@@ -1,0 +1,9 @@
+a : integer = 69
+a := 420
+
+b : integer
+b := 42
+
+defun foo (a:integer, b:integer):integer {
+
+}
