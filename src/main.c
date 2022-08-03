@@ -273,18 +273,16 @@ void print_node(Node *node, size_t indent_level) {
     }
     break;
   case NODE_TYPE_BINARY_OPERATOR:
-    printf("TODO: print_node() BINARY_OPERATOR");
+    printf("BINARY OPERATOR");
     break;
   case NODE_TYPE_VARIABLE_DECLARATION:
     printf("VARIABLE DECLARATION");
-    //printf("VAR_DECL:");
-    // TODO: Print first child (ID symbol), then type of second child.
     break;
   case NODE_TYPE_VARIABLE_DECLARATION_INITIALIZED:
-    printf("TODO: print_node() VAR DECL INIT");
+    printf("VARIABLE DECLARATION INITIALIZED");
     break;
   case NODE_TYPE_PROGRAM:
-    printf("TODO: print_node() PROGRAM");
+    printf("PROGRAM");
     break;
   }
   putchar('\n');
