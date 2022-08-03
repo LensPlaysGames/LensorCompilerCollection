@@ -26,6 +26,7 @@ char *file_contents(char *path) {
   }
   long size = file_size(file);
   char *contents = malloc(size + 1);
+  assert(contents && "Could not allocate buffer for file contents");
   char *write_it = contents;
   size_t bytes_read = 0;
   while (bytes_read < size) {
@@ -112,41 +113,10 @@ const char *delimiters = " \r\n,():";
 typedef struct Token {
   char *beginning;
   char *end;
-  struct Token *next;
 } Token;
-
-Token *token_create() {
-  Token *token = malloc(sizeof(Token));
-  assert(token && "Could not allocate memory for token");
-  memset(token, 0, sizeof(Token));
-  return token;
-}
-
-void token_free(Token *root) {
-  while (root) {
-    Token *token_to_free = root;
-    root = root->next;
-    free(token_to_free);
-  }
-}
 
 void print_token(Token t) {
   printf("%.*s", t.end - t.beginning, t.beginning);
-}
-
-void print_tokens(Token *root) {
-  size_t count = 1;
-  while (root) {
-    // FIXME: Remove this limit.
-    if (count > 10000) { break; }
-    printf("Token %zu: ", count);
-    if (root->beginning && root->end) {
-      printf("%.*s", root->end - root->beginning, root->beginning);
-    }
-    putchar('\n');
-    root = root->next;
-    count++;
-  }
 }
 
 /// Lex the next token from SOURCE, and point to it with BEG and END.
@@ -177,19 +147,49 @@ Error lex(char *source, Token *token) {
 // `-- 0  ->  1  ->  2
 //     `-- 3  ->  4
 
+// A : integer = 420
+//
+// PROGRAM
+// `-- VARIABLE_DECLARATION_INITIALIZED
+//     `-- INTEGER (420) -> SYMBOL (A)
+
 // TODO:
 // |-- API to create new node.
 // `-- API to add node as child.
-typedef long long integer_t;
 typedef struct Node {
+  // TODO: Think about how to document node types and how they fit in the AST.
   enum NodeType {
+    // BEGIN LITERALS
+
+    /// The definition of nothing; false, etc.
     NODE_TYPE_NONE,
+
+    /// Just an integer.
     NODE_TYPE_INTEGER,
+
+    /// When a literal is expected but no other literal is valid, it
+    /// becomes a symbol.
+    NODE_TYPE_SYMBOL,
+
+    // END LITERALS
+
+    /// Contains two children. The first determines type (and value),
+    /// while the second contains the symbolic name of the variable.
+    NODE_TYPE_VARIABLE_DECLARATION,
+    NODE_TYPE_VARIABLE_DECLARATION_INITIALIZED,
+
+    /// Contains two children that determine left and right acceptable
+    /// types.
+    NODE_TYPE_BINARY_OPERATOR,
+
+    /// Contains a list of expressions to execute in sequence.
     NODE_TYPE_PROGRAM,
+
     NODE_TYPE_MAX,
   } type;
   union NodeValue {
-    integer_t integer;
+    long long integer;
+    char *symbol;
   } value;
   // Possible TODO: Parent?
   struct Node *children;
@@ -198,6 +198,23 @@ typedef struct Node {
 
 #define nonep(node)    ((node).type == NODE_TYPE_NONE)
 #define integerp(node) ((node).type == NODE_TYPE_INTEGER)
+#define symbolp(node)  ((node).type == NODE_TYPE_SYMBOL)
+
+void node_add_child(Node *parent, Node *new_child) {
+  if (!parent || !new_child) { return; }
+  Node *allocated_child = malloc(sizeof(Node));
+  assert(allocated_child && "Could not allocate new child Node for AST");
+  *allocated_child = *new_child;
+  if (parent->children) {
+    Node *child = parent->children;
+    while (child->next_child) {
+      child = child->next_child;
+    }
+    child->next_child = allocated_child;
+  } else {
+    parent->children = allocated_child;
+  }
+}
 
 /// @return Boolean-like value; 1 for success, 0 for failure.
 int node_compare(Node *a, Node *b) {
@@ -242,14 +259,32 @@ void print_node(Node *node, size_t indent_level) {
   switch (node->type) {
   default:
     printf("UNKNOWN");
+    break;
   case NODE_TYPE_NONE:
     printf("NONE");
     break;
   case NODE_TYPE_INTEGER:
     printf("INT:%lld", node->value.integer);
     break;
+  case NODE_TYPE_SYMBOL:
+    printf("SYM");
+    if (node->value.symbol) {
+      printf(":%s", node->value.symbol);
+    }
+    break;
+  case NODE_TYPE_BINARY_OPERATOR:
+    printf("TODO: print_node() BINARY_OPERATOR");
+    break;
+  case NODE_TYPE_VARIABLE_DECLARATION:
+    printf("VARIABLE DECLARATION");
+    //printf("VAR_DECL:");
+    // TODO: Print first child (ID symbol), then type of second child.
+    break;
+  case NODE_TYPE_VARIABLE_DECLARATION_INITIALIZED:
+    printf("TODO: print_node() VAR DECL INIT");
+    break;
   case NODE_TYPE_PROGRAM:
-    printf("PROGRAM");
+    printf("TODO: print_node() PROGRAM");
     break;
   }
   putchar('\n');
@@ -271,6 +306,9 @@ void node_free(Node *root) {
     next_child = child->next_child;
     node_free(child);
     child = next_child;
+  }
+  if (symbolp(*root) && root->value.symbol) {
+    free(root->value.symbol);
   }
   free(root);
 }
@@ -350,60 +388,119 @@ int token_string_equalp(char* string, Token *token) {
 /// @return Boolean-like value; 1 upon success, 0 for failure.
 int parse_integer(Token *token, Node *node) {
   if (!token || !node) { return 0; }
+  char *end = NULL;
   if (token->end - token->beginning == 1 && *(token->beginning) == '0') {
     node->type = NODE_TYPE_INTEGER;
     node->value.integer = 0;
-  } else if ((node->value.integer = strtoll(token->beginning, NULL, 10)) != 0) {
+  } else if ((node->value.integer = strtoll(token->beginning, &end, 10)) != 0) {
+    if (end != token->end) {
+      return 0;
+    }
     node->type = NODE_TYPE_INTEGER;
   } else { return 0; }
   return 1;
 }
 
-Error parse_expr(char *source, Node *result) {
+Error parse_expr(char *source, char **end, Node *result) {
   size_t token_count = 0;
   Token current_token;
-  current_token.next = NULL;
   current_token.beginning  = source;
   current_token.end        = source;
   Error err = ok;
 
-  Node *root = calloc(1, sizeof(Node));
-  assert(root && "Could not allocate memory for AST Root.");
-  root->type = NODE_TYPE_PROGRAM;
-
-  Node working_node;
   while ((err = lex(current_token.end, &current_token)).type == ERROR_NONE) {
-    working_node.children = NULL;
-    working_node.next_child = NULL;
-    working_node.type = NODE_TYPE_NONE;
-    working_node.value.integer = 0;
+    *end = current_token.end;
     size_t token_length = current_token.end - current_token.beginning;
     if (token_length == 0) { break; }
-    if (parse_integer(&current_token, &working_node)) {
+    if (parse_integer(&current_token, result)) {
       // look ahead for binary ops that include integers.
-      Token integer;
-      memcpy(&integer, &current_token, sizeof(Token));
+      Node lhs_integer = *result;
       err = lex(current_token.end, &current_token);
       if (err.type != ERROR_NONE) {
         return err;
       }
+      *end = current_token.end;
+
       // TODO: Check for valid integer operator.
       // It would be cool to use an operator environment to look up
       // operators instead of hard-coding them. This would eventually
       // allow for user-defined operators, or stuff like that!
+
     } else {
-      printf("Unrecognized token: ");
-      print_token(current_token);
-      putchar('\n');
+      // TODO: Check for unary prefix operators.
+
+      // TODO: Check that it isn't a binary operator (we should encounter left
+      // side first and peek forward, rather than encounter it at top level).
+
+      Node symbol;
+      symbol.type = NODE_TYPE_SYMBOL;
+      symbol.children      = NULL;
+      symbol.next_child    = NULL;
+      symbol.value.symbol  = NULL;
+
+      char *symbol_string = malloc(token_length + 1);
+      assert(symbol_string && "Could not allocate memory for symbol");
+      memcpy(symbol_string, current_token.beginning, token_length);
+      symbol_string[token_length] = '\0';
+      symbol.value.symbol = symbol_string;
+
+      *result = symbol;
 
       // TODO: Check if valid symbol for variable environment, then
       // attempt to pattern match variable access, assignment,
       // declaration, or declaration with initialization.
 
+      err = lex(current_token.end, &current_token);
+      if (err.type != ERROR_NONE) {
+        return err;
+      }
+      *end = current_token.end;
+      size_t token_length = current_token.end - current_token.beginning;
+      if (token_length == 0) { break; }
+
+      if (token_string_equalp(":", &current_token)) {
+        err = lex(current_token.end, &current_token);
+        if (err.type != ERROR_NONE) {
+          return err;
+        }
+        *end = current_token.end;
+        size_t token_length = current_token.end - current_token.beginning;
+        if (token_length == 0) { break; }
+
+        // TODO: Look up type in types environment from parsing context.
+        if (token_string_equalp("integer", &current_token)) {
+          Node var_decl;
+          var_decl.children = NULL;
+          var_decl.next_child = NULL;
+          var_decl.type = NODE_TYPE_VARIABLE_DECLARATION;
+
+          Node type_node;
+          memset(&type_node, 0, sizeof(Node));
+          type_node.type = NODE_TYPE_INTEGER;
+
+          node_add_child(&var_decl, &type_node);
+          node_add_child(&var_decl, &symbol);
+
+          *result = var_decl;
+
+          // TODO: Look ahead for "=" assignment operator.
+
+          return ok;
+        }
+      }
+
+      printf("Unrecognized token: ");
+      print_token(current_token);
+      putchar('\n');
+
+      return err;
     }
-    printf("Found node: ");
-    print_node(&working_node, 0);
+
+    printf("Intermediate node: ");
+    print_node(result, 0);
     putchar('\n');
+
+
   }
 
   return err;
@@ -417,11 +514,19 @@ int main(int argc, char **argv) {
 
   char *path = argv[1];
   char *contents = file_contents(path);
+
   if (contents) {
     //printf("Contents of %s:\n---\n\"%s\"\n---\n", path, contents);
 
+    // TODO: Create API to heap allocate a program node, as well as add
+    // expressions as children.
     Node expression;
-    Error err = parse_expr(contents, &expression);
+    memset(&expression,0,sizeof(Node));
+    char *contents_it = contents;
+    Error err = parse_expr(contents_it, &contents_it, &expression);
+    print_node(&expression,0);
+    putchar('\n');
+
     print_error(err);
 
     free(contents);
