@@ -13,5 +13,14 @@ project(FUNCompiler C)
 
 add_executable(
   func
+  src/error.c
+  src/environment.c
+  src/file_io.c
   src/main.c
+  src/parser.c
+)
+
+target_include_directories(
+  func
+  PUBLIC src/
 )
