@@ -254,10 +254,10 @@ Error parse_expr
       // look ahead for binary ops that include integers.
       Node lhs_integer = *result;
       err = lex(current_token.end, &current_token);
+      *end = current_token.end;
       if (err.type != ERROR_NONE) {
         return err;
       }
-      *end = current_token.end;
 
       // TODO: Check for valid integer operator.
       // It would be cool to use an operator environment to look up
@@ -279,17 +279,59 @@ Error parse_expr
       // declaration, or declaration with initialization.
 
       err = lex(current_token.end, &current_token);
-      if (err.type != ERROR_NONE) { return err; }
       *end = current_token.end;
+      if (err.type != ERROR_NONE) { return err; }
       size_t token_length = current_token.end - current_token.beginning;
       if (token_length == 0) { break; }
 
       if (token_string_equalp(":", &current_token)) {
+
         err = lex(current_token.end, &current_token);
-        if (err.type != ERROR_NONE) { return err; }
         *end = current_token.end;
+        if (err.type != ERROR_NONE) { return err; }
         size_t token_length = current_token.end - current_token.beginning;
         if (token_length == 0) { break; }
+
+        // TODO: Check for variable re-assignment...
+
+        // FIXME: Actually set variable declarations within environment so that
+        // reassignments and redefinitions can be properly parsed and handled.
+        Node *variable_binding = node_allocate();
+        if (environment_get(*context->variables, symbol, variable_binding)) {
+          // Either re-assignment of existing variable (look for =)
+
+          if (token_string_equalp("=", &current_token)) {
+            err = lex(current_token.end, &current_token);
+            *end = current_token.end;
+            if (err.type != ERROR_NONE) { return err; }
+            size_t token_length = current_token.end - current_token.beginning;
+            if (token_length == 0) { break; }
+
+            // TODO: Stack based continuation to parse assignment expression.
+
+            // FIXME: This recursive call is kind of the worst :^)
+            Node *assigned_expr = node_allocate();
+            err = parse_expr(context, current_token.end, &current_token.end, assigned_expr);
+            if (err.type != ERROR_NONE) { return err; }
+
+            // TODO: FIXME: Proper type-checking (this only accepts literals)
+            // We will have to figure out the return value of the expression.
+            if (assigned_expr->type != variable_binding->children->type) {
+              ERROR_PREP(err, ERROR_TYPE, "Variable assignment expression has mismatched type.");
+              return err;
+            }
+
+            variable_binding->children->value = assigned_expr->value;
+
+            // Node contents transfer ownership, assigned_expr is now hollow shell.
+            free(assigned_expr);
+            return ok;
+          }
+          // TODO: Create new error type.
+          printf("ID of redefined variable: \"%s\"\n", symbol->value.symbol);
+          ERROR_PREP(err, ERROR_GENERIC, "Redefinition of variable!");
+          return err;
+        }
 
         Node *expected_type_symbol =
           node_symbol_from_buffer(current_token.beginning, token_length);
@@ -298,6 +340,9 @@ Error parse_expr
           printf("\nINVALID TYPE: \"%s\"\n", expected_type_symbol->value.symbol);
           return err;
         } else {
+
+          // TODO: Check for variable re-definition...
+
           //printf("Found valid type: ");
           //print_node(expected_type_symbol,0);
           //putchar('\n');
@@ -311,7 +356,46 @@ Error parse_expr
           node_add_child(var_decl, type_node);
           node_add_child(var_decl, symbol);
 
+          // TODO: Check for "=" initializiation operator.
+
+          err = lex(current_token.end, &current_token);
+          *end = current_token.end;
+          if (err.type != ERROR_NONE) { return err; }
+          size_t token_length = current_token.end - current_token.beginning;
+          if (token_length == 0) { break; }
+
+          if (token_string_equalp("=", &current_token)) {
+            err = lex(current_token.end, &current_token);
+            *end = current_token.end;
+            if (err.type != ERROR_NONE) { return err; }
+            size_t token_length = current_token.end - current_token.beginning;
+            if (token_length == 0) { break; }
+
+            // TODO: Stack based continuation to parse assignment expression.
+
+            // FIXME: This recursive call is kind of the worst :^)
+            Node *assigned_expr = node_allocate();
+            err = parse_expr(context, current_token.end, &current_token.end, assigned_expr);
+            if (err.type != ERROR_NONE) { return err; }
+
+            // TODO: FIXME: Proper type-checking (this only accepts literals)
+            // We will have to figure out the return value of the expression.
+            if (assigned_expr->type != type_node->type) {
+              ERROR_PREP(err, ERROR_TYPE, "Variable assignment expression has mismatched type.");
+              return err;
+            }
+
+            type_node->value = assigned_expr->value;
+
+            // Node contents transfer ownership, assigned_expr is now hollow shell.
+            free(assigned_expr);
+          }
+
           *result = *var_decl;
+          // TODO: Write node_copy() and node_deep_copy(), then deep copy
+          // var. decl. into environment. Possibly copy symbol as well?
+          //int status = environment_set(context->variables, symbol, result);
+
           // Node contents transfer ownership, var_decl is now hollow shell.
           free(var_decl);
 
@@ -323,6 +407,7 @@ Error parse_expr
       print_token(current_token);
       putchar('\n');
 
+      ERROR_PREP(err, ERROR_SYNTAX, "Unrecognized token reached during parsing");
       return err;
     }
 
