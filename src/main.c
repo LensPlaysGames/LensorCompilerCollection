@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     for (;;) {
 
       Error err = parse_expr(context, contents_it, &contents_it, expression);
-      printf("contents_it: \"%s\"\n", contents_it);
+      //printf("contents_it: \"%s\"\n", contents_it);
 
       if (!(*contents_it)) {
         break;
