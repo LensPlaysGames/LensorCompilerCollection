@@ -1,9 +1,25 @@
+; This is a comment. It will end at the newline.
+# This is also a comment.
+
+; This is a variable declaration with initialization.
 a : integer = 69
+; This is a variable re-assignment.
 a := 420
 
+; This is another variable declaration and re-assignment.
+; When a declaration has no initialized value, it is zero.
 b : integer
 b := 42
 
-defun foo (a:integer, b:integer):integer {
+; This is an error! We should catch this as a variable re-definition.
+b : integer
 
+; This is a function definition with two integer arugments that returns
+; an integer.
+defun foo (a:integer, b:integer):integer {
+  ; TODO: How do we return things?
 }
+
+; This is a function call.
+foo(20, 34)
+

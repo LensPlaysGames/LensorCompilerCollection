@@ -9,14 +9,24 @@
 
 //================================================================ BEG lexer
 
-const char *whitespace = " \r\n";
-const char *delimiters = " \r\n,():";
+const char *comment_delimiters = ";#";
+const char *whitespace         = " \r\n";
+const char *delimiters         = " \r\n,():";
 
-void print_token(Token t) {
-  printf("%.*s", t.end - t.beginning, t.beginning);
+/// @return Boolean-like value: 1 for success, 0 for failure.
+int comment_at_beginning(Token token) {
+  const char *comment_it = comment_delimiters;
+  while (*comment_it) {
+    if (*(token.beginning) == *comment_it) {
+      return 1;
+    }
+    comment_it++;
+  }
+  return 0;
 }
 
 /// Lex the next token from SOURCE, and point to it with BEG and END.
+/// If BEG and END of token are equal, there is nothing more to lex.
 Error lex(char *source, Token *token) {
   Error err = ok;
   if (!source || !token) {
@@ -26,6 +36,20 @@ Error lex(char *source, Token *token) {
   token->beginning = source;
   token->beginning += strspn(token->beginning, whitespace);
   token->end = token->beginning;
+  if (*(token->end) == '\0') { return err; }
+  // Check if current line is a comment, and skip past it.
+  while (comment_at_beginning(*token)) {
+    // Skip to next newline.
+    token->beginning = strpbrk(token->beginning, "\n");
+    if (!token->beginning) {
+      // If last line of file is comment, we're done lexing.
+      token->end = token->beginning;
+      return err;
+    }
+    // Skip to beginning of next token after comment.
+    token->beginning += strspn(token->beginning, whitespace);
+    token->end = token->beginning;
+  }
   if (*(token->end) == '\0') { return err; }
   token->end += strcspn(token->beginning, delimiters);
   if (token->end == token->beginning) {
@@ -45,6 +69,10 @@ int token_string_equalp(char* string, Token *token) {
     beg++;
   }
   return 1;
+}
+
+void print_token(Token t) {
+  printf("%.*s", t.end - t.beginning, t.beginning);
 }
 
 //================================================================ END lexer
@@ -390,6 +418,28 @@ Error parse_expr
             // Node contents transfer ownership, assigned_expr is now hollow shell.
             free(assigned_expr);
           }
+
+          /* VARIABLE DECLARATION
+           * `-- TYPE (VALUE) -> SYMBOL (ID)
+           * Add to parsing context variables environment
+           *
+           * During codegen:
+           * |-- Find somewhere to stick the length of bytes of the size of TYPE.
+           * `-- Keep track of where we stick it :^)
+           *
+           * We never actually need the symbol in the AST, I don't think.
+           * We just need to keep track of it in parsing context so that
+           * future accesses and re-assignments can refer to the same one.
+           *
+           * VARIABLE RE-ASSIGNMENT
+           * `-- NEW VALUE EXPRESSION -> VARIABLE DECLARATION
+           *                             `-- TYPE (VALUE) -> SYMBOL (ID)
+           *
+           * If we have a codegen context, then we can map symbols to
+           * wherever we decide to stick them. Then we can just do an
+           * environment lookup in the codegen context to update the
+           * proper value.
+           */
 
           *result = *var_decl;
           // TODO: Write node_copy() and node_deep_copy(), then deep copy
