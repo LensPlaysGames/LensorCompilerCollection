@@ -2,7 +2,9 @@
 # This is also a comment.
 
 ; This is a variable declaration with initialization.
+
 a : integer = 69
+
 ; This is a variable re-assignment.
 a := 420
 

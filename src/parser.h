@@ -29,7 +29,7 @@ typedef struct Node {
     // BEGIN LITERALS
 
     /// The definition of nothing; false, etc.
-    NODE_TYPE_NONE,
+    NODE_TYPE_NONE = 0,
 
     /// Just an integer.
     NODE_TYPE_INTEGER,
@@ -44,6 +44,10 @@ typedef struct Node {
     /// while the second contains the symbolic name of the variable.
     NODE_TYPE_VARIABLE_DECLARATION,
     NODE_TYPE_VARIABLE_DECLARATION_INITIALIZED,
+
+    /// Contains two children. The first is the new expression to
+    /// execute that returns proper type, and second is ID symbol.
+    NODE_TYPE_VARIABLE_REASSIGNMENT,
 
     /// Contains two children that determine left and right acceptable
     /// types.
@@ -88,6 +92,9 @@ Node *node_symbol_from_buffer(char *buffer, size_t length);
 void print_node(Node *node, size_t indent_level);
 
 void node_free(Node *root);
+
+/// Copy A into B, asserting allocations.
+void node_copy(Node *a, Node *b);
 
 // @return Boolean-like value; 1 for success, 0 for failure.
 int token_string_equalp(char* string, Token *token);
