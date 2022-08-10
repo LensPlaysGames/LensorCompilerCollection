@@ -13,6 +13,7 @@ project(FUNCompiler C)
 
 add_executable(
   func
+  src/codegen.c
   src/error.c
   src/environment.c
   src/file_io.c

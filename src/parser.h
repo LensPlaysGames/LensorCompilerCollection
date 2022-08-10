@@ -14,50 +14,45 @@ typedef struct Token {
 void print_token(Token t);
 Error lex(char *source, Token *token);
 
-// A : integer = 420
-//
-// PROGRAM
-// `-- VARIABLE_DECLARATION_INITIALIZED
-//     `-- INTEGER (420) -> SYMBOL (A)
-//
-// "`--" == Node->children
-// "->"  == Node->next_child
+typedef enum NodeType {
+  // BEGIN LITERALS
+
+  /// The definition of nothing; false, etc.
+  NODE_TYPE_NONE = 0,
+
+  /// Just an integer.
+  NODE_TYPE_INTEGER,
+
+  /// When a literal is expected but no other literal is valid, it
+  /// becomes a symbol.
+  NODE_TYPE_SYMBOL,
+
+  // END LITERALS
+
+  /// Contains two children.
+  /// 1. SYMBOL (VARIABLE IDENTIFIER)
+  /// 2. INITIALIZE EXPRESSION, or None.
+  NODE_TYPE_VARIABLE_DECLARATION,
+  NODE_TYPE_VARIABLE_DECLARATION_INITIALIZED,
+
+  /// Contains two children.
+  /// 1. SYMBOL (VARIABLE IDENTIFIER)
+  /// 2. VALUE EXPRESSION
+  NODE_TYPE_VARIABLE_REASSIGNMENT,
+
+  /// Contains two children that determine left and right acceptable
+  /// types.
+  NODE_TYPE_BINARY_OPERATOR,
+
+  /// Contains a list of expressions to execute in sequence.
+  NODE_TYPE_PROGRAM,
+
+  NODE_TYPE_MAX,
+} NodeType;
 
 typedef struct Node {
   // TODO: Think about how to document node types and how they fit in the AST.
-  enum NodeType {
-    // BEGIN LITERALS
-
-    /// The definition of nothing; false, etc.
-    NODE_TYPE_NONE = 0,
-
-    /// Just an integer.
-    NODE_TYPE_INTEGER,
-
-    /// When a literal is expected but no other literal is valid, it
-    /// becomes a symbol.
-    NODE_TYPE_SYMBOL,
-
-    // END LITERALS
-
-    /// Contains two children. The first determines type (and value),
-    /// while the second contains the symbolic name of the variable.
-    NODE_TYPE_VARIABLE_DECLARATION,
-    NODE_TYPE_VARIABLE_DECLARATION_INITIALIZED,
-
-    /// Contains two children. The first is the new expression to
-    /// execute that returns proper type, and second is ID symbol.
-    NODE_TYPE_VARIABLE_REASSIGNMENT,
-
-    /// Contains two children that determine left and right acceptable
-    /// types.
-    NODE_TYPE_BINARY_OPERATOR,
-
-    /// Contains a list of expressions to execute in sequence.
-    NODE_TYPE_PROGRAM,
-
-    NODE_TYPE_MAX,
-  } type;
+  int type;
   union NodeValue {
     long long integer;
     char *symbol;
@@ -104,6 +99,9 @@ int parse_integer(Token *token, Node *node);
 
 typedef struct ParsingContext {
   // FIXME: "struct ParsingContext *parent;" ???
+  /// TYPE
+  /// `-- SYMBOL (IDENTIFIER) -> TYPE (NODE_TYPE)
+  ///                            `-- BYTE_SIZE (N)
   Environment *types;
   Environment *variables;
 } ParsingContext;

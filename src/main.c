@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <codegen.h>
 #include <error.h>
 #include <file_io.h>
 #include <environment.h>
@@ -28,12 +29,13 @@ int main(int argc, char **argv) {
     for (;;) {
 
       Error err = parse_expr(context, contents_it, &contents_it, expression);
-
-      if (!(*contents_it)) { break; }
       if (err.type != ERROR_NONE) {
         print_error(err);
         break;
       }
+      // Check for end-of-parsing case (source and end are the same).
+      if (!(*contents_it)) { break; }
+
 
       //printf("Parsed expression:\n");
       //print_node(expression,0);
@@ -49,6 +51,12 @@ int main(int argc, char **argv) {
 
     print_node(program, 0);
     putchar('\n');
+
+    printf("Generating code!\n");
+
+    codegen_program(OUTPUT_FMT_DEFAULT, context, program);
+
+    printf("Code generated.\n");
 
     node_free(program);
     free(contents);
