@@ -15,7 +15,7 @@ void print_token(Token t);
 Error lex(char *source, Token *token);
 
 typedef enum NodeType {
-  // BEGIN LITERALS
+  // BEGIN NULL DENOTATION TYPES
 
   /// The definition of nothing; false, etc.
   NODE_TYPE_NONE = 0,
@@ -27,7 +27,15 @@ typedef enum NodeType {
   /// becomes a symbol.
   NODE_TYPE_SYMBOL,
 
-  // END LITERALS
+  // END NULL DENOTATION TYPES
+
+  /// Contains three children.
+  /// 1. Parameter List
+  ///    1. Name Symbol
+  ///    2. Type Symbol
+  /// 2. Return Type Symbol
+  /// 3. Expression List (Program)
+  NODE_TYPE_FUNCTION,
 
   /// Contains two children.
   /// 1. SYMBOL (VARIABLE IDENTIFIER)
@@ -97,16 +105,31 @@ int token_string_equalp(char* string, Token *token);
 /// @return Boolean-like value; 1 upon success, 0 for failure.
 int parse_integer(Token *token, Node *node);
 
+typedef struct ParsingStack {
+  Node *operator;
+  Node *result;
+} ParsingStack;
+
+// FIXME: Should this be an environment that contains other environments and things?
 typedef struct ParsingContext {
-  // FIXME: "struct ParsingContext *parent;" ???
+  struct ParsingContext *parent;
+  Node *operator;
   /// TYPE
   /// `-- SYMBOL (IDENTIFIER) -> TYPE (NODE_TYPE)
   ///                            `-- BYTE_SIZE (N)
   Environment *types;
+  /// VARIABLE
+  /// `-- SYMBOL (NAME) -> SYMBOL (TYPE)
   Environment *variables;
+  /// VARIABLE
+  /// `-- SYMBOL (NAME) -> FUNCTION
+  Environment *functions;
 } ParsingContext;
 
-ParsingContext *parse_context_create();
+Error parse_get_type(ParsingContext *context, Node *id, Node *result);
+
+ParsingContext *parse_context_create(ParsingContext *parent);
+ParsingContext *parse_context_default_create();
 
 Error parse_expr(ParsingContext *context,
                  char *source, char **end,

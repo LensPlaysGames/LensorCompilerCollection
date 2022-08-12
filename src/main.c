@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
   char *contents = file_contents(argv[1]);
   if (contents) {
     Error err = ok;
-    ParsingContext *context = parse_context_create();
+    ParsingContext *context = parse_context_default_create();
     Node *program = node_allocate();
     program->type = NODE_TYPE_PROGRAM;
     char *contents_it = contents;

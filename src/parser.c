@@ -108,7 +108,7 @@ int node_compare(Node *a, Node *b) {
     }
     return 0;
   }
-  assert(NODE_TYPE_MAX == 8 && "node_compare() must handle all node types");
+  assert(NODE_TYPE_MAX == 9 && "node_compare() must handle all node types");
   if (a->type != b->type) { return 0; }
   switch (a->type) {
   case NODE_TYPE_NONE:
@@ -133,6 +133,9 @@ int node_compare(Node *a, Node *b) {
     break;
   case NODE_TYPE_BINARY_OPERATOR:
     printf("TODO: node_compare() BINARY OPERATOR\n");
+    break;
+  case NODE_TYPE_FUNCTION:
+    printf("TODO: node_compare() FUNCTION\n");
     break;
   case NODE_TYPE_VARIABLE_REASSIGNMENT:
     printf("TODO: node_compare() VARIABLE REASSIGNMENT\n");
@@ -212,7 +215,7 @@ void print_node(Node *node, size_t indent_level) {
     putchar(' ');
   }
   // Print type + value.
-  assert(NODE_TYPE_MAX == 8 && "print_node() must handle all node types");
+  assert(NODE_TYPE_MAX == 9 && "print_node() must handle all node types");
   switch (node->type) {
   default:
     printf("UNKNOWN");
@@ -243,6 +246,9 @@ void print_node(Node *node, size_t indent_level) {
     break;
   case NODE_TYPE_PROGRAM:
     printf("PROGRAM");
+    break;
+  case NODE_TYPE_FUNCTION:
+    printf("FUNCTION");
     break;
   }
   putchar('\n');
@@ -301,18 +307,25 @@ void node_copy(Node *a, Node *b) {
   }
 }
 
-ParsingContext *parse_context_create() {
+ParsingContext *parse_context_create(ParsingContext *parent) {
   ParsingContext *ctx = calloc(1, sizeof(ParsingContext));
   assert(ctx && "Could not allocate memory for parsing context.");
+  ctx->parent = parent;
   ctx->types = environment_create(NULL);
+  ctx->variables = environment_create(NULL);
+  ctx->functions = environment_create(NULL);
+  return ctx;
+}
+
+ParsingContext *parse_context_default_create() {
+  ParsingContext *ctx = parse_context_create(NULL);
   Error err = node_add_type(ctx->types,
                             NODE_TYPE_INTEGER,
                             node_symbol("integer"),
                             sizeof(long long));
   if (err.type != ERROR_NONE) {
-    printf("ERROR: Failed to set builtin type in types environment.\n");
+    printf("ERROR: Failed to set builtin integer type in types environment.\n");
   }
-  ctx->variables = environment_create(NULL);
   return ctx;
 }
 
@@ -374,6 +387,18 @@ ExpectReturnValue lex_expect
   return out;
 }
 
+Error parse_get_type(ParsingContext *context, Node *id, Node *result) {
+  Error err = ok;
+  while (context) {
+    int status = environment_get(*context->types, id, result);
+    if (status) { return ok; }
+    context = context->parent;
+  }
+  result->type = NODE_TYPE_NONE;
+  ERROR_PREP(err, ERROR_GENERIC, "Type is not found in environment.");
+  return err;
+}
+
 #define EXPECT(expected, expected_string, current_token, current_length, end)   \
   expected = lex_expect(expected_string, &current_token, &current_length, end); \
   if (expected.err.type) { return expected.err; }                               \
@@ -422,103 +447,253 @@ Error parse_expr
       // operators instead of hard-coding them. This would eventually
       // allow for user-defined operators, or stuff like that!
 
-      return ok;
-    }
+    } else {
 
-    // TODO: Parse strings and other literal types.
+      Node *symbol = node_symbol_from_buffer(current_token.beginning, token_length);
 
-    // TODO: Check for unary prefix operators.
+      // TODO: Parse strings and other literal types.
 
-    // TODO: Check that it isn't a binary operator (we should encounter left
-    // side first and peek forward, rather than encounter it at top level).
+      // TODO: Check for unary prefix operators.
 
-    Node *symbol = node_symbol_from_buffer(current_token.beginning, token_length);
+      // TODO: Check that it isn't a binary operator (we should encounter left
+      // side first and peek forward, rather than encounter it at top level).
 
-    // TODO: Check if valid symbol for variable environment, then
-    // attempt to pattern match variable access, assignment,
-    // declaration, or declaration with initialization.
+      if (strcmp("defun", symbol->value.symbol) == 0) {
+        // Begin function definition.
+        // FUNCTION
+        //   LIST of parameters
+        //     PARAMETER
+        //       SYMBOL:NAME
+        //       SYMBOL:TYPE
+        //   RETURN TYPE SYMBOL
+        //   PROGRAM/LIST of expressions
+        //     ...
 
-    EXPECT(expected, ":", current_token, token_length, end);
-    if (expected.found) {
+        working_result->type = NODE_TYPE_FUNCTION;
 
-      // Re-assignment of existing variable (look for =)
-      EXPECT(expected, "=", current_token, token_length, end);
-      if (expected.found) {
-        Node *variable_binding = node_allocate();
-        if (!environment_get(*context->variables, symbol, variable_binding)) {
-          // TODO: Add source location or something to the error.
-          // TODO: Create new error type.
-          printf("ID of undeclared variable: \"%s\"\n", symbol->value.symbol);
-          ERROR_PREP(err, ERROR_GENERIC, "Reassignment of a variable that has not been declared!");
+        lex_advance(&current_token, &token_length, end);
+        Node *function_name = node_symbol_from_buffer(current_token.beginning, token_length);
+        // TODO: Bind function_name to function node in functions environment.
+
+        EXPECT(expected, "(", current_token, token_length, end);
+        if (!expected.found) {
+          printf("Function Name: \"%s\"\n", function_name->value.symbol);
+          ERROR_PREP(err, ERROR_SYNTAX,
+                     "Expected opening parenthesis for parameter list after function name");
           return err;
         }
-        free(variable_binding);
 
-        working_result->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
-        node_add_child(working_result, symbol);
-        Node *reassign_expr = node_allocate();
-        node_add_child(working_result, reassign_expr);
+        Node *parameter_list = node_allocate();
 
-        working_result = reassign_expr;
+        for (;;) {
+          EXPECT(expected, ")", current_token, token_length, end);
+          if (expected.found) { break; }
+          if (expected.done) {
+            ERROR_PREP(err, ERROR_SYNTAX,
+                       "Expected closing parenthesis for parameter list");
+            return err;
+          }
+
+          err = lex_advance(&current_token, &token_length, end);
+          if (err.type) { return err; }
+          Node *parameter_name = node_symbol_from_buffer(current_token.beginning, token_length);
+
+          EXPECT(expected, ":", current_token, token_length, end);
+          if (expected.done || !expected.found) {
+            ERROR_PREP(err, ERROR_SYNTAX, "Parameter declaration requires a type annotation");
+            return err;
+          }
+
+          lex_advance(&current_token, &token_length, end);
+          Node *parameter_type = node_symbol_from_buffer(current_token.beginning, token_length);
+
+          Node *parameter = node_allocate();
+          node_add_child(parameter, parameter_name);
+          node_add_child(parameter, parameter_type);
+
+          node_add_child(parameter_list, parameter);
+
+          EXPECT(expected, ",", current_token, token_length, end);
+          if (expected.found) {
+            continue;
+          }
+
+          EXPECT (expected, ")", current_token, token_length, end);
+          if (!expected.found) {
+            ERROR_PREP(err, ERROR_SYNTAX, "Expected closing parenthesis following parameter list");
+            return err;
+          }
+          break;
+
+        }
+
+        node_add_child(working_result, parameter_list);
+
+        // Parse return type.
+        EXPECT(expected, ":", current_token, token_length, end);
+        // TODO/FIXME: Should we allow implicit return type?
+        if (expected.done || !expected.found) {
+          ERROR_PREP(err, ERROR_SYNTAX,
+                     "Function definition requires return type annotation following parameter list");
+          return err;
+        }
+
+        lex_advance(&current_token, &token_length, end);
+        Node *function_return_type = node_symbol_from_buffer(current_token.beginning, token_length);
+        node_add_child(working_result, function_return_type);
+
+        // Bind function to function name in functions environment.
+        environment_set(context->functions, function_name, working_result);
+
+        // Parse function body.
+        EXPECT(expected, "{", current_token, token_length, end);
+        if (expected.done || !expected.found) {
+          ERROR_PREP(err, ERROR_SYNTAX, "Function definition requires body following return type: \"{ a + b }\"");
+          return err;
+        }
+
+        // TODO: Parse body of function
+        // Before parsing, enter nested scope with parameter names bound to variables
+        // (create new parsing context as child of current, bind variables in env.).
+
+        // Check for end of function body
+        // If found, return function
+        // If not found, allocate new expression node and parse into that
+
+        // A := 2
+        // 6
+
+        // update working_result and be able to parse next single expression into function body
+
+        context = parse_context_create(context);
+        context->operator = node_symbol("defun");
+
+        Node *param_it = working_result->children->children;
+        environment_set(context->variables,
+                        param_it->children,
+                        param_it->children->next_child);
+
+        Node *function_body = node_allocate();
+        Node *function_first_expression = node_allocate();
+        node_add_child(function_body, function_first_expression);
+        node_add_child(working_result, function_body);
+        working_result = function_first_expression;
         continue;
-      }
 
-      err = lex_advance(&current_token, &token_length, end);
-      if (err.type != ERROR_NONE) { return err; }
-      if (token_length == 0) { break; }
-      Node *type_symbol =
-        node_symbol_from_buffer(current_token.beginning, token_length);
-      Node *type_value = node_allocate();
-      if (environment_get(*context->types, type_symbol, type_value) == 0) {
-        ERROR_PREP(err, ERROR_TYPE, "Invalid type within variable declaration");
-        printf("\nINVALID TYPE: \"%s\"\n", type_symbol->value.symbol);
+      } else {
+
+        // TODO: Check if valid symbol for variable environment, then
+        // attempt to pattern match variable access, assignment,
+        // declaration, or declaration with initialization.
+
+        EXPECT(expected, ":", current_token, token_length, end);
+        if (expected.found) {
+
+          // Re-assignment of existing variable (look for =)
+          EXPECT(expected, "=", current_token, token_length, end);
+          if (expected.found) {
+            Node *variable_binding = node_allocate();
+            if (!environment_get(*context->variables, symbol, variable_binding)) {
+              // TODO: Add source location or something to the error.
+              // TODO: Create new error type.
+              printf("ID of undeclared variable: \"%s\"\n", symbol->value.symbol);
+              ERROR_PREP(err, ERROR_GENERIC, "Reassignment of a variable that has not been declared!");
+              return err;
+            }
+            free(variable_binding);
+
+            working_result->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
+            node_add_child(working_result, symbol);
+            Node *reassign_expr = node_allocate();
+            node_add_child(working_result, reassign_expr);
+
+            working_result = reassign_expr;
+            continue;
+          }
+
+          err = lex_advance(&current_token, &token_length, end);
+          if (err.type != ERROR_NONE) { return err; }
+          if (token_length == 0) { break; }
+          Node *type_symbol =
+            node_symbol_from_buffer(current_token.beginning, token_length);
+          Node *type_value = node_allocate();
+          parse_get_type(context, type_symbol, type_value);
+          if (nonep(*type_value)) {
+            ERROR_PREP(err, ERROR_TYPE, "Invalid type within variable declaration");
+            printf("\nINVALID TYPE: \"%s\"\n", type_symbol->value.symbol);
+            return err;
+          }
+          free(type_value);
+
+          Node *variable_binding = node_allocate();
+          if (environment_get(*context->variables, symbol, variable_binding)) {
+            // TODO: Create new error type.
+            printf("ID of redefined variable: \"%s\"\n", symbol->value.symbol);
+            ERROR_PREP(err, ERROR_GENERIC, "Redefinition of variable!");
+            return err;
+          }
+          // Variable binding is shell-node for environment value contents.
+          free(variable_binding);
+
+          working_result->type = NODE_TYPE_VARIABLE_DECLARATION;
+
+          Node *value_expression = node_none();
+
+          // `symbol` is now owned by working_result, a var. decl.
+          node_add_child(working_result, symbol);
+          node_add_child(working_result, value_expression);
+
+          // Context variables environment gains new binding.
+          Node *symbol_for_env = node_allocate();
+          node_copy(symbol, symbol_for_env);
+          int status = environment_set(context->variables, symbol_for_env, type_symbol);
+          if (status != 1) {
+            printf("Variable: \"%s\", status: %d\n", symbol_for_env->value.symbol, status);
+            ERROR_PREP(err, ERROR_GENERIC, "Failed to define variable!");
+            return err;
+          }
+
+          EXPECT(expected, "=", current_token, token_length, end);
+          if (expected.found) {
+            working_result = value_expression;
+            continue;
+          }
+
+          return ok;
+        }
+
+        printf("Unrecognized token: ");
+        print_token(current_token);
+        putchar('\n');
+
+        ERROR_PREP(err, ERROR_SYNTAX, "Unrecognized token reached during parsing");
         return err;
-      }
-      free(type_value);
 
-      Node *variable_binding = node_allocate();
-      if (environment_get(*context->variables, symbol, variable_binding)) {
-        // TODO: Create new error type.
-        printf("ID of redefined variable: \"%s\"\n", symbol->value.symbol);
-        ERROR_PREP(err, ERROR_GENERIC, "Redefinition of variable!");
-        return err;
-      }
-      // Variable binding is shell-node for environment value contents.
-      free(variable_binding);
-
-      working_result->type = NODE_TYPE_VARIABLE_DECLARATION;
-
-      Node *value_expression = node_none();
-
-      // `symbol` is now owned by working_result, a var. decl.
-      node_add_child(working_result, symbol);
-      node_add_child(working_result, value_expression);
-
-      // Context variables environment gains new binding.
-      Node *symbol_for_env = node_allocate();
-      node_copy(symbol, symbol_for_env);
-      int status = environment_set(context->variables, symbol_for_env, type_symbol);
-      if (status != 1) {
-        printf("Variable: \"%s\", status: %d\n", symbol_for_env->value.symbol, status);
-        ERROR_PREP(err, ERROR_GENERIC, "Failed to define variable!");
-        return err;
       }
 
-      EXPECT(expected, "=", current_token, token_length, end);
-      if (expected.found) {
-        working_result = value_expression;
-        continue;
-      }
-
-      return ok;
     }
 
-    printf("Unrecognized token: ");
-    print_token(current_token);
-    putchar('\n');
+    if (!context->parent) {
+      break;
+    }
 
-    ERROR_PREP(err, ERROR_SYNTAX, "Unrecognized token reached during parsing");
-    return err;
+    Node *operator = context->operator;
+    if (operator->type != NODE_TYPE_SYMBOL) {
+      ERROR_PREP(err, ERROR_TYPE,
+                 "Parsing context operator must be symbol. Likely internal error :(");
+      return err;
+    }
+
+    if (strcmp(operator->value.symbol, "defun") == 0) {
+      // TODO: Evaluate next expression unless it's a closing brace.
+      EXPECT(expected, "}", current_token, token_length, end);
+      if (expected.found) {
+        break; // ??
+      }
+    }
+
+    return ok;
+
   }
 
   return err;

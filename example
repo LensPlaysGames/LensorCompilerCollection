@@ -18,10 +18,11 @@ b := 42
 
 ; This is a function definition with two integer arugments that returns
 ; an integer.
-defun foo (a:integer, b:integer):integer {
-  a + b
+defun foo (c:integer, b:integer):integer {
+  c := 10
 }
 
 ; This is a function call.
+; For now, this errors because we no do function calls :^(
 foo(20, 34)
 
