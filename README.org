@@ -32,3 +32,10 @@ Finally, build an executable from the build tree.
   cmake --build bld
 #+end_src
 
+** To build generated x86_64 ASM
+
+On Windows under MinGW:
+#+begin_src shell
+  as code.S -o code.o
+  ld code.o -o code.exe && code.exe
+#+end_src

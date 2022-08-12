@@ -14,12 +14,12 @@ b : integer
 b := 42
 
 ; This is an error! We should catch this as a variable re-definition.
-b : integer
+;b : integer
 
 ; This is a function definition with two integer arugments that returns
 ; an integer.
 defun foo (a:integer, b:integer):integer {
-  ; TODO: How do we return things?
+  a + b
 }
 
 ; This is a function call.
