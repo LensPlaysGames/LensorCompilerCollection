@@ -94,7 +94,7 @@ Error codegen_program_x86_64_att_asm(ParsingContext *context, Node *program) {
     return err;
   }
 
-  err = fwrite_bytes(";#; ", code);
+  err = fwrite_bytes(";;#; ", code);
   if (err.type) { return err; }
   fwrite_line((char *)codegen_header, code);
   if (err.type) { return err; }
@@ -107,10 +107,9 @@ Error codegen_program_x86_64_att_asm(ParsingContext *context, Node *program) {
   fwrite_line("_start:", code);
   fwrite_line("push %rbp", code);
   fwrite_line("mov %rsp, %rbp", code);
-  //fwrite_line("sub $32, %rsp", code);
+  fwrite_line("sub $32, %rsp", code);
 
   Node *expression = program->children;
-  Node *tmpnode1 = node_allocate();
   while (expression) {
     switch (expression->type) {
     default:
@@ -126,11 +125,6 @@ Error codegen_program_x86_64_att_asm(ParsingContext *context, Node *program) {
       fwrite_integer(expression->children->next_child->value.integer,code);
       fwrite_line(", (%rax)",code);
 
-      // RAX: 0xffffffffffffffff -> memory address and write at that address
-      // *RAX = 42;
-      // *RAX = *RAX;
-      // ...
-
       break;
     }
 
@@ -138,7 +132,7 @@ Error codegen_program_x86_64_att_asm(ParsingContext *context, Node *program) {
   }
 
   // Top level program footer
-  //fwrite_line("add $32, %rsp", code);
+  fwrite_line("add $32, %rsp", code);
   fwrite_line("movq (%rax), %rax",code);
   fwrite_line("pop %rbp", code);
   fwrite_line("ret", code);

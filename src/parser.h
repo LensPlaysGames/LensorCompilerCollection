@@ -105,7 +105,9 @@ int token_string_equalp(char* string, Token *token);
 /// @return Boolean-like value; 1 upon success, 0 for failure.
 int parse_integer(Token *token, Node *node);
 
+// TODO: Separate context from stack.
 typedef struct ParsingStack {
+  struct ParsingStack *parent;
   Node *operator;
   Node *result;
 } ParsingStack;
@@ -113,7 +115,9 @@ typedef struct ParsingStack {
 // FIXME: Should this be an environment that contains other environments and things?
 typedef struct ParsingContext {
   struct ParsingContext *parent;
+  /// Used for stack continuation while parsing
   Node *operator;
+  Node *result;
   /// TYPE
   /// `-- SYMBOL (IDENTIFIER) -> TYPE (NODE_TYPE)
   ///                            `-- BYTE_SIZE (N)

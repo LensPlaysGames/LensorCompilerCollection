@@ -76,7 +76,7 @@ void print_token(Token t) {
   if (t.end - t.beginning < 1) {
     printf("INVALID TOKEN POINTERS");
   } else {
-    printf("%.*s", t.end - t.beginning, t.beginning);
+    printf("%.*s", (int)(t.end - t.beginning), t.beginning);
   }
 }
 
@@ -139,6 +139,7 @@ int node_compare(Node *a, Node *b) {
     break;
   case NODE_TYPE_VARIABLE_REASSIGNMENT:
     printf("TODO: node_compare() VARIABLE REASSIGNMENT\n");
+    break;
   case NODE_TYPE_VARIABLE_DECLARATION:
     printf("TODO: node_compare() VARIABLE DECLARATION\n");
     break;
@@ -311,6 +312,8 @@ ParsingContext *parse_context_create(ParsingContext *parent) {
   ParsingContext *ctx = calloc(1, sizeof(ParsingContext));
   assert(ctx && "Could not allocate memory for parsing context.");
   ctx->parent = parent;
+  ctx->operator = NULL;
+  ctx->result = NULL;
   ctx->types = environment_create(NULL);
   ctx->variables = environment_create(NULL);
   ctx->functions = environment_create(NULL);
@@ -427,7 +430,6 @@ Error parse_expr
  )
 {
   ExpectReturnValue expected;
-  size_t token_count = 0;
   size_t token_length = 0;
   Token current_token;
   current_token.beginning  = source;
@@ -473,7 +475,6 @@ Error parse_expr
 
         lex_advance(&current_token, &token_length, end);
         Node *function_name = node_symbol_from_buffer(current_token.beginning, token_length);
-        // TODO: Bind function_name to function node in functions environment.
 
         EXPECT(expected, "(", current_token, token_length, end);
         if (!expected.found) {
@@ -485,6 +486,9 @@ Error parse_expr
 
         Node *parameter_list = node_allocate();
 
+        // FIXME?: Should we possibly create a parser stack and evaluate the
+        // next expression, then ensure return value is var. decl. in stack
+        // handling below?
         for (;;) {
           EXPECT(expected, ")", current_token, token_length, end);
           if (expected.found) { break; }
@@ -552,19 +556,6 @@ Error parse_expr
           return err;
         }
 
-        // TODO: Parse body of function
-        // Before parsing, enter nested scope with parameter names bound to variables
-        // (create new parsing context as child of current, bind variables in env.).
-
-        // Check for end of function body
-        // If found, return function
-        // If not found, allocate new expression node and parse into that
-
-        // A := 2
-        // 6
-
-        // update working_result and be able to parse next single expression into function body
-
         context = parse_context_create(context);
         context->operator = node_symbol("defun");
 
@@ -578,6 +569,7 @@ Error parse_expr
         node_add_child(function_body, function_first_expression);
         node_add_child(working_result, function_body);
         working_result = function_first_expression;
+        context->result = working_result;
         continue;
 
       } else {
@@ -685,14 +677,15 @@ Error parse_expr
     }
 
     if (strcmp(operator->value.symbol, "defun") == 0) {
-      // TODO: Evaluate next expression unless it's a closing brace.
+      // Evaluate next expression unless it's a closing brace.
       EXPECT(expected, "}", current_token, token_length, end);
-      if (expected.found) {
-        break; // ??
-      }
-    }
+      if (expected.found) { break; }
 
-    return ok;
+      context->result->next_child = node_allocate();
+      working_result = context->result->next_child;
+      context->result = working_result;
+
+    }
 
   }
 

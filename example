@@ -20,6 +20,11 @@ b := 42
 ; an integer.
 defun foo (c:integer, b:integer):integer {
   c := 10
+  c := 5
+  c := 42
+  c := 69
+  c := 420
+  c := 69
 }
 
 ; This is a function call.
