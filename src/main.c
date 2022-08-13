@@ -16,48 +16,30 @@ void print_usage(char **argv) {
 int main(int argc, char **argv) {
   if (argc < 2) {
     print_usage(argv);
-    exit(0);
+    return 0;
   }
 
-  char *contents = file_contents(argv[1]);
-  if (contents) {
-    Error err = ok;
-    ParsingContext *context = parse_context_default_create();
-    Node *program = node_allocate();
-    program->type = NODE_TYPE_PROGRAM;
-    char *contents_it = contents;
-    for (;;) {
-      Node *expression = node_allocate();
-      node_add_child(program, expression);
-      err = parse_expr(context, contents_it, &contents_it, expression);
-      if (err.type != ERROR_NONE) {
-        print_error(err);
-        break;
-      }
-      // Check for end-of-parsing case (source and end are the same).
-      if (!(*contents_it)) { break; }
+  Node *program = node_allocate();
+  ParsingContext *context = parse_context_default_create();
+  Error err = parse_program(argv[1], context, program);
 
-      //printf("Parsed expression:\n");
-      //print_node(expression,0);
-      //putchar('\n');
+  print_node(program, 0);
+  putchar('\n');
 
-    }
-
-    print_node(program, 0);
-    putchar('\n');
-
-    if (err.type == ERROR_NONE) {
-      printf("Generating code!\n");
-
-      err = codegen_program(OUTPUT_FMT_DEFAULT, context, program);
-      print_error(err);
-
-      printf("Code generated.\n");
-    }
-
-    node_free(program);
-    free(contents);
+  if (err.type) {
+    print_error(err);
+    return 1;
   }
+
+  // TODO: Typecheck the program!
+
+  err = codegen_program(OUTPUT_FMT_DEFAULT, context, program);
+  if (err.type) {
+    print_error(err);
+    return 2;
+  }
+
+  node_free(program);
 
   return 0;
 }

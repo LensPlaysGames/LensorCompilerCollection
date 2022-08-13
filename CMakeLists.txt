@@ -20,7 +20,6 @@ add_executable(
   src/main.c
   src/parser.c
 )
-
 target_include_directories(
   func
   PUBLIC src/

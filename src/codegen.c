@@ -81,7 +81,141 @@ Error codegen_program_x86_64_att_asm_data_section(ParsingContext *context, FILE 
   return err;
 }
 
-Error codegen_program_x86_64_att_asm(ParsingContext *context, Node *program) {
+Error codegen_function_x86_64_att_asm_mswin(ParsingContext *context, char *name, Node *function, FILE *code);
+
+// If TOP_LEVEL is non-zero, it is assumed that expressions are in top level of program.
+Error codegen_expression_list_x86_64_att_asm_mswin(ParsingContext *context, Node *expression, FILE *code) {
+  Error err = ok;
+  Node *tmpnode = node_allocate();
+  size_t tmpcount;
+  const size_t lambda_symbol_size = 8;
+  char lambda_symbol[8];
+  for (size_t i = 0; i < lambda_symbol_size; ++i) {
+    lambda_symbol[i] = (rand() % 26) + 97;
+  }
+  while (expression) {
+    tmpcount = 0;
+    switch (expression->type) {
+    default:
+      break;
+    case NODE_TYPE_FUNCTION:
+      // Handling a function here means a lambda should be generated, I think.
+      // TODO: Generate name from some sort of hashing algorithm or something.
+      err = codegen_function_x86_64_att_asm_mswin(context, lambda_symbol, expression, code);
+      // If we were to keep track of the name of this function, we could
+      // then properly fill in the jump memory label further on in the program.
+      if (err.type) { return err; }
+      break;
+    case NODE_TYPE_FUNCTION_CALL:
+      // TODO: Actually codegen argument expressions.
+      tmpnode = expression->children->next_child->children;
+      while (tmpnode) {
+        switch (tmpcount) {
+        default:
+          printf("TODO: Codegen stack allocated arguments\n");
+          // stack stuff
+          break;
+        case 0:
+          fwrite_bytes("mov $",code);
+          // TODO:FIXME: This assumes integer type, and is bad bad bad!!!
+          fwrite_integer(tmpnode->value.integer,code);
+          fwrite_line(", %rcx",code);
+          break;
+        case 1:
+          fwrite_bytes("mov $",code);
+          // TODO:FIXME: This assumes integer type, and is bad bad bad!!!
+          fwrite_integer(tmpnode->value.integer,code);
+          fwrite_line(", %rdx",code);
+          break;
+        case 2:
+          fwrite_bytes("mov $",code);
+          // TODO:FIXME: This assumes integer type, and is bad bad bad!!!
+          fwrite_integer(tmpnode->value.integer,code);
+          fwrite_line(", %r8",code);
+          break;
+        case 3:
+          fwrite_bytes("mov $",code);
+          // TODO:FIXME: This assumes integer type, and is bad bad bad!!!
+          fwrite_integer(tmpnode->value.integer,code);
+          fwrite_line(", %r9",code);
+          break;
+        }
+        tmpnode = tmpnode->next_child;
+        tmpcount += 1;
+      }
+      fwrite_bytes("call ",code);
+      fwrite_line(expression->children->value.symbol,code);
+      break;
+    case NODE_TYPE_VARIABLE_REASSIGNMENT:
+      // TODO: Find variable binding and keep track of which context it is found in.
+      //       If context is top-level, use global variable access, otherwise local.
+
+      // TODO: Evaluate reassignment expression and get return value,
+      //       that way we can actually use it!
+
+      if (!context->parent) {
+        fwrite_bytes("lea ",code);
+        fwrite_bytes(expression->children->value.symbol,code);
+        fwrite_line("(%rip), %rax",code);
+        fwrite_bytes("movq $",code);
+        // TODO: FIXME: This assumes integer type, and is bad bad bad!!!
+        fwrite_integer(expression->children->next_child->value.integer,code);
+        fwrite_line(", (%rax)",code);
+      } else {
+
+        // TODO: Get index of argument within function parameter list
+
+        // TODO: Use index of argument to write to proper address/register
+
+      }
+
+      break;
+    }
+
+    expression = expression->next_child;
+  }
+  free(tmpnode);
+
+  return ok;
+}
+
+Error codegen_function_x86_64_att_asm_mswin(ParsingContext *context, char *name, Node *function, FILE *code) {
+  Node *parameter = function->children;
+  // Nested function execution protection
+  fwrite_bytes("jmp after",code);
+  fwrite_line(name,code);
+
+  // Function begin memory symbol
+  fwrite_bytes(name,code);
+  fwrite_line(":",code);
+
+  // Function header
+  fwrite_line("push %rbp", code);
+  fwrite_line("mov %rsp, %rbp", code);
+  fwrite_line("sub $32, %rsp", code);
+
+  // Function body
+  context = parse_context_create(context);
+  codegen_expression_list_x86_64_att_asm_mswin(context, function->children->next_child->next_child->children, code);
+  // TODO: Free context;
+  context = context->parent;
+
+  // Function footer
+  fwrite_line("add $32, %rsp", code);
+  fwrite_line("pop %rbp", code);
+  fwrite_line("ret", code);
+
+  // Nested function execution jump label
+  fwrite_bytes("after",code);
+  fwrite_bytes(name,code);
+  fwrite_line(":",code);
+
+  return ok;
+}
+
+/// Emit x86_64 AT&T Assembly with MS Windows function calling convention.
+/// Arguments passed in: RCX, RDX, R8, R9 -> stack
+Error codegen_program_x86_64_att_asm_mswin(ParsingContext *context, Node *program) {
   Error err = ok;
   if (!program || program->type != NODE_TYPE_PROGRAM) {
     ERROR_PREP(err, ERROR_ARGUMENTS, "codegen_program() requires a program!");
@@ -103,37 +237,30 @@ Error codegen_program_x86_64_att_asm(ParsingContext *context, Node *program) {
 
   fwrite_line(".section .text", code);
 
+  // Generate global functions
+  Binding *function_it = context->functions->bind;
+  while (function_it) {
+    Node *function_id = function_it->id;
+    Node *function = function_it->value;
+    function_it = function_it->next;
+
+    err = codegen_function_x86_64_att_asm_mswin(context, function_id->value.symbol, function, code);
+  }
+
   // Top level program header
+  fwrite_line(".global _start", code);
   fwrite_line("_start:", code);
   fwrite_line("push %rbp", code);
   fwrite_line("mov %rsp, %rbp", code);
   fwrite_line("sub $32, %rsp", code);
 
-  Node *expression = program->children;
-  while (expression) {
-    switch (expression->type) {
-    default:
-      break;
-    case NODE_TYPE_VARIABLE_REASSIGNMENT:
-      // TODO: Evaluate reassignment expression and get return value
-      //       That we we can actually use it!
-      fwrite_bytes("lea ",code);
-      fwrite_bytes(expression->children->value.symbol,code);
-      fwrite_line("(%rip), %rax",code);
-      fwrite_bytes("movq $",code);
-      // TODO: FIXME: This assumes integer type, and is bad bad bad!!!
-      fwrite_integer(expression->children->next_child->value.integer,code);
-      fwrite_line(", (%rax)",code);
+  // TODO: At some point we have to initialize global variables.
 
-      break;
-    }
-
-    expression = expression->next_child;
-  }
+  // Program body
+  codegen_expression_list_x86_64_att_asm_mswin(context, program->children, code);
 
   // Top level program footer
   fwrite_line("add $32, %rsp", code);
-  fwrite_line("movq (%rax), %rax",code);
   fwrite_line("pop %rbp", code);
   fwrite_line("ret", code);
 
@@ -151,7 +278,7 @@ Error codegen_program(CodegenOutputFormat format, ParsingContext *context, Node 
   switch (format) {
   case OUTPUT_FMT_DEFAULT:
   case OUTPUT_FMT_x86_64_AT_T_ASM:
-    return codegen_program_x86_64_att_asm(context, program);
+    return codegen_program_x86_64_att_asm_mswin(context, program);
   }
   return ok;
 }

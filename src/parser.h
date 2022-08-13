@@ -36,6 +36,10 @@ typedef enum NodeType {
   /// 2. Return Type Symbol
   /// 3. Expression List (Program)
   NODE_TYPE_FUNCTION,
+  /// Contains two children
+  /// 1. Function Symbol
+  /// 2. Parameter List
+  NODE_TYPE_FUNCTION_CALL,
 
   /// Contains two children.
   /// 1. SYMBOL (VARIABLE IDENTIFIER)
@@ -134,6 +138,8 @@ Error parse_get_type(ParsingContext *context, Node *id, Node *result);
 
 ParsingContext *parse_context_create(ParsingContext *parent);
 ParsingContext *parse_context_default_create();
+
+Error parse_program(char *filepath, ParsingContext *context, Node *result);
 
 Error parse_expr(ParsingContext *context,
                  char *source, char **end,
