@@ -63,15 +63,15 @@ typedef enum NodeType {
 } NodeType;
 
 typedef struct Node {
-  // TODO: Think about how to document node types and how they fit in the AST.
   int type;
   union NodeValue {
     long long integer;
     char *symbol;
   } value;
-  // Possible TODO: Parent?
   struct Node *children;
   struct Node *next_child;
+  /// Used during codegen to store result RegisterDescriptor.
+  int result_register;
 } Node;
 
 Node *node_allocate();

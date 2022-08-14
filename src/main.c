@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
 
   // TODO: Typecheck the program!
 
-  err = codegen_program(OUTPUT_FMT_DEFAULT, context, program);
+  err = codegen_program(CG_FMT_DEFAULT, context, program);
   if (err.type) {
     print_error(err);
     return 2;
