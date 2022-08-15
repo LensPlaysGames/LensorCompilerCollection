@@ -19,6 +19,7 @@ add_executable(
   src/file_io.c
   src/main.c
   src/parser.c
+  src/typechecker.c
 )
 target_include_directories(
   func

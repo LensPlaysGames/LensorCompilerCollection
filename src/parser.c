@@ -190,7 +190,7 @@ Node *node_symbol_from_buffer(char *buffer, size_t length) {
 }
 
 // Take ownership of type_symbol.
-Error node_add_type(Environment *types, int type, Node *type_symbol, long long byte_size) {
+Error define_type(Environment *types, int type, Node *type_symbol, long long byte_size) {
   assert(types && "Can not add type to NULL types environment");
   assert(type_symbol && "Can not add NULL type symbol to types environment");
   assert(byte_size >= 0 && "Can not define new type with zero or negative byte size");
@@ -329,10 +329,10 @@ ParsingContext *parse_context_create(ParsingContext *parent) {
 
 ParsingContext *parse_context_default_create() {
   ParsingContext *ctx = parse_context_create(NULL);
-  Error err = node_add_type(ctx->types,
-                            NODE_TYPE_INTEGER,
-                            node_symbol("integer"),
-                            sizeof(long long));
+  Error err = define_type(ctx->types,
+                          NODE_TYPE_INTEGER,
+                          node_symbol("integer"),
+                          sizeof(long long));
   if (err.type != ERROR_NONE) {
     printf("ERROR: Failed to set builtin integer type in types environment.\n");
   }
@@ -567,9 +567,12 @@ Error parse_expr
         context->operator = node_symbol("defun");
 
         Node *param_it = working_result->children->children;
-        environment_set(context->variables,
-                        param_it->children,
-                        param_it->children->next_child);
+        while (param_it) {
+          environment_set(context->variables,
+                          param_it->children,
+                          param_it->children->next_child);
+          param_it = param_it->next_child;
+        }
 
         Node *function_body = node_allocate();
         Node *function_first_expression = node_allocate();
@@ -711,7 +714,10 @@ Error parse_expr
     if (strcmp(operator->value.symbol, "defun") == 0) {
       // Evaluate next expression unless it's a closing brace.
       EXPECT(expected, "}", current_token, token_length, end);
-      if (expected.done || expected.found) { break; }
+      if (expected.done || expected.found) {
+        // TODO: Should we pop parser context here?
+        break;
+      }
 
       context->result->next_child = node_allocate();
       working_result = context->result->next_child;
@@ -737,7 +743,6 @@ Error parse_expr
 
       continue;
     }
-
   }
 
   return err;

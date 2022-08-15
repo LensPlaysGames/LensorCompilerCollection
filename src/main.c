@@ -5,9 +5,10 @@
 
 #include <codegen.h>
 #include <error.h>
-#include <file_io.h>
 #include <environment.h>
+#include <file_io.h>
 #include <parser.h>
+#include <typechecker.h>
 
 void print_usage(char **argv) {
   printf("USAGE: %s <path_to_file_to_compile>\n", argv[0]);
@@ -31,12 +32,16 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // TODO: Typecheck the program!
+  err = typecheck_program(context, program);
+  if (err.type) {
+    print_error(err);
+    return 2;
+  }
 
   err = codegen_program(CG_FMT_DEFAULT, context, program);
   if (err.type) {
     print_error(err);
-    return 2;
+    return 3;
   }
 
   node_free(program);

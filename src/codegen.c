@@ -17,6 +17,14 @@ CodegenContext *codegen_context_create(CodegenContext *parent) {
 
 //================================================================ BEG REGISTER STUFF
 
+void print_registers(Register *base) {
+  Register *it = base;
+  while (it) {
+    printf("%s:%i\n", it->name, it->in_use);
+    it = it->next;
+  }
+}
+
 Register *register_create(char *name) {
   Register *r = calloc(1,sizeof(Register));
   assert(r && "Could not allocate memory for new register");
@@ -25,9 +33,7 @@ Register *register_create(char *name) {
 }
 
 void register_add(Register *base, char *name) {
-  while (base->next) {
-    base = base->next;
-  }
+  while (base->next) { base = base->next; }
   base->next = register_create(name);
 }
 
@@ -77,11 +83,11 @@ void register_deallocate
 char *register_name
 (Register *base, RegisterDescriptor register_descriptor) {
   while (base) {
-    register_descriptor--;
     if (register_descriptor <= 0) {
       return base->name;
     }
     base = base->next;
+    register_descriptor--;
   }
   printf("ERROR::register_name(): Could not find register with descriptor of %d\n",
          register_descriptor);
@@ -181,7 +187,7 @@ Error codegen_expression_x86_64_mswin
         result = malloc(64);
         if (!result) {
           ERROR_PREP(err, ERROR_GENERIC, "Could not allocate integer result string buffer :^(");
-          return err;
+          break;
         }
         snprintf(result, 64, "$%lld", expression->children->next_child->value.integer);
         fprintf(code, "movq %s, %s\n", result, symbol_to_address(expression->children));
@@ -189,7 +195,7 @@ Error codegen_expression_x86_64_mswin
       } else {
         err = codegen_expression_x86_64_mswin(code, r, cg_context, context,
                                               expression->children->next_child);
-        if (err.type) { return err; }
+        if (err.type) { break; }
         result = register_name(r, expression->children->next_child->result_register);
         fprintf(code, "mov %s, %s\n", result, symbol_to_address(expression->children));
         register_deallocate(r, expression->children->next_child->result_register);
@@ -230,6 +236,7 @@ Error codegen_function_x86_64_att_asm_mswin
     // Bind parameter name to integer base pointer offset.
     // FIXME: Assume each argument is 8 bytes for now.
     // TODO: This currently doesn't allow for passing arguments in registers, which is much faster.
+    //       We need some local binding that refers to a register vs a base pointer offset.
     environment_set(cg_context->locals, parameter->children, node_integer(-param_count * 8));
     parameter = parameter->next_child;
   }
@@ -253,6 +260,8 @@ Error codegen_function_x86_64_att_asm_mswin
     }
     expression = expression->next_child;
   }
+
+  // TODO: Copy last expression result register to RAX
 
   // Function footer
   fprintf(code, "%s", function_footer_x86_64);
@@ -307,13 +316,20 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
           "main:\n"
           "%s", function_header_x86_64);
 
+  Node *last_expression = program->children;
   Node *expression = program->children;
   while (expression) {
     codegen_expression_x86_64_mswin(code, r, cg_context, context, expression);
+    last_expression = expression;
     expression = expression->next_child;
   }
 
-  fprintf(code, "mov $0, %%rax\n");
+  // TODO: Copy this code to the generic function for return value!
+  char *name = register_name(r,last_expression->result_register);
+  if (strcmp(name, "%rax")) {
+    fprintf(code, "mov %s, %%rax\n", name);
+  }
+
   fprintf(code, "%s", function_footer_x86_64);
 
   // TODO: This breaks things, but we should do it.

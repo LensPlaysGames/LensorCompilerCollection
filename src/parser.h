@@ -129,7 +129,7 @@ typedef struct ParsingContext {
   /// VARIABLE
   /// `-- SYMBOL (NAME) -> SYMBOL (TYPE)
   Environment *variables;
-  /// VARIABLE
+  /// FUNCTION
   /// `-- SYMBOL (NAME) -> FUNCTION
   Environment *functions;
 } ParsingContext;

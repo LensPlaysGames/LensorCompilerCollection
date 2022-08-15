@@ -32,7 +32,10 @@ defun foo (c:integer, b:integer):integer {
 foo(20, 34)
 
 ; TODO: Support this lambda syntax!
-;[(a:integer) { a := 25  a }]
+;[integer (a:integer) { a := 25  a }]
 
 ; TODO: Allow function assignment or something
-;foo : function = [(x:integer) { x }]
+;bar : function = [integer (x:integer) { x }]
+
+; TODO: Shorthand for function assignment
+;baz : [ integer (x:integer) { x } ]
