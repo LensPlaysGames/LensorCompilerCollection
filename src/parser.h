@@ -52,8 +52,9 @@ typedef enum NodeType {
   /// 2. VALUE EXPRESSION
   NODE_TYPE_VARIABLE_REASSIGNMENT,
 
-  /// Contains two children that determine left and right acceptable
-  /// types.
+  /// A valid binary operator. Contains two children.
+  /// 1. Left Hand Side, often abbreviated as LHS
+  /// 1. Right Hand Side, often abbreviated as RHS
   NODE_TYPE_BINARY_OPERATOR,
 
   /// Contains a list of expressions to execute in sequence.
@@ -132,7 +133,20 @@ typedef struct ParsingContext {
   /// FUNCTION
   /// `-- SYMBOL (NAME) -> FUNCTION
   Environment *functions;
+  /// BINARY OPERATOR
+  /// `-- SYMBOL (OPERATOR) -> NONE
+  ///                          `-- INTEGER (PRECEDENCE)
+  ///                              -> SYMBOL (RETURN TYPE)
+  ///                              -> SYMBOL (LHS TYPE)
+  ///                              -> SYMBOL (RHS TYPE)
+  Environment *binary_operators;
 } ParsingContext;
+
+Error define_binary_operator
+(ParsingContext *context,
+ char *operator,
+ int precedence,
+ char *return_type, char *lhs_type, char *rhs_type);
 
 Error parse_get_type(ParsingContext *context, Node *id, Node *result);
 

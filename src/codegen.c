@@ -155,8 +155,15 @@ Error codegen_expression_x86_64_mswin
 {
   Error err = ok;
   char *result = NULL;
+  Node *tmpnode = node_allocate();
   switch (expression->type) {
   default:
+    break;
+  case NODE_TYPE_INTEGER:
+    expression->result_register = register_allocate(r);
+    fprintf(code, "mov $%lld, %s\n",
+            expression->value.integer,
+            register_name(r, expression->result_register));
     break;
   case NODE_TYPE_FUNCTION:
     if (!cg_context->parent) { break; }
@@ -164,11 +171,67 @@ Error codegen_expression_x86_64_mswin
     result = label_generate();
     err = codegen_function_x86_64_att_asm_mswin(r, cg_context, context,
                                                 result, expression, code);
-    if (err.type) { return err; }
+    if (err.type) { break; }
     break;
-  case NODE_TYPE_INTEGER:
-    expression->result_register = register_allocate(r);
-    fprintf(code, "mov $%lld, %s\n", expression->value.integer, register_name(r, expression->result_register));
+  case NODE_TYPE_BINARY_OPERATOR:
+    while (context->parent) { context = context->parent; }
+    // FIXME: Second argument is memory leaked! :^(
+    environment_get(*context->binary_operators, node_symbol(expression->value.symbol), tmpnode);
+    printf("Codegenning symbol %s\n", expression->value.symbol);
+    print_node(tmpnode,0);
+
+    err = codegen_expression_x86_64_mswin(code, r, cg_context, context,
+                                          expression->children);
+    err = codegen_expression_x86_64_mswin(code, r, cg_context, context,
+                                          expression->children->next_child);
+
+    if (strcmp(expression->value.symbol, "+") == 0) {
+      // https://www.felixcloutier.com/x86/add
+
+      // Use right hand side result register as our result since ADD is destructive!
+      expression->result_register = expression->children->next_child->result_register;
+
+      fprintf(code, "add %s, %s\n",
+              register_name(r, expression->children->result_register),
+              register_name(r, expression->children->next_child->result_register));
+
+      // Free no-longer-used left hand side result register.
+      register_deallocate(r, expression->children->result_register);
+    } else if (strcmp(expression->value.symbol, "-") == 0) {
+      // https://www.felixcloutier.com/x86/sub
+
+      // Use right hand side result register as our result since ADD is destructive!
+      expression->result_register = expression->children->next_child->result_register;
+
+      fprintf(code, "sub %s, %s\n",
+              register_name(r, expression->children->result_register),
+              register_name(r, expression->children->next_child->result_register));
+
+      // Free no-longer-used left hand side result register.
+      register_deallocate(r, expression->children->result_register);
+    } else if (strcmp(expression->value.symbol, "*") == 0) {
+      // https://www.felixcloutier.com/x86/mul
+      // https://www.felixcloutier.com/x86/imul
+
+      // Use right hand side result register as our result since ADD is destructive!
+      expression->result_register = expression->children->next_child->result_register;
+
+      fprintf(code, "imul %s, %s\n",
+              register_name(r, expression->children->result_register),
+              register_name(r, expression->children->next_child->result_register));
+
+      // Free no-longer-used left hand side result register.
+      register_deallocate(r, expression->children->result_register);
+    } else if (strcmp(expression->value.symbol, "/") == 0) {
+      // TODO: Division codegen!
+
+      // https://www.felixcloutier.com/x86/div
+      // https://www.felixcloutier.com/x86/idiv
+
+      // Quotient is in RAX, Remainder in RDX; we must save and
+      // restore these registers before and after divide, sadly.
+    }
+
     break;
   case NODE_TYPE_VARIABLE_DECLARATION:
     if (!cg_context->parent) { break; }
@@ -203,6 +266,7 @@ Error codegen_expression_x86_64_mswin
     }
     break;
   }
+  free(tmpnode);
   return err;
 }
 
