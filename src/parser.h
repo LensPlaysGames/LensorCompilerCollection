@@ -45,7 +45,9 @@ typedef enum NodeType {
   /// 1. SYMBOL (VARIABLE IDENTIFIER)
   /// 2. INITIALIZE EXPRESSION, or None.
   NODE_TYPE_VARIABLE_DECLARATION,
-  NODE_TYPE_VARIABLE_DECLARATION_INITIALIZED,
+
+  /// Contains variable symbol in value.
+  NODE_TYPE_VARIABLE_ACCESS,
 
   /// Contains two children.
   /// 1. SYMBOL (VARIABLE IDENTIFIER)
@@ -74,6 +76,8 @@ typedef struct Node {
   /// Used during codegen to store result RegisterDescriptor.
   int result_register;
 } Node;
+
+char *node_text(Node *node);
 
 Node *node_allocate();
 
@@ -117,9 +121,14 @@ typedef struct ParsingStack {
   Node *result;
 } ParsingStack;
 
-// FIXME: Should this be an environment that contains other environments and things?
+// TODO: Shove ParsingContext within an AST Node.
 typedef struct ParsingContext {
+  /// Used for upward scope searching, mainly.
   struct ParsingContext *parent;
+  /// Used for entering scopes as different stages of the compiler
+  /// iterate and operate on the AST.
+  struct ParsingContext *children;
+  struct ParsingContext *next_child;
   /// Used for stack continuation while parsing
   Node *operator;
   Node *result;
@@ -141,6 +150,11 @@ typedef struct ParsingContext {
   ///                              -> SYMBOL (RHS TYPE)
   Environment *binary_operators;
 } ParsingContext;
+
+void parse_context_print(ParsingContext *top, size_t indent);
+
+/// PARENT is modified, CHILD is used verbatim.
+void parse_context_add_child(ParsingContext *parent, ParsingContext *child);
 
 Error define_binary_operator
 (ParsingContext *context,

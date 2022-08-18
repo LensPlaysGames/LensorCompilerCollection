@@ -18,6 +18,8 @@ typedef struct Environment {
   Binding *bind;
 } Environment;
 
+void environment_print(Environment env, long long indent);
+
 Environment *environment_create(Environment *parent);
 
 // TODO: Make return value an enum.

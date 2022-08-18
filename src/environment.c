@@ -2,9 +2,22 @@
 
 #include <assert.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <parser.h>
+
+void environment_print(Environment env, long long indent) {
+  Binding *binding_it = env.bind;
+  long long indent_it = indent;
+  while (binding_it) {
+    indent_it = indent;
+    while (indent_it-- > 0) { putchar(' '); }
+    printf("%s -> ", node_text(binding_it->id));
+    printf("%s\n", node_text(binding_it->value));
+    binding_it = binding_it->next;
+  }
+}
 
 Environment *environment_create(Environment *parent) {
   Environment *env = malloc(sizeof(Environment));

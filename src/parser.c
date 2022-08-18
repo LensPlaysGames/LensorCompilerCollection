@@ -13,7 +13,7 @@
 // TODO: Allow multi-byte comment delimiters.
 const char *comment_delimiters = ";#";
 const char *whitespace         = " \r\n";
-const char *delimiters         = " \r\n,():";
+const char *delimiters         = " \r\n,()[]<>:";
 
 /// @return Boolean-like value: 1 for success, 0 for failure.
 int comment_at_beginning(Token token) {
@@ -147,8 +147,8 @@ int node_compare(Node *a, Node *b) {
   case NODE_TYPE_VARIABLE_DECLARATION:
     printf("TODO: node_compare() VARIABLE DECLARATION\n");
     break;
-  case NODE_TYPE_VARIABLE_DECLARATION_INITIALIZED:
-    printf("TODO: node_compare() VARIABLE DECLARATION INITIALIZED\n");
+  case NODE_TYPE_VARIABLE_ACCESS:
+    printf("TODO: node_compare() VARIABLE ACCESS\n");
     break;
   case NODE_TYPE_PROGRAM:
     printf("TODO: Compare two programs.\n");
@@ -212,6 +212,51 @@ Error define_type(Environment *types, int type, Node *type_symbol, long long byt
   return err;
 }
 
+#define NODE_TEXT_BUFFER_SIZE 512
+char node_text_buffer[512];
+char *node_text(Node *node) {
+  assert(NODE_TYPE_MAX == 10 && "print_node() must handle all node types");
+  if (!node) {
+    return "NULL";
+  }
+  switch (node->type) {
+  default:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "UNKNOWN");
+    break;
+  case NODE_TYPE_NONE:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "NONE");
+    break;
+  case NODE_TYPE_INTEGER:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "INT:%lld", node->value.integer);
+    break;
+  case NODE_TYPE_SYMBOL:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "SYM:%s", node->value.symbol);
+    break;
+  case NODE_TYPE_BINARY_OPERATOR:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "BINARY OPERATOR:%s", node->value.symbol);
+    break;
+  case NODE_TYPE_VARIABLE_REASSIGNMENT:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "VARIABLE REASSIGNMENT");
+    break;
+  case NODE_TYPE_VARIABLE_DECLARATION:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "VARIABLE DECLARATION");
+    break;
+  case NODE_TYPE_VARIABLE_ACCESS:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "VARIABLE ACCESS:%s", node->value.symbol);
+    break;
+  case NODE_TYPE_PROGRAM:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "PROGRAM");
+    break;
+  case NODE_TYPE_FUNCTION:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "FUNCTION");
+    break;
+  case NODE_TYPE_FUNCTION_CALL:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "FUNCTION CALL");
+    break;
+  }
+  return node_text_buffer;
+}
+
 void print_node(Node *node, size_t indent_level) {
   if (!node) { return; }
 
@@ -220,46 +265,7 @@ void print_node(Node *node, size_t indent_level) {
     putchar(' ');
   }
   // Print type + value.
-  assert(NODE_TYPE_MAX == 10 && "print_node() must handle all node types");
-  switch (node->type) {
-  default:
-    printf("UNKNOWN");
-    break;
-  case NODE_TYPE_NONE:
-    printf("NONE");
-    break;
-  case NODE_TYPE_INTEGER:
-    printf("INT:%lld", node->value.integer);
-    break;
-  case NODE_TYPE_SYMBOL:
-    printf("SYM");
-    if (node->value.symbol) {
-      printf(":%s", node->value.symbol);
-    }
-    break;
-  case NODE_TYPE_BINARY_OPERATOR:
-    printf("BINARY OPERATOR:%s", node->value.symbol);
-    break;
-  case NODE_TYPE_VARIABLE_REASSIGNMENT:
-    printf("VARIABLE REASSIGNMENT");
-    break;
-  case NODE_TYPE_VARIABLE_DECLARATION:
-    printf("VARIABLE DECLARATION");
-    break;
-  case NODE_TYPE_VARIABLE_DECLARATION_INITIALIZED:
-    printf("VARIABLE DECLARATION INITIALIZED");
-    break;
-  case NODE_TYPE_PROGRAM:
-    printf("PROGRAM");
-    break;
-  case NODE_TYPE_FUNCTION:
-    printf("FUNCTION");
-    break;
-  case NODE_TYPE_FUNCTION_CALL:
-    printf("FUNCTION CALL");
-    break;
-  }
-  putchar('\n');
+  printf("%s\n", node_text(node));
   // Print children.
   Node *child = node->children;
   while (child) {
@@ -315,10 +321,57 @@ void node_copy(Node *a, Node *b) {
   }
 }
 
+void parse_context_print(ParsingContext *top, size_t indent) {
+  size_t indent_it = indent;
+  while (indent_it--) { putchar(' '); }
+  printf("TYPES:\n");
+  environment_print(*top->types,indent + 2);
+
+  indent_it = indent;
+  while (indent_it--) { putchar(' '); }
+  printf("VARIABLES:\n");
+  environment_print(*top->variables,indent + 2);
+
+  if (top->parent == NULL) {
+    indent_it = indent;
+    while (indent_it--) { putchar(' '); }
+    printf("BINARY OPERATORS:\n");
+    environment_print(*top->binary_operators,indent + 2);
+  }
+
+  indent_it = indent;
+  while (indent_it--) { putchar(' '); }
+  printf("FUNCTIONS:\n");
+  environment_print(*top->functions,indent);
+
+  ParsingContext *child = top->children;
+  while (child) {
+    parse_context_print(child,indent + 2);
+    child = child->next_child;
+  }
+}
+
+void parse_context_add_child(ParsingContext *parent, ParsingContext *child) {
+  if (parent) {
+    if (parent->children) {
+      parent = parent->children;
+      while (parent->next_child) { parent = parent->next_child; }
+      parent->next_child = child;
+    } else {
+      parent->children = child;
+    }
+  }
+}
+
 ParsingContext *parse_context_create(ParsingContext *parent) {
   ParsingContext *ctx = calloc(1, sizeof(ParsingContext));
   assert(ctx && "Could not allocate memory for parsing context.");
+  if (!ctx) { return NULL; }
   ctx->parent = parent;
+  // TODO: Add this new context as a child to given parent.
+  parse_context_add_child(parent, ctx);
+  ctx->children = NULL;
+  ctx->next_child = NULL;
   ctx->operator = NULL;
   ctx->result = NULL;
   ctx->types = environment_create(NULL);
@@ -330,12 +383,20 @@ ParsingContext *parse_context_create(ParsingContext *parent) {
 
 ParsingContext *parse_context_default_create() {
   ParsingContext *ctx = parse_context_create(NULL);
-  Error err = define_type(ctx->types,
-                          NODE_TYPE_INTEGER,
-                          node_symbol("integer"),
-                          sizeof(long long));
+  Error err = ok;
+  err = define_type(ctx->types,
+                    NODE_TYPE_INTEGER,
+                    node_symbol("integer"),
+                    sizeof(long long));
   if (err.type != ERROR_NONE) {
     printf("ERROR: Failed to set builtin integer type in types environment.\n");
+  }
+  err = define_type(ctx->types,
+                    NODE_TYPE_FUNCTION,
+                    node_symbol("function"),
+                    sizeof(long long));
+  if (err.type != ERROR_NONE) {
+    printf("ERROR: Failed to set builtin function type in types environment.\n");
   }
   // TODO: Should we use type IDs vs type symbols?
   // FIXME: Use precedence enum!
@@ -421,6 +482,7 @@ Error parse_get_type(ParsingContext *context, Node *id, Node *result) {
     context = context->parent;
   }
   result->type = NODE_TYPE_NONE;
+  printf("Type not found: \"%s\"\n", id->value.symbol);
   ERROR_PREP(err, ERROR_GENERIC, "Type is not found in environment.");
   return err;
 }
@@ -445,6 +507,65 @@ int parse_integer(Token *token, Node *node) {
   return 1;
 }
 
+/// Set FOUND to 1 if an infix operator is found and parsing should continue, otherwise 0.
+Error parse_binary_infix_operator
+(ParsingContext *context,
+ int *found,
+ Token *current, size_t *length, char **end,
+ long long *working_precedence,
+ Node *result, Node **working_result
+ )
+{
+  Error err = ok;
+  // Look ahead for a binary infix operator.
+  *found = 0;
+  Token current_copy = *current;
+  size_t length_copy = *length;
+  char *end_copy = *end;
+  err = lex_advance(&current_copy, &length_copy, &end_copy);
+  if (err.type != ERROR_NONE) { return err; }
+  Node *operator_symbol =
+    node_symbol_from_buffer(current_copy.beginning, length_copy);
+  Node *operator_value = node_allocate();
+  ParsingContext *global = context;
+  while (global->parent) { global = global->parent; }
+  if (environment_get(*global->binary_operators, operator_symbol, operator_value)) {
+    *current = current_copy;
+    *length = length_copy;
+    *end = end_copy;
+    long long precedence = operator_value->children->value.integer;
+
+    //printf("Got op. %s with precedence %lld (working %lld)\n",
+    //       operator_symbol->value.symbol,
+    //       precedence, working_precedence);
+    //printf("working precedence: %lld\n", working_precedence);
+
+    // TODO: Handle grouped expressions through parentheses using precedence stack.
+
+    Node *result_pointer = precedence <= *working_precedence ? result : *working_result;
+
+    Node *result_copy = node_allocate();
+    node_copy(result_pointer, result_copy);
+    result_pointer->type = NODE_TYPE_BINARY_OPERATOR;
+    result_pointer->value.symbol = operator_symbol->value.symbol;
+    result_pointer->children = result_copy;
+    result_pointer->next_child = NULL;
+
+    Node *rhs = node_allocate();
+    node_add_child(result_pointer, rhs);
+    *working_result = rhs;
+
+    *working_precedence = precedence;
+
+    *found = 1;
+  }
+
+  free(operator_symbol);
+  free(operator_value);
+  return ok;
+}
+
+
 Error parse_expr
 (ParsingContext *context,
  char *source,
@@ -468,14 +589,106 @@ Error parse_expr
 
     if (parse_integer(&current_token, working_result)) {
 
-      // TODO: Look ahead for binary ops that include integers.
-      // It would be cool to use an operator environment to look up
-      // operators instead of hard-coding them. This would eventually
-      // allow for user-defined operators, or stuff like that!
-
     } else {
 
       Node *symbol = node_symbol_from_buffer(current_token.beginning, token_length);
+
+      // Parse lambda
+      if (strcmp("[", symbol->value.symbol) == 0) {
+
+        Node *lambda = working_result;
+        lambda->type = NODE_TYPE_FUNCTION;
+
+        // Return type
+        lex_advance(&current_token, &token_length, end);
+        Node *function_return_type = node_symbol_from_buffer(current_token.beginning, token_length);
+
+        // Parameter list
+        EXPECT(expected, "(", current_token, token_length, end);
+        if (!expected.found || expected.done) {
+          ERROR_PREP(err, ERROR_SYNTAX, "Parameter list required within lambda definition");
+          return err;
+        }
+
+        Node *parameter_list = node_allocate();
+
+        // FIXME?: Should we possibly create a parser stack and evaluate the
+        // next expression, then ensure return value is var. decl. in stack
+        // handling below?
+        for (;;) {
+          EXPECT(expected, ")", current_token, token_length, end);
+          if (expected.found) { break; }
+          if (expected.done) {
+            ERROR_PREP(err, ERROR_SYNTAX,
+                       "Expected closing parenthesis for parameter list");
+            return err;
+          }
+
+          err = lex_advance(&current_token, &token_length, end);
+          if (err.type) { return err; }
+          Node *parameter_name = node_symbol_from_buffer(current_token.beginning, token_length);
+
+          EXPECT(expected, ":", current_token, token_length, end);
+          if (expected.done || !expected.found) {
+            ERROR_PREP(err, ERROR_SYNTAX, "Parameter declaration requires a type annotation");
+            return err;
+          }
+
+          lex_advance(&current_token, &token_length, end);
+          Node *parameter_type = node_symbol_from_buffer(current_token.beginning, token_length);
+
+          Node *parameter = node_allocate();
+          node_add_child(parameter, parameter_name);
+          node_add_child(parameter, parameter_type);
+
+          node_add_child(parameter_list, parameter);
+
+          EXPECT(expected, ",", current_token, token_length, end);
+          if (expected.found) { continue; }
+
+          EXPECT (expected, ")", current_token, token_length, end);
+          if (!expected.found) {
+            ERROR_PREP(err, ERROR_SYNTAX, "Expected closing parenthesis following parameter list");
+            return err;
+          }
+          break;
+
+        }
+
+        // TODO/FIXME: Do I need to bind unnamed function in environment?
+        //environment_set(context->functions, function_name, working_result);
+
+        // Parse function body.
+        EXPECT(expected, "{", current_token, token_length, end);
+        if (expected.done || !expected.found) {
+          ERROR_PREP(err, ERROR_SYNTAX, "Function definition requires body following return type");
+          return err;
+        }
+
+        context = parse_context_create(context);
+        context->operator = node_symbol("lambda");
+
+        Node *param_it = parameter_list->children;
+        while (param_it) {
+          environment_set(context->variables,
+                          param_it->children,
+                          param_it->children->next_child);
+          param_it = param_it->next_child;
+        }
+
+        Node *function_body = node_allocate();
+        Node *function_first_expression = node_allocate();
+        node_add_child(function_body, function_first_expression);
+        working_result = function_first_expression;
+
+        node_add_child(lambda, parameter_list);
+        node_add_child(lambda, function_return_type);
+        node_add_child(lambda, function_body);
+
+        context->result = working_result;
+
+        continue;
+      }
 
       // TODO: Parse strings and other literal types.
 
@@ -573,7 +786,7 @@ Error parse_expr
         // Parse function body.
         EXPECT(expected, "{", current_token, token_length, end);
         if (expected.done || !expected.found) {
-          ERROR_PREP(err, ERROR_SYNTAX, "Function definition requires body following return type: \"{ a + b }\"");
+          ERROR_PREP(err, ERROR_SYNTAX, "Function definition requires body following return type");
           return err;
         }
 
@@ -594,6 +807,7 @@ Error parse_expr
         node_add_child(working_result, function_body);
         working_result = function_first_expression;
         context->result = working_result;
+
         continue;
 
       }
@@ -632,7 +846,11 @@ Error parse_expr
         Node *type_symbol =
           node_symbol_from_buffer(current_token.beginning, token_length);
         Node *type_value = node_allocate();
-        parse_get_type(context, type_symbol, type_value);
+        err = parse_get_type(context, type_symbol, type_value);
+        if (err.type) {
+          free(type_value);
+          return err;
+        }
         if (nonep(*type_value)) {
           ERROR_PREP(err, ERROR_TYPE, "Invalid type within variable declaration");
           printf("\nINVALID TYPE: \"%s\"\n", type_symbol->value.symbol);
@@ -690,6 +908,27 @@ Error parse_expr
           // Create a parsing stack with function call operator IG,
           // and then start parsing function argument expressions.
 
+          // Original Context: @
+          // New contexts:     |
+
+          // @ -> NULL
+          // ^
+
+          // | -> @ -> NULL
+          // ^
+
+          // @ -> NULL
+          // |-- NEW CONTEXT
+          // |   `-- NEW CONTEXT
+          // |
+          // |-- ...
+
+          // GLOBAL ("x" -> "integer")
+          // |-- 0 ("x" -> "integer")
+          // |   `-- NEW CONTEXT/SCOPE
+          // |-- 1
+          // `-- N...
+
           context = parse_context_create(context);
           context->operator = node_symbol("funcall");
           context->result = working_result;
@@ -697,63 +936,41 @@ Error parse_expr
           continue;
 
         } else {
-          // TODO: Check if it's a variable access (defined variable)
+          ParsingContext *context_it = context;
+          Node *variable = node_allocate();
+          while (context_it) {
+            if (environment_get(*context_it->variables, symbol, variable)) {
+              break;
+            }
+            context_it = context_it->parent;
+          }
+          if (!context_it) {
+            printf("Symbol: \"%s\"\n", node_text(symbol));
+            ERROR_PREP(err, ERROR_SYNTAX, "Unknown symbol");
+            return err;
+          }
+
+          // Variable access node
+          working_result->type = NODE_TYPE_VARIABLE_ACCESS;
+          working_result->value.symbol = strdup(symbol->value.symbol);
+
+          free(variable);
         }
       }
     }
 
-    // Look ahead for a binary infix operator, right?
-    Token current_copy = current_token;
-    size_t length_copy = token_length;
-    char *end_copy = *end;
-    err = lex_advance(&current_copy, &length_copy, &end_copy);
-    if (err.type != ERROR_NONE) { return err; }
-    Node *operator_symbol =
-      node_symbol_from_buffer(current_copy.beginning, length_copy);
-    Node *operator_value = node_allocate();
-    ParsingContext *global = context;
-    while (global->parent) { global = global->parent; }
-    if (environment_get(*global->binary_operators, operator_symbol, operator_value)) {
-      current_token = current_copy;
-      token_length = length_copy;
-      *end = end_copy;
-      long long precedence = operator_value->children->value.integer;
-
-      //printf("Got op. %s with precedence %lld (working %lld)\n",
-      //       operator_symbol->value.symbol,
-      //       precedence, working_precedence);
-      //printf("working precedence: %lld\n", working_precedence);
-
-      // TODO: Handle grouped expressions through parentheses using precedence stack.
-
-      Node *result_pointer = precedence <= working_precedence ? result : working_result;
-
-      Node *result_copy = node_allocate();
-      node_copy(result_pointer, result_copy);
-      result_pointer->type = NODE_TYPE_BINARY_OPERATOR;
-      result_pointer->value.symbol = operator_symbol->value.symbol;
-      result_pointer->children = result_copy;
-      result_pointer->next_child = NULL;
-
-      Node *rhs = node_allocate();
-      node_add_child(result_pointer, rhs);
-      working_result = rhs;
-
-      working_precedence = precedence;
-
-      free(operator_symbol);
-      free(operator_value);
-
+    int found = 0;
+    err = parse_binary_infix_operator(context, &found, &current_token, &token_length,
+                                      end, &working_precedence, result, &working_result);
+    if (found) {
       continue;
     }
-    node_free(operator_symbol);
-    free(operator_value);
 
-    // TODO: If it works, update current_token
-
+    // If no more parser stack, return with current result.
     if (!context->parent) {
       break;
     }
+    // Otherwise, handle parser stack operator.
 
     Node *operator = context->operator;
     if (operator->type != NODE_TYPE_SYMBOL) {
@@ -762,12 +979,45 @@ Error parse_expr
       return err;
     }
 
+    if (strcmp(operator->value.symbol, "lambda") == 0) {
+      // Evaluate next expression unless it's a closing brace.
+      EXPECT(expected, "}", current_token, token_length, end);
+      if (expected.done || expected.found) {
+        EXPECT(expected, "]", current_token, token_length, end);
+        if (expected.done || expected.found) {
+          if (!context->parent) {
+            return ok;
+          }
+          context = context->parent;
+          // Returning into global context, return result expression.
+          if (!context->parent) {
+            break;
+          }
+        } else {
+          ERROR_PREP(err, ERROR_SYNTAX,
+                     "Expected closing square bracket for following lambda body definition");
+          return err;
+        }
+      }
+
+      context->result->next_child = node_allocate();
+      working_result = context->result->next_child;
+      context->result = working_result;
+
+      continue;
+    }
     if (strcmp(operator->value.symbol, "defun") == 0) {
       // Evaluate next expression unless it's a closing brace.
       EXPECT(expected, "}", current_token, token_length, end);
       if (expected.done || expected.found) {
-        // TODO: Should we pop parser context here?
-        break;
+        if (!context->parent || !context->parent->parent) {
+          break;
+        }
+        context = context->parent;
+        // Returning into global context, return result expression.
+        if (!context->parent) {
+          break;
+        }
       }
 
       context->result->next_child = node_allocate();
@@ -777,7 +1027,13 @@ Error parse_expr
     }
     if (strcmp(operator->value.symbol, "funcall") == 0) {
       EXPECT(expected, ")", current_token, token_length, end);
-      if (expected.done || expected.found) { break; }
+      if (expected.done || expected.found) {
+        int found = 0;
+        err = parse_binary_infix_operator(context, &found, &current_token, &token_length,
+                                          end, &working_precedence, result, &working_result);
+        if (found) { continue; }
+        break;
+      }
 
       // FIXME?: Should comma be optional?
       EXPECT(expected, ",", current_token, token_length, end);
@@ -813,11 +1069,18 @@ Error parse_program(char *filepath, ParsingContext *context, Node *result) {
   for (;;) {
     Node *expression = node_allocate();
     node_add_child(result, expression);
+
+    // FIXME: I DID THIS
+    context->result = expression;
+
     err = parse_expr(context, contents_it, &contents_it, expression);
     if (err.type != ERROR_NONE) {
       free(contents);
       return err;
     }
+
+
+
     // Check for end-of-parsing case (source and end are the same).
     if (!(*contents_it)) { break; }
 

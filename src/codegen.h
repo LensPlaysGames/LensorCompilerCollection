@@ -37,6 +37,7 @@ typedef struct CodegenContext {
   /// LOCALS
   /// `-- SYMBOL (NAME) -> INTEGER (STACK OFFSET)
   Environment *locals;
+  long long locals_offset;
 } CodegenContext;
 
 enum CodegenOutputFormat {

@@ -27,6 +27,8 @@ int main(int argc, char **argv) {
   print_node(program, 0);
   putchar('\n');
 
+  parse_context_print(context,0);
+
   if (err.type) {
     print_error(err);
     return 1;
