@@ -129,9 +129,6 @@ typedef struct ParsingContext {
   /// iterate and operate on the AST.
   struct ParsingContext *children;
   struct ParsingContext *next_child;
-  /// Used for stack continuation while parsing
-  Node *operator;
-  Node *result;
   /// TYPE
   /// `-- SYMBOL (IDENTIFIER) -> TYPE (NODE_TYPE)
   ///                            `-- BYTE_SIZE (N)

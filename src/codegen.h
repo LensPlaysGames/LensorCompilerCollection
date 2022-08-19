@@ -45,6 +45,6 @@ enum CodegenOutputFormat {
   CG_FMT_x86_64_MSWIN,
 };
 
-Error codegen_program(enum CodegenOutputFormat, ParsingContext *context, Node *program);
+Error codegen_program(enum CodegenOutputFormat, char *output_filepath, ParsingContext *context, Node *program);
 
 #endif /* CODEGEN_H */

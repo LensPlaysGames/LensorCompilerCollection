@@ -455,7 +455,9 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
     Node *type_info = node_allocate();
     if (!environment_get(*context->types, type, type_info)) {
       printf("Type: \"%s\"\n", type->value.symbol);
-      ERROR_PREP(err, ERROR_GENERIC, "Could not get type info from types environment!");
+      ERROR_PREP(err, ERROR_GENERIC,
+                 "Could not get type info from types environment!");
+      // TODO/FIXME: Should I return error here?
     }
     var_it = var_it->next;
     fprintf(code, "%s: .space %lld\n", var_id->value.symbol, type_info->children->value.integer);
@@ -505,13 +507,26 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
 
 //================================================================ END CG_FMT_x86_64_MSWIN
 
-Error codegen_program(enum CodegenOutputFormat format, ParsingContext *context, Node *program) {
+Error codegen_program
+(enum CodegenOutputFormat format,
+ char *filepath,
+ ParsingContext *context,
+ Node *program
+ )
+{
   Error err = ok;
-
+  if (!filepath) {
+    ERROR_PREP(err, ERROR_ARGUMENTS, "codegen_program(): filepath can not be NULL!");
+    return err;
+  }
   CodegenContext *cg_context = codegen_context_create(NULL);
-
   // Open file for writing.
-  FILE *code = fopen("code.S", "w");
+  FILE *code = fopen(filepath, "w");
+  if (!code) {
+    printf("Filepath: \"%s\"\n", filepath);
+    ERROR_PREP(err, ERROR_GENERIC, "codegen_program(): fopen failed to open file at path.");
+    return err;
+  }
   if (format == CG_FMT_DEFAULT || format == CG_FMT_x86_64_MSWIN) {
     err = codegen_program_x86_64_mswin(code, cg_context, context, program);
   }

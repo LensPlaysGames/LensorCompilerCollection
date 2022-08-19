@@ -38,7 +38,9 @@ Error lex(char *source, Token *token) {
   token->beginning = source;
   token->beginning += strspn(token->beginning, whitespace);
   token->end = token->beginning;
-  if (*(token->end) == '\0') { return err; }
+  if (*(token->end) == '\0') {
+    return err;
+  }
   // Check if current line is a comment, and skip past it.
   while (comment_at_beginning(*token)) {
     // Skip to next newline.
@@ -363,6 +365,15 @@ void parse_context_add_child(ParsingContext *parent, ParsingContext *child) {
   }
 }
 
+ParsingStack *parse_stack_create(ParsingStack *parent) {
+  ParsingStack *stack = malloc(sizeof(ParsingStack));
+  assert(stack && "Could not allocate memory for new parser continuation stack.");
+  stack->parent = parent;
+  stack->operator = NULL;
+  stack->result = NULL;
+  return stack;
+}
+
 ParsingContext *parse_context_create(ParsingContext *parent) {
   ParsingContext *ctx = calloc(1, sizeof(ParsingContext));
   assert(ctx && "Could not allocate memory for parsing context.");
@@ -372,8 +383,6 @@ ParsingContext *parse_context_create(ParsingContext *parent) {
   parse_context_add_child(parent, ctx);
   ctx->children = NULL;
   ctx->next_child = NULL;
-  ctx->operator = NULL;
-  ctx->result = NULL;
   ctx->types = environment_create(NULL);
   ctx->variables = environment_create(NULL);
   ctx->functions = environment_create(NULL);
@@ -489,8 +498,7 @@ Error parse_get_type(ParsingContext *context, Node *id, Node *result) {
 
 #define EXPECT(expected, expected_string, current_token, current_length, end)   \
   expected = lex_expect(expected_string, &current_token, &current_length, end); \
-  if (expected.err.type) { return expected.err; }                               \
-  if (expected.done) { return ok; }
+  if (expected.err.type) { return expected.err; }
 
 int parse_integer(Token *token, Node *node) {
   if (!token || !node) { return 0; }
@@ -573,6 +581,7 @@ Error parse_expr
  Node *result
  )
 {
+  ParsingStack *stack = NULL;
   ExpectReturnValue expected;
   size_t token_length = 0;
   Token current_token;
@@ -593,6 +602,10 @@ Error parse_expr
 
       Node *symbol = node_symbol_from_buffer(current_token.beginning, token_length);
 
+      if (strcmp("if", symbol->value.symbol) == 0) {
+        continue;
+      }
+
       // Parse lambda
       if (strcmp("[", symbol->value.symbol) == 0) {
 
@@ -602,6 +615,7 @@ Error parse_expr
         // Return type
         lex_advance(&current_token, &token_length, end);
         Node *function_return_type = node_symbol_from_buffer(current_token.beginning, token_length);
+        // TODO: Ensure function return type is a valid type.
 
         // Parameter list
         EXPECT(expected, "(", current_token, token_length, end);
@@ -666,8 +680,6 @@ Error parse_expr
         }
 
         context = parse_context_create(context);
-        context->operator = node_symbol("lambda");
-
         Node *param_it = parameter_list->children;
         while (param_it) {
           environment_set(context->variables,
@@ -685,7 +697,9 @@ Error parse_expr
         node_add_child(lambda, function_return_type);
         node_add_child(lambda, function_body);
 
-        context->result = working_result;
+        stack = parse_stack_create(stack);
+        stack->operator = node_symbol("lambda");
+        stack->result = working_result;
 
         continue;
       }
@@ -693,9 +707,6 @@ Error parse_expr
       // TODO: Parse strings and other literal types.
 
       // TODO: Check for unary prefix operators.
-
-      // TODO: Check that it isn't a binary operator (we should encounter left
-      // side first and peek forward, rather than encounter it at top level).
 
       if (strcmp("defun", symbol->value.symbol) == 0) {
         // Begin function definition.
@@ -790,9 +801,9 @@ Error parse_expr
           return err;
         }
 
-        context = parse_context_create(context);
-        context->operator = node_symbol("defun");
 
+
+        context = parse_context_create(context);
         Node *param_it = working_result->children->children;
         while (param_it) {
           environment_set(context->variables,
@@ -806,7 +817,10 @@ Error parse_expr
         node_add_child(function_body, function_first_expression);
         node_add_child(working_result, function_body);
         working_result = function_first_expression;
-        context->result = working_result;
+
+        stack = parse_stack_create(stack);
+        stack->operator = node_symbol("defun");
+        stack->result = working_result;
 
         continue;
 
@@ -816,7 +830,7 @@ Error parse_expr
       // declaration, or declaration with initialization.
 
       EXPECT(expected, ":", current_token, token_length, end);
-      if (expected.found) {
+      if (!expected.done && expected.found) {
 
         // Re-assignment of existing variable (look for =)
         EXPECT(expected, "=", current_token, token_length, end);
@@ -897,7 +911,7 @@ Error parse_expr
 
         // Check if it's a function call (lookahead for symbol)
         EXPECT(expected, "(", current_token, token_length, end);
-        if (expected.found) {
+        if (!expected.done && expected.found) {
           working_result->type = NODE_TYPE_FUNCTION_CALL;
           node_add_child(working_result, symbol);
           Node *argument_list = node_allocate();
@@ -905,57 +919,37 @@ Error parse_expr
           node_add_child(argument_list, first_argument);
           node_add_child(working_result, argument_list);
           working_result = first_argument;
-          // Create a parsing stack with function call operator IG,
+          // Create a parsing stack with function call operator,
           // and then start parsing function argument expressions.
-
-          // Original Context: @
-          // New contexts:     |
-
-          // @ -> NULL
-          // ^
-
-          // | -> @ -> NULL
-          // ^
-
-          // @ -> NULL
-          // |-- NEW CONTEXT
-          // |   `-- NEW CONTEXT
-          // |
-          // |-- ...
-
-          // GLOBAL ("x" -> "integer")
-          // |-- 0 ("x" -> "integer")
-          // |   `-- NEW CONTEXT/SCOPE
-          // |-- 1
-          // `-- N...
-
-          context = parse_context_create(context);
-          context->operator = node_symbol("funcall");
-          context->result = working_result;
-
+          stack = parse_stack_create(stack);
+          stack->operator = node_symbol("funcall");
+          stack->result = working_result;
           continue;
-
-        } else {
-          ParsingContext *context_it = context;
-          Node *variable = node_allocate();
-          while (context_it) {
-            if (environment_get(*context_it->variables, symbol, variable)) {
-              break;
-            }
-            context_it = context_it->parent;
-          }
-          if (!context_it) {
-            printf("Symbol: \"%s\"\n", node_text(symbol));
-            ERROR_PREP(err, ERROR_SYNTAX, "Unknown symbol");
-            return err;
-          }
-
-          // Variable access node
-          working_result->type = NODE_TYPE_VARIABLE_ACCESS;
-          working_result->value.symbol = strdup(symbol->value.symbol);
-
-          free(variable);
         }
+
+        ParsingContext *context_it = context;
+        Node *variable = node_allocate();
+        while (context_it) {
+          if (environment_get(*context_it->variables, symbol, variable)) {
+            break;
+          }
+          context_it = context_it->parent;
+        }
+
+        if (!context_it) {
+          printf("Symbol: \"%s\"\n", node_text(symbol));
+          ERROR_PREP(err, ERROR_SYNTAX, "Unknown symbol");
+          return err;
+        }
+
+        //print_token(current_token);
+        //putchar('\n');
+
+        // Variable access node
+        working_result->type = NODE_TYPE_VARIABLE_ACCESS;
+        working_result->value.symbol = strdup(symbol->value.symbol);
+
+        free(variable);
       }
     }
 
@@ -967,13 +961,12 @@ Error parse_expr
     }
 
     // If no more parser stack, return with current result.
-    if (!context->parent) {
-      break;
-    }
+    //if (!context->parent) { break; }
+    if (!stack) { break; }
     // Otherwise, handle parser stack operator.
 
-    Node *operator = context->operator;
-    if (operator->type != NODE_TYPE_SYMBOL) {
+    Node *operator = stack->operator;
+    if (!operator || operator->type != NODE_TYPE_SYMBOL) {
       ERROR_PREP(err, ERROR_TYPE,
                  "Parsing context operator must be symbol. Likely internal error :(");
       return err;
@@ -985,14 +978,13 @@ Error parse_expr
       if (expected.done || expected.found) {
         EXPECT(expected, "]", current_token, token_length, end);
         if (expected.done || expected.found) {
-          if (!context->parent) {
-            return ok;
-          }
+          //if (!context->parent) {
+          //  // FIXME: Shouldn't this be an error?
+          //  return ok;
+          //}
           context = context->parent;
-          // Returning into global context, return result expression.
-          if (!context->parent) {
-            break;
-          }
+          stack = stack->parent;
+          if (!stack) { break; }
         } else {
           ERROR_PREP(err, ERROR_SYNTAX,
                      "Expected closing square bracket for following lambda body definition");
@@ -1000,34 +992,40 @@ Error parse_expr
         }
       }
 
-      context->result->next_child = node_allocate();
-      working_result = context->result->next_child;
-      context->result = working_result;
-
+      stack->result->next_child = node_allocate();
+      working_result = stack->result->next_child;
+      stack->result = working_result;
       continue;
     }
     if (strcmp(operator->value.symbol, "defun") == 0) {
       // Evaluate next expression unless it's a closing brace.
       EXPECT(expected, "}", current_token, token_length, end);
       if (expected.done || expected.found) {
-        if (!context->parent || !context->parent->parent) {
-          break;
-        }
+        // if (!context->parent || !context->parent->parent) {
+        //   break;
+        // }
+        // context = context->parent;
+        // // Returning into global context, return result expression.
+        // if (!context->parent) {
+        //   break;
+        // }
+
         context = context->parent;
-        // Returning into global context, return result expression.
-        if (!context->parent) {
-          break;
-        }
+        stack = stack->parent;
+        if (!stack) { break; }
       }
 
-      context->result->next_child = node_allocate();
-      working_result = context->result->next_child;
-      context->result = working_result;
+      stack->result->next_child = node_allocate();
+      working_result = stack->result->next_child;
+      stack->result = working_result;
       continue;
     }
     if (strcmp(operator->value.symbol, "funcall") == 0) {
       EXPECT(expected, ")", current_token, token_length, end);
       if (expected.done || expected.found) {
+
+        stack = stack->parent;
+
         int found = 0;
         err = parse_binary_infix_operator(context, &found, &current_token, &token_length,
                                           end, &working_precedence, result, &working_result);
@@ -1044,9 +1042,9 @@ Error parse_expr
         return err;
       }
 
-      context->result->next_child = node_allocate();
-      working_result = context->result->next_child;
-      context->result = working_result;
+      stack->result->next_child = node_allocate();
+      working_result = stack->result->next_child;
+      stack->result = working_result;
 
       continue;
     }
@@ -1069,17 +1067,11 @@ Error parse_program(char *filepath, ParsingContext *context, Node *result) {
   for (;;) {
     Node *expression = node_allocate();
     node_add_child(result, expression);
-
-    // FIXME: I DID THIS
-    context->result = expression;
-
     err = parse_expr(context, contents_it, &contents_it, expression);
     if (err.type != ERROR_NONE) {
       free(contents);
       return err;
     }
-
-
 
     // Check for end-of-parsing case (source and end are the same).
     if (!(*contents_it)) { break; }

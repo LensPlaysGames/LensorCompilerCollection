@@ -2,11 +2,9 @@
 
 * FUNCompiler
 
-I don't really have a plan, I just want to make a compiler; it sounds
-fun. There's an example of some code that should be valid and able to
-be compiled in ~example~.
-
-NOTE: Shell commands shown assume a working directory of this repository.
+I didn't really have a plan, but I went ahead and started making this
+compiler from scratch in C anyways. Now we have a functioning compiler
+with a brand new language that has still not even been named.
 
 ** Usage
 
@@ -32,10 +30,37 @@ Finally, build an executable from the build tree.
   cmake --build bld
 #+end_src
 
-** To build generated x86_64 ASM
+*** To build generated x86_64 ASM
 
-On Windows under MinGW:
 #+begin_src shell
   as code.S -o code.o
-  ld code.o -o code.exe && code.exe
+  ld code.o -o code
 #+end_src
+
+** Language Reference
+
+The language is statically typed.
+
+Functions are first-class citizens.
+
+Variables must be declared and type annotated before use.
+
+A program in this language comes in the form of a file. The file may
+contain a series of expressions that will be executed in order, from
+top to bottom. There is no =main= function or other entry point;
+control flow starts at the very top of the file and makes it's way to
+the bottom of the file.
+
+Let's take a look at a basic program:
+#+begin_example
+add_ten : function = [ integer (x : integer) { x + 10 } ]
+
+a : integer
+
+a := 0
+a := add_ten(a)
+a := add_ten(a)
+
+add_ten(a)
+
+#+end_example
