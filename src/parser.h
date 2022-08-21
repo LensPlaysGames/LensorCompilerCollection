@@ -54,6 +54,12 @@ typedef enum NodeType {
   /// 2. VALUE EXPRESSION
   NODE_TYPE_VARIABLE_REASSIGNMENT,
 
+  /// Contains two children.
+  /// 1. Condition Expression
+  /// 2. "THEN" Expression List
+  /// TODO: 3. "ELSE" Expression List
+  NODE_TYPE_IF,
+
   /// A valid binary operator. Contains two children.
   /// 1. Left Hand Side, often abbreviated as LHS
   /// 1. Right Hand Side, often abbreviated as RHS
