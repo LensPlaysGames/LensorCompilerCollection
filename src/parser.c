@@ -416,10 +416,19 @@ ParsingContext *parse_context_default_create() {
   // TODO: Should we use type IDs vs type symbols?
   // FIXME: Use precedence enum!
   const char *binop_error_message = "ERROR: Failed to set builtin binary operator in environment.";
+
+  err = define_binary_operator(ctx, "=", 3, "integer", "integer", "integer");
+  if (err.type != ERROR_NONE) { puts(binop_error_message); }
+  err = define_binary_operator(ctx, "<", 3, "integer", "integer", "integer");
+  if (err.type != ERROR_NONE) { puts(binop_error_message); }
+  err = define_binary_operator(ctx, ">", 3, "integer", "integer", "integer");
+  if (err.type != ERROR_NONE) { puts(binop_error_message); }
+
   err = define_binary_operator(ctx, "+", 5, "integer", "integer", "integer");
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
   err = define_binary_operator(ctx, "-", 5, "integer", "integer", "integer");
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
+
   err = define_binary_operator(ctx, "*", 10, "integer", "integer", "integer");
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
   err = define_binary_operator(ctx, "/", 10, "integer", "integer", "integer");
@@ -523,7 +532,7 @@ int parse_integer(Token *token, Node *node) {
 
 /// Set FOUND to 1 if an infix operator is found and parsing should continue, otherwise 0.
 Error parse_binary_infix_operator
-(ParsingContext *context,
+(ParsingContext *context, ParsingStack *stack,
  int *found,
  Token *current, size_t *length, char **end,
  long long *working_precedence,
@@ -557,6 +566,15 @@ Error parse_binary_infix_operator
     // TODO: Handle grouped expressions through parentheses using precedence stack.
 
     Node *result_pointer = precedence <= *working_precedence ? result : *working_result;
+    if (precedence  <= *working_precedence) {
+      if (stack) {
+        result_pointer = stack->result;
+      } else {
+        result_pointer = result;
+      }
+    } else {
+      result_pointer = *working_result;
+    }
 
     Node *result_copy = node_allocate();
     node_copy(result_pointer, result_copy);
@@ -634,16 +652,18 @@ Error handle_stack_operator
       // TODO: Maybe warn?
       EXPECT(expected, "}", current, length, end);
       if (expected.found) {
+        // TODO: First check for else...
         *stack = (*stack)->parent;
         *status = STACK_HANDLED_CHECK;
         return ok;
       }
 
-      *working_result = if_then_first_expr;
       // TODO: Should new parsing context be created for scope of if body?
       // TODO: Don't leak stack->operator.
       (*stack)->operator = node_symbol("if-then-body");
-      (*stack)->result = *working_result;
+      (*stack)->body = if_then_body;
+      (*stack)->result = if_then_first_expr;
+      *working_result = if_then_first_expr;
       *status = STACK_HANDLED_PARSE;
       return ok;
     }
@@ -657,13 +677,51 @@ Error handle_stack_operator
     EXPECT(expected, "}", current, length, end);
     if (expected.done || expected.found) {
       // TODO: Lookahead for else then parse if-else-body.
+      EXPECT(expected, "else", current, length, end);
+      if (expected.found) {
+        EXPECT(expected, "{", current, length, end);
+        if (expected.found) {
+          Node *if_else_body = node_allocate();
+          Node *if_else_first_expr = node_allocate();
+          node_add_child(if_else_body, if_else_first_expr);
+
+          (*stack)->body->next_child = if_else_body;
+
+          // TODO: Don't leak stack operator!
+          (*stack)->operator = node_symbol("if-else-body");
+          (*stack)->body = if_else_body;
+          (*stack)->result = if_else_first_expr;
+          *working_result = if_else_first_expr;
+          *status = STACK_HANDLED_PARSE;
+          return ok;
+        }
+        ERROR_PREP(err, ERROR_SYNTAX, "`else` must be followed by body.");
+        return err;
+      }
+
       *stack = (*stack)->parent;
       *status = STACK_HANDLED_CHECK;
       return ok;
     }
-    (*stack)->result->next_child = node_allocate();
-    *working_result = (*stack)->result->next_child;
-    (*stack)->result = *working_result;
+    Node *next_expr = node_allocate();
+    (*stack)->result->next_child = next_expr;
+    (*stack)->result = next_expr;
+    *working_result = next_expr;
+    *status = STACK_HANDLED_PARSE;
+    return ok;
+  }
+
+  if (strcmp(operator->value.symbol, "if-else-body") == 0) {
+    // Evaluate next expression unless it's a closing brace.
+    EXPECT(expected, "}", current, length, end);
+    if (expected.done || expected.found) {
+      *stack = (*stack)->parent;
+      *status = STACK_HANDLED_CHECK;
+      return ok;
+    }
+    Node *next_expr = node_allocate();
+    node_add_child((*stack)->result, next_expr);
+    *working_result = next_expr;
     *status = STACK_HANDLED_PARSE;
     return ok;
   }
@@ -718,7 +776,7 @@ Error handle_stack_operator
       *stack = (*stack)->parent;
 
       int found = 0;
-      err = parse_binary_infix_operator(*context, &found, current, length,
+      err = parse_binary_infix_operator(*context, *stack, &found, current, length,
                                         end, working_precedence, result, working_result);
       if (found) {
         *status = STACK_HANDLED_PARSE;
@@ -1065,11 +1123,8 @@ Error parse_expr
 
         working_result->type = NODE_TYPE_VARIABLE_DECLARATION;
 
-        Node *value_expression = node_none();
-
         // `symbol` is now owned by working_result, a var. decl.
         node_add_child(working_result, symbol);
-        node_add_child(working_result, value_expression);
 
         // Context variables environment gains new binding.
         Node *symbol_for_env = node_allocate();
@@ -1083,6 +1138,21 @@ Error parse_expr
 
         EXPECT(expected, "=", &current_token, &token_length, end);
         if (expected.found) {
+
+          working_result->next_child = node_allocate();
+
+          Node **local_result = &result;
+          if (stack) { local_result = &stack->result; }
+
+          Node *reassign = node_allocate();
+          reassign->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
+          Node *value_expression = node_allocate();
+          node_add_child(reassign, node_symbol(symbol->value.symbol));
+          node_add_child(reassign, value_expression);
+
+          (*local_result)->next_child = reassign;
+          *local_result = reassign;
+
           working_result = value_expression;
           continue;
         }
@@ -1135,7 +1205,7 @@ Error parse_expr
     }
 
     int found = 0;
-    err = parse_binary_infix_operator(context, &found, &current_token, &token_length,
+    err = parse_binary_infix_operator(context, stack, &found, &current_token, &token_length,
                                       end, &working_precedence, result, &working_result);
     if (found) {
       continue;

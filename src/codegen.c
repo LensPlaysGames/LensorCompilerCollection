@@ -107,7 +107,7 @@ size_t label_count = 0;
 char *label_generate() {
   char *label = label_buffer + label_index;
   label_index += snprintf(label, label_buffer_size - label_index,
-                          ".L%zu:\n", label_count);
+                          ".L%zu", label_count);
   label_index++;
   if (label_index >= label_buffer_size) {
     label_index = 0;
@@ -118,6 +118,9 @@ char *label_generate() {
 }
 
 //================================================================ BEG CG_FMT_x86_64_MSWIN
+
+// TODO/FIXME: Make this a parameter affectable by command line arguments.
+char codegen_verbose = 1;
 
 #define symbol_buffer_size 1024
 char symbol_buffer[label_buffer_size];
@@ -174,16 +177,31 @@ Error codegen_expression_x86_64_mswin
   Node *tmpnode = node_allocate();
   Node *iterator = NULL;
   long long count = 0;
+
+  //expression->result_register = -1;
+
+  assert(NODE_TYPE_MAX == 11 && "codegen_expression_x86_64_mswin() must exhaustively handle node types!");
   switch (expression->type) {
   default:
     break;
   case NODE_TYPE_INTEGER:
+    if (codegen_verbose) {
+      fprintf(code, ";;#; INTEGER: %lld\n", expression->value.integer);
+    }
     expression->result_register = register_allocate(r);
     fprintf(code, "mov $%lld, %s\n",
             expression->value.integer,
             register_name(r, expression->result_register));
     break;
   case NODE_TYPE_FUNCTION_CALL:
+    if (codegen_verbose) {
+      fprintf(code, ";;#; Function Call: \"%s\"\n", expression->children->value.symbol);
+    }
+
+    // TODO: Should we technically save all in-use scratch registers?
+    // Save RAX because function call will over-write it!
+    fprintf(code, "pushq %%rax\n");
+
     // Push arguments *in reverse order* on to the stack.
     // TODO: In reverse order. Or just calculate same when accessing.
     iterator = expression->children->next_child->children;
@@ -195,19 +213,126 @@ Error codegen_expression_x86_64_mswin
       iterator = iterator->next_child;
       count++;
     }
+
     // Emit call
     fprintf(code, "call %s\n", expression->children->value.symbol);
     fprintf(code, "add $%lld, %%rsp\n", count * 8);
+
+    // Copy return value of function call from RAX to result register
+    expression->result_register = register_allocate(r);
+    if (strcmp(register_name(r, expression->result_register), "%rax") != 0) {
+      fprintf(code, "mov %%rax, %s\n", register_name(r, expression->result_register));
+      // Save overwritten in-use registers.
+      fprintf(code, "pop %%rax\n");
+    } else {
+      fprintf(code, "add $8, %%rsp\n");
+    }
+
     break;
   case NODE_TYPE_FUNCTION:
+    if (codegen_verbose) {
+      fprintf(code, ";;#; Function\n");
+    }
     if (!cg_context->parent) { break; }
     // TODO: Keep track of local lambda label in environment or something.
     result = label_generate();
     err = codegen_function_x86_64_att_asm_mswin(r, cg_context, context, next_child_context,
                                                 result, expression, code);
-    if (err.type) { break; }
+
+    // TODO: What should function return?
+
+    break;
+  case NODE_TYPE_IF:
+    if (codegen_verbose) {
+      fprintf(code, ";;#; If\n");
+    }
+    err = codegen_expression_x86_64_mswin(code, r, cg_context,
+                                          context, next_child_context,
+                                          expression->children);
+    if (err.type) { return err; }
+
+    if (codegen_verbose) {
+      fprintf(code, ";;#; If CONDITION\n");
+    }
+
+    // Generate code using result register from condition expression.
+    char *otherwise_label = label_generate();
+    char *after_otherwise_label = label_generate();
+    char *condition_register_name = register_name(r, expression->children->result_register);
+    fprintf(code, "test %s, %s\n", condition_register_name, condition_register_name);
+    fprintf(code, "jz %s\n", otherwise_label);
+    register_deallocate(r,expression->children->result_register);
+
+    if (codegen_verbose) {
+      fprintf(code, ";;#; If THEN\n");
+    }
+
+    // Generate THEN expression body.
+    Node *last_expr = NULL;
+    Node *expr = expression->children->next_child->children;
+    while (expr) {
+      err = codegen_expression_x86_64_mswin(code, r, cg_context,
+                                            context, next_child_context,
+                                            expr);
+
+      //register_deallocate(r, expr->result_register);
+
+      if (err.type) { return err; }
+      if (last_expr) {
+        register_deallocate(r, last_expr->result_register);
+      }
+      last_expr = expr;
+      expr = expr->next_child;
+    }
+
+    // Generate code to copy last expr result register to if result register.
+    expression->result_register = register_allocate(r);
+    fprintf(code, "mov %s, %s\n",
+            register_name(r, last_expr->result_register),
+            register_name(r, expression->result_register));
+    register_deallocate(r, last_expr->result_register);
+    fprintf(code, "jmp %s\n", after_otherwise_label);
+
+    if (codegen_verbose) {
+      fprintf(code, ";;#; If OTHERWISE\n");
+    }
+
+    // Generate OTHERWISE
+    fprintf(code, "%s:\n", otherwise_label);
+    // TODO/FIXME: What should implicit return of IF with failing condition
+    //             with no else be?
+
+    fprintf(code, "mov $0, %s\n", register_name(r, expression->result_register));
+    last_expr = NULL;
+    expr = expression->children->next_child->next_child->children;
+    while (expr) {
+      err = codegen_expression_x86_64_mswin(code, r, cg_context,
+                                            context, next_child_context,
+                                            expr);
+
+      //register_deallocate(r, expr->result_register);
+
+      if (err.type) { return err; }
+      if (last_expr) {
+        register_deallocate(r, last_expr->result_register);
+      }
+      last_expr = expr;
+      expr = expr->next_child;
+    }
+
+    // Generate code to copy last expr result register to if result register.
+    fprintf(code, "mov %s, %s\n",
+            register_name(r, last_expr->result_register),
+            register_name(r, expression->result_register));
+    register_deallocate(r, last_expr->result_register);
+
+    fprintf(code, "%s:\n", after_otherwise_label);
+
     break;
   case NODE_TYPE_BINARY_OPERATOR:
+    if (codegen_verbose) {
+      fprintf(code, ";;#; Binary Operator: \"%s\"\n", expression->value.symbol);
+    }
     while (context->parent) { context = context->parent; }
     // FIXME: Second argument is memory leaked! :^(
     environment_get(*context->binary_operators, node_symbol(expression->value.symbol), tmpnode);
@@ -218,11 +343,72 @@ Error codegen_expression_x86_64_mswin
     err = codegen_expression_x86_64_mswin(code, r, cg_context,
                                           context, next_child_context,
                                           expression->children);
+    if (err.type) { return err; }
     err = codegen_expression_x86_64_mswin(code, r, cg_context,
                                           context, next_child_context,
                                           expression->children->next_child);
+    if (err.type) { return err; }
 
-    if (strcmp(expression->value.symbol, "+") == 0) {
+    if (strcmp(expression->value.symbol, ">") == 0) {
+      // https://www.felixcloutier.com/x86/cmovcc
+
+      expression->result_register = register_allocate(r);
+      RegisterDescriptor true_register = register_allocate(r);
+
+      fprintf(code, "mov $0, %s\n", register_name(r, expression->result_register));
+      fprintf(code, "mov $1, %s\n", register_name(r, true_register));
+      fprintf(code, "cmp %s, %s\n"
+              , register_name(r, expression->children->next_child->result_register)
+              , register_name(r, expression->children->result_register)
+              );
+      fprintf(code, "cmovg %s, %s\n",
+              register_name(r, true_register),
+              register_name(r, expression->result_register));
+
+      // Free no-longer-used left hand side result register.
+      register_deallocate(r, true_register);
+      register_deallocate(r, expression->children->result_register);
+      register_deallocate(r, expression->children->next_child->result_register);
+    } else if (strcmp(expression->value.symbol, "<") == 0) {
+      // https://www.felixcloutier.com/x86/cmovcc
+
+      expression->result_register = register_allocate(r);
+      RegisterDescriptor true_register = register_allocate(r);
+
+      fprintf(code, "mov $0, %s\n", register_name(r, expression->result_register));
+      fprintf(code, "mov $1, %s\n", register_name(r, true_register));
+      fprintf(code, "cmp %s, %s\n"
+              , register_name(r, expression->children->next_child->result_register)
+              , register_name(r, expression->children->result_register)
+              );
+      fprintf(code, "cmovl %s, %s\n",
+              register_name(r, true_register),
+              register_name(r, expression->result_register));
+
+      // Free no-longer-used left hand side result register.
+      register_deallocate(r, true_register);
+      register_deallocate(r, expression->children->result_register);
+      register_deallocate(r, expression->children->next_child->result_register);
+    } else if (strcmp(expression->value.symbol, "=") == 0) {
+      // https://www.felixcloutier.com/x86/cmovcc
+
+      expression->result_register = register_allocate(r);
+      RegisterDescriptor true_register = register_allocate(r);
+
+      fprintf(code, "mov $0, %s\n", register_name(r, expression->result_register));
+      fprintf(code, "mov $1, %s\n", register_name(r, true_register));
+      fprintf(code, "cmp %s, %s\n",
+              register_name(r, expression->children->result_register),
+              register_name(r, expression->children->next_child->result_register));
+      fprintf(code, "cmove %s, %s\n",
+              register_name(r, true_register),
+              register_name(r, expression->result_register));
+
+      // Free no-longer-used left hand side result register.
+      register_deallocate(r, true_register);
+      register_deallocate(r, expression->children->result_register);
+      register_deallocate(r, expression->children->next_child->result_register);
+    } else if (strcmp(expression->value.symbol, "+") == 0) {
       // https://www.felixcloutier.com/x86/add
 
       // Use right hand side result register as our result since ADD is destructive!
@@ -237,15 +423,15 @@ Error codegen_expression_x86_64_mswin
     } else if (strcmp(expression->value.symbol, "-") == 0) {
       // https://www.felixcloutier.com/x86/sub
 
-      // Use right hand side result register as our result since ADD is destructive!
-      expression->result_register = expression->children->next_child->result_register;
+      // Use right hand side result register as our result since SUB is destructive!
+      expression->result_register = expression->children->result_register;
 
       fprintf(code, "sub %s, %s\n",
-              register_name(r, expression->children->result_register),
-              register_name(r, expression->children->next_child->result_register));
+              register_name(r, expression->children->next_child->result_register),
+              register_name(r, expression->children->result_register));
 
       // Free no-longer-used left hand side result register.
-      register_deallocate(r, expression->children->result_register);
+      register_deallocate(r, expression->children->next_child->result_register);
     } else if (strcmp(expression->value.symbol, "*") == 0) {
       // https://www.felixcloutier.com/x86/mul
       // https://www.felixcloutier.com/x86/imul
@@ -267,10 +453,14 @@ Error codegen_expression_x86_64_mswin
 
       // Quotient is in RAX, Remainder in RDX; we must save and
       // restore these registers before and after divide, sadly.
+
     }
 
     break;
   case NODE_TYPE_VARIABLE_ACCESS:
+    if (codegen_verbose) {
+      fprintf(code, ";;#; Variable Access: \"%s\"\n", expression->value.symbol);
+    }
     expression->result_register = register_allocate(r);
     if (!cg_context->parent) {
       // Global variable
@@ -305,6 +495,9 @@ Error codegen_expression_x86_64_mswin
     break;
   case NODE_TYPE_VARIABLE_DECLARATION:
     if (!cg_context->parent) { break; }
+    if (codegen_verbose) {
+      fprintf(code, ";;#; Variable Declaration\n");
+    }
     // Allocate space on stack
     //   Get the size in bytes of the type of the variable
     while (context) {
@@ -321,6 +514,9 @@ Error codegen_expression_x86_64_mswin
     environment_set(cg_context->locals, expression->children, node_integer(cg_context->locals_offset));
     break;
   case NODE_TYPE_VARIABLE_REASSIGNMENT:
+    if (codegen_verbose) {
+      fprintf(code, ";;#; Variable Reassignment\n");
+    }
     if (cg_context->parent) {
       err = codegen_expression_x86_64_mswin(code, r, cg_context, context, next_child_context,
                                             expression->children->next_child);
@@ -351,6 +547,13 @@ Error codegen_expression_x86_64_mswin
     }
     break;
   }
+
+  if (expression->result_register == -1) {
+    printf("Mishandled expression type %i in codegen_expression_x86_64_mswin()\n", expression->type);
+  }
+  //assert(expression->result_register != -1 &&
+  //      "Result register of expression not set. Likely an internal error during codegen.");
+
   free(tmpnode);
   return err;
 }
@@ -398,6 +601,12 @@ Error codegen_function_x86_64_att_asm_mswin
   // Function header
   fprintf(code, "%s", function_header_x86_64);
 
+  // TODO/FIXME: Do not save/restore these registers unless they are used in function body.
+  fprintf(code,
+          "push %%rbx\n"
+          "push %%rsi\n"
+          "push %%rdi\n");
+
   // Function body
   ParsingContext *ctx = next_child_context ? *next_child_context : context;
   Node *last_expression = NULL;
@@ -424,6 +633,12 @@ Error codegen_function_x86_64_att_asm_mswin
     }
   }
 
+  // TODO/FIXME: Only save/restore when register used in function.
+  fprintf(code,
+          "pop %%rbx\n"
+          "pop %%rsi\n"
+          "pop %%rdi\n");
+
   // Function footer
   fprintf(code, "add $%lld, %%rsp\n", -cg_context->locals_offset);
   fprintf(code, "%s", function_footer_x86_64);
@@ -444,6 +659,9 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
   Register *r = register_create("%rax");
   register_add(r, "%r10");
   register_add(r, "%r11");
+  register_add(r, "%rbx");
+  register_add(r, "%rdi");
+  register_add(r, "%rsi");
 
   fprintf(code, "%s", ".section .data\n");
 
@@ -484,7 +702,12 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
   Node *last_expression = program->children;
   Node *expression = program->children;
   while (expression) {
-    codegen_expression_x86_64_mswin(code, r, cg_context, context, &next_child_context, expression);
+    if (nonep(*expression)) {
+      expression = expression->next_child;
+      continue;
+    }
+    err = codegen_expression_x86_64_mswin(code, r, cg_context, context, &next_child_context, expression);
+    if (err.type) { return err; }
     register_deallocate(r, expression->result_register);
     last_expression = expression;
     expression = expression->next_child;
@@ -492,7 +715,7 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
 
   // TODO: Copy this code to the generic function for return value!
   char *name = register_name(r,last_expression->result_register);
-  if (strcmp(name, "%rax")) {
+  if (strcmp(name, "%rax") != 0) {
     fprintf(code, "mov %s, %%rax\n", name);
   }
 

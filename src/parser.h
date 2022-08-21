@@ -41,9 +41,8 @@ typedef enum NodeType {
   /// 2. Parameter List
   NODE_TYPE_FUNCTION_CALL,
 
-  /// Contains two children.
+  /// Contains one child.
   /// 1. SYMBOL (VARIABLE IDENTIFIER)
-  /// 2. INITIALIZE EXPRESSION, or None.
   NODE_TYPE_VARIABLE_DECLARATION,
 
   /// Contains variable symbol in value.
@@ -125,6 +124,7 @@ typedef struct ParsingStack {
   struct ParsingStack *parent;
   Node *operator;
   Node *result;
+  Node *body;
 } ParsingStack;
 
 // TODO: Shove ParsingContext within an AST Node.

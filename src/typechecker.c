@@ -42,6 +42,7 @@ Error expression_return_type(ParsingContext *context, Node *expression, int *typ
     err = parse_get_type(original_context, result->children->next_child, result);
     break;
   case NODE_TYPE_VARIABLE_ACCESS:
+    parse_context_print(context,0);
     // Get type symbol from variables environment using variable symbol.
     while (context) {
       if (environment_get_by_symbol(*context->variables, expression->value.symbol, tmpnode)) {
@@ -50,7 +51,7 @@ Error expression_return_type(ParsingContext *context, Node *expression, int *typ
       context = context->parent;
     }
     if (!context) {
-      printf("Variable: \"%s\"\n", tmpnode->value.symbol);
+      printf("Variable: \"%s\"\n", expression->value.symbol);
       ERROR_PREP(err, ERROR_GENERIC,
                  "Could not get variable within context for variable access return type");
       break;
@@ -90,13 +91,14 @@ Error typecheck_expression(ParsingContext *context, Node *expression) {
   Node *result = node_allocate();
   int type = NODE_TYPE_NONE;
 
+  // TODO: I feel like children should only be checked when parent type is handled.
   // Typecheck all the children of node before typechecking node.
-  Node *child_it = expression->children;
-  while (child_it) {
-    err = typecheck_expression(context, child_it);
-    if (err.type) { return err; }
-    child_it = child_it->next_child;
-  }
+  //Node *child_it = expression->children;
+  //while (child_it) {
+  //  err = typecheck_expression(context, child_it);
+  //  if (err.type) { return err; }
+  //  child_it = child_it->next_child;
+  //}
 
   switch (expression->type) {
   default:
