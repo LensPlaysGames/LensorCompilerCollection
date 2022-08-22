@@ -59,6 +59,13 @@ typedef enum NodeType {
   /// TODO: 3. "ELSE" Expression List
   NODE_TYPE_IF,
 
+  /// Contains one child.
+  /// 1. Type Symbol or another Pointer
+  NODE_TYPE_POINTER,
+
+  NODE_TYPE_ADDRESSOF,
+  NODE_TYPE_DEREFERENCE,
+
   /// A valid binary operator. Contains two children.
   /// 1. Left Hand Side, often abbreviated as LHS
   /// 1. Right Hand Side, often abbreviated as RHS
@@ -76,6 +83,7 @@ typedef struct Node {
     long long integer;
     char *symbol;
   } value;
+  struct Node *parent;
   struct Node *children;
   struct Node *next_child;
   /// Used during codegen to store result RegisterDescriptor.
@@ -145,7 +153,7 @@ typedef struct ParsingContext {
   /// FUNCTION
   /// `-- SYMBOL (NAME) -> FUNCTION
   Environment *functions;
-  /// BINARY OPERATOR
+  /// BINARY INFIX OPERATOR
   /// `-- SYMBOL (OPERATOR) -> NONE
   ///                          `-- INTEGER (PRECEDENCE)
   ///                              -> SYMBOL (RETURN TYPE)

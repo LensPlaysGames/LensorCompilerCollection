@@ -137,7 +137,11 @@ char *symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
     // Local variable access.
     Node *stack_offset = node_allocate();
     if (!environment_get(*cg_ctx->locals, symbol, stack_offset)) {
-      printf("ERROR: Internal compiler error :^(\n");
+      putchar('\n');
+      print_node(symbol,0);
+      environment_print(*cg_ctx->locals, 0);
+      printf("ERROR: symbol_to_address() Could not find \"%s\" in locals environment.\n",
+             symbol->value.symbol);
       return NULL;
     }
     symbol_index += snprintf(symbol_string,
@@ -180,7 +184,7 @@ Error codegen_expression_x86_64_mswin
 
   //expression->result_register = -1;
 
-  assert(NODE_TYPE_MAX == 11 && "codegen_expression_x86_64_mswin() must exhaustively handle node types!");
+  assert(NODE_TYPE_MAX == 14 && "codegen_expression_x86_64_mswin() must exhaustively handle node types!");
   switch (expression->type) {
   default:
     break;
@@ -208,6 +212,7 @@ Error codegen_expression_x86_64_mswin
     while (iterator) {
       err = codegen_expression_x86_64_mswin
         (code, r, cg_context, context, next_child_context, iterator);
+      if (err.type) { return err; }
       fprintf(code, "pushq %s\n", register_name(r, iterator->result_register));
       register_deallocate(r, iterator->result_register);
       iterator = iterator->next_child;
@@ -216,7 +221,9 @@ Error codegen_expression_x86_64_mswin
 
     // Emit call
     fprintf(code, "call %s\n", expression->children->value.symbol);
-    fprintf(code, "add $%lld, %%rsp\n", count * 8);
+    if (count) {
+      fprintf(code, "add $%lld, %%rsp\n", count * 8);
+    }
 
     // Copy return value of function call from RAX to result register
     expression->result_register = register_allocate(r);
@@ -241,6 +248,26 @@ Error codegen_expression_x86_64_mswin
 
     // TODO: What should function return?
 
+    break;
+  case NODE_TYPE_DEREFERENCE:
+    if (codegen_verbose) {
+      fprintf(code, ";;#; Dereference\n");
+    }
+    err = codegen_expression_x86_64_mswin(code, r, cg_context,
+                                          context, next_child_context,
+                                          expression->children);
+    if (err.type) { return err; }
+    expression->result_register = expression->children->result_register;
+    break;
+  case NODE_TYPE_ADDRESSOF:
+    if (codegen_verbose) {
+      fprintf(code, ";;#; Addressof\n");
+    }
+    expression->result_register = register_allocate(r);
+    fprintf(code, "lea %s, %s\n",
+            symbol_to_address(cg_context, expression->children),
+            register_name(r, expression->result_register));
+    if (err.type) { return err; }
     break;
   case NODE_TYPE_IF:
     if (codegen_verbose) {
@@ -496,20 +523,29 @@ Error codegen_expression_x86_64_mswin
   case NODE_TYPE_VARIABLE_DECLARATION:
     if (!cg_context->parent) { break; }
     if (codegen_verbose) {
-      fprintf(code, ";;#; Variable Declaration\n");
+      fprintf(code, ";;#; Variable Declaration: \"%s\"\n", expression->children->value.symbol);
     }
     // Allocate space on stack
     //   Get the size in bytes of the type of the variable
+    long long size_in_bytes = 0;
     while (context) {
-      if (environment_get(*context->variables, expression->children, tmpnode)) { break; }
+      if (environment_get(*context->variables, expression->children, tmpnode)) {
+        break;
+      }
       context = context->parent;
     }
-    err = parse_get_type(context, tmpnode, tmpnode);
-    if (err.type) { return err; }
+    if (tmpnode->type == NODE_TYPE_POINTER) {
+      size_in_bytes = 8;
+    } else {
+      print_node(tmpnode, 0);
+      err = parse_get_type(context, tmpnode, tmpnode);
+      if (err.type) { return err; }
+      size_in_bytes = tmpnode->children->value.integer;
+    }
     //   Subtract type size in bytes from stack pointer
-    fprintf(code, "sub $%lld, %%rsp\n", tmpnode->children->value.integer);
+    fprintf(code, "sub $%zu, %%rsp\n", size_in_bytes);
     // Keep track of RBP offset.
-    cg_context->locals_offset -= tmpnode->children->value.integer;
+    cg_context->locals_offset -= size_in_bytes;
     //   Kept in codegen context.
     environment_set(cg_context->locals, expression->children, node_integer(cg_context->locals_offset));
     break;
@@ -518,12 +554,31 @@ Error codegen_expression_x86_64_mswin
       fprintf(code, ";;#; Variable Reassignment\n");
     }
     if (cg_context->parent) {
+      // Codegen RHS
       err = codegen_expression_x86_64_mswin(code, r, cg_context, context, next_child_context,
                                             expression->children->next_child);
       if (err.type) { break; }
-      result = register_name(r, expression->children->next_child->result_register);
-      fprintf(code, "mov %s, %s\n", result, symbol_to_address(cg_context, expression->children));
-      register_deallocate(r, expression->children->next_child->result_register);
+
+      if (expression->children->type == NODE_TYPE_DEREFERENCE) {
+        // Dereference is there! It will return address in result register to dereference.
+        err = codegen_expression_x86_64_mswin(code, r, cg_context, context, next_child_context,
+                                              expression->children);
+        if (err.type) { break; }
+        fprintf(code, "mov %s, (%s)\n",
+                register_name(r, expression->children->next_child->result_register),
+                register_name(r, expression->children->result_register));
+        // TODO: Set result register or something.
+        register_deallocate(r, expression->children->next_child->result_register);
+        register_deallocate(r, expression->children->result_register);
+      } else {
+        fprintf(code, "mov %s, %s\n",
+                register_name(r, expression->children->next_child->result_register),
+                symbol_to_address(cg_context, expression->children));
+        // TODO: Set result register or something.
+        register_deallocate(r, expression->children->next_child->result_register);
+      }
+
+
     } else {
       // Global variable reassignment
       // Very simple optimization to handle plain integer node assignment.
@@ -667,10 +722,10 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
 
   // Generate global variables
   Binding *var_it = context->variables->bind;
+  Node *type_info = node_allocate();
   while (var_it) {
     Node *var_id = var_it->id;
     Node *type = var_it->value;
-    Node *type_info = node_allocate();
     if (!environment_get(*context->types, type, type_info)) {
       printf("Type: \"%s\"\n", type->value.symbol);
       ERROR_PREP(err, ERROR_GENERIC,
@@ -679,8 +734,8 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
     }
     var_it = var_it->next;
     fprintf(code, "%s: .space %lld\n", var_id->value.symbol, type_info->children->value.integer);
-    free(type_info);
   }
+  free(type_info);
 
   fprintf(code, ".section .text\n");
 
@@ -692,6 +747,7 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
     Node *function = function_it->value;
     function_it = function_it->next;
     err = codegen_function_x86_64_att_asm_mswin(r, cg_context, context, &next_child_context, function_id->value.symbol, function, code);
+    if (err.type) { return err; }
   }
 
   fprintf(code,
@@ -752,6 +808,8 @@ Error codegen_program
   }
   if (format == CG_FMT_DEFAULT || format == CG_FMT_x86_64_MSWIN) {
     err = codegen_program_x86_64_mswin(code, cg_context, context, program);
+  } else {
+    printf("ERROR: Unrecognized codegen format\n");
   }
   fclose(code);
   return err;

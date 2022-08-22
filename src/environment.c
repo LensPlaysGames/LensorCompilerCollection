@@ -15,6 +15,14 @@ void environment_print(Environment env, long long indent) {
     while (indent_it-- > 0) { putchar(' '); }
     printf("%s -> ", node_text(binding_it->id));
     printf("%s\n", node_text(binding_it->value));
+    Node *value_iterator = binding_it->value->children;
+    while (value_iterator) {
+      putchar(' ');
+      indent_it = indent + 2;
+      while (indent_it-- > 0) { putchar(' '); }
+      printf("%s\n", node_text(value_iterator));
+      value_iterator = value_iterator->next_child;
+    }
     binding_it = binding_it->next;
   }
 }
