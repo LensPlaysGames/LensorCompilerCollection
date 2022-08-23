@@ -40,10 +40,12 @@ Finally, build an executable from the build tree.
 ** Language Reference
 
 The language is statically typed.
-
-Functions are first-class citizens.
-
 Variables must be declared and type annotated before use.
+
+Whitespace is ignored and there are no required expression delimiters.
+That's right: no semi-colons and no forced indent!
+
+Functions are first-class citizens, or at least should be eventually.
 
 A program in this language comes in the form of a file. The file may
 contain a series of expressions that will be executed in order, from
@@ -53,14 +55,20 @@ the bottom of the file.
 
 Let's take a look at a basic program:
 #+begin_example
-add_ten : function = [ integer (x : integer) { x + 10 } ]
+defun fact (n : integer) : integer {
+  if n < 2 {
+    1
+  } else {
+    n * fact(n - 1)
+  }
+}
 
-a : integer
-
-a := 0
-a := add_ten(a)
-a := add_ten(a)
-
-add_ten(a)
-
+fact(4)
 #+end_example
+
+This program will return 24 as a status code. The result of the last
+expression in the file is the return value. The same holds true for
+function bodies, and if/else bodies.
+
+Variables in a local scope shadow variables in a parent scope, and may
+share the same symbolic name.

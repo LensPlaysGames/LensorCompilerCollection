@@ -1181,10 +1181,6 @@ Error parse_expr
             if (token_length == 0) { break; }
           }
 
-          // Variable Symbol Mapped Value in Variables Environment
-          // POINTER
-          // `-- "integer"
-
           Node *type_symbol =
             node_symbol_from_buffer(current_token.beginning, token_length);
           // WHY ARE WE DOING THIS
