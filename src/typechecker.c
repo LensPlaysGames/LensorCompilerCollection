@@ -316,35 +316,59 @@ Error typecheck_expression
     }
     //print_node(value,0);
     iterator = expression->children->next_child->children;
-    tmpnode = value->children->children;
+    Node *expected_parameter = value->children->children;
 
     //printf("Iterator:\n");
     //print_node(iterator,2);
-    //printf("Tmpnode:\n");
-    //print_node(tmpnode,2);
+    //printf("Expected parameter:\n");
+    //print_node(expected_parameter,2);
 
-    while (iterator && tmpnode) {
+    while (iterator && expected_parameter) {
       // Get return type of given parameter.
       err = expression_return_type(original_context, context_to_enter, iterator, type);
       if (err.type) { return err; }
-      // Expected type symbol of parameter found in tmpnode->children->next_child.
-      err = parse_get_type(context, tmpnode->children->next_child, result);
+
+      // Expected type symbol of parameter found in expected_parameter->children->next_child.
+      Node *expected_type_symbol = expected_parameter->children->next_child;
+      Node *type_result_it = result;
+      while (expected_type_symbol->children && expected_type_symbol->type != NODE_TYPE_SYMBOL) {
+        result->type = NODE_TYPE_POINTER;
+
+        Node *one_more_level_of_pointer_indirection = node_allocate();
+        one_more_level_of_pointer_indirection->type = NODE_TYPE_POINTER;
+        type_result_it->children = one_more_level_of_pointer_indirection;
+        type_result_it = one_more_level_of_pointer_indirection;
+
+        expected_type_symbol = expected_type_symbol->children;
+      }
+      err = parse_get_type(context, expected_type_symbol, type_result_it);
       if (err.type) { return err; }
+
+      //print_node(type,2);
+      //printf("\n");
+      //print_node(result,2);
+      //printf("\n");
+      //print_node(expected_type_symbol,2);
+
       if (type_compare(result, type) == 0) {
         printf("Function:%s\n", expression->children->value.symbol);
         printf("Invalid argument:\n");
         print_node(iterator, 2);
         printf("Expected argument:\n");
-        print_node(tmpnode, 2);
+        print_node(expected_parameter, 2);
         ERROR_PREP(err, ERROR_TYPE, "Argument type does not match declared parameter type");
         return err;
       }
+
+      node_free(result->children);
+
       iterator = iterator->next_child;
-      tmpnode = tmpnode->next_child;
+      expected_parameter = expected_parameter->next_child;
     }
-    if (tmpnode != NULL) {
-      printf("Expected argument:\n");
+    if (expected_parameter != NULL) {
       printf("Function:%s\n", expression->children->value.symbol);
+      printf("Expected argument:\n");
+      print_node(expected_parameter, 2);
       ERROR_PREP(err, ERROR_ARGUMENTS, "Not enough arguments passed to function!");
       break;
     }
