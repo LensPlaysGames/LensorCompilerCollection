@@ -297,8 +297,21 @@ Error typecheck_expression
     //print_node(tmpnode,2);
 
     while (iterator && tmpnode) {
-      err = parse_get_type(original_context, tmpnode->children->next_child, result);
-      if (err.type) { break; }
+      // Get expected type of parameter from tmpnode.
+
+      // Lookup tmpnode->children in variables environment for expected parameter type.
+      context = original_context;
+      while (context) {
+        if (environment_get(*context->variables, tmpnode->children, result)) {
+          break;
+        }
+        context = context->parent;
+      }
+      if (!context) {
+        ERROR_PREP(err, ERROR_GENERIC, "Malformed or mishapen parsing context encountered during typechecking");
+        return err;
+      }
+      // Get return type of given parameter.
       err = expression_return_type(original_context, context_to_enter, iterator, type);
       if (err.type) { return err; }
       if (type_compare(result, type) == 0) {
