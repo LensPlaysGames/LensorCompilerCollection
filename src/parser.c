@@ -385,6 +385,10 @@ void parse_context_print(ParsingContext *top, size_t indent) {
 
 void parse_context_add_child(ParsingContext *parent, ParsingContext *child) {
   if (parent) {
+
+    //child->next_child = parent->children;
+    //parent->children = child;
+
     if (parent->children) {
       parent = parent->children;
       while (parent->next_child) { parent = parent->next_child; }
@@ -392,6 +396,7 @@ void parse_context_add_child(ParsingContext *parent, ParsingContext *child) {
     } else {
       parent->children = child;
     }
+
   }
 }
 
