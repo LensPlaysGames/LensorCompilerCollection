@@ -123,16 +123,27 @@ char *label_generate() {
 char codegen_verbose = 1;
 
 #define symbol_buffer_size 1024
-char symbol_buffer[label_buffer_size];
+char symbol_buffer[symbol_buffer_size];
 size_t symbol_index = 0;
 size_t symbol_count = 0;
+// TODO: Return Error and bubble, but makes it annoying.
 char *symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
+  if (!cg_ctx) {
+    printf("ERROR::symbol_to_address(): Context must not be NULL (pass global).\n");
+    return NULL;
+  }
+  if (!symbol || !symbol->value.symbol) {
+    printf("ERROR::symbol_to_address(): A symbol must be passed.\n");
+    print_node(symbol,2);
+    return NULL;
+  }
   char *symbol_string = symbol_buffer + symbol_index;
   if (!cg_ctx->parent) {
     // Global variable access.
     symbol_index += snprintf(symbol_string,
                              symbol_buffer_size - symbol_index,
-                             "%s(%%rip)", symbol->value.symbol);
+                             "%s(%%rip)",
+                             symbol->value.symbol);
   } else {
     // Local variable access.
     Node *stack_offset = node_allocate();
@@ -150,9 +161,9 @@ char *symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
     free(stack_offset);
   }
   symbol_index++;
-  if (symbol_index >= label_buffer_size) {
+  if (symbol_index >= symbol_buffer_size) {
     symbol_index = 0;
-    return label_generate();
+    return symbol_to_address(cg_ctx, symbol);
   }
   return symbol_string;
 }
@@ -182,6 +193,7 @@ Error codegen_expression_x86_64_mswin
   Node *iterator = NULL;
   long long count = 0;
 
+  ParsingContext *original_context = context;
   //expression->result_register = -1;
 
   assert(NODE_TYPE_MAX == 14 && "codegen_expression_x86_64_mswin() must exhaustively handle node types!");
@@ -555,53 +567,56 @@ Error codegen_expression_x86_64_mswin
     if (codegen_verbose) {
       fprintf(code, ";;#; Variable Reassignment\n");
     }
-    if (cg_context->parent) {
-      // Codegen RHS
-      err = codegen_expression_x86_64_mswin(code, r, cg_context, context, next_child_context,
-                                            expression->children->next_child);
-      if (err.type) { break; }
-
-      if (expression->children->type == NODE_TYPE_DEREFERENCE) {
-        // Dereference is there! It will return address in result register to dereference.
-        err = codegen_expression_x86_64_mswin(code, r, cg_context, context, next_child_context,
-                                              expression->children);
-        if (err.type) { break; }
-        fprintf(code, "mov %s, (%s)\n",
-                register_name(r, expression->children->next_child->result_register),
-                register_name(r, expression->children->result_register));
-        // TODO: Set result register or something.
-        register_deallocate(r, expression->children->next_child->result_register);
-        register_deallocate(r, expression->children->result_register);
-      } else {
-        fprintf(code, "mov %s, %s\n",
-                register_name(r, expression->children->next_child->result_register),
-                symbol_to_address(cg_context, expression->children));
-        // TODO: Set result register or something.
-        register_deallocate(r, expression->children->next_child->result_register);
-      }
 
 
-    } else {
-      // Global variable reassignment
-      // Very simple optimization to handle plain integer node assignment.
-      if (expression->children->next_child->type == NODE_TYPE_INTEGER) {
-        result = malloc(64);
-        if (!result) {
-          ERROR_PREP(err, ERROR_GENERIC, "Could not allocate integer result string buffer :^(");
-          break;
-        }
-        snprintf(result, 64, "$%lld", expression->children->next_child->value.integer);
-        fprintf(code, "movq %s, %s\n", result, symbol_to_address(cg_context, expression->children));
-        free(result);
-      } else {
-        err = codegen_expression_x86_64_mswin(code, r, cg_context, context, next_child_context,
-                                              expression->children->next_child);
-        if (err.type) { break; }
-        result = register_name(r, expression->children->next_child->result_register);
-        fprintf(code, "mov %s, %s\n", result, symbol_to_address(cg_context, expression->children));
-        register_deallocate(r, expression->children->next_child->result_register);
-      }
+    // 1. Codegen RHS
+    // 2. Recurse LHS into children until LHS is a var. access.
+
+    // Set iterator to the var. access node.
+    iterator = expression->children;
+    while (iterator && iterator->type != NODE_TYPE_VARIABLE_ACCESS) {
+      iterator = iterator->children;
     }
+    if (!iterator) {
+      // TODO: Error here for invalid or mishapen AST.
+    }
+
+    // Codegen RHS
+    err = codegen_expression_x86_64_mswin(code, r, cg_context, context, next_child_context,
+                                          expression->children->next_child);
+    if (err.type) { break; }
+
+    // When non-zero, de-allocate LHS register and free result string.
+    char should_free_result = 0;
+
+    // Set `result` to operand representing LHS that will be written into.
+    if (expression->children->type == NODE_TYPE_VARIABLE_ACCESS) {
+      result = symbol_to_address(cg_context, expression->children);
+    } else {
+      should_free_result = 1;
+      // Codegen LHS
+      err = codegen_expression_x86_64_mswin(code, r, cg_context, context, next_child_context,
+                                            expression->children);
+      if (err.type) { break; }
+      result = register_name(r, expression->children->result_register);
+      // Put parenthesis around `result`.
+      size_t needed_len = strlen(result) + 2;
+      char *result_copy = strdup(result);
+      result = malloc(needed_len + 1);
+      snprintf(result, needed_len + 1, "(%s)", result_copy);
+      result[needed_len] = '\0';
+      free(result_copy);
+    }
+    fprintf(code, "mov %s, %s\n",
+            register_name(r, expression->children->next_child->result_register),
+            result);
+    register_deallocate(r, expression->children->next_child->result_register);
+
+    if (should_free_result) {
+      free(result);
+      register_deallocate(r, expression->children->result_register);
+    }
+
     break;
   }
 
