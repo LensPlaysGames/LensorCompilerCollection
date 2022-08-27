@@ -694,16 +694,18 @@ Error handle_stack_operator
       // TODO: Maybe warn?
       EXPECT(expected, "}", current, length, end);
       if (expected.found) {
+
         // TODO: First check for else...
+
+        *context = (*context)->parent;
+
         *stack = (*stack)->parent;
         *status = STACK_HANDLED_CHECK;
         return ok;
       }
 
-      // TODO: Should new parsing context be created for scope of if body?
       // TODO: Don't leak stack->operator.
       (*stack)->operator = node_symbol("if-then-body");
-      // TODO: Is this needed?
       (*stack)->body = if_then_body;
       (*stack)->result = if_then_first_expr;
 
@@ -725,11 +727,17 @@ Error handle_stack_operator
       return err;
     }
     if (expected.found) {
+      // Eat if-then-body context.
+      *context = (*context)->parent;
+
       // Lookahead for else then parse if-else-body.
       EXPECT(expected, "else", current, length, end);
       if (expected.found) {
         EXPECT(expected, "{", current, length, end);
         if (expected.found) {
+
+          *context = parse_context_create(*context);
+
           Node *if_else_body = node_allocate();
           Node *if_else_first_expr = node_allocate();
           node_add_child(if_else_body, if_else_first_expr);
@@ -764,6 +772,7 @@ Error handle_stack_operator
     // Evaluate next expression unless it's a closing brace.
     EXPECT(expected, "}", current, length, end);
     if (expected.done || expected.found) {
+      *context = (*context)->parent;
       *stack = (*stack)->parent;
       *status = STACK_HANDLED_CHECK;
       return ok;
@@ -900,27 +909,6 @@ Error handle_stack_operator
     return ok;
   }
 
-  if (strcmp(operator->value.symbol, "defun") == 0) {
-    // Evaluate next expression unless it's a closing brace.
-    EXPECT(expected, "}", current, length, end);
-    if (expected.done || expected.found) {
-      *context = (*context)->parent;
-      *stack = (*stack)->parent;
-      if (!(*stack)) {
-        *status = STACK_HANDLED_BREAK;
-      } else {
-        *status = STACK_HANDLED_CHECK;
-      }
-      return ok;
-    }
-
-    (*stack)->result->next_child = node_allocate();
-    *working_result = (*stack)->result->next_child;
-    (*stack)->result = *working_result;
-    *status = STACK_HANDLED_PARSE;
-    return ok;
-  }
-
   if (strcmp(operator->value.symbol, "funcall") == 0) {
     EXPECT(expected, ")", current, length, end);
     if (expected.done || expected.found) {
@@ -1051,6 +1039,8 @@ Error parse_expr
         if_conditional->type = NODE_TYPE_IF;
         Node *condition_expression = node_allocate();
         node_add_child(if_conditional, condition_expression);
+
+        context = parse_context_create(context);
 
         stack = parse_stack_create(stack);
         stack->operator = node_symbol("if-condition");
@@ -1299,6 +1289,14 @@ Error parse_expr
 
         EXPECT(expected, ":", &current_token, &token_length, end);
         if (!expected.done && expected.found) {
+
+          EXPECT(expected, "=", &current_token, &token_length, end);
+          if (!expected.done && expected.found) {
+            printf("Invalid Variable Symbol: \"%s\"\n", symbol->value.symbol);
+            ERROR_PREP(err, ERROR_SYNTAX,
+                       "Reassignment of undeclared variable is not allowed!");
+            return err;
+          }
 
           err = lex_advance(&current_token, &token_length, end);
           if (err.type != ERROR_NONE) { return err; }
