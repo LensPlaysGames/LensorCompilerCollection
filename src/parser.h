@@ -173,6 +173,25 @@ Error define_binary_operator
  int precedence,
  char *return_type, char *lhs_type, char *rhs_type);
 
+/**
+ * type has this form
+ * POINTER...
+ * `-- NODE WITH PROPER TYPE IN NODE.TYPE
+ *
+ * type_name has this form
+ * POINTER...
+ * `-- SYMBOL WITH NAME OF TYPE
+ */
+Error parse_type
+(ParsingContext *context,
+ Token *current,
+ size_t *length,
+ char **end,
+ Node *type);
+
+/** Get the value of a type symbol/ID in types environment.
+ *  Return an error if type is not a valid symbol/ID found in context.
+ */
 Error parse_get_type(ParsingContext *context, Node *id, Node *result);
 
 ParsingContext *parse_context_create(ParsingContext *parent);

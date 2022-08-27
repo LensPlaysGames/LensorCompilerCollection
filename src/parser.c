@@ -680,7 +680,7 @@ Error handle_stack_operator
     return err;
   }
 
-  if (strcmp(operator->value.symbol, "if-cond") == 0) {
+  if (strcmp(operator->value.symbol, "if-condition") == 0) {
     // TODO: Maybe eventually allow multiple expressions in an if
     // condition, or something like that.
     EXPECT(expected, "{", current, length, end);
@@ -703,22 +703,29 @@ Error handle_stack_operator
       // TODO: Should new parsing context be created for scope of if body?
       // TODO: Don't leak stack->operator.
       (*stack)->operator = node_symbol("if-then-body");
+      // TODO: Is this needed?
       (*stack)->body = if_then_body;
       (*stack)->result = if_then_first_expr;
+
       *working_result = if_then_first_expr;
       *status = STACK_HANDLED_PARSE;
       return ok;
     }
     // TODO/FIXME: Ask the user how to proceed when if has no body.
-    ERROR_PREP(err, ERROR_SYNTAX, "`if` expression requires a \"then\" body.");
+    ERROR_PREP(err, ERROR_SYNTAX,
+               "Expected `{` after `if` condition. `if` expression requires a \"then\" body.");
     return err;
   }
 
   if (strcmp(operator->value.symbol, "if-then-body") == 0) {
     // Evaluate next expression unless it's a closing brace.
     EXPECT(expected, "}", current, length, end);
-    if (expected.done || expected.found) {
-      // TODO: Lookahead for else then parse if-else-body.
+    if (expected.done) {
+      ERROR_PREP(err, ERROR_SYNTAX, "EOF reached before end of if-then-body.");
+      return err;
+    }
+    if (expected.found) {
+      // Lookahead for else then parse if-else-body.
       EXPECT(expected, "else", current, length, end);
       if (expected.found) {
         EXPECT(expected, "{", current, length, end);
@@ -791,6 +798,108 @@ Error handle_stack_operator
     *status = STACK_HANDLED_PARSE;
     return ok;
   }
+
+  if (strcmp(operator->value.symbol, "defun-params") == 0) {
+    // TODO: Handle `done` cases.
+    // Evaluate next expression unless it's a closing parenthesis.
+    EXPECT(expected, ")", current, length, end);
+    if (expected.found) {
+
+      // First lex/parse function return type.
+      EXPECT(expected, ":", current, length, end);
+      if (expected.found) {
+
+        err = lex_advance(current, length, end);
+        if (err.type != ERROR_NONE) { return err; }
+        if (*length == 0) {
+          // FIXME: This error message SUCKS!
+          ERROR_PREP(err, ERROR_SYNTAX, "There must be a valid type following type annotation operator");
+          return err;
+        }
+
+        // PARSE RETURN TYPE.
+        Node *type = node_allocate();
+        parse_type(*context, current, length, end, type);
+        node_add_child((*stack)->body, type);
+
+        // Ensure curly open brace for function body start.
+        EXPECT(expected, "{", current, length, end);
+        if (expected.found) {
+          // Update the stack to handle defun-body and continue.
+
+          // Bind parameters as variables in function body scope.
+          // TODO: This assumes that var. decls. were parsed, but
+          // we may not have var. decls. Do minimal type-checking!
+          Node *param_it = (*stack)->body->children->children;
+          while (param_it) {
+            environment_set((*context)->variables,
+                            param_it->children,
+                            param_it->children->next_child);
+            param_it = param_it->next_child;
+          }
+
+          Node *function_body = node_allocate();
+          node_add_child((*stack)->body, function_body);
+
+          EXPECT(expected, "}", current, length, end);
+          if (expected.found) {
+            *stack = (*stack)->parent;
+            if (!(*stack)) {
+              *status = STACK_HANDLED_BREAK;
+            } else {
+              *status = STACK_HANDLED_CHECK;
+            }
+            return ok;
+          }
+
+          Node *first_expr = node_allocate();
+          node_add_child(function_body, first_expr);
+
+          // TODO: Don't leak stack operator!
+          (*stack)->operator = node_symbol("defun-body");
+          (*stack)->result = first_expr;
+          *working_result = first_expr;
+          *status = STACK_HANDLED_PARSE;
+          return ok;
+        }
+
+        ERROR_PREP(err, ERROR_SYNTAX, "Function declaration requires body definition");
+        return err;
+
+      }
+      ERROR_PREP(err, ERROR_SYNTAX, "Expected type annotation following parameter list for return type of function.");
+      return err;
+    }
+
+    Node *next_expr = node_allocate();
+    (*stack)->result->next_child = next_expr;
+    *working_result = next_expr;
+    (*stack)->result = next_expr;
+    *status = STACK_HANDLED_PARSE;
+    return ok;
+  }
+
+  if (strcmp(operator->value.symbol, "defun-body") == 0) {
+    // Evaluate next expression unless it's a closing brace.
+    EXPECT(expected, "}", current, length, end);
+    if (expected.done || expected.found) {
+      *context = (*context)->parent;
+      *stack = (*stack)->parent;
+      if (!(*stack)) {
+        *status = STACK_HANDLED_BREAK;
+      } else {
+        *status = STACK_HANDLED_CHECK;
+      }
+      return ok;
+    }
+    Node *next_expr = node_allocate();
+    (*stack)->result->next_child = next_expr;
+    *working_result = next_expr;
+    (*stack)->result = next_expr;
+    *status = STACK_HANDLED_PARSE;
+    return ok;
+  }
+
   if (strcmp(operator->value.symbol, "defun") == 0) {
     // Evaluate next expression unless it's a closing brace.
     EXPECT(expected, "}", current, length, end);
@@ -811,6 +920,7 @@ Error handle_stack_operator
     *status = STACK_HANDLED_PARSE;
     return ok;
   }
+
   if (strcmp(operator->value.symbol, "funcall") == 0) {
     EXPECT(expected, ")", current, length, end);
     if (expected.done || expected.found) {
@@ -846,6 +956,51 @@ Error handle_stack_operator
   ERROR_PREP(err, ERROR_GENERIC, "Internal error: Could not handle stack operator!");
   return err;
 }
+
+Error parse_type
+(ParsingContext *context,
+ Token *current,
+ size_t *length,
+ char **end,
+ Node *type
+ )
+{
+  Error err = ok;
+  Node *type_it = type;
+  // Loop over all pointer declaration symbols.
+  while (current->beginning[0] == '@') {
+    // Add one level of pointer indirection.
+    type_it->type = NODE_TYPE_POINTER;
+    Node *child = node_allocate();
+    type_it->children = child;
+    type_it = child;
+    // Advance lexer.
+    err = lex_advance(current, length, end);
+    if (err.type != ERROR_NONE) { return err; }
+    if (*length == 0) {
+      // FIXME: This error message SUCKS!
+      ERROR_PREP(err, ERROR_SYNTAX, "There must be a valid type following pointer type declaration symbol");
+      return err;
+    }
+  }
+
+  Node *type_symbol =
+    node_symbol_from_buffer(current->beginning, *length);
+  *type_it = *type_symbol;
+
+  Node *type_validator = node_allocate();
+  err = parse_get_type(context, type_symbol, type_validator);
+  if (err.type) { return err; }
+  if (nonep(*type_validator)) {
+    ERROR_PREP(err, ERROR_TYPE, "Invalid type within variable declaration");
+    printf("\nINVALID TYPE: \"%s\"\n", type_symbol->value.symbol);
+    return err;
+  }
+  free(type_validator);
+
+  return err;
+}
+
 
 Error parse_expr
 (ParsingContext *context,
@@ -896,11 +1051,12 @@ Error parse_expr
         if_conditional->type = NODE_TYPE_IF;
         Node *condition_expression = node_allocate();
         node_add_child(if_conditional, condition_expression);
-        working_result = condition_expression;
 
         stack = parse_stack_create(stack);
-        stack->operator = node_symbol("if-cond");
-        stack->result = working_result;
+        stack->operator = node_symbol("if-condition");
+        stack->result = condition_expression;
+
+        working_result = condition_expression;
         continue;
       }
 
@@ -1004,8 +1160,6 @@ Error parse_expr
 
       // TODO: Parse strings and other literal types.
 
-      // TODO: Check for unary prefix operators.
-
       if (strcmp("defun", symbol->value.symbol) == 0) {
         // Begin function definition.
         // FUNCTION
@@ -1023,6 +1177,12 @@ Error parse_expr
         lex_advance(&current_token, &token_length, end);
         Node *function_name = node_symbol_from_buffer(current_token.beginning, token_length);
 
+        // TODO: Check return value for redefinition of function!
+        environment_set_end(context->functions, function_name, function);
+
+        Node *parameter_list = node_allocate();
+        node_add_child(function, parameter_list);
+
         EXPECT(expected, "(", &current_token, &token_length, end);
         if (!expected.found) {
           printf("Function Name: \"%s\"\n", function_name->value.symbol);
@@ -1031,94 +1191,69 @@ Error parse_expr
           return err;
         }
 
-        Node *parameter_list = node_allocate();
-        node_add_child(function, parameter_list);
+        stack = parse_stack_create(stack);
+        // Create new parsing context (scope) for function.
+        context = parse_context_create(context);
 
-        // FIXME?: Should we possibly create a parser stack and evaluate the
-        // next expression, then ensure return value is var. decl. in stack
-        // handling below?
-        for (;;) {
-          EXPECT(expected, ")", &current_token, &token_length, end);
-          if (expected.found) { break; }
-          if (expected.done) {
-            ERROR_PREP(err, ERROR_SYNTAX,
-                       "Expected closing parenthesis for parameter list");
-            return err;
-          }
-
-          err = lex_advance(&current_token, &token_length, end);
-          if (err.type) { return err; }
-          Node *parameter_name = node_symbol_from_buffer(current_token.beginning, token_length);
+        EXPECT(expected, ")", &current_token, &token_length, end);
+        if (expected.done) {
+          ERROR_PREP(err, ERROR_SYNTAX,
+                     "Expected closing parenthesis for parameter list");
+          return err;
+        }
+        if (expected.found) {
+          // TODO: parse return type as well as function body open.
 
           EXPECT(expected, ":", &current_token, &token_length, end);
-          if (expected.done || !expected.found) {
-            ERROR_PREP(err, ERROR_SYNTAX, "Parameter declaration requires a type annotation");
-            return err;
+          if (expected.found && !expected.done) {
+            err = lex_advance(&current_token, &token_length, end);
+            if (err.type != ERROR_NONE) { return err; }
+            if (token_length == 0) {
+              // FIXME: This error message SUCKS!
+              ERROR_PREP(err, ERROR_SYNTAX, "There must be a valid type following type annotation operator");
+              return err;
+            }
+
+            // PARSE RETURN TYPE.
+            Node *type = node_allocate();
+            parse_type(context, &current_token, &token_length, end, type);
+            node_add_child(function, type);
+
+            EXPECT(expected, "{", &current_token, &token_length, end);
+            if (!expected.found) {
+              ERROR_PREP(err, ERROR_SYNTAX,
+                         "Expected open curly brace to begin function body following function return type");
+              return err;
+            }
+
+            // Setup stack for defun-body, no param parsing needed.
+            Node *function_body = node_allocate();
+            node_add_child(function, function_body);
+            Node *first_body_expr = node_allocate();
+            node_add_child(function_body, first_body_expr);
+
+            stack->operator = node_symbol("defun-body");
+            stack->result = first_body_expr;
+            stack->body = function;
+            working_result = first_body_expr;
+            continue;
+
           }
 
-          lex_advance(&current_token, &token_length, end);
-          Node *parameter_type = node_symbol_from_buffer(current_token.beginning, token_length);
-
-          Node *parameter = node_allocate();
-          node_add_child(parameter, parameter_name);
-          node_add_child(parameter, parameter_type);
-
-          node_add_child(parameter_list, parameter);
-
-          EXPECT(expected, ",", &current_token, &token_length, end);
-          if (expected.found) { continue; }
-
-          EXPECT (expected, ")", &current_token, &token_length, end);
-          if (!expected.found) {
-            ERROR_PREP(err, ERROR_SYNTAX, "Expected closing parenthesis following parameter list");
-            return err;
-          }
-          break;
-
-        }
-
-        // Parse return type.
-        EXPECT(expected, ":", &current_token, &token_length, end);
-        // TODO/FIXME: Should we allow implicit return type?
-        if (expected.done || !expected.found) {
           ERROR_PREP(err, ERROR_SYNTAX,
-                     "Function definition requires return type annotation following parameter list");
+                     "Type annotation required following parameter list for return value of function.");
           return err;
+
         }
 
-        lex_advance(&current_token, &token_length, end);
-        Node *function_return_type = node_symbol_from_buffer(current_token.beginning, token_length);
-        node_add_child(function, function_return_type);
+        // Setup stack for defun-params to parse all parameters.
+        Node *first_parameter = node_allocate();
+        node_add_child(parameter_list, first_parameter);
 
-        // Bind function to function name in functions environment.
-        environment_set(context->functions, function_name, working_result);
-
-        // Parse function body.
-        EXPECT(expected, "{", &current_token, &token_length, end);
-        if (expected.done || !expected.found) {
-          ERROR_PREP(err, ERROR_SYNTAX, "Function definition requires body following return type");
-          return err;
-        }
-
-        context = parse_context_create(context);
-        Node *param_it = function->children->children;
-        while (param_it) {
-          environment_set(context->variables,
-                          param_it->children,
-                          param_it->children->next_child);
-          param_it = param_it->next_child;
-        }
-
-        Node *function_body = node_allocate();
-        Node *function_first_expression = node_allocate();
-        node_add_child(function_body, function_first_expression);
-        node_add_child(function, function_body);
-        working_result = function_first_expression;
-
-        stack = parse_stack_create(stack);
-        stack->operator = node_symbol("defun");
-        stack->result = working_result;
-
+        stack->operator = node_symbol("defun-params");
+        stack->result = first_parameter;
+        stack->body = function;
+        working_result = first_parameter;
         continue;
 
       }
@@ -1168,39 +1303,9 @@ Error parse_expr
           err = lex_advance(&current_token, &token_length, end);
           if (err.type != ERROR_NONE) { return err; }
           if (token_length == 0) { break; }
-
-          // TODO: parse_type() with ALL the arguments.
-
-          Node *type_value = node_allocate();
-          Node *type_value_it = type_value;
-          // Loop over all pointer declaration symbols.
-          while (current_token.beginning[0] == '@') {
-            // Add one level of pointer indirection.
-            type_value_it->type = NODE_TYPE_POINTER;
-            Node *child = node_allocate();
-            type_value->children = child;
-            type_value_it = child;
-            // Advance lexer.
-            err = lex_advance(&current_token, &token_length, end);
-            if (err.type != ERROR_NONE) { return err; }
-            if (token_length == 0) { break; }
-          }
-
-          Node *type_symbol =
-            node_symbol_from_buffer(current_token.beginning, token_length);
-          // WHY ARE WE DOING THIS
-          Node *type_validator = node_allocate();
-          err = parse_get_type(context, type_symbol, type_validator);
-          if (err.type) {
-            free(type_value);
-            return err;
-          }
-          if (nonep(*type_validator)) {
-            ERROR_PREP(err, ERROR_TYPE, "Invalid type within variable declaration");
-            printf("\nINVALID TYPE: \"%s\"\n", type_symbol->value.symbol);
-            return err;
-          }
-          free(type_validator);
+          Node *type = node_allocate();
+          err = parse_type(context, &current_token, &token_length, end, type);
+          if (err.type) { return err; }
 
           Node *variable_binding = node_allocate();
           if (environment_get(*context->variables, symbol, variable_binding)) {
@@ -1212,24 +1317,17 @@ Error parse_expr
           // Variable binding is shell-node for environment value contents.
           free(variable_binding);
 
-          working_result->type = NODE_TYPE_VARIABLE_DECLARATION;
+          Node *variable_declaration = working_result;
+          variable_declaration->type = NODE_TYPE_VARIABLE_DECLARATION;
 
           // `symbol` is now owned by working_result, a var. decl.
-          node_add_child(working_result, symbol);
+          node_add_child(variable_declaration, symbol);
 
           // Context variables environment gains new binding.
           Node *symbol_for_env = node_allocate();
           node_copy(symbol, symbol_for_env);
 
-          Node *type_for_env = node_allocate();
-          node_copy(type_value, type_for_env);
-          Node *type_child = type_for_env;
-          while (type_child->children) {
-            type_child = type_child->children;
-          }
-          *type_child = *type_symbol;
-
-          int status = environment_set(context->variables, symbol_for_env, type_for_env);
+          int status = environment_set(context->variables, symbol_for_env, type);
           if (status != 1) {
             printf("Variable: \"%s\", status: %d\n", symbol_for_env->value.symbol, status);
             ERROR_PREP(err, ERROR_GENERIC, "Failed to define variable!");
@@ -1239,8 +1337,6 @@ Error parse_expr
           // Check for initialization after declaration.
           EXPECT(expected, "=", &current_token, &token_length, end);
           if (expected.found) {
-
-            working_result->next_child = node_allocate();
 
             Node **local_result = &result;
             if (stack) { local_result = &stack->result; }

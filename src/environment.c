@@ -58,6 +58,33 @@ int environment_set(Environment *env, Node *id, Node *value) {
   return 1;
 }
 
+int environment_set_end(Environment *env, Node *id, Node *value) {
+  // Over-write existing value if ID is already bound in environment.
+  if (!env || !id || !value) {
+    return 0;
+  }
+  if (!env->bind) {
+    return environment_set(env, id, value);
+  }
+  Binding *last_binding = env->bind;
+  Binding *binding_it = env->bind;
+  while (binding_it) {
+    if (node_compare(binding_it->id, id)) {
+      binding_it->value = value;
+      return 2;
+    }
+    last_binding = binding_it;
+    binding_it = binding_it->next;
+  }
+  // Create new binding.
+  Binding *binding = calloc(1,sizeof(Binding));
+  assert(binding && "Could not allocate new binding for environment");
+  binding->id = id;
+  binding->value = value;
+  last_binding->next = binding;
+  return 1;
+}
+
 int environment_get(Environment env, Node *id, Node *result) {
   Binding *binding_it = env.bind;
   while (binding_it) {

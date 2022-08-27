@@ -30,6 +30,13 @@ Environment *environment_create(Environment *parent);
  */
 int environment_set(Environment *env, Node *id, Node *value);
 
+/** Exactly like evironment_set() except it adds the child to the end.
+ * @retval 0 Failure.
+ * @retval 1 Creation of new binding.
+ * @retval 2 Existing binding value overwrite (ID unused).
+ */
+int environment_set_end(Environment *env, Node *id, Node *value);
+
 /** Fill RESULT with value bound to ID in ENV, if successful.
  *
  * @return Boolean-like value; 1 for success, 0 for failure.

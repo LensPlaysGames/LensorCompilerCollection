@@ -331,27 +331,30 @@ Error codegen_expression_x86_64_mswin
 
     fprintf(code, "mov $0, %s\n", register_name(r, expression->result_register));
     last_expr = NULL;
-    expr = expression->children->next_child->next_child->children;
-    while (expr) {
-      err = codegen_expression_x86_64_mswin(code, r, cg_context,
-                                            context, next_child_context,
-                                            expr);
+    if (expression->children->next_child->next_child) {
+      expr = expression->children->next_child->next_child->children;
+      while (expr) {
+        err = codegen_expression_x86_64_mswin(code, r, cg_context,
+                                              context, next_child_context,
+                                              expr);
 
-      //register_deallocate(r, expr->result_register);
+        //register_deallocate(r, expr->result_register);
 
-      if (err.type) { return err; }
+        if (err.type) { return err; }
+        if (last_expr) {
+          register_deallocate(r, last_expr->result_register);
+        }
+        last_expr = expr;
+        expr = expr->next_child;
+      }
+      // Copy last_expr result register to if result register.
       if (last_expr) {
+        fprintf(code, "mov %s, %s\n",
+                register_name(r, last_expr->result_register),
+                register_name(r, expression->result_register));
         register_deallocate(r, last_expr->result_register);
       }
-      last_expr = expr;
-      expr = expr->next_child;
     }
-
-    // Generate code to copy last expr result register to if result register.
-    fprintf(code, "mov %s, %s\n",
-            register_name(r, last_expr->result_register),
-            register_name(r, expression->result_register));
-    register_deallocate(r, last_expr->result_register);
 
     fprintf(code, "%s:\n", after_otherwise_label);
 
@@ -537,13 +540,12 @@ Error codegen_expression_x86_64_mswin
     if (tmpnode->type == NODE_TYPE_POINTER) {
       size_in_bytes = 8;
     } else {
-      print_node(tmpnode, 0);
-      err = parse_get_type(context, tmpnode, tmpnode);
+      err = parse_get_type(original_context, tmpnode, tmpnode);
       if (err.type) { return err; }
       size_in_bytes = tmpnode->children->value.integer;
     }
     //   Subtract type size in bytes from stack pointer
-    fprintf(code, "sub $%zu, %%rsp\n", size_in_bytes);
+    fprintf(code, "sub $%lld, %%rsp\n", size_in_bytes);
     // Keep track of RBP offset.
     cg_context->locals_offset -= size_in_bytes;
     //   Kept in codegen context.
@@ -663,7 +665,12 @@ Error codegen_function_x86_64_att_asm_mswin
           "push %%rdi\n");
 
   // Function body
-  ParsingContext *ctx = next_child_context ? *next_child_context : context;
+  ParsingContext *ctx = context;
+  if (next_child_context) {
+    ctx = *next_child_context;
+    *next_child_context = (*next_child_context)->next_child;
+  }
+
   Node *last_expression = NULL;
   Node *expression = function->children->next_child->next_child->children;
   while (expression) {
@@ -675,9 +682,6 @@ Error codegen_function_x86_64_att_asm_mswin
     }
     last_expression = expression;
     expression = expression->next_child;
-  }
-  if (next_child_context) {
-    *next_child_context = (*next_child_context)->next_child;
   }
 
   // Copy last expression result register to RAX
@@ -725,12 +729,22 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
   Node *type_info = node_allocate();
   while (var_it) {
     Node *var_id = var_it->id;
-    Node *type = var_it->value;
-    if (!environment_get(*context->types, type, type_info)) {
-      printf("Type: \"%s\"\n", type->value.symbol);
+    Node *type_id = var_it->value;
+    while (type_id && !type_id->value.symbol) {
+      type_id = type_id->children;
+    }
+    if (!type_id) {
+      // TODO: Some sort of error about mishapen variable type.
+      printf("Type: \"%s\"\n", type_id->value.symbol);
+      ERROR_PREP(err, ERROR_GENERIC,
+                 "Could not get type symbol/ID; AST must be invalid or mishapen!");
+      return err;
+    }
+    if (!environment_get(*context->types, type_id, type_info)) {
+      printf("Type: \"%s\"\n", type_id->value.symbol);
       ERROR_PREP(err, ERROR_GENERIC,
                  "Could not get type info from types environment!");
-      // TODO/FIXME: Should I return error here?
+      return err;
     }
     var_it = var_it->next;
     fprintf(code, "%s: .space %lld\n", var_id->value.symbol, type_info->children->value.integer);
@@ -749,7 +763,6 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
     err = codegen_function_x86_64_att_asm_mswin(r, cg_context, context, &next_child_context, function_id->value.symbol, function, code);
     if (err.type) { return err; }
   }
-
   fprintf(code,
           ".global main\n"
           "main:\n"
