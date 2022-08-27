@@ -297,32 +297,26 @@ Error typecheck_expression
     //print_node(tmpnode,2);
 
     while (iterator && tmpnode) {
-      // Get expected type of parameter from tmpnode.
-
-      // Lookup tmpnode->children in variables environment for expected parameter type.
-      context = original_context;
-      while (context) {
-        if (environment_get(*context->variables, tmpnode->children, result)) {
-          break;
-        }
-        context = context->parent;
-      }
-      if (!context) {
-        ERROR_PREP(err, ERROR_GENERIC, "Malformed or mishapen parsing context encountered during typechecking");
-        return err;
-      }
       // Get return type of given parameter.
       err = expression_return_type(original_context, context_to_enter, iterator, type);
       if (err.type) { return err; }
+      // Expected type symbol of parameter found in tmpnode->children->next_child.
+      err = parse_get_type(context, tmpnode->children->next_child, result);
+      if (err.type) { return err; }
       if (type_compare(result, type) == 0) {
         printf("Function:%s\n", expression->children->value.symbol);
+        printf("Invalid argument:\n");
+        print_node(iterator, 2);
+        printf("Expected argument:\n");
+        print_node(tmpnode, 2);
         ERROR_PREP(err, ERROR_TYPE, "Argument type does not match declared parameter type");
-        break;
+        return err;
       }
       iterator = iterator->next_child;
       tmpnode = tmpnode->next_child;
     }
     if (tmpnode != NULL) {
+      printf("Expected argument:\n");
       printf("Function:%s\n", expression->children->value.symbol);
       ERROR_PREP(err, ERROR_ARGUMENTS, "Not enough arguments passed to function!");
       break;

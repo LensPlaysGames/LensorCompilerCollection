@@ -809,6 +809,18 @@ Error handle_stack_operator
   }
 
   if (strcmp(operator->value.symbol, "defun-params") == 0) {
+    if ((*working_result)->type != NODE_TYPE_VARIABLE_DECLARATION) {
+      ERROR_PREP(err, ERROR_SYNTAX, "Function parameter definition must be variable declaration expression");
+      return err;
+    }
+
+    // Lookup var. decl. symbol in environment to get it's type symbol node thing.
+
+    Node *type = node_allocate();
+    err = parse_get_variable(*context, (*working_result)->children, type);
+    if (err.type) { return err; }
+    node_add_child(*working_result, type);
+
     // TODO: Handle `done` cases.
     // Evaluate next expression unless it's a closing parenthesis.
     EXPECT(expected, ")", current, length, end);
