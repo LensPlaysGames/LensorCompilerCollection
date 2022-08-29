@@ -13,7 +13,8 @@ Error expression_return_type(ParsingContext *context,
                              Node *type);
 Error typecheck_expression(ParsingContext *context,
                            ParsingContext **context_to_enter,
-                           Node *expression);
+                           Node *expression,
+                           Node *type);
 Error typecheck_program(ParsingContext *context, Node *program);
 
 #endif /* TYPECHECKER_H */

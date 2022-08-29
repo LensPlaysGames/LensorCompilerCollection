@@ -249,10 +249,10 @@ Error codegen_expression_x86_64_mswin
 
     break;
   case NODE_TYPE_FUNCTION:
+    if (!cg_context->parent) { break; }
     if (codegen_verbose) {
       fprintf(code, ";;#; Function\n");
     }
-    if (!cg_context->parent) { break; }
     // TODO: Keep track of local lambda label in environment or something.
     result = label_generate();
     err = codegen_function_x86_64_att_asm_mswin(r, cg_context, context, next_child_context,
@@ -549,6 +549,11 @@ Error codegen_expression_x86_64_mswin
         break;
       }
       context = context->parent;
+    }
+    if (!context) {
+      printf("Variable Symbol: \"%s\"\n", expression->children->value.symbol);
+      ERROR_PREP(err, ERROR_GENERIC, "Invalid AST/context fed to codegen. Could not find variable declaration in environment");
+      return err;
     }
     if (tmpnode->type == NODE_TYPE_POINTER) {
       size_in_bytes = 8;
