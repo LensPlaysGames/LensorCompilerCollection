@@ -1,0 +1,36 @@
+defun foo () : integer {
+  a : integer = 0
+  b : integer = 42
+
+  ptr : @integer
+  ptr := &a
+  @ptr := 69
+
+  test_ptr : @integer
+  test_ptr := &b
+
+  ptrptr : @@integer
+  ptrptr := &ptr
+
+  @ptrptr := test_ptr
+
+  @ptr := 42
+
+  a
+}
+
+foo()
+
+;; Using a pointer to mutate an integer variable that may be created at
+;; any time!
+defun bar (ptr : @integer) : integer {
+  @ptr := 69
+  0
+}
+
+number : integer = 0
+numptr : @integer
+numptr := &number
+bar(numptr)
+number
+
