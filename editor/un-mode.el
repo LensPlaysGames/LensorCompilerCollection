@@ -10,6 +10,10 @@
 (modify-syntax-entry
  ?\; "<"
  un-mode-syntax-table)
+;; Set hash/pound as comment starting character.
+(modify-syntax-entry
+ ?# "<"
+ un-mode-syntax-table)
 ;; Set newline as comment ending character.
 (modify-syntax-entry
  ?\n ">"
