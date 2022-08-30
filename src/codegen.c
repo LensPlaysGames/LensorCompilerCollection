@@ -306,6 +306,8 @@ Error codegen_expression_x86_64_mswin
       fprintf(code, ";;#; If THEN\n");
     }
 
+    // TODO/FIXME: There should be context handling here!
+
     // Generate THEN expression body.
     Node *last_expr = NULL;
     Node *expr = expression->children->next_child->children;
@@ -335,6 +337,8 @@ Error codegen_expression_x86_64_mswin
     if (codegen_verbose) {
       fprintf(code, ";;#; If OTHERWISE\n");
     }
+
+    // TODO/FIXME: There should be context handling here!
 
     // Generate OTHERWISE
     fprintf(code, "%s:\n", otherwise_label);
@@ -555,9 +559,11 @@ Error codegen_expression_x86_64_mswin
       ERROR_PREP(err, ERROR_GENERIC, "Invalid AST/context fed to codegen. Could not find variable declaration in environment");
       return err;
     }
-    if (tmpnode->type == NODE_TYPE_POINTER) {
+    // Pointers are 8 bytes always, at least for now!
+    if (tmpnode->pointer_indirection != 0) {
       size_in_bytes = 8;
     } else {
+      // If not a pointer, get size in bytes from types environment.
       err = parse_get_type(original_context, tmpnode, tmpnode);
       if (err.type) { return err; }
       size_in_bytes = tmpnode->children->value.integer;
@@ -573,7 +579,6 @@ Error codegen_expression_x86_64_mswin
     if (codegen_verbose) {
       fprintf(code, ";;#; Variable Reassignment\n");
     }
-
 
     // 1. Codegen RHS
     // 2. Recurse LHS into children until LHS is a var. access.

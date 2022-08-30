@@ -9,8 +9,39 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define TYPE_NODE_TEXT_BUFFER_SIZE 1024
+char type_node_text_buffer[TYPE_NODE_TEXT_BUFFER_SIZE];
+char *type_node_text(Node *type) {
+  static size_t offset = 0;
+  char *outstring = type_node_text_buffer + offset;
+  for (unsigned i = 0; i < type->pointer_indirection; ++i) {
+    offset += snprintf(type_node_text_buffer + offset,
+                       TYPE_NODE_TEXT_BUFFER_SIZE - offset,
+                       "@");
+  }
+  offset += snprintf(type_node_text_buffer + offset,
+                     TYPE_NODE_TEXT_BUFFER_SIZE - offset,
+                     "%s", type->value.symbol);
+  offset += 1;
+  if (offset >= TYPE_NODE_TEXT_BUFFER_SIZE) {
+    offset = 0;
+  }
+  return outstring;
+}
+
+void print_type_node(Node *type, size_t indent) {
+  size_t indent_it = indent;
+  while (indent_it--) {
+    putchar(' ');
+  }
+  printf("%s\n", type_node_text(type));
+}
+
 int type_compare(Node *a, Node *b) {
-  if (a->type != b->type) { return 0; }
+  if (a->type != b->type
+      || a->pointer_indirection != b->pointer_indirection) {
+    return 0;
+  }
   Node *child_it_a = a->children;
   Node *child_it_b = b->children;
   while (child_it_a && child_it_b) {
@@ -20,11 +51,23 @@ int type_compare(Node *a, Node *b) {
     child_it_a = child_it_a->next_child;
     child_it_b = child_it_b->next_child;
   }
-  if (child_it_a == child_it_b) {
+  if (child_it_a == NULL && child_it_b == NULL) {
     return 1;
   }
   return 0;
 }
+
+char type_compare_symbol(Node *a, Node *b) {
+  if (a->type != NODE_TYPE_SYMBOL
+      || b->type != NODE_TYPE_SYMBOL
+      || a->pointer_indirection != b->pointer_indirection
+      || strcmp(a->value.symbol, b->value.symbol) != 0)
+    {
+      return 0;
+    }
+  return 1;
+}
+
 
 Error typecheck_expression
 (ParsingContext *context,
@@ -60,9 +103,10 @@ Error typecheck_expression
   default:
     break;
   case NODE_TYPE_INTEGER:
-    result_type->type = NODE_TYPE_INTEGER;
-    Node *sizeof_integer = node_integer(8);
-    result_type->children = sizeof_integer;
+    if (0) { ; }
+    Node *integer_type = node_symbol("integer");
+    *result_type = *integer_type;
+    free(integer_type);
     break;
   case NODE_TYPE_VARIABLE_ACCESS:
     // Get type symbol from variables environment using variable symbol.
@@ -78,76 +122,66 @@ Error typecheck_expression
                  "Could not get variable within context for variable access return type");
       break;
     }
-
-    // TYPE -> "integer"
-    // TYPE -> POINTER
-    //         `-- "integer"
-
-    // TYPE -> INT:0
-    // TYPE -> POINTER
-    //         `-- INT:0
-
-    node_copy(result_type, type);
-    iterator = type;
-    while (iterator->children) {
-      iterator = iterator->children;
-    }
-    // Get type node from types environment using type symbol.
-    err = parse_get_type(context, iterator, tmpnode);
-    if (err.type) {
-      printf("Variable: \"%s\"\n", expression->value.symbol);
-      ERROR_PREP(err, ERROR_GENERIC,
-                 "Could not get type definition in current context for variable access");
-      return err;
-    }
-    *iterator = *tmpnode;
-    *result_type = *type;
     break;
   case NODE_TYPE_ADDRESSOF:
     // Ensure child is a variable access.
-    // TODO: Addressof a Dereference should cancel out.
+    // TODO: Addressof a Dereference should cancel out. Maybe do this during parsing?
+    // Or just remove this pattern nodes during optimization.
     if (!expression->children || expression->children->type != NODE_TYPE_VARIABLE_ACCESS) {
       ERROR_PREP(err, ERROR_TYPE,
                  "Addressof operator requires valid variable access following it.");
       return err;
     }
-    Node *variable_access_return_type = node_allocate();
-    typecheck_expression(context, context_to_enter,
-                         expression->children,
-                         variable_access_return_type);
-
-    result_type->type = NODE_TYPE_POINTER;
-    result_type->children = variable_access_return_type;
+    err = typecheck_expression(context, context_to_enter,
+                               expression->children,
+                               result_type);
+    if (err.type) { return err; }
+    result_type->pointer_indirection += 1;
     break;
   case NODE_TYPE_DEREFERENCE:
     // Ensure child return type is at least one level of pointer indirection.
+
+    //printf("\n\n");
+    //print_node(expression,0);
+
     err = typecheck_expression(context, context_to_enter, expression->children, result_type);
     if (err.type) { return err; }
-    if (result_type->type != NODE_TYPE_POINTER) {
+    if (result_type->pointer_indirection == 0) {
       print_node(result_type,0);
       ERROR_PREP(err, ERROR_TYPE, "Dereference may only operate on pointers!");
       return err;
     }
-    *result_type = *result_type->children;
+    result_type->pointer_indirection -= 1;
     break;
   case NODE_TYPE_IF:
     if (0) { ; }
+
+    // Enter `if` THEN context.
+    to_enter = (*context_to_enter)->children;
     Node *then_expression = expression->children->next_child->children;
     while (then_expression) {
-      err = typecheck_expression(context, context_to_enter, then_expression, result_type);
+      err = typecheck_expression(*context_to_enter, &to_enter, then_expression, result_type);
       if (err.type) { return err; }
       then_expression = then_expression->next_child;
     }
+    // Eat `if` THEN context.
+    *context_to_enter = (*context_to_enter)->next_child;
+
+    // When `if` has OTHERWISE...
     if (expression->children->next_child->next_child) {
+      // Enter `if` OTHERWISE context.
+      to_enter = (*context_to_enter)->children;
       Node *otherwise_expression = expression->children->next_child->next_child->children;
       Node *otherwise_type = node_allocate();
       while (otherwise_expression) {
-        err = typecheck_expression(context, context_to_enter, otherwise_expression, otherwise_type);
+        err = typecheck_expression(*context_to_enter, &to_enter, otherwise_expression, otherwise_type);
         if (err.type) { return err; }
         otherwise_expression = otherwise_expression->next_child;
       }
+      // Eat `if` OTHERWISE context.
+      *context_to_enter = (*context_to_enter)->next_child;
       // Enforce that `if` expressions with else bodies must return same type.
-      if(type_compare(result_type, otherwise_type) == 0) {
+      if(type_compare_symbol(result_type, otherwise_type) == 0) {
         printf("THEN type:\n");
         print_node(result_type,2);
         printf("OTHERWISE type:\n");
@@ -174,14 +208,7 @@ Error typecheck_expression
 
     // Compare return type of function to return type of last
     // expression in the body.
-    Node *function_return_type = node_allocate();
-    node_copy(expression->children->next_child, function_return_type);
-    Node *function_return_type_it = function_return_type;
-    while (function_return_type_it->children) {
-      function_return_type_it = function_return_type_it->children;
-    }
-    parse_get_type(*context_to_enter, function_return_type_it, result);
-    if (type_compare(result, expr_return_type) == 0) {
+    if (type_compare_symbol(expression->children->next_child, expr_return_type) == 0) {
       ERROR_PREP(err, ERROR_TYPE, "Return type of last expression in function does not match function return type.");
       return err;
     }
@@ -216,7 +243,7 @@ Error typecheck_expression
     //printf("RHS return type\n");
     //print_node(rhs_return_value,0);
 
-    if (type_compare(result_type, rhs_return_value) == 0) {
+    if (type_compare_symbol(result_type, rhs_return_value) == 0) {
       printf("Expression:\n");
       print_node(expression,0);
       printf("LHS TYPE:\n");
@@ -240,12 +267,8 @@ Error typecheck_expression
     // Get return type of LHS into `type`.
     err = typecheck_expression(context, context_to_enter, expression->children, type);
     if (err.type) { return err; }
-    // Get expected return type of LHS into `tmpnode`.
-    err = parse_get_type(context,
-                         value->children->next_child->next_child,
-                         tmpnode);
-    if (err.type) { return err; }
-    if (type_compare(type, tmpnode) == 0) {
+    // Expected return type of LHS is third child of binary operator definition.
+    if (type_compare_symbol(type, value->children->next_child->next_child) == 0) {
       print_node(expression,0);
       ERROR_PREP(err, ERROR_TYPE,
                  "Return type of left hand side expression of binary operator does not match declared left hand side return type");
@@ -254,22 +277,14 @@ Error typecheck_expression
     // Get return type of RHS into `type`.
     err = typecheck_expression(context, context_to_enter, expression->children->next_child, type);
     if (err.type) { return err; }
-    // Get expected return type of RHS into `tmpnode`.
-    err = parse_get_type(context,
-                         value->children->next_child->next_child->next_child,
-                         tmpnode);
-    if (err.type) { return err; }
-    if (type_compare(type, tmpnode) == 0) {
+    // Expected return type of RHS is fourth child of binary operator definition.
+    if (type_compare_symbol(type, value->children->next_child->next_child->next_child) == 0) {
       print_node(expression,0);
       ERROR_PREP(err, ERROR_TYPE,
                  "Return type of right hand side expression of binary operator does not match declared right hand side return type");
       return err;
     }
     *result_type = *value->children->next_child;
-
-    // Resolve symbol of binary operator return value.
-    err = parse_get_type(context, value->children->next_child, result_type);
-    if (err.type) { return err; }
     break;
   case NODE_TYPE_FUNCTION_CALL:
     // Ensure function call arguments are of correct type.
@@ -295,37 +310,13 @@ Error typecheck_expression
       if (err.type) { return err; }
 
       // Expected type symbol of parameter found in expected_parameter->children->next_child.
-      Node *expected_type_symbol = expected_parameter->children->next_child;
-      Node *type_result_it = result;
-      while (expected_type_symbol->children && expected_type_symbol->type != NODE_TYPE_SYMBOL) {
-        result->type = NODE_TYPE_POINTER;
-
-        Node *one_more_level_of_pointer_indirection = node_allocate();
-        one_more_level_of_pointer_indirection->type = NODE_TYPE_POINTER;
-        type_result_it->children = one_more_level_of_pointer_indirection;
-        type_result_it = one_more_level_of_pointer_indirection;
-
-        expected_type_symbol = expected_type_symbol->children;
-      }
-      err = parse_get_type(context, expected_type_symbol, type_result_it);
-      if (err.type) { return err; }
-
-      //print_node(type,2);
-      //printf("\n");
-      //print_node(result,2);
-      //printf("\n");
-      //print_node(expected_type_symbol,2);
-
-      if (type_compare(result, type) == 0) {
+      if (type_compare(expected_parameter->children->next_child, type) == 0) {
         printf("Function:%s\n", expression->children->value.symbol);
         printf("Invalid argument:\n");
         print_node(iterator, 2);
-        printf("Argument return type:\n");
-        print_node(type, 2);
-        printf("Expected return type:\n");
-        print_node(result, 2);
-        //printf("Expected argument:\n");
-        //print_node(expected_parameter, 2);
+        printf("Argument return type is `%s` but was expected to be `%s`\n",
+               type_node_text(type),
+               type_node_text(expected_parameter->children->next_child));
         ERROR_PREP(err, ERROR_TYPE, "Argument type does not match declared parameter type");
         return err;
       }
@@ -345,31 +336,7 @@ Error typecheck_expression
       ERROR_PREP(err, ERROR_ARGUMENTS, "Too many arguments passed to function!");
       break;
     }
-
-    // Set `func_return_type` to return type symbol of called function.
-    Node *func_return_type = node_allocate();
-    node_copy(value->children->next_child, func_return_type);
-    Node *func_return_type_it = func_return_type;
-    while (func_return_type_it->children) {
-      func_return_type_it = func_return_type_it->children;
-    }
-
-    // TODO/FIXME:
-    // Is context_to_enter correct, like, at all? NO!
-    // Do we need some link between function definition and function context? Maybe!
-    // It's like we need to know which context function was defined within
-    // to properly check that return type is valid or get it at all, really.
-
-    err = parse_get_type(context, func_return_type_it, result);
-    if (err.type) { return err; }
-    *func_return_type_it = *result;
-    node_copy(func_return_type, result_type);
-
-    //printf("RESULT:\n");
-    //print_node(result,0);
-    //printf("resolved func return type:\n");
-    //print_node(func_return_type,0);
-
+    *result_type = *value->children->next_child;
     break;
   }
   free(result);

@@ -60,10 +60,6 @@ typedef enum NodeType {
   /// TODO: 3. "ELSE" Expression List
   NODE_TYPE_IF,
 
-  /// Contains one child.
-  /// 1. Type Symbol or another Pointer
-  NODE_TYPE_POINTER,
-
   NODE_TYPE_ADDRESSOF,
   NODE_TYPE_DEREFERENCE,
 
@@ -89,6 +85,7 @@ typedef struct Node {
   struct Node *next_child;
   /// Used during codegen to store result RegisterDescriptor.
   int result_register;
+  unsigned int pointer_indirection;
 } Node;
 
 char *node_text(Node *node);
