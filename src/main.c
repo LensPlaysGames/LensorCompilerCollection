@@ -89,6 +89,17 @@ int handle_command_line_arguments(int argc, char **argv) {
         print_acceptable_formats();
         return 1;
       }
+    } else if (strcmp(argument, "--aluminium") == 0){
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+        // Windows
+        system("start https://www.youtube.com/watch?v=dQw4w9WgXcQ"); // FIXME: Must test this
+#elif __APPLE__
+        // Apple (iOS, OS X, watchOS...)
+        system("open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+#elif __linux__ || __unix__
+        // Linux or unix-based
+        system("xdg-open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+#endif
     } else {
       if (input_filepath_index != -1) {
         printf("ERROR: Only a single input filepath is used, but multiple were given.\n"
