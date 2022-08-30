@@ -130,6 +130,34 @@ Error typecheck_expression
     }
     *result_type = *result_type->children;
     break;
+  case NODE_TYPE_IF:
+    if (0) { ; }
+    Node *then_expression = expression->children->next_child->children;
+    while (then_expression) {
+      err = typecheck_expression(context, context_to_enter, then_expression, result_type);
+      if (err.type) { return err; }
+      then_expression = then_expression->next_child;
+    }
+    if (expression->children->next_child->next_child) {
+      Node *otherwise_expression = expression->children->next_child->next_child->children;
+      Node *otherwise_type = node_allocate();
+      while (otherwise_expression) {
+        err = typecheck_expression(context, context_to_enter, otherwise_expression, otherwise_type);
+        if (err.type) { return err; }
+        otherwise_expression = otherwise_expression->next_child;
+      }
+      // Enforce that `if` expressions with else bodies must return same type.
+      if(type_compare(result_type, otherwise_type) == 0) {
+        printf("THEN type:\n");
+        print_node(result_type,2);
+        printf("OTHERWISE type:\n");
+        print_node(otherwise_type,2);
+        ERROR_PREP(err, ERROR_TYPE, "All branches of `if` expression must return same type.");
+        return err;
+      }
+      free(otherwise_type);
+    }
+    break;
   case NODE_TYPE_FUNCTION:
     // Typecheck body of function in proper context.
 
@@ -238,6 +266,10 @@ Error typecheck_expression
       return err;
     }
     *result_type = *value->children->next_child;
+
+    // Resolve symbol of binary operator return value.
+    err = parse_get_type(context, value->children->next_child, result_type);
+    if (err.type) { return err; }
     break;
   case NODE_TYPE_FUNCTION_CALL:
     // Ensure function call arguments are of correct type.
@@ -288,8 +320,12 @@ Error typecheck_expression
         printf("Function:%s\n", expression->children->value.symbol);
         printf("Invalid argument:\n");
         print_node(iterator, 2);
-        printf("Expected argument:\n");
-        print_node(expected_parameter, 2);
+        printf("Argument return type:\n");
+        print_node(type, 2);
+        printf("Expected return type:\n");
+        print_node(result, 2);
+        //printf("Expected argument:\n");
+        //print_node(expected_parameter, 2);
         ERROR_PREP(err, ERROR_TYPE, "Argument type does not match declared parameter type");
         return err;
       }
