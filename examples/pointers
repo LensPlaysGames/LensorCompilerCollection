@@ -33,4 +33,3 @@ numptr : @integer
 numptr := &number
 bar(numptr)
 number
-

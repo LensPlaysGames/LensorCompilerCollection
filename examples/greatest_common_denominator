@@ -1,0 +1,13 @@
+defun gcd_euclid (a : integer, b : integer) : integer {
+  if a = b {
+    a
+  } else {
+    if a < b {
+      gcd_euclid(a, b - a)
+    } else {
+      gcd_euclid(a - b, b)
+    }
+  }
+}
+
+gcd_euclid(88, 32)

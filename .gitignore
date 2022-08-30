@@ -1,13 +1,22 @@
 # Build Artifacts
+**/*.S
+**/*.o
+**/*.exe
 # CCache
 .cache
 # CMake
 **/bld
 **/win*
+**/lnx
 **/lin*
 **/dbg
 **/debug
 **/rls
 **/release
 **/*tst*
-**/*test*
+**/test*
+**/*test
+# Language Server
+**/compile_commands.json
+
+# Backup Files
