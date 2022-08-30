@@ -8,9 +8,8 @@ with a brand new language that has still not even been named.
 
 ** Usage
 
-Run the executable from a shell with a path to some source code as the
-only argument. Currently, we print out the furthest progress we are
-able to make. Eventually, we will output compiled source code.
+Running the compiler executable with no arguments will display a usage
+message that contains compiler flags and options as well as command layout.
 
 ** Building
 
@@ -32,9 +31,20 @@ Finally, build an executable from the build tree.
 
 *** To build generated x86_64 ASM
 
+GNU Binutils:
 #+begin_src shell
   as code.S -o code.o
   ld code.o -o code
+#+end_src
+
+GNU Compiler Collection
+#+begin_src shell
+  gcc code.S -o code.exe
+#+end_src
+
+LLVM/Clang
+#+begin_src shell
+  clang code.S -o code.exe --target=x86_64
 #+end_src
 
 ** Language Reference
