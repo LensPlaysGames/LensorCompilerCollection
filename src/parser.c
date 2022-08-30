@@ -809,7 +809,7 @@ Error handle_stack_operator
   }
 
   if (strcmp(operator->value.symbol, "defun-params") == 0) {
-    if ((*working_result)->type != NODE_TYPE_VARIABLE_DECLARATION) {
+    if (((*stack)->result)->type != NODE_TYPE_VARIABLE_DECLARATION) {
       ERROR_PREP(err, ERROR_SYNTAX, "Function parameter definition must be variable declaration expression");
       return err;
     }
@@ -889,6 +889,13 @@ Error handle_stack_operator
 
       }
       ERROR_PREP(err, ERROR_SYNTAX, "Expected type annotation following parameter list for return type of function.");
+      return err;
+    }
+
+    // Eat the comma in-between variable declarations.
+    EXPECT(expected, ",", current, length, end);
+    if (expected.done) {
+      ERROR_PREP(err, ERROR_SYNTAX, "Expected another parameter definition but got EOF!");
       return err;
     }
 
