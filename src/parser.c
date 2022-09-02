@@ -106,13 +106,22 @@ void node_add_child(Node *parent, Node *new_child) {
 }
 
 int node_compare(Node *a, Node *b) {
+  assert(NODE_TYPE_MAX == 13 && "node_compare() must handle all node types");
+
+  // Actually really nice debug output when you need it.
+  //printf("Comparing nodes:\n");
+  //print_node(a, 2);
+  //print_node(b, 2);
+  //putchar('\n');
+
   if (!a || !b) {
     if (!a && !b) {
       return 1;
     }
     return 0;
   }
-  assert(NODE_TYPE_MAX == 13 && "node_compare() must handle all node types");
+
+  // Compare types of nodes.
   // Variable access and symbol are not same type but share same comparison.
   if (!((a->type == NODE_TYPE_SYMBOL || a->type == NODE_TYPE_VARIABLE_ACCESS)
         && (b->type == NODE_TYPE_SYMBOL || b->type == NODE_TYPE_VARIABLE_ACCESS)))
@@ -121,12 +130,25 @@ int node_compare(Node *a, Node *b) {
         return 0;
       }
     }
-  switch (a->type) {
-  case NODE_TYPE_NONE:
-    if (nonep(*b)) {
-      return 1;
+
+  // Compare all children recursively!
+  Node *a_child = a->children;
+  Node *b_child = b->children;
+  while (a_child && b_child) {
+    if (node_compare(a_child, b_child) == 0) {
+      return 0;
     }
-    break;
+    a_child = a_child->next_child;
+    b_child = b_child->next_child;
+  }
+  if (a_child || b_child) {
+    return 0;
+  }
+
+  // Compare value of node.
+  switch (a->type) {
+  default:
+    return 1;
   case NODE_TYPE_INTEGER:
     if (a->value.integer == b->value.integer) {
       return 1;
@@ -134,6 +156,7 @@ int node_compare(Node *a, Node *b) {
     break;
   case NODE_TYPE_VARIABLE_ACCESS:
   case NODE_TYPE_SYMBOL:
+  case NODE_TYPE_BINARY_OPERATOR:
     if (a->value.symbol && b->value.symbol) {
       if (strcmp(a->value.symbol, b->value.symbol) == 0) {
         return 1;
@@ -142,33 +165,6 @@ int node_compare(Node *a, Node *b) {
     } else if (!a->value.symbol && !b->value.symbol) {
       return 1;
     }
-    break;
-  case NODE_TYPE_BINARY_OPERATOR:
-    printf("TODO: node_compare() BINARY OPERATOR\n");
-    break;
-  case NODE_TYPE_FUNCTION:
-    printf("TODO: node_compare() FUNCTION\n");
-    break;
-  case NODE_TYPE_FUNCTION_CALL:
-    printf("TODO: node_compare() FUNCTION CALL\n");
-    break;
-  case NODE_TYPE_VARIABLE_REASSIGNMENT:
-    printf("TODO: node_compare() VARIABLE REASSIGNMENT\n");
-    break;
-  case NODE_TYPE_VARIABLE_DECLARATION:
-    printf("TODO: node_compare() VARIABLE DECLARATION\n");
-    break;
-  case NODE_TYPE_ADDRESSOF:
-    printf("TODO: node_compare() ADDRESSOF\n");
-    break;
-  case NODE_TYPE_DEREFERENCE:
-    printf("TODO: node_compare() DEREFERENCE\n");
-    break;
-  case NODE_TYPE_IF:
-    printf("TODO: node_compare() IF\n");
-    break;
-  case NODE_TYPE_PROGRAM:
-    printf("TODO: Compare two programs.\n");
     break;
   }
   return 0;

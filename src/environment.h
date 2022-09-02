@@ -46,4 +46,10 @@ int environment_get(Environment env, Node *id, Node *result);
 /// @return Boolean-like value; 1 for success, 0 for failure.
 int environment_get_by_symbol(Environment env, char *symbol, Node *result);
 
+/** Fill RESULT with identifier bound to VALUE in ENV, if successful.
+ *
+ * @return Boolean-like value; 1 for success, 0 for failure.
+ */
+int environment_get_by_value(Environment env, Node *value, Node *result);
+
 #endif /* COMPILER_ENVIRONMENT_H */

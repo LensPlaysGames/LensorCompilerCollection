@@ -196,7 +196,7 @@ Error codegen_expression_x86_64_mswin
   ParsingContext *original_context = context;
   //expression->result_register = -1;
 
-  assert(NODE_TYPE_MAX == 14 && "codegen_expression_x86_64_mswin() must exhaustively handle node types!");
+  assert(NODE_TYPE_MAX == 13 && "codegen_expression_x86_64_mswin() must exhaustively handle node types!");
   switch (expression->type) {
   default:
     break;
@@ -249,17 +249,29 @@ Error codegen_expression_x86_64_mswin
 
     break;
   case NODE_TYPE_FUNCTION:
-    if (!cg_context->parent) { break; }
     if (codegen_verbose) {
       fprintf(code, ";;#; Function\n");
     }
-    // TODO: Keep track of local lambda label in environment or something.
-    result = label_generate();
-    err = codegen_function_x86_64_att_asm_mswin(r, cg_context, context, next_child_context,
+    // TODO/FIXME: Obviously this is not ideal to do backwards lookup,
+    // especially for function nodes which contain the body... Oh well!
+    ParsingContext *context_it = context;
+    while (context_it) {
+      if (environment_get_by_value(*context_it->functions, expression, tmpnode)) {
+        result = tmpnode->value.symbol;
+        break;
+      }
+      context_it = context_it->parent;
+    }
+    if (!result) {
+      // TODO: Keep track of local lambda label in environment or something.
+      // FIXME: Completely memory leaked here, no chance of freeing!
+      result = label_generate();
+    }
+    err = codegen_function_x86_64_att_asm_mswin(r, cg_context,
+                                                context, next_child_context,
                                                 result, expression, code);
-
     // TODO: What should function return?
-
+    // Probably function pointer/begin instruction address?
     break;
   case NODE_TYPE_DEREFERENCE:
     if (codegen_verbose) {
@@ -760,7 +772,6 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
       type_id = type_id->children;
     }
     if (!type_id) {
-      // TODO: Some sort of error about mishapen variable type.
       printf("Type: \"%s\"\n", type_id->value.symbol);
       ERROR_PREP(err, ERROR_GENERIC,
                  "Could not get type symbol/ID; AST must be invalid or mishapen!");
@@ -777,23 +788,13 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
   }
   free(type_info);
 
-  fprintf(code, ".section .text\n");
-
-  // Generate global functions
-  ParsingContext *next_child_context = context->children;
-  Binding *function_it = context->functions->bind;
-  while (function_it) {
-    Node *function_id = function_it->id;
-    Node *function = function_it->value;
-    function_it = function_it->next;
-    err = codegen_function_x86_64_att_asm_mswin(r, cg_context, context, &next_child_context, function_id->value.symbol, function, code);
-    if (err.type) { return err; }
-  }
   fprintf(code,
+          ".section .text\n"
           ".global main\n"
           "main:\n"
           "%s", function_header_x86_64);
 
+  ParsingContext *next_child_context = context->children;
   Node *last_expression = program->children;
   Node *expression = program->children;
   while (expression) {
