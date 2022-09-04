@@ -768,7 +768,8 @@ Error handle_stack_operator
       return ok;
     }
     Node *next_expr = node_allocate();
-    node_add_child((*stack)->result, next_expr);
+    (*stack)->result->next_child = next_expr;
+    (*stack)->result = next_expr;
     *working_result = next_expr;
     *status = STACK_HANDLED_PARSE;
     return ok;
