@@ -1281,11 +1281,9 @@ Error parse_expr
             continue;
           }
 
-          if (!stack) {
-            printf("Symbol: \"%s\"\n", node_text(symbol));
-            ERROR_PREP(err, ERROR_SYNTAX, "Unknown symbol");
-            return err;
-          }
+          printf("Symbol: \"%s\"\n", node_text(symbol));
+          ERROR_PREP(err, ERROR_SYNTAX, "Unknown symbol");
+          return err;
         }
       }
       free(var_binding);
