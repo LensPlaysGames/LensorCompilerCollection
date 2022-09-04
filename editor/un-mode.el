@@ -68,56 +68,26 @@
  ?@ "'"
  un-mode-syntax-table)
 
-(defconst un--font-lock-operators
-  (list
-   ;; Matching Regexp
-   (rx (or
-        "+" "*" "-" "/"
-        "<" ">"
-        ":" "=" ":="
-        "&" "@"
-        ))
-   '(0 nil)
-   ))
-
-(defconst un--font-lock-generic
-  (list
-   ;; Matching Regexp
-   (rx (or "defun" "if" "else"))
-   ;; Font face to use
-   '(0 font-lock-keyword-face)
-   ))
-
-(defconst un--font-lock-function-name
-  (list
-   ;; Matching Regexp
-   (rx "defun" whitespace
-       (group (* (or (not whitespace) "("))))
-   ;; Font face to use
-   '1
-   'font-lock-function-name-face
-   ))
-
-(defconst un--font-lock-builtin-types
-  (list
-   ;; Matching Regexp
-   (rx (zero-or-more "@")
-       (or "integer" "function"))
-   ;; Font face to use
-   '(0 font-lock-type-face)
-   ))
-
 ;; Gather all keyword font locks together into big daddy keyword font-lock
-(defconst un--font-lock
-  (list
-   un--font-lock-builtin-types
-   un--font-lock-operators
-   un--font-lock-function-name
-   un--font-lock-generic
-   ))
+(setq un--font-lock-defaults
+      (let* ((keywords '("defun" "if" "else"))
+             (binary-operators '("+" "*" "-" "/"
+                                 "<" ">"
+                                 ":" "=" ":="
+                                 "&" "@"))
+
+             (keywords-regex (regexp-opt keywords 'words))
+             (binary-operators-regex (regexp-opt binary-operators 'words))
+             (builtin-types-regex (rx (zero-or-more "@")
+                                      (or "integer" "function")))
+             )
+        `((,keywords-regex . 'font-lock-keyword-face)
+          (,builtin-types-regex . 'font-lock-type-face)
+          (,binary-operators-regex . nil)
+          )))
 
 (define-derived-mode un-mode prog-mode
   "unnamed"
-  (setq font-lock-defaults '(un--font-lock)))
+  (setq font-lock-defaults '(un--font-lock-defaults)))
 
 ;;; un-mode.el ends here
