@@ -231,8 +231,12 @@ Error codegen_expression_x86_64_mswin
       count++;
     }
 
+    err = codegen_expression_x86_64_mswin(code, r, cg_context, context, next_child_context, expression->children);
+    if (err.type) { return err; }
+
     // Emit call
-    fprintf(code, "call %s\n", expression->children->value.symbol);
+    fprintf(code, "call *%s\n", register_name(r, expression->children->result_register));
+    register_deallocate(r, expression->children->result_register);
     if (count) {
       fprintf(code, "add $%lld, %%rsp\n", count * 8);
     }
@@ -270,8 +274,14 @@ Error codegen_expression_x86_64_mswin
     err = codegen_function_x86_64_att_asm_mswin(r, cg_context,
                                                 context, next_child_context,
                                                 result, expression, code);
-    // TODO: What should function return?
-    // Probably function pointer/begin instruction address?
+
+    // Function returns beginning of instructions address.
+    expression->result_register = register_allocate(r);
+    fprintf(code, "lea %s(%%rip), %s\n",
+            result,
+            register_name(r, expression->result_register)
+            );
+
     break;
   case NODE_TYPE_DEREFERENCE:
     if (codegen_verbose) {
@@ -790,20 +800,13 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext* cg_context, Parsi
   Node *type_info = node_allocate();
   while (var_it) {
     Node *var_id = var_it->id;
-    Node *type_id = var_it->value;
-    while (type_id && !type_id->value.symbol) {
-      type_id = type_id->children;
-    }
-    if (!type_id) {
-      printf("Type: \"%s\"\n", type_id->value.symbol);
-      ERROR_PREP(err, ERROR_GENERIC,
-                 "Could not get type symbol/ID; AST must be invalid or mishapen!");
-      return err;
-    }
-    if (!environment_get(*context->types, type_id, type_info)) {
-      printf("Type: \"%s\"\n", type_id->value.symbol);
-      ERROR_PREP(err, ERROR_GENERIC,
-                 "Could not get type info from types environment!");
+    Node *type_id = node_allocate();
+    *type_id = *var_it->value;
+    type_id->children = NULL;
+    type_id->next_child = NULL;
+    err = parse_get_type(context, type_id, type_info);
+    if (err.type) {
+      print_node(type_id, 0);
       return err;
     }
     var_it = var_it->next;

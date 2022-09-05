@@ -243,7 +243,10 @@ char *node_text(Node *node) {
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "INT:%lld", node->value.integer);
     break;
   case NODE_TYPE_SYMBOL:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "SYM:%s", node->value.symbol);
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE,
+             "SYM:%s (%d)",
+             node->value.symbol,
+             node->pointer_indirection);
     break;
   case NODE_TYPE_BINARY_OPERATOR:
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "BINARY OPERATOR:%s", node->value.symbol);
@@ -314,6 +317,7 @@ void node_free(Node *root) {
 void node_copy(Node *a, Node *b) {
   if (!a || !b) { return; }
   b->type = a->type;
+  b->pointer_indirection = a->pointer_indirection;
   // Handle all allocated values here.
   switch (a->type) {
   default:
@@ -670,6 +674,68 @@ Error handle_stack_operator
     return err;
   }
 
+  if (strcmp(operator->value.symbol, "lambda-body") == 0) {
+    EXPECT(expected, "}", current, length, end);
+    if (expected.found) {
+
+      // TODO: Lookahead for immediate lambda function call.
+
+      // Eat lambda context.
+      *context = (*context)->parent;
+      // Stack is handled
+      *stack = (*stack)->parent;
+      *status = STACK_HANDLED_CHECK;
+      return ok;
+    }
+    Node *next_expr = node_allocate();
+    (*stack)->result->next_child = next_expr;
+    (*stack)->result = next_expr;
+    *working_result = next_expr;
+    *status = STACK_HANDLED_PARSE;
+    return ok;
+  }
+
+  if (strcmp(operator->value.symbol, "lambdarameters") == 0) {
+    print_node((*stack)->result,0);
+
+    EXPECT(expected, ")", current, length, end);
+    if (expected.found) {
+      // Pass stack to lambda-body
+      EXPECT(expected, "{", current, length, end);
+      if (!expected.found) {
+        ERROR_PREP(err, ERROR_SYNTAX,
+                   "Expected lambda body following lambda signature");
+        return err;
+      }
+
+      Node *body = node_allocate();
+      (*stack)->body->next_child = body;
+      Node *first_expression = node_allocate();
+      node_add_child(body, first_expression);
+
+      // Enter new ParsingStack to handle lambda body.
+      (*stack)->operator = node_symbol("lambda-body");
+      (*stack)->body = body;
+      (*stack)->result = first_expression;
+      *working_result = first_expression;
+      *status = STACK_HANDLED_PARSE;
+      return ok;
+    }
+
+    // Eat the comma in-between variable declarations.
+    EXPECT(expected, ",", current, length, end);
+    if (expected.done) {
+      ERROR_PREP(err, ERROR_SYNTAX, "Expected another parameter definition but got EOF!");
+      return err;
+    }
+
+    Node *next_expr = node_allocate();
+    (*stack)->result->next_child = next_expr;
+    (*stack)->result = next_expr;    *working_result = next_expr;
+    *status = STACK_HANDLED_PARSE;
+    return ok;
+  }
+
   if (strcmp(operator->value.symbol, "if-condition") == 0) {
     // TODO: Maybe eventually allow multiple expressions in an if
     // condition, or something like that.
@@ -775,129 +841,13 @@ Error handle_stack_operator
     return ok;
   }
 
-  if (strcmp(operator->value.symbol, "defun-params") == 0) {
-    if (((*stack)->result)->type != NODE_TYPE_VARIABLE_DECLARATION) {
-      ERROR_PREP(err, ERROR_SYNTAX, "Function parameter definition must be variable declaration expression");
-      return err;
-    }
-
-    // Lookup var. decl. symbol in environment to get it's type symbol node thing.
-
-    Node *type = node_allocate();
-    err = parse_get_variable(*context, (*working_result)->children, type);
-    if (err.type) { return err; }
-    node_add_child(*working_result, type);
-
-    // TODO: Handle `done` cases.
-    // Evaluate next expression unless it's a closing parenthesis.
-    EXPECT(expected, ")", current, length, end);
-    if (expected.found) {
-
-      // First lex/parse function return type.
-      EXPECT(expected, ":", current, length, end);
-      if (expected.found) {
-
-        err = lex_advance(current, length, end);
-        if (err.type != ERROR_NONE) { return err; }
-        if (*length == 0) {
-          // FIXME: This error message SUCKS!
-          ERROR_PREP(err, ERROR_SYNTAX, "There must be a valid type following type annotation operator");
-          return err;
-        }
-
-        // PARSE RETURN TYPE.
-        Node *type = node_allocate();
-        parse_type(*context, current, length, end, type);
-        node_add_child((*stack)->body, type);
-
-        // Ensure curly open brace for function body start.
-        EXPECT(expected, "{", current, length, end);
-        if (expected.found) {
-          // Update the stack to handle defun-body and continue.
-
-          // Bind parameters as variables in function body scope.
-          // TODO: This assumes that var. decls. were parsed, but
-          // we may not have var. decls. Do minimal type-checking!
-          Node *param_it = (*stack)->body->children->children;
-          while (param_it) {
-            environment_set((*context)->variables,
-                            param_it->children,
-                            param_it->children->next_child);
-            param_it = param_it->next_child;
-          }
-
-          Node *function_body = node_allocate();
-          node_add_child((*stack)->body, function_body);
-
-          EXPECT(expected, "}", current, length, end);
-          if (expected.found) {
-            *stack = (*stack)->parent;
-            if (!(*stack)) {
-              *status = STACK_HANDLED_BREAK;
-            } else {
-              *status = STACK_HANDLED_CHECK;
-            }
-            return ok;
-          }
-
-          Node *first_expr = node_allocate();
-          node_add_child(function_body, first_expr);
-
-          // TODO: Don't leak stack operator!
-          (*stack)->operator = node_symbol("defun-body");
-          (*stack)->result = first_expr;
-          *working_result = first_expr;
-          *status = STACK_HANDLED_PARSE;
-          return ok;
-        }
-
-        ERROR_PREP(err, ERROR_SYNTAX, "Function declaration requires body definition");
-        return err;
-
-      }
-      ERROR_PREP(err, ERROR_SYNTAX, "Expected type annotation following parameter list for return type of function.");
-      return err;
-    }
-
-    // Eat the comma in-between variable declarations.
-    EXPECT(expected, ",", current, length, end);
-    if (expected.done) {
-      ERROR_PREP(err, ERROR_SYNTAX, "Expected another parameter definition but got EOF!");
-      return err;
-    }
-
-    Node *next_expr = node_allocate();
-    (*stack)->result->next_child = next_expr;
-    *working_result = next_expr;
-    (*stack)->result = next_expr;
-    *status = STACK_HANDLED_PARSE;
-    return ok;
-  }
-
-  if (strcmp(operator->value.symbol, "defun-body") == 0) {
-    // Evaluate next expression unless it's a closing brace.
-    EXPECT(expected, "}", current, length, end);
-    if (expected.done || expected.found) {
-      *context = (*context)->parent;
-      *stack = (*stack)->parent;
-      if (!(*stack)) {
-        *status = STACK_HANDLED_BREAK;
-      } else {
-        *status = STACK_HANDLED_CHECK;
-      }
-      return ok;
-    }
-    Node *next_expr = node_allocate();
-    (*stack)->result->next_child = next_expr;
-    *working_result = next_expr;
-    (*stack)->result = next_expr;
-    *status = STACK_HANDLED_PARSE;
-    return ok;
-  }
-
   if (strcmp(operator->value.symbol, "funcall") == 0) {
     EXPECT(expected, ")", current, length, end);
-    if (expected.done || expected.found) {
+    if (expected.done) {
+      ERROR_PREP(err, ERROR_SYNTAX, "Expected closing parenthesis for functionc all before end of file.");
+      return err;
+    }
+    if (expected.found) {
 
       *stack = (*stack)->parent;
 
@@ -912,26 +862,28 @@ Error handle_stack_operator
       return ok;
     }
 
-    // FIXME?: Should comma be optional?
     EXPECT(expected, ",", current, length, end);
-    if (expected.done || !expected.found) {
+    if (expected.done) {
       print_token(*current);
       ERROR_PREP(err, ERROR_SYNTAX,
                  "Parameter list expected closing parenthesis or comma for another parameter");
       return err;
     }
-    (*stack)->result->next_child = node_allocate();
-    *working_result = (*stack)->result->next_child;
-    (*stack)->result = *working_result;
+
+    Node *next_expr = node_allocate();
+    (*stack)->result->next_child = next_expr;
+    (*stack)->result = next_expr;
+    *working_result = next_expr;
     *status = STACK_HANDLED_PARSE;
     return ok;
   }
   *status = STACK_HANDLED_INVALID;
+  printf("Invalid stack operator: \"%s\"\n", (*stack)->operator->value.symbol);
   ERROR_PREP(err, ERROR_GENERIC, "Internal error: Could not handle stack operator!");
   return err;
 }
 
-Error parse_type
+Error parse_base_type
 (ParsingContext *context,
  Token *current,
  size_t *length,
@@ -970,6 +922,80 @@ Error parse_type
   }
   free(type_symbol);
   free(type_validator);
+
+  return err;
+}
+
+Error parse_type
+(ParsingContext *context,
+ Token *current,
+ size_t *length,
+ char **end,
+ Node *type
+ )
+{
+  Error err = ok;
+
+  err = parse_base_type(context, current, length, end, type);
+  if (err.type) { return err; }
+
+  // Parse function signature as type (instead of custom)
+  ExpectReturnValue expected;
+  EXPECT(expected, "(", current, length, end);
+  if (expected.found) {
+    Node *return_type = node_allocate();
+    node_copy(type, return_type);
+    free(type->value.symbol);
+    Node *function_type = node_symbol("function");
+    *type = *function_type;
+    free(function_type);
+    node_add_child(type, return_type);
+
+    // Parse parameters of function signature
+
+    for (;;) {
+      EXPECT(expected, ")", current, length, end);
+      if (expected.done) {
+        ERROR_PREP(err, ERROR_SYNTAX,
+                   "Expected closing paren, `)`, at end of function signature type");
+        return err;
+      }
+      if (expected.found) {
+        break;
+      }
+
+      // Parse parameter name
+      // TODO: Maybe make names optional in function type signature.
+      err = lex_advance(current, length, end);
+      if (err.type != ERROR_NONE) { return err; }
+      if (*length == 0) {
+        ERROR_PREP(err, ERROR_SYNTAX, "I hope we never see this error");
+        return err;
+      }
+      Node *parameter_name = node_symbol_from_buffer(current->beginning,
+                                                     current->end - current->beginning);
+      EXPECT(expected, ":", current, length, end);
+      if (!expected.found) {
+        ERROR_PREP(err, ERROR_SYNTAX,
+                   "Expected type annotation operator following function parameter name");
+        return err;
+      }
+
+      err = lex_advance(current, length, end);
+      if (err.type != ERROR_NONE) { return err; }
+      if (*length == 0) {
+        ERROR_PREP(err, ERROR_SYNTAX, "Expected type following type annotation operator for function parameter");
+        return err;
+      }
+      Node *parameter_type = node_allocate();
+      err = parse_type(context, current, length, end, parameter_type);
+      if (err.type) { return err; }
+
+      // With finished parameter, add as child to function, or add to function context?
+      node_add_child(type, parameter_type);
+    }
+  }
+
   return err;
 }
 
@@ -1000,294 +1026,250 @@ Error parse_expr
 
     } else {
 
-      Node *symbol = node_symbol_from_buffer(current_token.beginning, token_length);
-
-      if (strcmp("@", symbol->value.symbol) == 0) {
-        working_result->type = NODE_TYPE_DEREFERENCE;
-        Node *child = node_allocate();
-        node_add_child(working_result, child);
-        working_result = child;
-        continue;
-      }
-
-      if (strcmp("&", symbol->value.symbol) == 0) {
-        working_result->type = NODE_TYPE_ADDRESSOF;
-        Node *child = node_allocate();
-        node_add_child(working_result, child);
-        working_result = child;
-        continue;
-      }
-
-      if (strcmp("if", symbol->value.symbol) == 0) {
-        Node *if_conditional = working_result;
-        if_conditional->type = NODE_TYPE_IF;
-        Node *condition_expression = node_allocate();
-        node_add_child(if_conditional, condition_expression);
+      // Check for lambda
+      // TODO: We need the names of the parameters, but we also need
+      // the return type of the lambda. How fun :^)
+      Node *type = node_allocate();
+      Token token = current_token;
+      size_t length = token_length;
+      err = parse_base_type(context, &current_token, &token_length, end, type);
+      if (err.type == ERROR_NONE) {
 
         context = parse_context_create(context);
 
-        stack = parse_stack_create(stack);
-        stack->operator = node_symbol("if-condition");
-        stack->result = condition_expression;
-
-        working_result = condition_expression;
-        continue;
-      }
-
-      // TODO: Parse strings and other literal types.
-      // TODO: Parse lambdas (RIP)
-
-      if (strcmp("defun", symbol->value.symbol) == 0) {
-        // Begin function definition.
-        // FUNCTION
-        //   LIST of parameters
-        //     PARAMETER
-        //       SYMBOL:NAME
-        //       SYMBOL:TYPE
-        //   RETURN TYPE SYMBOL
-        //   PROGRAM/LIST of expressions
-        //     ...
-
-        Node *function = working_result;
-        function->type = NODE_TYPE_FUNCTION;
-
-        lex_advance(&current_token, &token_length, end);
-        Node *function_name = node_symbol_from_buffer(current_token.beginning, token_length);
-
-        // TODO: Check return value for redefinition of function!
-        environment_set_end(context->functions, function_name, function);
-
-        Node *parameter_list = node_allocate();
-        node_add_child(function, parameter_list);
+        Node *lambda = working_result;
+        lambda->type = NODE_TYPE_FUNCTION;
+        node_add_child(lambda, type);
 
         EXPECT(expected, "(", &current_token, &token_length, end);
         if (!expected.found) {
-          printf("Function Name: \"%s\"\n", function_name->value.symbol);
+          // Nothing except a lambda starts with a type annotation.
           ERROR_PREP(err, ERROR_SYNTAX,
-                     "Expected opening parenthesis for parameter list after function name");
+                     "Expected parameter declaration(s) following lambda return type");
           return err;
         }
 
-        stack = parse_stack_create(stack);
-        // Create new parsing context (scope) for function.
-        context = parse_context_create(context);
+        Node *parameters = node_allocate();
+        node_add_child(lambda, parameters);
 
         EXPECT(expected, ")", &current_token, &token_length, end);
-        if (expected.done) {
-          ERROR_PREP(err, ERROR_SYNTAX,
-                     "Expected closing parenthesis for parameter list");
-          return err;
-        }
         if (expected.found) {
-          // TODO: parse return type as well as function body open.
 
-          EXPECT(expected, ":", &current_token, &token_length, end);
-          if (expected.found && !expected.done) {
-            err = lex_advance(&current_token, &token_length, end);
-            if (err.type != ERROR_NONE) { return err; }
-            if (token_length == 0) {
-              // FIXME: This error message SUCKS!
-              ERROR_PREP(err, ERROR_SYNTAX, "There must be a valid type following type annotation operator");
-              return err;
-            }
-
-            // PARSE RETURN TYPE.
-            Node *type = node_allocate();
-            parse_type(context, &current_token, &token_length, end, type);
-            node_add_child(function, type);
-
-            EXPECT(expected, "{", &current_token, &token_length, end);
-            if (!expected.found) {
-              ERROR_PREP(err, ERROR_SYNTAX,
-                         "Expected open curly brace to begin function body following function return type");
-              return err;
-            }
-
-            // Setup stack for defun-body, no param parsing needed.
-            Node *function_body = node_allocate();
-            node_add_child(function, function_body);
-            Node *first_body_expr = node_allocate();
-            node_add_child(function_body, first_body_expr);
-
-            stack->operator = node_symbol("defun-body");
-            stack->result = first_body_expr;
-            stack->body = function;
-            working_result = first_body_expr;
-            continue;
-
+          EXPECT(expected, "{", &current_token, &token_length, end);
+          if (!expected.found) {
+            ERROR_PREP(err, ERROR_SYNTAX,
+                       "Expected lambda body following lambda signature");
+            return err;
           }
 
-          ERROR_PREP(err, ERROR_SYNTAX,
-                     "Type annotation required following parameter list for return value of function.");
-          return err;
+          Node *body = node_allocate();
+          node_add_child(lambda, body);
+          Node *first_expression = node_allocate();
+          node_add_child(body, first_expression);
 
+          // Enter new ParsingStack to handle lambda body.
+          stack = parse_stack_create(stack);
+          stack->operator = node_symbol("lambda-body");
+          stack->body = body;
+          stack->result = first_expression;
+          working_result = first_expression;
+          continue;
         }
 
-        // Setup stack for defun-params to parse all parameters.
         Node *first_parameter = node_allocate();
-        node_add_child(parameter_list, first_parameter);
+        node_add_child(parameters, first_parameter);
 
-        stack->operator = node_symbol("defun-params");
+        // Enter new ParsingStack to handle lambda body.
+        stack = parse_stack_create(stack);
+        stack->operator = node_symbol("lambdarameters");
+        stack->body = parameters;
         stack->result = first_parameter;
-        stack->body = function;
         working_result = first_parameter;
+
         continue;
 
-      }
+      } else {
 
-      // Check if valid symbol for variable environment, then
-      // attempt to pattern match variable access, assignment,
-      // declaration, or declaration with initialization.
+        Node *symbol = node_symbol_from_buffer(current_token.beginning, token_length);
 
-      // Check for variable access here.
-      Node *var_binding = node_allocate();
-      err = parse_get_variable(context, symbol, var_binding);
-      if (!nonep(*var_binding)) {
-        if (err.type) { return err; }
-
-        // Create variable access node.
-        working_result->type = NODE_TYPE_VARIABLE_ACCESS;
-        working_result->value.symbol = strdup(symbol->value.symbol);
-
-        // Lookahead for variable reassignment.
-        EXPECT(expected, ":", &current_token, &token_length, end);
-        if (expected.found) {
-          EXPECT(expected, "=", &current_token, &token_length, end);
-          if (expected.found) {
-            Node *result_pointer = result;
-            if (stack && stack->result) {
-              result_pointer = stack->result;
-            }
-            Node *lhs = node_allocate();
-            node_copy(result_pointer, lhs);
-            memset(result_pointer, 0, sizeof(Node));
-            result_pointer->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
-            node_add_child(result_pointer, lhs);
-            Node *reassign_expr = node_allocate();
-            node_add_child(result_pointer, reassign_expr);
-            working_result = reassign_expr;
-            continue;
-          }
+        if (strcmp("@", symbol->value.symbol) == 0) {
+          working_result->type = NODE_TYPE_DEREFERENCE;
+          Node *child = node_allocate();
+          node_add_child(working_result, child);
+          working_result = child;
+          continue;
         }
 
-      } else {
-        // Symbol is not a valid variable name. Check for function call
-        // or new variable declaration.
+        if (strcmp("&", symbol->value.symbol) == 0) {
+          working_result->type = NODE_TYPE_ADDRESSOF;
+          Node *child = node_allocate();
+          node_add_child(working_result, child);
+          working_result = child;
+          continue;
+        }
 
-        EXPECT(expected, ":", &current_token, &token_length, end);
-        if (!expected.done && expected.found) {
+        if (strcmp("if", symbol->value.symbol) == 0) {
+          Node *if_conditional = working_result;
+          if_conditional->type = NODE_TYPE_IF;
+          Node *condition_expression = node_allocate();
+          node_add_child(if_conditional, condition_expression);
 
-          EXPECT(expected, "=", &current_token, &token_length, end);
-          if (!expected.done && expected.found) {
-            printf("Invalid Variable Symbol: \"%s\"\n", symbol->value.symbol);
-            ERROR_PREP(err, ERROR_SYNTAX,
-                       "Reassignment of undeclared variable is not allowed!");
-            return err;
-          }
+          context = parse_context_create(context);
 
-          err = lex_advance(&current_token, &token_length, end);
-          if (err.type != ERROR_NONE) { return err; }
-          if (token_length == 0) { break; }
-          Node *type = node_allocate();
-          err = parse_type(context, &current_token, &token_length, end, type);
+          stack = parse_stack_create(stack);
+          stack->operator = node_symbol("if-condition");
+          stack->result = condition_expression;
+
+          working_result = condition_expression;
+          continue;
+        }
+
+        // TODO: Parse strings and other literal types.
+
+        // Check if valid symbol for variable environment, then
+        // attempt to pattern match variable access, assignment,
+        // declaration, or declaration with initialization.
+
+        // Check for variable access here.
+        Node *var_binding = node_allocate();
+        err = parse_get_variable(context, symbol, var_binding);
+        if (!nonep(*var_binding)) {
           if (err.type) { return err; }
 
-          Node *variable_binding = node_allocate();
-          if (environment_get(*context->variables, symbol, variable_binding)) {
-            // TODO: Create new error type.
-            printf("ID of redefined variable: \"%s\"\n", symbol->value.symbol);
-            ERROR_PREP(err, ERROR_GENERIC, "Redefinition of variable!");
-            return err;
-          }
-          // Variable binding is shell-node for environment value contents.
-          free(variable_binding);
+          // Create variable access node.
+          working_result->type = NODE_TYPE_VARIABLE_ACCESS;
+          working_result->value.symbol = strdup(symbol->value.symbol);
 
-          Node *variable_declaration = working_result;
-          variable_declaration->type = NODE_TYPE_VARIABLE_DECLARATION;
-
-          // `symbol` is now owned by working_result, a var. decl.
-          node_add_child(variable_declaration, symbol);
-
-          // Context variables environment gains new binding.
-          Node *symbol_for_env = node_allocate();
-          node_copy(symbol, symbol_for_env);
-
-          int status = environment_set(context->variables, symbol_for_env, type);
-          if (status != 1) {
-            printf("Variable: \"%s\", status: %d\n", symbol_for_env->value.symbol, status);
-            ERROR_PREP(err, ERROR_GENERIC, "Failed to define variable!");
-            return err;
-          }
-
-          // Check for initialization after declaration.
-          EXPECT(expected, "=", &current_token, &token_length, end);
+          // Lookahead for function call
+          EXPECT(expected, "(", &current_token, &token_length, end);
           if (expected.found) {
+            // This is a function call!
 
-            Node **local_result = &result;
-            if (stack) { local_result = &stack->result; }
+            Node *var_access = node_allocate();
+            node_copy(working_result, var_access);
+            working_result->type = NODE_TYPE_FUNCTION_CALL;
+            working_result->value.integer = 0;
+            node_add_child(working_result, var_access);
 
-            Node *reassign = node_allocate();
-            reassign->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
-            Node *value_expression = node_allocate();
+            Node *parameters = node_allocate();
+            node_add_child(working_result, parameters);
 
-            // FIXME: This is a problem. We should use LHS copy.
-            Node *lhs = node_allocate();
-            lhs->type = NODE_TYPE_VARIABLE_ACCESS;
-            lhs->value.symbol = strdup(symbol->value.symbol);
-            node_add_child(reassign, lhs);
-            node_add_child(reassign, value_expression);
-
-            (*local_result)->next_child = reassign;
-            *local_result = reassign;
-
-            working_result = value_expression;
-            continue;
+            EXPECT(expected, ")", &current_token, &token_length, end);
+            if (!expected.found) {
+              Node *first_parameter = node_allocate();
+              node_add_child(parameters, first_parameter);
+              stack = parse_stack_create(stack);
+              stack->operator = node_symbol("funcall");
+              stack->result = first_parameter;
+              working_result = first_parameter;
+              continue;
+            }
+          } else {
+            // Lookahead for variable reassignment.
+            EXPECT(expected, ":", &current_token, &token_length, end);
+            if (expected.found) {
+              EXPECT(expected, "=", &current_token, &token_length, end);
+              if (expected.found) {
+                Node *result_pointer = result;
+                if (stack && stack->result) {
+                  result_pointer = stack->result;
+                }
+                Node *lhs = node_allocate();
+                node_copy(result_pointer, lhs);
+                memset(result_pointer, 0, sizeof(Node));
+                result_pointer->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
+                node_add_child(result_pointer, lhs);
+                Node *reassign_expr = node_allocate();
+                node_add_child(result_pointer, reassign_expr);
+                working_result = reassign_expr;
+                continue;
+              }
+            }
           }
 
         } else {
-          // Symbol is not `defun` and it is not followed by an assignment operator `:`.
+          // Symbol is not a valid variable name. Check for function call
+          // or new variable declaration.
 
-          // Check if it's a function call (lookahead for symbol)
-          EXPECT(expected, "(", &current_token, &token_length, end);
+          EXPECT(expected, ":", &current_token, &token_length, end);
           if (!expected.done && expected.found) {
-            working_result->type = NODE_TYPE_FUNCTION_CALL;
-            node_add_child(working_result, symbol);
-            Node *argument_list = node_allocate();
-            node_add_child(working_result, argument_list);
 
-            EXPECT(expected, ")", &current_token, &token_length, end);
-            if (expected.done || expected.found) {
-              // Done parsing function call.
-              int found = 0;
-              err = parse_binary_infix_operator(context, stack, &found, &current_token, &token_length,
-                                                end, &working_precedence, result, &working_result);
-              if (found) {
-                // Parse RHS of binary infix operator.
-                continue;
-              } else {
-                // Parsed function call, check for stack continuation.
-                break;
-              }
+            EXPECT(expected, "=", &current_token, &token_length, end);
+            if (!expected.done && expected.found) {
+              printf("Invalid Variable Symbol: \"%s\"\n", symbol->value.symbol);
+              ERROR_PREP(err, ERROR_SYNTAX,
+                         "Reassignment of undeclared variable is not allowed!");
+              return err;
             }
 
-            Node *first_argument = node_allocate();
-            node_add_child(argument_list, first_argument);
-            working_result = first_argument;
+            err = lex_advance(&current_token, &token_length, end);
+            if (err.type != ERROR_NONE) { return err; }
+            if (token_length == 0) { break; }
+            Node *type = node_allocate();
+            err = parse_type(context, &current_token, &token_length, end, type);
+            if (err.type) { return err; }
 
-            // Create a parsing stack with function call operator,
-            // and then start parsing function argument expressions.
-            stack = parse_stack_create(stack);
-            stack->operator = node_symbol("funcall");
-            stack->result = working_result;
-            continue;
+            Node *variable_binding = node_allocate();
+            if (environment_get(*context->variables, symbol, variable_binding)) {
+              // TODO: Create new error type.
+              printf("ID of redefined variable: \"%s\"\n", symbol->value.symbol);
+              ERROR_PREP(err, ERROR_GENERIC, "Redefinition of variable!");
+              return err;
+            }
+            // Variable binding is shell-node for environment value contents.
+            free(variable_binding);
+
+            Node *variable_declaration = working_result;
+            variable_declaration->type = NODE_TYPE_VARIABLE_DECLARATION;
+
+            // `symbol` is now owned by working_result, a var. decl.
+            node_add_child(variable_declaration, symbol);
+
+            // Context variables environment gains new binding.
+            Node *symbol_for_env = node_allocate();
+            node_copy(symbol, symbol_for_env);
+
+            int status = environment_set(context->variables, symbol_for_env, type);
+            if (status != 1) {
+              printf("Variable: \"%s\", status: %d\n", symbol_for_env->value.symbol, status);
+              ERROR_PREP(err, ERROR_GENERIC, "Failed to define variable!");
+              return err;
+            }
+
+            // Check for initialization after declaration.
+            EXPECT(expected, "=", &current_token, &token_length, end);
+            if (expected.found) {
+
+              Node **local_result = &result;
+              if (stack) { local_result = &stack->result; }
+
+              Node *reassign = node_allocate();
+              reassign->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
+              Node *value_expression = node_allocate();
+
+              // FIXME: This is a problem. We should use LHS copy.
+              Node *lhs = node_allocate();
+              lhs->type = NODE_TYPE_VARIABLE_ACCESS;
+              lhs->value.symbol = strdup(symbol->value.symbol);
+              node_add_child(reassign, lhs);
+              node_add_child(reassign, value_expression);
+
+              (*local_result)->next_child = reassign;
+              *local_result = reassign;
+
+              working_result = value_expression;
+              continue;
+            }
+
+          } else {
+            // Symbol is unknown and is not followed by an assignment operator `:`.
+            printf("Symbol: \"%s\"\n", node_text(symbol));
+            ERROR_PREP(err, ERROR_SYNTAX, "Unknown symbol");
+            return err;
           }
-
-          printf("Symbol: \"%s\"\n", node_text(symbol));
-          ERROR_PREP(err, ERROR_SYNTAX, "Unknown symbol");
-          return err;
         }
+        free(var_binding);
       }
-      free(var_binding);
     }
 
     // NOTE: We often need to continue from here.

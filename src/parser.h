@@ -192,6 +192,11 @@ Error parse_type
  */
 Error parse_get_type(ParsingContext *context, Node *id, Node *result);
 
+/** Get the value of a variable symbol/ID in variables environment.
+ *  Return an error if variable is not a valid symbol/ID found in context.
+ */
+Error parse_get_variable(ParsingContext *context, Node *id, Node *result);
+
 ParsingContext *parse_context_create(ParsingContext *parent);
 ParsingContext *parse_context_default_create();
 
