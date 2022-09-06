@@ -1,4 +1,4 @@
-defun gcd_euclid (a : integer, b : integer) : integer {
+gcd_euclid : integer (a : integer b : integer) = integer (a : integer b : integer) {
   if a = b {
     a
   } else {

@@ -1,4 +1,4 @@
-defun fact (n : integer) : integer {
+fact : integer (n : integer) = integer (n : integer) {
   if n < 2 {
     1
   } else {

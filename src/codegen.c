@@ -545,32 +545,26 @@ Error codegen_expression_x86_64_mswin
       fprintf(code, ";;#; Variable Access: \"%s\"\n", expression->value.symbol);
     }
     expression->result_register = register_allocate(r);
-    if (!cg_context->parent) {
+
+    // Find context that local variable resides in.
+
+    CodegenContext *variable_residency = cg_context;
+    while (variable_residency) {
+      if (environment_get_by_symbol(*variable_residency->locals, expression->value.symbol, tmpnode)) {
+        break;
+      }
+      variable_residency = variable_residency->parent;
+    }
+    if (!variable_residency) {
       // Global variable
       fprintf(code, "mov %s(%%rip), %s\n",
               expression->value.symbol,
               register_name(r, expression->result_register));
     } else {
-      // Local variable
-      // TODO: Store base pointer offset from parent base pointer offset,
-      //       if possible. This would allow for us to access any local
-      //       variable in any parent scope.
-      //while (cg_context) {
-      //  if (environment_get(*cg_context->locals, expression, tmpnode)) {
-      //    break;
-      //  }
-      //  cg_context = cg_context->parent;
-      //}
-      //if (!cg_context) {
-      //  printf("Variable: \"%s\"\n", expression->value.symbol);
-      //  ERROR_PREP(err, ERROR_GENERIC, "Could not get local base pointer offset of variable");
-      //  return err;
-      //}
-      if (!environment_get_by_symbol(*cg_context->locals, expression->value.symbol, tmpnode)) {
-        printf("Variable: \"%s\"\n", expression->value.symbol);
-        ERROR_PREP(err, ERROR_GENERIC, "Could not get local base pointer offset of variable");
-        return err;
-      }
+      // TODO: For each context change upwards (base pointer load), emit a call to load caller RBP
+      // from current RBP into some register, and use that register as offset for memory access.
+      // This will require us to differentiate scopes from stack frames, which is a problem for
+      // another time :^). Good luck, future me!
       fprintf(code, "mov %lld(%%rbp), %s\n",
               tmpnode->value.integer,
               register_name(r, expression->result_register));
