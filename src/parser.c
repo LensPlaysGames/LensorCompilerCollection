@@ -96,8 +96,16 @@ void node_add_child(Node *parent, Node *new_child) {
   new_child->parent = parent;
   if (parent->children) {
     Node *child = parent->children;
+    if (child == new_child) {
+      fprintf(stderr, "DEVELOPER WARNING: Refusal to make circular linked list in node_add_child()\n");
+      return;
+    }
     while (child->next_child) {
       child = child->next_child;
+      if (child == new_child) {
+        fprintf(stderr, "DEVELOPER WARNING: Refusal to make circular linked list in node_add_child()\n");
+        return;
+      }
     }
     child->next_child = new_child;
   } else {
@@ -529,7 +537,7 @@ Error parse_get_type(ParsingContext *context, Node *id, Node *result) {
     context = context->parent;
   }
   result->type = NODE_TYPE_NONE;
-  printf("Type not found: \"%s\"\n", id->value.symbol);
+  //printf("Type not found: \"%s\"\n", id->value.symbol);
   ERROR_PREP(err, ERROR_GENERIC, "Type is not found in environment.");
   return err;
 }
@@ -696,8 +704,6 @@ Error handle_stack_operator
   }
 
   if (strcmp(operator->value.symbol, "lambdarameters") == 0) {
-    print_node((*stack)->result,0);
-
     EXPECT(expected, ")", current, length, end);
     if (expected.found) {
       // Pass stack to lambda-body
@@ -731,7 +737,8 @@ Error handle_stack_operator
 
     Node *next_expr = node_allocate();
     (*stack)->result->next_child = next_expr;
-    (*stack)->result = next_expr;    *working_result = next_expr;
+    (*stack)->result = next_expr;
+    *working_result = next_expr;
     *status = STACK_HANDLED_PARSE;
     return ok;
   }
@@ -892,23 +899,26 @@ Error parse_base_type
  )
 {
   Error err = ok;
+  Token current_copy = *current;
+  size_t length_copy = *length;
+  char *end_copy = *end;
 
   unsigned indirection_level = 0;
   // Loop over all pointer declaration symbols.
-  while (current->beginning[0] == '@') {
+  while (current_copy.beginning[0] == '@') {
     // Add one level of pointer indirection.
     indirection_level += 1;
     // Advance lexer.
-    err = lex_advance(current, length, end);
+    err = lex_advance(&current_copy, &length_copy, &end_copy);
     if (err.type != ERROR_NONE) { return err; }
-    if (*length == 0) {
+    if (length_copy == 0) {
       ERROR_PREP(err, ERROR_SYNTAX, "Expected a valid type following pointer type declaration symbol: `@`");
       return err;
     }
   }
 
   Node *type_symbol =
-    node_symbol_from_buffer(current->beginning, *length);
+    node_symbol_from_buffer(current_copy.beginning, length_copy);
   *type = *type_symbol;
   type->pointer_indirection = indirection_level;
 
@@ -922,6 +932,10 @@ Error parse_base_type
   }
   free(type_symbol);
   free(type_validator);
+
+  *current = current_copy;
+  *length = length_copy;
+  *end = end_copy;
 
   return err;
 }
@@ -1027,8 +1041,6 @@ Error parse_expr
     } else {
 
       // Check for lambda
-      // TODO: We need the names of the parameters, but we also need
-      // the return type of the lambda. How fun :^)
       Node *type = node_allocate();
       Token token = current_token;
       size_t length = token_length;
@@ -1079,13 +1091,12 @@ Error parse_expr
         Node *first_parameter = node_allocate();
         node_add_child(parameters, first_parameter);
 
-        // Enter new ParsingStack to handle lambda body.
+        // Enter new ParsingStack to handle lambda parameters.
         stack = parse_stack_create(stack);
         stack->operator = node_symbol("lambdarameters");
         stack->body = parameters;
         stack->result = first_parameter;
         working_result = first_parameter;
-
         continue;
 
       } else {

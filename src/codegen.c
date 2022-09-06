@@ -99,7 +99,6 @@ char *register_name
 
 //================================================================ END REGISTER STUFF
 
-
 #define label_buffer_size 1024
 char label_buffer[label_buffer_size];
 size_t label_index = 0;
@@ -279,9 +278,7 @@ Error codegen_expression_x86_64_mswin
     expression->result_register = register_allocate(r);
     fprintf(code, "lea %s(%%rip), %s\n",
             result,
-            register_name(r, expression->result_register)
-            );
-
+            register_name(r, expression->result_register));
     break;
   case NODE_TYPE_DEREFERENCE:
     if (codegen_verbose) {
@@ -704,7 +701,7 @@ Error codegen_function_x86_64_att_asm_mswin
   // Store base pointer integer offset within locals environment
   // Start at one to make space for pushed RBP in function header.
   size_t param_count = 1;
-  Node *parameter = function->children->children;
+  Node *parameter = function->children->next_child->children;
   while (parameter) {
     param_count++;
     // Bind parameter name to integer base pointer offset.
