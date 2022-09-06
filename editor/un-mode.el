@@ -70,7 +70,7 @@
 
 ;; Gather all keyword font locks together into big daddy keyword font-lock
 (setq un--font-lock-defaults
-      (let* ((keywords '("defun" "if" "else"))
+      (let* ((keywords '("if" "else"))
              (binary-operators '("+" "*" "-" "/"
                                  "<" ">"
                                  ":" "=" ":="
@@ -79,7 +79,7 @@
              (keywords-regex (regexp-opt keywords 'words))
              (binary-operators-regex (regexp-opt binary-operators 'words))
              (builtin-types-regex (rx (zero-or-more "@")
-                                      (or "integer" "function")))
+                                      (or "integer")))
              )
         `((,keywords-regex . 'font-lock-keyword-face)
           (,builtin-types-regex . 'font-lock-type-face)
