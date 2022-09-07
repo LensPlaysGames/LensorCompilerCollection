@@ -480,6 +480,12 @@ ParsingContext *parse_context_default_create() {
   err = define_binary_operator(ctx, ">", 3, "integer", "integer", "integer");
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
 
+  // TODO/FIXME: These are very much so temporary bitshifting operators!!!
+  err = define_binary_operator(ctx, "[", 4, "integer", "integer", "integer");
+  if (err.type != ERROR_NONE) { puts(binop_error_message); }
+  err = define_binary_operator(ctx, "]", 4, "integer", "integer", "integer");
+  if (err.type != ERROR_NONE) { puts(binop_error_message); }
+
   err = define_binary_operator(ctx, "+", 5, "integer", "integer", "integer");
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
   err = define_binary_operator(ctx, "-", 5, "integer", "integer", "integer");
@@ -620,10 +626,13 @@ Error parse_binary_infix_operator
   size_t length_copy = *state->length;
   char *end_copy     = *state->end;
   ParsingState state_copy = parse_state_create(&current_copy, &length_copy, &end_copy);
+  // TODO: Continually lex until operators are no longer getting got.
+  // This will require lexer knowledge of what's an operator and what isn't!
   err = lex_advance(&state_copy);
   if (err.type != ERROR_NONE) { return err; }
   Node *operator_symbol =
     node_symbol_from_buffer(state_copy.current->beginning, *state_copy.length);
+
   Node *operator_value = node_allocate();
   ParsingContext *global = context;
   while (global->parent) { global = global->parent; }
@@ -633,8 +642,8 @@ Error parse_binary_infix_operator
 
     //printf("Got op. %s with precedence %lld (working %lld)\n",
     //       operator_symbol->value.symbol,
-    //       precedence, working_precedence);
-    //printf("working precedence: %lld\n", working_precedence);
+    //       precedence, *working_precedence);
+    //printf("working precedence: %lld\n", *working_precedence);
 
     // TODO: Handle grouped expressions through parentheses using precedence stack.
 
