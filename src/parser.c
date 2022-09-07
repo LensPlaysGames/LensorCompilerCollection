@@ -355,6 +355,41 @@ void node_copy(Node *a, Node *b) {
   }
 }
 
+ParsingState parse_state_create(Token *current_token, size_t *token_length, char **end) {
+  ParsingState out;
+  out.current = current_token;
+  out.length = token_length;
+  out.end = end;
+  return out;
+}
+
+void parse_state_update
+(ParsingState *state,
+ Token current_token,
+ size_t token_length,
+ char *end
+ )
+{
+  *state->current = current_token;
+  *state->length = token_length;
+  *state->end = end;
+}
+
+void parse_state_update_from(ParsingState *state, ParsingState new_state) {
+  *state->current = *new_state.current;
+  *state->length  = *new_state.length;
+  *state->end     = *new_state.end;
+}
+
+ParsingStack *parse_stack_create(ParsingStack *parent) {
+  ParsingStack *stack = malloc(sizeof(ParsingStack));
+  assert(stack && "Could not allocate memory for new parser continuation stack.");
+  stack->parent = parent;
+  stack->operator = NULL;
+  stack->result = NULL;
+  return stack;
+}
+
 void parse_context_print(ParsingContext *top, size_t indent) {
   size_t indent_it = indent;
   while (indent_it--) { putchar(' '); }
@@ -408,15 +443,6 @@ void parse_context_add_child(ParsingContext *parent, ParsingContext *child) {
   }
 }
 
-ParsingStack *parse_stack_create(ParsingStack *parent) {
-  ParsingStack *stack = malloc(sizeof(ParsingStack));
-  assert(stack && "Could not allocate memory for new parser continuation stack.");
-  stack->parent = parent;
-  stack->operator = NULL;
-  stack->result = NULL;
-  return stack;
-}
-
 ParsingContext *parse_context_create(ParsingContext *parent) {
   ParsingContext *ctx = calloc(1, sizeof(ParsingContext));
   assert(ctx && "Could not allocate memory for parsing context.");
@@ -468,16 +494,16 @@ ParsingContext *parse_context_default_create() {
 }
 
 /// Update token, token length, and end of current token pointer.
-Error lex_advance(Token *token, size_t *token_length, char **end) {
-  if (!token || !token_length || !end) {
+Error lex_advance(ParsingState *state) {
+  if (!state || !state->current || !state->length || !state->end) {
     ERROR_CREATE(err, ERROR_ARGUMENTS,
                  "lex_advance(): pointer arguments must not be NULL!");
     return err;
   }
-  Error err = lex(token->end, token);
-  *end = token->end;
+  Error err = lex(state->current->end, state->current);
+  *state->end = state->current->end;
   if (err.type != ERROR_NONE) { return err; }
-  *token_length = token->end - token->beginning;
+  *state->length = state->current->end - state->current->beginning;
   return err;
 }
 
@@ -487,29 +513,23 @@ typedef struct ExpectReturnValue {
   char done;
 } ExpectReturnValue;
 
-ExpectReturnValue lex_expect
-(char *expected,
- Token *current,
- size_t *current_length,
- char **end
- )
-{
+ExpectReturnValue lex_expect(char *expected, ParsingState *state) {
   ExpectReturnValue out;
   out.done = 0;
   out.found = 0;
   out.err = ok;
-  if (!expected || !current || !current_length || !end) {
+  if (!expected || !state || !state->current || !state->length || !state->end) {
     ERROR_PREP(out.err, ERROR_ARGUMENTS,
                "lex_expect() must not be passed NULL pointers!");
     return out;
   }
-  Token current_copy = *current;
-  size_t current_length_copy = *current_length;
-  char *end_value = *end;
-
-  out.err = lex_advance(&current_copy, &current_length_copy, &end_value);
+  Token current_copy = *state->current;
+  size_t length_copy = *state->length;
+  char *end_copy     = *state->end;
+  ParsingState state_copy = parse_state_create(&current_copy, &length_copy, &end_copy);
+  out.err = lex_advance(&state_copy);
   if (out.err.type != ERROR_NONE) { return out; }
-  if (current_length_copy == 0) {
+  if (length_copy == 0) {
     out.done = 1;
     return out;
   }
@@ -520,9 +540,7 @@ ExpectReturnValue lex_expect
 
   if (token_string_equalp(expected, &current_copy)) {
     out.found = 1;
-    *end = end_value;
-    *current = current_copy;
-    *current_length = current_length_copy;
+    parse_state_update_from(state, state_copy);
   }
 
   return out;
@@ -568,8 +586,8 @@ Error parse_get_variable(ParsingContext *context, Node *id, Node *result) {
   return err;
 }
 
-#define EXPECT(expected, expected_string, current_token, current_length, end) \
-  expected = lex_expect(expected_string, current_token, current_length, end); \
+#define EXPECT(expected, expected_string, state) \
+  expected = lex_expect(expected_string, state); \
   if (expected.err.type) { return expected.err; }
 
 int parse_integer(Token *token, Node *node) {
@@ -589,30 +607,28 @@ int parse_integer(Token *token, Node *node) {
 
 /// Set FOUND to 1 if an infix operator is found and parsing should continue, otherwise 0.
 Error parse_binary_infix_operator
-(ParsingContext *context, ParsingStack *stack,
+(ParsingContext *context, ParsingStack *stack, ParsingState *state,
  int *found,
- Token *current, size_t *length, char **end,
- long long *working_precedence,
- Node *result, Node **working_result
+ long long *working_precedence, Node **working_result,
+ Node *result
  )
 {
   Error err = ok;
   // Look ahead for a binary infix operator.
   *found = 0;
-  Token current_copy = *current;
-  size_t length_copy = *length;
-  char *end_copy = *end;
-  err = lex_advance(&current_copy, &length_copy, &end_copy);
+  Token current_copy = *state->current;
+  size_t length_copy = *state->length;
+  char *end_copy     = *state->end;
+  ParsingState state_copy = parse_state_create(&current_copy, &length_copy, &end_copy);
+  err = lex_advance(&state_copy);
   if (err.type != ERROR_NONE) { return err; }
   Node *operator_symbol =
-    node_symbol_from_buffer(current_copy.beginning, length_copy);
+    node_symbol_from_buffer(state_copy.current->beginning, *state_copy.length);
   Node *operator_value = node_allocate();
   ParsingContext *global = context;
   while (global->parent) { global = global->parent; }
   if (environment_get(*global->binary_operators, operator_symbol, operator_value)) {
-    *current = current_copy;
-    *length = length_copy;
-    *end = end_copy;
+    parse_state_update_from(state, state_copy);
     long long precedence = operator_value->children->value.integer;
 
     //printf("Got op. %s with precedence %lld (working %lld)\n",
@@ -671,12 +687,10 @@ Error handle_stack_operator
 (int *status,
  ParsingContext **context,
  ParsingStack **stack,
+ ParsingState *state,
  Node **working_result,
  Node *result,
- long long *working_precedence,
- Token *current,
- size_t *length,
- char **end
+ long long *working_precedence
  )
 {
   if (!(*stack)) {
@@ -696,7 +710,7 @@ Error handle_stack_operator
   }
 
   if (strcmp(operator->value.symbol, "lambda-body") == 0) {
-    EXPECT(expected, "}", current, length, end);
+    EXPECT(expected, "}", state);
     if (expected.found) {
 
       // TODO: Lookahead for immediate lambda function call.
@@ -717,10 +731,10 @@ Error handle_stack_operator
   }
 
   if (strcmp(operator->value.symbol, "lambdarameters") == 0) {
-    EXPECT(expected, ")", current, length, end);
+    EXPECT(expected, ")", state);
     if (expected.found) {
       // Pass stack to lambda-body
-      EXPECT(expected, "{", current, length, end);
+      EXPECT(expected, "{", state);
       if (!expected.found) {
         ERROR_PREP(err, ERROR_SYNTAX,
                    "Expected lambda body following lambda signature");
@@ -742,7 +756,7 @@ Error handle_stack_operator
     }
 
     // Eat the comma in-between variable declarations.
-    EXPECT(expected, ",", current, length, end);
+    EXPECT(expected, ",", state);
     if (expected.done) {
       ERROR_PREP(err, ERROR_SYNTAX, "Expected another parameter definition but got EOF!");
       return err;
@@ -759,7 +773,7 @@ Error handle_stack_operator
   if (strcmp(operator->value.symbol, "if-condition") == 0) {
     // TODO: Maybe eventually allow multiple expressions in an if
     // condition, or something like that.
-    EXPECT(expected, "{", current, length, end);
+    EXPECT(expected, "{", state);
     if (expected.found) {
       Node *if_then_body = node_allocate();
       (*stack)->result->next_child = if_then_body;
@@ -768,7 +782,7 @@ Error handle_stack_operator
 
       // Empty if-then-body handling.
       // TODO: Maybe warn?
-      EXPECT(expected, "}", current, length, end);
+      EXPECT(expected, "}", state);
       if (expected.found) {
 
         // TODO: First check for else...
@@ -797,7 +811,7 @@ Error handle_stack_operator
 
   if (strcmp(operator->value.symbol, "if-then-body") == 0) {
     // Evaluate next expression unless it's a closing brace.
-    EXPECT(expected, "}", current, length, end);
+    EXPECT(expected, "}", state);
     if (expected.done) {
       ERROR_PREP(err, ERROR_SYNTAX, "EOF reached before end of if-then-body.");
       return err;
@@ -807,9 +821,9 @@ Error handle_stack_operator
       *context = (*context)->parent;
 
       // Lookahead for else then parse if-else-body.
-      EXPECT(expected, "else", current, length, end);
+      EXPECT(expected, "else", state);
       if (expected.found) {
-        EXPECT(expected, "{", current, length, end);
+        EXPECT(expected, "{", state);
         if (expected.found) {
 
           *context = parse_context_create(*context);
@@ -846,7 +860,7 @@ Error handle_stack_operator
 
   if (strcmp(operator->value.symbol, "if-else-body") == 0) {
     // Evaluate next expression unless it's a closing brace.
-    EXPECT(expected, "}", current, length, end);
+    EXPECT(expected, "}", state);
     if (expected.done || expected.found) {
       *context = (*context)->parent;
       *stack = (*stack)->parent;
@@ -862,7 +876,7 @@ Error handle_stack_operator
   }
 
   if (strcmp(operator->value.symbol, "funcall") == 0) {
-    EXPECT(expected, ")", current, length, end);
+    EXPECT(expected, ")", state);
     if (expected.done) {
       ERROR_PREP(err, ERROR_SYNTAX, "Expected closing parenthesis for functionc all before end of file.");
       return err;
@@ -872,8 +886,9 @@ Error handle_stack_operator
       *stack = (*stack)->parent;
 
       int found = 0;
-      err = parse_binary_infix_operator(*context, *stack, &found, current, length,
-                                        end, working_precedence, result, working_result);
+      err = parse_binary_infix_operator(*context, *stack, state, &found,
+                                        working_precedence, working_result,
+                                        result);
       if (found) {
         *status = STACK_HANDLED_PARSE;
       } else {
@@ -882,9 +897,9 @@ Error handle_stack_operator
       return ok;
     }
 
-    EXPECT(expected, ",", current, length, end);
+    EXPECT(expected, ",", state);
     if (expected.done) {
-      print_token(*current);
+      print_token(*state->current);
       ERROR_PREP(err, ERROR_SYNTAX,
                  "Parameter list expected closing parenthesis or comma for another parameter");
       return err;
@@ -905,24 +920,24 @@ Error handle_stack_operator
 
 Error parse_base_type
 (ParsingContext *context,
- Token *current,
- size_t *length,
- char **end,
+ ParsingState *state,
  Node *type
  )
 {
   Error err = ok;
-  Token current_copy = *current;
-  size_t length_copy = *length;
-  char *end_copy = *end;
+
+  Token current_copy = *state->current;
+  size_t length_copy = *state->length;
+  char *end_copy = *state->end;
+  ParsingState state_copy = parse_state_create(&current_copy, &length_copy, &end_copy);
 
   unsigned indirection_level = 0;
   // Loop over all pointer declaration symbols.
-  while (current_copy.beginning[0] == '@') {
+  while (state_copy.current->beginning[0] == '@') {
     // Add one level of pointer indirection.
     indirection_level += 1;
     // Advance lexer.
-    err = lex_advance(&current_copy, &length_copy, &end_copy);
+    err = lex_advance(&state_copy);
     if (err.type != ERROR_NONE) { return err; }
     if (length_copy == 0) {
       ERROR_PREP(err, ERROR_SYNTAX, "Expected a valid type following pointer type declaration symbol: `@`");
@@ -931,7 +946,7 @@ Error parse_base_type
   }
 
   Node *type_symbol =
-    node_symbol_from_buffer(current_copy.beginning, length_copy);
+    node_symbol_from_buffer(state_copy.current->beginning, *state_copy.length);
   *type = *type_symbol;
   type->pointer_indirection = indirection_level;
 
@@ -946,29 +961,20 @@ Error parse_base_type
   free(type_symbol);
   free(type_validator);
 
-  *current = current_copy;
-  *length = length_copy;
-  *end = end_copy;
+  parse_state_update_from(state, state_copy);
 
   return err;
 }
 
-Error parse_type
-(ParsingContext *context,
- Token *current,
- size_t *length,
- char **end,
- Node *type
- )
-{
+Error parse_type(ParsingContext *context, ParsingState *state, Node *type) {
   Error err = ok;
 
-  err = parse_base_type(context, current, length, end, type);
+  err = parse_base_type(context, state, type);
   if (err.type) { return err; }
 
   // Parse function signature as type (instead of custom)
   ExpectReturnValue expected;
-  EXPECT(expected, "(", current, length, end);
+  EXPECT(expected, "(", state);
   if (expected.found) {
     Node *return_type = node_allocate();
     node_copy(type, return_type);
@@ -981,7 +987,7 @@ Error parse_type
     // Parse parameters of function signature
 
     for (;;) {
-      EXPECT(expected, ")", current, length, end);
+      EXPECT(expected, ")", state);
       if (expected.done) {
         ERROR_PREP(err, ERROR_SYNTAX,
                    "Expected closing paren, `)`, at end of function signature type");
@@ -993,29 +999,29 @@ Error parse_type
 
       // Parse parameter name
       // TODO: Maybe make names optional in function type signature.
-      err = lex_advance(current, length, end);
+      err = lex_advance(state);
       if (err.type != ERROR_NONE) { return err; }
-      if (*length == 0) {
+      if (*state->length == 0) {
         ERROR_PREP(err, ERROR_SYNTAX, "I hope we never see this error");
         return err;
       }
-      Node *parameter_name = node_symbol_from_buffer(current->beginning,
-                                                     current->end - current->beginning);
-      EXPECT(expected, ":", current, length, end);
+      Node *parameter_name = node_symbol_from_buffer(state->current->beginning,
+                                                     state->current->end - state->current->beginning);
+      EXPECT(expected, ":", state);
       if (!expected.found) {
         ERROR_PREP(err, ERROR_SYNTAX,
                    "Expected type annotation operator following function parameter name");
         return err;
       }
 
-      err = lex_advance(current, length, end);
+      err = lex_advance(state);
       if (err.type != ERROR_NONE) { return err; }
-      if (*length == 0) {
+      if (*state->length == 0) {
         ERROR_PREP(err, ERROR_SYNTAX, "Expected type following type annotation operator for function parameter");
         return err;
       }
       Node *parameter_type = node_allocate();
-      err = parse_type(context, current, length, end, parameter_type);
+      err = parse_type(context, state, parameter_type);
       if (err.type) { return err; }
 
       // With finished parameter, add as child to function, or add to function context?
@@ -1034,18 +1040,21 @@ Error parse_expr
  Node *result
  )
 {
-  ParsingStack *stack = NULL;
+  Error err = ok;
+
   ExpectReturnValue expected;
+  ParsingStack *stack = NULL;
+
   size_t token_length = 0;
   Token current_token;
   current_token.beginning  = source;
   current_token.end        = source;
-  Error err = ok;
 
+  ParsingState state = parse_state_create(&current_token, &token_length, end);
   Node *working_result = result;
   long long working_precedence = 0;
 
-  while ((err = lex_advance(&current_token, &token_length, end)).type == ERROR_NONE) {
+  while ((err = lex_advance(&state)).type == ERROR_NONE) {
     //printf("lexed: "); print_token(current_token); putchar('\n');
     if (token_length == 0) { return ok; }
 
@@ -1057,7 +1066,7 @@ Error parse_expr
       Node *type = node_allocate();
       Token token = current_token;
       size_t length = token_length;
-      err = parse_base_type(context, &current_token, &token_length, end, type);
+      err = parse_base_type(context, &state, type);
       if (err.type == ERROR_NONE) {
 
         context = parse_context_create(context);
@@ -1066,7 +1075,7 @@ Error parse_expr
         lambda->type = NODE_TYPE_FUNCTION;
         node_add_child(lambda, type);
 
-        EXPECT(expected, "(", &current_token, &token_length, end);
+        EXPECT(expected, "(", &state);
         if (!expected.found) {
           // Nothing except a lambda starts with a type annotation.
           ERROR_PREP(err, ERROR_SYNTAX,
@@ -1077,10 +1086,10 @@ Error parse_expr
         Node *parameters = node_allocate();
         node_add_child(lambda, parameters);
 
-        EXPECT(expected, ")", &current_token, &token_length, end);
+        EXPECT(expected, ")", &state);
         if (expected.found) {
 
-          EXPECT(expected, "{", &current_token, &token_length, end);
+          EXPECT(expected, "{", &state);
           if (!expected.found) {
             ERROR_PREP(err, ERROR_SYNTAX,
                        "Expected lambda body following lambda signature");
@@ -1165,7 +1174,7 @@ Error parse_expr
           working_result->value.symbol = strdup(symbol->value.symbol);
 
           // Lookahead for function call
-          EXPECT(expected, "(", &current_token, &token_length, end);
+          EXPECT(expected, "(", &state);
           if (expected.found) {
             // This is a function call!
 
@@ -1178,7 +1187,7 @@ Error parse_expr
             Node *parameters = node_allocate();
             node_add_child(working_result, parameters);
 
-            EXPECT(expected, ")", &current_token, &token_length, end);
+            EXPECT(expected, ")", &state);
             if (!expected.found) {
               Node *first_parameter = node_allocate();
               node_add_child(parameters, first_parameter);
@@ -1190,9 +1199,9 @@ Error parse_expr
             }
           } else {
             // Lookahead for variable reassignment.
-            EXPECT(expected, ":", &current_token, &token_length, end);
+            EXPECT(expected, ":", &state);
             if (expected.found) {
-              EXPECT(expected, "=", &current_token, &token_length, end);
+              EXPECT(expected, "=", &state);
               if (expected.found) {
                 Node *result_pointer = result;
                 if (stack && stack->result) {
@@ -1215,10 +1224,10 @@ Error parse_expr
           // Symbol is not a valid variable name. Check for function call
           // or new variable declaration.
 
-          EXPECT(expected, ":", &current_token, &token_length, end);
+          EXPECT(expected, ":", &state);
           if (!expected.done && expected.found) {
 
-            EXPECT(expected, "=", &current_token, &token_length, end);
+            EXPECT(expected, "=", &state);
             if (!expected.done && expected.found) {
               printf("Invalid Variable Symbol: \"%s\"\n", symbol->value.symbol);
               ERROR_PREP(err, ERROR_SYNTAX,
@@ -1226,11 +1235,11 @@ Error parse_expr
               return err;
             }
 
-            err = lex_advance(&current_token, &token_length, end);
+            err = lex_advance(&state);
             if (err.type != ERROR_NONE) { return err; }
             if (token_length == 0) { break; }
             Node *type = node_allocate();
-            err = parse_type(context, &current_token, &token_length, end, type);
+            err = parse_type(context, &state, type);
             if (err.type) { return err; }
 
             Node *variable_binding = node_allocate();
@@ -1261,7 +1270,7 @@ Error parse_expr
             }
 
             // Check for initialization after declaration.
-            EXPECT(expected, "=", &current_token, &token_length, end);
+            EXPECT(expected, "=", &state);
             if (expected.found) {
 
               Node **local_result = &result;
@@ -1299,11 +1308,10 @@ Error parse_expr
     // NOTE: We often need to continue from here.
 
     int found = 0;
-    err = parse_binary_infix_operator(context, stack, &found, &current_token, &token_length,
-                                      end, &working_precedence, result, &working_result);
-    if (found) {
-      continue;
-    }
+    err = parse_binary_infix_operator(context, stack, &state, &found,
+                                      &working_precedence, &working_result,
+                                      result);
+    if (found) { continue; }
 
     // If no more parser stack, return with current result.
     // Otherwise, handle parser stack operator.
@@ -1311,10 +1319,9 @@ Error parse_expr
 
     int status = 1;
     do {
-      err = handle_stack_operator(&status, &context, &stack,
+      err = handle_stack_operator(&status, &context, &stack, &state,
                                   &working_result, result,
-                                  &working_precedence,
-                                  &current_token, &token_length, end);
+                                  &working_precedence);
       if (err.type) { return err; }
     } while (status == STACK_HANDLED_CHECK);
 
