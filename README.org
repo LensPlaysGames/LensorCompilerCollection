@@ -55,7 +55,7 @@ Variables must be declared and type annotated before use.
 Whitespace is ignored and there are no required expression delimiters.
 That's right: no semi-colons and no forced indent!
 
-Functions are first-class citizens, or at least should be eventually.
+Functions are first-class citizens.
 
 A program in this language comes in the form of a file. The file may
 contain a series of expressions that will be executed in order, from
@@ -64,8 +64,8 @@ control flow starts at the very top of the file and makes it's way to
 the bottom of the file.
 
 Let's take a look at a basic program:
-#+begin_example
-defun fact (n : integer) : integer {
+#+begin_example un
+fact : integer (n : integer) = integer (n : integer) {
   if n < 2 {
     1
   } else {
@@ -73,10 +73,10 @@ defun fact (n : integer) : integer {
   }
 }
 
-fact(4)
+fact(5)
 #+end_example
 
-This program will return 24 as a status code. The result of the last
+This program will return 120 as a status code. The result of the last
 expression in the file is the return value. The same holds true for
 function bodies, and if/else bodies.
 
