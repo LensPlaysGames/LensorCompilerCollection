@@ -601,7 +601,7 @@ Error codegen_expression_x86_64_mswin
       fprintf(code,
               "push %%rcx\n"
               "mov %s, %%rcx\n"
-              "shr %%cl, %s\n"
+              "sar %%cl, %s\n"
               "pop %%rcx\n",
               register_name(r, expression->children->next_child->result_register),
               register_name(r, expression->children->result_register));
