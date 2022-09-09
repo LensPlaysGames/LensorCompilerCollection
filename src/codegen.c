@@ -443,8 +443,7 @@ Error codegen_expression_x86_64_mswin
       fprintf(code, "mov $1, %s\n", register_name(r, true_register));
       fprintf(code, "cmp %s, %s\n"
               , register_name(r, expression->children->next_child->result_register)
-              , register_name(r, expression->children->result_register)
-              );
+              , register_name(r, expression->children->result_register));
       fprintf(code, "cmovg %s, %s\n",
               register_name(r, true_register),
               register_name(r, expression->result_register));
@@ -574,7 +573,8 @@ Error codegen_expression_x86_64_mswin
       fprintf(code,
               "pop %%rdx\n"
               "pop %%rax\n");
-    } else if (strcmp(expression->value.symbol, "[") == 0) { // FIXME: Temp. bitshift operator
+
+    } else if (strcmp(expression->value.symbol, "<<") == 0) {
       // Bitshift Left
       // https://www.felixcloutier.com/x86/sal:sar:shl:shr
 
@@ -584,14 +584,14 @@ Error codegen_expression_x86_64_mswin
       fprintf(code,
               "push %%rcx\n"
               "mov %s, %%rcx\n"
-              "shl %%cl, %s\n"
+              "sal %%cl, %s\n"
               "pop %%rcx\n",
               register_name(r, expression->children->next_child->result_register),
               register_name(r, expression->children->result_register));
 
       // Free no-longer-used right hand side result register.
       register_deallocate(r, expression->children->next_child->result_register);
-    } else if (strcmp(expression->value.symbol, "]") == 0) {
+    } else if (strcmp(expression->value.symbol, ">>") == 0) {
       // Minus/Subtraction
       // https://www.felixcloutier.com/x86/sub
 
@@ -608,6 +608,10 @@ Error codegen_expression_x86_64_mswin
 
       // Free no-longer-used right hand side result register.
       register_deallocate(r, expression->children->next_child->result_register);
+    } else {
+      fprintf(stderr, "Unrecognized binary operator: \"%s\"\n", expression->value.symbol);
+      ERROR_PREP(err, ERROR_GENERIC, "codegen_expression_x86_64() does not recognize binary operator");
+      return err;
     }
     break;
   case NODE_TYPE_VARIABLE_ACCESS:

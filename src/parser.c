@@ -13,6 +13,7 @@
 // TODO: Allow multi-byte comment delimiters.
 const char *comment_delimiters = ";#";
 const char *whitespace         = " \r\n";
+// TODO: Think harder about delimiters.
 const char *delimiters         = " \r\n,{}()[]<>:&@";
 
 /// @return Boolean-like value: 1 for success, 0 for failure.
@@ -26,6 +27,11 @@ int comment_at_beginning(Token token) {
   }
   return 0;
 }
+
+// "a +- 4" == "a + -4"
+// FIXME: If we removed whitespace from token string view during binary
+// operator comparison than this would work.
+// "a > > 4" != "a >> 4"
 
 /// Lex the next token from SOURCE, and point to it with BEG and END.
 /// If BEG and END of token are equal, there is nothing more to lex.
@@ -59,6 +65,19 @@ Error lex(char *source, Token *token) {
   if (token->end == token->beginning) {
     token->end += 1;
   }
+  return err;
+}
+
+/** Keep beginning of token the same, but extend the end by another token.
+ *
+ * Begin lexing at the end of the given token.
+ */
+Error lex_extend(Token *token) {
+  Error err = ok;
+  Token new_token;
+  err = lex(token->end, &new_token);
+  token->end = new_token.end;
+  if (err.type) { return err; }
   return err;
 }
 
@@ -481,9 +500,9 @@ ParsingContext *parse_context_default_create() {
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
 
   // TODO/FIXME: These are very much so temporary bitshifting operators!!!
-  err = define_binary_operator(ctx, "[", 4, "integer", "integer", "integer");
+  err = define_binary_operator(ctx, "<<", 4, "integer", "integer", "integer");
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
-  err = define_binary_operator(ctx, "]", 4, "integer", "integer", "integer");
+  err = define_binary_operator(ctx, ">>", 4, "integer", "integer", "integer");
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
 
   err = define_binary_operator(ctx, "+", 5, "integer", "integer", "integer");
@@ -626,15 +645,27 @@ Error parse_binary_infix_operator
   size_t length_copy = *state->length;
   char *end_copy     = *state->end;
   ParsingState state_copy = parse_state_create(&current_copy, &length_copy, &end_copy);
-  // TODO: Continually lex until operators are no longer getting got.
-  // This will require lexer knowledge of what's an operator and what isn't!
   err = lex_advance(&state_copy);
   if (err.type != ERROR_NONE) { return err; }
+
+  // While state_copy.current->end isn't whitespace, is delimiter,
+  // and is not null terminator, extend binary operator.
+  // This is needed to catch binary operators like "<<" made up of
+  // multiple delimiters.
+  Token single_lex_operator = current_copy;
+  while (*state_copy.current->end != '\0'
+         && strchr(whitespace, *state_copy.current->end) == NULL
+         && strchr(delimiters, *state_copy.current->end) != NULL) {
+    state_copy.current->end += 1;
+    *state_copy.length += 1;
+  }
+
   Node *operator_symbol =
     node_symbol_from_buffer(state_copy.current->beginning, *state_copy.length);
 
   Node *operator_value = node_allocate();
   ParsingContext *global = context;
+
   while (global->parent) { global = global->parent; }
   if (environment_get(*global->binary_operators, operator_symbol, operator_value)) {
     parse_state_update_from(state, state_copy);
@@ -673,6 +704,8 @@ Error parse_binary_infix_operator
 
     *found = 1;
   }
+
+  // TODO: Iterate advanced token end backwards until reaching a valid binary operator.
 
   free(operator_symbol);
   free(operator_value);
