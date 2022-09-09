@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum RegX86_64_MsWin : RegisterDescriptor {
+enum RegX86_64_MsWin {
   REG_X86_64_MSWIN_RAX = 0,
   REG_X86_64_MSWIN_R10 = 1,
   REG_X86_64_MSWIN_R11 = 2,
@@ -24,7 +24,7 @@ enum RegX86_64_MsWin : RegisterDescriptor {
   registers[desc] = (Register){.name = reg_name, .in_use = 0, .descriptor = desc}
 
 /// Creates a context for the CG_FMT_x86_64_MSWIN architecture.
-CodegenContext *codegen_context_create_x86_64_mswin(CodegenContext *parent) {
+CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
   Register *registers = calloc(REG_X86_64_MSWIN_COUNT, sizeof *registers);
   INIT_REGISTER(REG_X86_64_MSWIN_RAX, "%rax");
   INIT_REGISTER(REG_X86_64_MSWIN_R10, "%r10");
@@ -47,6 +47,13 @@ CodegenContext *codegen_context_create_x86_64_mswin(CodegenContext *parent) {
 }
 
 #undef INIT_REGISTER
+
+/// Free a context created by codegen_context_x86_64_mswin_create.
+void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
+  free(ctx->registers.regs);
+  /// TODO(sirraide): Free environment.
+  free(ctx);
+}
 
 //================================================================ BEG REGISTER STUFF
 
@@ -238,7 +245,7 @@ Error codegen_expression_x86_64_mswin
 
     // Copy return value of function call from RAX to result register
     expression->result_register = register_allocate(cg_context);
-    if (strcmp(register_name(cg_context, expression->result_register), "%rax") != 0) {
+    if (expression->result_register != REG_X86_64_MSWIN_RAX) {
       fprintf(code, "mov %%rax, %s\n", register_name(cg_context, expression->result_register));
       // Save overwritten in-use registers.
       fprintf(code, "pop %%rax\n");
@@ -554,9 +561,9 @@ Error codegen_expression_x86_64_mswin
               "push %%rdx\n");
 
       // Load RAX with left hand side of division operator, if needed.
-      // TODO: Use enum comparison on RegisterDescriptor instead of strcmp()!
-      const char *lhs_register_name = register_name(cg_context,expression->children->result_register);
-      if (strcmp(lhs_register_name, "%rax")) {
+      RegisterDescriptor result_register = expression->children->result_register;
+      if (result_register != REG_X86_64_MSWIN_RAX) {
+        const char *lhs_register_name = register_name(cg_context, result_register);
         // TODO: If RHS is in RAX, we must save RAX first...
         fprintf(code, "mov %s, %%rax\n", lhs_register_name);
       }
@@ -578,7 +585,7 @@ Error codegen_expression_x86_64_mswin
         fprintf(code, "mov %%rdx, %s\n", result_register_name);
       } else {
         // Move return value from RAX into wherever it actually belongs.
-        if (strcmp(result_register_name, "%rax")) {
+        if (expression->result_register != REG_X86_64_MSWIN_RAX) {
           fprintf(code, "mov %%rax, %s\n", result_register_name);
         }
       }
@@ -772,7 +779,7 @@ Error codegen_function_x86_64_att_asm_mswin
 {
   Error err = ok;
 
-  cg_context = codegen_context_create_x86_64_mswin(cg_context);
+  cg_context = codegen_context_x86_64_mswin_create(cg_context);
 
   // Store base pointer integer offset within locals environment
   // Start at one to make space for pushed RBP in function header.
@@ -830,8 +837,8 @@ Error codegen_function_x86_64_att_asm_mswin
 
   // Copy last expression result register to RAX
   if (last_expression) {
-    const char *name = register_name(cg_context,last_expression->result_register);
-    if (strcmp(name, "%rax")) {
+    if (last_expression->result_register != REG_X86_64_MSWIN_RAX) {
+      const char *name = register_name(cg_context,last_expression->result_register);
       fprintf(code, "mov %s, %%rax\n", name);
     }
   }
@@ -850,9 +857,8 @@ Error codegen_function_x86_64_att_asm_mswin
   fprintf(code, "after%s:\n", name);
   // after<function_label>:
 
-  // TODO: Free context;
-  cg_context = cg_context->parent;
-
+  // Free context;
+  codegen_context_x86_64_mswin_free(cg_context);
   return ok;
 }
 
@@ -902,16 +908,13 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext *cg_context, Parsi
   }
 
   // TODO: Copy this code to the generic function for return value!
-  const char *name = register_name(cg_context, last_expression->result_register);
-  if (strcmp(name, "%rax") != 0) {
+  if (last_expression->result_register != REG_X86_64_MSWIN_RAX) {
+    const char *name = register_name(cg_context, last_expression->result_register);
     fprintf(code, "mov %s, %%rax\n", name);
   }
 
   fprintf(code, "add $%lld, %%rsp\n", -cg_context->locals_offset);
   fprintf(code, "%s", function_footer_x86_64);
-
-  // TODO: This breaks things, but we should do it.
-  //register_free(r);
 
   return err;
 }
@@ -930,7 +933,6 @@ Error codegen_program
     ERROR_PREP(err, ERROR_ARGUMENTS, "codegen_program(): filepath can not be NULL!");
     return err;
   }
-  CodegenContext *cg_context = codegen_context_create_x86_64_mswin(NULL);
   // Open file for writing.
   FILE *code = fopen(filepath, "w");
   if (!code) {
@@ -939,7 +941,9 @@ Error codegen_program
     return err;
   }
   if (format == CG_FMT_DEFAULT || format == CG_FMT_x86_64_MSWIN) {
+    CodegenContext *cg_context = codegen_context_x86_64_mswin_create(NULL);
     err = codegen_program_x86_64_mswin(code, cg_context, context, program);
+    codegen_context_x86_64_mswin_free(cg_context);
   } else {
     printf("ERROR: Unrecognized codegen format\n");
   }
