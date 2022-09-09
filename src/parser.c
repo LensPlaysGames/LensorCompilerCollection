@@ -514,6 +514,8 @@ ParsingContext *parse_context_default_create() {
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
   err = define_binary_operator(ctx, "/", 10, "integer", "integer", "integer");
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
+  err = define_binary_operator(ctx, "%", 10, "integer", "integer", "integer");
+  if (err.type != ERROR_NONE) { puts(binop_error_message); }
 
   return ctx;
 }

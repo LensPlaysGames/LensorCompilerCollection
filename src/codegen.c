@@ -533,25 +533,37 @@ Error codegen_expression_x86_64_mswin
 
       // Free no-longer-used left hand side result register.
       register_deallocate(r, expression->children->result_register);
-    } else if (strcmp(expression->value.symbol, "/") == 0) {
-      // Division
+    } else if (strcmp(expression->value.symbol, "/") == 0
+               || strcmp(expression->value.symbol, "%") == 0) {
+      // Division/Modulo
       // https://www.felixcloutier.com/x86/div
       // https://www.felixcloutier.com/x86/idiv
       // https://www.felixcloutier.com/x86/cwd:cdq:cqo
 
+      char modulo_flag = 0;
+      // TODO: Don't compare twice!
+      if (strcmp(expression->value.symbol, "%") == 0) {
+        modulo_flag = 1;
+      }
+
       // Quotient is in RAX, Remainder in RDX; we must save and
       // restore these registers before and after divide, sadly.
+
+      // TODO: We can optimize the outputted code by testing if LHS
+      // result register is RAX, in which case we can use it
+      // destructively as our division expression result register.
 
       fprintf(code,
               "push %%rax\n"
               "push %%rdx\n");
 
-      // Load RAX with left hand side of division operator.
-      // TODO: Check if LHS is already in RAX or not.
-      //       If RHS is in RAX, we must save RAX first...
-      fprintf(code,
-              "mov %s, %%rax\n",
-              register_name(r, expression->children->result_register));
+      // Load RAX with left hand side of division operator, if needed.
+      // TODO: Use enum comparison on RegisterDescriptor instead of strcmp()!
+      char *lhs_register_name = register_name(r,expression->children->result_register);
+      if (strcmp(lhs_register_name, "%rax")) {
+        // TODO: If RHS is in RAX, we must save RAX first...
+        fprintf(code, "mov %s, %%rax\n", lhs_register_name);
+      }
 
       // Sign-extend the value in RAX to RDX.
       // RDX is treated as the 8 high bytes of a 16-byte
@@ -563,12 +575,17 @@ Error codegen_expression_x86_64_mswin
               "idiv %s\n",
               register_name(r, expression->children->next_child->result_register));
 
-      // Move return value from RAX into wherever it actually belongs.
       expression->result_register = register_allocate(r);
-      // TODO: Check if result_register is RAX...
-      fprintf(code,
-              "mov %%rax, %s\n",
-              register_name(r, expression->result_register));
+      char *result_register_name = register_name(r,expression->result_register);
+      if (modulo_flag) {
+        // Move return value from RDX into wherever it actually belongs.
+        fprintf(code, "mov %%rdx, %s\n", result_register_name);
+      } else {
+        // Move return value from RAX into wherever it actually belongs.
+        if (strcmp(result_register_name, "%rax")) {
+          fprintf(code, "mov %%rax, %s\n", result_register_name);
+        }
+      }
 
       fprintf(code,
               "pop %%rdx\n"
