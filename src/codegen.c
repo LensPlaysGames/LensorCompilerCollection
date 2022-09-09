@@ -25,22 +25,29 @@ enum RegX86_64_MsWin {
 
 /// Creates a context for the CG_FMT_x86_64_MSWIN architecture.
 CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
-  Register *registers = calloc(REG_X86_64_MSWIN_COUNT, sizeof *registers);
-  INIT_REGISTER(REG_X86_64_MSWIN_RAX, "%rax");
-  INIT_REGISTER(REG_X86_64_MSWIN_R10, "%r10");
-  INIT_REGISTER(REG_X86_64_MSWIN_R11, "%r11");
-  INIT_REGISTER(REG_X86_64_MSWIN_RBX, "%rbx");
-  INIT_REGISTER(REG_X86_64_MSWIN_RDI, "%rdi");
-  INIT_REGISTER(REG_X86_64_MSWIN_RSI, "%rsi");
+  RegisterPool pool;
 
-  RegisterPool register_pool = {
-    .regs = registers,
-    .num_regs = REG_X86_64_MSWIN_COUNT,
-  };
+  // Create the registers if this is the top-level context.
+  if (!parent) {
+    Register *registers = calloc(REG_X86_64_MSWIN_COUNT, sizeof *registers);
+    INIT_REGISTER(REG_X86_64_MSWIN_RAX, "%rax");
+    INIT_REGISTER(REG_X86_64_MSWIN_R10, "%r10");
+    INIT_REGISTER(REG_X86_64_MSWIN_R11, "%r11");
+    INIT_REGISTER(REG_X86_64_MSWIN_RBX, "%rbx");
+    INIT_REGISTER(REG_X86_64_MSWIN_RDI, "%rdi");
+    INIT_REGISTER(REG_X86_64_MSWIN_RSI, "%rsi");
+
+    pool = (RegisterPool) {
+      .regs = registers,
+      .num_regs = REG_X86_64_MSWIN_COUNT,
+    };
+  } else {
+    pool = parent->registers;
+  }
 
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
   cg_ctx->parent = parent;
-  cg_ctx->registers = register_pool;
+  cg_ctx->registers = pool;
   cg_ctx->locals = environment_create(NULL);
   cg_ctx->locals_offset = -32;
   return cg_ctx;
@@ -50,8 +57,9 @@ CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
 
 /// Free a context created by codegen_context_x86_64_mswin_create.
 void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
-  free(ctx->registers.regs);
-  /// TODO(sirraide): Free environment.
+  // Only free the registers if this is the top-level context.
+  if (!ctx->parent) free(ctx->registers.regs);
+  // TODO(sirraide): Free environment.
   free(ctx);
 }
 
