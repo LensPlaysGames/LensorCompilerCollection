@@ -1,0 +1,292 @@
+CO This path is relative to the project root dir. CO
+CO Currently unused due to a bug in the runtime.  CO
+CO STRING working directory = "./bld";            CO
+
+CO These paths are relative to the `working directory`. CO
+STRING func = "./func";
+STRING func output path = "./code.S";
+STRING gcc output path = "./code";
+STRING temp dir = "./tmp";
+STRING temp file path = temp dir + "/.tmpfile";
+STRING tests dir = "../test";
+
+CO Command to compile the generated assembly files. CO
+STRING gcc = "gcc";
+
+CO Test statistics. CO
+INT tests run := 0;
+INT tests failed := 0;
+INT tests errored := 0;
+
+CO For error reporting. CO
+FILE err;
+STRING error message buffer;
+associate (err, error message buffer);
+
+CO =================================================== CO
+CO  Utils                                              CO
+CO =================================================== CO
+CO Print the global error message and abort execution. CO
+PROC die = VOID: abend (error message buffer);
+
+CO Run a shell command and return the exit code. CO
+PROC cmd = (STRING command) INT: wexitstatus (system (command));
+
+CO Get the first occurence of a string in a string starting CO
+CO at a given offset. Returns whether the string was found. CO
+PROC string find = (STRING needle, STRING haystack, REF INT in out pos) BOOL:
+BEGIN
+    IF in out pos LT LWB haystack OR in out pos GT UPB haystack THEN FALSE ELSE
+        INT absolute pos = in out pos;
+        INT relative offset;
+        IF NOT string in string (needle, relative offset, haystack [in out pos :])
+        THEN FALSE
+        ELSE
+            in out pos := absolute pos + relative offset - 1;
+            TRUE
+        FI
+    FI
+END;
+
+CO Remove leading and trailing whitespace from a string. CO
+PROC string trim = (STRING str) STRING:
+BEGIN
+    IF str EQ "" THEN "" ELSE
+        INT begin := LWB str;
+        INT end := UPB str;
+
+        WHILE begin LE end AND is space (str [begin]) DO begin +:= 1 OD;
+        WHILE end GE begin AND is space (str [end]) DO end -:= 1 OD;
+
+        IF end LT begin THEN "" ELSE str [begin : end] FI
+    FI
+END;
+
+CO Get the exit code of a program. CO
+PROC wexitstatus = (INT status) INT: ABS ((BIN status SHR 8) AND BIN 255);
+
+CO =================================================== CO
+CO  File I/O                                           CO
+CO =================================================== CO
+CO Get all files in a directory. CO
+PROC dir get files = (STRING directory) [] STRING:
+BEGIN
+    CO Make sure the path is a directory. CO
+    IF NOT file is directory (directory) THEN
+        putf (err, ($"dir get files(): '"g"' is not a directory"$, directory));
+        die
+    FI;
+    SORT get directory (directory)
+END;
+
+CO Read the contents of a file. CO
+PROC read file = (STRING file path) STRING:
+BEGIN
+    CO Attempt to open the file. CO
+    FILE file;
+    IF open (file, file path, stand in channel) NE 0 THEN
+        putf (err, ($"read file(): Could not open file '" g "'"$, file path));
+        die
+    FI;
+
+    CO Read the file line by line. CO
+    STRING contents;
+    STRING line;
+    DO
+        get (file, (line, new line));
+        contents +:= line;
+        contents +:= " "
+    UNTIL end of file (file) OD;
+
+    CO Close the file and return the contents. CO
+    close (file);
+    contents
+END;
+
+CO =================================================== CO
+CO  Test parser etc                                    CO
+CO =================================================== CO
+CO                                                     CO
+CO  Test BNF:                                          CO
+CO <test>    ::= 'TEST' <code> <check> 'END'           CO
+CO <check>   ::= 'RETURNS' <number>                    CO
+CO <code>    ::= func source code                      CO
+CO                                                     CO
+CO This evaluates our test dsl and runs the tests.     CO
+PROC run tests = (STRING file path, STRING test code in) VOID:
+BEGIN
+    CO Sanity check. CO
+    STRING test code = string trim (test code in);
+    IF test code EQ "" THEN GO TO return FI;
+
+    INT saved tests failed = tests failed;
+    INT test count := 0;
+    INT pos := LWB test code;
+
+    CO Parse the tests. CO
+    WHILE string find ("TEST", test code, pos) DO
+        test count +:= 1;
+
+        CO Make sure we have a RETURNS directive. CO
+        INT code start = pos +:= 4;
+        IF NOT string find ("RETURNS", test code, pos) THEN
+            print ((file path, ": parse error: Missing 'RETURNS' directive", new line));
+            tests errored +:= 1;
+            GO TO return
+        FI;
+        INT code end = pos - 1;
+        pos +:= 7;
+
+        CO Parse the expected return value. CO
+        INT return value start = pos;
+        IF NOT string find ("END", test code, pos) THEN
+            print ((file path, ": parse error: Unterminated 'RETURNS' directive", new line));
+            tests errored +:= 1;
+            GO TO return
+        FI;
+        INT return value end = pos - 1;
+        pos +:= 3;
+
+        CO Trim the result value. CO
+        STRING trimmed = string trim (test code [return value start : return value end]);
+        IF trimmed EQ "" THEN
+            print ((file path, ": parse error: RESULT value '", trimmed, "' is not a number", new line));
+            tests errored +:= 1;
+            GO TO return
+        FI;
+
+        CO Convert it to an integer. CO
+        INT expected exit code := 0;
+        FOR i FROM LWB trimmed TO UPB trimmed DO
+            CHAR digit = trimmed [i];
+            IF NOT is digit (digit) THEN
+                print ((file path, ": parse error: RESULT value is not a number", new line));
+                tests errored +:= 1;
+                GO TO return
+            FI;
+
+            expected exit code *:= 10;
+            expected exit code +:= ABS digit - ABS "0"
+        OD;
+
+        CO Write the code to a temporary file. CO
+        FILE code file;
+        IF
+            IF file is regular (temp file path)
+                THEN open (code file, temp file path, stand out channel)
+                ELSE establish (code file, temp file path, stand out channel)
+            FI
+        NE 0 THEN
+            putf (err, ($"Could not open temporary file '" g "'"$, temp file path));
+            die
+        FI;
+        put (code file, test code [code start : code end]);
+        close (code file);
+
+        CO Compile the program. CO
+        IF cmd (func + " '" + temp file path + "'") NE 0 THEN
+            tests errored +:= 1;
+            print ((file path, ": compile error:", new line));
+            GO TO next
+        FI;
+
+        CO Assembly the program. CO
+        IF cmd (gcc + " " + func output path + " -o " + gcc output path) NE 0 THEN
+            tests errored +:= 1;
+            print ((file path, ": assembly error:", new line));
+            GO TO next
+        FI;
+
+        CO Run it and check the exit code. CO
+        INT exit code = cmd (gcc output path);
+        IF exit code NE expected exit code THEN
+            print ((file path));
+            printf (($": test " g(0) " failed:"l$, test count));
+            printf (($"    expected exit code " g(0) " but was " g(0)l$, expected exit code, exit code));
+            tests failed +:= 1
+        FI;
+
+        CO Continue with the next test. CO
+        next: SKIP
+    OD;
+
+    CO If we're not at the end of the input, then there was something we couldn't parse. CO
+    IF pos LT UPB test code THEN
+        print ((file path, ": parse error: Could not parse all tests", new line));
+        tests errored +:= 1;
+
+        CO Print the code that couldn't be parsed. CO
+        IF UPB test code - pos LT 255
+        THEN print (("    Junk at end of file: ", test code [pos :], new line))
+        FI
+    ELIF saved tests failed EQ tests failed THEN
+        printf (($g ": " g(0) " / " g(0) " tests passed"l$, file path, test count, test count))
+    FI;
+
+    CO This is the easiest way I could find to return  CO
+    CO from a function if there is an error.           CO
+    return: tests run +:= test count
+END;
+
+
+CO =================================================== CO
+CO  Driver                                             CO
+CO =================================================== CO
+CO Run all tests in a file. CO
+PROC run tests in file = (STRING file path) VOID:
+BEGIN
+    CO Read the file. CO
+    STRING contents = read file (file path);
+    print (("Testing ", file path, "...", new line));
+    run tests (file path, contents)
+END;
+
+CO Not necessary, but it makes this entire thing a bit more structured. CO
+PROC main = VOID:
+BEGIN
+    CO This is currently broken in the runtime: CO
+    CO                                          CO
+    CO Make sure we're in the right directory.  CO
+    CO VOID (set pwd (working directory));      CO
+    CO                                          CO
+    CO So instead, we do this:                  CO
+    IF NOT string in string ("FUNCompiler/bld", LOC INT, get pwd) THEN
+        put (err, ("This program must be run in the ./bld directory$"));
+        die
+    FI;
+
+    CO Create a temporary directory for the code. CO
+    IF NOT file is directory (temp dir) THEN
+        IF system ("mkdir " + temp dir) NE 0 THEN
+            putf (err, ($"Could not create directory '" g "'"$, temp dir));
+            die
+        FI
+    FI;
+
+    CO Get the names of all test files. CO
+    [] STRING test files = dir get files (tests dir);
+
+    CO Iterate over all tests and run them. CO
+    FOR i FROM LWB test files TO UPB test files DO
+        CO Ignore '.', '..', directories, and files ending with '~'. CO
+        CO TODO: Iterate over subdirectories. CO
+        STRING file = test files [i];
+        STRING file path = tests dir + "/" + file;
+
+        IF file NE "."
+            AND file NE ".."
+            AND file [UPB file] NE "~"
+            AND file is regular (file path)
+        THEN run tests in file (file path)
+        FI
+    OD;
+
+    CO Print a summary. CO
+    print  ((new line, "Summary:", new line));
+    printf (($"    " g(0) " tests run"l$, tests run));
+    printf (($"    " g(0) " tests failed"l$, tests failed));
+    printf (($"    " g(0) " tests errored"l$, tests errored))
+END;
+
+CO Run the program. CO
+main

@@ -14,8 +14,6 @@
 **/rls
 **/release
 **/*tst*
-**/test*
-**/*test
 # Language Server
 **/compile_commands.json
 
