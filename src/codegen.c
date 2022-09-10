@@ -106,6 +106,7 @@ const char *register_name
   if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
     printf("ERROR::register_name(): Could not find register with descriptor of %d\n",
            descriptor);
+    return NULL;
   }
   return cg_ctx->registers.regs[descriptor].name;
 }
