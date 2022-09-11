@@ -1,12 +1,15 @@
 CO This path is relative to the project root dir. CO
 CO Currently unused due to a bug in the runtime.  CO
-CO STRING working directory = "./bld";            CO
+CO STRING working directory = "bld";              CO
+
+CO Platform directory separator. CO
+STRING platform dir sep = IF platform is windows THEN "\" ELSE "/" FI;
 
 CO These paths are relative to the `working directory`. CO
-STRING func = "./func";
-STRING func output path = "./code.S";
-STRING gcc output path = "./code";
-STRING temp dir = "./tmp";
+STRING func = "." + platform dir sep + "func";
+STRING func output path = "code.S";
+STRING gcc output path = "." + platform dir sep + "compiled-test";
+STRING temp dir = "tmp";
 STRING temp file path = temp dir + "/.tmpfile";
 STRING tests dir = "../test";
 
@@ -26,11 +29,22 @@ associate (err, error message buffer);
 CO =================================================== CO
 CO  Utils                                              CO
 CO =================================================== CO
+CO Run a shell command and return the exit code. CO
+PROC cmd = (STRING command) INT: wexitstatus (system (command));
+
 CO Print the global error message and abort execution. CO
 PROC die = VOID: abend (error message buffer);
 
-CO Run a shell command and return the exit code. CO
-PROC cmd = (STRING command) INT: wexitstatus (system (command));
+CO Check if a string ends with another string. CO
+PROC string ends with = (STRING string, STRING suffix) BOOL:
+BEGIN
+    INT string len = UPB string - LWB string;
+    INT suffix len = UPB suffix - LWB suffix;
+
+    IF string EQ "" THEN suffix EQ ""
+    ELIF string len LT suffix len THEN FALSE
+    ELSE string [UPB string - suffix len :] EQ suffix FI
+END;
 
 CO Get the first occurence of a string in a string starting CO
 CO at a given offset. Returns whether the string was found. CO
@@ -63,7 +77,16 @@ BEGIN
 END;
 
 CO Get the exit code of a program. CO
-PROC wexitstatus = (INT status) INT: ABS ((BIN status SHR 8) AND BIN 255);
+PROC wexitstatus = (INT status) INT:
+BEGIN
+    IF platform is windows
+    THEN status
+    ELSE ABS ((BIN status SHR 8) AND BIN 255)
+    FI
+END;
+
+CO Check if we're on Windows. CO
+PROC platform is windows = BOOL: get env ("WINDIR") NE "";
 
 CO =================================================== CO
 CO  File I/O                                           CO
@@ -120,6 +143,7 @@ BEGIN
     IF test code EQ "" THEN GO TO return FI;
 
     INT saved tests failed = tests failed;
+    INT saved tests errored = tests errored;
     INT test count := 0;
     INT pos := LWB test code;
 
@@ -184,7 +208,7 @@ BEGIN
         close (code file);
 
         CO Compile the program. CO
-        IF cmd (func + " '" + temp file path + "'") NE 0 THEN
+        IF cmd (func + " " + temp file path) NE 0 THEN
             tests errored +:= 1;
             print ((file path, ": compile error:", new line));
             GO TO next
@@ -219,7 +243,7 @@ BEGIN
         IF UPB test code - pos LT 255
         THEN print (("    Junk at end of file: ", test code [pos :], new line))
         FI
-    ELIF saved tests failed EQ tests failed THEN
+    ELIF saved tests failed EQ tests failed AND saved tests errored EQ tests errored THEN
         printf (($g ": " g(0) " / " g(0) " tests passed"l$, file path, test count, test count))
     FI;
 
@@ -250,7 +274,7 @@ BEGIN
     CO VOID (set pwd (working directory));      CO
     CO                                          CO
     CO So instead, we do this:                  CO
-    IF NOT string in string ("FUNCompiler/bld", LOC INT, get pwd) THEN
+    IF NOT string ends with (get pwd, "bld") THEN
         put (err, ("This program must be run in the ./bld directory$"));
         die
     FI;
