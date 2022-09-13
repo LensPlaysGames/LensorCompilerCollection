@@ -119,27 +119,21 @@ RegisterDescriptor register_allocate(CodegenContext *cg_ctx) {
       return reg->descriptor;
     }
   }
-
-  printf("ERROR::register_allocate(): Could not allocate register!\n");
-  exit(1);
+  panic("ERROR::register_allocate(): Could not allocate register!\n");
 }
 
 void register_deallocate
 (CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
   if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
-    printf("ERROR::register_deallocate(): Invalid register descriptor!\n");
-    exit(1);
-  } else {
-    cg_ctx->registers.regs[descriptor].in_use = 0;
+    panic("ERROR::register_deallocate(): Invalid register descriptor!\n");
   }
+  cg_ctx->registers.regs[descriptor].in_use = 0;
 }
 
 const char *register_name
 (CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
   if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
-    printf("ERROR::register_name(): Could not find register with descriptor of %d\n",
-           descriptor);
-    exit(1);
+    panic("ERROR::register_name(): Could not find register with descriptor of %d\n", descriptor);
   }
   return cg_ctx->registers.regs[descriptor].name;
 }
