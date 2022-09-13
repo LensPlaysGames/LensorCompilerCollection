@@ -27,15 +27,19 @@ extern Error ok;
   (n).msg = (message);
 
 #ifndef _MSC_VER
-__attribute__((noreturn))
-__attribute__((format(printf, 1, 2)))
+#define FUNC_NORETURN __attribute__((noreturn))
+#define FUNC_FORMAT(...) __attribute__((format(__VA_ARGS__)))
+#else
+#define FUNC_NORETURN
 #endif
+
+
+FUNC_NORETURN
+FUNC_FORMAT(printf, 1, 2)
 void panic(const char *fmt, ...);
 
-#ifndef _MSC_VER
-__attribute__((noreturn))
-__attribute__((format(printf, 2, 3)))
-#endif
+FUNC_NORETURN
+FUNC_FORMAT(printf, 2, 3)
 void panic_with_code(int code, const char *fmt, ...);
 
 

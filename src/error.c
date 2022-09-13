@@ -41,9 +41,7 @@ void print_error(Error err) {
   }
 }
 
-#ifndef _MSC_VER
-__attribute__((noreturn))
-#endif
+FUNC_NORETURN
 static void vpanic(int code, const char *fmt, va_list args) {
   vfprintf(stderr, fmt, args);
   fputc('\n', stderr);
