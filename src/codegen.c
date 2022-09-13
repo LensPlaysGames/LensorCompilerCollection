@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <typechecker.h>
 
 // Each platform must have registers defined, obviously.
 // Scratch registers MUST come first in enumeration.
@@ -256,27 +257,79 @@ Error codegen_expression_x86_64_mswin
     // Save RAX because function call will over-write it!
     fprintf(code, "pushq %%rax\n");
 
-    // Push arguments *in reverse order* on to the stack.
-    // TODO: In reverse order. Or just calculate same when accessing.
+    // Setup function environment based on calling convention.
+
+    Node *variable_type = node_allocate();
+    // Use `typecheck_expression()` to get type of variable.
+    // err is ignored purposefully, program already type-checked valid.
+    typecheck_expression(context, NULL, expression->children, variable_type);
+
     iterator = expression->children->next_child->children;
-    while (iterator) {
-      err = codegen_expression_x86_64_mswin
-        (code, cg_context, context, next_child_context, iterator);
+    if (strcmp(variable_type->value.symbol, "external function") == 0) {
+      // TODO: Save RCX, RDX, R8, and R9 (they are scratch registers).
+      // TODO: Only save scratch registers that are in-use.
+      // TODO: Don't generate `mov` if both operands are the same!
+
+      // Put arguments in RCX, RDX, R8, R9, then on the stack in reverse order.
+      if (iterator) {
+        // Place first argument in RCX or XMM0
+        err = codegen_expression_x86_64_mswin
+          (code, cg_context, context, next_child_context, iterator);
+        if (err.type) { return err; }
+        fprintf(code, "mov %s, %%rcx\n", register_name(cg_context, iterator->result_register));
+        iterator = iterator->next_child;
+      }
+      if (iterator) {
+        // Place second argument in RDX or XMM1
+        err = codegen_expression_x86_64_mswin
+          (code, cg_context, context, next_child_context, iterator);
+        if (err.type) { return err; }
+        fprintf(code, "mov %s, %%rdx\n", register_name(cg_context, iterator->result_register));
+        iterator = iterator->next_child;
+      }
+      if (iterator) {
+        // Place third argument in R8 or XMM2
+        err = codegen_expression_x86_64_mswin
+          (code, cg_context, context, next_child_context, iterator);
+        if (err.type) { return err; }
+        fprintf(code, "mov %s, %%r8\n", register_name(cg_context, iterator->result_register));
+        iterator = iterator->next_child;
+      }
+      if (iterator) {
+        // Place third argument in R9 or XMM3
+        err = codegen_expression_x86_64_mswin
+          (code, cg_context, context, next_child_context, iterator);
+        if (err.type) { return err; }
+        fprintf(code, "mov %s, %%r9\n", register_name(cg_context, iterator->result_register));
+        iterator = iterator->next_child;
+      }
+
+      // TODO: Reverse rest of arguments, push on stack.
+
+      fprintf(code, "call %s\n", expression->children->value.symbol);
+
+    } else {
+      // Push arguments on stack in order.
+      while (iterator) {
+        err = codegen_expression_x86_64_mswin
+          (code, cg_context, context, next_child_context, iterator);
+        if (err.type) { return err; }
+        fprintf(code, "pushq %s\n", register_name(cg_context, iterator->result_register));
+        register_deallocate(cg_context, iterator->result_register);
+        iterator = iterator->next_child;
+        count += 8;
+      }
+
+      err = codegen_expression_x86_64_mswin(code, cg_context, context, next_child_context, expression->children);
       if (err.type) { return err; }
-      fprintf(code, "pushq %s\n", register_name(cg_context, iterator->result_register));
-      register_deallocate(cg_context, iterator->result_register);
-      iterator = iterator->next_child;
-      count++;
+
+      // Emit call
+      fprintf(code, "call *%s\n", register_name(cg_context, expression->children->result_register));
+      register_deallocate(cg_context, expression->children->result_register);
     }
 
-    err = codegen_expression_x86_64_mswin(code, cg_context, context, next_child_context, expression->children);
-    if (err.type) { return err; }
-
-    // Emit call
-    fprintf(code, "call *%s\n", register_name(cg_context, expression->children->result_register));
-    register_deallocate(cg_context, expression->children->result_register);
     if (count) {
-      fprintf(code, "add $%lld, %%rsp\n", count * 8);
+      fprintf(code, "add $%lld, %%rsp\n", count);
     }
 
     // Copy return value of function call from RAX to result register
@@ -719,6 +772,9 @@ Error codegen_expression_x86_64_mswin
       ERROR_PREP(err, ERROR_GENERIC, "Invalid AST/context fed to codegen. Could not find variable declaration in environment");
       return err;
     }
+    if (strcmp(tmpnode->value.symbol, "external function") != 0) {
+      break;
+    }
     // Get size in bytes from types environment.
     err = parse_get_type(original_context, tmpnode, tmpnode);
     if (err.type) { return err; }
@@ -900,13 +956,17 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext *cg_context, Parsi
     *type_id = *var_it->value;
     type_id->children = NULL;
     type_id->next_child = NULL;
-    err = parse_get_type(context, type_id, type_info);
-    if (err.type) {
-      print_node(type_id, 0);
-      return err;
+    // Do not emit "external" typed variables.
+    // TODO: Probably should have external attribute rather than this nonsense!
+    if (strcmp(type_id->value.symbol, "external function") != 0) {
+      err = parse_get_type(context, type_id, type_info);
+      if (err.type) {
+        print_node(type_id, 0);
+        return err;
+      }
+      fprintf(code, "%s: .space %lld\n", var_id->value.symbol, type_info->children->value.integer);
     }
     var_it = var_it->next;
-    fprintf(code, "%s: .space %lld\n", var_id->value.symbol, type_info->children->value.integer);
   }
   free(type_info);
 
