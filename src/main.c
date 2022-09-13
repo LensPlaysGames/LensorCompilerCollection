@@ -54,30 +54,26 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--output") == 0) {
       i++;
       if (i >= argc) {
-        printf("ERROR: Expected filepath after output command line argument\n");
-        return 1;
+        panic("ERROR: Expected filepath after output command line argument");
       }
       // FIXME: This very well may be a valid filepath. We may want to
       //        check that it isn't a valid filepath with fopen or something.
       if (*argv[i] == '-') {
-        printf("ERROR: Expected filepath after output command line argument\n"
+        panic("ERROR: Expected filepath after output command line argument\n"
                "Instead, got what looks like another command line argument.\n"
-               " -> \"%s\"\n", argv[i]);
-        return 1;
+               " -> \"%s\"", argv[i]);
       }
       output_filepath_index = i;
     } else if (strcmp(argument, "-f") == 0
                || strcmp(argument, "--format") == 0) {
       i++;
       if (i >= argc) {
-        printf("ERROR: Expected format after format command line argument\n");
-        return 1;
+        panic("ERROR: Expected format after format command line argument");
       }
       if (*argv[i] == '-') {
-        printf("ERROR: Expected format after format command line argument\n"
+        panic("ERROR: Expected format after format command line argument\n"
                "Instead, got what looks like another command line argument.\n"
-               " -> \"%s\"\n", argv[i]);
-        return 1;
+               " -> \"%s\"", argv[i]);
       }
       if (strcmp(argv[i], "default") == 0) {
         output_format = CG_FMT_DEFAULT;
