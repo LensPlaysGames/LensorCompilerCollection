@@ -31,6 +31,7 @@ extern Error ok;
 #define FUNC_FORMAT(...) __attribute__((format(__VA_ARGS__)))
 #else
 #define FUNC_NORETURN
+#define FUNC_FORMAT(...)
 #endif
 
 
