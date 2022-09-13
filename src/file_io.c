@@ -1,10 +1,9 @@
+#include <error.h>
+#include <errno.h>
 #include <file_io.h>
-
-#include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 
 size_t file_size(FILE *file) {
   if (!file) { return 0; }
@@ -30,7 +29,7 @@ char *file_contents(char *path) {
   }
   size_t size = file_size(file);
   char *contents = malloc(size + 1);
-  assert(contents && "Could not allocate buffer for file contents");
+  FUNC_ASSERT(contents, "Could not allocate buffer for file contents");
   char *write_it = contents;
   size_t bytes_read = 0;
   while (bytes_read < size) {
