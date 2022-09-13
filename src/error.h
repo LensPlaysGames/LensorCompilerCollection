@@ -26,4 +26,17 @@ extern Error ok;
   (n).type = (t);                               \
   (n).msg = (message);
 
+#ifndef _MSC_VER
+__attribute__((noreturn))
+__attribute__((format(printf, 1, 2)))
+#endif
+void panic(const char *fmt, ...);
+
+#ifndef _MSC_VER
+__attribute__((noreturn))
+__attribute__((format(printf, 2, 3)))
+#endif
+void panic_with_code(int code, const char *fmt, ...);
+
+
 #endif /* COMPILER_ERROR_H */
