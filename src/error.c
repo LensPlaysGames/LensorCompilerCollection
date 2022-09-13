@@ -62,33 +62,3 @@ void panic_with_code(int code, const char *fmt, ...) {
   vpanic(code, fmt, va);
   exit(1); // unreachable
 }
-
-void assert_impl
-(const char *file,
- const char *func,
- int line,
- const char *condition,
- const char *fmt,
- ...
- )
-{
-  /// Prettier file name
-  const char* basename = strrchr(file, PATH_SEPARATOR[0]);
-  file = basename ? basename + 1 : file;
-
-  fprintf(stderr, "Assertion failed: %s\n", condition);
-  fprintf(stderr, "    In file %s:%d\n", file, line);
-  fprintf(stderr, "    In function %s", func);
-
-  if (fmt) {
-    fprintf (stderr, "\n    Message: ");
-
-    va_list va;
-    va_start(va, fmt);
-    fprintf(stderr, fmt, va);
-    va_end(va);
-  }
-
-  fputc('\n', stderr);
-  exit(1);
-}
