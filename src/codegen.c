@@ -110,7 +110,7 @@ char register_descriptor_is_valid(CodegenContext *cg_ctx, RegisterDescriptor des
 }
 
 RegisterDescriptor register_allocate(CodegenContext *cg_ctx) {
-  FUNC_ASSERT(cg_ctx->registers.num_regs > 0 && cg_ctx->registers.num_scratch_regs > 0, "Register pool is empty");
+  ASSERT(cg_ctx->registers.num_regs > 0 && cg_ctx->registers.num_scratch_regs > 0, "Register pool is empty");
 
   for (RegisterDescriptor d = 0; d < cg_ctx->registers.num_scratch_regs; ++d) {
     Register *reg = &cg_ctx->registers.regs[d];
@@ -234,7 +234,7 @@ Error codegen_expression_x86_64_mswin
   ParsingContext *original_context = context;
   //expression->result_register = -1;
 
-  FUNC_ASSERT(NODE_TYPE_MAX == 13, "codegen_expression_x86_64_mswin() must exhaustively handle node types!");
+  ASSERT(NODE_TYPE_MAX == 13, "codegen_expression_x86_64_mswin() must exhaustively handle node types!");
   switch (expression->type) {
   default:
     break;

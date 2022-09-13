@@ -27,61 +27,61 @@ extern Error ok;
   (n).msg = (message);
 
 #ifndef _MSC_VER
-#define FUNC_NORETURN __attribute__((noreturn))
-#define FUNC_FORMAT(...) __attribute__((format(__VA_ARGS__)))
-#define FUNC_PRETTY_FUNCTION __PRETTY_FUNCTION__
-#define FUNC_LIKELY(x) __builtin_expect((x), 1)
-#define FUNC_UNLIKELY(x) __builtin_expect((x), 0)
-#define FUNC_PATH_SEPARATOR "/"
+#  define NORETURN __attribute__((noreturn))
+#  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
+#  define PRETTY_FUNCTION __PRETTY_FUNCTION__
+#  define LIKELY(x) __builtin_expect((x), 1)
+#  define UNLIKELY(x) __builtin_expect((x), 0)
+#  define PATH_SEPARATOR "/"
 #else
-#define FUNC_NORETURN
-#define FUNC_FORMAT(...)
-#define FUNC_PRETTY_FUNCTION __FUNCSIG__
-#define FUNC_LIKELY(x) (x)
-#define FUNC_UNLIKELY(x) (x)
-#define FUNC_PATH_SEPARATOR "\\"
+#  define NORETURN
+#  define FORMAT(...)
+#  define PRETTY_FUNCTION __FUNCSIG__
+#  define LIKELY(x) (x)
+#  define UNLIKELY(x) (x)
+#  define PATH_SEPARATOR "\\"
 #endif
 
-#define FUNC_VA_FIRST(x, ...) x
-#define FUNC_VA_REST(x, ...) __VA_ARGS__
-#define FUNC_VA_REST_COMMA(x, ...) __VA_OPT__(,) __VA_ARGS__
+#define VA_FIRST(x, ...) x
+#define VA_REST(x, ...) __VA_ARGS__
+#define VA_REST_COMMA(x, ...) __VA_OPT__(,) __VA_ARGS__
 
-FUNC_NORETURN
-FUNC_FORMAT(printf, 1, 2)
+NORETURN
+FORMAT(printf, 1, 2)
 void panic(const char *fmt, ...);
 
-FUNC_NORETURN
-FUNC_FORMAT(printf, 2, 3)
+NORETURN
+FORMAT(printf, 2, 3)
 void panic_with_code(int code, const char *fmt, ...);
 
-/// Used by FUNC_ASSERT(). You probably don't want to use this directly.
-FUNC_NORETURN
-FUNC_FORMAT(printf, 5, 6)
-void func_assert_impl(
-    const char *file,
-    const char *func,
-    int line,
-    const char *condition,
-    const char *fmt,
-    ...
-);
+/// Used by ASSERT(). You probably don't want to use this directly.
+NORETURN
+FORMAT(printf, 5, 6)
+void assert_impl
+(const char *file,
+ const char *func,
+ int line,
+ const char *condition,
+ const char *fmt,
+ ...
+ );
 
 /// Usage:
-///   FUNC_ASSERT(condition);
-///   FUNC_ASSERT(condition, "message", ...);
-#define FUNC_ASSERT(cond, ...)                        \
+///   ASSERT(condition);
+///   ASSERT(condition, "message", ...);
+#define ASSERT(cond, ...)                             \
   do {                                                \
-    if (FUNC_UNLIKELY(!(cond))) {                     \
-      func_assert_impl(                               \
-        __FILE__,                                     \
-        FUNC_PRETTY_FUNCTION,                         \
-        __LINE__ ,                                    \
-        #cond,                                        \
-        /* First element of __VA_ARGS__ or NULL */    \
-        FUNC_VA_FIRST(__VA_ARGS__ __VA_OPT__(,) NULL) \
-        /* Comma + rest of __VA_ARGS__ */             \
-        FUNC_VA_REST_COMMA(__VA_ARGS__)               \
-      );                                              \
+    if (UNLIKELY(!(cond))) {                          \
+      assert_impl                                     \
+        (__FILE__,                                    \
+         PRETTY_FUNCTION,                             \
+         __LINE__ ,                                   \
+         #cond,                                       \
+         /* First element of __VA_ARGS__ or NULL */   \
+         VA_FIRST(__VA_ARGS__ __VA_OPT__(,) NULL)     \
+         /* Comma + rest of __VA_ARGS__ */            \
+         VA_REST_COMMA(__VA_ARGS__)                   \
+         );                                           \
     }                                                 \
   } while (0)
 
