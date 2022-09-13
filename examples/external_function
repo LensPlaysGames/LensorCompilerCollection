@@ -1,0 +1,5 @@
+putchar : ext integer(c : integer)
+putchar(69)
+putchar(121)
+putchar(121)
+;; Eyy
