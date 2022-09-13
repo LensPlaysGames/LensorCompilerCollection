@@ -1,6 +1,5 @@
 #include <environment.h>
 
-#include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,7 +28,7 @@ void environment_print(Environment env, long long indent) {
 
 Environment *environment_create(Environment *parent) {
   Environment *env = malloc(sizeof(Environment));
-  assert(env && "Could not allocate memory for new environment");
+  FUNC_ASSERT(env, "Could not allocate memory for new environment");
   env->parent = parent;
   env->bind = NULL;
   return env;
@@ -50,7 +49,7 @@ int environment_set(Environment *env, Node *id, Node *value) {
   }
   // Create new binding.
   Binding *binding = malloc(sizeof(Binding));
-  assert(binding && "Could not allocate new binding for environment");
+  FUNC_ASSERT(binding, "Could not allocate new binding for environment");
   binding->id = id;
   binding->value = value;
   binding->next = env->bind;
@@ -78,7 +77,7 @@ int environment_set_end(Environment *env, Node *id, Node *value) {
   }
   // Create new binding.
   Binding *binding = calloc(1,sizeof(Binding));
-  assert(binding && "Could not allocate new binding for environment");
+  FUNC_ASSERT(binding, "Could not allocate new binding for environment");
   binding->id = id;
   binding->value = value;
   last_binding->next = binding;
