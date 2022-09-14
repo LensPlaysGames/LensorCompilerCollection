@@ -17,6 +17,17 @@ enum ComparisonType {
   COMPARE_LE,
   COMPARE_GT,
   COMPARE_GE,
+
+  COMPARE_COUNT,
+};
+
+static const char *comparison_suffixes[COMPARE_COUNT] = {
+    "e",
+    "ne",
+    "l",
+    "le",
+    "g",
+    "ge",
 };
 
 // Each platform must have registers defined, obviously.
@@ -232,73 +243,34 @@ void codegen_comparison_x86_64_mswin
  Node *expression,
  enum ComparisonType type,
  FILE *code) {
-  switch (type) {
-    case COMPARE_EQ: {
-      expression->result_register = register_allocate(cg_context);
-      RegisterDescriptor true_register = register_allocate(cg_context);
+  assert(type < COMPARE_COUNT && "Invalid comparison type");
 
-      fprintf(code, "mov $0, %s\n", register_name(cg_context, expression->result_register));
-      fprintf(code, "mov $1, %s\n", register_name(cg_context, true_register));
-      fprintf(code, "cmp %s, %s\n",
-          register_name(cg_context, expression->children->result_register),
-          register_name(cg_context, expression->children->next_child->result_register));
-      fprintf(code, "cmove %s, %s\n",
-          register_name(cg_context, true_register),
-          register_name(cg_context, expression->result_register));
+  // Reuse a register for the result of the comparison.
+  expression->result_register = expression->children->result_register;
 
-      // Free no-longer-used left hand side result register.
-      register_deallocate(cg_context, true_register);
-      register_deallocate(cg_context, expression->children->result_register);
-      register_deallocate(cg_context, expression->children->next_child->result_register);
-    } return;
+  // To avoid having to encode 8-bit registers, we always use %r8b for this for
+  // the time being. If the result register happens to be %r8, we can just use it
+  // without having to save/restore anything.
+  // TODO: Implement 8-bit registers and use the 8-bit variant of the result register
+  //   instead. Don't forget to zero out that register instead of %r8.
+  char r8_is_result = expression->result_register == REG_X86_64_MSWIN_R8;
 
-    case COMPARE_NE: assert(0 && "Not implemented"); return;
+  // Save %r8 if need be and clear it.
+  if (!r8_is_result) { fprintf(code, "pushq %%r8\n"); }
+  fprintf(code, "xor %%r8, %%r8\n");
 
-    case COMPARE_LT: {
-      expression->result_register = register_allocate(cg_context);
-      RegisterDescriptor true_register = register_allocate(cg_context);
+  // Perform the comparison.
+  fprintf(code, "cmp %s, %s\n",
+      register_name(cg_context, expression->children->next_child->result_register),
+      register_name(cg_context, expression->children->result_register));
+  fprintf(code, "set%s %%r8b\n", comparison_suffixes[type]);
+  register_deallocate(cg_context, expression->children->next_child->result_register);
 
-      fprintf(code, "mov $0, %s\n", register_name(cg_context, expression->result_register));
-      fprintf(code, "mov $1, %s\n", register_name(cg_context, true_register));
-      fprintf(code, "cmp %s, %s\n"
-              , register_name(cg_context, expression->children->next_child->result_register)
-              , register_name(cg_context, expression->children->result_register)
-      );
-      fprintf(code, "cmovl %s, %s\n",
-          register_name(cg_context, true_register),
-          register_name(cg_context, expression->result_register));
-
-      // Free no-longer-used left hand side result register.
-      register_deallocate(cg_context, true_register);
-      register_deallocate(cg_context, expression->children->result_register);
-      register_deallocate(cg_context, expression->children->next_child->result_register);
-    } return;
-
-    case COMPARE_LE: assert(0 && "Not implemented"); return;
-
-    case COMPARE_GT: {
-      expression->result_register = register_allocate(cg_context);
-      RegisterDescriptor true_register = register_allocate(cg_context);
-
-      fprintf(code, "mov $0, %s\n", register_name(cg_context, expression->result_register));
-      fprintf(code, "mov $1, %s\n", register_name(cg_context, true_register));
-      fprintf(code, "cmp %s, %s\n"
-              , register_name(cg_context, expression->children->next_child->result_register)
-              , register_name(cg_context, expression->children->result_register));
-      fprintf(code, "cmovg %s, %s\n",
-          register_name(cg_context, true_register),
-          register_name(cg_context, expression->result_register));
-
-      // Free no-longer-used left hand side result register.
-      register_deallocate(cg_context, true_register);
-      register_deallocate(cg_context, expression->children->result_register);
-      register_deallocate(cg_context, expression->children->next_child->result_register);
-    } return;
-
-    case COMPARE_GE: assert(0 && "Not implemented"); return;
+  // Move the value into the result register and restore %r8 if it was in use.
+  if (!r8_is_result) {
+    fprintf(code, "movzbq %%r8b, %s\n", register_name(cg_context, expression->result_register));
+    fprintf(code, "popq %%r8\n");
   }
-
-  panic("Invalid comparison type: %d", type);
 }
 
 Error codegen_expression_x86_64_mswin
