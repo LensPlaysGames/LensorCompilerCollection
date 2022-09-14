@@ -21,7 +21,7 @@ enum ComparisonType {
   COMPARE_COUNT,
 };
 
-static const char *comparison_suffixes[COMPARE_COUNT] = {
+static const char *comparison_suffixes_x86_64[COMPARE_COUNT] = {
     "e",
     "ne",
     "l",
@@ -263,7 +263,7 @@ void codegen_comparison_x86_64_mswin
   fprintf(code, "cmp %s, %s\n",
       register_name(cg_context, expression->children->next_child->result_register),
       register_name(cg_context, expression->children->result_register));
-  fprintf(code, "set%s %%r8b\n", comparison_suffixes[type]);
+  fprintf(code, "set%s %%r8b\n", comparison_suffixes_x86_64[type]);
   register_deallocate(cg_context, expression->children->next_child->result_register);
 
   // Move the value into the result register and restore %r8 if it was in use.
