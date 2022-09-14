@@ -10,6 +10,15 @@
 #include <string.h>
 #include <typechecker.h>
 
+enum ComparisonType {
+  COMPARE_EQ,
+  COMPARE_NE,
+  COMPARE_LT,
+  COMPARE_LE,
+  COMPARE_GT,
+  COMPARE_GE,
+};
+
 // Each platform must have registers defined, obviously.
 // Scratch registers MUST come first in enumeration.
 // Values on or between zero and maximum MUST be a valid register
@@ -217,6 +226,80 @@ Error codegen_function_x86_64_att_asm_mswin
  char *name,
  Node *function,
  FILE *code);
+
+void codegen_comparison_x86_64_mswin
+(CodegenContext *cg_context,
+ Node *expression,
+ enum ComparisonType type,
+ FILE *code) {
+  switch (type) {
+    case COMPARE_EQ: {
+      expression->result_register = register_allocate(cg_context);
+      RegisterDescriptor true_register = register_allocate(cg_context);
+
+      fprintf(code, "mov $0, %s\n", register_name(cg_context, expression->result_register));
+      fprintf(code, "mov $1, %s\n", register_name(cg_context, true_register));
+      fprintf(code, "cmp %s, %s\n",
+          register_name(cg_context, expression->children->result_register),
+          register_name(cg_context, expression->children->next_child->result_register));
+      fprintf(code, "cmove %s, %s\n",
+          register_name(cg_context, true_register),
+          register_name(cg_context, expression->result_register));
+
+      // Free no-longer-used left hand side result register.
+      register_deallocate(cg_context, true_register);
+      register_deallocate(cg_context, expression->children->result_register);
+      register_deallocate(cg_context, expression->children->next_child->result_register);
+    } return;
+
+    case COMPARE_NE: assert(0 && "Not implemented"); return;
+
+    case COMPARE_LT: {
+      expression->result_register = register_allocate(cg_context);
+      RegisterDescriptor true_register = register_allocate(cg_context);
+
+      fprintf(code, "mov $0, %s\n", register_name(cg_context, expression->result_register));
+      fprintf(code, "mov $1, %s\n", register_name(cg_context, true_register));
+      fprintf(code, "cmp %s, %s\n"
+              , register_name(cg_context, expression->children->next_child->result_register)
+              , register_name(cg_context, expression->children->result_register)
+      );
+      fprintf(code, "cmovl %s, %s\n",
+          register_name(cg_context, true_register),
+          register_name(cg_context, expression->result_register));
+
+      // Free no-longer-used left hand side result register.
+      register_deallocate(cg_context, true_register);
+      register_deallocate(cg_context, expression->children->result_register);
+      register_deallocate(cg_context, expression->children->next_child->result_register);
+    } return;
+
+    case COMPARE_LE: assert(0 && "Not implemented"); return;
+
+    case COMPARE_GT: {
+      expression->result_register = register_allocate(cg_context);
+      RegisterDescriptor true_register = register_allocate(cg_context);
+
+      fprintf(code, "mov $0, %s\n", register_name(cg_context, expression->result_register));
+      fprintf(code, "mov $1, %s\n", register_name(cg_context, true_register));
+      fprintf(code, "cmp %s, %s\n"
+              , register_name(cg_context, expression->children->next_child->result_register)
+              , register_name(cg_context, expression->children->result_register));
+      fprintf(code, "cmovg %s, %s\n",
+          register_name(cg_context, true_register),
+          register_name(cg_context, expression->result_register));
+
+      // Free no-longer-used left hand side result register.
+      register_deallocate(cg_context, true_register);
+      register_deallocate(cg_context, expression->children->result_register);
+      register_deallocate(cg_context, expression->children->next_child->result_register);
+    } return;
+
+    case COMPARE_GE: assert(0 && "Not implemented"); return;
+  }
+
+  panic("Invalid comparison type: %d", type);
+}
 
 Error codegen_expression_x86_64_mswin
 (FILE *code,
@@ -525,66 +608,11 @@ Error codegen_expression_x86_64_mswin
     if (err.type) { return err; }
 
     if (strcmp(expression->value.symbol, ">") == 0) {
-      // Greater than
-      // https://www.felixcloutier.com/x86/cmovcc
-
-      expression->result_register = register_allocate(cg_context);
-      RegisterDescriptor true_register = register_allocate(cg_context);
-
-      fprintf(code, "mov $0, %s\n", register_name(cg_context, expression->result_register));
-      fprintf(code, "mov $1, %s\n", register_name(cg_context, true_register));
-      fprintf(code, "cmp %s, %s\n"
-              , register_name(cg_context, expression->children->next_child->result_register)
-              , register_name(cg_context, expression->children->result_register));
-      fprintf(code, "cmovg %s, %s\n",
-              register_name(cg_context, true_register),
-              register_name(cg_context, expression->result_register));
-
-      // Free no-longer-used left hand side result register.
-      register_deallocate(cg_context, true_register);
-      register_deallocate(cg_context, expression->children->result_register);
-      register_deallocate(cg_context, expression->children->next_child->result_register);
+      codegen_comparison_x86_64_mswin(cg_context, expression, COMPARE_GT, code);
     } else if (strcmp(expression->value.symbol, "<") == 0) {
-      // Less than
-      // https://www.felixcloutier.com/x86/cmovcc
-
-      expression->result_register = register_allocate(cg_context);
-      RegisterDescriptor true_register = register_allocate(cg_context);
-
-      fprintf(code, "mov $0, %s\n", register_name(cg_context, expression->result_register));
-      fprintf(code, "mov $1, %s\n", register_name(cg_context, true_register));
-      fprintf(code, "cmp %s, %s\n"
-              , register_name(cg_context, expression->children->next_child->result_register)
-              , register_name(cg_context, expression->children->result_register)
-              );
-      fprintf(code, "cmovl %s, %s\n",
-              register_name(cg_context, true_register),
-              register_name(cg_context, expression->result_register));
-
-      // Free no-longer-used left hand side result register.
-      register_deallocate(cg_context, true_register);
-      register_deallocate(cg_context, expression->children->result_register);
-      register_deallocate(cg_context, expression->children->next_child->result_register);
+      codegen_comparison_x86_64_mswin(cg_context, expression, COMPARE_LT, code);
     } else if (strcmp(expression->value.symbol, "=") == 0) {
-      // Equality
-      // https://www.felixcloutier.com/x86/cmovcc
-
-      expression->result_register = register_allocate(cg_context);
-      RegisterDescriptor true_register = register_allocate(cg_context);
-
-      fprintf(code, "mov $0, %s\n", register_name(cg_context, expression->result_register));
-      fprintf(code, "mov $1, %s\n", register_name(cg_context, true_register));
-      fprintf(code, "cmp %s, %s\n",
-              register_name(cg_context, expression->children->result_register),
-              register_name(cg_context, expression->children->next_child->result_register));
-      fprintf(code, "cmove %s, %s\n",
-              register_name(cg_context, true_register),
-              register_name(cg_context, expression->result_register));
-
-      // Free no-longer-used left hand side result register.
-      register_deallocate(cg_context, true_register);
-      register_deallocate(cg_context, expression->children->result_register);
-      register_deallocate(cg_context, expression->children->next_child->result_register);
+      codegen_comparison_x86_64_mswin(cg_context, expression, COMPARE_EQ, code);
     } else if (strcmp(expression->value.symbol, "+") == 0) {
       // Plus/Addition
       // https://www.felixcloutier.com/x86/add

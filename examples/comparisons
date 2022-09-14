@@ -1,0 +1,19 @@
+;; Workaround because we don't support parentheses in expressions yet
+add : integer (a : integer b : integer) = integer (a : integer b : integer) {
+  a + b
+}
+
+a: integer = 0
+
+;; True
+a := add(a, 1 = 1)
+a := add(a, 1 < 2)
+a := add(a, 2 > 1)
+
+;; False
+a := add(a, 1 = 2)
+a := add(a, 1 > 2)
+a := add(a, 2 < 1)
+
+;; Should return 3
+a
