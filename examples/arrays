@@ -1,0 +1,20 @@
+;; This is an array declaration.
+;; It has a base type of "integer" and a capacity of "4".
+;; Memory is allocated in the executable for the entire array, either
+;; in stack space, or in the `.data` section.
+int_array : integer[4]
+
+;; To get the memory address of any specific item in the array, use the
+;; square bracket array index operator.
+first_int_pointer : @integer = int_array[0]
+
+;; To access the value of an item in the array, and not the address,
+;; dereference the address returned by array index operator.
+first_int : integer = @int_array[0]
+
+;; To reassign, use the dereference operator on the memory address
+;; you'd like to write to.
+@int_array[0] := 69
+@int_array[1] := 420
+@int_array[2] := 69
+@int_array[3] := 420
