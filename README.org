@@ -47,6 +47,8 @@ LLVM/Clang
   clang code.S -o code.exe --target=x86_64
 #+end_src
 
+To use external calls, link with appropriate libraries!
+
 ** Language Reference
 
 The language is statically typed.

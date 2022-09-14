@@ -63,6 +63,10 @@ typedef enum NodeType {
   NODE_TYPE_ADDRESSOF,
   NODE_TYPE_DEREFERENCE,
 
+  /// Contains one child.
+  /// 1. VARIABLE ACCESS of "array" type
+  NODE_TYPE_INDEX,
+
   /// A valid binary operator. Contains two children.
   /// 1. Left Hand Side, often abbreviated as LHS
   /// 1. Right Hand Side, often abbreviated as RHS

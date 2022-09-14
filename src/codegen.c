@@ -290,7 +290,7 @@ Error codegen_expression_x86_64_mswin
   ParsingContext *original_context = context;
   //expression->result_register = -1;
 
-  assert(NODE_TYPE_MAX == 13 && "codegen_expression_x86_64_mswin() must exhaustively handle node types!");
+  assert(NODE_TYPE_MAX == 14 && "codegen_expression_x86_64_mswin() must exhaustively handle node types!");
   switch (expression->type) {
   default:
     break;
@@ -445,7 +445,36 @@ Error codegen_expression_x86_64_mswin
     fprintf(code, "lea %s, %s\n",
             symbol_to_address(cg_context, expression->children),
             register_name(cg_context, expression->result_register));
+    break;
+  case NODE_TYPE_INDEX:
+    if (codegen_verbose) {
+      fprintf(code, ";;#; Index %lld\n", expression->value.integer);
+    }
+
+    // Get type of accessed array.
+    err = parse_get_variable(context, expression->children, tmpnode);
     if (err.type) { return err; }
+
+    // Get size of base type of accessed array.
+    Node *base_type_info = node_allocate();
+    err = parse_get_type(context, tmpnode->children->next_child, base_type_info);
+    if (err.type) { return err; }
+    long long base_type_size = base_type_info->children->value.integer;
+    free(base_type_info);
+
+    long long offset = base_type_size * expression->value.integer;
+
+    // Load memory address of beginning of array.
+    expression->result_register = register_allocate(cg_context);
+    fprintf(code, "lea %s, %s\n",
+            symbol_to_address(cg_context, expression->children),
+            register_name(cg_context, expression->result_register));
+    // Offset memory address by index.
+    if (offset) {
+      fprintf(code, "add $%lld, %s\n",
+              offset,
+              register_name(cg_context, expression->result_register));
+    }
     break;
   case NODE_TYPE_IF:
     if (codegen_verbose) {
@@ -954,8 +983,6 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext *cg_context, Parsi
     Node *var_id = var_it->id;
     Node *type_id = node_allocate();
     *type_id = *var_it->value;
-    type_id->children = NULL;
-    type_id->next_child = NULL;
     // Do not emit "external" typed variables.
     // TODO: Probably should have external attribute rather than this nonsense!
     if (strcmp(type_id->value.symbol, "external function") != 0) {

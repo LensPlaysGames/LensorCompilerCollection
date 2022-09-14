@@ -146,6 +146,27 @@ Error typecheck_expression
       break;
     }
     break;
+  case NODE_TYPE_INDEX:
+    // Ensure child is a variable access
+    if (!expression->children || expression->children->type != NODE_TYPE_VARIABLE_ACCESS) {
+      ERROR_PREP(err, ERROR_TYPE, "Index node may only operate on a valid variable access.");
+      return err;
+    }
+    // Ensure variable being accessed is of an array type.
+    err = typecheck_expression(context, context_to_enter, expression->children, tmpnode);
+    if (strcmp(tmpnode->value.symbol, "array") != 0) {
+      ERROR_PREP(err, ERROR_TYPE, "Array index may only operate on variables of array type.");
+      return err;
+    }
+    // Ensure integer value is less than array size.
+    // TODO: Expand support for variable access array size.
+    if (expression->value.integer < 0 || expression->value.integer >= tmpnode->children->value.integer) {
+      ERROR_PREP(err, ERROR_TYPE, "Array index may only operate within bounds of given array.");
+      return err;
+    }
+    *result_type = *tmpnode->children->next_child;
+    result_type->pointer_indirection += 1;
+    break;
   case NODE_TYPE_ADDRESSOF:
     // Ensure child is a variable access.
     // TODO: Addressof a Dereference should cancel out. Maybe do this during parsing?
