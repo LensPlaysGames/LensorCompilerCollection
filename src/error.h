@@ -44,4 +44,32 @@ NORETURN
 FORMAT(printf, 2, 3)
 void panic_with_code(int code, const char *fmt, ...);
 
+/// Used by ASSERT(). You probably don't want to use this directly.
+NORETURN
+FORMAT(printf, 5, 6)
+void assert_impl (
+    const char *file,
+    const char *func,
+    int line,
+    const char *condition,
+    const char *fmt,
+    ...
+);
+
+/// Usage:
+///   ASSERT(condition);
+///   ASSERT(condition, "message", ...);
+#define ASSERT(cond, ...)  \
+  do {                     \
+    if (!(cond)) {         \
+      assert_impl          \
+        (__FILE__,         \
+         PRETTY_FUNCTION,  \
+         __LINE__ ,        \
+         #cond,            \
+         "" __VA_ARGS__    \
+         );                \
+    }                      \
+  } while (0)
+
 #endif /* COMPILER_ERROR_H */

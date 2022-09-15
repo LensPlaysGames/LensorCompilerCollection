@@ -1,6 +1,5 @@
 #include <parser.h>
 
-#include <assert.h>
 #include <error.h>
 #include <environment.h>
 #include <file_io.h>
@@ -106,7 +105,7 @@ void print_token(Token t) {
 
 Node *node_allocate() {
   Node *node = calloc(1,sizeof(Node));
-  assert(node && "Could not allocate memory for AST node");
+  ASSERT(node, "Could not allocate memory for AST node");
   return node;
 }
 
@@ -133,7 +132,7 @@ void node_add_child(Node *parent, Node *new_child) {
 }
 
 int node_compare(Node *a, Node *b) {
-  assert(NODE_TYPE_MAX == 14 && "node_compare() must handle all node types");
+  ASSERT(NODE_TYPE_MAX == 14, "node_compare() must handle all node types");
 
   // Actually really nice debug output when you need it.
   //printf("Comparing nodes:\n");
@@ -219,9 +218,9 @@ Node *node_symbol(char *symbol_string) {
 }
 
 Node *node_symbol_from_buffer(char *buffer, size_t length) {
-  assert(buffer && "Can not create AST symbol node from NULL buffer");
+  ASSERT(buffer, "Can not create AST symbol node from NULL buffer");
   char *symbol_string = malloc(length + 1);
-  assert(symbol_string && "Could not allocate memory for symbol string");
+  ASSERT(symbol_string, "Could not allocate memory for symbol string");
   memcpy(symbol_string, buffer, length);
   symbol_string[length] = '\0';
   Node *symbol = node_allocate();
@@ -232,9 +231,9 @@ Node *node_symbol_from_buffer(char *buffer, size_t length) {
 
 // Take ownership of type_symbol.
 Error define_type(Environment *types, int type, Node *type_symbol, long long byte_size) {
-  assert(types && "Can not add type to NULL types environment");
-  assert(type_symbol && "Can not add NULL type symbol to types environment");
-  assert(byte_size >= 0 && "Can not define new type with zero or negative byte size");
+  ASSERT(types, "Can not add type to NULL types environment");
+  ASSERT(type_symbol, "Can not add NULL type symbol to types environment");
+  ASSERT(byte_size >= 0, "Can not define new type with zero or negative byte size");
 
   Node *size_node = node_allocate();
   size_node->type = NODE_TYPE_INTEGER;
@@ -256,7 +255,7 @@ Error define_type(Environment *types, int type, Node *type_symbol, long long byt
 #define NODE_TEXT_BUFFER_SIZE 512
 char node_text_buffer[512];
 char *node_text(Node *node) {
-  assert(NODE_TYPE_MAX == 14 && "print_node() must handle all node types");
+  ASSERT(NODE_TYPE_MAX == 14, "print_node() must handle all node types");
   if (!node) {
     return "NULL";
   }
@@ -356,7 +355,7 @@ void node_copy(Node *a, Node *b) {
     break;
   case NODE_TYPE_SYMBOL:
     b->value.symbol = strdup(a->value.symbol);
-    assert(b->value.symbol && "node_copy(): Could not allocate memory for new symbol");
+    ASSERT(b->value.symbol, "node_copy(): Could not allocate memory for new symbol");
     break;
   }
   Node *child = a->children;
@@ -406,7 +405,7 @@ void parse_state_update_from(ParsingState *state, ParsingState new_state) {
 
 ParsingStack *parse_stack_create(ParsingStack *parent) {
   ParsingStack *stack = malloc(sizeof(ParsingStack));
-  assert(stack && "Could not allocate memory for new parser continuation stack.");
+  ASSERT(stack, "Could not allocate memory for new parser continuation stack.");
   stack->parent = parent;
   stack->operator = NULL;
   stack->result = NULL;
@@ -468,7 +467,7 @@ void parse_context_add_child(ParsingContext *parent, ParsingContext *child) {
 
 ParsingContext *parse_context_create(ParsingContext *parent) {
   ParsingContext *ctx = calloc(1, sizeof(ParsingContext));
-  assert(ctx && "Could not allocate memory for parsing context.");
+  ASSERT(ctx, "Could not allocate memory for parsing context.");
   if (!ctx) { return NULL; }
   ctx->parent = parent;
   // TODO: Add this new context as a child to given parent.
