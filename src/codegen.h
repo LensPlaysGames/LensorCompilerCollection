@@ -9,8 +9,6 @@
 typedef int RegisterDescriptor;
 
 typedef struct Register {
-  /// What will be emitted when referencing this register, i.e "%rax"
-  const char *name;
   /// If non-zero, this register is in use.
   char in_use;
   /// Identifies a register uniquely.
@@ -24,11 +22,6 @@ typedef struct RegisterPool {
   size_t num_scratch_registers;
   size_t num_registers;
 } RegisterPool;
-
-/// Used when initializing Register arrays for RegisterPool.
-#define INIT_REGISTER(registers, desc, reg_name)                        \
-  ((registers)[desc] = (Register){.name = (reg_name), .in_use = 0, .descriptor = (desc)})
-
 
 enum CodegenOutputFormat {
   CG_FMT_x86_64_GAS,
@@ -76,10 +69,6 @@ RegisterDescriptor register_allocate(CodegenContext *cg_ctx);
 
 void register_deallocate
 (CodegenContext *cg_ctx, RegisterDescriptor descriptor);
-
-const char *register_name
-(CodegenContext *cg_ctx, RegisterDescriptor descriptor);
-
 
 // Types of comparison to be implemented by codegen backend.
 enum ComparisonType {
