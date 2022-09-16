@@ -800,7 +800,7 @@ Error codegen_expression_x86_64_mswin
       ERROR_PREP(err, ERROR_GENERIC, "Invalid AST/context fed to codegen. Could not find variable declaration in environment");
       return err;
     }
-    if (strcmp(tmpnode->value.symbol, "external function") != 0) {
+    if (strcmp(tmpnode->value.symbol, "external function") == 0) {
       break;
     }
     // Get size in bytes from types environment.
@@ -808,6 +808,8 @@ Error codegen_expression_x86_64_mswin
     if (err.type) { return err; }
     size_in_bytes = tmpnode->children->value.integer;
 
+    // TODO: Optimize to subtract all local variable's stack size at
+    // beginning of function rather than throughout.
     //   Subtract type size in bytes from stack pointer
     fprintf(code, "sub $%lld, %%rsp\n", size_in_bytes);
     // Keep track of RBP offset.
