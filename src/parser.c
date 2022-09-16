@@ -306,7 +306,7 @@ char *node_text(Node *node) {
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "FUNCTION CALL");
     break;
   case NODE_TYPE_INDEX:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "INDEX");
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "INDEX:%lld", node->value.integer);
     break;
   }
   return node_text_buffer;

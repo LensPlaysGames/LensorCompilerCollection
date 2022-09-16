@@ -2,144 +2,469 @@
 
 #include <environment.h>
 #include <error.h>
+#include <inttypes.h>
 #include <parser.h>
+#include <stdarg.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <typechecker.h>
 
-enum ComparisonType {
-  COMPARE_EQ,
-  COMPARE_NE,
-  COMPARE_LT,
-  COMPARE_LE,
-  COMPARE_GT,
-  COMPARE_GE,
+char codegen_verbose = 1;
 
-  COMPARE_COUNT,
+
+enum Registers_x86_64 {
+  REG_X86_64_RAX,
+  REG_X86_64_RBX,
+  REG_X86_64_RCX,
+  REG_X86_64_RDX,
+  REG_X86_64_R8,
+  REG_X86_64_R9,
+  REG_X86_64_R10,
+  REG_X86_64_R11,
+  REG_X86_64_R12,
+  REG_X86_64_R13,
+  REG_X86_64_R14,
+  REG_X86_64_R15,
+  REG_X86_64_RSI,
+  REG_X86_64_RDI,
+  REG_X86_64_RBP,
+  REG_X86_64_RSP,
+  REG_X86_64_RIP,
+  REG_X86_64_COUNT
 };
 
-static const char *comparison_suffixes_x86_64[COMPARE_COUNT] = {
-    "e",
-    "ne",
-    "l",
-    "le",
-    "g",
-    "ge",
+// TODO: All instructions we use in x86_64 should be in this enum.
+enum Instructions_x86_64 {
+  INSTRUCTION_X86_64_ADD,
+  INSTRUCTION_X86_64_SUB,
+  INSTRUCTION_X86_64_MUL,
+  INSTRUCTION_X86_64_IMUL,
+  INSTRUCTION_X86_64_DIV,
+  INSTRUCTION_X86_64_IDIV,
+  INSTRUCTION_X86_64_PUSH,
+  INSTRUCTION_X86_64_POP,
+  INSTRUCTION_X86_64_XOR,
+  INSTRUCTION_X86_64_CMP,
+  INSTRUCTION_X86_64_CALL,
+  INSTRUCTION_X86_64_RET,
+  INSTRUCTION_X86_64_MOV,
+  INSTRUCTION_X86_64_LEA,
+  INSTRUCTION_X86_64_COUNT
 };
 
-// Each platform must have registers defined, obviously.
-// Scratch registers MUST come first in enumeration.
-// Values on or between zero and maximum MUST be a valid register
-// descriptor.
-enum ScratchRegisters_X86_64_MSWIN {
-  // Scratch Registers
-  REG_X86_64_MSWIN_RAX,
-  REG_X86_64_MSWIN_RCX,
-  REG_X86_64_MSWIN_RDX,
-  REG_X86_64_MSWIN_R8,
-  REG_X86_64_MSWIN_R9,
-  REG_X86_64_MSWIN_R10,
-  REG_X86_64_MSWIN_R11,
+enum InstructionOperands_x86_64 {
+  IMMEDIATE,
+  MEMORY,
+  REGISTER,
+  NAME,
 
-  // Non-scratch Registers XD
-  REG_X86_64_MSWIN_R12,
-  REG_X86_64_MSWIN_R13,
-  REG_X86_64_MSWIN_R14,
-  REG_X86_64_MSWIN_R15,
-  REG_X86_64_MSWIN_RBX,
-  REG_X86_64_MSWIN_RSI,
-  REG_X86_64_MSWIN_RDI,
-  REG_X86_64_MSWIN_RBP,
-  REG_X86_64_MSWIN_RSP,
-  REG_X86_64_MSWIN_RIP,
+  IMMEDIATE_TO_REGISTER,
+  IMMEDIATE_TO_MEMORY,
+  MEMORY_TO_REGISTER,
+  NAME_TO_REGISTER,
+  REGISTER_TO_REGISTER,
+  REGISTER_TO_MEMORY,
 
-  REG_X86_64_MSWIN_SCRATCH = REG_X86_64_MSWIN_R11 + 1,
-  REG_X86_64_MSWIN_COUNT = REG_X86_64_MSWIN_RIP + 1
 };
 
-#define INIT_REGISTER(registers, desc, reg_name)                        \
-  ((registers)[desc] = (Register){.name = (reg_name), .in_use = 0, .descriptor = (desc)})
+const char *instruction_mnemonic_x86_64(enum CodegenOutputFormat fmt, enum Instructions_x86_64 instruction) {
+  ASSERT(INSTRUCTION_X86_64_COUNT == 14, "ERROR: instruction_mnemonic_x86_64() must exhaustively handle all instructions.");
+  // x86_64 instructions that aren't different across syntaxes can go here!
+  switch (instruction) {
+  default:
+    break;
+  case INSTRUCTION_X86_64_ADD:
+    return "add";
+  case INSTRUCTION_X86_64_SUB:
+    return "sub";
+  case INSTRUCTION_X86_64_MUL:
+    return "mul";
+  case INSTRUCTION_X86_64_IMUL:
+    return "imul";
+  case INSTRUCTION_X86_64_DIV:
+    return "div";
+  case INSTRUCTION_X86_64_IDIV:
+    return "idiv";
+  case INSTRUCTION_X86_64_PUSH:
+    return "push";
+  case INSTRUCTION_X86_64_POP:
+    return "pop";
+  case INSTRUCTION_X86_64_XOR:
+    return "xor";
+  case INSTRUCTION_X86_64_CMP:
+    return "cmp";
+  case INSTRUCTION_X86_64_CALL:
+    return "call";
+  case INSTRUCTION_X86_64_RET:
+    return "ret";
+  case INSTRUCTION_X86_64_MOV:
+    return "mov";
+  case INSTRUCTION_X86_64_LEA:
+    return "lea";
+  }
+  panic("Could not convert instruction into mnemonic for x86_64");
+  return NULL; // Unreachable
+}
+
+void femit_x86_64_imm_to_reg(FILE *code, CodegenContext *context, const char *mnemonic, va_list args) {
+  int64_t immediate                    = va_arg(args, int64_t);
+  RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
+
+  const char *destination = register_name(context, destination_register);
+
+  fprintf(code, "%s $%" PRId64 ", %s\n",
+          mnemonic, immediate, destination);
+}
+
+void femit_x86_64_imm_to_mem(FILE *code, CodegenContext *context, const char *mnemonic, va_list args) {
+  int64_t immediate                    = va_arg(args, int64_t);
+  RegisterDescriptor address_register  = va_arg(args, RegisterDescriptor);
+  int64_t offset                       = va_arg(args, int64_t);
+
+  const char *address = register_name(context, address_register);
+
+  fprintf(code, "%s $%" PRId64 ", %" PRId64 "(%s)\n",
+          mnemonic, immediate, offset, address);
+}
+
+void femit_x86_64_mem_to_reg(FILE *code, CodegenContext *context, const char *mnemonic, va_list args) {
+  int64_t offset                           = va_arg(args, int64_t);
+  RegisterDescriptor address_register      = va_arg(args, RegisterDescriptor);
+  RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
+
+  const char *address = register_name(context, address_register);
+  const char *destination = register_name(context, destination_register);
+
+  fprintf(code,
+          "%s %" PRId64 "(%s), %s\n",
+          mnemonic, offset, address, destination);
+}
+
+void femit_x86_64_name_to_reg(FILE *code, CodegenContext *context, const char *mnemonic, va_list args) {
+  char *name                               = va_arg(args, char *);
+  RegisterDescriptor address_register      = va_arg(args, RegisterDescriptor);
+  RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
+
+  const char *address = register_name(context, address_register);
+  const char *destination = register_name(context, destination_register);
+
+  fprintf(code,
+          "%s %s(%s), %s\n",
+          mnemonic, name, address, destination);
+}
+
+void femit_x86_64_reg_to_mem(FILE *code, CodegenContext *context, const char *mnemonic, va_list args) {
+  RegisterDescriptor source_register   = va_arg(args, RegisterDescriptor);
+  RegisterDescriptor address_register  = va_arg(args, RegisterDescriptor);
+  int64_t offset                       = va_arg(args, int64_t);
+
+  const char *source = register_name(context, source_register);
+  const char *address = register_name(context, address_register);
+
+  fprintf(code,
+          "%s %s, %" PRId64 "(%s)\n",
+          mnemonic, source, offset, address);
+}
+
+void femit_x86_64_reg_to_reg(FILE *code, CodegenContext *context, const char *mnemonic, va_list args) {
+  RegisterDescriptor source_register       = va_arg(args, RegisterDescriptor);
+  RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
+
+  const char *source = register_name(context, source_register);
+  const char *destination = register_name(context, destination_register);
+
+  fprintf(code,
+          "%s %s, %s\n",
+          mnemonic, source, destination);
+}
+
+
+void femit_x86_64
+(FILE *code,
+ CodegenContext *context,
+ enum Instructions_x86_64 instruction,
+ ...
+ )
+{
+  va_list args;
+  va_start(args, instruction);
+
+  const char *mnemonic = instruction_mnemonic_x86_64(context->format, instruction);
+
+  ASSERT(context);
+  switch (context->format) {
+  default:
+    break;
+  case CG_FMT_x86_64_GAS: {
+    ASSERT(INSTRUCTION_X86_64_COUNT == 14, "femit_x86_64() must exhaustively handle all x86_64 instructions for GAS syntax.");
+    switch (instruction) {
+    default:
+      panic("Unhandled instruction in x86_64 GAS code generation.");
+    case INSTRUCTION_X86_64_ADD:
+    case INSTRUCTION_X86_64_SUB:
+    case INSTRUCTION_X86_64_MOV: {
+      enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
+      switch (operands) {
+      default:
+        panic("Unhandled operand type in x86_64 GAS code generation for MOV.");
+      case IMMEDIATE_TO_REGISTER:
+        // femit(..., IMMEDIATE_TO_REGISTER, (int64_t)immediate value, (RegisterDescriptor) destination)
+        femit_x86_64_imm_to_reg(code, context, mnemonic, args);
+        break;
+      case IMMEDIATE_TO_MEMORY:
+        // femit(..., IMMEDIATE_TO_MEMORY, (int64_t)immediate value, (RegisterDescriptor) memory_address, (int64_t) memory_offset)
+        femit_x86_64_imm_to_mem(code, context, mnemonic, args);
+        break;
+      case MEMORY_TO_REGISTER:
+        // femit(..., MEMORY_TO_REGISTER, (int64_t)memory_offset, (RegisterDescriptor) memory_address, (RegisterDescriptor) destination)
+        femit_x86_64_mem_to_reg(code, context, mnemonic, args);
+        break;
+      case REGISTER_TO_MEMORY:
+        // femit(..., REGISTER_TO_MEMORY, (RegisterDescriptor) source, (RegisterDescriptor) address, (int64_t) memory_offset)
+        femit_x86_64_reg_to_mem(code, context, mnemonic, args);
+        break;
+      case REGISTER_TO_REGISTER:
+        // femit(..., REGISTER_TO_REGISTER, (RegisterDescriptor) source, (RegisterDescriptor) destination)
+        femit_x86_64_reg_to_reg(code, context, mnemonic, args);
+        break;
+      }
+      break;
+    }
+    case INSTRUCTION_X86_64_LEA: {
+      enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
+      switch (operands) {
+      default:
+        panic("femit_x86_64() only accepts MEMORY_TO_REGISTER or NAME_TO_REGISTER operand type with LEA instruction.");
+      case MEMORY_TO_REGISTER:
+        // femit(..., MEMORY_TO_REGISTER, (int64_t) memory_offset, (RegisterDescriptor) memory_address, (RegisterDescriptor) destination)
+        femit_x86_64_mem_to_reg(code, context, mnemonic, args);
+        break;
+      case NAME_TO_REGISTER:
+        // femit(..., MEMORY_TO_REGISTER, (char *) name, (RegisterDescriptor) memory_address, (RegisterDescriptor) destination)
+        femit_x86_64_name_to_reg(code, context, mnemonic, args);
+        break;
+      }
+      break;
+    }
+    case INSTRUCTION_X86_64_IMUL: {
+      enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
+      switch (operands) {
+      default:
+        panic("femit_x86_64() only accepts MEMORY_TO_REGISTER or REGISTER_TO_REGISTER operand type with IMUL instruction.");
+        break;
+      case MEMORY_TO_REGISTER:
+        femit_x86_64_mem_to_reg(code, context, mnemonic, args);
+        break;
+      case REGISTER_TO_REGISTER:
+        femit_x86_64_reg_to_reg(code, context, mnemonic, args);
+        break;
+      }
+      break;
+    }
+    case INSTRUCTION_X86_64_IDIV: {
+      enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
+      switch (operands) {
+      default:
+        panic("femit_x86_64() only accepts MEMORY or REGISTER operand type with IDIV instruction.");
+        break;
+      case MEMORY: {
+        // femit(..., MEMORY, (int64_t) memory_offset, (RegisterDescriptor) memory_address);
+        int64_t offset                           = va_arg(args, int64_t);
+        RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
+
+        const char *destination = register_name(context, destination_register);
+
+        fprintf(code, "%s %" PRId64 "(%s)\n",
+                mnemonic, offset, destination);
+        break;
+      }
+      case REGISTER: {
+        // femit(..., REGISTER, (RegisterDescriptor) source);
+        RegisterDescriptor source_register = va_arg(args, RegisterDescriptor);
+
+        const char *source = register_name(context, source_register);
+
+        fprintf(code, "%s %s\n",
+                mnemonic, source);
+        break;
+      }
+      }
+      break;
+    }
+    case INSTRUCTION_X86_64_CALL: {
+      enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
+
+      if (operand == REGISTER) {
+        RegisterDescriptor call_register = va_arg(args, RegisterDescriptor);
+
+        const char *call_address = register_name(context, call_register);
+
+        fprintf(code, "%s *%s\n",
+                mnemonic, call_address);
+
+      } else if (operand == NAME) {
+        char *name = va_arg(args, char *);
+
+        fprintf(code, "%s %s\n",
+                mnemonic, name);
+
+      } else {
+        panic("femit_x86_64() only accepts REGISTER or NAME operand type with CALL instruction.");
+      }
+
+      break;
+    }
+    case INSTRUCTION_X86_64_PUSH: {
+      enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
+      if (operand == REGISTER) {
+        // femit(..., REGISTER, (RegisterDescriptor) value_to_push)
+        RegisterDescriptor value_register = va_arg(args, RegisterDescriptor);
+
+        const char *value = register_name(context, value_register);
+
+        fprintf(code, "%s %s\n",
+                mnemonic, value);
+      } else if (operand == MEMORY) {
+        // femit(..., MEMORY, (RegisterDescriptor) memory_address, (int64_t) memory_offset)
+        RegisterDescriptor address_register  = va_arg(args, RegisterDescriptor);
+        int64_t offset                       = va_arg(args, RegisterDescriptor);
+
+        const char *address = register_name(context, address_register);
+
+        fprintf(code, "%s %" PRId64 "(%s)",
+                mnemonic, offset, address);
+
+      } else if (operand == IMMEDIATE) {
+        // femit(..., IMMEDIATE, (int64_t) immediate)
+        int64_t immediate = va_arg(args, RegisterDescriptor);
+
+        fprintf(code, "%s $%" PRId64 "\n",
+                mnemonic, immediate);
+
+      } else {
+        panic("femit_x86_64() only accepts REGISTER, MEMORY, or IMMEDIATE operand type with PUSH instruction.");
+      }
+      break;
+    }
+    }
+    break;
+  }
+  }
+
+  va_end(args);
+}
 
 /// Creates a context for the CG_FMT_x86_64_MSWIN architecture.
-CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
+CodegenContext *codegen_context_x86_64_gas_mswin_create(CodegenContext *parent) {
   RegisterPool pool;
 
   // If this is the top level context, create the registers.
   // Otherwise, shallow copy register pool to child context.
   if (!parent) {
-    Register *registers = calloc(REG_X86_64_MSWIN_COUNT, sizeof(Register));
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_RAX, "%rax");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_RCX, "%rcx");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_RDX, "%rdx");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_R8, "%r8");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_R9, "%r9");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_R10, "%r10");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_R11, "%r11");
+    Register *registers = calloc(REG_X86_64_COUNT, sizeof(Register));
+    INIT_REGISTER(registers, REG_X86_64_RAX, "%rax");
+    INIT_REGISTER(registers, REG_X86_64_RCX, "%rcx");
+    INIT_REGISTER(registers, REG_X86_64_RDX, "%rdx");
+    INIT_REGISTER(registers, REG_X86_64_R8,  "%r8");
+    INIT_REGISTER(registers, REG_X86_64_R9,  "%r9");
+    INIT_REGISTER(registers, REG_X86_64_R10, "%r10");
+    INIT_REGISTER(registers, REG_X86_64_R11, "%r11");
+    INIT_REGISTER(registers, REG_X86_64_R12, "%r12");
+    INIT_REGISTER(registers, REG_X86_64_R13, "%r13");
+    INIT_REGISTER(registers, REG_X86_64_R14, "%r14");
+    INIT_REGISTER(registers, REG_X86_64_R15, "%r15");
+    INIT_REGISTER(registers, REG_X86_64_RBX, "%rbx");
+    INIT_REGISTER(registers, REG_X86_64_RSI, "%rsi");
+    INIT_REGISTER(registers, REG_X86_64_RDI, "%rdi");
+    INIT_REGISTER(registers, REG_X86_64_RBP, "%rbp");
+    INIT_REGISTER(registers, REG_X86_64_RSP, "%rsp");
+    INIT_REGISTER(registers, REG_X86_64_RIP, "%rip");
 
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_R12, "%r12");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_R13, "%r13");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_R14, "%r14");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_R15, "%r15");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_RBX, "%rbx");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_RSI, "%rsi");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_RDI, "%rdi");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_RBP, "%rbp");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_RSP, "%rsp");
-    INIT_REGISTER(registers, REG_X86_64_MSWIN_RIP, "%rip");
+    // Link to MSDN documentation (surely will fall away, but it's been Internet Archive'd).
+    // https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170#callercallee-saved-registers
+    // https://web.archive.org/web/20220916164241/https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170
+    // "The x64 ABI considers the registers RAX, RCX, RDX, R8, R9, R10, R11, and XMM0-XMM5 volatile."
+    // "The x64 ABI considers registers RBX, RBP, RDI, RSI, RSP, R12, R13, R14, R15, and XMM6-XMM15 nonvolatile."
+    size_t number_of_scratch_registers = 7;
+    Register **scratch_registers = calloc(number_of_scratch_registers, sizeof(Register *));
+    scratch_registers[0] = registers + REG_X86_64_RAX;
+    scratch_registers[1] = registers + REG_X86_64_RCX;
+    scratch_registers[2] = registers + REG_X86_64_RDX;
+    scratch_registers[3] = registers + REG_X86_64_R8;
+    scratch_registers[4] = registers + REG_X86_64_R9;
+    scratch_registers[5] = registers + REG_X86_64_R10;
+    scratch_registers[6] = registers + REG_X86_64_R11;
 
-    pool = (RegisterPool) {
-      .regs = registers,
-      .num_scratch_regs = REG_X86_64_MSWIN_SCRATCH,
-      .num_regs = REG_X86_64_MSWIN_COUNT,
-    };
+    pool.registers = registers;
+    pool.scratch_registers = scratch_registers;
+    pool.num_scratch_registers = number_of_scratch_registers;
+    pool.num_registers = REG_X86_64_COUNT;
   } else {
-    pool = parent->registers;
+    pool = parent->register_pool;
   }
 
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
   cg_ctx->parent = parent;
-  cg_ctx->registers = pool;
   cg_ctx->locals = environment_create(NULL);
   cg_ctx->locals_offset = -32;
+  cg_ctx->register_pool = pool;
+  cg_ctx->format = CG_FMT_x86_64_GAS;
+  cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
   return cg_ctx;
 }
-
-#undef INIT_REGISTER
 
 /// Free a context created by codegen_context_x86_64_mswin_create.
 void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
   // Only free the registers if this is the top-level context.
-  if (!ctx->parent) free(ctx->registers.regs);
+  if (!ctx->parent) free(ctx->register_pool.registers);
   // TODO(sirraide): Free environment.
   free(ctx);
+}
+
+
+CodegenContext *create_codegen_context(CodegenContext *parent) {
+  ASSERT(parent, "create_codegen_context() can only create contexts when a parent is given.");
+  ASSERT(CG_FMT_COUNT == 1, "create_codegen_context() must exhaustively handle all codegen output formats.");
+  ASSERT(CG_CALL_CONV_COUNT == 2, "create_codegen_context() must exhaustively handle all calling conventions.");
+  if (parent->format == CG_FMT_x86_64_GAS) {
+    if (parent->call_convention == CG_CALL_CONV_MSWIN) {
+      return codegen_context_x86_64_gas_mswin_create(parent);
+    } else if (parent->call_convention == CG_CALL_CONV_MSWIN) {
+      // return codegen_context_x86_64_gas_linux_create(parent);
+    }
+  }
+  panic("create_codegen_context() could not create a new context from the given parent.");
+  return NULL; // Unreachable
 }
 
 //================================================================ BEG REGISTER STUFF
 
 void print_registers(CodegenContext *cg_ctx) {
-  for (RegisterDescriptor d = 0; d < cg_ctx->registers.num_regs; ++d) {
-    Register *reg = &cg_ctx->registers.regs[d];
+  for (size_t i = 0; i < cg_ctx->register_pool.num_registers; ++i) {
+    Register *reg = &cg_ctx->register_pool.registers[i];
     printf("%s:%i\n", reg->name, reg->in_use);
   }
 }
 
 char register_descriptor_is_valid(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
-  return descriptor >= 0 && descriptor < cg_ctx->registers.num_regs;
+  return descriptor >= 0 && descriptor < (int)cg_ctx->register_pool.num_registers;
 }
 
 RegisterDescriptor register_allocate(CodegenContext *cg_ctx) {
-  ASSERT(cg_ctx->registers.num_regs > 0 && cg_ctx->registers.num_scratch_regs > 0, "Register pool is empty");
+  ASSERT(cg_ctx->register_pool.num_registers > 0 && cg_ctx->register_pool.num_scratch_registers > 0, "Register pool is empty");
 
-  for (RegisterDescriptor d = 0; d < cg_ctx->registers.num_scratch_regs; ++d) {
-    Register *reg = &cg_ctx->registers.regs[d];
+  for (size_t i = 0; i < cg_ctx->register_pool.num_scratch_registers; ++i) {
+    Register *reg = cg_ctx->register_pool.scratch_registers[i];
     if (reg->in_use == 0) {
       reg->in_use = 1;
       return reg->descriptor;
     }
   }
   panic("ERROR::register_allocate(): Could not allocate register!\n");
+  return 0; // Unreachable
 }
 
 void register_deallocate
@@ -147,7 +472,7 @@ void register_deallocate
   if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
     panic("ERROR::register_deallocate(): Invalid register descriptor!\n");
   }
-  cg_ctx->registers.regs[descriptor].in_use = 0;
+  cg_ctx->register_pool.registers[descriptor].in_use = 0;
 }
 
 const char *register_name
@@ -155,16 +480,18 @@ const char *register_name
   if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
     panic("ERROR::register_name(): Could not find register with descriptor of %d\n", descriptor);
   }
-  return cg_ctx->registers.regs[descriptor].name;
+  return cg_ctx->register_pool.registers[descriptor].name;
 }
 
 //================================================================ END REGISTER STUFF
+
+//================================================================ BEG CG_FMT_x86_64_MSWIN
 
 #define label_buffer_size 1024
 char label_buffer[label_buffer_size];
 size_t label_index = 0;
 size_t label_count = 0;
-char *label_generate() {
+static char *label_generate() {
   char *label = label_buffer + label_index;
   label_index += snprintf(label, label_buffer_size - label_index,
                           ".L%zu", label_count);
@@ -177,10 +504,144 @@ char *label_generate() {
   return label;
 }
 
-//================================================================ BEG CG_FMT_x86_64_MSWIN
+const char *byte_register_name_x86_64_gas
+(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
+  if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
+    panic("ERROR::register_name(): Could not find register with descriptor of %d\n", descriptor);
+  }
+  ASSERT(REG_X86_64_COUNT == 17, "All x86_64 register descriptors must be handled in switch case.");
+  switch (descriptor) {
+  case REG_X86_64_RAX:
+    return "%al";
+  case REG_X86_64_RCX:
+    return "%cl";
+  case REG_X86_64_RDX:
+    return "%dl";
+  case REG_X86_64_R8:
+    return "%r8b";
+  case REG_X86_64_R9:
+    return "%r9b";
+  case REG_X86_64_R10:
+    return "%r10b";
+  case REG_X86_64_R11:
+    return "%r11b";
+  case REG_X86_64_R12:
+    return "%r12b";
+  case REG_X86_64_R13:
+    return "%r13b";
+  case REG_X86_64_R14:
+    return "%r14b";
+  case REG_X86_64_R15:
+    return "%r15b";
+  case REG_X86_64_RBX:
+    return "%bl";
+  case REG_X86_64_RSI:
+    return "%sil";
+  case REG_X86_64_RDI:
+    return "%dil";
+  case REG_X86_64_RBP:
+    return "%bpl";
+  case REG_X86_64_RSP:
+    return "%spl";
+  case REG_X86_64_RIP:
+    break;
+  };
+  return cg_ctx->register_pool.registers[descriptor].name;
+}
 
-// TODO/FIXME: Make this a parameter affectable by command line arguments.
-char codegen_verbose = 1;
+const char *word_register_name_x86_64_gas
+(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
+  if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
+    panic("ERROR::register_name(): Could not find register with descriptor of %d\n", descriptor);
+  }
+  ASSERT(REG_X86_64_COUNT == 17, "All x86_64 register descriptors must be handled in switch case.");
+  switch (descriptor) {
+  default:
+    break;
+  case REG_X86_64_RAX:
+    return "%ax";
+  case REG_X86_64_RCX:
+    return "%cx";
+  case REG_X86_64_RDX:
+    return "%dx";
+  case REG_X86_64_R8:
+    return "%r8w";
+  case REG_X86_64_R9:
+    return "%r9w";
+  case REG_X86_64_R10:
+    return "%r10w";
+  case REG_X86_64_R11:
+    return "%r11w";
+  case REG_X86_64_R12:
+    return "%r12w";
+  case REG_X86_64_R13:
+    return "%r13w";
+  case REG_X86_64_R14:
+    return "%r14w";
+  case REG_X86_64_R15:
+    return "%r15w";
+  case REG_X86_64_RBX:
+    return "%bx";
+  case REG_X86_64_RSI:
+    return "%si";
+  case REG_X86_64_RDI:
+    return "%di";
+  case REG_X86_64_RBP:
+    return "%bp";
+  case REG_X86_64_RSP:
+    return "%sp";
+  case REG_X86_64_RIP:
+    return "%ip";
+  };
+  return cg_ctx->register_pool.registers[descriptor].name;
+}
+
+const char *double_word_register_name_x86_64_gas
+(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
+  if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
+    panic("ERROR::register_name(): Could not find register with descriptor of %d\n", descriptor);
+  }
+  ASSERT(REG_X86_64_COUNT == 17, "All x86_64 register descriptors must be handled in switch case.");
+  switch (descriptor) {
+  default:
+    break;
+  case REG_X86_64_RAX:
+    return "%eax";
+  case REG_X86_64_RCX:
+    return "%ecx";
+  case REG_X86_64_RDX:
+    return "%edx";
+  case REG_X86_64_R8:
+    return "%r8d";
+  case REG_X86_64_R9:
+    return "%r9d";
+  case REG_X86_64_R10:
+    return "%r10d";
+  case REG_X86_64_R11:
+    return "%r11d";
+  case REG_X86_64_R12:
+    return "%r12d";
+  case REG_X86_64_R13:
+    return "%r13d";
+  case REG_X86_64_R14:
+    return "%r14d";
+  case REG_X86_64_R15:
+    return "%r15d";
+  case REG_X86_64_RBX:
+    return "%ebx";
+  case REG_X86_64_RSI:
+    return "%esi";
+  case REG_X86_64_RDI:
+    return "%edi";
+  case REG_X86_64_RBP:
+    return "%ebp";
+  case REG_X86_64_RSP:
+    return "%esp";
+  case REG_X86_64_RIP:
+    return "%eip";
+  };
+  return cg_ctx->register_pool.registers[descriptor].name;
+}
 
 #define symbol_buffer_size 1024
 char symbol_buffer[symbol_buffer_size];
@@ -228,8 +689,44 @@ char *symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
   return symbol_string;
 }
 
+const char *comparison_suffixes_x86_64[COMPARE_COUNT] = {
+    "e",
+    "ne",
+    "l",
+    "le",
+    "g",
+    "ge",
+};
+
+void codegen_comparison_x86_64
+(CodegenContext *cg_context,
+ Node *expression,
+ enum ComparisonType type,
+ FILE *code) {
+  ASSERT(type < COMPARE_COUNT, "Invalid comparison type");
+
+  expression->result_register = register_allocate(cg_context);
+
+  // Zero out result register.
+  fprintf(code, "xor %s, %s\n",
+          register_name(cg_context, expression->result_register),
+          register_name(cg_context, expression->result_register));
+
+  // Perform the comparison.
+  fprintf(code, "cmp %s, %s\n",
+      register_name(cg_context, expression->children->next_child->result_register),
+      register_name(cg_context, expression->children->result_register));
+  fprintf(code, "set%s %s\n",
+          comparison_suffixes_x86_64[type],
+          byte_register_name_x86_64_gas(cg_context, expression->result_register));
+
+  // Deallocate LHS and RHS result registers, comparison is complete.
+  register_deallocate(cg_context, expression->children->result_register);
+  register_deallocate(cg_context, expression->children->next_child->result_register);
+}
+
 // Forward declare codegen_function for codegen_expression
-Error codegen_function_x86_64_att_asm_mswin
+Error codegen_function_x86_64_gas
 (CodegenContext *cg_context,
  ParsingContext *context,
  ParsingContext **next_child_context,
@@ -237,42 +734,7 @@ Error codegen_function_x86_64_att_asm_mswin
  Node *function,
  FILE *code);
 
-void codegen_comparison_x86_64_mswin
-(CodegenContext *cg_context,
- Node *expression,
- enum ComparisonType type,
- FILE *code) {
-  ASSERT(type < COMPARE_COUNT, "Invalid comparison type");
-
-  // Reuse a register for the result of the comparison.
-  expression->result_register = expression->children->result_register;
-
-  // To avoid having to encode 8-bit registers, we always use %r8b for this for
-  // the time being. If the result register happens to be %r8, we can just use it
-  // without having to save/restore anything.
-  // TODO: Implement 8-bit registers and use the 8-bit variant of the result register
-  //   instead. Don't forget to zero out that register instead of %r8.
-  char r8_is_result = expression->result_register == REG_X86_64_MSWIN_R8;
-
-  // Save %r8 if need be and clear it.
-  if (!r8_is_result) { fprintf(code, "pushq %%r8\n"); }
-  fprintf(code, "xor %%r8, %%r8\n");
-
-  // Perform the comparison.
-  fprintf(code, "cmp %s, %s\n",
-      register_name(cg_context, expression->children->next_child->result_register),
-      register_name(cg_context, expression->children->result_register));
-  fprintf(code, "set%s %%r8b\n", comparison_suffixes_x86_64[type]);
-  register_deallocate(cg_context, expression->children->next_child->result_register);
-
-  // Move the value into the result register and restore %r8 if it was in use.
-  if (!r8_is_result) {
-    fprintf(code, "movzbq %%r8b, %s\n", register_name(cg_context, expression->result_register));
-    fprintf(code, "popq %%r8\n");
-  }
-}
-
-Error codegen_expression_x86_64_mswin
+Error codegen_expression_x86_64
 (FILE *code,
  CodegenContext *cg_context,
  ParsingContext *context,
@@ -289,7 +751,7 @@ Error codegen_expression_x86_64_mswin
   ParsingContext *original_context = context;
   //expression->result_register = -1;
 
-  ASSERT(NODE_TYPE_MAX == 14, "codegen_expression_x86_64_mswin() must exhaustively handle node types!");
+  ASSERT(NODE_TYPE_MAX == 14, "codegen_expression_x86_64() must exhaustively handle node types!");
   switch (expression->type) {
   default:
     break;
@@ -298,9 +760,10 @@ Error codegen_expression_x86_64_mswin
       fprintf(code, ";;#; INTEGER: %lld\n", expression->value.integer);
     }
     expression->result_register = register_allocate(cg_context);
-    fprintf(code, "mov $%lld, %s\n",
-            expression->value.integer,
-            register_name(cg_context, expression->result_register));
+    femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV,
+                 IMMEDIATE_TO_REGISTER,
+                 (int64_t)expression->value.integer,
+                 expression->result_register);
     break;
   case NODE_TYPE_FUNCTION_CALL:
     if (codegen_verbose) {
@@ -309,7 +772,7 @@ Error codegen_expression_x86_64_mswin
 
     // TODO: Should we technically save all in-use scratch registers?
     // Save RAX because function call will over-write it!
-    fprintf(code, "pushq %%rax\n");
+    femit_x86_64(code, cg_context, INSTRUCTION_X86_64_PUSH, REGISTER, REG_X86_64_RAX);
 
     // Setup function environment based on calling convention.
 
@@ -327,73 +790,80 @@ Error codegen_expression_x86_64_mswin
       // Put arguments in RCX, RDX, R8, R9, then on the stack in reverse order.
       if (iterator) {
         // Place first argument in RCX or XMM0
-        err = codegen_expression_x86_64_mswin
+        err = codegen_expression_x86_64
           (code, cg_context, context, next_child_context, iterator);
         if (err.type) { return err; }
-        fprintf(code, "mov %s, %%rcx\n", register_name(cg_context, iterator->result_register));
+        // Ensure iterator result register is moved into RCX.
+        femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV, REGISTER_TO_REGISTER,
+                     iterator->result_register, REG_X86_64_RCX);
         iterator = iterator->next_child;
       }
       if (iterator) {
         // Place second argument in RDX or XMM1
-        err = codegen_expression_x86_64_mswin
+        err = codegen_expression_x86_64
           (code, cg_context, context, next_child_context, iterator);
         if (err.type) { return err; }
-        fprintf(code, "mov %s, %%rdx\n", register_name(cg_context, iterator->result_register));
+        femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV, REGISTER_TO_REGISTER,
+                     iterator->result_register, REG_X86_64_RDX);
         iterator = iterator->next_child;
       }
       if (iterator) {
         // Place third argument in R8 or XMM2
-        err = codegen_expression_x86_64_mswin
+        err = codegen_expression_x86_64
           (code, cg_context, context, next_child_context, iterator);
         if (err.type) { return err; }
-        fprintf(code, "mov %s, %%r8\n", register_name(cg_context, iterator->result_register));
+        femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV, REGISTER_TO_REGISTER,
+                     iterator->result_register, REG_X86_64_R8);
         iterator = iterator->next_child;
       }
       if (iterator) {
         // Place third argument in R9 or XMM3
-        err = codegen_expression_x86_64_mswin
+        err = codegen_expression_x86_64
           (code, cg_context, context, next_child_context, iterator);
         if (err.type) { return err; }
-        fprintf(code, "mov %s, %%r9\n", register_name(cg_context, iterator->result_register));
+        femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV, REGISTER_TO_REGISTER,
+                     iterator->result_register, REG_X86_64_R9);
         iterator = iterator->next_child;
       }
 
       // TODO: Reverse rest of arguments, push on stack.
 
-      fprintf(code, "call %s\n", expression->children->value.symbol);
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_CALL, NAME, expression->children->value.symbol);
 
     } else {
       // Push arguments on stack in order.
       while (iterator) {
-        err = codegen_expression_x86_64_mswin
+        err = codegen_expression_x86_64
           (code, cg_context, context, next_child_context, iterator);
         if (err.type) { return err; }
-        fprintf(code, "pushq %s\n", register_name(cg_context, iterator->result_register));
+        femit_x86_64(code, cg_context, INSTRUCTION_X86_64_PUSH, REGISTER, iterator->result_register);
         register_deallocate(cg_context, iterator->result_register);
         iterator = iterator->next_child;
         count += 8;
       }
 
-      err = codegen_expression_x86_64_mswin(code, cg_context, context, next_child_context, expression->children);
+      err = codegen_expression_x86_64(code, cg_context, context, next_child_context, expression->children);
       if (err.type) { return err; }
 
       // Emit call
-      fprintf(code, "call *%s\n", register_name(cg_context, expression->children->result_register));
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_CALL, REGISTER, expression->children->result_register);
       register_deallocate(cg_context, expression->children->result_register);
     }
 
     if (count) {
-      fprintf(code, "add $%lld, %%rsp\n", count);
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_ADD, IMMEDIATE_TO_REGISTER, count, REG_X86_64_RSP);
     }
 
     // Copy return value of function call from RAX to result register
     expression->result_register = register_allocate(cg_context);
-    if (expression->result_register != REG_X86_64_MSWIN_RAX) {
-      fprintf(code, "mov %%rax, %s\n", register_name(cg_context, expression->result_register));
+    if (expression->result_register != REG_X86_64_RAX) {
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV, REGISTER_TO_REGISTER,
+                   REG_X86_64_RAX, expression->result_register);
       // Save overwritten in-use registers.
       fprintf(code, "pop %%rax\n");
     } else {
-      fprintf(code, "add $8, %%rsp\n");
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_ADD, IMMEDIATE_TO_REGISTER,
+                   (int64_t)8, REG_X86_64_RSP);
     }
 
     break;
@@ -416,21 +886,20 @@ Error codegen_expression_x86_64_mswin
       // FIXME: Completely memory leaked here, no chance of freeing!
       result = label_generate();
     }
-    err = codegen_function_x86_64_att_asm_mswin(cg_context,
-                                                context, next_child_context,
-                                                result, expression, code);
+    err = codegen_function_x86_64_gas(cg_context,
+                                      context, next_child_context,
+                                      result, expression, code);
 
     // Function returns beginning of instructions address.
     expression->result_register = register_allocate(cg_context);
-    fprintf(code, "lea %s(%%rip), %s\n",
-            result,
-            register_name(cg_context, expression->result_register));
+    femit_x86_64(code, cg_context, INSTRUCTION_X86_64_LEA, NAME_TO_REGISTER,
+                 result, REG_X86_64_RIP, expression->result_register);
     break;
   case NODE_TYPE_DEREFERENCE:
     if (codegen_verbose) {
       fprintf(code, ";;#; Dereference\n");
     }
-    err = codegen_expression_x86_64_mswin(code, cg_context,
+    err = codegen_expression_x86_64(code, cg_context,
                                           context, next_child_context,
                                           expression->children);
     if (err.type) { return err; }
@@ -470,9 +939,8 @@ Error codegen_expression_x86_64_mswin
             register_name(cg_context, expression->result_register));
     // Offset memory address by index.
     if (offset) {
-      fprintf(code, "add $%lld, %s\n",
-              offset,
-              register_name(cg_context, expression->result_register));
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_ADD, IMMEDIATE_TO_REGISTER,
+                   offset, expression->result_register);
     }
     break;
   case NODE_TYPE_IF:
@@ -481,7 +949,7 @@ Error codegen_expression_x86_64_mswin
     }
 
     // Generate if condition expression code.
-    err = codegen_expression_x86_64_mswin(code, cg_context,
+    err = codegen_expression_x86_64(code, cg_context,
                                           context, next_child_context,
                                           expression->children);
     if (err.type) { return err; }
@@ -519,7 +987,7 @@ Error codegen_expression_x86_64_mswin
     Node *last_expr = NULL;
     Node *expr = expression->children->next_child->children;
     while (expr) {
-      err = codegen_expression_x86_64_mswin(code, cg_context,
+      err = codegen_expression_x86_64(code, cg_context,
                                             ctx, &next_child_ctx,
                                             expr);
       if (err.type) { return err; }
@@ -532,9 +1000,8 @@ Error codegen_expression_x86_64_mswin
 
     // Generate code to copy last expr result register to if result register.
     expression->result_register = register_allocate(cg_context);
-    fprintf(code, "mov %s, %s\n",
-            register_name(cg_context, last_expr->result_register),
-            register_name(cg_context, expression->result_register));
+    femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV, REGISTER_TO_REGISTER,
+                 last_expr->result_register, expression->result_register);
     register_deallocate(cg_context, last_expr->result_register);
     fprintf(code, "jmp %s\n", after_otherwise_label);
 
@@ -563,7 +1030,7 @@ Error codegen_expression_x86_64_mswin
 
       expr = expression->children->next_child->next_child->children;
       while (expr) {
-        err = codegen_expression_x86_64_mswin(code, cg_context,
+        err = codegen_expression_x86_64(code, cg_context,
                                               ctx, &next_child_ctx,
                                               expr);
         if (err.type) { return err; }
@@ -575,13 +1042,13 @@ Error codegen_expression_x86_64_mswin
       }
       // Copy last_expr result register to if result register.
       if (last_expr) {
-        fprintf(code, "mov %s, %s\n",
-                register_name(cg_context, last_expr->result_register),
-                register_name(cg_context, expression->result_register));
+        femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV, REGISTER_TO_REGISTER,
+                     last_expr->result_register, expression->result_register);
         register_deallocate(cg_context, last_expr->result_register);
       }
     } else {
-      fprintf(code, "mov $0, %s\n", register_name(cg_context, expression->result_register));
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV, IMMEDIATE_TO_REGISTER,
+                   (int64_t)0, expression->result_register);
     }
 
     fprintf(code, "%s:\n", after_otherwise_label);
@@ -598,21 +1065,21 @@ Error codegen_expression_x86_64_mswin
     //printf("Codegenning binary operator %s\n", expression->value.symbol);
     //print_node(tmpnode,0);
 
-    err = codegen_expression_x86_64_mswin(code, cg_context,
+    err = codegen_expression_x86_64(code, cg_context,
                                           context, next_child_context,
                                           expression->children);
     if (err.type) { return err; }
-    err = codegen_expression_x86_64_mswin(code, cg_context,
+    err = codegen_expression_x86_64(code, cg_context,
                                           context, next_child_context,
                                           expression->children->next_child);
     if (err.type) { return err; }
 
     if (strcmp(expression->value.symbol, ">") == 0) {
-      codegen_comparison_x86_64_mswin(cg_context, expression, COMPARE_GT, code);
+      codegen_comparison_x86_64(cg_context, expression, COMPARE_GT, code);
     } else if (strcmp(expression->value.symbol, "<") == 0) {
-      codegen_comparison_x86_64_mswin(cg_context, expression, COMPARE_LT, code);
+      codegen_comparison_x86_64(cg_context, expression, COMPARE_LT, code);
     } else if (strcmp(expression->value.symbol, "=") == 0) {
-      codegen_comparison_x86_64_mswin(cg_context, expression, COMPARE_EQ, code);
+      codegen_comparison_x86_64(cg_context, expression, COMPARE_EQ, code);
     } else if (strcmp(expression->value.symbol, "+") == 0) {
       // Plus/Addition
       // https://www.felixcloutier.com/x86/add
@@ -620,9 +1087,11 @@ Error codegen_expression_x86_64_mswin
       // Use right hand side result register as our result since ADD is destructive!
       expression->result_register = expression->children->next_child->result_register;
 
-      fprintf(code, "add %s, %s\n",
-              register_name(cg_context, expression->children->result_register),
-              register_name(cg_context, expression->children->next_child->result_register));
+      femit_x86_64
+        (code, cg_context,
+         INSTRUCTION_X86_64_ADD,
+         expression->children->result_register,
+         expression->children->next_child->result_register);
 
       // Free no-longer-used left hand side result register.
       register_deallocate(cg_context, expression->children->result_register);
@@ -633,9 +1102,9 @@ Error codegen_expression_x86_64_mswin
       // Use right hand side result register as our result since SUB is destructive!
       expression->result_register = expression->children->result_register;
 
-      fprintf(code, "sub %s, %s\n",
-              register_name(cg_context, expression->children->next_child->result_register),
-              register_name(cg_context, expression->children->result_register));
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_SUB, REGISTER_TO_REGISTER,
+                   expression->children->next_child->result_register,
+                   expression->children->result_register);
 
       // Free no-longer-used left hand side result register.
       register_deallocate(cg_context, expression->children->next_child->result_register);
@@ -647,9 +1116,9 @@ Error codegen_expression_x86_64_mswin
       // Use right hand side result register as our result since ADD is destructive!
       expression->result_register = expression->children->next_child->result_register;
 
-      fprintf(code, "imul %s, %s\n",
-              register_name(cg_context, expression->children->result_register),
-              register_name(cg_context, expression->children->next_child->result_register));
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_IMUL, REGISTER_TO_REGISTER,
+                   expression->children->result_register,
+                   expression->children->next_child->result_register);
 
       // Free no-longer-used left hand side result register.
       register_deallocate(cg_context, expression->children->result_register);
@@ -673,38 +1142,34 @@ Error codegen_expression_x86_64_mswin
       // result register is RAX, in which case we can use it
       // destructively as our division expression result register.
 
-      fprintf(code,
-              "push %%rax\n"
-              "push %%rdx\n");
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_PUSH,
+                   REGISTER, REG_X86_64_RAX);
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_PUSH,
+                   REGISTER, REG_X86_64_RDX);
 
       // Load RAX with left hand side of division operator, if needed.
-      RegisterDescriptor result_register = expression->children->result_register;
-      if (result_register != REG_X86_64_MSWIN_RAX) {
-        const char *lhs_register_name = register_name(cg_context, result_register);
-        // TODO: If RHS is in RAX, we must save RAX first...
-        fprintf(code, "mov %s, %%rax\n", lhs_register_name);
-      }
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV, REGISTER_TO_REGISTER,
+                   expression->children->result_register, REG_X86_64_RAX);
 
-      // Sign-extend the value in RAX to RDX.
-      // RDX is treated as the 8 high bytes of a 16-byte
-      // number stored in RDX:RAX.
+
+
+      // Sign-extend the value in RAX to RDX. RDX is treated as the
+      // 8 high bytes of a 16-byte number stored in RDX:RAX.
       fprintf(code, "cqto\n");
 
       // Call IDIV with right hand side of division operator.
-      fprintf(code,
-              "idiv %s\n",
-              register_name(cg_context, expression->children->next_child->result_register));
+      femit_x86_64(code, cg_context, INSTRUCTION_X86_64_IDIV,
+                   REGISTER, expression->children->next_child->result_register);
 
       expression->result_register = register_allocate(cg_context);
-      const char *result_register_name = register_name(cg_context, expression->result_register);
       if (modulo_flag) {
         // Move return value from RDX into wherever it actually belongs.
-        fprintf(code, "mov %%rdx, %s\n", result_register_name);
+        femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV, REGISTER_TO_REGISTER,
+                     REG_X86_64_RDX, expression->result_register);
       } else {
         // Move return value from RAX into wherever it actually belongs.
-        if (expression->result_register != REG_X86_64_MSWIN_RAX) {
-          fprintf(code, "mov %%rax, %s\n", result_register_name);
-        }
+        femit_x86_64(code, cg_context, INSTRUCTION_X86_64_MOV, REGISTER_TO_REGISTER,
+                     REG_X86_64_RAX, expression->result_register);
       }
 
       fprintf(code,
@@ -822,6 +1287,8 @@ Error codegen_expression_x86_64_mswin
       fprintf(code, ";;#; Variable Reassignment\n");
     }
 
+    // TODO: This whole section of code is pretty non-radical, dudes.
+
     // 1. Codegen RHS
     // 2. Recurse LHS into children until LHS is a var. access.
 
@@ -835,7 +1302,7 @@ Error codegen_expression_x86_64_mswin
     }
 
     // Codegen RHS
-    err = codegen_expression_x86_64_mswin(code, cg_context, context, next_child_context,
+    err = codegen_expression_x86_64(code, cg_context, context, next_child_context,
                                           expression->children->next_child);
     if (err.type) { break; }
 
@@ -848,7 +1315,7 @@ Error codegen_expression_x86_64_mswin
     } else {
       should_free_result = 1;
       // Codegen LHS
-      err = codegen_expression_x86_64_mswin(code, cg_context, context, next_child_context,
+      err = codegen_expression_x86_64(code, cg_context, context, next_child_context,
                                             expression->children);
       if (err.type) { break; }
       const char *name = register_name(cg_context, expression->children->result_register);
@@ -873,11 +1340,8 @@ Error codegen_expression_x86_64_mswin
     break;
   }
 
-  if (expression->result_register == -1) {
-    printf("Mishandled expression type %i in codegen_expression_x86_64_mswin()\n", expression->type);
-  }
-  //ASSERT(expression->result_register != -1,
-  //      "Result register of expression not set. Likely an internal error during codegen.");
+  ASSERT(expression->result_register != -1,
+         "Result register of expression not set. Likely an internal error during codegen.");
 
   free(tmpnode);
   return err;
@@ -890,7 +1354,7 @@ const char *function_header_x86_64 =
 const char *function_footer_x86_64 =
   "pop %rbp\n"
   "ret\n";
-Error codegen_function_x86_64_att_asm_mswin
+Error codegen_function_x86_64_gas
 (CodegenContext *cg_context,
  ParsingContext *context,
  ParsingContext **next_child_context,
@@ -901,7 +1365,7 @@ Error codegen_function_x86_64_att_asm_mswin
 {
   Error err = ok;
 
-  cg_context = codegen_context_x86_64_mswin_create(cg_context);
+  cg_context = create_codegen_context(cg_context);
 
   // Store base pointer integer offset within locals environment
   // Start at one to make space for pushed RBP in function header.
@@ -941,7 +1405,7 @@ Error codegen_function_x86_64_att_asm_mswin
   Node *last_expression = NULL;
   Node *expression = function->children->next_child->next_child->children;
   while (expression) {
-    err = codegen_expression_x86_64_mswin(code, cg_context, ctx, &next_child_ctx, expression);
+    err = codegen_expression_x86_64(code, cg_context, ctx, &next_child_ctx, expression);
     register_deallocate(cg_context, expression->result_register);
     if (err.type) {
       print_error(err);
@@ -953,7 +1417,7 @@ Error codegen_function_x86_64_att_asm_mswin
 
   // Copy last expression result register to RAX
   if (last_expression) {
-    if (last_expression->result_register != REG_X86_64_MSWIN_RAX) {
+    if (last_expression->result_register != REG_X86_64_RAX) {
       const char *name = register_name(cg_context,last_expression->result_register);
       fprintf(code, "mov %s, %%rax\n", name);
     }
@@ -972,7 +1436,7 @@ Error codegen_function_x86_64_att_asm_mswin
   return ok;
 }
 
-Error codegen_program_x86_64_mswin(FILE *code, CodegenContext *cg_context, ParsingContext *context, Node *program) {
+Error codegen_program_x86_64(FILE *code, CodegenContext *cg_context, ParsingContext *context, Node *program) {
   Error err = ok;
 
   fprintf(code, "%s", ".section .data\n");
@@ -1012,7 +1476,7 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext *cg_context, Parsi
       expression = expression->next_child;
       continue;
     }
-    err = codegen_expression_x86_64_mswin(code, cg_context, context, &next_child_context, expression);
+    err = codegen_expression_x86_64(code, cg_context, context, &next_child_context, expression);
     if (err.type) { return err; }
     register_deallocate(cg_context, expression->result_register);
     last_expression = expression;
@@ -1020,7 +1484,7 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext *cg_context, Parsi
   }
 
   // Copy last expression into RAX register for return value.
-  if (last_expression->result_register != REG_X86_64_MSWIN_RAX) {
+  if (last_expression->result_register != REG_X86_64_RAX) {
     const char *name = register_name(cg_context, last_expression->result_register);
     fprintf(code, "mov %s, %%rax\n", name);
   }
@@ -1035,6 +1499,7 @@ Error codegen_program_x86_64_mswin(FILE *code, CodegenContext *cg_context, Parsi
 
 Error codegen_program
 (enum CodegenOutputFormat format,
+ enum CodegenCallingConvention call_convention,
  char *filepath,
  ParsingContext *context,
  Node *program
@@ -1052,9 +1517,20 @@ Error codegen_program
     ERROR_PREP(err, ERROR_GENERIC, "codegen_program(): fopen failed to open file at path.");
     return err;
   }
-  if (format == CG_FMT_x86_64_MSWIN) {
-    CodegenContext *cg_context = codegen_context_x86_64_mswin_create(NULL);
-    err = codegen_program_x86_64_mswin(code, cg_context, context, program);
+  if (format == CG_FMT_x86_64_GAS) {
+    // TODO: Handle call_convention for creating codegen context!
+    CodegenContext *cg_context;
+    if (call_convention == CG_CALL_CONV_MSWIN) {
+      cg_context = codegen_context_x86_64_gas_mswin_create(NULL);
+    } else if (call_convention == CG_CALL_CONV_LINUX) {
+      // TODO: Create codegen context for GAS linux assembly.
+      ERROR_PREP(err, ERROR_TODO, "Create codegen context for GAS linux x86_64 assembly.");
+      return err;
+    } else {
+      ERROR_PREP(err, ERROR_GENERIC, "Unrecognized calling convention!");
+      return err;
+    }
+    err = codegen_program_x86_64(code, cg_context, context, program);
     codegen_context_x86_64_mswin_free(cg_context);
   } else {
     printf("ERROR: Unrecognized codegen format\n");
