@@ -4,6 +4,7 @@
 #include <environment.h>
 #include <error.h>
 #include <parser.h>
+#include <stdio.h>
 
 typedef int RegisterDescriptor;
 
@@ -48,6 +49,7 @@ typedef struct CodegenContext {
   struct CodegenContext *parent;
   /// LOCALS
   /// `-- SYMBOL (NAME) -> INTEGER (STACK OFFSET)
+  FILE* code;
   Environment *locals;
   long long locals_offset;
   RegisterPool register_pool;
