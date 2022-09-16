@@ -242,12 +242,10 @@ Error typecheck_expression
       // Typecheck body of function in proper context.
       to_enter = (*context_to_enter)->children;
       Node *body_expression = expression->children->next_child->next_child->children;
-      Node *last_expression = NULL;
       Node *expr_return_type = node_allocate();
       while (body_expression) {
         err = typecheck_expression(*context_to_enter, &to_enter, body_expression, expr_return_type);
         if (err.type) { return err; }
-        last_expression = body_expression;
         body_expression = body_expression->next_child;
       }
 
