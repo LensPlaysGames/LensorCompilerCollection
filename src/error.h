@@ -67,7 +67,7 @@ void assert_impl (
          PRETTY_FUNCTION,  \
          __LINE__ ,        \
          #cond,            \
-         "" __VA_ARGS__    \
+         "!" __VA_ARGS__   \
          );                \
     }                      \
   } while (0)
