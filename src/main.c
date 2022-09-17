@@ -180,7 +180,7 @@ int main(int argc, char **argv) {
   }
 
   char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
-  err = codegen_program(output_format, output_calling_convention, output_filepath, context, program);
+  err = codegen(output_format, output_calling_convention, output_filepath, context, program);
   if (err.type) {
     print_error(err);
     return 3;
