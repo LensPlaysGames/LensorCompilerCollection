@@ -31,7 +31,7 @@ extern Error ok;
 #  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
 #  define PRETTY_FUNCTION __PRETTY_FUNCTION__
 #else
-#  define NORETURN
+#  define NORETURN __declspec(noreturn)
 #  define FORMAT(...)
 #  define PRETTY_FUNCTION __FUNCSIG__
 #endif

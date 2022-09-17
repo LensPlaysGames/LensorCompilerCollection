@@ -27,12 +27,3 @@ target_include_directories(
   func
   PUBLIC src/
 )
-target_compile_options(
-  func
-  PRIVATE
-  -Wall
-  -Wextra
-  -Werror=return-type
-  -Wno-unused-parameter
-  -Wno-unused-variable
-)
