@@ -331,6 +331,9 @@ void femit_x86_64_reg_to_reg(CodegenContext *context, enum Instructions_x86_64 i
   const char *source = register_name(source_register);
   const char *destination = register_name(destination_register);
 
+  // Optimise away moves from a register to itself
+  if (inst == INSTRUCTION_X86_64_MOV && source_register == destination_register) return;
+
   switch (context->format) {
     case CG_FMT_x86_64_GAS:
       fprintf(context->code, "%s %%%s, %%%s\n",
