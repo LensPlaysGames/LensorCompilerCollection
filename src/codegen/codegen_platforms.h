@@ -8,6 +8,7 @@
 CodegenContext *codegen_context_create_top_level
 (enum CodegenOutputFormat format,
  enum CodegenCallingConvention call_convention,
+ enum CodegenAssemblyDialect dialect,
  FILE* code);
 
 /// Create a codegen context from a parent context.

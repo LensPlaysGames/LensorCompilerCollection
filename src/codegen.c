@@ -768,6 +768,7 @@ Error codegen_program(CodegenContext *cg_context, ParsingContext *context, Node 
 Error codegen
 (enum CodegenOutputFormat format,
  enum CodegenCallingConvention call_convention,
+ enum CodegenAssemblyDialect dialect,
  char *filepath,
  ParsingContext *context,
  Node *program
@@ -786,7 +787,7 @@ Error codegen
     return err;
   }
 
-  CodegenContext *cg_context = codegen_context_create_top_level(format, call_convention, code);
+  CodegenContext *cg_context = codegen_context_create_top_level(format, call_convention, dialect, code);
   err = codegen_program(cg_context, context, program);
   codegen_context_free(cg_context);
 

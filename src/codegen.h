@@ -33,7 +33,7 @@ struct CodegenContext {
   RegisterPool register_pool;
   enum CodegenOutputFormat format;
   enum CodegenCallingConvention call_convention;
-
+  enum CodegenAssemblyDialect dialect;
   /// Architecture-specific data.
   void *arch_data;
 };
@@ -44,6 +44,7 @@ extern char codegen_verbose;
 Error codegen
 (enum CodegenOutputFormat,
  enum CodegenCallingConvention,
+ enum CodegenAssemblyDialect,
  char *output_filepath,
  ParsingContext *context,
  Node *program);
