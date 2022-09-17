@@ -7,6 +7,14 @@ typedef struct Register Register;
 typedef struct RegisterPool RegisterPool;
 typedef struct CodegenContext CodegenContext;
 
+enum CodegenAssemblyDialect {
+  CG_ASM_DIALECT_ATT,
+  CG_ASM_DIALECT_INTEL,
+  CG_ASM_DIALECT_COUNT,
+
+  CG_ASM_DIALECT_DEFAULT = CG_ASM_DIALECT_ATT
+};
+
 enum CodegenOutputFormat {
   CG_FMT_x86_64_GAS,
   CG_FMT_COUNT,

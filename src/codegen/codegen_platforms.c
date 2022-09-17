@@ -8,6 +8,7 @@
 CodegenContext *codegen_context_create_top_level
 (enum CodegenOutputFormat format,
  enum CodegenCallingConvention call_convention,
+ enum CodegenAssemblyDialect dialect,
  FILE* code) {
   CodegenContext *cg_context;
 
@@ -27,6 +28,7 @@ CodegenContext *codegen_context_create_top_level
   }
 
   cg_context->code = code;
+  cg_context->dialect = dialect;
   return cg_context;
 }
 

@@ -15,11 +15,13 @@ void print_usage(char **argv) {
          "   `-h`, `--help`    :: Show this help and usage information.\n"
          "   `--formats`       :: List acceptable output formats.\n"
          "   `--callings`      :: List acceptable calling conventions.\n"
+         "   `--dialects`      :: List acceptable assembly dialects.\n"
          "   `-v`, `--verbose` :: Print out more information.\n");
   printf("Options:\n"
          "    `-o`, `--output`   :: Set the output filepath to the one given.\n"
          "    `-f`, `--format`   :: Set the output format to the one given.\n"
          "    `-cc`, `--calling` :: Set the calling convention to the one given.\n"
+         "    `-d`, `--dialect`   :: Set the output assembly dialect to the one given.\n"
          "Anything other arguments are treated as input filepaths (source code).\n");
 }
 
@@ -27,6 +29,7 @@ int input_filepath_index = -1;
 int output_filepath_index = -1;
 enum CodegenOutputFormat output_format = CG_FMT_DEFAULT;
 enum CodegenCallingConvention output_calling_convention = CG_CALL_CONV_DEFAULT;
+enum CodegenAssemblyDialect output_assembly_dialect = CG_ASM_DIALECT_DEFAULT;
 int verbosity = 0;
 
 void print_acceptable_formats() {
@@ -40,6 +43,13 @@ void print_acceptable_calling_conventions() {
          " -> default\n"
          " -> LINUX\n"
          " -> MSWIN\n");
+}
+
+void print_acceptable_asm_dialects() {
+  printf("Acceptable dialects include:\n"
+         " -> default\n"
+         " -> att\n"
+         " -> intel\n");
 }
 
 /// @return Zero if everything goes well, otherwise return non-zero value.
@@ -58,6 +68,9 @@ int handle_command_line_arguments(int argc, char **argv) {
       exit(0);
     } else if (strcmp(argument, "--callings") == 0) {
       print_acceptable_calling_conventions();
+      exit(0);
+    } else if (strcmp(argument, "--dialects") == 0) {
+      print_acceptable_asm_dialects();
       exit(0);
     } else if (strcmp(argument, "-v") == 0
                || strcmp(argument, "--verbose") == 0) {
@@ -97,14 +110,14 @@ int handle_command_line_arguments(int argc, char **argv) {
         print_acceptable_formats();
         return 1;
       }
-    } else if (strcmp(argument, "-f") == 0
-               || strcmp(argument, "--format") == 0) {
+    } else if (strcmp(argument, "-cc") == 0
+               || strcmp(argument, "--calling") == 0) {
       i++;
       if (i >= argc) {
-        panic("ERROR: Expected format after format command line argument");
+        panic("ERROR: Expected calling convention after format command line argument");
       }
       if (*argv[i] == '-') {
-        panic("ERROR: Expected format after format command line argument\n"
+        panic("ERROR: Expected calling convention after format command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);
       }
@@ -118,6 +131,29 @@ int handle_command_line_arguments(int argc, char **argv) {
         printf("ERROR: Expected calling convention after calling convention command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
         print_acceptable_calling_conventions();
+        return 1;
+      }
+    } else if (strcmp(argument, "-d") == 0
+               || strcmp(argument, "--dialect") == 0) {
+      i++;
+      if (i >= argc) {
+        panic("ERROR: Expected assembly dialect after format command line argument");
+      }
+      if (*argv[i] == '-') {
+        panic("ERROR: Expected assembly dialect after format command line argument\n"
+              "Instead, got what looks like another command line argument.\n"
+              " -> \"%s\"", argv[i]);
+      }
+      if (strcmp(argv[i], "default") == 0) {
+        output_assembly_dialect = CG_ASM_DIALECT_DEFAULT;
+      } else if (strcmp(argv[i], "att") == 0) {
+        output_assembly_dialect = CG_ASM_DIALECT_ATT;
+      } else if (strcmp(argv[i], "intel") == 0) {
+        output_assembly_dialect = CG_ASM_DIALECT_INTEL;
+      } else {
+        printf("ERROR: Expected assembly dialect after calling convention command line argument\n"
+               "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
+        print_acceptable_asm_dialects();
         return 1;
       }
     } else if (strcmp(argument, "--aluminium") == 0) {
@@ -180,7 +216,7 @@ int main(int argc, char **argv) {
   }
 
   char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
-  err = codegen(output_format, output_calling_convention, output_filepath, context, program);
+  err = codegen(output_format, output_calling_convention, output_assembly_dialect, output_filepath, context, program);
   if (err.type) {
     print_error(err);
     return 3;
