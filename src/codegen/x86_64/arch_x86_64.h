@@ -130,7 +130,6 @@ void codegen_zero_register_x86_64
 /// Generate a comparison between two registers.
 RegisterDescriptor codegen_comparison_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  enum ComparisonType type,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
@@ -138,49 +137,42 @@ RegisterDescriptor codegen_comparison_x86_64
 /// Add two registers together.
 RegisterDescriptor codegen_add_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Subtract rhs from lhs.
 RegisterDescriptor codegen_subtract_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Multiply two registers together.
 RegisterDescriptor codegen_multiply_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Divide lhs by rhs.
 RegisterDescriptor codegen_divide_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Modulo lhs by rhs.
 RegisterDescriptor codegen_modulo_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Shift lhs to the left by rhs.
 RegisterDescriptor codegen_shift_left_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Shift lhs to the right by rhs (arithmetic).
 RegisterDescriptor codegen_shift_right_arithmetic_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 

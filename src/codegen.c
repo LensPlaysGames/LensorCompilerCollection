@@ -432,52 +432,45 @@ Error codegen_expression
 
     if (strcmp(expression->value.symbol, ">") == 0) {
       expression->result_register = codegen_comparison(cg_context,
-          CODEGEN_CLOBBER_OPERANDS, COMPARE_GT,
+          COMPARE_GT,
           expression->children->result_register,
           expression->children->next_child->result_register);
     } else if (strcmp(expression->value.symbol, "<") == 0) {
       expression->result_register = codegen_comparison(cg_context,
-          CODEGEN_CLOBBER_OPERANDS, COMPARE_LT,
+          COMPARE_LT,
           expression->children->result_register,
           expression->children->next_child->result_register);
     } else if (strcmp(expression->value.symbol, "=") == 0) {
       expression->result_register = codegen_comparison(cg_context,
-          CODEGEN_CLOBBER_OPERANDS, COMPARE_EQ,
+          COMPARE_EQ,
           expression->children->result_register,
           expression->children->next_child->result_register);
     } else if (strcmp(expression->value.symbol, "+") == 0) {
       expression->result_register = codegen_add(cg_context,
-          CODEGEN_CLOBBER_OPERANDS,
           expression->children->result_register,
           expression->children->next_child->result_register);
     } else if (strcmp(expression->value.symbol, "-") == 0) {
       expression->result_register = codegen_subtract(cg_context,
-          CODEGEN_CLOBBER_OPERANDS,
           expression->children->result_register,
           expression->children->next_child->result_register);
     } else if (strcmp(expression->value.symbol, "*") == 0) {
       expression->result_register = codegen_multiply(cg_context,
-          CODEGEN_CLOBBER_OPERANDS,
           expression->children->result_register,
           expression->children->next_child->result_register);
     } else if (strcmp(expression->value.symbol, "/") == 0) {
       expression->result_register = codegen_divide(cg_context,
-          CODEGEN_CLOBBER_OPERANDS,
           expression->children->result_register,
           expression->children->next_child->result_register);
     } else if (strcmp(expression->value.symbol, "%") == 0) {
       expression->result_register = codegen_modulo(cg_context,
-          CODEGEN_CLOBBER_OPERANDS,
           expression->children->result_register,
           expression->children->next_child->result_register);
     } else if (strcmp(expression->value.symbol, "<<") == 0) {
       expression->result_register = codegen_shift_left(cg_context,
-          CODEGEN_CLOBBER_OPERANDS,
           expression->children->result_register,
           expression->children->next_child->result_register);
     } else if (strcmp(expression->value.symbol, ">>") == 0) {
       expression->result_register = codegen_shift_right_arithmetic(cg_context,
-          CODEGEN_CLOBBER_OPERANDS,
           expression->children->result_register,
           expression->children->next_child->result_register);
     } else {

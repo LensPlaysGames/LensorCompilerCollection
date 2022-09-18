@@ -293,12 +293,11 @@ void codegen_copy_register
 /// Generate a comparison between two registers.
 RegisterDescriptor codegen_comparison
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  enum ComparisonType type,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
   switch (cg_context->format) {
-    case CG_FMT_x86_64_GAS: return codegen_comparison_x86_64(cg_context, mode, type, lhs, rhs);
+    case CG_FMT_x86_64_GAS: return codegen_comparison_x86_64(cg_context, type, lhs, rhs);
     default: panic("ERROR: Unrecognized codegen format");
   }
 }
@@ -306,11 +305,10 @@ RegisterDescriptor codegen_comparison
 /// Add two registers together.
 RegisterDescriptor codegen_add
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
   switch (cg_context->format) {
-    case CG_FMT_x86_64_GAS: return codegen_add_x86_64(cg_context, mode, lhs, rhs);
+    case CG_FMT_x86_64_GAS: return codegen_add_x86_64(cg_context, lhs, rhs);
     default: panic("ERROR: Unrecognized codegen format");
   }
 }
@@ -318,11 +316,10 @@ RegisterDescriptor codegen_add
 /// Subtract rhs from lhs.
 RegisterDescriptor codegen_subtract
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
   switch (cg_context->format) {
-    case CG_FMT_x86_64_GAS: return codegen_subtract_x86_64(cg_context, mode, lhs, rhs);
+    case CG_FMT_x86_64_GAS: return codegen_subtract_x86_64(cg_context, lhs, rhs);
     default: panic("ERROR: Unrecognized codegen format");
   }
 }
@@ -330,11 +327,10 @@ RegisterDescriptor codegen_subtract
 /// Multiply two registers together.
 RegisterDescriptor codegen_multiply
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
   switch (cg_context->format) {
-    case CG_FMT_x86_64_GAS: return codegen_multiply_x86_64(cg_context, mode, lhs, rhs);
+    case CG_FMT_x86_64_GAS: return codegen_multiply_x86_64(cg_context, lhs, rhs);
     default: panic("ERROR: Unrecognized codegen format");
   }
 }
@@ -342,11 +338,10 @@ RegisterDescriptor codegen_multiply
 /// Divide lhs by rhs.
 RegisterDescriptor codegen_divide
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
   switch (cg_context->format) {
-    case CG_FMT_x86_64_GAS: return codegen_divide_x86_64(cg_context, mode, lhs, rhs);
+    case CG_FMT_x86_64_GAS: return codegen_divide_x86_64(cg_context, lhs, rhs);
     default: panic("ERROR: Unrecognized codegen format");
   }
 }
@@ -354,11 +349,10 @@ RegisterDescriptor codegen_divide
 /// Modulo lhs by rhs.
 RegisterDescriptor codegen_modulo
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
   switch (cg_context->format) {
-    case CG_FMT_x86_64_GAS: return codegen_modulo_x86_64(cg_context, mode, lhs, rhs);
+    case CG_FMT_x86_64_GAS: return codegen_modulo_x86_64(cg_context, lhs, rhs);
     default: panic("ERROR: Unrecognized codegen format");
   }
 }
@@ -366,11 +360,10 @@ RegisterDescriptor codegen_modulo
 /// Shift lhs to the left by rhs.
 RegisterDescriptor codegen_shift_left
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
   switch (cg_context->format) {
-    case CG_FMT_x86_64_GAS: return codegen_shift_left_x86_64(cg_context, mode, lhs, rhs);
+    case CG_FMT_x86_64_GAS: return codegen_shift_left_x86_64(cg_context, lhs, rhs);
     default: panic("ERROR: Unrecognized codegen format");
   }
 }
@@ -378,11 +371,10 @@ RegisterDescriptor codegen_shift_left
 /// Shift lhs to the right by rhs (arithmetic).
 RegisterDescriptor codegen_shift_right_arithmetic
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
   switch (cg_context->format) {
-    case CG_FMT_x86_64_GAS: return codegen_shift_right_arithmetic_x86_64(cg_context, mode, lhs, rhs);
+    case CG_FMT_x86_64_GAS: return codegen_shift_right_arithmetic_x86_64(cg_context, lhs, rhs);
     default: panic("ERROR: Unrecognized codegen format");
   }
 }

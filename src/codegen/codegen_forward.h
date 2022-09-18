@@ -42,10 +42,4 @@ enum ComparisonType {
   COMPARE_COUNT,
 };
 
-// Whether to deallocate the lhs and rhs of an arithmetic operation.
-enum CodegenBinaryOpMode {
-  CODEGEN_PRESERVE_OPERANDS,
-  CODEGEN_CLOBBER_OPERANDS,
-};
-
 #endif // CODEGEN_FORWARD_H

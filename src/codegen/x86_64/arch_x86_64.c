@@ -757,7 +757,6 @@ static RegisterDescriptor copy_return_value(CodegenContext *cg_context) {
 /// Calculate quotient and remainder of lhs by rhs.
 static RegisterDescriptor divmod
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  char wants_quotient,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
@@ -767,8 +766,8 @@ static RegisterDescriptor divmod
   Register* rax = cg_context->register_pool.registers + REG_RAX;
   Register* rdx = cg_context->register_pool.registers + REG_RDX;
 
-  char rax_pushed = rax->in_use && (mode == CODEGEN_PRESERVE_OPERANDS || (lhs != REG_RAX && rhs != REG_RAX));
-  char rdx_pushed = rdx->in_use && (mode == CODEGEN_PRESERVE_OPERANDS || (lhs != REG_RDX && rhs != REG_RDX));
+  char rax_pushed = rax->in_use && ((lhs != REG_RAX && rhs != REG_RAX));
+  char rdx_pushed = rdx->in_use && ((lhs != REG_RDX && rhs != REG_RDX));
 
   if (rax_pushed) { femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RAX); }
   if (rdx_pushed) { femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RDX); }
@@ -793,36 +792,20 @@ static RegisterDescriptor divmod
   // Call IDIV with right hand side of division operator.
   femit_x86_64(cg_context, I_IDIV, REGISTER, actual_rhs);
 
-  // Copy the wanted result into a register. There are several optimisations
-  // that we can employ here. We pick the fist one that we can use.
-  //   - If either the lhs or rhs is RAX or RDX, depending on whether we want the
-  //     quotient or remainder, respectively, and we are allowed to clobber
-  //     registers, we can just return the corresponding register.
-  //   - If we are allowed to clobber registers, we can move the result into
-  //     either lhs or rhs.
-  //   - If we have allocated a scratch register for the rhs, we can move the
-  //     result into that register.
-  //   - Otherwise, we must allocate a new register.
+  // Set the result register
   RegisterDescriptor result;
-  if (mode == CODEGEN_CLOBBER_OPERANDS) {
-    if (wants_quotient && (lhs == REG_RAX || rhs == REG_RAX)) { result = REG_RAX; }
-    else if (!wants_quotient && (lhs == REG_RDX || rhs == REG_RDX)) { result = REG_RDX; }
-    else {
-      femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER,
-                   wants_quotient ? REG_RAX : REG_RDX,
-                   lhs);
-      result = lhs;
-    }
-  } else {
-    result = actual_rhs_is_scratch ? actual_rhs : register_allocate(cg_context);
+  if (wants_quotient && (lhs == REG_RAX || rhs == REG_RAX)) { result = REG_RAX; }
+  else if (!wants_quotient && (lhs == REG_RDX || rhs == REG_RDX)) { result = REG_RDX; }
+  else {
     femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER,
                  wants_quotient ? REG_RAX : REG_RDX,
-                 result);
+                 lhs);
+    result = lhs;
   }
 
   // Cleanup everything.
   // If we allocated a scratch register for the rhs, free it unless it is the result.
-  if (actual_rhs_is_scratch && actual_rhs != result) {
+  if (actual_rhs_is_scratch) {
     register_deallocate(cg_context, actual_rhs);
   }
 
@@ -833,10 +816,8 @@ static RegisterDescriptor divmod
   // At this point, we have already taken care of restoring everything
   // that we had to preserve. We can now free any registers that we
   // no longer need if we are allowed to clobber registers.
-  if (mode == CODEGEN_CLOBBER_OPERANDS) {
-    if (lhs != result) { register_deallocate(cg_context, lhs); }
-    if (rhs != result) { register_deallocate(cg_context, rhs); }
-  }
+  if (lhs != result) { register_deallocate(cg_context, lhs); }
+  if (rhs != result) { register_deallocate(cg_context, rhs); }
 
   return result;
 }
@@ -844,58 +825,31 @@ static RegisterDescriptor divmod
 /// Shift lhs by rhs.
 static RegisterDescriptor shift
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  enum Instructions_x86_64 shift_instruction,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
   Register* rcx = cg_context->register_pool.registers + REG_RCX;
-  if (mode == CODEGEN_CLOBBER_OPERANDS) {
-    // Save RCX if it's in use and not the same as lhs or rhs by swapping
-    // it with rhs. Otherwise, if the lhs is RCX, swap it with the rhs.
-    // Otherwise, move the rhs into RCX.
-    char save_rcx = rcx->in_use && (lhs != REG_RCX && rhs != REG_RCX);
-    if (save_rcx) {
-      femit_x86_64(cg_context, I_XCHG, REGISTER_TO_REGISTER, REG_RCX, rhs);
-    } else if (lhs == REG_RCX) {
-      femit_x86_64(cg_context, I_XCHG, REGISTER_TO_REGISTER, lhs, rhs);
-    } else {
-      femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, rhs, REG_RCX);
-    }
-
-    femit_x86_64(cg_context, shift_instruction, REGISTER, lhs);
-
-    // If we saved RCX, restore it. Deallocate rhs since it's no longer
-    // needed and return lhs.
-    if (save_rcx) {
-      femit_x86_64(cg_context, I_XCHG, REGISTER_TO_REGISTER, REG_RCX, rhs);
-    }
-    register_deallocate(cg_context, rhs);
-    return lhs;
+  // Save RCX if it's in use and not the same as lhs or rhs by swapping
+  // it with rhs. Otherwise, if the lhs is RCX, swap it with the rhs.
+  // Otherwise, move the rhs into RCX.
+  char save_rcx = rcx->in_use && (lhs != REG_RCX && rhs != REG_RCX);
+  if (save_rcx) {
+    femit_x86_64(cg_context, I_XCHG, REGISTER_TO_REGISTER, REG_RCX, rhs);
+  } else if (lhs == REG_RCX) {
+    femit_x86_64(cg_context, I_XCHG, REGISTER_TO_REGISTER, lhs, rhs);
   } else {
-    RegisterDescriptor result = register_allocate(cg_context);
-    // If RCX is in use and not the result register, save it.
-    char rcx_saved = rcx->in_use && result != REG_RCX;
-    if (rcx_saved) { femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RCX); }
-
-    // Move the rhs into RCX.
     femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, rhs, REG_RCX);
-
-    // If the result is not RCX, move the lhs into it. Otherwise,
-    // save lhs and restore it after the shift.
-    if (result != REG_RCX) {
-      femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, lhs, result);
-      femit_x86_64(cg_context, shift_instruction, REGISTER, result);
-    } else {
-      femit_x86_64(cg_context, I_PUSH, REGISTER, lhs);
-      femit_x86_64(cg_context, shift_instruction, REGISTER, REG_RCX);
-      femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, lhs, result);
-      femit_x86_64(cg_context, I_POP, REGISTER, lhs);
-    }
-
-    // If we saved RCX, restore it.
-    if (rcx_saved) { femit_x86_64(cg_context, I_POP, REGISTER, REG_RCX); }
-    return result;
   }
+
+  femit_x86_64(cg_context, shift_instruction, REGISTER, lhs);
+
+  // If we saved RCX, restore it. Deallocate rhs since it's no longer
+  // needed and return lhs.
+  if (save_rcx) {
+    femit_x86_64(cg_context, I_XCHG, REGISTER_TO_REGISTER, REG_RCX, rhs);
+  }
+  register_deallocate(cg_context, rhs);
+  return lhs;
 }
 
 /// Save state before a function call.
@@ -1112,7 +1066,6 @@ void codegen_zero_register_x86_64
 /// Generate a comparison between two registers.
 RegisterDescriptor codegen_comparison_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  enum ComparisonType type,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
@@ -1126,102 +1079,71 @@ RegisterDescriptor codegen_comparison_x86_64
   femit_x86_64(cg_context, I_CMP, REGISTER_TO_REGISTER, rhs, lhs);
   femit_x86_64(cg_context, I_SETCC, type, result);
 
-  if (mode == CODEGEN_CLOBBER_OPERANDS) {
-    register_deallocate(cg_context, lhs);
-    register_deallocate(cg_context, rhs);
-  }
-
+  register_deallocate(cg_context, lhs);
+  register_deallocate(cg_context, rhs);
   return result;
 }
 
 /// Add two registers together.
 RegisterDescriptor codegen_add_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
-  if (mode == CODEGEN_CLOBBER_OPERANDS) {
-    femit_x86_64(cg_context, I_ADD, REGISTER_TO_REGISTER, lhs, rhs);
-    register_deallocate(cg_context, lhs);
-    return rhs;
-  } else {
-    RegisterDescriptor result = register_allocate(cg_context);
-    femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, rhs, result);
-    femit_x86_64(cg_context, I_ADD, REGISTER_TO_REGISTER, lhs, result);
-    return result;
-  }
+  femit_x86_64(cg_context, I_ADD, REGISTER_TO_REGISTER, lhs, rhs);
+  register_deallocate(cg_context, lhs);
+  return rhs;
 }
 
 /// Subtract rhs from lhs.
 RegisterDescriptor codegen_subtract_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
-  if (mode == CODEGEN_CLOBBER_OPERANDS) {
-    femit_x86_64(cg_context, I_SUB, REGISTER_TO_REGISTER, rhs, lhs);
-    register_deallocate(cg_context, rhs);
-    return lhs;
-  } else {
-    RegisterDescriptor result = register_allocate(cg_context);
-    femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, lhs, result);
-    femit_x86_64(cg_context, I_SUB, REGISTER_TO_REGISTER, rhs, result);
-    return result;
-  }
+  femit_x86_64(cg_context, I_SUB, REGISTER_TO_REGISTER, rhs, lhs);
+  register_deallocate(cg_context, rhs);
+  return lhs;
 }
 
 /// Multiply two registers together.
 RegisterDescriptor codegen_multiply_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
-  if (mode == CODEGEN_CLOBBER_OPERANDS) {
-    femit_x86_64(cg_context, I_IMUL, REGISTER_TO_REGISTER, lhs, rhs);
-    register_deallocate(cg_context, lhs);
-    return rhs;
-  } else {
-    RegisterDescriptor result = register_allocate(cg_context);
-    femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, rhs, result);
-    femit_x86_64(cg_context, I_IMUL, REGISTER_TO_REGISTER, lhs, result);
-    return result;
-  }
+  femit_x86_64(cg_context, I_IMUL, REGISTER_TO_REGISTER, lhs, rhs);
+  register_deallocate(cg_context, lhs);
+  return rhs;
 }
 
 /// Divide lhs by rhs.
 RegisterDescriptor codegen_divide_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
-  return divmod(cg_context, mode, 1, lhs, rhs);
+  return divmod(cg_context, 1, lhs, rhs);
 }
 
 /// Modulo lhs by rhs.
 RegisterDescriptor codegen_modulo_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
-  return divmod(cg_context, mode, 0, lhs, rhs);
+  return divmod(cg_context, 0, lhs, rhs);
 }
 
 /// Shift lhs to the left by rhs.
 RegisterDescriptor codegen_shift_left_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
-  return shift(cg_context, mode, I_SAL, lhs, rhs);
+  return shift(cg_context, I_SAL, lhs, rhs);
 }
 
 /// Shift lhs to the right by rhs (arithmetic).
 RegisterDescriptor codegen_shift_right_arithmetic_x86_64
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
-  return shift(cg_context, mode, I_SAR, lhs, rhs);
+  return shift(cg_context, I_SAR, lhs, rhs);
 }
 
 /// Allocate space on the stack.
