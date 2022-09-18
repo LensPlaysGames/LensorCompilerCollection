@@ -1,6 +1,6 @@
-#include "codegen_platforms.h"
+#include <codegen/codegen_platforms.h>
 
-#include "x86_64/arch_x86_64.h"
+#include <codegen/x86_64/arch_x86_64.h>
 
 #include <codegen.h>
 #include <error.h>

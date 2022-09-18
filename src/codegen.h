@@ -1,7 +1,7 @@
 #ifndef CODEGEN_H
 #define CODEGEN_H
 
-#include "codegen/codegen_forward.h"
+#include <codegen/codegen_forward.h>
 
 #include <environment.h>
 #include <error.h>
