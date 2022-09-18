@@ -40,7 +40,7 @@ CodegenContext *codegen_context_create(CodegenContext *parent) {
   if (parent->format == CG_FMT_x86_64_GAS) {
     if (parent->call_convention == CG_CALL_CONV_MSWIN) {
       return codegen_context_x86_64_mswin_create(parent);
-    } else if (parent->call_convention == CG_CALL_CONV_MSWIN) {
+    } else if (parent->call_convention == CG_CALL_CONV_LINUX) {
       // return codegen_context_x86_64_gas_linux_create(parent);
     }
   }
