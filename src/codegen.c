@@ -1,5 +1,5 @@
 #include <codegen.h>
-#include "codegen/codegen_platforms.h"
+#include <codegen/codegen_platforms.h>
 
 #include <environment.h>
 #include <error.h>
