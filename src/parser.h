@@ -69,8 +69,13 @@ typedef enum NodeType {
 
   /// A valid binary operator. Contains two children.
   /// 1. Left Hand Side, often abbreviated as LHS
-  /// 1. Right Hand Side, often abbreviated as RHS
+  /// 2. Right Hand Side, often abbreviated as RHS
   NODE_TYPE_BINARY_OPERATOR,
+
+  // A typecast. Contains two children.
+  // 1. Cast Type
+  // 2. Expression to Cast
+  NODE_TYPE_CAST,
 
   /// Contains a list of expressions to execute in sequence.
   NODE_TYPE_PROGRAM,

@@ -422,6 +422,104 @@ Error typecheck_expression
     }
     *result_type = *value->children;
     break;
+  case NODE_TYPE_CAST:
+    if (0) {}
+
+    Node *cast_type = expression->children;
+
+    // Result of a cast expression will always be the casted-to type.
+    *result_type = *cast_type;
+
+    Node *expression_type = node_allocate();
+    err = typecheck_expression(context, context_to_enter, expression->children->next_child, expression_type);
+    if (err.type) { return err; }
+
+    // We could/should remove this cast node if the cast type and
+    // return type of expression are the same. Turns out removing nodes
+    // is actually impossible without a parent node pointer member.
+    // So, for now, this type of cast is just passed through.
+    if (type_compare(cast_type, expression_type)) {
+      break;
+    }
+
+    // TODO: We should probably have some way to assert the amount of
+    // base types or something. Otherwise we'll have silent errors when
+    // adding new base types.
+
+    // Check for reinterpret kind of typecast (pointer to pointer)
+    if (cast_type->pointer_indirection > 0) {
+      if (cast_type->pointer_indirection != expression_type->pointer_indirection) {
+        ERROR_PREP(err, ERROR_TYPE,
+                   "Pointer to pointer cast must maintain pointer indirection level.");
+        return err;
+      }
+
+      // Get size of cast_type and expression_type to determine kind of
+      // typecast.
+      size_t cast_type_size;
+      size_t expression_type_size;
+      Node *cast_type_info = node_allocate();
+      Node *expression_type_info = node_allocate();
+
+      // Use type copy without pointer indirection to get size of base
+      // type!
+      Node *cast_type_no_pointer = node_allocate();
+      *cast_type_no_pointer = *cast_type;
+      cast_type_no_pointer->pointer_indirection = 0;
+
+      Node *expression_type_no_pointer = node_allocate();
+      *expression_type_no_pointer = *expression_type;
+      expression_type_no_pointer->pointer_indirection = 0;
+
+      err = parse_get_type(context, cast_type_no_pointer, cast_type_info);
+      if (err.type) { return err; }
+      err = parse_get_type(context, expression_type_no_pointer, expression_type_info);
+      if (err.type) { return err; }
+      cast_type_size = cast_type_info->children->value.integer;
+      expression_type_size = expression_type_info->children->value.integer;
+      free(cast_type_info);
+      free(expression_type_info);
+
+      // a : integer = 69
+      // ;; a is an 8 byte integer
+      // b : byte = 42
+      // ;; b is a one byte integer
+      // ptr_a : @integer = &a
+      // ptr_b : @byte    = &b
+      // ;; The following should trigger a type error, as ptr_b does
+      // ;; not contain enough memory to store an 8 byte integer.
+      // ptr_a := [@integer]ptr_b
+      if (cast_type_size > expression_type_size) {
+        ERROR_PREP(err, ERROR_TYPE,
+                   "Invalid Reinterpret Typecast: Base type of cast type must be smaller or equal to expression_type");
+      }
+      break;
+    } else if (expression_type->pointer_indirection > 0) {
+      ERROR_PREP(err, ERROR_TYPE, "Invalid Typecast: Can not cast pointer to non-pointer type.");
+      break;
+    }
+    // If it's not a pointer reinterpret, ensure both expression and
+    // cast type are base types.
+    static Node int_type = (Node) {
+      .type = NODE_TYPE_SYMBOL,
+      .value.symbol = "integer",
+    };
+
+    static Node byte_type = (Node) {
+      .type = NODE_TYPE_SYMBOL,
+      .value.symbol = "byte",
+    };
+
+    // TODO: Extract is_base_type() helper function.
+    if (!(type_compare(cast_type, &int_type) || type_compare(cast_type, &byte_type))) {
+      ERROR_PREP(err, ERROR_TYPE, "Invalid typecast: Cast type must be a base type.");
+      break;
+    }
+    if (!(type_compare(expression_type, &int_type) || type_compare(expression_type, &byte_type))) {
+      ERROR_PREP(err, ERROR_TYPE, "Invalid typecast: Expression type must be a base type.");
+      break;
+    }
+    break;
   }
   free(result);
   free(value);

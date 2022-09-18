@@ -132,7 +132,7 @@ void node_add_child(Node *parent, Node *new_child) {
 }
 
 int node_compare(Node *a, Node *b) {
-  ASSERT(NODE_TYPE_MAX == 14, "node_compare() must handle all node types");
+  ASSERT(NODE_TYPE_MAX == 15, "node_compare() must handle all node types");
 
   // Actually really nice debug output when you need it.
   //printf("Comparing nodes:\n");
@@ -255,7 +255,7 @@ Error define_type(Environment *types, int type, Node *type_symbol, long long byt
 #define NODE_TEXT_BUFFER_SIZE 512
 char node_text_buffer[512];
 char *node_text(Node *node) {
-  ASSERT(NODE_TYPE_MAX == 14, "print_node() must handle all node types");
+  ASSERT(NODE_TYPE_MAX == 15, "print_node() must handle all node types");
   if (!node) {
     return "NULL";
   }
@@ -307,6 +307,9 @@ char *node_text(Node *node) {
     break;
   case NODE_TYPE_INDEX:
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "INDEX:%lld", node->value.integer);
+    break;
+  case NODE_TYPE_CAST:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "TYPECAST");
     break;
   }
   return node_text_buffer;
@@ -606,7 +609,11 @@ Error parse_get_type(ParsingContext *context, Node *id, Node *result) {
 
   while (context) {
     int status = environment_get(*context->types, id, result);
-    if (status) { return ok; }
+    if (status) {
+      //printf("Got thing:\n");
+      //print_node(result,2);
+      return ok;
+    }
     context = context->parent;
   }
   result->type = NODE_TYPE_NONE;
@@ -1241,6 +1248,34 @@ Error parse_expr
         err = ok;
 
         Node *symbol = node_symbol_from_buffer(current_token.beginning, token_length);
+
+
+        // FIXME: Experimental and not implemented in typechecker or codegen backends yet.
+        // NOTE: Square bracket syntax is for sure experimental, and likely temporary.
+        if (strcmp("[", symbol->value.symbol) == 0) {
+          working_result->type = NODE_TYPE_CAST;
+
+          err = lex_advance(&state);
+          if (err.type) { return err; }
+
+          Node *cast_type = node_allocate();
+          err = parse_base_type(context, &state, cast_type);
+          if (err.type) { return err; }
+
+          node_add_child(working_result, cast_type);
+
+          EXPECT(expected, "]", &state);
+          if (!expected.found) {
+            ERROR_PREP(err, ERROR_SYNTAX,
+                       "There must be a closing square bracket, ']', after a type within a type cast expression.");
+            return err;
+          }
+
+          Node *child = node_allocate();
+          node_add_child(working_result, child);
+          working_result = child;
+          continue;
+        }
 
         if (strcmp("@", symbol->value.symbol) == 0) {
           working_result->type = NODE_TYPE_DEREFERENCE;

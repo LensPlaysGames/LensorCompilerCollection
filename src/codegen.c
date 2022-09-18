@@ -147,7 +147,7 @@ Error codegen_expression
   ParsingContext *original_context = context;
   //expression->result_register = -1;
 
-  ASSERT(NODE_TYPE_MAX == 14, "codegen_expression_x86_64() must exhaustively handle node types!");
+  ASSERT(NODE_TYPE_MAX == 15, "codegen_expression_x86_64() must exhaustively handle node types!");
   switch (expression->type) {
   default:
     break;
@@ -587,6 +587,41 @@ Error codegen_expression
       register_deallocate(cg_context, expression->children->next_child->result_register);
       register_deallocate(cg_context, expression->children->result_register);
     }
+    break;
+  case NODE_TYPE_CAST:
+    if (0) {}
+
+    Node *cast_type = expression->children;
+    // TODO: Somehow avoid typechecking twice; this is only needed to get result type of expression.
+    Node *expression_type = node_allocate();
+    err = typecheck_expression(context, next_child_context, expression->children->next_child, expression_type);
+    if (err.type) { return err; }
+
+    // Get size of cast_type and expression_type to determine kind of
+    // typecast.
+    Node *cast_type_info = node_allocate();
+    Node *expression_type_info = node_allocate();
+    err = parse_get_type(context, cast_type, cast_type_info);
+    if (err.type) { return err; }
+    err = parse_get_type(context, expression_type, expression_type_info);
+    if (err.type) { return err; }
+    size_t cast_type_size = cast_type_info->children->value.integer;
+    size_t expression_type_size = expression_type_info->children->value.integer;
+    free(cast_type_info);
+    free(expression_type_info);
+
+    if (cast_type_size > expression_type_size) {
+      // TODO: Set `expression_signed` to `1` iff expression_type is of signed type.
+      char expression_signed = 0;
+      if (expression_signed) {
+        TODO("Handle TYPECAST sign extension in codegen_platform.c!");
+      } else {
+        TODO("Handle TYPECAST zero extension in codegen_platform.c!");
+      }
+    } else if (cast_type_size < expression_type_size) {
+      TODO("Handle TYPECAST truncation in codegen_platform.c!");
+    }
+
     break;
   }
 
