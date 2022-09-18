@@ -604,6 +604,8 @@ Error codegen_expression
   return err;
 }
 
+#define LABEL_NAME_BUFFER_SIZE (1024)
+
 Error codegen_function
 (CodegenContext *cg_context,
  ParsingContext *context,
@@ -633,8 +635,8 @@ Error codegen_function
 
   // Nested function execution protection
 
-  char after_name_buffer[1024] = {0};
-  snprintf(after_name_buffer, 1024, "after%s", name);
+  char after_name_buffer[LABEL_NAME_BUFFER_SIZE];
+  snprintf(after_name_buffer, sizeof after_name_buffer, "after%s", name);
   after_name_buffer[sizeof after_name_buffer - 1] = 0;
   codegen_branch(cg_context, after_name_buffer);
 
