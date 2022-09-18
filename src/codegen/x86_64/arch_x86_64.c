@@ -946,20 +946,22 @@ RegisterDescriptor codegen_perform_internal_call_x86_64(CodegenContext *cg_conte
 void codegen_cleanup_call_x86_64(CodegenContext *cg_context) {
   ArchData *arch_data = cg_context->arch_data;
 
+  // Clean up stack from function call. This is only needed if
+  // arguments were passed on the stack.
   switch (arch_data->current_call) {
-    // Pop arguments off the stack.
-    case FUNCTION_CALL_TYPE_EXTERNAL:
+    case FUNCTION_CALL_TYPE_INTERNAL:
       femit_x86_64(cg_context, I_ADD, IMMEDIATE_TO_REGISTER,
-                   arch_data->call_arg_count * 8, REG_RSP);
+                   (int64_t)(arch_data->call_arg_count * 8), REG_RSP);
       break;
-    case FUNCTION_CALL_TYPE_INTERNAL: break;
+    case FUNCTION_CALL_TYPE_EXTERNAL:
+      break;
     default: panic("No call to clean up");
   }
 
-  // Restore rax if it was in use.
-  if (arch_data->rax_in_use) femit_x86_64(cg_context, I_POP, REGISTER, REG_RAX);
-  else femit_x86_64(cg_context, I_ADD, IMMEDIATE_TO_REGISTER,
-                    (int64_t)8, REG_RSP);
+  // Restore rax if it was in use, because function return value clobbered it.
+  if (arch_data->rax_in_use) {
+    femit_x86_64(cg_context, I_POP, REGISTER, REG_RAX);
+  }
 
   // Clean up the call state.
   arch_data->current_call = FUNCTION_CALL_TYPE_NONE;
