@@ -137,7 +137,6 @@ void codegen_copy_register
 /// Generate a comparison between two registers.
 RegisterDescriptor codegen_comparison
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  enum ComparisonType type,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
@@ -145,49 +144,42 @@ RegisterDescriptor codegen_comparison
 /// Add two registers together.
 RegisterDescriptor codegen_add
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Subtract rhs from lhs.
 RegisterDescriptor codegen_subtract
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Multiply two registers together.
 RegisterDescriptor codegen_multiply
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Divide lhs by rhs.
 RegisterDescriptor codegen_divide
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Modulo lhs by rhs.
 RegisterDescriptor codegen_modulo
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Shift lhs to the left by rhs.
 RegisterDescriptor codegen_shift_left
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
 /// Shift lhs to the right by rhs (arithmetic).
 RegisterDescriptor codegen_shift_right_arithmetic
 (CodegenContext *cg_context,
- enum CodegenBinaryOpMode mode,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs);
 
