@@ -327,12 +327,22 @@ static void femit_x86_64_reg_to_mem(CodegenContext *context, enum Instructions_x
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "%s %%%s, %" PRId64 "(%%%s)\n",
-          mnemonic, source, offset, address);
+      if (offset) {
+        fprintf(context->code, "%s %%%s, %" PRId64 "(%%%s)\n",
+                mnemonic, source, offset, address);
+      } else {
+        fprintf(context->code, "%s %%%s, (%%%s)\n",
+                mnemonic, source, address);
+      }
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "%s [%s + %" PRId64 "], %s\n",
-          mnemonic, address, offset, source);
+      if (offset) {
+        fprintf(context->code, "%s [%s + %" PRId64 "], %s\n",
+                mnemonic, address, offset, source);
+      } else {
+        fprintf(context->code, "%s [%s], %s\n",
+                mnemonic, address, source);
+      }
       break;
     default: panic("ERROR: femit_x86_64_reg_to_mem(): Unsupported dialect %d", context->dialect);
   }
