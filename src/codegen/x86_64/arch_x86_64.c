@@ -1,5 +1,4 @@
-#include "arch_x86_64.h"
-
+#include <codegen/x86_64/arch_x86_64.h>
 #include <codegen.h>
 #include <error.h>
 #include <inttypes.h>

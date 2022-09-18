@@ -1,7 +1,7 @@
 #ifndef CODEGEN_PLATFORMS_H
 #define CODEGEN_PLATFORMS_H
 
-#include "codegen_forward.h"
+#include <codegen/codegen_forward.h>
 #include <stdio.h>
 
 /// Create a top-level codegen context.

@@ -1,7 +1,7 @@
 #ifndef ARCH_X86_64_H
 #define ARCH_X86_64_H
 
-#include "../codegen_forward.h"
+#include <codegen/codegen_forward.h>
 
 /// This is used for defining lookup tables etc. and
 /// ensures that the registers are always in the correct
