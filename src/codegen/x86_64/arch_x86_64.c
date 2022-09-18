@@ -1030,7 +1030,7 @@ void codegen_store_x86_64
 (CodegenContext *cg_context,
  RegisterDescriptor source,
  RegisterDescriptor address) {
-  femit_x86_64(cg_context, I_MOV, REGISTER_TO_MEMORY, source, address, 0);
+  femit_x86_64(cg_context, I_MOV, REGISTER_TO_MEMORY, source, address, (int64_t)0);
 }
 
 /// Add an immediate value to a register.
@@ -1165,7 +1165,7 @@ void codegen_alloca_x86_64(CodegenContext *cg_context, long long int size) {
 void codegen_prologue_x86_64(CodegenContext *cg_context) {
   femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RBP);
   femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RSP, REG_RBP);
-  femit_x86_64(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, -cg_context->locals_offset, REG_RSP);
+  femit_x86_64(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, (int64_t)-cg_context->locals_offset, REG_RSP);
 }
 
 /// Emit the function epilogue.
