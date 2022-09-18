@@ -72,4 +72,8 @@ void assert_impl (
     }                      \
   } while (0)
 
+#define TODO(...)     ASSERT(0, "TODO: "__VA_ARGS__)
+#define PANIC(...)    ASSERT(0, "PANIC: "__VA_ARGS__)
+#define UNREACHABLE() ASSERT(0, "Unreachable")
+
 #endif /* COMPILER_ERROR_H */
