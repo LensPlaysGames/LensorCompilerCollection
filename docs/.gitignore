@@ -1,0 +1,10 @@
+# PDF Output
+**/*.aux
+**/*.log
+**/*.out
+**/*.pdf
+
+# HTML Output
+**/*.html
+**/*.css
+**/*.js

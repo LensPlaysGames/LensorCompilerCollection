@@ -1,0 +1,493 @@
+% Use `pdflatex REFERENCE.tex` to produce `REFERENCE.pdf`.
+
+\documentclass[12pt]{report}
+% \documentclass[12pt, titlepage]{article}
+
+\title  {Intercept Programmer's Manual}
+\author {Rylan Lens Kellogg}
+
+% Easy, interactive cross-references with '\hyperref[label]{text}'.
+\usepackage{hyperref}
+% Prevent section titles from appearing at the bottom of pages!
+\usepackage[nobottomtitles, nobottomtitles*]{titlesec}
+% Fancy verbatim markup, for better source code.
+\usepackage{fancyvrb}
+% Fancy headers, for chapter title page headers
+\usepackage{fancyhdr}
+
+% \titleformat{<command>}[<shape>]
+% {<format>}
+% {<label>}
+% {<sep>}
+% {<before-code>}
+% {<after-code>}
+
+% Remove numbering from chapter heading.
+\titleformat  {\chapter} [hang]
+{ \normalfont\huge\bfseries }
+{}{ 0pt }
+{  }
+{  }
+% Make chapter heading snug up to top of page.
+\titlespacing*{\chapter}{-21pt}{-108pt}{10pt}
+
+% Remove numbering from section heading.
+\titleformat  {\section} [hang]
+{ \normalfont\Large\bfseries }
+{}{ 0pt }
+{  }
+{  }
+% Make section heading have a sensible amount of spacing around it.
+\titlespacing*{\section}{-10pt}{24pt}{10pt}
+
+% Set variable paragraph skip (vertical blank space between paragraphs).
+\setlength{\parskip}{3pt plus 3pt minus 1pt}
+
+\setlength{\headheight}{14.5pt}
+\addtolength{\topmargin}{-2.5pt}
+
+\begin{document}
+
+% I have no idea how this works but it puts the chapter name at the top of each page.
+% https://stackoverflow.com/a/48735234
+\pagestyle{fancy}
+\renewcommand{\chaptermark}[1]{\markboth{#1}{#1}}
+\fancyhf{}
+\fancyhead[C]{\leftmark}
+\fancyfoot[C]{\thepage}
+
+% Title Page
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+  \maketitle
+\end{titlepage}
+
+\chapter{Introduction}
+\label{sec:intro}
+
+With a language as extensive as \verb|Intercept|, it can be hard to know where to start.
+
+A program is executed from top to bottom, and in order. The entry point of the program is at the beginning of the file.
+
+The last expression of the program is the return status code from the \verb|main| function in the C runtime.
+
+Let's begin.
+
+\chapter{Variables}
+\label{chpt:vars}
+
+In mathematics, a \emph{variable} is defined as a symbol and placeholder for any mathematical object. An \verb|Intercept| variable is a symbol (or name) and placeholder for a unique chunk of memory. Using this symbol and placeholder (the variable name), this chunk of memory can be (at least) accessed to return a value, (possibly) modified, and even more that we will get to later.
+
+On top of this, \verb|Intercept| variables have a type associated with them. A type determines both the size of the chunk of memory, as well as how this chunk of memory is treated.
+
+% A trailing asterisk (i.e. "subsection*") prevents numbering of header,
+% and inclusion in TOC.
+\section*{Declaration}
+\label{subsec:variables-declaration}
+
+A variable declaration is the act of declaring a new variable within an \verb|Intercept| program. This variable will have a unique chunk of memory associated with it. How this chunk of memory can be accessed and altered is determined by the variable's declared type. The type is declared by the programmer along with the variable symbol.
+
+Let's take a look at a variable declaration in practice. Here is some \verb|Intercept| source code showing some variable declarations:
+\begin{Verbatim}[samepage=true]
+;; In Intercept, comments start with ';' and end at the newline.
+
+;; Intercept Variable Declaration Syntax
+;; <variable_name> ":" <variable_type> [ "=" <expression> ]
+
+x : integer = 34
+y : integer = x + 1
+z : integer = x + y
+\end{Verbatim}
+
+The \verb|:| is the \emph{type annotation} symbol. It associates the symbol (or name) on the left hand side with a chunk of memory (at least) large enough to store the type on the right hand side. Optionally, an expression can be given that will be the initial value of the variable. The expression must result in the same type as has been declared, or a \emph{type error} will occur. A type error indicates that a program is invalid, and the \verb|Intercept| tooling will not move on any further with it. The above example program contains no errors of any kind.
+
+\section*{Assignment}
+\label{subsec:variables-assignment}
+
+Most variables can be assigned to at any time after they have been declared using the assignment operator: \verb|:=|.
+\begin{Verbatim}[samepage=true]
+;; Intercept Variable Reassignment
+
+x : integer = 69
+y : integer = x
+x := 420
+\end{Verbatim}
+
+% \pagebreak with a numeric argument from 0 to 4 becomes a request rather than a demand.
+% The higher the number, the more blank vertical space is allowed when breaking into pages.
+%\pagebreak[1]
+\chapter{Types}
+\label{sec:types}
+
+There are a few different types built-in to \verb|Intercept|. Here they are split into two categories (\emph{base} and \emph{complex}), and listed with their symbol (or name) and a brief description.
+
+The difference between a \emph{base} type and a \emph{complex} type is that base types may have pointers to them created, while complex types may not. In addition, base types can be typecast, while complex types may not.
+
+Pointers and complex types are special in that they are not declared by writing the type symbol itself, but rather with special syntaxes for each. This is necessary due to the extra information that is needed from the programmer with these sorts of types.
+
+\section{Base Types}
+\label{subsec:types-base-types}
+
+\begin{itemize}
+\item[integer]  An 8 byte signed integer number.
+\item[byte]     A 1 byte signed integer number.
+\item[pointer]  The address of a chunk of memory that is at least the size of the base type.
+\end{itemize}
+
+\subsection*{Pointers}
+
+A pointer is a memory address; a value specifying where to find a chunk of memory at least as big as the underlying type.
+
+To create a pointer from a variable of a valid base type, use an \hyperref[subsec:expressions-address-of]{address-of expression}.
+
+To read the base type value from a pointer, use a \hyperref[subsec:expressions-dereference]{dereference expression}.
+
+When declaring a type, the programmer must declare how many levels of pointer indirection are wanted. This is done using the amount of pointer declaration operators, \verb|@|, preceding the type symbol.
+
+\begin{Verbatim}[samepage=true]
+;; Intercept Pointer Type Declaration
+
+a : integer = 69
+
+;; Pointer to an integer
+b : @integer
+
+c : @integer = &a
+b := c
+
+d : integer = @b
+\end{Verbatim}
+
+See \verb|examples/pointers| in the repository for more.
+
+\section{Complex Types}
+\label{subsec:types-complex-types}
+
+\begin{itemize}
+\item[array]    A contiguous chunk of memory big enough to store it's capacity amount of it's base type.
+\item[function] A pointer to the beginning of a procedure that may be called and returned from.
+\end{itemize}
+
+\subsection*{Arrays}
+\label{subsec:types-complex-types-arrays}
+For an array, the programmer must declare it's base type, as well as it's capacity.
+\begin{Verbatim}[samepage=true]
+;; Intercept Array Type Declaration
+eight_ints : integer[8]
+\end{Verbatim}
+
+An array of eight integers is a chunk of memory large enough to hold, you guessed it (Frank Stallone), eight integers. The memory address of any item in an array can be accessed, and further dereferenced to produce a value of the base type.
+
+\subsection*{Functions}
+\label{subsec:types-complex-types-functions}
+
+A function type has a return type, and a list of parameter types.
+
+A function type's declared return type is used to know the return type of the function call expression that calls a function of function type. Basically, the function, when called, returns a value that is of the return type.
+A function type's declared parameter type(s), if any, are used to ensure both the proper amount of arguments, and to ensure each argument expression returns the type that the function expects.
+
+Because a function is just another variable type, functions can be passed as arguments to other functions. In computer science, this is referred to as \href{https://en.wikipedia.org/wiki/Funarg_problem}{the downwards funarg problem}, and we have solved it :P.
+
+As for the \emph{upwards} funarg problem, there are plans for this to be supported. The only problem at the moment is how the function type is parsed, in that the return type must be a base type. This is just a limitation of the parser, and will eventually be fixed to allow for functions to be returned from functions, as well. One reason this is possible is because \verb|Intercept| does not allow a function to reach outside of it's own scope, other than the global scope. That is, a nested function's body may not access variables that were defined in a parent function. This allows for the parent function's stack frame to be able to be cleaned up when the function returns, and the nested function does not depend on that nested stack frame.
+
+The programmer must declare a function's return type, as well as the types of any and all parameters. It is clear that just writing \verb|function| is not going to cut it... This is why we have the following function type syntax:
+\begin{Verbatim}[samepage=true]
+;; Intercept Function Type Declaration
+
+;; Define 'square' as a function that returns an integer,
+;; and takes in one integer argument.
+square : integer(n : integer)
+
+;; Define 'plus' as a function that returns an integer,
+;; and takes in two integer arguments.
+plus : integer(a : integer b : integer)
+
+;; A comma separating each parameter is optional.
+sub : integer(a : integer, b : integer)
+\end{Verbatim}
+
+\section*{Attributes}
+\label{subsec:types-attributes}
+
+Currently, there is only one attribute: \emph{external}. It is currently only allowed on function types, and is needed to call functions that are defined outside of \verb|Intercept|. In the future, we hope to allow any type to be external. An external type is prefixed with the \verb|ext| keyword.
+
+In the future, we hope to provide a \emph{public} attribute that will allow symbols in our language to be used by other languages and such during linking.
+
+\section*{Casting Between Types}
+
+It is not yet supported, but very soon we will work on being able to convert base types to other base types, as well as reinterpret pointers to some base types to other base types.
+
+Here is an idea of the current syntax:
+\begin{Verbatim}[samepage=true]
+;; Intercept Type Casting Syntax Experimental
+a : byte = [byte]69
+\end{Verbatim}
+
+We haven't yet talked about expressions, but when we do, we will learn that \verb|69| is an expression that returns an \verb|integer|. An integer is not a byte, and I think we can all see that this is a problem. In fact, this is a type error. However, by taking advantage of type-casting, we can convert our integer into a byte, allowing the program to stay valid with no type errors. This kind of type cast is only allowed between specific built-in types, as it requires runtime handling of the value for proper conversion.
+
+A reinterpret type cast is more simple. It occurs between pointer types, as long as the cast type is a pointer that has a base type that is smaller or equal to in size than the expression return type. Let's see this in practice:
+\begin{Verbatim}[samepage=true]
+;; Intercept Reinterpret Type Casting Experimental
+x : integer = 69
+;; "foo" is a pointer to an integer initially assigned to the address of "x
+foo : @integer = &x
+bar : @byte = [@byte]foo
+\end{Verbatim}
+
+As you can see, it is valid to cast an integer pointer to a byte pointer. This is because, when the memory is read from, the integer chunk of memory is large enough to contain a byte chunk of memory. There will be no memory errors when doing this.
+
+In the future, it would be cool to allow for casting an integer to an array of bytes. This would effectively be unpacking. It would be really, ultra cool if we could also do it the other way around, and pack an array of 8 bytes into an integer. I don't know if it would ever be useful though :p.
+
+\chapter{Expressions}
+\label{sec:expressions}
+
+An \verb|Intercept| expression is anything that returns a value.
+
+\section{Numbers}
+\label{subsec:expressions-numbers}
+
+The simplest expression is just a number.
+\begin{Verbatim}[samepage=true]
+;; Intercept Simple Expressions
+5
+9
+69
+420
+\end{Verbatim}
+
+Number expressions return an \verb|integer| type. This is what allows an integer variable to be assigned to a number.
+
+\section{Binary Infix Operators}
+\label{subsec:expressions-binops}
+
+A binary operator is a symbol that acts on two values. Usually these are referred to as the left hand side and the right hand side.
+
+Here are the binary operators currently supported.
+
+\begin{itemize}
+
+%Arithmetic
+\item[$+$]
+  Add \verb|integer| to \verb|integer| and return the \verb|integer| sum.
+\item[$-$]
+  Subtract RHS \verb|integer| from LHS \verb|integer| and return the \verb|integer| difference.
+\item[$*$]
+  Multiply \verb|integer| by \verb|integer| and return the \verb|integer| product.
+\item[$/$]
+ Divide LHS \verb|integer| by RHS \verb|integer| and return the \verb|integer| quotient.
+\item[$\%$]
+ Divide LHS \verb|integer| by RHS \verb|integer| and return the \verb|integer| remainder.
+
+% Bitwise
+\item[$\langle\langle$]
+ Shift the bits of LHS \verb|integer| by RHS \verb|integer| to the left and return the \verb|integer| result.
+\item[$\rangle\rangle$]
+ Shift the bits of LHS \verb|integer| by RHS \verb|integer| to the right and return the \verb|integer| result.
+
+ % Comparison
+\item[$=$]
+ Return \verb|integer| 1 iff \verb|integer| and \verb|integer| are equal; otherwise return zero.
+\item[$\langle$]
+ Return \verb|integer| 1 iff LHS \verb|integer| is less than RHS \verb|integer|, otherwise return zero.
+\item[$\rangle$]
+ Return \verb|integer| 1 iff LHS \verb|integer| is greater than RHS \verb|integer|, otherwise return zero.
+\end{itemize}
+
+\begin{Verbatim}[samepage=true]
+;; Intercept Binary Infix Operator Expression Example
+34 + 35  ; 69
+40 % 16  ; 8
+10 < 5   ; 0
+2 << 6   ; 128
+\end{Verbatim}
+
+In the future, we hope to allow for users to define their own binary operators in the program itself.
+
+% For now, variable declarations do not return any value. They are, therefore, not expressions.
+% \subsection{Variable Declarations}
+% \label{subsec:expressions-variable-declarations}
+% TODO Actually implement variable declaration as an expression with
+% return value, in typechecking and codegen and stuff.
+
+\section{Variable Access}
+\label{subsec:expressions-variable-access}
+
+A variable that has been declared may be accessed using the symbol (or name) the variable was declared with.
+
+A variable access expression returns the declared type of the variable being accessed.
+
+The variable symbol (or name) can be thought of as a placeholder for the underlying value, much like variables in mathematical equations.
+
+\begin{Verbatim}[samepage=true]
+;; Intercept Variable Access Expression Example
+
+;; Declaration
+foo : integer
+bar : integer
+
+;; Assignment
+foo := 69
+bar := foo
+
+;; Access
+foo
+bar
+\end{Verbatim}
+
+\section{Lambdas}
+\label{subsec:expressions-lambdas}
+
+A lambda is an expression that returns a function.
+
+\begin{Verbatim}[samepage=true]
+;; Intercept Lambda Expression Example
+
+;; A lambda that returns a function that returns
+;; an integer, and doesn't take any parameters.
+integer() {
+  a : integer = 69
+  ;; The last expression in a lambda body is the return
+  ;; value.
+  a
+}
+
+;; A lambda that returns a function that returns
+;; the integer sum of two integer parameters.
+integer(x : integer y : integer) {
+  x + y
+}
+
+;; Assigning a variable function type to a lambda
+;; that returns a matching function type.
+double : integer(n : integer) = integer(n : integer) {
+  n + n
+}
+\end{Verbatim}
+
+In the future, we hope to provide a function variable declaration syntax that does not include repeating the function signature for both the variable's declared type as well as the lambda expression.
+
+\section{Function Calls}
+\label{subsec:expressions-calls}
+
+A function variable access may be transformed into a function call using parentheses following the variable symbol. Within the parentheses, arguments are passed in order. A type error occurs when the given argument expression's result type does not match the function type declarations parameter type. The return type of a function call expression is the same as the return type of the function being called.
+
+\begin{Verbatim}[samepage=true]
+;; Intercept Function Call Expression Example
+
+double : integer(n : integer) = integer(n : integer) {
+  n + n
+}
+answer_to_life_universe_and_everything : integer = double(21)
+
+sum : integer(a : integer b : integer) = integer(a : integer b : integer) {
+  a + b
+}
+sum(34, 35)
+;;  a   b
+\end{Verbatim}
+
+\section{Dereference}
+\label{subsec:expressions-dereference}
+
+The dereference operator, \verb|@|, is unary, in that it operates on a single value. This value \emph{must} be of a pointer type, otherwise a type error occurs.
+
+Most of the time, a variable of pointer type is dereferenced to access the value of the type that is pointed to. Effectively, the dereference operator removes one level of pointer indirection. This kind of dereference is an expression, and returns one less level of indirection than the given pointer type. For a concrete example, an integer pointer, when dereferenced, produces an integer value.
+
+In the specific case of a dereference on the left hand side of a variable assignment, a dereference is no longer the same type of expression. In this case, instead of returning the value, it returns the memory address of the value pointed to. This allows the assignment to write into it's left hand side result and do what the programmer expects. If this is confusing, when you see it in practice in the following example, an undertanding should hopefully fall into place.
+
+\begin{Verbatim}[samepage=true]
+;; Intercept Dereference Expression Example
+a : integer = 69
+b : integer
+
+;; Declare a pointer to an integer variable.
+ptr_to_a : @integer
+
+;; Assign 'ptr_to_a' to the address of 'a'.
+ptr_to_a := &a
+
+;; Dereference 'ptr_to_a' to access the integer value pointed to.
+b := @ptr_to_a
+
+;; 'b' is now equal to the value of the integer 'ptr_to_a' pointed to.
+;; Because 'ptr_to_a' pointed to 'a', 'b' is assigned the value of 'a'.
+;; 'a' was last assigned to the integer '69'.
+;; 'b' now equals the integer '69'.
+b
+
+;; Here is the special case, on the left hand side of an assignment.
+;; A dereference is used to write to the memory pointed to by the given
+;; pointer.
+@ptr_to_a := 420
+
+;; Accessing 'a' now returns the integer '420'.
+;; This is due to the dereference assignment.
+a
+\end{Verbatim}
+
+\section{Address Of}
+\label{subsec:expressions-address-of}
+
+The address-of operator, \verb|&|, is used to create a pointer to a variable that has already been declared.
+
+The address-of operator return type is the declared type of the given variable plus one level of pointer indirection.
+
+\begin{Verbatim}[samepage=true]
+;; Intercept Address Of Expression Example
+a : integer
+ptr : @integer
+a   := 69
+
+;; Assign 'ptr' to the address of 'a'.
+ptr := &a
+
+ptr_to_ptr : @@integer
+ptr_to_ptr := &ptr
+\end{Verbatim}
+
+\section{Array Index}
+\label{subsec:expressions-array-index}
+
+An array index expression is used to access a memory address (hopefully) within an array. It returns a pointer to an item within the array. This is unlike most other languages, where the array index expression returns the value of the item itself. To get the value of the item, use a \hyperref[subsec:expressions-dereference]{dereference expression}.
+
+\begin{Verbatim}[samepage=true]
+;; Intercept Array Index Expression Example
+int_array : integer[8]
+
+;; The array index operator returns a pointer to the array base type.
+first : @integer = int_array[0]
+
+;; To access the base type value, use a dereference.
+x : integer = @int_array[0]
+y : integer = @int_array[1]
+
+;; Assign new values into the array.
+@a[0] := x + y
+@a[1] := x + 35
+\end{Verbatim}
+
+\section{If/Else}
+\label{subsec:expressions-if-else}
+
+Unlike most languages, \verb|Intercept|'s if/else control flow construct is an expression. This means that it returns a value.
+
+The \verb|else| branch is optional, but, if included, must return the same type as the \verb|if| branch. Otherwise, static type checking would not be possible (the program would become ambiguous).
+
+The condition of the \verb|if| statement is tested against zero. That is, iff the condition result is zero, the \verb|if| branch will not be taken. If one is present, the \verb|else| branch will be taken.
+
+\begin{Verbatim}[samepage=true]
+;; Intercept If/Else Expression Example
+
+less_than_100 : integer(n : integer) = integer(n : integer) {
+  ;; Because the 'if/else' expression is the last expression
+  ;; in the function, it's result is what will be returned.
+  ;; The type checker ensures both branches return an 'integer'.
+  if n < 100 {
+    1
+  } else {
+    0
+  }
+}
+\end{Verbatim}
+
+\end{document}
