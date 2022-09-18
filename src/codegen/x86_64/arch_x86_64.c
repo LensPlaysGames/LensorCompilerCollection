@@ -657,16 +657,22 @@ static void femit_x86_64
 }
 
 /// X86_64-specific code generation state.
-typedef struct ArchData {
+typedef struct StackFrame {
   /// The type of function call that is currently being emitted.
   enum {
     FUNCTION_CALL_TYPE_NONE,
     FUNCTION_CALL_TYPE_INTERNAL,
     FUNCTION_CALL_TYPE_EXTERNAL,
-  } current_call;
+  } call_type;
   /// The number of arguments emitted.
   size_t call_arg_count;
   char rax_in_use;
+  char call_performed;
+  struct StackFrame* parent;
+} StackFrame;
+
+typedef struct ArchData {
+  StackFrame *current_call;
 } ArchData;
 
 /// Creates a context for the CG_FMT_x86_64_MSWIN architecture.
@@ -751,9 +757,10 @@ RegisterDescriptor codegen_load_immediate_x86_64
 /// Copy the return value from RAX into a new register.
 static RegisterDescriptor copy_return_value(CodegenContext *cg_context) {
   ArchData *arch_data = cg_context->arch_data;
-  ASSERT(arch_data->current_call != FUNCTION_CALL_TYPE_NONE);
+  ASSERT(arch_data->current_call, "Cannot copy return value outside of a function call.");
+  ASSERT(arch_data->current_call->call_performed, "Cannot copy return value before a call has been performed");
 
-  if (arch_data->rax_in_use) {
+  if (arch_data->current_call->rax_in_use) {
     RegisterDescriptor result = register_allocate(cg_context);
     femit_x86_64(cg_context, I_MOV,
                  REGISTER_TO_REGISTER,
@@ -865,26 +872,32 @@ static RegisterDescriptor shift
 /// Save state before a function call.
 void codegen_prepare_call_x86_64(CodegenContext *cg_context) {
   ArchData *arch_data = cg_context->arch_data;
-  if (arch_data->current_call != FUNCTION_CALL_TYPE_NONE) {
-    panic("Cannot prepare call if a call is already prepared");
-  }
 
-  arch_data->rax_in_use = cg_context->register_pool.registers[REG_RAX].in_use;
-  if (arch_data->rax_in_use) femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RAX);
+  // Create a new stack frame and push it onto the call stack.
+  StackFrame *parent = arch_data->current_call;
+  StackFrame *frame = calloc(1, sizeof(StackFrame));
+  frame->parent = parent;
+  arch_data->current_call = frame;
+
+  arch_data->current_call->rax_in_use = cg_context->register_pool.registers[REG_RAX].in_use;
+  if (arch_data->current_call->rax_in_use) femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RAX);
 }
 
 /// Add an argument to the current function call.
 void codegen_add_external_function_arg_x86_64(CodegenContext *cg_context, RegisterDescriptor arg) {
   ArchData *arch_data = cg_context->arch_data;
-  switch (arch_data->current_call) {
-    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call = FUNCTION_CALL_TYPE_EXTERNAL; break;
+  ASSERT(arch_data->current_call, "Cannot add argument if there is no call in progress.");
+  ASSERT(!arch_data->current_call->call_performed, "Cannot add argument if call has already been performed.");
+
+  switch (arch_data->current_call->call_type) {
+    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call->call_type = FUNCTION_CALL_TYPE_EXTERNAL; break;
     case FUNCTION_CALL_TYPE_EXTERNAL: break;
     default: panic("Cannot add external argument if internal call is prepared");
   }
 
   switch (cg_context->call_convention) {
     case CG_CALL_CONV_MSWIN: {
-      switch (arch_data->call_arg_count++) {
+      switch (arch_data->current_call->call_arg_count++) {
         case 0: femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, arg, REG_RCX); break;
         case 1: femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, arg, REG_RDX); break;
         case 2: femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, arg, REG_R8); break;
@@ -904,13 +917,16 @@ void codegen_add_external_function_arg_x86_64(CodegenContext *cg_context, Regist
 /// Add an argument to the current function call.
 void codegen_add_internal_function_arg_x86_64(CodegenContext *cg_context, RegisterDescriptor arg) {
   ArchData *arch_data = cg_context->arch_data;
-  switch (arch_data->current_call) {
-    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call = FUNCTION_CALL_TYPE_INTERNAL; break;
+  ASSERT(arch_data->current_call, "Cannot add argument if there is no call in progress.");
+  ASSERT(!arch_data->current_call->call_performed, "Cannot add argument if call has already been performed.");
+
+  switch (arch_data->current_call->call_type) {
+    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call->call_type = FUNCTION_CALL_TYPE_INTERNAL; break;
     case FUNCTION_CALL_TYPE_INTERNAL: break;
     default: panic("Cannot add internal argument if external call is prepared");
   }
 
-  arch_data->call_arg_count++;
+  arch_data->current_call->call_arg_count++;
   femit_x86_64(cg_context, I_PUSH, REGISTER, arg);
 }
 
@@ -919,8 +935,12 @@ RegisterDescriptor codegen_perform_external_call_x86_64
 (CodegenContext *cg_context,
  const char* function_name) {
   ArchData *arch_data = cg_context->arch_data;
-  switch (arch_data->current_call) {
-    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call = FUNCTION_CALL_TYPE_EXTERNAL; break;
+  ASSERT(arch_data->current_call, "Cannot perform call if there is no call in progress.");
+  ASSERT(!arch_data->current_call->call_performed, "Cannot perform the same call twice.");
+  arch_data->current_call->call_performed = 1;
+
+  switch (arch_data->current_call->call_type) {
+    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call->call_type = FUNCTION_CALL_TYPE_EXTERNAL; break;
     case FUNCTION_CALL_TYPE_EXTERNAL: break;
     default: panic("Cannot perform external call after preparing internal call");
   }
@@ -932,8 +952,12 @@ RegisterDescriptor codegen_perform_external_call_x86_64
 /// Call an internal function. Return the register containing the return value.
 RegisterDescriptor codegen_perform_internal_call_x86_64(CodegenContext *cg_context, RegisterDescriptor function) {
   ArchData *arch_data = cg_context->arch_data;
-  switch (arch_data->current_call) {
-    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call = FUNCTION_CALL_TYPE_INTERNAL; break;
+  ASSERT(arch_data->current_call, "Cannot perform call if there is no call in progress.");
+  ASSERT(!arch_data->current_call->call_performed, "Cannot perform the same call twice.");
+  arch_data->current_call->call_performed = 1;
+
+  switch (arch_data->current_call->call_type) {
+    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call->call_type = FUNCTION_CALL_TYPE_INTERNAL; break;
     case FUNCTION_CALL_TYPE_INTERNAL: break;
     default: panic("Cannot perform internal call after preparing external call");
   }
@@ -945,13 +969,15 @@ RegisterDescriptor codegen_perform_internal_call_x86_64(CodegenContext *cg_conte
 /// Clean up after a function call.
 void codegen_cleanup_call_x86_64(CodegenContext *cg_context) {
   ArchData *arch_data = cg_context->arch_data;
+  ASSERT(arch_data->current_call, "Cannot clean up call if there is no call in progress.");
+  ASSERT(arch_data->current_call->call_performed, "Cannot clean up call that hasn't been performed yet.");
 
   // Clean up stack from function call. This is only needed if
   // arguments were passed on the stack.
-  switch (arch_data->current_call) {
+  switch (arch_data->current_call->call_type) {
     case FUNCTION_CALL_TYPE_INTERNAL:
       femit_x86_64(cg_context, I_ADD, IMMEDIATE_TO_REGISTER,
-                   (int64_t)(arch_data->call_arg_count * 8), REG_RSP);
+                   (int64_t)(arch_data->current_call->call_arg_count * 8), REG_RSP);
       break;
     case FUNCTION_CALL_TYPE_EXTERNAL:
       break;
@@ -959,14 +985,14 @@ void codegen_cleanup_call_x86_64(CodegenContext *cg_context) {
   }
 
   // Restore rax if it was in use, because function return value clobbered it.
-  if (arch_data->rax_in_use) {
+  if (arch_data->current_call->rax_in_use) {
     femit_x86_64(cg_context, I_POP, REGISTER, REG_RAX);
   }
 
   // Clean up the call state.
-  arch_data->current_call = FUNCTION_CALL_TYPE_NONE;
-  arch_data->call_arg_count = 0;
-  arch_data->rax_in_use = 0;
+  StackFrame *parent = arch_data->current_call->parent;
+  free(arch_data->current_call);
+  arch_data->current_call = parent;
 }
 
 /// Load the address of a global variable into a newly allocated register and return it.
