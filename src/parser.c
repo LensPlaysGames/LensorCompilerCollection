@@ -669,7 +669,6 @@ Error parse_binary_infix_operator
   // and is not null terminator, extend binary operator.
   // This is needed to catch binary operators like "<<" made up of
   // multiple delimiters.
-  Token single_lex_operator = current_copy;
   while (*state_copy.current->end != '\0'
          && strchr(whitespace, *state_copy.current->end) == NULL
          && strchr(delimiters, *state_copy.current->end) != NULL) {
@@ -1081,8 +1080,10 @@ Error parse_type(ParsingContext *context, ParsingState *state, Node *type) {
         ERROR_PREP(err, ERROR_SYNTAX, "I hope we never see this error");
         return err;
       }
-      Node *parameter_name = node_symbol_from_buffer(state->current->beginning,
-                                                     state->current->end - state->current->beginning);
+
+      //Node *parameter_name = node_symbol_from_buffer(state->current->beginning,
+      //                                               state->current->end - state->current->beginning);
+
       EXPECT(expected, ":", state);
       if (!expected.found) {
         ERROR_PREP(err, ERROR_SYNTAX,
