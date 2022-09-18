@@ -179,32 +179,8 @@ Error codegen_expression
       // TODO: Only save scratch registers that are in-use.
 
       // Put arguments in RCX, RDX, R8, R9, then on the stack in reverse order.
-      if (iterator) {
+      while (iterator) {
         // Place first argument in RCX or XMM0
-        err = codegen_expression(cg_context, context, next_child_context, iterator);
-        if (err.type) { return err; }
-
-        codegen_add_external_function_arg(cg_context, iterator->result_register);
-        iterator = iterator->next_child;
-      }
-      if (iterator) {
-        // Place second argument in RDX or XMM1
-        err = codegen_expression(cg_context, context, next_child_context, iterator);
-        if (err.type) { return err; }
-
-        codegen_add_external_function_arg(cg_context, iterator->result_register);
-        iterator = iterator->next_child;
-      }
-      if (iterator) {
-        // Place third argument in R8 or XMM2
-        err = codegen_expression(cg_context, context, next_child_context, iterator);
-        if (err.type) { return err; }
-
-        codegen_add_external_function_arg(cg_context, iterator->result_register);
-        iterator = iterator->next_child;
-      }
-      if (iterator) {
-        // Place third argument in R9 or XMM3
         err = codegen_expression(cg_context, context, next_child_context, iterator);
         if (err.type) { return err; }
 
