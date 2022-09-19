@@ -11,6 +11,28 @@
 #include <string.h>
 #include <typechecker.h>
 
+/// This is used for defining lookup tables etc. and
+/// ensures that the registers are always in the correct
+/// order
+#define FOR_ALL_X86_64_REGISTERS(F)     \
+  F(RAX, "rax", "eax", "ax", "al")      \
+  F(RBX, "rbx", "ebx", "bx", "bl")      \
+  F(RCX, "rcx", "ecx", "cx", "cl")      \
+  F(RDX, "rdx", "edx", "dx", "dl")      \
+  F(R8,  "r8", "r8d", "r8w", "r8b")     \
+  F(R9,  "r9", "r9d", "r9w", "r9b")     \
+  F(R10, "r10", "r10d", "r10w", "r10b") \
+  F(R11, "r11", "r11d", "r11w", "r11b") \
+  F(R12, "r12", "r12d", "r12w", "r12b") \
+  F(R13, "r13", "r13d", "r13w", "r13b") \
+  F(R14, "r14", "r14d", "r14w", "r14b") \
+  F(R15, "r15", "r15d", "r15w", "r15b") \
+  F(RSI, "rsi", "esi", "si", "sil")     \
+  F(RDI, "rdi", "edi", "di", "dil")     \
+  F(RBP, "rbp", "ebp", "bp", "bpl")     \
+  F(RSP, "rsp", "esp", "sp", "spl")     \
+  F(RIP, "rip", "eip", "ip", "ipl")
+
 #define DEFINE_REGISTER_ENUM(name, ...) REG_##name,
 #define REGISTER_NAME_64(ident, name, ...) name,
 #define REGISTER_NAME_32(ident, name, name_32, ...) name_32,
@@ -49,6 +71,41 @@ DEFINE_REGISTER_NAME_LOOKUP_FUNCTION(register_name_8, 8)
 
 #undef DEFINE_REGISTER_ENUM
 #undef DEFINE_REGISTER_NAME_LOOKUP_FUNCTION
+
+typedef struct Register {
+  /// If non-zero, this register is in use.
+  char in_use;
+  /// Identifies a register uniquely.
+  RegisterDescriptor descriptor;
+} Register;
+
+/// Architecture-specific register information.
+typedef struct RegisterPool {
+  Register *registers;
+  Register **scratch_registers;
+  size_t num_scratch_registers;
+  size_t num_registers;
+} RegisterPool;
+
+/// X86_64-specific code generation state.
+typedef struct StackFrame {
+  /// The type of function call that is currently being emitted.
+  enum {
+    FUNCTION_CALL_TYPE_NONE,
+    FUNCTION_CALL_TYPE_INTERNAL,
+    FUNCTION_CALL_TYPE_EXTERNAL,
+  } call_type;
+  /// The number of arguments emitted.
+  size_t call_arg_count;
+  char rax_in_use;
+  char call_performed;
+  struct StackFrame* parent;
+} StackFrame;
+
+typedef struct ArchData {
+  StackFrame *current_call;
+  RegisterPool register_pool;
+} ArchData;
 
 /// Types of conditional jump instructions (Jcc).
 /// Do NOT reorder these.
@@ -231,12 +288,51 @@ static const char *instruction_mnemonic_x86_64(CodegenContext *context, enum Ins
   }
 }
 
+static void femit_x86_64
+(CodegenContext *context,
+ enum Instructions_x86_64 instruction,
+ ...);
+
+static char register_descriptor_is_valid(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
+  ArchData *arch_data = cg_ctx->arch_data;
+  return descriptor >= 0 && descriptor < (int)arch_data->register_pool.num_registers;
+}
+
+static RegisterDescriptor register_allocate(CodegenContext *cg_ctx) {
+  ArchData *arch_data = cg_ctx->arch_data;
+  ASSERT(arch_data->register_pool.num_registers > 0 && arch_data->register_pool.num_scratch_registers > 0, "Register pool is empty");
+
+  for (size_t i = 0; i < arch_data->register_pool.num_scratch_registers; ++i) {
+    Register *reg = arch_data->register_pool.scratch_registers[i];
+    if (reg->in_use == 0) {
+      reg->in_use = 1;
+      return reg->descriptor;
+    }
+  }
+  panic("ERROR::register_allocate(): Could not allocate register!\n");
+  return 0; // Unreachable
+}
+
+static void register_deallocate(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
+  ArchData *arch_data = cg_ctx->arch_data;
+  if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
+    panic("ERROR::register_deallocate(): Invalid register descriptor!\n");
+  }
+  arch_data->register_pool.registers[descriptor].in_use = 0;
+}
+
 static void femit_x86_64_imm_to_reg(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
-  int64_t immediate                    = va_arg(args, int64_t);
+  int64_t immediate                        = va_arg(args, int64_t);
   RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
 
   const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
   const char *destination = register_name(destination_register);
+
+  // Optimise zeroing out a register.
+  if (inst == I_MOV && immediate == 0) {
+    femit_x86_64(context, I_XOR, REGISTER_TO_REGISTER, destination_register, destination_register);
+    return;
+  }
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
@@ -656,28 +752,9 @@ static void femit_x86_64
   va_end(args);
 }
 
-/// X86_64-specific code generation state.
-typedef struct StackFrame {
-  /// The type of function call that is currently being emitted.
-  enum {
-    FUNCTION_CALL_TYPE_NONE,
-    FUNCTION_CALL_TYPE_INTERNAL,
-    FUNCTION_CALL_TYPE_EXTERNAL,
-  } call_type;
-  /// The number of arguments emitted.
-  size_t call_arg_count;
-  char rax_in_use;
-  char call_performed;
-  struct StackFrame* parent;
-} StackFrame;
-
-typedef struct ArchData {
-  StackFrame *current_call;
-} ArchData;
-
 /// Creates a context for the CG_FMT_x86_64_MSWIN architecture.
 CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
-  RegisterPool pool;
+  CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
 
   // If this is the top level context, create the registers.
   // Otherwise, shallow copy register pool to child context.
@@ -700,34 +777,23 @@ CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
     scratch_registers[5] = registers + REG_R10;
     scratch_registers[6] = registers + REG_R11;
 
-    pool.registers = registers;
-    pool.scratch_registers = scratch_registers;
-    pool.num_scratch_registers = number_of_scratch_registers;
-    pool.num_registers = REG_COUNT;
-  } else {
-    pool = parent->register_pool;
-  }
+    ArchData *arch_data = calloc(1, sizeof(ArchData));
+    cg_ctx->arch_data = arch_data;
+    arch_data->register_pool.registers = registers;
+    arch_data->register_pool.scratch_registers = scratch_registers;
+    arch_data->register_pool.num_scratch_registers = number_of_scratch_registers;
+    arch_data->register_pool.num_registers = REG_COUNT;
 
-  CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
-
-  // Shallow-copy state from the parent.
-  if (parent) {
-    cg_ctx->code = parent->code;
-    cg_ctx->arch_data = parent->arch_data;
-    cg_ctx->format = parent->format;
-    cg_ctx->call_convention = parent->call_convention;
-    cg_ctx->dialect = parent->dialect;
-  } else {
-    cg_ctx->arch_data = calloc(1, sizeof(ArchData));
     cg_ctx->format = CG_FMT_x86_64_GAS;
     cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
     cg_ctx->dialect = CG_ASM_DIALECT_ATT;
+  } else {
+    *cg_ctx = *parent;
   }
 
   cg_ctx->parent = parent;
   cg_ctx->locals = environment_create(NULL);
   cg_ctx->locals_offset = -32;
-  cg_ctx->register_pool = pool;
   return cg_ctx;
 }
 
@@ -735,8 +801,9 @@ CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
 void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
   // Only free the registers and arch data if this is the top-level context.
   if (!ctx->parent) {
-    free(ctx->register_pool.registers);
-    free(ctx->register_pool.scratch_registers);
+    ArchData *arch_data = ctx->arch_data;
+    free(arch_data->register_pool.registers);
+    free(arch_data->register_pool.scratch_registers);
     free(ctx->arch_data);
   }
   // TODO(sirraide): Free environment.
@@ -780,8 +847,9 @@ static RegisterDescriptor divmod
   // Quotient is in RAX, Remainder in RDX; we must save and restore these
   // registers before and after divide, if they were in use, unless either
   // register is the lhs and rhs and we are allowed to clobber registers.
-  Register* rax = cg_context->register_pool.registers + REG_RAX;
-  Register* rdx = cg_context->register_pool.registers + REG_RDX;
+  ArchData *arch_data = cg_context->arch_data;
+  Register* rax = arch_data->register_pool.registers + REG_RAX;
+  Register* rdx = arch_data->register_pool.registers + REG_RDX;
 
   char rax_pushed = rax->in_use && ((lhs != REG_RAX && rhs != REG_RAX));
   char rdx_pushed = rdx->in_use && ((lhs != REG_RDX && rhs != REG_RDX));
@@ -845,7 +913,8 @@ static RegisterDescriptor shift
  enum Instructions_x86_64 shift_instruction,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
-  Register* rcx = cg_context->register_pool.registers + REG_RCX;
+  ArchData *arch_data = cg_context->arch_data;
+  Register* rcx = arch_data->register_pool.registers + REG_RCX;
   // Save RCX if it's in use and not the same as lhs or rhs by swapping
   // it with rhs. Otherwise, if the lhs is RCX, swap it with the rhs.
   // Otherwise, move the rhs into RCX.
@@ -879,7 +948,7 @@ void codegen_prepare_call_x86_64(CodegenContext *cg_context) {
   frame->parent = parent;
   arch_data->current_call = frame;
 
-  arch_data->current_call->rax_in_use = cg_context->register_pool.registers[REG_RAX].in_use;
+  arch_data->current_call->rax_in_use = arch_data->register_pool.registers[REG_RAX].in_use;
   if (arch_data->current_call->rax_in_use) femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RAX);
 }
 
@@ -928,6 +997,7 @@ void codegen_add_internal_function_arg_x86_64(CodegenContext *cg_context, Regist
 
   arch_data->current_call->call_arg_count++;
   femit_x86_64(cg_context, I_PUSH, REGISTER, arg);
+  register_deallocate(cg_context, arg);
 }
 
 /// Call an external function. Returns the register containing the return value.
@@ -963,6 +1033,7 @@ RegisterDescriptor codegen_perform_internal_call_x86_64(CodegenContext *cg_conte
   }
 
   femit_x86_64(cg_context, I_CALL, REGISTER, function);
+  register_deallocate(cg_context, function);
   return copy_return_value(cg_context);
 }
 
@@ -996,43 +1067,47 @@ void codegen_cleanup_call_x86_64(CodegenContext *cg_context) {
 }
 
 /// Load the address of a global variable into a newly allocated register and return it.
-void codegen_load_global_address_into_x86_64
+RegisterDescriptor codegen_load_global_address_x86_64
 (CodegenContext *cg_context,
- const char *name,
- RegisterDescriptor target) {
+ const char *name) {
+  RegisterDescriptor reg = register_allocate(cg_context);
   femit_x86_64(cg_context, I_LEA, NAME_TO_REGISTER,
-      REG_RIP, name,
-      target);
+               REG_RIP, name,
+               reg);
+  return reg;
 }
 
 /// Load the address of a local variable into a newly allocated register and return it.
-void codegen_load_local_address_into_x86_64
+RegisterDescriptor codegen_load_local_address_x86_64
 (CodegenContext *cg_context,
- long long int offset,
- RegisterDescriptor target)  {
+ long long int offset)  {
+  RegisterDescriptor reg = register_allocate(cg_context);
   femit_x86_64(cg_context, I_LEA, MEMORY_TO_REGISTER,
                REG_RBP, offset,
-               target);
+               reg);
+  return reg;
 }
 
 /// Load the value of a global variable into a newly allocated register and return it.
-void codegen_load_global_into_x86_64
+RegisterDescriptor codegen_load_global_x86_64
 (CodegenContext *cg_context,
- const char *name,
- RegisterDescriptor target) {
+ const char *name) {
+  RegisterDescriptor reg = register_allocate(cg_context);
   femit_x86_64(cg_context, I_MOV, NAME_TO_REGISTER,
-      REG_RIP, name,
-      target);
+               REG_RIP, name,
+               reg);
+  return reg;
 }
 
 /// Load the value of a local variable into a newly allocated register and return it.
-void codegen_load_local_into_x86_64
+RegisterDescriptor codegen_load_local_x86_64
 (CodegenContext *cg_context,
- long long int offset,
- RegisterDescriptor target)  {
+ long long int offset)  {
+  RegisterDescriptor reg = register_allocate(cg_context);
   femit_x86_64(cg_context, I_MOV, MEMORY_TO_REGISTER,
       REG_RBP, offset,
-      target);
+      reg);
+  return reg;
 }
 
 /// Store a global variable.
@@ -1059,6 +1134,8 @@ void codegen_store_x86_64
  RegisterDescriptor source,
  RegisterDescriptor address) {
   femit_x86_64(cg_context, I_MOV, REGISTER_TO_MEMORY, source, address, (int64_t)0);
+  register_deallocate(cg_context, source);
+  register_deallocate(cg_context, address);
 }
 
 /// Add an immediate value to a register.
@@ -1077,6 +1154,7 @@ void codegen_branch_if_zero_x86_64
  const char *label) {
   femit_x86_64(cg_context, I_TEST, REGISTER_TO_REGISTER, reg, reg);
   femit_x86_64(cg_context, I_JCC, JUMP_TYPE_Z, label);
+  register_deallocate(cg_context, reg);
 }
 
 /// Branch to a label.
@@ -1190,14 +1268,14 @@ void codegen_alloca_x86_64(CodegenContext *cg_context, long long int size) {
 }
 
 /// Emit the function prologue.
-void codegen_prologue_x86_64(CodegenContext *cg_context) {
+void codegen_function_prologue_x86_64(CodegenContext *cg_context) {
   femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RBP);
   femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RSP, REG_RBP);
   femit_x86_64(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, (int64_t)-cg_context->locals_offset, REG_RSP);
 }
 
 /// Emit the function epilogue.
-void codegen_epilogue_x86_64(CodegenContext *cg_context) {
+void codegen_function_epilogue_x86_64(CodegenContext *cg_context) {
   femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
   femit_x86_64(cg_context, I_POP, REGISTER, REG_RBP);
   femit_x86_64(cg_context, I_RET);
@@ -1216,5 +1294,37 @@ void codegen_entry_point_x86_64(CodegenContext *cg_context) {
       ".global main\n"
       "main:\n",
       cg_context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
-  codegen_prologue_x86_64(cg_context);
+  codegen_function_prologue_x86_64(cg_context);
+}
+
+void codegen_dispose_x86_64(CodegenContext *cg_context, RegisterDescriptor reg) {
+  register_deallocate(cg_context, reg);
+}
+
+typedef struct PHINodeImpl {
+  RegisterDescriptor output_register;
+  char finalised;
+} PHINodeImpl;
+
+PHI codegen_phi_create_x86_64(CodegenContext *cg_context) {
+  PHI phi = calloc(1, sizeof(PHINodeImpl));
+  phi->output_register = register_allocate(cg_context);
+  return phi;
+}
+
+void codegen_phi_add_value_x86_64(CodegenContext *cg_context, PHI phi, RegisterDescriptor value) {
+  ASSERT(!phi->finalised, "Cannot add values to a finalised PHI node");
+  femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, value, phi->output_register);
+  register_deallocate(cg_context, value);
+}
+
+void codegen_phi_add_immediate_x86_64(CodegenContext *cg_context, PHI phi, long long int value) {
+  ASSERT(!phi->finalised, "Cannot add values to a finalised PHI node");
+  femit_x86_64(cg_context, I_MOV, IMMEDIATE_TO_REGISTER, value, phi->output_register);
+}
+
+RegisterDescriptor codegen_phi_finalise_x86_64(CodegenContext *cg_context, PHI phi) {
+  ASSERT(!phi->finalised, "Cannot finalise a finalised PHI node");
+  phi->finalised = 1;
+  return phi->output_register;
 }

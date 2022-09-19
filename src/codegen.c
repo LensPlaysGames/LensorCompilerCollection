@@ -14,35 +14,6 @@
 #include <typechecker.h>
 
 char codegen_verbose = 1;
-//================================================================ BEG REGISTER STUFF
-
-char register_descriptor_is_valid(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
-  return descriptor >= 0 && descriptor < (int)cg_ctx->register_pool.num_registers;
-}
-
-RegisterDescriptor register_allocate(CodegenContext *cg_ctx) {
-  ASSERT(cg_ctx->register_pool.num_registers > 0 && cg_ctx->register_pool.num_scratch_registers > 0, "Register pool is empty");
-
-  for (size_t i = 0; i < cg_ctx->register_pool.num_scratch_registers; ++i) {
-    Register *reg = cg_ctx->register_pool.scratch_registers[i];
-    if (reg->in_use == 0) {
-      reg->in_use = 1;
-      return reg->descriptor;
-    }
-  }
-  panic("ERROR::register_allocate(): Could not allocate register!\n");
-  return 0; // Unreachable
-}
-
-void register_deallocate
-(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
-  if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
-    panic("ERROR::register_deallocate(): Invalid register descriptor!\n");
-  }
-  cg_ctx->register_pool.registers[descriptor].in_use = 0;
-}
-
-//================================================================ END REGISTER STUFF
 
 //================================================================ BEG CG_FMT_x86_64_MSWIN
 
@@ -197,7 +168,6 @@ Error codegen_expression
         err = codegen_expression(cg_context, context, next_child_context, iterator);
         if (err.type) { return err; }
         codegen_add_internal_function_arg(cg_context, iterator->result_register);
-        register_deallocate(cg_context, iterator->result_register);
         iterator = iterator->next_child;
       }
 
@@ -206,7 +176,6 @@ Error codegen_expression
 
       // Emit call
       expression->result_register = codegen_perform_internal_call(cg_context, expression->children->result_register);
-      register_deallocate(cg_context, expression->children->result_register);
     }
 
     codegen_cleanup_call(cg_context);
@@ -236,11 +205,7 @@ Error codegen_expression
                                       result, expression);
 
     // Function returns beginning of instructions address.
-    expression->result_register = register_allocate(cg_context);
-    codegen_load_global_address_into(cg_context, result, expression->result_register);
-    /*femit_x86_64(cg_context, INSTRUCTION_X86_64_LEA, NAME_TO_REGISTER,
-        REG_X86_64_RIP, result,
-        expression->result_register);*/
+    expression->result_register = codegen_load_global_address(cg_context, result);
     break;
   case NODE_TYPE_DEREFERENCE:
     if (codegen_verbose) {
@@ -323,7 +288,6 @@ Error codegen_expression
     char *otherwise_label = label_generate();
     char *after_otherwise_label = label_generate();
     codegen_branch_if_zero(cg_context, expression->children->result_register, otherwise_label);
-    register_deallocate(cg_context, expression->children->result_register);
 
     if (codegen_verbose) {
       fprintf(code, ";;#; If THEN\n");
@@ -351,16 +315,15 @@ Error codegen_expression
                                expr);
       if (err.type) { return err; }
       if (last_expr) {
-        register_deallocate(cg_context, last_expr->result_register);
+        codegen_dispose(cg_context, last_expr->result_register);
       }
       last_expr = expr;
       expr = expr->next_child;
     }
 
     // Generate code to copy last expr result register to if result register.
-    expression->result_register = register_allocate(cg_context);
-    codegen_copy_register(cg_context, last_expr->result_register, expression->result_register);
-    register_deallocate(cg_context, last_expr->result_register);
+    PHI phi = codegen_phi_create(cg_context);
+    codegen_phi_add_value(cg_context, phi, last_expr->result_register);
     codegen_branch(cg_context, after_otherwise_label);
 
     if (codegen_verbose) {
@@ -393,19 +356,20 @@ Error codegen_expression
                                  expr);
         if (err.type) { return err; }
         if (last_expr) {
-          register_deallocate(cg_context, last_expr->result_register);
+          codegen_dispose(cg_context, last_expr->result_register);
         }
         last_expr = expr;
         expr = expr->next_child;
       }
       // Copy last_expr result register to if result register.
       if (last_expr) {
-        codegen_copy_register(cg_context, last_expr->result_register, expression->result_register);
-        register_deallocate(cg_context, last_expr->result_register);
+        codegen_phi_add_value(cg_context, phi, last_expr->result_register);
       }
     } else {
-      codegen_zero_register(cg_context, expression->result_register);
+      codegen_phi_add_immediate(cg_context, phi, 0);
     }
+
+    expression->result_register = codegen_phi_finalise(cg_context, phi);
 
     fprintf(code, "%s:\n", after_otherwise_label);
 
@@ -584,8 +548,6 @@ Error codegen_expression
       codegen_store(cg_context,
                     expression->children->next_child->result_register,
                     expression->children->result_register);
-      register_deallocate(cg_context, expression->children->next_child->result_register);
-      register_deallocate(cg_context, expression->children->result_register);
     }
     break;
   case NODE_TYPE_CAST:
@@ -691,10 +653,12 @@ Error codegen_function
   Node *expression = function->children->next_child->next_child->children;
   while (expression) {
     err = codegen_expression(cg_context, ctx, &next_child_ctx, expression);
-    register_deallocate(cg_context, expression->result_register);
     if (err.type) {
       print_error(err);
       return err;
+    }
+    if (last_expression) {
+      codegen_dispose(cg_context, last_expression->result_register);
     }
     last_expression = expression;
     expression = expression->next_child;
@@ -753,7 +717,9 @@ Error codegen_program(CodegenContext *cg_context, ParsingContext *context, Node 
     }
     err = codegen_expression(cg_context, context, &next_child_context, expression);
     if (err.type) { return err; }
-    register_deallocate(cg_context, expression->result_register);
+    if (last_expression) {
+      codegen_dispose(cg_context, last_expression->result_register);
+    }
     last_expression = expression;
     expression = expression->next_child;
   }

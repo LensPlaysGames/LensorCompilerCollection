@@ -2,9 +2,7 @@
 #define CODEGEN_FORWARD_H
 
 typedef int RegisterDescriptor;
-
-typedef struct Register Register;
-typedef struct RegisterPool RegisterPool;
+typedef struct PHINodeImpl* PHI;
 typedef struct CodegenContext CodegenContext;
 
 enum CodegenAssemblyDialect {
