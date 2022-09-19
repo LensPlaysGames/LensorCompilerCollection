@@ -50,6 +50,15 @@
 # define VA_SEPARATOR_COMMA() ,
 #endif
 
+/// This is so we don't depend on error.h.
+#ifndef FORMAT
+# ifndef _MSC_VER
+#   define FORMAT(...) __attribute__((format(__VA_ARGS__)))
+# else
+#   define FORMAT(...)
+# endif
+#endif
+
 #ifndef CODEGEN_API_PARAMS_DECLARE
 # define CODEGEN_API_PARAMS_DECLARE(type, name) type name
 #endif
@@ -232,5 +241,19 @@ CODEGEN_API_FUNCTION(void, codegen_phi_add_immediate, PHI, phi, long long int, i
 ///  Finalise a phi node. This returns the final value of the phi node.
 CODEGEN_API_FUNCTION(RegisterDescriptor, codegen_phi_finalise, PHI, phi);
 
+/// Create a comment.
+CODEGEN_API_FUNCTION(void, codegen_vcomment, const char *, fmt, va_list, ap);
+
+/// Create a comment.
+/// Backends should implement `codegen_vcomment_*()` instead.
+FORMAT(printf, 2, 3)
+void codegen_comment(CodegenContext *ctx, const char* fmt, ...);
+
+/// Create a comment if verbose mode is enabled.
+/// Backends should implement `codegen_vcomment_verbose_*()` instead.
+FORMAT(printf, 2, 3)
+void codegen_comment_verbose(CodegenContext *ctx, const char* fmt, ...);
+
 #undef CODEGEN_API_FUNCTION
+#undef CODEGEN_API_FUNCTION_VARIADIC
 #undef CODEGEN_API_FUNCTION_NAME

@@ -1328,3 +1328,9 @@ RegisterDescriptor codegen_phi_finalise_x86_64(CodegenContext *cg_context, PHI p
   phi->finalised = 1;
   return phi->output_register;
 }
+
+void codegen_vcomment_x86_64(CodegenContext *context, const char* fmt, va_list ap) {
+  fprintf(context->code, ";;#; ");
+  vfprintf(context->code, fmt, ap);
+  fprintf(context->code, "\n");
+}

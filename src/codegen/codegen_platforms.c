@@ -1,9 +1,8 @@
-#include <codegen/codegen_platforms.h>
-
-#include <codegen/x86_64/arch_x86_64.h>
-
 #include <codegen.h>
+#include <codegen/codegen_platforms.h>
+#include <codegen/x86_64/arch_x86_64.h>
 #include <error.h>
+#include <stdarg.h>
 
 CodegenContext *codegen_context_create_top_level
 (enum CodegenOutputFormat format,
@@ -60,13 +59,28 @@ void codegen_context_free(CodegenContext *context) {
   panic("free_codegen_context() could not free the given context.");
 }
 
+void codegen_comment(CodegenContext *context, const char* fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  codegen_vcomment(context, fmt, ap);
+  va_end(ap);
+}
+
+void codegen_comment_verbose(CodegenContext *context, const char* fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  if (codegen_verbose) {
+    codegen_vcomment(context, fmt, ap);
+  }
+  va_end(ap);
+}
+
 #define SECOND(x, y) y
 #define CODEGEN_API_FUNCTION(return_type, name, ...) \
   return_type name(FOR_EACH_PAIR_JOIN(CODEGEN_API_PARAMS_DECLARE, VA_SEPARATOR_COMMA, CodegenContext*, ctx, __VA_ARGS__)) { \
     switch (ctx->format) { \
-      case CG_FMT_x86_64_GAS: CONCATENATE(name, _x86_64)(FOR_EACH_PAIR_JOIN(SECOND, VA_SEPARATOR_COMMA, CodegenContext*, ctx, __VA_ARGS__)); break; \
+      case CG_FMT_x86_64_GAS: return CONCATENATE(name, _x86_64)(FOR_EACH_PAIR_JOIN(SECOND, VA_SEPARATOR_COMMA, CodegenContext*, ctx, __VA_ARGS__)); \
       default: panic("ERROR: Unrecognized codegen format"); \
     } \
   }
-
 #include <codegen/codegen_interface.def>

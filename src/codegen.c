@@ -123,15 +123,11 @@ Error codegen_expression
   default:
     break;
   case NODE_TYPE_INTEGER:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; INTEGER: %lld\n", expression->value.integer);
-    }
+    codegen_comment_verbose(cg_context, "INTEGER: %lld", expression->value.integer);
     expression->result_register = codegen_load_immediate(cg_context, expression->value.integer);
     break;
   case NODE_TYPE_FUNCTION_CALL:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Function Call: \"%s\"\n", expression->children->value.symbol);
-    }
+    codegen_comment_verbose(cg_context, "Function Call: \"%s\"", expression->children->value.symbol);
 
     // TODO: Should we technically save all in-use scratch registers?
     // Save RAX because function call will over-write it!
@@ -182,9 +178,8 @@ Error codegen_expression
 
     break;
   case NODE_TYPE_FUNCTION:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Function\n");
-    }
+    codegen_comment_verbose(cg_context, "Function");
+
     // TODO/FIXME: Obviously this is not ideal to do backwards lookup,
     // especially for function nodes which contain the body... Oh well!
     ParsingContext *context_it = context;
@@ -208,9 +203,8 @@ Error codegen_expression
     expression->result_register = codegen_load_global_address(cg_context, result);
     break;
   case NODE_TYPE_DEREFERENCE:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Dereference\n");
-    }
+    codegen_comment_verbose(cg_context, "Dereference");
+
     err = codegen_expression(cg_context,
                              context, next_child_context,
                              expression->children);
@@ -218,9 +212,7 @@ Error codegen_expression
     expression->result_register = expression->children->result_register;
     break;
   case NODE_TYPE_ADDRESSOF: {
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Addressof\n");
-    }
+    codegen_comment_verbose(cg_context, "Addressof");
 
     symbol_address address = symbol_to_address(cg_context, expression->children);
     switch (address.mode) {
@@ -235,9 +227,7 @@ Error codegen_expression
     break;
   }
   case NODE_TYPE_INDEX: {
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Index %lld\n", expression->value.integer);
-    }
+    codegen_comment_verbose(cg_context, "Index %lld", expression->value.integer);
 
     // Get type of accessed array.
     err = parse_get_variable(context, expression->children, tmpnode);
@@ -270,9 +260,7 @@ Error codegen_expression
     break;
   }
   case NODE_TYPE_IF:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; If\n");
-    }
+    codegen_comment_verbose(cg_context, "If");
 
     // Generate if condition expression code.
     err = codegen_expression(cg_context,
@@ -280,18 +268,14 @@ Error codegen_expression
                              expression->children);
     if (err.type) { return err; }
 
-    if (codegen_verbose) {
-      fprintf(code, ";;#; If CONDITION\n");
-    }
+    codegen_comment_verbose(cg_context, "If CONDITION");
 
     // Generate code using result register from condition expression.
     char *otherwise_label = label_generate();
     char *after_otherwise_label = label_generate();
     codegen_branch_if_zero(cg_context, expression->children->result_register, otherwise_label);
 
-    if (codegen_verbose) {
-      fprintf(code, ";;#; If THEN\n");
-    }
+    codegen_comment_verbose(cg_context, "If THEN");
 
     // Enter if then body context
     ParsingContext *ctx = context;
@@ -326,9 +310,7 @@ Error codegen_expression
     codegen_phi_add_value(cg_context, phi, last_expr->result_register);
     codegen_branch(cg_context, after_otherwise_label);
 
-    if (codegen_verbose) {
-      fprintf(code, ";;#; If OTHERWISE\n");
-    }
+    codegen_comment_verbose(cg_context, "If OTHERWISE");
 
     // Generate OTHERWISE
     fprintf(code, "%s:\n", otherwise_label);
@@ -375,14 +357,13 @@ Error codegen_expression
 
     break;
   case NODE_TYPE_BINARY_OPERATOR:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Binary Operator: \"%s\"\n", expression->value.symbol);
-    }
+    codegen_comment_verbose(cg_context, "Binary Operator: \"%s\"", expression->value.symbol);
+
     while (context->parent) { context = context->parent; }
     // FIXME: Second argument is memory leaked! :^(
     environment_get(*context->binary_operators, node_symbol(expression->value.symbol), tmpnode);
 
-    //printf("Codegenning binary operator %s\n", expression->value.symbol);
+    //codegen_comment_verbose(cg_context, "Codegenning binary operator %s", expression->value.symbol);
     //print_node(tmpnode,0);
 
     err = codegen_expression(cg_context,
@@ -438,17 +419,13 @@ Error codegen_expression
           expression->children->result_register,
           expression->children->next_child->result_register);
     } else {
-      fprintf(stderr, "Unrecognized binary operator: \"%s\"\n", expression->value.symbol);
-      ERROR_PREP(err, ERROR_GENERIC, "codegen_expression() does not recognize binary operator");
-      return err;
+      PANIC("Unrecognized binary operator: \"%s\"", expression->value.symbol);
     }
     break;
   case NODE_TYPE_VARIABLE_ACCESS:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Variable Access: \"%s\"\n", expression->value.symbol);
-    }
-    // Find context that local variable resides in.
+    codegen_comment_verbose(cg_context, "Variable Access: \"%s\"", expression->value.symbol);
 
+    // Find context that local variable resides in.
     CodegenContext *variable_residency = cg_context;
     while (variable_residency) {
       if (environment_get_by_symbol(*variable_residency->locals, expression->value.symbol, tmpnode)) {
@@ -469,9 +446,7 @@ Error codegen_expression
     break;
   case NODE_TYPE_VARIABLE_DECLARATION:
     if (!cg_context->parent) { break; }
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Variable Declaration: \"%s\"\n", expression->children->value.symbol);
-    }
+    codegen_comment_verbose(cg_context, "Variable Declaration: \"%s\"", expression->children->value.symbol);
     // Allocate space on stack
     //   Get the size in bytes of the type of the variable
     long long size_in_bytes = 0;
@@ -482,9 +457,9 @@ Error codegen_expression
       context = context->parent;
     }
     if (!context) {
-      printf("Variable Symbol: \"%s\"\n", expression->children->value.symbol);
-      ERROR_PREP(err, ERROR_GENERIC, "Invalid AST/context fed to codegen. Could not find variable declaration in environment");
-      return err;
+      PANIC("Invalid AST/context fed to codegen. Could not find variable declaration in environment\n"
+            "Variable Symbol: \"%s\"",
+            expression->children->value.symbol);
     }
     if (strcmp(tmpnode->value.symbol, "external function") == 0) {
       break;
@@ -506,9 +481,7 @@ Error codegen_expression
     environment_set(cg_context->locals, expression->children, node_integer(cg_context->locals_offset));
     break;
   case NODE_TYPE_VARIABLE_REASSIGNMENT:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Variable Reassignment\n");
-    }
+    codegen_comment_verbose(cg_context, "Variable Reassignment");
 
     // TODO: This whole section of code is pretty non-radical, dudes.
 
@@ -754,7 +727,7 @@ Error codegen
   // Open file for writing.
   FILE *code = fopen(filepath, "w");
   if (!code) {
-    printf("Filepath: \"%s\"\n", filepath);
+    fprintf(stderr, "Filepath: \"%s\"\n", filepath);
     ERROR_PREP(err, ERROR_GENERIC, "codegen_program(): fopen failed to open file at path.");
     return err;
   }
