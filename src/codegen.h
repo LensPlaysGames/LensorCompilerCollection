@@ -18,6 +18,11 @@ struct CodegenContext {
   enum CodegenOutputFormat format;
   enum CodegenCallingConvention call_convention;
   enum CodegenAssemblyDialect dialect;
+  BasicBlock *insert_point;
+  Function *functions;
+  Function *current_function;
+  /// For generating unique function names
+  size_t *func_count;
   /// Architecture-specific data.
   void *arch_data;
 };

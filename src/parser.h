@@ -27,6 +27,9 @@ typedef enum NodeType {
   /// becomes a symbol.
   NODE_TYPE_SYMBOL,
 
+  /// Reference to the memory allocated for a local variable.
+  NODE_TYPE_LOCAL_VARIABLE,
+
   // END NULL DENOTATION TYPES
 
   /// Contains three children.
@@ -88,12 +91,13 @@ typedef struct Node {
   union NodeValue {
     long long integer;
     char *symbol;
+    struct Value* local_variable;
   } value;
   struct Node *parent;
   struct Node *children;
   struct Node *next_child;
   /// Used during codegen to store result RegisterDescriptor.
-  int result_register;
+  struct Value* result;
   unsigned int pointer_indirection;
 } Node;
 
@@ -120,6 +124,9 @@ Node *node_symbol(char *symbol_string);
 
 /// Create a new node with symbol type and value copied from given buffer.
 Node *node_symbol_from_buffer(char *buffer, size_t length);
+
+/// Create a reference to a local variable.
+Node* node_local_variable(struct Value* variable);
 
 void print_node(Node *node, size_t indent_level);
 

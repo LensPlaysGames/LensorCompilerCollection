@@ -1,8 +1,9 @@
 #ifndef CODEGEN_FORWARD_H
 #define CODEGEN_FORWARD_H
 
-typedef int RegisterDescriptor;
-typedef struct PHINodeImpl* PHI;
+typedef struct Value Value;
+typedef struct Function Function;
+typedef struct BasicBlock BasicBlock;
 typedef struct CodegenContext CodegenContext;
 
 enum CodegenAssemblyDialect {

@@ -132,7 +132,7 @@ void node_add_child(Node *parent, Node *new_child) {
 }
 
 int node_compare(Node *a, Node *b) {
-  ASSERT(NODE_TYPE_MAX == 15, "node_compare() must handle all node types");
+  ASSERT(NODE_TYPE_MAX == 16, "node_compare() must handle all node types");
 
   // Actually really nice debug output when you need it.
   //printf("Comparing nodes:\n");
@@ -226,6 +226,13 @@ Node *node_symbol_from_buffer(char *buffer, size_t length) {
   Node *symbol = node_allocate();
   symbol->type = NODE_TYPE_SYMBOL;
   symbol->value.symbol = symbol_string;
+  return symbol;
+}
+
+Node* node_local_variable(struct Value* variable) {
+  Node *symbol = node_allocate();
+  symbol->type = NODE_TYPE_LOCAL_VARIABLE;
+  symbol->value.local_variable = variable;
   return symbol;
 }
 

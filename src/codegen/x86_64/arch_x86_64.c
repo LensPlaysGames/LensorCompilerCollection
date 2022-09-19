@@ -11,6 +11,8 @@
 #include <string.h>
 #include <typechecker.h>
 
+typedef int RegisterDescriptor;
+
 /// This is used for defining lookup tables etc. and
 /// ensures that the registers are always in the correct
 /// order
@@ -89,21 +91,13 @@ typedef struct RegisterPool {
 
 /// X86_64-specific code generation state.
 typedef struct StackFrame {
-  /// The type of function call that is currently being emitted.
-  enum {
-    FUNCTION_CALL_TYPE_NONE,
-    FUNCTION_CALL_TYPE_INTERNAL,
-    FUNCTION_CALL_TYPE_EXTERNAL,
-  } call_type;
   /// The number of arguments emitted.
   size_t call_arg_count;
   char rax_in_use;
   char call_performed;
-  struct StackFrame* parent;
 } StackFrame;
 
 typedef struct ArchData {
-  StackFrame *current_call;
   RegisterPool register_pool;
 } ArchData;
 
@@ -784,6 +778,8 @@ CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
     arch_data->register_pool.num_scratch_registers = number_of_scratch_registers;
     arch_data->register_pool.num_registers = REG_COUNT;
 
+    cg_ctx->func_count = calloc(1, sizeof(size_t));
+
     cg_ctx->format = CG_FMT_x86_64_GAS;
     cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
     cg_ctx->dialect = CG_ASM_DIALECT_ATT;
@@ -821,7 +817,24 @@ RegisterDescriptor codegen_load_immediate_x86_64
   return result;
 }
 
-/// Copy the return value from RAX into a new register.
+#define label_buffer_size 1024
+char label_buffer[label_buffer_size];
+size_t label_index = 0;
+size_t label_count = 0;
+static char *label_generate() {
+  char *label = label_buffer + label_index;
+  label_index += snprintf(label, label_buffer_size - label_index,
+      ".L%zu", label_count);
+  label_index++;
+  if (label_index >= label_buffer_size) {
+    label_index = 0;
+    return label_generate();
+  }
+  label_count++;
+  return label;
+}
+
+/*/// Copy the return value from RAX into a new register.
 static RegisterDescriptor copy_return_value(CodegenContext *cg_context) {
   ArchData *arch_data = cg_context->arch_data;
   ASSERT(arch_data->current_call, "Cannot copy return value outside of a function call.");
@@ -836,7 +849,7 @@ static RegisterDescriptor copy_return_value(CodegenContext *cg_context) {
   }
 
   return REG_RAX;
-}
+}*/
 
 /// Calculate quotient and remainder of lhs by rhs.
 static RegisterDescriptor divmod
@@ -937,19 +950,19 @@ static RegisterDescriptor shift
   register_deallocate(cg_context, rhs);
   return lhs;
 }
+/*
 
 /// Save state before a function call.
-void codegen_prepare_call_x86_64(CodegenContext *cg_context) {
+FunctionCall* codegen_prepare_call_x86_64(CodegenContext *cg_context) {
   ArchData *arch_data = cg_context->arch_data;
 
   // Create a new stack frame and push it onto the call stack.
-  StackFrame *parent = arch_data->current_call;
   StackFrame *frame = calloc(1, sizeof(StackFrame));
-  frame->parent = parent;
-  arch_data->current_call = frame;
+  frame->rax_in_use = arch_data->register_pool.registers[REG_RAX].in_use;
 
-  arch_data->current_call->rax_in_use = arch_data->register_pool.registers[REG_RAX].in_use;
-  if (arch_data->current_call->rax_in_use) femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RAX);
+  FunctionCall *value_call = calloc(1, sizeof(FunctionCall));
+  value_call->arch_call_data = frame;
+  return value_call;
 }
 
 /// Add an argument to the current function call.
@@ -1267,6 +1280,12 @@ void codegen_alloca_x86_64(CodegenContext *cg_context, long long int size) {
   femit_x86_64(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, size, REG_RSP);
 }
 
+/// Allocate space on the stack.
+Value* codegen_bind_function_parameter(CodegenContext *cg_context, Function *function, size_t param_index) {
+  // First parameter is at offset 16; then increment by 8 for each parameter.
+  // TODO: pass arguments in registers instead (C calling convention?)
+}
+
 /// Emit the function prologue.
 void codegen_function_prologue_x86_64(CodegenContext *cg_context) {
   femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RBP);
@@ -1301,11 +1320,6 @@ void codegen_dispose_x86_64(CodegenContext *cg_context, RegisterDescriptor reg) 
   register_deallocate(cg_context, reg);
 }
 
-typedef struct PHINodeImpl {
-  RegisterDescriptor output_register;
-  char finalised;
-} PHINodeImpl;
-
 PHI codegen_phi_create_x86_64(CodegenContext *cg_context) {
   PHI phi = calloc(1, sizeof(PHINodeImpl));
   phi->output_register = register_allocate(cg_context);
@@ -1333,4 +1347,4 @@ void codegen_vcomment_x86_64(CodegenContext *context, const char* fmt, va_list a
   fprintf(context->code, ";;#; ");
   vfprintf(context->code, fmt, ap);
   fprintf(context->code, "\n");
-}
+}*/
