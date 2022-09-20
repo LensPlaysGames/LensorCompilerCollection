@@ -57,12 +57,23 @@ struct Function {
   Value *return_value;
 };
 
+typedef struct BasicBlockPredecessor {
+  BasicBlock *block;
+  struct BasicBlockPredecessor *next;
+} BasicBlockPredecessor;
+
 struct BasicBlock {
   Function *parent;
   BasicBlock *next;
   BasicBlock *prev;
+
+  /// Basic blocks that branch to this one.
+  /// This is used for control flow analysis.
+  BasicBlockPredecessor *preds;
+
   /// Linked list of values.
   Value *values;
+
   /// The last value in the linked list.
   Value *end;
   size_t id;
@@ -127,7 +138,8 @@ typedef struct GlobalStore {
 struct Value {
   enum IRInstructionType type;
   BasicBlock *parent;
-  size_t id;
+  size_t instruction_index;
+  size_t virt_reg;
 
   Value *next;
   Value *prev;
@@ -297,6 +309,13 @@ FORMAT(printf, 2, 3)
 void codegen_comment_verbose(CodegenContext *ctx, const char *fmt, ...);
 
 /// Dump the intermediate representation to stdout.
+void codegen_dump_value(CodegenContext *context, Value *val);
+void codegen_dump_basic_block(CodegenContext *context, BasicBlock *bb);
+void codegen_dump_function(CodegenContext *context, Function *f);
 void codegen_dump_ir(CodegenContext *context);
+
+/// Post-process the IR for code generation. This should only be called
+/// after the entire program has been converted to IR.
+void finalise_ir(CodegenContext *context);
 
 #endif // IR_H

@@ -5,7 +5,6 @@ typedef struct Value Value;
 typedef struct Function Function;
 typedef struct BasicBlock BasicBlock;
 typedef struct CodegenContext CodegenContext;
-typedef struct LiveRange LiveRange;
 
 enum CodegenAssemblyDialect {
   CG_ASM_DIALECT_ATT,

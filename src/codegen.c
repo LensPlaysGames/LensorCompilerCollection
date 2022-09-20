@@ -338,9 +338,11 @@ Error codegen_expression
     }
 
     codegen_basic_block_attach(cg_context, end_block);
-    expression->result = codegen_phi_create(cg_context);
-    codegen_phi_add(cg_context, expression->result, then_block, then_result);
-    codegen_phi_add(cg_context, expression->result, else_block, else_result);
+    if (then_result && else_result) {
+      expression->result = codegen_phi_create(cg_context);
+      codegen_phi_add(cg_context, expression->result, then_block, then_result);
+      codegen_phi_add(cg_context, expression->result, else_block, else_result);
+    }
 
     break;
   case NODE_TYPE_BINARY_OPERATOR:

@@ -282,6 +282,16 @@ void codegen_branch_if(CodegenContext *context, Value *value, BasicBlock *true_b
   br->cond_branch_value.condition = value;
   br->cond_branch_value.true_branch = true_block;
   br->cond_branch_value.false_branch = false_block;
+
+  BasicBlockPredecessor *pred_true = calloc(1, sizeof *pred_true);
+  BasicBlockPredecessor *pred_false = calloc(1, sizeof *pred_false);
+  pred_true->block = context->insert_point;
+  pred_false->block = context->insert_point;
+  pred_true->next = true_block->preds;
+  pred_false->next = false_block->preds;
+  true_block->preds = pred_true;
+  false_block->preds = pred_false;
+
   insert(context, br);
 }
 
@@ -290,6 +300,12 @@ void codegen_branch(CodegenContext *context, BasicBlock *block) {
   Value *br = calloc(1, sizeof *br);
   br->type = IR_INSTRUCTION_BRANCH;
   br->branch_target = block;
+
+  BasicBlockPredecessor *pred = calloc(1, sizeof *pred);
+  pred->block = context->insert_point;
+  pred->next = block->preds;
+  block->preds = pred;
+
   insert(context, br);
 }
 
@@ -310,6 +326,8 @@ Value *codegen_phi_create(CodegenContext *context) {
 
 ///  Add a value to a phi node.
 void codegen_phi_add(CodegenContext *context, Value *phi, BasicBlock *block, Value *value) {
+  ASSERT(block, "Block may not be NULL");
+  ASSERT(value, "Value may not be NULL");
   PHINodeEntry *entry = calloc(1, sizeof *entry);
 
   if (phi->phi_entries) {
@@ -394,150 +412,147 @@ void codegen_return(CodegenContext *context) {
   insert(context, ret);
 }
 
-/// Very scuffed IR printer.
-static void codegen_dump_value(CodegenContext *context, Value *val) {
+/// Very primitive IR printer.
+void codegen_dump_value(CodegenContext *context, Value *val) {
   ASSERT(val->type > 0 && val->type < IR_INSTRUCTION_COUNT, "Invalid value type");
   switch (val->type) {
     case IR_INSTRUCTION_CALL:
       if (val->call_value.type == FUNCTION_CALL_TYPE_EXTERNAL) {
-        printf("    %%r%zu = call %s (", val->id, val->call_value.external_callee);
+        printf("    %%r%zu = call %s (", val->virt_reg, val->call_value.external_callee);
       } else {
-        printf("    %%r%zu = call %%r%zu (", val->id, val->call_value.callee->id);
+        printf("    %%r%zu = call %%r%zu (", val->virt_reg, val->call_value.callee->virt_reg);
       }
       for (FunctionCallArg *arg = val->call_value.args; arg; arg = arg->next) {
-        printf("%%r%zu", arg->value->id);
+        printf("%%r%zu", arg->value->virt_reg);
         if (arg->next) printf (", ");
       }
-      printf(")\n");
+      printf(")");
       break;
     case IR_INSTRUCTION_COMMENT:
-      printf("    ;; %s\n", val->comment_value);
+      printf("    ;; %s", val->comment_value);
       break;
     case IR_INSTRUCTION_BRANCH:
-      printf("    branch to bb%zu\n", val->branch_target->id);
+      printf("    branch to bb%zu", val->branch_target->id);
       break;
     case IR_INSTRUCTION_BRANCH_IF:
-      printf("    branch on %%r%zu to bb%zu else bb%zu\n",
-        val->cond_branch_value.condition->id,
+      printf("    branch on %%r%zu to bb%zu else bb%zu",
+        val->cond_branch_value.condition->virt_reg,
         val->cond_branch_value.true_branch->id,
         val->cond_branch_value.false_branch->id);
       break;
     case IR_INSTRUCTION_RETURN:
-      if (val->parent->parent->return_value) {
-        printf("    return %%r%zu\n", val->parent->parent->return_value->id);
-      } else {
-        printf("    return\n");
-      }
+      printf("    return");
       break;
     case IR_INSTRUCTION_FUNCTION_REF:
-      printf("    %%r%zu = %s\n", val->id, val->function_ref->name);
+      printf("    %%r%zu = %s", val->virt_reg, val->function_ref->name);
       break;
     case IR_INSTRUCTION_ADD:
-      printf("    %%r%zu = add %%r%zu, %%r%zu\n", val->id, val->lhs->id, val->rhs->id);
+      printf("    %%r%zu = add %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_SUB:
-      printf("    %%r%zu = sub %%r%zu, %%r%zu\n", val->id, val->lhs->id, val->rhs->id);
+      printf("    %%r%zu = sub %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_MUL:
-      printf("    %%r%zu = mul %%r%zu, %%r%zu\n", val->id, val->lhs->id, val->rhs->id);
+      printf("    %%r%zu = mul %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_DIV:
-      printf("    %%r%zu = div %%r%zu, %%r%zu\n", val->id, val->lhs->id, val->rhs->id);
+      printf("    %%r%zu = div %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_MOD:
-      printf("    %%r%zu = mod %%r%zu, %%r%zu\n", val->id, val->lhs->id, val->rhs->id);
+      printf("    %%r%zu = mod %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_SHL:
-      printf("    %%r%zu = shl %%r%zu, %%r%zu\n", val->id, val->lhs->id, val->rhs->id);
+      printf("    %%r%zu = shl %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_SAR:
-      printf("    %%r%zu = sar %%r%zu, %%r%zu\n", val->id, val->lhs->id, val->rhs->id);
+      printf("    %%r%zu = sar %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_COMPARISON: {
       static const char* op[] = { "eq", "ne", "lt", "le", "gt", "ge" };
-      printf("    %%r%zu = cmp %s %%r%zu, %%r%zu\n", val->id, op[val->comparison.type],
-             val->comparison.lhs->id, val->comparison.rhs->id);
+      printf("    %%r%zu = cmp %s %%r%zu, %%r%zu", val->virt_reg, op[val->comparison.type],
+             val->comparison.lhs->virt_reg, val->comparison.rhs->virt_reg);
     } break;
     case IR_INSTRUCTION_ALLOCA:
-      printf("    %%r%zu = alloca %llu\n", val->id, val->immediate);
+      printf("    %%r%zu = alloca %llu", val->virt_reg, val->immediate);
       break;
     case IR_INSTRUCTION_IMMEDIATE:
-      printf("    %%r%zu = immediate %llu\n", val->id, val->immediate);
+      printf("    %%r%zu = immediate %llu", val->virt_reg, val->immediate);
       break;
     case IR_INSTRUCTION_PHI:
-      printf("    %%r%zu = phi ", val->id);
+      printf("    %%r%zu = phi ", val->virt_reg);
       for (PHINodeEntry *e = val->phi_entries; e; e = e->next) {
-        printf("[bb%zu, %%r%zu]", e->block->id, e->value->id);
+        printf("[bb%zu, %%r%zu]", e->block->id, e->value->virt_reg);
         if (e->next) printf(", ");
       }
-      printf("\n");
+      printf("");
       break;
     case IR_INSTRUCTION_GLOBAL_REF:
-      printf("    %%r%zu = global address %s\n", val->id, val->global_name);
+      printf("    %%r%zu = global address %s", val->virt_reg, val->global_name);
       break;
     case IR_INSTRUCTION_GLOBAL_VAL:
-      printf("    %%r%zu = global load %s\n", val->id, val->global_name);
+      printf("    %%r%zu = global load %s", val->virt_reg, val->global_name);
       break;
     case IR_INSTRUCTION_STORE_GLOBAL:
-      printf("    %%r%zu = global store %%r%zu to %s\n", val->id, val->global_store.value->id, val->global_store.name);
+      printf("    global store %%r%zu to %s", val->global_store.value->virt_reg, val->global_store.name);
       break;
     case IR_INSTRUCTION_LOCAL_REF:
-      printf("    %%r%zu = local address %%r%zu\n", val->id, val->local_ref->id);
+      printf("    %%r%zu = local address %%r%zu", val->virt_reg, val->local_ref->virt_reg);
       break;
     case IR_INSTRUCTION_LOCAL_VAL:
-      printf("    %%r%zu = local load %%r%zu\n", val->id, val->local_ref->id);
+      printf("    %%r%zu = local load %%r%zu", val->virt_reg, val->local_ref->virt_reg);
       break;
     case IR_INSTRUCTION_STORE_LOCAL:
-      printf("    %%r%zu = local store %%r%zu to %%r%zu\n", val->id, val->lhs->id, val->rhs->id);
+      printf("    local store %%r%zu to %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_STORE:
-      printf("    %%r%zu = store %%r%zu to [%%r%zu]\n", val->id, val->lhs->id, val->rhs->id);
+      printf("    store %%r%zu to [%%r%zu]", val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_PARAM_REF:
-      printf("    %%r%zu = param %zu\n", val->id, val->param_ref.index);
+      printf("    %%r%zu = param %zu", val->virt_reg, val->param_ref.index);
       break;
     case IR_INSTRUCTION_COPY:
-      printf("    %%r%zu = copy %%r%zu\n", val->id, val->operand->id);
+      printf("    %%r%zu = copy %%r%zu", val->virt_reg, val->operand->virt_reg);
       break;
     case IR_INSTRUCTION_COPY_REGISTER:
-      printf("    %%r%zu = copy %%r%u\n", val->id, val->reg);
+      printf("    %%r%zu = copy %%r%u", val->virt_reg, val->reg);
       break;
     case IR_INSTRUCTION_ACQUIRE:
-      printf("    acquire %%r%u\n", val->reg);
+      printf("    acquire %%r%u", val->reg);
       break;
     case IR_INSTRUCTION_RELEASE:
-      printf("    release %%r%u\n", val->reg);
+      printf("    release %%r%u", val->reg);
       break;
     case IR_INSTRUCTION_ADD_TWO_ADDRESS:
-      printf("    add %%r%zu, %%r%zu\n", val->lhs->id, val->rhs->id);
+      printf("    add %%r%zu, %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_SUB_TWO_ADDRESS:
-      printf("    sub %%r%zu, %%r%zu\n", val->lhs->id, val->rhs->id);
+      printf("    sub %%r%zu, %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_MUL_TWO_ADDRESS:
-      printf("    mul %%r%zu, %%r%zu\n", val->lhs->id, val->rhs->id);
+      printf("    mul %%r%zu, %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_DIV_ONE_ADDRESS:
-      printf("    div %%r%zu, %%r%u\n", val->left->id, val->right);
+      printf("    div %%r%zu, %%r%u", val->left->virt_reg, val->right);
       break;
     case IR_INSTRUCTION_SHL_TWO_ADDRESS:
-      printf("    shl %%r%zu, %%r%zu\n", val->lhs->id, val->rhs->id);
+      printf("    shl %%r%zu, %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_SAR_TWO_ADDRESS:
-      printf("    sar %%r%zu, %%r%zu\n", val->lhs->id, val->rhs->id);
+      printf("    sar %%r%zu, %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
       break;
     case IR_INSTRUCTION_COUNT: UNREACHABLE();
   }
 }
 
-static void codegen_dump_basic_block(CodegenContext *context, BasicBlock *bb) {
+void codegen_dump_basic_block(CodegenContext *context, BasicBlock *bb) {
   printf("bb%zu:\n", bb->id);
   for (Value *val = bb->values; val; val = val->next) {
     codegen_dump_value(context, val);
+    printf("\n");
   }
 }
 
-static void codegen_dump_function(CodegenContext *context, Function *f) {
+void codegen_dump_function(CodegenContext *context, Function *f) {
   printf("defun %s:\n", f->name);
   for (BasicBlock *bb = f->entry; bb; bb = bb->next) {
     codegen_dump_basic_block(context, bb);
@@ -546,16 +561,7 @@ static void codegen_dump_function(CodegenContext *context, Function *f) {
 }
 
 void codegen_dump_ir(CodegenContext *context) {
-  /// Calculare block and value ids.
   for (Function *f = context->functions; f; f = f->next) {
-    size_t block_id = 0;
-    size_t value_id = 1024;
-    for (BasicBlock *bb = f->entry; bb; bb = bb->next) {
-      bb->id = block_id++;
-      for (Value *val = bb->values; val; val = val->next) {
-        if (val->id == 0) val->id = value_id++;
-      }
-    }
     codegen_dump_function(context, f);
   }
 }

@@ -1434,7 +1434,7 @@ static void convert_to_two_address(CodegenContext *context, Function *f) {
           // Copy the rhs into %cl if it isn't an immediate value.
           if (value->rhs->type != IR_INSTRUCTION_IMMEDIATE) {
             Value *move_to_cl = create_copy(context, value->rhs);
-            move_to_cl->id = REG_RCX;
+            move_to_cl->virt_reg = REG_RCX;
             insert_before(value, move_to_cl);
             value->rhs = move_to_cl;
           }
@@ -1452,18 +1452,25 @@ static void convert_to_two_address(CodegenContext *context, Function *f) {
         case IR_INSTRUCTION_MOD:
         case IR_INSTRUCTION_DIV: {
           Value *rax_copy = create_copy(context, value->lhs);
-          rax_copy->id = REG_RAX;
+          rax_copy->virt_reg = REG_RAX;
           insert_before(value, rax_copy);
 
           Value *div = create_copy(context, value->rhs);
           div->type = IR_INSTRUCTION_DIV_ONE_ADDRESS;
           div->left = value->rhs;
           div->right = value->type == IR_INSTRUCTION_DIV ? REG_RDX : REG_RAX;
-          div->id = value->type == IR_INSTRUCTION_DIV ? REG_RAX : REG_RDX;
+          div->virt_reg = value->type == IR_INSTRUCTION_DIV ? REG_RAX : REG_RDX;
           insert_before(value, div);
 
           value->type = IR_INSTRUCTION_COPY_REGISTER;
           value->reg = value->type == IR_INSTRUCTION_DIV ? REG_RAX : REG_RDX;
+        } break;
+
+        // Move return values into %rax.
+        case IR_INSTRUCTION_RETURN: {
+          Value *rax_copy = create_copy(context, f->return_value);
+          rax_copy->virt_reg = REG_RAX;
+          insert_before(value, rax_copy);
         } break;
 
         default: break;
@@ -1480,11 +1487,11 @@ static void emit_function(CodegenContext *context, Function *f) {
   // X86_64 uses two-address instructions, so we need to convert our SSA
   // IR into a form that can be emitted.
   convert_to_two_address(context, f);
-  return;
 
   // Perform register allocation.
   ArchData *arch_data = context->arch_data;
   allocate_registers(context, f, arch_data->register_pool.num_scratch_registers);
+  exit(0);
 
   // Emit the rest of the function.
   for (BasicBlock *block = f->entry; block; block = block->next) {

@@ -22,6 +22,7 @@ add_executable(
   src/typechecker.c
   src/codegen/codegen_platforms.c
   src/codegen/ir.c
+  src/codegen/ra.c
   src/codegen/x86_64/arch_x86_64.c
 )
 target_include_directories(
