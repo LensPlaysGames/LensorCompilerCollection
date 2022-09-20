@@ -69,6 +69,11 @@ struct BasicBlock {
   char closed;
 };
 
+typedef struct FunctionCallArg {
+  Value *value;
+  struct FunctionCallArg *next;
+} FunctionCallArg;
+
 typedef struct FunctionCall {
   enum FunctionCallType {
     FUNCTION_CALL_TYPE_INTERNAL,
@@ -78,7 +83,7 @@ typedef struct FunctionCall {
     Value *callee;
     const char *external_callee;
   };
-  Value *args;
+  FunctionCallArg *args;
   /// Architecture-specific data.
   void *arch_call_data;
 } FunctionCall;
@@ -117,8 +122,8 @@ typedef struct GlobalStore {
 } GlobalStore;
 
 /// FIXME(Sirraide): This is, without a doubt, one of the most abominable
-///    structs I have ever ‘designed’. There has to be a better way of doing
-///    this. Perhaps splitting it into separate structs would help.
+///   structs I have ever ‘designed’. There has to be a better way of doing
+///   this. Perhaps splitting it into separate structs would help.
 struct Value {
   enum IRInstructionType type;
   BasicBlock *parent;
@@ -126,8 +131,6 @@ struct Value {
 
   Value *next;
   Value *prev;
-  Value *next_in_block;
-  Value *prev_in_block;
 
   union {
     char *comment_value;
@@ -197,84 +200,87 @@ Value *codegen_load_local_address(CodegenContext *ctx, Value *address);
 /// Load the value of global variable into a newly allocated value and return it.
 Value *codegen_load_global(CodegenContext *ctx, const char  *name);
 
-///  Load the value of local variable into a newly allocated value and return it.
+/// Load the value of local variable into a newly allocated value and return it.
 Value *codegen_load_local(CodegenContext *ctx, Value *source);
 
-///  Store a global variable.
+/// Store a global variable.
 void codegen_store_global(CodegenContext *ctx, Value *source, const char  *name);
 
-///  Store a local variable.
+/// Store a local variable.
 void codegen_store_local(CodegenContext *ctx, Value *source, Value *dest);
 
-///  Store data in the memory pointed to by the given address.
+/// Store data in the memory pointed to by the given address.
 void codegen_store(CodegenContext *ctx, Value *data, Value *address);
 
-///  Branch to true_block if value is true, and to false_block otherwise.
+/// Branch to true_block if value is true, and to false_block otherwise.
 void codegen_branch_if(CodegenContext *ctx, Value *value, BasicBlock *true_block, BasicBlock *false_block);
 
-///  Branch to a label.
+/// Branch to a label.
 void codegen_branch(CodegenContext *ctx, BasicBlock *block);
 
-///  Load an immediate value.
+/// Load an immediate value.
 Value *codegen_load_immediate(CodegenContext *ctx, long long int immediate);
 
-///  Generate a comparison between two values.
+/// Generate a comparison between two values.
 Value *codegen_comparison(CodegenContext *ctx, enum ComparisonType type, Value *lhs, Value *rhs);
 
-///  Add two values together.
+/// Add two values together.
 Value *codegen_add(CodegenContext *ctx, Value *lhs, Value *rhs);
 
-///  Subtract rhs from lhs.
+/// Subtract rhs from lhs.
 Value *codegen_subtract(CodegenContext *ctx, Value *lhs, Value *rhs);
 
-///  Multiply two values together.
+/// Multiply two values together.
 Value *codegen_multiply(CodegenContext *ctx, Value *lhs, Value *rhs);
 
-///  Divide lhs by rhs.
+/// Divide lhs by rhs.
 Value *codegen_divide(CodegenContext *ctx, Value *lhs, Value *rhs);
 
-///  Modulo lhs by rhs.
+/// Modulo lhs by rhs.
 Value *codegen_modulo(CodegenContext *ctx, Value *lhs, Value *rhs);
 
-///  Shift lhs to the left by rhs.
+/// Shift lhs to the left by rhs.
 Value *codegen_shift_left(CodegenContext *ctx, Value *lhs, Value *rhs);
 
-///  Shift lhs to the right by rhs (arithmetic).
+/// Shift lhs to the right by rhs (arithmetic).
 Value *codegen_shift_right_arithmetic(CodegenContext *ctx, Value *lhs, Value *rhs);
 
-///  Allocate space on the stack.
+/// Allocate space on the stack.
 Value *codegen_alloca(CodegenContext *ctx, long long int size);
 
-///  Bind a function parameter.
+/// Bind a function parameter.
 Value *codegen_bind_function_parameter(CodegenContext *ctx, Function *function, size_t param_index);
 
-///  Set the return value of a function.
+/// Set the return value of a function.
 void codegen_set_return_value(CodegenContext *ctx, Function *function, Value *value);
 
-///  Set the entry point of the program.
+/// Create a return instruction.
+void codegen_return(CodegenContext *context);
+
+/// Set the entry point of the program.
 void codegen_entry_point(CodegenContext *ctx, Function *function);
 
-///  Create an empty phi node. This is used to merge control flow
+/// Create an empty phi node. This is used to merge control flow
 ///
-///  A phi node is used to merge values from different control flow paths
-///  into a single value. This is a very common operation in an SSA IR
-///  and is used here to abstract away operations such as allocating an
-///  empty register or copying values from one register to another.
+/// A phi node is used to merge values from different control flow paths
+/// into a single value. This is a very common operation in an SSA IR
+/// and is used here to abstract away operations such as allocating an
+/// empty register or copying values from one register to another.
 ///
-///  The reasons why this exists are
-///    - to abstract away the details of how values are allocated and moved;
-///    - because not all architectures have a notion of registers;
-///    - because they're a generally useful and widely used concept.
+/// The reasons why this exists are
+///   - to abstract away the details of how values are allocated and moved;
+///   - because not all architectures have a notion of registers;
+///   - because they're a generally useful and widely used concept.
 ///
-///  This API is used as follows:
-///  ```c
-///  Value *phi = codegen_phi_create(cg_context);
-///  codegen_phi_add(cg_context, phi, block1, value1);
-///  codegen_phi_add(cg_context, phi, block2, value2);
-///  ```
+/// This API is used as follows:
+/// ```c
+/// Value *phi = codegen_phi_create(cg_context);
+/// codegen_phi_add(cg_context, phi, block1, value1);
+/// codegen_phi_add(cg_context, phi, block2, value2);
+/// ```
 Value *codegen_phi_create(CodegenContext *ctx);
 
-///  Add a value to a phi node.
+/// Add a value to a phi node.
 void codegen_phi_add(CodegenContext *ctx, Value *phi, BasicBlock *block, Value *value);
 
 /// Create a comment.

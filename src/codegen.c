@@ -258,7 +258,7 @@ Error codegen_expression
     codegen_comment_verbose(cg_context, "If CONDITION");
 
     // Generate code using result register from condition expression.
-    BasicBlock *then_block = codegen_basic_block_create(cg_context);
+    BasicBlock *then_block = codegen_basic_block_create_detached(cg_context);
     BasicBlock *else_block = codegen_basic_block_create_detached(cg_context);
     BasicBlock *end_block = codegen_basic_block_create_detached(cg_context);
 
@@ -266,6 +266,7 @@ Error codegen_expression
     Value* else_result = NULL;
 
     codegen_branch_if(cg_context, expression->children->result, then_block, else_block);
+    codegen_basic_block_attach(cg_context, then_block);
 
     codegen_comment_verbose(cg_context, "If THEN");
     // Enter if then body context
@@ -602,6 +603,7 @@ Error codegen_function
 
   codegen_set_return_value(cg_context, f, last_expression->result);
   function->result = codegen_function_ref(cg_context, f);
+  codegen_return(cg_context);
 
   // Free context;
   codegen_context_free(cg_context);
@@ -661,6 +663,7 @@ Error codegen_program(CodegenContext *cg_context, ParsingContext *context, Node 
     codegen_set_return_value(cg_context, main, last_expression->result);
   }
 
+  codegen_return(cg_context);
   return err;
 }
 

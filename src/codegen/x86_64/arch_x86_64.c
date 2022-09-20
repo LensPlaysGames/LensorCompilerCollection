@@ -1489,7 +1489,7 @@ static void emit_function(CodegenContext *context, Function *f) {
   // Emit the rest of the function.
   for (BasicBlock *block = f->entry; block; block = block->next) {
     fprintf(context->code, ".L%zu:\n", block->id);
-    for (Value *value = block->values; value; value = value->next_in_block) {
+    for (Value *value = block->values; value; value = value->next) {
       //emit_value(context, value);
     }
   }

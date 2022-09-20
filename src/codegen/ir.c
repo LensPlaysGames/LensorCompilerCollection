@@ -15,14 +15,14 @@ void insert(CodegenContext *context, Value *value) {
 
   // Insert the value into the current block.
   if (context->insert_point->end) {
-    context->insert_point->end->next_in_block = value;
-    value->prev_in_block = context->insert_point->end;
+    context->insert_point->end->next = value;
+    value->prev = context->insert_point->end;
   } else {
-    value->prev_in_block = NULL;
+    value->prev = NULL;
     context->insert_point->values = value;
   }
   context->insert_point->end = value;
-  value->next_in_block = NULL;
+  value->next = NULL;
 
   // Close the block if the value was a branch.
   if (value->type == IR_INSTRUCTION_BRANCH    ||
@@ -30,6 +30,8 @@ void insert(CodegenContext *context, Value *value) {
       value->type == IR_INSTRUCTION_RETURN) {
     context->insert_point->closed = 1;
   }
+
+  value->parent = context->insert_point;
 }
 
 void codegen_comment(CodegenContext *context, const char* fmt, ...) {
@@ -90,14 +92,15 @@ Value *codegen_create_internal_call(CodegenContext *context, Value *callee) {
   return call;
 }
 
-void codegen_add_function_arg(CodegenContext *context, Value *call_value, Value *arg) {
+void codegen_add_function_arg(CodegenContext *context, Value *call_value, Value *arg_value) {
   ASSERT(call_value->type == IR_INSTRUCTION_CALL, "Argument 'call' must be a function call");
-  FunctionCall* call = &call_value->call_value;
+  FunctionCall *call = &call_value->call_value;
+  FunctionCallArg *arg = calloc(1, sizeof *arg);
+  arg->value = arg_value;
   if (call->args) {
-    Value *func_args = call->args;
+    FunctionCallArg *func_args = call->args;
     while (func_args->next) { func_args = func_args->next; }
     func_args->next = arg;
-    arg->prev = func_args;
   } else {
     call->args = arg;
   }
@@ -385,6 +388,12 @@ void codegen_set_return_value(CodegenContext *context, Function* f, Value *value
   f->return_value = value;
 }
 
+void codegen_return(CodegenContext *context) {
+  Value *ret = calloc(1, sizeof *ret);
+  ret->type = IR_INSTRUCTION_RETURN;
+  insert(context, ret);
+}
+
 /// Very scuffed IR printer.
 static void codegen_dump_value(CodegenContext *context, Value *val) {
   ASSERT(val->type > 0 && val->type < IR_INSTRUCTION_COUNT, "Invalid value type");
@@ -395,8 +404,8 @@ static void codegen_dump_value(CodegenContext *context, Value *val) {
       } else {
         printf("    %%r%zu = call %%r%zu (", val->id, val->call_value.callee->id);
       }
-      for (Value *arg = val->call_value.args; arg; arg = arg->next) {
-        printf("%%r%zu", arg->id);
+      for (FunctionCallArg *arg = val->call_value.args; arg; arg = arg->next) {
+        printf("%%r%zu", arg->value->id);
         if (arg->next) printf (", ");
       }
       printf(")\n");
@@ -414,7 +423,11 @@ static void codegen_dump_value(CodegenContext *context, Value *val) {
         val->cond_branch_value.false_branch->id);
       break;
     case IR_INSTRUCTION_RETURN:
-      printf("    return\n");
+      if (val->parent->parent->return_value) {
+        printf("    return %%r%zu\n", val->parent->parent->return_value->id);
+      } else {
+        printf("    return\n");
+      }
       break;
     case IR_INSTRUCTION_FUNCTION_REF:
       printf("    %%r%zu = %s\n", val->id, val->function_ref->name);
@@ -490,10 +503,10 @@ static void codegen_dump_value(CodegenContext *context, Value *val) {
       printf("    %%r%zu = copy %%r%u\n", val->id, val->reg);
       break;
     case IR_INSTRUCTION_ACQUIRE:
-      printf("    acquire %%r%%u\n", val->reg);
+      printf("    acquire %%r%u\n", val->reg);
       break;
     case IR_INSTRUCTION_RELEASE:
-      printf("    release %%r%%u\n", val->reg);
+      printf("    release %%r%u\n", val->reg);
       break;
     case IR_INSTRUCTION_ADD_TWO_ADDRESS:
       printf("    add %%r%zu, %%r%zu\n", val->lhs->id, val->rhs->id);
@@ -519,7 +532,7 @@ static void codegen_dump_value(CodegenContext *context, Value *val) {
 
 static void codegen_dump_basic_block(CodegenContext *context, BasicBlock *bb) {
   printf("bb%zu:\n", bb->id);
-  for (Value *val = bb->values; val; val = val->next_in_block) {
+  for (Value *val = bb->values; val; val = val->next) {
     codegen_dump_value(context, val);
   }
 }
@@ -539,7 +552,7 @@ void codegen_dump_ir(CodegenContext *context) {
     size_t value_id = 1024;
     for (BasicBlock *bb = f->entry; bb; bb = bb->next) {
       bb->id = block_id++;
-      for (Value *val = bb->values; val; val = val->next_in_block) {
+      for (Value *val = bb->values; val; val = val->next) {
         if (val->id == 0) val->id = value_id++;
       }
     }
