@@ -23,6 +23,8 @@ struct CodegenContext {
   Function *current_function;
   /// For generating unique function names
   size_t *func_count;
+  /// For generating unique labels
+  size_t *block_count;
   /// Architecture-specific data.
   void *arch_data;
 };

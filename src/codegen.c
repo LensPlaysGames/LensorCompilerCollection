@@ -1,4 +1,5 @@
 #include <codegen.h>
+#include <codegen/ir.h>
 #include <codegen/codegen_platforms.h>
 
 #include <environment.h>
@@ -82,7 +83,7 @@ Error codegen_function
 (CodegenContext *cg_context,
  ParsingContext *context,
  ParsingContext **next_child_context,
- char *name,
+ const char **name,
  Node *function);
 
 Error codegen_expression
@@ -128,36 +129,43 @@ Error codegen_expression
     if (strcmp(variable_type->value.symbol, "external function") == 0) {
       // TODO: Save RCX, RDX, R8, and R9 (they are scratch registers).
       // TODO: Only save scratch registers that are in-use.
-      expression->result = codegen_create_call(cg_context, 1);
 
       // Put arguments in RCX, RDX, R8, R9, then on the stack in reverse order.
+      Node *it = iterator;
       while (iterator) {
         // Place first argument in RCX or XMM0
         err = codegen_expression(cg_context, context, next_child_context, iterator);
         if (err.type) { return err; }
-
-        codegen_add_function_arg(cg_context, expression->result, iterator->result);
         iterator = iterator->next_child;
       }
 
+      expression->result = codegen_create_external_call(cg_context, expression->children->value.symbol);
+      while (it) {
+        codegen_add_function_arg(cg_context, expression->result, it->result);
+        it = it->next_child;
+      }
       // TODO: Reverse rest of arguments, push on stack.
     } else {
-      expression->result = codegen_create_call(cg_context, 0);
-
       // Push arguments on stack in order.
+      Node* it = iterator;
       while (iterator) {
         err = codegen_expression(cg_context, context, next_child_context, iterator);
         if (err.type) { return err; }
-        codegen_add_function_arg(cg_context, expression->result, iterator->result);
         iterator = iterator->next_child;
       }
 
       err = codegen_expression(cg_context, context, next_child_context, expression->children);
       if (err.type) { return err; }
+
+      expression->result = codegen_create_internal_call(cg_context, expression->children->result);
+      while (it) {
+        codegen_add_function_arg(cg_context, expression->result, it->result);
+        it = it->next_child;
+      }
     }
 
     break;
-  case NODE_TYPE_FUNCTION:
+  case NODE_TYPE_FUNCTION: {
     codegen_comment_verbose(cg_context, "Function");
 
     // TODO/FIXME: Obviously this is not ideal to do backwards lookup,
@@ -170,13 +178,16 @@ Error codegen_expression
       }
       context_it = context_it->parent;
     }
+
+    const char** symbol = (const char **) &result;
     err = codegen_function(cg_context,
-                           context, next_child_context,
-                           result, expression);
+        context, next_child_context,
+        symbol, expression);
 
     // Function returns beginning of instructions address.
-    expression->result = codegen_load_global_address(cg_context, result);
-    break;
+    // TODO(Sirraide): Save function name in symbol table
+    expression->result = codegen_load_global_address(cg_context, *symbol);
+  } break;
   case NODE_TYPE_DEREFERENCE:
     codegen_comment_verbose(cg_context, "Dereference");
 
@@ -451,7 +462,7 @@ Error codegen_expression
     // Keep track of RBP offset.
     // FIXME(Sirraide): this is probably no longer necessary since we now reset
     //   RSP to RBP at the end of a function anyway.
-    cg_context->locals_offset -= size_in_bytes;
+    /*cg_context->locals_offset -= size_in_bytes;*/
     //   Kept in codegen context.
     environment_set(cg_context->locals, expression->children, node_local_variable(variable));
     break;
@@ -545,7 +556,7 @@ Error codegen_function
 (CodegenContext *cg_context,
  ParsingContext *context,
  ParsingContext **next_child_context,
- char *name,
+ const char **name_ptr,
  Node *function
  )
 {
@@ -554,7 +565,7 @@ Error codegen_function
 
   cg_context = codegen_context_create(cg_context);
 
-  Function *f = codegen_function_create(cg_context, NULL);
+  Function *f = codegen_function_create(cg_context, name_ptr);
 
   size_t param_count = 0;
   Node *parameter = function->children->next_child->children;
@@ -625,7 +636,10 @@ Error codegen_program(CodegenContext *cg_context, ParsingContext *context, Node 
   free(type_info);
 
   // Entry point is always main atm.
-  Function *main = codegen_function_create(cg_context, "main");
+  // Do NOT take the address of a string literal and cast it to a (const char**),
+  // or bad things will happen...
+  static const char* main_name = "main";
+  Function *main = codegen_function_create(cg_context, &main_name);
 
   ParsingContext *next_child_context = context->children;
   Node *last_expression = program->children;
@@ -676,7 +690,8 @@ Error codegen
 
   CodegenContext *cg_context = codegen_context_create_top_level(format, call_convention, dialect, code);
   err = codegen_program(cg_context, context, program);
-  codegen_dump_ir(cg_context);
+  if (err.type) return err;
+  codegen_emit(cg_context);
   codegen_context_free(cg_context);
 
   fclose(code);

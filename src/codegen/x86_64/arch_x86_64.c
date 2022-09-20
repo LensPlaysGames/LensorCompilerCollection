@@ -1,5 +1,8 @@
-#include <codegen/x86_64/arch_x86_64.h>
 #include <codegen.h>
+#include <codegen/x86_64/arch_x86_64.h>
+#include <codegen/ir.h>
+#include <codegen/ra.h>
+
 #include <error.h>
 #include <inttypes.h>
 #include <parser.h>
@@ -56,6 +59,7 @@ typedef int RegisterDescriptor;
   }
 
 enum Registers_x86_64 {
+    REG_NONE,
   FOR_ALL_X86_64_REGISTERS(DEFINE_REGISTER_ENUM)
       REG_COUNT
 };
@@ -290,29 +294,6 @@ static void femit_x86_64
 static char register_descriptor_is_valid(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
   ArchData *arch_data = cg_ctx->arch_data;
   return descriptor >= 0 && descriptor < (int)arch_data->register_pool.num_registers;
-}
-
-static RegisterDescriptor register_allocate(CodegenContext *cg_ctx) {
-  ArchData *arch_data = cg_ctx->arch_data;
-  ASSERT(arch_data->register_pool.num_registers > 0 && arch_data->register_pool.num_scratch_registers > 0, "Register pool is empty");
-
-  for (size_t i = 0; i < arch_data->register_pool.num_scratch_registers; ++i) {
-    Register *reg = arch_data->register_pool.scratch_registers[i];
-    if (reg->in_use == 0) {
-      reg->in_use = 1;
-      return reg->descriptor;
-    }
-  }
-  panic("ERROR::register_allocate(): Could not allocate register!\n");
-  return 0; // Unreachable
-}
-
-static void register_deallocate(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
-  ArchData *arch_data = cg_ctx->arch_data;
-  if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
-    panic("ERROR::register_deallocate(): Invalid register descriptor!\n");
-  }
-  arch_data->register_pool.registers[descriptor].in_use = 0;
 }
 
 static void femit_x86_64_imm_to_reg(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
@@ -778,7 +759,9 @@ CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
     arch_data->register_pool.num_scratch_registers = number_of_scratch_registers;
     arch_data->register_pool.num_registers = REG_COUNT;
 
+    // FIXME(Sirraide): These heap allocations are jank.
     cg_ctx->func_count = calloc(1, sizeof(size_t));
+    cg_ctx->block_count = calloc(1, sizeof(size_t));
 
     cg_ctx->format = CG_FMT_x86_64_GAS;
     cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
@@ -805,6 +788,7 @@ void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
   // TODO(sirraide): Free environment.
   free(ctx);
 }
+/*
 
 /// Load an immediate value into a new register.
 RegisterDescriptor codegen_load_immediate_x86_64
@@ -834,13 +818,9 @@ static char *label_generate() {
   return label;
 }
 
-/*/// Copy the return value from RAX into a new register.
-static RegisterDescriptor copy_return_value(CodegenContext *cg_context) {
-  ArchData *arch_data = cg_context->arch_data;
-  ASSERT(arch_data->current_call, "Cannot copy return value outside of a function call.");
-  ASSERT(arch_data->current_call->call_performed, "Cannot copy return value before a call has been performed");
-
-  if (arch_data->current_call->rax_in_use) {
+/// Copy the return value from RAX into a new register.
+static RegisterDescriptor copy_return_value(CodegenContext *cg_context, char rax_in_use) {
+  if (rax_in_use) {
     RegisterDescriptor result = register_allocate(cg_context);
     femit_x86_64(cg_context, I_MOV,
                  REGISTER_TO_REGISTER,
@@ -849,7 +829,7 @@ static RegisterDescriptor copy_return_value(CodegenContext *cg_context) {
   }
 
   return REG_RAX;
-}*/
+}
 
 /// Calculate quotient and remainder of lhs by rhs.
 static RegisterDescriptor divmod
@@ -950,134 +930,6 @@ static RegisterDescriptor shift
   register_deallocate(cg_context, rhs);
   return lhs;
 }
-/*
-
-/// Save state before a function call.
-FunctionCall* codegen_prepare_call_x86_64(CodegenContext *cg_context) {
-  ArchData *arch_data = cg_context->arch_data;
-
-  // Create a new stack frame and push it onto the call stack.
-  StackFrame *frame = calloc(1, sizeof(StackFrame));
-  frame->rax_in_use = arch_data->register_pool.registers[REG_RAX].in_use;
-
-  FunctionCall *value_call = calloc(1, sizeof(FunctionCall));
-  value_call->arch_call_data = frame;
-  return value_call;
-}
-
-/// Add an argument to the current function call.
-void codegen_add_external_function_arg_x86_64(CodegenContext *cg_context, RegisterDescriptor arg) {
-  ArchData *arch_data = cg_context->arch_data;
-  ASSERT(arch_data->current_call, "Cannot add argument if there is no call in progress.");
-  ASSERT(!arch_data->current_call->call_performed, "Cannot add argument if call has already been performed.");
-
-  switch (arch_data->current_call->call_type) {
-    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call->call_type = FUNCTION_CALL_TYPE_EXTERNAL; break;
-    case FUNCTION_CALL_TYPE_EXTERNAL: break;
-    default: panic("Cannot add external argument if internal call is prepared");
-  }
-
-  switch (cg_context->call_convention) {
-    case CG_CALL_CONV_MSWIN: {
-      switch (arch_data->current_call->call_arg_count++) {
-        case 0: femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, arg, REG_RCX); break;
-        case 1: femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, arg, REG_RDX); break;
-        case 2: femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, arg, REG_R8); break;
-        case 3: femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, arg, REG_R9); break;
-        default: panic("Too many function arguments");
-      }
-    } break;
-
-    case CG_CALL_CONV_LINUX: {
-      ASSERT(0, "Not implemented.");
-    } break;
-
-    default: panic("Unsupported calling convention: %d.", cg_context->call_convention);
-  }
-}
-
-/// Add an argument to the current function call.
-void codegen_add_internal_function_arg_x86_64(CodegenContext *cg_context, RegisterDescriptor arg) {
-  ArchData *arch_data = cg_context->arch_data;
-  ASSERT(arch_data->current_call, "Cannot add argument if there is no call in progress.");
-  ASSERT(!arch_data->current_call->call_performed, "Cannot add argument if call has already been performed.");
-
-  switch (arch_data->current_call->call_type) {
-    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call->call_type = FUNCTION_CALL_TYPE_INTERNAL; break;
-    case FUNCTION_CALL_TYPE_INTERNAL: break;
-    default: panic("Cannot add internal argument if external call is prepared");
-  }
-
-  arch_data->current_call->call_arg_count++;
-  femit_x86_64(cg_context, I_PUSH, REGISTER, arg);
-  register_deallocate(cg_context, arg);
-}
-
-/// Call an external function. Returns the register containing the return value.
-RegisterDescriptor codegen_perform_external_call_x86_64
-(CodegenContext *cg_context,
- const char* function_name) {
-  ArchData *arch_data = cg_context->arch_data;
-  ASSERT(arch_data->current_call, "Cannot perform call if there is no call in progress.");
-  ASSERT(!arch_data->current_call->call_performed, "Cannot perform the same call twice.");
-  arch_data->current_call->call_performed = 1;
-
-  switch (arch_data->current_call->call_type) {
-    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call->call_type = FUNCTION_CALL_TYPE_EXTERNAL; break;
-    case FUNCTION_CALL_TYPE_EXTERNAL: break;
-    default: panic("Cannot perform external call after preparing internal call");
-  }
-
-  femit_x86_64(cg_context, I_CALL, NAME, function_name);
-  return copy_return_value(cg_context);
-}
-
-/// Call an internal function. Return the register containing the return value.
-RegisterDescriptor codegen_perform_internal_call_x86_64(CodegenContext *cg_context, RegisterDescriptor function) {
-  ArchData *arch_data = cg_context->arch_data;
-  ASSERT(arch_data->current_call, "Cannot perform call if there is no call in progress.");
-  ASSERT(!arch_data->current_call->call_performed, "Cannot perform the same call twice.");
-  arch_data->current_call->call_performed = 1;
-
-  switch (arch_data->current_call->call_type) {
-    case FUNCTION_CALL_TYPE_NONE: arch_data->current_call->call_type = FUNCTION_CALL_TYPE_INTERNAL; break;
-    case FUNCTION_CALL_TYPE_INTERNAL: break;
-    default: panic("Cannot perform internal call after preparing external call");
-  }
-
-  femit_x86_64(cg_context, I_CALL, REGISTER, function);
-  register_deallocate(cg_context, function);
-  return copy_return_value(cg_context);
-}
-
-/// Clean up after a function call.
-void codegen_cleanup_call_x86_64(CodegenContext *cg_context) {
-  ArchData *arch_data = cg_context->arch_data;
-  ASSERT(arch_data->current_call, "Cannot clean up call if there is no call in progress.");
-  ASSERT(arch_data->current_call->call_performed, "Cannot clean up call that hasn't been performed yet.");
-
-  // Clean up stack from function call. This is only needed if
-  // arguments were passed on the stack.
-  switch (arch_data->current_call->call_type) {
-    case FUNCTION_CALL_TYPE_INTERNAL:
-      femit_x86_64(cg_context, I_ADD, IMMEDIATE_TO_REGISTER,
-                   (int64_t)(arch_data->current_call->call_arg_count * 8), REG_RSP);
-      break;
-    case FUNCTION_CALL_TYPE_EXTERNAL:
-      break;
-    default: panic("No call to clean up");
-  }
-
-  // Restore rax if it was in use, because function return value clobbered it.
-  if (arch_data->current_call->rax_in_use) {
-    femit_x86_64(cg_context, I_POP, REGISTER, REG_RAX);
-  }
-
-  // Clean up the call state.
-  StackFrame *parent = arch_data->current_call->parent;
-  free(arch_data->current_call);
-  arch_data->current_call = parent;
-}
 
 /// Load the address of a global variable into a newly allocated register and return it.
 RegisterDescriptor codegen_load_global_address_x86_64
@@ -1168,13 +1020,6 @@ void codegen_branch_if_zero_x86_64
   femit_x86_64(cg_context, I_TEST, REGISTER_TO_REGISTER, reg, reg);
   femit_x86_64(cg_context, I_JCC, JUMP_TYPE_Z, label);
   register_deallocate(cg_context, reg);
-}
-
-/// Branch to a label.
-void codegen_branch_x86_64
-(CodegenContext *cg_context,
- const char *label) {
-  femit_x86_64(cg_context, I_JMP, NAME, label);
 }
 
 /// Copy a register to another register.
@@ -1276,8 +1121,14 @@ RegisterDescriptor codegen_shift_right_arithmetic_x86_64
 }
 
 /// Allocate space on the stack.
-void codegen_alloca_x86_64(CodegenContext *cg_context, long long int size) {
+int codegen_alloca_x86_64(CodegenContext *cg_context, long long int size) {
+  // FIXME(Sirraide): Should probably be a size_t.
+  int offset = cg_context->locals_offset;
+
+  // TODO(Sirraide): We are currently not taking alignment into account.
+  cg_context->locals_offset += size;
   femit_x86_64(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, size, REG_RSP);
+  return offset;
 }
 
 /// Allocate space on the stack.
@@ -1303,17 +1154,6 @@ void codegen_function_epilogue_x86_64(CodegenContext *cg_context) {
 /// Set the return value of a function.
 void codegen_set_return_value_x86_64(CodegenContext *cg_context, RegisterDescriptor value) {
   femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, value, REG_RAX);
-}
-
-/// Emit the entry point of the program.
-void codegen_entry_point_x86_64(CodegenContext *cg_context) {
-  fprintf(cg_context->code,
-      "%s"
-      ".section .text\n"
-      ".global main\n"
-      "main:\n",
-      cg_context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
-  codegen_function_prologue_x86_64(cg_context);
 }
 
 void codegen_dispose_x86_64(CodegenContext *cg_context, RegisterDescriptor reg) {
@@ -1347,4 +1187,325 @@ void codegen_vcomment_x86_64(CodegenContext *context, const char* fmt, va_list a
   fprintf(context->code, ";;#; ");
   vfprintf(context->code, fmt, ap);
   fprintf(context->code, "\n");
-}*/
+}
+
+static void emit_value(CodegenContext *context, Value *v);
+
+static void emit_call(CodegenContext *context, Value *call) {
+  ASSERT(call->type == IR_INSTRUCTION_CALL, "Expected call instruction");
+  ArchData *arch_data = context->arch_data;
+
+  // Emit the arguments.
+  for (Value *arg = call->call_value.args; arg; arg = arg->next) {
+    if (arg->emitted) continue;
+    emit_value(context, arg);
+  }
+
+  // Emit the function reference if this is an internal call.
+  if (call->call_value.type == FUNCTION_CALL_TYPE_INTERNAL) {
+    emit_value(context, call->call_value.callee);
+  }
+
+  // Save RAX if it is in use.
+  char rax_in_use = arch_data->register_pool.registers[REG_RAX].in_use;
+  if (arch_data->register_pool.registers[REG_RAX].in_use) {
+    femit_x86_64(context, I_PUSH, REGISTER, REG_RAX);
+  }
+
+  if (call->call_value.type == FUNCTION_CALL_TYPE_INTERNAL) {
+    // Set up the arguments.
+    size_t args_count = 0;
+    for (Value *arg = call->call_value.args; arg; arg = arg->next) {
+      femit_x86_64(context, I_PUSH, REGISTER, arg->arch_emitted_value);
+      register_deallocate(context, arg->arch_emitted_value);
+      args_count++;
+    }
+
+    // Perform the call and free the callee.
+    femit_x86_64(context, I_CALL, REGISTER, call->call_value.callee->arch_emitted_value);
+    register_deallocate(context, call->call_value.callee->arch_emitted_value);
+    call->arch_emitted_value = copy_return_value(context, rax_in_use);
+
+    // Clean up the stack.
+    femit_x86_64(context, I_ADD, IMMEDIATE_TO_REGISTER, (int64_t)(args_count * 8), REG_RSP);
+  } else if (call->call_value.type == FUNCTION_CALL_TYPE_EXTERNAL) {
+    // Set up the arguments.
+    switch (context->call_convention) {
+      case CG_CALL_CONV_MSWIN: {
+        size_t i = 0;
+        for (Value *arg = call->call_value.args; arg; arg = arg->next) {
+          switch (i++) {
+            case 0: femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER, arg->arch_emitted_value, REG_RCX); break;
+            case 1: femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER, arg->arch_emitted_value, REG_RDX); break;
+            case 2: femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER, arg->arch_emitted_value, REG_R8); break;
+            case 3: femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER, arg->arch_emitted_value, REG_R9); break;
+            default: PANIC("Too many function arguments");
+          }
+        }
+      } break;
+
+      case CG_CALL_CONV_LINUX: {
+        TODO("Linux calling convention");
+      } break;
+
+      default: PANIC("Unsupported calling convention: %d.", context->call_convention);
+    }
+
+    // TODO(Sirraide): Save caller-saved registers.
+
+    // Perform the call.
+    femit_x86_64(context, I_CALL, NAME, call->call_value.external_callee);
+    call->arch_emitted_value = copy_return_value(context, rax_in_use);
+  } else {
+    PANIC("Unknown function call type: %d", call->call_value.type);
+  }
+
+  // Restore rax if it was in use, because function return value clobbered it.
+  if (rax_in_use) {
+    femit_x86_64(context, I_POP, REGISTER, REG_RAX);
+  }
+
+  // Free the arguments.
+  for (Value *arg = call->call_value.args; arg; arg = arg->next) {
+    register_deallocate(context, arg->arch_emitted_value);
+  }
+}
+
+static void emit_value(CodegenContext *context, Value *value) {
+  if (value->emitted) return;
+
+  switch (value->type) {
+    case IR_INSTRUCTION_ADD:
+      emit_value(context, value->lhs);
+      emit_value(context, value->rhs);
+      codegen_add_x86_64(context,
+          value->lhs->arch_emitted_value,
+          value->rhs->arch_emitted_value);
+      break;
+    case IR_INSTRUCTION_SUB:
+      emit_value(context, value->lhs);
+      emit_value(context, value->rhs);
+      codegen_subtract_x86_64(context,
+          value->lhs->arch_emitted_value,
+          value->rhs->arch_emitted_value);
+      break;
+    case IR_INSTRUCTION_MUL:
+      emit_value(context, value->lhs);
+      emit_value(context, value->rhs);
+      codegen_multiply_x86_64(context,
+          value->lhs->arch_emitted_value,
+          value->rhs->arch_emitted_value);
+      break;
+    case IR_INSTRUCTION_DIV:
+      emit_value(context, value->lhs);
+      emit_value(context, value->rhs);
+      codegen_divide_x86_64(context,
+          value->lhs->arch_emitted_value,
+          value->rhs->arch_emitted_value);
+      break;
+    case IR_INSTRUCTION_MOD:
+      emit_value(context, value->lhs);
+      emit_value(context, value->rhs);
+      codegen_modulo_x86_64(context,
+          value->lhs->arch_emitted_value,
+          value->rhs->arch_emitted_value);
+      break;
+    case IR_INSTRUCTION_SHL:
+      emit_value(context, value->lhs);
+      emit_value(context, value->rhs);
+      codegen_shift_left_x86_64(context,
+          value->lhs->arch_emitted_value,
+          value->rhs->arch_emitted_value);
+      break;
+    case IR_INSTRUCTION_SAR:
+      emit_value(context, value->lhs);
+      emit_value(context, value->rhs);
+      codegen_shift_right_arithmetic_x86_64(context,
+          value->lhs->arch_emitted_value,
+          value->rhs->arch_emitted_value);
+      break;
+    case IR_INSTRUCTION_ALLOCA:
+      // arch_emitted_value is the offset from RBP
+      codegen_alloca_x86_64(context, value->immediate);
+      break;
+    case IR_INSTRUCTION_CALL:
+      emit_call(context, value);
+      break;
+    case IR_INSTRUCTION_COMMENT:
+      fprintf(context->code, ";;#; %s\n", value->comment_value);
+      break;
+    case IR_INSTRUCTION_COMPARISON:
+      emit_value(context, value->comparison.lhs);
+      emit_value(context, value->comparison.rhs);
+      codegen_comparison_x86_64(context,
+          value->comparison.type,
+          value->comparison.lhs->arch_emitted_value,
+          value->comparison.rhs->arch_emitted_value);
+      break;
+    case IR_INSTRUCTION_BRANCH: {
+      char branch_buffer[64];
+      snprintf(branch_buffer, sizeof branch_buffer, ".L%zu", value->branch_target->id);
+      femit_x86_64(context, I_JMP, NAME, branch_buffer);
+    } break;
+    case IR_INSTRUCTION_BRANCH_IF: {
+      char branch_buffer1[64], branch_buffer2[64];
+      snprintf(branch_buffer1, sizeof branch_buffer1, ".L%zu", value->cond_branch_value.true_branch->id);
+      snprintf(branch_buffer2, sizeof branch_buffer2, ".L%zu", value->cond_branch_value.false_branch->id);
+
+      emit_value(context, value->cond_branch_value.condition);
+      femit_x86_64(context, I_TEST, REGISTER_TO_REGISTER,
+          value->cond_branch_value.condition->arch_emitted_value,
+          value->cond_branch_value.condition->arch_emitted_value);
+      femit_x86_64(context, I_JCC, JUMP_TYPE_NZ, NAME, branch_buffer1);
+      femit_x86_64(context, I_JMP, NAME, branch_buffer2);
+    } break;
+    case IR_INSTRUCTION_IMMEDIATE:
+      codegen_load_immediate_x86_64(context, value->immediate);
+      break;
+    case IR_INSTRUCTION_PHI: break;
+    case IR_INSTRUCTION_RETURN: break;
+    case IR_INSTRUCTION_FUNCTION_REF: break;
+    case IR_INSTRUCTION_GLOBAL_REF: break;
+    case IR_INSTRUCTION_GLOBAL_VAL: break;
+    case IR_INSTRUCTION_STORE_GLOBAL: break;
+    case IR_INSTRUCTION_LOCAL_REF: break;
+    case IR_INSTRUCTION_LOCAL_VAL: break;
+    case IR_INSTRUCTION_STORE_LOCAL: break;
+    case IR_INSTRUCTION_STORE: break;
+    case IR_INSTRUCTION_PARAM_REF: break;
+    case IR_INSTRUCTION_COUNT: break;
+  }
+}
+*/
+
+static void insert_before(Value* value, Value *value_to_insert) {
+  if (value->prev) { value->prev->next = value_to_insert; }
+  value_to_insert->prev = value->prev;
+  value_to_insert->next = value;
+  value->prev = value_to_insert;
+}
+
+static Value *create_copy(CodegenContext *context, Value *v) {
+  Value *copy = calloc(1, sizeof *copy);
+  copy->type = IR_INSTRUCTION_COPY;
+  copy->operand = v;
+  return copy;
+}
+
+static enum IRInstructionType equiv(enum IRInstructionType type) {
+  switch (type) {
+    case IR_INSTRUCTION_ADD: return IR_INSTRUCTION_ADD_TWO_ADDRESS;
+    case IR_INSTRUCTION_SUB: return IR_INSTRUCTION_SUB_TWO_ADDRESS;
+    case IR_INSTRUCTION_MUL: return IR_INSTRUCTION_MUL_TWO_ADDRESS;
+    case IR_INSTRUCTION_DIV: return IR_INSTRUCTION_DIV_ONE_ADDRESS;
+    case IR_INSTRUCTION_MOD: return IR_INSTRUCTION_DIV_ONE_ADDRESS;
+    case IR_INSTRUCTION_SHL: return IR_INSTRUCTION_SHL_TWO_ADDRESS;
+    case IR_INSTRUCTION_SAR: return IR_INSTRUCTION_SAR_TWO_ADDRESS;
+    default: UNREACHABLE();
+  }
+}
+
+static void convert_to_two_address(CodegenContext *context, Function *f) {
+  size_t vreg = 0;
+  for (BasicBlock *block = f->entry; block; block = block->next) {
+    for (Value *value = block->values; value; value = value->next) {
+      switch (value->type) {
+        // %A = OP %B, %C -> %A = COPY %B; OP %A, %C
+        case IR_INSTRUCTION_SUB:
+        case IR_INSTRUCTION_MUL:
+        case IR_INSTRUCTION_ADD: {
+          value->type = equiv(value->type);
+
+          Value *copy = create_copy(context, value->lhs);
+          insert_before(value, copy);
+          value->lhs = copy;
+        } break;
+
+        // %A = SHIFT %B, IMM -> %A = COPY %B; SHIFT %A, IMM
+        // %A = SHIFT %B, %C  -> %A = COPY %B; %cl = COPY %C; SHIFT %A, %cl
+        case IR_INSTRUCTION_SHL:
+        case IR_INSTRUCTION_SAR: {
+          value->type = equiv(value->type);
+
+          Value *copy = create_copy(context, value->lhs);
+          insert_before(value, copy);
+          value->lhs = copy;
+
+          // Copy the rhs into %cl if it isn't an immediate value.
+          if (value->rhs->type != IR_INSTRUCTION_IMMEDIATE) {
+            Value *move_to_cl = create_copy(context, value->rhs);
+            move_to_cl->id = REG_RCX;
+            insert_before(value, move_to_cl);
+            value->rhs = move_to_cl;
+          }
+        } break;
+
+        // %A = DIV %B, %C -> %rax = COPY %B; %rax = DIV %C, %rdx; %A = COPY %rax
+        // %A = MOD %B, %C -> %rax = COPY %B; %rdx = DIV %C, %rax; %A = COPY %rdx
+        // CQO is generated when the div is emitted and doesn't need to be
+        // a value in the ir since it takes no inputs and clobbers nothing.
+        // %rdx is clobbered by the div instruction.
+        //
+        // Even though DIV actually only takes one input, we pass the clobbered
+        // register (%rax/%rdx) as the second input so that the register allocator
+        // knows that it is clobbered.
+        case IR_INSTRUCTION_MOD:
+        case IR_INSTRUCTION_DIV: {
+          Value *rax_copy = create_copy(context, value->lhs);
+          rax_copy->id = REG_RAX;
+          insert_before(value, rax_copy);
+
+          Value *div = create_copy(context, value->rhs);
+          div->type = IR_INSTRUCTION_DIV_ONE_ADDRESS;
+          div->left = value->rhs;
+          div->right = value->type == IR_INSTRUCTION_DIV ? REG_RDX : REG_RAX;
+          div->id = value->type == IR_INSTRUCTION_DIV ? REG_RAX : REG_RDX;
+          insert_before(value, div);
+
+          value->type = IR_INSTRUCTION_COPY_REGISTER;
+          value->reg = value->type == IR_INSTRUCTION_DIV ? REG_RAX : REG_RDX;
+        } break;
+
+        default: break;
+      }
+    }
+  }
+}
+
+static void emit_function(CodegenContext *context, Function *f) {
+  fprintf(context->code, "%s:\n", f->name);
+  context->locals_offset = 0;
+  //codegen_function_prologue_x86_64(context);
+
+  // X86_64 uses two-address instructions, so we need to convert our SSA
+  // IR into a form that can be emitted.
+  convert_to_two_address(context, f);
+  return;
+
+  // Perform register allocation.
+  ArchData *arch_data = context->arch_data;
+  allocate_registers(context, f, arch_data->register_pool.num_scratch_registers);
+
+  // Emit the rest of the function.
+  for (BasicBlock *block = f->entry; block; block = block->next) {
+    fprintf(context->code, ".L%zu:\n", block->id);
+    for (Value *value = block->values; value; value = value->next_in_block) {
+      //emit_value(context, value);
+    }
+  }
+
+  //codegen_function_epilogue_x86_64(context);
+}
+
+void codegen_emit_x86_64(CodegenContext *context) {
+  fprintf(context->code,
+      "%s"
+      ".section .text\n"
+      ".global main\n",
+      context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
+
+  for (Function *f = context->functions; f; f = f->next) {
+    emit_function(context, f);
+  }
+  codegen_dump_ir(context);
+}
