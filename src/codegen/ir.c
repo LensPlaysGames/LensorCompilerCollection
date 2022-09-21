@@ -516,11 +516,11 @@ void codegen_dump_value(CodegenContext *context, Value *val) {
     case IR_INSTRUCTION_COPY_REGISTER:
       printf("    %%r%zu = copy %%r%u", val->virt_reg, val->reg);
       break;
-    case IR_INSTRUCTION_ACQUIRE:
-      printf("    acquire %%r%u", val->reg);
+    case IR_INSTRUCTION_SPILL:
+      printf("    spill");
       break;
-    case IR_INSTRUCTION_RELEASE:
-      printf("    release %%r%u", val->reg);
+    case IR_INSTRUCTION_UNSPILL:
+      printf("    unspill");
       break;
     case IR_INSTRUCTION_ADD_TWO_ADDRESS:
       printf("    add %%r%zu, %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);

@@ -36,8 +36,8 @@ enum IRInstructionType {
   // FIXME(Sirraide): Should these be in a separate enum?
   IR_INSTRUCTION_COPY,
   IR_INSTRUCTION_COPY_REGISTER,
-  IR_INSTRUCTION_ACQUIRE,
-  IR_INSTRUCTION_RELEASE,
+  IR_INSTRUCTION_SPILL,
+  IR_INSTRUCTION_UNSPILL,
   IR_INSTRUCTION_ADD_TWO_ADDRESS,
   IR_INSTRUCTION_SUB_TWO_ADDRESS,
   IR_INSTRUCTION_MUL_TWO_ADDRESS,
@@ -174,6 +174,7 @@ struct Value {
   };
 
   /// Used by the backend.
+  struct Web* web;
   char emitted;
   char unused;
 };

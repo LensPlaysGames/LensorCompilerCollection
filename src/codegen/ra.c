@@ -108,10 +108,10 @@ void follow_control_flow(CodegenContext *context, BasicBlock *block, void callba
   vfollow_control_flow(context, &ctx, block, callback, ap);
   va_end(ap);
 }
-
+/*
 /// Definition-use entry.
 typedef struct DUEntry {
-  size_t index;
+  Value* use;
   BasicBlock *block;
   struct DUEntry *next;
 } DUEntry;
@@ -121,17 +121,20 @@ typedef struct DUChain {
   BasicBlock *definition_block;
   Value *definition;
   DUEntry *uses;
+  /// Whether the chain has already been processed.
+  /// This is used when we combine chains.
+  char removed;
 } DUChain;
 
 /// Add an entry for value in the current basic block to its du chain.
-void du_chains_update(DUChain *chains, BasicBlock *block, Value* value, size_t index) {
+void du_chains_update(DUChain *chains, BasicBlock *block, Value* value, Value *use) {
   DUChain *chain = chains + value->instruction_index;
 
   // If there already is an entry for this value in the current block, extend it.
   DUEntry *entry = chain->uses;
   while (entry) {
     if (entry->block == block) {
-      entry->index = index;
+      entry->use = use;
       return;
     }
     entry = entry->next;
@@ -139,7 +142,7 @@ void du_chains_update(DUChain *chains, BasicBlock *block, Value* value, size_t i
 
   // Otherwise, create a new entry.
   DUEntry *new_entry = calloc(1, sizeof *new_entry);
-  new_entry->index = index;
+  new_entry->use = use;
   new_entry->block = block;
   new_entry->next = chain->uses;
   chain->uses = new_entry;
@@ -155,49 +158,49 @@ void du_chains_add(DUChain *chain, BasicBlock *block, Value *value) {
     case IR_INSTRUCTION_MOD:
     case IR_INSTRUCTION_SHL:
     case IR_INSTRUCTION_SAR:
-      du_chains_update(chain, block, value->lhs, value->instruction_index);
-      du_chains_update(chain, block, value->rhs, value->instruction_index);
+      du_chains_update(chain, block, value->lhs, value);
+      du_chains_update(chain, block, value->rhs, value);
       return;
 
     case IR_INSTRUCTION_CALL:
       for (FunctionCallArg *arg = value->call_value.args; arg; arg = arg->next) {
-        du_chains_update(chain, block, arg->value, value->instruction_index);
+        du_chains_update(chain, block, arg->value, value);
       }
       if (value->call_value.type == FUNCTION_CALL_TYPE_INTERNAL) {
-        du_chains_update(chain, block, value->call_value.callee, value->instruction_index);
+        du_chains_update(chain, block, value->call_value.callee, value);
       }
       return;
 
     case IR_INSTRUCTION_COMPARISON:
-      du_chains_update(chain, block, value->comparison.lhs, value->instruction_index);
-      du_chains_update(chain, block, value->comparison.rhs, value->instruction_index);
+      du_chains_update(chain, block, value->comparison.lhs, value);
+      du_chains_update(chain, block, value->comparison.rhs, value);
       return;
 
     case IR_INSTRUCTION_BRANCH_IF:
-      du_chains_update(chain, block, value->cond_branch_value.condition, value->instruction_index);
+      du_chains_update(chain, block, value->cond_branch_value.condition, value);
       return;
 
     case IR_INSTRUCTION_PHI:
       for (PHINodeEntry *e = value->phi_entries; e; e = e->next) {
-        du_chains_update(chain, block, e->value, value->instruction_index);
+        du_chains_update(chain, block, e->value, value);
       }
       return;
 
     case IR_INSTRUCTION_STORE_GLOBAL:
-      du_chains_update(chain, block, value->global_store.value, value->instruction_index);
+      du_chains_update(chain, block, value->global_store.value, value);
       return;
 
     case IR_INSTRUCTION_STORE_LOCAL:
-      du_chains_update(chain, block, value->lhs, value->instruction_index);
+      du_chains_update(chain, block, value->lhs, value);
       return;
 
     case IR_INSTRUCTION_STORE:
-      du_chains_update(chain, block, value->lhs, value->instruction_index);
-      du_chains_update(chain, block, value->rhs, value->instruction_index);
+      du_chains_update(chain, block, value->lhs, value);
+      du_chains_update(chain, block, value->rhs, value);
       return;
 
     case IR_INSTRUCTION_COPY:
-      du_chains_update(chain, block, value->operand, value->instruction_index);
+      du_chains_update(chain, block, value->operand, value);
       return;
 
     case IR_INSTRUCTION_ALLOCA:
@@ -232,6 +235,26 @@ void du_chains_build(BasicBlock *block, va_list ap) {
   }
 }
 
+/// A web is a set of overlapping du chains. Each web is assigned a register.
+typedef struct Web {
+  /// The chains that constitute this web.
+  DUChain **chains;
+  size_t chain_count;
+  size_t chain_capacity;
+  unsigned allocated_register;
+  struct Web *next;
+} Web;*/
+
+/// A web is a set of overlapping values. Each web is assigned a register.
+typedef struct Web {
+  Value **values;
+  size_t value_count;
+  size_t value_capacity;
+  unsigned allocated_register;
+  struct Web *next;
+  struct Web *prev;
+} Web;
+
 void allocate_registers(CodegenContext *context, Function *f, size_t num_regs) {
   // Collect all values that need registers.
   Value **values = calloc(INITIAL_VALUES_CAPACITY, sizeof(Value *));
@@ -253,50 +276,141 @@ void allocate_registers(CodegenContext *context, Function *f, size_t num_regs) {
     }
   }
   f->value_count = value_count;
-
+/*
   // Build du chains.
   DUChain *chains = calloc(value_count, sizeof *chains);
   follow_control_flow(context, f->entry, du_chains_build, chains);
 
-/*  // Rename registers. While there are two chain that don't overlap,
-  // rename the register of the second entry to the register of the first.
-  size_t rename = MIN_VIRT_REG;
-  for (size_t i = 0; i < value_count; i++) {
-    if (values[i]->virt_reg == 0) {
-      values[i]->virt_reg = rename++;
+  // Combine overlapping du chains.
+  Web *web = calloc(1, sizeof *web);
+  if (value_count == 1) {
+    web->chains = calloc(1, sizeof *web->chains);
+    web->chains[0] = chains;
+    web->chain_count = 1;
+    web->chain_capacity = 1;
+  } else {
+    size_t last = 0;
+    for (size_t i = 1; i < value_count; i++) {
+      DUChain *left = chains + last;
+      DUChain *right = chains + i;
+
+      // Two du chains overlap if
     }
   }*/
 
-  /// PRINT IR
+  // Special cases.
+  if (value_count == 0) { return; }
+  if (value_count == 1) {
+    values[0]->virt_reg = 1;
+    return;
+  }
+
+  // We don't need to assign a register for each value. Certain values overlap
+  // and can share a register. Two values A and B can share a register iff
+  //     - A is a PHI node and B is an argument of A, or
+  //     - B is a PHI node and A is an argument of B, or
+  //     - A and B are both arguments of the same PHI node.
+  //     - A and B are both arguments of a COPY instruction.
+  Web *web = NULL;
+
+  // For each PHI and COPY instruction, construct a web consisting of the
+  // instruction value and its arguments.
+  for (Value **value = values; value < values + value_count; value++) {
+    Web *phi_web = (*value)->web;
+    Value* argument = NULL;
+
+    if ((*value)->type == IR_INSTRUCTION_PHI) {
+      for (PHINodeEntry *e = (*value)->phi_entries; e; e = e->next) {
+        argument = e->value;
+
+        // If either value is not in a web, add it to the other value's web.
+      combine:
+        if (!phi_web || !argument->web) {
+          if (!phi_web && !argument->web) {
+            // Neither the phi node nor the argument is in a web. Create a new web.
+            phi_web = calloc(1, sizeof *phi_web);
+            phi_web->next = web;
+            if (web) web->prev = phi_web;
+            web = phi_web;
+
+            phi_web->values = calloc(2, sizeof *phi_web->values);
+            phi_web->values[0] = *value;
+            phi_web->values[1] = argument;
+            phi_web->value_count = 2;
+            phi_web->value_capacity = 2;
+          } else {
+            // One of the values is in a web; add the other one to it.
+            phi_web = phi_web ? phi_web : argument->web;
+            if (phi_web->value_count == phi_web->value_capacity) {
+              phi_web->value_capacity *= 2;
+              phi_web->values = realloc(phi_web->values, phi_web->value_capacity * sizeof *phi_web->values);
+            }
+            phi_web->values[phi_web->value_count++] = argument->web ? *value : argument;
+          }
+          (*value)->web = argument->web = phi_web;
+        }
+
+        // Both values are in two different webs; merge them
+        else if (phi_web != e->value->web) {
+          if (phi_web->value_capacity < phi_web->value_count + e->value->web->value_count) {
+            phi_web->value_capacity = (phi_web->value_count + e->value->web->value_count) * 2;
+            phi_web->values = realloc(phi_web->values, phi_web->value_capacity * sizeof *phi_web->values);
+          }
+          for (size_t i = 0; i < e->value->web->value_count; i++) {
+            phi_web->values[phi_web->value_count++] = e->value->web->values[i];
+            e->value->web->values[i]->web = phi_web;
+          }
+
+          // Remove the merged web from the list of webs.
+          Web *old_web = e->value->web;
+          if (old_web->prev) old_web->prev->next = old_web->next;
+          if (old_web->next) old_web->next->prev = old_web->prev;
+          if (old_web == web) web = old_web->next;
+          free(old_web->values);
+          free(old_web);
+        }
+
+        // This is possible because of the goto.
+        if ((*value)->type == IR_INSTRUCTION_COPY) break;
+      }
+    } else if ((*value)->type == IR_INSTRUCTION_COPY) {
+      argument = (*value)->operand;
+      phi_web = (*value)->web;
+      goto combine;
+    }
+  }
+
+  // Now that all PHI nodes have been taken care of, create a web for each value
+  // that isn't already in a web.
+  for (Value **value = values; value < values + value_count; value++) {
+    if (!(*value)->web && needs_register(*value) && (*value)->virt_reg >= MIN_VIRT_REG) {
+      Web *new_web = calloc(1, sizeof *new_web);
+      new_web->next = web;
+      if (web) web->prev = new_web;
+      web = new_web;
+
+      new_web->values = calloc(1, sizeof *new_web->values);
+      new_web->values[0] = *value;
+      new_web->value_count = 1;
+      new_web->value_capacity = 1;
+      (*value)->web = new_web;
+    }
+  }
+
+  /// Print webs.
+  for (Web *w = web; w; w = w->next) {
+    printf("Web: ");
+    for (size_t i = 0; i < w->value_count; i++) {
+      printf("%%r%zu ", w->values[i]->virt_reg);
+    }
+    printf("\n");
+  }
+
   for (BasicBlock *block = f->entry; block; block = block->next) {
     printf("bb%zu:\n", block->id);
     for (Value *val = block->values; val; val = val->next) {
       codegen_dump_value(context, val);
-
-      size_t l[128];
-      size_t l_count = 0;
-      for (size_t i = 0; i < value_count; i++) {
-        for (DUEntry *entry = chains[i].uses; entry; entry = entry->next) {
-          if (entry->index == val->instruction_index && values[i]->virt_reg) {
-            for (size_t j = 0; j < l_count; j++) {
-              if (l[j] == values[i]->virt_reg) goto next;
-            }
-            l[l_count++] = values[i]->virt_reg;
-          }
-        next:;
-        }
-      }
-
-      if (l_count) {
-        printf("\033[55G{ ");
-        for (size_t i = 0; i < l_count; i++) {
-          printf("%%r%zu", l[i]);
-          if (i < l_count - 1) {
-            printf(", ");
-          }
-        }
-        printf(" }\n");
-      } else printf("\n");
+      printf("\n");
     }
   }
 }
