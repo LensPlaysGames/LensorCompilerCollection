@@ -1,0 +1,544 @@
+\documentclass[12pt]{report}
+
+\newcommand{\langname}{Lenscript}
+\newcommand{\lang}{\texttt{\langname} }
+
+\title  {\langname\ Developer's Manual}
+\author {Rylan Lens Kellogg}
+
+\newlength{\inprogramwidth}
+\settowidth{\inprogramwidth}{A few lines of text in a block.}
+
+% Easy, interactive cross-references with '\hyperref[label]{text}'.
+\usepackage{hyperref}
+% Prevent section titles from appearing at the bottom of pages!
+\usepackage[nobottomtitles, nobottomtitles*]{titlesec}
+% Fancy verbatim markup, for better source code.
+\usepackage{fancyvrb}
+% Fancy headers, for chapter title page headers
+\usepackage{fancyhdr}
+% Easy flow charts and other simple diagrams
+\usepackage{smartdiagram}
+% Very complicated diagram drawing
+\usepackage{tikz}
+\usetikzlibrary{arrows, shapes}
+
+% \titleformat{<command>}[<shape>]
+% {<format>}
+% {<label>}
+% {<sep>}
+% {<before-code>}
+% {<after-code>}
+
+% Remove numbering from chapter heading.
+\titleformat  {\chapter} [hang]
+{ \normalfont\huge\bfseries }
+{}{ 0pt }
+{  }
+{  }
+% Make chapter heading snug up to top of page.
+\titlespacing*{\chapter}{-21pt}{-72pt}{10pt}
+
+% Remove numbering from section heading.
+\titleformat  {\section} [hang]
+{ \normalfont\Large\bfseries }
+{}{ 0pt }
+{  }
+{  }
+% Make section heading have a sensible amount of spacing around it.
+\titlespacing*{\section}{-10pt}{24pt}{10pt}
+
+% Set variable paragraph skip (vertical blank space between paragraphs).
+\setlength{\parskip}{3pt plus 3pt minus 1pt}
+
+
+% I should probably just use geometry, but this works so...
+
+% Move fancy header upwards. It's like halfway down the page by default.
+\setlength{\headheight}{14.5pt}
+\addtolength{\topmargin}{-64pt}
+% Extend text downwards, it stops with like 3 inches on the bottom.
+\addtolength{\textheight}{128pt}
+
+% Smart diagram style(s)
+\smartdiagramset{
+  monotone/.style={
+    uniform arrow color   = true,
+    arrow color           = black,
+    uniform color list    = white!60 for 20 items,
+    back arrow disabled   = true
+  }
+}
+
+\begin{document}
+
+% I have no idea how this works but it puts the chapter name at the top of each page.
+% https://stackoverflow.com/a/48735234
+\pagestyle{fancy}
+\renewcommand{\chaptermark}[1]{\markboth{#1}{#1}}
+\fancyhf{}
+\fancyhead[C]{\leftmark}
+\fancyfoot[C]{\thepage}
+
+% Title Page
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+  \maketitle
+\end{titlepage}
+
+\chapter{Overview}
+\label{ch:Overview}
+
+Currently, \lang has three stages (or phases, or levels, anything to that regard; we'll call them stages).
+
+\begin{center}
+  \smartdiagramset{
+    monotone,
+    text width = 4cm,
+    module x sep = 5cm,
+    font = \large
+  }
+  \smartdiagram[flow diagram:horizontal]{
+    Parsing,
+    Type-checking,
+    Code Generation
+  }
+\end{center}
+
+The parser converts \lang source code into a data structure that represents the program in it's entirety.
+
+The type-checker then validates this data structure, ensuring that the semantics of types are being followed properly.
+
+The code generation stage creates a new data structure (an in-memory intermediate representation) that follows static single assignment form.
+This intermediate representation gets converted by each backend into
+architecture specific implementations (machine code, asm, etc).
+
+\chapter{Parsing}
+\label{ch:parsing}
+
+The parsing stage validates and begins to understand the syntax of \lang source code.
+
+The parsing stage can be thought of as two systems that work together: the \emph{lexer} and the \emph{parser}. The parser drives the parsing stage, and calls to the lexer as needed.
+
+The parser keeps track of all state (how much has been parsed so far, etc). The lexer is a simple tool to increment the state of the parser. The parsing state state consists of a lexeme, it's length in bytes, and a pointer to the end of the lexeme (where we will begin lexing from next). This pointer starts at the beginning of our source code, and makes it's way towards the end as the parser advances the parsing state.
+
+\section{Lexer}
+\label{subsec:lexer}
+
+The lexer's job is to split up the input source code into understandable chunks (called lexemes); after all, the file is read as one, large, arbitrary sequence of bytes. The lexer splits these bytes into understandable pieces, and also strips off parts of the file that aren't needed, like whitespace and comments.
+
+The lexer must not lex more than one lexeme at a time. It is the job of the parser to understand sequences of lexemes.
+
+\vspace{1em}
+
+There are two main actions the lexer can make:
+\begin{itemize}
+\item[advance] Get the lexeme directly after the given position, updating position to end of new lexeme.
+\item[expect]  Get the lexeme directly after the given position, only updating position if the given lexeme was found.
+\end{itemize}
+
+\begin{minipage}{\textwidth}
+
+Given the following source code:
+\begin{Verbatim}[samepage=true]
+  ;; Intercept Simple Lexing Example
+  a : integer
+  a := 69
+\end{Verbatim}
+
+The lexer would produce the following lexemes (line separated) from the above source code, on subsequent calls.
+\begin{Verbatim}[samepage=true]
+  a
+  :
+  integer
+  a
+  :
+  =
+  69
+\end{Verbatim}
+\end{minipage}
+
+\section{Parser}
+\label{subsec:parser}
+
+The parser is the main component of the parsing stage, and does most of the heavy lifting.
+
+The job of the parser is to create an understanding of the program, from the compiler's point of view. To do this, the program must be unambigous, and contain only sequences of lexemes that are understood.
+
+One thing you may be wondering: how does a computer program (the compiler) \emph{know} something? How can you make it \emph{understand}? The idea is that by defining a data structure in our compiler that can store the meaning of programs, as well as any necessary data along with it, the compiler can construct one of these structures and end up with an understood program, because the data structure is already understood.
+
+There are two usual choices for data structures that can fully define the semantics of a program, while also storing data along with it.
+
+One, the most common, is called an \emph{abstract syntax tree}, or AST. The AST is a fancy name for a tree that houses only the bare minimum data of what is needed for the program moving forward. For example, parentheses aren't needed in an AST, because they don't actually do anything. They are only for the parser to understand what order to parse things in; since we don't need them after that (the AST is already constructed in the right order), they don't get included in the AST itself. This is why it is an \emph{abstract} syntax tree; the tree doesn't map one-to-one with the source code syntax. Some compilers do build what's called a parse tree that does map one-to-one with the source code.
+
+Another, still fairly common, is called a \emph{directed acyclic graph}, or DAG. A DAG is much like an AST, except that it is not a tree structure, but a graph. This means any node can be connected to any node, and lots of complicated group and category theory ensues. Because a single node can be referenced by any other node, it does mean that it takes less memory to store the same program, and is likely more efficient overall. The problem lies within it's complexity: DAGs are hard to manage, and when it goes wrong, it goes very, very wrong. However, it is clear that a DAG is better in almost every way than an AST, if you are willing to deal with the headaches.
+
+For the sake of simplicity and understanding, \lang uses an AST, or abstract syntax tree, and generates it from recognized sequences of lexemes.
+
+A tree, in computer programming, is a data structure that can branch into multiple data structures. An AST happens to be a recursive tree, in that each of the branches of the tree can have branches, and those branches can have branches, and so on. A lot of compilers use a binary tree, or btree, which is a tree with a recursive left hand side and right hand side. The problem you see in using binary trees is that it is rather difficult to represent anything with more than two children (as one might expect). This is quite a common case in programming language ASTs; for example, when calling a function, there may be any amount of arguments. Most compilers go the LISP route, and have these sort of lists implemented as recursive pairs, where as long as the lhs is another pair, the list continues. I feel like this is a messy implementation, and results in code that is quite hard to read, due to chains of dereferences, i.e. \verb|lhs->lhs->rhs->value|.
+
+The compiler includes a text-debug format to print the abstract syntax tree that is produced, and can be printed out for any program by adding the verbose command line flag: \verb|-v|.
+% NOTE: It would be cool to output this printout into a file and have our own little file format to save this intermediate step. This would help a load if we wanted to start doing conditional compilation.
+
+\begin{minipage}{\textwidth}
+
+Let's take a look at an example. Given the following source code:
+\begin{Verbatim}[samepage=true]
+  ;; Intercept Parsing Example
+  fact : integer (n : integer) = integer (n : integer) {
+    if n < 2 {
+      1
+    } else {
+      n * fact(n - 1)
+    }
+  }
+
+  fact(5)
+\end{Verbatim}
+
+The parser would produce the following abstract syntax tree:
+\begin{Verbatim}
+  PROGRAM
+    VARIABLE DECLARATION
+      SYM:"fact"          <- colon separates node type from node value
+    VARIABLE REASSIGNMENT
+      SYM:"fact"
+      FUNCTION
+        SYM:"integer" (0) <- refers to level of pointer indirection
+        NONE              <- empty node to store list of parameter types
+          SYM:"integer"
+        NONE              <- empty node to store list of body expressions
+          IF
+            BINARY OPERATOR:"<"
+              VARIABLE ACCESS:"n"
+              INT:2
+            NONE          <- stores 'then' body
+              INT:1
+            NONE          <- stores 'otherwise' body
+              BINARY OPERATOR:"*"
+                VARIABLE ACCESS:"n"
+                FUNCTION CALL
+                  SYM:"fact"
+                  BINARY OPERATOR:"-"
+                    VARIABLE ACCESS:"n"
+                    INT:1
+    FUNCTION CALL
+      SYM:"fact"
+      INT:5
+\end{Verbatim}
+
+As you can see, this is a complete representation of the program. It is able to understand high level concepts that the programmer construed in the source code, like conditional control flow, variable accesses, function calls with arguments, and more.
+
+\end{minipage}
+
+
+\chapter{Type-checking}
+\label{ch:typechecking}
+
+Type-checking refers to the process of ensuring the types of expressions are what they are expected to be.
+
+This is only relevant due to \lang being statically typed. This means the type of a variable is known at compile-time, due to the programmer declaring it. This declared type is associated with the variable, and any expressions assigned to it must return a compatible type. It also comes into play with binary expressions: they operate on two objects, each of some type. It wouldn't make any sense to try to add a function to an array, would it? Function calls' arguments must match a function's declared parameters' types. A dereference may only operate on a pointer. All of these semantics of the language are enforced by the type-checker.
+
+\chapter{Code Generation}
+\label{ch:codegen}
+
+Finally, we arrive at code generation. This is definitely the most complicated part, and is where compiler developers get lost for decades. While \lang started as a very simple, x86\_64-only compiler, it is slowly growing to become a compiler that supports many backends, each of which cross platform themselves.
+
+Thanks to Sirraide, our compiler has an intermediate representation. I didn't budge easy, but he was insistent and convincing.
+
+If you are like me, you may wonder why this IR is even needed; it seems (at least to me) like it is of no use, and everything it represents could be stored in the AST. If you are not like me, that's good. You're probably smart :P.
+
+Here is a list of reasons that were used to convince myself of using an IR:
+- There are none.
+
+Seriously, you can do everything with just an AST, I promise. If you don't want an IR, don't use one. In the early versions of the compiler (that I wrote), there was no IR and codegen happened straight from AST. It wasn't always optimal but through peephole optimizations I'm fairly sure we could get it very good. In any case, Sirraide insisted and made the PR, and I won't turn down a chance to learn something I don't know.
+
+First of all, in the intermediate representation, that doesn't conform to any hardware standard, there are some assumptions that can be made. If there are no hardware limitations, then every value could just be stored in a new register; why wouldn't there be infinite? With this, we would never have to worry about slow-downs from RAM access or an appalling disk IO situation: it would simply always be register to register movement, and only when the user dereferences something would we begin to have memory accesses generated. It's like a code optimizers wet dream: everything in a register, and only explicit memory accesses.
+
+% END INTRO
+
+\begin{Verbatim}[samepage = true]
+  ;; Intercept Intermediate Representation Example
+  ;; Expressions are annotated with numbers for easy referencing.
+
+  ;; Let us assume that input_condition and if_condition are somehow
+  ;; different every time the program runs, like parameters.
+  input_condition : integer           ; 0
+  if_condition : integer              ; 1
+
+  a : integer                         ; 2
+  b : integer = 420                   ; 3
+  c : integer = 69                    ; 4
+  d : integer                         ; 5
+  e : integer                         ; 6
+  f : integer                         ; 7
+
+  while 1 {                           ; 8, 9
+
+    a := b + c                        ; 10
+    d := a * -1                       ; 11
+    e := d + f                        ; 12
+
+    if input_condition {              ; 13, 14
+      f := 2 * e                      ; 15
+    } else {
+      b := d + e                      ; 16
+      e := e - 1                      ; 17
+    }
+
+    b := f + c                        ; 18
+  }
+\end{Verbatim}
+
+And the generated AST of the program:
+\begin{Verbatim}
+  PROGRAM
+    VARIABLE DECLARATION:"input_condition"    ; 0
+    VARIABLE DECLARATION:"if_condition"       ; 1
+    VARIABLE DECLARATION:"a"                  ; 2
+    VARIABLE DECLARATION:"b"                  ; 3
+    VARIABLE ASSIGNMENT
+      SYM:"b"
+      INT:420
+    VARIABLE DECLARATION:"c"                  ; 4
+    VARIABLE ASSIGNMENT
+      SYM:"c"
+      INT:69
+    VARIABLE DECLARATION:"d"                  ; 5
+    VARIABLE DECLARATION:"e"                  ; 6
+    VARIABLE DECLARATION:"f"                  ; 7
+    WHILE                                     ; 8
+      INT:1                                   ; 9
+      NONE
+        VARIABLE ASSIGNMENT                   ; 10
+          SYM:"a"
+          BINARY OPERATOR:"+"
+            VARIABLE ACCESS:"b"
+            VARIABLE ACCESS:"c"
+        VARIABLE ASSIGNMENT                   ; 11
+          SYM:"d"
+          BINARY OPERATOR:"*"
+            VARIABLE ACCESS:"a"
+            INT:-1
+        VARIABLE ASSIGNMENT                   ; 12
+          SYM:"e"
+          BINARY OPERATOR:"+"
+            VARIABLE ACCESS:"d"
+            VARIABLE ACCESS:"f"
+        IF                                    ; 13
+          VARIABLE ACCESS:"input_condition"   ; 14
+          NONE
+            VARIABLE ASSIGNMENT               ; 15
+              SYM:"f"
+              BINARY OPERATOR:"*"
+                INT:2
+                VARIABLE ACCESS:"e"
+          NONE
+            VARIABLE ASSIGNMENT               ; 16
+              SYM:"b"
+              BINARY OPERATOR:"+"
+                VARIABLE ACCESS:"d"
+                VARIABLE ACCESS:"e"
+            VARIABLE ASSIGNMENT               ; 17
+              SYM:"e"
+              BINARY OPERATOR:"-"
+                VARIABLE ACCESS:"e"
+                INT:1
+        VARIABLE ASSIGNMENT                   ; 18
+          SYM:"b"
+          BINARY OPERATOR:"+"
+            VARIABLE ACCESS:"f"
+            VARIABLE ACCESS:"c"
+\end{Verbatim}
+
+Previously, this AST would be used to generate code by the code generation backend (the frontend delegates to different backends based on defaults or configuration at the command line). However, this now gets converted into the following IR (excluding initial variable declarations, only for the sake of brevity in the initial basic block):
+
+Here is the while loop body from our current program, in terms of \lang's intermediate representation, or IR.
+\begin{center}
+  \begin{tikzpicture}[
+    > = latex', auto,
+    block/.style = {
+      rectangle,
+      draw=black,
+      thick,
+      align=flush center,
+      rounded corners,
+      minimum height=4em
+    },]
+\matrix [column sep=5mm,row sep=7mm]{
+  % row 1
+  &
+  \node [block, text width=\inprogramwidth] (firstbox) {
+    a := b + c    ; 10
+
+    d := a * -1    ; 11
+
+    e := d + f    ; 12
+  }; & \\
+  % row 2
+  & \node[block] (if) {
+    if input\_condition ; 13, 14
+  }; & \\
+  \node [block] (b1) {
+    f := 2 * e    ; 15
+
+  }; &
+  & \node [block] (b2) {
+    b := d + e    ; 16
+    \\
+    e := e - 1    ; 17
+  };\\
+  & \node [block] (d1) {
+    b := f + c    ; 18
+  };\\
+};
+
+\draw[->] (firstbox) -- (if);
+\draw[->] (if) -| (b1);
+\draw[->] (if) -| (b2);
+\draw[->] (b1) -v (d1);
+\draw[->] (b2) -v (d1);
+% Arrow with label
+% \draw[->] (b2) -v (d1) node[midway,above left] {-10};
+
+\draw[-latex,black] ($(d1.east) + (.4,0)$) arc
+    [
+        start angle = 90,
+        end angle =   -80,
+        x radius =    6cm,
+        y radius =    -3.6cm
+    ] ;
+\end{tikzpicture}
+\end{center}
+
+However, this diagram does not actually conform to \lang's intermediate representation; there is one more step to complete before it matches one-to-one: conversion into static single assignment form, or SSA form for short.
+
+\section{Static Single Assignment Form}
+\label{sec:codegen-ssa}
+
+A variable has different values at different times throughout the program, all with different lifetimes... They almost sound like different variables! Wait... what if they were?
+
+Each assignment of a variable after the first creating a new variable is the entire idea behind \emph{SSA}, or static single assignment, form. SSA form is a form of program in which each variable does not get assigned more than one time.
+
+Let's take a look at the example above, converted into SSA form.
+\begin{center}
+  \begin{tikzpicture}[
+    > = latex', auto,
+    block/.style = {
+      rectangle,
+      draw=black,
+      thick,
+      align=flush center,
+      rounded corners,
+      minimum height=4em
+    },]
+\matrix [column sep=5mm,row sep=7mm]{
+  % row 1
+  &
+  \node [block, text width=\inprogramwidth] (firstbox) {
+    $a_1$ := b + c    ; 10
+
+    $d_1$ := $a_1$ * -1    ; 11
+
+    $e_1$ := $d_1$ + f    ; 12
+  }; & \\
+  % row 2
+  & \node[block] (if) {
+    if input\_condition ; 13, 14
+  }; & \\
+  \node [block] (b1) {
+    f := 2 * $e_1$    ; 15
+
+  }; &
+  & \node [block] (b2) {
+    $b_1$ := $d_1$ + $e_1$    ; 16
+    \\
+    $e_2$ := $e_1$ - 1    ; 17
+  };\\
+  & \node [block] (d1) {
+    $b_2$ := f + c    ; 18
+  };\\
+};
+
+\draw[->] (firstbox) -- (if);
+\draw[->] (if) -| (b1);
+\draw[->] (if) -| (b2);
+\draw[->] (b1) -v (d1);
+\draw[->] (b2) -v (d1);
+% Arrow with label
+% \draw[->] (b2) -v (d1) node[midway,above left] {-10};
+
+\draw[-latex,black] ($(d1.east) + (.4,0)$) arc
+    [
+        start angle = 90,
+        end angle =   -80,
+        x radius =    6cm,
+        y radius =    -3.6cm
+    ] ;
+\end{tikzpicture}
+\end{center}
+
+% TODO: Basic block, function, value, etc. vocabulary definitions
+% \begin{itemize}
+% \item[Basic Block] A list of IR Instructions
+% \end{itemize}
+
+
+% TODO: There has to be a better title than this!
+\section{Variable Liveness}
+\label{sec:codegen-variable-liveness}
+
+WARNING: The following section contains vocabulary regarding topics of life and death, due to this being what it has been called in many, many learning resources. We hope to move away from these possibly offensive terms, and towards something we can all discuss without bad memories being brought up.
+
+\begin{itemize}
+\item[Live]
+  A variable is considered live after it has been assigned and up until the last use of this variable.
+\item[Live Range]
+  The range of expressions in a basic block in which a variable is live.
+\end{itemize}
+
+% TODO: Liveness analysis. How is it done?
+Liveness analysis is done by keeping track of every use of some calculated value in a linked list of \verb|Use| structures (pronounce like the noun, the 'S' is voiceless). This is done during intermediate representation generation. Effectively, we build our IR with live ranges built-in.
+
+
+% TODO: Add diagram reference/cite/something.
+% From the above static single assignment form diagram, we can begin to piece together the variables that are live at each point within the program, or within some specific block of code.
+
+% TODO: This probably should go somewhere, but not right here.
+%       It's a diagram explaining what we mean when talking about between expressions, rather than actual expressions themselves.
+% \begin{minipage}{\textwidth}
+%   \begin{Verbatim}
+%     ;------------ before 10
+%     a := b + c    ; 10
+%     ;------------ before 11
+%     d := a * -1   ; 11
+%     ;------------ etc...
+%   \end{Verbatim}
+% \end{minipage}
+
+
+
+%\begin{itemize}
+% \item[before xxx]
+%   \begin{minipage}{\textwidth}
+%     $x$ \\
+%     $x$ is live and continues to be, as it is accessed later in the code block. \\
+%     $x$ is dying, as this is it's last use in the code block. \\
+%     $x$ is becoming live, as it is being assigned to.
+%   \end{minipage}
+%\end{itemize}
+
+
+
+\section{Register Allocation}
+\label{sec:codegen-register-allocation}
+
+% TODO: Go into detail about register allocation.
+
+However, you may be (like me) thinking... there \emph{\emph{aren't}} infinite registers in hardware implementations. Even in x86\_64, there's only 16 64-bit registers... This is one of the reasons why I was (and am) averse to the intermediate representation idea: it add's so much complexity. However, I assure you, it isn't too complicated, it just sounds it.
+
+% TODO: Cite compilerai channel from YouTube Compiler Desgin Module 85: Register Allocation
+% https://www.youtube.com/watch?v=8jPpJkm6HVE
+
+
+\end{document}
