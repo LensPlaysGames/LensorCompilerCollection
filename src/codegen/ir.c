@@ -34,6 +34,14 @@ void insert(CodegenContext *context, Value *value) {
   value->parent = context->insert_point;
 }
 
+/// Mark a value as used by another value.
+void mark_used_by(Value *value, Value *parent) {
+  Use *use = calloc(1, sizeof(Use));
+  use->parent = parent;
+  use->next = value->uses;
+  value->uses = use;
+}
+
 void codegen_comment(CodegenContext *context, const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
@@ -93,6 +101,7 @@ Value *codegen_create_internal_call(CodegenContext *context, Value *callee) {
 }
 
 void codegen_add_function_arg(CodegenContext *context, Value *call_value, Value *arg_value) {
+  (void) context;
   ASSERT(call_value->type == IR_INSTRUCTION_CALL, "Argument 'call' must be a function call");
   FunctionCall *call = &call_value->call_value;
   FunctionCallArg *arg = calloc(1, sizeof *arg);
@@ -104,6 +113,7 @@ void codegen_add_function_arg(CodegenContext *context, Value *call_value, Value 
   } else {
     call->args = arg;
   }
+  mark_used_by(arg_value, call_value);
 }
 
 Function *codegen_function_create(CodegenContext *context, const char **name) {
@@ -128,6 +138,8 @@ Function *codegen_function_create(CodegenContext *context, const char **name) {
     context->functions = f;
   }
 
+  f->return_block = codegen_basic_block_create_detached(context);
+
   context->current_function = f;
   codegen_basic_block_create(context);
 
@@ -135,6 +147,7 @@ Function *codegen_function_create(CodegenContext *context, const char **name) {
 }
 
 Value *codegen_function_ref(CodegenContext *context, Function *function) {
+  (void) context;
   Value *ref = calloc(1, sizeof *ref);
   ref->type = IR_INSTRUCTION_FUNCTION_REF;
   ref->function_ref = function;
@@ -156,25 +169,34 @@ BasicBlock * codegen_basic_block_create(CodegenContext *context) {
 }
 
 /// Attach a block to the current function
-void codegen_basic_block_attach(CodegenContext *context, BasicBlock* block) {
-  ASSERT(context->current_function, "Cannot attach block if there is no function");
-
-  if (!context->current_function->last) {
-    context->current_function->entry = block;
-    context->current_function->last = block;
+void codegen_basic_block_attach_to(CodegenContext *context, BasicBlock* block, Function *f) {
+  if (!f->last) {
+    f->entry = block;
+    f->last = block;
     block->prev = NULL;
   } else {
     // Create a dummy branch to the next block in case we want to reorder the blocks later.
-    BasicBlock *last = context->current_function->last;
-    if (!last->closed) { codegen_branch(context, block); }
+    BasicBlock *last = f->last;
+    if (!last->closed) {
+      BasicBlock *insert_point = context->insert_point;
+      context->insert_point = last;
+      codegen_branch(context, block);
+      context->insert_point = insert_point;
+    }
 
     last->next = block;
     block->prev = last;
-    context->current_function->last = block;
+    f->last = block;
   }
 
   context->insert_point = block;
-  block->parent = context->current_function;
+  block->parent = f;
+}
+
+/// Attach a block to the current function
+void codegen_basic_block_attach(CodegenContext *context, BasicBlock* block) {
+  ASSERT(context->current_function, "Cannot attach block if there is no function");
+  codegen_basic_block_attach_to(context, block, context->current_function);
 }
 
 Value *codegen_load_global_address(CodegenContext *context, const char *name) {
@@ -190,6 +212,7 @@ Value *codegen_load_local_address(CodegenContext *context, Value *address) {
   Value *local = calloc(1, sizeof *local);
   local->type = IR_INSTRUCTION_LOCAL_REF;
   local->local_ref = address;
+  mark_used_by(address, local);
   insert(context, local);
   return local;
 }
@@ -200,6 +223,8 @@ Value *codegen_add(CodegenContext *context, Value *lhs, Value *rhs) {
   sum->type = IR_INSTRUCTION_ADD;
   sum->lhs = lhs;
   sum->rhs = rhs;
+  mark_used_by(lhs, sum);
+  mark_used_by(rhs, sum);
   insert(context, sum);
   return sum;
 }
@@ -210,6 +235,8 @@ Value *codegen_subtract(CodegenContext *context, Value *lhs, Value *rhs) {
   sum->type = IR_INSTRUCTION_SUB;
   sum->lhs = lhs;
   sum->rhs = rhs;
+  mark_used_by(lhs, sum);
+  mark_used_by(rhs, sum);
   insert(context, sum);
   return sum;
 }
@@ -220,6 +247,8 @@ Value *codegen_multiply(CodegenContext *context, Value *lhs, Value *rhs) {
   sum->type = IR_INSTRUCTION_MUL;
   sum->lhs = lhs;
   sum->rhs = rhs;
+  mark_used_by(lhs, sum);
+  mark_used_by(rhs, sum);
   insert(context, sum);
   return sum;
 }
@@ -230,6 +259,8 @@ Value *codegen_divide(CodegenContext *context, Value *lhs, Value *rhs) {
   sum->type = IR_INSTRUCTION_DIV;
   sum->lhs = lhs;
   sum->rhs = rhs;
+  mark_used_by(lhs, sum);
+  mark_used_by(rhs, sum);
   insert(context, sum);
   return sum;
 }
@@ -240,6 +271,8 @@ Value *codegen_modulo(CodegenContext *context, Value *lhs, Value *rhs) {
   sum->type = IR_INSTRUCTION_MOD;
   sum->lhs = lhs;
   sum->rhs = rhs;
+  mark_used_by(lhs, sum);
+  mark_used_by(rhs, sum);
   insert(context, sum);
   return sum;
 }
@@ -250,6 +283,8 @@ Value *codegen_shift_left(CodegenContext *context, Value *lhs, Value *rhs) {
   sum->type = IR_INSTRUCTION_SHL;
   sum->lhs = lhs;
   sum->rhs = rhs;
+  mark_used_by(lhs, sum);
+  mark_used_by(rhs, sum);
   insert(context, sum);
   return sum;
 }
@@ -260,6 +295,8 @@ Value *codegen_shift_right_arithmetic(CodegenContext *context, Value *lhs, Value
   sum->type = IR_INSTRUCTION_SAR;
   sum->lhs = lhs;
   sum->rhs = rhs;
+  mark_used_by(lhs, sum);
+  mark_used_by(rhs, sum);
   insert(context, sum);
   return sum;
 }
@@ -270,18 +307,21 @@ Value *codegen_comparison(CodegenContext *context, enum ComparisonType type, Val
   cmp->comparison.type = type;
   cmp->comparison.lhs = lhs;
   cmp->comparison.rhs = rhs;
+  mark_used_by(lhs, cmp);
+  mark_used_by(rhs, cmp);
   insert(context, cmp);
   return cmp;
 }
 
-void codegen_branch_if(CodegenContext *context, Value *value, BasicBlock *true_block, BasicBlock *false_block) {
+void codegen_branch_if(CodegenContext *context, Value *condition, BasicBlock *true_block, BasicBlock *false_block) {
   ASSERT(true_block, "True block may not be NULL");
   ASSERT(false_block, "False block may not be NULL");
   Value *br = calloc(1, sizeof *br);
   br->type = IR_INSTRUCTION_BRANCH_IF;
-  br->cond_branch_value.condition = value;
+  br->cond_branch_value.condition = condition;
   br->cond_branch_value.true_branch = true_block;
   br->cond_branch_value.false_branch = false_block;
+  mark_used_by(condition, br);
 
   BasicBlockPredecessor *pred_true = calloc(1, sizeof *pred_true);
   BasicBlockPredecessor *pred_false = calloc(1, sizeof *pred_false);
@@ -326,6 +366,7 @@ Value *codegen_phi_create(CodegenContext *context) {
 
 ///  Add a value to a phi node.
 void codegen_phi_add(CodegenContext *context, Value *phi, BasicBlock *block, Value *value) {
+  (void) context;
   ASSERT(block, "Block may not be NULL");
   ASSERT(value, "Value may not be NULL");
   PHINodeEntry *entry = calloc(1, sizeof *entry);
@@ -340,6 +381,7 @@ void codegen_phi_add(CodegenContext *context, Value *phi, BasicBlock *block, Val
 
   entry->block = block;
   entry->value = value;
+  mark_used_by(value, phi);
 }
 
 Value *codegen_alloca(CodegenContext *context, long long int size) {
@@ -363,6 +405,7 @@ Value *codegen_load_local(CodegenContext *context, Value *val) {
   Value *local = calloc(1, sizeof *local);
   local->type = IR_INSTRUCTION_LOCAL_VAL;
   local->local_ref = val;
+  mark_used_by(val, local);
   insert(context, local);
   return local;
 }
@@ -373,6 +416,7 @@ void codegen_store_global(CodegenContext *context, Value *val, const char *name)
   store->type = IR_INSTRUCTION_STORE_GLOBAL;
   store->global_store.name = name;
   store->global_store.value = val;
+  mark_used_by(val, store);
   insert(context, store);
 }
 
@@ -381,6 +425,8 @@ void codegen_store_local(CodegenContext *context, Value *src, Value *dest) {
   store->type = IR_INSTRUCTION_STORE_LOCAL;
   store->lhs = src;
   store->rhs = dest;
+  mark_used_by(src, store);
+  mark_used_by(dest, store);
   insert(context, store);
 }
 
@@ -389,6 +435,8 @@ void codegen_store(CodegenContext *context, Value *src, Value *dest) {
   store->type = IR_INSTRUCTION_STORE;
   store->lhs = src;
   store->rhs = dest;
+  mark_used_by(src, store);
+  mark_used_by(dest, store);
   insert(context, store);
 }
 
@@ -402,28 +450,44 @@ Value *codegen_bind_function_parameter(CodegenContext *context, Function* f, siz
 }
 
 void codegen_set_return_value(CodegenContext *context, Function* f, Value *value) {
-  // TODO(Sirraide): Should be a PHI node to support early return.
-  f->return_value = value;
+  // The return value is a phi node to allow for early returns.
+  if (!f->return_value) {
+    Value *phi = calloc(1, sizeof *phi);
+    phi->type = IR_INSTRUCTION_PHI;
+    f->return_value = phi;
+  }
+  codegen_phi_add(context, f->return_value, context->insert_point, value);
 }
 
 void codegen_return(CodegenContext *context) {
-  Value *ret = calloc(1, sizeof *ret);
-  ret->type = IR_INSTRUCTION_RETURN;
-  insert(context, ret);
+  codegen_branch(context, context->insert_point->parent->return_block);
+}
+
+void codegen_function_finalise(CodegenContext *context, Function *f) {
+  BasicBlock *insert_point = context->insert_point;
+
+  // Attach the return block.
+  codegen_basic_block_attach_to(context, f->return_block, f);
+  context->insert_point = f->return_block;
+  insert(context, f->return_value);
+
+  context->insert_point = insert_point;
 }
 
 /// Very primitive IR printer.
 void codegen_dump_value(CodegenContext *context, Value *val) {
   ASSERT(val->type > 0 && val->type < IR_INSTRUCTION_COUNT, "Invalid value type");
+  static const char* cmp_op[] = { "eq", "ne", "lt", "le", "gt", "ge" };
+
   switch (val->type) {
     case IR_INSTRUCTION_CALL:
       if (val->call_value.type == FUNCTION_CALL_TYPE_EXTERNAL) {
-        printf("    %%r%zu = call %s (", val->virt_reg, val->call_value.external_callee);
+        printf("    %%r%zu = call %s (", val->reg, val->call_value.external_callee);
       } else {
-        printf("    %%r%zu = call %%r%zu (", val->virt_reg, val->call_value.callee->virt_reg);
+        printf("    %%r%zu = call %%r%zu (", val->reg, val->call_value.callee->reg);
       }
       for (FunctionCallArg *arg = val->call_value.args; arg; arg = arg->next) {
-        printf("%%r%zu", arg->value->virt_reg);
+        printf("%%r%zu", arg->value->reg);
         if (arg->next) printf (", ");
       }
       printf(")");
@@ -436,85 +500,84 @@ void codegen_dump_value(CodegenContext *context, Value *val) {
       break;
     case IR_INSTRUCTION_BRANCH_IF:
       printf("    branch on %%r%zu to bb%zu else bb%zu",
-        val->cond_branch_value.condition->virt_reg,
+        val->cond_branch_value.condition->reg,
         val->cond_branch_value.true_branch->id,
         val->cond_branch_value.false_branch->id);
       break;
     case IR_INSTRUCTION_RETURN:
-      printf("    return");
+      if (val->operand) codegen_dump_value(context, val->operand);
+      printf("\n    branch to bb%zu", val->parent->parent->return_block->id);
       break;
     case IR_INSTRUCTION_FUNCTION_REF:
-      printf("    %%r%zu = %s", val->virt_reg, val->function_ref->name);
+      printf("    %%r%zu = %s", val->reg, val->function_ref->name);
       break;
     case IR_INSTRUCTION_ADD:
-      printf("    %%r%zu = add %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    %%r%zu = add %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_SUB:
-      printf("    %%r%zu = sub %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    %%r%zu = sub %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_MUL:
-      printf("    %%r%zu = mul %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    %%r%zu = mul %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_DIV:
-      printf("    %%r%zu = div %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    %%r%zu = div %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_MOD:
-      printf("    %%r%zu = mod %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    %%r%zu = mod %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_SHL:
-      printf("    %%r%zu = shl %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    %%r%zu = shl %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_SAR:
-      printf("    %%r%zu = sar %%r%zu, %%r%zu", val->virt_reg, val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    %%r%zu = sar %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
       break;
-    case IR_INSTRUCTION_COMPARISON: {
-      static const char* op[] = { "eq", "ne", "lt", "le", "gt", "ge" };
-      printf("    %%r%zu = cmp %s %%r%zu, %%r%zu", val->virt_reg, op[val->comparison.type],
-             val->comparison.lhs->virt_reg, val->comparison.rhs->virt_reg);
-    } break;
+    case IR_INSTRUCTION_COMPARISON:
+      printf("    %%r%zu = cmp %s %%r%zu, %%r%zu", val->reg, cmp_op[val->comparison.type],
+             val->comparison.lhs->reg, val->comparison.rhs->reg);
+      break;
     case IR_INSTRUCTION_ALLOCA:
-      printf("    %%r%zu = alloca %llu", val->virt_reg, val->immediate);
+      printf("    %%r%zu = alloca %llu", val->reg, val->immediate);
       break;
     case IR_INSTRUCTION_IMMEDIATE:
-      printf("    %%r%zu = immediate %llu", val->virt_reg, val->immediate);
+      printf("    %%r%zu = immediate %llu", val->reg, val->immediate);
       break;
     case IR_INSTRUCTION_PHI:
-      printf("    %%r%zu = phi ", val->virt_reg);
+      printf("    %%r%zu = phi ", val->reg);
       for (PHINodeEntry *e = val->phi_entries; e; e = e->next) {
-        printf("[bb%zu, %%r%zu]", e->block->id, e->value->virt_reg);
+        printf("[bb%zu, %%r%zu]", e->block->id, e->value->reg);
         if (e->next) printf(", ");
       }
-      printf("");
       break;
     case IR_INSTRUCTION_GLOBAL_REF:
-      printf("    %%r%zu = global address %s", val->virt_reg, val->global_name);
+      printf("    %%r%zu = global address %s", val->reg, val->global_name);
       break;
     case IR_INSTRUCTION_GLOBAL_VAL:
-      printf("    %%r%zu = global load %s", val->virt_reg, val->global_name);
+      printf("    %%r%zu = global load %s", val->reg, val->global_name);
       break;
     case IR_INSTRUCTION_STORE_GLOBAL:
-      printf("    global store %%r%zu to %s", val->global_store.value->virt_reg, val->global_store.name);
+      printf("    global store %%r%zu to %s", val->global_store.value->reg, val->global_store.name);
       break;
     case IR_INSTRUCTION_LOCAL_REF:
-      printf("    %%r%zu = local address %%r%zu", val->virt_reg, val->local_ref->virt_reg);
+      printf("    %%r%zu = local address %%r%zu", val->reg, val->local_ref->reg);
       break;
     case IR_INSTRUCTION_LOCAL_VAL:
-      printf("    %%r%zu = local load %%r%zu", val->virt_reg, val->local_ref->virt_reg);
+      printf("    %%r%zu = local load %%r%zu", val->reg, val->local_ref->reg);
       break;
     case IR_INSTRUCTION_STORE_LOCAL:
-      printf("    local store %%r%zu to %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    local store %%r%zu to %%r%zu", val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_STORE:
-      printf("    store %%r%zu to [%%r%zu]", val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    store %%r%zu to [%%r%zu]", val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_PARAM_REF:
-      printf("    %%r%zu = param %zu", val->virt_reg, val->param_ref.index);
+      printf("    %%r%zu = param %zu", val->reg, val->param_ref.index);
       break;
     case IR_INSTRUCTION_COPY:
-      printf("    %%r%zu = copy %%r%zu", val->virt_reg, val->operand->virt_reg);
+      printf("    %%r%zu = copy %%r%zu", val->reg, val->operand->reg);
       break;
     case IR_INSTRUCTION_COPY_REGISTER:
-      printf("    %%r%zu = copy %%r%u", val->virt_reg, val->reg);
+      printf("    %%r%zu = copy %%r%u", val->reg, val->reg_operand);
       break;
     case IR_INSTRUCTION_SPILL:
       printf("    spill");
@@ -523,22 +586,28 @@ void codegen_dump_value(CodegenContext *context, Value *val) {
       printf("    unspill");
       break;
     case IR_INSTRUCTION_ADD_TWO_ADDRESS:
-      printf("    add %%r%zu, %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    add %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_SUB_TWO_ADDRESS:
-      printf("    sub %%r%zu, %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    sub %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_MUL_TWO_ADDRESS:
-      printf("    mul %%r%zu, %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    mul %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_DIV_ONE_ADDRESS:
-      printf("    div %%r%zu, %%r%u", val->left->virt_reg, val->right);
+      printf("    div %%r%zu, %%r%u", val->left->reg, val->right);
       break;
     case IR_INSTRUCTION_SHL_TWO_ADDRESS:
-      printf("    shl %%r%zu, %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    shl %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_SAR_TWO_ADDRESS:
-      printf("    sar %%r%zu, %%r%zu", val->lhs->virt_reg, val->rhs->virt_reg);
+      printf("    sar %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
+      break;
+    case IR_INSTRUCTION_CMP_TWO_ADDRESS:
+      printf("    cmp %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
+      break;
+    case IR_INSTRUCTION_SET:
+      printf("    set%s %%r%zu", cmp_op[val->comparison.type], val->reg);
       break;
     case IR_INSTRUCTION_COUNT: UNREACHABLE();
   }
@@ -557,7 +626,7 @@ void codegen_dump_function(CodegenContext *context, Function *f) {
   for (BasicBlock *bb = f->entry; bb; bb = bb->next) {
     codegen_dump_basic_block(context, bb);
   }
-  printf("\n");
+  printf("    return\n");
 }
 
 void codegen_dump_ir(CodegenContext *context) {

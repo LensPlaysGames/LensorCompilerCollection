@@ -44,6 +44,8 @@ enum IRInstructionType {
   IR_INSTRUCTION_DIV_ONE_ADDRESS,
   IR_INSTRUCTION_SHL_TWO_ADDRESS,
   IR_INSTRUCTION_SAR_TWO_ADDRESS,
+  IR_INSTRUCTION_CMP_TWO_ADDRESS,
+  IR_INSTRUCTION_SET,
 
   IR_INSTRUCTION_COUNT
 };
@@ -53,6 +55,7 @@ struct Function {
   size_t value_count;
   BasicBlock *entry;
   BasicBlock *last;
+  BasicBlock *return_block;
   Function *next;
   Value *return_value;
 };
@@ -132,6 +135,11 @@ typedef struct GlobalStore {
   Value *value;
 } GlobalStore;
 
+typedef struct Use {
+  Value *parent;
+  struct Use *next;
+} Use;
+
 /// FIXME(Sirraide): This is, without a doubt, one of the most abominable
 ///   structs I have ever ‘designed’. There has to be a better way of doing
 ///   this. Perhaps splitting it into separate structs would help.
@@ -139,7 +147,7 @@ struct Value {
   enum IRInstructionType type;
   BasicBlock *parent;
   size_t instruction_index;
-  size_t virt_reg;
+  Use *uses;
 
   Value *next;
   Value *prev;
@@ -153,7 +161,7 @@ struct Value {
     Value *local_ref;
     Value *operand;
     long long int immediate;
-    unsigned reg;
+    unsigned reg_operand;
 
     struct {
       Value *lhs;
@@ -175,6 +183,7 @@ struct Value {
 
   /// Used by the backend.
   struct Web* web;
+  size_t reg;
   char emitted;
   char unused;
 };
@@ -315,8 +324,11 @@ void codegen_dump_basic_block(CodegenContext *context, BasicBlock *bb);
 void codegen_dump_function(CodegenContext *context, Function *f);
 void codegen_dump_ir(CodegenContext *context);
 
-/// Post-process the IR for code generation. This should only be called
-/// after the entire program has been converted to IR.
-void finalise_ir(CodegenContext *context);
+/// DO NOT USE THIS IN THE FRONTEND. EVER.
+/// Inserts a value into the current basic block.
+void insert(CodegenContext *context, Value *value);
+
+/// A backend should call this before emitting a function. Do not call this elsewhere.
+void codegen_function_finalise(CodegenContext *context, Function *f);
 
 #endif // IR_H

@@ -50,7 +50,7 @@ typedef int RegisterDescriptor;
 
 /// Lookup tables for register names.
 #define DEFINE_REGISTER_NAME_LOOKUP_FUNCTION(name, bits)                                        \
-  static const char *name(RegisterDescriptor descriptor) {                                             \
+  MAYBE_UNUSED static const char *name(RegisterDescriptor descriptor) {                                             \
     static const char* register_names[] = { FOR_ALL_X86_64_REGISTERS(REGISTER_NAME_##bits) };   \
     if (descriptor < 0 || descriptor >= REG_COUNT) {                                     \
       panic("ERROR::" #name "(): Could not find register with descriptor of %d\n", descriptor); \
@@ -240,6 +240,7 @@ const char *comparison_suffixes_x86_64[COMPARE_COUNT] = {
     "ge",
 };
 
+MAYBE_UNUSED
 static const char *instruction_mnemonic_x86_64(CodegenContext *context, enum Instructions_x86_64 instruction) {
   ASSERT(I_COUNT == 21, "ERROR: instruction_mnemonic_x86_64() must exhaustively handle all instructions.");
   // x86_64 instructions that aren't different across syntaxes can go here!
@@ -291,6 +292,7 @@ static void femit_x86_64
  enum Instructions_x86_64 instruction,
  ...);
 
+MAYBE_UNUSED
 static char register_descriptor_is_valid(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
   ArchData *arch_data = cg_ctx->arch_data;
   return descriptor >= 0 && descriptor < (int)arch_data->register_pool.num_registers;
@@ -1385,7 +1387,15 @@ static void insert_before(Value* value, Value *value_to_insert) {
   value->prev = value_to_insert;
 }
 
+static void insert_after(Value *value, Value *value_to_insert) {
+  if (value->next) { value->next->prev = value_to_insert; }
+  value_to_insert->next = value->next;
+  value_to_insert->prev = value;
+  value->next = value_to_insert;
+}
+
 static Value *create_copy(CodegenContext *context, Value *v) {
+  (void) context;
   Value *copy = calloc(1, sizeof *copy);
   copy->type = IR_INSTRUCTION_COPY;
   copy->operand = v;
@@ -1406,7 +1416,6 @@ static enum IRInstructionType equiv(enum IRInstructionType type) {
 }
 
 static void convert_to_two_address(CodegenContext *context, Function *f) {
-  size_t vreg = 0;
   for (BasicBlock *block = f->entry; block; block = block->next) {
     for (Value *value = block->values; value; value = value->next) {
       switch (value->type) {
@@ -1434,7 +1443,7 @@ static void convert_to_two_address(CodegenContext *context, Function *f) {
           // Copy the rhs into %cl if it isn't an immediate value.
           if (value->rhs->type != IR_INSTRUCTION_IMMEDIATE) {
             Value *move_to_cl = create_copy(context, value->rhs);
-            move_to_cl->virt_reg = REG_RCX;
+            move_to_cl->reg = REG_RCX;
             insert_before(value, move_to_cl);
             value->rhs = move_to_cl;
           }
@@ -1452,26 +1461,36 @@ static void convert_to_two_address(CodegenContext *context, Function *f) {
         case IR_INSTRUCTION_MOD:
         case IR_INSTRUCTION_DIV: {
           Value *rax_copy = create_copy(context, value->lhs);
-          rax_copy->virt_reg = REG_RAX;
+          rax_copy->reg = REG_RAX;
           insert_before(value, rax_copy);
 
           Value *div = create_copy(context, value->rhs);
           div->type = IR_INSTRUCTION_DIV_ONE_ADDRESS;
           div->left = value->rhs;
           div->right = value->type == IR_INSTRUCTION_DIV ? REG_RDX : REG_RAX;
-          div->virt_reg = value->type == IR_INSTRUCTION_DIV ? REG_RAX : REG_RDX;
+          div->reg = value->type == IR_INSTRUCTION_DIV ? REG_RAX : REG_RDX;
           insert_before(value, div);
 
           value->type = IR_INSTRUCTION_COPY_REGISTER;
-          value->reg = value->type == IR_INSTRUCTION_DIV ? REG_RAX : REG_RDX;
+          value->reg_operand = value->type == IR_INSTRUCTION_DIV ? REG_RAX : REG_RDX;
         } break;
 
-        // Move return values into %rax.
-        case IR_INSTRUCTION_RETURN: {
-          Value *rax_copy = create_copy(context, f->return_value);
-          rax_copy->virt_reg = REG_RAX;
-          insert_before(value, rax_copy);
+        // Split into compare and set.
+        case IR_INSTRUCTION_COMPARISON: {
+          Comparison cmp = value->comparison;
+          value->type = IR_INSTRUCTION_CMP_TWO_ADDRESS;
+          value->lhs = cmp.lhs;
+          value->rhs = cmp.rhs;
+
+          Value *set = calloc(1, sizeof *set);
+          set->type = IR_INSTRUCTION_SET;
+          set->comparison = cmp;
+          insert_after(value, set);
         } break;
+
+        // A return instruction doesn't actually return; it just jumps
+        // to the return block.
+        case IR_INSTRUCTION_RETURN: break;
 
         default: break;
       }
@@ -1479,18 +1498,52 @@ static void convert_to_two_address(CodegenContext *context, Function *f) {
   }
 }
 
+static char interfere_p(const Value* value, unsigned reg) {
+  switch (value->type) {
+    case IR_INSTRUCTION_DIV: return reg == REG_RDX;
+    case IR_INSTRUCTION_MOD: return reg == REG_RAX;
+
+    case IR_INSTRUCTION_DIV_ONE_ADDRESS:
+      if (value->reg == REG_RAX) return reg == REG_RDX;
+      return reg == REG_RAX;
+
+    case IR_INSTRUCTION_SHL:
+    case IR_INSTRUCTION_SAR:
+      return reg == REG_RCX;
+
+    case IR_INSTRUCTION_CALL:
+      // TODO: Clobber caller-saved registers.
+      return 0;
+
+    case IR_INSTRUCTION_SHL_TWO_ADDRESS:
+    case IR_INSTRUCTION_SAR_TWO_ADDRESS:
+      return reg == REG_RCX;
+
+    default: return 0;
+  }
+}
+
 static void emit_function(CodegenContext *context, Function *f) {
   fprintf(context->code, "%s:\n", f->name);
   context->locals_offset = 0;
+  codegen_function_finalise(context, f);
   //codegen_function_prologue_x86_64(context);
 
   // X86_64 uses two-address instructions, so we need to convert our SSA
   // IR into a form that can be emitted.
   convert_to_two_address(context, f);
 
+  // Copy the return value into %rax.
+  if (f->return_value) {
+    Value *copy = create_copy(context, f->return_value);
+    copy->reg = REG_RAX;
+    context->insert_point = f->return_block;
+    insert(context, copy);
+  }
+
   // Perform register allocation.
   ArchData *arch_data = context->arch_data;
-  allocate_registers(context, f, arch_data->register_pool.num_scratch_registers);
+  allocate_registers(context, f, arch_data->register_pool.num_scratch_registers, interfere_p);
   exit(0);
 
   // Emit the rest of the function.

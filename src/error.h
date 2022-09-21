@@ -30,10 +30,12 @@ extern Error ok;
 #  define NORETURN __attribute__((noreturn))
 #  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
 #  define PRETTY_FUNCTION __PRETTY_FUNCTION__
+#  define MAYBE_UNUSED __attribute__((unused))
 #else
 #  define NORETURN __declspec(noreturn)
 #  define FORMAT(...)
 #  define PRETTY_FUNCTION __FUNCSIG__
+#  define MAYBE_UNUSED
 #endif
 
 NORETURN
