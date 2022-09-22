@@ -5,16 +5,22 @@
 
 /// Allocate registers for a function.
 ///
-/// This assigns to IR instruction in `f` a physical register between 1 and
-/// `num_regs` (inclusive).
+/// This is the entry point for the register allocator; its purpose is to assign
+/// to each IR instruction in the function a physical register between 1 and the
+/// number of registers (inclusive).
 ///
-/// If the result register of an instruction is already set to a value between
-/// 1 and `num_regs` (inclusive), then the register allocator will respect that
-/// and try its best to work with that restriction.
+/// If the result register of an instruction is already set to a physical
+/// register, then the register allocator will respect that and try its best
+/// to work with that restriction.
 ///
-/// `platform_interfere_p` is a callback that when passed a Value* and a register
-/// number should return 1 or 0 depending on whether that register is clobbered by
-/// the instruction that computes the value or not, respectively.
+/// \param context The codegen context holding architecture-specific data.
+/// \param function The function to allocate registers for.
+/// \param num_registers The maximum number of registers to allocate.
+/// \param platform_interfere_p A predicate that when passed a value and a
+///     physical register should return 1 if the computation of that values
+///     indirectly interferes with (clobbers) that register, and 0 otherwise.
+///     For example, if the value passed to it is a call instruction, the
+///     function should return 1 for each caller-saved register.
 void allocate_registers
 (CodegenContext *context,
  Function *f,

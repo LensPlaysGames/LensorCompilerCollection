@@ -1542,6 +1542,8 @@ static void emit_function(CodegenContext *context, Function *f) {
   }
 
   // Perform register allocation.
+  // FIXME: pass all registers instead and put rbp, rsp, and rip at the very end
+  //     of the registers enum.
   ArchData *arch_data = context->arch_data;
   allocate_registers(context, f, arch_data->register_pool.num_scratch_registers, interfere_p);
   exit(0);

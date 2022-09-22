@@ -4,8 +4,49 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #define INITIAL_VALUES_CAPACITY (16)
+
+/// Ensure that there is space for at least (vector->count + elements) many elements.
+#define VECTOR_RESERVE(vector, elements)                                                     \
+  do {                                                                                       \
+    if ((vector)->capacity < (vector)->count + (elements)) {                                 \
+      (vector)->capacity += (elements);                                                      \
+      (vector)->capacity *= 2;                                                               \
+      (vector)->data = realloc((vector)->data, (vector)->capacity * sizeof *(vector)->data); \
+    }                                                                                        \
+  } while (0)
+
+/// Push an element onto the vector.
+#define VECTOR_PUSH(vector, element)               \
+  do {                                             \
+    VECTOR_RESERVE((vector), 1);                   \
+    (vector)->data[(vector)->count++] = (element); \
+  } while (0)
+
+/// Pop an element from the vector.
+#define VECTOR_POP(vector) ((vector)->data[--(vector)->count])
+
+/// Remove an element from a vector. This may change the order of elements in the vector.
+#define VECTOR_REMOVE_UNORDERED(vector, index)                 \
+  do {                                                         \
+    (vector)->data[index] = (vector)->data[--(vector)->count]; \
+  } while (0)
+
+/// Append a vector to another vector
+#define VECTOR_APPEND(to, from) \
+  do {                          \
+    VECTOR_RESERVE((to), (from)->count); \
+    memcpy((to)->data + (to)->count, (from)->data, (from)->count * sizeof *(from)->data); \
+    (to)->count += (from)->count; \
+  } while (0)
+
+/// Remove all elements from a vector.
+#define VECTOR_CLEAR(vector) \
+  do {                       \
+    (vector)->count = 0;     \
+  } while (0)
 
 /// Whether an instruction returns a value.
 static char needs_register(Value *value) {
@@ -30,201 +71,28 @@ static char needs_register(Value *value) {
   }
 }
 
-
-/// TODO: Optimize this.
-/*typedef struct VariableBinding {
-  Value* alloca;
-  Value* last_def;
-} VariableBinding;
-
-typedef struct VariableBindings {
-  VariableBinding *bindings;
+/// Helper struct to hold references to all values in a function.
+typedef struct Values {
+  Value **data;
   size_t capacity;
-  size_t size;
-} VariableBindings;
-
-static void convert_locals_to_regs(CodegenContext *context, Function *f, VariableBindings *vars) {
-  for (BasicBlock *bb = f->entry; bb; bb = bb->next) {
-    for (Value *val = bb->values; val; val = val->next) {
-      // Add a variable binding.
-      if (val->type == IR_INSTRUCTION_ALLOCA) {
-        if (vars->size == vars->capacity) {
-          vars->capacity *= 2;
-          vars->bindings = realloc(vars->bindings, vars->capacity * sizeof(VariableBinding));
-        }
-        vars->bindings[vars->size++] = (VariableBinding) {
-            .alloca = val,
-            .last_def = NULL,
-        };
-      } else if (val->type == IR_INSTRUCTION_STORE_LOCAL) {
-
-      }
-    }
-  }
-}*/
+  size_t count;
+} Values;
 
 typedef struct ControlFlowIterationContext {
-  BasicBlock **blocks_visited;
-  size_t blocks_visited_count;
-  size_t blocks_visited_capacity;
+  BasicBlock **data;
+  size_t count;
+  size_t capacity;
 } ControlFlowIterationContext;
-
-/// Do not call this directly. Use `follow_control_flow` instead.
-char vfollow_control_flow(ControlFlowIterationContext *ctx, BasicBlock *block, char callback(BasicBlock *block, va_list ap), va_list ap) {
-  for (;;) {
-    // Check if we have already visited this block.
-    for (size_t i = 0; i < ctx->blocks_visited_count; i++) {
-      if (ctx->blocks_visited[i] == block) {
-        return 0;
-      }
-    }
-
-    // Add this block to the list of visited blocks.
-    if (ctx->blocks_visited_count == ctx->blocks_visited_capacity) {
-      ctx->blocks_visited_capacity *= 2;
-      ctx->blocks_visited = realloc(ctx->blocks_visited, ctx->blocks_visited_capacity * sizeof(BasicBlock*));
-    }
-    ctx->blocks_visited[ctx->blocks_visited_count++] = block;
-
-    va_list copy;
-    va_copy(copy, ap);
-    char result = callback(block, copy);
-    if (result) return result;
-
-    if (block->end->type == IR_INSTRUCTION_RETURN) return 0;
-    else if (block->end->type == IR_INSTRUCTION_BRANCH) block = block->end->branch_target;
-    else if (block->end->type == IR_INSTRUCTION_BRANCH_IF) {
-      if (vfollow_control_flow(ctx, block->end->cond_branch_value.true_branch, callback, ap)) return 1;
-      if (vfollow_control_flow(ctx, block->end->cond_branch_value.false_branch, callback, ap)) return 1;
-      return 0;
-    } else UNREACHABLE();
-  }
-}
-
-/// Follow the control flow graph starting at a block and call a callback for each block.
-///
-/// Arguments passed after the callback are forwarded to the callback as a va_list.
-/// No block is visited more than once. If the callback returns a nonzero value,
-/// the iteration stops.
-///
-/// Returns 0 if the iteration completed, or the return value of the callback
-/// if the iteration was stopped.
-char follow_control_flow(BasicBlock *block, char callback(BasicBlock *block, va_list ap), ...) {
-  ControlFlowIterationContext ctx = {0};
-  va_list ap;
-  va_start(ap, callback);
-  char result = vfollow_control_flow(&ctx, block, callback, ap);
-  va_end(ap);
-  return result;
-}
 
 /// A web is a set of overlapping values. Each web is assigned a register.
 typedef struct Web {
-  Value **values;
-  size_t value_count;
-  size_t value_capacity;
+  Values values;
   unsigned allocated_register;
   struct Web *next;
   struct Web *prev;
+  size_t id;
+  char allocated;
 } Web;
-
-// We don't need to assign a register for each value. Certain values overlap
-// and can share a register. Two values A and B can share a register iff
-//   - A is a PHI node and B is an argument of A, or
-//   - B is a PHI node and A is an argument of B, or
-//   - A and B are both arguments of the same PHI node.
-//   - A and B are both arguments of a COPY instruction.
-Web *build_webs(Value **values, size_t value_count, size_t num_regs) {
-  Web *web = NULL;
-
-  // For each PHI and COPY instruction, construct a web consisting of the
-  // instruction value and its arguments.
-  for (Value **value = values; value < values + value_count; value++) {
-    Web *phi_web = (*value)->web;
-    Value* argument = NULL;
-
-    if ((*value)->type == IR_INSTRUCTION_PHI) {
-      for (PHINodeEntry *e = (*value)->phi_entries; e; e = e->next) {
-        argument = e->value;
-
-        // If either value is not in a web, add it to the other value's web.
-      combine:
-        if (!phi_web || !argument->web) {
-          if (!phi_web && !argument->web) {
-            // Neither the phi node nor the argument is in a web. Create a new web.
-            phi_web = calloc(1, sizeof *phi_web);
-            phi_web->next = web;
-            if (web) web->prev = phi_web;
-            web = phi_web;
-
-            phi_web->values = calloc(2, sizeof *phi_web->values);
-            phi_web->values[0] = *value;
-            phi_web->values[1] = argument;
-            phi_web->value_count = 2;
-            phi_web->value_capacity = 2;
-          } else {
-            // One of the values is in a web; add the other one to it.
-            phi_web = phi_web ? phi_web : argument->web;
-            if (phi_web->value_count == phi_web->value_capacity) {
-              phi_web->value_capacity *= 2;
-              phi_web->values = realloc(phi_web->values, phi_web->value_capacity * sizeof *phi_web->values);
-            }
-            phi_web->values[phi_web->value_count++] = argument->web ? *value : argument;
-          }
-          (*value)->web = argument->web = phi_web;
-        }
-
-        // Both values are in two different webs; merge them
-        else if (phi_web != argument->web) {
-          if (phi_web->value_capacity < phi_web->value_count + argument->web->value_count) {
-            phi_web->value_capacity = (phi_web->value_count + argument->web->value_count + 1) * 2;
-            phi_web->values = realloc(phi_web->values, phi_web->value_capacity * sizeof *phi_web->values);
-          }
-          for (size_t i = 0; i < argument->web->value_count; i++) {
-            phi_web->values[phi_web->value_count++] = argument->web->values[i];
-            argument->web->values[i]->web = phi_web;
-          }
-
-          // Remove the merged web from the list of webs.
-          Web *old_web = argument->web;
-          argument->web = phi_web;
-          phi_web->values[phi_web->value_count++] = argument;
-          if (old_web->prev) old_web->prev->next = old_web->next;
-          if (old_web->next) old_web->next->prev = old_web->prev;
-          if (old_web == web) web = old_web->next;
-          free(old_web->values);
-          free(old_web);
-        }
-
-        // This is possible because of the goto.
-        if ((*value)->type == IR_INSTRUCTION_COPY) break;
-      }
-    } else if ((*value)->type == IR_INSTRUCTION_COPY) {
-      argument = (*value)->operand;
-      phi_web = (*value)->web;
-      goto combine;
-    }
-  }
-
-  // Now that all PHI nodes have been taken care of, create a web for each value
-  // that isn't already in a web.
-  for (Value **value = values; value < values + value_count; value++) {
-    if (!(*value)->web && needs_register(*value) && (*value)->reg > num_regs) {
-      Web *new_web = calloc(1, sizeof *new_web);
-      new_web->next = web;
-      if (web) web->prev = new_web;
-      web = new_web;
-
-      new_web->values = calloc(1, sizeof *new_web->values);
-      new_web->values[0] = *value;
-      new_web->value_count = 1;
-      new_web->value_capacity = 1;
-      (*value)->web = new_web;
-    }
-  }
-
-  return web;
-}
 
 /// Adjacency matrix for the interference graph.
 ///
@@ -249,6 +117,192 @@ typedef struct AdjacencyMatrix {
   size_t rows; /// Also the number of columns.
   size_t num_regs;
 } AdjacencyMatrix;
+
+/// Vector of registers.
+typedef struct RegisterVector {
+  size_t *data;
+  size_t count;
+  size_t capacity;
+} RegisterVector;
+
+/// Adjacency list for the interference graph.
+typedef struct AdjacencyList {
+  char spill;
+  size_t colour;
+  size_t spill_offset;
+  size_t spill_cost;
+  size_t interferences;
+  RegisterVector interferences_list;
+  RegisterVector removed_interferences_list;
+} AdjacencyList;
+
+typedef struct AdjacencyLists {
+  AdjacencyList *data;
+  size_t count;
+  size_t capacity;
+} AdjacencyLists;
+
+typedef struct NodeStack {
+  size_t *data;
+  size_t count;
+  size_t capacity;
+} NodeStack;
+
+typedef struct InterferenceGraph {
+  AdjacencyLists lists;
+  AdjacencyMatrix mtx;
+  NodeStack stack;
+} InterferenceGraph;
+
+/// Find the first bit set in a word.
+static size_t find_first_set(intmax_t n) {
+#ifndef _MSVC_VER
+  return __builtin_ffsll(n);
+#else
+  unsigned long index;
+  _BitScanForward64(&index, n);
+  return index + 1;
+#endif
+}
+
+/// Do not call this directly. Use `follow_control_flow` instead.
+char vfollow_control_flow(ControlFlowIterationContext *ctx, BasicBlock *block, char callback(BasicBlock *block, va_list ap), va_list ap) {
+  for (;;) {
+    // Check if we have already visited this block.
+    for (size_t i = 0; i < ctx->count; i++) {
+      if (ctx->data[i] == block) {
+        return 0;
+      }
+    }
+
+    // Add this block to the list of visited blocks.
+    VECTOR_PUSH(ctx, block);
+
+    va_list copy;
+    va_copy(copy, ap);
+    char result = callback(block, copy);
+    if (result) return result;
+
+    if (block->end->type == IR_INSTRUCTION_RETURN) return 0;
+    else if (block->end->type == IR_INSTRUCTION_BRANCH) block = block->end->branch_target;
+    else if (block->end->type == IR_INSTRUCTION_BRANCH_IF) {
+      result = vfollow_control_flow(ctx, block->end->cond_branch_value.true_branch, callback, ap);
+      if (result) return result;
+
+      result = vfollow_control_flow(ctx, block->end->cond_branch_value.false_branch, callback, ap);
+      if (result) return result;
+      return 0;
+    } else UNREACHABLE();
+  }
+}
+
+/// Follow the control flow graph starting at a block and call a callback for each block.
+///
+/// Arguments passed after the callback are forwarded to the callback as a va_list.
+/// No block is visited more than once. If the callback returns a nonzero value,
+/// the iteration stops.
+///
+/// Returns 0 if the iteration completed, or the return value of the callback
+/// if the iteration was stopped.
+char follow_control_flow(BasicBlock *block, char callback(BasicBlock *block, va_list ap), ...) {
+  ControlFlowIterationContext ctx = {0};
+  va_list ap;
+  va_start(ap, callback);
+  char result = vfollow_control_flow(&ctx, block, callback, ap);
+  va_end(ap);
+  return result;
+}
+
+/// We don't need to assign a register for each value. Certain values overlap
+/// and can share a register. Two values A and B can share a register iff
+///   - A is a PHI node and B is an argument of A, or
+///   - B is a PHI node and A is an argument of B, or
+///   - A and B are both arguments of the same PHI node.
+///   - A and B are both arguments of a COPY instruction.
+Web *build_webs(Values *values, size_t num_regs) {
+  Web *web = NULL;
+
+  // For each PHI and COPY instruction, construct a web consisting of the
+  // instruction value and its arguments.
+  for (Value **value = values->data; value < values->data + values->count; value++) {
+    Web *phi_web = (*value)->web;
+    Value* argument = NULL;
+
+    if ((*value)->type == IR_INSTRUCTION_PHI) {
+      for (PHINodeEntry *e = (*value)->phi_entries; e; e = e->next) {
+        argument = e->value;
+
+        // If either value is not in a web, add it to the other value's web.
+      combine:
+        if (!phi_web || !argument->web) {
+          if (!phi_web && !argument->web) {
+            // Neither the phi node nor the argument is in a web. Create a new web.
+            phi_web = calloc(1, sizeof *phi_web);
+            phi_web->next = web;
+            if (web) web->prev = phi_web;
+            web = phi_web;
+
+            phi_web->values.data = calloc(2, sizeof *phi_web->values.data);
+            phi_web->values.data[0] = *value;
+            phi_web->values.data[1] = argument;
+            phi_web->values.count = 2;
+            phi_web->values.capacity = 2;
+          } else {
+            // One of the values is in a web; add the other one to it.
+            phi_web = phi_web ? phi_web : argument->web;
+            VECTOR_PUSH(&phi_web->values, argument->web ? *value : argument);
+          }
+          (*value)->web = argument->web = phi_web;
+        }
+
+        // Both values are in two different webs; merge them
+        else if (phi_web != argument->web) {
+          VECTOR_RESERVE(&phi_web->values, argument->web->values.count);
+          for (size_t i = 0; i < argument->web->values.count; i++) {
+            phi_web->values.data[phi_web->values.count++] = argument->web->values.data[i];
+            argument->web->values.data[i]->web = phi_web;
+          }
+
+          // Remove the merged web from the list of webs.
+          Web *old_web = argument->web;
+          argument->web = phi_web;
+          phi_web->values.data[phi_web->values.count++] = argument;
+          if (old_web->prev) old_web->prev->next = old_web->next;
+          if (old_web->next) old_web->next->prev = old_web->prev;
+          if (old_web == web) web = old_web->next;
+          free(old_web->values.data);
+          free(old_web);
+        }
+
+        // This is possible because of the goto.
+        if ((*value)->type == IR_INSTRUCTION_COPY) break;
+      }
+    } else if ((*value)->type == IR_INSTRUCTION_COPY) {
+      argument = (*value)->operand;
+      phi_web = (*value)->web;
+      goto combine;
+    }
+  }
+
+  // Now that all PHI nodes have been taken care of, create a web for each value
+  // that isn't already in a web.
+  for (Value **value = values->data; value < values->data + values->count; value++) {
+    if (!(*value)->web && needs_register(*value) && (*value)->reg > num_regs) {
+      Web *new_web = calloc(1, sizeof *new_web);
+      new_web->next = web;
+      if (web) web->prev = new_web;
+      web = new_web;
+
+      new_web->values.data = calloc(1, sizeof *new_web->values.data);
+      new_web->values.data[0] = *value;
+      new_web->values.count = 1;
+      new_web->values.capacity = 1;
+      (*value)->web = new_web;
+    }
+  }
+
+  return web;
+}
 
 /// Helpers to check for interference between webs and registers in the adjacency matrix.
 ///
@@ -279,6 +333,9 @@ typedef struct AdjacencyMatrix {
 /// Next, subtract 1 from each element of the pair; we do this because registers
 /// start at 1 (0 is used to indicate no register), but the matrix starts at 0.
 ///
+/// Note that in the functions below, we do not subtract 1 from elements that are
+/// webs because webs, unlike registers, start at 0 in our implementation.
+///
 ///     (5, 3) -> (4, 2)
 ///
 /// Finally, subtract 1 from the first element of the pair; we do this because the
@@ -292,9 +349,6 @@ typedef struct AdjacencyMatrix {
 /// (reg3, web2) and arrived at (3, 2)) is just a coincidence. The index for
 /// (reg1, web3), for instance, would be (reg1, web3) -> (web3, reg1) -> (6, 1)
 /// -> (5, 0) -> (4, 0).
-///
-/// Note that in the functions below, there is no need to subtract 1 from
-/// web ids because webs, unlike registers, start at 0 in our implementation.
 ///
 char* rr(AdjacencyMatrix *mtx, size_t r1, size_t r2) {
   ASSERT(r1 != r2, "Cannot check for or set interference between a register and itself.");
@@ -312,12 +366,31 @@ char* ww(AdjacencyMatrix *mtx, size_t w1, size_t w2) {
   return mtx->data + (w1 + mtx->num_regs - 1) * mtx->rows + w2 + mtx->num_regs;
 }
 
+/// Check whether a register is a physical register.
+char physreg_p(Value* v, size_t num_regs) {
+  return v->reg >= 1 && v->reg <= num_regs;
+}
+
+/// Access the entry in the adjacency matrix for the given pair of values.
+char* adj(AdjacencyMatrix *mtx, Value *a, Value *b) {
+  char a_is_physical = physreg_p(a, mtx->num_regs);
+  char b_is_physical = physreg_p(b, mtx->num_regs);
+  if (a_is_physical || b_is_physical) {
+    if (a_is_physical && b_is_physical) return rr(mtx, a->reg, b->reg);
+    if (a_is_physical) return rw(mtx, a->reg, b->web->id);
+  }
+  return ww(mtx, a->web->id, b->web->id);
+}
+
 /// Lambda used by `values_interfere()`. Returns 1 if the two values interfere
 /// with one another, 0 if they do not interfere in the current block, and -1
 /// if they cannot interfere.
 char values_interfere_callback(BasicBlock *block, va_list ap) {
   Value *use_value = va_arg(ap, Value*);
   Value *def_value = va_arg(ap, Value*);
+
+  // def/def_value is the definition of v2
+  // use/use_value is the use of v1
 
   // The use is in this block.
   if (use_value->parent == block) {
@@ -362,12 +435,14 @@ char values_interfere_callback(BasicBlock *block, va_list ap) {
 ///
 /// If the definition of v2 is contained within any of these intervals, v1 and v2
 /// interfere. If so, return 1, and 0 otherwise.
+/// TODO: If the uses are NULL, then that value doesn't interfere w/ anything.
+/// TODO: Fix uses when creating nodes in the backend.
 char values_interfere(Value *v1, Value *v2) {
   for (Use *use = v1->uses; use; use = use->next) {
     // The definition and use of v1 are in the same block.
     if (v1->parent == use->parent->parent) {
       // If the definition of v2 is also in that block, and lies between the
-      // definition of v1 its use, then v1 and v2 interfere.
+      // definition of v1 and its use, then v1 and v2 interfere.
         return v2->parent == v1->parent &&
          v1->instruction_index < v2->instruction_index &&
          v2->instruction_index <= use->parent->instruction_index;
@@ -391,10 +466,10 @@ char webs_interfere(Web* w1, Web* w2) {
   // A web never interferes with itself.
   if (w1 == w2) return 0;
 
-  for (size_t i = 0; i < w1->value_count; i++) {
-    for (size_t j = 0; j < w2->value_count; j++) {
-      Value *v1 = w1->values[i];
-      Value *v2 = w2->values[j];
+  for (size_t i = 0; i < w1->values.count; i++) {
+    for (size_t j = 0; j < w2->values.count; j++) {
+      Value *v1 = w1->values.data[i];
+      Value *v2 = w2->values.data[j];
       if (values_interfere(v1, v2)) return 1;
       if (values_interfere(v2, v1)) return 1;
     }
@@ -421,11 +496,12 @@ void build_adjacency_matrix
   size_t wi = 0;
   for (Web *w = web; w; w = w->next, wi++) {
     size_t vi = 0;
-    for (Value **v = w->values; v < w->values + w->value_count; v++, vi++) {
+    for (Value **v = w->values.data; v < w->values.data + w->values.count; v++, vi++) {
       for (size_t i = 0; i < m->num_regs; i++) {
         if (platform_interfere_p(*v, i)) {
-          printf("Web %zu interferes with register %zu (platform)\n", wi + 1, (*v)->reg);
-          *wr(m, wi, (*v)->reg) = 1;
+          printf("Web %zu interferes with register %zu (platform)\n", wi + 1, i);
+          /// TODO: Was `(*v)->reg`, but is now `i`. Is this right.
+          *wr(m, wi, i) = 1;
         }
       }
     }
@@ -446,6 +522,170 @@ void build_adjacency_matrix
   }
 }
 
+/// Perform register coalescing.
+void coalesce_registers(AdjacencyMatrix *mtx, Web *webs, Values *values) {
+  /// TODO: Implement.
+}
+
+void build_adjacency_lists(InterferenceGraph *g, Web *webs) {
+  size_t wi = 0;
+  for (Web *w = webs; w; w = w->next, wi++) {
+    size_t vi = 0;
+    for (Web *v = webs; v && vi < wi; v = v->next, vi++) {
+      if (*ww(&g->mtx, wi, vi)) {
+        g->lists.data[wi].interferences++;
+        g->lists.data[vi].interferences++;
+        VECTOR_PUSH(&g->lists.data[wi].interferences_list, vi);
+        VECTOR_PUSH(&g->lists.data[vi].interferences_list, wi);
+      }
+    }
+  }
+}
+
+/// Remove a vertex from the interference graph.
+void remove_vertex(InterferenceGraph *g, size_t index) {
+  for (size_t i = 0; i < g->lists.data[index].interferences_list.count; i++) {
+    AdjacencyList *list = &g->lists.data[i];
+    for (size_t j = 0; j < list->interferences_list.count; j++) {
+      if (list->interferences_list.data[j] == index) {
+        VECTOR_REMOVE_UNORDERED(&list->interferences_list, j);
+        VECTOR_PUSH(&list->removed_interferences_list, index);
+        break;
+      }
+    }
+  }
+
+  AdjacencyList *list = &g->lists.data[index];
+  list->interferences = 0;
+  VECTOR_APPEND(&list->removed_interferences_list, &list->interferences_list);
+  VECTOR_CLEAR(&list->interferences_list);
+}
+
+/// Perform initial graph colouring.
+void prune_interference_graph(InterferenceGraph *g, Web *webs, size_t web_count) {
+  while (web_count) {
+    // Apply the degree < k rule: A graph G is k-colourable if for every vertex v
+    // in G, deg(v) < k. Thus, if a vertex v has deg(v) < k, then we know it can
+    // be coloured, so we remove it from the graph and push it onto the stack.
+    char done = 0;
+    do {
+      done = 1;
+      size_t wi = 0;
+      for (Web *w = webs; w; w = w->next, wi++) {
+        if (!w->allocated && g->lists.data[wi].interferences < g->mtx.num_regs) {
+          done = 0;
+          VECTOR_PUSH(&g->stack, wi);
+          remove_vertex(g, wi);
+          w->allocated = 1;
+          web_count--;
+        }
+      }
+    } while (!done && web_count);
+
+    // Apply the degree >= k rule: At this point, the graph is either empty or
+    // contains only vertices with deg(v) >= k. Chaitin's algorithm would spill
+    // here, but we can do better.
+    //
+    // Briggs' improvement to Chaitin's algorithm is to select the vertex with the
+    // lowest spill cost, but instead of spilling it, it too is pushed onto the stack.
+    //
+    // This works because a graph G is k-colourable if, not iff, for every vertex
+    // v in G, deg(v) < k. This means that even if there is a vertex v in G with
+    // deg(v) >= k, there may still be a k-colouring of G, and spilling may not be
+    // necessary, but we don't have enough information to determine that at this
+    // point, so we optimistically push the vertex onto the stack and defer spilling
+    // as much as possible.
+    //
+    // A classic example of this is the graph below, which is 2-colourable, but
+    // Chaitin's algorithm would spill a vertex:
+    //
+    //       A ------ B
+    //       |        |
+    //       |        |
+    //       C ------ D
+    //
+    if (web_count) {
+      // Determine the node with the minimal spill cost.
+      size_t min_cost = -1;
+      size_t wi = 0;
+      size_t node_to_spill = 0;
+      for (Web *w = webs; w; w = w->next, wi++) {
+        size_t cost = g->lists.data[wi].interferences
+            ? g->lists.data[wi].spill_cost / g->lists.data[wi].interferences
+            : 0 /* TODO: Should this be 0? */;
+        if (!w->allocated && g->lists.data[wi].interferences && cost < min_cost) {
+          min_cost = cost;
+          node_to_spill = wi;
+          w->allocated = 1;
+          if (!min_cost) break;
+        }
+      }
+
+      // Remove it from the graph.
+      VECTOR_PUSH(&g->stack, node_to_spill);
+      remove_vertex(g, node_to_spill);
+      web_count--;
+    }
+  }
+}
+
+/// Return the smallest register that can be assigned to the vertex
+/// at the given index. Returns 0 if no register can be assigned.
+unsigned min_register(InterferenceGraph *g, size_t index) {
+  ASSERT(g->mtx.num_regs <= sizeof(intmax_t) * 8, "RA currently does not support more than 64 registers");
+
+  // The register mask is a bitset where each bit represents a register.
+  // If the bit is set, then the register is in use.
+  intmax_t regmask = 0;
+
+  for (size_t i = 0; i < g->lists.data[index].interferences_list.count; i++) {
+    unsigned reg = g->lists.data[g->lists.data[index].interferences_list.data[i]].colour;
+    regmask &= 1 << (reg - 1);
+  }
+  for (size_t i = 0; i < g->lists.data[index].removed_interferences_list.count; i++) {
+    unsigned reg = g->lists.data[g->lists.data[index].removed_interferences_list.data[i]].colour;
+    regmask &= 1 << (reg - 1);
+  }
+
+  // To find the smallest register that can be assigned, we simply
+  // find the first bit that is not set in the register mask.
+  unsigned first_set = find_first_set(~regmask);
+  return first_set > g->mtx.num_regs ? 0 : first_set;
+}
+
+/// Assign registers to each vertex in the interference graph.
+/// Returns 1 if the graph was coloured successfully, 0 otherwise.
+char assign_registers(InterferenceGraph *g, Web *webs) {
+  char coloured = 1;
+  do {
+    // Pop a vertex from the stack and assign it a register.
+    size_t wi = VECTOR_POP(&g->stack);
+    unsigned reg = min_register(g, wi);
+    if (reg) {
+      g->lists.data[wi].colour = reg;
+
+      Web *web = webs;
+      size_t web_id = 0;
+      while (web_id < wi) {
+        web = web->next;
+        web_id++;
+      }
+      ASSERT(web);
+
+      // Assign the register to each value in the web.
+      for (size_t i = 0; i < web->values.count; i++) {
+        web->values.data[i]->reg = reg;
+        web->allocated_register = reg;
+      }
+    } else {
+      // If we couldn't assign a register, then we have to spill the web.
+      g->lists.data[wi].spill = 1;
+      coloured = 0;
+    }
+  } while (g->stack.count);
+  return coloured;
+}
+
 void allocate_registers
 (CodegenContext *context,
  Function *f,
@@ -454,81 +694,98 @@ void allocate_registers
   ASSERT(num_regs, "Need at least one register");
 
   // Collect all values that need registers.
-  Value **values = calloc(INITIAL_VALUES_CAPACITY, sizeof(Value *));
-  size_t values_allocated = INITIAL_VALUES_CAPACITY;
-  size_t value_count = 0;
+  Values values = {0};
+  values.data = calloc(INITIAL_VALUES_CAPACITY, sizeof(Value *));
+  values.capacity = INITIAL_VALUES_CAPACITY;
+  values.count = 0;
   size_t regs = num_regs + 1;
 
   for (BasicBlock *block = f->entry; block; block = block->next) {
     for (Value *value = block->values; value; value = value->next) {
-      value->instruction_index = value_count++;
-      if (value_count > values_allocated) {
-        values_allocated *= 2;
-        values = realloc(values, values_allocated * sizeof(Value *));
-      }
-      values[value->instruction_index] = value;
+      value->instruction_index = values.count;
+      VECTOR_PUSH(&values, value);
       if (needs_register(value) && value->reg == 0) {
         value->reg = regs++;
       }
     }
   }
-  f->value_count = value_count;
+  f->value_count = values.count;
 
   // Special cases.
-  if (value_count == 0) { return; }
-  if (value_count == 1) {
-    values[0]->reg = 1;
+  if (values.count == 0) { return; }
+  if (values.count == 1) {
+    values.data[0]->reg = 1;
     return;
   }
 
   // Combine values into webs.
-  Web *web = build_webs(values, value_count, num_regs);
+  Web *web = build_webs(&values, num_regs);
   size_t web_count = 0;
   for (Web *w = web; w; w = w->next) web_count++;
   size_t matrix_size = web_count + num_regs - 1;
 
+/*
+  // Print webs.
+  printf("\nWebs: %zu\n", web_count);
+  {
+    size_t web_cnt = 0;
+    for (Web *w = web; w; w = w->next) {
+      printf("Web %zu: ", ++web_cnt);
+      for (size_t i = 0; i < w->values.count; i++) {
+        printf("%%r%zu ", w->values.data[i]->reg);
+      }
+      printf("\n");
+    }
+  }
+*/
+
+  // Create the adjacency matrix for the interference graph.
+  InterferenceGraph g = {0};
+  g.mtx.rows = matrix_size;
+  g.mtx.num_regs = num_regs;
+  g.mtx.data = calloc(g.mtx.rows * g.mtx.rows, sizeof(char));
+  build_adjacency_matrix(&g.mtx, web, platform_interfere_p);
+
+  // Perform register coalescing.
+  coalesce_registers(&g.mtx, web, &values);
+
+  // Build the adjacency lists for the interference graph.
+  g.lists.data = calloc(web_count, sizeof(AdjacencyList));
+  g.lists.count = web_count;
+  g.lists.capacity = web_count;
+  build_adjacency_lists(&g, web);
+
+  // Prune the interference graph.
+  prune_interference_graph(&g, web, web_count);
+
+  // Assign registers to the webs.
+  if (!assign_registers(&g, web)) {
+    TODO("Spill values");
+  }
 
   codegen_dump_function(context, f);
 
-  // Print webs.
-  printf("\nWebs: %zu\n", web_count);
-  size_t web_cnt = 0;
-  for (Web *w = web; w; w = w->next) {
-    printf("Web %zu: ", ++web_cnt);
-    for (size_t i = 0; i < w->value_count; i++) {
-      printf("%%r%zu ", w->values[i]->reg);
-    }
-    printf("\n");
-  }
-
-  // Create the adjacency matrix for the interference graph.
-  AdjacencyMatrix mtx;
-  mtx.rows = matrix_size;
-  mtx.num_regs = num_regs;
-  mtx.data = calloc(mtx.rows * mtx.rows, sizeof(char));
-  build_adjacency_matrix(&mtx, web, platform_interfere_p);
-
-  // Print the matrix.
+/*  // Print the matrix.
   ///    r1 r2 r3 w1 w2
   /// r2 1
   /// r3 1  1
   /// w1 0  0  0
   /// w2 0  0  1  1
   /// w3 1  0  0  0  1
-  printf("\nMatrix: num_regs: %zu, rows: %zu\n   ", mtx.num_regs, mtx.rows);
-  for (size_t i = 0; i < mtx.rows; i++) {
-    if (i + 1 > mtx.num_regs) { printf("w%zu ", i - mtx.num_regs + 1); }
+  printf("\nMatrix: num_regs: %zu, rows: %zu\n   ", g.mtx.num_regs, g.mtx.rows);
+  for (size_t i = 0; i < g.mtx.rows; i++) {
+    if (i + 1 > g.mtx.num_regs) { printf("w%zu ", i - g.mtx.num_regs + 1); }
     else { printf("r%zu ", i + 1); }
   }
   printf("\n");
 
-  for (size_t i = 0; i < mtx.rows; i++) {
-    if (i + 2 > mtx.num_regs) { printf("w%zu ", i - mtx.num_regs + 2); }
+  for (size_t i = 0; i < g.mtx.rows; i++) {
+    if (i + 2 > g.mtx.num_regs) { printf("w%zu ", i - g.mtx.num_regs + 2); }
     else { printf("r%zu ", i + 2); }
 
-    for (size_t j = 0; j < mtx.rows; j++) {
-      printf("%d  ", mtx.data[i * mtx.rows + j]);
+    for (size_t j = 0; j < g.mtx.rows; j++) {
+      printf("%d  ", g.mtx.data[i * g.mtx.rows + j]);
     }
     printf("\n");
-  }
+  }*/
 }
