@@ -25,6 +25,6 @@ void allocate_registers
 (CodegenContext *context,
  Function *f,
  size_t num_regs,
- char platform_interfere_p(const Value *value, unsigned reg));
+ regmask_t platform_interfering_regs(const Value *value));
 
 #endif // X86_64_RA_H

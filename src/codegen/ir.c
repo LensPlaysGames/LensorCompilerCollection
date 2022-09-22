@@ -576,39 +576,6 @@ void codegen_dump_value(CodegenContext *context, Value *val) {
     case IR_INSTRUCTION_COPY:
       printf("    %%r%zu = copy %%r%zu", val->reg, val->operand->reg);
       break;
-    case IR_INSTRUCTION_COPY_REGISTER:
-      printf("    %%r%zu = copy %%r%u", val->reg, val->reg_operand);
-      break;
-    case IR_INSTRUCTION_SPILL:
-      printf("    spill");
-      break;
-    case IR_INSTRUCTION_UNSPILL:
-      printf("    unspill");
-      break;
-    case IR_INSTRUCTION_ADD_TWO_ADDRESS:
-      printf("    add %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
-      break;
-    case IR_INSTRUCTION_SUB_TWO_ADDRESS:
-      printf("    sub %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
-      break;
-    case IR_INSTRUCTION_MUL_TWO_ADDRESS:
-      printf("    mul %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
-      break;
-    case IR_INSTRUCTION_DIV_ONE_ADDRESS:
-      printf("    div %%r%zu, %%r%u", val->left->reg, val->right);
-      break;
-    case IR_INSTRUCTION_SHL_TWO_ADDRESS:
-      printf("    shl %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
-      break;
-    case IR_INSTRUCTION_SAR_TWO_ADDRESS:
-      printf("    sar %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
-      break;
-    case IR_INSTRUCTION_CMP_TWO_ADDRESS:
-      printf("    cmp %%r%zu, %%r%zu", val->lhs->reg, val->rhs->reg);
-      break;
-    case IR_INSTRUCTION_SET:
-      printf("    set%s %%r%zu", cmp_op[val->comparison.type], val->reg);
-      break;
     case IR_INSTRUCTION_COUNT: UNREACHABLE();
   }
 }

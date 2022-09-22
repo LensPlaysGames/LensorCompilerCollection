@@ -1380,6 +1380,7 @@ static void emit_value(CodegenContext *context, Value *value) {
 }
 */
 
+MAYBE_UNUSED
 static void insert_before(Value* value, Value *value_to_insert) {
   if (value->prev) { value->prev->next = value_to_insert; }
   value_to_insert->prev = value->prev;
@@ -1387,6 +1388,7 @@ static void insert_before(Value* value, Value *value_to_insert) {
   value->prev = value_to_insert;
 }
 
+MAYBE_UNUSED
 static void insert_after(Value *value, Value *value_to_insert) {
   if (value->next) { value->next->prev = value_to_insert; }
   value_to_insert->next = value->next;
@@ -1402,122 +1404,19 @@ static Value *create_copy(CodegenContext *context, Value *v) {
   return copy;
 }
 
-static enum IRInstructionType equiv(enum IRInstructionType type) {
-  switch (type) {
-    case IR_INSTRUCTION_ADD: return IR_INSTRUCTION_ADD_TWO_ADDRESS;
-    case IR_INSTRUCTION_SUB: return IR_INSTRUCTION_SUB_TWO_ADDRESS;
-    case IR_INSTRUCTION_MUL: return IR_INSTRUCTION_MUL_TWO_ADDRESS;
-    case IR_INSTRUCTION_DIV: return IR_INSTRUCTION_DIV_ONE_ADDRESS;
-    case IR_INSTRUCTION_MOD: return IR_INSTRUCTION_DIV_ONE_ADDRESS;
-    case IR_INSTRUCTION_SHL: return IR_INSTRUCTION_SHL_TWO_ADDRESS;
-    case IR_INSTRUCTION_SAR: return IR_INSTRUCTION_SAR_TWO_ADDRESS;
-    default: UNREACHABLE();
-  }
-}
 
-static void convert_to_two_address(CodegenContext *context, Function *f) {
-  for (BasicBlock *block = f->entry; block; block = block->next) {
-    for (Value *value = block->values; value; value = value->next) {
-      switch (value->type) {
-        // %A = OP %B, %C -> %A = COPY %B; OP %A, %C
-        case IR_INSTRUCTION_SUB:
-        case IR_INSTRUCTION_MUL:
-        case IR_INSTRUCTION_ADD: {
-          value->type = equiv(value->type);
-
-          Value *copy = create_copy(context, value->lhs);
-          insert_before(value, copy);
-          value->lhs = copy;
-        } break;
-
-        // %A = SHIFT %B, IMM -> %A = COPY %B; SHIFT %A, IMM
-        // %A = SHIFT %B, %C  -> %A = COPY %B; %cl = COPY %C; SHIFT %A, %cl
-        case IR_INSTRUCTION_SHL:
-        case IR_INSTRUCTION_SAR: {
-          value->type = equiv(value->type);
-
-          Value *copy = create_copy(context, value->lhs);
-          insert_before(value, copy);
-          value->lhs = copy;
-
-          // Copy the rhs into %cl if it isn't an immediate value.
-          if (value->rhs->type != IR_INSTRUCTION_IMMEDIATE) {
-            Value *move_to_cl = create_copy(context, value->rhs);
-            move_to_cl->reg = REG_RCX;
-            insert_before(value, move_to_cl);
-            value->rhs = move_to_cl;
-          }
-        } break;
-
-        // %A = DIV %B, %C -> %rax = COPY %B; %rax = DIV %C, %rdx; %A = COPY %rax
-        // %A = MOD %B, %C -> %rax = COPY %B; %rdx = DIV %C, %rax; %A = COPY %rdx
-        // CQO is generated when the div is emitted and doesn't need to be
-        // a value in the ir since it takes no inputs and clobbers nothing.
-        // %rdx is clobbered by the div instruction.
-        //
-        // Even though DIV actually only takes one input, we pass the clobbered
-        // register (%rax/%rdx) as the second input so that the register allocator
-        // knows that it is clobbered.
-        case IR_INSTRUCTION_MOD:
-        case IR_INSTRUCTION_DIV: {
-          Value *rax_copy = create_copy(context, value->lhs);
-          rax_copy->reg = REG_RAX;
-          insert_before(value, rax_copy);
-
-          Value *div = create_copy(context, value->rhs);
-          div->type = IR_INSTRUCTION_DIV_ONE_ADDRESS;
-          div->left = value->rhs;
-          div->right = value->type == IR_INSTRUCTION_DIV ? REG_RDX : REG_RAX;
-          div->reg = value->type == IR_INSTRUCTION_DIV ? REG_RAX : REG_RDX;
-          insert_before(value, div);
-
-          value->type = IR_INSTRUCTION_COPY_REGISTER;
-          value->reg_operand = value->type == IR_INSTRUCTION_DIV ? REG_RAX : REG_RDX;
-        } break;
-
-        // Split into compare and set.
-        case IR_INSTRUCTION_COMPARISON: {
-          Comparison cmp = value->comparison;
-          value->type = IR_INSTRUCTION_CMP_TWO_ADDRESS;
-          value->lhs = cmp.lhs;
-          value->rhs = cmp.rhs;
-
-          Value *set = calloc(1, sizeof *set);
-          set->type = IR_INSTRUCTION_SET;
-          set->comparison = cmp;
-          insert_after(value, set);
-        } break;
-
-        // A return instruction doesn't actually return; it just jumps
-        // to the return block.
-        case IR_INSTRUCTION_RETURN: break;
-
-        default: break;
-      }
-    }
-  }
-}
-
-static char interfere_p(const Value* value, unsigned reg) {
+static regmask_t interfering_regs(const Value *value){
   switch (value->type) {
-    case IR_INSTRUCTION_DIV: return reg == REG_RDX;
-    case IR_INSTRUCTION_MOD: return reg == REG_RAX;
-
-    case IR_INSTRUCTION_DIV_ONE_ADDRESS:
-      if (value->reg == REG_RAX) return reg == REG_RDX;
-      return reg == REG_RAX;
+    case IR_INSTRUCTION_DIV: return 1 << (REG_RDX - 1);
+    case IR_INSTRUCTION_MOD: return 1 << (REG_RAX - 1);
 
     case IR_INSTRUCTION_SHL:
     case IR_INSTRUCTION_SAR:
-      return reg == REG_RCX;
+      return 1 << (REG_RCX - 1);
 
     case IR_INSTRUCTION_CALL:
       // TODO: Clobber caller-saved registers.
       return 0;
-
-    case IR_INSTRUCTION_SHL_TWO_ADDRESS:
-    case IR_INSTRUCTION_SAR_TWO_ADDRESS:
-      return reg == REG_RCX;
 
     default: return 0;
   }
@@ -1529,9 +1428,7 @@ static void emit_function(CodegenContext *context, Function *f) {
   codegen_function_finalise(context, f);
   //codegen_function_prologue_x86_64(context);
 
-  // X86_64 uses two-address instructions, so we need to convert our SSA
-  // IR into a form that can be emitted.
-  convert_to_two_address(context, f);
+  // TODO: Copy result of DIV/MOD
 
   // Copy the return value into %rax.
   if (f->return_value) {
@@ -1545,7 +1442,7 @@ static void emit_function(CodegenContext *context, Function *f) {
   // FIXME: pass all registers instead and put rbp, rsp, and rip at the very end
   //     of the registers enum.
   ArchData *arch_data = context->arch_data;
-  allocate_registers(context, f, arch_data->register_pool.num_scratch_registers, interfere_p);
+  allocate_registers(context, f, arch_data->register_pool.num_scratch_registers, interfering_regs);
   exit(0);
 
   // Emit the rest of the function.

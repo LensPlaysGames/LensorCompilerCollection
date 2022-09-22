@@ -61,6 +61,8 @@ void assert_impl (
 /// Usage:
 ///   ASSERT(condition);
 ///   ASSERT(condition, "message", ...);
+/// TODO: Make this an expression
+/// TODO: static_assert
 #define ASSERT(cond, ...)  \
   do {                     \
     if (!(cond)) {         \

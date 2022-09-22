@@ -1,6 +1,14 @@
 #ifndef CODEGEN_FORWARD_H
 #define CODEGEN_FORWARD_H
 
+#include <stdint.h>
+
+#ifndef _MSVC_VER
+typedef long long regmask_t;
+#else
+typedef unsigned __int64 regmask_t;
+#endif
+
 typedef struct Value Value;
 typedef struct Function Function;
 typedef struct BasicBlock BasicBlock;
