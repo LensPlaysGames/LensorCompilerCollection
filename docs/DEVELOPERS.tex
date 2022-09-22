@@ -1,6 +1,6 @@
 \documentclass[12pt]{report}
 
-\newcommand{\langname}{Lenscript}
+\newcommand{\langname}{Funguwuage}
 \newcommand{\lang}{\texttt{\langname} }
 
 \title  {\langname\ Developer's Manual}
@@ -411,6 +411,16 @@ Here is the while loop body from our current program, in terms of \lang's interm
 \end{tikzpicture}
 \end{center}
 
+Each box with code within it is referred to as a \emph{basic block}. \\
+The diagram above illustrates the basic blocks of the "main" \emph{function} in our example program and their relation to one another.
+
+\begin{itemize}
+\item[Basic Block]
+  A flat list of IR instructions that must end in a branch.
+\item[Function]
+  A flat list of basic blocks with at least an entry and a return block specified, although they may be the same.
+\end{itemize}
+
 However, this diagram does not actually conform to \lang's intermediate representation; there is one more step to complete before it matches one-to-one: conversion into static single assignment form, or SSA form for short.
 
 \section{Static Single Assignment Form}
@@ -435,7 +445,7 @@ Let's take a look at the example above, converted into SSA form.
 \matrix [column sep=5mm,row sep=7mm]{
   % row 1
   &
-  \node [block, text width=\inprogramwidth] (firstbox) {
+  \node [block, label = above:{\small bb0}, text width=\inprogramwidth] (firstbox) {
     $a_1$ := b + c    ; 10
 
     $d_1$ := $a_1$ * -1    ; 11
@@ -443,19 +453,19 @@ Let's take a look at the example above, converted into SSA form.
     $e_1$ := $d_1$ + f    ; 12
   }; & \\
   % row 2
-  & \node[block] (if) {
+  & \node[block, label = below:{\small bb1}] (if) {
     if input\_condition ; 13, 14
   }; & \\
-  \node [block] (b1) {
+  \node [block, label = left:{\small bb2}] (b1) {
     f := 2 * $e_1$    ; 15
 
   }; &
-  & \node [block] (b2) {
+  & \node [block, label = left:{\small bb3}] (b2) {
     $b_1$ := $d_1$ + $e_1$    ; 16
     \\
     $e_2$ := $e_1$ - 1    ; 17
   };\\
-  & \node [block] (d1) {
+  & \node [block, label = above:{\small bb4}] (d1) {
     $b_2$ := f + c    ; 18
   };\\
 };
@@ -471,18 +481,40 @@ Let's take a look at the example above, converted into SSA form.
 \draw[-latex,black] ($(d1.east) + (.4,0)$) arc
     [
         start angle = 90,
-        end angle =   -80,
-        x radius =    6cm,
-        y radius =    -3.6cm
+        end angle =   -81,
+        x radius =    6.8cm,
+        y radius =    -4.18cm
     ] ;
 \end{tikzpicture}
 \end{center}
 
-% TODO: Basic block, function, value, etc. vocabulary definitions
-% \begin{itemize}
-% \item[Basic Block] A list of IR Instructions
-% \end{itemize}
+% TODO: They are up above, but maybe should be here? Basic block, function, value, etc. vocabulary definitions...
 
+The above diagram is not what the actual data structure appears as, so let's take a look at a lower level representation of the intermediate representation. How about that?
+
+\begin{itemize}
+\item[\%]
+  A temporary value, like a register on a CPU.
+\item[bb]
+  A basic block within a function.
+\item[fun]
+  A function with a list of basic blocks.
+\end{itemize}
+
+
+\begin{Verbatim}[samepage = true]
+fun main:
+  bb0:
+    %r0 = global_load("b")
+    %r1 = global_load("c")
+    %r2 = add(%r0, %r1)
+    global_store(%r2, "a") ;;  10
+    %r3 = global_load("a")
+    %r4 = immediate(-1)
+    %r5 = multiply(%r3, %r4)
+    global_store(%r5, "d") ;; 11
+    ;; ...
+\end{Verbatim}
 
 % TODO: There has to be a better title than this!
 \section{Variable Liveness}
@@ -492,53 +524,79 @@ WARNING: The following section contains vocabulary regarding topics of life and 
 
 \begin{itemize}
 \item[Live]
-  A variable is considered live after it has been assigned and up until the last use of this variable.
+  A temporary is considered live after it has been assigned and up until the last use of this temporary.
 \item[Live Range]
-  The range of expressions in a basic block in which a variable is live.
+  The range of expressions in a basic block in which a temporary is live.
 \end{itemize}
 
-% TODO: Liveness analysis. How is it done?
 Liveness analysis is done by keeping track of every use of some calculated value in a linked list of \verb|Use| structures (pronounce like the noun, the 'S' is voiceless). This is done during intermediate representation generation. Effectively, we build our IR with live ranges built-in.
 
+If a temporary is live during the definition of another temporary, the two temporaries are said to \emph{interfere}.
 
-% TODO: Add diagram reference/cite/something.
-% From the above static single assignment form diagram, we can begin to piece together the variables that are live at each point within the program, or within some specific block of code.
+Excerpt from demonstration IR above:
+\begin{Verbatim}
+  %r0 = global_load("b")   ;; a
+  %r1 = global_load("c")   ;; b
+  %r2 = add(%r0, %r1)      ;; c
+  global_store(%r2, "a")   ;; d
+  %r3 = global_load("a")   ;; e
+  %r4 = immediate(-1)      ;; f
+  %r5 = multiply(%r3, %r4) ;; g
+  global_store(%r5, "d")   ;; h
+\end{Verbatim}
 
-% TODO: This probably should go somewhere, but not right here.
-%       It's a diagram explaining what we mean when talking about between expressions, rather than actual expressions themselves.
-% \begin{minipage}{\textwidth}
-%   \begin{Verbatim}
-%     ;------------ before 10
-%     a := b + c    ; 10
-%     ;------------ before 11
-%     d := a * -1   ; 11
-%     ;------------ etc...
-%   \end{Verbatim}
-% \end{minipage}
-
-
-
-%\begin{itemize}
-% \item[before xxx]
-%   \begin{minipage}{\textwidth}
-%     $x$ \\
-%     $x$ is live and continues to be, as it is accessed later in the code block. \\
-%     $x$ is dying, as this is it's last use in the code block. \\
-%     $x$ is becoming live, as it is being assigned to.
-%   \end{minipage}
-%\end{itemize}
-
-
+Live ranges from above excerpt:
+\begin{Verbatim}
+    r0 r1 r2 r3 r4 r5
+  a |
+  b |  |
+  c |  |  |
+  d       |
+  e          |
+  f          |  |
+  g          |  |  |
+  h                |
+\end{Verbatim}
 
 \section{Register Allocation}
 \label{sec:codegen-register-allocation}
 
-% TODO: Go into detail about register allocation.
+% TODO: This intro doesn't make any sense whatsoever, anymore
+% However, you may be (like me) thinking... there \emph{\emph{aren't}} infinite registers in hardware implementations. Even in x86\_64, there's only 16 64-bit registers... This is one of the reasons why I was (and am) averse to the intermediate representation idea: it add's so much complexity. However, I assure you, it isn't too complicated, it just sounds it.
 
-However, you may be (like me) thinking... there \emph{\emph{aren't}} infinite registers in hardware implementations. Even in x86\_64, there's only 16 64-bit registers... This is one of the reasons why I was (and am) averse to the intermediate representation idea: it add's so much complexity. However, I assure you, it isn't too complicated, it just sounds it.
+\begin{itemize}
+\item[$\Phi$ (Phi)]
+  The $\Phi$ IR instruction represents a merging of multiple temporaries into a new temporary. The temporaries to-be-merged are referred to as $\Phi$'s arguments.
+\item[Web]
+  A list of temporaries that \textbf{\emph{must}} be stored in the same hardware register.
+\end{itemize}
 
-% TODO: Cite compilerai channel from YouTube Compiler Desgin Module 85: Register Allocation
-% https://www.youtube.com/watch?v=8jPpJkm6HVE
+At this point, we will build our webs. To build webs, there are only a few simple rules.
 
+For two IR instructions $A$ and $B$, they \emph{must} share the same register iff any one of the following are true:
+\begin{itemize}
+\item $A$ is a $\Phi$ instruction and $B$ is an argument of $A$.
+\item $B$ is a $\Phi$ instruction and $A$ is an argument of $B$.
+\item $A$ and $B$ are both arguments of the same $\Phi$ node.
+\item $A$ and $B$ are both arguments of a COPY instruction.
+\end{itemize}
+
+Conceptually, this all tracks. If two temporaries are merged, they must be stored in the same hardware register, otherwise, further accesses would require run-time knowledge during compile-time. If two temporaries are copied, why not just use the same register to refer to both? That way no actual hardware copy has to happen; the copy can just use the originally calculated temporary.
+
+Webs from above excerpt:
+\begin{Verbatim}
+  w0: {r0}
+  w1: {r1}
+  w2: {r2}
+  w3: {r3}
+  w4: {r4}
+  w5: {r5}
+\end{Verbatim}
+
+These webs each contain a list of temporaries that \emph{must} be stored in the same register. Keep in mind that these webs (and corresponding temporaries) \emph{may} still be stored in the same register, if they do not interfere (calculated later).
+
+What is web interference? Two webs, $A$ and $B$ are said to interfere iff any one of the temporaries within $A$ inteferes with any one of the temporaries within $B$.
+
+When two webs interfere, they \emph{must} not be stored in the same register.
 
 \end{document}

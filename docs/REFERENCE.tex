@@ -29,7 +29,7 @@
 {  }
 {  }
 % Make chapter heading snug up to top of page.
-\titlespacing*{\chapter}{-21pt}{-108pt}{10pt}
+\titlespacing*{\chapter}{-21pt}{-72pt}{10pt}
 
 % Remove numbering from section heading.
 \titleformat  {\section} [hang]
@@ -43,8 +43,14 @@
 % Set variable paragraph skip (vertical blank space between paragraphs).
 \setlength{\parskip}{3pt plus 3pt minus 1pt}
 
+
+% I should probably just use geometry, but this works so...
+
+% Move fancy header upwards. It's like halfway down the page by default.
 \setlength{\headheight}{14.5pt}
-\addtolength{\topmargin}{-2.5pt}
+\addtolength{\topmargin}{-64pt}
+% Extend text downwards, it stops with like 3 inches on the bottom.
+\addtolength{\textheight}{128pt}
 
 \begin{document}
 
