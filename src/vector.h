@@ -2,9 +2,9 @@
 #define VECTOR_H
 
 #ifndef _MSVC_VER
-#define VECTOR_TYPEOF __typeof__
+#define TYPEOF __typeof__
 #elif defined(__cplusplus)
-#define VECTOR_TYPEOF decltype
+#define TYPEOF decltype
 #else
 #error This program requires either __typeof__ or decltype to work properly. \
        If you are using MSVC, please compile this in C++ mode.
@@ -40,13 +40,13 @@
 
 /// Iterate over each element of a vector.
 #define VECTOR_FOREACH(element, vector)                        \
-  for (VECTOR_TYPEOF((vector)->data) element = (vector)->data; \
+  for (TYPEOF((vector)->data) element = (vector)->data; \
     element < (vector)->data + (vector)->count;                \
     element++)
 
 /// Iterate over each element of a vector, and dereference the element.
 #define VECTOR_FOREACH_PTR(element, vector)                                          \
-  for (VECTOR_TYPEOF(*(vector)->data) *element##_ptr = (vector)->data, element = NULL; \
+  for (TYPEOF(*(vector)->data) *element##_ptr = (vector)->data, element = NULL; \
     element##_ptr < (vector)->data + (vector)->count && (element = *element##_ptr, 1); /* "=", not "=="! */ \
     element##_ptr++)
 
@@ -55,13 +55,18 @@
   for (size_t index = 0; index < (vector)->count; index++)
 
 /// Ensure that there is space for at least (vector->count + elements) many elements.
-#define VECTOR_RESERVE(vector, elements)                                                     \
-  do {                                                                                       \
-    if ((vector)->capacity < (vector)->count + (elements)) {                                 \
-      (vector)->capacity += (elements);                                                      \
-      (vector)->capacity *= 2;                                                               \
-      (vector)->data = realloc((vector)->data, (vector)->capacity * sizeof *(vector)->data); \
-    }                                                                                        \
+#define VECTOR_RESERVE(vector, elements)                                                                             \
+  do {                                                                                                               \
+    if ((vector)->capacity < (vector)->count + (elements)) {                                                         \
+      (vector)->capacity += (elements);                                                                              \
+      (vector)->capacity *= 2;                                                                                       \
+      if (!(vector)->data) {                                                                                         \
+        (vector)->data = calloc((vector)->capacity, sizeof *(vector)->data);                                         \
+      } else {                                                                                                       \
+        (vector)->data = realloc((vector)->data, (vector)->capacity * sizeof *(vector)->data);                       \
+        memset((vector)->data + (vector)->count, 0, ((vector)->capacity - (vector)->count) * sizeof *(vector)->data);\
+      }                                                                                                              \
+    }                                                                                                                \
   } while (0)
 
 /// Push an element onto the vector.

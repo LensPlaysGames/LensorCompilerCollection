@@ -14,7 +14,7 @@ struct CodegenContext {
   /// `-- SYMBOL (NAME) -> INTEGER (STACK OFFSET)
   FILE* code;
   Environment *locals;
-  long long locals_offset;
+  long long locals_base_offset;
   enum CodegenOutputFormat format;
   enum CodegenCallingConvention call_convention;
   enum CodegenAssemblyDialect dialect;

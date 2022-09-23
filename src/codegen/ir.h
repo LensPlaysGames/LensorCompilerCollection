@@ -2,6 +2,10 @@
 #define IR_H
 
 #include <codegen/codegen_forward.h>
+#include <vector.h>
+
+#define LIST_FOREACH(element, list) \
+  for (TYPEOF(list) element = list; element; element = element->next)
 
 enum IRInstructionType {
   IR_INSTRUCTION_ADD,
@@ -34,8 +38,9 @@ enum IRInstructionType {
 
   // Used by the backend. Do not use this directly.
   IR_INSTRUCTION_COPY,
+  IR_INSTRUCTION_REGISTER,
 
-  IR_INSTRUCTION_COUNT
+  IR_INSTRUCTION_COUNT,
 };
 
 struct Function {
@@ -169,9 +174,6 @@ struct Value {
     ParamRef param_ref;
     GlobalStore global_store;
   };
-
-  /// For local vars
-  int64_t offset;
 
   /// Used by the backend.
   struct Web* web;
@@ -314,8 +316,8 @@ void codegen_comment_verbose(CodegenContext *ctx, const char *fmt, ...);
 
 /// Dump the intermediate representation to stdout.
 void codegen_dump_value(Value *val);
-void codegen_dump_basic_block(CodegenContext *context, BasicBlock *bb);
-void codegen_dump_function(CodegenContext *context, Function *f);
+void codegen_dump_basic_block(BasicBlock *bb);
+void codegen_dump_function(Function *f);
 void codegen_dump_ir(CodegenContext *context);
 
 /// DO NOT USE THIS IN THE FRONTEND. EVER.

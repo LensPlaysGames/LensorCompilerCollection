@@ -387,10 +387,8 @@ void codegen_phi_add(CodegenContext *context, Value *phi, BasicBlock *block, Val
 
 Value *codegen_alloca(CodegenContext *context, uint64_t size) {
   Value *alloc = calloc(1, sizeof *alloc);
-  alloc->offset = context->current_function->locals_offset;
   alloc->type = IR_INSTRUCTION_ALLOCA;
   alloc->immediate = size;
-  context->current_function->locals_offset += size;
   insert(context, alloc);
   return alloc;
 }
@@ -493,7 +491,7 @@ void codegen_dump_value(Value *val) {
       } else {
         printf("    %%r%zu = call %%r%zu (", val->reg, val->call_value.callee->reg);
       }
-      for (FunctionCallArg *arg = val->call_value.args; arg; arg = arg->next) {
+      LIST_FOREACH (arg,  val->call_value.args) {
         printf("%%r%zu", arg->value->reg);
         if (arg->next) printf (", ");
       }
@@ -551,7 +549,7 @@ void codegen_dump_value(Value *val) {
       break;
     case IR_INSTRUCTION_PHI:
       printf("    %%r%zu = phi ", val->reg);
-      for (PHINodeEntry *e = val->phi_entries; e; e = e->next) {
+      LIST_FOREACH (e, val->phi_entries) {
         printf("[bb%zu, %%r%zu]", e->block->id, e->value->reg);
         if (e->next) printf(", ");
       }
@@ -583,28 +581,25 @@ void codegen_dump_value(Value *val) {
     case IR_INSTRUCTION_COPY:
       printf("    %%r%zu = copy %%r%zu", val->reg, val->operand->reg);
       break;
+    case IR_INSTRUCTION_REGISTER: break;
     case IR_INSTRUCTION_COUNT: UNREACHABLE();
   }
 }
 
-void codegen_dump_basic_block(CodegenContext *context, BasicBlock *bb) {
+void codegen_dump_basic_block(BasicBlock *bb) {
   printf("bb%zu:\n", bb->id);
-  for (Value *val = bb->values; val; val = val->next) {
+  LIST_FOREACH (val, bb->values) {
     codegen_dump_value(val);
     printf("\n");
   }
 }
 
-void codegen_dump_function(CodegenContext *context, Function *f) {
+void codegen_dump_function(Function *f) {
   printf("defun %s:\n", f->name);
-  for (BasicBlock *bb = f->entry; bb; bb = bb->next) {
-    codegen_dump_basic_block(context, bb);
-  }
+  LIST_FOREACH (bb, f->entry) { codegen_dump_basic_block(bb); }
   printf("    return\n");
 }
 
 void codegen_dump_ir(CodegenContext *context) {
-  for (Function *f = context->functions; f; f = f->next) {
-    codegen_dump_function(context, f);
-  }
+  LIST_FOREACH (f, context->functions) {codegen_dump_function(f); }
 }

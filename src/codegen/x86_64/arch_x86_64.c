@@ -84,7 +84,7 @@ typedef unsigned Register;
     if (descriptor == REG_NONE || descriptor >= REG_COUNT) {                                    \
       PANIC("Could not find register with descriptor of %d\n", descriptor);                     \
     }                                                                                           \
-    return register_names[descriptor];                                                          \
+    return register_names[descriptor - 1];                                                          \
   }
 
 enum Registers {
@@ -127,7 +127,7 @@ CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
 
   cg_ctx->parent = parent;
   cg_ctx->locals = environment_create(NULL);
-  cg_ctx->locals_offset = -32;
+  cg_ctx->locals_base_offset = 32;
   return cg_ctx;
 }
 
@@ -395,7 +395,7 @@ static void femit_mem_to_reg(CodegenContext *context, enum Instructions inst, va
 
 static void femit_name_to_reg(CodegenContext *context, enum Instructions inst, va_list args) {
   Register address_register      = va_arg(args, Register);
-  char *name                               = va_arg(args, char *);
+  char *name                     = va_arg(args, char *);
   Register destination_register  = va_arg(args, Register);
 
   const char *mnemonic = instruction_mnemonic(context, inst);
@@ -941,9 +941,10 @@ static void shift_right_arithmetic
 
 /// Emit the function prologue.
 static void function_prologue(CodegenContext *cg_context, Function *f) {
+  fprintf(cg_context->code, "endbr64\n");
   femit(cg_context, I_PUSH, REGISTER, REG_RBP);
   femit(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RSP, REG_RBP);
-  femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, f->locals_offset, REG_RSP);
+  femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, f->locals_offset + cg_context->locals_base_offset, REG_RSP);
   // TODO: Align stack to 16 bytes.
 }
 
@@ -1051,39 +1052,32 @@ static void emit_value(CodegenContext *context, Value *value) {
       break;
     case IR_INSTRUCTION_LOCAL_REF:
       ASSERT(value->local_ref->type == IR_INSTRUCTION_ALLOCA);
-      load_local_address(context, value->reg, value->local_ref->offset);
+      load_local_address(context, value->reg, value->local_ref->immediate);
       break;
     case IR_INSTRUCTION_LOCAL_VAL:
       ASSERT(value->local_ref->type == IR_INSTRUCTION_ALLOCA);
-      load_local(context, value->reg, value->local_ref->offset);
+      load_local(context, value->reg, value->local_ref->immediate);
       break;
     case IR_INSTRUCTION_STORE_LOCAL:
       ASSERT(value->rhs->type == IR_INSTRUCTION_ALLOCA);
-      store_local(context, value->lhs->reg, value->rhs->offset);
+      store_local(context, value->lhs->reg, value->rhs->immediate);
       break;
     case IR_INSTRUCTION_STORE:
        store(context, value->lhs->reg, value->rhs->reg);
        break;
-    case IR_INSTRUCTION_PARAM_REF:
-      if (value->param_ref.index + FIRST_ARGUMENT_REGISTER < FIRST_ARGUMENT_REGISTER ||
-          value->param_ref.index + FIRST_ARGUMENT_REGISTER > LAST_ARGUMENT_REGISTER) {
-        TODO("Handle arguments on the stack");
-      } else {
-        femit(context, I_MOV, REGISTER_TO_REGISTER,
-            value->param_ref.index + FIRST_ARGUMENT_REGISTER,
-            value->reg);
-      }
-      break;
     case IR_INSTRUCTION_COPY:
       femit(context, I_MOV, REGISTER_TO_REGISTER,
           value->operand->reg,
           value->reg);
       break;
+
+    case IR_INSTRUCTION_REGISTER: break;
+    case IR_INSTRUCTION_PARAM_REF: ASSERT(0, "Param ref should have been lowered");
     case IR_INSTRUCTION_COUNT: break;
   }
 }
 
-/*
+MAYBE_UNUSED
 static void insert_before(Value* value, Value *value_to_insert) {
   if (value->prev) { value->prev->next = value_to_insert; }
   value_to_insert->prev = value->prev;
@@ -1091,13 +1085,13 @@ static void insert_before(Value* value, Value *value_to_insert) {
   value->prev = value_to_insert;
 }
 
+MAYBE_UNUSED
 static void insert_after(Value *value, Value *value_to_insert) {
   if (value->next) { value->next->prev = value_to_insert; }
   value_to_insert->next = value->next;
   value_to_insert->prev = value;
   value->next = value_to_insert;
 }
-*/
 
 static Value *create_copy(CodegenContext *context, Value *v) {
   (void) context;
@@ -1105,6 +1099,13 @@ static Value *create_copy(CodegenContext *context, Value *v) {
   copy->type = IR_INSTRUCTION_COPY;
   copy->operand = v;
   return copy;
+}
+
+static Value *create_register(Register reg) {
+  Value *v = calloc(1, sizeof *v);
+  v->type = IR_INSTRUCTION_REGISTER;
+  v->reg = reg;
+  return v;
 }
 
 static regmask_t interfering_regs(const Value *value){
@@ -1124,10 +1125,49 @@ static regmask_t interfering_regs(const Value *value){
   }
 }
 
+static void lower_function(CodegenContext *context, Function *f) {
+  (void) context;
+  LIST_FOREACH (bb, f->entry) {
+    LIST_FOREACH (val, bb->values) {
+      if (val->type == IR_INSTRUCTION_PARAM_REF) {
+        Value *store = calloc(1, sizeof *store);
+        store->type = IR_INSTRUCTION_STORE_LOCAL;
+        if (val->param_ref.index + FIRST_ARGUMENT_REGISTER >= FIRST_ARGUMENT_REGISTER &&
+            val->param_ref.index + FIRST_ARGUMENT_REGISTER <= LAST_ARGUMENT_REGISTER) {
+          store->lhs = create_register(val->param_ref.index + FIRST_ARGUMENT_REGISTER);
+        } else {
+          TODO("Handle stack arguments");
+        }
+        store->rhs = val;
+        insert_after(val, store);
+
+        val->type = IR_INSTRUCTION_ALLOCA;
+        val->immediate = 8;
+      }
+    }
+  }
+}
+
+/// Add up all allocas.
+static void sum_local_allocations(Function *f) {
+  f->locals_offset = 8;
+  LIST_FOREACH (bb, f->entry) {
+    LIST_FOREACH (val, bb->values) {
+      if (val->type == IR_INSTRUCTION_ALLOCA) {
+        size_t immediate = val->immediate;
+        val->immediate = f->locals_offset;
+        f->locals_offset += immediate;
+      }
+    }
+  }
+
+}
+
 static void emit_function(CodegenContext *context, Function *f) {
   fprintf(context->code, "%s:\n", f->name);
-  context->locals_offset = 0;
   codegen_function_finalise(context, f);
+  lower_function(context, f);
+  sum_local_allocations(f);
   function_prologue(context, f);
 
   // TODO: Copy result of DIV/MOD
@@ -1146,9 +1186,9 @@ static void emit_function(CodegenContext *context, Function *f) {
   allocate_registers(context, f, GENERAL_PURPOSE_REGISTER_COUNT, interfering_regs);
 
   // Emit the rest of the function.
-  for (BasicBlock *block = f->entry; block; block = block->next) {
+  LIST_FOREACH (block, f->entry) {
     fprintf(context->code, ".L%zu:\n", block->id);
-    for (Value *value = block->values; value; value = value->next) {
+    LIST_FOREACH (value, block->values) {
       emit_value(context, value);
     }
   }
@@ -1163,7 +1203,5 @@ void codegen_emit_x86_64(CodegenContext *context) {
       ".global main\n",
       context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
 
-  for (Function *f = context->functions; f; f = f->next) {
-    emit_function(context, f);
-  }
+  LIST_FOREACH (f, context->functions) { emit_function(context, f); }
 }

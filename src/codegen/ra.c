@@ -191,7 +191,7 @@ char values_interfere_callback(BasicBlock *block, va_list ap) {
 /// TODO: If the uses are NULL, then that value doesn't interfere w/ anything.
 /// TODO: Fix uses when creating nodes in the backend.
 char values_interfere(Value *v1, Value *v2) {
-  for (Use *use = v1->uses; use; use = use->next) {
+  LIST_FOREACH (use, v1->uses) {
     // The definition and use of v1 are in the same block.
     if (v1->parent == use->parent->parent) {
       // If the definition of v2 is also in that block, and lies between the
@@ -407,25 +407,20 @@ char assign_registers(InterferenceGraph *g, Values *values) {
 }
 
 /// Print debug info.
-void ra_debug_before_allocation
-(CodegenContext *context,
- Function *f) {
+void ra_debug_before_allocation(Function *f) {
   printf("============================================\n");
   printf(" Function: %s\n", f->name);
   printf("============================================\n");
-  codegen_dump_function(context, f);
+  codegen_dump_function(f);
 }
 
-void ra_debug
-(CodegenContext *context,
- Function *f,
- InterferenceGraph *g) {
+void ra_debug(Function *f, InterferenceGraph *g) {
   printf("\nMatrix: rows: %zu\n   ", g->mtx.rows);
-  FOR (i, g->mtx.rows) { printf("%zu ", i);  }
+  FOR (i, g->mtx.rows) { printf("%%%zu ", i);  }
   printf("\n");
 
   FOR (i, g->mtx.rows) {
-    { printf("%zu ", i); }
+    { printf("%%%zu ", i); }
     for (size_t j = 0; j <= i; j++) {
       printf("%d  ", g->mtx.data[i * g->mtx.rows + j]);
     }
@@ -433,7 +428,7 @@ void ra_debug
   }
 
   printf("\n");
-  codegen_dump_function(context, f);
+  codegen_dump_function(f);
 }
 
 void allocate_registers
@@ -441,13 +436,14 @@ void allocate_registers
  Function *f,
  size_t num_regs,
  regmask_t platform_interfering_regs(const Value *value)) {
+  (void) context;
   ASSERT(num_regs, "Need at least one register");
 
   // Collect all values that need registers.
   Values values = {0};
   size_t virt_reg = num_regs + 1;
-  for (BasicBlock *block = f->entry; block; block = block->next) {
-    for (Value *value = block->values; value; value = value->next) {
+  LIST_FOREACH (block, f->entry) {
+    LIST_FOREACH (value, block->values) {
       value->instruction_index = values.count;
       if (needs_register(value)) {
         value->id = values.count;
@@ -467,7 +463,7 @@ void allocate_registers
     goto free_values;
   }
 
-  if (ra_debug_flag) ra_debug_before_allocation(context, f);
+  if (ra_debug_flag) ra_debug_before_allocation(f);
 
   // Create the adjacency matrix for the interference graph.
   InterferenceGraph g = {0};
@@ -489,7 +485,7 @@ void allocate_registers
   // Assign registers to the values.
   if (!assign_registers(&g, &values)) { TODO("Spill values"); }
 
-  if (ra_debug_flag) { ra_debug(context, f, &g); }
+  if (ra_debug_flag) { ra_debug(f, &g); }
 
   // Free memory.
   free(g.mtx.data);
