@@ -1,5 +1,6 @@
 #include <codegen.h>
 #include <codegen/ir.h>
+#include <inttypes.h>
 #include <codegen/codegen_platforms.h>
 
 #include <error.h>
@@ -349,7 +350,7 @@ void codegen_branch(CodegenContext *context, BasicBlock *block) {
   insert(context, br);
 }
 
-Value *codegen_load_immediate(CodegenContext *context, long long int immediate) {
+Value *codegen_load_immediate(CodegenContext *context, int64_t immediate) {
   Value *imm = calloc(1, sizeof *imm);
   imm->type = IR_INSTRUCTION_IMMEDIATE;
   imm->immediate = immediate;
@@ -384,10 +385,12 @@ void codegen_phi_add(CodegenContext *context, Value *phi, BasicBlock *block, Val
   mark_used_by(value, phi);
 }
 
-Value *codegen_alloca(CodegenContext *context, long long int size) {
+Value *codegen_alloca(CodegenContext *context, uint64_t size) {
   Value *alloc = calloc(1, sizeof *alloc);
+  alloc->offset = context->current_function->locals_offset;
   alloc->type = IR_INSTRUCTION_ALLOCA;
   alloc->immediate = size;
+  context->current_function->locals_offset += size;
   insert(context, alloc);
   return alloc;
 }
@@ -471,11 +474,15 @@ void codegen_function_finalise(CodegenContext *context, Function *f) {
   context->insert_point = f->return_block;
   insert(context, f->return_value);
 
+  Value *ret = calloc(1, sizeof *ret);
+  ret->type = IR_INSTRUCTION_RETURN;
+  insert(context, ret);
+
   context->insert_point = insert_point;
 }
 
 /// Very primitive IR printer.
-void codegen_dump_value(CodegenContext *context, Value *val) {
+void codegen_dump_value(Value *val) {
   ASSERT(val->type > 0 && val->type < IR_INSTRUCTION_COUNT, "Invalid value type");
   static const char* cmp_op[] = { "eq", "ne", "lt", "le", "gt", "ge" };
 
@@ -505,7 +512,7 @@ void codegen_dump_value(CodegenContext *context, Value *val) {
         val->cond_branch_value.false_branch->id);
       break;
     case IR_INSTRUCTION_RETURN:
-      if (val->operand) codegen_dump_value(context, val->operand);
+      if (val->operand) codegen_dump_value(val->operand);
       printf("\n    branch to bb%zu", val->parent->parent->return_block->id);
       break;
     case IR_INSTRUCTION_FUNCTION_REF:
@@ -537,10 +544,10 @@ void codegen_dump_value(CodegenContext *context, Value *val) {
              val->comparison.lhs->reg, val->comparison.rhs->reg);
       break;
     case IR_INSTRUCTION_ALLOCA:
-      printf("    %%r%zu = alloca %llu", val->reg, val->immediate);
+      printf("    %%r%zu = alloca %" PRId64, val->reg, val->immediate);
       break;
     case IR_INSTRUCTION_IMMEDIATE:
-      printf("    %%r%zu = immediate %llu", val->reg, val->immediate);
+      printf("    %%r%zu = immediate %" PRId64, val->reg, val->immediate);
       break;
     case IR_INSTRUCTION_PHI:
       printf("    %%r%zu = phi ", val->reg);
@@ -583,7 +590,7 @@ void codegen_dump_value(CodegenContext *context, Value *val) {
 void codegen_dump_basic_block(CodegenContext *context, BasicBlock *bb) {
   printf("bb%zu:\n", bb->id);
   for (Value *val = bb->values; val; val = val->next) {
-    codegen_dump_value(context, val);
+    codegen_dump_value(val);
     printf("\n");
   }
 }

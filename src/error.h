@@ -31,11 +31,13 @@ extern Error ok;
 #  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
 #  define PRETTY_FUNCTION __PRETTY_FUNCTION__
 #  define MAYBE_UNUSED __attribute__((unused))
+#  define DEPRECATED(msg) __attribute__((deprecated(msg)))
 #else
 #  define NORETURN __declspec(noreturn)
 #  define FORMAT(...)
 #  define PRETTY_FUNCTION __FUNCSIG__
 #  define MAYBE_UNUSED
+#  define DEPRECATED(msg) __declspec(deprecated(msg))
 #endif
 
 NORETURN
@@ -75,6 +77,12 @@ void assert_impl (
          );                \
     }                      \
   } while (0)
+
+#if __STDC_VERSION__ >= 201112L
+#define STATIC_ASSERT(cond, ...) _Static_assert(cond, __VA_ARGS__)
+#else
+#define STATIC_ASSERT(cond, ...) ASSERT(cond, __VA_ARGS__)
+#endif
 
 #define TODO(...)     ASSERT(0, "TODO: "__VA_ARGS__)
 #define PANIC(...)    ASSERT(0, "PANIC: "__VA_ARGS__)

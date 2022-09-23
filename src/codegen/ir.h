@@ -46,6 +46,7 @@ struct Function {
   BasicBlock *return_block;
   Function *next;
   Value *return_value;
+  size_t locals_offset;
 };
 
 typedef struct BasicBlockPredecessor {
@@ -97,7 +98,7 @@ typedef struct PHINodeEntry {
 } PHINodeEntry;
 
 typedef struct Variable {
-  long long int local_offset;
+  int64_t local_offset;
   size_t size;
 } Variable;
 
@@ -148,7 +149,7 @@ struct Value {
     Function *function_ref;
     Value *local_ref;
     Value *operand;
-    long long int immediate;
+    int64_t immediate;
     unsigned reg_operand;
 
     struct {
@@ -169,10 +170,15 @@ struct Value {
     GlobalStore global_store;
   };
 
+  /// For local vars
+  int64_t offset;
+
   /// Used by the backend.
   struct Web* web;
   size_t reg;
+  size_t id;
   char emitted;
+  char allocated;
   char unused;
 };
 
@@ -229,7 +235,7 @@ void codegen_branch_if(CodegenContext *ctx, Value *value, BasicBlock *true_block
 void codegen_branch(CodegenContext *ctx, BasicBlock *block);
 
 /// Load an immediate value.
-Value *codegen_load_immediate(CodegenContext *ctx, long long int immediate);
+Value *codegen_load_immediate(CodegenContext *ctx, int64_t immediate);
 
 /// Generate a comparison between two values.
 Value *codegen_comparison(CodegenContext *ctx, enum ComparisonType type, Value *lhs, Value *rhs);
@@ -256,7 +262,7 @@ Value *codegen_shift_left(CodegenContext *ctx, Value *lhs, Value *rhs);
 Value *codegen_shift_right_arithmetic(CodegenContext *ctx, Value *lhs, Value *rhs);
 
 /// Allocate space on the stack.
-Value *codegen_alloca(CodegenContext *ctx, long long int size);
+Value *codegen_alloca(CodegenContext *ctx, uint64_t size);
 
 /// Bind a function parameter.
 Value *codegen_bind_function_parameter(CodegenContext *ctx, Function *function, size_t param_index);
@@ -307,7 +313,7 @@ FORMAT(printf, 2, 3)
 void codegen_comment_verbose(CodegenContext *ctx, const char *fmt, ...);
 
 /// Dump the intermediate representation to stdout.
-void codegen_dump_value(CodegenContext *context, Value *val);
+void codegen_dump_value(Value *val);
 void codegen_dump_basic_block(CodegenContext *context, BasicBlock *bb);
 void codegen_dump_function(CodegenContext *context, Function *f);
 void codegen_dump_ir(CodegenContext *context);

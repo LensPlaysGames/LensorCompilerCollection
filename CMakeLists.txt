@@ -32,6 +32,6 @@ target_include_directories(
 
 target_compile_options(
   func
-  PRIVATE -Wall -Wextra -Werror=return-type
+  PRIVATE -Wall -Wextra -Werror=return-type -Wno-unused-function
 )
 

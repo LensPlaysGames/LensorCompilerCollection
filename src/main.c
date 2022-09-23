@@ -23,6 +23,9 @@ void print_usage(char **argv) {
          "    `-cc`, `--calling` :: Set the calling convention to the one given.\n"
          "    `-d`, `--dialect`   :: Set the output assembly dialect to the one given.\n"
          "Anything other arguments are treated as input filepaths (source code).\n");
+
+  // Developer flags (undocumented):
+  //   `--ra-debug` :: Debug register allocator.
 }
 
 int input_filepath_index = -1;
@@ -30,6 +33,7 @@ int output_filepath_index = -1;
 enum CodegenOutputFormat output_format = CG_FMT_DEFAULT;
 enum CodegenCallingConvention output_calling_convention = CG_CALL_CONV_DEFAULT;
 enum CodegenAssemblyDialect output_assembly_dialect = CG_ASM_DIALECT_DEFAULT;
+char ra_debug_flag = 0;
 int verbosity = 0;
 
 void print_acceptable_formats() {
@@ -167,6 +171,8 @@ int handle_command_line_arguments(int argc, char **argv) {
       // Linux or unix-based
       system("xdg-open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #     endif
+    } else if (strcmp(argument, "--ra-debug") == 0) {
+      ra_debug_flag = 1;
     } else {
       if (input_filepath_index != -1) {
         printf("ERROR: Only a single input filepath is used, but multiple were given.\n"

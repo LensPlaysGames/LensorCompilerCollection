@@ -47,7 +47,7 @@
 /// Iterate over each element of a vector, and dereference the element.
 #define VECTOR_FOREACH_PTR(element, vector)                                          \
   for (VECTOR_TYPEOF(*(vector)->data) *element##_ptr = (vector)->data, element = NULL; \
-    element##_ptr < (vector)->data + (vector)->count && (element = *element##_ptr); /* "=", not "=="! */ \
+    element##_ptr < (vector)->data + (vector)->count && (element = *element##_ptr, 1); /* "=", not "=="! */ \
     element##_ptr++)
 
 /// Iterate over each index and element of a vector.
