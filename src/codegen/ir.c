@@ -470,6 +470,7 @@ Value *create_copy(CodegenContext *context, Value *v) {
   Value *copy = calloc(1, sizeof *copy);
   copy->type = IR_INSTRUCTION_COPY;
   copy->operand = v;
+  mark_used_by(v, copy);
   return copy;
 }
 
@@ -565,12 +566,12 @@ void codegen_dump_value(Value *val) {
   switch (val->type) {
     case IR_INSTRUCTION_CALL:
       if (val->call_value.type == FUNCTION_CALL_TYPE_EXTERNAL) {
-        printf("    %%r%zu = call %s (", val->reg, val->call_value.external_callee);
+        printf("    %%r%u = call %s (", val->reg, val->call_value.external_callee);
       } else {
-        printf("    %%r%zu = call %%r%zu (", val->reg, val->call_value.callee->reg);
+        printf("    %%r%u = call %%r%u (", val->reg, val->call_value.callee->reg);
       }
       LIST_FOREACH (arg,  val->call_value.args) {
-        printf("%%r%zu", arg->value->reg);
+        printf("%%r%u", arg->value->reg);
         if (arg->next) printf (", ");
       }
       printf(")");
@@ -579,10 +580,10 @@ void codegen_dump_value(Value *val) {
       printf("    ;; %s", val->comment_value);
       break;
     case IR_INSTRUCTION_BRANCH:
-      printf("    branch to bb%zu", val->branch_target->id);
+      printf("    branch to bb%u", val->branch_target->id);
       break;
     case IR_INSTRUCTION_BRANCH_IF:
-      printf("    branch on %%r%zu to bb%zu else bb%zu",
+      printf("    branch on %%r%u to bb%u else bb%u",
         val->cond_branch_value.condition->reg,
         val->cond_branch_value.true_branch->id,
         val->cond_branch_value.false_branch->id);
@@ -592,72 +593,72 @@ void codegen_dump_value(Value *val) {
       printf("    return");
       break;
     case IR_INSTRUCTION_FUNCTION_REF:
-      printf("    %%r%zu = %s", val->reg, val->function_ref->name);
+      printf("    %%r%u = %s", val->reg, val->function_ref->name);
       break;
     case IR_INSTRUCTION_ADD:
-      printf("    %%r%zu = add %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
+      printf("    %%r%u = add %%r%u, %%r%u", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_SUB:
-      printf("    %%r%zu = sub %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
+      printf("    %%r%u = sub %%r%u, %%r%u", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_MUL:
-      printf("    %%r%zu = mul %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
+      printf("    %%r%u = mul %%r%u, %%r%u", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_DIV:
-      printf("    %%r%zu = div %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
+      printf("    %%r%u = div %%r%u, %%r%u", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_MOD:
-      printf("    %%r%zu = mod %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
+      printf("    %%r%u = mod %%r%u, %%r%u", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_SHL:
-      printf("    %%r%zu = shl %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
+      printf("    %%r%u = shl %%r%u, %%r%u", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_SAR:
-      printf("    %%r%zu = sar %%r%zu, %%r%zu", val->reg, val->lhs->reg, val->rhs->reg);
+      printf("    %%r%u = sar %%r%u, %%r%u", val->reg, val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_COMPARISON:
-      printf("    %%r%zu = cmp %s %%r%zu, %%r%zu", val->reg, cmp_op[val->comparison.type],
+      printf("    %%r%u = cmp %s %%r%u, %%r%u", val->reg, cmp_op[val->comparison.type],
              val->comparison.lhs->reg, val->comparison.rhs->reg);
       break;
     case IR_INSTRUCTION_ALLOCA:
-      printf("    %%r%zu = alloca %" PRId64, val->reg, val->immediate);
+      printf("    %%r%u = alloca %" PRId64, val->reg, val->immediate);
       break;
     case IR_INSTRUCTION_IMMEDIATE:
-      printf("    %%r%zu = immediate %" PRId64, val->reg, val->immediate);
+      printf("    %%r%u = immediate %" PRId64, val->reg, val->immediate);
       break;
     case IR_INSTRUCTION_PHI:
-      printf("    %%r%zu = phi ", val->reg);
+      printf("    %%r%u = phi ", val->reg);
       LIST_FOREACH (e, val->phi_entries) {
-        printf("[bb%zu, %%r%zu]", e->block->id, e->value->reg);
+        printf("[bb%u, %%r%u]", e->block->id, e->value->reg);
         if (e->next) printf(", ");
       }
       break;
     case IR_INSTRUCTION_GLOBAL_REF:
-      printf("    %%r%zu = global address %s", val->reg, val->global_name);
+      printf("    %%r%u = global address %s", val->reg, val->global_name);
       break;
     case IR_INSTRUCTION_GLOBAL_VAL:
-      printf("    %%r%zu = global load %s", val->reg, val->global_name);
+      printf("    %%r%u = global load %s", val->reg, val->global_name);
       break;
     case IR_INSTRUCTION_STORE_GLOBAL:
-      printf("    global store %%r%zu to %s", val->global_store.value->reg, val->global_store.name);
+      printf("    global store %%r%u to %s", val->global_store.value->reg, val->global_store.name);
       break;
     case IR_INSTRUCTION_LOCAL_REF:
-      printf("    %%r%zu = local address %%r%zu", val->reg, val->local_ref->reg);
+      printf("    %%r%u = local address %%r%u", val->reg, val->local_ref->reg);
       break;
     case IR_INSTRUCTION_LOCAL_VAL:
-      printf("    %%r%zu = local load %%r%zu", val->reg, val->local_ref->reg);
+      printf("    %%r%u = local load %%r%u", val->reg, val->local_ref->reg);
       break;
     case IR_INSTRUCTION_STORE_LOCAL:
-      printf("    local store %%r%zu to %%r%zu", val->lhs->reg, val->rhs->reg);
+      printf("    local store %%r%u to %%r%u", val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_STORE:
-      printf("    store %%r%zu to [%%r%zu]", val->lhs->reg, val->rhs->reg);
+      printf("    store %%r%u to [%%r%u]", val->lhs->reg, val->rhs->reg);
       break;
     case IR_INSTRUCTION_PARAM_REF:
-      printf("    %%r%zu = param %zu", val->reg, val->param_ref.index);
+      printf("    %%r%u = param %u", val->reg, val->param_ref.index);
       break;
     case IR_INSTRUCTION_COPY:
-      printf("    %%r%zu = copy %%r%zu", val->reg, val->operand->reg);
+      printf("    %%r%u = copy %%r%u", val->reg, val->operand->reg);
       break;
     case IR_INSTRUCTION_REGISTER: break;
     case IR_INSTRUCTION_COUNT: UNREACHABLE();
@@ -665,7 +666,7 @@ void codegen_dump_value(Value *val) {
 }
 
 void codegen_dump_basic_block(BasicBlock *bb) {
-  printf("bb%zu:\n", bb->id);
+  printf("bb%u:\n", bb->id);
   LIST_FOREACH (val, bb->values) {
     codegen_dump_value(val);
     printf("\n");
@@ -719,72 +720,4 @@ void delete_from_block(Value *v) {
 void delete_value(Value *v) {
   if (v->parent) delete_from_block(v);
   free(v);
-}
-
-void replace_use(Value *value, Use *use, Value *replacement) {
-  switch (use->parent->type) {
-    case IR_INSTRUCTION_ADD:
-    case IR_INSTRUCTION_SUB:
-    case IR_INSTRUCTION_MUL:
-    case IR_INSTRUCTION_DIV:
-    case IR_INSTRUCTION_MOD:
-    case IR_INSTRUCTION_SHL:
-    case IR_INSTRUCTION_SAR:
-    case IR_INSTRUCTION_STORE_LOCAL:
-    case IR_INSTRUCTION_STORE:
-      if (use->parent->lhs == value) { use->parent->lhs = replacement; }
-      if (use->parent->rhs == value) { use->parent->rhs = replacement; }
-      break;
-
-    case IR_INSTRUCTION_CALL:
-      LIST_FOREACH(entry, use->parent->call_value.args) {
-        if (entry->value == value) { entry->value = replacement; }
-      }
-      break;
-
-    case IR_INSTRUCTION_COMPARISON:
-      if (use->parent->comparison.lhs == value) { use->parent->comparison.lhs = replacement; }
-      if (use->parent->comparison.rhs == value) { use->parent->comparison.rhs = replacement; }
-      break;
-
-    case IR_INSTRUCTION_BRANCH_IF:
-      if (use->parent->cond_branch_value.condition == value) {
-        use->parent->cond_branch_value.condition = replacement;
-      }
-      break;
-
-    case IR_INSTRUCTION_PHI:
-      LIST_FOREACH(entry, use->parent->phi_entries) {
-        if (entry->value == value) { entry->value = replacement; }
-      }
-      break;
-
-    case IR_INSTRUCTION_STORE_GLOBAL:
-      if (use->parent->global_store.value == value) {
-        use->parent->global_store.value = replacement;
-      }
-      break;
-
-    case IR_INSTRUCTION_LOCAL_REF:
-    case IR_INSTRUCTION_LOCAL_VAL:
-      if (use->parent->local_ref == value) { use->parent->local_ref = replacement; }
-      break;
-
-    case IR_INSTRUCTION_COPY:
-      if (use->parent->operand == value) { use->parent->operand = replacement; }
-      break;
-
-    case IR_INSTRUCTION_RETURN:
-    case IR_INSTRUCTION_ALLOCA:
-    case IR_INSTRUCTION_COMMENT:
-    case IR_INSTRUCTION_BRANCH:
-    case IR_INSTRUCTION_IMMEDIATE:
-    case IR_INSTRUCTION_FUNCTION_REF:
-    case IR_INSTRUCTION_GLOBAL_REF:
-    case IR_INSTRUCTION_GLOBAL_VAL:
-    case IR_INSTRUCTION_PARAM_REF:
-    case IR_INSTRUCTION_REGISTER:
-    case IR_INSTRUCTION_COUNT:
-      UNREACHABLE();
-  }
 }

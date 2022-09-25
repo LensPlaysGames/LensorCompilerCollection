@@ -18,6 +18,15 @@
 
 extern char ra_debug_flag;
 
+
+/// Print debug info.
+void ra_debug_before_allocation(Function *f) {
+  printf("============================================\n");
+  printf(" Function: %s\n", f->name);
+  printf("============================================\n");
+  codegen_dump_function(f);
+}
+
 /// Whether an instruction returns a value.
 static char needs_register(Value *value) {
   switch (value->type) {
@@ -67,6 +76,7 @@ typedef struct AdjacencyList {
   size_t spill_cost;
   size_t interferences;
   regmask_t interfering_regs;
+  Register preferred_reg;
   VECTOR(size_t) interferences_list;
   VECTOR(size_t) removed_interferences_list;
 } AdjacencyList;
@@ -90,7 +100,7 @@ static size_t find_first_set(regmask_t n) {
 }
 
 /// Check if a register is a physical register.
-char physreg_p(unsigned reg, size_t num_regs) {
+char physreg_p(Register reg, size_t num_regs) {
   return reg != 0 && reg <= num_regs;
 }
 
@@ -283,11 +293,25 @@ void fixup_calls(RAInfo *info) {
   VALUE_FOREACH_TYPE (call, block, info->function, IR_INSTRUCTION_CALL) {
     size_t arg_index = 0;
     LIST_FOREACH (arg, call->call_value.args) {
+      // Remove the use of the argument in the call.
+      Use *prev = NULL;
+      LIST_FOREACH (use, arg->value->uses) {
+        if (use->parent == call) {
+          if (prev) prev->next = use->next;
+          else arg->value->uses = use->next;
+          free(use);
+          break;
+        }
+        prev = use;
+      }
+
+      // Copy the argument into the right register.
       Value *copy = create_copy(info->context, arg->value);
       insert_before(call, copy);
       mark_used_by(copy, call);
       arg->value = copy;
 
+      // Set the target register.
       if (arg_index >= info->num_arg_regs) PANIC("Too many arguments to function");
       copy->reg = info->arg_regs[arg_index++];
     }
@@ -305,7 +329,7 @@ Values collect_values(Function *f, size_t num_regs) {
       value->id = values.count;
       VECTOR_PUSH(&values, value);
 
-      // Assign a virtual register to the value for debugging.
+      // Assign a virtual register to the value.
       if (!physreg_p(value->reg, num_regs)) {
         value->reg = virt_reg++;
       }
@@ -423,10 +447,80 @@ void build_adjacency_matrix(AdjacencyMatrix *m, Values *values) {
       if (v1 == v2) { continue; }
       if (v2 > v1)  { break; }
       if (values_interfere(v1, v2) || values_interfere(v2, v1)) {
-        printf("Value %zu interferes with value %zu\n", v1->reg, v2->reg);
+        printf("Value %u interferes with value %u\n", v1->reg, v2->reg);
         *adj(m, v1, v2) = 1;
       }
     }
+  }
+}
+
+static void replace_use(Value *value, Use *use, Value *replacement) {
+  if (use->parent == replacement) return;
+
+  switch (use->parent->type) {
+    case IR_INSTRUCTION_ADD:
+    case IR_INSTRUCTION_SUB:
+    case IR_INSTRUCTION_MUL:
+    case IR_INSTRUCTION_DIV:
+    case IR_INSTRUCTION_MOD:
+    case IR_INSTRUCTION_SHL:
+    case IR_INSTRUCTION_SAR:
+    case IR_INSTRUCTION_STORE_LOCAL:
+    case IR_INSTRUCTION_STORE:
+      if (use->parent->lhs == value) { use->parent->lhs = replacement; }
+      if (use->parent->rhs == value) { use->parent->rhs = replacement; }
+      break;
+
+    case IR_INSTRUCTION_CALL:
+      LIST_FOREACH(entry, use->parent->call_value.args) {
+        if (entry->value == value) { entry->value = replacement; }
+      }
+      break;
+
+    case IR_INSTRUCTION_COMPARISON:
+      if (use->parent->comparison.lhs == value) { use->parent->comparison.lhs = replacement; }
+      if (use->parent->comparison.rhs == value) { use->parent->comparison.rhs = replacement; }
+      break;
+
+    case IR_INSTRUCTION_BRANCH_IF:
+      if (use->parent->cond_branch_value.condition == value) {
+        use->parent->cond_branch_value.condition = replacement;
+      }
+      break;
+
+    case IR_INSTRUCTION_PHI:
+      LIST_FOREACH(entry, use->parent->phi_entries) {
+        if (entry->value == value) { entry->value = replacement; }
+      }
+      break;
+
+    case IR_INSTRUCTION_STORE_GLOBAL:
+      if (use->parent->global_store.value == value) {
+        use->parent->global_store.value = replacement;
+      }
+      break;
+
+    case IR_INSTRUCTION_LOCAL_REF:
+    case IR_INSTRUCTION_LOCAL_VAL:
+      if (use->parent->local_ref == value) { use->parent->local_ref = replacement; }
+      break;
+
+    case IR_INSTRUCTION_COPY:
+      if (use->parent->operand == value) { use->parent->operand = replacement; }
+      break;
+
+    case IR_INSTRUCTION_RETURN:
+    case IR_INSTRUCTION_ALLOCA:
+    case IR_INSTRUCTION_COMMENT:
+    case IR_INSTRUCTION_BRANCH:
+    case IR_INSTRUCTION_IMMEDIATE:
+    case IR_INSTRUCTION_FUNCTION_REF:
+    case IR_INSTRUCTION_GLOBAL_REF:
+    case IR_INSTRUCTION_GLOBAL_VAL:
+    case IR_INSTRUCTION_PARAM_REF:
+    case IR_INSTRUCTION_REGISTER:
+    case IR_INSTRUCTION_COUNT:
+      UNREACHABLE();
   }
 }
 
@@ -449,11 +543,32 @@ void coalesce_registers(InterferenceGraph *g, Function *f, Values *values) {
       if (v == v->operand ||
           (physreg_p(v->reg, g->num_regs) && v->reg == v->operand->reg) ||
           !*adj(&g->mtx, v, v->operand)) {
-        VECTOR_PUSH(&values_to_remove, v);
-      } else continue;
+        if (v->reg == v->operand->reg) {
+          VECTOR_PUSH(&values_to_remove, v);
+          continue;
+        }
+      } else { continue; }
 
-      // Replace all uses of the target with the source.
-      LIST_FOREACH (use, v->operand->uses) { replace_use(v->operand, use, v); }
+      // Replace all uses of the target with the source. If the register we're
+      // copying to is a physical register, then we record that register as the
+      // preferred register for the operand.
+      //
+      // Otherwise, we simply replace the target with the source.
+      if (physreg_p(v->reg, g->num_regs)) {
+        // If the operand already has a preferred physical register, then we
+        // can't remove the copy. Otherwise, set the register as the preferred
+        // physical register.
+        //
+        // Either way, we don't remove the copy since either it will end up being
+        // required or its target and source will be the same and the backend will
+        // optimise it away.
+        if (v->operand->preferred_reg) { continue; }
+        v->operand->preferred_reg = v->reg;
+      } else {
+        LIST_FOREACH (use, v->uses) { replace_use(v, use, v->operand); }
+        VECTOR_PUSH(&values_to_remove, v);
+      }
+
 
       // Fix the adjacency matrix.
       VECTOR_FOREACH_PTR (v2, values) {
@@ -466,6 +581,7 @@ void coalesce_registers(InterferenceGraph *g, Function *f, Values *values) {
     VECTOR_FOREACH_PTR (v, &values_to_remove) { delete_value(v); }
   } while (values_to_remove.count != last_removed);
   VECTOR_DELETE(&values_to_remove);
+
 
   // Rebuild the adjacency matrix.
   *values = collect_values(f, g->num_regs);
@@ -491,6 +607,7 @@ void build_adjacency_lists
   // Determine the registers that interfere with each value.
   VECTOR_FOREACH_PTR(value, values) {
       g->lists.data[value->id].interfering_regs |= platform_interfering_regs(context, value);
+      g->lists.data[value->id].preferred_reg = value->preferred_reg;
   }
 }
 
@@ -587,7 +704,7 @@ void prune_interference_graph(InterferenceGraph *g, Values *values) {
 
 /// Return the smallest register that can be assigned to the vertex
 /// at the given index. Returns 0 if no register can be assigned.
-unsigned min_register(InterferenceGraph *g, size_t index) {
+Register min_register(InterferenceGraph *g, size_t index) {
   ASSERT(g->num_regs <= sizeof(regmask_t) * 8, "RA currently does not support more than 64 registers");
 
   // The register mask is a bitset where each bit represents a register.
@@ -595,17 +712,23 @@ unsigned min_register(InterferenceGraph *g, size_t index) {
   regmask_t regmask = g->lists.data[index].interfering_regs;
 
   VECTOR_FOREACH (i, &g->lists.data[index].interferences_list) {
-    unsigned reg = g->lists.data[*i].colour;
+    Register reg = g->lists.data[*i].colour;
     if (reg) regmask |= 1 << (reg - 1);
   }
   VECTOR_FOREACH (i, &g->lists.data[index].removed_interferences_list) {
-    unsigned reg = g->lists.data[*i].colour;
+    Register reg = g->lists.data[*i].colour;
     if (reg) regmask |= 1 << (reg - 1);
+  }
+
+  // If this value has a preferred register, use it if we can.
+  if (g->lists.data[index].preferred_reg) {
+    Register reg = g->lists.data[index].preferred_reg;
+    if ((regmask & (1 << (reg - 1))) == 0) return reg;
   }
 
   // To find the smallest register that can be assigned, we simply
   // find the first bit that is not set in the register mask.
-  unsigned first_set = find_first_set(~regmask);
+  Register first_set = find_first_set(~regmask);
   return first_set > g->num_regs ? 0 : first_set;
 }
 
@@ -616,7 +739,11 @@ char assign_registers(InterferenceGraph *g, Values *values) {
   do {
     // Pop a vertex from the stack and assign it a register.
     size_t val = VECTOR_POP(&g->stack);
-    unsigned reg = min_register(g, val);
+
+    // Don't overwrite precoloured physical registers.
+    if (physreg_p(values->data[val]->reg, g->num_regs)) continue;
+
+    Register reg = min_register(g, val);
     if (reg) {
       g->lists.data[val].colour = reg;
       values->data[val]->reg = reg;
@@ -637,13 +764,6 @@ char assign_registers(InterferenceGraph *g, Values *values) {
   return coloured;
 }
 
-/// Print debug info.
-void ra_debug_before_allocation(Function *f) {
-  printf("============================================\n");
-  printf(" Function: %s\n", f->name);
-  printf("============================================\n");
-  codegen_dump_function(f);
-}
 
 void ra_debug(Function *f, InterferenceGraph *g) {
   printf("\nMatrix: rows: %zu\n   ", g->mtx.dimension);
@@ -665,9 +785,7 @@ void ra_debug(Function *f, InterferenceGraph *g) {
 void allocate_registers(RAInfo *info) {
   ASSERT(info->num_regs, "Need at least one register");
 
-  // Print IR before allocation.
-  if (ra_debug_flag) ra_debug_before_allocation(info->function);
-
+  // Sanity checks to make sure we're compiling valid IR.
   typecheck_ir(info->context, info->function);
 
   // Convert PHIs to copies.
@@ -688,7 +806,7 @@ void allocate_registers(RAInfo *info) {
   g.mtx.registers = calloc(g.mtx.dimension, sizeof(Register));
   build_adjacency_matrix(&g.mtx, &values);
 
-   // Perform register coalescing.
+  // Perform register coalescing.
   coalesce_registers(&g, info->function, &values);
 
   // Build the adjacency lists for the interference graph.

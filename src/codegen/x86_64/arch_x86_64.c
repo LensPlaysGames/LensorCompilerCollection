@@ -1018,13 +1018,13 @@ static void emit_value(CodegenContext *context, Value *value) {
       break;
     case IR_INSTRUCTION_BRANCH: {
       char branch_buffer[64];
-      snprintf(branch_buffer, sizeof branch_buffer, ".L%zu", value->branch_target->id);
+      snprintf(branch_buffer, sizeof branch_buffer, ".L%u", value->branch_target->id);
       femit(context, I_JMP, NAME, branch_buffer);
     } break;
     case IR_INSTRUCTION_BRANCH_IF: {
       char branch_buffer1[64], branch_buffer2[64];
-      snprintf(branch_buffer1, sizeof branch_buffer1, ".L%zu", value->cond_branch_value.true_branch->id);
-      snprintf(branch_buffer2, sizeof branch_buffer2, ".L%zu", value->cond_branch_value.false_branch->id);
+      snprintf(branch_buffer1, sizeof branch_buffer1, ".L%u", value->cond_branch_value.true_branch->id);
+      snprintf(branch_buffer2, sizeof branch_buffer2, ".L%u", value->cond_branch_value.false_branch->id);
 
       femit(context, I_TEST, REGISTER_TO_REGISTER,
           value->cond_branch_value.condition->reg,
@@ -1184,7 +1184,7 @@ static void emit_function(CodegenContext *context, Function *f) {
 
   // Emit the rest of the function.
   LIST_FOREACH (block, f->entry) {
-    fprintf(context->code, ".L%zu:\n", block->id);
+    fprintf(context->code, ".L%u:\n", block->id);
     LIST_FOREACH (value, block->values) {
       emit_value(context, value);
     }

@@ -69,7 +69,7 @@ struct BasicBlock {
 
   /// The last value in the linked list.
   Value *end;
-  size_t id;
+  unsigned id;
   char closed;
 };
 
@@ -117,7 +117,7 @@ typedef struct Comparison {
 
 typedef struct ParamRef {
   Function *func;
-  size_t index;
+  unsigned index;
 } ParamRef;
 
 typedef struct GlobalStore {
@@ -172,8 +172,9 @@ struct Value {
   };
 
   /// Used by the backend.
-  size_t reg;
-  size_t id;
+  unsigned reg;
+  unsigned preferred_reg;
+  unsigned id;
   char emitted;
   char allocated;
   char unused;

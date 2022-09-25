@@ -30,9 +30,6 @@ void insert_after(Value *value, Value *value_to_insert);
 /// Mark a value as used by another value.
 void mark_used_by(Value *value, Value *parent);
 
-/// Replace a use of a value with another value.
-void replace_use(Value *value, Use *use, Value *replacement);
-
 /// IR sanity checks go here.
 void typecheck_ir(CodegenContext *context, Function *f);
 
