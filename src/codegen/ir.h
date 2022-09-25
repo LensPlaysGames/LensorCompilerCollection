@@ -175,7 +175,6 @@ struct Value {
   };
 
   /// Used by the backend.
-  struct Web* web;
   size_t reg;
   size_t id;
   char emitted;
@@ -183,6 +182,15 @@ struct Value {
   char unused;
   char phi_arg;
 };
+
+#define VALUE_FOREACH(value, block, function) \
+  LIST_FOREACH (block, function->entry) \
+    LIST_FOREACH (value, block->values)
+
+#define VALUE_FOREACH_TYPE(value, block, function, value_type) \
+  LIST_FOREACH (block, function->entry) \
+    LIST_FOREACH (value, block->values) \
+      if (value->type == value_type)
 
 /// Create an external call by name.
 Value *codegen_create_external_call(CodegenContext *ctx, const char *name);

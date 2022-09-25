@@ -1104,38 +1104,30 @@ static regmask_t interfering_regs(const CodegenContext *context, const Value *va
 
 static void lower_function(CodegenContext *context, Function *f) {
   (void) context;
-  LIST_FOREACH (bb, f->entry) {
-    LIST_FOREACH (val, bb->values) {
-      if (val->type == IR_INSTRUCTION_PARAM_REF) {
-        Value *store = calloc(1, sizeof *store);
-        store->type = IR_INSTRUCTION_STORE_LOCAL;
-        if (val->param_ref.index + FIRST_ARGUMENT_REGISTER >= FIRST_ARGUMENT_REGISTER &&
-            val->param_ref.index + FIRST_ARGUMENT_REGISTER <= LAST_ARGUMENT_REGISTER) {
-          store->lhs = create_register(val->param_ref.index + FIRST_ARGUMENT_REGISTER);
-        } else {
-          TODO("Handle stack arguments");
-        }
-        store->rhs = val;
-        insert_after(val, store);
-
-        val->type = IR_INSTRUCTION_ALLOCA;
-        val->immediate = 8;
-      }
+  VALUE_FOREACH_TYPE (val, bb, f, IR_INSTRUCTION_PARAM_REF) {
+    Value *store = calloc(1, sizeof *store);
+    store->type = IR_INSTRUCTION_STORE_LOCAL;
+    if (val->param_ref.index + FIRST_ARGUMENT_REGISTER >= FIRST_ARGUMENT_REGISTER &&
+        val->param_ref.index + FIRST_ARGUMENT_REGISTER <= LAST_ARGUMENT_REGISTER) {
+      store->lhs = create_register(val->param_ref.index + FIRST_ARGUMENT_REGISTER);
+    } else {
+      TODO("Handle stack arguments");
     }
+    store->rhs = val;
+    insert_after(val, store);
+
+    val->type = IR_INSTRUCTION_ALLOCA;
+    val->immediate = 8;
   }
 }
 
 /// Add up all allocas.
 static void sum_local_allocations(Function *f) {
   f->locals_offset = 8;
-  LIST_FOREACH (bb, f->entry) {
-    LIST_FOREACH (val, bb->values) {
-      if (val->type == IR_INSTRUCTION_ALLOCA) {
-        size_t immediate = val->immediate;
-        val->immediate = f->locals_offset;
-        f->locals_offset += immediate;
-      }
-    }
+  VALUE_FOREACH_TYPE (val, bb, f, IR_INSTRUCTION_ALLOCA) {
+    size_t immediate = val->immediate;
+    val->immediate = f->locals_offset;
+    f->locals_offset += immediate;
   }
 }
 

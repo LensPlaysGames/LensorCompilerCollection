@@ -162,33 +162,27 @@ static Values lower_ir(CodegenContext *ctx, Function *f, size_t num_regs) {
   Values values = {0};
 
   // Lower PHIs. We need to do this first because it introduces new values.
-  LIST_FOREACH (block, f->entry) {
-    LIST_FOREACH (value, block->values) {
-      if (value->type == IR_INSTRUCTION_PHI) {
-        LIST_FOREACH (entry, value->phi_entries) {
-          Value *copy = create_copy(ctx, entry->value);
-          copy->phi_arg = 1;
-          insert_after(entry->value, copy);
+  VALUE_FOREACH_TYPE (value, block, f, value->type) {
+    LIST_FOREACH (entry, value->phi_entries) {
+      Value *copy = create_copy(ctx, entry->value);
+      copy->phi_arg = 1;
+      insert_after(entry->value, copy);
 
-          entry->value = copy;
-        }
-      }
+      entry->value = copy;
     }
   }
 
   // Collect values.
   size_t virt_reg = num_regs + 1;
-  LIST_FOREACH (block, f->entry) {
-    LIST_FOREACH (value, block->values) {
-      value->instruction_index = values.count;
-      if (needs_register(value)) {
-        value->id = values.count;
-        VECTOR_PUSH(&values, value);
+  VALUE_FOREACH(value, block, f) {
+    value->instruction_index = values.count;
+    if (needs_register(value)) {
+      value->id = values.count;
+      VECTOR_PUSH(&values, value);
 
-        // Assign a virtual register to the value for debugging.
-        if (!physreg_p(value->reg, num_regs)) {
-          value->reg = virt_reg++;
-        }
+      // Assign a virtual register to the value for debugging.
+      if (!physreg_p(value->reg, num_regs)) {
+        value->reg = virt_reg++;
       }
     }
   }
