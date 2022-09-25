@@ -1,7 +1,8 @@
 #include <codegen.h>
-#include <codegen/x86_64/arch_x86_64.h>
-#include <codegen/ir.h>
 #include <codegen/ra.h>
+#include <codegen/ir.h>
+#include <codegen/ir_backend.h>
+#include <codegen/x86_64/arch_x86_64.h>
 
 #include <error.h>
 #include <inttypes.h>
@@ -13,8 +14,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <typechecker.h>
-
-typedef unsigned Register;
 
 /// This is used for defining lookup tables etc. and
 /// ensures that the registers are always in the correct
@@ -1075,22 +1074,6 @@ static void emit_value(CodegenContext *context, Value *value) {
   }
 }
 
-MAYBE_UNUSED
-static void insert_before(Value* value, Value *value_to_insert) {
-  if (value->prev) { value->prev->next = value_to_insert; }
-  value_to_insert->prev = value->prev;
-  value_to_insert->next = value;
-  value->prev = value_to_insert;
-}
-
-MAYBE_UNUSED
-static void insert_after(Value *value, Value *value_to_insert) {
-  if (value->next) { value->next->prev = value_to_insert; }
-  value_to_insert->next = value->next;
-  value_to_insert->prev = value;
-  value->next = value_to_insert;
-}
-
 static Value *create_register(Register reg) {
   Value *v = calloc(1, sizeof *v);
   v->type = IR_INSTRUCTION_REGISTER;
@@ -1154,7 +1137,29 @@ static void sum_local_allocations(Function *f) {
       }
     }
   }
+}
 
+static void get_argument_registers(RAInfo *info) {
+  switch (info->context->call_convention) {
+    case CG_CALL_CONV_LINUX: {
+      static const Register regs[] = {
+        REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9
+      };
+      info->arg_regs = regs;
+      info->num_arg_regs = sizeof regs / sizeof *regs;
+      return;
+    }
+    case CG_CALL_CONV_MSWIN: {
+      static const Register regs[] = {
+        REG_RCX, REG_RDX, REG_R8, REG_R9
+      };
+      info->arg_regs = regs;
+      info->num_arg_regs = sizeof regs / sizeof *regs;
+      return;
+    }
+    case CG_CALL_CONV_COUNT: break;
+  }
+  PANIC("Unknown calling convention");
 }
 
 static void emit_function(CodegenContext *context, Function *f) {
@@ -1175,9 +1180,13 @@ static void emit_function(CodegenContext *context, Function *f) {
   }
 
   // Perform register allocation.
-  // FIXME: pass all registers instead and put rbp, rsp, and rip at the very end
-  //     of the registers enum.
-  allocate_registers(context, f, GENERAL_PURPOSE_REGISTER_COUNT, interfering_regs);
+  RAInfo info = {0};
+  info.context = context;
+  info.function = f;
+  info.num_regs = GENERAL_PURPOSE_REGISTER_COUNT;
+  info.platform_interfering_regs = interfering_regs;
+  get_argument_registers(&info);
+  allocate_registers(&info);
 
   // Emit the rest of the function.
   LIST_FOREACH (block, f->entry) {

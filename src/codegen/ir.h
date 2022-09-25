@@ -45,7 +45,6 @@ enum IRInstructionType {
 
 struct Function {
   char *name;
-  size_t value_count;
   BasicBlock *entry;
   BasicBlock *last;
   BasicBlock *return_block;
@@ -182,6 +181,7 @@ struct Value {
   char emitted;
   char allocated;
   char unused;
+  char phi_arg;
 };
 
 /// Create an external call by name.
@@ -319,15 +319,5 @@ void codegen_dump_value(Value *val);
 void codegen_dump_basic_block(BasicBlock *bb);
 void codegen_dump_function(Function *f);
 void codegen_dump_ir(CodegenContext *context);
-
-/// DO NOT USE THIS IN THE FRONTEND. EVER.
-/// Inserts a value into the current basic block.
-void insert(CodegenContext *context, Value *value);
-
-/// Used by the backend.
-Value *create_copy(CodegenContext *context, Value *v);
-
-/// A backend should call this before emitting a function. Do not call this elsewhere.
-void codegen_function_finalise(CodegenContext *context, Function *f);
 
 #endif // IR_H

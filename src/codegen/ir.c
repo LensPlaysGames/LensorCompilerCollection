@@ -1,5 +1,6 @@
 #include <codegen.h>
 #include <codegen/ir.h>
+#include <codegen/ir_backend.h>
 #include <inttypes.h>
 #include <codegen/codegen_platforms.h>
 
@@ -610,4 +611,18 @@ void codegen_dump_function(Function *f) {
 
 void codegen_dump_ir(CodegenContext *context) {
   LIST_FOREACH (f, context->functions) {codegen_dump_function(f); }
+}
+
+void insert_before(Value* value, Value *value_to_insert) {
+  if (value->prev) { value->prev->next = value_to_insert; }
+  value_to_insert->prev = value->prev;
+  value_to_insert->next = value;
+  value->prev = value_to_insert;
+}
+
+void insert_after(Value *value, Value *value_to_insert) {
+  if (value->next) { value->next->prev = value_to_insert; }
+  value_to_insert->next = value->next;
+  value_to_insert->prev = value;
+  value->next = value_to_insert;
 }

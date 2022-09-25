@@ -1,5 +1,7 @@
 #include <codegen.h>
 #include <codegen/ir.h>
+#include <codegen/ra.h>
+#include <codegen/ir_backend.h>
 #include <codegen/x86_64/arch_x86_64.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -135,6 +137,65 @@ char follow_control_flow(BasicBlock *block, char callback(BasicBlock *block, va_
   return result;
 }
 
+/// Prepare IR for RA.
+///
+/// Converts PHIs to copies and collects all values for which we need to allocate
+/// registers.
+///
+/// PHI instructions are special in that no CPU has an instruction that corresponds
+/// to a PHI, and yet they are pretty much required for an SSA IR. This also means
+/// that we cannot simply assign a physical register to each PHI node and be done
+/// with it.
+///
+/// Instead we convert each PHI node to a series of copy instructions. For instance
+/// given the PHI node `phi [bb1, %v1], [bb2, %v2]`, we insert copy instructions at
+/// the end of `bb1` and `bb2` that copy `%v1` and `%v2` into the result register
+/// of the phi node. We then replace the arguments `%v1` and `%v2` in the PHI node
+/// with those copy instructions (only in the PHI node of course; the instructions
+/// that generate `%v1` and `%v2` are not modified).
+///
+/// The reason why we do this here instead of just allocating a register for each
+/// PHI node and letting the backend insert the copies is because doing this here
+/// means that the register coalescer might be able to optimise away some of the
+/// copies.
+static Values lower_ir(CodegenContext *ctx, Function *f, size_t num_regs) {
+  Values values = {0};
+
+  // Lower PHIs. We need to do this first because it introduces new values.
+  LIST_FOREACH (block, f->entry) {
+    LIST_FOREACH (value, block->values) {
+      if (value->type == IR_INSTRUCTION_PHI) {
+        LIST_FOREACH (entry, value->phi_entries) {
+          Value *copy = create_copy(ctx, entry->value);
+          copy->phi_arg = 1;
+          insert_after(entry->value, copy);
+
+          entry->value = copy;
+        }
+      }
+    }
+  }
+
+  // Collect values.
+  size_t virt_reg = num_regs + 1;
+  LIST_FOREACH (block, f->entry) {
+    LIST_FOREACH (value, block->values) {
+      value->instruction_index = values.count;
+      if (needs_register(value)) {
+        value->id = values.count;
+        VECTOR_PUSH(&values, value);
+
+        // Assign a virtual register to the value for debugging.
+        if (!physreg_p(value->reg, num_regs)) {
+          value->reg = virt_reg++;
+        }
+      }
+    }
+  }
+
+  return values;
+}
+
 /// Lambda used by `values_interfere()`. Returns 1 if the two values interfere
 /// with one another, 0 if they do not interfere in the current block, and -1
 /// if they cannot interfere.
@@ -244,10 +305,8 @@ void build_adjacency_matrix(AdjacencyMatrix *m, Values *values) {
 }
 
 /// Perform register coalescing.
-void coalesce_registers(InterferenceGraph *g, Values *values) {
-  (void) g;
-  (void) values;
-  //TODO();
+void coalesce_registers(InterferenceGraph *g, Function *f, Values *values) {
+
 }
 
 void build_adjacency_lists
@@ -398,6 +457,14 @@ char assign_registers(InterferenceGraph *g, Values *values) {
     if (reg) {
       g->lists.data[val].colour = reg;
       values->data[val]->reg = reg;
+
+      // If the value is a PHI node, then we need to assign the same register
+      // to all of its operands (which are guaranteed to be copies).
+      if (values->data[val]->type == IR_INSTRUCTION_PHI) {
+        LIST_FOREACH (entry, values->data[val]->phi_entries) {
+          entry->value->reg = reg;
+        }
+      }
     } else {
       // If we couldn't assign a register, then we have to spill the value.
       g->lists.data[val].spill = 1;
@@ -432,53 +499,29 @@ void ra_debug(Function *f, InterferenceGraph *g) {
   codegen_dump_function(f);
 }
 
-void allocate_registers
-(CodegenContext *context,
- Function *f,
- size_t num_regs,
- regmask_t platform_interfering_regs(const CodegenContext *context, const Value *value)) {
-  (void) context;
-  ASSERT(num_regs, "Need at least one register");
+void allocate_registers(RAInfo *info) {
+  ASSERT(info->num_regs, "Need at least one register");
 
-  // Collect all values that need registers.
-  Values values = {0};
-  size_t virt_reg = num_regs + 1;
-  LIST_FOREACH (block, f->entry) {
-    LIST_FOREACH (value, block->values) {
-      value->instruction_index = values.count;
-      if (needs_register(value)) {
-        value->id = values.count;
-        VECTOR_PUSH(&values, value);
-        if (!physreg_p(value->reg, num_regs)) {
-          value->reg = virt_reg++;
-        }
-      }
-    }
-  }
-  f->value_count = values.count;
+  // Print IR before allocation.
+  if (ra_debug_flag) ra_debug_before_allocation(info->function);
 
-  // Special cases.
+  // Convert PHIs to copies.
+  Values values = lower_ir(info->context, info->function, info->num_regs);
   if (values.count == 0) { goto free_values; }
-  if (values.count == 1) {
-    values.data[0]->reg = 1;
-    goto free_values;
-  }
-
-  if (ra_debug_flag) ra_debug_before_allocation(f);
 
   // Create the adjacency matrix for the interference graph.
   InterferenceGraph g = {0};
-  g.num_regs = num_regs;
+  g.num_regs = info->num_regs;
   g.mtx.rows = values.count;
   g.mtx.data = calloc(g.mtx.rows * g.mtx.rows, sizeof(char));
   build_adjacency_matrix(&g.mtx, &values);
 
   // Perform register coalescing.
-  coalesce_registers(&g, &values);
+  coalesce_registers(&g, info->function, &values);
 
   // Build the adjacency lists for the interference graph.
   VECTOR_RESERVE(&g.lists, g.mtx.rows);
-  build_adjacency_lists(context, &g, &values, platform_interfering_regs);
+  build_adjacency_lists(info->context, &g, &values, info->platform_interfering_regs);
 
   // Prune the interference graph.
   prune_interference_graph(&g, &values);
@@ -486,7 +529,8 @@ void allocate_registers
   // Assign registers to the values.
   if (!assign_registers(&g, &values)) { TODO("Spill values"); }
 
-  if (ra_debug_flag) { ra_debug(f, &g); }
+  // Print matrix and IR after allocation.
+  if (ra_debug_flag) { ra_debug(info->function, &g); }
 
   // Free memory.
   free(g.mtx.data);
