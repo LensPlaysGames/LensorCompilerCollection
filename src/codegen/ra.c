@@ -76,7 +76,7 @@ typedef struct InterferenceGraph {
 } InterferenceGraph;
 
 /// Find the first bit set in a word.
-static size_t find_first_set(intmax_t n) {
+static size_t find_first_set(regmask_t n) {
 #ifndef _MSVC_VER
   return __builtin_ffsll(n);
 #else
@@ -244,10 +244,10 @@ void build_adjacency_matrix(AdjacencyMatrix *m, Values *values) {
 }
 
 /// Perform register coalescing.
-void coalesce_registers(InterferenceGraph *g, Value *values) {
+void coalesce_registers(InterferenceGraph *g, Values *values) {
   (void) g;
   (void) values;
-  TODO();
+  //TODO();
 }
 
 void build_adjacency_lists
@@ -373,11 +373,11 @@ unsigned min_register(InterferenceGraph *g, size_t index) {
 
   VECTOR_FOREACH (i, &g->lists.data[index].interferences_list) {
     unsigned reg = g->lists.data[*i].colour;
-    regmask |= 1 << (reg - 1);
+    if (reg) regmask |= 1 << (reg - 1);
   }
   VECTOR_FOREACH (i, &g->lists.data[index].removed_interferences_list) {
     unsigned reg = g->lists.data[*i].colour;
-    regmask |= 1 << (reg - 1);
+    if (reg) regmask |= 1 << (reg - 1);
   }
 
   // To find the smallest register that can be assigned, we simply
@@ -473,7 +473,7 @@ void allocate_registers
   build_adjacency_matrix(&g.mtx, &values);
 
   // Perform register coalescing.
-  //coalesce_registers(&g.mtx, value, &values);
+  coalesce_registers(&g, &values);
 
   // Build the adjacency lists for the interference graph.
   VECTOR_RESERVE(&g.lists, g.mtx.rows);

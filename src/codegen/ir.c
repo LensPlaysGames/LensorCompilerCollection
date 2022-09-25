@@ -464,6 +464,14 @@ void codegen_return(CodegenContext *context) {
   codegen_branch(context, context->insert_point->parent->return_block);
 }
 
+Value *create_copy(CodegenContext *context, Value *v) {
+  (void) context;
+  Value *copy = calloc(1, sizeof *copy);
+  copy->type = IR_INSTRUCTION_COPY;
+  copy->operand = v;
+  return copy;
+}
+
 void codegen_function_finalise(CodegenContext *context, Function *f) {
   BasicBlock *insert_point = context->insert_point;
 

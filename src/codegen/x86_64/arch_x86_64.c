@@ -1037,9 +1037,7 @@ static void emit_value(CodegenContext *context, Value *value) {
       load_immediate(context, value->reg, value->immediate);
       break;
     case IR_INSTRUCTION_PHI: break;
-    case IR_INSTRUCTION_RETURN:
-      femit(context, I_RET);
-      break;
+    case IR_INSTRUCTION_RETURN: break;
     case IR_INSTRUCTION_FUNCTION_REF: break;
     case IR_INSTRUCTION_GLOBAL_REF:
       load_global_address(context, value->reg, value->global_name);
@@ -1091,14 +1089,6 @@ static void insert_after(Value *value, Value *value_to_insert) {
   value_to_insert->next = value->next;
   value_to_insert->prev = value;
   value->next = value_to_insert;
-}
-
-static Value *create_copy(CodegenContext *context, Value *v) {
-  (void) context;
-  Value *copy = calloc(1, sizeof *copy);
-  copy->type = IR_INSTRUCTION_COPY;
-  copy->operand = v;
-  return copy;
 }
 
 static Value *create_register(Register reg) {
