@@ -1098,7 +1098,7 @@ static Value *create_register(Register reg) {
   return v;
 }
 
-static regmask_t interfering_regs(const Value *value){
+static regmask_t interfering_regs(const CodegenContext *context, const Value *value){
   switch (value->type) {
     case IR_INSTRUCTION_DIV: return 1 << (REG_RDX - 1);
     case IR_INSTRUCTION_MOD: return 1 << (REG_RAX - 1);
@@ -1108,9 +1108,13 @@ static regmask_t interfering_regs(const Value *value){
       return 1 << (REG_RCX - 1);
 
     case IR_INSTRUCTION_CALL:
-      // TODO: Clobber caller-saved registers.
-      return 0;
-
+    switch (context->call_convention) {
+      case CG_CALL_CONV_LINUX:
+      case CG_CALL_CONV_MSWIN:
+        return 0b111111111;
+      case CG_CALL_CONV_COUNT: break;
+    }
+    PANIC("Unknown calling convention");
     default: return 0;
   }
 }

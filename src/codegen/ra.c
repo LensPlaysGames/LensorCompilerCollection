@@ -251,9 +251,10 @@ void coalesce_registers(InterferenceGraph *g, Values *values) {
 }
 
 void build_adjacency_lists
-(InterferenceGraph *g,
+(const CodegenContext *context,
+ InterferenceGraph *g,
  Values *values,
- regmask_t platform_interfering_regs(const Value *value)) {
+ regmask_t platform_interfering_regs(const CodegenContext *context, const Value *value)) {
   VECTOR_FOREACH_INDEX(i, values) {
     VECTOR_FOREACH_INDEX(j, values) {
       if (*adji(&g->mtx, i, j)) {
@@ -267,7 +268,7 @@ void build_adjacency_lists
 
   // Determine the registers that interfere with each value.
   VECTOR_FOREACH_PTR(value, values) {
-      g->lists.data[value->id].interfering_regs |= platform_interfering_regs(value);
+      g->lists.data[value->id].interfering_regs |= platform_interfering_regs(context, value);
   }
 }
 
@@ -435,7 +436,7 @@ void allocate_registers
 (CodegenContext *context,
  Function *f,
  size_t num_regs,
- regmask_t platform_interfering_regs(const Value *value)) {
+ regmask_t platform_interfering_regs(const CodegenContext *context, const Value *value)) {
   (void) context;
   ASSERT(num_regs, "Need at least one register");
 
@@ -477,7 +478,7 @@ void allocate_registers
 
   // Build the adjacency lists for the interference graph.
   VECTOR_RESERVE(&g.lists, g.mtx.rows);
-  build_adjacency_lists(&g, &values, platform_interfering_regs);
+  build_adjacency_lists(context, &g, &values, platform_interfering_regs);
 
   // Prune the interference graph.
   prune_interference_graph(&g, &values);
