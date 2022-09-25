@@ -64,6 +64,7 @@ void codegen_context_free(CodegenContext *context) {
 }
 
 void codegen_emit(CodegenContext *context) {
+  context->insert_point = NULL;
   switch (context->format) {
     case CG_FMT_x86_64_GAS:
       codegen_emit_x86_64(context);

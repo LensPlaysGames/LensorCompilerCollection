@@ -338,11 +338,11 @@ static void femit_imm_to_reg(CodegenContext *context, enum Instructions inst, va
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "%s $%" PRId64 ", %%%s\n",
+      fprintf(context->code, "    %s $%" PRId64 ", %%%s\n",
           mnemonic, immediate, destination);
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "%s %s, %" PRId64 "\n",
+      fprintf(context->code, "    %s %s, %" PRId64 "\n",
           mnemonic, destination, immediate);
       break;
     default: PANIC("Unsupported dialect %d", context->dialect);
@@ -359,11 +359,11 @@ static void femit_imm_to_mem(CodegenContext *context, enum Instructions inst, va
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "%s $%" PRId64 ", %" PRId64 "(%%%s)\n",
+      fprintf(context->code, "    %s $%" PRId64 ", %" PRId64 "(%%%s)\n",
           mnemonic, immediate, offset, address);
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "%s [%s + %" PRId64 "], %" PRId64 "\n",
+      fprintf(context->code, "    %s [%s + %" PRId64 "], %" PRId64 "\n",
           mnemonic, address, offset, immediate);
       break;
     default: PANIC("Unsupported dialect %d", context->dialect);
@@ -381,11 +381,11 @@ static void femit_mem_to_reg(CodegenContext *context, enum Instructions inst, va
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "%s %" PRId64 "(%%%s), %%%s\n",
+      fprintf(context->code, "    %s %" PRId64 "(%%%s), %%%s\n",
           mnemonic, offset, address, destination);
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "%s %s, [%s + %" PRId64 "]\n",
+      fprintf(context->code, "    %s %s, [%s + %" PRId64 "]\n",
           mnemonic, destination, address, offset);
       break;
     default: PANIC("Unsupported dialect %d", context->dialect);
@@ -403,11 +403,11 @@ static void femit_name_to_reg(CodegenContext *context, enum Instructions inst, v
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "%s %s(%%%s), %%%s\n",
+      fprintf(context->code, "    %s %s(%%%s), %%%s\n",
           mnemonic, name, address, destination);
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "%s %s, [%s + %s]\n",
+      fprintf(context->code, "    %s %s, [%s + %s]\n",
           mnemonic, destination, address, name);
       break;
     default: PANIC("Unsupported dialect %d", context->dialect);
@@ -426,19 +426,19 @@ static void femit_reg_to_mem(CodegenContext *context, enum Instructions inst, va
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
       if (offset) {
-        fprintf(context->code, "%s %%%s, %" PRId64 "(%%%s)\n",
+        fprintf(context->code, "    %s %%%s, %" PRId64 "(%%%s)\n",
                 mnemonic, source, offset, address);
       } else {
-        fprintf(context->code, "%s %%%s, (%%%s)\n",
+        fprintf(context->code, "    %s %%%s, (%%%s)\n",
                 mnemonic, source, address);
       }
       break;
     case CG_ASM_DIALECT_INTEL:
       if (offset) {
-        fprintf(context->code, "%s [%s + %" PRId64 "], %s\n",
+        fprintf(context->code, "    %s [%s + %" PRId64 "], %s\n",
                 mnemonic, address, offset, source);
       } else {
-        fprintf(context->code, "%s [%s], %s\n",
+        fprintf(context->code, "    %s [%s], %s\n",
                 mnemonic, address, source);
       }
       break;
@@ -459,11 +459,11 @@ static void femit_reg_to_reg(CodegenContext *context, enum Instructions inst, va
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "%s %%%s, %%%s\n",
+      fprintf(context->code, "    %s %%%s, %%%s\n",
           mnemonic, source, destination);
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "%s %s, %s\n",
+      fprintf(context->code, "    %s %s, %s\n",
           mnemonic, destination, source);
       break;
     default: PANIC("Unsupported dialect %d", context->dialect);
@@ -481,11 +481,11 @@ static void femit_reg_to_name(CodegenContext *context, enum Instructions inst, v
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "%s %%%s, %s(%%%s)\n",
+      fprintf(context->code, "    %s %%%s, %s(%%%s)\n",
           mnemonic, source, name, address);
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "%s [%s + %s], %s\n",
+      fprintf(context->code, "    %s [%s + %s], %s\n",
           mnemonic, address, name, source);
       break;
     default: PANIC("Unsupported dialect %d", context->dialect);
@@ -501,11 +501,11 @@ static void femit_mem(CodegenContext *context, enum Instructions inst, va_list a
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "%s %" PRId64 "(%%%s)\n",
+      fprintf(context->code, "    %s %" PRId64 "(%%%s)\n",
           mnemonic, offset, address);
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "%s [%s + %" PRId64 "]\n",
+      fprintf(context->code, "    %s [%s + %" PRId64 "]\n",
           mnemonic, address, offset);
       break;
     default: PANIC("Unsupported dialect %d", context->dialect);
@@ -520,11 +520,11 @@ static void femit_reg(CodegenContext *context, enum Instructions inst, va_list a
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "%s %%%s\n",
+      fprintf(context->code, "    %s %%%s\n",
           mnemonic, source);
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "%s %s\n",
+      fprintf(context->code, "    %s %s\n",
           mnemonic, source);
       break;
     default: PANIC("Unsupported dialect %d", context->dialect);
@@ -538,11 +538,11 @@ static void femit_imm(CodegenContext *context, enum Instructions inst, va_list a
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "%s $%" PRId64 "\n",
+      fprintf(context->code, "    %s $%" PRId64 "\n",
           mnemonic, immediate);
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "%s %" PRId64 "\n",
+      fprintf(context->code, "    %s %" PRId64 "\n",
           mnemonic, immediate);
       break;
     default: PANIC("Unsupported dialect %d", context->dialect);
@@ -557,11 +557,11 @@ static void femit_indirect_branch(CodegenContext *context, enum Instructions ins
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "%s *%%%s\n",
+      fprintf(context->code, "    %s *%%%s\n",
           mnemonic, address);
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "%s %s\n",
+      fprintf(context->code, "    %s %s\n",
           mnemonic, address);
       break;
     default: PANIC("Unsupported dialect %d", context->dialect);
@@ -640,11 +640,11 @@ static void femit
 
           switch (context->dialect) {
             case CG_ASM_DIALECT_ATT:
-              fprintf(context->code, "%s %%%s, %%%s\n",
+              fprintf(context->code, "    %s %%%s, %%%s\n",
                   mnemonic, cl, register_name(register_to_shift));
               break;
             case CG_ASM_DIALECT_INTEL:
-              fprintf(context->code, "%s %s, %s\n",
+              fprintf(context->code, "    %s %s, %s\n",
                   mnemonic, register_name(register_to_shift), cl);
               break;
             default: PANIC("Unsupported dialect %d for shift instruction", context->dialect);
@@ -666,7 +666,7 @@ static void femit
           switch (context->dialect) {
             case CG_ASM_DIALECT_ATT:
             case CG_ASM_DIALECT_INTEL:
-              fprintf(context->code, "%s %s\n",
+              fprintf(context->code, "    %s %s\n",
                   mnemonic, label);
               break;
             default: PANIC("Unsupported dialect %d for CALL/JMP instruction", context->dialect);
@@ -712,12 +712,12 @@ static void femit
 
       switch (context->dialect) {
         case CG_ASM_DIALECT_ATT:
-          fprintf(context->code, "%s%s %%%s\n",
+          fprintf(context->code, "    %s%s %%%s\n",
               mnemonic,
               comparison_suffixes[comparison_type], value);
           break;
         case CG_ASM_DIALECT_INTEL:
-          fprintf(context->code, "%s%s %s\n",
+          fprintf(context->code, "    %s%s %s\n",
               mnemonic,
               comparison_suffixes[comparison_type], value);
           break;
@@ -735,7 +735,7 @@ static void femit
       switch (context->dialect) {
         case CG_ASM_DIALECT_ATT:
         case CG_ASM_DIALECT_INTEL:
-          fprintf(context->code, "%s%s %s\n",
+          fprintf(context->code, "    %s%s %s\n",
               mnemonic, jump_type_names[type], label);
           break;
         default: PANIC("Unsupported dialect %d", context->dialect);
@@ -745,7 +745,7 @@ static void femit
     case I_RET:
     case I_CQO: {
       const char *mnemonic = instruction_mnemonic(context, instruction);
-      fprintf(context->code, "%s\n", mnemonic);
+      fprintf(context->code, "    %s\n", mnemonic);
     } break;
 
     default: PANIC("Unhandled instruction in x86_64 code generation: %d.", instruction);
@@ -940,7 +940,7 @@ static void shift_right_arithmetic
 
 /// Emit the function prologue.
 static void function_prologue(CodegenContext *cg_context, Function *f) {
-  fprintf(cg_context->code, "endbr64\n");
+  fprintf(cg_context->code, "    endbr64\n");
   femit(cg_context, I_PUSH, REGISTER, REG_RBP);
   femit(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RSP, REG_RBP);
   femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, f->locals_offset + cg_context->locals_base_offset, REG_RSP);
@@ -1007,7 +1007,7 @@ static void emit_value(CodegenContext *context, Value *value) {
       emit_call(context, value);
       break;
     case IR_INSTRUCTION_COMMENT:
-      fprintf(context->code, ";;#; %s\n", value->comment_value);
+      fprintf(context->code, "    ;;#; %s\n", value->comment_value);
       break;
     case IR_INSTRUCTION_COMPARISON:
       comparison(context,
@@ -1110,10 +1110,12 @@ static void lower_function(CodegenContext *context, Function *f) {
     if (val->param_ref.index + FIRST_ARGUMENT_REGISTER >= FIRST_ARGUMENT_REGISTER &&
         val->param_ref.index + FIRST_ARGUMENT_REGISTER <= LAST_ARGUMENT_REGISTER) {
       store->lhs = create_register(val->param_ref.index + FIRST_ARGUMENT_REGISTER);
+      mark_used_by(store->lhs, store);
     } else {
       TODO("Handle stack arguments");
     }
     store->rhs = val;
+    mark_used_by(store->rhs, store);
     insert_after(val, store);
 
     val->type = IR_INSTRUCTION_ALLOCA;
@@ -1168,7 +1170,7 @@ static void emit_function(CodegenContext *context, Function *f) {
     Value *copy = create_copy(context, f->return_value);
     copy->reg = REG_RAX;
     context->insert_point = f->return_block;
-    insert(context, copy);
+    insert_before(f->return_block->end, copy);
   }
 
   // Perform register allocation.

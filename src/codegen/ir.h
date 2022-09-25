@@ -4,9 +4,6 @@
 #include <codegen/codegen_forward.h>
 #include <vector.h>
 
-#define LIST_FOREACH(element, list) \
-  for (TYPEOF(list) element = list; element; element = element->next)
-
 enum IRInstructionType {
   IR_INSTRUCTION_ADD,
   IR_INSTRUCTION_SUB,

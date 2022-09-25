@@ -113,4 +113,61 @@
 /// TODO: Convert ASSERT() into an expression and insert an ASSERT() here.
 #define VECTOR_BACK(vector) ((vector)->data[(vector)->count - 1])
 
+/// Iterate over each element of a list.
+#define LIST_FOREACH(element, list) \
+  for (TYPEOF(list) element = list; element; element = element->next)
+
+/// Delete a list.
+#define LIST_DELETE(list)    \
+  do {                       \
+    while (list) {           \
+      LIST_DELETE_ONE(list); \
+    }                        \
+  } while (0)
+
+/// Delete the first element of a list.
+#define LIST_DELETE_ONE(list)       \
+  do {                              \
+    TYPEOF(list) next = list->next; \
+    free(list);                     \
+    list = next;                    \
+  } while (0)
+
+/// Replace the fist occurrence of an element in a list.
+#define LIST_REPLACE(list_, element_, replacement_)  \
+  do {                                               \
+    TYPEOF(element_) element = element_;             \
+    TYPEOF(replacement_) replacement = replacement_; \
+    TYPEOF(list_) list = list_, prev = NULL;         \
+                                                     \
+    while (list && list != element) {                \
+      prev = list;                                   \
+      list = list->next;                             \
+    }                                                \
+    if (!list) break;                                \
+                                                     \
+    replacement->next = list->next;                  \
+    if (prev) prev->next = replacement;              \
+    list->next = NULL;                               \
+  } while (0)
+
+/// Replace the fist occurrence of an element in a doubly-linked list.
+#define DLIST_REPLACE(list_, element_, replacement_)       \
+  do {                                                     \
+    TYPEOF(element_) element = element_;                   \
+    TYPEOF(replacement_) replacement = replacement_;       \
+    TYPEOF(list_) list = list_;                            \
+                                                           \
+    while (list && list != element) { list = list->next; } \
+    if (!list) break;                                      \
+                                                           \
+    replacement->prev = list->prev;                        \
+    replacement->next = list->next;                        \
+    if (list->prev) list->prev->next = replacement;        \
+    if (list->next) list->next->prev = replacement;        \
+                                                           \
+    list->prev = NULL;                                     \
+    list->next = NULL;                                     \
+  } while (0)
+
 #endif // VECTOR_H

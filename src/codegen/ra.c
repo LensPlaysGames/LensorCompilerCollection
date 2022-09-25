@@ -55,7 +55,8 @@ typedef VECTOR(BasicBlock*) ControlFlowIterationContext;
 /// w3 0  1  0
 typedef struct AdjacencyMatrix {
   char *data;
-  size_t rows; /// Also the number of columns.
+  regmask_t *registers;
+  size_t dimension;
 } AdjacencyMatrix;
 
 /// Adjacency list for the interference graph.
@@ -145,35 +146,159 @@ char follow_control_flow(BasicBlock *block, char callback(BasicBlock *block, va_
 /// PHI instructions are special in that no CPU has an instruction that corresponds
 /// to a PHI, and yet they are pretty much required for an SSA IR. This also means
 /// that we cannot simply assign a physical register to each PHI node and be done
-/// with it.
-///
-/// Instead we convert each PHI node to a series of copy instructions. For instance
-/// given the PHI node `phi [bb1, %v1], [bb2, %v2]`, we insert copy instructions at
-/// the end of `bb1` and `bb2` that copy `%v1` and `%v2` into the result register
-/// of the phi node. We then replace the arguments `%v1` and `%v2` in the PHI node
-/// with those copy instructions (only in the PHI node of course; the instructions
-/// that generate `%v1` and `%v2` are not modified).
+/// with it; we also have to insert copies in the right places to make sure that
+/// the values involved end up in the right registers.
 ///
 /// The reason why we do this here instead of just allocating a register for each
 /// PHI node and letting the backend insert the copies is because doing this here
 /// means that the register coalescer might be able to optimise away some of the
 /// copies.
-static Values lower_ir(CodegenContext *ctx, Function *f, size_t num_regs) {
-  Values values = {0};
+///
+/// For each entry in a PHI node, we generate a copy instruction. For instance,
+/// given the PHI node `phi [bb1, %1], [bb2, %2]`, we insert copy instructions at
+/// the end of `bb1` and `bb2` that copy `%1` and `%2` into the result register
+/// of the phi node. We then replace the arguments `%1` and `%2` in the PHI node
+/// with those copy instructions (only in the PHI node of course; the instructions
+/// that generate `%1` and `%2` are not modified).
+///
+/// If an entry of a PHI node is at a critical edge, we need to insert an extra
+/// block to avoid clobbering a register on a different control flow path. A
+/// critical edge is an edge from a block with multiple successors to a block
+/// with multiple predecessors.
+///
+/// In the example below, there is a critical edge between bb1 and bb3:
+///
+///   bb1:
+///     %cond = ...
+///     %a = ...
+///     branch on %cond to bb2 else bb3
+///   bb2:
+///     ...
+///     %b = %c + %d
+///     branch to bb3
+///   bb3:
+///     %phi = phi [bb1, %a], [bb2, %b]
+///     ...
+///
+/// The trivial lowering strategy of inserting a copy instruction at the end of
+/// each basic block that branches (or can branch) to the block that contains the
+/// PHI node does not work in this case:
+///
+///   bb1:
+///     %cond = ...
+///     %a = ...
+///     %phi = %a
+///     branch on %cond to bb2 else bb3
+///   bb2:
+///     ...
+///     %b = %c + %d
+///     %phi = %b
+///     branch to bb3
+///   bb3:
+///     ...
+///
+/// If we try to lower the PHI on bb3 by inserting a copy (`%phi = %a`) before the
+/// branch, that copy will execute irrespective of whether control flow branches
+/// to bb2 or bb3, even though the copy is only needed in the latter case.
+///
+/// Furthermore, the target of the copy cannot not be a register that is used in bb2,
+/// since that would clobber that register and thus change the semantics of the
+/// program should control flow branch to bb2.
+///
+/// This effectively means that the liveness range of the copy instruction spans
+/// *any* successors of its parent block that can be reached between it and the PHI
+/// node.
+///
+/// This is an unnecessarily large liveness range and, depending on the number of
+/// phi nodes in the program, may lead to various registers remaining live for much
+/// longer than necessary.
+///
+/// This problem exists iff there is a critical edge. If the branch in bb1
+/// were non-conditional and always branched to bb3, then we could just insert
+/// the copy and call it a day.
+///
+/// However, if there is a critical edge, the usual solution is to insert
+/// another block containing the copy instruction(s) between bb1 and bb3 to
+/// ensure that they are only executed when control flow branches to bb3:
+///
+///   bb1:
+///     %cond = ...
+///     %a = ...
+///     branch on %cond to bb1-copy else bb3
+///   bb1-copy:
+///     %phi = %a
+///     branch to bb3
+///   bb2:
+///     ...
+///     %b = %c + %d
+///     %phi = b
+///     branch to bb3
+///   bb3:
+///     ...
+///
+static void lower_phis(CodegenContext *ctx, Function *f) {
+  BasicBlock *last_block = NULL;
 
   // Lower PHIs. We need to do this first because it introduces new values.
-  VALUE_FOREACH_TYPE (value, block, f, value->type) {
-    LIST_FOREACH (entry, value->phi_entries) {
+  VALUE_FOREACH_TYPE (phi, block, f, IR_INSTRUCTION_PHI) {
+    ASSERT(last_block != phi->parent, "RA currently does not support more than one PHI per block");
+    LIST_FOREACH (entry, phi->phi_entries) {
       Value *copy = create_copy(ctx, entry->value);
       copy->phi_arg = 1;
-      insert_after(entry->value, copy);
+
+      // Insert another block if the entry is at a critical edge.
+      Value *branch = entry->block->end;
+      if (branch->type == IR_INSTRUCTION_BRANCH_IF) {
+        BasicBlock *insert_point = ctx->insert_point;
+
+        // Create the block that holds the copy.
+        BasicBlock *bb_copy = codegen_basic_block_create_detached(ctx);
+        ctx->insert_point = bb_copy;
+        insert(ctx, copy);
+        codegen_branch(ctx, phi->parent);
+        codegen_basic_block_attach_to(ctx, bb_copy, phi->parent->parent);
+
+        // Change the branch instruction to branch to the copy block.
+        if (branch->cond_branch_value.true_branch == phi->parent) {
+          branch->cond_branch_value.true_branch = bb_copy;
+        } else {
+          branch->cond_branch_value.false_branch = bb_copy;
+        }
+
+        ctx->insert_point = insert_point;
+      }
+
+      // Otherwise, insert the copy in the same block as the predecessor.
+      else { insert_after(entry->value, copy); }
 
       entry->value = copy;
+      mark_used_by(copy, phi);
+    }
+    last_block = phi->parent;
+  }
+}
+
+/// Ensure that function call arguments are in the right registers.
+void fixup_calls(RAInfo *info) {
+  VALUE_FOREACH_TYPE (call, block, info->function, IR_INSTRUCTION_CALL) {
+    size_t arg_index = 0;
+    LIST_FOREACH (arg, call->call_value.args) {
+      Value *copy = create_copy(info->context, arg->value);
+      insert_before(call, copy);
+      mark_used_by(copy, call);
+      arg->value = copy;
+
+      if (arg_index >= info->num_arg_regs) PANIC("Too many arguments to function");
+      copy->reg = info->arg_regs[arg_index++];
     }
   }
+}
 
-  // Collect values.
+/// Collect all values that need to be assigned a register.
+Values collect_values(Function *f, size_t num_regs) {
+  Values values = {0};
   size_t virt_reg = num_regs + 1;
+
   VALUE_FOREACH(value, block, f) {
     value->instruction_index = values.count;
     if (needs_register(value)) {
@@ -194,18 +319,19 @@ static Values lower_ir(CodegenContext *ctx, Function *f, size_t num_regs) {
 /// with one another, 0 if they do not interfere in the current block, and -1
 /// if they cannot interfere.
 char values_interfere_callback(BasicBlock *block, va_list ap) {
+  // Use of v1.
   Value *use_value = va_arg(ap, Value*);
-  Value *def_value = va_arg(ap, Value*);
 
-  // def/def_value is the definition of v2
-  // use/use_value is the use of v1
+  // Definition of v2.
+  Value *def_value = va_arg(ap, Value*);
 
   // The use is in this block.
   if (use_value->parent == block) {
     // If the def is in this block, and precedes or is the same as the use,
     // then the use and def interfere.
     if (def_value->parent == block && def_value->instruction_index <= use_value->instruction_index) {
-      return 1;
+      // def and use interfere if def isn't a copy (see also values_interfere()).
+      return def_value->type == IR_INSTRUCTION_COPY ? -1 : 1;
     }
 
     // If the def is not in this block, then the use and def do not interfere.
@@ -215,7 +341,8 @@ char values_interfere_callback(BasicBlock *block, va_list ap) {
   // The def is in this block. Since we haven't seen the use yet, we know that
   // it is somewhere after the def, and therefore, the use and def interfere.
   if (def_value->parent == block) {
-    return 1;
+    // def and use interfere if def isn't a copy.
+    return def_value->type == IR_INSTRUCTION_COPY ? -1 : 1;
   }
 
   // Neither the use nor the definition is in the current block. Move
@@ -247,6 +374,11 @@ char values_interfere_callback(BasicBlock *block, va_list ap) {
 /// TODO: Fix uses when creating nodes in the backend.
 char values_interfere(Value *v1, Value *v2) {
   LIST_FOREACH (use, v1->uses) {
+    // Copies aren't considered for the purpose of interference checking since
+    // we don't care if the target and source of a copy instruction are assigned
+    // the same register. In fact, that would actually be a good thing.
+    if (use->parent->type == IR_INSTRUCTION_COPY) continue;
+
     // The definition and use of v1 are in the same block.
     if (v1->parent == use->parent->parent) {
       // If the definition of v2 is also in that block, and lies between the
@@ -273,7 +405,7 @@ char* adji(AdjacencyMatrix *mtx, size_t v1, size_t v2) {
   static char ignored;
   if (v1 == v2) return &ignored;
   if (v1 < v2) return adji(mtx, v2, v1);
-  return mtx->data + v1 * mtx->rows + v2;
+  return mtx->data + v1 * mtx->dimension + v2;
 }
 
 /// Get the entry for values (v1, v2) in the adjacency matrix.
@@ -283,7 +415,7 @@ char* adj(AdjacencyMatrix *mtx, Value *v1, Value *v2) {
 
 /// Compute the adjacency matrix for the interference graph.
 void build_adjacency_matrix(AdjacencyMatrix *m, Values *values) {
-  memset(m->data, 0, m->rows * m->rows);
+  memset(m->data, 0, m->dimension * m->dimension);
 
   // Add edges between values that interfere.
   VECTOR_FOREACH_PTR (v1, values) {
@@ -300,7 +432,44 @@ void build_adjacency_matrix(AdjacencyMatrix *m, Values *values) {
 
 /// Perform register coalescing.
 void coalesce_registers(InterferenceGraph *g, Function *f, Values *values) {
+  // I don't want to have to deal with iterator invalidation when removing
+  // instructions, so we store pointers to the instructions to be removed
+  // here and then remove them at the end in one fell swoop.
+  VECTOR(Value*) values_to_remove = {0};
+  size_t last_removed = 0;
 
+  do {
+    VECTOR_CLEAR(&values_to_remove);
+    last_removed = values_to_remove.count;
+
+    // Iterate over all copy instructions and remove them if possible.
+    VALUE_FOREACH_TYPE (v, block, f, IR_INSTRUCTION_COPY) {
+      // If the source and target of the copy instruction are the same or if
+      // they don't interfere, then we can remove the copy instruction.
+      if (v == v->operand ||
+          (physreg_p(v->reg, g->num_regs) && v->reg == v->operand->reg) ||
+          !*adj(&g->mtx, v, v->operand)) {
+        VECTOR_PUSH(&values_to_remove, v);
+      } else continue;
+
+      // Replace all uses of the target with the source.
+      LIST_FOREACH (use, v->operand->uses) { replace_use(v->operand, use, v); }
+
+      // Fix the adjacency matrix.
+      VECTOR_FOREACH_PTR (v2, values) {
+        if (v2 == v) { continue; }
+        *adj(&g->mtx, v, v2) = *adj(&g->mtx, v->operand, v2);
+      }
+    }
+
+    // Remove all copy instructions that were marked for removal.
+    VECTOR_FOREACH_PTR (v, &values_to_remove) { delete_value(v); }
+  } while (values_to_remove.count != last_removed);
+  VECTOR_DELETE(&values_to_remove);
+
+  // Rebuild the adjacency matrix.
+  *values = collect_values(f, g->num_regs);
+  build_adjacency_matrix(&g->mtx, values);
 }
 
 void build_adjacency_lists
@@ -347,7 +516,7 @@ void remove_vertex(InterferenceGraph *g, size_t index) {
 
 /// Perform initial graph colouring.
 void prune_interference_graph(InterferenceGraph *g, Values *values) {
-  size_t value_count = g->mtx.rows;
+  size_t value_count = g->mtx.dimension;
   while (value_count) {
     // Apply the degree < k rule: A graph G is k-colourable if for every vertex v
     // in G, deg(v) < k. Furthermore, given a graph G containing a vertex v with
@@ -477,14 +646,14 @@ void ra_debug_before_allocation(Function *f) {
 }
 
 void ra_debug(Function *f, InterferenceGraph *g) {
-  printf("\nMatrix: rows: %zu\n   ", g->mtx.rows);
-  FOR (i, g->mtx.rows) { printf("%%%zu ", i);  }
+  printf("\nMatrix: rows: %zu\n   ", g->mtx.dimension);
+  FOR (i, g->mtx.dimension) { printf("%%%zu ", i);  }
   printf("\n");
 
-  FOR (i, g->mtx.rows) {
+  FOR (i, g->mtx.dimension) {
     { printf("%%%zu ", i); }
     for (size_t j = 0; j <= i; j++) {
-      printf("%d  ", g->mtx.data[i * g->mtx.rows + j]);
+      printf("%d  ", g->mtx.data[i * g->mtx.dimension + j]);
     }
     printf("\n");
   }
@@ -499,22 +668,31 @@ void allocate_registers(RAInfo *info) {
   // Print IR before allocation.
   if (ra_debug_flag) ra_debug_before_allocation(info->function);
 
+  typecheck_ir(info->context, info->function);
+
   // Convert PHIs to copies.
-  Values values = lower_ir(info->context, info->function, info->num_regs);
+  lower_phis(info->context, info->function);
+
+  // Move call arguments into the right registers.
+  fixup_calls(info);
+
+  // Collect values.
+  Values values = collect_values(info->function, info->num_regs);
   if (values.count == 0) { goto free_values; }
 
   // Create the adjacency matrix for the interference graph.
   InterferenceGraph g = {0};
   g.num_regs = info->num_regs;
-  g.mtx.rows = values.count;
-  g.mtx.data = calloc(g.mtx.rows * g.mtx.rows, sizeof(char));
+  g.mtx.dimension = values.count;
+  g.mtx.data = calloc(g.mtx.dimension * g.mtx.dimension, sizeof(char));
+  g.mtx.registers = calloc(g.mtx.dimension, sizeof(Register));
   build_adjacency_matrix(&g.mtx, &values);
 
-  // Perform register coalescing.
+   // Perform register coalescing.
   coalesce_registers(&g, info->function, &values);
 
   // Build the adjacency lists for the interference graph.
-  VECTOR_RESERVE(&g.lists, g.mtx.rows);
+  VECTOR_RESERVE(&g.lists, g.mtx.dimension);
   build_adjacency_lists(info->context, &g, &values, info->platform_interfering_regs);
 
   // Prune the interference graph.

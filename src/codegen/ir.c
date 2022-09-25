@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vector.h>
 
 /// Insert a value into the current basic block.
 void insert(CodegenContext *context, Value *value) {
@@ -36,7 +37,6 @@ void insert(CodegenContext *context, Value *value) {
   value->parent = context->insert_point;
 }
 
-/// Mark a value as used by another value.
 void mark_used_by(Value *value, Value *parent) {
   Use *use = calloc(1, sizeof(Use));
   use->parent = parent;
@@ -473,6 +473,73 @@ Value *create_copy(CodegenContext *context, Value *v) {
   return copy;
 }
 
+/// Returns 1 for convenience.
+static int irprintf(const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+
+  for (;;) {
+    const char *start = fmt;
+    fmt = strpbrk(fmt, "%");
+    if (!fmt) {
+      printf("%s", start);
+      return 1;
+    }
+    printf("%.*s", (int)(fmt - start), start);
+
+    switch (*++fmt) {
+      case 0: PANIC("Invalid format string");
+      case '%':
+        printf("%%");
+        break;
+      case 's':
+        printf("%s", va_arg(ap, const char *));
+        break;
+      case 'b': {
+        BasicBlock *block = va_arg(ap, BasicBlock *);
+        if (block) codegen_dump_basic_block(block);
+        else printf("(null)");
+      } break;
+      case 'v': {
+        Value *v = va_arg(ap, Value *);
+        if (v) codegen_dump_value(v);
+        else printf("(null)");
+      } break;
+      case 'f': {
+        Function *f = va_arg(ap, Function *);
+        if (f) printf("[%s()]", f->name);
+        else printf("(null)");
+      } break;
+    }
+    fmt++;
+  }
+
+  va_end(ap);
+  return 1;
+}
+
+void typecheck_ir(CodegenContext *context, Function *f) {
+  (void) context;
+  int err = 0;
+
+  // Each block must end with a branch, have a parent, and have a start and an end.
+  LIST_FOREACH (block, f->entry) {
+    if (block->end->type != IR_INSTRUCTION_RETURN &&
+        block->end->type != IR_INSTRUCTION_BRANCH &&
+        block->end->type != IR_INSTRUCTION_BRANCH_IF) {
+      err = irprintf("Error: Block does not end with a branch:\n%b", block);
+    } else if (block->parent != f) {
+      err = irprintf("Error: Block in %f has wrong parent %f:\n%b", f, block->parent, block);
+    } else if (!block->values) {
+      err = irprintf("Error: Block is empty:\n%b", block);
+    } else if (!block->end) {
+      err = irprintf("Error: Block has no end:\n%b", block);
+    }
+  }
+
+  if (err) exit(1);
+}
+
 void codegen_function_finalise(CodegenContext *context, Function *f) {
   BasicBlock *insert_point = context->insert_point;
 
@@ -486,6 +553,8 @@ void codegen_function_finalise(CodegenContext *context, Function *f) {
   insert(context, ret);
 
   context->insert_point = insert_point;
+
+  typecheck_ir(context, f);
 }
 
 /// Very primitive IR printer.
@@ -520,7 +589,7 @@ void codegen_dump_value(Value *val) {
       break;
     case IR_INSTRUCTION_RETURN:
       if (val->operand) codegen_dump_value(val->operand);
-      printf("\n    branch to bb%zu", val->parent->parent->return_block->id);
+      printf("    return");
       break;
     case IR_INSTRUCTION_FUNCTION_REF:
       printf("    %%r%zu = %s", val->reg, val->function_ref->name);
@@ -606,7 +675,6 @@ void codegen_dump_basic_block(BasicBlock *bb) {
 void codegen_dump_function(Function *f) {
   printf("defun %s:\n", f->name);
   LIST_FOREACH (bb, f->entry) { codegen_dump_basic_block(bb); }
-  printf("    return\n");
 }
 
 void codegen_dump_ir(CodegenContext *context) {
@@ -618,6 +686,9 @@ void insert_before(Value* value, Value *value_to_insert) {
   value_to_insert->prev = value->prev;
   value_to_insert->next = value;
   value->prev = value_to_insert;
+
+  value_to_insert->parent = value->parent;
+  if (value->parent->values == value) { value->parent->values = value_to_insert; }
 }
 
 void insert_after(Value *value, Value *value_to_insert) {
@@ -625,4 +696,95 @@ void insert_after(Value *value, Value *value_to_insert) {
   value_to_insert->next = value->next;
   value_to_insert->prev = value;
   value->next = value_to_insert;
+
+  value_to_insert->parent = value->parent;
+  if (value->parent->end == value) { value->parent->end = value_to_insert; }
+}
+
+void delete_from_block(Value *v) {
+  ASSERT(v->parent->values != v || v->parent->end != v, "Cannot delete last value from block");
+
+  if (v->prev) { v->prev->next = v->next; }
+  if (v->next) { v->next->prev = v->prev; }
+  if (v->parent->values == v) { v->parent->values = v->next; }
+  if (v->parent->end == v) { v->parent->end = v->prev; }
+  if (v->uses) LIST_DELETE(v->uses);
+
+  v->parent = NULL;
+  v->next = NULL;
+  v->prev = NULL;
+  v->uses = NULL;
+}
+
+void delete_value(Value *v) {
+  if (v->parent) delete_from_block(v);
+  free(v);
+}
+
+void replace_use(Value *value, Use *use, Value *replacement) {
+  switch (use->parent->type) {
+    case IR_INSTRUCTION_ADD:
+    case IR_INSTRUCTION_SUB:
+    case IR_INSTRUCTION_MUL:
+    case IR_INSTRUCTION_DIV:
+    case IR_INSTRUCTION_MOD:
+    case IR_INSTRUCTION_SHL:
+    case IR_INSTRUCTION_SAR:
+    case IR_INSTRUCTION_STORE_LOCAL:
+    case IR_INSTRUCTION_STORE:
+      if (use->parent->lhs == value) { use->parent->lhs = replacement; }
+      if (use->parent->rhs == value) { use->parent->rhs = replacement; }
+      break;
+
+    case IR_INSTRUCTION_CALL:
+      LIST_FOREACH(entry, use->parent->call_value.args) {
+        if (entry->value == value) { entry->value = replacement; }
+      }
+      break;
+
+    case IR_INSTRUCTION_COMPARISON:
+      if (use->parent->comparison.lhs == value) { use->parent->comparison.lhs = replacement; }
+      if (use->parent->comparison.rhs == value) { use->parent->comparison.rhs = replacement; }
+      break;
+
+    case IR_INSTRUCTION_BRANCH_IF:
+      if (use->parent->cond_branch_value.condition == value) {
+        use->parent->cond_branch_value.condition = replacement;
+      }
+      break;
+
+    case IR_INSTRUCTION_PHI:
+      LIST_FOREACH(entry, use->parent->phi_entries) {
+        if (entry->value == value) { entry->value = replacement; }
+      }
+      break;
+
+    case IR_INSTRUCTION_STORE_GLOBAL:
+      if (use->parent->global_store.value == value) {
+        use->parent->global_store.value = replacement;
+      }
+      break;
+
+    case IR_INSTRUCTION_LOCAL_REF:
+    case IR_INSTRUCTION_LOCAL_VAL:
+      if (use->parent->local_ref == value) { use->parent->local_ref = replacement; }
+      break;
+
+    case IR_INSTRUCTION_COPY:
+      if (use->parent->operand == value) { use->parent->operand = replacement; }
+      break;
+
+    case IR_INSTRUCTION_RETURN:
+    case IR_INSTRUCTION_ALLOCA:
+    case IR_INSTRUCTION_COMMENT:
+    case IR_INSTRUCTION_BRANCH:
+    case IR_INSTRUCTION_IMMEDIATE:
+    case IR_INSTRUCTION_FUNCTION_REF:
+    case IR_INSTRUCTION_GLOBAL_REF:
+    case IR_INSTRUCTION_GLOBAL_VAL:
+    case IR_INSTRUCTION_PARAM_REF:
+    case IR_INSTRUCTION_REGISTER:
+    case IR_INSTRUCTION_COUNT:
+      UNREACHABLE();
+  }
 }
