@@ -29,6 +29,7 @@ void ra_debug_before_allocation(Function *f) {
 
 /// Whether an instruction returns a value.
 static char needs_register(Value *value) {
+  STATIC_ASSERT(IR_INSTRUCTION_COUNT == 27, "needs_register must exhaustively handle all IR instructions.");
   switch (value->type) {
     case IR_INSTRUCTION_ALLOCA:
     case IR_INSTRUCTION_COMMENT:
@@ -455,6 +456,7 @@ void build_adjacency_matrix(AdjacencyMatrix *m, Values *values) {
 }
 
 static void replace_use(Value *value, Use *use, Value *replacement) {
+  STATIC_ASSERT(IR_INSTRUCTION_COUNT == 27, "replace_use must exhaustively handle all IR instructions");
   if (use->parent == replacement) return;
 
   switch (use->parent->type) {

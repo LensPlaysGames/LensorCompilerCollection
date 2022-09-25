@@ -560,6 +560,7 @@ void codegen_function_finalise(CodegenContext *context, Function *f) {
 
 /// Very primitive IR printer.
 void codegen_dump_value(Value *val) {
+  STATIC_ASSERT(IR_INSTRUCTION_COUNT == 27, "Update this switch statement");
   ASSERT(val->type >= 0 && val->type < IR_INSTRUCTION_COUNT, "Invalid value type");
   static const char* cmp_op[] = { "eq", "ne", "lt", "le", "gt", "ge" };
 

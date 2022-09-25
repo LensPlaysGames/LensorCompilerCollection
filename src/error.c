@@ -12,7 +12,7 @@ void print_error(Error err) {
     return;
   }
   printf("ERROR: ");
-  ASSERT(ERROR_MAX == 6);
+  STATIC_ASSERT(ERROR_MAX == 6, "print_error should handle all error types");
   switch (err.type) {
   default:
     printf("Unkown error type...");

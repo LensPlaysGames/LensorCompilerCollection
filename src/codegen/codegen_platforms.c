@@ -64,6 +64,7 @@ void codegen_context_free(CodegenContext *context) {
 }
 
 void codegen_emit(CodegenContext *context) {
+  STATIC_ASSERT(CG_FMT_COUNT == 1, "codegen_emit() must exhaustively handle all codegen output formats.");
   context->insert_point = NULL;
   switch (context->format) {
     case CG_FMT_x86_64_GAS:
