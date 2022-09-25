@@ -105,7 +105,7 @@ char physreg_p(Register reg, size_t num_regs) {
 }
 
 /// Do not call this directly. Use `follow_control_flow` instead.
-char vfollow_control_flow(ControlFlowIterationContext *ctx, BasicBlock *block, char callback(BasicBlock *block, va_list ap), va_list ap) {
+size_t vfollow_control_flow(ControlFlowIterationContext *ctx, BasicBlock *block, size_t callback(BasicBlock *block, va_list ap), va_list ap) {
   for (;;) {
     // Check if we have already visited this block.
     VECTOR_FOREACH (bb, ctx) {
@@ -117,7 +117,7 @@ char vfollow_control_flow(ControlFlowIterationContext *ctx, BasicBlock *block, c
 
     va_list copy;
     va_copy(copy, ap);
-    char result = callback(block, copy);
+    size_t result = callback(block, copy);
     if (result) return result;
 
     // Follow branches.
@@ -139,11 +139,11 @@ char vfollow_control_flow(ControlFlowIterationContext *ctx, BasicBlock *block, c
 ///
 /// Returns 0 if the iteration completed, or the return value of the callback
 /// if the iteration was stopped.
-char follow_control_flow(BasicBlock *block, char callback(BasicBlock *block, va_list ap), ...) {
+size_t follow_control_flow(BasicBlock *block, size_t callback(BasicBlock *block, va_list ap), ...) {
   ControlFlowIterationContext ctx = {0};
   va_list ap;
   va_start(ap, callback);
-  char result = vfollow_control_flow(&ctx, block, callback, ap);
+  size_t result = vfollow_control_flow(&ctx, block, callback, ap);
   va_end(ap);
   return result;
 }
@@ -342,7 +342,7 @@ Values collect_values(Function *f, size_t num_regs) {
 /// Lambda used by `values_interfere()`. Returns 1 if the two values interfere
 /// with one another, 0 if they do not interfere in the current block, and -1
 /// if they cannot interfere.
-char values_interfere_callback(BasicBlock *block, va_list ap) {
+size_t values_interfere_callback(BasicBlock *block, va_list ap) {
   // Use of v1.
   Value *use_value = va_arg(ap, Value*);
 
@@ -396,7 +396,7 @@ char values_interfere_callback(BasicBlock *block, va_list ap) {
 /// interfere. If so, return 1, and 0 otherwise.
 /// TODO: If the uses are NULL, then that value doesn't interfere w/ anything.
 /// TODO: Fix uses when creating nodes in the backend.
-char values_interfere(Value *v1, Value *v2) {
+size_t values_interfere(Value *v1, Value *v2) {
   LIST_FOREACH (use, v1->uses) {
     // Copies aren't considered for the purpose of interference checking since
     // we don't care if the target and source of a copy instruction are assigned
@@ -588,6 +588,44 @@ void coalesce_registers(InterferenceGraph *g, Function *f, Values *values) {
   build_adjacency_matrix(&g->mtx, values);
 }
 
+/*size_t value_interfering_regs_callback(BasicBlock *block, va_list ap) {
+  regmask_t *mask = va_arg(ap, regmask_t*);
+  Value *use_value = va_arg(ap, Value*);
+  Value *value = va_arg(ap, Value*);
+
+  // The use is in this block. Check all instructions up to the use.
+  if (use_value->parent == block) {
+    LIST_FOREACH (v, block->values) {
+      if (v == use_value) { return 1; }
+      if (v->reg == value->reg && v != value) { *mask |= 1 << (v->reg - 1); }
+    }
+    return 1;
+  }
+
+  // Continue until we find the use.
+  return 0;
+}
+
+/// Determine the registers that interfere with a value.
+regmask_t value_interfering_regs(InterferenceGraph *g, Value *v) {
+  // If the result register is not a physical register, then, by default, no
+  // registers interfere with it.
+  if (!physreg_p(v->reg, g->num_regs)) { return 0; }
+
+  // Otherwise, check if the result register is assigned to anywhere else between
+  // the definition of the value and its last use. If so, the value interferes
+  // with that register.
+  regmask_t mask = 0;
+  LIST_FOREACH (use, v->uses) {
+    follow_control_flow(v->parent, value_interfering_regs_callback, &mask, use->parent, v);
+  }
+  *//*if (!mask)  {
+    codegen_dump_function(v->parent->parent);
+    PANIC("Spilling not implemented");
+  }*//*
+  return mask;
+}*/
+
 void build_adjacency_lists
 (const CodegenContext *context,
  InterferenceGraph *g,
@@ -607,6 +645,7 @@ void build_adjacency_lists
   // Determine the registers that interfere with each value.
   VECTOR_FOREACH_PTR(value, values) {
       g->lists.data[value->id].interfering_regs |= platform_interfering_regs(context, value);
+      // g->lists.data[value->id].interfering_regs |= value_interfering_regs(g, value);
       g->lists.data[value->id].preferred_reg = value->preferred_reg;
   }
 }

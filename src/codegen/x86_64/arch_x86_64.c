@@ -18,8 +18,7 @@
 /// This is used for defining lookup tables etc. and
 /// ensures that the registers are always in the correct
 /// order
-#ifndef _WIN64
-#define FOR_ALL_REGISTERS(F)     \
+#define FOR_ALL_REGISTERS(F)            \
   /* Caller-saved */                    \
   F(RAX, "rax", "eax", "ax", "al")      \
   F(RDI, "rdi", "edi", "di", "dil")     \
@@ -40,33 +39,6 @@
   F(RBP, "rbp", "ebp", "bp", "bpl")     \
   F(RSP, "rsp", "esp", "sp", "spl")     \
   F(RIP, "rip", "eip", "ip", "ipl")
-#define FIRST_ARGUMENT_REGISTER REG_RDI
-#define LAST_ARGUMENT_REGISTER REG_R9
-#else
-#define FOR_ALL_REGISTERS(F)     \
-  /* Caller-saved */                    \
-  F(RAX, "rax", "eax", "ax", "al")      \
-  F(RCX, "rcx", "ecx", "cx", "cl")      \
-  F(RDX, "rdx", "edx", "dx", "dl")      \
-  F(R8,  "r8", "r8d", "r8w", "r8b")     \
-  F(R9,  "r9", "r9d", "r9w", "r9b")     \
-  F(RDI, "rdi", "edi", "di", "dil")     \
-  F(RSI, "rsi", "esi", "si", "sil")     \
-  F(R10, "r10", "r10d", "r10w", "r10b") \
-  F(R11, "r11", "r11d", "r11w", "r11b") \
-  /* Callee-saved */                    \
-  F(RBX, "rbx", "ebx", "bx", "bl")      \
-  F(R12, "r12", "r12d", "r12w", "r12b") \
-  F(R13, "r13", "r13d", "r13w", "r13b") \
-  F(R14, "r14", "r14d", "r14w", "r14b") \
-  F(R15, "r15", "r15d", "r15w", "r15b") \
-  /* Special */                         \
-  F(RBP, "rbp", "ebp", "bp", "bpl")     \
-  F(RSP, "rsp", "esp", "sp", "spl")     \
-  F(RIP, "rip", "eip", "ip", "ipl")
-#define FIRST_ARGUMENT_REGISTER REG_RCX
-#define LAST_ARGUMENT_REGISTER REG_R9
-#endif
 
 #define GENERAL_PURPOSE_REGISTER_COUNT (13)
 
@@ -90,6 +62,14 @@ enum Registers {
   REG_NONE,
   FOR_ALL_REGISTERS(DEFINE_REGISTER_ENUM)
   REG_COUNT
+};
+
+static const Register linux_argument_registers[] = {
+    REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9
+};
+
+static const Register mswin_argument_registers[] = {
+    REG_RCX, REG_RDX, REG_R8, REG_R9
 };
 
 /// Define register_name and friends.
@@ -350,9 +330,9 @@ static void femit_imm_to_reg(CodegenContext *context, enum Instructions inst, va
 }
 
 static void femit_imm_to_mem(CodegenContext *context, enum Instructions inst, va_list args) {
-  int64_t immediate                    = va_arg(args, int64_t);
+  int64_t immediate          = va_arg(args, int64_t);
   Register address_register  = va_arg(args, Register);
-  int64_t offset                       = va_arg(args, int64_t);
+  int64_t offset             = va_arg(args, int64_t);
 
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
@@ -385,7 +365,7 @@ static void femit_mem_to_reg(CodegenContext *context, enum Instructions inst, va
           mnemonic, offset, address, destination);
       break;
     case CG_ASM_DIALECT_INTEL:
-      fprintf(context->code, "    %s %s, [%s + %" PRId64 "]\n",
+      fprintf(context->code, "    %s %s, [%s - %" PRId64 "]\n",
           mnemonic, destination, address, offset);
       break;
     default: PANIC("Unsupported dialect %d", context->dialect);
@@ -417,7 +397,7 @@ static void femit_name_to_reg(CodegenContext *context, enum Instructions inst, v
 static void femit_reg_to_mem(CodegenContext *context, enum Instructions inst, va_list args) {
   Register source_register   = va_arg(args, Register);
   Register address_register  = va_arg(args, Register);
-  int64_t offset                       = va_arg(args, int64_t);
+  int64_t offset             = va_arg(args, int64_t);
 
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = register_name(source_register);
@@ -435,7 +415,7 @@ static void femit_reg_to_mem(CodegenContext *context, enum Instructions inst, va
       break;
     case CG_ASM_DIALECT_INTEL:
       if (offset) {
-        fprintf(context->code, "    %s [%s + %" PRId64 "], %s\n",
+        fprintf(context->code, "    %s [%s - %" PRId64 "], %s\n",
                 mnemonic, address, offset, source);
       } else {
         fprintf(context->code, "    %s [%s], %s\n",
@@ -958,13 +938,16 @@ static void emit_value(CodegenContext *context, Value *v);
 
 static void emit_call(CodegenContext *context, Value *call) {
   ASSERT(call->type == IR_INSTRUCTION_CALL, "Expected call instruction");
+
   // Emit the function reference if this is an internal call.
   if (call->call_value.type == FUNCTION_CALL_TYPE_INTERNAL) {
-    emit_value(context, call->call_value.callee);
     femit(context, I_CALL, REGISTER, call->call_value.callee->reg);
   } else {
     femit(context, I_CALL, NAME, call->call_value.external_callee);
   }
+
+  // Move the result into the destination register.
+  femit(context, I_MOV, REGISTER_TO_REGISTER, REG_RAX, call->reg);
 }
 
 static void emit_value(CodegenContext *context, Value *value) {
@@ -1094,7 +1077,7 @@ static regmask_t interfering_regs(const CodegenContext *context, const Value *va
     switch (context->call_convention) {
       case CG_CALL_CONV_LINUX:
       case CG_CALL_CONV_MSWIN:
-        return 0b111111111;
+        return 1 << (REG_RAX - 1);
       case CG_CALL_CONV_COUNT: break;
     }
     PANIC("Unknown calling convention");
@@ -1102,24 +1085,44 @@ static regmask_t interfering_regs(const CodegenContext *context, const Value *va
   }
 }
 
+/// Convert a param_ref to a register. Returns 0 if the argument is passed on the stack.
+Register argument_register(CodegenContext *context, size_t index) {
+  switch (context->call_convention) {
+    case CG_CALL_CONV_MSWIN:
+      return index < sizeof mswin_argument_registers / sizeof *mswin_argument_registers
+        ? mswin_argument_registers[index]
+        : 0;
+    case CG_CALL_CONV_LINUX:
+      return index < sizeof linux_argument_registers / sizeof *linux_argument_registers
+        ? linux_argument_registers[index]
+        : 0;
+    default: PANIC("Unknown calling convention");
+  }
+}
+
 static void lower_function(CodegenContext *context, Function *f) {
   (void) context;
-  VALUE_FOREACH_TYPE (val, bb, f, IR_INSTRUCTION_PARAM_REF) {
-    Value *store = calloc(1, sizeof *store);
-    store->type = IR_INSTRUCTION_STORE_LOCAL;
-    if (val->param_ref.index + FIRST_ARGUMENT_REGISTER >= FIRST_ARGUMENT_REGISTER &&
-        val->param_ref.index + FIRST_ARGUMENT_REGISTER <= LAST_ARGUMENT_REGISTER) {
-      store->lhs = create_register(val->param_ref.index + FIRST_ARGUMENT_REGISTER);
-      mark_used_by(store->lhs, store);
-    } else {
-      TODO("Handle stack arguments");
-    }
-    store->rhs = val;
-    mark_used_by(store->rhs, store);
-    insert_after(val, store);
+  VALUE_FOREACH (val, bb, f) {
+    switch (val->type) {
+      default: break;
+      case IR_INSTRUCTION_PARAM_REF: {
+        Value *store = calloc(1, sizeof *store);
+        store->type = IR_INSTRUCTION_STORE_LOCAL;
+        Register r = argument_register(context, val->param_ref.index);
+        if (r) {
+          store->lhs = create_register(r);
+          mark_used_by(store->lhs, store);
+        } else {
+          TODO("Handle stack arguments");
+        }
+        store->rhs = val;
+        mark_used_by(store->rhs, store);
+        insert_after(val, store);
 
-    val->type = IR_INSTRUCTION_ALLOCA;
-    val->immediate = 8;
+        val->type = IR_INSTRUCTION_ALLOCA;
+        val->immediate = 8;
+      } break;
+    }
   }
 }
 
@@ -1136,19 +1139,13 @@ static void sum_local_allocations(Function *f) {
 static void get_argument_registers(RAInfo *info) {
   switch (info->context->call_convention) {
     case CG_CALL_CONV_LINUX: {
-      static const Register regs[] = {
-        REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9
-      };
-      info->arg_regs = regs;
-      info->num_arg_regs = sizeof regs / sizeof *regs;
+      info->arg_regs = linux_argument_registers;
+      info->num_arg_regs = sizeof linux_argument_registers / sizeof *linux_argument_registers;
       return;
     }
     case CG_CALL_CONV_MSWIN: {
-      static const Register regs[] = {
-        REG_RCX, REG_RDX, REG_R8, REG_R9
-      };
-      info->arg_regs = regs;
-      info->num_arg_regs = sizeof regs / sizeof *regs;
+      info->arg_regs = mswin_argument_registers;
+      info->num_arg_regs = sizeof mswin_argument_registers / sizeof *mswin_argument_registers;
       return;
     }
     case CG_CALL_CONV_COUNT: break;
