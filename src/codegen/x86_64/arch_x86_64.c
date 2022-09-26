@@ -360,7 +360,7 @@ static void femit_mem_to_reg(CodegenContext *context, enum Instructions inst, va
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprintf(context->code, "    %s %" PRId64 "(%%%s), %%%s\n",
+      fprintf(context->code, "    %s -%" PRId64 "(%%%s), %%%s\n",
           mnemonic, offset, address, destination);
       break;
     case CG_ASM_DIALECT_INTEL:
@@ -405,7 +405,7 @@ static void femit_reg_to_mem(CodegenContext *context, enum Instructions inst, va
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
       if (offset) {
-        fprintf(context->code, "    %s %%%s, %" PRId64 "(%%%s)\n",
+        fprintf(context->code, "    %s %%%s, -%" PRId64 "(%%%s)\n",
                 mnemonic, source, offset, address);
       } else {
         fprintf(context->code, "    %s %%%s, (%%%s)\n",
@@ -935,25 +935,25 @@ static void function_epilogue(CodegenContext *cg_context) {
 
 static void emit_value(CodegenContext *context, Value *v);
 
+// Save caller-saved registers and emit a call instruction. This is a horrible hack.
+// This should only need to emit a call instruction once we have a register allocator
+// that handles caller-saved registers.
+// TODO: This currently only works with GAS because it involves GAS macros.
 static void emit_call(CodegenContext *context, Value *call) {
   ASSERT(call->type == IR_INSTRUCTION_CALL, "Expected call instruction");
 
-  // Save caller-saved registers. This is a hack. Remove once we have a register
-  // allocator that can handle caller-saved registers.
-  fprintf(context->code, "    __call_init\n");
+  fprintf(context->code, "    __call ");
 
   // Emit the call.
   if (call->call_value.type == FUNCTION_CALL_TYPE_INTERNAL) {
-    femit(context, I_CALL, REGISTER, call->call_value.callee->reg);
+    if (context->dialect == CG_ASM_DIALECT_ATT) fprintf(context->code, "*%%");
+    fprintf(context->code, "%s, ", register_name(call->call_value.callee->reg));
   } else {
-    femit(context, I_CALL, NAME, call->call_value.external_callee);
+    fprintf(context->code, "%s, ", call->call_value.external_callee);
   }
 
-  // Pop caller-saved registers.
-  fprintf(context->code, "    __call_fini\n");
-
-  // Move the result into the destination register.
-  load_global(context, call->reg, "__return_value");
+  if (context->dialect == CG_ASM_DIALECT_ATT) fprintf(context->code, "%%");
+  fprintf(context->code, "%s\n", register_name(call->reg));
 }
 
 static void emit_value(CodegenContext *context, Value *value) {
@@ -1205,16 +1205,24 @@ void codegen_emit_x86_64(CodegenContext *context) {
       context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
 
   // Intrinsics.
-  fprintf(context->code, "\n.macro __call_init\n");
+  // TODO: This currently only works with GAS because it involves GAS macros.
+  fprintf(context->code, "\n.macro __call func, result\n");
   for (Register r = FIRST_CALLER_SAVED_REGISTER; r <= LAST_CALLER_SAVED_REGISTER; r++) {
     femit(context, I_PUSH, REGISTER, (size_t) r);
   }
-  fprintf(context->code, ".endm\n");
-
-  fprintf(context->code, "\n.macro __call_fini\n");
+  fprintf(context->code, "    call \\func\n");
   store_global(context, REG_RAX, "__return_value");
   for (Register r = LAST_CALLER_SAVED_REGISTER; r >= FIRST_CALLER_SAVED_REGISTER; r--) {
     femit(context, I_POP, REGISTER, (size_t) r);
+  }
+  switch (context->dialect) {
+    case CG_ASM_DIALECT_ATT:
+      fprintf(context->code, "    mov __return_value(%%rip), \\result\n");
+      break;
+    case CG_ASM_DIALECT_INTEL:
+      fprintf(context->code, "    mov \\result, [rip + __return_value]\n");
+      break;
+    default: PANIC("Unsupported dialect %d", context->dialect);
   }
   fprintf(context->code, ".endm\n");
 
