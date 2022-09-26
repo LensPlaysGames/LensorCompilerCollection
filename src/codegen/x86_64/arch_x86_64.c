@@ -859,13 +859,18 @@ static void add
  Register result,
  Register lhs,
  Register rhs) {
-  // TODO: Don't copy if lhs or rhs is the result;
   // TODO: use LEA for a three-address add.
   // TODO: immediate values should be added directly rather than using a register.
   //       Also update interfering_regs() to reflect that.
   // TODO: Do the same for all arithmetic instructions.
-  if (result != lhs) { femit(cg_context, I_MOV, REGISTER_TO_REGISTER, lhs, result); }
-  femit(cg_context, I_ADD, REGISTER_TO_REGISTER, rhs, result);
+  if (result == lhs) {
+    femit(cg_context, I_ADD, REGISTER_TO_REGISTER, rhs, lhs);
+  } else if (result == rhs) {
+    femit(cg_context, I_ADD, REGISTER_TO_REGISTER, lhs, rhs);
+  } else {
+    femit(cg_context, I_MOV, REGISTER_TO_REGISTER, lhs, result);
+    femit(cg_context, I_ADD, REGISTER_TO_REGISTER, rhs, result);
+  }
 }
 
 /// Subtract rhs from lhs.
@@ -874,8 +879,16 @@ static void subtract
  Register result,
  Register lhs,
  Register rhs) {
-  if (result != lhs) { femit(cg_context, I_MOV, REGISTER_TO_REGISTER, lhs, result); }
-  femit(cg_context, I_SUB, REGISTER_TO_REGISTER, rhs, result);
+  if (result == lhs) {
+    femit(cg_context, I_SUB, REGISTER_TO_REGISTER, rhs, lhs);
+  } else if (result == rhs) {
+    femit(cg_context, I_XCHG, REGISTER_TO_REGISTER, lhs, rhs);
+    femit(cg_context, I_SUB, REGISTER_TO_REGISTER, rhs, lhs);
+  } else {
+    femit(cg_context, I_MOV, REGISTER_TO_REGISTER, lhs, result);
+    femit(cg_context, I_SUB, REGISTER_TO_REGISTER, rhs, result);
+  }
+
 }
 
 /// Multiply two registers together.
@@ -884,8 +897,14 @@ static void multiply
  Register result,
  Register lhs,
  Register rhs) {
-  if (result != lhs) { femit(cg_context, I_MOV, REGISTER_TO_REGISTER, lhs, result); }
-  femit(cg_context, I_IMUL, REGISTER_TO_REGISTER, rhs, result);
+  if (result == lhs) {
+    femit(cg_context, I_IMUL, REGISTER_TO_REGISTER, rhs, lhs);
+  } else if (result == rhs) {
+    femit(cg_context, I_IMUL, REGISTER_TO_REGISTER, lhs, rhs);
+  } else {
+    femit(cg_context, I_MOV, REGISTER_TO_REGISTER, lhs, result);
+    femit(cg_context, I_IMUL, REGISTER_TO_REGISTER, rhs, result);
+  }
 }
 
 /// Divide lhs by rhs. The RA already loads the dividend into RAX and stores
@@ -893,6 +912,7 @@ static void multiply
 static void divmod
 (CodegenContext *cg_context,
  Register divisor) {
+  // TODO: probably horribly broken.
   femit(cg_context, I_CQO);
   femit(cg_context, I_IDIV, REGISTER, divisor);
 }

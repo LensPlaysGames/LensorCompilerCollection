@@ -659,8 +659,10 @@ Error codegen_program(CodegenContext *cg_context, ParsingContext *context, Node 
 
   // Copy last expression into RAX register for return value.
   // femit() will optimise the move away if the result is already in RAX.
-  if (last_expression) {
+  if (last_expression && last_expression->result) {
     codegen_set_return_value(cg_context, main, last_expression->result);
+  } else {
+    codegen_set_return_value(cg_context, main, codegen_load_immediate(cg_context, 0));
   }
 
   codegen_return(cg_context);

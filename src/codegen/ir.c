@@ -12,6 +12,7 @@
 
 /// Insert a value into the current basic block.
 void insert(CodegenContext *context, Value *value) {
+  ASSERT(value, "Cannot insert() NULL value");
   ASSERT(context->insert_point, "Cannot insert without insert point");
   // Create a new block if the current one is closed.
   if (context->insert_point->closed) codegen_basic_block_create(context);
@@ -553,7 +554,7 @@ void codegen_function_finalise(CodegenContext *context, Function *f) {
   // Attach the return block.
   codegen_basic_block_attach_to(context, f->return_block, f);
   context->insert_point = f->return_block;
-  insert(context, f->return_value);
+  if (f->return_value) insert(context, f->return_value);
 
   Value *ret = calloc(1, sizeof *ret);
   ret->type = IR_INSTRUCTION_RETURN;
