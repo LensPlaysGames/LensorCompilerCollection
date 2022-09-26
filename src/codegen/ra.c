@@ -156,6 +156,7 @@ size_t follow_control_flow(BasicBlock *block, size_t callback(BasicBlock *block,
   va_list ap;
   va_start(ap, callback);
   size_t result = vfollow_control_flow(&ctx, block, callback, ap);
+  VECTOR_DELETE(&ctx);
   va_end(ap);
   return result;
 }

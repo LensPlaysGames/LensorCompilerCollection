@@ -43,10 +43,25 @@ CodegenContext *codegen_context_create(CodegenContext *parent) {
 
 /// Free a codegen context.
 void codegen_context_free(CodegenContext *context) {
-  if (context->format == CG_FMT_x86_64) {
-    return codegen_context_x86_64_free(context);
+  STATIC_ASSERT(CG_FMT_COUNT == 1, "codegen_context_free() must exhaustively handle all codegen output formats.");
+  switch (context->format) {
+    default: PANIC("Unrecognized codegen format");
+    case CG_FMT_x86_64: codegen_context_x86_64_free(context); break;
   }
-  panic("free_codegen_context() could not free the given context.");
+
+  if (context->parent) return;
+
+  // Free IR.
+  LIST_FOREACH (f, context->functions) {
+    LIST_FOREACH (block, f->entry) {
+      LIST_FOREACH (v, block->values) {
+        /// TODO: Delete value.
+      }
+      /// TODO: Delete block.
+    }
+  }
+
+  LIST_DELETE(context->functions);
 }
 
 void codegen_emit(CodegenContext *context) {

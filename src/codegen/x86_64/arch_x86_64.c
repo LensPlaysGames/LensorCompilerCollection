@@ -112,6 +112,10 @@ CodegenContext *codegen_context_x86_64_create(CodegenContext *parent) {
 /// Free a context created by context_create.
 void codegen_context_x86_64_free(CodegenContext *ctx) {
   // TODO(sirraide): Free environment.
+  if (!ctx->parent) {
+    free(ctx->func_count);
+    free(ctx->block_count);
+  }
   free(ctx);
 }
 
