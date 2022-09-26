@@ -656,14 +656,6 @@ void remove_vertex(InterferenceGraph *g, size_t index) {
   VECTOR_FOREACH(i, &g->lists.data[index].interferences_list) {
     AdjacencyList *list= g->lists.data + *i;
     list->interferences--;
-/*    VECTOR_FOREACH(j, &list->interferences_list) {
-      ASSERT(j < list->interferences_list.data + list->interferences_list.count);
-      if (list->interferences_list.data[*j] == index) {
-        VECTOR_REMOVE_UNORDERED(&list->interferences_list, *j);
-        VECTOR_PUSH(&list->removed_interferences_list, index);
-        break;
-      }
-    }*/
   }
 
   AdjacencyList *list = &g->lists.data[index];
