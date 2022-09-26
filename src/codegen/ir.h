@@ -312,6 +312,9 @@ void codegen_comment(CodegenContext *ctx, const char *fmt, ...);
 FORMAT(printf, 2, 3)
 void codegen_comment_verbose(CodegenContext *ctx, const char *fmt, ...);
 
+/// Free all memory associated with the IR in a context.
+void codegen_free_ir(CodegenContext *ctx);
+
 /// Dump the intermediate representation to stdout.
 void codegen_dump_value(Value *val);
 void codegen_dump_basic_block(BasicBlock *bb);

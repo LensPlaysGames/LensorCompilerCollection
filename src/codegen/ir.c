@@ -567,6 +567,39 @@ void codegen_function_finalise(CodegenContext *context, Function *f) {
   typecheck_ir(context, f);
 }
 
+static void free_value_data(Value *v) {
+  STATIC_ASSERT(IR_INSTRUCTION_COUNT == 27, "Update this function when adding new instructions");
+
+  LIST_DELETE(v->uses);
+
+  switch (v->type) {
+    default: break;
+    case IR_INSTRUCTION_CALL:
+      LIST_DELETE(v->call_value.args);
+      break;
+    case IR_INSTRUCTION_COMMENT:
+      free(v->comment_value);
+      break;
+    case IR_INSTRUCTION_PHI:
+      LIST_DELETE(v->phi_entries);
+      break;
+  }
+}
+
+void codegen_free_ir(CodegenContext *ctx) {
+  LIST_FOREACH (f, ctx->functions) {
+    LIST_FOREACH (block, f->entry) {
+      LIST_FOREACH (v, block->values) {
+        free_value_data(v);
+      }
+      LIST_DELETE(block->values);
+      LIST_DELETE(block->preds);
+    }
+    LIST_DELETE(f->entry);
+  }
+  LIST_DELETE(ctx->functions);
+}
+
 /// Very primitive IR printer.
 void codegen_dump_value(Value *val) {
   STATIC_ASSERT(IR_INSTRUCTION_COUNT == 27, "Update this switch statement");
