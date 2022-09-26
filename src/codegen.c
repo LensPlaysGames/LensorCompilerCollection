@@ -249,12 +249,12 @@ Error codegen_expression
     codegen_comment_verbose(cg_context, "If");
 
     // Generate if condition expression code.
+    codegen_comment_verbose(cg_context, "If CONDITION");
     err = codegen_expression(cg_context,
                              context, next_child_context,
                              expression->children);
     if (err.type) { return err; }
 
-    codegen_comment_verbose(cg_context, "If CONDITION");
 
     // Generate code using result register from condition expression.
     BasicBlock *then_block = codegen_basic_block_create_detached(cg_context);
@@ -294,15 +294,16 @@ Error codegen_expression
     }
 
     // Save the value for later.
+    BasicBlock *last_block_in_then = cg_context->insert_point;
     then_result = last_expr ? last_expr->result : NULL;
 
     // Skip the else branch.
     codegen_branch(cg_context, end_block);
 
-    codegen_comment_verbose(cg_context, "If OTHERWISE");
-
     // Generate OTHERWISE
     codegen_basic_block_attach(cg_context, else_block);
+
+    codegen_comment_verbose(cg_context, "If OTHERWISE");
 
     last_expr = NULL;
     if (expression->children->next_child->next_child) {
@@ -336,11 +337,14 @@ Error codegen_expression
       else_result = codegen_load_immediate(cg_context, 0);
     }
 
+    BasicBlock *last_block_in_else = cg_context->insert_point;
+
     codegen_basic_block_attach(cg_context, end_block);
+    codegen_comment_verbose(cg_context, "If END");
     if (then_result && else_result) {
       expression->result = codegen_phi_create(cg_context);
-      codegen_phi_add(cg_context, expression->result, then_block, then_result);
-      codegen_phi_add(cg_context, expression->result, else_block, else_result);
+      codegen_phi_add(cg_context, expression->result, last_block_in_then, then_result);
+      codegen_phi_add(cg_context, expression->result, last_block_in_else, else_result);
     }
 
     break;

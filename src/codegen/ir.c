@@ -60,7 +60,8 @@ void codegen_comment(CodegenContext *context, const char* fmt, ...) {
   Value* v = calloc(1, sizeof *v);
   v->type = IR_INSTRUCTION_COMMENT;
   v->comment_value = comment;
-  insert(context, v);
+  if (context->insert_point->closed) { insert_before(context->insert_point->end, v); }
+  else { insert(context, v); }
 }
 
 void codegen_comment_verbose(CodegenContext *context, const char* fmt, ...) {
@@ -82,7 +83,8 @@ void codegen_comment_verbose(CodegenContext *context, const char* fmt, ...) {
     Value* v = calloc(1, sizeof *v);
     v->type = IR_INSTRUCTION_COMMENT;
     v->comment_value = comment;
-    insert(context, v);
+    if (context->insert_point->closed) { insert_before(context->insert_point->end, v); }
+    else { insert(context, v); }
   }
 }
 
