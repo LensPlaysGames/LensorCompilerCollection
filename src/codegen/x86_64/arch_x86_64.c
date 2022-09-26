@@ -1045,7 +1045,9 @@ static void emit_value(CodegenContext *context, Value *value) {
       load_immediate(context, value->reg, value->immediate);
       break;
     case IR_INSTRUCTION_PHI: break;
-    case IR_INSTRUCTION_RETURN: break;
+    case IR_INSTRUCTION_RETURN:
+      function_epilogue(context);
+      break;
     case IR_INSTRUCTION_FUNCTION_REF: break;
     case IR_INSTRUCTION_GLOBAL_REF:
       load_global_address(context, value->reg, value->global_name);
@@ -1212,8 +1214,6 @@ static void emit_function(CodegenContext *context, Function *f) {
       emit_value(context, value);
     }
   }
-
-  function_epilogue(context);
 }
 
 void codegen_emit_x86_64(CodegenContext *context) {
