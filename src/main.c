@@ -228,7 +228,9 @@ int main(int argc, char **argv) {
     return 3;
   }
 
-  printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
+  if (verbosity) {
+    printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
+  }
 
   node_free(program);
 

@@ -14,7 +14,7 @@
 #include <string.h>
 #include <typechecker.h>
 
-char codegen_verbose = 1;
+char codegen_verbose = 0;
 
 //================================================================ BEG CG_FMT_x86_64_MSWIN
 #define node_integer _Static_assert(0); node_integer

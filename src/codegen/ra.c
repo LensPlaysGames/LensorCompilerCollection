@@ -459,7 +459,6 @@ void build_adjacency_matrix(AdjacencyMatrix *m, Values *values) {
       if (v1 == v2) { continue; }
       if (*adj(m, v1, v2)) { continue; }
       if (values_interfere(v1, v2) || values_interfere(v2, v1)) {
-        printf("Value %u interferes with value %u\n", v1->reg, v2->reg);
         *adj(m, v1, v2) = 1;
       }
     }
