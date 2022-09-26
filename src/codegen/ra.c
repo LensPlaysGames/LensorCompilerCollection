@@ -414,7 +414,7 @@ size_t values_interfere(Value *v1, Value *v2) {
     // Copies aren't considered for the purpose of interference checking since
     // we don't care if the target and source of a copy instruction are assigned
     // the same register. In fact, that would actually be a good thing.
-    if (use->parent->type == IR_INSTRUCTION_COPY) { continue; }
+    //if (use->parent->type == IR_INSTRUCTION_COPY) { continue; }
 
     // The definition and use of v1 are in the same block.
     if (v1->parent == use->parent->parent) {
@@ -602,43 +602,33 @@ void coalesce_registers(InterferenceGraph *g, Function *f, Values *values) {
   build_adjacency_matrix(&g->mtx, values);
 }
 
-/*size_t value_interfering_regs_callback(BasicBlock *block, va_list ap) {
+size_t value_interfering_regs_callback(BasicBlock *block, va_list ap) {
+  size_t num_regs = va_arg(ap, size_t);
   regmask_t *mask = va_arg(ap, regmask_t*);
   Value *use_value = va_arg(ap, Value*);
   Value *value = va_arg(ap, Value*);
 
   // The use is in this block. Check all instructions up to the use.
-  if (use_value->parent == block) {
-    LIST_FOREACH (v, block->values) {
-      if (v == use_value) { return 1; }
-      if (v->reg == value->reg && v != value) { *mask |= 1 << (v->reg - 1); }
-    }
-    return 1;
+  LIST_FOREACH (v, block->values) {
+    if (v->instruction_index <= value->instruction_index) { continue; }
+    if (v == use_value) { return 1; }
+    if (v->reg && v->reg != value->reg && physreg_p(v->reg, num_regs)) { *mask |= 1 << (v->reg - 1); }
   }
 
   // Continue until we find the use.
-  return 0;
+  return use_value->parent == block;
 }
 
 /// Determine the registers that interfere with a value.
 regmask_t value_interfering_regs(InterferenceGraph *g, Value *v) {
-  // If the result register is not a physical register, then, by default, no
-  // registers interfere with it.
-  if (!physreg_p(v->reg, g->num_regs)) { return 0; }
-
-  // Otherwise, check if the result register is assigned to anywhere else between
-  // the definition of the value and its last use. If so, the value interferes
-  // with that register.
+  // Collect the physical registers that are assigned to between the definition
+  // of the value and its last use.
   regmask_t mask = 0;
   LIST_FOREACH (use, v->uses) {
-    follow_control_flow(v->parent, value_interfering_regs_callback, &mask, use->parent, v);
+    follow_control_flow(v->parent, value_interfering_regs_callback, g->num_regs, &mask, use->parent, v);
   }
-  *//*if (!mask)  {
-    codegen_dump_function(v->parent->parent);
-    PANIC("Spilling not implemented");
-  }*//*
   return mask;
-}*/
+}
 
 void build_adjacency_lists
 (const CodegenContext *context,
@@ -659,7 +649,7 @@ void build_adjacency_lists
   // Determine the registers that interfere with each value.
   VECTOR_FOREACH_PTR(value, values) {
       g->lists.data[value->id].interfering_regs |= platform_interfering_regs(context, value);
-      // g->lists.data[value->id].interfering_regs |= value_interfering_regs(g, value);
+      g->lists.data[value->id].interfering_regs |= value_interfering_regs(g, value);
       g->lists.data[value->id].preferred_reg = value->preferred_reg;
   }
 }

@@ -938,8 +938,9 @@ static void emit_value(CodegenContext *context, Value *v);
 static void emit_call(CodegenContext *context, Value *call) {
   ASSERT(call->type == IR_INSTRUCTION_CALL, "Expected call instruction");
 
-  // Save caller-saved registers.
-  femit(context, I_CALL, NAME, "__call_init");
+  // Save caller-saved registers. This is a hack. Remove once we have a register
+  // allocator that can handle caller-saved registers.
+  fprintf(context->code, "    __call_init\n");
 
   // Emit the call.
   if (call->call_value.type == FUNCTION_CALL_TYPE_INTERNAL) {
@@ -949,7 +950,7 @@ static void emit_call(CodegenContext *context, Value *call) {
   }
 
   // Pop caller-saved registers.
-  femit(context, I_CALL, NAME, "__call_fini");
+  fprintf(context->code, "    __call_fini\n");
 
   // Move the result into the destination register.
   load_global(context, call->reg, "__return_value");
@@ -1204,18 +1205,18 @@ void codegen_emit_x86_64(CodegenContext *context) {
       context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
 
   // Intrinsics.
-  fprintf(context->code, "\n__call_init:\n");
+  fprintf(context->code, "\n.macro __call_init\n");
   for (Register r = FIRST_CALLER_SAVED_REGISTER; r <= LAST_CALLER_SAVED_REGISTER; r++) {
     femit(context, I_PUSH, REGISTER, (size_t) r);
   }
-  femit(context, I_RET);
+  fprintf(context->code, ".endm\n");
 
-  fprintf(context->code, "\n__call_fini:\n");
+  fprintf(context->code, "\n.macro __call_fini\n");
   store_global(context, REG_RAX, "__return_value");
   for (Register r = LAST_CALLER_SAVED_REGISTER; r >= FIRST_CALLER_SAVED_REGISTER; r--) {
     femit(context, I_POP, REGISTER, (size_t) r);
   }
-  femit(context, I_RET);
+  fprintf(context->code, ".endm\n");
 
   LIST_FOREACH (f, context->functions) { emit_function(context, f); }
 }
