@@ -91,7 +91,6 @@ typedef struct AdjacencyList {
   regmask_t interfering_regs;
   Register preferred_reg;
   VECTOR(size_t) interferences_list;
-  VECTOR(size_t) removed_interferences_list;
 } AdjacencyList;
 
 typedef struct InterferenceGraph {
@@ -657,19 +656,18 @@ void remove_vertex(InterferenceGraph *g, size_t index) {
   VECTOR_FOREACH(i, &g->lists.data[index].interferences_list) {
     AdjacencyList *list= g->lists.data + *i;
     list->interferences--;
-    VECTOR_FOREACH(j, &list->interferences_list) {
+/*    VECTOR_FOREACH(j, &list->interferences_list) {
+      ASSERT(j < list->interferences_list.data + list->interferences_list.count);
       if (list->interferences_list.data[*j] == index) {
         VECTOR_REMOVE_UNORDERED(&list->interferences_list, *j);
         VECTOR_PUSH(&list->removed_interferences_list, index);
         break;
       }
-    }
+    }*/
   }
 
   AdjacencyList *list = &g->lists.data[index];
   list->interferences = 0;
-  VECTOR_APPEND(&list->removed_interferences_list, &list->interferences_list);
-  VECTOR_CLEAR(&list->interferences_list);
 }
 
 /// Perform initial graph colouring.
@@ -753,10 +751,6 @@ Register min_register(InterferenceGraph *g, size_t index) {
   regmask_t regmask = g->lists.data[index].interfering_regs;
 
   VECTOR_FOREACH (i, &g->lists.data[index].interferences_list) {
-    Register reg = g->lists.data[*i].colour;
-    if (reg) regmask |= 1 << (reg - 1);
-  }
-  VECTOR_FOREACH (i, &g->lists.data[index].removed_interferences_list) {
     Register reg = g->lists.data[*i].colour;
     if (reg) regmask |= 1 << (reg - 1);
   }
@@ -871,7 +865,6 @@ void allocate_registers(RAInfo *info) {
   VECTOR_DELETE(&g.stack);
   VECTOR_FOREACH (list, &g.lists) {
     VECTOR_DELETE(&list->interferences_list);
-    VECTOR_DELETE(&list->removed_interferences_list);
   }
   VECTOR_DELETE(&g.lists);
 
