@@ -867,6 +867,7 @@ void allocate_registers(RAInfo *info) {
 
   // Free memory.
   free(g.mtx.data);
+  free(g.mtx.registers);
   VECTOR_DELETE(&g.stack);
   VECTOR_FOREACH (list, &g.lists) {
     VECTOR_DELETE(&list->interferences_list);
