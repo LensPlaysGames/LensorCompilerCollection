@@ -23,10 +23,10 @@ enum CodegenAssemblyDialect {
 };
 
 enum CodegenOutputFormat {
-  CG_FMT_x86_64_GAS,
+  CG_FMT_x86_64,
   CG_FMT_COUNT,
 
-  CG_FMT_DEFAULT = CG_FMT_x86_64_GAS,
+  CG_FMT_DEFAULT = CG_FMT_x86_64,
 };
 
 enum CodegenCallingConvention {

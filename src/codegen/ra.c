@@ -829,6 +829,8 @@ void allocate_registers(RAInfo *info) {
   // Sanity checks to make sure we're compiling valid IR.
   typecheck_ir(info->context, info->function);
 
+  if (ra_debug_flag) ra_debug_before_allocation(info->function);
+
   // Convert PHIs to copies.
   lower_phis(info->context, info->function);
 

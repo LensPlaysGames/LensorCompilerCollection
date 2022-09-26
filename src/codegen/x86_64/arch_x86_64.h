@@ -6,8 +6,8 @@
 #define MIN_VIRTUAL_REGISTER_X86_64 (1024)
 
 /// Context allocation/deallocation
-CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent);
-void codegen_context_x86_64_mswin_free(CodegenContext *ctx);
+CodegenContext *codegen_context_x86_64_create(CodegenContext *parent);
+void codegen_context_x86_64_free(CodegenContext *ctx);
 
 /// Emit the program.
 void codegen_emit_x86_64(CodegenContext *context);

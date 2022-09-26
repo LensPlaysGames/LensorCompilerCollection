@@ -262,7 +262,7 @@ Error define_type(Environment *types, int type, Node *type_symbol, long long byt
 #define NODE_TEXT_BUFFER_SIZE 512
 char node_text_buffer[512];
 char *node_text(Node *node) {
-  ASSERT(NODE_TYPE_MAX == 15, "print_node() must handle all node types");
+  STATIC_ASSERT(NODE_TYPE_MAX == 16, "print_node() must handle all node types");
   if (!node) {
     return "NULL";
   }
@@ -281,6 +281,11 @@ char *node_text(Node *node) {
              "SYM:%s (%d)",
              node->value.symbol,
              node->pointer_indirection);
+    break;
+  case NODE_TYPE_LOCAL_VARIABLE:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE,
+             "VAR: 0x%p",
+             node->value.local_variable);
     break;
   case NODE_TYPE_BINARY_OPERATOR:
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "BINARY OPERATOR:%s", node->value.symbol);

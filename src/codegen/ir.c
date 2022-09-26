@@ -77,6 +77,11 @@ void codegen_comment_verbose(CodegenContext *context, const char* fmt, ...) {
     va_start(ap, fmt);
     vsnprintf(comment, size, fmt, ap);
     va_end(ap);
+
+    Value* v = calloc(1, sizeof *v);
+    v->type = IR_INSTRUCTION_COMMENT;
+    v->comment_value = comment;
+    insert(context, v);
   }
 }
 

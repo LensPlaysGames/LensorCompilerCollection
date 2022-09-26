@@ -107,7 +107,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       if (strcmp(argv[i], "default") == 0) {
         output_format = CG_FMT_DEFAULT;
       } else if (strcmp(argv[i], "x86_64_gas") == 0) {
-        output_format = CG_FMT_x86_64_GAS;
+        output_format = CG_FMT_x86_64;
       } else {
         printf("ERROR: Expected format after format command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);

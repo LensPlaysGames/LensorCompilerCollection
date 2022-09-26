@@ -87,8 +87,8 @@ DEFINE_REGISTER_NAME_LOOKUP_FUNCTION(register_name_8, 8)
 #undef DEFINE_REGISTER_NAME_LOOKUP_FUNCTION
 
 
-/// Creates a context for the CG_FMT_MSWIN architecture.
-CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
+/// Creates a context for the X86_64 architecture.
+CodegenContext *codegen_context_x86_64_create(CodegenContext *parent) {
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
 
   // If this is the top level context, create the registers.
@@ -97,9 +97,6 @@ CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
     // FIXME(Sirraide): These heap allocations are jank.
     cg_ctx->func_count = calloc(1, sizeof(size_t));
     cg_ctx->block_count = calloc(1, sizeof(size_t));
-    cg_ctx->format = CG_FMT_x86_64_GAS;
-    cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
-    cg_ctx->dialect = CG_ASM_DIALECT_ATT;
   } else {
     *cg_ctx = *parent;
   }
@@ -110,8 +107,8 @@ CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
   return cg_ctx;
 }
 
-/// Free a context created by context_mswin_create.
-void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
+/// Free a context created by context_create.
+void codegen_context_x86_64_free(CodegenContext *ctx) {
   // TODO(sirraide): Free environment.
   free(ctx);
 }
