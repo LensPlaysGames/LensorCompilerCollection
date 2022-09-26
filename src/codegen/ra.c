@@ -25,6 +25,18 @@ void ra_debug_before_allocation(Function *f) {
   printf(" Function: %s\n", f->name);
   printf("============================================\n");
   codegen_dump_function(f);
+  printf("Uses:\n");
+  VALUE_FOREACH (value, block, f) {
+    if (!value->reg) { continue; }
+    printf("%%r%u is used by ", value->reg);
+    char first = 1;
+    LIST_FOREACH (use, value->uses) {
+      if (!first) { printf(", "); }
+      else { first = 0; }
+      printf("%%r%u", use->parent->reg);
+    }
+    printf("\n");
+  }
 }
 
 /// Whether an instruction returns a value.
@@ -402,7 +414,7 @@ size_t values_interfere(Value *v1, Value *v2) {
     // Copies aren't considered for the purpose of interference checking since
     // we don't care if the target and source of a copy instruction are assigned
     // the same register. In fact, that would actually be a good thing.
-    if (use->parent->type == IR_INSTRUCTION_COPY) continue;
+    if (use->parent->type == IR_INSTRUCTION_COPY) { continue; }
 
     // The definition and use of v1 are in the same block.
     if (v1->parent == use->parent->parent) {
@@ -419,7 +431,7 @@ size_t values_interfere(Value *v1, Value *v2) {
       // The use of v1 HAS to follow the definition of v1, not necessarily in terms
       // of the instruction index, but certainly in terms of control flow, for which
       // reason we only need to scan forward from the definition of v1 to its use.
-      if (follow_control_flow(v1->parent, values_interfere_callback, use->parent, v2) == 1) return 1;
+      if (follow_control_flow(v1->parent, values_interfere_callback, use->parent, v2) == 1) { return 1; }
     }
   }
   return 0;
@@ -428,8 +440,8 @@ size_t values_interfere(Value *v1, Value *v2) {
 /// Get the entry for values (v1, v2) in the adjacency matrix.
 char* adji(AdjacencyMatrix *mtx, size_t v1, size_t v2) {
   static char ignored;
-  if (v1 == v2) return &ignored;
-  if (v1 < v2) return adji(mtx, v2, v1);
+  if (v1 == v2) { return &ignored; }
+  if (v1 < v2) { return adji(mtx, v2, v1); }
   return mtx->data + v1 * mtx->dimension + v2;
 }
 
@@ -446,7 +458,7 @@ void build_adjacency_matrix(AdjacencyMatrix *m, Values *values) {
   VECTOR_FOREACH_PTR (v1, values) {
     VECTOR_FOREACH_PTR (v2, values) {
       if (v1 == v2) { continue; }
-      if (v2 > v1)  { break; }
+      if (*adj(m, v1, v2)) { continue; }
       if (values_interfere(v1, v2) || values_interfere(v2, v1)) {
         printf("Value %u interferes with value %u\n", v1->reg, v2->reg);
         *adj(m, v1, v2) = 1;
@@ -829,8 +841,6 @@ void allocate_registers(RAInfo *info) {
   // Sanity checks to make sure we're compiling valid IR.
   typecheck_ir(info->context, info->function);
 
-  if (ra_debug_flag) ra_debug_before_allocation(info->function);
-
   // Convert PHIs to copies.
   lower_phis(info->context, info->function);
 
@@ -840,6 +850,8 @@ void allocate_registers(RAInfo *info) {
   // Collect values.
   Values values = collect_values(info->function, info->num_regs);
   if (values.count == 0) { goto free_values; }
+
+  if (ra_debug_flag) ra_debug_before_allocation(info->function);
 
   // Create the adjacency matrix for the interference graph.
   InterferenceGraph g = {0};

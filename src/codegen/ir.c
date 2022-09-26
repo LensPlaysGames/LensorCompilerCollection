@@ -103,6 +103,7 @@ Value *codegen_create_internal_call(CodegenContext *context, Value *callee) {
   call->type = IR_INSTRUCTION_CALL;
   call->call_value.type = FUNCTION_CALL_TYPE_INTERNAL;
   call->call_value.callee = callee;
+  mark_used_by(callee, call);
   insert(context, call);
   return call;
 }

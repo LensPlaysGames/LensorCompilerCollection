@@ -41,6 +41,8 @@
   F(RIP, "rip", "eip", "ip", "ipl")
 
 #define GENERAL_PURPOSE_REGISTER_COUNT (13)
+#define FIRST_CALLER_SAVED_REGISTER REG_RAX
+#define LAST_CALLER_SAVED_REGISTER REG_R11
 
 #define DEFINE_REGISTER_ENUM(name, ...) REG_##name,
 #define REGISTER_NAME_64(ident, name, ...) name,
@@ -936,15 +938,21 @@ static void emit_value(CodegenContext *context, Value *v);
 static void emit_call(CodegenContext *context, Value *call) {
   ASSERT(call->type == IR_INSTRUCTION_CALL, "Expected call instruction");
 
-  // Emit the function reference if this is an internal call.
+  // Save caller-saved registers.
+  femit(context, I_CALL, NAME, "__call_init");
+
+  // Emit the call.
   if (call->call_value.type == FUNCTION_CALL_TYPE_INTERNAL) {
     femit(context, I_CALL, REGISTER, call->call_value.callee->reg);
   } else {
     femit(context, I_CALL, NAME, call->call_value.external_callee);
   }
 
+  // Pop caller-saved registers.
+  femit(context, I_CALL, NAME, "__call_fini");
+
   // Move the result into the destination register.
-  femit(context, I_MOV, REGISTER_TO_REGISTER, REG_RAX, call->reg);
+  load_global(context, call->reg, "__return_value");
 }
 
 static void emit_value(CodegenContext *context, Value *value) {
@@ -1151,7 +1159,7 @@ static void get_argument_registers(RAInfo *info) {
 }
 
 static void emit_function(CodegenContext *context, Function *f) {
-  fprintf(context->code, "%s:\n", f->name);
+  fprintf(context->code, "\n%s:\n", f->name);
   codegen_function_finalise(context, f);
   lower_function(context, f);
   sum_local_allocations(f);
@@ -1189,10 +1197,25 @@ static void emit_function(CodegenContext *context, Function *f) {
 
 void codegen_emit_x86_64(CodegenContext *context) {
   fprintf(context->code,
+      "__return_value: .space 8\n\n"
       "%s"
       ".section .text\n"
       ".global main\n",
       context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
+
+  // Intrinsics.
+  fprintf(context->code, "\n__call_init:\n");
+  for (Register r = FIRST_CALLER_SAVED_REGISTER; r <= LAST_CALLER_SAVED_REGISTER; r++) {
+    femit(context, I_PUSH, REGISTER, (size_t) r);
+  }
+  femit(context, I_RET);
+
+  fprintf(context->code, "\n__call_fini:\n");
+  store_global(context, REG_RAX, "__return_value");
+  for (Register r = LAST_CALLER_SAVED_REGISTER; r >= FIRST_CALLER_SAVED_REGISTER; r--) {
+    femit(context, I_POP, REGISTER, (size_t) r);
+  }
+  femit(context, I_RET);
 
   LIST_FOREACH (f, context->functions) { emit_function(context, f); }
 }
