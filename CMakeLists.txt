@@ -31,14 +31,14 @@ target_include_directories(
 )
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-target_compile_options(
-        func
-        PRIVATE /W3 /Zc:preprocessor
-)
+  target_compile_options(
+    func
+    PRIVATE /W3 /Zc:preprocessor
+  )
 else()
-target_compile_options(
-  func
-  PRIVATE -Wall -Wextra -Werror=return-type -Wno-unused-function
-)
+  target_compile_options(
+    func
+    PRIVATE -Wall -Wextra -Werror=return-type -Wno-unused-function
+  )
 endif()
 
