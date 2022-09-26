@@ -1188,7 +1188,7 @@ static void emit_function(CodegenContext *context, Function *f) {
   sum_local_allocations(f);
   function_prologue(context, f);
 
-  // TODO: Copy result of DIV/MOD
+  // TODO: Save and restore callee-saved registers.
 
   // Copy the return value into %rax.
   if (f->return_value) {
@@ -1216,15 +1216,8 @@ static void emit_function(CodegenContext *context, Function *f) {
   }
 }
 
-void codegen_emit_x86_64(CodegenContext *context) {
-  fprintf(context->code,
-      "__return_value: .space 8\n\n"
-      "%s"
-      ".section .text\n"
-      ".global main\n",
-      context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
-
-  // Intrinsics.
+static void emit_intrinsics(CodegenContext *context) {
+  // Function call macro.
   // TODO: This currently only works with GAS because it involves GAS macros.
   fprintf(context->code, "\n.macro __call func, result\n");
   for (Register r = FIRST_CALLER_SAVED_REGISTER; r <= LAST_CALLER_SAVED_REGISTER; r++) {
@@ -1245,6 +1238,18 @@ void codegen_emit_x86_64(CodegenContext *context) {
     default: PANIC("Unsupported dialect %d", context->dialect);
   }
   fprintf(context->code, ".endm\n");
+}
+
+void codegen_emit_x86_64(CodegenContext *context) {
+  fprintf(context->code,
+      "__return_value: .space 8\n\n"
+      "%s"
+      ".section .text\n"
+      ".global main\n",
+      context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
+
+  // Intrinsics.
+  emit_intrinsics(context);
 
   LIST_FOREACH (f, context->functions) { emit_function(context, f); }
 }
