@@ -151,20 +151,13 @@ struct Value {
     Value *local_ref;
     Value *operand;
     int64_t immediate;
-    unsigned reg_operand;
 
     struct {
       Value *lhs;
       Value *rhs;
     };
 
-    struct {
-      Value *left;
-      unsigned right;
-    };
-
     FunctionCall call_value;
-    Variable variable_value;
     CondBranch cond_branch_value;
     Comparison comparison;
     ParamRef param_ref;
@@ -178,7 +171,6 @@ struct Value {
   char emitted;
   char allocated;
   char unused;
-  char phi_arg;
 };
 
 #define VALUE_FOREACH(value, block, function) \

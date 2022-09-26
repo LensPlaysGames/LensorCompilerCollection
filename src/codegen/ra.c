@@ -267,7 +267,6 @@ static void lower_phis(CodegenContext *ctx, Function *f) {
     ASSERT(last_block != phi->parent, "RA currently does not support more than one PHI per block");
     LIST_FOREACH (entry, phi->phi_entries) {
       Value *copy = create_copy(ctx, entry->value);
-      copy->phi_arg = 1;
 
       // Insert another block if the entry is at a critical edge.
       Value *branch = entry->block->end;
