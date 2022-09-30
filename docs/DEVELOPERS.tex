@@ -31,7 +31,7 @@
 
 % I don't want to deal with putting \ after ‘i.e.’ etc., and also
 % double spacing isn't really that common anymore nowadays...
-% 
+%
 % Note: most confusingly, the command ‘\frenchspacing’ turns French
 % spacing off (!).
 \frenchspacing
@@ -976,7 +976,7 @@ However, since our programs, at least for the time being, are unlikely to be so 
 not implement it and simply terminates should it find that the interference graph is not $k$-colourable.} and relies on two
 principles.
 
-First, a graph $G$ is $k$-colourable if (\textit{not} iff) for every vertex $v$ in $G$, $\deg(v) < k$.\footnote{$\deg(v)$ denotes the 
+First, a graph $G$ is $k$-colourable if (\textit{not} iff) for every vertex $v$ in $G$, $\deg(v) < k$.\footnote{$\deg(v)$ denotes the
 \textit{degree} of $v$. The degree of a vertex is the number of adjacent vertices, or, in our case, the number of temporaries that
 interfere with the temporary associated with the vertex.} Furthermore, given a graph $G$ containing a vertex $v$ with $\deg(v) < k$,
 $G$ is $k$-colourable iff $G - v$ is $k$-colourable.\footnote{The proof of these theorems is left to the reader; this is not a textbook
@@ -987,7 +987,7 @@ Thus, the first step of the Chaitin-Briggs algorithm is to iterate over all vert
 with degree $< k$ and pushing them onto a stack. A removed vertex no longer interferes with any other vertex in the graph (but we still
 keep track of what values it used to interfere with; this information is still needed later). This also means that removing a vertex may
 cause previously adjacent vertices with degree $= k$ to now have degree $< k$, and therefore, those vertices can now be removed as well
-and so on. This procedure is repeated until no more vertices are removed. Ideally, the graph should now be empty. If it isn't we move on 
+and so on. This procedure is repeated until no more vertices are removed. Ideally, the graph should now be empty. If it isn't we move on
 to step 2.
 
 Chaitin’s original algorithm would spill\footnote{Spilling a temporary means storing its value into memory, thus freeing up a register, and
@@ -1012,40 +1012,387 @@ spill a vertex:
 $\geq k$, because the graph might still be $k$-colourable. If it isn’t, we‘ll find out later, and then we’ll have to spill.
 
 Once the interference graph is empty, we can pop vertices off the stack one by one and assign to each vertex a register that has not yet
-been assigned to any of its neighbours. If there are no registers left that we could assign to a vertex, then this is where we spill the 
+been assigned to any of its neighbours. If there are no registers left that we could assign to a vertex, then this is where we spill the
 vertex. As mentioned before, our register allocator currently does not account for that and simply aborts if that happens. But if everything
 goes well, we now have a properly register-allocated function!
 
 \section{Example}
 This section illustrates step by step how a \langname{} program is compiled from source code to register-allocated IR. We will be compiling
-the following program:
+the following program (declarations are once again omitted for the sake of brevity; ‘\ldots’ informally indicates omitted instructions that
+ultimately produce a value):
+\begin{Verbatim}
+e := ...
+f := ...
+a := b + c;
+d := b + if a {
+  e
+} else {
+  f
+}
+\end{Verbatim}
 
+\noindent First, the program is converted to our SSA IR:
+\begin{Verbatim}
+bb1:
+    %e = ...
+    %f = ...
+    %a = add %b, %c
+    branch on %a to bb2 else bb3
+bb2:
+    branch to bb4
+bb3:
+    branch to bb4
+bb4:
+    %tmp = phi [bb2: %e], [bb3: %f]
+    %d   = add %b, %tmp
+\end{Verbatim}
 
-%% \begin{center}
-%% \begin{tikzpicture}
+\noindent Next, we perform PHI elimination:
+\begin{Verbatim}
+bb1:
+    %e = ...
+    %f = ...
+    %a = add %b, %c
+    branch on %a to bb2 else bb3
+bb2:
+    %tmp = copy %e
+    branch to bb4
+bb3:
+    %tmp = copy %f
+    branch to bb4
+bb4:
+    %tmp = phi [bb2: %e], [bb3: %f]
+    %d   = add %b, %tmp
+\end{Verbatim}
 
-%% \node[circle, draw] (A) at (0,0) {};
-%% \node[circle, draw] (B) at (1,0) {};
-%% \node[circle, draw] (C) at (0,1) {};
-%% \node[circle, draw] (D) at (1,1) {};
-%% \draw (A) -- (B);
-%% \draw (A) -- (C);
-%% \draw (D) -- (B);
-%% \draw (D) -- (C);
+\noindent Once that's done, it's time to build the adjacency matrix:\medskip
 
-%% \draw[->] (1.25, .5) -- (1.75, .5);
+\noindent\begin{tabular}{@{}c|ccccccc}
+        &\tt\%a&\tt\%b&\tt\%c&\tt\%d&\tt\%e&\tt\%f&\tt\%tmp\\\hline
+\tt\%a  &      &      &      &      &      &      &        \\
+\tt\%b  &1     &      &      &      &      &      &        \\
+\tt\%c  &0     &1     &      &      &      &      &        \\
+\tt\%d  &0     &0     &0     &      &      &      &        \\
+\tt\%e  &1     &1     &1     &0     &      &      &        \\
+\tt\%f  &1     &1     &1     &0     &1     &      &        \\
+\tt\%tmp&0     &1     &0     &0     &0     &0     &        \\
+\end{tabular}\medskip
 
-%% \node[circle, draw, fill, color=red!75]    (A1) at (2,0) {};
-%% \node[circle, draw, fill, color=yellow!75] (B1) at (3,0) {};
-%% \node[circle, draw, fill, color=yellow!75] (C1) at (2,1) {};
-%% \node[circle, draw, fill, color=red!75]    (D1) at (3,1) {};
-%% \draw (A1) -- (B1);
-%% \draw (A1) -- (C1);
-%% \draw (D1) -- (B1);
-%% \draw (D1) -- (C1);
+\noindent Next, we perform coalescing; here, we are able to merge \verb|%e| and \verb|%tmp|:
+\begin{Verbatim}
+bb1:
+    %e = ...
+    %f = ...
+    %a = add %b, %c
+    branch on %a to bb2 else bb3
+bb2:
+    branch to bb4
+bb3:
+    %e = copy %f
+    branch to bb4
+bb4:
+    %e = phi [bb2: %e], [bb3: %f]
+    %d = add %b, %e
+\end{Verbatim}
 
-%% \end{tikzpicture}
-%% \end{center}
+\noindent We can now rebuild the matrix\footnote{For the sake of brevity, we won't show that step here since its identical to how we
+constructed the matrix above, albeit with one fewer temporary.} and build the adjacency lists:
+\begin{Verbatim}
+%a: [%e, %f]
+%b: [%c, %e, %f]
+%c: [%b, %e, %f]
+%d: []
+%e: [%a, %b, %c, %f]
+%f: [%a, %b, %c, %e]
+\end{Verbatim}
 
+\noindent The interference graph looks like this:
+\begin{center}
+\begin{tikzpicture}
+
+\node[circle, draw] (A) at (0,0)    {\tt \%a};
+\node[circle, draw] (B) at (2,0)    {\tt \%b};
+\node[circle, draw] (C) at (3,1.5)  {\tt \%c};
+\node[circle, draw] (D) at (2,3)    {\tt \%d};
+\node[circle, draw] (E) at (0,3)    {\tt \%e};
+\node[circle, draw] (F) at (-1,1.5) {\tt \%f};
+
+\draw (B) -- (C);
+\draw (B) -- (E);
+\draw (B) -- (F);
+\draw (C) -- (E);
+\draw (C) -- (F);
+\draw (E) -- (A);
+\draw (F) -- (A);
+\draw (F) -- (E);
+
+\end{tikzpicture}
+\end{center}
+
+\noindent This graph is $4$-colourable, so let’s use $4$ registers; we now iterate over all vertices in no particular order and remove all
+vertices with degree $<4$. Dashed circles indicate removed vertices and dashed lines indicate removed edges.
+\begin{center}
+\begin{tikzpicture}
+\node[circle, draw, dashed] (A) at (0,0)    {\tt \%a};
+\node[circle, draw, dashed] (B) at (2,0)    {\tt \%b};
+\node[circle, draw, dashed] (C) at (3,1.5)  {\tt \%c};
+\node[circle, draw, dashed] (D) at (2,3)    {\tt \%d};
+\node[circle, draw] (E) at (0,3)    {\tt \%e};
+\node[circle, draw] (F) at (-1,1.5) {\tt \%f};
+
+\draw[dashed] (B) -- (C);
+\draw[dashed] (B) -- (E);
+\draw[dashed] (B) -- (F);
+\draw[dashed] (C) -- (E);
+\draw[dashed] (C) -- (F);
+\draw[dashed] (E) -- (A);
+\draw[dashed] (F) -- (A);
+\draw         (F) -- (E);
+
+\node[] (S)  at (5,3.25) {Stack};
+\node[] (S4) at (5,1.5)  {\tt \%a};
+\node[] (S3) at (5,1)    {\tt \%b};
+\node[] (S2) at (5,.5)   {\tt \%c};
+\node[] (S1) at (5,0)    {\tt \%d};
+
+\draw (4, 3.5) -- (4, -.5);
+\end{tikzpicture}
+\end{center}
+
+\noindent Now, do the same thing again. Note how the vertices \verb|%e| and \verb|%f|, which previously had degree $4$, now have degree $1$:
+\begin{center}
+\begin{tikzpicture}
+\node[circle, draw, dashed] (A) at (0,0)    {\tt \%a};
+\node[circle, draw, dashed] (B) at (2,0)    {\tt \%b};
+\node[circle, draw, dashed] (C) at (3,1.5)  {\tt \%c};
+\node[circle, draw, dashed] (D) at (2,3)    {\tt \%d};
+\node[circle, draw, dashed] (E) at (0,3)    {\tt \%e};
+\node[circle, draw, dashed] (F) at (-1,1.5) {\tt \%f};
+
+\draw[dashed] (B) -- (C);
+\draw[dashed] (B) -- (E);
+\draw[dashed] (B) -- (F);
+\draw[dashed] (C) -- (E);
+\draw[dashed] (C) -- (F);
+\draw[dashed] (E) -- (A);
+\draw[dashed] (F) -- (A);
+\draw[dashed] (F) -- (E);
+
+\node[] (S)  at (5,3.25) {Stack};
+\node[] (S4) at (5,2.5) {\tt \%f};
+\node[] (S4) at (5,2)   {\tt \%e};
+\node[] (S4) at (5,1.5) {\tt \%a};
+\node[] (S3) at (5,1)   {\tt \%b};
+\node[] (S2) at (5,.5)  {\tt \%c};
+\node[] (S1) at (5,0)   {\tt \%d};
+
+\draw (4, 3.5) -- (4, -.5);
+\end{tikzpicture}
+\end{center}
+
+\noindent Now that all nodes have been marked as removed, we can start popping nodes off the stack and assigning colours to them. We'll
+use the following colours: 1 = red, 2 = yellow, 3 = blue, 4 = green. We will assign to each vertex the lowest colour that is not used
+by any of its neighbours:
+
+%%% 1
+\begin{center}
+\begin{tikzpicture}
+\node[circle, draw, dashed] (A) at (0,0)    {\tt \%a};
+\node[circle, draw, dashed] (B) at (2,0)    {\tt \%b};
+\node[circle, draw, dashed] (C) at (3,1.5)  {\tt \%c};
+\node[circle, draw, dashed] (D) at (2,3)    {\tt \%d};
+\node[circle, draw, dashed] (E) at (0,3)    {\tt \%e};
+\node[circle, draw, fill, color=red!40] (F) at (-1,1.5) {\color{black}\tt \%f};
+
+\draw[dashed] (B) -- (C);
+\draw[dashed] (B) -- (E);
+\draw[dashed] (B) -- (F);
+\draw[dashed] (C) -- (E);
+\draw[dashed] (C) -- (F);
+\draw[dashed] (E) -- (A);
+\draw[dashed] (F) -- (A);
+\draw[dashed] (F) -- (E);
+
+\node[] (S)  at (5,3.25) {Stack};
+\node[] (S4) at (5,2)   {\tt \%e};
+\node[] (S4) at (5,1.5) {\tt \%a};
+\node[] (S3) at (5,1)   {\tt \%b};
+\node[] (S2) at (5,.5)  {\tt \%c};
+\node[] (S1) at (5,0)   {\tt \%d};
+
+\draw (4, 3.5) -- (4, -.5);
+\end{tikzpicture}
+\end{center}
+
+%%% 2
+\begin{center}
+\begin{tikzpicture}
+\node[circle, draw, dashed] (A) at (0,0)    {\tt \%a};
+\node[circle, draw, dashed] (B) at (2,0)    {\tt \%b};
+\node[circle, draw, dashed] (C) at (3,1.5)  {\tt \%c};
+\node[circle, draw, dashed] (D) at (2,3)    {\tt \%d};
+\node[circle, draw, fill, color=yellow!40] (E) at (0,3)    {\color{black}\tt \%e};
+\node[circle, draw, fill, color=red!40] (F) at (-1,1.5) {\color{black}\tt \%f};
+
+\draw[dashed] (B) -- (C);
+\draw[dashed] (B) -- (E);
+\draw[dashed] (B) -- (F);
+\draw[dashed] (C) -- (E);
+\draw[dashed] (C) -- (F);
+\draw[dashed] (E) -- (A);
+\draw[dashed] (F) -- (A);
+\draw (F) -- (E);
+
+\node[] (S)  at (5,3.25) {Stack};
+\node[] (S4) at (5,1.5) {\tt \%a};
+\node[] (S3) at (5,1)   {\tt \%b};
+\node[] (S2) at (5,.5)  {\tt \%c};
+\node[] (S1) at (5,0)   {\tt \%d};
+
+\draw (4, 3.5) -- (4, -.5);
+\end{tikzpicture}
+\end{center}
+
+%%% 3
+\begin{center}
+\begin{tikzpicture}
+\node[circle, draw, fill, color=blue!40] (A) at (0,0)    {\color{black}\tt \%a};
+\node[circle, draw, dashed] (B) at (2,0)    {\tt \%b};
+\node[circle, draw, dashed] (C) at (3,1.5)  {\tt \%c};
+\node[circle, draw, dashed] (D) at (2,3)    {\tt \%d};
+\node[circle, draw, fill, color=yellow!40] (E) at (0,3)    {\color{black}\tt \%e};
+\node[circle, draw, fill, color=red!40] (F) at (-1,1.5) {\color{black}\tt \%f};
+
+\draw[dashed] (B) -- (C);
+\draw[dashed] (B) -- (E);
+\draw[dashed] (B) -- (F);
+\draw[dashed] (C) -- (E);
+\draw[dashed] (C) -- (F);
+\draw (E) -- (A);
+\draw (F) -- (A);
+\draw (F) -- (E);
+
+\node[] (S)  at (5,3.25) {Stack};
+\node[] (S3) at (5,1)   {\tt \%b};
+\node[] (S2) at (5,.5)  {\tt \%c};
+\node[] (S1) at (5,0)   {\tt \%d};
+
+\draw (4, 3.5) -- (4, -.5);
+\end{tikzpicture}
+\end{center}
+
+%%% 4
+\begin{center}
+\begin{tikzpicture}
+\node[circle, draw, fill, color=blue!40] (A) at (0,0)    {\color{black}\tt \%a};
+\node[circle, draw, fill, color=blue!40] (B) at (2,0)    {\color{black}\tt \%b};
+\node[circle, draw, dashed] (C) at (3,1.5)  {\tt \%c};
+\node[circle, draw, dashed] (D) at (2,3)    {\tt \%d};
+\node[circle, draw, fill, color=yellow!40] (E) at (0,3)    {\color{black}\tt \%e};
+\node[circle, draw, fill, color=red!40] (F) at (-1,1.5) {\color{black}\tt \%f};
+
+\draw[dashed] (B) -- (C);
+\draw (B) -- (E);
+\draw (B) -- (F);
+\draw[dashed] (C) -- (E);
+\draw[dashed] (C) -- (F);
+\draw (E) -- (A);
+\draw (F) -- (A);
+\draw (F) -- (E);
+
+\node[] (S)  at (5,3.25) {Stack};
+\node[] (S2) at (5,.5)  {\tt \%c};
+\node[] (S1) at (5,0)   {\tt \%d};
+
+\draw (4, 3.5) -- (4, -.5);
+\end{tikzpicture}
+\end{center}
+
+%%% 4
+\begin{center}
+\begin{tikzpicture}
+\node[circle, draw, fill, color=blue!40] (A) at (0,0)    {\color{black}\tt \%a};
+\node[circle, draw, fill, color=blue!40] (B) at (2,0)    {\color{black}\tt \%b};
+\node[circle, draw, fill, color=green!40] (C) at (3,1.5)  {\color{black}\tt \%c};
+\node[circle, draw, dashed] (D) at (2,3)    {\tt \%d};
+\node[circle, draw, fill, color=yellow!40] (E) at (0,3)    {\color{black}\tt \%e};
+\node[circle, draw, fill, color=red!40] (F) at (-1,1.5) {\color{black}\tt \%f};
+
+\draw (B) -- (C);
+\draw (B) -- (E);
+\draw (B) -- (F);
+\draw (C) -- (E);
+\draw (C) -- (F);
+\draw (E) -- (A);
+\draw (F) -- (A);
+\draw (F) -- (E);
+
+\node[] (S)  at (5,3.25) {Stack};
+\node[] (S1) at (5,0)   {\tt \%d};
+
+\draw (4, 3.5) -- (4, -.5);
+\end{tikzpicture}
+\end{center}
+
+%%% 4
+\begin{center}
+\begin{tikzpicture}
+\node[circle, draw, fill, color=blue!40] (A) at (0,0)    {\color{black}\tt \%a};
+\node[circle, draw, fill, color=blue!40] (B) at (2,0)    {\color{black}\tt \%b};
+\node[circle, draw, fill, color=green!40] (C) at (3,1.5)  {\color{black}\tt \%c};
+\node[circle, draw, fill, color=red!40] (D) at (2,3)    {\color{black}\tt \%d};
+\node[circle, draw, fill, color=yellow!40] (E) at (0,3)    {\color{black}\tt \%e};
+\node[circle, draw, fill, color=red!40] (F) at (-1,1.5) {\color{black}\tt \%f};
+
+\draw (B) -- (C);
+\draw (B) -- (E);
+\draw (B) -- (F);
+\draw (C) -- (E);
+\draw (C) -- (F);
+\draw (E) -- (A);
+\draw (F) -- (A);
+\draw (F) -- (E);
+
+% Draw an invisible stack so everything lines up.
+\node[] (S)  at (5,3.25) {\hphantom{Stack}};
+\draw[color=white] (4, 3.5) -- (4, -.5);
+\end{tikzpicture}
+\end{center}
+
+\clearpage
+\noindent And this is what the final IR looks like:
+\begin{Verbatim}
+bb1:
+    %r2 = ...
+    %r1 = ...
+    %r3 = add %r3, %r4
+    branch on %r3 to bb2 else bb3
+bb2:
+    branch to bb4
+bb3:
+    %r2 = copy %r1
+    branch to bb4
+bb4:
+    %r2 = phi [bb2: %r2], [bb3: %r1]
+    %r1 = add %r3, %r2
+\end{Verbatim}
+
+\noindent If we emit this as x86\textunderscore64 ASM, the result might look a bit like this:
+\begin{Verbatim}
+.L1:
+    ;; ...
+    add rsi, rdx
+    test rsi, rsi
+    jnz .L2
+    jmp .L3
+.L2:
+    jmp .L4
+.L3:
+    mov rdi, rax
+    jmp .L4
+.L4:
+    mov rax, rsi
+    add rax, rdi
+\end{Verbatim}
 
 \end{document}
