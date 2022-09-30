@@ -586,12 +586,17 @@ from $1$ to $k$, such that no vertex $v'$ with $vv' \in E$ (that is, no vertex $
 Or, to put it differently: the process of assigning at most $k$ registers to the temporaries that make up  a function consists in assigning
  to each temporary a register between $1$ and $k$ such that no temporary that interferes with it is assigned that same register.
 
+Unfortunately, graph colouring—and by extension register allocation—cannot be solved in polynomial time in the general
+case,\footnote{The colouring part of register allocation for a program in SSA form \textit{is} possible in polynomial time; however, if we
+also include PHI lowering and everything else that goes into register allocation, the RA process overall is still NP-complete.} unless
+P = NP, which is one reason why this entire process ends up being as complicated as it is.
+
 This is a very high level overview of RA; both the actual implementation and the theory behind it are rather complex, and writing a register
 allocator that can account for every last quirk that an architecture may have and which can allocate any correct IR program appropriately
 is a fairly complicated endeavour, and the current register allocator is currently still a far cry from that.
 
 Nevertheless, the following sections aim to be a hopefully not too complicated description of the general RA process, as well as the theory
-and ideas behind it, the reasons as to why certain things are implemented the way they are, and finally, the shortcomings of the current 
+and ideas behind it, the reasons as to why certain things are implemented the way they are, and finally, the shortcomings of the current
 implementation.
 
 \section{PHI Elimination}
