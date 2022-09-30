@@ -10,7 +10,7 @@
 \settowidth{\inprogramwidth}{A few lines of text in a block.}
 
 % Easy, interactive cross-references with '\hyperref[label]{text}'.
-\usepackage{hyperref}
+\usepackage[hidelinks]{hyperref}
 % Prevent section titles from appearing at the bottom of pages!
 \usepackage[nobottomtitles, nobottomtitles*]{titlesec}
 % Fancy verbatim markup, for better source code.
@@ -22,6 +22,15 @@
 % Very complicated diagram drawing
 \usepackage{tikz}
 \usetikzlibrary{arrows, shapes}
+
+% Footnotes should be flushed left with no indent.
+\makeatletter
+\renewcommand\@makefntext[1]{%
+	\setlength\parindent{1em}%
+	\noindent
+	\llap{\textsuperscript{\@thefnmark}\kern.5pt}{#1}%
+}
+\makeatother
 
 % \titleformat{<command>}[<shape>]
 % {<format>}
@@ -632,13 +641,13 @@ magical mystical PHI node, that can not exist in nature, but can be synthesized 
 instruction here merely tells us \textit{what} values must be assigned to \verb|%a|—it does not contain or provide us with any information
 whatsoever as to \textit{how} this should be accomplished.
 
-Thus, before we can even begin to talk about register allocation proper, we must first convert these PHI nodes into something that can
+Thus, before we can even begin to talk about register allocation proper, we must first convert these PHIs into something that can
 actually be assigned a register, or several registers. This process is referred to as \textit{PHI lowering} or \textit{PHI elimination}
 both here and in the source code of the RA, but it is also often known by other names such as \textit{PHI lifting} or \textit{SSA 
 destruction}.
 
-Lowering PHI nodes seems simple at first glance: simply insert a copy from \verb|%c| in \verb|bb2| and from \verb|%d| in \verb|bb3| to 
-\verb|%a| before the branch to \verb|bb4|; no code is ultimately generated at the actual location of the PHI instruction itself, but we
+Lowering PHIs seems simple at first glance: simply insert a copy from \verb|%c| in \verb|bb2| and from \verb|%d| in \verb|bb3| to 
+\verb|%a| before the branch to \verb|bb4|; no code is ultimately generated at the actual location of the PHI itself, but we
 still allocate a register for it, and that is the register that we copy \verb|%c| or \verb|%d| into. After register allocation, we may 
 end up with something like this:
 \begin{Verbatim}
@@ -691,7 +700,7 @@ bb4:
     %a = phi [bb1: %c], [bb2: %d]
 \end{Verbatim}
 
-\noindent Trying to lower the PHI instruction in \verb|bb4| by simply inserting copies in the blocks above doesn't quite work in this case:
+\noindent Trying to lower the PHI in \verb|bb4| by simply inserting copies in the blocks above doesn't quite work in this case:
 \begin{Verbatim}
 bb1:
     %r1 = ...
@@ -760,5 +769,91 @@ is never clobbered if control flow branches to \verb|bb3| instead. We can now sa
 changing the semantics of the program.
 
 \subsection{Multiple PHIs in One Block}
+The second problem that one might encounter is less intuitive, but it too is a direct result of SSA form. In order to uphold the invariants
+of SSA form, all PHIs in a block must execute \textit{simultaneously} and immediately upon entering the block; or at least, they must 
+behave as such when lowered.
+
+This is best illustrated with an example. Consider the following program:
+\begin{Verbatim}
+bb1:
+    %a1 = ...
+    %a2 = ...
+    branch to bb3
+bb2:
+    %b1 = ...
+    %b2 = ...
+    branch to bb3
+bb3:
+    %c1 = phi [bb1: %a1], [bb2: %b1]
+    %c2 = phi [bb1: %a2], [bb2: %b2]
+\end{Verbatim}
+
+\noindent Assuming the latest uses of \verb|%a1| and \verb|%a2|, as well as of \verb|%b1| and \verb|%b2|, are in the PHIs in \verb|bb3|, we 
+might end up with the following register allocation:
+\begin{Verbatim}
+bb1:
+    %r1 = ... (%a1)
+    %r2 = ... (%a2)
+    branch to bb3
+bb2:
+    ;; Yes, %r1 and %r2 are the other way around here
+    ;; on purpose; the RA might decide to do this if, 
+    ;; for example, the value previously stored in %r1
+    ;; is required to compute %r2.
+    %r2 = ... (%b1)
+    %r1 = ... (%b2)
+    branch to bb3
+bb3:
+    %r1 = phi [bb1: %r1], [bb2: %r2]
+    %r2 = phi [bb1: %r2], [bb2: %r1]
+\end{Verbatim}
+
+\noindent Here, the RA has allocated only two registers for the six temporaries; normally, this would be desired since not only do we waste
+fewer registers, but especially in the case of a PHI, it is doubly beneficial for its result and one or more of its arguments to share a
+register, seeing as the latter need to be copied into the former either way, and copying from a register to itself is a no-op.
+
+This program, as is, is perfectly fine, but you may notice that we haven't inserted any copies for the PHIs yet. That was done on purpose
+to show how this program, which is, again, perfectly correct \textit{while still in SSA form}, breaks as soon as we try to lower the PHIs:
+\begin{Verbatim}
+bb1:
+    %r1 = ... (%a1)
+    %r2 = ... (%a2)
+
+    ;; Ok, no-op
+    copy %r1 to %r1 
+    copy %r2 to %r2
+
+    branch to bb3
+bb2:
+    %r2 = ... (%b1)
+    %r1 = ... (%b2)
+
+    ;; ERROR
+    copy %r2 to %r1 
+    copy %r1 to %r2
+
+    branch to bb3
+bb3:
+    %r1 = phi [bb1: %r1], [bb2: %r2]
+    %r2 = phi [bb1: %r2], [bb2: %r1]
+\end{Verbatim}
+
+\noindent You may notice that a recurring effect of lowering PHIs seems to be that everything works out just fine—so long as we only ever
+follow one control flow path, in this case from \verb|bb1| to \verb|bb3|. However, if we reach \verb|bb3| from \verb|bb2|, then everything 
+breaks down: unfortunately, \verb|%r1| needs to be copied into \verb|%r2|, but \verb|%r2| needs to be copied into \verb|%1|! In 
+other words, we need to swap two registers. If we simply try to lower these two PHIs by inserting copies like we have done so far, we end
+up overwriting one of the values with the other. This what we mean when we say that SSA expects all PHIs to execute simultaneously.
+
+In some cases, swapping the contents of two registers can be a non-trivial problem that may involve using a third register, which then also
+needs to be allocated, or evicting the contents of either register into memory and then loading it back into the other. Alternatively, we
+could also just swap the values by performing three \verb|xor|s or by using some sort of \verb|swap| instruction (\verb|xchg| on 
+x86\textunderscore64), provided the target architecture allows for that.
+
+So what's the deal with this then? Sure, this is a bit annoying, but it seems rather easy to solve: just swap them, right? Well, in this
+case, yes, but what if instead of two PHIs, we had to lower three, or ten.\footnote{This may, at first glance, seem like an absurd number of
+PHIs, but consider that if we want to optimise local variables by converting them to temporaries, we will eventually have to insert PHIs for
+variables that are assigned to in multiple different control flow paths.} At that point, we have to deal with a complex scheduling 
+problem since certain registers may be assigned to both the result of a PHI and potentially arguments of \textit{several} PHIs. Generally
+speaking, this problem is not that easy to solve, which is why our RA currently does not permit more than one PHI per block.
 
 \end{document}
