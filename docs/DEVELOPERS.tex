@@ -968,4 +968,84 @@ of increasing the chromatic number\footnote{The \textit{chromatic number} of a g
 or, in our case, the total number of registers that need to be allocated for a function.} of the interference graph; the current version of
 the RA does not take this into account just yet.
 
+\section{Colouring}
+After lowering PHIs, building the adjacency matrix, coalescing, and building the adjacency lists, we can finally move on to the actual
+colouring process. Our register allocated uses the Chaitin-Briggs algorithm. This algorithm is a two-step process\footnote{Strictly
+speaking, proper Chaitin-Briggs register allocation also involves a third step: spilling temporaries that cannot be assigned a register.
+However, since our programs, at least for the time being, are unlikely to be so complex as to necessitate spilling, the RA currently does
+not implement it and simply terminates should it find that the interference graph is not $k$-colourable.} and relies on two
+principles.
+
+First, a graph $G$ is $k$-colourable if (\textit{not} iff) for every vertex $v$ in $G$, $\deg(v) < k$.\footnote{$\deg(v)$ denotes the 
+\textit{degree} of $v$. The degree of a vertex is the number of adjacent vertices, or, in our case, the number of temporaries that
+interfere with the temporary associated with the vertex.} Furthermore, given a graph $G$ containing a vertex $v$ with $\deg(v) < k$,
+$G$ is $k$-colourable iff $G - v$ is $k$-colourable.\footnote{The proof of these theorems is left to the reader; this is not a textbook
+on graph theory, after all.} In simpler terms, this means that every vertex that has fewer than $k$ neighbours
+can be coloured, and removing that vertex does not affect the $k$-colourability of the graph.
+
+Thus, the first step of the Chaitin-Briggs algorithm is to iterate over all vertices in the interference graph, removing all vertices
+with degree $< k$ and pushing them onto a stack. A removed vertex no longer interferes with any other vertex in the graph (but we still
+keep track of what values it used to interfere with; this information is still needed later). This also means that removing a vertex may
+cause previously adjacent vertices with degree $= k$ to now have degree $< k$, and therefore, those vertices can now be removed as well
+and so on. This procedure is repeated until no more vertices are removed. Ideally, the graph should now be empty. If it isn't we move on 
+to step 2.
+
+Chaitin’s original algorithm would spill\footnote{Spilling a temporary means storing its value into memory, thus freeing up a register, and
+loading it back when it is next needed.} a vertex as soon as there are no more vertices with degree $< k$. However, recall that all
+vertices having degree $< k$ is only sufficient and not necessary for a graph to be $k$-colourable. Even if a vertex has degree $\geq k$, we
+might still be able to $k$-colour it. The most famous example is the graph below, which is $2$-colourable, but Chaitin’s algorithm would
+spill a vertex:
+\begin{center}
+\begin{tikzpicture}
+\node[circle, draw, fill, color=red!75]    (A1) at (0,0) {};
+\node[circle, draw, fill, color=yellow!75] (B1) at (1,0) {};
+\node[circle, draw, fill, color=yellow!75] (C1) at (0,1) {};
+\node[circle, draw, fill, color=red!75]    (D1) at (1,1) {};
+\draw (A1) -- (B1);
+\draw (A1) -- (C1);
+\draw (D1) -- (B1);
+\draw (D1) -- (C1);
+\end{tikzpicture}
+\end{center}
+
+\noindent Briggs’ improvement to Chaitin’s algorithm consists in removing a vertex and putting it onto the stack, even if it has degree
+$\geq k$, because the graph might still be $k$-colourable. If it isn’t, we‘ll find out later, and then we’ll have to spill.
+
+Once the interference graph is empty, we can pop vertices off the stack one by one and assign to each vertex a register that has not yet
+been assigned to any of its neighbours. If there are no registers left that we could assign to a vertex, then this is where we spill the 
+vertex. As mentioned before, our register allocator currently does not account for that and simply aborts if that happens. But if everything
+goes well, we now have a properly register-allocated function!
+
+\section{Example}
+This section illustrates step by step how a \langname{} program is compiled from source code to register-allocated IR. We will be compiling
+the following program:
+
+
+%% \begin{center}
+%% \begin{tikzpicture}
+
+%% \node[circle, draw] (A) at (0,0) {};
+%% \node[circle, draw] (B) at (1,0) {};
+%% \node[circle, draw] (C) at (0,1) {};
+%% \node[circle, draw] (D) at (1,1) {};
+%% \draw (A) -- (B);
+%% \draw (A) -- (C);
+%% \draw (D) -- (B);
+%% \draw (D) -- (C);
+
+%% \draw[->] (1.25, .5) -- (1.75, .5);
+
+%% \node[circle, draw, fill, color=red!75]    (A1) at (2,0) {};
+%% \node[circle, draw, fill, color=yellow!75] (B1) at (3,0) {};
+%% \node[circle, draw, fill, color=yellow!75] (C1) at (2,1) {};
+%% \node[circle, draw, fill, color=red!75]    (D1) at (3,1) {};
+%% \draw (A1) -- (B1);
+%% \draw (A1) -- (C1);
+%% \draw (D1) -- (B1);
+%% \draw (D1) -- (C1);
+
+%% \end{tikzpicture}
+%% \end{center}
+
+
 \end{document}
