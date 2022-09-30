@@ -590,8 +590,8 @@ Live ranges from above excerpt:
 
 \chapter{Register Allocation}
 \label{sec:codegen-register-allocation}
-An IR function may contain a potentially infinite number of temporaries; a physical CPU, by contrast, contains only a limited number
-of \textit{physical} or \textit{hardware registers}. Register allocation (RA) is the process of assigning to each temporary a register, and
+An IR function may contain a potentially infinite number of temporaries; a physical CPU, by contrast, has only a limited number
+of \textit{physical} or \textit{hardware registers}. Register allocation (RA) is the process of assigning to each temporary a register
 in such a way that no two interfering temporaries share a register. This is accomplished mainly by means of an \textit{interference graph}.
 
 The interference graph of an IR function is an undirected graph consisting of a set of vertices and a set of edges between those
@@ -610,18 +610,18 @@ case,\footnote{The colouring part of register allocation for a program in SSA fo
 also include PHI lowering and everything else that goes into register allocation, the RA process overall is still NP-complete.} unless
 P = NP, which is one reason why this entire process ends up being as complicated as it is.
 
-This is a very high level overview of RA; both the actual implementation and the theory behind it are rather complex, and writing a register
-allocator that can account for every last quirk that an architecture may have and which can allocate any correct IR program appropriately
-is a fairly complicated endeavour, and the current register allocator is currently still a far cry from that.
+The following sections are only a high level overview of RA; both the actual implementation and the theory behind it are rather complex,
+and writing a register allocator that can account for every last quirk that an architecture may have and which can correctly allocate
+registers for any well-formed IR program is a fairly complicated endeavour, and our current register allocator is still a far cry from that.
 
-Nevertheless, the following sections aim to be a hopefully not too complicated description of the general RA process, as well as the theory
+Nevertheless, in what follows, we present a hopefully not too complicated description of the general RA process, as well as the theory
 and ideas behind it, the reasons as to why certain things are implemented the way they are, and finally, the shortcomings of the current
 implementation.
 
 \section{PHI Elimination}
 The first step of our register allocation algorithm concerns \textit{PHI ($\Phi$) instructions}. Of all the instructions in our IR, the PHI
-instruction is easily the most abstract, as it is an instruction that is found in all SSA languages, and yet, there are no physical CPUs
-that implement anything remotely similar to it.
+instruction is easily the most difficult to grasp, as it is a rather abstract concept that is found in all SSA languages, and yet, there
+are no physical CPUs that implement anything like it.
 
 As the name might suggest, the central concept of an SSA language like our IR is exactly that: \textit{single static assignment}. Once
 created, a temporary can \textit{never} be reassigned, and its value is guaranteed to be the same throughout the entire function. This
@@ -673,7 +673,9 @@ both here and in the source code of the RA, but it is also often known by other 
 destruction}.
 
 Lowering PHIs seems simple at first glance: simply insert a copy from \verb|%c| in \verb|bb2| and from \verb|%d| in \verb|bb3| to
-\verb|%a| before the branch to \verb|bb4|; no code is ultimately generated at the actual location of the PHI itself, but we
+\verb|%a| before the branch to \verb|bb4|;\footnote{Note that copying to an SSA temporary, thereby changing its value, breaks the
+aforementioned SSA invariant; as a result of this, the program will no longer be in SSA form after PHI lowering, hence the term ‘SSA
+destruction’.} no code is ultimately generated at the actual location of the PHI itself, but we
 still allocate a register for it, and that is the register that we copy \verb|%c| or \verb|%d| into. After register allocation, we may
 end up with something like this:
 \begin{Verbatim}
@@ -682,11 +684,11 @@ bb1:
     branch on %r1 to bb2 else bb3
 bb2:
     %r2 = ... ;; Code that computes ‘%r2’ (%c)
-    copy %r2 to %r4
+    %r4 = copy %r2
     branch to bb4
 bb3:
     %r3 = ... ;; Code that computes ‘%r3’ (%d)
-    copy %r3 to %r4
+    %r4 = copy %r3
     branch to bb4
 bb4:
     ;; In this case, the RA has assigned %r4 to %a.
@@ -731,12 +733,12 @@ bb4:
 bb1:
     %r1 = ...
     %r2 = ...
-    copy %r2 to %r4
+    %r4 = copy %r2
     branch on %r1 to bb2 else bb4
 bb2:
     %r3 = ...
     %r5 = ...
-    copy %r3 to %r4
+    %r4 = copy %r3
     branch on %r5 to bb3 else bb4 (*)
 bb3:
     ;; Some lengthy computation
@@ -773,21 +775,21 @@ bb1:
     %r2 = ...
     branch on %r1 to bb2 else bb1-copy
 bb1-copy:
-    copy %r2 to %r4
+    %r4 = copy %r2
     branch to bb4
 bb2:
     %r3 = ...
     %r5 = ...
     branch on %r5 to bb3 else bb2-copy
 bb2-copy
-    copy %r3 to %r4
+    %r4 = copy %r3
     branch to bb4
 bb3:
     ;; Some lengthy computation
     ;; ...
     return
 bb4:
-    ;; Value of ‘%a’ is can now be in %r4.
+    ;; Value of ‘%a’ can now be in %r4.
 \end{Verbatim}
 
 \noindent This way, the right values are always in \verb|%r4| by the time control flow reaches \verb|bb4|, but at the same time, \verb|%r4|
@@ -846,8 +848,8 @@ bb1:
     %r2 = ... (%a2)
 
     ;; Ok, no-op
-    copy %r1 to %r1
-    copy %r2 to %r2
+    %r1 = copy %r1
+    %r2 = copy %r2
 
     branch to bb3
 bb2:
@@ -855,8 +857,8 @@ bb2:
     %r1 = ... (%b2)
 
     ;; ERROR
-    copy %r2 to %r1
-    copy %r1 to %r2
+    %r1 = copy %r2
+    %r2 = copy %r1
 
     branch to bb3
 bb3:
@@ -878,18 +880,19 @@ x86\textunderscore64), provided the target architecture allows for that.
 So what's the deal with this then? Sure, this is a bit annoying, but it seems rather easy to solve: just swap them, right? Well, in this
 case, yes, but what if instead of two PHIs, we had to lower three, or ten.\footnote{This may, at first glance, seem like an absurd number of
 PHIs, but consider that if we want to optimise local variables by converting them to temporaries, we will eventually have to insert PHIs for
-variables that are assigned to in multiple different control flow paths.} At that point, we have to deal with a complex scheduling
-problem since certain registers may be assigned to both the result of a PHI and potentially arguments of \textit{several} PHIs. Generally
-speaking, this problem is not that easy to solve, which is why our RA currently does not permit more than one PHI per block.
+variables that are assigned to in multiple different control flow paths.} At that point, we would be confronted with a complex scheduling
+problem since efficient register allocation might lead to certain registers’ being assigned to both the result of a PHI and arguments of
+potentially \textit{several} PHIs. Generally speaking, this problem is not that easy to solve, which is why our RA currently does not
+permit more than one PHI per block.
 
 \section{Interference Graph}
-The next step is to build the interference graph that we use for graph colouring. The interference graph has two representations: an
-adjacency matrix and a set of adjacency lists. First, we construct the matrix and perform register coalescing (more about that later),
-and then we convert the matrix into a adjacency lists; those lists are the input for the actual graph colouring portion of the algorithm.
+The next step is to build the interference graph of the function. This interference graph has two representations: an adjacency matrix and
+a set of adjacency lists. First, we construct the matrix and perform register coalescing (more about that later), and then we convert the
+matrix into a set of adjacency lists; those lists are the input for the actual graph colouring portion of the algorithm.
 
 \subsection{Adjacency Matrix}
 The adjacency matrix $M$ is a $n×n$ lower triangular matrix, where $n$ is the number of temporaries that need to be allocated. Each temporary
-is assigned an index between $0$ and $n-1$. Given two temporaries whose indices are $i$ and $j$, the entry $M_{\max(i,j),\,\min(i, j)}$ is $1$ if
+is assigned an index between $1$ and $n$. Given two temporaries whose indices are $i$ and $j$, the entry $M_{\max(i,j),\,\min(i, j)}$ is $1$ if
 those temporaries interfere, and $0$ otherwise.\footnote{Since ‘interferes with’ is a symmetric relation, we only need to store either
 $M_{i,j}$ or $M_{j, i}$. Here, we arbitratily choose to always put the larger index first.} The values on the main diagonal are unused since
 there is never a reason to check if a temporary interferes with itself.
@@ -943,8 +946,8 @@ The other representation of the Interference Graph is a set of adjacency lists, 
 temporary $t$ contains, amongst other things, the set of temporaries that interfere with $t$, as well as the set of physical registers that
 interfere with $t$.\footnote{Whether and what physical registers interfere with a temporary depends on the target architecture, the type of
 the instruction that computes the temporary and other temporaries in that instruction, as well as on  physical registers are stored into
-or clobbered while the temporary is live.} The former can be computed by looking at the adjacency matrix and the latter by performing
-examining the live range of each temporary.
+or clobbered while the temporary is live.} The former can be computed by looking at the adjacency matrix and the latter by examining the
+live range of each temporary.
 
 \section{Coalescing}
 After we build the adjacency matrix and before we build the adjacency lists, there is yet another step that is commonly referred to as
@@ -965,12 +968,12 @@ from the IR. This is repeated until no more copy instructions are removed, at wh
 since merging two temporaries entails merging their live ranges: any other temporary that previously interfered with either temporary now
 interferes with the merged temporary. Since this can lead to more live ranges overlapping, coaleascing can also have the adverse effect
 of increasing the chromatic number\footnote{The \textit{chromatic number} of a graph is the number of colours required to colour the graph,
-or, in our case, the total number of registers that need to be allocated for a function.} of the interference graph; the current version of
-the RA does not take this into account just yet.
+or, in our case, the total number of registers that need to be allocated for a function.} of the interference graph; our RA currently does
+not take this into account.
 
 \section{Colouring}
 After lowering PHIs, building the adjacency matrix, coalescing, and building the adjacency lists, we can finally move on to the actual
-colouring process. Our register allocated uses the Chaitin-Briggs algorithm. This algorithm is a two-step process\footnote{Strictly
+colouring process. Our register allocator uses the Chaitin-Briggs algorithm. This algorithm is a two-step process\footnote{Strictly
 speaking, proper Chaitin-Briggs register allocation also involves a third step: spilling temporaries that cannot be assigned a register.
 However, since our programs, at least for the time being, are unlikely to be so complex as to necessitate spilling, the RA currently does
 not implement it and simply terminates should it find that the interference graph is not $k$-colourable.} and relies on two
@@ -986,15 +989,15 @@ can be coloured, and removing that vertex does not affect the $k$-colourability 
 Thus, the first step of the Chaitin-Briggs algorithm is to iterate over all vertices in the interference graph, removing all vertices
 with degree $< k$ and pushing them onto a stack. A removed vertex no longer interferes with any other vertex in the graph (but we still
 keep track of what values it used to interfere with; this information is still needed later). This also means that removing a vertex may
-cause previously adjacent vertices with degree $= k$ to now have degree $< k$, and therefore, those vertices can now be removed as well
+cause previously adjacent vertices with degree $\geq k$ to now have degree $< k$, and therefore, those vertices can now be removed as well
 and so on. This procedure is repeated until no more vertices are removed. Ideally, the graph should now be empty. If it isn't we move on
 to step 2.
 
 Chaitin’s original algorithm would spill\footnote{Spilling a temporary means storing its value into memory, thus freeing up a register, and
 loading it back when it is next needed.} a vertex as soon as there are no more vertices with degree $< k$. However, recall that all
 vertices having degree $< k$ is only sufficient and not necessary for a graph to be $k$-colourable. Even if a vertex has degree $\geq k$, we
-might still be able to $k$-colour it. The most famous example is the graph below, which is $2$-colourable, but Chaitin’s algorithm would
-spill a vertex:
+might still be able to $k$-colour the graph. The most famous example of this is the graph below, which is $2$-colourable, but Chaitin’s
+algorithm would spill a vertex when trying to $2$-colour it:
 \begin{center}
 \begin{tikzpicture}
 \node[circle, draw, fill, color=red!75]    (A1) at (0,0) {};
@@ -1125,6 +1128,10 @@ constructed the matrix above, albeit with one fewer temporary.} and build the ad
 \draw (E) -- (A);
 \draw (F) -- (A);
 \draw (F) -- (E);
+
+% Draw an invisible stack so everything lines up.
+\node[] (S)  at (5,3.25) {\hphantom{Stack}};
+\draw[color=white] (4, 3.5) -- (4, -.5);
 
 \end{tikzpicture}
 \end{center}
@@ -1359,7 +1366,6 @@ by any of its neighbours:
 \end{tikzpicture}
 \end{center}
 
-\clearpage
 \noindent And this is what the final IR looks like:
 \begin{Verbatim}
 bb1:
