@@ -29,6 +29,16 @@
 % For programs
 \usepackage{listings}
 
+% I don't want to deal with putting \ after ‘i.e.’ etc., and also
+% double spacing isn't really that common anymore nowadays...
+% 
+% Note: most confusingly, the command ‘\frenchspacing’ turns French
+% spacing off (!).
+\frenchspacing
+
+\newcommand\ie{i.\,e.}
+\newcommand\eg{e.\,g.}
+
 % Math mode columns
 \newcolumntype{C}{>{$}c<{$}}
 
@@ -195,7 +205,7 @@ Another, still fairly common, is called a \emph{directed acyclic graph}, or DAG.
 
 For the sake of simplicity and understanding, \lang uses an AST, or abstract syntax tree, and generates it from recognized sequences of lexemes.
 
-A tree, in computer programming, is a data structure that can branch into multiple data structures. An AST happens to be a recursive tree, in that each of the branches of the tree can have branches, and those branches can have branches, and so on. A lot of compilers use a binary tree, or btree, which is a tree with a recursive left hand side and right hand side. The problem you see in using binary trees is that it is rather difficult to represent anything with more than two children (as one might expect). This is quite a common case in programming language ASTs; for example, when calling a function, there may be any amount of arguments. Most compilers go the LISP route, and have these sort of lists implemented as recursive pairs, where as long as the lhs is another pair, the list continues. I feel like this is a messy implementation, and results in code that is quite hard to read, due to chains of dereferences, i.e. \verb|lhs->lhs->rhs->value|.
+A tree, in computer programming, is a data structure that can branch into multiple data structures. An AST happens to be a recursive tree, in that each of the branches of the tree can have branches, and those branches can have branches, and so on. A lot of compilers use a binary tree, or btree, which is a tree with a recursive left hand side and right hand side. The problem you see in using binary trees is that it is rather difficult to represent anything with more than two children (as one might expect). This is quite a common case in programming language ASTs; for example, when calling a function, there may be any amount of arguments. Most compilers go the LISP route, and have these sort of lists implemented as recursive pairs, where as long as the lhs is another pair, the list continues. I feel like this is a messy implementation, and results in code that is quite hard to read, due to chains of dereferences, \ie{} \verb|lhs->lhs->rhs->value|.
 
 The compiler includes a text-debug format to print the abstract syntax tree that is produced, and can be printed out for any program by adding the verbose command line flag: \verb|-v|.
 % NOTE: It would be cool to output this printout into a file and have our own little file format to save this intermediate step. This would help a load if we wanted to start doing conditional compilation.
@@ -927,5 +937,35 @@ otherwise. It accomplishes this by iterating over all the uses of \verb|ts[i]| a
 between the definition of \verb|ts[i]| and the use, and vice versa.\footnote{Recall that two temporaries interfere iff either one is live
 at the definition point of the other, for which reason we only need to search for the definition point of \texttt{ts[j]} within the live
 range of \texttt{ts[i]}, and vice versa.} If any of the uses interfere, then the temporaries interfere.
+
+\subsection{Adjacency Lists}
+The other representation of the Interference Graph is a set of adjacency lists, one for each vertex (temporary). The adjacency list of a
+temporary $t$ contains, amongst other things, the set of temporaries that interfere with $t$, as well as the set of physical registers that
+interfere with $t$.\footnote{Whether and what physical registers interfere with a temporary depends on the target architecture, the type of
+the instruction that computes the temporary and other temporaries in that instruction, as well as on  physical registers are stored into
+or clobbered while the temporary is live.} The former can be computed by looking at the adjacency matrix and the latter by performing
+examining the live range of each temporary.
+
+\section{Coalescing}
+After we build the adjacency matrix and before we build the adjacency lists, there is yet another step that is commonly referred to as
+\textit{coalescing}. The main purpose of coalescing is copy elision: we try to remove as many copy instructions from the IR as possible.
+
+Consider the copy instruction \verb|%a = copy %b|. If the live range of \verb|%b| ends with that copy instruction, \ie{} if \verb|%b| is not
+used afterwards, then we may be able to generate the value of \verb|%b| in \verb|%a| instead, effectively combining (or \textit{coalescing})
+\verb|%a| and \verb|%b| into one temporary. We can then remove the copy instruction.
+
+Since our backend makes liberal use of precoloured copy instructions so as to make sure that certain values end up in the right registers
+where necessary (\eg{} the actual parameters of a function call),\footnote{Precoloured in this case means that we have already assigned a
+physical register to the result of an instruction. For instance, if \texttt{\%a} is the first argument of a function call, then—on Linux—we
+will need to make sure that that value ends up in \texttt{\%rdi}, for which reason we insert a \texttt{\%rdi = copy \%a} instruction before
+the call.} coalescing can help drastically reduce the number of copy instructions in the generated code.
+
+Coalescing is an iterative process: we iterate over all temporaries, merge copies, and remove copy instructions that are no longer needed
+from the IR. This is repeated until no more copy instructions are removed, at which point we also need to rebuild the adjacency matrix
+since merging two temporaries entails merging their live ranges: any other temporary that previously interfered with either temporary now
+interferes with the merged temporary. Since this can lead to more live ranges overlapping, coaleascing can also have the adverse effect
+of increasing the chromatic number\footnote{The \textit{chromatic number} of a graph is the number of colours required to colour the graph,
+or, in our case, the total number of registers that need to be allocated for a function.} of the interference graph; the current version of
+the RA does not take this into account just yet.
 
 \end{document}
