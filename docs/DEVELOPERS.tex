@@ -23,6 +23,15 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows, shapes}
 
+% For tables
+\usepackage{tabularx, array, multirow}
+
+% For programs
+\usepackage{listings}
+
+% Math mode columns
+\newcolumntype{C}{>{$}c<{$}}
+
 % Footnotes should be flushed left with no indent.
 \makeatletter
 \renewcommand\@makefntext[1]{%
@@ -607,15 +616,15 @@ that implement anything remotely similar to it.
 As the name might suggest, the central concept of an SSA language like our IR is exactly that: \textit{single static assignment}. Once
 created, a temporary can \textit{never} be reassigned, and its value is guaranteed to be the same throughout the entire function. This
 works just fine in most cases: most instructions only consume and produce values, but never alter them; even variable reassignment,
-can be expressed as a sequence of load and store instruction without any actual reassignment. 
+can be expressed as a sequence of load and store instruction without any actual reassignment.
 
-Where it leads to problems is in situations where control flow demands that different values be used depending on what path is taken, 
+Where it leads to problems is in situations where control flow demands that different values be used depending on what path is taken,
 and while it may theoretically be possible to solve this by employing a temporary store/load to/from memory, we would much rather keep
 temporaries in registers for as long as possible and only evict them to memory once we start running out of registers.
 
 The classical example of such a situation is the following \langname{} program (declarations are omitted for the sake of brevity):
 \begin{Verbatim}
-a := if b { 
+a := if b {
   ;; Code that computes ‘c’
   c
 } else {
@@ -643,19 +652,19 @@ bb4:
 from \verb|bb1|, and the value of \verb|%d| if we reached this block from \verb|bb2|’; this way, we can assign different values to \verb|%a|
 depending on the control flow of the program, without having to assign to \verb|%a| twice.
 
-It is important to realise that a PHI instruction is a very high-level construct. The LLVM documentation quite aptly refers to it as ‘the 
-magical mystical PHI node, that can not exist in nature, but can be synthesized in a computer scientist's overactive imagination’. The PHI 
+It is important to realise that a PHI instruction is a very high-level construct. The LLVM documentation quite aptly refers to it as ‘the
+magical mystical PHI node, that can not exist in nature, but can be synthesized in a computer scientist's overactive imagination’. The PHI
 instruction here merely tells us \textit{what} values must be assigned to \verb|%a|—it does not contain or provide us with any information
 whatsoever as to \textit{how} this should be accomplished.
 
 Thus, before we can even begin to talk about register allocation proper, we must first convert these PHIs into something that can
 actually be assigned a register, or several registers. This process is referred to as \textit{PHI lowering} or \textit{PHI elimination}
-both here and in the source code of the RA, but it is also often known by other names such as \textit{PHI lifting} or \textit{SSA 
+both here and in the source code of the RA, but it is also often known by other names such as \textit{PHI lifting} or \textit{SSA
 destruction}.
 
-Lowering PHIs seems simple at first glance: simply insert a copy from \verb|%c| in \verb|bb2| and from \verb|%d| in \verb|bb3| to 
+Lowering PHIs seems simple at first glance: simply insert a copy from \verb|%c| in \verb|bb2| and from \verb|%d| in \verb|bb3| to
 \verb|%a| before the branch to \verb|bb4|; no code is ultimately generated at the actual location of the PHI itself, but we
-still allocate a register for it, and that is the register that we copy \verb|%c| or \verb|%d| into. After register allocation, we may 
+still allocate a register for it, and that is the register that we copy \verb|%c| or \verb|%d| into. After register allocation, we may
 end up with something like this:
 \begin{Verbatim}
 bb1:
@@ -687,7 +696,7 @@ approach, one of which is rather easy to solve (and the solution is implemented 
 \subsection{Critical Edges}
 The first problem occurs when an argument of a PHI instruction originates in a block that has a \textit{critical edge}. A critical edge is
 defined as an edge between a block with multiple successors and a block with multiple predecessors (though in our case, it only matters
-that the block has multiple successors). 
+that the block has multiple successors).
 
 Consider the following IR program:
 \begin{Verbatim}
@@ -728,19 +737,19 @@ bb4:
 \end{Verbatim}
 
 \noindent At first glance, it might seem as though there were nothing wrong with this program; and indeed, it works just fine, so long
-as the \verb|(*)| branch instruction always branches to \verb|bb4|. However, what happens if control flow branches to \verb|bb3| instead? 
-In that case, we still end up copying \verb|%r3| to \verb|%r4|—even if its value isn't used in \verb|bb3|! This means that \verb|%r4| 
-cannot be used at all in \verb|bb3|! 
+as the \verb|(*)| branch instruction always branches to \verb|bb4|. However, what happens if control flow branches to \verb|bb3| instead?
+In that case, we still end up copying \verb|%r3| to \verb|%r4|—even if its value isn't used in \verb|bb3|! This means that \verb|%r4|
+cannot be used at all in \verb|bb3|!
 
-As to why that is the case, consider the following scenario: assume there is some value \verb|%v| that is computed somewhere before 
-\verb|bb2| and which is used in \verb|bb3|, but not in \verb|bb4| or any of its successors. Assume futher that we (incorrectly) allow 
-the use of \verb|%r4| in \verb|bb3|; in this case, the RA may decide to assign \verb|%r4| to both \verb|%v| and \verb|%a|. If we consider 
-only the semantics of our original IR pre PHI lowering, then this assignment is perfectly reasonable: \verb|%v| is only used up to 
-\verb|bb3|, and unused in \verb|bb4| and after, and \verb|%a| is only used in \verb|bb4| and after. The liveness ranges of \verb|%v| and 
+As to why that is the case, consider the following scenario: assume there is some value \verb|%v| that is computed somewhere before
+\verb|bb2| and which is used in \verb|bb3|, but not in \verb|bb4| or any of its successors. Assume futher that we (incorrectly) allow
+the use of \verb|%r4| in \verb|bb3|; in this case, the RA may decide to assign \verb|%r4| to both \verb|%v| and \verb|%a|. If we consider
+only the semantics of our original IR pre PHI lowering, then this assignment is perfectly reasonable: \verb|%v| is only used up to
+\verb|bb3|, and unused in \verb|bb4| and after, and \verb|%a| is only used in \verb|bb4| and after. The liveness ranges of \verb|%v| and
 \verb|%a| do not overlap, and therefore, they may be assigned the same register.
 
 However, during PHI lowering, we end up inserting a copy instruction from \verb|%r3| to \verb|%r4| in \verb|bb2|. This means that the value
-of \verb|%v|, which was held in \verb|%r4| up to this point, is overwritten with \verb|%r3|, \textit{irrespective of what block we branch 
+of \verb|%v|, which was held in \verb|%r4| up to this point, is overwritten with \verb|%r3|, \textit{irrespective of what block we branch
 to}. Everything is fine so long as we branch to \verb|bb4|, but if we branch to \verb|bb4|, then we have problem, since \verb|bb4|
 expects the value of \verb|%v| to be stored in \verb|%r4|, but we've just overwritten it with the value of \verb|%r3|.
 
@@ -777,7 +786,7 @@ changing the semantics of the program.
 
 \subsection{Multiple PHIs in One Block}
 The second problem that one might encounter is less intuitive, but it too is a direct result of SSA form. In order to uphold the invariants
-of SSA form, all PHIs in a block must execute \textit{simultaneously} and immediately upon entering the block; or at least, they must 
+of SSA form, all PHIs in a block must execute \textit{simultaneously} and immediately upon entering the block; or at least, they must
 behave as such when lowered.
 
 This is best illustrated with an example. Consider the following program:
@@ -795,7 +804,7 @@ bb3:
     %c2 = phi [bb1: %a2], [bb2: %b2]
 \end{Verbatim}
 
-\noindent Assuming the latest uses of \verb|%a1| and \verb|%a2|, as well as of \verb|%b1| and \verb|%b2|, are in the PHIs in \verb|bb3|, we 
+\noindent Assuming the latest uses of \verb|%a1| and \verb|%a2|, as well as of \verb|%b1| and \verb|%b2|, are in the PHIs in \verb|bb3|, we
 might end up with the following register allocation:
 \begin{Verbatim}
 bb1:
@@ -804,7 +813,7 @@ bb1:
     branch to bb3
 bb2:
     ;; Yes, %r1 and %r2 are the other way around here
-    ;; on purpose; the RA might decide to do this if, 
+    ;; on purpose; the RA might decide to do this if,
     ;; for example, the value previously stored in %r1
     ;; is required to compute %r2.
     %r2 = ... (%b1)
@@ -827,7 +836,7 @@ bb1:
     %r2 = ... (%a2)
 
     ;; Ok, no-op
-    copy %r1 to %r1 
+    copy %r1 to %r1
     copy %r2 to %r2
 
     branch to bb3
@@ -836,7 +845,7 @@ bb2:
     %r1 = ... (%b2)
 
     ;; ERROR
-    copy %r2 to %r1 
+    copy %r2 to %r1
     copy %r1 to %r2
 
     branch to bb3
@@ -846,21 +855,77 @@ bb3:
 \end{Verbatim}
 
 \noindent You may notice that a recurring effect of lowering PHIs seems to be that everything works out just fine—so long as we only ever
-follow one control flow path, in this case from \verb|bb1| to \verb|bb3|. However, if we reach \verb|bb3| from \verb|bb2|, then everything 
-breaks down: unfortunately, \verb|%r1| needs to be copied into \verb|%r2|, but \verb|%r2| needs to be copied into \verb|%1|! In 
+follow one control flow path, in this case from \verb|bb1| to \verb|bb3|. However, if we reach \verb|bb3| from \verb|bb2|, then everything
+breaks down: unfortunately, \verb|%r1| needs to be copied into \verb|%r2|, but \verb|%r2| needs to be copied into \verb|%1|! In
 other words, we need to swap two registers. If we simply try to lower these two PHIs by inserting copies like we have done so far, we end
 up overwriting one of the values with the other. This what we mean when we say that SSA expects all PHIs to execute simultaneously.
 
 In some cases, swapping the contents of two registers can be a non-trivial problem that may involve using a third register, which then also
 needs to be allocated, or evicting the contents of either register into memory and then loading it back into the other. Alternatively, we
-could also just swap the values by performing three \verb|xor|s or by using some sort of \verb|swap| instruction (\verb|xchg| on 
+could also just swap the values by performing three \verb|xor|s or by using some sort of \verb|swap| instruction (\verb|xchg| on
 x86\textunderscore64), provided the target architecture allows for that.
 
 So what's the deal with this then? Sure, this is a bit annoying, but it seems rather easy to solve: just swap them, right? Well, in this
 case, yes, but what if instead of two PHIs, we had to lower three, or ten.\footnote{This may, at first glance, seem like an absurd number of
 PHIs, but consider that if we want to optimise local variables by converting them to temporaries, we will eventually have to insert PHIs for
-variables that are assigned to in multiple different control flow paths.} At that point, we have to deal with a complex scheduling 
+variables that are assigned to in multiple different control flow paths.} At that point, we have to deal with a complex scheduling
 problem since certain registers may be assigned to both the result of a PHI and potentially arguments of \textit{several} PHIs. Generally
 speaking, this problem is not that easy to solve, which is why our RA currently does not permit more than one PHI per block.
+
+\section{Interference Graph}
+The next step is to build the interference graph that we use for graph colouring. The interference graph has two representations: an
+adjacency matrix and a set of adjacency lists. First, we construct the matrix and perform register coalescing (more about that later),
+and then we convert the matrix into a adjacency lists; those lists are the input for the actual graph colouring portion of the algorithm.
+
+\subsection{Adjacency Matrix}
+The adjacency matrix $M$ is a $n×n$ lower triangular matrix, where $n$ is the number of temporaries that need to be allocated. Each temporary
+is assigned an index between $0$ and $n-1$. Given two temporaries whose indices are $i$ and $j$, the entry $M_{\max(i,j),\,\min(i, j)}$ is $1$ if
+those temporaries interfere, and $0$ otherwise.\footnote{Since ‘interferes with’ is a symmetric relation, we only need to store either
+$M_{i,j}$ or $M_{j, i}$. Here, we arbitratily choose to always put the larger index first.} The values on the main diagonal are unused since
+there is never a reason to check if a temporary interferes with itself.
+
+For example, given a program with 5 temporaries $t_1$–$t_5$ in which $t_1$ interferes with $t_3$, $t_2$ with $t_1$, and $t_3$ with $t_5$, the
+adjacency matrix of the interference graph of that program looks as follows:\medskip
+
+\noindent\begin{tabular}{@{}C|CCCCC}
+ & t_1& t_2& t_3& t_4& t_5\\\hline
+t_1& & & & & \\
+t_2&1& & & & \\
+t_3&1&0& & & \\
+t_4&0&0&0& & \\
+t_5&0&0&1&0& \\
+\end{tabular}\medskip
+
+\noindent This matrix is constructed by the following algorithm:
+\lstset{%
+	language=algol,
+	basicstyle=\ttfamily,
+	keywordstyle=\bfseries,
+	emph={%
+		TEMPORARY, ADJMATRIX, ADJLIST, RETURN
+	}, emphstyle={\bfseries}
+}
+\begin{lstlisting}
+PROC build adjacency matrix = ([] TEMPORARY ts) ADJMATRIX:
+BEGIN
+    ADJMATRIX m;
+
+    FOR i FROM 1 TO length (ts) DO
+        FOR j FROM 1 TO length (ts) DO
+            IF interfere (ts[i], ts[j]) THEN
+                m[max (i, j), min (i, j)] = 1
+            FI
+        OD
+    OD;
+
+    RETURN m
+END
+\end{lstlisting}
+
+\noindent The function \verb|interfere (ts[i], ts[j])| returns \verb|TRUE| if the $i$-th and $j$-th temporaries interfere, and \verb|FALSE|
+otherwise. It accomplishes this by iterating over all the uses of \verb|ts[i]| and checking if the definition of \verb|ts[j]| lies
+between the definition of \verb|ts[i]| and the use, and vice versa.\footnote{Recall that two temporaries interfere iff either one is live
+at the definition point of the other, for which reason we only need to search for the definition point of \texttt{ts[j]} within the live
+range of \texttt{ts[i]}, and vice versa.} If any of the uses interfere, then the temporaries interfere.
 
 \end{document}
