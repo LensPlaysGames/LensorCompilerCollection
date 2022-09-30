@@ -585,17 +585,17 @@ implementation.
 
 \section{PHI Elimination}
 The first step of our register allocation algorithm concerns \textit{PHI ($\Phi$) instructions}. Of all the instructions in our IR, the PHI
-instruction is easily the most abstract, as it is an instruction that is found in all SSA language, and yet, there are no physical CPUs
-that implement anything remotely similar to them.
+instruction is easily the most abstract, as it is an instruction that is found in all SSA languages, and yet, there are no physical CPUs
+that implement anything remotely similar to it.
 
 As the name might suggest, the central concept of an SSA language like our IR is exactly that: \textit{single static assignment}. Once
-created, a temporary can \textit{never} be reassigned and its value is guaranteed to be the same throughout the entire function. This
+created, a temporary can \textit{never} be reassigned, and its value is guaranteed to be the same throughout the entire function. This
 works just fine in most cases: most instructions only consume and produce values, but never alter them; even variable reassignment,
 can be expressed as a sequence of load and store instruction without any actual reassignment. 
 
 Where it leads to problems is in situations where control flow demands that different values be used depending on what path is taken, 
 and while it may theoretically be possible to solve this by employing a temporary store/load to/from memory, we would much rather keep
-temporaries in registers for as long as possible, and only evict them to memory once we start running out of registers.
+temporaries in registers for as long as possible and only evict them to memory once we start running out of registers.
 
 The classical example of such a situation is the following \langname{} program (declarations are omitted for the sake of brevity):
 \begin{Verbatim}
@@ -625,7 +625,7 @@ bb4:
 
 \noindent The PHI instruction \verb|%a = phi [bb1: %c], [bb2: %d]| means ‘assign to \verb|%a| the value of \verb|%c| if we reached this block
 from \verb|bb1|, and the value of \verb|%d| if we reached this block from \verb|bb2|’; this way, we can assign different values to \verb|%a|
-depending on the control flow of the program without having to assign to \verb|%a| twice.
+depending on the control flow of the program, without having to assign to \verb|%a| twice.
 
 It is important to realise that a PHI instruction is a very high-level construct. The LLVM documentation quite aptly refers to it as ‘the 
 magical mystical PHI node, that can not exist in nature, but can be synthesized in a computer scientist's overactive imagination’. The PHI 
@@ -638,9 +638,9 @@ both here and in the source code of the RA, but it is also often known by other 
 destruction}.
 
 Lowering PHI nodes seems simple at first glance: simply insert a copy from \verb|%c| in \verb|bb2| and from \verb|%d| in \verb|bb3| to 
-\verb|%a| before the branch to \verb|bb4|; the actual PHI instruction ultimately is not emitted at all, but we still allocate a register
-for it and this is the register that we copy \verb|%c| or \verb|%d| into. After register allocation, we may end up with something like
-this:
+\verb|%a| before the branch to \verb|bb4|; no code is ultimately generated at the actual location of the PHI instruction itself, but we
+still allocate a register for it, and that is the register that we copy \verb|%c| or \verb|%d| into. After register allocation, we may 
+end up with something like this:
 \begin{Verbatim}
 bb1:
     %r1 = ... ;; Code that computes ‘%r1’ (%b)
@@ -650,10 +650,12 @@ bb2:
     copy %r2 to %r4
     branch to bb4
 bb3:
-    %r3 = ... ;; Code that computes ‘%r3’ (%c)
+    %r3 = ... ;; Code that computes ‘%r3’ (%d)
     copy %r3 to %r4
     branch to bb4
 bb4:
+    ;; In this case, the RA has assigned %r4 to %a.
+    ;;
     ;; No code is generated for the PHI; the copy
     ;; instructions that we inserted above have
     ;; already placed the right value into %r4 by
@@ -661,13 +663,13 @@ bb4:
 \end{Verbatim}
 
 \noindent Depending on the complexity of the program, a good register allocator may even be able to generate the values of \verb|%b| and
-\verb|%c| directly in \verb|%r4|, which would make the copy unnecessary since the value would already be in the right register.
+\verb|%c| directly in \verb|%r4|, which would make the copies unnecessary since the values would already be in the right register.
 
 Unfortunately for us, this strategy of simply inserting copies everywhere does not always work. There are two big problems with this
-approach, one of which is rather easy to solve (and the solution is implemented in our RA), the other one... not so much.
+approach, one of which is rather easy to solve (and the solution is implemented in our RA), the other one\ldots{} not so much.
 
 \subsection{Critical Edges}
-The first problem can occur when the argument of a phi node originates in a block that has a \textit{critical edge}. A critical edge is
+The first problem occurs when an argument of a PHI instruction originates in a block that has a \textit{critical edge}. A critical edge is
 defined as an edge between a block with multiple successors and a block with multiple predecessors (though in our case, it only matters
 that the block has multiple successors). 
 
@@ -689,7 +691,7 @@ bb4:
     %a = phi [bb1: %c], [bb2: %d]
 \end{Verbatim}
 
-\noindent Trying to lower this PHI instruction by simply inserting copies in the corresponding blocks doesn't quite work in this case:
+\noindent Trying to lower the PHI instruction in \verb|bb4| by simply inserting copies in the blocks above doesn't quite work in this case:
 \begin{Verbatim}
 bb1:
     %r1 = ...
@@ -709,10 +711,10 @@ bb4:
     ;; Value of ‘%a’ is supposed to be in %r4 here.
 \end{Verbatim}
 
-\noindent At first glance, it might seem as though there were nothing wrong with this problem; and indeed, it works just fine, so long
-as the \verb|(*)| branch instruction branches to \verb|bb4|. However, what happens if control flow branches to \verb|bb3| instead? In that
-case, we still always copy \verb|%r3| to \verb|%r4|—even if its value isn't used in \verb|bb3|! This means that \verb|%r4| cannot be used
-at all in \verb|bb3|! 
+\noindent At first glance, it might seem as though there were nothing wrong with this program; and indeed, it works just fine, so long
+as the \verb|(*)| branch instruction always branches to \verb|bb4|. However, what happens if control flow branches to \verb|bb3| instead? 
+In that case, we still end up copying \verb|%r3| to \verb|%r4|—even if its value isn't used in \verb|bb3|! This means that \verb|%r4| 
+cannot be used at all in \verb|bb3|! 
 
 As to why that is the case, consider the following scenario: assume there is some value \verb|%v| that is computed somewhere before 
 \verb|bb2| and which is used in \verb|bb3|, but not in \verb|bb4| or any of its successors. Assume futher that we (incorrectly) allow 
@@ -722,11 +724,11 @@ only the semantics of our original IR pre PHI lowering, then this assignment is 
 \verb|%a| do not overlap, and therefore, they may be assigned the same register.
 
 However, during PHI lowering, we end up inserting a copy instruction from \verb|%r3| to \verb|%r4| in \verb|bb2|. This means that the value
-of \verb|%v| which was held in \verb|%r4| up to this point is overwritten with the value in \verb|%r3|, \textit{irrespective of what block
-we branch to}. Everything is fine so long as we branch to \verb|bb4|, but if we branch to \verb|bb4|, then we have problem, since \verb|bb4|
+of \verb|%v|, which was held in \verb|%r4| up to this point, is overwritten with \verb|%r3|, \textit{irrespective of what block we branch 
+to}. Everything is fine so long as we branch to \verb|bb4|, but if we branch to \verb|bb4|, then we have problem, since \verb|bb4|
 expects the value of \verb|%v| to be stored in \verb|%r4|, but we've just overwritten it with the value of \verb|%r3|.
 
-This illustrates that we can't just insert copies into a block that ends with a conditional branch; fortunately, this problem has a rather
+This illustrates that we can't just insert copies into a block that ends with a conditional branch. Fortunately, this problem has a rather
 simple solution: if copy insertion is problematic in blocks that contain a conditional branch, then we simply need to insert the copy in a
 block that contains only an unconditional branch instead. This can be accomplished by inserting an additional block between \verb|bb2| and
 \verb|bb4| and generating the copy instruction in that block:
@@ -741,7 +743,7 @@ bb1-copy:
 bb2:
     %r3 = ...
     %r5 = ...
-    branch on %r5 to bb3 else bb2-copy (*)
+    branch on %r5 to bb3 else bb2-copy
 bb2-copy
     copy %r3 to %r4
     branch to bb4
@@ -754,6 +756,9 @@ bb4:
 \end{Verbatim}
 
 \noindent This way, the right values are always in \verb|%r4| by the time control flow reaches \verb|bb4|, but at the same time, \verb|%r4|
-is never clobbered if control flow branches to \verb|bb3| instead.
+is never clobbered if control flow branches to \verb|bb3| instead. We can now safely use \verb|%r4| for both \verb|%v| and \verb|%a| without
+changing the semantics of the program.
+
+\subsection{Multiple PHIs in One Block}
 
 \end{document}
