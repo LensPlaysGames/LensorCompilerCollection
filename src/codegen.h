@@ -8,6 +8,16 @@
 #include <parser.h>
 #include <stdio.h>
 
+CodegenContext *codegen_context_create_top_level
+(ParsingContext *parse_context,
+ enum CodegenOutputFormat format,
+ enum CodegenCallingConvention call_convention,
+ enum CodegenAssemblyDialect dialect,
+ FILE* code);
+
+CodegenContext *codegen_context_create(CodegenContext *parent);
+void codegen_context_free(CodegenContext *context);
+
 struct Register {
   /// If non-zero, this register is in use.
   char in_use;
@@ -16,6 +26,7 @@ struct Register {
 };
 
 /// Architecture-specific register information.
+// TODO: Can probably just get rid of this
 struct RegisterPool {
   Register *registers;
   Register **scratch_registers;
@@ -25,10 +36,16 @@ struct RegisterPool {
 
 struct CodegenContext {
   CodegenContext *parent;
+  ParsingContext *parse_context;
+  FILE* code;
+
+  IRFunction *function;
+  IRBlock *block;
+
   /// LOCALS
   /// `-- SYMBOL (NAME) -> INTEGER (STACK OFFSET)
-  FILE* code;
   Environment *locals;
+
   long long locals_offset;
   RegisterPool register_pool;
   enum CodegenOutputFormat format;
@@ -48,13 +65,5 @@ Error codegen
  char *output_filepath,
  ParsingContext *context,
  Node *program);
-
-
-char register_descriptor_is_valid(CodegenContext *cg_ctx, RegisterDescriptor descriptor);
-
-RegisterDescriptor register_allocate(CodegenContext *cg_ctx);
-
-void register_deallocate
-(CodegenContext *cg_ctx, RegisterDescriptor descriptor);
 
 #endif /* CODEGEN_H */

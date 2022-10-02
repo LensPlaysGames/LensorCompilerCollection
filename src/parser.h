@@ -2,7 +2,9 @@
 #define COMPILER_PARSER_H
 
 #include <stddef.h>
+#include <stdint.h>
 #include <error.h>
+#include <codegen/codegen_forward.h>
 
 typedef struct Environment Environment;
 
@@ -84,17 +86,21 @@ typedef enum NodeType {
 } NodeType;
 
 typedef struct Node {
-  int type;
-  union NodeValue {
-    long long integer;
-    char *symbol;
-  } value;
+  // Tree structure.
   struct Node *parent;
   struct Node *children;
   struct Node *next_child;
-  /// Used during codegen to store result RegisterDescriptor.
-  int result_register;
+
+  // Tagged union.
+  int type;
+  union NodeValue {
+    int64_t integer;
+    char *symbol;
+  } value;
+
   unsigned int pointer_indirection;
+
+  IRInstruction *result;
 } Node;
 
 char *node_text(Node *node);
@@ -112,7 +118,7 @@ void node_add_child(Node *parent, Node *new_child);
 int node_compare(Node *a, Node *b);
 
 /// Create a new node with integer type and given value.
-Node *node_integer(long long value);
+Node *node_integer(int64_t value);
 
 // TODO: Think about caching used symbols and not creating duplicates!
 /// Create a new node with symbol type and given value.

@@ -1,6 +1,8 @@
 #include <codegen.h>
-#include <codegen/codegen_platforms.h>
 
+#include <codegen/codegen_platforms.h>
+#include <codegen/intermediate_representation.h>
+#include <codegen/x86_64/arch_x86_64.h>
 #include <environment.h>
 #include <error.h>
 #include <inttypes.h>
@@ -14,35 +16,63 @@
 #include <typechecker.h>
 
 char codegen_verbose = 1;
-//================================================================ BEG REGISTER STUFF
 
-char register_descriptor_is_valid(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
-  return descriptor >= 0 && descriptor < (int)cg_ctx->register_pool.num_registers;
+CodegenContext *codegen_context_create_top_level
+(ParsingContext *parse_context,
+ enum CodegenOutputFormat format,
+ enum CodegenCallingConvention call_convention,
+ enum CodegenAssemblyDialect dialect,
+ FILE* code
+ )
+{
+  CodegenContext *context;
+
+  if (format == CG_FMT_x86_64_GAS) {
+    // TODO: Handle call_convention for creating codegen context!
+    if (call_convention == CG_CALL_CONV_MSWIN) {
+      context = codegen_context_x86_64_mswin_create(NULL);
+      ASSERT(context);
+    } else if (call_convention == CG_CALL_CONV_LINUX) {
+      // TODO: Create codegen context for GAS linux assembly.
+      panic("Not implemented: Create codegen context for GAS linux x86_64 assembly.");
+    } else {
+      panic("Unrecognized calling convention!");
+    }
+  } else {
+    panic("Unrecognized codegen format");
+  }
+
+  context->parse_context = parse_context;
+  context->code = code;
+  context->dialect = dialect;
+  return context;
 }
 
-RegisterDescriptor register_allocate(CodegenContext *cg_ctx) {
-  ASSERT(cg_ctx->register_pool.num_registers > 0 && cg_ctx->register_pool.num_scratch_registers > 0, "Register pool is empty");
-
-  for (size_t i = 0; i < cg_ctx->register_pool.num_scratch_registers; ++i) {
-    Register *reg = cg_ctx->register_pool.scratch_registers[i];
-    if (reg->in_use == 0) {
-      reg->in_use = 1;
-      return reg->descriptor;
+CodegenContext *codegen_context_create(CodegenContext *parent) {
+  ASSERT(parent, "create_codegen_context() can only create contexts when a parent is given.");
+  ASSERT(CG_FMT_COUNT == 1, "create_codegen_context() must exhaustively handle all codegen output formats.");
+  ASSERT(CG_CALL_CONV_COUNT == 2, "create_codegen_context() must exhaustively handle all calling conventions.");
+  if (parent->format == CG_FMT_x86_64_GAS) {
+    if (parent->call_convention == CG_CALL_CONV_MSWIN) {
+      return codegen_context_x86_64_mswin_create(parent);
+    } else if (parent->call_convention == CG_CALL_CONV_LINUX) {
+      // return codegen_context_x86_64_gas_linux_create(parent);
     }
   }
-  panic("ERROR::register_allocate(): Could not allocate register!\n");
-  return 0; // Unreachable
+  panic("create_codegen_context() could not create a new context from the given parent.");
+  return NULL; // Unreachable
 }
 
-void register_deallocate
-(CodegenContext *cg_ctx, RegisterDescriptor descriptor) {
-  if (!register_descriptor_is_valid(cg_ctx, descriptor)) {
-    panic("ERROR::register_deallocate(): Invalid register descriptor!\n");
+void codegen_context_free(CodegenContext *context) {
+  if (context->format == CG_FMT_x86_64_GAS) {
+    if (context->call_convention == CG_CALL_CONV_MSWIN) {
+      return codegen_context_x86_64_mswin_free(context);
+    } else if (context->call_convention == CG_CALL_CONV_LINUX) {
+      // return codegen_context_x86_64_gas_linux_free(parent);
+    }
   }
-  cg_ctx->register_pool.registers[descriptor].in_use = 0;
+  panic("free_codegen_context() could not free the given context.");
 }
-
-//================================================================ END REGISTER STUFF
 
 //================================================================ BEG CG_FMT_x86_64_MSWIN
 
@@ -65,7 +95,7 @@ static char *label_generate() {
 
 /// The address of a local or global symbol, or an error
 /// indicating why the symbol could not be found.
-typedef struct symbol_address {
+typedef struct SymbolAddress {
   enum {
     /// Global variable. The address is in `global`.
     SYMBOL_ADDRESS_MODE_GLOBAL,
@@ -77,20 +107,23 @@ typedef struct symbol_address {
   union {
     Error error;
     const char *global;
-    long long int local;
+    int64_t local;
   };
-} symbol_address;
+} SymbolAddress;
 
-symbol_address symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
+SymbolAddress symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
+  SymbolAddress out;
+  out.mode = SYMBOL_ADDRESS_MODE_ERROR;
+  out.error = ok;
+
   ASSERT(cg_ctx, "symbol_to_address(): Context must not be NULL (pass global).");
   ASSERT(symbol && symbol->value.symbol, "symbol_to_address(): A symbol must be passed.");
 
   // Global variable access.
   if (!cg_ctx->parent) {
-    return (symbol_address) {
-        .mode = SYMBOL_ADDRESS_MODE_GLOBAL,
-        .global = symbol->value.symbol,
-    };
+    out.mode = SYMBOL_ADDRESS_MODE_GLOBAL;
+    out.global = symbol->value.symbol;
+    return out;
   }
 
   // Local variable access.
@@ -109,18 +142,16 @@ symbol_address symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
     static char err_buf[1024];
     snprintf(err_buf, sizeof err_buf, "symbol_to_address(): Could not find symbol '%s' in environment.", symbol->value.symbol);
     ERROR_CREATE(err, ERROR_GENERIC, err_buf);
-    return (symbol_address) {
-      .mode = SYMBOL_ADDRESS_MODE_ERROR,
-      .error = err,
-    };
+    out.mode = SYMBOL_ADDRESS_MODE_ERROR;
+    out.error = err;
+    return out;
   }
 
-  long long int address = stack_offset->value.integer;
+  int64_t address = stack_offset->value.integer;
   free(stack_offset);
-  return (symbol_address) {
-    .mode = SYMBOL_ADDRESS_MODE_LOCAL,
-    .local = address,
-  };
+  out.mode = SYMBOL_ADDRESS_MODE_LOCAL;
+  out.local = address;
+  return out;
 }
 
 // Forward declare codegen_function for codegen_expression
@@ -145,77 +176,44 @@ Error codegen_expression
   FILE *code = cg_context->code;
 
   ParsingContext *original_context = context;
-  //expression->result_register = -1;
 
   ASSERT(NODE_TYPE_MAX == 15, "codegen_expression_x86_64() must exhaustively handle node types!");
   switch (expression->type) {
   default:
     break;
   case NODE_TYPE_INTEGER:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; INTEGER: %lld\n", expression->value.integer);
-    }
-    expression->result_register = codegen_load_immediate(cg_context, expression->value.integer);
+    expression->result = ir_load_immediate(cg_context, expression->value.integer);
     break;
   case NODE_TYPE_FUNCTION_CALL:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Function Call: \"%s\"\n", expression->children->value.symbol);
-    }
-
-    // TODO: Should we technically save all in-use scratch registers?
-    // Save RAX because function call will over-write it!
-    codegen_prepare_call(cg_context);
-
-    // Setup function environment based on calling convention.
-
-    Node *variable_type = node_allocate();
+    if (0) {}
     // Use `typecheck_expression()` to get type of variable.
+    Node *variable_type = node_allocate();
     // err is ignored purposefully, program already type-checked valid.
     typecheck_expression(context, NULL, expression->children, variable_type);
 
-    iterator = expression->children->next_child->children;
     if (strcmp(variable_type->value.symbol, "external function") == 0) {
-      // TODO: Save RCX, RDX, R8, and R9 (they are scratch registers).
-      // TODO: Only save scratch registers that are in-use.
-
-      // Put arguments in RCX, RDX, R8, R9, then on the stack in reverse order.
-      while (iterator) {
-        // Place first argument in RCX or XMM0
-        err = codegen_expression(cg_context, context, next_child_context, iterator);
-        if (err.type) { return err; }
-
-        codegen_add_external_function_arg(cg_context, iterator->result_register);
-        iterator = iterator->next_child;
-      }
-
-      // TODO: Reverse rest of arguments, push on stack.
-
-      expression->result_register = codegen_perform_external_call(cg_context, expression->children->value.symbol);
+      expression->result = ir_external_call(cg_context, expression->children->value.symbol);
     } else {
-      // Push arguments on stack in order.
-      while (iterator) {
-        err = codegen_expression(cg_context, context, next_child_context, iterator);
-        if (err.type) { return err; }
-        codegen_add_internal_function_arg(cg_context, iterator->result_register);
-        register_deallocate(cg_context, iterator->result_register);
-        iterator = iterator->next_child;
-      }
-
-      err = codegen_expression(cg_context, context, next_child_context, expression->children);
-      if (err.type) { return err; }
-
-      // Emit call
-      expression->result_register = codegen_perform_internal_call(cg_context, expression->children->result_register);
-      register_deallocate(cg_context, expression->children->result_register);
+      expression->result = ir_internal_call(cg_context, expression->children->result);
     }
 
-    codegen_cleanup_call(cg_context);
+    for (iterator = expression->children->next_child->children;
+         iterator;
+         iterator = iterator->next_child
+         ) {
+      err = codegen_expression(cg_context, context, next_child_context, iterator);
+      if (err.type) { return err; }
+      ir_add_function_call_argument(cg_context, expression->result, iterator->result);
+    }
+
+    if (strcmp(variable_type->value.symbol, "external function") != 0) {
+      err = codegen_expression(cg_context, context, next_child_context, expression->children);
+      if (err.type) { return err; }
+    }
 
     break;
   case NODE_TYPE_FUNCTION:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Function\n");
-    }
+    if (0) {}
     // TODO/FIXME: Obviously this is not ideal to do backwards lookup,
     // especially for function nodes which contain the body... Oh well!
     ParsingContext *context_it = context;
@@ -231,49 +229,35 @@ Error codegen_expression
       // FIXME: Completely memory leaked here, no chance of freeing!
       result = label_generate();
     }
-    err = codegen_function(cg_context,
-                                      context, next_child_context,
-                                      result, expression);
-
+    err = codegen_function
+      (cg_context,
+       context, next_child_context,
+       result, expression);
+    if (err.type) { return err; }
     // Function returns beginning of instructions address.
-    expression->result_register = register_allocate(cg_context);
-    codegen_load_global_address_into(cg_context, result, expression->result_register);
-    /*femit_x86_64(cg_context, INSTRUCTION_X86_64_LEA, NAME_TO_REGISTER,
-        REG_X86_64_RIP, result,
-        expression->result_register);*/
+    expression->result = ir_load_global_address(cg_context, result);
     break;
   case NODE_TYPE_DEREFERENCE:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Dereference\n");
-    }
     err = codegen_expression(cg_context,
                              context, next_child_context,
                              expression->children);
     if (err.type) { return err; }
-    expression->result_register = expression->children->result_register;
+    expression->result = ir_load(cg_context, expression->children->result);
     break;
   case NODE_TYPE_ADDRESSOF: {
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Addressof\n");
-    }
-
-    symbol_address address = symbol_to_address(cg_context, expression->children);
+    SymbolAddress address = symbol_to_address(cg_context, expression->children);
     switch (address.mode) {
-      case SYMBOL_ADDRESS_MODE_ERROR: return address.error;
-      case SYMBOL_ADDRESS_MODE_GLOBAL:
-        expression->result_register = codegen_load_global_address(cg_context, address.global);
-        break;
-      case SYMBOL_ADDRESS_MODE_LOCAL:
-        expression->result_register = codegen_load_local_address(cg_context, address.local);
-        break;
+    case SYMBOL_ADDRESS_MODE_ERROR: return address.error;
+    case SYMBOL_ADDRESS_MODE_GLOBAL:
+      expression->result = ir_load_global_address(cg_context, address.global);
+      break;
+    case SYMBOL_ADDRESS_MODE_LOCAL:
+      expression->result = ir_load_local_address(cg_context, address.local);
+      break;
     }
     break;
   }
   case NODE_TYPE_INDEX: {
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Index %lld\n", expression->value.integer);
-    }
-
     // Get type of accessed array.
     err = parse_get_variable(context, expression->children, tmpnode);
     if (err.type) { return err; }
@@ -288,46 +272,56 @@ Error codegen_expression
     long long offset = base_type_size * expression->value.integer;
 
     // Load memory address of beginning of array.
-    symbol_address address = symbol_to_address(cg_context, expression->children);
+    SymbolAddress address = symbol_to_address(cg_context, expression->children);
     switch (address.mode) {
-      case SYMBOL_ADDRESS_MODE_ERROR: return address.error;
+      case SYMBOL_ADDRESS_MODE_ERROR:
+        return address.error;
       case SYMBOL_ADDRESS_MODE_GLOBAL:
-        expression->result_register = codegen_load_global_address(cg_context, address.global);
+        expression->result = ir_load_global_address(cg_context, address.global);
         break;
       case SYMBOL_ADDRESS_MODE_LOCAL:
-        expression->result_register = codegen_load_local_address(cg_context, address.local);
+        expression->result = ir_load_local_address(cg_context, address.local);
         break;
     }
     // Offset memory address by index.
     if (offset) {
-      codegen_add_immediate(cg_context, expression->result_register, offset);
+      TODO("Create IR_IMMEDIATE to load offset into temporary, then generate an add between the new temporary and the result of loading the array's address.");
     }
     break;
   }
   case NODE_TYPE_IF:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; If\n");
-    }
-
     // Generate if condition expression code.
     err = codegen_expression(cg_context,
                              context, next_child_context,
                              expression->children);
     if (err.type) { return err; }
 
-    if (codegen_verbose) {
-      fprintf(code, ";;#; If CONDITION\n");
-    }
+    /** Each box is a basic block within intermediate representation,
+     *  and edges represent control flow from top to bottom.
+     *
+     *      +---------+
+     *      | current |
+     *      +---------+
+     *     /           \
+     * +------+    +-----------+
+     * | then |    | otherwise |
+     * +------+    +-----------+
+     *         \  /
+     *       +------+
+     *       | join |
+     *       +------+
+     */
 
-    // Generate code using result register from condition expression.
-    char *otherwise_label = label_generate();
-    char *after_otherwise_label = label_generate();
-    codegen_branch_if_zero(cg_context, expression->children->result_register, otherwise_label);
-    register_deallocate(cg_context, expression->children->result_register);
+    IRBlock *then_block = ir_block_create();
+    IRBlock *last_then_block = then_block;
+    IRBlock *otherwise_block = ir_block_create();
+    IRBlock *last_otherwise_block = otherwise_block;
+    IRBlock *join_block = ir_block_create();
 
-    if (codegen_verbose) {
-      fprintf(code, ";;#; If THEN\n");
-    }
+    // TODO: Generate if instruction with then, otherwise blocks
+
+    // TODO: Attach then_block to current function and make it active
+    // as our context block.
 
     // Enter if then body context
     ParsingContext *ctx = context;
@@ -350,25 +344,19 @@ Error codegen_expression
                                ctx, &next_child_ctx,
                                expr);
       if (err.type) { return err; }
-      if (last_expr) {
-        register_deallocate(cg_context, last_expr->result_register);
-      }
       last_expr = expr;
       expr = expr->next_child;
     }
 
-    // Generate code to copy last expr result register to if result register.
-    expression->result_register = register_allocate(cg_context);
-    codegen_copy_register(cg_context, last_expr->result_register, expression->result_register);
-    register_deallocate(cg_context, last_expr->result_register);
-    codegen_branch(cg_context, after_otherwise_label);
+    // Generate an unconditional branch to the join_block.
+    ir_branch(cg_context, join_block);
 
-    if (codegen_verbose) {
-      fprintf(code, ";;#; If OTHERWISE\n");
-    }
+    last_then_block = cg_context->block;
 
     // Generate OTHERWISE
-    fprintf(code, "%s:\n", otherwise_label);
+
+    // TODO: Attach otherwise_block to current function and make it
+    // active as our context block.
 
     last_expr = NULL;
     if (expression->children->next_child->next_child) {
@@ -392,28 +380,25 @@ Error codegen_expression
                                  ctx, &next_child_ctx,
                                  expr);
         if (err.type) { return err; }
-        if (last_expr) {
-          register_deallocate(cg_context, last_expr->result_register);
-        }
         last_expr = expr;
         expr = expr->next_child;
       }
-      // Copy last_expr result register to if result register.
-      if (last_expr) {
-        codegen_copy_register(cg_context, last_expr->result_register, expression->result_register);
-        register_deallocate(cg_context, last_expr->result_register);
-      }
+
+      ir_branch(cg_context, join_block);
+
+      last_otherwise_block = cg_context->block;
+
     } else {
-      codegen_zero_register(cg_context, expression->result_register);
+      ir_immediate(cg_context, 0);
     }
 
-    fprintf(code, "%s:\n", after_otherwise_label);
+    // TODO: Attach join_block to function and set it as the active
+    // context block.
+
+    // TODO: Phi stuff
 
     break;
   case NODE_TYPE_BINARY_OPERATOR:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Binary Operator: \"%s\"\n", expression->value.symbol);
-    }
     while (context->parent) { context = context->parent; }
     // FIXME: Second argument is memory leaked! :^(
     environment_get(*context->binary_operators, node_symbol(expression->value.symbol), tmpnode);
@@ -431,48 +416,58 @@ Error codegen_expression
     if (err.type) { return err; }
 
     if (strcmp(expression->value.symbol, ">") == 0) {
-      expression->result_register = codegen_comparison(cg_context,
-          COMPARE_GT,
-          expression->children->result_register,
-          expression->children->next_child->result_register);
+      expression->result = ir_comparison
+        (cg_context,
+         COMPARE_GT,
+         expression->children->result,
+         expression->children->next_child->result);
     } else if (strcmp(expression->value.symbol, "<") == 0) {
-      expression->result_register = codegen_comparison(cg_context,
-          COMPARE_LT,
-          expression->children->result_register,
-          expression->children->next_child->result_register);
+      expression->result = ir_comparison
+        (cg_context,
+         COMPARE_LT,
+         expression->children->result,
+         expression->children->next_child->result);
     } else if (strcmp(expression->value.symbol, "=") == 0) {
-      expression->result_register = codegen_comparison(cg_context,
-          COMPARE_EQ,
-          expression->children->result_register,
-          expression->children->next_child->result_register);
+      expression->result = ir_comparison
+        (cg_context,
+         COMPARE_EQ,
+         expression->children->result,
+         expression->children->next_child->result);
     } else if (strcmp(expression->value.symbol, "+") == 0) {
-      expression->result_register = codegen_add(cg_context,
-          expression->children->result_register,
-          expression->children->next_child->result_register);
+      expression->result = ir_add
+        (cg_context,
+         expression->children->result,
+         expression->children->next_child->result);
     } else if (strcmp(expression->value.symbol, "-") == 0) {
-      expression->result_register = codegen_subtract(cg_context,
-          expression->children->result_register,
-          expression->children->next_child->result_register);
+      expression->result = ir_subtract
+        (cg_context,
+         expression->children->result,
+         expression->children->next_child->result);
     } else if (strcmp(expression->value.symbol, "*") == 0) {
-      expression->result_register = codegen_multiply(cg_context,
-          expression->children->result_register,
-          expression->children->next_child->result_register);
+      expression->result = ir_multiply
+        (cg_context,
+         expression->children->result,
+         expression->children->next_child->result);
     } else if (strcmp(expression->value.symbol, "/") == 0) {
-      expression->result_register = codegen_divide(cg_context,
-          expression->children->result_register,
-          expression->children->next_child->result_register);
+      expression->result = ir_divide
+        (cg_context,
+         expression->children->result,
+         expression->children->next_child->result);
     } else if (strcmp(expression->value.symbol, "%") == 0) {
-      expression->result_register = codegen_modulo(cg_context,
-          expression->children->result_register,
-          expression->children->next_child->result_register);
+      expression->result = ir_modulo
+        (cg_context,
+         expression->children->result,
+         expression->children->next_child->result);
     } else if (strcmp(expression->value.symbol, "<<") == 0) {
-      expression->result_register = codegen_shift_left(cg_context,
-          expression->children->result_register,
-          expression->children->next_child->result_register);
+      expression->result = ir_shift_left
+        (cg_context,
+         expression->children->result,
+         expression->children->next_child->result);
     } else if (strcmp(expression->value.symbol, ">>") == 0) {
-      expression->result_register = codegen_shift_right_arithmetic(cg_context,
-          expression->children->result_register,
-          expression->children->next_child->result_register);
+      expression->result = ir_shift_right_arithmetic
+        (cg_context,
+         expression->children->result,
+         expression->children->next_child->result);
     } else {
       fprintf(stderr, "Unrecognized binary operator: \"%s\"\n", expression->value.symbol);
       ERROR_PREP(err, ERROR_GENERIC, "codegen_expression() does not recognize binary operator");
@@ -480,9 +475,8 @@ Error codegen_expression
     }
     break;
   case NODE_TYPE_VARIABLE_ACCESS:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Variable Access: \"%s\"\n", expression->value.symbol);
-    }
+    if (0) {}
+
     // Find context that local variable resides in.
 
     CodegenContext *variable_residency = cg_context;
@@ -494,20 +488,18 @@ Error codegen_expression
     }
     if (!variable_residency) {
       // Global variable
-      expression->result_register = codegen_load_global(cg_context, expression->value.symbol);
+      expression->result = ir_load_global(cg_context, expression->value.symbol);
     } else {
       // TODO: For each context change upwards (base pointer load), emit a call to load caller RBP
       // from current RBP into some register, and use that register as offset for memory access.
       // This will require us to differentiate scopes from stack frames, which is a problem for
       // another time :^). Good luck, future me!
-      expression->result_register = codegen_load_local(cg_context, tmpnode->value.integer);
+      // TODO: Local variable loading is going to be overhauled in a major way.
+      expression->result = ir_load_local(cg_context, tmpnode->value.integer);
     }
     break;
   case NODE_TYPE_VARIABLE_DECLARATION:
     if (!cg_context->parent) { break; }
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Variable Declaration: \"%s\"\n", expression->children->value.symbol);
-    }
     // Allocate space on stack
     //   Get the size in bytes of the type of the variable
     long long size_in_bytes = 0;
@@ -530,35 +522,20 @@ Error codegen_expression
     if (err.type) { return err; }
     size_in_bytes = tmpnode->children->value.integer;
 
-    // TODO: Optimize to subtract all local variable's stack size at
-    // beginning of function rather than throughout.
-    //   Subtract type size in bytes from stack pointer
-    codegen_alloca(cg_context, size_in_bytes);
-    // Keep track of RBP offset.
-    // FIXME(Sirraide): this is probably no longer necessary since we now reset
-    //   RSP to RBP at the end of a function anyway.
-    cg_context->locals_offset -= size_in_bytes;
-    //   Kept in codegen context.
+    IRInstruction *local = ir_stack_allocate(cg_context, size_in_bytes);
+    // TODO: Store local stack allocation instruction in codegen
+    // context's locals environment.
+
     environment_set(cg_context->locals, expression->children, node_integer(cg_context->locals_offset));
     break;
   case NODE_TYPE_VARIABLE_REASSIGNMENT:
-    if (codegen_verbose) {
-      fprintf(code, ";;#; Variable Reassignment\n");
-    }
-
-    // TODO: This whole section of code is pretty non-radical, dudes.
-
-    // 1. Codegen RHS
-    // 2. Recurse LHS into children until LHS is a var. access.
-
+    // Recurse LHS into children until LHS is a var. access.
     // Set iterator to the var. access node.
     iterator = expression->children;
     while (iterator && iterator->type != NODE_TYPE_VARIABLE_ACCESS) {
       iterator = iterator->children;
     }
-    if (!iterator) {
-      // TODO: Error here for invalid or misshapen AST.
-    }
+    ASSERT(iterator, "Invalid or mishapen AST.");
 
     // Codegen RHS
     err = codegen_expression(cg_context, context, next_child_context,
@@ -566,14 +543,21 @@ Error codegen_expression
     if (err.type) { break; }
 
     if (expression->children->type == NODE_TYPE_VARIABLE_ACCESS) {
-      symbol_address address = symbol_to_address(cg_context, expression->children);
+      SymbolAddress address = symbol_to_address(cg_context, expression->children);
       switch (address.mode) {
-        case SYMBOL_ADDRESS_MODE_ERROR: return address.error;
+        case SYMBOL_ADDRESS_MODE_ERROR:
+          return address.error;
         case SYMBOL_ADDRESS_MODE_GLOBAL:
-          codegen_store_global(cg_context, expression->children->next_child->result_register, address.global);
+          expression->result = ir_store_global
+            (cg_context,
+             expression->children->next_child->result,
+             address.global);
           break;
         case SYMBOL_ADDRESS_MODE_LOCAL:
-          codegen_store_local(cg_context, expression->children->next_child->result_register, address.local);
+          expression->result = ir_store_local
+            (cg_context,
+             expression->children->next_child->result,
+             address.local);
           break;
       }
     } else {
@@ -581,11 +565,9 @@ Error codegen_expression
       err = codegen_expression(cg_context, context, next_child_context,
                                expression->children);
       if (err.type) { break; }
-      codegen_store(cg_context,
-                    expression->children->next_child->result_register,
-                    expression->children->result_register);
-      register_deallocate(cg_context, expression->children->next_child->result_register);
-      register_deallocate(cg_context, expression->children->result_register);
+      expression->result = ir_store(cg_context,
+               expression->children->next_child->result,
+               expression->children->result);
     }
     break;
   case NODE_TYPE_CAST:
@@ -625,9 +607,6 @@ Error codegen_expression
     break;
   }
 
-  ASSERT(expression->result_register != -1,
-         "Result register of expression not set. Likely an internal error during codegen.");
-
   free(tmpnode);
   return err;
 }
@@ -647,6 +626,8 @@ Error codegen_function
 
   cg_context = codegen_context_create(cg_context);
 
+  IRFunction *f = ir_function(cg_context);
+
   // Store base pointer integer offset within locals environment
   // Start at one to make space for pushed RBP in function header.
   size_t param_count = 1;
@@ -661,18 +642,8 @@ Error codegen_function
     parameter = parameter->next_child;
   }
 
-  // Nested function execution protection
-
-  char after_name_buffer[LABEL_NAME_BUFFER_SIZE];
-  snprintf(after_name_buffer, sizeof after_name_buffer, "after%s", name);
-  after_name_buffer[sizeof after_name_buffer - 1] = 0;
-  codegen_branch(cg_context, after_name_buffer);
-
   // Function beginning label
   fprintf(code, "%s:\n", name);
-
-  // Function header
-  codegen_function_prologue(cg_context);
 
   // Function body
   ParsingContext *ctx = context;
@@ -691,7 +662,6 @@ Error codegen_function
   Node *expression = function->children->next_child->next_child->children;
   while (expression) {
     err = codegen_expression(cg_context, ctx, &next_child_ctx, expression);
-    register_deallocate(cg_context, expression->result_register);
     if (err.type) {
       print_error(err);
       return err;
@@ -700,28 +670,25 @@ Error codegen_function
     expression = expression->next_child;
   }
 
-  codegen_set_return_value(cg_context, last_expression->result_register);
-
-  // Function footer
-  codegen_function_epilogue(cg_context);
-
-  // Nested function execution jump label
-  fprintf(code, "%s:\n", after_name_buffer);
-  // after<function_label>:
+  ir_set_return_value(cg_context, f, last_expression->result);
 
   // Free context;
   codegen_context_free(cg_context);
   return ok;
 }
 
-Error codegen_program(CodegenContext *cg_context, ParsingContext *context, Node *program) {
+Error codegen_program(CodegenContext *context, Node *program) {
   Error err = ok;
-  FILE *code = cg_context->code;
 
-  fprintf(code, "%s", ".section .data\n");
 
-  // Generate global variables
-  Binding *var_it = context->variables->bind;
+  // Generate global variables.
+  // TODO: Generate global variables in THE CODEGEN BACKEND, where this
+  // actually belongs :P.
+
+  fprintf(context->code, "%s", ".section .data\n");
+
+
+  Binding *var_it = context->parse_context->variables->bind;
   Node *type_info = node_allocate();
   while (var_it) {
     Node *var_id = var_it->id;
@@ -730,42 +697,35 @@ Error codegen_program(CodegenContext *cg_context, ParsingContext *context, Node 
     // Do not emit "external" typed variables.
     // TODO: Probably should have external attribute rather than this nonsense!
     if (strcmp(type_id->value.symbol, "external function") != 0) {
-      err = parse_get_type(context, type_id, type_info);
+      err = parse_get_type(context->parse_context, type_id, type_info);
       if (err.type) {
         print_node(type_id, 0);
         return err;
       }
-      fprintf(code, "%s: .space %lld\n", var_id->value.symbol, type_info->children->value.integer);
+      fprintf(context->code, "%s: .space %lld\n", var_id->value.symbol, type_info->children->value.integer);
     }
     var_it = var_it->next;
   }
   free(type_info);
 
-  codegen_entry_point(cg_context);
+  IRFunction *main = ir_function(context);
 
-  ParsingContext *next_child_context = context->children;
-  Node *last_expression = program->children;
+  ParsingContext *next_child_context = context->parse_context->children;
+  Node *last_expression = NULL;
   Node *expression = program->children;
   while (expression) {
     if (nonep(*expression)) {
       expression = expression->next_child;
       continue;
     }
-    err = codegen_expression(cg_context, context, &next_child_context, expression);
+    err = codegen_expression(context, context->parse_context, &next_child_context, expression);
     if (err.type) { return err; }
-    register_deallocate(cg_context, expression->result_register);
     last_expression = expression;
     expression = expression->next_child;
   }
-
-  // Copy last expression into RAX register for return value.
-  // femit() will optimise the move away if the result is already in RAX.
   if (last_expression) {
-    codegen_set_return_value(cg_context, last_expression->result_register);
+    ir_set_return_value(context, main, last_expression->result);
   }
-
-  codegen_function_epilogue(cg_context);
-
   return err;
 }
 
@@ -776,26 +736,27 @@ Error codegen
  enum CodegenCallingConvention call_convention,
  enum CodegenAssemblyDialect dialect,
  char *filepath,
- ParsingContext *context,
+ ParsingContext *parse_context,
  Node *program
  )
 {
   Error err = ok;
   if (!filepath) {
-    ERROR_PREP(err, ERROR_ARGUMENTS, "codegen_program(): filepath can not be NULL!");
+    ERROR_PREP(err, ERROR_ARGUMENTS, "codegen(): filepath can not be NULL!");
     return err;
   }
   // Open file for writing.
   FILE *code = fopen(filepath, "w");
   if (!code) {
     printf("Filepath: \"%s\"\n", filepath);
-    ERROR_PREP(err, ERROR_GENERIC, "codegen_program(): fopen failed to open file at path.");
+    ERROR_PREP(err, ERROR_GENERIC, "codegen(): fopen failed to open file at path.");
     return err;
   }
 
-  CodegenContext *cg_context = codegen_context_create_top_level(format, call_convention, dialect, code);
-  err = codegen_program(cg_context, context, program);
-  codegen_context_free(cg_context);
+  CodegenContext *context = codegen_context_create_top_level
+    (parse_context, format, call_convention, dialect, code);
+  err = codegen_program(context, program);
+  codegen_context_free(context);
 
   fclose(code);
   return err;

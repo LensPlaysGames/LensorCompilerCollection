@@ -20,7 +20,7 @@ add_executable(
   src/main.c
   src/parser.c
   src/typechecker.c
-  src/codegen/codegen_platforms.c
+  src/codegen/intermediate_representation.c
   src/codegen/x86_64/arch_x86_64.c
 )
 target_include_directories(

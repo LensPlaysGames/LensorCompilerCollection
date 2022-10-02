@@ -1,6 +1,10 @@
 #ifndef CODEGEN_FORWARD_H
 #define CODEGEN_FORWARD_H
 
+typedef struct IRInstruction IRInstruction;
+typedef struct IRBlock IRBlock;
+typedef struct IRFunction IRFunction;
+
 typedef int RegisterDescriptor;
 
 typedef struct Register Register;
