@@ -10,104 +10,96 @@
   ASSERT((name), "Could not allocate new IRInstruction.");  \
   (name)->type = (given_type);
 
-typedef enum IRType {
-  IR_IMMEDIATE,
-  IR_CALL,
-  IR_RETURN,
-  IR_LOAD,
-  IR_BRANCH,
-  IR_BRANCH_CONDITIONAL,
-  IR_PHI,
-
-  IR_ADD,
-  IR_SUBTRACT,
-
-  IR_LOCAL_LOAD,
-  IR_LOCAL_STORE,
-  IR_LOCAL_ADDRESS,
-
-  IR_GLOBAL_LOAD,
-  IR_GLOBAL_STORE,
-  IR_GLOBAL_ADDRESS,
-
-  IR_COMPARISON,
-  IR_COUNT
-} IRType;
-
-typedef struct IRPhiArgument {
-  /// The value of the argument itself.
-  IRInstruction *value;
-  /// Stores the predecessor to the Phi node in the direction of the
-  /// argument assignment.
-  ///    [a]
-  ///  [t] [o]
-  ///    \ [b]
-  ///    [j]
-  /// For example, if arg->value->block == o, then arg->block == b.
-  IRBlock *block;
-  // A linked list of arguments.
-  struct IRPhiArgument *next;
-} IRPhiArgument;
-
-typedef struct IRPair {
-  IRInstruction *car;
-  IRInstruction *cdr;
-} IRPair;
-
-typedef struct IRCallArgument {
-  IRInstruction *value;
-  struct IRCallArgument *next;
-} IRCallArgument;
-
-typedef enum IRCallType {
-  IR_CALLTYPE_DIRECT,
-  IR_CALLTYPE_INDIRECT,
-  IR_CALLTYPE_COUNT
-} IRCallType;
-
-typedef union IRCallValue {
-  char *name;
-  IRInstruction *callee;
-} IRCallValue;
-
-typedef struct IRCall {
-  IRCallType type;
-  IRCallValue value;
-  IRCallArgument *arguments;
-} IRCall;
-
-typedef struct IRBranchConditional {
-  IRInstruction *condition;
-  IRBlock *true_branch;
-  IRBlock *false_branch;
-} IRBranchConditional;
-
-typedef struct IRComparison {
-  enum ComparisonType type;
-  IRPair pair;
-} IRComparison;
-
-typedef struct IRGlobalAssignment {
-  IRInstruction *new_value;
-  char *name;
-} IRGlobalAssignment;
-
-typedef union IRValue {
-  IRBlock *block;
-  IRInstruction *reference;
-  int64_t immediate;
-  IRCall call;
-  IRPhiArgument *phi_argument;
-  IRBranchConditional conditional_branch;
-  IRPair pair;
-  IRComparison comparison;
-  char *name;
-  IRGlobalAssignment global_assignment;
-} IRValue;
-
 typedef struct IRInstruction {
-  int type;
-  IRValue value;
+  enum {
+    IR_IMMEDIATE,
+    IR_CALL,
+    IR_RETURN,
+    IR_LOAD,
+    IR_BRANCH,
+    IR_BRANCH_CONDITIONAL,
+    IR_PHI,
+
+    IR_ADD,
+    IR_SUBTRACT,
+
+    IR_LOCAL_LOAD,
+    IR_LOCAL_STORE,
+    IR_LOCAL_ADDRESS,
+
+    IR_GLOBAL_LOAD,
+    IR_GLOBAL_STORE,
+    IR_GLOBAL_ADDRESS,
+
+    IR_COMPARISON,
+    IR_COUNT
+  } type;
+
+  union {
+    IRBlock *block;
+    IRInstruction *reference;
+    int64_t immediate;
+
+    struct {
+      enum {
+        IR_CALLTYPE_DIRECT,
+        IR_CALLTYPE_INDIRECT,
+        IR_CALLTYPE_COUNT
+      } call_type;
+
+      union {
+        char *name;
+        IRInstruction *callee;
+      };
+
+      struct IRCallArgument {
+        IRInstruction *value;
+        struct IRCallArgument *next;
+      } *arguments;
+    };
+
+    struct IRPhiArgument {
+      /// The value of the argument itself.
+      IRInstruction *value;
+      /// Stores the predecessor to the Phi node in the direction of the
+      /// argument assignment.
+      ///    [a]
+      ///  [t] [o]
+      ///    \ [b]
+      ///    [j]
+      /// For example, if arg->value->block == o, then arg->block == b.
+      IRBlock *block;
+      // A linked list of arguments.
+      struct IRPhiArgument *next;
+    } phi_argument;
+
+
+    struct {
+      IRInstruction *condition;
+      IRBlock *true_branch;
+      IRBlock *false_branch;
+    };
+
+    struct {
+      IRInstruction *car;
+      IRInstruction *cdr;
+    };
+
+    struct {
+      enum ComparisonType comp_type;
+      struct {
+        IRInstruction *lhs;
+        IRInstruction *rhs;
+      };
+    };
+
+    struct {
+      IRInstruction *new_value;
+      char *name1;
+    };
+
+    char *name2;
+  };
 
   /// A unique identifier (mainly for debug purposes).
   size_t id;
