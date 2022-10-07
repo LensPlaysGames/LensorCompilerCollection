@@ -1010,6 +1010,31 @@ void emit_function(CodegenContext *context, IRFunction *function) {
 }
 
 void codegen_emit_x86_64(CodegenContext *context) {
+  // Generate global variables.
+
+  fprintf(context->code, "%s", ".section .data\n");
+
+  Binding *var_it = context->parse_context->variables->bind;
+  Node *type_info = node_allocate();
+  while (var_it) {
+    Node *var_id = var_it->id;
+    Node *type_id = node_allocate();
+    *type_id = *var_it->value;
+    // Do not emit "external" typed variables.
+    // TODO: Probably should have external attribute rather than this nonsense!
+    if (strcmp(type_id->value.symbol, "external function") != 0) {
+      Error err = parse_get_type(context->parse_context, type_id, type_info);
+      if (err.type) {
+        print_node(type_id, 0);
+        print_error(err);
+        PANIC();
+      }
+      fprintf(context->code, "%s: .space %lld\n", var_id->value.symbol, type_info->children->value.integer);
+    }
+    var_it = var_it->next;
+  }
+  free(type_info);
+
   // TODO: Fixup parameter references (spill to stack every time for
   // now). This converts parameters into local variables, which makes
   // life 1000% easier.

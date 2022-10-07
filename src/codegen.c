@@ -1,6 +1,5 @@
 #include <codegen.h>
 
-#include <codegen/codegen_platforms.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/x86_64/arch_x86_64.h>
 #include <environment.h>
@@ -107,7 +106,7 @@ typedef struct SymbolAddress {
   union {
     Error error;
     const char *global;
-    int64_t local;
+    IRInstruction *local;
   };
 } SymbolAddress;
 
@@ -127,6 +126,8 @@ SymbolAddress symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
   }
 
   // Local variable access.
+  // TODO: Make a custom symbol to local instruction hash map/table.
+  // That way, we can get rid of IR node type in the AST.
   Node *stack_offset = node_allocate();
   if (!environment_get(*cg_ctx->locals, symbol, stack_offset)) {
     putchar('\n');
@@ -140,14 +141,14 @@ SymbolAddress symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
     //   memory since we're probably going to terminate anyway if there
     //   was an error.
     static char err_buf[1024];
-    snprintf(err_buf, sizeof err_buf, "symbol_to_address(): Could not find symbol '%s' in environment.", symbol->value.symbol);
+    snprintf(err_buf, sizeof(err_buf), "symbol_to_address(): Could not find symbol '%s' in environment.", symbol->value.symbol);
     ERROR_CREATE(err, ERROR_GENERIC, err_buf);
     out.mode = SYMBOL_ADDRESS_MODE_ERROR;
     out.error = err;
     return out;
   }
 
-  int64_t address = stack_offset->value.integer;
+  IRInstruction *address = stack_offset->value.ir_instruction;
   free(stack_offset);
   out.mode = SYMBOL_ADDRESS_MODE_LOCAL;
   out.local = address;
@@ -182,7 +183,7 @@ Error codegen_expression
   default:
     break;
   case NODE_TYPE_INTEGER:
-    expression->result = ir_load_immediate(cg_context, expression->value.integer);
+    expression->result = ir_immediate(cg_context, expression->value.integer);
     break;
   case NODE_TYPE_FUNCTION_CALL:
     if (0) {}
@@ -192,9 +193,9 @@ Error codegen_expression
     typecheck_expression(context, NULL, expression->children, variable_type);
 
     if (strcmp(variable_type->value.symbol, "external function") == 0) {
-      expression->result = ir_external_call(cg_context, expression->children->value.symbol);
+      expression->result = ir_direct_call(cg_context, expression->children->value.symbol);
     } else {
-      expression->result = ir_internal_call(cg_context, expression->children->result);
+      expression->result = ir_indirect_call(cg_context, expression->children->result);
     }
 
     for (iterator = expression->children->next_child->children;
@@ -318,10 +319,12 @@ Error codegen_expression
     IRBlock *last_otherwise_block = otherwise_block;
     IRBlock *join_block = ir_block_create();
 
-    // TODO: Generate if instruction with then, otherwise blocks
+    // Generate if instruction with then, otherwise blocks
+    ir_branch_conditional(cg_context, expression->children->result, then_block, otherwise_block);
 
-    // TODO: Attach then_block to current function and make it active
-    // as our context block.
+    // Attach then_block to current function and make it active as our
+    // context block.
+    ir_block_attach(cg_context, then_block);
 
     // Enter if then body context
     ParsingContext *ctx = context;
@@ -355,8 +358,9 @@ Error codegen_expression
 
     // Generate OTHERWISE
 
-    // TODO: Attach otherwise_block to current function and make it
-    // active as our context block.
+    // Attach otherwise_block to current function and make it active as
+    // our context block.
+    ir_block_attach(cg_context, otherwise_block);
 
     last_expr = NULL;
     if (expression->children->next_child->next_child) {
@@ -392,10 +396,20 @@ Error codegen_expression
       ir_immediate(cg_context, 0);
     }
 
-    // TODO: Attach join_block to function and set it as the active
-    // context block.
+    // This assumes that the last instruction in a block returns a
+    // value; if it doesn't, we will simply return zero. This should
+    // probably be ensured in the type checker in the future.
+    IRInstruction *then_return_value = last_then_block->last_instruction;
+    IRInstruction *otherwise_return_value = last_otherwise_block->last_instruction;
 
-    // TODO: Phi stuff
+    // Attach join_block to function and set it as the active context
+    // block.
+    ir_block_attach(cg_context, join_block);
+
+    // Insert phi node for result of if expression in join block.
+    IRInstruction *phi = ir_phi(cg_context);
+    ir_phi_argument(phi, last_otherwise_block, then_return_value);
+    ir_phi_argument(phi, last_otherwise_block, otherwise_return_value);
 
     break;
   case NODE_TYPE_BINARY_OPERATOR:
@@ -523,10 +537,9 @@ Error codegen_expression
     size_in_bytes = tmpnode->children->value.integer;
 
     IRInstruction *local = ir_stack_allocate(cg_context, size_in_bytes);
-    // TODO: Store local stack allocation instruction in codegen
-    // context's locals environment.
-
-    environment_set(cg_context->locals, expression->children, node_integer(cg_context->locals_offset));
+    Node *local_reference = node_allocate();
+    local_reference->value.ir_instruction = local;
+    environment_set(cg_context->locals, expression->children, local_reference);
     break;
   case NODE_TYPE_VARIABLE_REASSIGNMENT:
     // Recurse LHS into children until LHS is a var. access.
@@ -670,7 +683,10 @@ Error codegen_function
     expression = expression->next_child;
   }
 
-  ir_set_return_value(cg_context, f, last_expression->result);
+  IRInstruction *branch = ir_return(cg_context);
+  f->last->branch = branch;
+
+  f->return_value = last_expression->result;
 
   // Free context;
   codegen_context_free(cg_context);
@@ -679,34 +695,6 @@ Error codegen_function
 
 Error codegen_program(CodegenContext *context, Node *program) {
   Error err = ok;
-
-
-  // Generate global variables.
-  // TODO: Generate global variables in THE CODEGEN BACKEND, where this
-  // actually belongs :P.
-
-  fprintf(context->code, "%s", ".section .data\n");
-
-
-  Binding *var_it = context->parse_context->variables->bind;
-  Node *type_info = node_allocate();
-  while (var_it) {
-    Node *var_id = var_it->id;
-    Node *type_id = node_allocate();
-    *type_id = *var_it->value;
-    // Do not emit "external" typed variables.
-    // TODO: Probably should have external attribute rather than this nonsense!
-    if (strcmp(type_id->value.symbol, "external function") != 0) {
-      err = parse_get_type(context->parse_context, type_id, type_info);
-      if (err.type) {
-        print_node(type_id, 0);
-        return err;
-      }
-      fprintf(context->code, "%s: .space %lld\n", var_id->value.symbol, type_info->children->value.integer);
-    }
-    var_it = var_it->next;
-  }
-  free(type_info);
 
   IRFunction *main = ir_function(context);
 
@@ -723,13 +711,27 @@ Error codegen_program(CodegenContext *context, Node *program) {
     last_expression = expression;
     expression = expression->next_child;
   }
+  if (!main->last->branch) {
+    IRInstruction *branch = ir_return(context);
+    main->last->branch = branch;
+  }
   if (last_expression) {
-    ir_set_return_value(context, main, last_expression->result);
+    main->return_value = last_expression->result;
   }
   return err;
 }
 
 //================================================================ END CG_FMT_x86_64_MSWIN
+
+void codegen_emit(CodegenContext *context) {
+  switch (context->format) {
+  case CG_FMT_x86_64_GAS:
+    codegen_emit_x86_64(context);
+    break;
+  default:
+    TODO("Handle %d code generation format.", context->format);
+  }
+}
 
 Error codegen
 (enum CodegenOutputFormat format,
@@ -756,6 +758,12 @@ Error codegen
   CodegenContext *context = codegen_context_create_top_level
     (parse_context, format, call_convention, dialect, code);
   err = codegen_program(context, program);
+
+  ir_set_ids(context);
+  ir_femit(stdout, context);
+
+  codegen_emit(context);
+
   codegen_context_free(context);
 
   fclose(code);

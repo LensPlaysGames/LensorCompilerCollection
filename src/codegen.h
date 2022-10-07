@@ -39,6 +39,7 @@ struct CodegenContext {
   ParsingContext *parse_context;
   FILE* code;
 
+  IRFunction *all_functions;
   IRFunction *function;
   IRBlock *block;
 

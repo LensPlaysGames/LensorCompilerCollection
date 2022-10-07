@@ -500,12 +500,12 @@ Error typecheck_expression
     }
     // If it's not a pointer reinterpret, ensure both expression and
     // cast type are base types.
-    static Node int_type = (Node) {
+    Node int_type = (Node) {
       .type = NODE_TYPE_SYMBOL,
       .value.symbol = "integer",
     };
 
-    static Node byte_type = (Node) {
+    Node byte_type = (Node) {
       .type = NODE_TYPE_SYMBOL,
       .value.symbol = "byte",
     };

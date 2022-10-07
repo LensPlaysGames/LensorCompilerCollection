@@ -96,6 +96,7 @@ typedef struct Node {
   union NodeValue {
     int64_t integer;
     char *symbol;
+    IRInstruction *ir_instruction;
   } value;
 
   unsigned int pointer_indirection;
