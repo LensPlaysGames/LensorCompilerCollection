@@ -1,5 +1,6 @@
 #include <codegen.h>
 
+#include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/x86_64/arch_x86_64.h>
 #include <environment.h>
@@ -51,15 +52,35 @@ CodegenContext *codegen_context_create(CodegenContext *parent) {
   ASSERT(parent, "create_codegen_context() can only create contexts when a parent is given.");
   ASSERT(CG_FMT_COUNT == 1, "create_codegen_context() must exhaustively handle all codegen output formats.");
   ASSERT(CG_CALL_CONV_COUNT == 2, "create_codegen_context() must exhaustively handle all calling conventions.");
-  if (parent->format == CG_FMT_x86_64_GAS) {
-    if (parent->call_convention == CG_CALL_CONV_MSWIN) {
-      return codegen_context_x86_64_mswin_create(parent);
-    } else if (parent->call_convention == CG_CALL_CONV_LINUX) {
-      // return codegen_context_x86_64_gas_linux_create(parent);
+
+  CodegenContext *new_context = NULL;
+
+  switch (parent->format) {
+  case CG_FMT_x86_64_GAS:
+    switch (parent->call_convention) {
+    case CG_CALL_CONV_MSWIN:
+      new_context = codegen_context_x86_64_mswin_create(parent);
+      break;
+    default:
+      TODO("Handle %d codegen call convention.", parent->call_convention);
+      break;
     }
+    break;
+  default:
+    TODO("Handle %d codegen output format.", parent->format);
+    break;
   }
-  panic("create_codegen_context() could not create a new context from the given parent.");
-  return NULL; // Unreachable
+
+  new_context->parse_context    = parent->parse_context;
+  new_context->all_functions    = parent->all_functions;
+  new_context->function         = parent->function;
+  new_context->block            = parent->block;
+  new_context->dialect          = parent->dialect;
+  new_context->call_convention  = parent->call_convention;
+  new_context->format           = parent->format;
+  new_context->code             = parent->code;
+
+  return new_context;
 }
 
 void codegen_context_free(CodegenContext *context) {
@@ -70,7 +91,7 @@ void codegen_context_free(CodegenContext *context) {
       // return codegen_context_x86_64_gas_linux_free(parent);
     }
   }
-  panic("free_codegen_context() could not free the given context.");
+  PANIC("Could not free the given context.");
 }
 
 //================================================================ BEG CG_FMT_x86_64_MSWIN
@@ -105,7 +126,7 @@ typedef struct SymbolAddress {
   } mode;
   union {
     Error error;
-    const char *global;
+    char *global;
     IRInstruction *local;
   };
 } SymbolAddress;
@@ -192,10 +213,16 @@ Error codegen_expression
     // err is ignored purposefully, program already type-checked valid.
     typecheck_expression(context, NULL, expression->children, variable_type);
 
+    INSTRUCTION(call, IR_CALL);
+
     if (strcmp(variable_type->value.symbol, "external function") == 0) {
-      expression->result = ir_direct_call(cg_context, expression->children->value.symbol);
+      call->value.call.type = IR_CALLTYPE_DIRECT;
+      call->value.call.value.name = expression->children->value.symbol;
     } else {
-      expression->result = ir_indirect_call(cg_context, expression->children->result);
+      err = codegen_expression(cg_context, context, next_child_context, expression->children);
+      if (err.type) { return err; }
+      call->value.call.type = IR_CALLTYPE_INDIRECT;
+      call->value.call.value.callee = expression->children->result;
     }
 
     for (iterator = expression->children->next_child->children;
@@ -204,13 +231,11 @@ Error codegen_expression
          ) {
       err = codegen_expression(cg_context, context, next_child_context, iterator);
       if (err.type) { return err; }
-      ir_add_function_call_argument(cg_context, expression->result, iterator->result);
+      ir_add_function_call_argument(cg_context, call, iterator->result);
     }
 
-    if (strcmp(variable_type->value.symbol, "external function") != 0) {
-      err = codegen_expression(cg_context, context, next_child_context, expression->children);
-      if (err.type) { return err; }
-    }
+    ir_insert(cg_context, call);
+    expression->result = call;
 
     break;
   case NODE_TYPE_FUNCTION:
@@ -411,6 +436,8 @@ Error codegen_expression
     ir_phi_argument(phi, last_otherwise_block, then_return_value);
     ir_phi_argument(phi, last_otherwise_block, otherwise_return_value);
 
+    expression->result = phi;
+
     break;
   case NODE_TYPE_BINARY_OPERATOR:
     while (context->parent) { context = context->parent; }
@@ -508,8 +535,7 @@ Error codegen_expression
       // from current RBP into some register, and use that register as offset for memory access.
       // This will require us to differentiate scopes from stack frames, which is a problem for
       // another time :^). Good luck, future me!
-      // TODO: Local variable loading is going to be overhauled in a major way.
-      expression->result = ir_load_local(cg_context, tmpnode->value.integer);
+      expression->result = ir_load_local(cg_context, tmpnode->value.ir_instruction);
     }
     break;
   case NODE_TYPE_VARIABLE_DECLARATION:
@@ -646,15 +672,19 @@ Error codegen_function
   size_t param_count = 1;
   Node *parameter = function->children->next_child->children;
   while (parameter) {
-    param_count++;
-    // Bind parameter name to integer base pointer offset.
-    // FIXME: Assume each argument is 8 bytes for now.
-    // TODO: This currently doesn't allow for passing arguments in registers, which is much faster.
-    //       We need some local binding that refers to a register vs a base pointer offset.
-    environment_set(cg_context->locals, parameter->children, node_integer(param_count * 8));
+    Node *param_node = node_allocate();
+
+    INSTRUCTION(param, IR_PARAMETER_REFERENCE);
+    param->value.immediate = param_count++;
+    ir_insert(cg_context, param);
+
+    param_node->value.ir_instruction = param;
+    environment_set(cg_context->locals, parameter->children, param_node);
+
     parameter = parameter->next_child;
   }
 
+  // TODO: REMOVE THIS!!!
   // Function beginning label
   fprintf(code, "%s:\n", name);
 

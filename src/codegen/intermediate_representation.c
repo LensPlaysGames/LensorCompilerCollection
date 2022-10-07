@@ -1,3 +1,4 @@
+#include "codegen/codegen_forward.h"
 #include <codegen/intermediate_representation.h>
 
 #include <stdint.h>
@@ -9,6 +10,10 @@ void ir_insert
  IRInstruction *new_instruction
  )
 {
+  // If block is closed, open a new block.
+  if (context->block->branch) {
+    //
+  }
   ASSERT(context->block->branch == NULL, "Can not insert into a closed IRBlock.");
   // [ ] <-> [ ] <-> [NULL]
   //         [ ] <-> [new] <-> [NULL]
@@ -49,8 +54,10 @@ void ir_femit_instruction
     switch (instruction->value.call.type) {
     case IR_CALLTYPE_DIRECT:
       fprintf(file, "%s", instruction->value.call.value.name);
+      break;
     case IR_CALLTYPE_INDIRECT:
       fprintf(file, "%%%zu", instruction->value.call.value.callee->id);
+      break;
     default:
       TODO("Handle %d IRCallType.", instruction->value.call.type);
       break;
@@ -74,6 +81,14 @@ void ir_femit_instruction
             instruction->value.pair.car->id,
             instruction->value.pair.cdr->id);
     break;
+  case IR_SUBTRACT:
+    fprintf(file, "subtract %%%zu, %%%zu",
+            instruction->value.pair.car->id,
+            instruction->value.pair.cdr->id);
+    break;
+  case IR_GLOBAL_LOAD:
+    fprintf(file, "g.load %s", instruction->value.name);
+    break;
   case IR_GLOBAL_STORE:
     fprintf(file, "g.store %%%zu, %s",
             instruction->value.global_assignment.new_value->id,
@@ -81,6 +96,63 @@ void ir_femit_instruction
     break;
   case IR_GLOBAL_ADDRESS:
     fprintf(file, "g.address %s", instruction->value.name);
+    break;
+  case IR_LOCAL_LOAD:
+    fprintf(file, "l.load %%%zu", instruction->value.reference->id);
+    break;
+  case IR_PARAMETER_REFERENCE:
+    fprintf(file, "parameter.reference %%%"PRId64,
+            instruction->value.immediate);
+    break;
+  case IR_COMPARISON:
+    switch (instruction->value.comparison.type) {
+    case COMPARE_EQ:
+      fprintf(file, "eq");
+      break;
+    case COMPARE_GE:
+      fprintf(file, "ge");
+      break;
+    case COMPARE_LE:
+      fprintf(file, "le");
+      break;
+    case COMPARE_GT:
+      fprintf(file, "gt");
+      break;
+    case COMPARE_LT:
+      fprintf(file, "lt");
+      break;
+    case COMPARE_NE:
+      fprintf(file, "ne");
+      break;
+    default:
+      PANIC("Unhandled comparison type: %d", instruction->value.comparison.type);
+      break;
+    }
+    fprintf(file, " %%%zu, %%%zu",
+            instruction->value.comparison.pair.car->id,
+            instruction->value.comparison.pair.cdr->id);
+    break;
+  case IR_BRANCH:
+    fprintf(file, "branch bb%zu", instruction->value.block->id);
+    break;
+  case IR_BRANCH_CONDITIONAL:
+    fprintf(file, "branch.conditional %%%zu, bb%zu, bb%zu",
+            instruction->value.conditional_branch.condition->id,
+            instruction->value.conditional_branch.true_branch->id,
+            instruction->value.conditional_branch.false_branch->id);
+    break;
+  case IR_PHI:
+    fprintf(file, "phi");
+    IRPhiArgument *arg = instruction->value.phi_argument;
+    if (arg) {
+      fprintf(file, " [bb%zu : %%%zu]",
+              arg->block->id, arg->value->id);
+      arg = arg->next;
+    }
+    for (; arg; arg = arg->next) {
+      fprintf(file, ", [bb%zu : %%%zu]",
+              arg->block->id, arg->value->id);
+    }
     break;
   default:
     TODO("Handle IRType %d\n", instruction->type);
@@ -125,7 +197,7 @@ void ir_femit
  CodegenContext *context
  )
 {
-  for (IRFunction *function = context->all_functions;
+  for (IRFunction *function = context->function;
        function;
        function = function->next
        ) {
@@ -168,10 +240,12 @@ void ir_add_function_call_argument
   IRCallArgument *new_argument = calloc(1, sizeof(IRCallArgument));
   ASSERT(new_argument, "Could not allocate memory for new_argument.");
 
-  IRCallArgument *arguments = call->value.call.arguments;
-  if (!arguments) {
-    arguments = new_argument;
+  new_argument->value = argument;
+
+  if (!call->value.call.arguments) {
+    call->value.call.arguments = new_argument;
   } else {
+    IRCallArgument *arguments = call->value.call.arguments;
     for (; arguments->next; arguments = arguments->next);
     arguments->next = new_argument;
   }
@@ -199,6 +273,7 @@ void ir_phi_argument
 
 IRInstruction *ir_phi(CodegenContext *context) {
   INSTRUCTION(phi, IR_PHI);
+  INSERT(phi);
   return phi;
 }
 
@@ -227,17 +302,16 @@ IRFunction *ir_function(CodegenContext *context) {
   // functions out with an empty block.
   IRBlock *block = ir_block_create();
 
-  function->next = context->function;
+  if (context->function) {
+    IRFunction *last_function = context->function;
+    for (; last_function->next; last_function = last_function->next);
+    last_function->next = function;
+  }
+  context->function = function;
 
   function->first = block;
   function->last = block;
-
-  context->function = function;
   context->block = block;
-
-  if (!context->all_functions) {
-    context->all_functions = function;
-  }
 
   return function;
 }

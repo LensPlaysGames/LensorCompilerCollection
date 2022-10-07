@@ -31,6 +31,9 @@ typedef enum IRType {
   IR_GLOBAL_ADDRESS,
 
   IR_COMPARISON,
+
+  IR_PARAMETER_REFERENCE,
+
   IR_COUNT
 } IRType;
 
