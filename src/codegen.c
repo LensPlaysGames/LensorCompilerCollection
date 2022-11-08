@@ -727,6 +727,7 @@ Error codegen_program(CodegenContext *context, Node *program) {
   Error err = ok;
 
   IRFunction *main = ir_function(context);
+  context->all_functions = main;
 
   ParsingContext *next_child_context = context->parse_context->children;
   Node *last_expression = NULL;

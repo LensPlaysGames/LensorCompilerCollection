@@ -6,9 +6,9 @@ typedef struct IRBlock IRBlock;
 typedef struct IRFunction IRFunction;
 
 typedef int RegisterDescriptor;
-
-typedef struct Register Register;
 typedef struct RegisterPool RegisterPool;
+
+typedef int Register;
 typedef struct CodegenContext CodegenContext;
 
 enum CodegenAssemblyDialect {

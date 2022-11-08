@@ -1,9 +1,16 @@
-#include "codegen/codegen_forward.h"
+#include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <inttypes.h>
+
+void mark_used(IRInstruction *usee, IRInstruction *user) {
+  Use *new_use = calloc(1, sizeof(Use));
+  new_use->next = usee->uses;
+  new_use->user = user;
+  usee->uses = new_use;
+}
 
 void ir_insert
 (CodegenContext *context,
@@ -12,9 +19,12 @@ void ir_insert
 {
   // If block is closed, open a new block.
   if (context->block->branch) {
-    //
+    // TODO
   }
   ASSERT(context->block->branch == NULL, "Can not insert into a closed IRBlock.");
+
+  new_instruction->block = context->block;
+
   // [ ] <-> [ ] <-> [NULL]
   //         [ ] <-> [new] <-> [NULL]
   if (!context->block->instructions) {
@@ -34,7 +44,7 @@ void ir_femit_instruction
  IRInstruction *instruction
  )
 {
-  ASSERT(instruction, "Can not insert NULL instruction");
+  ASSERT(instruction, "Can not emit NULL instruction to file.");
 
 # define ID_FORMAT "%%%zu | ", instruction->id
   const size_t id_width = 10;
@@ -45,6 +55,20 @@ void ir_femit_instruction
   }
   fprintf(file, ID_FORMAT);
 # undef ID_FORMAT
+
+# define RESULT_FORMAT "r%d | ", instruction->result
+  if (instruction->result) {
+    const size_t result_width = 6;
+    size_t result_length = snprintf(NULL, 0, RESULT_FORMAT);
+    int64_t result_difference = result_width - result_length;
+    while (result_difference--) {
+      fputc(' ', file);
+    }
+    fprintf(file, RESULT_FORMAT);
+  } else {
+    fprintf(file, "    | ");
+  }
+# undef RESULT_FORMAT
 
   switch (instruction->type) {
   case IR_IMMEDIATE:
@@ -96,6 +120,9 @@ void ir_femit_instruction
     break;
   case IR_GLOBAL_ADDRESS:
     fprintf(file, "g.address %s", instruction->value.name);
+    break;
+  case IR_COPY:
+    fprintf(file, "copy %%%zu", instruction->value.reference->id);
     break;
   case IR_LOCAL_LOAD:
     fprintf(file, "l.load %%%zu", instruction->value.reference->id);
@@ -333,7 +360,10 @@ IRInstruction *ir_load
  )
 {
   INSTRUCTION(load, IR_LOAD);
+
   load->value.reference = address;
+  mark_used(address, load);
+
   INSERT(load);
   return load;
 }
@@ -357,7 +387,10 @@ IRInstruction *ir_indirect_call
 {
   INSTRUCTION(call, IR_CALL);
   call->value.call.type = IR_CALLTYPE_INDIRECT;
+
   call->value.call.value.callee = function;
+  mark_used(function, call);
+
   INSERT(call);
   return call;
 }
@@ -379,7 +412,10 @@ IRInstruction *ir_load_local_address
  )
 {
   INSTRUCTION(local_address, IR_LOCAL_ADDRESS);
+
   local_address->value.reference = local;
+  mark_used(local, local_address);
+
   INSERT(local_address);
   return local_address;
 }
@@ -401,7 +437,10 @@ IRInstruction *ir_load_local
  )
 {
   INSTRUCTION(local_load, IR_LOCAL_LOAD);
+
   local_load->value.reference = local;
+  mark_used(local, local_load);
+
   INSERT(local_load);
   return local_load;
 }
@@ -413,7 +452,10 @@ IRInstruction *ir_store_global
  )
 {
   INSTRUCTION(global_store, IR_GLOBAL_STORE);
+
   global_store->value.global_assignment.new_value = source;
+  mark_used(source, global_store);
+
   global_store->value.global_assignment.name = name;
   INSERT(global_store);
   return global_store;
@@ -426,8 +468,13 @@ IRInstruction *ir_store_local
  )
 {
   INSTRUCTION(local_store, IR_LOCAL_STORE);
+
   local_store->value.pair.car = local;
+  mark_used(local, local_store);
+
   local_store->value.pair.cdr = source;
+  mark_used(source, local_store);
+
   INSERT(local_store);
   return local_store;
 }
@@ -449,7 +496,10 @@ IRInstruction *ir_branch_conditional
  )
 {
   INSTRUCTION(branch, IR_BRANCH_CONDITIONAL);
+
   branch->value.conditional_branch.condition = condition;
+  mark_used(condition, branch);
+
   branch->value.conditional_branch.true_branch = then_block;
   branch->value.conditional_branch.false_branch = otherwise_block;
   context->block->branch = branch;
@@ -467,18 +517,22 @@ IRInstruction *ir_branch
   return branch;
 }
 
+/// NOTE: Does not self insert!
 IRInstruction *ir_return(CodegenContext *context) {
   INSTRUCTION(branch, IR_RETURN);
   context->block->branch = branch;
   return branch;
 }
 
+/// NOTE: Does not self insert!
 IRInstruction *ir_copy
 (CodegenContext *context,
  IRInstruction *source
  )
 {
-  TODO();
+  INSTRUCTION(copy, IR_COPY);
+  copy->value.reference = source;
+  return copy;
 }
 
 IRInstruction *ir_comparison
