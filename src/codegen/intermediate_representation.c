@@ -546,6 +546,10 @@ IRInstruction *ir_comparison
   cc->value.comparison.type = type;
   cc->value.comparison.pair.car = lhs;
   cc->value.comparison.pair.cdr = rhs;
+
+  mark_used(lhs, cc);
+  mark_used(rhs, cc);
+
   INSERT(cc);
   return cc;
 }
