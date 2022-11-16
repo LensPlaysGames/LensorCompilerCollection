@@ -299,6 +299,8 @@ void ir_add_function_call_argument
     for (; arguments->next; arguments = arguments->next);
     arguments->next = new_argument;
   }
+
+  // TODO: Mark used
 }
 
 IRBlock *ir_block_create() {
@@ -408,7 +410,6 @@ IRInstruction *ir_direct_call
   INSTRUCTION(call, IR_CALL);
   call->value.call.type = IR_CALLTYPE_DIRECT;
   call->value.call.value.name = function_name;
-  INSERT(call);
   return call;
 }
 
@@ -423,7 +424,6 @@ IRInstruction *ir_indirect_call
   call->value.call.value.callee = function;
   mark_used(function, call);
 
-  INSERT(call);
   return call;
 }
 
@@ -569,7 +569,7 @@ IRInstruction *ir_copy
 {
   INSTRUCTION(copy, IR_COPY);
   copy->value.reference = source;
-  // TODO: Should we mark used here?
+  mark_used(source, copy);
   return copy;
 }
 

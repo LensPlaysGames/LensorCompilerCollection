@@ -238,10 +238,12 @@ void ir_phi_argument
 IRInstruction *ir_phi
 (CodegenContext *context);
 
+/// NOTE: Does not insert call instruction.
 IRInstruction *ir_direct_call
 (CodegenContext *context,
  char* function_name);
 
+/// NOTE: Does not insert call instruction.
 IRInstruction *ir_indirect_call
 (CodegenContext *context,
  IRInstruction *function);
