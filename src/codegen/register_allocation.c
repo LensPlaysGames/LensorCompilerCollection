@@ -190,12 +190,13 @@ void function_call_arguments(RegisterAllocationInfo *info) {
         if (instruction->type == IR_CALL) {
           IRCallArgument *arguments = instruction->value.call.arguments;
           for (size_t i = 0; arguments; ++i, arguments = arguments->next) {
-            IRInstruction *argument = arguments->value;
-            IRInstruction *arg_copy = ir_copy(info->context, argument);
             if (i >= info->argument_register_count) {
               TODO("Handle stack allocated function parameters, somehow :p");
             }
-            arg_copy->result = info->argument_registers[i];
+            IRInstruction *argument = arguments->value;
+            Register result = info->argument_registers[i];
+            IRInstruction *arg_copy = ir_copy(info->context, argument);
+            arg_copy->result = result;
             insert_instruction_before(arg_copy, instruction);
             arguments->value = arg_copy;
           }
