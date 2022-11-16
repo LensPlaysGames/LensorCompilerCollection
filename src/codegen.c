@@ -413,13 +413,13 @@ Error codegen_expression
         expr = expr->next_child;
       }
 
-      ir_branch(cg_context, join_block);
-
       last_otherwise_block = cg_context->block;
 
     } else {
       ir_immediate(cg_context, 0);
     }
+
+    ir_branch(cg_context, join_block);
 
     // This assumes that the last instruction in a block returns a
     // value; if it doesn't, we will simply return zero. This should
