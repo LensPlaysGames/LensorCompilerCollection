@@ -433,7 +433,7 @@ Error codegen_expression
 
     // Insert phi node for result of if expression in join block.
     IRInstruction *phi = ir_phi(cg_context);
-    ir_phi_argument(phi, last_otherwise_block, then_return_value);
+    ir_phi_argument(phi, last_then_block,      then_return_value);
     ir_phi_argument(phi, last_otherwise_block, otherwise_return_value);
 
     expression->result = phi;
