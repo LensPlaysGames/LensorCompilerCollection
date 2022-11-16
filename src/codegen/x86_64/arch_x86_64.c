@@ -1,7 +1,7 @@
-#include "codegen/codegen_forward.h"
 #include <codegen/x86_64/arch_x86_64.h>
 
 #include <codegen.h>
+#include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/register_allocation.h>
 #include <error.h>
@@ -1016,9 +1016,109 @@ void emit_function(CodegenContext *context, IRFunction *function) {
   emit_instruction(context, function->return_value);
 }
 
-void codegen_emit_x86_64(CodegenContext *context) {
-  // Generate global variables.
+static Register *argument_registers = NULL;
+static size_t argument_register_count = 0;
+static Register general[GENERAL_REGISTER_COUNT] = {
+  REG_RAX,
+  REG_RBX,
+  REG_RCX,
+  REG_RDX,
+  REG_RSI,
+  REG_RDI,
+  REG_R8,
+  REG_R9,
+  REG_R10,
+  REG_R11,
+  REG_R12,
+  REG_R13,
+  REG_R14,
+  REG_R15,
+};
 
+#define LINUX_ARGUMENT_REGISTER_COUNT 6
+static Register linux_argument_registers[LINUX_ARGUMENT_REGISTER_COUNT] = {
+  REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9
+};
+
+#define MSWIN_ARGUMENT_REGISTER_COUNT 4
+static Register mswin_argument_registers[MSWIN_ARGUMENT_REGISTER_COUNT] = {
+  REG_RCX, REG_RDX, REG_R8, REG_R9
+};
+
+static void lower(CodegenContext *context) {
+  ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
+  for (IRFunction *function = context->function;
+       function;
+       function = function->next
+       ) {
+    for (IRBlock *block = function->first;
+         block;
+         block = block->next
+         ) {
+      for (IRInstruction *instruction = block->instructions;
+           instruction;
+           instruction = instruction->next
+           ) {
+        switch (instruction->type) {
+        case IR_PARAMETER_REFERENCE:
+          if (instruction->value.immediate >= argument_register_count) {
+            TODO("arch_x86_64 doesn't yet support passing arguments on the stack, sorry.");
+          }
+
+          // Create instruction to save parameter on function entry onto stack from register.
+          IRInstruction *store = calloc(1, sizeof(IRInstruction));
+          ASSERT(store, "Could not allocate IRInstruction");
+          store->type = IR_LOCAL_STORE;
+
+          IRInstruction *register_instruction = calloc(1, sizeof(IRInstruction));
+          ASSERT(register_instruction, "Could not allocate IRInstruction");
+          register_instruction->type = IR_REGISTER;
+          register_instruction->result = argument_registers[instruction->value.immediate];
+
+          set_pair_and_mark(store, &store->value.pair, register_instruction, instruction);
+
+          insert_instruction_after(store, instruction);
+          insert_instruction_after(register_instruction, instruction);
+
+          // Overwrite current instruction to allocate space for parameter on stack.
+          instruction->type = IR_STACK_ALLOCATE;
+          // TODO: Size here be dictated by size of type of parameter.
+          // We would first have to know which function we are within,
+          // that way we can lookup the parameters, that way we can
+          // lookup the type of the parameter
+          // (based on parameter index). Basically, lots of environment
+          // lookups.
+          instruction->value.immediate = 8;
+          break;
+        default:
+          break;
+        }
+      }
+    }
+  }
+}
+
+void codegen_emit_x86_64(CodegenContext *context) {
+  // Setup register allocation structures.
+  switch (context->call_convention) {
+  case CG_CALL_CONV_LINUX:
+    argument_register_count = LINUX_ARGUMENT_REGISTER_COUNT;
+    argument_registers = linux_argument_registers;
+    break;
+  case CG_CALL_CONV_MSWIN:
+    argument_register_count = MSWIN_ARGUMENT_REGISTER_COUNT;
+    argument_registers = mswin_argument_registers;
+    break;
+  case CG_CALL_CONV_COUNT:
+  default:
+    PANIC("Invalid call convention.");
+    break;
+  }
+
+  // IR fixup for this specific backend.
+  lower(context);
+
+  // Generate global variables.
   fprintf(context->code, "%s", ".section .data\n");
 
   Binding *var_it = context->parse_context->variables->bind;
@@ -1042,58 +1142,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   }
   free(type_info);
 
-  // TODO: Fixup parameter references (spill to stack every time for
-  // now). This converts parameters into local variables, which makes
-  // life 1000% easier.
-
-  // TODO: Setup register allocation strucutres and allocate registers
-  // to each temporary within the program.
-
-  Register general[GENERAL_REGISTER_COUNT] = {
-    REG_RAX,
-    REG_RBX,
-    REG_RCX,
-    REG_RDX,
-    REG_RSI,
-    REG_RDI,
-    REG_R8,
-    REG_R9,
-    REG_R10,
-    REG_R11,
-    REG_R12,
-    REG_R13,
-    REG_R14,
-    REG_R15,
-  };
-
-  Register *argument_registers = NULL;
-  size_t argument_register_count = 0;
-
-#define LINUX_ARGUMENT_REGISTER_COUNT 6
-  Register linux_argument_registers[LINUX_ARGUMENT_REGISTER_COUNT] = {
-    REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9
-  };
-
-#define MSWIN_ARGUMENT_REGISTER_COUNT 4
-  Register mswin_argument_registers[MSWIN_ARGUMENT_REGISTER_COUNT] = {
-    REG_RCX, REG_RDX, REG_R8, REG_R9
-  };
-
-  switch (context->call_convention) {
-  case CG_CALL_CONV_LINUX:
-    argument_register_count = LINUX_ARGUMENT_REGISTER_COUNT;
-    argument_registers = linux_argument_registers;
-    break;
-  case CG_CALL_CONV_MSWIN:
-    argument_register_count = MSWIN_ARGUMENT_REGISTER_COUNT;
-    argument_registers = mswin_argument_registers;
-    break;
-  case CG_CALL_CONV_COUNT:
-  default:
-    PANIC("Invalid call convention.");
-    break;
-  }
-
+  // Allocate registers to each temporary within the program.
   RegisterAllocationInfo *info = ra_allocate_info
     (context,
      REG_RAX,
