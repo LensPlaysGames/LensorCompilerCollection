@@ -1104,6 +1104,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
      );
   ra(info);
 
+  ir_set_ids(context);
+  ir_femit(stdout, context);
+
   for (IRFunction *function = context->all_functions; function; function = function->next) {
     emit_function(context, function);
   }

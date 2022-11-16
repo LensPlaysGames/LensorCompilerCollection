@@ -788,9 +788,6 @@ Error codegen
     (parse_context, format, call_convention, dialect, code);
   err = codegen_program(context, program);
 
-  ir_set_ids(context);
-  ir_femit(stdout, context);
-
   codegen_emit(context);
 
   codegen_context_free(context);
