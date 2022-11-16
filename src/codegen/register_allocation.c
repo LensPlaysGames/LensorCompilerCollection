@@ -217,6 +217,35 @@ void function_return_values(RegisterAllocationInfo *info) {
 
 //==== END REGISTER ALLOCATION PASSES ====
 
+/// Return non-zero iff given instruction needs a register.
+char needs_register(IRInstruction *instruction) {
+  if (!instruction) {
+    return 0;
+  }
+
+  switch(instruction->type) {
+  case IR_ADD:
+  case IR_SUBTRACT:
+  case IR_LOAD:
+  case IR_LOCAL_LOAD:
+  case IR_LOCAL_ADDRESS:
+  case IR_GLOBAL_LOAD:
+  case IR_GLOBAL_ADDRESS:
+  case IR_PHI:
+  case IR_COPY:
+  case IR_IMMEDIATE:
+  case IR_COMPARISON:
+  case IR_CALL:
+  case IR_PARAMETER_REFERENCE:
+    return 1;
+    break;
+  default:
+    return 0;
+    break;
+  }
+  return 0;
+}
+
 //==== BEG INSTRUCTION LIST ====
 
 typedef struct IRInstructionList {
@@ -242,20 +271,7 @@ IRInstructionList *collect_instructions(RegisterAllocationInfo *info) {
            ) {
         // Add instruction to flat list iff instruction needs register
         // allocated.
-        switch(instruction->type) {
-        case IR_ADD:
-        case IR_SUBTRACT:
-        case IR_LOAD:
-        case IR_LOCAL_LOAD:
-        case IR_LOCAL_ADDRESS:
-        case IR_GLOBAL_LOAD:
-        case IR_GLOBAL_ADDRESS:
-        case IR_PHI:
-        case IR_COPY:
-        case IR_IMMEDIATE:
-        case IR_COMPARISON:
-        case IR_CALL:
-        case IR_PARAMETER_REFERENCE:
+        if (needs_register(instruction)) {
           if (list_it) {
             list_it->next = calloc(1, sizeof(IRInstructionList));
             list_it = list_it->next;
@@ -265,9 +281,6 @@ IRInstructionList *collect_instructions(RegisterAllocationInfo *info) {
           }
           instruction->index = index++;
           list_it->instruction = instruction;
-          break;
-        default:
-          break;
         }
       }
     }
@@ -864,10 +877,12 @@ void color
     Register r = node.color;
     if (instruction->type == IR_PHI) {
       for (IRPhiArgument *phi = instruction->value.phi_argument; phi; phi = phi->next) {
-        AdjacencyListNode *phi_node = array + phi->value->index;
-        phi_node->color = r;
-        phi->value->result = r;
-        // TODO: Should we follow argument recursively if it is also PHI?
+        if (needs_register(phi->value)) {
+          AdjacencyListNode *phi_node = array + phi->value->index;
+          phi_node->color = r;
+          phi->value->result = r;
+          // TODO: Should we follow argument recursively if it is also PHI?
+        }
       }
     }
 
