@@ -11,9 +11,9 @@
 
 // TODO: Allow multi-byte comment delimiters.
 const char *comment_delimiters = ";#";
-const char *whitespace         = " \r\n";
+const char *whitespace         = " \t\r\n";
 // TODO: Think harder about delimiters.
-const char *delimiters         = " \r\n,{}()[]<>:&@";
+const char *delimiters         = " \t\r\n,{}()[]<>:&@";
 
 /// @return Boolean-like value: 1 for success, 0 for failure.
 int comment_at_beginning(Token token) {
