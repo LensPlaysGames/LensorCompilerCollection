@@ -60,6 +60,60 @@ void ir_insert
   ir_insert_into_block(context->block, new_instruction);
 }
 
+/// Insert instruction A before instruction B
+void insert_instruction_before(IRInstruction *a, IRInstruction *b) {
+  if (!a || !b) { return; }
+
+  // 0 - b - 1
+  // 0 - a - b - 1
+
+  a->previous = b->previous;
+
+  if (b->previous) {
+    b->previous->next = a;
+  }
+  b->previous = a;
+
+  a->next = b;
+
+  a->block = b->block;
+
+  // Handle beginning of block/function stuffs.
+  if (b->block->instructions == b) {
+    b->block->instructions = a;
+  }
+  // TODO: Update entry instruction of function, if needed.
+}
+
+
+/// Insert instruction A after instruction B
+void insert_instruction_after(IRInstruction *a, IRInstruction *b) {
+  if (!a || !b) { return; }
+
+  if (b == b->block->branch) {
+    PANIC("Can not insert instruction *after* the branch instruction of a basic block.");
+  }
+
+  // 0 - b - 1
+  // 0 - b - a - 1
+
+  if (b->next) {
+    b->next->previous = a;
+  }
+  a->next = b->next;
+  b->next = a;
+
+  a->previous = b;
+
+  a->block = b->block;
+
+  // Handle end of block/function stuffs.
+  if (b->block->last_instruction == b) {
+    b->block->last_instruction = a;
+  }
+  // TODO: Update return value of function, if needed.
+}
+
 #define INSERT(instruction) ir_insert(context, (instruction))
 
 void ir_femit_instruction
@@ -150,6 +204,11 @@ void ir_femit_instruction
   case IR_LOCAL_LOAD:
     fprintf(file, "l.load %%%zu", instruction->value.reference->id);
     break;
+  case IR_LOCAL_STORE:
+    fprintf(file, "l.store %%%zu, %%%zu",
+            instruction->value.pair.car->id,
+            instruction->value.pair.cdr->id);
+    break;
   case IR_PARAMETER_REFERENCE:
     fprintf(file, "parameter.reference %%%"PRId64,
             instruction->value.immediate);
@@ -203,6 +262,12 @@ void ir_femit_instruction
       fprintf(file, ", [bb%zu : %%%zu]",
               arg->block->id, arg->value->id);
     }
+    break;
+  case IR_REGISTER:
+    fprintf(file, "register r%d", instruction->result);
+    break;
+  case IR_STACK_ALLOCATE:
+    fprintf(file, "stack.allocate %"PRId64, instruction->value.immediate);
     break;
   default:
     TODO("Handle IRType %d\n", instruction->type);
