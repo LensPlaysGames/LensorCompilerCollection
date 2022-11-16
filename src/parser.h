@@ -59,7 +59,7 @@ typedef enum NodeType {
   /// Contains two children.
   /// 1. Condition Expression
   /// 2. "THEN" Expression List
-  /// TODO: 3. "ELSE" Expression List
+  /// 3. "ELSE" Expression List
   NODE_TYPE_IF,
 
   NODE_TYPE_ADDRESSOF,
