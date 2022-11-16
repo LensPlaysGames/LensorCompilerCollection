@@ -103,6 +103,31 @@ void print_token(Token t) {
 
 //================================================================ END lexer
 
+char node_returns_value(Node *node) {
+  if (!node) {
+    return 0;
+  }
+  switch(node->type) {
+  case NODE_TYPE_INTEGER:
+  case NODE_TYPE_FUNCTION:
+  case NODE_TYPE_FUNCTION_CALL:
+  case NODE_TYPE_VARIABLE_ACCESS:
+  case NODE_TYPE_IF:
+  case NODE_TYPE_ADDRESSOF:
+  case NODE_TYPE_DEREFERENCE:
+  case NODE_TYPE_INDEX:
+  case NODE_TYPE_BINARY_OPERATOR:
+  case NODE_TYPE_CAST:
+  case NODE_TYPE_PROGRAM:
+    return 1;
+    break;
+  default:
+    return 0;
+    break;
+  }
+  return 0;
+}
+
 Node *node_allocate() {
   Node *node = calloc(1,sizeof(Node));
   ASSERT(node, "Could not allocate memory for AST node");
