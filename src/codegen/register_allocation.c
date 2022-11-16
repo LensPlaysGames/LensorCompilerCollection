@@ -41,60 +41,6 @@ RegisterAllocationInfo *ra_allocate_info
   return info;
 }
 
-/// Insert instruction A before instruction B
-void insert_instruction_before(IRInstruction *a, IRInstruction *b) {
-  if (!a || !b) { return; }
-
-  // 0 - b - 1
-  // 0 - a - b - 1
-
-  a->previous = b->previous;
-
-  if (b->previous) {
-    b->previous->next = a;
-  }
-  b->previous = a;
-
-  a->next = b;
-
-  a->block = b->block;
-
-  // Handle beginning of block/function stuffs.
-  if (b->block->instructions == b) {
-    b->block->instructions = a;
-  }
-  // TODO: Update entry instruction of function, if needed.
-}
-
-
-/// Insert instruction A after instruction B
-void insert_instruction_after(IRInstruction *a, IRInstruction *b) {
-  if (!a || !b) { return; }
-
-  if (b == b->block->branch) {
-    PANIC("Can not insert instruction *after* the branch instruction of a basic block.");
-  }
-
-  // 0 - b - 1
-  // 0 - b - a - 1
-
-  if (b->next) {
-    b->next->previous = a;
-  }
-  a->next = b->next;
-  b->next = a;
-
-  a->previous = b;
-
-  a->block = b->block;
-
-  // Handle end of block/function stuffs.
-  if (b->block->last_instruction == b) {
-    b->block->last_instruction = a;
-  }
-  // TODO: Update return value of function, if needed.
-}
-
 //==== BEG REGISTER ALLOCATION PASSES ====
 
 // TODO: Siraide said this is all horribly wrong, and he is right.

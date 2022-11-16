@@ -37,6 +37,11 @@ typedef enum IRType {
 
   IR_PARAMETER_REFERENCE,
 
+  // A lot of backends have these instructions, but the IR isn't
+  // generated with them in it.
+  IR_REGISTER,
+  IR_STACK_ALLOCATE,
+
   IR_COUNT
 } IRType;
 
@@ -229,6 +234,12 @@ void ir_insert_into_block
 void ir_insert
 (CodegenContext *context,
  IRInstruction *new_instruction);
+
+/// Insert instruction A before instruction B
+void insert_instruction_before(IRInstruction *a, IRInstruction *b);
+
+/// Insert instruction A after instruction B
+void insert_instruction_after(IRInstruction *a, IRInstruction *b);
 
 void ir_phi_argument
 (IRInstruction *phi,
