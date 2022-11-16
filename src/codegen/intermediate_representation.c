@@ -12,29 +12,52 @@ void mark_used(IRInstruction *usee, IRInstruction *user) {
   usee->uses = new_use;
 }
 
+void set_pair_and_mark
+(IRInstruction *parent,
+ IRPair *pair,
+ IRInstruction *lhs,
+ IRInstruction *rhs
+ )
+{
+  pair->car = lhs;
+  pair->cdr = rhs;
+  mark_used(lhs, parent);
+  mark_used(rhs, parent);
+}
+
+void ir_insert_into_block
+(IRBlock *block,
+ IRInstruction *new_instruction
+ )
+{
+  // If block is closed, open a new block.
+  if (block->branch) {
+    // TODO
+  }
+  ASSERT(block->branch == NULL, "Can not insert into a closed IRBlock.");
+
+  new_instruction->block = block;
+
+  // [ ] <-> [ ] <-> [NULL]
+  //         [ ] <-> [new] <-> [NULL]
+  if (!block->instructions) {
+    block->instructions = new_instruction;
+    block->last_instruction = new_instruction;
+    return;
+  }
+  block->last_instruction->next = new_instruction;
+  new_instruction->previous = block->last_instruction;
+  block->last_instruction = new_instruction;
+}
+
+
 void ir_insert
 (CodegenContext *context,
  IRInstruction *new_instruction
  )
 {
-  // If block is closed, open a new block.
-  if (context->block->branch) {
-    // TODO
-  }
-  ASSERT(context->block->branch == NULL, "Can not insert into a closed IRBlock.");
-
-  new_instruction->block = context->block;
-
-  // [ ] <-> [ ] <-> [NULL]
-  //         [ ] <-> [new] <-> [NULL]
-  if (!context->block->instructions) {
-    context->block->instructions = new_instruction;
-    context->block->last_instruction = new_instruction;
-    return;
-  }
-  context->block->last_instruction->next = new_instruction;
-  new_instruction->previous = context->block->last_instruction;
-  context->block->last_instruction = new_instruction;
+  ASSERT(context->block != NULL, "Can not insert when context has NULL insertion block.");
+  ir_insert_into_block(context->block, new_instruction);
 }
 
 #define INSERT(instruction) ir_insert(context, (instruction))
@@ -304,16 +327,25 @@ IRInstruction *ir_phi(CodegenContext *context) {
   return phi;
 }
 
+void ir_block_attach_to_function
+(IRFunction *function,
+ IRBlock *new_block
+ )
+{
+  ASSERT(function->last);
+  function->last->next = new_block;
+  new_block->previous = function->last;
+  function->last = new_block;
+  new_block->function = function;
+}
+
+
 void ir_block_attach
 (CodegenContext *context,
  IRBlock *new_block
  )
 {
-  IRFunction *function = context->function;
-  ASSERT(function->last);
-  function->last->next = new_block;
-  new_block->previous = function->last;
-  function->last = new_block;
+  ir_block_attach_to_function(context->function, new_block);
   context->block = new_block;
 }
 
@@ -468,13 +500,7 @@ IRInstruction *ir_store_local
  )
 {
   INSTRUCTION(local_store, IR_LOCAL_STORE);
-
-  local_store->value.pair.car = local;
-  mark_used(local, local_store);
-
-  local_store->value.pair.cdr = source;
-  mark_used(source, local_store);
-
+  set_pair_and_mark(local_store, &local_store->value.pair, local, source);
   INSERT(local_store);
   return local_store;
 }
@@ -506,6 +532,17 @@ IRInstruction *ir_branch_conditional
   return branch;
 }
 
+IRInstruction *ir_branch_into_block
+(IRBlock *destination,
+ IRBlock *block
+ )
+{
+  INSTRUCTION(branch, IR_BRANCH);
+  branch->value.block = destination;
+  block->branch = branch;
+  return branch;
+}
+
 IRInstruction *ir_branch
 (CodegenContext *context,
  IRBlock *destination
@@ -532,6 +569,7 @@ IRInstruction *ir_copy
 {
   INSTRUCTION(copy, IR_COPY);
   copy->value.reference = source;
+  // TODO: Should we mark used here?
   return copy;
 }
 
@@ -544,11 +582,8 @@ IRInstruction *ir_comparison
 {
   INSTRUCTION(cc, IR_COMPARISON);
   cc->value.comparison.type = type;
-  cc->value.comparison.pair.car = lhs;
-  cc->value.comparison.pair.cdr = rhs;
 
-  mark_used(lhs, cc);
-  mark_used(rhs, cc);
+  set_pair_and_mark(cc, &cc->value.comparison.pair, lhs, rhs);
 
   INSERT(cc);
   return cc;
@@ -561,8 +596,7 @@ IRInstruction *ir_add
  )
 {
   INSTRUCTION(add, IR_ADD);
-  add->value.pair.car = lhs;
-  add->value.pair.cdr = rhs;
+  set_pair_and_mark(add, &add->value.pair, lhs, rhs);
   INSERT(add);
   return add;
 }
@@ -574,8 +608,7 @@ IRInstruction *ir_subtract
  )
 {
   INSTRUCTION(sub, IR_SUBTRACT);
-  sub->value.pair.car = lhs;
-  sub->value.pair.cdr = rhs;
+  set_pair_and_mark(sub, &sub->value.pair, lhs, rhs);
   INSERT(sub);
   return sub;
 }
