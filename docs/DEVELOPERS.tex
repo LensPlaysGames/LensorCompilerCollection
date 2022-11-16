@@ -1,111 +1,53 @@
-\documentclass[12pt]{report}
-
-\newcommand{\langname}{Funguwuage}
-\newcommand{\lang}{\texttt{\langname} }
-
-\title  {\langname\ Developer's Manual}
-\author {Rylan Lens Kellogg}
-
-\newlength{\inprogramwidth}
-\settowidth{\inprogramwidth}{A few lines of text in a block.}
-
-% Easy, interactive cross-references with '\hyperref[label]{text}'.
-\usepackage{hyperref}
-% Prevent section titles from appearing at the bottom of pages!
-\usepackage[nobottomtitles, nobottomtitles*]{titlesec}
-% Fancy verbatim markup, for better source code.
-\usepackage{fancyvrb}
-% Fancy headers, for chapter title page headers
-\usepackage{fancyhdr}
-% Easy flow charts and other simple diagrams
-\usepackage{smartdiagram}
-% Very complicated diagram drawing
-\usepackage{tikz}
-\usetikzlibrary{arrows, shapes}
-
-% \titleformat{<command>}[<shape>]
-% {<format>}
-% {<label>}
-% {<sep>}
-% {<before-code>}
-% {<after-code>}
-
-% Remove numbering from chapter heading.
-\titleformat  {\chapter} [hang]
-{ \normalfont\huge\bfseries }
-{}{ 0pt }
-{  }
-{  }
-% Make chapter heading snug up to top of page.
-\titlespacing*{\chapter}{-21pt}{-72pt}{10pt}
-
-% Remove numbering from section heading.
-\titleformat  {\section} [hang]
-{ \normalfont\Large\bfseries }
-{}{ 0pt }
-{  }
-{  }
-% Make section heading have a sensible amount of spacing around it.
-\titlespacing*{\section}{-10pt}{24pt}{10pt}
-
-% Set variable paragraph skip (vertical blank space between paragraphs).
-\setlength{\parskip}{3pt plus 3pt minus 1pt}
+\documentclass[
+12pt,
+letterpaper,
+% a4paper,
+% ebook,
+oneside,
+% twoside,
+]{memoir}
 
 
-% I should probably just use geometry, but this works so...
+\usepackage{xcolor}
+% Uncomment for dark-mode PDF (don't try to print this).
+\definecolor{darkBG}{RGB}{19,20,21} \pagecolor{darkBG} \color{white}
 
-% Move fancy header upwards. It's like halfway down the page by default.
-\setlength{\headheight}{14.5pt}
-\addtolength{\topmargin}{-64pt}
-% Extend text downwards, it stops with like 3 inches on the bottom.
-\addtolength{\textheight}{128pt}
-
-% Smart diagram style(s)
-\smartdiagramset{
-  monotone/.style={
-    uniform arrow color   = true,
-    arrow color           = black,
-    uniform color list    = white!60 for 20 items,
-    back arrow disabled   = true
-  }
+\newcommand{\lang}{Glint
 }
+
+\title{\lang Compiler Developer Reference}
+\author{Rylan Lens Kellogg}
+
+% cross references, links, etc
+\usepackage[colorlinks]{hyperref}
+
+% formatting
+\usepackage{titlesec}
+% Remove section number from section header
+\titleformat{\chapter}{\normalfont\Huge\bfseries}{}{0pt}{}
+\titlespacing*{\chapter}{0pt}{-8em}{2em}
+
+% Source Code
+\usepackage{fontspec}
+\usepackage{minted}
+\usemintedstyle{monokai}
+
+
+\usepackage{microtype}
 
 \begin{document}
 
-% I have no idea how this works but it puts the chapter name at the top of each page.
-% https://stackoverflow.com/a/48735234
-\pagestyle{fancy}
-\renewcommand{\chaptermark}[1]{\markboth{#1}{#1}}
-\fancyhf{}
-\fancyhead[C]{\leftmark}
-\fancyfoot[C]{\thepage}
+\maketitle
+\clearpage
 
-% Title Page
-\hypersetup{pageanchor=false}
-\begin{titlepage}
-  \maketitle
-\end{titlepage}
+\tableofcontents
+\clearpage
 
 \chapter{Overview}
-\label{ch:Overview}
 
-Currently, \lang has three stages (or phases, or levels, anything to that regard; we'll call them stages).
+Currently, \lang has three stages (or phases, or levels, anything to that regard---we'll call them stages).
 
-\begin{center}
-  \smartdiagramset{
-    monotone,
-    text width = 4cm,
-    module x sep = 5cm,
-    font = \large
-  }
-  \smartdiagram[flow diagram:horizontal]{
-    Parsing,
-    Type-checking,
-    Code Generation
-  }
-\end{center}
-
-The parser converts \lang source code into a data structure that represents the program in it's entirety.
+The parser converts \lang source code into a data structure that represents the program in it's entirety. The parser relies on the lexer, and the two work in tandem.
 
 The type-checker then validates this data structure, ensuring that the semantics of types are being followed properly.
 
@@ -113,55 +55,61 @@ The code generation stage creates a new data structure (an in-memory intermediat
 This intermediate representation gets converted by each backend into
 architecture specific implementations (machine code, asm, etc).
 
+\chapter{Lexing}
+
+\paragraph{Lexing} The process of converting a sequence of characters into a sequence of lexical tokens, or \emph{lexemes}.
+
+The compiler uses lexing to separate the source code into meaningful pieces; after all, it's all just bytes in a file. The lexer is the first stage in syntax analysis, and works in tandem with the parser.
+
+The lexer returns a string view: a pointer to the beginning and end of a sequence of bytes. This returned string is then further analyzed by the parser, until it has been handled, and the parser can once again get a new string view from the lexer.
+
+\filbreak
+
+The lexer works by following these steps:
+
+\begin{enumerate}
+\item Set beginning of lexeme to SOURCE, the string given, after skipping all initial whitespace.
+\item Set end of lexeme to beginning of lexeme.
+\item Skip beginning and end of lexeme past any comments.
+\item Skip end of lexeme to the first occurence of whitespace after the beginning.
+\item If beginning and end of lexeme are equal, return a 1-length lexeme.
+\end{enumerate}
+
+NOTE: Lots of error checking steps were left out, for the sake of brevity.
+
+\paragraph{Whitespace} \verb| \t\r\n|
+
+\paragraph{Delimiters} \verb| \t\r\n,{}()[]<>:&@|
+
+\filbreak
+
+For example, here is how the following source code would be split into lexemes.
+
+\begin{minted}[linenos, breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+  numA : integer = 42
+  numB : integer = 69
+\end{minted}
+
+\begin{minted}[linenos, breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+  "numA"
+  ":"
+  "integer"
+  "="
+  "42"
+  "numB"
+  ":"
+  "integer"
+  "="
+  "69"
+\end{minted}
+
 \chapter{Parsing}
-\label{ch:parsing}
-
-The parsing stage validates and begins to understand the syntax of \lang source code.
-
-The parsing stage can be thought of as two systems that work together: the \emph{lexer} and the \emph{parser}. The parser drives the parsing stage, and calls to the lexer as needed.
-
-The parser keeps track of all state (how much has been parsed so far, etc). The lexer is a simple tool to increment the state of the parser. The parsing state state consists of a lexeme, it's length in bytes, and a pointer to the end of the lexeme (where we will begin lexing from next). This pointer starts at the beginning of our source code, and makes it's way towards the end as the parser advances the parsing state.
-
-\section{Lexer}
-\label{subsec:lexer}
-
-The lexer's job is to split up the input source code into understandable chunks (called lexemes); after all, the file is read as one, large, arbitrary sequence of bytes. The lexer splits these bytes into understandable pieces, and also strips off parts of the file that aren't needed, like whitespace and comments.
-
-The lexer must not lex more than one lexeme at a time. It is the job of the parser to understand sequences of lexemes.
-
-\vspace{1em}
-
-There are two main actions the lexer can make:
-\begin{itemize}
-\item[advance] Get the lexeme directly after the given position, updating position to end of new lexeme.
-\item[expect]  Get the lexeme directly after the given position, only updating position if the given lexeme was found.
-\end{itemize}
-
-\begin{minipage}{\textwidth}
-
-Given the following source code:
-\begin{Verbatim}[samepage=true]
-  ;; Intercept Simple Lexing Example
-  a : integer
-  a := 69
-\end{Verbatim}
-
-The lexer would produce the following lexemes (line separated) from the above source code, on subsequent calls.
-\begin{Verbatim}[samepage=true]
-  a
-  :
-  integer
-  a
-  :
-  =
-  69
-\end{Verbatim}
-\end{minipage}
-
-\section{Parser}
-\label{subsec:parser}
-
-The parser is the main component of the parsing stage, and does most of the heavy lifting.
 
 The job of the parser is to create an understanding of the program, from the compiler's point of view. To do this, the program must be unambigous, and contain only sequences of lexemes that are understood.
 
@@ -178,425 +126,292 @@ For the sake of simplicity and understanding, \lang uses an AST, or abstract syn
 A tree, in computer programming, is a data structure that can branch into multiple data structures. An AST happens to be a recursive tree, in that each of the branches of the tree can have branches, and those branches can have branches, and so on. A lot of compilers use a binary tree, or btree, which is a tree with a recursive left hand side and right hand side. The problem you see in using binary trees is that it is rather difficult to represent anything with more than two children (as one might expect). This is quite a common case in programming language ASTs; for example, when calling a function, there may be any amount of arguments. Most compilers go the LISP route, and have these sort of lists implemented as recursive pairs, where as long as the lhs is another pair, the list continues. I feel like this is a messy implementation, and results in code that is quite hard to read, due to chains of dereferences, i.e. \verb|lhs->lhs->rhs->value|.
 
 The compiler includes a text-debug format to print the abstract syntax tree that is produced, and can be printed out for any program by adding the verbose command line flag: \verb|-v|.
-% NOTE: It would be cool to output this printout into a file and have our own little file format to save this intermediate step. This would help a load if we wanted to start doing conditional compilation.
 
-\begin{minipage}{\textwidth}
+\filbreak
 
-Let's take a look at an example. Given the following source code:
-\begin{Verbatim}[samepage=true]
-  ;; Intercept Parsing Example
-  fact : integer (n : integer) = integer (n : integer) {
-    if n < 2 {
-      1
-    } else {
-      n * fact(n - 1)
-    }
+Let's take a look at an example.
+\begin{minted}[linenos, breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{lisp}
+;; Intercept Parsing Example
+fact : integer (n : integer) = integer (n : integer) {
+  if n < 2 {
+    1
+  } else {
+    n * fact(n - 1)
   }
+}
 
-  fact(5)
-\end{Verbatim}
+fact(5)
+\end{minted}
 
-The parser would produce the following abstract syntax tree:
-\begin{Verbatim}
-  PROGRAM
-    VARIABLE DECLARATION
-      SYM:"fact"          <- colon separates node type from node value
-    VARIABLE REASSIGNMENT
-      SYM:"fact"
-      FUNCTION
-        SYM:"integer" (0) <- refers to level of pointer indirection
-        NONE              <- empty node to store list of parameter types
-          SYM:"integer"
-        NONE              <- empty node to store list of body expressions
-          IF
-            BINARY OPERATOR:"<"
+\filbreak
+
+The parser would produce the following abstract syntax tree.
+
+\begin{minted}[linenos, breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+PROGRAM
+  VARIABLE DECLARATION
+    SYM:"fact"          <- colon separates type from value
+  VARIABLE REASSIGNMENT
+    SYM:"fact"
+    FUNCTION
+      SYM:"integer" (0) <- level of pointer indirection
+      NONE              <- stores parameter types
+        SYM:"integer"
+      NONE              <- stores body expressions
+        IF
+          BINARY OPERATOR:"<"
+            VARIABLE ACCESS:"n"
+            INT:2
+          NONE          <- stores 'then' body
+            INT:1
+          NONE          <- stores 'otherwise' body
+            BINARY OPERATOR:"*"
               VARIABLE ACCESS:"n"
-              INT:2
-            NONE          <- stores 'then' body
-              INT:1
-            NONE          <- stores 'otherwise' body
-              BINARY OPERATOR:"*"
-                VARIABLE ACCESS:"n"
-                FUNCTION CALL
-                  SYM:"fact"
-                  BINARY OPERATOR:"-"
-                    VARIABLE ACCESS:"n"
-                    INT:1
-    FUNCTION CALL
-      SYM:"fact"
-      INT:5
-\end{Verbatim}
+              FUNCTION CALL
+                SYM:"fact"
+                BINARY OPERATOR:"-"
+                  VARIABLE ACCESS:"n"
+                  INT:1
+  FUNCTION CALL
+    SYM:"fact"
+    INT:5
+\end{minted}
 
 As you can see, this is a complete representation of the program. It is able to understand high level concepts that the programmer construed in the source code, like conditional control flow, variable accesses, function calls with arguments, and more.
 
-\end{minipage}
-
-
-\chapter{Type-checking}
-\label{ch:typechecking}
+\chapter{Type Checking}
 
 Type-checking refers to the process of ensuring the types of expressions are what they are expected to be.
 
 This is only relevant due to \lang being statically typed. This means the type of a variable is known at compile-time, due to the programmer declaring it. This declared type is associated with the variable, and any expressions assigned to it must return a compatible type. It also comes into play with binary expressions: they operate on two objects, each of some type. It wouldn't make any sense to try to add a function to an array, would it? Function calls' arguments must match a function's declared parameters' types. A dereference may only operate on a pointer. All of these semantics of the language are enforced by the type-checker.
 
 \chapter{Code Generation}
-\label{ch:codegen}
 
-Finally, we arrive at code generation. This is definitely the most complicated part, and is where compiler developers get lost for decades. While \lang started as a very simple, x86\_64-only compiler, it is slowly growing to become a compiler that supports many backends, each of which cross platform themselves.
+Code generation is---by far---the most complicated part of the compiler. It is what inspired me to create this document, so as to ease further developers' use of similar architectures, or even help them understand this compiler so that they can make a pull request. Keep in mind that the compiler is a moving target, so this documentation is ``as up to date as can be''. Things change all the time, and technical writing is hard.
 
-Thanks to Sirraide, our compiler has an intermediate representation. I didn't budge easy, but he was insistent and convincing.
+\section{Terminology}
 
-If you are like me, you may wonder why this IR is even needed; it seems (at least to me) like it is of no use, and everything it represents could be stored in the AST. If you are not like me, that's good. You're probably smart :P.
+\paragraph{IR} Stands for \emph{Intermediate Representation}. An intermediate representation is like a high level assembly language that isn't platform specific.
 
-Here is a list of reasons that were used to convince myself of using an IR:
-- There are none.
+\paragraph{IR Function} A list of basic blocks that may branch to each other.
 
-Seriously, you can do everything with just an AST, I promise. If you don't want an IR, don't use one. In the early versions of the compiler (that I wrote), there was no IR and codegen happened straight from AST. It wasn't always optimal but through peephole optimizations I'm fairly sure we could get it very good. In any case, Sirraide insisted and made the PR, and I won't turn down a chance to learn something I don't know.
+\paragraph{IR Basic Block} A list of instructions in which control flow begins at the start and exits at the end. That is, a basic block must have only one branch instruction, and it must be at the very end.
 
-First of all, in the intermediate representation, that doesn't conform to any hardware standard, there are some assumptions that can be made. If there are no hardware limitations, then every value could just be stored in a new register; why wouldn't there be infinite? With this, we would never have to worry about slow-downs from RAM access or an appalling disk IO situation: it would simply always be register to register movement, and only when the user dereferences something would we begin to have memory accesses generated. It's like a code optimizers wet dream: everything in a register, and only explicit memory accesses.
+\paragraph{IR Instruction} A tagged union, storing the type and value of the instruction, as well as other metadata like its allocated register and a unique ID for debugging.
 
-% END INTRO
+\paragraph{Backend} The code that translates the intermediate representation into actual, usable code. For example, the x86\_64 code generation backend converts IR into x86\_64 assembly code.
 
-\begin{Verbatim}[samepage = true]
-  ;; Intercept Intermediate Representation Example
-  ;; Expressions are annotated with numbers for easy referencing.
+\section{Source Code $\rightarrow$ IR}
 
-  ;; Let us assume that input_condition and if_condition are somehow
-  ;; different every time the program runs, like parameters.
-  input_condition : integer           ; 0
-  if_condition : integer              ; 1
+\begin{minted}[linenos, breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+4 + 4 + 4 + 4
+\end{minted}
 
-  a : integer                         ; 2
-  b : integer = 420                   ; 3
-  c : integer = 69                    ; 4
-  d : integer                         ; 5
-  e : integer                         ; 6
-  f : integer                         ; 7
+\filbreak
+\noindent
 
-  while 1 {                           ; 8, 9
+The IR for this program is as follows.
+% TODO: Mention that it is just a reorganization of AST
 
-    a := b + c                        ; 10
-    d := a * -1                       ; 11
-    e := d + f                        ; 12
+\begin{minted}[linenos, breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+f1
+  bb1
+     %1 | 4
+     %2 | 4
+     %3 | add %1, %2
+     %4 | 4
+     %5 | add %3, %4
+     %6 | 4
+     %7 | add %5, %6
+     %8 | return
+return value: %7
+\end{minted}
 
-    if input_condition {              ; 13, 14
-      f := 2 * e                      ; 15
-    } else {
-      b := d + e                      ; 16
-      e := e - 1                      ; 17
-    }
+As you can see, there is a single IR function \emph{f1}, a single basic block \emph{bb1}, eight IR instructions within that basic block, with a branch instruction at the end: \emph{\%8}.
 
-    b := f + c                        ; 18
-  }
-\end{Verbatim}
+Another thing you may notice is that the addition no longer happens between numbers, but between IR instructions. For example, \emph{\%3} produces the sum of instructions \emph{\%1} and \emph{\%2}. It is these instructions that refer to an immediate value. This extra layer of abstraction helps to separate things that require computation into their own instruction. That is, an immediate value needs to be loaded before addition can take place.
 
-And the generated AST of the program:
-\begin{Verbatim}
-  PROGRAM
-    VARIABLE DECLARATION:"input_condition"    ; 0
-    VARIABLE DECLARATION:"if_condition"       ; 1
-    VARIABLE DECLARATION:"a"                  ; 2
-    VARIABLE DECLARATION:"b"                  ; 3
-    VARIABLE ASSIGNMENT
-      SYM:"b"
-      INT:420
-    VARIABLE DECLARATION:"c"                  ; 4
-    VARIABLE ASSIGNMENT
-      SYM:"c"
-      INT:69
-    VARIABLE DECLARATION:"d"                  ; 5
-    VARIABLE DECLARATION:"e"                  ; 6
-    VARIABLE DECLARATION:"f"                  ; 7
-    WHILE                                     ; 8
-      INT:1                                   ; 9
-      NONE
-        VARIABLE ASSIGNMENT                   ; 10
-          SYM:"a"
-          BINARY OPERATOR:"+"
-            VARIABLE ACCESS:"b"
-            VARIABLE ACCESS:"c"
-        VARIABLE ASSIGNMENT                   ; 11
-          SYM:"d"
-          BINARY OPERATOR:"*"
-            VARIABLE ACCESS:"a"
-            INT:-1
-        VARIABLE ASSIGNMENT                   ; 12
-          SYM:"e"
-          BINARY OPERATOR:"+"
-            VARIABLE ACCESS:"d"
-            VARIABLE ACCESS:"f"
-        IF                                    ; 13
-          VARIABLE ACCESS:"input_condition"   ; 14
-          NONE
-            VARIABLE ASSIGNMENT               ; 15
-              SYM:"f"
-              BINARY OPERATOR:"*"
-                INT:2
-                VARIABLE ACCESS:"e"
-          NONE
-            VARIABLE ASSIGNMENT               ; 16
-              SYM:"b"
-              BINARY OPERATOR:"+"
-                VARIABLE ACCESS:"d"
-                VARIABLE ACCESS:"e"
-            VARIABLE ASSIGNMENT               ; 17
-              SYM:"e"
-              BINARY OPERATOR:"-"
-                VARIABLE ACCESS:"e"
-                INT:1
-        VARIABLE ASSIGNMENT                   ; 18
-          SYM:"b"
-          BINARY OPERATOR:"+"
-            VARIABLE ACCESS:"f"
-            VARIABLE ACCESS:"c"
-\end{Verbatim}
+The major advantage of this representation is something called \emph{Single Static Assignment}, or SSA. SSA refers to a property of a program that means no value gets assigned to twice. This makes it \emph{much} easier to do things like register allocation, and program optimization.
 
-Previously, this AST would be used to generate code by the code generation backend (the frontend delegates to different backends based on defaults or configuration at the command line). However, this now gets converted into the following IR (excluding initial variable declarations, only for the sake of brevity in the initial basic block):
+\filbreak
 
-Here is the while loop body from our current program, in terms of \lang's intermediate representation, or IR.
+For example, we are able to ({\footnotesize \emph{somewhat}}) easily compute whether or not a variable is live at any given point in the program, by checking it's latest use and it's definition. Liveness analysis is done by keeping track of every use of some calculated value in a linked list of \verb|Use| structures (pronounce like the noun, the 'S' is voiceless). This is done during intermediate representation generation. Effectively, we build our IR with live ranges built-in.
+
+Here are the live ranges from the above IR example.
+
+\begin{minted}[breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+    %1 %2 %3 %4 %5 %6 %7
+%1  |
+%2  |  |
+%3  x  x  |
+%4        |  |
+%5        x  x  |
+%6              |  |
+%7              x  x  |
+\end{minted}
+
+\filbreak
+
+What happens next is rather complicated, and there is probably 100 pages we could write to describe it: \emph{Register Allocation}.
+
+Register allocation refers to assigning a hardware register to each instruction in the IR that produces a value. This allows the code generation backend to use the allocated register, and not have to keep track of which to use itself. It also allows for less code duplication, and quite a few optimizations to take place.
+
+The problem of register allocation may be framed in a more formal sense. That is, rather than asking the question, ``How do I assign registers to each of the instructions that needs them?'', we should be asking, ``How do I color a graph with less than k colors?''. Yes, register allocation is just graph theory. Each instruction refers to a vertex, or a node, in the graph. The edges of the graph are made by interferences between instructions. An interference occurs when two instructions' results are in use at the same point in the program. It's reasonable that if both are being used at once, then you can't store them in the same place without getting in the way of each other.
+
+So, with this example, we would end up with seven instructions that need a register. After all, a return statement doesn't actually need to be stored anywhere. During register allocation, we collect a flat list of instructions that need registers, and disregard all of the other instructions. This allows the graph to reduce in size, making the problem easier to solve.
+
+\filbreak
+
+The register allocator also simplifies the IR in other ways, attempting to lower PHI instructions, remove COPY instructions, etc. It also pre-allocates any registers that are known ahead of time at this point, like function call arguments according to call convention, and function return values.
+
+Next, the register allocator creates an \emph{adjacency matrix}. An adjacency matrix stores a boolean value for every unique pair of coordinates possible in a two dimensional array that is the size of the flat list of instructions just collected. It is effectively the data version of the live range visualization above.
+
+\begin{minted}[breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+0 |
+1 |  1
+2 |
+3 |        1
+4 |
+5 |              1
+6 |
+  |  0  1  2  3  4  5  6
+\end{minted}
+
 \begin{center}
-  \begin{tikzpicture}[
-    > = latex', auto,
-    block/.style = {
-      rectangle,
-      draw=black,
-      thick,
-      align=flush center,
-      rounded corners,
-      minimum height=4em
-    },]
-\matrix [column sep=5mm,row sep=7mm]{
-  % row 1
-  &
-  \node [block, text width=\inprogramwidth] (firstbox) {
-    a := b + c    ; 10
-
-    d := a * -1    ; 11
-
-    e := d + f    ; 12
-  }; & \\
-  % row 2
-  & \node[block] (if) {
-    if input\_condition ; 13, 14
-  }; & \\
-  \node [block] (b1) {
-    f := 2 * e    ; 15
-
-  }; &
-  & \node [block] (b2) {
-    b := d + e    ; 16
-    \\
-    e := e - 1    ; 17
-  };\\
-  & \node [block] (d1) {
-    b := f + c    ; 18
-  };\\
-};
-
-\draw[->] (firstbox) -- (if);
-\draw[->] (if) -| (b1);
-\draw[->] (if) -| (b2);
-\draw[->] (b1) -v (d1);
-\draw[->] (b2) -v (d1);
-% Arrow with label
-% \draw[->] (b2) -v (d1) node[midway,above left] {-10};
-
-\draw[-latex,black] ($(d1.east) + (.4,0)$) arc
-    [
-        start angle = 90,
-        end angle =   -80,
-        x radius =    6cm,
-        y radius =    -3.6cm
-    ] ;
-\end{tikzpicture}
+{\small Take note that we now use index into the flat list of instructions to refer to each instruction, and that these are different from the IDs we were using before. This is why there is no percentage next to the label numbers.}
 \end{center}
 
-Each box with code within it is referred to as a \emph{basic block}. \\
-The diagram above illustrates the basic blocks of the "main" \emph{function} in our example program and their relation to one another.
+While it may be confusing at first, it actually makes a lot of sense. As \emph{\%0} and \emph{\%1} are both live at the same time, they must be stored in separate temporary registers, and therefore interfere. However, as they both are dropped to ground by \emph{\%3}, it isn't necessary that all three are stored in separate registers; that is, \emph{\%3} could be stored in the same hardware register as \emph{\%0} or \emph{\%1}. This is why they are said to not interfere, and the adjacency matrix contains a zero (shown as blank space).
 
-\begin{itemize}
-\item[Basic Block]
-  A flat list of IR instructions that must end in a branch.
-\item[Function]
-  A flat list of basic blocks with at least an entry and a return block specified, although they may be the same.
-\end{itemize}
+\filbreak
 
-However, this diagram does not actually conform to \lang's intermediate representation; there is one more step to complete before it matches one-to-one: conversion into static single assignment form, or SSA form for short.
+From here, the register allocator creates adjacency lists from the adjacency matrix. Adjacency lists are another data structure to represent the same data that the matrix represents, just in a more convenient form for what we are about to do.
 
-\section{Static Single Assignment Form}
-\label{sec:codegen-ssa}
+An adjacency list stores a list of adjacencies for each node, or vertex, in the register allocation graph. So, any time you see a $1$ in the adjacency matrix, the node at both the $x$ and $y$ will have each other added to each other's adjacency list.
 
-A variable has different values at different times throughout the program, all with different lifetimes... They almost sound like different variables! Wait... what if they were?
+\filbreak
 
-Each assignment of a variable after the first creating a new variable is the entire idea behind \emph{SSA}, or static single assignment, form. SSA form is a form of program in which each variable does not get assigned more than one time.
+Here is what the adjacency lists look like from the above example. Keep in mind that the number with a percentage refers to ID, and the number without refers to index.
 
-Let's take a look at the example above, converted into SSA form.
-\begin{center}
-  \begin{tikzpicture}[
-    > = latex', auto,
-    block/.style = {
-      rectangle,
-      draw=black,
-      thick,
-      align=flush center,
-      rounded corners,
-      minimum height=4em
-    },]
-\matrix [column sep=5mm,row sep=7mm]{
-  % row 1
-  &
-  \node [block, label = above:{\small bb0}, text width=\inprogramwidth] (firstbox) {
-    $a_1$ := b + c    ; 10
+\begin{minted}[breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+%1::0: 1
+%2::1: 0
+%3::2: 3
+%4::3: 2
+%5::4: 5
+%6::5: 4
+%7::6:
+\end{minted}
 
-    $d_1$ := $a_1$ * -1    ; 11
+\filbreak
 
-    $e_1$ := $d_1$ + f    ; 12
-  }; & \\
-  % row 2
-  & \node[block, label = below:{\small bb1}] (if) {
-    if input\_condition ; 13, 14
-  }; & \\
-  \node [block, label = left:{\small bb2}] (b1) {
-    f := 2 * $e_1$    ; 15
+The register allocator now creates what is called a \emph{coloring stack}. This is a stack, or list, of indices that \emph{should} be able to be colored with less than $k$ colors. However, it isn't guaranteed, as this problem is NP-complete, and therefore the solution we find may not be 100\% ideal. Currently, we use the Chaitin--Briggs algorithm of register allocation (more or less).
 
-  }; &
-  & \node [block, label = left:{\small bb3}] (b2) {
-    $b_1$ := $d_1$ + $e_1$    ; 16
-    \\
-    $e_2$ := $e_1$ - 1    ; 17
-  };\\
-  & \node [block, label = above:{\small bb4}] (d1) {
-    $b_2$ := f + c    ; 18
-  };\\
-};
+Here is the coloring stack generated by the above program. This is where things get really complicated, so I'm pretty sure we don't have this 100\% correct, hence the duplicate zeros.
 
-\draw[->] (firstbox) -- (if);
-\draw[->] (if) -| (b1);
-\draw[->] (if) -| (b2);
-\draw[->] (b1) -v (d1);
-\draw[->] (b2) -v (d1);
-% Arrow with label
-% \draw[->] (b2) -v (d1) node[midway,above left] {-10};
+\begin{minted}[breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+0, 5, 4, 3, 2, 1, 0
+\end{minted}
 
-\draw[-latex,black] ($(d1.east) + (.4,0)$) arc
-    [
-        start angle = 90,
-        end angle =   -81,
-        x radius =    6.8cm,
-        y radius =    -4.18cm
-    ] ;
-\end{tikzpicture}
-\end{center}
+You'll notice that some indices are missing from this list; this is due to being pre-allocated (i.e. function call arguments according to calling convention).
 
-% TODO: They are up above, but maybe should be here? Basic block, function, value, etc. vocabulary definitions...
+The register allocator may now, finally, color the graph (and therefore allocate the registers). To do this, the register allocator colors the graph in order of the coloring stack, making sure to avoid coloring a node with the same color as any of the nodes within the adjacency list of the node being colored. This means that no two values that interfere will be allocated the same register.
 
-The above diagram is not what the actual data structure appears as, so let's take a look at a lower level representation of the intermediate representation. How about that?
+Our final IR ends up looking like so, when registers are allocated for the x86\_64 architecture.
 
-\begin{itemize}
-\item[\%]
-  A temporary value, like a register on a CPU.
-\item[bb]
-  A basic block within a function.
-\item[fun]
-  A function with a list of basic blocks.
-\end{itemize}
+\begin{minted}[breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+f1
+  bb1
+     %1 | RAX | 4
+     %2 | RBX | 4
+     %3 | RBX | add %1, %2
+     %4 | RAX | 4
+     %5 | RBX | add %3, %4
+     %6 | RAX | 4
+     %7 | RAX | add %5, %6
+     %8 |     | return
+return value: %7
+\end{minted}
 
+\section{It's About $\Phi$}
 
-\begin{Verbatim}[samepage = true]
-fun main:
-  bb0:
-    %r0 = global_load("b")
-    %r1 = global_load("c")
-    %r2 = add(%r0, %r1)
-    global_store(%r2, "a") ;;  10
-    %r3 = global_load("a")
-    %r4 = immediate(-1)
-    %r5 = multiply(%r3, %r4)
-    global_store(%r5, "d") ;; 11
-    ;; ...
-\end{Verbatim}
+$\Phi$, or Phi, is a Greek letter that is used to describe a certain type of instruction within the compiler's intermediate representation. This instruction represents a merging of control flows. For example, the return value of an IF expression will always be a PHI node; this is because IF may branch, or not branch, causing different control flows to be taken that end up in the same destination. The purpose of this instruction is to be able to keep track of the different values that may be returned from the IF expression, and make sure that they end up in the expected places. On most backends, this means allocating registers, but it could be solved in any way, really.
 
-% TODO: There has to be a better title than this!
-\section{Variable Liveness}
-\label{sec:codegen-variable-liveness}
+Let's take a look at a real example.
 
-WARNING: The following section contains vocabulary regarding topics of life and death, due to this being what it has been called in many, many learning resources. We hope to move away from these possibly offensive terms, and towards something we can all discuss without bad memories being brought up.
+\begin{minted}[linenos, breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+cond : integer = 1
+a    : integer = 0
+if cond {
+  a := a + 5
+  a
+}
+a
+\end{minted}
 
-\begin{itemize}
-\item[Live]
-  A temporary is considered live after it has been assigned and up until the last use of this temporary.
-\item[Live Range]
-  The range of expressions in a basic block in which a temporary is live.
-\end{itemize}
+\filbreak
 
-Liveness analysis is done by keeping track of every use of some calculated value in a linked list of \verb|Use| structures (pronounce like the noun, the 'S' is voiceless). This is done during intermediate representation generation. Effectively, we build our IR with live ranges built-in.
+The above source code would be compiled into the following intermediate representation.
 
-If a temporary is live during the definition of another temporary, the two temporaries are said to \emph{interfere}.
-
-Excerpt from demonstration IR above:
-\begin{Verbatim}
-  %r0 = global_load("b")   ;; a
-  %r1 = global_load("c")   ;; b
-  %r2 = add(%r0, %r1)      ;; c
-  global_store(%r2, "a")   ;; d
-  %r3 = global_load("a")   ;; e
-  %r4 = immediate(-1)      ;; f
-  %r5 = multiply(%r3, %r4) ;; g
-  global_store(%r5, "d")   ;; h
-\end{Verbatim}
-
-Live ranges from above excerpt:
-\begin{Verbatim}
-    r0 r1 r2 r3 r4 r5
-  a |
-  b |  |
-  c |  |  |
-  d       |
-  e          |
-  f          |  |
-  g          |  |  |
-  h                |
-\end{Verbatim}
-
-\section{Register Allocation}
-\label{sec:codegen-register-allocation}
-
-% TODO: This intro doesn't make any sense whatsoever, anymore
-% However, you may be (like me) thinking... there \emph{\emph{aren't}} infinite registers in hardware implementations. Even in x86\_64, there's only 16 64-bit registers... This is one of the reasons why I was (and am) averse to the intermediate representation idea: it add's so much complexity. However, I assure you, it isn't too complicated, it just sounds it.
-
-\begin{itemize}
-\item[$\Phi$ (Phi)]
-  The $\Phi$ IR instruction represents a merging of multiple temporaries into a new temporary. The temporaries to-be-merged are referred to as $\Phi$'s arguments.
-\item[Web]
-  A list of temporaries that \textbf{\emph{must}} be stored in the same hardware register.
-\end{itemize}
-
-At this point, we will build our webs. To build webs, there are only a few simple rules.
-
-For two IR instructions $A$ and $B$, they \emph{must} share the same register iff any one of the following are true:
-\begin{itemize}
-\item $A$ is a $\Phi$ instruction and $B$ is an argument of $A$.
-\item $B$ is a $\Phi$ instruction and $A$ is an argument of $B$.
-\item $A$ and $B$ are both arguments of the same $\Phi$ node.
-\item $A$ and $B$ are both arguments of a COPY instruction.
-\end{itemize}
-
-Conceptually, this all tracks. If two temporaries are merged, they must be stored in the same hardware register, otherwise, further accesses would require run-time knowledge during compile-time. If two temporaries are copied, why not just use the same register to refer to both? That way no actual hardware copy has to happen; the copy can just use the originally calculated temporary.
-
-Webs from above excerpt:
-\begin{Verbatim}
-  w0: {r0}
-  w1: {r1}
-  w2: {r2}
-  w3: {r3}
-  w4: {r4}
-  w5: {r5}
-\end{Verbatim}
-
-These webs each contain a list of temporaries that \emph{must} be stored in the same register. Keep in mind that these webs (and corresponding temporaries) \emph{may} still be stored in the same register, if they do not interfere (calculated later).
-
-What is web interference? Two webs, $A$ and $B$ are said to interfere iff any one of the temporaries within $A$ inteferes with any one of the temporaries within $B$.
-
-When two webs interfere, they \emph{must} not be stored in the same register.
+\begin{minted}[breaklines,
+  frame = single, framesep = 2mm,
+  tabsize = 4
+  ]{python}
+f1
+  bb1
+     %1 | RAX | 1
+     %2 |     | g.store %1, cond
+     %3 | RAX | 0
+     %4 |     | g.store %3, a
+     %5 | RBX | g.load cond
+     %6 |     | branch.conditional %5, bb2, bb3
+  bb2
+     %7 | RDX | g.load a
+     %8 | RCX | 5
+     %9 | RCX | add %7, %8
+    %10 |     | g.store %9, a
+    %11 | RCX | g.load a
+    %12 | RAX | copy %11
+    %13 |     | branch bb4
+  bb3
+    %14 | RBX | 0
+    %15 | RAX | copy %14
+    %16 |     | branch bb4
+  bb4
+    %17 | RAX | phi [bb3 : %15], [bb2 : %12]
+    %18 | RAX | g.load a
+    %19 |     | return
+return value: %18
+\end{minted}
 
 \end{document}
