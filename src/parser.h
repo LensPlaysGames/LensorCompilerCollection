@@ -106,6 +106,8 @@ typedef struct Node {
 
 char *node_text(Node *node);
 
+char node_returns_value(Node *node);
+
 Node *node_allocate();
 
 #define nonep(node)    ((node).type == NODE_TYPE_NONE)

@@ -202,11 +202,22 @@ Error typecheck_expression
 
     // Enter `if` THEN context.
     to_enter = (*context_to_enter)->children;
+    Node *last_then_expression = NULL;
     Node *then_expression = expression->children->next_child->children;
     while (then_expression) {
       err = typecheck_expression(*context_to_enter, &to_enter, then_expression, result_type);
       if (err.type) { return err; }
+      last_then_expression = then_expression;
       then_expression = then_expression->next_child;
+    }
+    if (!last_then_expression) {
+      TODO("Compiler doesn't yet handle empty if expression bodies. Put a zero or something.");
+    }
+    // Ensure last expression of IF THEN body returns a value.
+    if (!node_returns_value(last_then_expression)) {
+      printf("\n%s does not return a value!\n", node_text(last_then_expression));
+      ERROR_PREP(err, ERROR_TYPE, "Last expression of IF THEN body must return a value.");
+      return err;
     }
     // Eat `if` THEN context.
     *context_to_enter = (*context_to_enter)->next_child;
@@ -215,12 +226,22 @@ Error typecheck_expression
     if (expression->children->next_child->next_child) {
       // Enter `if` OTHERWISE context.
       to_enter = (*context_to_enter)->children;
+      Node *last_otherwise_expression = NULL;
       Node *otherwise_expression = expression->children->next_child->next_child->children;
       Node *otherwise_type = node_allocate();
       while (otherwise_expression) {
         err = typecheck_expression(*context_to_enter, &to_enter, otherwise_expression, otherwise_type);
         if (err.type) { return err; }
+        last_otherwise_expression = otherwise_expression;
         otherwise_expression = otherwise_expression->next_child;
+      }
+      if (!last_otherwise_expression) {
+        TODO("Compiler doesn't yet handle empty if expression bodies. Put a zero or something.");
+      }
+      if (!node_returns_value(last_otherwise_expression)) {
+        printf("\n%s does not return a value!\n", node_text(last_otherwise_expression));
+        ERROR_PREP(err, ERROR_TYPE, "Last expression of IF OTHERWISE body must return a value.");
+        return err;
       }
       // Eat `if` OTHERWISE context.
       *context_to_enter = (*context_to_enter)->next_child;
