@@ -213,16 +213,14 @@ Error codegen_expression
     // err is ignored purposefully, program already type-checked valid.
     typecheck_expression(context, NULL, expression->children, variable_type);
 
-    INSTRUCTION(call, IR_CALL);
+    IRInstruction *call = NULL;
 
     if (strcmp(variable_type->value.symbol, "external function") == 0) {
-      call->value.call.type = IR_CALLTYPE_DIRECT;
-      call->value.call.value.name = expression->children->value.symbol;
+      call = ir_direct_call(cg_context, expression->children->value.symbol);
     } else {
       err = codegen_expression(cg_context, context, next_child_context, expression->children);
       if (err.type) { return err; }
-      call->value.call.type = IR_CALLTYPE_INDIRECT;
-      call->value.call.value.callee = expression->children->result;
+      call = ir_indirect_call(cg_context, expression->children->result);
     }
 
     for (iterator = expression->children->next_child->children;
