@@ -1,10 +1,18 @@
-#include "error.h"
 #include <codegen/register_allocation.h>
 
 #include <codegen.h>
+#include <error.h>
 #include <stdlib.h>
 #include <string.h>
 #include <codegen/intermediate_representation.h>
+
+//#define DEBUG_RA
+
+#ifdef DEBUG_RA
+#define IR_FEMIT(file, context) ir_femit(file, context)
+#else
+#define IR_FEMIT(file, context)
+#endif
 
 RegisterAllocationInfo *ra_allocate_info
 (CodegenContext *context,
@@ -295,6 +303,12 @@ void print_instruction_list(IRInstructionList *list) {
   }
 }
 
+#ifdef DEBUG_RA
+#define PRINT_INSTRUCTION_LIST(list) print_instruction_list(list)
+#else
+#define PRINT_INSTRUCTION_LIST(list)
+#endif
+
 //==== END INSTRUCTION LIST ====
 
 typedef struct IRBlockList {
@@ -428,12 +442,9 @@ int follow_control_flow(IRBlockList *visited, IRBlock *block, IRInstruction *a_u
 /// of its uses, then A and B interfere.
 char instructions_interfere(IRInstruction *A, IRInstruction *B) {
   ASSERT(A && B, "Can not get interference of NULL instructions.");
+  ASSERT(A->block, "Can not get interference when A has NULL containing block.");
   for (Use *a_use = A->uses; a_use; a_use = a_use->next) {
     ASSERT(a_use->user, "Use instruction can not be NULL!");
-
-    if (!A->block) {
-      ir_femit_instruction(stdout, A);
-    }
 
     // If definition and use of A are in the same block, and if the
     // definition of B is also in the same block, it is a simple index
@@ -473,6 +484,7 @@ void build_adjacency_matrix(RegisterAllocationInfo *info, IRInstructionList *ins
   }
 }
 
+
 void print_adjacency_matrix(AdjacencyMatrix m) {
   for (size_t y = 0; y < m.size; ++y) {
     printf("%4zu |%3hhu", y, adjm(m, 0, y));
@@ -488,6 +500,12 @@ void print_adjacency_matrix(AdjacencyMatrix m) {
   }
   printf("\n\n");
 }
+
+#ifdef DEBUG_RA
+#define PRINT_ADJACENCY_MATRIX(m) print_adjacency_matrix(m)
+#else
+#define PRINT_ADJACENCY_MATRIX(m)
+#endif
 
 //==== END ADJACENCY MATRIX ====
 
@@ -573,6 +591,12 @@ void print_adjacency_list(AdjacencyList *list) {
   printf("\n");
 }
 
+#ifdef DEBUG_RA
+#define PRINT_ADJACENCY_LIST(list) print_adjacency_list(list)
+#else
+#define PRINT_ADJACENCY_LIST(list)
+#endif
+
 void print_adjacency_array(AdjacencyListNode *array, size_t size) {
   AdjacencyListNode it = array[0];
   for (size_t i = 0; i < size; ++i, it = array[i]) {
@@ -584,6 +608,12 @@ void print_adjacency_array(AdjacencyListNode *array, size_t size) {
   }
   printf("\n");
 }
+
+#ifdef DEBUG_RA
+#define PRINT_ADJACENCY_ARRAY(arr, sz) print_adjacency_array(arr, sz)
+#else
+#define PRINT_ADJACENCY_ARRAY(arr, sz)
+#endif
 
 //==== END ADJACENCY LISTS ====
 
@@ -748,6 +778,12 @@ void print_number_stack(NumberStack *stack) {
   printf("\n");
 }
 
+#ifdef DEBUG_RA
+#define PRINT_NUMBER_STACK(stack) print_number_stack(stack)
+#else
+#define PRINT_NUMBER_STACK(stack)
+#endif
+
 NumberStack *build_coloring_stack(RegisterAllocationInfo *info, IRInstructionList *instructions, AdjacencyGraph *G) {
   NumberStack *stack = NULL;
 
@@ -903,34 +939,35 @@ void ra(RegisterAllocationInfo *info) {
   function_return_values(info);
 
   ir_set_ids(info->context);
-  ir_femit(stdout, info->context);
+  IR_FEMIT(stdout, info->context);
 
   IRInstructionList *instructions = collect_instructions(info);
 
   AdjacencyGraph G;
   G.order = info->register_count;
   build_adjacency_matrix(info, instructions, &G);
-  print_adjacency_matrix(G.matrix);
+
+  PRINT_ADJACENCY_MATRIX(G.matrix);
 
   coalesce(info, &instructions, &G);
 
   ir_set_ids(info->context);
-  ir_femit(stdout, info->context);
+  IR_FEMIT(stdout, info->context);
 
   instructions = collect_instructions(info);
   build_adjacency_matrix(info, instructions, &G);
   build_adjacency_lists(info, instructions, &G);
 
   ir_set_ids(info->context);
-  print_adjacency_matrix(G.matrix);
-  print_adjacency_array(G.list, G.matrix.size);
+  PRINT_ADJACENCY_MATRIX(G.matrix);
+  PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
 
   NumberStack *stack = build_coloring_stack(info, instructions, &G);
-  print_number_stack(stack);
+  PRINT_NUMBER_STACK(stack);
 
   color(info, stack, instructions, G.list, G.matrix.size);
 
-  print_instruction_list(instructions);
+  PRINT_INSTRUCTION_LIST(instructions);
 
-  ir_femit(stdout, info->context);
+  IR_FEMIT(stdout, info->context);
 }
