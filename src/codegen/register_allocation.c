@@ -86,10 +86,9 @@ void phi2copy(RegisterAllocationInfo *info) {
               if (0) {}
               IRBlock *critical_edge_trampoline = ir_block_create();
               ir_insert_into_block(critical_edge_trampoline, copy);
-              IRInstruction *new_branch = ir_branch_into_block(instruction->block, critical_edge_trampoline);
+              ir_branch_into_block(instruction->block, critical_edge_trampoline);
 
               ASSERT(critical_edge_trampoline->branch, "branch null");
-              ASSERT(critical_edge_trampoline, "HERE");
 
               ir_block_attach_to_function(instruction->block->function, critical_edge_trampoline);
               if (argument->block->branch->value.conditional_branch.true_branch == instruction->block) {
@@ -409,7 +408,7 @@ char instructions_interfere(IRInstruction *A, IRInstruction *B) {
   return 0;
 }
 
-void build_adjacency_matrix(RegisterAllocationInfo *info, IRInstructionList *instructions, AdjacencyGraph *G) {
+void build_adjacency_matrix(IRInstructionList *instructions, AdjacencyGraph *G) {
   ASSERT(instructions, "Can not build adjacency matrix of NULL instruction list.");
    IRInstructionList *last = instructions;
    while (last->next) {
@@ -505,7 +504,7 @@ void adjl_add(AdjacencyListNode *A, AdjacencyListNode *B) {
   adjl_add_impl(B, A);
 }
 
-void build_adjacency_lists(RegisterAllocationInfo *info, IRInstructionList *instructions, AdjacencyGraph *G) {
+void build_adjacency_lists(IRInstructionList *instructions, AdjacencyGraph *G) {
   G->list = calloc(G->matrix.size + 1, sizeof(AdjacencyListNode));
 
   for (IRInstructionList *it = instructions; it; it = it->next) {
@@ -633,7 +632,7 @@ void replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
   }
 }
 
-void coalesce(RegisterAllocationInfo *info, IRInstructionList **instructions, AdjacencyGraph *G) {
+void coalesce(IRInstructionList **instructions, AdjacencyGraph *G) {
   IRInstructionList *instructions_to_remove = NULL;
 
   // Attempt to remove copy instructions.
@@ -876,6 +875,26 @@ void color
   }
 }
 
+// Keep track of what registers are used in each function.
+void track_registers(RegisterAllocationInfo *info) {
+  for (IRFunction *function = info->context->function;
+       function;
+       function = function->next
+       ) {
+    for (IRBlock *block = function->first;
+         block;
+         block = block->next
+         ) {
+      for (IRInstruction *instruction = block->instructions;
+           instruction;
+           instruction = instruction->next
+           ) {
+        function->registers_in_use |= 1 << instruction->result;
+      }
+    }
+  }
+}
+
 void ra(RegisterAllocationInfo *info) {
   if (!info) { return; }
 
@@ -891,18 +910,18 @@ void ra(RegisterAllocationInfo *info) {
 
   AdjacencyGraph G;
   G.order = info->register_count;
-  build_adjacency_matrix(info, instructions, &G);
+  build_adjacency_matrix(instructions, &G);
 
   PRINT_ADJACENCY_MATRIX(G.matrix);
 
-  coalesce(info, &instructions, &G);
+  coalesce(&instructions, &G);
 
   ir_set_ids(info->context);
   IR_FEMIT(stdout, info->context);
 
   instructions = collect_instructions(info);
-  build_adjacency_matrix(info, instructions, &G);
-  build_adjacency_lists(info, instructions, &G);
+  build_adjacency_matrix(instructions, &G);
+  build_adjacency_lists(instructions, &G);
 
   ir_set_ids(info->context);
   PRINT_ADJACENCY_MATRIX(G.matrix);
@@ -916,4 +935,6 @@ void ra(RegisterAllocationInfo *info) {
   PRINT_INSTRUCTION_LIST(instructions);
 
   IR_FEMIT(stdout, info->context);
+
+  track_registers(info);
 }

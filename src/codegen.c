@@ -659,7 +659,7 @@ Error codegen_function
 
   cg_context = codegen_context_create(cg_context);
 
-  IRFunction *f = ir_function(cg_context);
+  IRFunction *f = ir_function(cg_context, name);
 
   // Store base pointer integer offset within locals environment
   // Start at one to make space for pushed RBP in function header.
@@ -716,7 +716,7 @@ Error codegen_function
 Error codegen_program(CodegenContext *context, Node *program) {
   Error err = ok;
 
-  IRFunction *main = ir_function(context);
+  IRFunction *main = ir_function(context, "main");
   context->all_functions = main;
 
   ParsingContext *next_child_context = context->parse_context->children;
