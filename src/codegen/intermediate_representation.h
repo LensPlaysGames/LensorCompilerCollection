@@ -103,6 +103,11 @@ typedef struct IRGlobalAssignment {
   char *name;
 } IRGlobalAssignment;
 
+typedef struct IRStackAllocation {
+  size_t size;
+  size_t offset;
+} IRStackAllocation;
+
 typedef union IRValue {
   IRBlock *block;
   IRInstruction *reference;
@@ -114,6 +119,7 @@ typedef union IRValue {
   IRComparison comparison;
   char *name;
   IRGlobalAssignment global_assignment;
+  IRStackAllocation stack_allocation;
 } IRValue;
 
 
@@ -162,6 +168,8 @@ typedef struct IRBlockPredecessor {
 /// A block is a list of instructions that have control flow enter at
 /// the beginning and leave at the end.
 typedef struct IRBlock {
+  const char *name;
+
   IRInstruction *instructions;
   IRInstruction *last_instruction;
 
@@ -182,6 +190,8 @@ typedef struct IRBlock {
 } IRBlock;
 
 typedef struct IRFunction {
+  const char *name;
+
   IRBlock *first;
   IRBlock *last;
 
@@ -192,6 +202,11 @@ typedef struct IRFunction {
 
   // Unique ID (among functions)
   size_t id;
+
+  // Used by certain backends.
+  size_t locals_total_size;
+
+  int64_t registers_in_use;
 } IRFunction;
 
 void ir_set_ids(CodegenContext *context);
@@ -225,7 +240,7 @@ void ir_block_attach
  IRBlock *new_block);
 
 IRFunction *ir_function_create();
-IRFunction *ir_function(CodegenContext *context);
+IRFunction *ir_function(CodegenContext *context, const char *name);
 
 void ir_insert_into_block
 (IRBlock *block,
