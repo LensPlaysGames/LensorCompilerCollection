@@ -55,6 +55,19 @@ DEFINE_REGISTER_NAME_LOOKUP_FUNCTION(register_name_8, 8)
 // TODO: This should probably be 13?
 #define GENERAL_REGISTER_COUNT 14
 
+
+static Register *caller_saved_registers = NULL;
+static size_t caller_saved_register_count = 0;
+
+char is_caller_saved(Register r) {
+  for (int i = 0; i < caller_saved_register_count; ++i) {
+    if (caller_saved_registers[i] == r) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 /// Types of conditional jump instructions (Jcc).
 /// Do NOT reorder these.
 enum IndirectJumpType_x86_64 {
@@ -237,10 +250,10 @@ static const char *instruction_mnemonic_x86_64(CodegenContext *context, enum Ins
 }
 
 static void femit_x86_64_imm_to_reg(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
-  int64_t immediate                    = va_arg(args, int64_t);
+  int64_t immediate                        = va_arg(args, int64_t);
   RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
 
-  const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic    = instruction_mnemonic_x86_64(context, inst);
   const char *destination = register_name(destination_register);
 
   switch (context->dialect) {
@@ -821,8 +834,7 @@ void codegen_load_global_into_x86_64
 }
 
 /// Load the value of a local variable into a newly allocated register and return it.
-void codegen_load_local_into_x86_64
-(CodegenContext *cg_context,
+void codegen_load_local_into_x86_64(CodegenContext *cg_context,
  long long int offset,
  RegisterDescriptor target)  {
   femit_x86_64(cg_context, I_MOV, MEMORY_TO_REGISTER,
@@ -952,10 +964,10 @@ void codegen_stack_allocate_x86_64(CodegenContext *cg_context, long long int siz
 }
 
 /// Emit the function prologue.
-void codegen_prologue_x86_64(CodegenContext *cg_context) {
+void codegen_prologue_x86_64(CodegenContext *cg_context, int64_t locals_offset) {
   femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RBP);
   femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RSP, REG_RBP);
-  femit_x86_64(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, (int64_t)-cg_context->locals_offset, REG_RSP);
+  femit_x86_64(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, locals_offset, REG_RSP);
 }
 
 /// Emit the function epilogue.
@@ -970,33 +982,129 @@ void codegen_set_return_value_x86_64(CodegenContext *cg_context, RegisterDescrip
   femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, value, REG_RAX);
 }
 
-/// Emit the entry point of the program.
-void codegen_entry_point_x86_64(CodegenContext *cg_context) {
-  fprintf(cg_context->code,
-      "%s"
-      ".section .text\n"
-      ".global main\n"
-      "main:\n",
-      cg_context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
-  codegen_prologue_x86_64(cg_context);
-}
-
-
 void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
   switch (instruction->type) {
+  case IR_PHI:
+  case IR_STACK_ALLOCATE:
+  case IR_REGISTER:
+    break;
+  case IR_IMMEDIATE:
+    femit_x86_64(context, I_MOV, IMMEDIATE_TO_REGISTER,
+                 instruction->value.immediate,
+                 instruction->result);
+    break;
+  case IR_COPY:
+    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+                 instruction->value.reference->result,
+                 instruction->result);
+    break;
   case IR_GLOBAL_ADDRESS:
     femit_x86_64(context, I_LEA, NAME_TO_REGISTER,
                  REG_RIP, instruction->value.name,
                  instruction->result);
     break;
+  case IR_GLOBAL_STORE:
+    femit_x86_64(context, I_MOV, REGISTER_TO_NAME,
+                 instruction->value.global_assignment.new_value->result,
+                 REG_RIP,
+                 instruction->value.global_assignment.name);
+    break;
+  case IR_GLOBAL_LOAD:
+    femit_x86_64(context, I_MOV, NAME_TO_REGISTER,
+                 REG_RIP,
+                 instruction->value.name,
+                 instruction->result);
+    break;
+  case IR_LOCAL_STORE:
+    femit_x86_64(context, I_MOV, REGISTER_TO_MEMORY,
+                 instruction->value.pair.cdr->result,
+                 REG_RBP,
+                 (int64_t)-instruction->value.pair.car->value.stack_allocation.offset);
+    break;
+  case IR_LOCAL_LOAD:
+    femit_x86_64(context, I_MOV, MEMORY_TO_REGISTER,
+                 REG_RBP,
+                 (int64_t)-instruction->value.reference->value.stack_allocation.offset,
+                 instruction->result);
+    break;
+  case IR_CALL:
+    if (0) {}
+    // Save caller saved registers used in caller function.
+    ASSERT(instruction->block, "call instruction null block");
+    ASSERT(instruction->block->function, "block has null function");
+    int64_t func_regs = instruction->block->function->registers_in_use;
+    for (int i = REG_RBX; i < sizeof(func_regs) * 8; ++i) {
+      if (func_regs & (1 << i) && is_caller_saved(i)) {
+        femit_x86_64(context, I_PUSH, REGISTER, i);
+      }
+    }
+    if (instruction->value.call.type == IR_CALLTYPE_INDIRECT) {
+      femit_x86_64(context, I_CALL, REGISTER,
+                   instruction->value.call.value.callee->result);
+
+    } else {
+      femit_x86_64(context, I_CALL, NAME,
+                   instruction->value.call.value.name);
+    }
+    // Restore caller saved registers used in called function.
+    for (int i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i) {
+      if (func_regs & (1 << i) && is_caller_saved(i)) {
+        femit_x86_64(context, I_POP, REGISTER, i);
+      }
+    }
+    break;
+  case IR_RETURN:
+    codegen_epilogue_x86_64(context);
+    break;
+  case IR_BRANCH:
+    // TODO: If jumping to next block, don't generate.
+    femit_x86_64(context, I_JMP, NAME, instruction->value.block->name);
+    break;
+  case IR_BRANCH_CONDITIONAL:
+    femit_x86_64(context, I_TEST, REGISTER_TO_REGISTER,
+                 instruction->value.conditional_branch.condition->result,
+                 instruction->value.conditional_branch.condition->result);
+    femit_x86_64(context, I_JCC, JUMP_TYPE_Z, instruction->value.conditional_branch.false_branch->name);
+    femit_x86_64(context, I_JMP, NAME, instruction->value.conditional_branch.true_branch->name);
+    break;
+  case IR_COMPARISON:
+    codegen_comparison_x86_64(context, instruction->value.comparison.type,
+                              instruction->value.comparison.pair.car->result,
+                              instruction->value.comparison.pair.cdr->result,
+                              instruction->result);
+    break;
+  case IR_ADD:
+    femit_x86_64(context, I_ADD, REGISTER_TO_REGISTER,
+                 instruction->value.pair.cdr->result,
+                 instruction->value.pair.car->result);
+    if (instruction->result != instruction->value.pair.car->result) {
+      femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+                   instruction->value.pair.car->result,
+                   instruction->result);
+    }
+    break;
+  case IR_SUBTRACT:
+    femit_x86_64(context, I_SUB, REGISTER_TO_REGISTER,
+                 instruction->value.pair.cdr->result,
+                 instruction->value.pair.car->result);
+    if (instruction->result != instruction->value.pair.car->result) {
+      femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+                   instruction->value.pair.car->result,
+                   instruction->result);
+    }
+    break;
   default:
+    ir_femit_instruction(stderr, instruction);
     TODO("Handle IRType %d\n", instruction->type);
     break;
   }
 }
 
 void emit_block(CodegenContext *context, IRBlock *block) {
-  // TODO: Generate block label.
+  // Generate block label.
+  fprintf(context->code,
+          "%s:\n",
+          block->name);
   for (IRInstruction *instruction = block->instructions;
        instruction;
        instruction = instruction->next
@@ -1008,12 +1116,24 @@ void emit_block(CodegenContext *context, IRBlock *block) {
 }
 
 void emit_function(CodegenContext *context, IRFunction *function) {
-  // TODO: Generate function label.
+  // Generate function entry.
+  // TODO: Maybe make some functions not global.
+  fprintf(context->code,
+          ".global %s\n"
+          "%s:\n",
+          function->name,
+          function->name);
+  codegen_prologue_x86_64(context, function->locals_total_size);
   for (IRBlock *block = function->first; block; block = block->next) {
     emit_block(context, block);
   }
+}
 
-  emit_instruction(context, function->return_value);
+void emit_entry(CodegenContext *context) {
+  fprintf(context->code,
+          "%s"
+          ".section .text\n",
+          context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
 }
 
 static Register *argument_registers = NULL;
@@ -1045,6 +1165,16 @@ static Register mswin_argument_registers[MSWIN_ARGUMENT_REGISTER_COUNT] = {
   REG_RCX, REG_RDX, REG_R8, REG_R9
 };
 
+#define MSWIN_CALLER_SAVED_REGISTER_COUNT 7
+static Register mswin_caller_saved_registers[MSWIN_CALLER_SAVED_REGISTER_COUNT] = {
+  REG_RAX, REG_RCX, REG_RDX, REG_R8, REG_R9, REG_R10, REG_R11
+};
+
+#define LINUX_CALLER_SAVED_REGISTER_COUNT 9
+static Register linux_caller_saved_registers[LINUX_CALLER_SAVED_REGISTER_COUNT] = {
+  REG_RAX, REG_RCX, REG_RDX, REG_R8, REG_R9, REG_R10, REG_R11, REG_RSI, REG_RDI
+};
+
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   for (IRFunction *function = context->function;
@@ -1055,13 +1185,20 @@ static void lower(CodegenContext *context) {
          block;
          block = block->next
          ) {
+      // If block doesn't have a name, give it one!
+      if (!block->name) {
+        // TODO: Heap allocate or something (UGHGHGUOEHHGEH).
+        // We could also have a static buffer where we write the block
+        // id as a string to and then use that as a label all around.
+        block->name = label_generate();
+      }
       for (IRInstruction *instruction = block->instructions;
            instruction;
            instruction = instruction->next
            ) {
         switch (instruction->type) {
         case IR_PARAMETER_REFERENCE:
-          if (instruction->value.immediate >= argument_register_count) {
+          if (instruction->value.immediate >= (int64_t)argument_register_count) {
             TODO("arch_x86_64 doesn't yet support passing arguments on the stack, sorry.");
           }
 
@@ -1073,9 +1210,9 @@ static void lower(CodegenContext *context) {
           IRInstruction *register_instruction = calloc(1, sizeof(IRInstruction));
           ASSERT(register_instruction, "Could not allocate IRInstruction");
           register_instruction->type = IR_REGISTER;
-          register_instruction->result = argument_registers[instruction->value.immediate];
+          register_instruction->result = argument_registers[instruction->value.immediate - 1];
 
-          set_pair_and_mark(store, &store->value.pair, register_instruction, instruction);
+          set_pair_and_mark(store, &store->value.pair, instruction, register_instruction);
 
           insert_instruction_after(store, instruction);
           insert_instruction_after(register_instruction, instruction);
@@ -1088,7 +1225,7 @@ static void lower(CodegenContext *context) {
           // lookup the type of the parameter
           // (based on parameter index). Basically, lots of environment
           // lookups.
-          instruction->value.immediate = 8;
+          instruction->value.stack_allocation.size = 8;
           break;
         default:
           break;
@@ -1098,14 +1235,46 @@ static void lower(CodegenContext *context) {
   }
 }
 
+void calculate_stack_offsets(CodegenContext *context) {
+  for (IRFunction *function = context->function;
+       function;
+       function = function->next
+       ) {
+    size_t offset = 0;
+    for (IRBlock *block = function->first;
+         block;
+         block = block->next
+         ) {
+      for (IRInstruction *instruction = block->instructions;
+           instruction;
+           instruction = instruction->next
+           ) {
+        switch (instruction->type) {
+        case IR_STACK_ALLOCATE:
+          offset += instruction->value.stack_allocation.size;
+          instruction->value.stack_allocation.offset = offset;
+          break;
+        default:
+          break;
+        }
+      }
+    }
+    function->locals_total_size = offset;
+  }
+}
+
 void codegen_emit_x86_64(CodegenContext *context) {
   // Setup register allocation structures.
   switch (context->call_convention) {
   case CG_CALL_CONV_LINUX:
+    caller_saved_register_count = LINUX_CALLER_SAVED_REGISTER_COUNT;
+    caller_saved_registers = linux_caller_saved_registers;
     argument_register_count = LINUX_ARGUMENT_REGISTER_COUNT;
     argument_registers = linux_argument_registers;
     break;
   case CG_CALL_CONV_MSWIN:
+    caller_saved_register_count = MSWIN_CALLER_SAVED_REGISTER_COUNT;
+    caller_saved_registers = mswin_caller_saved_registers;
     argument_register_count = MSWIN_ARGUMENT_REGISTER_COUNT;
     argument_registers = mswin_argument_registers;
     break;
@@ -1119,7 +1288,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   lower(context);
 
   // Generate global variables.
-  fprintf(context->code, "%s", ".section .data\n");
+  fprintf(context->code, ".section .data\n");
 
   Binding *var_it = context->parse_context->variables->bind;
   Node *type_info = node_allocate();
@@ -1156,6 +1325,10 @@ void codegen_emit_x86_64(CodegenContext *context) {
   ir_set_ids(context);
   ir_femit(stdout, context);
 
+  calculate_stack_offsets(context);
+
+  // TODO: Add entry only on entry function, not just the first one.
+  emit_entry(context);
   for (IRFunction *function = context->all_functions; function; function = function->next) {
     emit_function(context, function);
   }
