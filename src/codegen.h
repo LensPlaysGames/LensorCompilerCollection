@@ -8,6 +8,8 @@
 #include <parser.h>
 #include <stdio.h>
 
+char *label_generate();
+
 CodegenContext *codegen_context_create_top_level
 (ParsingContext *parse_context,
  enum CodegenOutputFormat format,

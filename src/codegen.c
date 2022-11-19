@@ -100,7 +100,7 @@ void codegen_context_free(CodegenContext *context) {
 char label_buffer[label_buffer_size];
 size_t label_index = 0;
 size_t label_count = 0;
-static char *label_generate() {
+char *label_generate() {
   char *label = label_buffer + label_index;
   label_index += snprintf(label, label_buffer_size - label_index,
                           ".L%zu", label_count);
@@ -363,14 +363,12 @@ Error codegen_expression
     }
 
     // Generate THEN expression body.
-    Node *last_expr = NULL;
     Node *expr = expression->children->next_child->children;
     while (expr) {
       err = codegen_expression(cg_context,
                                ctx, &next_child_ctx,
                                expr);
       if (err.type) { return err; }
-      last_expr = expr;
       expr = expr->next_child;
     }
 
@@ -385,7 +383,6 @@ Error codegen_expression
     // our context block.
     ir_block_attach(cg_context, otherwise_block);
 
-    last_expr = NULL;
     if (expression->children->next_child->next_child) {
 
       // Enter if otherwise body context
@@ -407,7 +404,6 @@ Error codegen_expression
                                  ctx, &next_child_ctx,
                                  expr);
         if (err.type) { return err; }
-        last_expr = expr;
         expr = expr->next_child;
       }
 
@@ -681,10 +677,6 @@ Error codegen_function
 
     parameter = parameter->next_child;
   }
-
-  // TODO: REMOVE THIS!!!
-  // Function beginning label
-  fprintf(code, "%s:\n", name);
 
   // Function body
   ParsingContext *ctx = context;
