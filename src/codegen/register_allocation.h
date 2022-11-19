@@ -14,6 +14,8 @@ typedef struct RegisterAllocationInfo {
 
   // In which register every function result ends up.
   Register result_register;
+
+  int64_t (*instruction_register_interference)(IRInstruction *instruction);
 } RegisterAllocationInfo;
 
 RegisterAllocationInfo *ra_allocate_info
@@ -22,7 +24,8 @@ RegisterAllocationInfo *ra_allocate_info
  size_t general_registers_count,
  Register *general_registers,
  size_t argument_registers_count,
- Register *argument_registers
+ Register *argument_registers,
+ int64_t (*instruction_register_interference)(IRInstruction *instruction)
  );
 
 void ra(RegisterAllocationInfo *info);

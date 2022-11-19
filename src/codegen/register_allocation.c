@@ -20,7 +20,8 @@ RegisterAllocationInfo *ra_allocate_info
  size_t general_registers_count,
  Register *general_registers,
  size_t argument_registers_count,
- Register *argument_registers
+ Register *argument_registers,
+ int64_t (*instruction_register_interference)(IRInstruction *instruction)
  )
 {
   if (!context) { return NULL; }
@@ -37,6 +38,8 @@ RegisterAllocationInfo *ra_allocate_info
 
   info->argument_register_count = argument_registers_count;
   info->argument_registers = argument_registers;
+
+  info->instruction_register_interference = instruction_register_interference;
 
   return info;
 }
@@ -164,7 +167,10 @@ void function_return_values(RegisterAllocationInfo *info) {
        function;
        function = function->next
        ) {
-    function->return_value->result = info->result_register;
+    IRInstruction *copy = ir_copy(info->context, function->return_value);
+    copy->result = info->result_register;
+    insert_instruction_after(copy, function->return_value);
+    function->return_value = copy;
   }
 }
 
@@ -179,6 +185,12 @@ char needs_register(IRInstruction *instruction) {
   switch(instruction->type) {
   case IR_ADD:
   case IR_SUBTRACT:
+  case IR_MULTIPLY:
+  case IR_DIVIDE:
+  case IR_MODULO:
+  case IR_SHIFT_LEFT:
+  case IR_SHIFT_RIGHT_LOGICAL:
+  case IR_SHIFT_RIGHT_ARITHMETIC:
   case IR_LOAD:
   case IR_LOCAL_LOAD:
   case IR_LOCAL_ADDRESS:
@@ -632,7 +644,7 @@ void replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
   }
 }
 
-void coalesce(IRInstructionList **instructions, AdjacencyGraph *G) {
+void coalesce(RegisterAllocationInfo *info, IRInstructionList **instructions, AdjacencyGraph *G) {
   IRInstructionList *instructions_to_remove = NULL;
 
   // Attempt to remove copy instructions.
@@ -659,6 +671,11 @@ void coalesce(IRInstructionList **instructions, AdjacencyGraph *G) {
       if (instruction->result) {
         // Don't override anything that is already colored.
         if (instruction->value.reference->result) {
+          continue;
+        }
+        // Don't override with interfering register.
+        int64_t regmask = info->instruction_register_interference(instruction->value.reference);
+        if (regmask & (1 << (instruction->result - 1))) {
           continue;
         }
 
@@ -826,24 +843,31 @@ void color
     Register r = 0;
 
     size_t k = info->register_count;
-    // Each byte refers to register in register list that must not be
-    // assigned to this.
-    char *register_interferences = calloc(1, k);
-
+    // Each bit that is set refers to register in register list that
+    // must not be assigned to this.
+    int64_t register_interferences = 0;
+    register_interferences |=
+      info->instruction_register_interference(node->instruction);
     for (AdjacencyList *adj_it = node->adjacencies; adj_it; adj_it = adj_it->next) {
+      register_interferences |=
+        info->instruction_register_interference(adj_it->node->instruction);
       if (adj_it->node->color) {
-        register_interferences[adj_it->node->color - 1] = 1;
+        register_interferences |= 1 << (adj_it->node->color - 1);
       }
+    }
+    // TODO: Siraide said we shouldn't need uses here. I don't know how
+    // else to solve the issue, so this is how is for now. Siraide says
+    // that, ideally, this should be done before coalescing.
+    for (Use *use = node->instruction->uses; use; use = use->next) {
+      register_interferences |= info->instruction_register_interference(use->user);
     }
 
     for (size_t x = 0; x < k; ++x) {
-      if (!register_interferences[x]) {
+      if (!(register_interferences & 1 << x)) {
         r = x + 1;
         break;
       }
     }
-
-    free(register_interferences);
 
     if (!r) {
       TODO("Can not color graph with %zu colors until stack spilling is implemented!", k);
@@ -914,7 +938,7 @@ void ra(RegisterAllocationInfo *info) {
 
   PRINT_ADJACENCY_MATRIX(G.matrix);
 
-  coalesce(&instructions, &G);
+  coalesce(info, &instructions, &G);
 
   ir_set_ids(info->context);
   IR_FEMIT(stdout, info->context);
