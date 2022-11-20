@@ -289,6 +289,14 @@ void ir_femit_instruction
               arg->block->id, arg->value->id);
     }
     break;
+  case IR_LOAD:
+    fprintf(file, "load %%%zu", instruction->value.reference->id);
+    break;
+  case IR_STORE:
+    fprintf(file, "store %%%zu, %%%zu",
+            instruction->value.pair.cdr->id,
+            instruction->value.pair.car->id);
+    break;
   case IR_REGISTER:
     fprintf(file, "register r%d", instruction->result);
     break;
@@ -605,7 +613,10 @@ IRInstruction *ir_store
  IRInstruction *address
  )
 {
-  TODO();
+  INSTRUCTION(store, IR_STORE);
+  set_pair_and_mark(store, &store->value.pair, address, data);
+  INSERT(store);
+  return store;
 }
 
 IRInstruction *ir_branch_conditional

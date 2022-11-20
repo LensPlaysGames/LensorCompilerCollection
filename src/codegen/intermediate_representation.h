@@ -40,6 +40,9 @@ typedef enum IRType {
   IR_GLOBAL_STORE,
   IR_GLOBAL_ADDRESS,
 
+  /// Store data at an address.
+  IR_STORE,
+
   IR_COMPARISON,
 
   IR_PARAMETER_REFERENCE,

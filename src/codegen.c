@@ -309,7 +309,12 @@ Error codegen_expression
     }
     // Offset memory address by index.
     if (offset) {
-      TODO("Create IR_IMMEDIATE to load offset into temporary, then generate an add between the new temporary and the result of loading the array's address.");
+      // TODO: We should probably have IR_ARRAY_INDEX or something as
+      // it's own instruction, that way we can take advantage of
+      // hardware address calculation.
+      IRInstruction *imm = ir_immediate(cg_context, offset);
+      IRInstruction *add = ir_add(cg_context, expression->result, imm);
+      expression->result = add;
     }
     break;
   }
@@ -576,7 +581,7 @@ Error codegen_expression
     if (err.type) { break; }
 
     if (expression->children->type == NODE_TYPE_VARIABLE_ACCESS) {
-      SymbolAddress address = symbol_to_address(cg_context, expression->children);
+      SymbolAddress address = symbol_to_address(cg_context, iterator);
       switch (address.mode) {
         case SYMBOL_ADDRESS_MODE_ERROR:
           return address.error;
@@ -594,13 +599,22 @@ Error codegen_expression
           break;
       }
     } else {
+      // TODO: This is *very* broken!
+      // When a dereference is codegenned, it loads the value at the
+      // address; we actually just need the dereference for type
+      // checking. When we codegen as a result of the following call, a
+      // value is attempted to be used as an address in future
+      // instructions. This is not correct, and obviously not wanted.
+      // A better solution would be to loop the amount of times that
+      // there are dereferences (minus one), getting the new address
+      // each time.
       // Codegen LHS
       err = codegen_expression(cg_context, context, next_child_context,
                                expression->children);
       if (err.type) { break; }
       expression->result = ir_store(cg_context,
-               expression->children->next_child->result,
-               expression->children->result);
+                                    expression->children->next_child->result,
+                                    expression->children->result);
     }
     break;
   case NODE_TYPE_CAST:

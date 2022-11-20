@@ -18,3 +18,5 @@ first_int : integer = @int_array[0]
 @int_array[1] := 420
 @int_array[2] := 69
 @int_array[3] := 420
+
+@int_array[2]

@@ -1167,6 +1167,18 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
                  instruction->value.pair.car->result,
                  instruction->result);
     break;
+  case IR_LOAD:
+    femit_x86_64(context, I_MOV, MEMORY_TO_REGISTER,
+                 instruction->value.reference->result,
+                 (int64_t)0,
+                 instruction->result);
+    break;
+  case IR_STORE:
+    femit_x86_64(context, I_MOV, REGISTER_TO_MEMORY,
+                 instruction->value.pair.car->result,
+                 instruction->value.pair.cdr->result,
+                 (int64_t)0);
+    break;
   default:
     ir_femit_instruction(stderr, instruction);
     TODO("Handle IRType %d\n", instruction->type);
