@@ -424,7 +424,7 @@ void ir_add_function_call_argument
     arguments->next = new_argument;
   }
 
-  // TODO: Mark used
+  mark_used(argument, call);
 }
 
 IRBlock *ir_block_create() {
@@ -445,6 +445,8 @@ void ir_phi_argument
 
   phi_argument->next = phi->value.phi_argument;
   phi->value.phi_argument = phi_argument;
+
+  mark_used(argument, phi);
 }
 
 IRInstruction *ir_phi(CodegenContext *context) {

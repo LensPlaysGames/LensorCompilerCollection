@@ -1439,10 +1439,10 @@ void codegen_emit_x86_64(CodegenContext *context) {
      argument_registers,
      x86_64_instruction_register_interference
      );
-  ra(info);
 
   ir_set_ids(context);
   ir_femit(stdout, context);
+  ra(info);
 
   calculate_stack_offsets(context);
 

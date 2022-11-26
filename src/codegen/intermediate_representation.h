@@ -4,6 +4,7 @@
 #include <codegen.h>
 #include <codegen/codegen_forward.h>
 #include <inttypes.h>
+#include <stdbool.h>
 
 #define INSTRUCTION(name, given_type)                       \
   IRInstruction *(name) = calloc(1, sizeof(IRInstruction)); \
@@ -87,7 +88,7 @@ typedef enum IRCallType {
 } IRCallType;
 
 typedef union IRCallValue {
-  char *name;
+  const char *name;
   IRInstruction *callee;
 } IRCallValue;
 
@@ -95,6 +96,7 @@ typedef struct IRCall {
   IRCallType type;
   IRCallValue value;
   IRCallArgument *arguments;
+  bool tail_call;
 } IRCall;
 
 typedef struct IRBranchConditional {
