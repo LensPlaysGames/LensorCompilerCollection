@@ -1041,6 +1041,23 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     // Save caller saved registers used in caller function.
     ASSERT(instruction->block, "call instruction null block");
     ASSERT(instruction->block->function, "block has null function");
+
+    // Tail call.
+    if (instruction->value.call.tail_call) {
+      // Restore the frame pointer if we have one.
+      if (instruction->block->function->locals_total_size) {
+        femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
+        femit_x86_64(context, I_POP, REGISTER, REG_RBP);
+      }
+
+      if (instruction->value.call.type == IR_CALLTYPE_INDIRECT) {
+        femit_x86_64(context, I_JMP, REGISTER, instruction->value.call.value.callee->result);
+      } else {
+        femit_x86_64(context, I_JMP, NAME, instruction->value.call.value.name);
+      }
+      break;
+    }
+
     int64_t func_regs = instruction->block->function->registers_in_use;
     for (int i = REG_RBX; i < sizeof(func_regs) * 8; ++i) {
       if (func_regs & (1 << i) && is_caller_saved(i)) {
