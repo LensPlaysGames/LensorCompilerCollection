@@ -1095,15 +1095,18 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     codegen_epilogue_x86_64(context, instruction->block->function);
     break;
   case IR_BRANCH:
-    // TODO: If jumping to next block, don't generate.
-    femit_x86_64(context, I_JMP, NAME, instruction->value.block->name);
+    if (instruction->block && instruction->value.block != instruction->block->next) {
+      femit_x86_64(context, I_JMP, NAME, instruction->value.block->name);
+    }
     break;
   case IR_BRANCH_CONDITIONAL:
     femit_x86_64(context, I_TEST, REGISTER_TO_REGISTER,
                  instruction->value.conditional_branch.condition->result,
                  instruction->value.conditional_branch.condition->result);
     femit_x86_64(context, I_JCC, JUMP_TYPE_Z, instruction->value.conditional_branch.false_branch->name);
-    femit_x86_64(context, I_JMP, NAME, instruction->value.conditional_branch.true_branch->name);
+    if (instruction->block && instruction->value.conditional_branch.true_branch != instruction->block->next) {
+      femit_x86_64(context, I_JMP, NAME, instruction->value.conditional_branch.true_branch->name);
+    }
     break;
   case IR_COMPARISON:
     codegen_comparison_x86_64(context, instruction->value.comparison.type,
