@@ -6,6 +6,11 @@
 /// Iterate from 0 to until (exclusive).
 #define FOR(i, until) for (size_t i = 0; i < (until); ++i)
 
+/// Iterate over the values in a list.
+#define FOREACH(type, it, list) \
+  for (type it = list; it; it = it->next)
+
+
 /// Define a vector of `type`.
 #define VECTOR(type) \
   struct {           \

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <codegen/intermediate_representation.h>
+#include <vector.h>
 
 #define DEBUG_RA
 
@@ -48,7 +49,6 @@ RegisterAllocationInfo *ra_allocate_info
 
 //==== BEG REGISTER ALLOCATION PASSES ====
 
-// TODO: Siraide said this is all horribly wrong, and he is right.
 void phi2copy(RegisterAllocationInfo *info) {
   for (IRFunction *function = info->context->all_functions;
        function;
@@ -59,76 +59,78 @@ void phi2copy(RegisterAllocationInfo *info) {
          block = block->next
          ) {
       IRBlock* last_block = NULL;
-      for (IRInstruction *instruction = block->instructions;
-           instruction;
-           instruction = instruction->next
+      for (IRInstruction *phi = block->instructions;
+           phi;
+           phi = phi->next
            ) {
-        if (instruction->type == IR_PHI) {
-          ASSERT(instruction->block != last_block,
+        if (phi->type == IR_PHI) {
+          ASSERT(phi->block != last_block,
                  "Multiple PHI instructions in a single block are not allowed within register allocation!");
-          IRPhiArgument *phi = instruction->value.phi_argument;
+          IRPhiArgument *arg = phi->value.phi_argument;
 
           // Single PHI argument means that we can replace it with a
           // simple copy.
-          if (phi && !phi->next) {
-            instruction->type = IR_COPY;
-            instruction->value.reference = phi->value;
+          if (arg && !arg->next) {
+            phi->type = IR_COPY;
+            phi->value.reference = arg->value;
             continue;
           }
 
-          // For each of the PHI arguments, we basically insert a copy.
-          // Where we insert it depends on some complicated factors
-          // that have to do with control flow.
-          for (; phi; phi = phi->next) {
-            IRInstruction *argument = phi->value;
-            IRInstruction *copy = ir_copy(info->context, argument);
+          /// For each of the PHI arguments, we basically insert a copy.
+          /// Where we insert it depends on some complicated factors
+          /// that have to do with control flow.
+          ///
+          /// TODO: store returns and branches in the instruction list
+          for (; arg; arg = arg->next) {
+            STATIC_ASSERT(IR_COUNT == 27, "Handle all branch types");
+            IRInstruction *branch = arg->block->branch;
 
-            switch (phi->block->branch->type) {
-            default:
-              /// TODO: store returns and branches in the instruction list
-              ///       so we don’t have to do this nonsense.
-              if (!phi->block->instructions) {
-                phi->block->instructions = phi->block->last_instruction = copy;
-                copy->block = phi->block;
-              } else insert_instruction_after(copy, phi->block->last_instruction);
-              break;
-            case IR_BRANCH_CONDITIONAL:;
+            switch (arg->block->branch->type) {
+              /// If the predecessor returns, then the PHI is never going to be reached
+              /// anyway, so we can just ignore this argument.
+              case IR_RETURN: continue;
+
+              /// Direct branches are easy, we just insert the copy before the branch.
+              case IR_BRANCH: {
+                IRInstruction *copy = ir_copy(info->context, arg->value);
+
+                ir_remove_use(arg->value, phi);
+                mark_used(arg->value, copy);
+                mark_used(copy, phi);
+                arg->value = copy;
+
+                if (!arg->block->instructions) {
+                  arg->block->instructions = arg->block->last_instruction = copy;
+                  copy->block = arg->block;
+                } else insert_instruction_after(copy, arg->block->last_instruction);
+              } break;
+
+              /// Indirect branches are a bit more complicated. We need to insert an
+              /// additional block for the copy instruction and replace the branch
+              /// to the phi block with a branch to that block.
+            case IR_BRANCH_CONDITIONAL: {
+              IRInstruction *copy = ir_copy(info->context, arg->value);
               IRBlock *critical_edge_trampoline = ir_block_create();
+
+              ir_remove_use(arg->value, phi);
+              mark_used(arg->value, copy);
+              mark_used(copy, phi);
+              arg->value = copy;
+
               ir_insert_into_block(critical_edge_trampoline, copy);
-              ir_branch_into_block(instruction->block, critical_edge_trampoline);
+              ir_branch_into_block(phi->block, critical_edge_trampoline);
+              ir_block_attach_to_function(phi->block->function, critical_edge_trampoline);
 
-              ASSERT(critical_edge_trampoline->branch, "branch null");
-
-              ir_block_attach_to_function(instruction->block->function, critical_edge_trampoline);
-              if (argument->block->branch->value.conditional_branch.true_branch == instruction->block) {
-                argument->block->branch->value.conditional_branch.true_branch = critical_edge_trampoline;
+              if (branch->value.conditional_branch.true_branch == phi->block) {
+                branch->value.conditional_branch.true_branch = critical_edge_trampoline;
               } else {
-                argument->block->branch->value.conditional_branch.false_branch = critical_edge_trampoline;
+                ASSERT(branch->value.conditional_branch.false_branch == phi->block,
+                       "Branch to phi block is neither true nor false branch!");
+                branch->value.conditional_branch.false_branch = critical_edge_trampoline;
               }
-              break;
+            } break;
+            default: UNREACHABLE();
             }
-
-            mark_used(argument, copy);
-            mark_used(copy, instruction);
-
-            // Remove use of PHI argument in PHI; it's now used in the
-            // copy instead.
-            Use *previous_use = NULL;
-            for (Use *use = argument->uses;
-                 use;
-                 previous_use = use,
-                   use = use->next
-                 ) {
-              if (use->user == instruction) {
-                if (previous_use) {
-                  previous_use->next = use->next;
-                } else {
-                  argument->uses = use;
-                }
-              }
-            }
-
-            phi->value = copy;
           }
         }
       }
@@ -333,6 +335,204 @@ typedef struct AdjacencyGraph {
   AdjacencyListNode *list;
 } AdjacencyGraph;
 
+/// Vector of blocks for interference checking.
+typedef VECTOR(IRBlock*) BlockVector;
+
+/// Forward declarations.
+bool interferes_after_def(BlockVector *visited, IRBlock *B, IRInstruction *v1);
+bool block_reachable_from_successors(BlockVector *visited, IRBlock *from, IRBlock *block);
+
+/// Check if a block has already been visited.
+bool block_visited(BlockVector *visited, IRBlock *block) {
+  VECTOR_FOREACH_PTR (IRBlock*, b, visited) {
+    if (b == block) { return true; }
+  }
+
+  return false;
+}
+
+/// Check if a block is reachable from this block or any of its successors.
+/// Do not call this directly. Use block_reachable() instead.
+bool block_reachable_from_successor(BlockVector *visited, IRBlock *from, IRBlock *block) {
+  if (from == block) return true;
+
+  VECTOR_PUSH(visited, from);
+  return block_reachable_from_successors(visited, from, block);
+}
+
+/// Check if a block is reachable from any of the successors of another block.
+/// Do not call this directly. Use block_reachable() instead.
+bool block_reachable_from_successors(BlockVector *visited, IRBlock *from, IRBlock *block) {
+  STATIC_ASSERT(IR_COUNT == 27, "Handle all branch instructions");
+  switch (from->branch->type) {
+    case IR_RETURN: return false;
+    case IR_BRANCH:
+      if (block_visited(visited, from->branch->value.block)) { return false; }
+      return block_reachable_from_successor(visited, from->branch->value.block, block);
+    case IR_BRANCH_CONDITIONAL:
+      if (!block_visited(visited, from->branch->value.conditional_branch.true_branch)) {
+        if (block_reachable_from_successor(visited, from->branch->value.conditional_branch.true_branch, block)) {
+          return true;
+        }
+      }
+      if (!block_visited(visited, from->branch->value.conditional_branch.false_branch)) {
+        if (block_reachable_from_successor(visited, from->branch->value.conditional_branch.false_branch, block)) {
+          return true;
+        }
+      }
+      return false;
+    default: UNREACHABLE();
+  }
+}
+
+/// Check if a block is reachable from another block.
+bool block_reachable(IRBlock *from, IRBlock *block) {
+  if (block == from) { return true; }
+
+  BlockVector visited = {0};
+  VECTOR_PUSH(&visited, from);
+  bool reachable = block_reachable_from_successors(&visited, from, block);
+  VECTOR_DELETE(&visited);
+  return reachable;
+}
+
+/// Check if there is a use of v1 in B or any of its successors.
+/// \see values_interfere()
+bool has_use_after_def_in_block(BlockVector *visited, IRBlock *B, IRInstruction *v1) {
+  FOREACH (Use*, use, v1->uses) {
+    if (use->user->block == B) { return true; }
+  }
+
+  VECTOR_PUSH(visited, B);
+  return interferes_after_def (visited, B, v1);
+}
+
+/// Check if there is a use of v1 in any of the successors of B.
+/// \see values_interfere()
+bool interferes_after_def(BlockVector *visited, IRBlock *B, IRInstruction *v1) {
+  STATIC_ASSERT(IR_COUNT == 27, "Handle all branch instructions");
+  switch (B->branch->type) {
+    case IR_RETURN: return false;
+
+    case IR_BRANCH:
+      if (block_visited(visited, B->branch->value.block)) { return false; }
+      return has_use_after_def_in_block(visited, B->branch->value.block, v1);
+
+    case IR_BRANCH_CONDITIONAL:
+      if (!block_visited(visited, B->branch->value.conditional_branch.true_branch)) {
+        if (has_use_after_def_in_block(visited, B->branch->value.conditional_branch.true_branch, v1)) {
+          return true;
+        }
+      }
+      if (!block_visited(visited, B->branch->value.conditional_branch.false_branch)) {
+        if (has_use_after_def_in_block(visited, B->branch->value.conditional_branch.false_branch, v1)) {
+          return true;
+        }
+      }
+      return false;
+    default: UNREACHABLE();
+  }
+}
+
+/// Check if a value interferes with another value in the block containing
+/// the second value’s definition.
+/// \see values_interfere()
+bool inteferes_at_def(IRBlock *b, IRInstruction *v1, IRInstruction *v2) {
+  FOREACH (Use*, use, v1->uses) {
+    if (use->user->index > v2->index) { return true; }
+  }
+
+  BlockVector visited = {0};
+  VECTOR_PUSH(&visited, b);
+  bool interferes = interferes_after_def(&visited, b, v1);
+  VECTOR_DELETE(&visited);
+  return interferes;
+}
+
+/// Check if two values interfere if the definition of the first precedes
+/// that of the second.
+/// \see values_interfere()
+bool check_values_interfere(IRInstruction *v1, IRInstruction *v2) {
+  IRBlock *B1 = v1->block, *B2 = v2->block;
+  if (B1 == B2) {
+    /// This case will be handled by the second invocation of this function
+    /// in values_interfere().
+    if (v1->index > v2->index) { return false; }
+    return inteferes_at_def(B1, v1, v2);
+  }
+
+  if (!block_reachable(B1, B2)) { return false; }
+  return inteferes_at_def(B2, v1, v2);
+}
+
+/// Determine whether two values interfere.
+///
+/// Two values interfere if either one is live at the definition point
+/// of the other. A value is live starting at its definition point until
+/// just before its last use. If a value’s last use is in a different
+/// block than its definition, then it is live in all blocks between
+/// the definition and the use, in control flow order.
+///
+/// Whether a value V is live at its own definition point is undefined,
+/// simply because it’s not relevant: the only situation in which this
+/// would matter is if there were a value V' whose last use was in the
+/// definition of V. If V were considered live at its own definition,
+/// one might erroneously assume that the two would interfere, and that
+/// the RA might think that V' could not be assigned the same register
+/// as V. However, this is incorrect, since, as mentioned above, a value
+/// is live up to just *before* its last use. Therefore, V' would not
+/// interfere with V in this case, and the question of whether or not a
+/// value is live at its own definition point is irrelevant.
+///
+/// The algorithm that is used to determine whether two values interfere
+/// is described below and implemented across several mutually recursive
+/// functions.
+///
+/// The algorithm is as follows:
+///
+///   ## has-use-after-def-in-block (visited, B, v1)
+///      1. If there is a use of v1 in B, return true.
+///      2. Return interferes-after-def (visited, B, v1).
+///
+///   ## interferes-after-def (visited, B, v1)
+///      1. For each successor S of B:
+///         1a. If S is in visited, continue.
+///         1b. Add S to visited.
+///         1c. If has-use-after-def-in-block (S, v1) returns true, return true.
+///      2. Return false.
+///
+///   ## interferes-at-def (B, v1, v2)
+///      1. For each use U of v1 in B, if U->idx > v2->idx, return true.
+///      2. Let visited be a set of blocks containing B.
+///      3. Return interferes-after-def (visited, B, v1)
+///
+///   ## check-values-interfere (v1, v2)
+///      1. Let B1, B2 be the blocks containing the definitions of v1, v2.
+///      2. If B1 == B2, then
+///         2a. If v1->idx > v2->idx, return false.
+///         2b. Return interferes-at-def (B1, v1, v2)
+///      3. If B2 is not reachable from B1, return false.
+///      4. Return interferes-at-def (B2, v1, v2).
+///
+///   ## values-interfere (v1, v2)
+///      1. If v1 == v2, return false.
+///      2. If v1 is a COPY instruction and its argument is v2, or vice versa, return false.
+///      3. If check-values-interfere (v1, v2) returns true, return true.
+///      4. Return check-values-interfere (v2, v1).
+///
+/// \see has_use_after_def_in_block()
+/// \see interferes_after_def()
+/// \see interferes_at_def()
+/// \see check_values_interfere()
+bool values_interfere(IRInstruction *v1, IRInstruction *v2) {
+  if (v1 == v2) { return false; }
+  if (v1->type == IR_COPY && v1->value.reference == v2) { return false; }
+  if (v2->type == IR_COPY && v2->value.reference == v1) { return false; }
+  if (check_values_interfere(v1, v2)) { return true; }
+  return check_values_interfere(v2, v1);
+}
+
+#if 0
 enum ControlFlowResult {
   RA_CF_CONTINUE,
   RA_CF_INTERFERE,
@@ -377,64 +577,33 @@ int follow_control_flow(IRBlockList *visited, IRBlock *block, IRInstruction *a_u
 
     // Actually follow control flow, according to branch instruction.
     switch (block->branch->type) {
-    case IR_RETURN:
-      return RA_CF_CLEARED;
-      break;
-    case IR_BRANCH:
-      block = block->branch->value.block;
-      continue;
-      break;
-    case IR_BRANCH_CONDITIONAL:
-      if(0){}
-      int result = follow_control_flow
-        (visited,
-         block->branch->value.conditional_branch.true_branch,
-         a_use, B);
-      if (result != RA_CF_CONTINUE) {
-        return result;
-      }
-      block = block->branch->value.conditional_branch.false_branch;
-      continue;
-      break;
-    default:
-      TODO("Handle branch instruction type: %d", block->branch->type);
-      break;
+      case IR_RETURN:
+        return RA_CF_CLEARED;
+        break;
+      case IR_BRANCH:
+        block = block->branch->value.block;
+        continue;
+        break;
+      case IR_BRANCH_CONDITIONAL:
+        if(0){}
+        int result = follow_control_flow
+            (visited,
+                block->branch->value.conditional_branch.true_branch,
+                a_use, B);
+        if (result != RA_CF_CONTINUE) {
+          return result;
+        }
+        block = block->branch->value.conditional_branch.false_branch;
+        continue;
+        break;
+      default:
+        TODO("Handle branch instruction type: %d", block->branch->type);
+        break;
     }
     UNREACHABLE();
   }
   return RA_CF_CONTINUE;
 }
-
-/// Determine whether two values interfere.
-///
-/// The algorithm is as follows:
-///
-///   ## has-use-after-def-in-block (B, v1)
-///      1. If there is a use of v1 in B, return true.
-///      2. Return interferes-after-def (B, v1).
-///
-///   ## interferes-after-def (B, v1)
-///      1. For each successor S of B, if has-use-after-def-in-block (S, v1)
-///         returns true, return true.
-///      2. Return false.
-///
-///   ## interferes-at-def (B, v1, v2)
-///      1. For each use U of v1 in B, if U->idx > v2->idx, return true.
-///      2. Return interferes-after-def (B, v1)
-///
-///   ## check-values-interfere (v1, v2)
-///      1. Let B1, B2 be the blocks containing the definitions of v1, v2.
-///      2. If B1 == B2, then
-///         2a. If v1->idx > v2->idx, return false.
-///         2b. Return interferes-at-def (B1, v1, v2)
-///      3. If B2 is not reachable from B1, return false.
-///      4. Return interferes-at-def (B2, v1, v2).
-///
-///   ## values-interfere (v1, v2)
-///      1. If v1 == v2, return false.
-///      2. If v1 is a COPY instruction and its argument is v2, or vice versa, return false.
-///      3. If check-values-interfere (v1, v2) returns true, return true.
-///      4. Return check-values-interfere (v2, v1).
 
 char instructions_interfere(IRInstruction *A, IRInstruction *B) {
   ASSERT(A && B, "Can not get interference of NULL instructions.");
@@ -456,22 +625,20 @@ char instructions_interfere(IRInstruction *A, IRInstruction *B) {
   }
   return 0;
 }
+#endif
 
 void build_adjacency_matrix(IRInstructionList *instructions, AdjacencyGraph *G) {
   ASSERT(instructions, "Can not build adjacency matrix of NULL instruction list.");
-   IRInstructionList *last = instructions;
-   while (last->next) {
-     last = last->next;
-   }
+
+  IRInstructionList *last = instructions;
+  while (last->next) { last = last->next; }
+
   size_t size = last->instruction->index + 1;
   G->matrix = adjm_create(size);
-  for(IRInstructionList *A = instructions; A; A = A->next) {
-    for(IRInstructionList *B = instructions; B; B = B->next) {
-      if (A == B) { continue; }
-      if (adjm(G->matrix, A->instruction->index, B->instruction->index)) {
-        continue;
-      }
-      if (instructions_interfere(A->instruction, B->instruction)) {
+  for (IRInstructionList *A = instructions; A; A = A->next) {
+    for (IRInstructionList *B = instructions; B && B != A; B = B->next) {
+      if (adjm(G->matrix, A->instruction->index, B->instruction->index)) { continue; }
+      if (values_interfere(A->instruction, B->instruction)) {
         adjm_set(G->matrix, A->instruction->index, B->instruction->index);
       }
     }

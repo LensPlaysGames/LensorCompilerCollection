@@ -6,9 +6,6 @@
 #include <string.h>
 #include <vector.h>
 
-#define FOREACH(type, it, list) \
-  for (type it = list; it; it = it->next)
-
 #define IR_REDUCE_BINARY(op)                 \
   if (ipair(i)) {                            \
     IRInstruction *car = i->value.pair.car;  \
