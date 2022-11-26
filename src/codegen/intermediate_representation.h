@@ -199,6 +199,8 @@ typedef struct IRBlock {
 
   // Unique ID (among blocks)
   size_t id;
+  // For the backend.
+  bool done;
 } IRBlock;
 
 typedef struct IRFunction {

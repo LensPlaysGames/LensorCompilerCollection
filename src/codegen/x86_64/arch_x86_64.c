@@ -1039,14 +1039,13 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
                  (int64_t)-instruction->value.reference->value.stack_allocation.offset,
                  instruction->result);
     break;
-  case IR_CALL:
-    if (0) {}
+  case IR_CALL:;
     // Save caller saved registers used in caller function.
     ASSERT(instruction->block, "call instruction null block");
     ASSERT(instruction->block->function, "block has null function");
 
     // Tail call.
-    if (instruction->value.call.tail_call) {
+    if (optimise && instruction->value.call.tail_call) {
       // Restore the frame pointer if we have one.
       if (instruction->block->function->locals_total_size) {
         femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
@@ -1058,11 +1057,12 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
       } else {
         femit_x86_64(context, I_JMP, NAME, instruction->value.call.value.name);
       }
+      if (instruction->block) instruction->block->done = true;
       break;
     }
 
     int64_t func_regs = instruction->block->function->registers_in_use;
-    for (int i = REG_RBX; i < sizeof(func_regs) * 8; ++i) {
+    for (int i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i) {
       if (func_regs & (1 << i) && is_caller_saved(i)) {
         femit_x86_64(context, I_PUSH, REGISTER, i);
       }
@@ -1093,20 +1093,23 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
       }
     }
     codegen_epilogue_x86_64(context, instruction->block->function);
+    if (optimise && instruction->block) instruction->block->done = true;
     break;
   case IR_BRANCH:
-    if (instruction->block && instruction->value.block != instruction->block->next) {
+    if (!optimise || (instruction->block && instruction->value.block != instruction->block->next)) {
       femit_x86_64(context, I_JMP, NAME, instruction->value.block->name);
     }
+    if (optimise && instruction->block) instruction->block->done = true;
     break;
   case IR_BRANCH_CONDITIONAL:
     femit_x86_64(context, I_TEST, REGISTER_TO_REGISTER,
                  instruction->value.conditional_branch.condition->result,
                  instruction->value.conditional_branch.condition->result);
     femit_x86_64(context, I_JCC, JUMP_TYPE_Z, instruction->value.conditional_branch.false_branch->name);
-    if (instruction->block && instruction->value.conditional_branch.true_branch != instruction->block->next) {
+    if (!optimise || (instruction->block && instruction->value.conditional_branch.true_branch != instruction->block->next)) {
       femit_x86_64(context, I_JMP, NAME, instruction->value.conditional_branch.true_branch->name);
     }
+    if (optimise && instruction->block) instruction->block->done = true;
     break;
   case IR_COMPARISON:
     codegen_comparison_x86_64(context, instruction->value.comparison.type,
@@ -1219,13 +1222,15 @@ void emit_block(CodegenContext *context, IRBlock *block) {
           "%s:\n",
           block->name);
   for (IRInstruction *instruction = block->instructions;
-       instruction;
+       instruction && !block->done;
        instruction = instruction->next
        ) {
     emit_instruction(context, instruction);
   }
 
-  emit_instruction(context, block->branch);
+  if (!optimise || !block->done) {
+    emit_instruction(context, block->branch);
+  }
 }
 
 void emit_function(CodegenContext *context, IRFunction *function) {
@@ -1260,7 +1265,6 @@ static Register *argument_registers = NULL;
 static size_t argument_register_count = 0;
 static Register general[GENERAL_REGISTER_COUNT] = {
   REG_RAX,
-  REG_RBX,
   REG_RCX,
   REG_RDX,
   REG_RSI,
@@ -1270,6 +1274,7 @@ static Register general[GENERAL_REGISTER_COUNT] = {
   REG_R10,
   REG_R11,
   REG_R12,
+  REG_RBX,
   REG_R13,
   REG_R14,
   REG_R15,
