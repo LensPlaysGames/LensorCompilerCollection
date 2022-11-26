@@ -12,6 +12,22 @@ void mark_used(IRInstruction *usee, IRInstruction *user) {
   usee->uses = new_use;
 }
 
+void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
+    ASSERT(usee->uses, "Usee is useless");
+
+    for (Use *prev = NULL, *u = usee->uses; u; u = u->next) {
+        if (u->user == user) {
+            if (prev) { prev->next = u->next; }
+            else { usee->uses = u->next; }
+            free(u);
+            return;
+        }
+        prev = u;
+    }
+
+    PANIC("Usee not used by user");
+}
+
 void set_pair_and_mark
 (IRInstruction *parent,
  IRPair *pair,
@@ -49,7 +65,6 @@ void ir_insert_into_block
   new_instruction->previous = block->last_instruction;
   block->last_instruction = new_instruction;
 }
-
 
 void ir_insert
 (CodegenContext *context,
@@ -112,6 +127,16 @@ void insert_instruction_after(IRInstruction *a, IRInstruction *b) {
     b->block->last_instruction = a;
   }
   // TODO: Update return value of function, if needed.
+}
+
+void ir_remove(IRInstruction* instruction) {
+  if (instruction->previous) { instruction->previous->next = instruction->next; }
+  if (instruction->next) { instruction->next->previous = instruction->previous; }
+  if (instruction == instruction->block->instructions) { instruction->block->instructions = instruction->next; }
+  if (instruction == instruction->block->last_instruction) { instruction->block->last_instruction = instruction->previous; }
+  if (instruction == instruction->block->branch) { instruction->block->branch = NULL; }
+  if (instruction == instruction->block->function->return_value) { instruction->block->function->return_value = NULL; }
+  free(instruction);
 }
 
 #define INSERT(instruction) ir_insert(context, (instruction))

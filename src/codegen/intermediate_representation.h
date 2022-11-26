@@ -389,4 +389,9 @@ IRInstruction *ir_stack_allocate
 (CodegenContext *context,
  int64_t size);
 
+/// Remove an instruction from the AST and free it.
+/// Used by the optimiser.
+void ir_remove(IRInstruction* instruction);
+void ir_remove_use(IRInstruction *usee, IRInstruction *user);
+
 #endif /* INTERMEDIATE_REPRESENTATION_H */

@@ -228,7 +228,7 @@ Node *node_none() {
   return none;
 }
 
-Node *node_integer(long long value) {
+Node *node_integer(int64_t value) {
   Node *integer = node_allocate();
   integer->type = NODE_TYPE_INTEGER;
   integer->value.integer = value;

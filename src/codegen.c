@@ -6,6 +6,7 @@
 #include <environment.h>
 #include <error.h>
 #include <inttypes.h>
+#include <opt.h>
 #include <parser.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -793,6 +794,8 @@ Error codegen
   CodegenContext *context = codegen_context_create_top_level
     (parse_context, format, call_convention, dialect, code);
   err = codegen_program(context, program);
+
+  if (optimise) codegen_optimise(context);
 
   codegen_emit(context);
 

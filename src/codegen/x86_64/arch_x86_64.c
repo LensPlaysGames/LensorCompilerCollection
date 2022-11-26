@@ -6,6 +6,7 @@
 #include <codegen/register_allocation.h>
 #include <error.h>
 #include <inttypes.h>
+#include <opt.h>
 #include <parser.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -970,15 +971,18 @@ void codegen_stack_allocate_x86_64(CodegenContext *cg_context, long long int siz
 
 /// Emit the function prologue.
 void codegen_prologue_x86_64(CodegenContext *cg_context, int64_t locals_offset) {
+  if (optimise && !locals_offset) return;
   femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RBP);
   femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RSP, REG_RBP);
   femit_x86_64(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, locals_offset, REG_RSP);
 }
 
 /// Emit the function epilogue.
-void codegen_epilogue_x86_64(CodegenContext *cg_context) {
-  femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
-  femit_x86_64(cg_context, I_POP, REGISTER, REG_RBP);
+void codegen_epilogue_x86_64(CodegenContext *cg_context, IRFunction *f) {
+  if (!optimise || f->locals_total_size) {
+    femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
+    femit_x86_64(cg_context, I_POP, REGISTER, REG_RBP);
+  }
   femit_x86_64(cg_context, I_RET);
 }
 
@@ -1068,7 +1072,7 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
         femit_x86_64(context, I_POP, REGISTER, i);
       }
     }
-    codegen_epilogue_x86_64(context);
+    codegen_epilogue_x86_64(context, instruction->block->function);
     break;
   case IR_BRANCH:
     // TODO: If jumping to next block, don't generate.
