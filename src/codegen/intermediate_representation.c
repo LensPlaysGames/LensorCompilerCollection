@@ -177,6 +177,7 @@ void ir_femit_instruction
     fprintf(file, "%"PRId64, instruction->value.immediate);
     break;
   case IR_CALL:
+    if (instruction->value.call.tail_call) { fprintf(file, "tail "); }
     switch (instruction->value.call.type) {
     case IR_CALLTYPE_DIRECT:
       fprintf(file, "%s", instruction->value.call.value.name);
@@ -814,6 +815,103 @@ IRInstruction *ir_stack_allocate
  )
 {
   TODO();
+}
+
+/// NEVER CALL THIS DIRECTLY! Use ir_replace_uses() or fix the uses manually.
+static void ir_replace_use(IRInstruction *usee, Use *use, IRInstruction *replacement) {
+  if (use->user == replacement) {
+    return;
+  }
+
+  STATIC_ASSERT(IR_COUNT == 27);
+  switch (use->user->type) {
+    case IR_PHI:
+      for (IRPhiArgument *phi = use->user->value.phi_argument; phi; phi = phi->next) {
+        if (phi->value == usee) {
+          phi->value = replacement;
+        }
+      }
+      break;
+    case IR_LOAD:
+    case IR_LOCAL_ADDRESS:
+    case IR_LOCAL_LOAD:
+    case IR_COPY:
+      if (use->user->value.reference == usee) {
+        use->user->value.reference = replacement;
+      }
+      break;
+    case IR_GLOBAL_STORE:
+      if (use->user->value.global_assignment.new_value == usee) {
+        use->user->value.global_assignment.new_value = replacement;
+      }
+      break;
+      //case IR_STORE:
+    case IR_LOCAL_STORE:
+    case IR_ADD:
+    case IR_SUBTRACT:
+    case IR_DIVIDE:
+    case IR_MULTIPLY:
+    case IR_MODULO:
+    case IR_SHIFT_LEFT:
+    case IR_SHIFT_RIGHT_ARITHMETIC:
+    case IR_SHIFT_RIGHT_LOGICAL:
+      if (use->user->value.pair.car == usee) {
+        use->user->value.pair.car = replacement;
+      }
+      if (use->user->value.pair.cdr == usee) {
+        use->user->value.pair.cdr = replacement;
+      }
+      break;
+    case IR_CALL:
+      if (use->user->value.call.type == IR_CALLTYPE_INDIRECT) {
+        if (use->user->value.call.value.callee == usee) {
+          use->user->value.call.value.callee = replacement;
+        }
+      }
+
+      for (IRCallArgument *arg = use->user->value.call.arguments; arg; arg = arg->next) {
+        if (arg->value == usee) { arg->value = replacement; }
+      }
+      break;
+    case IR_BRANCH_CONDITIONAL:
+      if (use->user->value.conditional_branch.condition == usee) {
+        use->user->value.conditional_branch.condition = replacement;
+      }
+      break;
+    case IR_COMPARISON:
+      if (use->user->value.comparison.pair.car == usee) {
+        use->user->value.comparison.pair.car = replacement;
+      }
+      if (use->user->value.comparison.pair.cdr == usee) {
+        use->user->value.comparison.pair.cdr = replacement;
+      }
+      break;
+    case IR_PARAMETER_REFERENCE:
+    case IR_GLOBAL_ADDRESS:
+    case IR_GLOBAL_LOAD:
+    case IR_IMMEDIATE:
+    case IR_BRANCH:
+    case IR_RETURN:
+      break;
+    default:
+      TODO("Handle IR instruction type to be able to replace uses.");
+      break;
+  }
+}
+
+void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
+  Use *last = instruction->uses;
+  for (Use *use = instruction->uses; use; use = use->next) {
+    last = use;
+    ir_replace_use(instruction, use, replacement);
+  }
+
+  if (last) {
+    last->next = replacement->uses;
+    replacement->uses = instruction->uses;
+  }
+
+  instruction->uses = NULL;
 }
 
 #undef INSERT

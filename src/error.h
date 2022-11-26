@@ -72,6 +72,12 @@ void assert_impl (
     }                      \
   } while (0)
 
+#if __STDC_VERSION__ >= 201112L
+#  define STATIC_ASSERT(cond, ...) _Static_assert(cond, "" __VA_ARGS__)
+#else
+#  define STATIC_ASSERT(cond, ...) ASSERT(cond, "" __VA_ARGS__)
+#endif
+
 #define TODO(...)     ASSERT(0, "TODO: "__VA_ARGS__)
 #define PANIC(...)    ASSERT(0, "PANIC: "__VA_ARGS__)
 #define UNREACHABLE() ASSERT(0, "Unreachable")

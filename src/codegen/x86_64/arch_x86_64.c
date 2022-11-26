@@ -589,6 +589,8 @@ static void femit_x86_64
           char *label = va_arg(args, char *);
           const char *mnemonic = instruction_mnemonic_x86_64(context, instruction);
 
+          ASSERT(label, "JMP/CALL label must not be NULL.");
+
           switch (context->dialect) {
             case CG_ASM_DIALECT_ATT:
             case CG_ASM_DIALECT_INTEL:
@@ -655,6 +657,7 @@ static void femit_x86_64
       enum IndirectJumpType_x86_64 type = va_arg(args, enum IndirectJumpType_x86_64);
       ASSERT(type < JUMP_TYPE_COUNT, "femit_x86_64_direct_branch(): Invalid jump type %d", type);
       char *label = va_arg(args, char *);
+      //ASSERT(label, "JCC label must not be NULL.");
 
       const char *mnemonic = instruction_mnemonic_x86_64(context, I_JCC);
 
@@ -1299,13 +1302,6 @@ static void lower(CodegenContext *context) {
          block;
          block = block->next
          ) {
-      // If block doesn't have a name, give it one!
-      if (!block->name) {
-        // TODO: Heap allocate or something (UGHGHGUOEHHGEH).
-        // We could also have a static buffer where we write the block
-        // id as a string to and then use that as a label all around.
-        block->name = label_generate();
-      }
       for (IRInstruction *instruction = block->instructions;
            instruction;
            instruction = instruction->next
@@ -1398,30 +1394,32 @@ int64_t x86_64_instruction_register_interference(IRInstruction *instruction) {
   return mask >> 1;
 }
 
-void codegen_emit_x86_64(CodegenContext *context) {
+void codegen_lower_x86_64(CodegenContext *context) {
   // Setup register allocation structures.
   switch (context->call_convention) {
-  case CG_CALL_CONV_LINUX:
-    caller_saved_register_count = LINUX_CALLER_SAVED_REGISTER_COUNT;
-    caller_saved_registers = linux_caller_saved_registers;
-    argument_register_count = LINUX_ARGUMENT_REGISTER_COUNT;
-    argument_registers = linux_argument_registers;
-    break;
-  case CG_CALL_CONV_MSWIN:
-    caller_saved_register_count = MSWIN_CALLER_SAVED_REGISTER_COUNT;
-    caller_saved_registers = mswin_caller_saved_registers;
-    argument_register_count = MSWIN_ARGUMENT_REGISTER_COUNT;
-    argument_registers = mswin_argument_registers;
-    break;
-  case CG_CALL_CONV_COUNT:
-  default:
-    PANIC("Invalid call convention.");
-    break;
+    case CG_CALL_CONV_LINUX:
+      caller_saved_register_count = LINUX_CALLER_SAVED_REGISTER_COUNT;
+      caller_saved_registers = linux_caller_saved_registers;
+      argument_register_count = LINUX_ARGUMENT_REGISTER_COUNT;
+      argument_registers = linux_argument_registers;
+      break;
+    case CG_CALL_CONV_MSWIN:
+      caller_saved_register_count = MSWIN_CALLER_SAVED_REGISTER_COUNT;
+      caller_saved_registers = mswin_caller_saved_registers;
+      argument_register_count = MSWIN_ARGUMENT_REGISTER_COUNT;
+      argument_registers = mswin_argument_registers;
+      break;
+    case CG_CALL_CONV_COUNT:
+    default:
+      PANIC("Invalid call convention.");
+      break;
   }
 
   // IR fixup for this specific backend.
   lower(context);
+}
 
+void codegen_emit_x86_64(CodegenContext *context) {
   // Generate global variables.
   fprintf(context->code, ".section .data\n");
 
@@ -1457,9 +1455,28 @@ void codegen_emit_x86_64(CodegenContext *context) {
      x86_64_instruction_register_interference
      );
 
-  ir_set_ids(context);
-  ir_femit(stdout, context);
   ra(info);
+
+  // Assign block labels.
+  for (IRFunction *function = context->function;
+       function;
+       function = function->next
+  ) {
+    for (IRBlock *block = function->first;
+         block;
+         block = block->next) {
+      // If block doesn't have a name, give it one!
+      if (!block->name) {
+        // TODO: Heap allocate or something (UGHGHGUOEHHGEH).
+        // We could also have a static buffer where we write the block
+        // id as a string to and then use that as a label all around.
+        block->name = label_generate();
+      }
+    }
+  }
+
+  /*ir_set_ids(context);
+  ir_femit(stdout, context);*/
 
   calculate_stack_offsets(context);
 

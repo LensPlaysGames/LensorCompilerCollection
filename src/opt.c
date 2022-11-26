@@ -203,9 +203,101 @@ static void opt_tail_call_elim(CodegenContext *ctx, IRFunction *f) {
   VECTOR_DELETE(&tc_info.phis);
 }
 
+static bool opt_mem2reg(CodegenContext *ctx, IRFunction *f) {
+  bool changed = false;
+  (void) ctx;
+  typedef struct {
+    IRInstruction *alloca;
+    IRInstruction *store;
+    VECTOR(IRInstruction *) loads;
+    bool unoptimisable;
+  } stack_var;
+  VECTOR(stack_var) vars = {0};
+
+  /// Collect all stack variables that are stored into once, and
+  /// whose address is never taken.
+  FOREACH (IRBlock*, b, f->first) {
+    FOREACH (IRInstruction*, i, b->instructions) {
+      switch (i->type) {
+        /// New variable.
+        case IR_STACK_ALLOCATE: {
+          stack_var v = {0};
+          v.alloca = i;
+          VECTOR_PUSH(&vars, v);
+        } break;
+
+        /// Record the first store into a variable.
+        case IR_LOCAL_STORE: {
+          VECTOR_FOREACH (stack_var, a, &vars) {
+            if (!a->unoptimisable && a->alloca == i->value.pair.car) {
+              /// If there are multiple stores, mark the variable as unoptimisable.
+              if (a->store) a->unoptimisable = true;
+              else a->store = i;
+              break;
+            }
+          }
+        } break;
+
+        /// Record all loads; also check for loads before the first store.
+        case IR_LOCAL_LOAD: {
+          VECTOR_FOREACH (stack_var, a, &vars) {
+            if (!a->unoptimisable && a->alloca == i->value.reference) {
+              /// Load before store.
+              if (!a->store) {
+                a->unoptimisable = true;
+                fprintf(stderr, "Warning: Load of uninitialised variable in function %s", f->name);
+              } else {
+                VECTOR_PUSH(&a->loads, i);
+              }
+              break;
+            }
+          }
+        } break;
+
+        /// If the address of a variable is taken, mark it as unoptimisable.
+        case IR_LOCAL_ADDRESS: {
+          VECTOR_FOREACH (stack_var, a, &vars) {
+            if (a->alloca == i->value.reference) {
+              a->unoptimisable = true;
+              break;
+            }
+          }
+        } break;
+      }
+    }
+  }
+
+  /// Optimise all optimisable variables.
+  VECTOR_FOREACH (stack_var, a, &vars) {
+    if (a->unoptimisable) {
+      VECTOR_DELETE(&a->loads);
+      continue;
+    }
+
+    changed = true;
+
+    /// Replace all loads with the stored value.
+    VECTOR_FOREACH_PTR (IRInstruction*, i, &a->loads) {
+      ir_replace_uses(i, a->store->value.pair.cdr);
+      ir_remove(i);
+    }
+    VECTOR_DELETE(&a->loads);
+
+    /// Remove the store.
+    ir_remove(a->store);
+
+    /// Remove the alloca.
+    ir_remove(a->alloca);
+  }
+
+  VECTOR_DELETE(&vars);
+  return changed;
+}
+
 static void optimise_function(CodegenContext *ctx, IRFunction *f) {
   while (opt_fold_constants(ctx, f) ||
-         opt_dce(ctx, f));
+         opt_dce(ctx, f) ||
+         opt_mem2reg(ctx, f));
   opt_tail_call_elim(ctx, f);
 }
 
@@ -214,5 +306,3 @@ void codegen_optimise(CodegenContext *ctx) {
     optimise_function(ctx, f);
   }
 }
-
-

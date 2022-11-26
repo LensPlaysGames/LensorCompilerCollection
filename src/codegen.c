@@ -107,6 +107,7 @@ char *label_generate() {
                           ".L%zu", label_count);
   label_index++;
   if (label_index >= label_buffer_size) {
+    PANIC("Label overflow!");
     label_index = 0;
     return label_generate();
   }
@@ -758,6 +759,15 @@ Error codegen_program(CodegenContext *context, Node *program) {
 }
 
 //================================================================ END CG_FMT_x86_64_MSWIN
+void codegen_lower(CodegenContext *context) {
+  switch (context->format) {
+    case CG_FMT_x86_64_GAS:
+      codegen_lower_x86_64(context);
+      break;
+    default:
+      TODO("Handle %d code generation format.", context->format);
+  }
+}
 
 void codegen_emit(CodegenContext *context) {
   switch (context->format) {
@@ -794,6 +804,8 @@ Error codegen
   CodegenContext *context = codegen_context_create_top_level
     (parse_context, format, call_convention, dialect, code);
   err = codegen_program(context, program);
+
+  codegen_lower(context);
 
   if (optimise) codegen_optimise(context);
 

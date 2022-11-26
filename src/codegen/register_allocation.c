@@ -6,12 +6,14 @@
 #include <string.h>
 #include <codegen/intermediate_representation.h>
 
-//#define DEBUG_RA
+#define DEBUG_RA
 
 #ifdef DEBUG_RA
 #define IR_FEMIT(file, context) ir_femit(file, context)
+#define DEBUG(...) fprintf(stdout, __VA_ARGS__)
 #else
 #define IR_FEMIT(file, context)
+#define DEBUG(...)
 #endif
 
 RegisterAllocationInfo *ra_allocate_info
@@ -81,12 +83,16 @@ void phi2copy(RegisterAllocationInfo *info) {
             IRInstruction *argument = phi->value;
             IRInstruction *copy = ir_copy(info->context, argument);
 
-            switch (argument->block->branch->type) {
+            switch (phi->block->branch->type) {
             default:
-              insert_instruction_after(copy, argument);
+              /// TODO: store returns and branches in the instruction list
+              ///       so we don’t have to do this nonsense.
+              if (!phi->block->instructions) {
+                phi->block->instructions = phi->block->last_instruction = copy;
+                copy->block = phi->block;
+              } else insert_instruction_after(copy, phi->block->last_instruction);
               break;
-            case IR_BRANCH_CONDITIONAL:
-              if (0) {}
+            case IR_BRANCH_CONDITIONAL:;
               IRBlock *critical_edge_trampoline = ir_block_create();
               ir_insert_into_block(critical_edge_trampoline, copy);
               ir_branch_into_block(instruction->block, critical_edge_trampoline);
@@ -152,6 +158,9 @@ void function_call_arguments(RegisterAllocationInfo *info) {
             IRInstruction *argument = arguments->value;
             Register result = info->argument_registers[i];
             IRInstruction *arg_copy = ir_copy(info->context, argument);
+            mark_used(argument, arg_copy);
+            mark_used(arg_copy, instruction);
+            ir_remove_use(argument, instruction);
             arg_copy->result = result;
             insert_instruction_before(arg_copy, instruction);
             arguments->value = arg_copy;
@@ -396,8 +405,37 @@ int follow_control_flow(IRBlockList *visited, IRBlock *block, IRInstruction *a_u
   return RA_CF_CONTINUE;
 }
 
-/// If the definition of B lies between the definition of A and any one
-/// of its uses, then A and B interfere.
+/// Determine whether two values interfere.
+///
+/// The algorithm is as follows:
+///
+///   ## has-use-after-def-in-block (B, v1)
+///      1. If there is a use of v1 in B, return true.
+///      2. Return interferes-after-def (B, v1).
+///
+///   ## interferes-after-def (B, v1)
+///      1. For each successor S of B, if has-use-after-def-in-block (S, v1)
+///         returns true, return true.
+///      2. Return false.
+///
+///   ## interferes-at-def (B, v1, v2)
+///      1. For each use U of v1 in B, if U->idx > v2->idx, return true.
+///      2. Return interferes-after-def (B, v1)
+///
+///   ## check-values-interfere (v1, v2)
+///      1. Let B1, B2 be the blocks containing the definitions of v1, v2.
+///      2. If B1 == B2, then
+///         2a. If v1->idx > v2->idx, return false.
+///         2b. Return interferes-at-def (B1, v1, v2)
+///      3. If B2 is not reachable from B1, return false.
+///      4. Return interferes-at-def (B2, v1, v2).
+///
+///   ## values-interfere (v1, v2)
+///      1. If v1 == v2, return false.
+///      2. If v1 is a COPY instruction and its argument is v2, or vice versa, return false.
+///      3. If check-values-interfere (v1, v2) returns true, return true.
+///      4. Return check-values-interfere (v2, v1).
+
 char instructions_interfere(IRInstruction *A, IRInstruction *B) {
   ASSERT(A && B, "Can not get interference of NULL instructions.");
   ASSERT(A->block, "Can not get interference when A has NULL containing block.");
@@ -407,10 +445,8 @@ char instructions_interfere(IRInstruction *A, IRInstruction *B) {
     // If definition and use of A are in the same block, and if the
     // definition of B is also in the same block, it is a simple index
     // comparison to check for interference.
-    if (A->block == a_use->user->block) {
-      return B->block == A->block
-        && A->index < B->index
-        && a_use->user->index > B->index;
+    if (A->block == a_use->user->block && B->block == A->block && A->index < B->index && a_use->user->index > B->index) {
+      return true;
     } else {
       // A and B are not defined in the same block, follow control flow.
       if (follow_control_flow(NULL, A->block, a_use->user, B) == RA_CF_INTERFERE) {
@@ -575,76 +611,6 @@ void print_adjacency_array(AdjacencyListNode *array, size_t size) {
 
 //==== END ADJACENCY LISTS ====
 
-void replace_use(IRInstruction *usee, Use *use, IRInstruction *replacement) {
-  if (use->user == replacement) {
-    return;
-  }
-
-  ASSERT(IR_COUNT == 18);
-  switch (use->user->type) {
-  case IR_PHI:
-    for (IRPhiArgument *phi = use->user->value.phi_argument; phi; phi = phi->next) {
-      if (phi->value == usee) {
-        phi->value = replacement;
-      }
-    }
-    break;
-  case IR_LOAD:
-  case IR_LOCAL_ADDRESS:
-  case IR_LOCAL_LOAD:
-  case IR_COPY:
-    if (use->user->value.reference == usee) {
-      use->user->value.reference = replacement;
-    }
-    break;
-  case IR_GLOBAL_STORE:
-    if (use->user->value.global_assignment.new_value == usee) {
-      use->user->value.global_assignment.new_value = replacement;
-    }
-    break;
-    //case IR_STORE:
-  case IR_LOCAL_STORE:
-  case IR_COMPARISON:
-  case IR_ADD:
-  case IR_SUBTRACT:
-    if (use->user->value.pair.car == usee) {
-      use->user->value.pair.car = replacement;
-    }
-    if (use->user->value.pair.cdr == usee) {
-      use->user->value.pair.cdr = replacement;
-    }
-    break;
-  case IR_CALL:
-    if (use->user->value.call.type == IR_CALLTYPE_INDIRECT) {
-      if (use->user->value.call.value.callee == usee) {
-        use->user->value.call.value.callee = replacement;
-      }
-    }
-    break;
-  case IR_BRANCH_CONDITIONAL:
-    if (use->user->value.conditional_branch.condition == usee) {
-      use->user->value.conditional_branch.condition = replacement;
-    }
-    break;
-  case IR_PARAMETER_REFERENCE:
-  case IR_GLOBAL_ADDRESS:
-  case IR_GLOBAL_LOAD:
-  case IR_IMMEDIATE:
-  case IR_BRANCH:
-  case IR_RETURN:
-    break;
-  default:
-    TODO("Handle IR instruction type to be able to replace uses.");
-    break;
-  }
-}
-
-void replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
-  for (Use *use = instruction->uses; use; use = use->next) {
-    replace_use(instruction, use, replacement);
-  }
-}
-
 void coalesce(RegisterAllocationInfo *info, IRInstructionList **instructions, AdjacencyGraph *G) {
   IRInstructionList *instructions_to_remove = NULL;
 
@@ -658,7 +624,7 @@ void coalesce(RegisterAllocationInfo *info, IRInstructionList **instructions, Ad
           ) {
         if (instruction->result == instruction->value.reference->result) {
           // Replace all uses of INSTRUCTION with the thing being copied.
-          replace_uses(instruction, instruction->value.reference);
+          ir_replace_uses(instruction, instruction->value.reference);
           IRInstructionList *head = calloc(1, sizeof(IRInstructionList));
           head->instruction = instruction;
           head->next = instructions_to_remove;
@@ -683,7 +649,7 @@ void coalesce(RegisterAllocationInfo *info, IRInstructionList **instructions, Ad
         instruction->value.reference->result = instruction->result;
       } else {
         // Replace all uses of INSTRUCTION with the thing being copied.
-        replace_uses(instruction, instruction->value.reference);
+        ir_replace_uses(instruction, instruction->value.reference);
         IRInstructionList *head = calloc(1, sizeof(IRInstructionList));
         head->instruction = instruction;
         head->next = instructions_to_remove;
@@ -923,13 +889,17 @@ void track_registers(RegisterAllocationInfo *info) {
 void ra(RegisterAllocationInfo *info) {
   if (!info) { return; }
 
+  ir_set_ids(info->context);
+  IR_FEMIT(stdout, info->context);
+
   phi2copy(info);
+
+  DEBUG("After PHI2COPY\n");
+  ir_set_ids(info->context);
+  IR_FEMIT(stdout, info->context);
 
   function_call_arguments(info);
   function_return_values(info);
-
-  ir_set_ids(info->context);
-  IR_FEMIT(stdout, info->context);
 
   IRInstructionList *instructions = collect_instructions(info, 0);
 
@@ -941,23 +911,24 @@ void ra(RegisterAllocationInfo *info) {
 
   coalesce(info, &instructions, &G);
 
-  ir_set_ids(info->context);
-  IR_FEMIT(stdout, info->context);
+  //DEBUG("After Coalescing\n");
+  //ir_set_ids(info->context);
+  //IR_FEMIT(stdout, info->context);
 
   instructions = collect_instructions(info, 1);
   build_adjacency_matrix(instructions, &G);
   build_adjacency_lists(instructions, &G);
 
   ir_set_ids(info->context);
-  PRINT_ADJACENCY_MATRIX(G.matrix);
-  PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
+  //PRINT_ADJACENCY_MATRIX(G.matrix);
+  //PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
 
   NumberStack *stack = build_coloring_stack(info, instructions, &G);
-  PRINT_NUMBER_STACK(stack);
+  //PRINT_NUMBER_STACK(stack);
 
   color(info, stack, instructions, G.list, G.matrix.size);
 
-  PRINT_INSTRUCTION_LIST(instructions);
+  //PRINT_INSTRUCTION_LIST(instructions);
 
   IR_FEMIT(stdout, info->context);
 
