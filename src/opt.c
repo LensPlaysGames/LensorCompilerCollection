@@ -203,6 +203,109 @@ static void opt_tail_call_elim(CodegenContext *ctx, IRFunction *f) {
   VECTOR_DELETE(&tc_info.phis);
 }
 
+#if 0
+static bool opt_merge_blocks(CodegenContext *ctx, IRFunction *f) {
+  bool changed = false;
+  (void) ctx;
+
+  typedef struct {
+    IRBlock *first;
+    IRBlock *second;
+    bool unmergeable;
+  } merge_candidate;
+  VECTOR(merge_candidate) candidates = {0};
+
+  /// Compute merge candidates.
+  FOREACH (IRBlock*, b1, f->first) {
+    FOREACH (IRBlock*, b2, f->first) {
+      if (b1 == b2) { continue; }
+      if (b1->branch->type == IR_BRANCH && b1->branch->value.block == b2) {
+        /// Check if the target block already exists.
+        VECTOR_FOREACH (merge_candidate, c, &candidates) {
+          if (c->second == b2) {
+            c->unmergeable = true;
+            goto next;
+          }
+        }
+
+        merge_candidate c = {b1, b2};
+        VECTOR_PUSH(&candidates, c);
+      }
+    next:;
+    }
+  }
+
+  /// Merge blocks.
+  VECTOR_FOREACH (merge_candidate, c, &candidates) {
+    if (c->unmergeable) { continue; }
+
+    /// Move all instructions from the second block to the first.
+    FOREACH (IRInstruction*, i, c->second->instructions) {
+      insert_instruction_after(i, c->first->last_instruction);
+    }
+
+    /// Keep the branch of the second block.
+    c->first->branch = c->second->branch;
+
+    /// Remove the second block.
+    ir_remove_block(c->second);
+    changed = true;
+  }
+  VECTOR_DELETE(&candidates);
+  return changed;
+}
+
+static bool opt_jump_threading(CodegenContext *ctx, IRFunction *f) {
+  bool changed = false;
+  (void) ctx;
+
+  /// Predecessor ‘map’.
+  VECTOR(IRBlock *) predecessors = {0};
+
+  /// Compute predecessor map.
+  FOREACH (IRBlock*, b, f->first) {
+    if (b == f->first || b->instructions) { continue; }
+
+    VECTOR_CLEAR(&predecessors);
+    FOREACH (IRBlock*, p, f->first) {
+      if (b->branch->type == IR_BRANCH &&
+          ((p->branch->type == IR_BRANCH && p->branch->value.block == b) ||
+           (p->branch->type == IR_BRANCH_CONDITIONAL &&
+            (p->branch->value.conditional_branch.true_branch == b ||
+             p->branch->value.conditional_branch.false_branch == b)))) {
+        VECTOR_PUSH(&predecessors, p);
+      }
+    }
+
+    /// Check if we can thread the jump.
+    size_t sz = predecessors.size;
+    VECTOR_FOREACH_PTR (IRBlock *, pred, &predecessors) {
+      if (pred->branch->type == IR_BRANCH) {
+        pred->branch->value.block = b->branch->value.block;
+        VECTOR_REMOVE_ELEMENT_UNORDERED(&predecessors, pred);
+      } else if (pred->branch->type == IR_BRANCH_CONDITIONAL) {
+        if (pred->branch->value.conditional_branch.true_branch == b) {
+          pred->branch->value.conditional_branch.true_branch = b->branch->value.block;
+          VECTOR_REMOVE_ELEMENT_UNORDERED(&predecessors, pred);
+        }
+        if (pred->branch->value.conditional_branch.false_branch == b) {
+          pred->branch->value.conditional_branch.false_branch = b->branch->value.block;
+          VECTOR_REMOVE_ELEMENT_UNORDERED(&predecessors, pred);
+        }
+      }
+    }
+    if (sz > 0 && predecessors.size == 0) {
+      /// Up
+      ir_remove_block(b);
+      changed = true;
+    }
+  }
+
+  VECTOR_DELETE(&predecessors);
+  return changed;
+}
+#endif
+
 static bool opt_mem2reg(CodegenContext *ctx, IRFunction *f) {
   bool changed = false;
   (void) ctx;
@@ -295,6 +398,8 @@ static bool opt_mem2reg(CodegenContext *ctx, IRFunction *f) {
 }
 
 static void optimise_function(CodegenContext *ctx, IRFunction *f) {
+  /// Sanity check.
+
   while (opt_fold_constants(ctx, f) ||
          opt_dce(ctx, f) ||
          opt_mem2reg(ctx, f));

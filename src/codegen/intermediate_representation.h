@@ -397,5 +397,6 @@ void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement);
 /// Used by the optimiser.
 void ir_remove(IRInstruction* instruction);
 void ir_remove_use(IRInstruction *usee, IRInstruction *user);
+void ir_remove_block(IRBlock *block);
 
 #endif /* INTERMEDIATE_REPRESENTATION_H */

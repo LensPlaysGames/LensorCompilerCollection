@@ -139,6 +139,14 @@ void ir_remove(IRInstruction* instruction) {
   free(instruction);
 }
 
+void ir_remove_block(IRBlock *block) {
+  if (block->previous) { block->previous->next = block->next; }
+  if (block->next) { block->next->previous = block->previous; }
+  if (block == block->function->first) { block->function->first = block->next; }
+  if (block == block->function->last) { block->function->last = block->previous; }
+  free(block);
+}
+
 #define INSERT(instruction) ir_insert(context, (instruction))
 
 void ir_femit_instruction
