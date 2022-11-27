@@ -425,8 +425,8 @@ Error codegen_expression
     // This assumes that the last instruction in a block returns a
     // value; if it doesn't, we will simply return zero. This should
     // probably be ensured in the type checker in the future.
-    IRInstruction *then_return_value = last_then_block->last_instruction;
-    IRInstruction *otherwise_return_value = last_otherwise_block->last_instruction;
+    IRInstruction *then_return_value = VECTOR_BACK_OR(last_then_block->instructions, NULL);
+    IRInstruction *otherwise_return_value = VECTOR_BACK_OR(last_otherwise_block->instructions, NULL);
 
     // Attach join_block to function and set it as the active context
     // block.
@@ -719,10 +719,7 @@ Error codegen_function
     expression = expression->next_child;
   }
 
-  IRInstruction *branch = ir_return(cg_context);
-  f->last->branch = branch;
-
-  f->return_value = last_expression->result;
+  ir_return(cg_context, last_expression->result);
 
   // Free context;
   codegen_context_free(cg_context);
@@ -733,7 +730,6 @@ Error codegen_program(CodegenContext *context, Node *program) {
   Error err = ok;
 
   IRFunction *main = ir_function(context, "main");
-  context->all_functions = main;
 
   ParsingContext *next_child_context = context->parse_context->children;
   Node *last_expression = NULL;
@@ -748,12 +744,8 @@ Error codegen_program(CodegenContext *context, Node *program) {
     last_expression = expression;
     expression = expression->next_child;
   }
-  if (!main->last->branch) {
-    IRInstruction *branch = ir_return(context);
-    main->last->branch = branch;
-  }
-  if (last_expression) {
-    main->return_value = last_expression->result;
+  if (!ir_is_closed(context->block)) {
+    ir_return(context, last_expression ? last_expression->result : ir_immediate(context, 0));
   }
   return err;
 }

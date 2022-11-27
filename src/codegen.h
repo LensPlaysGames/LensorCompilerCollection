@@ -7,6 +7,7 @@
 #include <error.h>
 #include <parser.h>
 #include <stdio.h>
+#include <vector.h>
 
 char *label_generate();
 
@@ -41,7 +42,7 @@ struct CodegenContext {
   ParsingContext *parse_context;
   FILE* code;
 
-  IRFunction *all_functions;
+  VECTOR (IRFunction *) all_functions;
   IRFunction *function;
   IRBlock *block;
 

@@ -5,11 +5,19 @@
 #include <codegen/codegen_forward.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <vector.h>
 
 #define INSTRUCTION(name, given_type)                       \
   IRInstruction *(name) = calloc(1, sizeof(IRInstruction)); \
   ASSERT((name), "Could not allocate new IRInstruction.");  \
   (name)->type = (given_type);
+
+#define FOREACH_INSTRUCTION_N(context, function, block, instruction) \
+  VECTOR_FOREACH_PTR (IRFunction*, function, context->all_functions) \
+    VECTOR_FOREACH_PTR (IRBlock*, block, function->blocks) \
+      VECTOR_FOREACH_PTR (IRInstruction*, instruction, block->instructions)
+
+#define FOREACH_INSTRUCTION(context) FOREACH_INSTRUCTION_N(context, function, block, instruction)
 
 typedef enum IRType {
   IR_IMMEDIATE,
@@ -135,11 +143,6 @@ typedef union IRValue {
 } IRValue;
 
 
-typedef struct Use {
-  IRInstruction *user;
-  struct Use *next;
-} Use;
-
 void mark_used(IRInstruction *usee, IRInstruction *user);
 
 void set_pair_and_mark
@@ -158,44 +161,30 @@ typedef struct IRInstruction {
 
   IRBlock *block;
 
+  DLIST_NODE(struct IRInstruction);
+
   // Register allocation.
   size_t index;
 
   Register result;
 
-  // List of uses---instructions that use this instruction should go in
+  // List of users---instructions that use this instruction should go in
   // this list.
-  Use *uses;
-
-  // Doubly linked list.
-  struct IRInstruction *previous;
-  struct IRInstruction *next;
+  VECTOR(IRInstruction*) users;
 } IRInstruction;
-
-typedef struct IRBlockPredecessor {
-  IRBlock *block;
-  struct IRBlockPredecessor *next;
-} IRBlockPredecessor;
 
 /// A block is a list of instructions that have control flow enter at
 /// the beginning and leave at the end.
 typedef struct IRBlock {
   const char *name;
 
-  IRInstruction *instructions;
-  IRInstruction *last_instruction;
-
-  IRInstruction *branch;
-
-  IRBlockPredecessor *predecessor;
+  VECTOR(IRInstruction *) instructions;
 
   /// A pointer to the function the block is attached to, or NULL if
   /// detached.
   IRFunction *function;
 
-  // Doubly linked list.
-  struct IRBlock *previous;
-  struct IRBlock *next;
+  DLIST_NODE(struct IRBlock);
 
   // Unique ID (among blocks)
   size_t id;
@@ -206,13 +195,7 @@ typedef struct IRBlock {
 typedef struct IRFunction {
   const char *name;
 
-  IRBlock *first;
-  IRBlock *last;
-
-  IRInstruction *return_value;
-
-  // Linked list.
-  struct IRFunction *next;
+  VECTOR(IRBlock*) blocks;
 
   // Unique ID (among functions)
   size_t id;
@@ -224,6 +207,16 @@ typedef struct IRFunction {
 } IRFunction;
 
 void ir_set_ids(CodegenContext *context);
+
+bool ir_is_branch(IRInstruction*);
+
+/// Check whether a block is closed.
+bool ir_is_closed(IRBlock *block);
+
+/// Get the next block after the given block.
+/// This need not be a successor of the block.
+/// This may return NULL.
+IRBlock *ir_next_block(IRBlock *block);
 
 void ir_femit_instruction
 (FILE *file,
@@ -256,6 +249,10 @@ void ir_block_attach
 IRFunction *ir_function_create();
 IRFunction *ir_function(CodegenContext *context, const char *name);
 
+void ir_force_insert_into_block
+(IRBlock *block,
+ IRInstruction *new_instruction);
+
 void ir_insert_into_block
 (IRBlock *block,
  IRInstruction *new_instruction);
@@ -264,11 +261,8 @@ void ir_insert
 (CodegenContext *context,
  IRInstruction *new_instruction);
 
-/// Insert instruction A before instruction B
-void insert_instruction_before(IRInstruction *a, IRInstruction *b);
-
-/// Insert instruction A after instruction B
-void insert_instruction_after(IRInstruction *a, IRInstruction *b);
+void insert_instruction_before(IRInstruction *i, IRInstruction *before);
+void insert_instruction_after(IRInstruction *i, IRInstruction *after);
 
 void ir_phi_argument
 (IRInstruction *phi,
@@ -342,7 +336,8 @@ IRInstruction *ir_branch_into_block
  IRBlock *block);
 
 IRInstruction *ir_return
-(CodegenContext *context);
+(CodegenContext *context,
+ IRInstruction *return_value);
 
 IRInstruction *ir_copy
 (CodegenContext *context,

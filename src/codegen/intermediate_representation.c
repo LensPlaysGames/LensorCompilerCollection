@@ -6,26 +6,35 @@
 #include <inttypes.h>
 
 void mark_used(IRInstruction *usee, IRInstruction *user) {
-  Use *new_use = calloc(1, sizeof(Use));
-  new_use->next = usee->uses;
-  new_use->user = user;
-  usee->uses = new_use;
+  VECTOR_PUSH(usee->users, user);
 }
 
 void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
-    ASSERT(usee->uses, "Usee is useless");
+  VECTOR_REMOVE_ELEMENT_UNORDERED(usee->users, user);
+}
 
-    for (Use *prev = NULL, *u = usee->uses; u; u = u->next) {
-        if (u->user == user) {
-            if (prev) { prev->next = u->next; }
-            else { usee->uses = u->next; }
-            free(u);
-            return;
-        }
-        prev = u;
+bool ir_is_branch(IRInstruction* i) {
+  STATIC_ASSERT(IR_COUNT == 27, "Handle all branch types.");
+  switch (i->type) {
+    case IR_BRANCH:
+    case IR_BRANCH_CONDITIONAL:
+    case IR_RETURN:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool ir_is_closed(IRBlock *block) {
+    return block->instructions.size && ir_is_branch(VECTOR_BACK(block->instructions));
+}
+
+IRBlock *ir_next_block(IRBlock *block) {
+  VECTOR_FOREACH_PTR (IRBlock *, b, block->function->blocks) {
+    if (b == block) {
+      return b_ptr == block->function->blocks.data + block->function->blocks.size - 1 ? NULL : b_ptr[1];
     }
-
-    PANIC("Usee not used by user");
+  }
 }
 
 void set_pair_and_mark
@@ -41,29 +50,21 @@ void set_pair_and_mark
   mark_used(rhs, parent);
 }
 
-void ir_insert_into_block
+void ir_insert_into_block(IRBlock *block, IRInstruction *instruction) {
+  IRInstruction *branch = VECTOR_BACK_OR(block->instructions, NULL);
+  if (branch && ir_is_branch(branch)) {
+    PANIC("Cannot insert into closed block. Use ir_force_insert_into_block() instead if that was intended.");
+  }
+  ir_force_insert_into_block(block, instruction);
+}
+
+void ir_force_insert_into_block
 (IRBlock *block,
- IRInstruction *new_instruction
+ IRInstruction *i
  )
 {
-  // If block is closed, open a new block.
-  if (block->branch) {
-    // TODO
-  }
-  ASSERT(block->branch == NULL, "Can not insert into a closed IRBlock.");
-
-  new_instruction->block = block;
-
-  // [ ] <-> [ ] <-> [NULL]
-  //         [ ] <-> [new] <-> [NULL]
-  if (!block->instructions) {
-    block->instructions = new_instruction;
-    block->last_instruction = new_instruction;
-    return;
-  }
-  block->last_instruction->next = new_instruction;
-  new_instruction->previous = block->last_instruction;
-  block->last_instruction = new_instruction;
+  i->block = block;
+  VECTOR_PUSH(block->instructions, i);
 }
 
 void ir_insert
@@ -75,75 +76,43 @@ void ir_insert
   ir_insert_into_block(context->block, new_instruction);
 }
 
-/// Insert instruction A before instruction B
-void insert_instruction_before(IRInstruction *a, IRInstruction *b) {
-  if (!a || !b) { return; }
-
-  // 0 - b - 1
-  // 0 - a - b - 1
-
-  a->previous = b->previous;
-
-  if (b->previous) {
-    b->previous->next = a;
-  }
-  b->previous = a;
-
-  a->next = b;
-
-  a->block = b->block;
-
-  // Handle beginning of block/function stuffs.
-  if (b->block->instructions == b) {
-    b->block->instructions = a;
-  }
-  // TODO: Update entry instruction of function, if needed.
+void insert_instruction_before(IRInstruction *i, IRInstruction *before) {
+  ASSERT(i && before);
+/*  IRInstruction **pos;
+  VECTOR_FOREACH (IRInstruction *, ptr, before->block->instructions) {
+    if (*ptr == before) {
+      VECTOR_INSERT(before->block->instructions, ptr, i);
+      i->block = before->block;
+      return;
+    }
+  }*/
+  VECTOR_INSERT_BEFORE(before->block->instructions, before, i);
+  i->block = before->block;
+  UNREACHABLE();
 }
 
-
-/// Insert instruction A after instruction B
-void insert_instruction_after(IRInstruction *a, IRInstruction *b) {
-  if (!a || !b) { return; }
-
-  if (b == b->block->branch) {
-    PANIC("Can not insert instruction *after* the branch instruction of a basic block.");
-  }
-
-  // 0 - b - 1
-  // 0 - b - a - 1
-
-  if (b->next) {
-    b->next->previous = a;
-  }
-  a->next = b->next;
-  b->next = a;
-
-  a->previous = b;
-
-  a->block = b->block;
-
-  // Handle end of block/function stuffs.
-  if (b->block->last_instruction == b) {
-    b->block->last_instruction = a;
-  }
-  // TODO: Update return value of function, if needed.
+void insert_instruction_after(IRInstruction *i, IRInstruction *after) {
+  ASSERT(i && after);
+/*  IRInstruction **pos;
+  VECTOR_FOREACH (IRInstruction *, ptr, after->block->instructions) {
+    if (*ptr == after) {
+      VECTOR_INSERT(after->block->instructions, (ptr + 1), i);
+      i->block = after->block;
+      return;
+    }
+  }*/
+  VECTOR_INSERT_AFTER(after->block->instructions, after, i);
+  i->block = after->block;
+  UNREACHABLE();
 }
 
 void ir_remove(IRInstruction* instruction) {
-  if (instruction->previous) { instruction->previous->next = instruction->next; }
-  if (instruction->next) { instruction->next->previous = instruction->previous; }
-  if (instruction == instruction->block->instructions) { instruction->block->instructions = instruction->next; }
-  if (instruction == instruction->block->last_instruction) { instruction->block->last_instruction = instruction->previous; }
-  if (instruction == instruction->block->branch) { instruction->block->branch = NULL; }
-  if (instruction == instruction->block->function->return_value) { instruction->block->function->return_value = NULL; }
+  VECTOR_REMOVE_ELEMENT(instruction->block->instructions, instruction);
   free(instruction);
 }
 
 void ir_remove_block(IRBlock *block) {
-  if (block->previous) { block->previous->next = block->next; }
-  if (block->next) { block->next->previous = block->previous; }
-  if (block == block->function->first) { block->function->first = block->next; }
-  if (block == block->function->last) { block->function->last = block->previous; }
+  VECTOR_REMOVE_ELEMENT(block->function->blocks, block);
   free(block);
 }
 
@@ -350,13 +319,9 @@ void ir_femit_block
  )
 {
   fprintf(file, "  bb%zu\n", block->id);
-  for (IRInstruction *instruction = block->instructions;
-       instruction;
-       instruction = instruction->next
-       ) {
+  VECTOR_FOREACH_PTR (IRInstruction*, instruction, block->instructions) {
     ir_femit_instruction(file, instruction);
   }
-  ir_femit_instruction(file, block->branch);
 }
 
 void ir_femit_function
@@ -365,14 +330,9 @@ void ir_femit_function
  )
 {
   fprintf(file, "f%zu\n", function->id);
-  for (IRBlock *block = function->first;
-       block;
-       block = block->next
-       ) {
+  VECTOR_FOREACH_PTR (IRBlock*, block, function->blocks) {
     ir_femit_block(file, block);
   }
-
-  fprintf(file, "return value: %%%zu\n", function->return_value->id);
 }
 
 void ir_femit
@@ -380,10 +340,7 @@ void ir_femit
  CodegenContext *context
  )
 {
-  for (IRFunction *function = context->function;
-       function;
-       function = function->next
-       ) {
+  VECTOR_FOREACH_PTR (IRFunction*, function, context->all_functions) {
     ir_femit_function(file, function);
   }
   putchar('\n');
@@ -393,24 +350,14 @@ void ir_set_ids(CodegenContext *context) {
   size_t function_id = 0;
   size_t block_id = 0;
   size_t instruction_id = 0;
-  for (IRFunction *function = context->function;
-       function;
-       function = function->next
-       ) {
-    for (IRBlock *block = function->first;
-         block;
-         block = block->next
-         ) {
-      for (IRInstruction *instruction = block->instructions;
-           instruction;
-           instruction = instruction->next
-           ) {
-        instruction->id = ++instruction_id;
+  VECTOR_FOREACH_PTR (IRFunction*, function, context->all_functions) {
+    function->id = function_id++;
+    VECTOR_FOREACH_PTR (IRBlock*, block, function->blocks) {
+      block->id = block_id++;
+      VECTOR_FOREACH_PTR (IRInstruction*, instruction, block->instructions) {
+        instruction->id = instruction_id++;
       }
-      block->branch->id = ++instruction_id;
-      block->id = ++block_id;
     }
-    function->id = ++function_id;
   }
 }
 
@@ -469,10 +416,7 @@ void ir_block_attach_to_function
  IRBlock *new_block
  )
 {
-  ASSERT(function->last);
-  function->last->next = new_block;
-  new_block->previous = function->last;
-  function->last = new_block;
+  VECTOR_PUSH(function->blocks, new_block);
   new_block->function = function;
 }
 
@@ -498,20 +442,9 @@ IRFunction *ir_function(CodegenContext *context, const char *name) {
   // A function *must* contain at least one block, so we start new
   // functions out with an empty block.
   IRBlock *block = ir_block_create();
-
-  if (context->function) {
-    IRFunction *last_function = context->function;
-    for (; last_function->next; last_function = last_function->next);
-    last_function->next = function;
-  }
   context->function = function;
-
-  function->first = block;
-  function->last = block;
-  context->block = block;
-
-  block->function = function;
-
+  ir_block_attach(context, block);
+  VECTOR_PUSH(context->all_functions, function);
   return function;
 }
 
@@ -669,7 +602,7 @@ IRInstruction *ir_branch_conditional
 
   branch->value.conditional_branch.true_branch = then_block;
   branch->value.conditional_branch.false_branch = otherwise_block;
-  context->block->branch = branch;
+  INSERT(branch);
   return branch;
 }
 
@@ -680,8 +613,8 @@ IRInstruction *ir_branch_into_block
 {
   INSTRUCTION(branch, IR_BRANCH);
   branch->value.block = destination;
-  block->branch = branch;
   branch->block = block;
+  VECTOR_PUSH(block->instructions, branch);
   return branch;
 }
 
@@ -690,18 +623,14 @@ IRInstruction *ir_branch
  IRBlock *destination
  )
 {
-  INSTRUCTION(branch, IR_BRANCH);
-  branch->value.block = destination;
-  context->block->branch = branch;
-  branch->block = context->block;
-  return branch;
+  return ir_branch_into_block(destination, context->block);
 }
 
-/// NOTE: Does not self insert!
-IRInstruction *ir_return(CodegenContext *context) {
+IRInstruction *ir_return(CodegenContext *context, IRInstruction* return_value) {
   INSTRUCTION(branch, IR_RETURN);
-  context->block->branch = branch;
   branch->block = context->block;
+  branch->value.reference = return_value;
+  INSERT(branch);
   return branch;
 }
 
@@ -826,15 +755,15 @@ IRInstruction *ir_stack_allocate
 }
 
 /// NEVER CALL THIS DIRECTLY! Use ir_replace_uses() or fix the uses manually.
-static void ir_replace_use(IRInstruction *usee, Use *use, IRInstruction *replacement) {
-  if (use->user == replacement) {
+static void ir_replace_use(IRInstruction *usee, IRInstruction *user, IRInstruction *replacement) {
+  if (user == replacement) {
     return;
   }
 
   STATIC_ASSERT(IR_COUNT == 27);
-  switch (use->user->type) {
+  switch (user->type) {
     case IR_PHI:
-      for (IRPhiArgument *phi = use->user->value.phi_argument; phi; phi = phi->next) {
+      for (IRPhiArgument *phi = user->value.phi_argument; phi; phi = phi->next) {
         if (phi->value == usee) {
           phi->value = replacement;
         }
@@ -844,13 +773,13 @@ static void ir_replace_use(IRInstruction *usee, Use *use, IRInstruction *replace
     case IR_LOCAL_ADDRESS:
     case IR_LOCAL_LOAD:
     case IR_COPY:
-      if (use->user->value.reference == usee) {
-        use->user->value.reference = replacement;
+      if (user->value.reference == usee) {
+        user->value.reference = replacement;
       }
       break;
     case IR_GLOBAL_STORE:
-      if (use->user->value.global_assignment.new_value == usee) {
-        use->user->value.global_assignment.new_value = replacement;
+      if (user->value.global_assignment.new_value == usee) {
+        user->value.global_assignment.new_value = replacement;
       }
       break;
       //case IR_STORE:
@@ -863,35 +792,35 @@ static void ir_replace_use(IRInstruction *usee, Use *use, IRInstruction *replace
     case IR_SHIFT_LEFT:
     case IR_SHIFT_RIGHT_ARITHMETIC:
     case IR_SHIFT_RIGHT_LOGICAL:
-      if (use->user->value.pair.car == usee) {
-        use->user->value.pair.car = replacement;
+      if (user->value.pair.car == usee) {
+        user->value.pair.car = replacement;
       }
-      if (use->user->value.pair.cdr == usee) {
-        use->user->value.pair.cdr = replacement;
+      if (user->value.pair.cdr == usee) {
+        user->value.pair.cdr = replacement;
       }
       break;
     case IR_CALL:
-      if (use->user->value.call.type == IR_CALLTYPE_INDIRECT) {
-        if (use->user->value.call.value.callee == usee) {
-          use->user->value.call.value.callee = replacement;
+      if (user->value.call.type == IR_CALLTYPE_INDIRECT) {
+        if (user->value.call.value.callee == usee) {
+          user->value.call.value.callee = replacement;
         }
       }
 
-      for (IRCallArgument *arg = use->user->value.call.arguments; arg; arg = arg->next) {
+      for (IRCallArgument *arg = user->value.call.arguments; arg; arg = arg->next) {
         if (arg->value == usee) { arg->value = replacement; }
       }
       break;
     case IR_BRANCH_CONDITIONAL:
-      if (use->user->value.conditional_branch.condition == usee) {
-        use->user->value.conditional_branch.condition = replacement;
+      if (user->value.conditional_branch.condition == usee) {
+        user->value.conditional_branch.condition = replacement;
       }
       break;
     case IR_COMPARISON:
-      if (use->user->value.comparison.pair.car == usee) {
-        use->user->value.comparison.pair.car = replacement;
+      if (user->value.comparison.pair.car == usee) {
+        user->value.comparison.pair.car = replacement;
       }
-      if (use->user->value.comparison.pair.cdr == usee) {
-        use->user->value.comparison.pair.cdr = replacement;
+      if (user->value.comparison.pair.cdr == usee) {
+        user->value.comparison.pair.cdr = replacement;
       }
       break;
     case IR_PARAMETER_REFERENCE:
@@ -908,18 +837,13 @@ static void ir_replace_use(IRInstruction *usee, Use *use, IRInstruction *replace
 }
 
 void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
-  Use *last = instruction->uses;
-  for (Use *use = instruction->uses; use; use = use->next) {
-    last = use;
-    ir_replace_use(instruction, use, replacement);
+  if (instruction == replacement) { return; }
+  VECTOR_FOREACH_PTR (IRInstruction *, user, instruction->users) {
+    ir_replace_use(instruction, user, replacement);
   }
 
-  if (last) {
-    last->next = replacement->uses;
-    replacement->uses = instruction->uses;
-  }
-
-  instruction->uses = NULL;
+  VECTOR_APPEND_ALL(replacement->users, instruction->users);
+  VECTOR_CLEAR(instruction->users);
 }
 
 #undef INSERT
