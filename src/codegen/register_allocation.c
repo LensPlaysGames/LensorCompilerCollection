@@ -778,9 +778,117 @@ void print_adjacency_array(AdjacencyListNode *array, size_t size) {
 
 //==== END ADJACENCY LISTS ====
 
+/// Determine whether an instruction interferes with a register.
+bool register_interference(int64_t regmask, IRInstruction *instruction) {
+  return (regmask & (1 << (instruction->result - 1))) != 0;
+}
+
+/// The aim of register coalescing is to eliminate register-to-register
+/// copies by merging the source and destination into a single value.
+///
+/// Whether copy elimination is possible depends whether the values in
+/// question interfere, both with each other and with hardware registers.
 void coalesce(RegisterAllocationInfo *info, IRInstructionList **instructions, AdjacencyGraph *G) {
   IRInstructionList *instructions_to_remove = NULL;
 
+#if 0
+  VECTOR(IRInstruction*) removed_instructions = {0};
+  VECTOR(IRInstruction*) phis = {0};
+
+  for (;;) {
+    VECTOR_CLEAR(&removed_instructions);
+    FOREACH (IRInstructionList*, it, *instructions) {
+      IRInstruction *to = it->instruction;
+      if (to->type != IR_COPY) { continue; }
+      IRInstruction *from = to->value.reference;
+
+      /// From and to are precoloured: eliminate the copy if they
+      /// are the same, replacing all uses of to w/ from.
+      if (from->result && from->result == to->result) { goto eliminate; }
+
+      /// To is precoloured, from is not, and from does not interfere
+      /// with the precoloured register: assign the precoloured register to
+      /// from, replace all uses of to with from, and eliminate the copy.
+      int64_t from_regmask = info->instruction_register_interference(from);
+      if (to->result &&
+         !from->result &&
+         !adjm(G->matrix, to->index, from->index) &&
+         !register_interference(from_regmask, to)) {
+        from->result = to->result;
+        goto eliminate;
+      }
+
+      /// From is precoloured, to is not, and to does not interfere
+      /// with the precoloured register: assign the precoloured register to
+      /// any PHI nodes that use to if those PHI nodes are uncoloured or
+      /// precoloured with the same register; if the are any PHI nodes that
+      /// are precoloured with a different register, then the copy cannot
+      /// be eliminated. Otherwise, replace all uses of to with from and
+      /// eliminate the copy.
+      int64_t to_regmask = info->instruction_register_interference(to);
+      if (!to->result &&
+           from->result &&
+          !adjm(G->matrix, to->index, from->index) &&
+          !register_interference(to_regmask, from)) {
+        /// Collect all PHI nodes that use to.
+        VECTOR_CLEAR(&phis);
+        FOREACH (IRInstructionList*, it2, *instructions) {
+          IRInstruction *phi = it2->instruction;
+          if (phi->type != IR_PHI) { continue; }
+          FOREACH (IRPhiArgument*, arg, phi->value.phi_argument) {
+            if (arg->value == to) {
+              /// If a PHI node that uses to is already precoloured with
+              /// a different register, then we need to keep the copy.
+              if (phi->result && phi->result != from->result) { goto keep_copy; }
+              VECTOR_PUSH(&phis, phi);
+              break;
+            }
+          }
+        }
+
+        /// If we get here, then we know that all PHI node that use to
+        /// can be precoloured with the same register as from.
+        VECTOR_FOREACH_PTR (IRInstruction*, phi, &phis) { phi->result = from->result; }
+        goto eliminate;
+      }
+
+      /// Neither from nor to are precoloured, and they do not interfere.
+      /// Replace all uses of to with from, and eliminate the copy.
+      if (!to->result &&
+          !from->result &&
+          !adjm(G->matrix, to->index, from->index)) {
+        goto eliminate;
+      }
+
+      /// Otherwise, keep the copy.
+      keep_copy:
+      continue;
+
+      /// Eliminate the copy.
+      eliminate:
+
+      /// First, replace all uses of to with from.
+      ir_replace_uses(to, from);
+
+      /// Yeet to.
+      VECTOR_PUSH(&removed_instructions, to);
+    }
+
+    /// Remove all instructions that were marked for removal.
+    VECTOR_FOREACH_PTR (IRInstruction*, instruction, &removed_instructions) {
+      ir_remove(instruction);
+    }
+
+    /// Collect the remaining instructions.
+    if (removed_instructions.size) { *instructions = collect_instructions(info, 0); }
+    else { break; }
+  }
+
+  /// Cleanup.
+  VECTOR_DELETE(&removed_instructions);
+  VECTOR_DELETE(&phis);
+
+#else
   // Attempt to remove copy instructions.
   for (IRInstructionList *it = *instructions; it; it = it->next) {
     IRInstruction *instruction = it->instruction;
@@ -856,6 +964,7 @@ void coalesce(RegisterAllocationInfo *info, IRInstructionList **instructions, Ad
     instruction->previous = NULL;
     instruction->uses = NULL;
   }
+#endif
 }
 
 typedef struct NumberStack {
@@ -1076,11 +1185,15 @@ void ra(RegisterAllocationInfo *info) {
 
   PRINT_ADJACENCY_MATRIX(G.matrix);
 
+  DEBUG("Before Coalescing\n");
+  ir_set_ids(info->context);
+  IR_FEMIT(stdout, info->context);
+
   coalesce(info, &instructions, &G);
 
-  //DEBUG("After Coalescing\n");
-  //ir_set_ids(info->context);
-  //IR_FEMIT(stdout, info->context);
+  DEBUG("After Coalescing\n");
+  ir_set_ids(info->context);
+  IR_FEMIT(stdout, info->context);
 
   instructions = collect_instructions(info, 1);
   build_adjacency_matrix(instructions, &G);
