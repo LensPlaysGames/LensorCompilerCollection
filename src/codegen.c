@@ -46,6 +46,7 @@ CodegenContext *codegen_context_create_top_level
   context->parse_context = parse_context;
   context->code = code;
   context->dialect = dialect;
+  context->functions = calloc(1, sizeof *context->functions);
   return context;
 }
 
@@ -73,7 +74,7 @@ CodegenContext *codegen_context_create(CodegenContext *parent) {
   }
 
   new_context->parse_context    = parent->parse_context;
-  new_context->all_functions    = parent->all_functions;
+  new_context->functions        = parent->functions;
   new_context->function         = parent->function;
   new_context->block            = parent->block;
   new_context->dialect          = parent->dialect;
@@ -103,8 +104,8 @@ size_t label_index = 0;
 size_t label_count = 0;
 char *label_generate() {
   char *label = label_buffer + label_index;
-  label_index += snprintf(label, label_buffer_size - label_index,
-                          ".L%zu", label_count);
+  label_index += (size_t) snprintf(label, label_buffer_size - label_index,
+    ".L%zu", label_count);
   label_index++;
   if (label_index >= label_buffer_size) {
     PANIC("Label overflow!");
@@ -320,11 +321,11 @@ Error codegen_expression
     }
     break;
   }
-  case NODE_TYPE_IF:
+  case NODE_TYPE_IF: {
     // Generate if condition expression code.
     err = codegen_expression(cg_context,
-                             context, next_child_context,
-                             expression->children);
+        context, next_child_context,
+        expression->children);
     if (err.type) { return err; }
 
     /** Each box is a basic block within intermediate representation,
@@ -357,26 +358,28 @@ Error codegen_expression
     ir_block_attach(cg_context, then_block);
 
     // Enter if then body context
-    ParsingContext *ctx = context;
-    ParsingContext *next_child_ctx = *next_child_context;
-    // FIXME: Should this NULL check create error rather than silently be allowed?
-    if (next_child_context) {
-      ctx = *next_child_context;
-      next_child_ctx = ctx->children;
-      *next_child_context = (*next_child_context)->next_child;
+    {
+      ParsingContext *ctx = context;
+      ParsingContext *next_child_ctx = *next_child_context;
+      // FIXME: Should this NULL check create error rather than silently be allowed?
+      if (next_child_context) {
+        ctx = *next_child_context;
+        next_child_ctx = ctx->children;
+        *next_child_context = (*next_child_context)->next_child;
 
-      //printf("Entered if context:\n");
-      //parse_context_print(ctx, 0);
-    }
+        // printf("Entered if context:\n");
+        // parse_context_print(ctx, 0);
+      }
 
-    // Generate THEN expression body.
-    Node *expr = expression->children->next_child->children;
-    while (expr) {
-      err = codegen_expression(cg_context,
-                               ctx, &next_child_ctx,
-                               expr);
-      if (err.type) { return err; }
-      expr = expr->next_child;
+      // Generate THEN expression body.
+      Node *expr = expression->children->next_child->children;
+      while (expr) {
+        err = codegen_expression(cg_context,
+            ctx, &next_child_ctx,
+            expr);
+        if (err.type) { return err; }
+        expr = expr->next_child;
+      }
     }
 
     // Generate an unconditional branch to the join_block.
@@ -391,7 +394,6 @@ Error codegen_expression
     ir_block_attach(cg_context, otherwise_block);
 
     if (expression->children->next_child->next_child) {
-
       // Enter if otherwise body context
       ParsingContext *ctx = context;
       ParsingContext *next_child_ctx = *next_child_context;
@@ -401,15 +403,15 @@ Error codegen_expression
         next_child_ctx = ctx->children;
         *next_child_context = (*next_child_context)->next_child;
 
-        //printf("Entered if else context:\n");
-        //parse_context_print(ctx, 0);
+        // printf("Entered if else context:\n");
+        // parse_context_print(ctx, 0);
       }
 
-      expr = expression->children->next_child->next_child->children;
+      Node *expr = expression->children->next_child->next_child->children;
       while (expr) {
         err = codegen_expression(cg_context,
-                                 ctx, &next_child_ctx,
-                                 expr);
+            ctx, &next_child_ctx,
+            expr);
         if (err.type) { return err; }
         expr = expr->next_child;
       }
@@ -425,8 +427,8 @@ Error codegen_expression
     // This assumes that the last instruction in a block returns a
     // value; if it doesn't, we will simply return zero. This should
     // probably be ensured in the type checker in the future.
-    IRInstruction *then_return_value = VECTOR_BACK_OR(last_then_block->instructions, NULL);
-    IRInstruction *otherwise_return_value = VECTOR_BACK_OR(last_otherwise_block->instructions, NULL);
+    IRInstruction *then_return_value = last_then_block->instructions.last;
+    IRInstruction *otherwise_return_value = last_otherwise_block->instructions.last;
 
     // Attach join_block to function and set it as the active context
     // block.
@@ -434,12 +436,12 @@ Error codegen_expression
 
     // Insert phi node for result of if expression in join block.
     IRInstruction *phi = ir_phi(cg_context);
-    ir_phi_argument(phi, last_then_block,      then_return_value);
+    ir_phi_argument(phi, last_then_block, then_return_value);
     ir_phi_argument(phi, last_otherwise_block, otherwise_return_value);
 
     expression->result = phi;
 
-    break;
+  } break;
   case NODE_TYPE_BINARY_OPERATOR:
     while (context->parent) { context = context->parent; }
     // FIXME: Second argument is memory leaked! :^(
@@ -636,8 +638,8 @@ Error codegen_expression
     if (err.type) { return err; }
     err = parse_get_type(context, expression_type, expression_type_info);
     if (err.type) { return err; }
-    size_t cast_type_size = cast_type_info->children->value.integer;
-    size_t expression_type_size = expression_type_info->children->value.integer;
+    size_t cast_type_size = (size_t) cast_type_info->children->value.integer;
+    size_t expression_type_size = (size_t) expression_type_info->children->value.integer;
     free(cast_type_info);
     free(expression_type_info);
 
@@ -675,7 +677,7 @@ Error codegen_function
 
   cg_context = codegen_context_create(cg_context);
 
-  IRFunction *f = ir_function(cg_context, name);
+  ir_function(cg_context, name);
 
   // Store base pointer integer offset within locals environment
   // Start at one to make space for pushed RBP in function header.
@@ -685,7 +687,7 @@ Error codegen_function
     Node *param_node = node_allocate();
 
     INSTRUCTION(param, IR_PARAMETER_REFERENCE);
-    param->value.immediate = param_count++;
+    param->value.immediate = (int64_t) param_count++;
     ir_insert(cg_context, param);
 
     param_node->value.ir_instruction = param;
@@ -729,7 +731,7 @@ Error codegen_function
 Error codegen_program(CodegenContext *context, Node *program) {
   Error err = ok;
 
-  IRFunction *main = ir_function(context, "main");
+  ir_function(context, "main");
 
   ParsingContext *next_child_context = context->parse_context->children;
   Node *last_expression = NULL;

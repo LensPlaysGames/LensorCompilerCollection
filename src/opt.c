@@ -31,6 +31,7 @@ static int64_t icdr(IRInstruction *i) {
 }
 
 static bool has_side_effects(IRInstruction *i) {
+  STATIC_ASSERT(IR_COUNT == 27, "Handle all instructions");
   switch (i->type) {
     case IR_IMMEDIATE:
     case IR_LOAD:
@@ -50,15 +51,7 @@ static bool has_side_effects(IRInstruction *i) {
     case IR_PARAMETER_REFERENCE:
       return false;
 
-    case IR_CALL:
-    case IR_RETURN:
-    case IR_BRANCH:
-    case IR_BRANCH_CONDITIONAL:
-    case IR_PHI:
-    case IR_COPY:
-    case IR_LOCAL_STORE:
-    case IR_GLOBAL_STORE:
-    case IR_STORE:
+    default:
       return true;
   }
 }
@@ -67,8 +60,8 @@ static bool opt_fold_constants(CodegenContext *ctx, IRFunction *f) {
   bool changed = false;
   (void) ctx;
 
-  VECTOR_FOREACH_PTR (IRBlock*, b, f->blocks) {
-    VECTOR_FOREACH_PTR (IRInstruction*, i, b->instructions) {
+  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    DLIST_FOREACH (IRInstruction*, i, b->instructions) {
       switch (i->type) {
         case IR_ADD: IR_REDUCE_BINARY(+) break;
         case IR_SUBTRACT: IR_REDUCE_BINARY(-) break;
@@ -103,8 +96,8 @@ static bool opt_dce(CodegenContext* ctx, IRFunction *f) {
   bool changed = false;
   (void) ctx;
 
-  VECTOR_FOREACH_PTR (IRBlock*, b, f->blocks) {
-    VECTOR_FOREACH_PTR (IRInstruction*, i, b->instructions) {
+  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    DLIST_FOREACH (IRInstruction*, i, b->instructions) {
       if (!i->users.size && !has_side_effects(i)) {
         ir_remove(i);
         changed = true;
@@ -122,11 +115,11 @@ typedef struct {
 
 /// See opt_tail_call_elim() for more info.
 static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
-  VECTOR_FOREACH_PTR (IRInstruction*, i, b->instructions) {
+  for (IRInstruction *i = b == tc->call->block ? tc->call->next : b->instructions.first; i; i = i->next) {
     if (i->type == IR_PHI) {
       /// If this is a phi node, then the call or a previous phi
       /// must be an argument of the phi.
-      FOREACH (IRPhiArgument *, arg, i->value.phi_argument) {
+      VECTOR_FOREACH (IRPhiArgument, arg, i->value.phi_arguments) {
         if (arg->value == tc->call) { goto phi; }
         VECTOR_FOREACH_PTR (IRInstruction *, a, tc->phis) {
           if (a == arg->value) { goto phi; }
@@ -163,14 +156,15 @@ static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
 static bool tail_call_possible(IRInstruction *i) {
   tail_call_info tc_info = {0};
   tc_info.call = i;
-
+  bool possible = tail_call_possible_iter(&tc_info, i->block);
   VECTOR_DELETE(tc_info.phis);
+  return possible;
 }
 
 static void opt_tail_call_elim(CodegenContext *ctx, IRFunction *f) {
   (void) ctx;
-  VECTOR_FOREACH_PTR (IRBlock*, b, f->blocks) {
-    VECTOR_FOREACH_PTR (IRInstruction*, i, b->instructions) {
+  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    DLIST_FOREACH (IRInstruction*, i, b->instructions) {
       if (i->type != IR_CALL) { continue; }
 
       /// An instruction is a tail call iff there are no other instruction
@@ -264,7 +258,7 @@ static bool opt_jump_threading(CodegenContext *ctx, IRFunction *f) {
 
     /// Check if we can thread the jump.
     size_t sz = predecessors.size;
-    VECTOR_FOREACH_PTR (IRBlock *, pred, &predecessors) {
+    DLIST_FOREACH (IRBlock *, pred, &predecessors) {
       if (pred->branch->type == IR_BRANCH) {
         pred->branch->value.block = b->branch->value.block;
         VECTOR_REMOVE_ELEMENT_UNORDERED(&predecessors, pred);
@@ -304,8 +298,8 @@ static bool opt_mem2reg(CodegenContext *ctx, IRFunction *f) {
 
   /// Collect all stack variables that are stored into once, and
   /// whose address is never taken.
-  VECTOR_FOREACH_PTR (IRBlock*, b, f->blocks) {
-    VECTOR_FOREACH_PTR (IRInstruction*, i, b->instructions) {
+  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    DLIST_FOREACH (IRInstruction*, i, b->instructions) {
       switch (i->type) {
         /// New variable.
         case IR_STACK_ALLOCATE: {
@@ -392,7 +386,7 @@ static void optimise_function(CodegenContext *ctx, IRFunction *f) {
 }
 
 void codegen_optimise(CodegenContext *ctx) {
-  VECTOR_FOREACH_PTR (IRFunction*, f, ctx->all_functions) {
+  VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
     optimise_function(ctx, f);
   }
 }

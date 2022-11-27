@@ -29,3 +29,20 @@ target_include_directories(
   func
   PUBLIC src/
 )
+
+if (NOT MSVC)
+  target_compile_options(
+    func
+    PRIVATE
+    -Wall -Wextra
+    -Wshadow -Wconversion
+    -Werror=return-type -Werror=implicit-function-declaration
+    -Werror=implicit-int -Werror=pointer-arith
+    -Wno-unused
+    -O0 -g
+  )
+  if (NOT WIN32)
+    target_compile_options(func PRIVATE -fsanitize=address)
+    target_link_options(func PRIVATE -fsanitize=address)
+  endif()
+endif()

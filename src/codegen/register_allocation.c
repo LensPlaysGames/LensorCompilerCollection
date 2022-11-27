@@ -51,20 +51,18 @@ RegisterAllocationInfo *ra_allocate_info
 
 void phi2copy(RegisterAllocationInfo *info) {
   IRBlock *last_block = NULL;
-
-  PREPARE_INSERT();
   FOREACH_INSTRUCTION_N (info->context, f, b, phi) {
     if (phi->type == IR_PHI) {
       ASSERT(phi->block != last_block,
              "Multiple PHI instructions in a single block are not allowed within register allocation!");
       last_block = phi->block;
-      IRPhiArgument *arg = phi->value.phi_argument;
 
-      // Single PHI argument means that we can replace it with a
-      // simple copy.
-      if (arg && !arg->next) {
+      /// Single PHI argument means that we can replace it with a simple copy.
+      if (phi->value.phi_arguments.size == 1) {
         phi->type = IR_COPY;
-        phi->value.reference = arg->value;
+        IRInstruction *value = phi->value.phi_arguments.data[0].value;
+        VECTOR_DELETE(phi->value.phi_arguments);
+        phi->value.reference = value;
         continue;
       }
 
@@ -73,10 +71,9 @@ void phi2copy(RegisterAllocationInfo *info) {
       /// that have to do with control flow.
       ///
       /// TODO: store returns and branches in the instruction list
-      for (; arg; arg = arg->next) {
+      VECTOR_FOREACH (IRPhiArgument, arg, phi->value.phi_arguments) {
         STATIC_ASSERT(IR_COUNT == 27, "Handle all branch types");
-        IRInstruction *branch = VECTOR_BACK(arg->block->instructions);
-
+        IRInstruction *branch = arg->block->instructions.last;
         switch (branch->type) {
           /// If the predecessor returns, then the PHI is never going to be reached
           /// anyway, so we can just ignore this argument.
@@ -85,13 +82,11 @@ void phi2copy(RegisterAllocationInfo *info) {
           /// Direct branches are easy, we just insert the copy before the branch.
           case IR_BRANCH: {
             IRInstruction *copy = ir_copy(info->context, arg->value);
-
             ir_remove_use(arg->value, phi);
             mark_used(arg->value, copy);
             mark_used(copy, phi);
+            insert_instruction_before(copy, branch);
             arg->value = copy;
-
-            INSERT_BEFORE(copy, branch);
           } break;
 
           /// Indirect branches are a bit more complicated. We need to insert an
@@ -123,7 +118,6 @@ void phi2copy(RegisterAllocationInfo *info) {
       }
     }
   }
-  PERFORM_INSERT();
 }
 
 void function_call_arguments(RegisterAllocationInfo *info) {
@@ -321,7 +315,7 @@ bool block_reachable_from_successor(BlockVector *visited, IRBlock *from, IRBlock
 /// Do not call this directly. Use block_reachable() instead.
 bool block_reachable_from_successors(BlockVector *visited, IRBlock *from, IRBlock *block) {
   STATIC_ASSERT(IR_COUNT == 27, "Handle all branch instructions");
-  IRInstruction *branch = VECTOR_BACK(from->instructions);
+  IRInstruction *branch = from->instructions.last;
   switch (branch->type) {
     case IR_RETURN: return false;
     case IR_BRANCH:
@@ -369,7 +363,7 @@ bool has_use_after_def_in_block(BlockVector *visited, IRBlock *B, IRInstruction 
 /// \see values_interfere()
 bool interferes_after_def(BlockVector *visited, IRBlock *B, IRInstruction *v1) {
   STATIC_ASSERT(IR_COUNT == 27, "Handle all branch instructions");
-  IRInstruction *branch = VECTOR_BACK(B->instructions);
+  IRInstruction *branch = B->instructions.last;
   switch (branch->type) {
     case IR_RETURN: return false;
 
@@ -487,6 +481,7 @@ bool values_interfere(IRInstruction *v1, IRInstruction *v2) {
   if (v1 == v2) { return false; }
   if (v1->type == IR_COPY && v1->value.reference == v2) { return false; }
   if (v2->type == IR_COPY && v2->value.reference == v1) { return false; }
+  if (v1->index == 15 && v2->index == 7) asm volatile ("int $3;");
   if (check_values_interfere(v1, v2)) { return true; }
   return check_values_interfere(v2, v1);
 }
@@ -628,8 +623,6 @@ void print_adjacency_matrix(AdjacencyMatrix m) {
 typedef struct AdjacencyList AdjacencyList;
 
 typedef struct AdjacencyListNode {
-  size_t color;
-
   // Degree refers to how many adjacencies this vertex/node has.
   size_t degree;
 
@@ -639,6 +632,8 @@ typedef struct AdjacencyListNode {
 
   // Unique integer index.
   size_t index;
+
+  Register color;
 
   char allocated;
 
@@ -714,7 +709,7 @@ void print_adjacency_array(AdjacencyListNode *array, size_t size) {
   for (size_t i = 0; i < size; ++i, it = array[i]) {
     printf("%%%zu::%zu: ", it.instruction->id, it.instruction->index);
     if (it.color) {
-      printf("(r%zu) ", it.color);
+      printf("(r%u) ", it.color);
     }
     print_adjacency_list(it.adjacencies);
   }
@@ -782,7 +777,7 @@ void coalesce(RegisterAllocationInfo *info, IRInstructions *instructions, Adjace
         VECTOR_CLEAR(phis);
         VECTOR_FOREACH_PTR (IRInstruction*, phi, *instructions) {
           if (phi->type != IR_PHI) { continue; }
-          FOREACH (IRPhiArgument*, arg, phi->value.phi_argument) {
+          VECTOR_FOREACH (IRPhiArgument, arg, phi->value.phi_arguments) {
             if (arg->value == to) {
               /// If a PHI node that uses to is already precoloured with
               /// a different register, then we need to keep the copy.
@@ -826,7 +821,10 @@ void coalesce(RegisterAllocationInfo *info, IRInstructions *instructions, Adjace
     }
 
     /// Collect the remaining instructions.
-    if (removed_instructions.size) { collect_instructions_into(info, instructions, 0); }
+    if (removed_instructions.size) {
+      collect_instructions_into(info, instructions, 0);
+      build_adjacency_matrix(instructions, G);
+    }
     else { break; }
   }
 
@@ -1054,7 +1052,7 @@ void color
 
     for (size_t x = 0; x < k; ++x) {
       if (!(register_interferences & 1 << x)) {
-        r = x + 1;
+        r = (Register)(x + 1);
         break;
       }
     }
@@ -1071,7 +1069,7 @@ void color
     IRInstruction *instruction = node.instruction;
     Register r = node.color;
     if (instruction->type == IR_PHI) {
-      for (IRPhiArgument *phi = instruction->value.phi_argument; phi; phi = phi->next) {
+      VECTOR_FOREACH (IRPhiArgument, phi, instruction->value.phi_arguments) {
         if (needs_register(phi->value)) {
           AdjacencyListNode *phi_node = array + phi->value->index;
           phi_node->color = r;
@@ -1109,14 +1107,6 @@ void ra(RegisterAllocationInfo *info) {
   IR_FEMIT(stdout, info->context);
 
   function_call_arguments(info);
-
-
-
-  ir_set_ids(info->context);
-  IR_FEMIT(stdout, info->context);
-
-  exit(42);
-
   function_return_values(info);
 
   IRInstructions instructions = collect_instructions(info, 0);

@@ -12,10 +12,10 @@
   ASSERT((name), "Could not allocate new IRInstruction.");  \
   (name)->type = (given_type);
 
-#define FOREACH_INSTRUCTION_N(context, function, block, instruction) \
-  VECTOR_FOREACH_PTR (IRFunction*, function, context->all_functions) \
-    VECTOR_FOREACH_PTR (IRBlock*, block, function->blocks) \
-      VECTOR_FOREACH_PTR (IRInstruction*, instruction, block->instructions)
+#define FOREACH_INSTRUCTION_N(context, function, block, instruction)  \
+  VECTOR_FOREACH_PTR (IRFunction *, function, *context->functions)    \
+    DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
+  DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
 
 #define FOREACH_INSTRUCTION(context) FOREACH_INSTRUCTION_N(context, function, block, instruction)
 
@@ -75,8 +75,6 @@ typedef struct IRPhiArgument {
   ///    [j]
   /// For example, if arg->value->block == o, then arg->block == b.
   IRBlock *block;
-  // A linked list of arguments.
-  struct IRPhiArgument *next;
 } IRPhiArgument;
 
 typedef struct IRPair {
@@ -133,7 +131,7 @@ typedef union IRValue {
   IRInstruction *reference;
   int64_t immediate;
   IRCall call;
-  IRPhiArgument *phi_argument;
+  VECTOR(IRPhiArgument) phi_arguments;
   IRBranchConditional conditional_branch;
   IRPair pair;
   IRComparison comparison;
@@ -178,7 +176,7 @@ typedef struct IRInstruction {
 typedef struct IRBlock {
   const char *name;
 
-  VECTOR(IRInstruction *) instructions;
+  DLIST(IRInstruction) instructions;
 
   /// A pointer to the function the block is attached to, or NULL if
   /// detached.
@@ -195,7 +193,7 @@ typedef struct IRBlock {
 typedef struct IRFunction {
   const char *name;
 
-  VECTOR(IRBlock*) blocks;
+  DLIST(IRBlock) blocks;
 
   // Unique ID (among functions)
   size_t id;
@@ -203,7 +201,7 @@ typedef struct IRFunction {
   // Used by certain backends.
   size_t locals_total_size;
 
-  int64_t registers_in_use;
+  size_t registers_in_use;
 } IRFunction;
 
 void ir_set_ids(CodegenContext *context);
@@ -212,11 +210,6 @@ bool ir_is_branch(IRInstruction*);
 
 /// Check whether a block is closed.
 bool ir_is_closed(IRBlock *block);
-
-/// Get the next block after the given block.
-/// This need not be a successor of the block.
-/// This may return NULL.
-IRBlock *ir_next_block(IRBlock *block);
 
 void ir_femit_instruction
 (FILE *file,

@@ -26,15 +26,7 @@ bool ir_is_branch(IRInstruction* i) {
 }
 
 bool ir_is_closed(IRBlock *block) {
-    return block->instructions.size && ir_is_branch(VECTOR_BACK(block->instructions));
-}
-
-IRBlock *ir_next_block(IRBlock *block) {
-  VECTOR_FOREACH_PTR (IRBlock *, b, block->function->blocks) {
-    if (b == block) {
-      return b_ptr == block->function->blocks.data + block->function->blocks.size - 1 ? NULL : b_ptr[1];
-    }
-  }
+    return block->instructions.last && ir_is_branch(block->instructions.last);
 }
 
 void set_pair_and_mark
@@ -51,7 +43,7 @@ void set_pair_and_mark
 }
 
 void ir_insert_into_block(IRBlock *block, IRInstruction *instruction) {
-  IRInstruction *branch = VECTOR_BACK_OR(block->instructions, NULL);
+  IRInstruction *branch = block->instructions.last;
   if (branch && ir_is_branch(branch)) {
     PANIC("Cannot insert into closed block. Use ir_force_insert_into_block() instead if that was intended.");
   }
@@ -64,7 +56,7 @@ void ir_force_insert_into_block
  )
 {
   i->block = block;
-  VECTOR_PUSH(block->instructions, i);
+  DLIST_PUSH_BACK(block->instructions, i);
 }
 
 void ir_insert
@@ -78,41 +70,23 @@ void ir_insert
 
 void insert_instruction_before(IRInstruction *i, IRInstruction *before) {
   ASSERT(i && before);
-/*  IRInstruction **pos;
-  VECTOR_FOREACH (IRInstruction *, ptr, before->block->instructions) {
-    if (*ptr == before) {
-      VECTOR_INSERT(before->block->instructions, ptr, i);
-      i->block = before->block;
-      return;
-    }
-  }*/
-  VECTOR_INSERT_BEFORE(before->block->instructions, before, i);
+  DLIST_INSERT_BEFORE(before->block->instructions, i, before);
   i->block = before->block;
-  UNREACHABLE();
 }
 
 void insert_instruction_after(IRInstruction *i, IRInstruction *after) {
   ASSERT(i && after);
-/*  IRInstruction **pos;
-  VECTOR_FOREACH (IRInstruction *, ptr, after->block->instructions) {
-    if (*ptr == after) {
-      VECTOR_INSERT(after->block->instructions, (ptr + 1), i);
-      i->block = after->block;
-      return;
-    }
-  }*/
-  VECTOR_INSERT_AFTER(after->block->instructions, after, i);
+  DLIST_INSERT_AFTER(after->block->instructions, i, after);
   i->block = after->block;
-  UNREACHABLE();
 }
 
 void ir_remove(IRInstruction* instruction) {
-  VECTOR_REMOVE_ELEMENT(instruction->block->instructions, instruction);
+  DLIST_REMOVE(instruction->block->instructions, instruction);
   free(instruction);
 }
 
 void ir_remove_block(IRBlock *block) {
-  VECTOR_REMOVE_ELEMENT(block->function->blocks, block);
+  DLIST_REMOVE(block->function->blocks, block);
   free(block);
 }
 
@@ -127,8 +101,8 @@ void ir_femit_instruction
 
 # define ID_FORMAT "%%%zu | ", instruction->id
   const size_t id_width = 10;
-  size_t id_length = snprintf(NULL, 0, ID_FORMAT);
-  int64_t difference = id_width - id_length;
+  size_t id_length = (size_t) snprintf(NULL, 0, ID_FORMAT);
+  size_t difference = id_width - id_length;
   while (difference--) {
     fputc(' ', file);
   }
@@ -138,8 +112,8 @@ void ir_femit_instruction
 # define RESULT_FORMAT "r%d | ", instruction->result
   if (instruction->result) {
     const size_t result_width = 6;
-    size_t result_length = snprintf(NULL, 0, RESULT_FORMAT);
-    int64_t result_difference = result_width - result_length;
+    size_t result_length = (size_t) snprintf(NULL, 0, RESULT_FORMAT);
+    size_t result_difference = result_width - result_length;
     while (result_difference--) {
       fputc(' ', file);
     }
@@ -279,19 +253,17 @@ void ir_femit_instruction
             instruction->value.conditional_branch.true_branch->id,
             instruction->value.conditional_branch.false_branch->id);
     break;
-  case IR_PHI:
-    fprintf(file, "phi");
-    IRPhiArgument *arg = instruction->value.phi_argument;
-    if (arg) {
-      fprintf(file, " [bb%zu : %%%zu]",
-              arg->block->id, arg->value->id);
-      arg = arg->next;
+  case IR_PHI: {
+    fprintf(file, "phi ");
+    bool first = true;
+    VECTOR_FOREACH (IRPhiArgument, arg, instruction->value.phi_arguments) {
+      if (first) { first = false; }
+      else { fprintf(file, ", "); }
+      fprintf(file, "[bb%zu : %%%zu]",
+              arg->value->id,
+              arg->block->id);
     }
-    for (; arg; arg = arg->next) {
-      fprintf(file, ", [bb%zu : %%%zu]",
-              arg->block->id, arg->value->id);
-    }
-    break;
+  } break;
   case IR_LOAD:
     fprintf(file, "load %%%zu", instruction->value.reference->id);
     break;
@@ -319,7 +291,7 @@ void ir_femit_block
  )
 {
   fprintf(file, "  bb%zu\n", block->id);
-  VECTOR_FOREACH_PTR (IRInstruction*, instruction, block->instructions) {
+  DLIST_FOREACH (IRInstruction*, instruction, block->instructions) {
     ir_femit_instruction(file, instruction);
   }
 }
@@ -330,7 +302,7 @@ void ir_femit_function
  )
 {
   fprintf(file, "f%zu\n", function->id);
-  VECTOR_FOREACH_PTR (IRBlock*, block, function->blocks) {
+  DLIST_FOREACH (IRBlock*, block, function->blocks) {
     ir_femit_block(file, block);
   }
 }
@@ -340,7 +312,7 @@ void ir_femit
  CodegenContext *context
  )
 {
-  VECTOR_FOREACH_PTR (IRFunction*, function, context->all_functions) {
+  VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
     ir_femit_function(file, function);
   }
   putchar('\n');
@@ -350,11 +322,12 @@ void ir_set_ids(CodegenContext *context) {
   size_t function_id = 0;
   size_t block_id = 0;
   size_t instruction_id = 0;
-  VECTOR_FOREACH_PTR (IRFunction*, function, context->all_functions) {
+
+  VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
     function->id = function_id++;
-    VECTOR_FOREACH_PTR (IRBlock*, block, function->blocks) {
+    DLIST_FOREACH (IRBlock*, block, function->blocks) {
       block->id = block_id++;
-      VECTOR_FOREACH_PTR (IRInstruction*, instruction, block->instructions) {
+      DLIST_FOREACH (IRInstruction*, instruction, block->instructions) {
         instruction->id = instruction_id++;
       }
     }
@@ -395,13 +368,11 @@ void ir_phi_argument
  IRInstruction *argument
  )
 {
-  IRPhiArgument *phi_argument = calloc(1, sizeof(IRPhiArgument));
-  phi_argument->block = phi_predecessor;
-  phi_argument->value = argument;
-
-  phi_argument->next = phi->value.phi_argument;
-  phi->value.phi_argument = phi_argument;
-
+  IRPhiArgument phi_argument = {
+    .block = phi_predecessor,
+    .value = argument
+  };
+  VECTOR_PUSH(phi->value.phi_arguments, phi_argument);
   mark_used(argument, phi);
 }
 
@@ -416,7 +387,7 @@ void ir_block_attach_to_function
  IRBlock *new_block
  )
 {
-  VECTOR_PUSH(function->blocks, new_block);
+  DLIST_PUSH_BACK(function->blocks, new_block);
   new_block->function = function;
 }
 
@@ -444,7 +415,7 @@ IRFunction *ir_function(CodegenContext *context, const char *name) {
   IRBlock *block = ir_block_create();
   context->function = function;
   ir_block_attach(context, block);
-  VECTOR_PUSH(context->all_functions, function);
+  VECTOR_PUSH(*context->functions, function);
   return function;
 }
 
@@ -614,7 +585,7 @@ IRInstruction *ir_branch_into_block
   INSTRUCTION(branch, IR_BRANCH);
   branch->value.block = destination;
   branch->block = block;
-  VECTOR_PUSH(block->instructions, branch);
+  DLIST_PUSH_BACK(block->instructions, branch);
   return branch;
 }
 
@@ -763,9 +734,9 @@ static void ir_replace_use(IRInstruction *usee, IRInstruction *user, IRInstructi
   STATIC_ASSERT(IR_COUNT == 27);
   switch (user->type) {
     case IR_PHI:
-      for (IRPhiArgument *phi = user->value.phi_argument; phi; phi = phi->next) {
-        if (phi->value == usee) {
-          phi->value = replacement;
+      VECTOR_FOREACH (IRPhiArgument, arg, user->value.phi_arguments) {
+        if (arg->value == usee) {
+          arg->value = replacement;
         }
       }
       break;

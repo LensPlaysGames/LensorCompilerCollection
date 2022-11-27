@@ -5,10 +5,10 @@ typedef struct IRInstruction IRInstruction;
 typedef struct IRBlock IRBlock;
 typedef struct IRFunction IRFunction;
 
-typedef int RegisterDescriptor;
+typedef unsigned RegisterDescriptor;
 typedef struct RegisterPool RegisterPool;
 
-typedef int Register;
+typedef unsigned Register;
 typedef struct CodegenContext CodegenContext;
 
 enum CodegenAssemblyDialect {

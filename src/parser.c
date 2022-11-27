@@ -3,6 +3,7 @@
 #include <error.h>
 #include <environment.h>
 #include <file_io.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,16 +16,15 @@ const char *whitespace         = " \t\r\n";
 // TODO: Think harder about delimiters.
 const char *delimiters         = " \t\r\n,{}()[]<>:&@";
 
-/// @return Boolean-like value: 1 for success, 0 for failure.
-int comment_at_beginning(Token token) {
+bool comment_at_beginning(Token token) {
   const char *comment_it = comment_delimiters;
   while (*comment_it) {
     if (*(token.beginning) == *comment_it) {
-      return 1;
+      return true;
     }
     comment_it++;
   }
-  return 0;
+  return false;
 }
 
 // "a +- 4" == "a + -4"
@@ -80,17 +80,17 @@ Error lex_extend(Token *token) {
   return err;
 }
 
-int token_string_equalp(char* string, Token *token) {
+bool token_string_equalp(char* string, Token *token) {
   if (!string || !token) { return 0; }
   char *beg = token->beginning;
   while (*string && token->beginning < token->end) {
     if (*string != *beg) {
-      return 0;
+      return false;
     }
     string++;
     beg++;
   }
-  return 1;
+  return true;
 }
 
 void print_token(Token t) {
@@ -292,7 +292,7 @@ char *node_text(Node *node) {
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "NONE");
     break;
   case NODE_TYPE_INTEGER:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "INT:%lld", node->value.integer);
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "INT:%"PRId64, node->value.integer);
     break;
   case NODE_TYPE_SYMBOL:
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE,
@@ -331,7 +331,7 @@ char *node_text(Node *node) {
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "FUNCTION CALL");
     break;
   case NODE_TYPE_INDEX:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "INDEX:%lld", node->value.integer);
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "INDEX:%"PRId64, node->value.integer);
     break;
   case NODE_TYPE_CAST:
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "TYPECAST");
@@ -561,7 +561,7 @@ Error lex_advance(ParsingState *state) {
   Error err = lex(state->current->end, state->current);
   *state->end = state->current->end;
   if (err.type != ERROR_NONE) { return err; }
-  *state->length = state->current->end - state->current->beginning;
+  *state->length = (size_t) (state->current->end - state->current->beginning);
   return err;
 }
 
@@ -664,19 +664,19 @@ Error parse_get_variable(ParsingContext *context, Node *id, Node *result) {
   expected = lex_expect(expected_string, state); \
   if (expected.err.type) { return expected.err; }
 
-int parse_integer(Token *token, Node *node) {
-  if (!token || !node) { return 0; }
+bool parse_integer(Token *token, Node *node) {
+  if (!token || !node) { return false; }
   char *end = NULL;
   if (token->end - token->beginning == 1 && *(token->beginning) == '0') {
     node->type = NODE_TYPE_INTEGER;
     node->value.integer = 0;
   } else if ((node->value.integer = strtoll(token->beginning, &end, 10)) != 0) {
     if (end != token->end) {
-      return 0;
+      return false;
     }
     node->type = NODE_TYPE_INTEGER;
-  } else { return 0; }
-  return 1;
+  } else { return false; }
+  return true;
 }
 
 /// Set FOUND to 1 if an infix operator is found and parsing should continue, otherwise 0.
@@ -1059,12 +1059,12 @@ Error parse_base_type
 Error parse_type(ParsingContext *context, ParsingState *state, Node *type) {
   Error err = ok;
   ExpectReturnValue expected;
-  char external = 0;
+  bool external = 0;
 
   // Parse type prefix keywords.
 
   // If state is at EXT, then advance lexer and mark external.
-  if ((external = token_string_equalp("ext", state->current))) {
+  if (external = token_string_equalp("ext", state->current), external) {
     err = lex_advance(state);
     if (err.type) { return err; }
     if (*state->length == 0) {
@@ -1446,8 +1446,8 @@ Error parse_expr
             err = lex_advance(&state);
             if (err.type != ERROR_NONE) { return err; }
             if (token_length == 0) { break; }
-            Node *type = node_allocate();
-            err = parse_type(context, &state, type);
+            Node *decl_type = node_allocate();
+            err = parse_type(context, &state, decl_type);
             if (err.type) { return err; }
 
             Node *variable_binding = node_allocate();
@@ -1470,7 +1470,7 @@ Error parse_expr
             Node *symbol_for_env = node_allocate();
             node_copy(symbol, symbol_for_env);
 
-            int status = environment_set(context->variables, symbol_for_env, type);
+            int status = environment_set(context->variables, symbol_for_env, decl_type);
             if (status != 1) {
               printf("Variable: \"%s\", status: %d\n", symbol_for_env->value.symbol, status);
               ERROR_PREP(err, ERROR_GENERIC, "Failed to define variable!");
