@@ -840,7 +840,7 @@ void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
   VECTOR_CLEAR(instruction->users);
 }
 
-static void ir_internal_unmark_usee(IRInstruction *user, IRInstruction **child, void *) {
+static void ir_internal_unmark_usee(IRInstruction *user, IRInstruction **child, void *unused) {
   VECTOR_FOREACH_PTR (IRInstruction *, child_user, (*child)->users) {
     if (child_user == user) {
       VECTOR_REMOVE_ELEMENT_UNORDERED((*child)->users, child_user);
