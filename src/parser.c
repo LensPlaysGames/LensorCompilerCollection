@@ -1115,7 +1115,7 @@ Error parse_type(ParsingContext *context, ParsingState *state, Node *type, Node 
       }
 
       Node *parameter_name = node_symbol_from_buffer(state->current->beginning,
-                                                     state->current->end - state->current->beginning);
+        (size_t)(state->current->end - state->current->beginning));
 
       // First time, write to parameter_names (or parameter_names_last)
       // Then on, write to parameter_names_last->next_child
@@ -1555,9 +1555,9 @@ Error parse_expr
                   Node *param_symbol_for_env = node_allocate();
                   node_copy(param_name, param_symbol_for_env);
 
-                  int status = environment_set(context->variables, param_symbol_for_env, param_type);
-                  if (status != 1) {
-                    printf("Variable: \"%s\", status: %d\n", param_symbol_for_env->value.symbol, status);
+                  int v_status = environment_set(context->variables, param_symbol_for_env, param_type);
+                  if (v_status != 1) {
+                    printf("Variable: \"%s\", status: %d\n", param_symbol_for_env->value.symbol, v_status);
                     ERROR_PREP(err, ERROR_GENERIC, "Failed to define parameter variable!");
                     return err;
                   }
