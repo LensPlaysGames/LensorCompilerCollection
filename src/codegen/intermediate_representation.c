@@ -287,15 +287,19 @@ void ir_femit_instruction
     fprintf(file, "stack.allocate %"PRId64, instruction->value.immediate);
     break;
   /// No-op
-  case IR_UNREACHABLE: break;
+  case IR_UNREACHABLE:
+    fprintf(file, "unreachable");
+    break;
   default:
     TODO("Handle IRType %d\n", instruction->type);
     break;
   }
-  fprintf(file, "\033[60GUsers: ");
+
+  /// Print users
+  /*fprintf(file, "\033[60GUsers: ");
   VECTOR_FOREACH_PTR (IRInstruction*, user, instruction->users) {
     fprintf(file, "%%%zu, ", user->id);
-  }
+  }*/
 
   fputc('\n', file);
 }

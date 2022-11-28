@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <vector.h>
 
+extern bool dump_ir;
+
 char *label_generate();
 
 CodegenContext *codegen_context_create_top_level

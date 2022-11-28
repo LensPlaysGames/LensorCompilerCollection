@@ -16,6 +16,7 @@ void print_usage(char **argv) {
          "   `--formats`       :: List acceptable output formats.\n"
          "   `--callings`      :: List acceptable calling conventions.\n"
          "   `--dialects`      :: List acceptable assembly dialects.\n"
+         "   `--dump-ir`       :: Dump intermediate representation to stdout.\n"
          "   `-O`, `--optimize`:: Optimize the generated code.\n"
          "   `-v`, `--verbose` :: Print out more information.\n");
   printf("Options:\n"
@@ -31,8 +32,11 @@ int output_filepath_index = -1;
 enum CodegenOutputFormat output_format = CG_FMT_DEFAULT;
 enum CodegenCallingConvention output_calling_convention = CG_CALL_CONV_DEFAULT;
 enum CodegenAssemblyDialect output_assembly_dialect = CG_ASM_DIALECT_DEFAULT;
+
+/// TODO: should be bools.
 int verbosity = 0;
 int optimise = 0;
+bool dump_ir = 0;
 
 void print_acceptable_formats() {
   printf("Acceptable formats include:\n"
@@ -74,6 +78,8 @@ int handle_command_line_arguments(int argc, char **argv) {
     } else if (strcmp(argument, "--dialects") == 0) {
       print_acceptable_asm_dialects();
       exit(0);
+    } else if (strcmp(argument, "--dump-ir") == 0) {
+      dump_ir = 1;
     } else if (strcmp(argument, "-O") == 0
                || strcmp(argument, "--optimise") == 0) {
       optimise = 1;
