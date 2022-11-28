@@ -159,6 +159,7 @@ void fixup_precoloured(RegisterAllocationInfo *info) {
       IRInstruction *copy = ir_copy_unused(info->context, instruction);
       insert_instruction_after(copy, instruction);
       ir_replace_uses(instruction, copy);
+      mark_used(instruction, copy);
     }
   }
 }
@@ -606,6 +607,8 @@ void build_adjacency_graph(RegisterAllocationInfo *info, IRInstructions *instruc
   VECTOR_FOREACH_PTR (IRInstruction *, A, *instructions) {
     size_t regmask = 0;
     VECTOR_FOREACH_PTR (IRInstruction *, B, *instructions) {
+      if (A == B) { break; } /// (!)
+      if (!adjm(G->matrix, A->index, B->index)) { continue; }
       regmask |= info->instruction_register_interference(B);
       if (B->result) regmask |= 1 << (B->result - 1);
     }

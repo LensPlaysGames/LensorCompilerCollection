@@ -383,7 +383,22 @@ static bool opt_mem2reg(CodegenContext *ctx, IRFunction *f) {
 }
 
 static void optimise_function(CodegenContext *ctx, IRFunction *f) {
-  /// Sanity check.
+/*
+  ir_set_ids(ctx);
+  ir_femit_function(stdout, f);
+
+  opt_fold_constants(ctx, f);
+
+  ir_set_ids(ctx);
+  ir_femit_function(stdout, f);
+  opt_dce(ctx, f);
+
+  ir_set_ids(ctx);
+  ir_femit_function(stdout, f);
+
+  _Exit(42);
+*/
+
 
   while (opt_fold_constants(ctx, f) ||
          opt_dce(ctx, f) ||

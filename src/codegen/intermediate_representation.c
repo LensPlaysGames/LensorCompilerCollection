@@ -288,6 +288,11 @@ void ir_femit_instruction
     TODO("Handle IRType %d\n", instruction->type);
     break;
   }
+  fprintf(file, "\033[60GUsers: ");
+  VECTOR_FOREACH_PTR (IRInstruction*, user, instruction->users) {
+    fprintf(file, "%%%zu, ", user->id);
+  }
+
   fputc('\n', file);
 }
 
@@ -608,6 +613,7 @@ IRInstruction *ir_return(CodegenContext *context, IRInstruction* return_value) {
   branch->block = context->block;
   branch->value.reference = return_value;
   INSERT(branch);
+  mark_used(return_value, branch);
   return branch;
 }
 
