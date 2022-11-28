@@ -427,8 +427,13 @@ Error codegen_expression
     // This assumes that the last instruction in a block returns a
     // value; if it doesn't, we will simply return zero. This should
     // probably be ensured in the type checker in the future.
-    IRInstruction *then_return_value = last_then_block->instructions.last;
-    IRInstruction *otherwise_return_value = last_otherwise_block->instructions.last;
+    // TODO: This should actually be the last instruction *that actually yields a value*.
+    IRInstruction *then_return_value = last_then_block->instructions.last->prev
+      ? last_then_block->instructions.last->prev
+      : ir_immediate(cg_context, 0);
+    IRInstruction *otherwise_return_value = last_otherwise_block->instructions.last->prev
+      ? last_otherwise_block->instructions.last->prev
+      : ir_immediate(cg_context, 0);
 
     // Attach join_block to function and set it as the active context
     // block.

@@ -166,8 +166,7 @@ typedef struct IRInstruction {
 
   Register result;
 
-  // List of users---instructions that use this instruction should go in
-  // this list.
+  /// List of instructions using this instruction.
   VECTOR(IRInstruction*) users;
 } IRInstruction;
 
@@ -332,6 +331,10 @@ IRInstruction *ir_return
 (CodegenContext *context,
  IRInstruction *return_value);
 
+IRInstruction *ir_copy_unused
+(CodegenContext *context,
+ IRInstruction *source);
+
 IRInstruction *ir_copy
 (CodegenContext *context,
  IRInstruction *source);
@@ -381,7 +384,11 @@ IRInstruction *ir_stack_allocate
 (CodegenContext *context,
  int64_t size);
 
+/// Replace all uses of instruction with replacement.
 void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement);
+
+/// Remove this instruction from the users lists of its children.
+void ir_unmark_usees(IRInstruction *instruction);
 
 /// Remove an instruction from the AST and free it.
 /// Used by the optimiser.

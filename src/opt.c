@@ -97,10 +97,14 @@ static bool opt_dce(CodegenContext* ctx, IRFunction *f) {
   (void) ctx;
 
   DLIST_FOREACH (IRBlock*, b, f->blocks) {
-    DLIST_FOREACH (IRInstruction*, i, b->instructions) {
+    for (IRInstruction *i = b->instructions.first; i;) {
       if (!i->users.size && !has_side_effects(i)) {
+        IRInstruction *next = i->next;
         ir_remove(i);
         changed = true;
+        i = next;
+      } else {
+        i = i->next;
       }
     }
   }
@@ -366,6 +370,8 @@ static bool opt_mem2reg(CodegenContext *ctx, IRFunction *f) {
     VECTOR_DELETE(a->loads);
 
     /// Remove the store.
+    ASSERT(a->store->users.size <= 1);
+    VECTOR_CLEAR(a->store->users);
     ir_remove(a->store);
 
     /// Remove the alloca.

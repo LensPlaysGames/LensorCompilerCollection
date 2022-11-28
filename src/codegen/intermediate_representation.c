@@ -6,6 +6,9 @@
 #include <inttypes.h>
 
 void mark_used(IRInstruction *usee, IRInstruction *user) {
+  VECTOR_FOREACH_PTR (IRInstruction *, i_user, usee->users) {
+    ASSERT(i_user != user, "Instruction already marked as user.");
+  }
   VECTOR_PUSH(usee->users, user);
 }
 
@@ -81,7 +84,10 @@ void insert_instruction_after(IRInstruction *i, IRInstruction *after) {
 }
 
 void ir_remove(IRInstruction* instruction) {
+  ASSERT(!instruction->users.size, "Cannot remove used instruction.");
   DLIST_REMOVE(instruction->block->instructions, instruction);
+  VECTOR_DELETE(instruction->users);
+  ir_unmark_usees(instruction);
   free(instruction);
 }
 
@@ -260,8 +266,8 @@ void ir_femit_instruction
       if (first) { first = false; }
       else { fprintf(file, ", "); }
       fprintf(file, "[bb%zu : %%%zu]",
-              arg->value->id,
-              arg->block->id);
+              arg->block->id,
+              arg->value->id);
     }
   } break;
   case IR_LOAD:
@@ -606,13 +612,23 @@ IRInstruction *ir_return(CodegenContext *context, IRInstruction* return_value) {
 }
 
 /// NOTE: Does not self insert!
-IRInstruction *ir_copy
+IRInstruction *ir_copy_unused
 (CodegenContext *context,
  IRInstruction *source
  )
 {
   INSTRUCTION(copy, IR_COPY);
   copy->value.reference = source;
+  return copy;
+}
+
+/// NOTE: Does not self insert!
+IRInstruction *ir_copy
+(CodegenContext *context,
+ IRInstruction *source
+ )
+{
+  IRInstruction *copy = ir_copy_unused(context, source);
   mark_used(source, copy);
   return copy;
 }
@@ -725,33 +741,44 @@ IRInstruction *ir_stack_allocate
   TODO();
 }
 
-/// NEVER CALL THIS DIRECTLY! Use ir_replace_uses() or fix the uses manually.
-static void ir_replace_use(IRInstruction *usee, IRInstruction *user, IRInstruction *replacement) {
-  if (user == replacement) {
+typedef struct {
+  IRInstruction *usee;
+  IRInstruction *replacement;
+} ir_internal_replace_use_t;
+static void ir_internal_replace_use(IRInstruction *user, IRInstruction **child, void *data) {
+  ir_internal_replace_use_t *replace = data;
+
+  if (user == replace->replacement) {
     return;
   }
 
+  if (*child == replace->usee) {
+    *child = replace->replacement;
+  }
+}
+
+/// Iterate over all children of an instruction.
+static void ir_for_each_child(
+  IRInstruction *user,
+  void callback(IRInstruction *user, IRInstruction **child, void *data),
+  void *data
+) {
   STATIC_ASSERT(IR_COUNT == 27);
   switch (user->type) {
     case IR_PHI:
       VECTOR_FOREACH (IRPhiArgument, arg, user->value.phi_arguments) {
-        if (arg->value == usee) {
-          arg->value = replacement;
-        }
+        callback(user, &arg->value, data);
       }
       break;
     case IR_LOAD:
     case IR_LOCAL_ADDRESS:
     case IR_LOCAL_LOAD:
     case IR_COPY:
-      if (user->value.reference == usee) {
-        user->value.reference = replacement;
-      }
+    case IR_RETURN:
+      callback(user, &user->value.reference, data);
       break;
     case IR_GLOBAL_STORE:
-      if (user->value.global_assignment.new_value == usee) {
-        user->value.global_assignment.new_value = replacement;
-      }
+      callback(user, &user->value.global_assignment.new_value, data);
       break;
       //case IR_STORE:
     case IR_LOCAL_STORE:
@@ -763,46 +790,34 @@ static void ir_replace_use(IRInstruction *usee, IRInstruction *user, IRInstructi
     case IR_SHIFT_LEFT:
     case IR_SHIFT_RIGHT_ARITHMETIC:
     case IR_SHIFT_RIGHT_LOGICAL:
-      if (user->value.pair.car == usee) {
-        user->value.pair.car = replacement;
-      }
-      if (user->value.pair.cdr == usee) {
-        user->value.pair.cdr = replacement;
-      }
+      callback(user, &user->value.pair.car, data);
+      callback(user, &user->value.pair.cdr, data);
       break;
     case IR_CALL:
       if (user->value.call.type == IR_CALLTYPE_INDIRECT) {
-        if (user->value.call.value.callee == usee) {
-          user->value.call.value.callee = replacement;
-        }
+        callback(user, &user->value.call.value.callee, data);
       }
 
       for (IRCallArgument *arg = user->value.call.arguments; arg; arg = arg->next) {
-        if (arg->value == usee) { arg->value = replacement; }
+        callback(user, &arg->value, data);
       }
       break;
     case IR_BRANCH_CONDITIONAL:
-      if (user->value.conditional_branch.condition == usee) {
-        user->value.conditional_branch.condition = replacement;
-      }
+      callback(user, &user->value.conditional_branch.condition, data);
       break;
     case IR_COMPARISON:
-      if (user->value.comparison.pair.car == usee) {
-        user->value.comparison.pair.car = replacement;
-      }
-      if (user->value.comparison.pair.cdr == usee) {
-        user->value.comparison.pair.cdr = replacement;
-      }
+      callback(user, &user->value.comparison.pair.car, data);
+      callback(user, &user->value.comparison.pair.cdr, data);
       break;
     case IR_PARAMETER_REFERENCE:
     case IR_GLOBAL_ADDRESS:
     case IR_GLOBAL_LOAD:
     case IR_IMMEDIATE:
     case IR_BRANCH:
-    case IR_RETURN:
+    case IR_STACK_ALLOCATE:
       break;
     default:
-      TODO("Handle IR instruction type to be able to replace uses.");
+      TODO("Handle IR instruction type %d", user->type);
       break;
   }
 }
@@ -810,11 +825,25 @@ static void ir_replace_use(IRInstruction *usee, IRInstruction *user, IRInstructi
 void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
   if (instruction == replacement) { return; }
   VECTOR_FOREACH_PTR (IRInstruction *, user, instruction->users) {
-    ir_replace_use(instruction, user, replacement);
+    ir_internal_replace_use_t replace = { instruction, replacement };
+    ir_for_each_child(user, ir_internal_replace_use, &replace);
   }
 
   VECTOR_APPEND_ALL(replacement->users, instruction->users);
   VECTOR_CLEAR(instruction->users);
+}
+
+static void ir_internal_unmark_usee(IRInstruction *user, IRInstruction **child, void *) {
+  VECTOR_FOREACH_PTR (IRInstruction *, child_user, (*child)->users) {
+    if (child_user == user) {
+      VECTOR_REMOVE_ELEMENT_UNORDERED((*child)->users, child_user);
+      break;
+    }
+  }
+}
+
+void ir_unmark_usees(IRInstruction *instruction) {
+  ir_for_each_child(instruction, ir_internal_unmark_usee, NULL);
 }
 
 #undef INSERT

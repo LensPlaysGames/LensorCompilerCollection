@@ -928,10 +928,10 @@ RegisterDescriptor codegen_comparison_x86_64
   ASSERT(type < COMPARE_COUNT, "Invalid comparison type");
 
   // Zero out result register.
-  femit_x86_64(cg_context, I_XOR, REGISTER_TO_REGISTER, result, result);
 
   // Perform the comparison.
   femit_x86_64(cg_context, I_CMP, REGISTER_TO_REGISTER, rhs, lhs);
+  femit_x86_64(cg_context, I_MOV, IMMEDIATE_TO_REGISTER, (int64_t)0, result);
   femit_x86_64(cg_context, I_SETCC, type, result);
 
   return result;
@@ -1350,9 +1350,9 @@ void calculate_stack_offsets(CodegenContext *context) {
   }
 }
 
-int64_t x86_64_instruction_register_interference(IRInstruction *instruction) {
+size_t x86_64_instruction_register_interference(IRInstruction *instruction) {
   ASSERT(instruction, "Can not get register interference of NULL instruction.");
-  int64_t mask = 0;
+  size_t mask = 0;
   switch(instruction->type) {
   case IR_SHIFT_LEFT:
   case IR_SHIFT_RIGHT_ARITHMETIC:

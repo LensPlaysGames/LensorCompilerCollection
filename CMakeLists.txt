@@ -41,7 +41,7 @@ if (NOT MSVC)
     -Wno-unused
     -O0 -g
   )
-  if (NOT WIN32)
+  if (DEFINED DEBUG AND NOT WIN32)
     target_compile_options(func PRIVATE -fsanitize=address)
     target_link_options(func PRIVATE -fsanitize=address)
   endif()
