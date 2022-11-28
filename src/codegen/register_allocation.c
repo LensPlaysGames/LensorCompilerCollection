@@ -7,7 +7,7 @@
 #include <codegen/intermediate_representation.h>
 #include <vector.h>
 
-#define DEBUG_RA
+//#define DEBUG_RA
 
 #ifdef DEBUG_RA
 #define IR_FEMIT(file, context) ir_femit(file, context)
@@ -188,6 +188,7 @@ bool needs_register(IRInstruction *instruction) {
   case IR_COMPARISON:
   case IR_CALL:
   case IR_PARAMETER_REFERENCE:
+  case IR_REGISTER:
     return true;
   default:
     return false;
