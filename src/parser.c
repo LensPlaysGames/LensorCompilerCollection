@@ -1494,7 +1494,7 @@ Error parse_expr
               return err;
             }
 
-            if (strcmp(type->value.symbol, "function") == 0) {
+            if (strcmp(decl_type->value.symbol, "function") == 0) {
               EXPECT(expected, "{", &state);
               if (expected.found) {
 
@@ -1525,7 +1525,7 @@ Error parse_expr
                 // child) as the first child of the lambda
                 // (return type).
                 Node *lambda_return_type = node_allocate();
-                node_copy(type->children, lambda_return_type);
+                node_copy(decl_type->children, lambda_return_type);
                 node_add_child(lambda, lambda_return_type);
 
                 Node *parameters = node_allocate();
@@ -1539,7 +1539,7 @@ Error parse_expr
                 // global and use that copy.
 
                 Node *param_name = param_names;
-                Node *param_type = type->children->next_child;
+                Node *param_type = decl_type->children->next_child;
 
                 while (param_type) {
                   Node *new_param = node_allocate();
