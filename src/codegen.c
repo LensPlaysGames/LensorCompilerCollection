@@ -198,7 +198,6 @@ Error codegen_expression
   char *result = NULL;
   Node *tmpnode = node_allocate();
   Node *iterator = NULL;
-  FILE *code = cg_context->code;
 
   ParsingContext *original_context = context;
 
@@ -678,7 +677,6 @@ Error codegen_function
  )
 {
   Error err = ok;
-  FILE *code = cg_context->code;
 
   cg_context = codegen_context_create(cg_context);
 

@@ -38,11 +38,19 @@ if (NOT MSVC)
     -Wshadow -Wconversion
     -Werror=return-type -Werror=implicit-function-declaration
     -Werror=implicit-int -Werror=pointer-arith
-    -Wno-unused
-    -O0 -g
+    -Wno-unused-parameter -Wno-unused-function
   )
+
+  if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(func PRIVATE -O0 -g)
+  else()
+    target_compile_options(func PRIVATE -O3)
+  endif()
+
   if (DEFINED DEBUG AND NOT WIN32)
     target_compile_options(func PRIVATE -fsanitize=address)
     target_link_options(func PRIVATE -fsanitize=address)
   endif()
+else()
+  target_compile_options(func PRIVATE /W4)
 endif()
