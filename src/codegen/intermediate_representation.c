@@ -323,6 +323,7 @@ void ir_femit
  CodegenContext *context
  )
 {
+  fprintf(file, "=======================================================================================\n\n");
   VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
     ir_femit_function(file, function);
   }

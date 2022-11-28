@@ -458,11 +458,7 @@ bool check_values_interfere(RegisterAllocationInfo *info, IRInstruction *v1, IRI
 ///      2. Return false.
 ///
 ///   ## interferes-at-def (B, v1, v2)
-///      1. For each use U of v1 in B,
-///         1a. if U->idx > v2->idx, return true.
-///         1b. if U->idx == v2->idx, and U is not the last use of v1, return true.
-///         1c. if U is the last use of v1, and info->last-use-interference (U, v2)
-///             returns true, return true.
+///      1. For each use U of v1 in B, if U->idx > v2->idx, return true.
 ///      2. Let visited be a set of blocks containing B.
 ///      3. Return interferes-after-def (visited, B, v1)
 ///
