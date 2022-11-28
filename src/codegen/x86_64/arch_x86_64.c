@@ -73,6 +73,7 @@ char is_callee_saved(Register r) {
   return !is_caller_saved(r);
 }
 
+const char *unreferenced_block_name = "unreferenced";
 
 /// Types of conditional jump instructions (Jcc).
 /// Do NOT reorder these.
@@ -995,10 +996,12 @@ void codegen_set_return_value_x86_64(CodegenContext *cg_context, RegisterDescrip
 }
 
 void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
+  STATIC_ASSERT(IR_COUNT == 28);
   switch (instruction->type) {
   case IR_PHI:
   case IR_STACK_ALLOCATE:
   case IR_REGISTER:
+  case IR_UNREACHABLE:
     break;
   case IR_IMMEDIATE:
     femit_x86_64(context, I_MOV, IMMEDIATE_TO_REGISTER,
@@ -1217,10 +1220,13 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
 }
 
 void emit_block(CodegenContext *context, IRBlock *block) {
-  // Generate block label.
-  fprintf(context->code,
-          "%s:\n",
-          block->name);
+  /// Emit block label if it is used.
+  if (block->name != unreferenced_block_name) {
+    fprintf(context->code,
+            "%s:\n",
+            block->name);
+  }
+
   DLIST_FOREACH (IRInstruction*, instruction, block->instructions) {
     emit_instruction(context, instruction);
   }
@@ -1437,6 +1443,44 @@ void codegen_emit_x86_64(CodegenContext *context) {
   // Assign block labels.
   VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
     DLIST_FOREACH (IRBlock *, block, function->blocks) {
+      if (optimise) {
+        /// Determine whether this block is ever referenced anywhere.
+        bool referenced = false;
+        for (IRBlock *b = (function->blocks).first; b; b = b->next) {
+          for (IRInstruction *i = (b->instructions).first; i; i = i->next) {
+            switch (i->type) {
+              case IR_UNREACHABLE: goto next_block;
+              case IR_BRANCH:
+                /// Direct branches to the next block are no-ops.
+                if (i->value.block == block) {
+                  if (i->value.block == block->next) goto next_block;
+                  referenced = true;
+                  goto done;
+                }
+                break;
+              case IR_BRANCH_CONDITIONAL:
+                if (i->value.conditional_branch.true_branch == block) {
+                  if (i->value.conditional_branch.true_branch == i->block->next) continue;
+                  referenced = true;
+                  goto done;
+                }
+                if (i->value.conditional_branch.false_branch == block) {
+                  referenced = true;
+                  goto done;
+                }
+                break;
+            }
+          }
+        next_block:;
+        }
+
+      done:
+        if (!referenced) {
+          block->name = unreferenced_block_name;
+          continue;
+        }
+      }
+
       // If block doesn't have a name, give it one!
       if (!block->name) {
         // TODO: Heap allocate or something (UGHGHGUOEHHGEH).

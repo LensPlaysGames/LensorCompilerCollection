@@ -31,7 +31,7 @@ static int64_t icdr(IRInstruction *i) {
 }
 
 static bool has_side_effects(IRInstruction *i) {
-  STATIC_ASSERT(IR_COUNT == 27, "Handle all instructions");
+  STATIC_ASSERT(IR_COUNT == 28, "Handle all instructions");
   switch (i->type) {
     case IR_IMMEDIATE:
     case IR_LOAD:
@@ -177,6 +177,7 @@ static void opt_tail_call_elim(CodegenContext *ctx, IRFunction *f) {
       if (tail_call_possible(i)) {
         /// The actual tail call optimisation takes place in the code generator.
         i->value.call.tail_call = true;
+        i->block->instructions.last->type = IR_UNREACHABLE;
 
         /// We can’t have more than two tail calls in a single block.
         goto next_block;

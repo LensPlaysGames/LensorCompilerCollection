@@ -17,11 +17,12 @@ void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
 }
 
 bool ir_is_branch(IRInstruction* i) {
-  STATIC_ASSERT(IR_COUNT == 27, "Handle all branch types.");
+  STATIC_ASSERT(IR_COUNT == 28, "Handle all branch types.");
   switch (i->type) {
     case IR_BRANCH:
     case IR_BRANCH_CONDITIONAL:
     case IR_RETURN:
+    case IR_UNREACHABLE:
       return true;
     default:
       return false;
@@ -129,6 +130,7 @@ void ir_femit_instruction
   }
 # undef RESULT_FORMAT
 
+  STATIC_ASSERT(IR_COUNT == 28);
   switch (instruction->type) {
   case IR_IMMEDIATE:
     fprintf(file, "%"PRId64, instruction->value.immediate);
@@ -284,6 +286,8 @@ void ir_femit_instruction
   case IR_STACK_ALLOCATE:
     fprintf(file, "stack.allocate %"PRId64, instruction->value.immediate);
     break;
+  /// No-op
+  case IR_UNREACHABLE: break;
   default:
     TODO("Handle IRType %d\n", instruction->type);
     break;
@@ -770,7 +774,7 @@ static void ir_for_each_child(
   void callback(IRInstruction *user, IRInstruction **child, void *data),
   void *data
 ) {
-  STATIC_ASSERT(IR_COUNT == 27);
+  STATIC_ASSERT(IR_COUNT == 28);
   switch (user->type) {
     case IR_PHI:
       VECTOR_FOREACH (IRPhiArgument, arg, user->value.phi_arguments) {
@@ -822,6 +826,7 @@ static void ir_for_each_child(
     case IR_IMMEDIATE:
     case IR_BRANCH:
     case IR_STACK_ALLOCATE:
+    case IR_UNREACHABLE:
       break;
     default:
       TODO("Handle IR instruction type %d", user->type);

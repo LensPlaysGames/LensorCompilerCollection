@@ -17,11 +17,12 @@
     DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
       DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
 
-#define FOREACH_INSTRUCTION_IN_FUNCTION(function) \
+#define FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block) \
   DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
     DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
 
 #define FOREACH_INSTRUCTION(context) FOREACH_INSTRUCTION_N(context, function, block, instruction)
+#define FOREACH_INSTRUCTION_IN_FUNCTION(function) FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block)
 
 typedef enum IRType {
   IR_IMMEDIATE,
@@ -31,6 +32,7 @@ typedef enum IRType {
   IR_RETURN,
   IR_BRANCH,
   IR_BRANCH_CONDITIONAL,
+  IR_UNREACHABLE,
 
   IR_PHI,
   IR_COPY,

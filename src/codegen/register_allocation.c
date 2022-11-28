@@ -71,11 +71,13 @@ void phi2copy(RegisterAllocationInfo *info) {
       /// Where we insert it depends on some complicated factors
       /// that have to do with control flow.
       VECTOR_FOREACH (IRPhiArgument, arg, phi->value.phi_arguments) {
-        STATIC_ASSERT(IR_COUNT == 27, "Handle all branch types");
+        STATIC_ASSERT(IR_COUNT == 28, "Handle all branch types");
         IRInstruction *branch = arg->block->instructions.last;
         switch (branch->type) {
-          /// If the predecessor returns, then the PHI is never going to be reached
-          /// anyway, so we can just ignore this argument.
+          /// If the predecessor returns or is unreachable, then the PHI
+          /// is never going to be reached anyway, so we can just ignore
+          /// this argument.
+          case IR_UNREACHABLE:
           case IR_RETURN: continue;
 
           /// Direct branches are easy, we just insert the copy before the branch.
@@ -317,9 +319,10 @@ bool block_reachable_from_successor(BlockVector *visited, IRBlock *from, IRBlock
 /// Check if a block is reachable from any of the successors of another block.
 /// Do not call this directly. Use block_reachable() instead.
 bool block_reachable_from_successors(BlockVector *visited, IRBlock *from, IRBlock *block) {
-  STATIC_ASSERT(IR_COUNT == 27, "Handle all branch instructions");
+  STATIC_ASSERT(IR_COUNT == 28, "Handle all branch instructions");
   IRInstruction *branch = from->instructions.last;
   switch (branch->type) {
+    case IR_UNREACHABLE:
     case IR_RETURN: return false;
     case IR_BRANCH:
       if (block_visited(visited, branch->value.block)) { return false; }
@@ -365,9 +368,10 @@ bool has_use_after_def_in_block(BlockVector *visited, IRBlock *B, IRInstruction 
 /// Check if there is a use of v1 in any of the successors of B.
 /// \see values_interfere()
 bool interferes_after_def(BlockVector *visited, IRBlock *B, IRInstruction *v1) {
-  STATIC_ASSERT(IR_COUNT == 27, "Handle all branch instructions");
+  STATIC_ASSERT(IR_COUNT == 28, "Handle all branch instructions");
   IRInstruction *branch = B->instructions.last;
   switch (branch->type) {
+    case IR_UNREACHABLE:
     case IR_RETURN: return false;
 
     case IR_BRANCH:
