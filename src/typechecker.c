@@ -306,7 +306,9 @@ Error typecheck_expression
         err = parse_get_variable(*context_to_enter, parameter->children, parameter_type);
         if (err.type) { return err; }
 
-        node_add_child(result_type, parameter_type);
+        Node *param_type_copy = node_allocate();
+        node_copy(parameter_type, param_type_copy);
+        node_add_child(result_type, param_type_copy);
 
         parameter = parameter->next_child;
       } while (parameter);
@@ -405,11 +407,6 @@ Error typecheck_expression
       iterator = expression->children->next_child->children;
       Node *expected_parameter = value->children->next_child;
 
-      //printf("Iterator:\n");
-      //print_node(iterator,2);
-      //printf("Expected parameter:\n");
-      //print_node(expected_parameter,2);
-
       while (iterator && expected_parameter) {
         // Get return type of given parameter.
         err = typecheck_expression(context, context_to_enter, iterator, type);
@@ -430,8 +427,12 @@ Error typecheck_expression
       }
       if (expected_parameter != NULL) {
         printf("Function:%s\n", expression->children->value.symbol);
-        printf("Expected argument:\n");
-        print_node(expected_parameter, 2);
+        printf("Expected argument(s):\n");
+        while (expected_parameter) {
+          print_node(expected_parameter, 2);
+          expected_parameter = expected_parameter->next_child;
+        }
+
         ERROR_PREP(err, ERROR_ARGUMENTS, "Not enough arguments passed to function!");
         break;
       }
