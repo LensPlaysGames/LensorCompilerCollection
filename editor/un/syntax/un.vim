@@ -10,7 +10,10 @@ syntax keyword unPrimitiveTypes
 
 syntax keyword unKeywords
   \ if
+  \ else
   \ ext
+
+syntax match unOperators "?\|+\|-\|\*\|;\|:\|,\|<\|>\|&\||\|!\|\~\|%\|=\|\.\|/\(/\|*\)\@!"
 
 syntax match unNumber "\v<\d+>"
 
@@ -20,5 +23,6 @@ highlight default link unKeywords       Keyword
 highlight default link unNumber         Number
 highlight default link unCommentLine1   Comment
 highlight default link unCommentLine2   Comment
+highlight default link unOperators      Operator
 
 let b:current_syntax = 'un'
