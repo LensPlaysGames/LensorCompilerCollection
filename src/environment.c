@@ -18,8 +18,7 @@ void environment_print(Environment env, long long indent) {
     while (value_iterator) {
       putchar(' ');
       indent_it = indent + 2;
-      while (indent_it-- > 0) { putchar(' '); }
-      printf("%s\n", node_text(value_iterator));
+      print_node(value_iterator,indent_it);
       value_iterator = value_iterator->next_child;
     }
     binding_it = binding_it->next;

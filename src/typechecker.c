@@ -407,11 +407,6 @@ Error typecheck_expression
       iterator = expression->children->next_child->children;
       Node *expected_parameter = value->children->next_child;
 
-      //printf("Iterator:\n");
-      //print_node(iterator,2);
-      //printf("Expected parameter:\n");
-      //print_node(expected_parameter,2);
-
       while (iterator && expected_parameter) {
         // Get return type of given parameter.
         err = typecheck_expression(context, context_to_enter, iterator, type);

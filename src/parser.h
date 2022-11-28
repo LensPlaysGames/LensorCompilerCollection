@@ -199,7 +199,7 @@ Error define_binary_operator
  int precedence,
  char *return_type, char *lhs_type, char *rhs_type);
 
-Error parse_type (ParsingContext *context, ParsingState *state, Node *type);
+Error parse_type(ParsingContext *context, ParsingState *state, Node *type, Node *parameter_names);
 
 /** Get the value of a type symbol/ID in types environment.
  *  Return an error if type is not a valid symbol/ID found in context.

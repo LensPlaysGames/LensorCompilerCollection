@@ -6,7 +6,7 @@
 #include <string.h>
 #include <codegen/intermediate_representation.h>
 
-#define DEBUG_RA
+//#define DEBUG_RA
 
 #ifdef DEBUG_RA
 #define IR_FEMIT(file, context) ir_femit(file, context)

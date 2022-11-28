@@ -1,6 +1,6 @@
-sixty_nine : integer() = integer() { 69 }
+sixty_nine : integer() { 69 }
 
-foo : integer(int : integer()) = integer(int : integer()) {
+foo : integer(int : integer()) {
   int()
 }
 

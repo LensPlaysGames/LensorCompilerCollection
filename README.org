@@ -67,7 +67,7 @@ the bottom of the file.
 
 Let's take a look at a basic program:
 #+begin_example un
-fact : integer (n : integer) = integer (n : integer) {
+fact : integer (n : integer) {
   if n < 2 {
     1
   } else {
