@@ -15,7 +15,11 @@
 #define FOREACH_INSTRUCTION_N(context, function, block, instruction)  \
   VECTOR_FOREACH_PTR (IRFunction *, function, *context->functions)    \
     DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
-  DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
+      DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
+
+#define FOREACH_INSTRUCTION_IN_FUNCTION(function) \
+  DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
+    DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
 
 #define FOREACH_INSTRUCTION(context) FOREACH_INSTRUCTION_N(context, function, block, instruction)
 
