@@ -1099,21 +1099,31 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     if (optimise && instruction->block) instruction->block->done = true;
     break;
   case IR_BRANCH:
+    /// Only emit a jump if the target isn’t the next block.
     if (!optimise || (instruction->block && instruction->value.block != instruction->block->next && !instruction->block->done)) {
       femit_x86_64(context, I_JMP, NAME, instruction->value.block->name);
     }
     if (optimise && instruction->block) instruction->block->done = true;
     break;
-  case IR_BRANCH_CONDITIONAL:
+  case IR_BRANCH_CONDITIONAL: {
+    IRBranchConditional *branch = &instruction->value.conditional_branch;
     femit_x86_64(context, I_TEST, REGISTER_TO_REGISTER,
-                 instruction->value.conditional_branch.condition->result,
-                 instruction->value.conditional_branch.condition->result);
-    femit_x86_64(context, I_JCC, JUMP_TYPE_Z, instruction->value.conditional_branch.false_branch->name);
-    if (!optimise || (instruction->block && instruction->value.conditional_branch.true_branch != instruction->block->next && !instruction->block->done)) {
-      femit_x86_64(context, I_JMP, NAME, instruction->value.conditional_branch.true_branch->name);
+        branch->condition->result,
+        branch->condition->result);
+
+    /// If either target is the next block, arrange the jumps in such a way
+    /// that we can save one and simply fallthrough to the next block.
+    if (optimise && branch->true_branch == instruction->block->next) {
+      femit_x86_64(context, I_JCC, JUMP_TYPE_Z, branch->false_branch->name);
+    } else if (optimise && branch->false_branch == instruction->block->next) {
+      femit_x86_64(context, I_JCC, JUMP_TYPE_NZ, branch->true_branch->name);
+    } else {
+      femit_x86_64(context, I_JCC, JUMP_TYPE_Z, branch->false_branch->name);
+      femit_x86_64(context, I_JMP, NAME, branch->true_branch->name);
     }
+
     if (optimise && instruction->block) instruction->block->done = true;
-    break;
+  } break;
   case IR_COMPARISON:
     codegen_comparison_x86_64(context, instruction->value.comparison.type,
                               instruction->value.comparison.pair.car->result,
@@ -1492,6 +1502,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
                   goto done;
                 }
                 if (i->value.conditional_branch.false_branch == block) {
+                  if (i->value.conditional_branch.false_branch == i->block->next) continue;
                   referenced = true;
                   goto done;
                 }
