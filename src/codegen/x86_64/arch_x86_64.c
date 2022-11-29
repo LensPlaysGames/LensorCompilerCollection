@@ -77,14 +77,14 @@ const char *unreferenced_block_name = "unreferenced";
 
 /// Types of conditional jump instructions (Jcc).
 /// Do NOT reorder these.
-enum IndirectJumpType_x86_64 {
+enum IndirectJumpType {
   JUMP_TYPE_A,
   JUMP_TYPE_AE,
   JUMP_TYPE_B,
   JUMP_TYPE_BE,
   JUMP_TYPE_C,
-  JUMP_TYPE_E,
   JUMP_TYPE_Z,
+  JUMP_TYPE_E = JUMP_TYPE_Z,
   JUMP_TYPE_G,
   JUMP_TYPE_GE,
   JUMP_TYPE_L,
@@ -95,6 +95,7 @@ enum IndirectJumpType_x86_64 {
   JUMP_TYPE_NBE,
   JUMP_TYPE_NC,
   JUMP_TYPE_NE,
+  JUMP_TYPE_NZ = JUMP_TYPE_NE,
   JUMP_TYPE_NG,
   JUMP_TYPE_NGE,
   JUMP_TYPE_NL,
@@ -102,7 +103,6 @@ enum IndirectJumpType_x86_64 {
   JUMP_TYPE_NO,
   JUMP_TYPE_NP,
   JUMP_TYPE_NS,
-  JUMP_TYPE_NZ,
   JUMP_TYPE_O,
   JUMP_TYPE_P,
   JUMP_TYPE_PE,
@@ -113,13 +113,12 @@ enum IndirectJumpType_x86_64 {
 };
 
 /// Do NOT reorder these.
-static const char *jump_type_names_x86_64[] = {
+static const char *jump_type_names_x86_64[JUMP_TYPE_COUNT] = {
     "a",
     "ae",
     "b",
     "be",
     "c",
-    "e",
     "z",
     "g",
     "ge",
@@ -130,7 +129,7 @@ static const char *jump_type_names_x86_64[] = {
     "nb",
     "nbe",
     "nc",
-    "ne",
+    "nz",
     "ng",
     "nge",
     "nl",
@@ -138,7 +137,6 @@ static const char *jump_type_names_x86_64[] = {
     "no",
     "np",
     "ns",
-    "nz",
     "o",
     "p",
     "pe",
@@ -147,7 +145,7 @@ static const char *jump_type_names_x86_64[] = {
 };
 
 // TODO: All instructions we use in x86_64 should be in this enum.
-enum Instructions_x86_64 {
+enum Instruction {
   /// Arithmetic instructions.
   I_ADD,
   I_SUB,
@@ -201,7 +199,7 @@ enum InstructionOperands_x86_64 {
   REGISTER_TO_NAME,      ///< Reg src, Reg address, const char* name
 };
 
-const char *comparison_suffixes_x86_64[COMPARE_COUNT] = {
+const char *setcc_suffixes_x86_64[COMPARE_COUNT] = {
     "e",
     "ne",
     "l",
@@ -210,8 +208,8 @@ const char *comparison_suffixes_x86_64[COMPARE_COUNT] = {
     "ge",
 };
 
-static const char *instruction_mnemonic_x86_64(CodegenContext *context, enum Instructions_x86_64 instruction) {
-  ASSERT(I_COUNT == 21, "ERROR: instruction_mnemonic_x86_64() must exhaustively handle all instructions.");
+static const char *instruction_mnemonic(CodegenContext *context, enum Instruction instruction) {
+  ASSERT(I_COUNT == 21, "ERROR: instruction_mnemonic() must exhaustively handle all instructions.");
   // x86_64 instructions that aren't different across syntaxes can go here!
   switch (instruction) {
     default: break;
@@ -240,27 +238,51 @@ static const char *instruction_mnemonic_x86_64(CodegenContext *context, enum Ins
   }
 
   switch (context->dialect) {
-    default: panic("instruction_mnemonic_x86_64(): Unknown output format.");
+    default: panic("instruction_mnemonic(): Unknown output format.");
 
     case CG_ASM_DIALECT_ATT:
     switch (instruction) {
-      default: panic("instruction_mnemonic_x86_64(): Unknown instruction.");
+      default: panic("instruction_mnemonic(): Unknown instruction.");
       case I_CQO: return "cqto";
     }
 
     case CG_ASM_DIALECT_INTEL:
     switch (instruction) {
-      default: panic("instruction_mnemonic_x86_64(): Unknown instruction.");
+      default: panic("instruction_mnemonic(): Unknown instruction.");
       case I_CQO: return "cqo";
     }
   }
 }
 
-static void femit_x86_64_imm_to_reg(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
+static enum IndirectJumpType comparison_to_jump_type(enum ComparisonType comparison) {
+  switch (comparison) {
+    case COMPARE_EQ: return JUMP_TYPE_E;
+    case COMPARE_NE: return JUMP_TYPE_NE;
+    case COMPARE_LT: return JUMP_TYPE_L;
+    case COMPARE_LE: return JUMP_TYPE_LE;
+    case COMPARE_GT: return JUMP_TYPE_G;
+    case COMPARE_GE: return JUMP_TYPE_GE;
+    default: panic("comparison_to_jump_type_x86_64(): Unknown comparison type.");
+  }
+}
+
+static enum IndirectJumpType negate_jump(enum IndirectJumpType j) {
+  switch (j) {
+    case JUMP_TYPE_E: return JUMP_TYPE_NE;
+    case JUMP_TYPE_NE: return JUMP_TYPE_E;
+    case JUMP_TYPE_L: return JUMP_TYPE_GE;
+    case JUMP_TYPE_LE: return JUMP_TYPE_G;
+    case JUMP_TYPE_G: return JUMP_TYPE_LE;
+    case JUMP_TYPE_GE: return JUMP_TYPE_L;
+    default: panic("negate_jump(): Unknown jump type.");
+  }
+}
+
+static void femit_imm_to_reg(CodegenContext *context, enum Instruction inst, va_list args) {
   int64_t immediate                        = va_arg(args, int64_t);
   RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
 
-  const char *mnemonic    = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic    = instruction_mnemonic(context, inst);
   const char *destination = register_name(destination_register);
 
   switch (context->dialect) {
@@ -272,16 +294,16 @@ static void femit_x86_64_imm_to_reg(CodegenContext *context, enum Instructions_x
       fprintf(context->code, "    %s %s, %" PRId64 "\n",
           mnemonic, destination, immediate);
       break;
-    default: panic("ERROR: femit_x86_64_imm_to_reg(): Unsupported dialect %d", context->dialect);
+    default: panic("ERROR: femit_imm_to_reg(): Unsupported dialect %d", context->dialect);
   }
 }
 
-static void femit_x86_64_imm_to_mem(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
+static void femit_imm_to_mem(CodegenContext *context, enum Instruction inst, va_list args) {
   int64_t immediate                    = va_arg(args, int64_t);
   RegisterDescriptor address_register  = va_arg(args, RegisterDescriptor);
   int64_t offset                       = va_arg(args, int64_t);
 
-  const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
 
   switch (context->dialect) {
@@ -293,16 +315,16 @@ static void femit_x86_64_imm_to_mem(CodegenContext *context, enum Instructions_x
       fprintf(context->code, "    %s [%s + %" PRId64 "], %" PRId64 "\n",
           mnemonic, address, offset, immediate);
       break;
-    default: panic("ERROR: femit_x86_64_imm_to_mem(): Unsupported dialect %d", context->dialect);
+    default: panic("ERROR: femit_imm_to_mem(): Unsupported dialect %d", context->dialect);
   }
 }
 
-static void femit_x86_64_mem_to_reg(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
+static void femit_mem_to_reg(CodegenContext *context, enum Instruction inst, va_list args) {
   RegisterDescriptor address_register      = va_arg(args, RegisterDescriptor);
   int64_t offset                           = va_arg(args, int64_t);
   RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
 
-  const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
   const char *destination = register_name(destination_register);
 
@@ -315,16 +337,16 @@ static void femit_x86_64_mem_to_reg(CodegenContext *context, enum Instructions_x
       fprintf(context->code, "    %s %s, [%s + %" PRId64 "]\n",
           mnemonic, destination, address, offset);
       break;
-    default: panic("ERROR: femit_x86_64_mem_to_reg(): Unsupported dialect %d", context->dialect);
+    default: panic("ERROR: femit_mem_to_reg(): Unsupported dialect %d", context->dialect);
   }
 }
 
-static void femit_x86_64_name_to_reg(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
+static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, va_list args) {
   RegisterDescriptor address_register      = va_arg(args, RegisterDescriptor);
   char *name                               = va_arg(args, char *);
   RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
 
-  const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
   const char *destination = register_name(destination_register);
 
@@ -337,16 +359,16 @@ static void femit_x86_64_name_to_reg(CodegenContext *context, enum Instructions_
       fprintf(context->code, "    %s %s, [%s + %s]\n",
           mnemonic, destination, address, name);
       break;
-    default: panic("ERROR: femit_x86_64_name_to_reg(): Unsupported dialect %d", context->dialect);
+    default: panic("ERROR: femit_name_to_reg(): Unsupported dialect %d", context->dialect);
   }
 }
 
-static void femit_x86_64_reg_to_mem(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
+static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, va_list args) {
   RegisterDescriptor source_register   = va_arg(args, RegisterDescriptor);
   RegisterDescriptor address_register  = va_arg(args, RegisterDescriptor);
   int64_t offset                       = va_arg(args, int64_t);
 
-  const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = register_name(source_register);
   const char *address = register_name(address_register);
 
@@ -369,15 +391,15 @@ static void femit_x86_64_reg_to_mem(CodegenContext *context, enum Instructions_x
                 mnemonic, address, source);
       }
       break;
-    default: panic("ERROR: femit_x86_64_reg_to_mem(): Unsupported dialect %d", context->dialect);
+    default: panic("ERROR: femit_reg_to_mem(): Unsupported dialect %d", context->dialect);
   }
 }
 
-static void femit_x86_64_reg_to_reg(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
+static void femit_reg_to_reg(CodegenContext *context, enum Instruction inst, va_list args) {
   RegisterDescriptor source_register       = va_arg(args, RegisterDescriptor);
   RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
 
-  const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = register_name(source_register);
   const char *destination = register_name(destination_register);
 
@@ -393,16 +415,16 @@ static void femit_x86_64_reg_to_reg(CodegenContext *context, enum Instructions_x
       fprintf(context->code, "    %s %s, %s\n",
           mnemonic, destination, source);
       break;
-    default: panic("ERROR: femit_x86_64_reg_to_reg(): Unsupported dialect %d", context->dialect);
+    default: panic("ERROR: femit_reg_to_reg(): Unsupported dialect %d", context->dialect);
   }
 }
 
-static void femit_x86_64_reg_to_name(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
+static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, va_list args) {
   RegisterDescriptor source_register  = va_arg(args, RegisterDescriptor);
   RegisterDescriptor address_register      = va_arg(args, RegisterDescriptor);
   char *name                               = va_arg(args, char *);
 
-  const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = register_name(source_register);
   const char *address = register_name(address_register);
 
@@ -415,15 +437,15 @@ static void femit_x86_64_reg_to_name(CodegenContext *context, enum Instructions_
       fprintf(context->code, "    %s [%s + %s], %s\n",
           mnemonic, address, name, source);
       break;
-    default: panic("ERROR: femit_x86_64_reg_to_name(): Unsupported dialect %d", context->dialect);
+    default: panic("ERROR: femit_reg_to_name(): Unsupported dialect %d", context->dialect);
   }
 }
 
-static void femit_x86_64_mem(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
+static void femit_mem(CodegenContext *context, enum Instruction inst, va_list args) {
   int64_t offset                           = va_arg(args, int64_t);
   RegisterDescriptor address_register      = va_arg(args, RegisterDescriptor);
 
-  const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
 
   switch (context->dialect) {
@@ -435,14 +457,14 @@ static void femit_x86_64_mem(CodegenContext *context, enum Instructions_x86_64 i
       fprintf(context->code, "    %s [%s + %" PRId64 "]\n",
           mnemonic, address, offset);
       break;
-    default: panic("ERROR: femit_x86_64_mem(): Unsupported dialect %d", context->dialect);
+    default: panic("ERROR: femit_mem(): Unsupported dialect %d", context->dialect);
   }
 }
 
-static void femit_x86_64_reg(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
+static void femit_reg(CodegenContext *context, enum Instruction inst, va_list args) {
   RegisterDescriptor source_register   = va_arg(args, RegisterDescriptor);
 
-  const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = register_name(source_register);
 
   switch (context->dialect) {
@@ -454,14 +476,14 @@ static void femit_x86_64_reg(CodegenContext *context, enum Instructions_x86_64 i
       fprintf(context->code, "    %s %s\n",
           mnemonic, source);
       break;
-    default: panic("ERROR: femit_x86_64_reg(): Unsupported dialect %d", context->dialect);
+    default: panic("ERROR: femit_reg(): Unsupported dialect %d", context->dialect);
   }
 }
 
-static void femit_x86_64_imm(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
+static void femit_imm(CodegenContext *context, enum Instruction inst, va_list args) {
   int64_t immediate = va_arg(args, int64_t);
 
-  const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic = instruction_mnemonic(context, inst);
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
@@ -472,14 +494,14 @@ static void femit_x86_64_imm(CodegenContext *context, enum Instructions_x86_64 i
       fprintf(context->code, "    %s %" PRId64 "\n",
           mnemonic, immediate);
       break;
-    default: panic("ERROR: femit_x86_64_imm(): Unsupported dialect %d", context->dialect);
+    default: panic("ERROR: femit_imm(): Unsupported dialect %d", context->dialect);
   }
 }
 
-static void femit_x86_64_indirect_branch(CodegenContext *context, enum Instructions_x86_64 inst, va_list args) {
+static void femit_indirect_branch(CodegenContext *context, enum Instruction inst, va_list args) {
   RegisterDescriptor address_register   = va_arg(args, RegisterDescriptor);
 
-  const char *mnemonic = instruction_mnemonic_x86_64(context, inst);
+  const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
 
   switch (context->dialect) {
@@ -491,20 +513,20 @@ static void femit_x86_64_indirect_branch(CodegenContext *context, enum Instructi
       fprintf(context->code, "    %s %s\n",
           mnemonic, address);
       break;
-    default: panic("ERROR: femit_x86_64_indirect_branch(): Unsupported dialect %d", context->dialect);
+    default: panic("ERROR: femit_indirect_branch(): Unsupported dialect %d", context->dialect);
   }
 }
 
-static void femit_x86_64
+static void femit
 (CodegenContext *context,
- enum Instructions_x86_64 instruction,
+ enum Instruction instruction,
  ...)
 {
   va_list args;
   va_start(args, instruction);
 
   ASSERT(context);
-  STATIC_ASSERT(I_COUNT == 21, "femit_x86_64() must exhaustively handle all x86_64 instructions.");
+  STATIC_ASSERT(I_COUNT == 21, "femit() must exhaustively handle all x86_64 instructions.");
 
   switch (instruction) {
     case I_ADD:
@@ -516,40 +538,40 @@ static void femit_x86_64
       enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
       switch (operands) {
         default: panic("Unhandled operand type %d in x86_64 code generation for %d.", operands, instruction);
-        case IMMEDIATE_TO_REGISTER: femit_x86_64_imm_to_reg(context, instruction, args); break;
-        case IMMEDIATE_TO_MEMORY: femit_x86_64_imm_to_mem(context, instruction, args); break;
-        case MEMORY_TO_REGISTER: femit_x86_64_mem_to_reg(context, instruction, args); break;
-        case REGISTER_TO_MEMORY: femit_x86_64_reg_to_mem(context, instruction, args); break;
-        case REGISTER_TO_REGISTER: femit_x86_64_reg_to_reg(context, instruction, args); break;
-        case REGISTER_TO_NAME: femit_x86_64_reg_to_name(context, instruction, args); break;
-        case NAME_TO_REGISTER: femit_x86_64_name_to_reg(context, instruction, args); break;
+        case IMMEDIATE_TO_REGISTER: femit_imm_to_reg(context, instruction, args); break;
+        case IMMEDIATE_TO_MEMORY: femit_imm_to_mem(context, instruction, args); break;
+        case MEMORY_TO_REGISTER: femit_mem_to_reg(context, instruction, args); break;
+        case REGISTER_TO_MEMORY: femit_reg_to_mem(context, instruction, args); break;
+        case REGISTER_TO_REGISTER: femit_reg_to_reg(context, instruction, args); break;
+        case REGISTER_TO_NAME: femit_reg_to_name(context, instruction, args); break;
+        case NAME_TO_REGISTER: femit_name_to_reg(context, instruction, args); break;
       }
     } break;
 
     case I_LEA: {
       enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
       switch (operands) {
-        default: panic("femit_x86_64() only accepts MEMORY_TO_REGISTER or NAME_TO_REGISTER operand type with LEA instruction.");
-        case MEMORY_TO_REGISTER: femit_x86_64_mem_to_reg(context, instruction, args); break;
-        case NAME_TO_REGISTER: femit_x86_64_name_to_reg(context, instruction, args); break;
+        default: panic("femit() only accepts MEMORY_TO_REGISTER or NAME_TO_REGISTER operand type with LEA instruction.");
+        case MEMORY_TO_REGISTER: femit_mem_to_reg(context, instruction, args); break;
+        case NAME_TO_REGISTER: femit_name_to_reg(context, instruction, args); break;
       }
     } break;
 
     case I_IMUL: {
       enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
       switch (operands) {
-        default: panic("femit_x86_64() only accepts MEMORY_TO_REGISTER or REGISTER_TO_REGISTER operand type with IMUL instruction.");
-        case MEMORY_TO_REGISTER: femit_x86_64_mem_to_reg(context, instruction, args); break;
-        case REGISTER_TO_REGISTER: femit_x86_64_reg_to_reg(context, instruction, args); break;
+        default: panic("femit() only accepts MEMORY_TO_REGISTER or REGISTER_TO_REGISTER operand type with IMUL instruction.");
+        case MEMORY_TO_REGISTER: femit_mem_to_reg(context, instruction, args); break;
+        case REGISTER_TO_REGISTER: femit_reg_to_reg(context, instruction, args); break;
       }
     } break;
 
     case I_IDIV: {
       enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
       switch (operand) {
-        default: panic("femit_x86_64() only accepts MEMORY or REGISTER operand type with IDIV instruction.");
-        case MEMORY: femit_x86_64_mem(context, instruction, args); break;
-        case REGISTER: femit_x86_64_reg(context, instruction, args); break;
+        default: panic("femit() only accepts MEMORY or REGISTER operand type with IDIV instruction.");
+        case MEMORY: femit_mem(context, instruction, args); break;
+        case REGISTER: femit_reg(context, instruction, args); break;
       }
     } break;
 
@@ -558,11 +580,11 @@ static void femit_x86_64
     case I_SHR: {
       enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
       switch (operand) {
-        default: panic("femit_x86_64() only accepts REGISTER OR IMMEDIATE_TO_REGISTER operand type with shift instructions.");
-        case IMMEDIATE_TO_REGISTER: femit_x86_64_imm_to_reg(context, instruction, args); break;
+        default: panic("femit() only accepts REGISTER OR IMMEDIATE_TO_REGISTER operand type with shift instructions.");
+        case IMMEDIATE_TO_REGISTER: femit_imm_to_reg(context, instruction, args); break;
         case REGISTER: {
           RegisterDescriptor register_to_shift = va_arg(args, RegisterDescriptor);
-          const char *mnemonic = instruction_mnemonic_x86_64(context, instruction);
+          const char *mnemonic = instruction_mnemonic(context, instruction);
           const char *cl = register_name_8(REG_RCX);
 
           switch (context->dialect) {
@@ -574,7 +596,7 @@ static void femit_x86_64
               fprintf(context->code, "    %s %s, %s\n",
                   mnemonic, register_name(register_to_shift), cl);
               break;
-            default: panic("ERROR: femit_x86_64(): Unsupported dialect %d for shift instruction", context->dialect);
+            default: panic("ERROR: femit(): Unsupported dialect %d for shift instruction", context->dialect);
           }
         } break;
       }
@@ -584,11 +606,11 @@ static void femit_x86_64
     case I_CALL: {
       enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
       switch (operand) {
-        default: panic("femit_x86_64() only accepts REGISTER or NAME operand type with CALL/JMP instruction.");
-        case REGISTER: femit_x86_64_indirect_branch(context, instruction, args); break;
+        default: panic("femit() only accepts REGISTER or NAME operand type with CALL/JMP instruction.");
+        case REGISTER: femit_indirect_branch(context, instruction, args); break;
         case NAME: {
           char *label = va_arg(args, char *);
-          const char *mnemonic = instruction_mnemonic_x86_64(context, instruction);
+          const char *mnemonic = instruction_mnemonic(context, instruction);
 
           ASSERT(label, "JMP/CALL label must not be NULL.");
 
@@ -598,7 +620,7 @@ static void femit_x86_64
               fprintf(context->code, "    %s %s\n",
                   mnemonic, label);
               break;
-            default: panic("ERROR: femit_x86_64(): Unsupported dialect %d for CALL/JMP instruction", context->dialect);
+            default: panic("ERROR: femit(): Unsupported dialect %d for CALL/JMP instruction", context->dialect);
           }
         } break;
       }
@@ -607,28 +629,28 @@ static void femit_x86_64
     case I_PUSH: {
       enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
       switch (operand) {
-        default: panic("femit_x86_64() only accepts REGISTER, MEMORY, or IMMEDIATE operand type with PUSH instruction.");
-        case REGISTER: femit_x86_64_reg(context, instruction, args); break;
-        case MEMORY: femit_x86_64_mem(context, instruction, args); break;
-        case IMMEDIATE: femit_x86_64_imm(context, instruction, args); break;
+        default: panic("femit() only accepts REGISTER, MEMORY, or IMMEDIATE operand type with PUSH instruction.");
+        case REGISTER: femit_reg(context, instruction, args); break;
+        case MEMORY: femit_mem(context, instruction, args); break;
+        case IMMEDIATE: femit_imm(context, instruction, args); break;
       }
     } break;
 
     case I_POP: {
       enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
       switch (operand) {
-        default: panic("femit_x86_64() only accepts REGISTER or MEMORY operand type with POP instruction.");
-        case REGISTER: femit_x86_64_reg(context, instruction, args); break;
-        case MEMORY: femit_x86_64_mem(context, instruction, args); break;
+        default: panic("femit() only accepts REGISTER or MEMORY operand type with POP instruction.");
+        case REGISTER: femit_reg(context, instruction, args); break;
+        case MEMORY: femit_mem(context, instruction, args); break;
       }
     } break;
 
     case I_XCHG: {
       enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
       switch (operands) {
-        default: panic("femit_x86_64(): invalid operands for XCHG instruction: %d", operands);
-        case REGISTER_TO_REGISTER: femit_x86_64_reg_to_reg(context, instruction, args); break;
-        case MEMORY_TO_REGISTER: femit_x86_64_mem_to_reg(context, instruction, args); break;
+        default: panic("femit(): invalid operands for XCHG instruction: %d", operands);
+        case REGISTER_TO_REGISTER: femit_reg_to_reg(context, instruction, args); break;
+        case MEMORY_TO_REGISTER: femit_mem_to_reg(context, instruction, args); break;
       }
     } break;
 
@@ -636,31 +658,31 @@ static void femit_x86_64
       enum ComparisonType comparison_type = va_arg(args, enum ComparisonType);
       RegisterDescriptor value_register = va_arg(args, RegisterDescriptor);
 
-      const char *mnemonic = instruction_mnemonic_x86_64(context, instruction);
+      const char *mnemonic = instruction_mnemonic(context, instruction);
       const char *value = register_name_8(value_register);
 
       switch (context->dialect) {
         case CG_ASM_DIALECT_ATT:
           fprintf(context->code, "    %s%s %%%s\n",
               mnemonic,
-              comparison_suffixes_x86_64[comparison_type], value);
+              setcc_suffixes_x86_64[comparison_type], value);
           break;
         case CG_ASM_DIALECT_INTEL:
           fprintf(context->code, "    %s%s %s\n",
               mnemonic,
-              comparison_suffixes_x86_64[comparison_type], value);
+              setcc_suffixes_x86_64[comparison_type], value);
           break;
-        default: panic("ERROR: femit_x86_64(): Unsupported dialect %d", context->dialect);
+        default: panic("ERROR: femit(): Unsupported dialect %d", context->dialect);
       }
     } break;
 
     case I_JCC: {
-      enum IndirectJumpType_x86_64 type = va_arg(args, enum IndirectJumpType_x86_64);
-      ASSERT(type < JUMP_TYPE_COUNT, "femit_x86_64_direct_branch(): Invalid jump type %d", type);
+      enum IndirectJumpType type = va_arg(args, enum IndirectJumpType);
+      ASSERT(type < JUMP_TYPE_COUNT, "femit_direct_branch(): Invalid jump type %d", type);
       char *label = va_arg(args, char *);
       //ASSERT(label, "JCC label must not be NULL.");
 
-      const char *mnemonic = instruction_mnemonic_x86_64(context, I_JCC);
+      const char *mnemonic = instruction_mnemonic(context, I_JCC);
 
       switch (context->dialect) {
         case CG_ASM_DIALECT_ATT:
@@ -668,13 +690,13 @@ static void femit_x86_64
           fprintf(context->code, "    %s%s %s\n",
               mnemonic, jump_type_names_x86_64[type], label);
           break;
-        default: panic("ERROR: femit_x86_64_direct_branch(): Unsupported dialect %d", context->dialect);
+        default: panic("ERROR: femit_direct_branch(): Unsupported dialect %d", context->dialect);
       }
     } break;
 
     case I_RET:
     case I_CQO: {
-      const char *mnemonic = instruction_mnemonic_x86_64(context, instruction);
+      const char *mnemonic = instruction_mnemonic(context, instruction);
       fprintf(context->code, "    %s\n", mnemonic);
     } break;
 
@@ -781,7 +803,7 @@ void codegen_prepare_call_x86_64(CodegenContext *cg_context) {
   arch_data->current_call = frame;
 
   //arch_data->current_call->rax_in_use = cg_context->register_pool.registers[REG_RAX].in_use;
-  if (arch_data->current_call->rax_in_use) femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RAX);
+  if (arch_data->current_call->rax_in_use) femit(cg_context, I_PUSH, REGISTER, REG_RAX);
 }
 
 /// Clean up after a function call.
@@ -794,7 +816,7 @@ void codegen_cleanup_call_x86_64(CodegenContext *cg_context) {
   // arguments were passed on the stack.
   switch (arch_data->current_call->call_type) {
     case FUNCTION_CALL_TYPE_INTERNAL:
-      femit_x86_64(cg_context, I_ADD, IMMEDIATE_TO_REGISTER,
+      femit(cg_context, I_ADD, IMMEDIATE_TO_REGISTER,
                    (int64_t)(arch_data->current_call->call_arg_count * 8), REG_RSP);
       break;
     case FUNCTION_CALL_TYPE_EXTERNAL:
@@ -804,7 +826,7 @@ void codegen_cleanup_call_x86_64(CodegenContext *cg_context) {
 
   // Restore rax if it was in use, because function return value clobbered it.
   if (arch_data->current_call->rax_in_use) {
-    femit_x86_64(cg_context, I_POP, REGISTER, REG_RAX);
+    femit(cg_context, I_POP, REGISTER, REG_RAX);
   }
 
   // Clean up the call state.
@@ -818,7 +840,7 @@ void codegen_load_global_address_into_x86_64
 (CodegenContext *cg_context,
  const char *name,
  RegisterDescriptor target) {
-  femit_x86_64(cg_context, I_LEA, NAME_TO_REGISTER,
+  femit(cg_context, I_LEA, NAME_TO_REGISTER,
       REG_RIP, name,
       target);
 }
@@ -828,7 +850,7 @@ void codegen_load_local_address_into_x86_64
 (CodegenContext *cg_context,
  long long int offset,
  RegisterDescriptor target)  {
-  femit_x86_64(cg_context, I_LEA, MEMORY_TO_REGISTER,
+  femit(cg_context, I_LEA, MEMORY_TO_REGISTER,
                REG_RBP, offset,
                target);
 }
@@ -838,7 +860,7 @@ void codegen_load_global_into_x86_64
 (CodegenContext *cg_context,
  const char *name,
  RegisterDescriptor target) {
-  femit_x86_64(cg_context, I_MOV, NAME_TO_REGISTER,
+  femit(cg_context, I_MOV, NAME_TO_REGISTER,
       REG_RIP, name,
       target);
 }
@@ -847,7 +869,7 @@ void codegen_load_global_into_x86_64
 void codegen_load_local_into_x86_64(CodegenContext *cg_context,
  long long int offset,
  RegisterDescriptor target)  {
-  femit_x86_64(cg_context, I_MOV, MEMORY_TO_REGISTER,
+  femit(cg_context, I_MOV, MEMORY_TO_REGISTER,
       REG_RBP, offset,
       target);
 }
@@ -857,7 +879,7 @@ void codegen_store_global_x86_64
 (CodegenContext *cg_context,
  RegisterDescriptor source,
  const char *name) {
-  femit_x86_64(cg_context, I_MOV, REGISTER_TO_NAME,
+  femit(cg_context, I_MOV, REGISTER_TO_NAME,
                source, REG_RIP, name);
 }
 
@@ -866,7 +888,7 @@ void codegen_store_local_x86_64
 (CodegenContext *cg_context,
  RegisterDescriptor source,
  long long int offset) {
-  femit_x86_64(cg_context, I_MOV, REGISTER_TO_MEMORY,
+  femit(cg_context, I_MOV, REGISTER_TO_MEMORY,
                source, REG_RBP, offset);
 }
 
@@ -875,7 +897,7 @@ void codegen_store_x86_64
 (CodegenContext *cg_context,
  RegisterDescriptor source,
  RegisterDescriptor address) {
-  femit_x86_64(cg_context, I_MOV, REGISTER_TO_MEMORY, source, address, (int64_t)0);
+  femit(cg_context, I_MOV, REGISTER_TO_MEMORY, source, address, (int64_t)0);
 }
 
 /// Add an immediate value to a register.
@@ -883,7 +905,7 @@ void codegen_add_immediate_x86_64
 (CodegenContext *cg_context,
  RegisterDescriptor reg,
  long long int immediate) {
-  femit_x86_64(cg_context, I_ADD, IMMEDIATE_TO_REGISTER,
+  femit(cg_context, I_ADD, IMMEDIATE_TO_REGISTER,
                immediate, reg);
 }
 
@@ -892,15 +914,15 @@ void codegen_branch_if_zero_x86_64
 (CodegenContext *cg_context,
  RegisterDescriptor reg,
  const char *label) {
-  femit_x86_64(cg_context, I_TEST, REGISTER_TO_REGISTER, reg, reg);
-  femit_x86_64(cg_context, I_JCC, JUMP_TYPE_Z, label);
+  femit(cg_context, I_TEST, REGISTER_TO_REGISTER, reg, reg);
+  femit(cg_context, I_JCC, JUMP_TYPE_Z, label);
 }
 
 /// Branch to a label.
 void codegen_branch_x86_64
 (CodegenContext *cg_context,
  const char *label) {
-  femit_x86_64(cg_context, I_JMP, NAME, label);
+  femit(cg_context, I_JMP, NAME, label);
 }
 
 /// Copy a register to another register.
@@ -908,14 +930,14 @@ void codegen_copy_register_x86_64
 (CodegenContext *cg_context,
  RegisterDescriptor src,
  RegisterDescriptor dest) {
-  femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, src, dest);
+  femit(cg_context, I_MOV, REGISTER_TO_REGISTER, src, dest);
 }
 
 /// Zero out a register.
 void codegen_zero_register_x86_64
 (CodegenContext *cg_context,
  RegisterDescriptor reg) {
-  femit_x86_64(cg_context, I_XOR, REGISTER_TO_REGISTER, reg, reg);
+  femit(cg_context, I_XOR, REGISTER_TO_REGISTER, reg, reg);
 }
 
 /// Generate a comparison between two registers.
@@ -931,9 +953,9 @@ RegisterDescriptor codegen_comparison_x86_64
   // Zero out result register.
 
   // Perform the comparison.
-  femit_x86_64(cg_context, I_CMP, REGISTER_TO_REGISTER, rhs, lhs);
-  femit_x86_64(cg_context, I_MOV, IMMEDIATE_TO_REGISTER, (int64_t)0, result);
-  femit_x86_64(cg_context, I_SETCC, type, result);
+  femit(cg_context, I_CMP, REGISTER_TO_REGISTER, rhs, lhs);
+  femit(cg_context, I_MOV, IMMEDIATE_TO_REGISTER, (int64_t)0, result);
+  femit(cg_context, I_SETCC, type, result);
 
   return result;
 }
@@ -943,7 +965,7 @@ RegisterDescriptor codegen_add_x86_64
 (CodegenContext *cg_context,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
-  femit_x86_64(cg_context, I_ADD, REGISTER_TO_REGISTER, lhs, rhs);
+  femit(cg_context, I_ADD, REGISTER_TO_REGISTER, lhs, rhs);
   //register_deallocate(cg_context, lhs);
   return rhs;
 }
@@ -953,7 +975,7 @@ RegisterDescriptor codegen_subtract_x86_64
 (CodegenContext *cg_context,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
-  femit_x86_64(cg_context, I_SUB, REGISTER_TO_REGISTER, rhs, lhs);
+  femit(cg_context, I_SUB, REGISTER_TO_REGISTER, rhs, lhs);
   //register_deallocate(cg_context, rhs);
   return lhs;
 }
@@ -963,40 +985,41 @@ RegisterDescriptor codegen_multiply_x86_64
 (CodegenContext *cg_context,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs) {
-  femit_x86_64(cg_context, I_IMUL, REGISTER_TO_REGISTER, lhs, rhs);
+  femit(cg_context, I_IMUL, REGISTER_TO_REGISTER, lhs, rhs);
   //register_deallocate(cg_context, lhs);
   return rhs;
 }
 
 /// Allocate space on the stack.
 void codegen_stack_allocate_x86_64(CodegenContext *cg_context, long long int size) {
-  femit_x86_64(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, size, REG_RSP);
+  femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, size, REG_RSP);
 }
 
 /// Emit the function prologue.
 void codegen_prologue_x86_64(CodegenContext *cg_context, size_t locals_offset) {
   if (optimise && !locals_offset) return;
-  femit_x86_64(cg_context, I_PUSH, REGISTER, REG_RBP);
-  femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RSP, REG_RBP);
-  femit_x86_64(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, locals_offset, REG_RSP);
+  femit(cg_context, I_PUSH, REGISTER, REG_RBP);
+  femit(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RSP, REG_RBP);
+  femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, locals_offset, REG_RSP);
 }
 
 /// Emit the function epilogue.
 void codegen_epilogue_x86_64(CodegenContext *cg_context, IRFunction *f) {
   if (!optimise || f->locals_total_size) {
-    femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
-    femit_x86_64(cg_context, I_POP, REGISTER, REG_RBP);
+    femit(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
+    femit(cg_context, I_POP, REGISTER, REG_RBP);
   }
-  femit_x86_64(cg_context, I_RET);
+  femit(cg_context, I_RET);
 }
 
 /// Set the return value of a function.
 void codegen_set_return_value_x86_64(CodegenContext *cg_context, RegisterDescriptor value) {
-  femit_x86_64(cg_context, I_MOV, REGISTER_TO_REGISTER, value, REG_RAX);
+  femit(cg_context, I_MOV, REGISTER_TO_REGISTER, value, REG_RAX);
 }
 
 void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
   STATIC_ASSERT(IR_COUNT == 28);
+  if (instruction->dont_emit) return;
   switch (instruction->type) {
   case IR_PHI:
   case IR_STACK_ALLOCATE:
@@ -1004,40 +1027,40 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
   case IR_UNREACHABLE:
     break;
   case IR_IMMEDIATE:
-    femit_x86_64(context, I_MOV, IMMEDIATE_TO_REGISTER,
+    femit(context, I_MOV, IMMEDIATE_TO_REGISTER,
                  instruction->value.immediate,
                  instruction->result);
     break;
   case IR_COPY:
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.reference->result,
                  instruction->result);
     break;
   case IR_GLOBAL_ADDRESS:
-    femit_x86_64(context, I_LEA, NAME_TO_REGISTER,
+    femit(context, I_LEA, NAME_TO_REGISTER,
                  REG_RIP, instruction->value.name,
                  instruction->result);
     break;
   case IR_GLOBAL_STORE:
-    femit_x86_64(context, I_MOV, REGISTER_TO_NAME,
+    femit(context, I_MOV, REGISTER_TO_NAME,
                  instruction->value.global_assignment.new_value->result,
                  REG_RIP,
                  instruction->value.global_assignment.name);
     break;
   case IR_GLOBAL_LOAD:
-    femit_x86_64(context, I_MOV, NAME_TO_REGISTER,
+    femit(context, I_MOV, NAME_TO_REGISTER,
                  REG_RIP,
                  instruction->value.name,
                  instruction->result);
     break;
   case IR_LOCAL_STORE:
-    femit_x86_64(context, I_MOV, REGISTER_TO_MEMORY,
+    femit(context, I_MOV, REGISTER_TO_MEMORY,
                  instruction->value.pair.cdr->result,
                  REG_RBP,
                  (int64_t)-instruction->value.pair.car->value.stack_allocation.offset);
     break;
   case IR_LOCAL_LOAD:
-    femit_x86_64(context, I_MOV, MEMORY_TO_REGISTER,
+    femit(context, I_MOV, MEMORY_TO_REGISTER,
                  REG_RBP,
                  (int64_t)-instruction->value.reference->value.stack_allocation.offset,
                  instruction->result);
@@ -1051,14 +1074,14 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     if (optimise && instruction->value.call.tail_call) {
       // Restore the frame pointer if we have one.
       if (instruction->block->function->locals_total_size) {
-        femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
-        femit_x86_64(context, I_POP, REGISTER, REG_RBP);
+        femit(context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
+        femit(context, I_POP, REGISTER, REG_RBP);
       }
 
       if (instruction->value.call.type == IR_CALLTYPE_INDIRECT) {
-        femit_x86_64(context, I_JMP, REGISTER, instruction->value.call.value.callee->result);
+        femit(context, I_JMP, REGISTER, instruction->value.call.value.callee->result);
       } else {
-        femit_x86_64(context, I_JMP, NAME, instruction->value.call.value.name);
+        femit(context, I_JMP, NAME, instruction->value.call.value.name);
       }
       if (instruction->block) instruction->block->done = true;
       break;
@@ -1067,24 +1090,24 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     size_t func_regs = instruction->block->function->registers_in_use;
     for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i) {
       if (func_regs & (1 << i) && is_caller_saved(i)) {
-        femit_x86_64(context, I_PUSH, REGISTER, i);
+        femit(context, I_PUSH, REGISTER, i);
       }
     }
     if (instruction->value.call.type == IR_CALLTYPE_INDIRECT) {
-      femit_x86_64(context, I_CALL, REGISTER,
+      femit(context, I_CALL, REGISTER,
                    instruction->value.call.value.callee->result);
 
     } else {
-      femit_x86_64(context, I_CALL, NAME,
+      femit(context, I_CALL, NAME,
                    instruction->value.call.value.name);
     }
     // Restore caller saved registers used in called function.
     for (Register i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i) {
       if (func_regs & (1 << i) && is_caller_saved(i)) {
-        femit_x86_64(context, I_POP, REGISTER, i);
+        femit(context, I_POP, REGISTER, i);
       }
     }
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  REG_RAX,
                  instruction->result);
     break;
@@ -1092,7 +1115,7 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     // Restore callee-saved registers used in the function.
     for (Register i = sizeof(instruction->block->function->registers_in_use) * 8 - 1; i > 0; --i) {
       if (instruction->block->function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i)) {
-        femit_x86_64(context, I_POP, REGISTER, i);
+        femit(context, I_POP, REGISTER, i);
       }
     }
     codegen_epilogue_x86_64(context, instruction->block->function);
@@ -1101,25 +1124,32 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
   case IR_BRANCH:
     /// Only emit a jump if the target isn’t the next block.
     if (!optimise || (instruction->block && instruction->value.block != instruction->block->next && !instruction->block->done)) {
-      femit_x86_64(context, I_JMP, NAME, instruction->value.block->name);
+      femit(context, I_JMP, NAME, instruction->value.block->name);
     }
     if (optimise && instruction->block) instruction->block->done = true;
     break;
   case IR_BRANCH_CONDITIONAL: {
     IRBranchConditional *branch = &instruction->value.conditional_branch;
-    femit_x86_64(context, I_TEST, REGISTER_TO_REGISTER,
-        branch->condition->result,
-        branch->condition->result);
+    enum IndirectJumpType jtype = JUMP_TYPE_Z;
+
+    /// If the condition is only used by this branch, emit a `cmp` + jcc instead.
+    if (branch->condition->dont_emit) {
+
+    } else {
+      femit(context, I_TEST, REGISTER_TO_REGISTER,
+          branch->condition->result,
+          branch->condition->result);
+    }
 
     /// If either target is the next block, arrange the jumps in such a way
     /// that we can save one and simply fallthrough to the next block.
     if (optimise && branch->true_branch == instruction->block->next) {
-      femit_x86_64(context, I_JCC, JUMP_TYPE_Z, branch->false_branch->name);
+      femit(context, I_JCC, JUMP_TYPE_Z, branch->false_branch->name);
     } else if (optimise && branch->false_branch == instruction->block->next) {
-      femit_x86_64(context, I_JCC, JUMP_TYPE_NZ, branch->true_branch->name);
+      femit(context, I_JCC, JUMP_TYPE_NZ, branch->true_branch->name);
     } else {
-      femit_x86_64(context, I_JCC, JUMP_TYPE_Z, branch->false_branch->name);
-      femit_x86_64(context, I_JMP, NAME, branch->true_branch->name);
+      femit(context, I_JCC, JUMP_TYPE_Z, branch->false_branch->name);
+      femit(context, I_JMP, NAME, branch->true_branch->name);
     }
 
     if (optimise && instruction->block) instruction->block->done = true;
@@ -1131,93 +1161,93 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
                               instruction->result);
     break;
   case IR_ADD:
-    femit_x86_64(context, I_ADD, REGISTER_TO_REGISTER,
+    femit(context, I_ADD, REGISTER_TO_REGISTER,
                  instruction->value.pair.cdr->result,
                  instruction->value.pair.car->result);
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.car->result,
                  instruction->result);
     break;
   case IR_SUBTRACT:
-    femit_x86_64(context, I_SUB, REGISTER_TO_REGISTER,
+    femit(context, I_SUB, REGISTER_TO_REGISTER,
                  instruction->value.pair.cdr->result,
                  instruction->value.pair.car->result);
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.car->result,
                  instruction->result);
     break;
   case IR_MULTIPLY:
-    femit_x86_64(context, I_IMUL, REGISTER_TO_REGISTER,
+    femit(context, I_IMUL, REGISTER_TO_REGISTER,
                  instruction->value.pair.car->result,
                  instruction->value.pair.cdr->result);
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.cdr->result,
                  instruction->result);
     break;
   case IR_DIVIDE:
     ASSERT(instruction->value.pair.cdr->result != REG_RAX,
            "Register allocation must not allocate RAX to divisor.");
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.car->result,
                  REG_RAX);
-    femit_x86_64(context, I_CQO);
-    femit_x86_64(context, I_IDIV, REGISTER,
+    femit(context, I_CQO);
+    femit(context, I_IDIV, REGISTER,
                  instruction->value.pair.cdr->result);
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  REG_RAX,
                  instruction->result);
     break;
   case IR_MODULO:
     ASSERT(instruction->value.pair.cdr->result != REG_RAX,
            "Register allocation must not allocate RAX to divisor.");
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.car->result,
                  REG_RAX);
-    femit_x86_64(context, I_CQO);
-    femit_x86_64(context, I_IDIV, REGISTER,
+    femit(context, I_CQO);
+    femit(context, I_IDIV, REGISTER,
                  instruction->value.pair.cdr->result);
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  REG_RDX,
                  instruction->result);
     break;
   case IR_SHIFT_LEFT:
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.cdr->result,
                  REG_RCX);
-    femit_x86_64(context, I_SHL, REGISTER,
+    femit(context, I_SHL, REGISTER,
                  instruction->value.pair.car->result);
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.car->result,
                  instruction->result);
     break;
   case IR_SHIFT_RIGHT_LOGICAL:
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.cdr->result,
                  REG_RCX);
-    femit_x86_64(context, I_SHR, REGISTER,
+    femit(context, I_SHR, REGISTER,
                  instruction->value.pair.car->result);
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.car->result,
                  instruction->result);
     break;
   case IR_SHIFT_RIGHT_ARITHMETIC:
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.cdr->result,
                  REG_RCX);
-    femit_x86_64(context, I_SAR, REGISTER,
+    femit(context, I_SAR, REGISTER,
                  instruction->value.pair.car->result);
-    femit_x86_64(context, I_MOV, REGISTER_TO_REGISTER,
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.car->result,
                  instruction->result);
     break;
   case IR_LOAD:
-    femit_x86_64(context, I_MOV, MEMORY_TO_REGISTER,
+    femit(context, I_MOV, MEMORY_TO_REGISTER,
                  instruction->value.reference->result,
                  (int64_t)0,
                  instruction->result);
     break;
   case IR_STORE:
-    femit_x86_64(context, I_MOV, REGISTER_TO_MEMORY,
+    femit(context, I_MOV, REGISTER_TO_MEMORY,
                  instruction->value.pair.car->result,
                  instruction->value.pair.cdr->result,
                  (int64_t)0);
@@ -1251,7 +1281,7 @@ void emit_function(CodegenContext *context, IRFunction *function) {
   // Save all callee-saved registers in use in the function.
   for (Register i = 1; i < sizeof(function->registers_in_use) * 8; ++i) {
     if ((size_t)function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i)) {
-      femit_x86_64(context, I_PUSH, REGISTER, i);
+      femit(context, I_PUSH, REGISTER, i);
     }
   }
   DLIST_FOREACH (IRBlock*, block, function->blocks) { emit_block(context, block); }
