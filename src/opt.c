@@ -691,22 +691,6 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
 }
 
 static void optimise_function(CodegenContext *ctx, IRFunction *f) {
-/*
-  ir_set_ids(ctx);
-  ir_femit_function(stdout, f);
-
-  opt_fold_constants(ctx, f);
-
-  ir_set_ids(ctx);
-  ir_femit_function(stdout, f);
-  opt_dce(ctx, f);
-
-  ir_set_ids(ctx);
-  ir_femit_function(stdout, f);
-
-  _Exit(42);
-*/
-
   DominatorInfo dom = {0};
   do {
     build_and_prune_dominator_tree(f, &dom);
@@ -728,6 +712,7 @@ void codegen_optimise(CodegenContext *ctx) {
   }
 }
 
+/// Called after RA.
 void codegen_optimise_blocks(CodegenContext *ctx) {
   VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
     DominatorInfo dom = {0};
