@@ -484,6 +484,7 @@ static void build_and_prune_dominator_tree(IRFunction *f, DominatorInfo* info) {
         /// Add the block to the dominators of the current node.
         VECTOR_PUSH(d->dominators, node);
 
+        /// FIXME: This is incorrect.
         /// Add the current node to the children of the block.
         VECTOR_PUSH(node->children, d);
       }
