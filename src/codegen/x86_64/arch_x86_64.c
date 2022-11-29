@@ -1234,11 +1234,8 @@ void emit_block(CodegenContext *context, IRBlock *block) {
 
 void emit_function(CodegenContext *context, IRFunction *function) {
   // Generate function entry.
-  // TODO: Maybe make some functions not global.
   fprintf(context->code,
-          ".global %s\n"
-          "%s:\n",
-          function->name,
+          "\n%s:\n",
           function->name);
   codegen_prologue_x86_64(context, function->locals_total_size);
   // Save all callee-saved registers in use in the function.
@@ -1256,6 +1253,12 @@ void emit_entry(CodegenContext *context) {
           "%s"
           ".section .text\n",
           context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
+
+  /// TODO: Maybe make some functions not global.
+  fprintf(context->code, "\n");
+  VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
+    fprintf(context->code, ".global %s\n", function->name);
+  }
 }
 
 static Register *argument_registers = NULL;
@@ -1404,8 +1407,7 @@ void codegen_lower_x86_64(CodegenContext *context) {
 
 void codegen_emit_x86_64(CodegenContext *context) {
   // Generate global variables.
-  fprintf(context->code, ".section .data\n");
-
+  bool have_data_section = false;
   Binding *var_it = context->parse_context->variables->bind;
   Node *type_info = node_allocate();
   while (var_it) {
@@ -1431,6 +1433,11 @@ void codegen_emit_x86_64(CodegenContext *context) {
           var_it = var_it->next;
           continue;
         }
+      }
+
+      if (!have_data_section) {
+        have_data_section = true;
+        fprintf(context->code, ".section .data\n");
       }
 
       Error err = parse_get_type(context->parse_context, type_id, type_info);
@@ -1516,7 +1523,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   calculate_stack_offsets(context);
 
-  // TODO: Add entry only on entry function, not just the first one.
   emit_entry(context);
   VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
     emit_function(context, function);
