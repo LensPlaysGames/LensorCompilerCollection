@@ -56,10 +56,8 @@ static bool has_side_effects(IRInstruction *i) {
   }
 }
 
-static bool opt_fold_constants(CodegenContext *ctx, IRFunction *f) {
+static bool opt_fold_constants(IRFunction *f) {
   bool changed = false;
-  (void) ctx;
-
   DLIST_FOREACH (IRBlock*, b, f->blocks) {
     DLIST_FOREACH (IRInstruction*, i, b->instructions) {
       switch (i->type) {
@@ -88,14 +86,11 @@ static bool opt_fold_constants(CodegenContext *ctx, IRFunction *f) {
       }
     }
   }
-
   return changed;
 }
 
-static bool opt_dce(CodegenContext* ctx, IRFunction *f) {
+static bool opt_dce(IRFunction *f) {
   bool changed = false;
-  (void) ctx;
-
   DLIST_FOREACH (IRBlock*, b, f->blocks) {
     for (IRInstruction *i = b->instructions.first; i;) {
       if (!i->users.size && !has_side_effects(i)) {
@@ -108,7 +103,6 @@ static bool opt_dce(CodegenContext* ctx, IRFunction *f) {
       }
     }
   }
-
   return changed;
 }
 
@@ -165,9 +159,8 @@ static bool tail_call_possible(IRInstruction *i) {
   return possible;
 }
 
-static bool opt_tail_call_elim(CodegenContext *ctx, IRFunction *f) {
+static bool opt_tail_call_elim(IRFunction *f) {
   bool changed = false;
-  (void) ctx;
   DLIST_FOREACH (IRBlock*, b, f->blocks) {
     DLIST_FOREACH (IRInstruction*, i, b->instructions) {
       if (i->type != IR_CALL) { continue; }
@@ -190,9 +183,10 @@ static bool opt_tail_call_elim(CodegenContext *ctx, IRFunction *f) {
   return changed;
 }
 
-static bool opt_mem2reg(CodegenContext *ctx, IRFunction *f) {
+static bool opt_mem2reg(IRFunction *f) {
   bool changed = false;
-  (void) ctx;
+
+  /// A stack variable.
   typedef struct {
     IRInstruction *alloca;
     IRInstruction *store;
@@ -286,6 +280,7 @@ static bool opt_mem2reg(CodegenContext *ctx, IRFunction *f) {
 /// Keep track of stores to global variables, and if there is only
 /// one, inline the value if it is also global.
 void opt_inline_global_vars(CodegenContext *ctx) {
+  /// A global variable.
   typedef struct {
     const char* name;
     IRInstruction *store;
@@ -696,11 +691,11 @@ static void optimise_function(CodegenContext *ctx, IRFunction *f) {
     build_and_prune_dominator_tree(f, &dom);
     opt_reorder_blocks(f, &dom);
   } while (
-    opt_fold_constants(ctx, f) ||
-    opt_dce(ctx, f) ||
-    opt_mem2reg(ctx, f) ||
+    opt_fold_constants(f) ||
+    opt_dce(f) ||
+    opt_mem2reg(f) ||
     opt_jump_threading(f, &dom) ||
-    opt_tail_call_elim(ctx, f)
+    opt_tail_call_elim(f)
   );
   free_dominator_info(&dom);
 }
