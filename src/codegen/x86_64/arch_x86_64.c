@@ -1415,6 +1415,24 @@ void codegen_emit_x86_64(CodegenContext *context) {
     // Do not emit "external" typed variables.
     // TODO: Probably should have external attribute rather than this nonsense!
     if (strcmp(type_id->value.symbol, "external function") != 0) {
+      /// Do not emit unused variables.
+      /// TODO: Cache this somewhere.
+      if (optimise) {
+        bool found = false;
+        FOREACH_INSTRUCTION (context) {
+          if (instruction->type == IR_GLOBAL_ADDRESS &&
+              strcmp(instruction->value.name, var_id->value.symbol) == 0) {
+            found = true;
+            goto break_loop;
+          }
+        }
+        break_loop:
+        if (!found) {
+          var_it = var_it->next;
+          continue;
+        }
+      }
+
       Error err = parse_get_type(context->parse_context, type_id, type_info);
       if (err.type) {
         print_node(type_id, 0);
