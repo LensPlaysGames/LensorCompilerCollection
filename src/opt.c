@@ -190,60 +190,6 @@ static bool opt_tail_call_elim(CodegenContext *ctx, IRFunction *f) {
   return changed;
 }
 
-#if 0
-static bool opt_merge_blocks(CodegenContext *ctx, IRFunction *f) {
-  bool changed = false;
-  (void) ctx;
-
-  typedef struct {
-    IRBlock *first;
-    IRBlock *second;
-    bool unmergeable;
-  } merge_candidate;
-  VECTOR(merge_candidate) candidates = {0};
-
-  /// Compute merge candidates.
-  FOREACH (IRBlock*, b1, f->first) {
-    FOREACH (IRBlock*, b2, f->first) {
-      if (b1 == b2) { continue; }
-      if (b1->branch->type == IR_BRANCH && b1->branch->value.block == b2) {
-        /// Check if the target block already exists.
-        VECTOR_FOREACH (merge_candidate, c, &candidates) {
-          if (c->second == b2) {
-            c->unmergeable = true;
-            goto next;
-          }
-        }
-
-        merge_candidate c = {b1, b2};
-        VECTOR_PUSH(&candidates, c);
-      }
-    next:;
-    }
-  }
-
-  /// Merge blocks.
-  VECTOR_FOREACH (merge_candidate, c, &candidates) {
-    if (c->unmergeable) { continue; }
-
-    /// Move all instructions from the second block to the first.
-    FOREACH (IRInstruction*, i, c->second->instructions) {
-      insert_instruction_after(i, c->first->last_instruction);
-    }
-
-    /// Keep the branch of the second block.
-    c->first->branch = c->second->branch;
-
-    /// Remove the second block.
-    ir_remove_block(c->second);
-    changed = true;
-  }
-  VECTOR_DELETE(&candidates);
-  return changed;
-}
-}
-#endif
-
 static bool opt_mem2reg(CodegenContext *ctx, IRFunction *f) {
   bool changed = false;
   (void) ctx;

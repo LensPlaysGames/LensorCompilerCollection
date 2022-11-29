@@ -494,101 +494,6 @@ bool values_interfere(RegisterAllocationInfo *info, IRInstruction *v1, IRInstruc
   return check_values_interfere(info, v2, v1);
 }
 
-#if 0
-enum ControlFlowResult {
-  RA_CF_CONTINUE,
-  RA_CF_INTERFERE,
-  RA_CF_CLEARED,
-};
-
-int follow_control_flow(IRBlockList *visited, IRBlock *block, IRInstruction *a_use, IRInstruction *B) {
-  ASSERT(block, "Can not follow control flow of NULL block.");
-  ASSERT(a_use, "Can not follow control flow of NULL use.");
-  ASSERT(B, "Can not follow control flow of NULL definition.");
-  while (1) {
-    // Return if block has been visited already.
-    for (IRBlockList *visited_it = visited; visited_it; visited_it = visited_it->next) {
-      if (visited_it->block == block) {
-        return RA_CF_CONTINUE;
-      }
-    }
-
-    // Add block to visited blocks list.
-    IRBlockList *new_block = calloc(1, sizeof(IRBlockList));
-    new_block->next = visited;
-    new_block->block = block;
-    visited = new_block;
-
-    // If use of A and definition of B are in this block, and the
-    // definition of B precedes the use of A, then it stands to reason
-    // that B is in-between the definition of A and its use, meaning
-    // there is an interference.
-    if (a_use->block == block) {
-      if (B->block == block && B->index < a_use->index) {
-        // TODO: Check that A and B are not precolored before clearing.
-        return B->type == IR_COPY ? RA_CF_CLEARED : RA_CF_INTERFERE;
-      }
-      return RA_CF_CLEARED;
-    }
-
-    if (B->block == block) {
-      // If only the definition of B is within the block, then the use of
-      // A must come after, otherwise we would have seen it already.
-      return B->type == IR_COPY ? RA_CF_CLEARED : RA_CF_INTERFERE;
-    }
-
-    // Actually follow control flow, according to branch instruction.
-    switch (block->branch->type) {
-      case IR_RETURN:
-        return RA_CF_CLEARED;
-        break;
-      case IR_BRANCH:
-        block = block->branch->value.block;
-        continue;
-        break;
-      case IR_BRANCH_CONDITIONAL:
-        if(0){}
-        int result = follow_control_flow
-            (visited,
-                block->branch->value.conditional_branch.true_branch,
-                a_use, B);
-        if (result != RA_CF_CONTINUE) {
-          return result;
-        }
-        block = block->branch->value.conditional_branch.false_branch;
-        continue;
-        break;
-      default:
-        TODO("Handle branch instruction type: %d", block->branch->type);
-        break;
-    }
-    UNREACHABLE();
-  }
-  return RA_CF_CONTINUE;
-}
-
-char instructions_interfere(IRInstruction *A, IRInstruction *B) {
-  ASSERT(A && B, "Can not get interference of NULL instructions.");
-  ASSERT(A->block, "Can not get interference when A has NULL containing block.");
-  for (Use *a_use = A->uses; a_use; a_use = a_use->next) {
-    ASSERT(a_use->user, "Use instruction can not be NULL!");
-
-    // If definition and use of A are in the same block, and if the
-    // definition of B is also in the same block, it is a simple index
-    // comparison to check for interference.
-    if (A->block == a_use->user->block && B->block == A->block && A->index < B->index && a_use->user->index > B->index) {
-      return true;
-    } else {
-      // A and B are not defined in the same block, follow control flow.
-      if (follow_control_flow(NULL, A->block, a_use->user, B) == RA_CF_INTERFERE) {
-        return 1;
-      }
-    }
-  }
-  return 0;
-}
-#endif
-
 void build_adjacency_graph(RegisterAllocationInfo *info, IRInstructions *instructions, AdjacencyGraph *G) {
   ASSERT(instructions, "Can not build adjacency matrix of NULL instruction list.");
   allocate_adjacency_graph(G, instructions->size);
@@ -762,7 +667,6 @@ bool check_register_interference(size_t regmask, IRInstruction *instruction) {
 /// Whether copy elimination is possible depends whether the values in
 /// question interfere, both with each other and with hardware registers.
 void coalesce(RegisterAllocationInfo *info, IRInstructions *instructions, AdjacencyGraph *G) {
-#if 1
   VECTOR(IRInstruction*) removed_instructions = {0};
   VECTOR(IRInstruction*) phis = {0};
 
@@ -858,85 +762,6 @@ void coalesce(RegisterAllocationInfo *info, IRInstructions *instructions, Adjace
   /// Cleanup.
   VECTOR_DELETE(removed_instructions);
   VECTOR_DELETE(phis);
-
-#else
-  IRInstructions instructions_to_remove = {0};
-  // Attempt to remove copy instructions.
-  for (IRInstructionList *it = *instructions; it; it = it->next) {
-    IRInstruction *instruction = it->instruction;
-    if (instruction->type == IR_COPY) {
-      if (instruction == instruction->value.reference
-          || instruction->result
-          || !adjm(G->matrix, instruction->index, instruction->value.reference->index)
-          ) {
-        if (instruction->result == instruction->value.reference->result) {
-          // Replace all uses of INSTRUCTION with the thing being copied.
-          ir_replace_uses(instruction, instruction->value.reference);
-          IRInstructionList *head = calloc(1, sizeof(IRInstructionList));
-          head->instruction = instruction;
-          head->next = instructions_to_remove;
-          instructions_to_remove = head;
-          continue;
-        }
-      } else {
-        continue;
-      }
-
-      if (instruction->result) {
-        // Don't override anything that is already colored.
-        if (instruction->value.reference->result) {
-          continue;
-        }
-        // Don't override with interfering register.
-        int64_t regmask = info->instruction_register_interference(instruction->value.reference);
-        if (regmask & (1 << (instruction->result - 1))) {
-          continue;
-        }
-
-        instruction->value.reference->result = instruction->result;
-      } else {
-        // Replace all uses of INSTRUCTION with the thing being copied.
-        ir_replace_uses(instruction, instruction->value.reference);
-        IRInstructionList *head = calloc(1, sizeof(IRInstructionList));
-        head->instruction = instruction;
-        head->next = instructions_to_remove;
-        instructions_to_remove = head;
-      }
-
-      // Also replace all adjacency matrix values regarding COPY instruction with the copied instruction.
-      for (IRInstructionList *adj_it = *instructions; adj_it; adj_it = adj_it->next) {
-        if (adj_it->instruction == instruction) {
-          continue;
-        }
-        *adjm_entry(G->matrix, instruction->index, adj_it->instruction->index) =
-          *adjm_entry(G->matrix, instruction->value.reference->index, adj_it->instruction->index);
-      }
-    }
-  }
-
-  // Remove instructions
-  for (; instructions_to_remove; instructions_to_remove = instructions_to_remove->next) {
-    // Delete instruction from block.
-    IRInstruction *instruction = instructions_to_remove->instruction;
-    if (instruction->previous) {
-      instruction->previous->next = instruction->next;
-    }
-    if (instruction->next) {
-      instruction->next->previous = instruction->previous;
-    }
-    if (instruction == instruction->block->instructions) {
-      instruction->block->instructions = instruction->next;
-    }
-    if (instruction == instruction->block->last_instruction) {
-      instruction->block->last_instruction = instruction->previous;
-    }
-    // TODO: Free uses.
-    instruction->block = NULL;
-    instruction->next = NULL;
-    instruction->previous = NULL;
-    instruction->uses = NULL;
-  }
-#endif
 }
 
 typedef struct NumberStack {
