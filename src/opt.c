@@ -356,6 +356,22 @@ void opt_inline_global_vars(CodegenContext *ctx) {
     VECTOR_CLEAR(a->store->users);
     ir_remove(a->store);
   }
+
+  /// Convert indirect calls to a global address to direct calls.
+  FOREACH_INSTRUCTION (ctx) {
+    switch (instruction->type) {
+      case IR_CALL: {
+        if (instruction->value.call.type == IR_CALLTYPE_INDIRECT &&
+            instruction->value.call.value.callee->type == IR_GLOBAL_ADDRESS) {
+          const char* name = instruction->value.call.value.callee->value.name;
+          ir_remove_use(instruction->value.call.value.callee, instruction);
+
+          instruction->value.call.type = IR_CALLTYPE_DIRECT;
+          instruction->value.call.value.name = name;
+        }
+      } break;
+    }
+  }
 }
 
 /// A node in the dominator tree.
@@ -716,7 +732,6 @@ static void optimise_function(CodegenContext *ctx, IRFunction *f) {
 }
 
 void codegen_optimise(CodegenContext *ctx) {
-  /// TODO: Yeet GLOBAL_ADDRESS.
   opt_inline_global_vars(ctx);
   VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
     optimise_function(ctx, f);
