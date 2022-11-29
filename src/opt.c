@@ -363,13 +363,70 @@ void opt_inline_global_vars(CodegenContext *ctx) {
   }
 }
 
+/// A node in the dominator tree.
 typedef struct DomTreeNode {
   IRBlock *block;
   VECTOR(struct DomTreeNode*) dominators;
   VECTOR(struct DomTreeNode*) children;
 } DomTreeNode;
 
-typedef struct {
+/// Structure used to store dominator information such as the
+/// dominator tree and the list of dominators of each block.
+///
+/// The following definitions may be useful in understanding
+/// the concept of dominance and dominator trees:
+///
+///   *dominates*:
+/// A block B1 *dominates* another block B2, iff all paths from the
+/// entry block to B2 go through B1. That is, when control flow
+/// reaches B2, it must have come from B1. By definition, every
+/// block dominates itself.
+///
+///   *strictly dominates*:
+/// A block B1 *strictly dominates* another block B2, iff B1 dominates
+/// B2 and B1 != B2.
+///
+///   *immediately dominates*:
+/// A block B1 *immediately dominates* another block B2, iff B1 strictly
+/// dominates B2 and there is no other block B3 such that B1 strictly
+/// dominates B3 and B3 strictly dominates B2. To put it differently, the
+/// immediate dominator of a block B2 is the closest block B1 that strictly
+/// dominates it, such that there is no other block in between that is
+/// strictly dominated by B1 and strictly dominates B2. Every block (except
+/// the entry block) has exactly one immediate dominator.
+///
+///   *dominator tree*:
+/// The *dominator tree* of a control flow graph is a tree containing a node
+/// for each block in the CFG such that each node’s children are the blocks
+/// that it immediately dominates.
+///
+/// By way of illustration, consider the following CFG:
+///
+///                   B0
+///                  ╱  ╲
+///                 B1  B3
+///                ╱  ╲ ╱
+///               B2  B4
+///               |   |
+///               B5  B6
+///
+/// In the graph above,
+///    - B0 dominates all blocks since it is the root.
+///    - B1 dominates B2 and B5, but *not* e.g. B4 since B4 can
+///      also be reached from B3.
+///    - B2 dominates B5.
+///    - B4 dominates B6.
+///
+/// The dominator tree for this CFG is:
+///
+///                    B0
+///                 ╱  |  ╲
+///                B1  B3  B4
+///                |       |
+///                B2      B6
+///                |
+///                B5
+typedef struct DominatorInfo {
   /// Nodes that make up the dominator tree. The first
   /// node is the root of the tree and corresponds to
   /// the entry block.
@@ -430,7 +487,15 @@ static void free_dominator_info(DominatorInfo* info) {
   VECTOR_DELETE(info->nodes);
 }
 
+/// Check if a node dominates another node.
+static bool dominates(DomTreeNode *dominator, DomTreeNode *node) {
+  bool out = false;
+  VECTOR_CONTAINS(node->dominators, dominator, out);
+  return out;
+}
+
 /// Build the dominator tree for a function and remove unused blocks.
+/// \see struct DominatorInfo
 static void build_and_prune_dominator_tree(IRFunction *f, DominatorInfo* info) {
   /// Determine all blocks that are reachable from the entry block.
   BlockVector reachable = collect_reachable_blocks(f->blocks.first, NULL);
@@ -470,11 +535,11 @@ static void build_and_prune_dominator_tree(IRFunction *f, DominatorInfo* info) {
   /// from the function; then, find all blocks that are still
   /// reachable from the root. Any unreachable are dominated
   /// by the removed block.
-  for (DomTreeNode *node = (info->nodes).data + 1;
-       node < (info->nodes).data + (info->nodes).size;
-       node++) {
+  for (DomTreeNode *dominator = (info->nodes).data + 1;
+       dominator < (info->nodes).data + (info->nodes).size;
+       dominator++) {
     /// Find all blocks that are still reachable from the root.
-    BlockVector still_reachable = collect_reachable_blocks(f->blocks.first, node->block);
+    BlockVector still_reachable = collect_reachable_blocks(f->blocks.first, dominator->block);
 
     /// Find all blocks that are no longer reachable.
     VECTOR_FOREACH (DomTreeNode, d, info->nodes) {
@@ -482,16 +547,38 @@ static void build_and_prune_dominator_tree(IRFunction *f, DominatorInfo* info) {
       VECTOR_CONTAINS(still_reachable, d->block, out);
       if (!out) {
         /// Add the block to the dominators of the current node.
-        VECTOR_PUSH(d->dominators, node);
+        VECTOR_PUSH(d->dominators, dominator);
 
-        /// FIXME: This is incorrect.
         /// Add the current node to the children of the block.
-        VECTOR_PUSH(node->children, d);
+        VECTOR_PUSH(dominator->children, d);
       }
     }
 
     VECTOR_DELETE(still_reachable);
   }
+
+  /// For each node N, remove from N’s children any nodes that are
+  /// also dominated by another child of N.
+  VECTOR (DomTreeNode*) to_remove = {0};
+  VECTOR_FOREACH (DomTreeNode, n, info->nodes) {
+    VECTOR_CLEAR(to_remove);
+
+    /// For each child of N, check if it is dominated by another child.
+    VECTOR_FOREACH_PTR (DomTreeNode*, c, n->children) {
+      VECTOR_FOREACH_PTR (DomTreeNode*, c2, n->children) {
+        if (c != c2 && dominates(c, c2)) {
+          VECTOR_PUSH(to_remove, c2);
+          break;
+        }
+      }
+    }
+
+    /// Remove the nodes.
+    VECTOR_FOREACH_PTR (DomTreeNode*, c, to_remove) {
+      VECTOR_REMOVE_ELEMENT(n->children, c);
+    }
+  }
+  VECTOR_DELETE(to_remove);
 }
 
 /// Rearrange the blocks in a function according to the dominator tree.
