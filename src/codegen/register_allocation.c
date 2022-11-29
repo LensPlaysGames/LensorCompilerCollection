@@ -1,13 +1,13 @@
-#include <codegen/register_allocation.h>
-
 #include <codegen.h>
+#include <codegen/intermediate_representation.h>
+#include <codegen/register_allocation.h>
 #include <error.h>
+#include <opt.h>
 #include <stdlib.h>
 #include <string.h>
-#include <codegen/intermediate_representation.h>
 #include <vector.h>
 
-//#define DEBUG_RA
+// #define DEBUG_RA
 
 #ifdef DEBUG_RA
 #define IR_FEMIT(file, context) ir_femit(file, context)
@@ -1172,4 +1172,6 @@ void ra(RegisterAllocationInfo *info) {
   IR_FEMIT(stdout, info->context);
 
   track_registers(info);
+
+  if (optimise) codegen_optimise_blocks(info->context);
 }

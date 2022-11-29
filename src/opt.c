@@ -165,7 +165,8 @@ static bool tail_call_possible(IRInstruction *i) {
   return possible;
 }
 
-static void opt_tail_call_elim(CodegenContext *ctx, IRFunction *f) {
+static bool opt_tail_call_elim(CodegenContext *ctx, IRFunction *f) {
+  bool changed = false;
   (void) ctx;
   DLIST_FOREACH (IRBlock*, b, f->blocks) {
     DLIST_FOREACH (IRInstruction*, i, b->instructions) {
@@ -177,7 +178,8 @@ static void opt_tail_call_elim(CodegenContext *ctx, IRFunction *f) {
       if (tail_call_possible(i)) {
         /// The actual tail call optimisation takes place in the code generator.
         i->value.call.tail_call = true;
-        i->block->instructions.last->type = IR_UNREACHABLE;
+        ir_mark_unreachable(b);
+        changed = true;
 
         /// We can’t have more than two tail calls in a single block.
         goto next_block;
@@ -185,6 +187,7 @@ static void opt_tail_call_elim(CodegenContext *ctx, IRFunction *f) {
     }
   next_block:;
   }
+  return changed;
 }
 
 #if 0
@@ -238,55 +241,6 @@ static bool opt_merge_blocks(CodegenContext *ctx, IRFunction *f) {
   VECTOR_DELETE(&candidates);
   return changed;
 }
-
-static bool opt_jump_threading(CodegenContext *ctx, IRFunction *f) {
-  bool changed = false;
-  (void) ctx;
-
-  /// Predecessor ‘map’.
-  VECTOR(IRBlock *) predecessors = {0};
-
-  /// Compute predecessor map.
-  FOREACH (IRBlock*, b, f->first) {
-    if (b == f->first || b->instructions) { continue; }
-
-    VECTOR_CLEAR(&predecessors);
-    FOREACH (IRBlock*, p, f->first) {
-      if (b->branch->type == IR_BRANCH &&
-          ((p->branch->type == IR_BRANCH && p->branch->value.block == b) ||
-           (p->branch->type == IR_BRANCH_CONDITIONAL &&
-            (p->branch->value.conditional_branch.true_branch == b ||
-             p->branch->value.conditional_branch.false_branch == b)))) {
-        VECTOR_PUSH(&predecessors, p);
-      }
-    }
-
-    /// Check if we can thread the jump.
-    size_t sz = predecessors.size;
-    DLIST_FOREACH (IRBlock *, pred, &predecessors) {
-      if (pred->branch->type == IR_BRANCH) {
-        pred->branch->value.block = b->branch->value.block;
-        VECTOR_REMOVE_ELEMENT_UNORDERED(&predecessors, pred);
-      } else if (pred->branch->type == IR_BRANCH_CONDITIONAL) {
-        if (pred->branch->value.conditional_branch.true_branch == b) {
-          pred->branch->value.conditional_branch.true_branch = b->branch->value.block;
-          VECTOR_REMOVE_ELEMENT_UNORDERED(&predecessors, pred);
-        }
-        if (pred->branch->value.conditional_branch.false_branch == b) {
-          pred->branch->value.conditional_branch.false_branch = b->branch->value.block;
-          VECTOR_REMOVE_ELEMENT_UNORDERED(&predecessors, pred);
-        }
-      }
-    }
-    if (sz > 0 && predecessors.size == 0) {
-      /// Up
-      ir_remove_block(b);
-      changed = true;
-    }
-  }
-
-  VECTOR_DELETE(&predecessors);
-  return changed;
 }
 #endif
 
@@ -463,6 +417,231 @@ void opt_inline_global_vars(CodegenContext *ctx) {
   }
 }
 
+typedef struct DomTreeNode {
+  IRBlock *block;
+  VECTOR(struct DomTreeNode*) dominators;
+  VECTOR(struct DomTreeNode*) children;
+} DomTreeNode;
+
+typedef struct {
+  /// Nodes that make up the dominator tree. The first
+  /// node is the root of the tree and corresponds to
+  /// the entry block.
+  VECTOR(DomTreeNode) nodes;
+  DomTreeNode *dominator_tree;
+} DominatorInfo;
+
+typedef VECTOR(IRBlock*) BlockVector;
+
+/// Perform DFS on the control flow graph to find blocks
+/// that are reachable from b.
+static BlockVector collect_reachable_blocks(IRBlock *block, IRBlock *ignore) {
+  BlockVector reachable = {0};
+  VECTOR_PUSH(reachable, block);
+
+  /// Stack for DFS.
+  VECTOR(IRBlock*) dfs_stack = {0};
+  VECTOR_PUSH(dfs_stack, block);
+  while (dfs_stack.size) {
+    IRBlock *b = VECTOR_POP(dfs_stack);
+    if (b == ignore) continue;
+
+    STATIC_ASSERT(IR_COUNT == 28, "Handle all branch types");
+    bool out = false;
+    IRInstruction *i = b->instructions.last;
+    switch (i->type) {
+      case IR_BRANCH:
+        VECTOR_CONTAINS(reachable, i->value.block, out);
+        if (!out) {
+          VECTOR_PUSH(reachable, i->value.block);
+          VECTOR_PUSH(dfs_stack, i->value.block);
+        }
+        break;
+
+      case IR_BRANCH_CONDITIONAL:
+        VECTOR_CONTAINS(reachable, i->value.conditional_branch.true_branch, out);
+        if (!out) {
+          VECTOR_PUSH(reachable, i->value.conditional_branch.true_branch);
+          VECTOR_PUSH(dfs_stack, i->value.conditional_branch.true_branch);
+        }
+        VECTOR_CONTAINS(reachable, i->value.conditional_branch.false_branch, out);
+        if (!out) {
+          VECTOR_PUSH(reachable, i->value.conditional_branch.false_branch);
+          VECTOR_PUSH(dfs_stack, i->value.conditional_branch.false_branch);
+        }
+        break;
+    }
+  }
+  VECTOR_DELETE(dfs_stack);
+  return reachable;
+}
+
+static void free_dominator_info(DominatorInfo* info) {
+  VECTOR_FOREACH (DomTreeNode, n, info->nodes) {
+    VECTOR_DELETE(n->dominators);
+    VECTOR_DELETE(n->children);
+  }
+  VECTOR_DELETE(info->nodes);
+}
+
+/// Build the dominator tree for a function and remove unused blocks.
+static void build_and_prune_dominator_tree(IRFunction *f, DominatorInfo* info) {
+  /// Determine all blocks that are reachable from the entry block.
+  BlockVector reachable = collect_reachable_blocks(f->blocks.first, NULL);
+
+  /// Remove any unreachable blocks.
+  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    bool out = false;
+    VECTOR_CONTAINS(reachable, b, out);
+    if (!out) ir_remove_and_free_block(b);
+  }
+
+  /// We no longer need this.
+  VECTOR_DELETE(reachable);
+
+  /// Free old dominator tree.
+  VECTOR_FOREACH (DomTreeNode, n, info->nodes) {
+    VECTOR_DELETE(n->dominators);
+    VECTOR_DELETE(n->children);
+  }
+  VECTOR_CLEAR(info->nodes);
+
+  /// Add a node for each block.
+  ASSERT(f->blocks.first);
+  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    DomTreeNode node = {0};
+    node.block = b;
+    VECTOR_PUSH(info->nodes, node);
+  }
+
+  /// The only dominator of the root is the root itself.
+  /// We assume that the first block in a function is
+  /// the entry block.
+  VECTOR_PUSH(info->nodes.data[0].dominators, info->nodes.data);
+  info->dominator_tree = info->nodes.data;
+
+  /// To find all dominators of a block, remove that block
+  /// from the function; then, find all blocks that are still
+  /// reachable from the root. Any unreachable are dominated
+  /// by the removed block.
+  for (DomTreeNode *node = (info->nodes).data + 1;
+       node < (info->nodes).data + (info->nodes).size;
+       node++) {
+    /// Find all blocks that are still reachable from the root.
+    BlockVector still_reachable = collect_reachable_blocks(f->blocks.first, node->block);
+
+    /// Find all blocks that are no longer reachable.
+    VECTOR_FOREACH (DomTreeNode, d, info->nodes) {
+      bool out = false;
+      VECTOR_CONTAINS(still_reachable, d->block, out);
+      if (!out) {
+        /// Add the block to the dominators of the current node.
+        VECTOR_PUSH(d->dominators, node);
+
+        /// Add the current node to the children of the block.
+        VECTOR_PUSH(node->children, d);
+      }
+    }
+
+    VECTOR_DELETE(still_reachable);
+  }
+}
+
+/// Rearrange the blocks in a function according to the dominator tree.
+static void opt_reorder_blocks(IRFunction *f, DominatorInfo* info) {
+  /// Clear the block list.
+  f->blocks.first = NULL;
+  f->blocks.last = NULL;
+
+  /// Perform a preorder traversal of the dominator tree
+  /// and reorder the blocks so that we can avoid jumps.
+  VECTOR(DomTreeNode*) stack = {0};
+  VECTOR(DomTreeNode*) visited = {0};
+  VECTOR_PUSH(stack, info->dominator_tree);
+  while (stack.size) {
+    DomTreeNode *node = VECTOR_POP(stack);
+    DLIST_PUSH_BACK(f->blocks, node->block);
+
+    /// If a block contains a direct branch or a conditional branch,
+    /// we want to put the target block at the top of the stack so
+    /// that it gets inserted directly after this block.
+    IRBlock *next = NULL;
+    IRInstruction *last = node->block->instructions.last;
+    DomTreeNode *next_node = NULL;
+    if (last->type == IR_BRANCH) next = last->value.block;
+    else if (last->type == IR_BRANCH_CONDITIONAL) next = last->value.conditional_branch.true_branch;
+
+    /// Insert all children except for the next node.
+    VECTOR_FOREACH_PTR (DomTreeNode*, child, node->children) {
+      if (child->block == next) {
+        next_node = child;
+        continue;
+      }
+      bool out = false;
+      VECTOR_CONTAINS(visited, child, out);
+      if (!out) VECTOR_PUSH(stack, child);
+    }
+
+    /// Insert the next node if there is one.
+    if (next_node) {
+      bool out = false;
+      VECTOR_CONTAINS(visited, next_node, out);
+      if (!out) VECTOR_PUSH(stack, next_node);
+    }
+  }
+  VECTOR_DELETE(stack);
+}
+
+
+static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
+  bool changed = false;
+
+  /// Remove blocks that consist of a single direct branch.
+  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    IRInstruction *last = b->instructions.last;
+    if (last == b->instructions.first && last->type == IR_BRANCH) {
+      /// Update any blocks that branch to this to branch to our
+      /// target instead.
+      DLIST_FOREACH (IRBlock*, b2, f->blocks) {
+        if (b == b2) continue;
+
+        STATIC_ASSERT(IR_COUNT == 28, "Handle all branch instructions");
+        IRInstruction *branch = b2->instructions.last;
+        if (branch->type == IR_BRANCH && branch->value.block == b) {
+          branch->value.block = last->value.block;
+          changed = true;
+        } else if (branch->type == IR_BRANCH_CONDITIONAL) {
+          if (branch->value.conditional_branch.true_branch == b) {
+            branch->value.conditional_branch.true_branch = last->value.block;
+            changed = true;
+          }
+          if (branch->value.conditional_branch.false_branch == b) {
+            branch->value.conditional_branch.false_branch = last->value.block;
+            changed = true;
+          }
+        }
+
+        /// Also update PHIs.
+        DLIST_FOREACH (IRInstruction*, i, b2->instructions) {
+          if (i->type == IR_PHI) {
+            VECTOR_FOREACH (IRPhiArgument, arg, i->value.phi_arguments) {
+              if (arg->block == b) {
+                arg->block = last->value.block;
+                changed = true;
+              }
+            }
+          }
+        }
+      }
+
+      ir_remove_and_free_block(b);
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 static void optimise_function(CodegenContext *ctx, IRFunction *f) {
 /*
   ir_set_ids(ctx);
@@ -480,15 +659,34 @@ static void optimise_function(CodegenContext *ctx, IRFunction *f) {
   _Exit(42);
 */
 
-  opt_inline_global_vars(ctx);
-  while (opt_fold_constants(ctx, f) ||
-         opt_dce(ctx, f) ||
-         opt_mem2reg(ctx, f));
-  opt_tail_call_elim(ctx, f);
+  DominatorInfo dom = {0};
+  do {
+    build_and_prune_dominator_tree(f, &dom);
+    opt_reorder_blocks(f, &dom);
+  } while (
+    opt_fold_constants(ctx, f) ||
+    opt_dce(ctx, f) ||
+    opt_mem2reg(ctx, f) ||
+    opt_jump_threading(f, &dom) ||
+    opt_tail_call_elim(ctx, f)
+  );
+  free_dominator_info(&dom);
 }
 
 void codegen_optimise(CodegenContext *ctx) {
+  opt_inline_global_vars(ctx);
   VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
     optimise_function(ctx, f);
+  }
+}
+
+void codegen_optimise_blocks(CodegenContext *ctx) {
+  VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
+    DominatorInfo dom = {0};
+    do {
+      build_and_prune_dominator_tree(f, &dom);
+      opt_reorder_blocks(f, &dom);
+    } while (opt_jump_threading(f, &dom));
+    free_dominator_info(&dom);
   }
 }

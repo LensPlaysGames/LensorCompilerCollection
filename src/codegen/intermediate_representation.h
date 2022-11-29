@@ -267,6 +267,8 @@ void ir_phi_argument
  IRBlock *phi_predecessor,
  IRInstruction *argument);
 
+void ir_phi_remove_argument(IRInstruction *phi, IRBlock *block);
+
 IRInstruction *ir_phi
 (CodegenContext *context);
 
@@ -404,6 +406,10 @@ void ir_unmark_usees(IRInstruction *instruction);
 /// Used by the optimiser.
 void ir_remove(IRInstruction* instruction);
 void ir_remove_use(IRInstruction *usee, IRInstruction *user);
-void ir_remove_block(IRBlock *block);
+void ir_remove_and_free_block(IRBlock *block);
+
+/// Mark a block as ending w/ `unreachable` and remove it
+/// from PHIs.
+void ir_mark_unreachable(IRBlock *block);
 
 #endif /* INTERMEDIATE_REPRESENTATION_H */

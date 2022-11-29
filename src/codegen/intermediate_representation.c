@@ -92,7 +92,19 @@ void ir_remove(IRInstruction* instruction) {
   free(instruction);
 }
 
-void ir_remove_block(IRBlock *block) {
+void ir_remove_and_free_block(IRBlock *block) {
+  /// Remove all instructions from the block.
+  while (block->instructions.first) {
+    /// Remove this instruction from PHIs.
+    if (block->instructions.first->type == IR_PHI) {
+        VECTOR_FOREACH_PTR (IRInstruction *, user, block->instructions.first->users) {
+            if (user->type == IR_PHI) ir_phi_remove_argument(user, block);
+        }
+    }
+
+    /// Remove it from the blocks.
+    ir_remove(block->instructions.first);
+  }
   DLIST_REMOVE(block->function->blocks, block);
   free(block);
 }
@@ -394,6 +406,16 @@ void ir_phi_argument
   };
   VECTOR_PUSH(phi->value.phi_arguments, phi_argument);
   mark_used(argument, phi);
+}
+
+void ir_phi_remove_argument(IRInstruction *phi, IRBlock *block) {
+  VECTOR_FOREACH (IRPhiArgument, argument, phi->value.phi_arguments) {
+    if (argument->block == block) {
+      ir_remove_use(argument->value, phi);
+      VECTOR_REMOVE_ELEMENT_UNORDERED(phi->value.phi_arguments, *argument);
+      return;
+    }
+  }
 }
 
 IRInstruction *ir_phi(CodegenContext *context) {
@@ -871,6 +893,33 @@ static void ir_internal_unmark_usee(IRInstruction *user, IRInstruction **child, 
 
 void ir_unmark_usees(IRInstruction *instruction) {
   ir_for_each_child(instruction, ir_internal_unmark_usee, NULL);
+}
+
+void ir_mark_unreachable(IRBlock *block) {
+  STATIC_ASSERT(IR_COUNT == 28, "Handle all branch types");
+  IRInstruction *i = block->instructions.last;
+  switch (i->type) {
+    case IR_BRANCH: {
+      IRInstruction *first = i->value.block->instructions.first;
+      while (first && first->type == IR_PHI) {
+        ir_phi_remove_argument(first, block);
+        first = first->next;
+      }
+    } break;
+    case IR_BRANCH_CONDITIONAL: {
+      IRInstruction *first = i->value.conditional_branch.true_branch->instructions.first;
+      while (first && first->type == IR_PHI) {
+        ir_phi_remove_argument(first, block);
+        first = first->next;
+      }
+      first = i->value.conditional_branch.false_branch->instructions.first;
+      while (first && first->type == IR_PHI) {
+        ir_phi_remove_argument(first, block);
+        first = first->next;
+      }
+    } break;
+  }
+  i->type = IR_UNREACHABLE;
 }
 
 #undef INSERT

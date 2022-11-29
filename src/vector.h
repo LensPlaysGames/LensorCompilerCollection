@@ -93,7 +93,7 @@
   do {                                                                     \
     size_t _index = 0;                                                     \
     for (; _index < (vector).size; _index++) {                           \
-      if ((vector).data[_index] == element) { break; }                    \
+      if (memcmp((vector).data + _index, &(element), sizeof(element)) == 0) { break; }                    \
     }                                                                      \
     if (_index < (vector).size) VECTOR_REMOVE_UNORDERED(vector, _index); \
   } while (0)
@@ -160,6 +160,20 @@
   } while (0)
 
 #define VECTOR_INSERT_AFTER(vector, element, after) VECTOR_INSERT_BEFORE(vector, element, (after + 1))
+
+#define VECTOR_CONTAINS(vector, element, out) \
+  do {                                        \
+    size_t _index = 0;                        \
+    for (; _index < (vector).size; _index++) { \
+      if ((vector).data[_index] == element) { \
+        (out) = true;                         \
+        break;                                \
+      }                                       \
+    }                                         \
+    if (_index == (vector).size) {            \
+      (out) = false;                          \
+    }                                         \
+  } while (0)
 
 #define DLIST_NODE(type) \
   struct {               \
