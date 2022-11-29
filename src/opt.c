@@ -437,7 +437,9 @@ typedef struct DominatorInfo {
 typedef VECTOR(IRBlock*) BlockVector;
 
 /// Perform DFS on the control flow graph to find blocks
-/// that are reachable from b.
+/// that are reachable from `block`. If `ignore` is encountered,
+/// it is ignored. This allows us to effectively ‘remove’ blocks
+/// from the CFG without having to actually remove them.
 static BlockVector collect_reachable_blocks(IRBlock *block, IRBlock *ignore) {
   BlockVector reachable = {0};
   VECTOR_PUSH(reachable, block);
@@ -492,6 +494,11 @@ static bool dominates(DomTreeNode *dominator, DomTreeNode *node) {
   bool out = false;
   VECTOR_CONTAINS(node->dominators, dominator, out);
   return out;
+}
+
+/// Check if a node strictly dominates another node.
+static bool strictly_dominates(DomTreeNode *dominator, DomTreeNode *node) {
+  return dominator != node && dominates(dominator, node);
 }
 
 /// Build the dominator tree for a function and remove unused blocks.
@@ -550,6 +557,7 @@ static void build_and_prune_dominator_tree(IRFunction *f, DominatorInfo* info) {
         VECTOR_PUSH(d->dominators, dominator);
 
         /// Add the current node to the children of the block.
+        /// This is used to build the dominator tree below.
         VECTOR_PUSH(dominator->children, d);
       }
     }
@@ -557,16 +565,22 @@ static void build_and_prune_dominator_tree(IRFunction *f, DominatorInfo* info) {
     VECTOR_DELETE(still_reachable);
   }
 
+  /// Now that we know the dominators of each block, we can
+  /// build the dominator tree. Currently, the children of each
+  /// node contains all nodes that are dominated by that node.
+  ///
+  /// However, we only want all nodes that are immediately
+  /// dominated by that node. The algorithm for this is simple:
   /// For each node N, remove from N’s children any nodes that are
-  /// also dominated by another child of N.
+  /// also strictly dominated by another child of N.
   VECTOR (DomTreeNode*) to_remove = {0};
   VECTOR_FOREACH (DomTreeNode, n, info->nodes) {
     VECTOR_CLEAR(to_remove);
 
-    /// For each child of N, check if it is dominated by another child.
+    /// For each child of N, check if it is strictly dominated by another child.
     VECTOR_FOREACH_PTR (DomTreeNode*, c, n->children) {
       VECTOR_FOREACH_PTR (DomTreeNode*, c2, n->children) {
-        if (c != c2 && dominates(c, c2)) {
+        if (strictly_dominates(c, c2)) {
           VECTOR_PUSH(to_remove, c2);
           break;
         }
