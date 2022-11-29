@@ -1130,26 +1130,39 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     break;
   case IR_BRANCH_CONDITIONAL: {
     IRBranchConditional *branch = &instruction->value.conditional_branch;
-    enum IndirectJumpType jtype = JUMP_TYPE_Z;
 
     /// If the condition is only used by this branch, emit a `cmp` + jcc instead.
     if (branch->condition->dont_emit) {
+      enum IndirectJumpType jtype = comparison_to_jump_type(branch->condition->value.comparison.type);
+      femit(context, I_CMP, REGISTER_TO_REGISTER,
+            branch->condition->value.comparison.pair.cdr->result,
+            branch->condition->value.comparison.pair.car->result);
 
+      /// If the next block happens to be the true branch, invert the condition.
+      if (branch->true_branch == instruction->block->next) {
+        jtype = negate_jump(jtype);
+        femit(context, I_JCC, jtype, branch->false_branch->name);
+      } else if (branch->false_branch == instruction->block->next) {
+        femit(context, I_JCC, jtype, branch->true_branch->name);
+      } else {
+        femit(context, I_JCC, jtype, branch->true_branch->name);
+        femit(context, I_JMP, NAME, branch->false_branch->name);
+      }
     } else {
       femit(context, I_TEST, REGISTER_TO_REGISTER,
           branch->condition->result,
           branch->condition->result);
-    }
 
-    /// If either target is the next block, arrange the jumps in such a way
-    /// that we can save one and simply fallthrough to the next block.
-    if (optimise && branch->true_branch == instruction->block->next) {
-      femit(context, I_JCC, JUMP_TYPE_Z, branch->false_branch->name);
-    } else if (optimise && branch->false_branch == instruction->block->next) {
-      femit(context, I_JCC, JUMP_TYPE_NZ, branch->true_branch->name);
-    } else {
-      femit(context, I_JCC, JUMP_TYPE_Z, branch->false_branch->name);
-      femit(context, I_JMP, NAME, branch->true_branch->name);
+      /// If either target is the next block, arrange the jumps in such a way
+      /// that we can save one and simply fallthrough to the next block.
+      if (optimise && branch->true_branch == instruction->block->next) {
+        femit(context, I_JCC, JUMP_TYPE_Z, branch->false_branch->name);
+      } else if (optimise && branch->false_branch == instruction->block->next) {
+        femit(context, I_JCC, JUMP_TYPE_NZ, branch->true_branch->name);
+      } else {
+        femit(context, I_JCC, JUMP_TYPE_Z, branch->false_branch->name);
+        femit(context, I_JMP, NAME, branch->true_branch->name);
+      }
     }
 
     if (optimise && instruction->block) instruction->block->done = true;

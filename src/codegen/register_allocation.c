@@ -187,11 +187,13 @@ bool needs_register(IRInstruction *instruction) {
   case IR_PHI:
   case IR_COPY:
   case IR_IMMEDIATE:
-  case IR_COMPARISON:
   case IR_CALL:
   case IR_PARAMETER_REFERENCE:
   case IR_REGISTER:
     return true;
+  case IR_COMPARISON:
+    /// TODO: Should we always return false if dont_emit is true?
+    return !instruction->dont_emit;
   default:
     return false;
   }

@@ -172,6 +172,17 @@ typedef struct IRInstruction {
 
   Register result;
 
+  /// Sometimes we don’t want to allocate a register for an instruction
+  /// or emit it, but we still want to use it as an operand and keep it
+  /// in the block so that we don’t leak it.
+  ///
+  /// An example of this are comparisons that are immediately used in
+  /// a conditional branch, and unused after.
+  ///
+  /// This is a bit of a hack, but it works. A dedicated instruction
+  /// selection pass would be better.
+  bool dont_emit;
+
   /// List of instructions using this instruction.
   VECTOR(IRInstruction*) users;
 } IRInstruction;

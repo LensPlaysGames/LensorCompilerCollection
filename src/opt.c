@@ -685,6 +685,20 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
   return changed;
 }
 
+/// Mark comparisons as `dont_emit` if they’re immediately
+/// used by a conditional branch.
+static bool opt_inline_comparisons(IRFunction *f) {
+  bool changed = false;
+  FOREACH_INSTRUCTION_IN_FUNCTION (f) {
+    if (instruction->dont_emit) continue;
+    if (instruction->type != IR_COMPARISON) continue;
+    if (instruction->next->type != IR_BRANCH_CONDITIONAL) continue;
+    if (instruction->users.size != 1 || instruction->users.data[0] != instruction->next) continue;
+    instruction->dont_emit = changed = true;
+  }
+  return changed;
+}
+
 static void optimise_function(CodegenContext *ctx, IRFunction *f) {
   DominatorInfo dom = {0};
   do {
@@ -695,12 +709,14 @@ static void optimise_function(CodegenContext *ctx, IRFunction *f) {
     opt_dce(f) ||
     opt_mem2reg(f) ||
     opt_jump_threading(f, &dom) ||
-    opt_tail_call_elim(f)
+    opt_tail_call_elim(f) ||
+    opt_inline_comparisons(f)
   );
   free_dominator_info(&dom);
 }
 
 void codegen_optimise(CodegenContext *ctx) {
+  /// TODO: Yeet GLOBAL_ADDRESS.
   opt_inline_global_vars(ctx);
   VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
     optimise_function(ctx, f);
