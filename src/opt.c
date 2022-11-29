@@ -383,6 +383,86 @@ static bool opt_mem2reg(CodegenContext *ctx, IRFunction *f) {
   return changed;
 }
 
+/// Keep track of stores to global variables, and if there is only
+/// one, inline the value if it is also global.
+void opt_inline_global_vars(CodegenContext *ctx) {
+  typedef struct {
+    const char* name;
+    IRInstruction *store;
+    VECTOR(IRInstruction *) loads;
+    bool unoptimisable;
+  } global_var;
+  VECTOR(global_var) vars = {0};
+
+  /// Since loads from global variables before the first store
+  /// are possible, we only check if the first store occurs
+  /// before any loads and in main() for now.
+  IRFunction *main = ir_get_function(ctx, "main");
+  ASSERT(main, "No main() function!");
+
+  FOREACH_INSTRUCTION (ctx) {
+    switch (instruction->type) {
+      /// Record the first store into a variable.
+      case IR_GLOBAL_STORE: {
+        VECTOR_FOREACH (global_var, a, vars) {
+          if (!a->unoptimisable && !strcmp(a->name, instruction->value.global_assignment.name)) {
+            /// If there are multiple stores, mark the variable as unoptimisable.
+            if (a->store || function != main) a->unoptimisable = true;
+            else a->store = instruction;
+            goto next_instruction;
+          }
+        }
+
+        /// Add a new variable.
+        global_var v = {0};
+        v.name = instruction->value.global_assignment.name;
+        v.store = function == main ? instruction : NULL;
+        v.unoptimisable = function != main;
+        VECTOR_PUSH(vars, v);
+      } break;
+
+      /// Record all loads; also check for loads before the first store.
+      case IR_GLOBAL_LOAD: {
+        VECTOR_FOREACH (global_var, a, vars) {
+          if (!a->unoptimisable && !strcmp(a->name, instruction->value.name)) {
+            /// Load before store.
+            if (!a->store) a->unoptimisable = true;
+            else VECTOR_PUSH(a->loads, instruction);
+            goto next_instruction;
+          }
+        }
+
+        /// Unoptimisable because the variable is loaded before it is stored to.
+        global_var v = {0};
+        v.name = instruction->value.name;
+        v.unoptimisable = true;
+        VECTOR_PUSH(vars, v);
+      } break;
+    }
+  next_instruction:;
+  }
+
+  /// Optimise all optimisable variables.
+  VECTOR_FOREACH (global_var, a, vars) {
+    if (a->unoptimisable) {
+      VECTOR_DELETE(a->loads);
+      continue;
+    }
+
+    /// Replace all loads with the stored value.
+    VECTOR_FOREACH_PTR (IRInstruction*, i, a->loads) {
+      ir_replace_uses(i, a->store->value.global_assignment.new_value);
+      ir_remove(i);
+    }
+    VECTOR_DELETE(a->loads);
+
+    /// Remove the store.
+    ASSERT(a->store->users.size <= 1);
+    VECTOR_CLEAR(a->store->users);
+    ir_remove(a->store);
+  }
+}
+
 static void optimise_function(CodegenContext *ctx, IRFunction *f) {
 /*
   ir_set_ids(ctx);
@@ -400,7 +480,7 @@ static void optimise_function(CodegenContext *ctx, IRFunction *f) {
   _Exit(42);
 */
 
-
+  opt_inline_global_vars(ctx);
   while (opt_fold_constants(ctx, f) ||
          opt_dce(ctx, f) ||
          opt_mem2reg(ctx, f));

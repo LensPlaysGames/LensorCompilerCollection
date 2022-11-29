@@ -776,6 +776,21 @@ void codegen_emit(CodegenContext *context) {
   }
 }
 
+static void codegen_finalise_ir(CodegenContext *ctx) {
+  /// Convert indirect calls to a global address to direct calls.
+  FOREACH_INSTRUCTION (ctx) {
+    switch (instruction->type) {
+      case IR_CALL: {
+        if (instruction->value.call.type == IR_CALLTYPE_INDIRECT &&
+            instruction->value.call.value.callee->type == IR_GLOBAL_ADDRESS) {
+          instruction->value.call.type = IR_CALLTYPE_DIRECT;
+          instruction->value.call.value.name = instruction->value.call.value.callee->value.name;
+        }
+      } break;
+    }
+  }
+}
+
 Error codegen
 (enum CodegenOutputFormat format,
  enum CodegenCallingConvention call_convention,
@@ -805,6 +820,8 @@ Error codegen
   codegen_lower(context);
 
   if (optimise) codegen_optimise(context);
+
+  codegen_finalise_ir(context);
 
   codegen_emit(context);
 

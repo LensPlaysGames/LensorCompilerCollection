@@ -1453,8 +1453,8 @@ void codegen_emit_x86_64(CodegenContext *context) {
             switch (i->type) {
               case IR_UNREACHABLE: goto next_block;
               case IR_BRANCH:
-                /// Direct branches to the next block are no-ops.
                 if (i->value.block == block) {
+                  /// Direct branches to the next block are no-ops.
                   if (i->value.block == block->next) goto next_block;
                   referenced = true;
                   goto done;

@@ -390,6 +390,10 @@ IRInstruction *ir_stack_allocate
 (CodegenContext *context,
  int64_t size);
 
+IRFunction *ir_get_function
+(CodegenContext *context,
+ const char *name);
+
 /// Replace all uses of instruction with replacement.
 void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement);
 

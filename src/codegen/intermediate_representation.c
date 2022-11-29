@@ -756,6 +756,17 @@ IRInstruction *ir_stack_allocate
   TODO();
 }
 
+IRFunction *ir_get_function
+(CodegenContext *context,
+ const char *name) {
+  VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
+    if (strcmp(function->name, name) == 0) {
+      return function;
+    }
+  }
+  return NULL;
+}
+
 typedef struct {
   IRInstruction *usee;
   IRInstruction *replacement;
