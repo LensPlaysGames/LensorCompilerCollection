@@ -45,21 +45,21 @@ static void vpanic(int code, const char *fmt, va_list args) {
   fprintf(stderr, "Panic: ");
   vfprintf(stderr, fmt, args);
   fputc('\n', stderr);
-  exit(code);
+  _Exit(code);
 }
 
 void panic(const char *fmt, ...) {
   va_list va;
   va_start(va, fmt);
   vpanic(1, fmt, va);
-  exit(1); // unreachable
+  UNREACHABLE();
 }
 
 void panic_with_code(int code, const char *fmt, ...) {
   va_list va;
   va_start(va, fmt);
   vpanic(code, fmt, va);
-  exit(1); // unreachable
+  UNREACHABLE();
 }
 
 void assert_impl (
@@ -96,5 +96,5 @@ void assert_impl (
   }
 
   fputc('\n', stderr);
-  exit(1);
+  _Exit(1);
 }

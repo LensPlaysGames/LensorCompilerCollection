@@ -20,7 +20,7 @@ size_t file_size(FILE *file) {
   if (fsetpos(file, &original) != 0) {
     printf("fsetpos() failed: %i\n", errno);
   }
-  return out;
+  return (size_t)out;
 }
 
 char *file_contents(char *path) {

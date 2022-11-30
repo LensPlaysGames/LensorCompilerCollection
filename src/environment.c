@@ -6,12 +6,12 @@
 
 #include <parser.h>
 
-void environment_print(Environment env, long long indent) {
+void environment_print(Environment env, size_t indent) {
   Binding *binding_it = env.bind;
-  long long indent_it = indent;
+  size_t indent_it = indent;
   while (binding_it) {
     indent_it = indent;
-    while (indent_it-- > 0) { putchar(' '); }
+    while (indent_it--) { putchar(' '); }
     printf("%s -> ", node_text(binding_it->id));
     printf("%s\n", node_text(binding_it->value));
     Node *value_iterator = binding_it->value->children;

@@ -7,6 +7,9 @@
 #include <error.h>
 #include <parser.h>
 #include <stdio.h>
+#include <vector.h>
+
+extern bool dump_ir;
 
 char *label_generate();
 
@@ -41,7 +44,7 @@ struct CodegenContext {
   ParsingContext *parse_context;
   FILE* code;
 
-  IRFunction *all_functions;
+  VECTOR (IRFunction *) *functions;
   IRFunction *function;
   IRBlock *block;
 
