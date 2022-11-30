@@ -6,6 +6,19 @@
 #include <string.h>
 #include <vector.h>
 
+#ifdef _MSVC_VER
+#include <intrin.h>
+
+uint32_t ctzll(uint64_t value) {
+  uint32_t zero = 0;
+  return _BitScanForward64(&zero, value)
+    ? zero
+    : 32;
+}
+#else
+#define ctzll __builtin_ctzll
+#endif
+
 #define IR_REDUCE_BINARY(op)                 \
   if (ipair(i)) {                            \
     IRInstruction *car = i->value.pair.car;  \
@@ -28,6 +41,10 @@ static int64_t icar(IRInstruction *i) {
 
 static int64_t icdr(IRInstruction *i) {
   return i->value.pair.cdr->value.immediate;
+}
+
+static bool power_of_two(int64_t value) {
+  return value > 0 && (value & (value - 1)) == 0;
 }
 
 static bool has_side_effects(IRInstruction *i) {
@@ -56,7 +73,7 @@ static bool has_side_effects(IRInstruction *i) {
   }
 }
 
-static bool opt_fold_constants(IRFunction *f) {
+static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
   bool changed = false;
   DLIST_FOREACH (IRBlock*, b, f->blocks) {
     DLIST_FOREACH (IRInstruction*, i, b->instructions) {
@@ -66,7 +83,27 @@ static bool opt_fold_constants(IRFunction *f) {
         case IR_MULTIPLY: IR_REDUCE_BINARY(*) break;
 
         /// TODO: Division by 0 should be a compile error.
-        case IR_DIVIDE: IR_REDUCE_BINARY(/) break;
+        case IR_DIVIDE:
+          IR_REDUCE_BINARY(/)
+          else {
+            IRInstruction *cdr = i->value.pair.cdr;
+            if (icdr(i)) {
+              /// Division by 1 does nothing.
+              if (cdr->value.immediate == 1) {
+                ir_remove_use(i->value.pair.car, i);
+                ir_remove_use(cdr, i);
+                ir_replace_uses(i, i->value.pair.car);
+              }
+
+              /// Replace division by a power of two with a shift.
+              else if (power_of_two(cdr->value.immediate)) {
+                i->type = IR_SHIFT_RIGHT_ARITHMETIC;
+                cdr->value.immediate = ctzll((uint64_t)cdr->value.immediate);
+                changed = true;
+              }
+            }
+          }
+          break;
         case IR_MODULO: IR_REDUCE_BINARY(%) break;
 
         case IR_SHIFT_LEFT: IR_REDUCE_BINARY(<<) break;
@@ -721,7 +758,7 @@ static void optimise_function(CodegenContext *ctx, IRFunction *f) {
     build_and_prune_dominator_tree(f, &dom);
     opt_reorder_blocks(f, &dom);
   } while (
-    opt_fold_constants(f) ||
+    opt_const_folding_and_strengh_reduction(f) ||
     opt_dce(f) ||
     opt_mem2reg(f) ||
     opt_jump_threading(f, &dom) ||
