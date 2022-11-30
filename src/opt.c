@@ -87,7 +87,7 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
           IR_REDUCE_BINARY(/)
           else {
             IRInstruction *cdr = i->value.pair.cdr;
-            if (icdr(i)) {
+            if (cdr->type == IR_IMMEDIATE) {
               /// Division by 1 does nothing.
               if (cdr->value.immediate == 1) {
                 ir_remove_use(i->value.pair.car, i);
