@@ -13,7 +13,7 @@ uint32_t ctzll(uint64_t value) {
   uint32_t zero = 0;
   return _BitScanForward64(&zero, value)
     ? zero
-    : 32;
+    : 64;
 }
 #else
 #define ctzll __builtin_ctzll
