@@ -172,7 +172,7 @@ void ir_femit_instruction
     fputc(')', file);
     break;
   case IR_RETURN:
-    fprintf(file, "return");
+    fprintf(file, "return %%%zu", instruction->value.reference->id);
     break;
   case IR_ADD:
     fprintf(file, "add %%%zu, %%%zu",
@@ -231,6 +231,9 @@ void ir_femit_instruction
     fprintf(file, "l.store %%%zu, %%%zu",
             instruction->value.pair.car->id,
             instruction->value.pair.cdr->id);
+    break;
+  case IR_LOCAL_ADDRESS:
+    fprintf(file, "l.address %%%zu", instruction->value.reference->id);
     break;
   case IR_PARAMETER_REFERENCE:
     fprintf(file, "parameter.reference %%%"PRId64,
@@ -775,7 +778,12 @@ IRInstruction *ir_stack_allocate
  int64_t size
  )
 {
-  TODO();
+  INSTRUCTION(stack_allocation, IR_STACK_ALLOCATE);
+  // TODO: Should we set offset here? Or just wait to calculate it like
+  // we do currently?
+  stack_allocation->value.stack_allocation.size = size;
+  INSERT(stack_allocation);
+  return stack_allocation;
 }
 
 IRFunction *ir_get_function
@@ -813,61 +821,61 @@ static void ir_for_each_child(
 ) {
   STATIC_ASSERT(IR_COUNT == 28);
   switch (user->type) {
-    case IR_PHI:
-      VECTOR_FOREACH (IRPhiArgument, arg, user->value.phi_arguments) {
-        callback(user, &arg->value, data);
-      }
-      break;
-    case IR_LOAD:
-    case IR_LOCAL_ADDRESS:
-    case IR_LOCAL_LOAD:
-    case IR_COPY:
-    case IR_RETURN:
-      callback(user, &user->value.reference, data);
-      break;
-    case IR_GLOBAL_STORE:
-      callback(user, &user->value.global_assignment.new_value, data);
-      break;
-      //case IR_STORE:
-    case IR_LOCAL_STORE:
-    case IR_ADD:
-    case IR_SUBTRACT:
-    case IR_DIVIDE:
-    case IR_MULTIPLY:
-    case IR_MODULO:
-    case IR_SHIFT_LEFT:
-    case IR_SHIFT_RIGHT_ARITHMETIC:
-    case IR_SHIFT_RIGHT_LOGICAL:
-      callback(user, &user->value.pair.car, data);
-      callback(user, &user->value.pair.cdr, data);
-      break;
-    case IR_CALL:
-      if (user->value.call.type == IR_CALLTYPE_INDIRECT) {
-        callback(user, &user->value.call.value.callee, data);
-      }
+  case IR_PHI:
+    VECTOR_FOREACH (IRPhiArgument, arg, user->value.phi_arguments) {
+      callback(user, &arg->value, data);
+    }
+    break;
+  case IR_LOAD:
+  case IR_LOCAL_ADDRESS:
+  case IR_LOCAL_LOAD:
+  case IR_COPY:
+  case IR_RETURN:
+    callback(user, &user->value.reference, data);
+    break;
+  case IR_GLOBAL_STORE:
+    callback(user, &user->value.global_assignment.new_value, data);
+    break;
+  case IR_STORE:
+  case IR_LOCAL_STORE:
+  case IR_ADD:
+  case IR_SUBTRACT:
+  case IR_DIVIDE:
+  case IR_MULTIPLY:
+  case IR_MODULO:
+  case IR_SHIFT_LEFT:
+  case IR_SHIFT_RIGHT_ARITHMETIC:
+  case IR_SHIFT_RIGHT_LOGICAL:
+    callback(user, &user->value.pair.car, data);
+    callback(user, &user->value.pair.cdr, data);
+    break;
+  case IR_CALL:
+    if (user->value.call.type == IR_CALLTYPE_INDIRECT) {
+      callback(user, &user->value.call.value.callee, data);
+    }
 
-      for (IRCallArgument *arg = user->value.call.arguments; arg; arg = arg->next) {
-        callback(user, &arg->value, data);
-      }
-      break;
-    case IR_BRANCH_CONDITIONAL:
-      callback(user, &user->value.conditional_branch.condition, data);
-      break;
-    case IR_COMPARISON:
-      callback(user, &user->value.comparison.pair.car, data);
-      callback(user, &user->value.comparison.pair.cdr, data);
-      break;
-    case IR_PARAMETER_REFERENCE:
-    case IR_GLOBAL_ADDRESS:
-    case IR_GLOBAL_LOAD:
-    case IR_IMMEDIATE:
-    case IR_BRANCH:
-    case IR_STACK_ALLOCATE:
-    case IR_UNREACHABLE:
-      break;
-    default:
-      TODO("Handle IR instruction type %d", user->type);
-      break;
+    for (IRCallArgument *arg = user->value.call.arguments; arg; arg = arg->next) {
+      callback(user, &arg->value, data);
+    }
+    break;
+  case IR_BRANCH_CONDITIONAL:
+    callback(user, &user->value.conditional_branch.condition, data);
+    break;
+  case IR_COMPARISON:
+    callback(user, &user->value.comparison.pair.car, data);
+    callback(user, &user->value.comparison.pair.cdr, data);
+    break;
+  case IR_PARAMETER_REFERENCE:
+  case IR_GLOBAL_ADDRESS:
+  case IR_GLOBAL_LOAD:
+  case IR_IMMEDIATE:
+  case IR_BRANCH:
+  case IR_STACK_ALLOCATE:
+  case IR_UNREACHABLE:
+    break;
+  default:
+    TODO("Handle IR instruction type %d", user->type);
+    break;
   }
 }
 

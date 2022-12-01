@@ -522,9 +522,7 @@ Error codegen_expression
       return err;
     }
     break;
-  case NODE_TYPE_VARIABLE_ACCESS:
-    if (0) {}
-
+  case NODE_TYPE_VARIABLE_ACCESS: {
     // Find context that local variable resides in.
 
     CodegenContext *variable_residency = cg_context;
@@ -544,7 +542,7 @@ Error codegen_expression
       // another time :^). Good luck, future me!
       expression->result = ir_load_local(cg_context, tmpnode->value.ir_instruction);
     }
-    break;
+  } break;
   case NODE_TYPE_VARIABLE_DECLARATION:
     if (!cg_context->parent) { break; }
     // Allocate space on stack
@@ -574,7 +572,7 @@ Error codegen_expression
     local_reference->value.ir_instruction = local;
     environment_set(cg_context->locals, expression->children, local_reference);
     break;
-  case NODE_TYPE_VARIABLE_REASSIGNMENT:
+  case NODE_TYPE_VARIABLE_REASSIGNMENT: {
     // Recurse LHS into children until LHS is a var. access.
     // Set iterator to the var. access node.
     iterator = expression->children;
@@ -589,25 +587,28 @@ Error codegen_expression
     if (err.type) { break; }
 
     if (expression->children->type == NODE_TYPE_VARIABLE_ACCESS) {
+      // LHS is simple variable access. No pointers, array indices, etc.
       SymbolAddress address = symbol_to_address(cg_context, iterator);
       switch (address.mode) {
-        case SYMBOL_ADDRESS_MODE_ERROR:
-          return address.error;
-        case SYMBOL_ADDRESS_MODE_GLOBAL:
-          expression->result = ir_store_global
-            (cg_context,
-             expression->children->next_child->result,
-             address.global);
-          break;
-        case SYMBOL_ADDRESS_MODE_LOCAL:
-          expression->result = ir_store_local
-            (cg_context,
-             expression->children->next_child->result,
-             address.local);
-          break;
+      case SYMBOL_ADDRESS_MODE_ERROR:
+        return address.error;
+      case SYMBOL_ADDRESS_MODE_GLOBAL:
+        expression->result = ir_store_global
+          (cg_context,
+           expression->children->next_child->result,
+           address.global);
+        break;
+      case SYMBOL_ADDRESS_MODE_LOCAL:
+        expression->result = ir_store_local
+          (cg_context,
+           expression->children->next_child->result,
+           address.local);
+        break;
       }
     } else {
-      // TODO: This is *very* broken!
+      // LHS contains complex stuff like dereference that needs handled
+      // differently than the expression is codegenned.
+
       // When a dereference is codegenned, it loads the value at the
       // address; we actually just need the dereference for type
       // checking. When we codegen as a result of the following call, a
@@ -616,15 +617,17 @@ Error codegen_expression
       // A better solution would be to loop the amount of times that
       // there are dereferences (minus one), getting the new address
       // each time.
-      // Codegen LHS
-      err = codegen_expression(cg_context, context, next_child_context,
-                               expression->children);
-      if (err.type) { break; }
-      expression->result = ir_store(cg_context,
-                                    expression->children->next_child->result,
-                                    expression->children->result);
+
+      codegen_expression(cg_context, context,
+                         next_child_context,
+                         expression->children->children);
+
+      expression->result =
+        ir_store(cg_context,
+                 expression->children->next_child->result,
+                 expression->children->children->result);
     }
-    break;
+  } break;
   case NODE_TYPE_CAST:
     if (0) {}
 
@@ -750,7 +753,8 @@ Error codegen_program(CodegenContext *context, Node *program) {
     expression = expression->next_child;
   }
   if (!ir_is_closed(context->block)) {
-    ir_return(context, last_expression ? last_expression->result : ir_immediate(context, 0));
+    ir_return(context,
+              last_expression ? last_expression->result : ir_immediate(context, 0));
   }
   return err;
 }

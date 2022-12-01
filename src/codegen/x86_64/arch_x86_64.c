@@ -1065,6 +1065,12 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
                  (int64_t)-instruction->value.reference->value.stack_allocation.offset,
                  instruction->result);
     break;
+  case IR_LOCAL_ADDRESS:
+    femit(context, I_LEA, MEMORY_TO_REGISTER,
+          REG_RBP,
+          (int64_t)-instruction->value.reference->value.stack_allocation.offset,
+          instruction->result);
+    break;
   case IR_CALL:;
     // Save caller saved registers used in caller function.
     ASSERT(instruction->block, "call instruction null block");
@@ -1261,8 +1267,8 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     break;
   case IR_STORE:
     femit(context, I_MOV, REGISTER_TO_MEMORY,
-                 instruction->value.pair.car->result,
                  instruction->value.pair.cdr->result,
+                 instruction->value.pair.car->result,
                  (int64_t)0);
     break;
   default:
