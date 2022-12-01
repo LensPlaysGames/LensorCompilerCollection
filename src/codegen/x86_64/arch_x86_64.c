@@ -1404,6 +1404,33 @@ static Register linux_caller_saved_registers[LINUX_CALLER_SAVED_REGISTER_COUNT] 
   REG_RAX, REG_RCX, REG_RDX, REG_R8, REG_R9, REG_R10, REG_R11, REG_RSI, REG_RDI
 };
 
+typedef enum TwoAddressClobbers {
+  CLOBBERS_NEITHER,
+  CLOBBERS_LEFT,
+  CLOBBERS_RIGHT,
+  CLOBBERS_BOTH,
+  CLOBBERS_OTHER,
+} TwoAddressClobbers;
+
+bool is_two_address(IRInstruction *instruction) {
+  STATIC_ASSERT(IR_COUNT == 28, "Exhaustive handling of IR types.");
+  switch (instruction->type) {
+  case IR_ADD:
+  case IR_SUBTRACT:
+  case IR_DIVIDE:
+  case IR_MULTIPLY:
+  case IR_MODULO:
+  case IR_SHIFT_LEFT:
+  case IR_SHIFT_RIGHT_LOGICAL:
+  case IR_SHIFT_RIGHT_ARITHMETIC:
+    return true;
+    break;
+  default:
+    break;
+  }
+  return false;
+}
+
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
@@ -1440,6 +1467,13 @@ static void lower(CodegenContext *context) {
       break;
     default:
       break;
+    }
+    if (is_two_address(instruction)) {
+      IRInstruction *copy = ir_copy(context, instruction->value.pair.car);
+      ir_remove_use(instruction->value.pair.car, instruction);
+      mark_used(copy, instruction);
+      insert_instruction_before(copy, instruction);
+      instruction->value.pair.car = copy;
     }
   }
 }
