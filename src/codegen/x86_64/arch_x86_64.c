@@ -990,6 +990,26 @@ RegisterDescriptor codegen_multiply_x86_64
   return rhs;
 }
 
+bool needs_prologue(CodegenContext *context, size_t locals_offset) {
+  if (optimise
+      && !locals_offset
+      && context->call_convention != CG_CALL_CONV_MSWIN
+      ) {
+    return false;
+  }
+  return true;
+}
+
+bool needs_epilogue(CodegenContext *context, IRFunction *function) {
+  if (!optimise
+      || function->locals_total_size
+      || context->call_convention == CG_CALL_CONV_MSWIN
+      ) {
+    return true;
+  }
+  return false;
+}
+
 /// Allocate space on the stack.
 void codegen_stack_allocate_x86_64(CodegenContext *cg_context, long long int size) {
   femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, size, REG_RSP);
@@ -997,15 +1017,25 @@ void codegen_stack_allocate_x86_64(CodegenContext *cg_context, long long int siz
 
 /// Emit the function prologue.
 void codegen_prologue_x86_64(CodegenContext *cg_context, size_t locals_offset) {
-  if (optimise && !locals_offset) return;
+  if (!needs_prologue(cg_context, locals_offset)) {
+    return;
+  }
   femit(cg_context, I_PUSH, REGISTER, REG_RBP);
   femit(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RSP, REG_RBP);
+  if (cg_context->call_convention == CG_CALL_CONV_MSWIN) {
+    // https://learn.microsoft.com/en-us/cpp/build/stack-usage?view=msvc-170
+    //> Even if the called function has fewer than 4 parameters, these 4
+    //> stack locations are effectively owned by the called function, and
+    //> may be used by the called function for other purposes besides
+    //> saving parameter register values.
+    locals_offset += 4 * 8 + 8;
+  }
   femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, locals_offset, REG_RSP);
 }
 
 /// Emit the function epilogue.
 void codegen_epilogue_x86_64(CodegenContext *cg_context, IRFunction *f) {
-  if (!optimise || f->locals_total_size) {
+  if (needs_epilogue(cg_context, f)) {
     femit(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
     femit(cg_context, I_POP, REGISTER, REG_RBP);
   }
@@ -1071,7 +1101,7 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
           (int64_t)-instruction->value.reference->value.stack_allocation.offset,
           instruction->result);
     break;
-  case IR_CALL:;
+  case IR_CALL: {
     // Save caller saved registers used in caller function.
     ASSERT(instruction->block, "call instruction null block");
     ASSERT(instruction->block->function, "block has null function");
@@ -1079,11 +1109,10 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     // Tail call.
     if (optimise && instruction->value.call.tail_call) {
       // Restore the frame pointer if we have one.
-      if (instruction->block->function->locals_total_size) {
+      if (needs_epilogue(context, instruction->block->function)) {
         femit(context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
         femit(context, I_POP, REGISTER, REG_RBP);
       }
-
       if (instruction->value.call.type == IR_CALLTYPE_INDIRECT) {
         femit(context, I_JMP, REGISTER, instruction->value.call.value.callee->result);
       } else {
@@ -1094,6 +1123,17 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     }
 
     size_t func_regs = instruction->block->function->registers_in_use;
+    size_t regs_pushed_count = 0;
+
+    size_t x = func_regs;
+    while (x) {
+      regs_pushed_count++;
+      x &= x - 1;
+    }
+    // Align stack pointer before call, if necessary.
+    if (regs_pushed_count & 0b1) {
+      femit(context, I_SUB, IMMEDIATE_TO_REGISTER, (int64_t)8, REG_RSP);
+    }
     for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i) {
       if (func_regs & (1 << i) && is_caller_saved(i)) {
         femit(context, I_PUSH, REGISTER, i);
@@ -1101,11 +1141,10 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     }
     if (instruction->value.call.type == IR_CALLTYPE_INDIRECT) {
       femit(context, I_CALL, REGISTER,
-                   instruction->value.call.value.callee->result);
-
+            instruction->value.call.value.callee->result);
     } else {
       femit(context, I_CALL, NAME,
-                   instruction->value.call.value.name);
+            instruction->value.call.value.name);
     }
     // Restore caller saved registers used in called function.
     for (Register i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i) {
@@ -1113,10 +1152,15 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
         femit(context, I_POP, REGISTER, i);
       }
     }
+    // Restore stack pointer from stack alignment, if necessary.
+    if (regs_pushed_count & 0b1) {
+      femit(context, I_ADD, IMMEDIATE_TO_REGISTER, (int64_t)8, REG_RSP);
+    }
     femit(context, I_MOV, REGISTER_TO_REGISTER,
-                 REG_RAX,
-                 instruction->result);
-    break;
+          REG_RAX,
+          instruction->result);
+  } break;
+
   case IR_RETURN:
     // Restore callee-saved registers used in the function.
     for (Register i = sizeof(instruction->block->function->registers_in_use) * 8 - 1; i > 0; --i) {
@@ -1127,6 +1171,7 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     codegen_epilogue_x86_64(context, instruction->block->function);
     if (optimise && instruction->block) instruction->block->done = true;
     break;
+
   case IR_BRANCH:
     /// Only emit a jump if the target isn’t the next block.
     if (!optimise || (instruction->block && instruction->value.block != instruction->block->next && !instruction->block->done)) {
