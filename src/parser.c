@@ -441,25 +441,34 @@ ParsingStack *parse_stack_create(ParsingStack *parent) {
 }
 
 void parse_context_print(ParsingContext *top, size_t indent) {
-  size_t indent_it = indent;
+  size_t indent_it;
+
+#define INDENT()                            \
+  indent_it = indent;                       \
   while (indent_it--) { putchar(' '); }
+
+  INDENT();
+  if (top->creates_stackframe) {
+    printf("NEW STACKFRAME==================================================\n");
+  } else {
+    printf("NEW SCOPE=======================\n");
+  }
+
+  INDENT();
   printf("TYPES:\n");
   environment_print(*top->types,indent + 2);
 
-  indent_it = indent;
-  while (indent_it--) { putchar(' '); }
+  INDENT();
   printf("VARIABLES:\n");
   environment_print(*top->variables,indent + 2);
 
   if (top->parent == NULL) {
-    indent_it = indent;
-    while (indent_it--) { putchar(' '); }
+    INDENT();
     printf("BINARY OPERATORS:\n");
     environment_print(*top->binary_operators,indent + 2);
   }
 
-  indent_it = indent;
-  while (indent_it--) { putchar(' '); }
+  INDENT();
   printf("FUNCTIONS:\n");
   environment_print(*top->functions,indent);
 
@@ -468,6 +477,7 @@ void parse_context_print(ParsingContext *top, size_t indent) {
     parse_context_print(child,indent + 2);
     child = child->next_child;
   }
+#undef INDENT
 }
 
 void parse_context_add_child(ParsingContext *parent, ParsingContext *child) {
@@ -493,7 +503,7 @@ void parse_context_add_child(ParsingContext *parent, ParsingContext *child) {
   }
 }
 
-ParsingContext *parse_context_create(ParsingContext *parent) {
+ParsingContext *parse_context_create(ParsingContext *parent, CreatesStackframe creates_stackframe) {
   ParsingContext *ctx = calloc(1, sizeof(ParsingContext));
   ASSERT(ctx, "Could not allocate memory for parsing context.");
   if (!ctx) { return NULL; }
@@ -506,11 +516,12 @@ ParsingContext *parse_context_create(ParsingContext *parent) {
   ctx->variables = environment_create(NULL);
   ctx->functions = environment_create(NULL);
   ctx->binary_operators = environment_create(NULL);
+  ctx->creates_stackframe = (bool)creates_stackframe;
   return ctx;
 }
 
 ParsingContext *parse_context_default_create() {
-  ParsingContext *ctx = parse_context_create(NULL);
+  ParsingContext *ctx = parse_context_create(NULL, CREATES_STACKFRAME);
   Error err = ok;
   err = define_type(ctx->types,
                     NODE_TYPE_INTEGER,
@@ -916,7 +927,7 @@ Error handle_stack_operator
         EXPECT(expected, "{", state);
         if (expected.found) {
 
-          *context = parse_context_create(*context);
+          *context = parse_context_create(*context, DOESNT_CREATE_STACKFRAME);
 
           Node *if_else_body = node_allocate();
           Node *if_else_first_expr = node_allocate();
@@ -1230,7 +1241,7 @@ Error parse_expr
       err = parse_base_type(context, &state, type);
       if (err.type == ERROR_NONE) {
 
-        context = parse_context_create(context);
+        context = parse_context_create(context, CREATES_STACKFRAME);
 
         Node *lambda = working_result;
         lambda->type = NODE_TYPE_FUNCTION;
@@ -1340,7 +1351,7 @@ Error parse_expr
           Node *condition_expression = node_allocate();
           node_add_child(if_conditional, condition_expression);
 
-          context = parse_context_create(context);
+          context = parse_context_create(context, DOESNT_CREATE_STACKFRAME);
 
           stack = parse_stack_create(stack);
           stack->operator = node_symbol("if-condition");
@@ -1517,7 +1528,7 @@ Error parse_expr
 
                 // TODO: Expect empty body and handle that accordingly.
 
-                context = parse_context_create(context);
+                context = parse_context_create(context, CREATES_STACKFRAME);
 
                 lambda->type = NODE_TYPE_FUNCTION;
 

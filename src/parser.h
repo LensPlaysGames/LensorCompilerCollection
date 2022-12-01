@@ -186,6 +186,8 @@ typedef struct ParsingContext {
   ///                              -> SYMBOL (LHS TYPE)
   ///                              -> SYMBOL (RHS TYPE)
   Environment *binary_operators;
+  /// If true, this scope also creates a new stackframe.
+  bool creates_stackframe;
 } ParsingContext;
 
 void parse_context_print(ParsingContext *top, size_t indent);
@@ -211,7 +213,12 @@ Error parse_get_type(ParsingContext *context, Node *id, Node *result);
  */
 Error parse_get_variable(ParsingContext *context, Node *id, Node *result);
 
-ParsingContext *parse_context_create(ParsingContext *parent);
+typedef enum CreatesStackframe {
+  DOESNT_CREATE_STACKFRAME = false,
+  CREATES_STACKFRAME       = true,
+} CreatesStackframe;
+
+ParsingContext *parse_context_create(ParsingContext *parent, CreatesStackframe creates_stackframe);
 ParsingContext *parse_context_default_create();
 
 Error parse_program(char *filepath, ParsingContext *context, Node *result);
