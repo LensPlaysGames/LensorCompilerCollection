@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <typechecker.h>
+#include <vector.h>
 
 #define DEFINE_REGISTER_ENUM(name, ...) REG_##name,
 #define REGISTER_NAME_64(ident, name, ...) name,
@@ -991,6 +992,13 @@ RegisterDescriptor codegen_multiply_x86_64
 }
 
 bool needs_prologue(CodegenContext *context, size_t locals_offset) {
+  // TODO: Check that, if we are in MSWIN call_conv, then we only need
+  // a prologue if the function makes function calls (simplified).
+  // Tail calls can muddy the waters, but in general recursive tail
+  // calls do not mean a prologue/epilogue is needed.
+  // REAL TODO: Write a pass on the IR that keeps track of whether or
+  // not each function requires a prologue and epilogue. Better than
+  // recomputing every time.
   if (optimise
       && !locals_offset
       && context->call_convention != CG_CALL_CONV_MSWIN
@@ -1001,6 +1009,8 @@ bool needs_prologue(CodegenContext *context, size_t locals_offset) {
 }
 
 bool needs_epilogue(CodegenContext *context, IRFunction *function) {
+  // TODO: MSWIN call conv isn't handled perfectly here.
+  // See needs_prologue().
   if (!optimise
       || function->locals_total_size
       || context->call_convention == CG_CALL_CONV_MSWIN
@@ -1412,23 +1422,27 @@ typedef enum TwoAddressClobbers {
   CLOBBERS_OTHER,
 } TwoAddressClobbers;
 
-bool is_two_address(IRInstruction *instruction) {
+TwoAddressClobbers is_two_address(IRInstruction *instruction) {
   STATIC_ASSERT(IR_COUNT == 28, "Exhaustive handling of IR types.");
   switch (instruction->type) {
   case IR_ADD:
-  case IR_SUBTRACT:
   case IR_DIVIDE:
   case IR_MULTIPLY:
   case IR_MODULO:
   case IR_SHIFT_LEFT:
   case IR_SHIFT_RIGHT_LOGICAL:
   case IR_SHIFT_RIGHT_ARITHMETIC:
-    return true;
+    return CLOBBERS_RIGHT;
     break;
+
+  case IR_SUBTRACT:
+    return CLOBBERS_LEFT;
+    break;
+
   default:
     break;
   }
-  return false;
+  return CLOBBERS_NEITHER;
 }
 
 static void lower(CodegenContext *context) {
@@ -1468,12 +1482,33 @@ static void lower(CodegenContext *context) {
     default:
       break;
     }
-    if (is_two_address(instruction)) {
-      IRInstruction *copy = ir_copy(context, instruction->value.pair.car);
-      ir_remove_use(instruction->value.pair.car, instruction);
-      mark_used(copy, instruction);
-      insert_instruction_before(copy, instruction);
-      instruction->value.pair.car = copy;
+  }
+
+  FOREACH_INSTRUCTION (context) {
+    TwoAddressClobbers status;
+    if ((status = is_two_address(instruction))) {
+      switch (status) {
+      case CLOBBERS_BOTH:
+        TODO("Handle clobbering of both registers by a two address instruction.");
+        break;
+      case CLOBBERS_LEFT: {
+        IRInstruction *copy = ir_copy(context, instruction->value.pair.car);
+        ir_remove_use(instruction->value.pair.car, instruction);
+        mark_used(copy, instruction);
+        insert_instruction_before(copy, instruction);
+        instruction->value.pair.car = copy;
+      } break;
+      case CLOBBERS_RIGHT: {
+        IRInstruction *copy = ir_copy(context, instruction->value.pair.cdr);
+        ir_remove_use(instruction->value.pair.cdr, instruction);
+        mark_used(copy, instruction);
+        insert_instruction_before(copy, instruction);
+        instruction->value.pair.cdr = copy;
+      } break;
+      default:
+      case CLOBBERS_NEITHER:
+        break;
+      }
     }
   }
 }
