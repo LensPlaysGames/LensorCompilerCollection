@@ -68,26 +68,86 @@
  ?@ "'"
  un-mode-syntax-table)
 
+(defcustom un-mode-face-keywords 'font-lock-keyword-face
+  "Symbol name of face to highlight un-mode keywords with."
+  :group 'un-mode
+  :tag "Syntax Highlight Keywords")
+
+(defcustom un-mode-face-types 'font-lock-type-face
+  "Symbol name of face to highlight un-mode builtin types with."
+  :group 'un-mode
+  :tag "Syntax Highlight Types")
+
+(defcustom un-mode-face-numbers nil
+  "Symbol name of face to highlight un-mode immediate numbers with."
+  :group 'un-mode
+  :tag "Syntax Highlight Numbers")
+
+(defcustom un-mode-face-operators nil
+  "Symbol name of face to highlight un-mode builtin binary operators with.
+Examples include addition (+) and subtraction (-)."
+  :group 'un-mode
+  :tag "Syntax Highlight Binary Operators")
+
+(defcustom un-mode-face-negation-char 'font-lock-negation-char-face
+  "Symbol name of face to highlight un-mode negation character (!) with."
+  :group 'un-mode
+  :tag "Syntax Highlight Negation Character")
+
+(defcustom un-mode-face-function-name 'font-lock-function-name-face
+  "Symbol name of face to highlight un-mode function names in definitions."
+  :group 'un-mode
+  :tag "Syntax Highlight Function Names")
+
 ;; Gather all keyword font locks together into big daddy keyword font-lock
 (setq un--font-lock-defaults
-      (let* ((keywords '("if" "else"))
-             (binary-operators '("+" "*" "-" "/"
+      (let* ((keywords '("if" "else" "ext"))
+             (binary-operators '("+" "*" "-" "/" "%"
                                  "<" ">"
                                  ":" "=" ":="
-                                 "&" "@"))
+                                 "&" "@"
+                                 ">>" "<<"))
 
-             (keywords-regex (regexp-opt keywords 'words))
-             (binary-operators-regex (regexp-opt binary-operators 'words))
-             (builtin-types-regex (rx (zero-or-more "@")
-                                      (or "integer")))
+             (keywords-regex         (regexp-opt keywords 'words))
+             (binary-operators-regex (regexp-opt binary-operators))
+             (negation-char-regex    (regexp-opt '("!")))
+             (number-regex           (rx (one-or-more digit)))
+             (builtin-types-regex    (rx (zero-or-more "@")
+                                         (or "integer")))
+             (function-name-regex
+              (rx (seq
+                   ;; Function name
+                   (group (+? anything))
+                   ;; Whitespace between function name and type operator
+                   (*? whitespace)
+                   ;; The type operator, a colon (:)
+                   (minimal-match ?:)
+                   ;; Whitespace between : and type
+                   (*? whitespace)
+                   ;; Type name
+                   (+? anything)
+                   ;; Whitespace between type and parameters
+                   (*? whitespace)
+                   ;; Parameter list start, open parenthesis: (
+                   (minimal-match ?\()
+                   ;; Parameters
+                   (+? anything)
+                   ;; Parameter list end, close parenthesis: )
+                   (minimal-match ?\))
+                   )))
              )
-        `((,keywords-regex . 'font-lock-keyword-face)
-          (,builtin-types-regex . 'font-lock-type-face)
-          (,binary-operators-regex . nil)
+        `(
+          (,keywords-regex          . ,un-mode-face-keywords)
+          (,builtin-types-regex     . ,un-mode-face-types)
+          (,number-regex            . ,un-mode-face-numbers)
+          (,binary-operators-regex  . ,un-mode-face-operators)
+          (,negation-char-regex     . ,un-mode-face-negation-char)
+          (,function-name-regex     . (1 ,un-mode-face-function-name))
           )))
 
 (defcustom un-mode-indent-amount 2
-  "The amount of characters that each level of parenthesis nesting in the unnamed language source code will be indented."
+  "The amount of space characters that each level of parenthesis nesting
+in the unnamed language source code will be indented."
   :group 'un-mode)
 
 (defun un--indent-line ()
