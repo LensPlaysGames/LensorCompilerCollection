@@ -19,20 +19,20 @@ uint32_t ctzll(uint64_t value) {
 #define ctzll __builtin_ctzll
 #endif
 
-#define IR_REDUCE_BINARY(op)                 \
-  if (ipair(i)) {                            \
-    IRInstruction *car = i->value.pair.car;  \
-    IRInstruction *cdr = i->value.pair.cdr;  \
-    i->type = IR_IMMEDIATE;                  \
-    i->value.immediate = icar(i) op icdr(i); \
-    ir_remove_use(car, i);                   \
-    ir_remove_use(cdr, i);                   \
-    changed = true;                          \
+#define IR_REDUCE_BINARY(op)                    \
+  if (ipair(i)) {                               \
+    IRInstruction *car = i->value.pair.car;     \
+    IRInstruction *cdr = i->value.pair.cdr;     \
+    i->type = IR_IMMEDIATE;                     \
+    i->value.immediate = icar(i) op icdr(i);    \
+    ir_remove_use(car, i);                      \
+    ir_remove_use(cdr, i);                      \
+    changed = true;                             \
   }
 
 static bool ipair(IRInstruction *i) {
   return i->value.pair.car->type == IR_IMMEDIATE &&
-         i->value.pair.cdr->type == IR_IMMEDIATE;
+    i->value.pair.cdr->type == IR_IMMEDIATE;
 }
 
 static int64_t icar(IRInstruction *i) {
@@ -50,26 +50,26 @@ static bool power_of_two(int64_t value) {
 static bool has_side_effects(IRInstruction *i) {
   STATIC_ASSERT(IR_COUNT == 28, "Handle all instructions");
   switch (i->type) {
-    case IR_IMMEDIATE:
-    case IR_LOAD:
-    case IR_ADD:
-    case IR_SUBTRACT:
-    case IR_MULTIPLY:
-    case IR_DIVIDE:
-    case IR_MODULO:
-    case IR_SHIFT_LEFT:
-    case IR_SHIFT_RIGHT_ARITHMETIC:
-    case IR_SHIFT_RIGHT_LOGICAL:
-    case IR_LOCAL_LOAD:
-    case IR_LOCAL_ADDRESS:
-    case IR_GLOBAL_LOAD:
-    case IR_GLOBAL_ADDRESS:
-    case IR_COMPARISON:
-    case IR_PARAMETER_REFERENCE:
-      return false;
+  case IR_IMMEDIATE:
+  case IR_LOAD:
+  case IR_ADD:
+  case IR_SUBTRACT:
+  case IR_MULTIPLY:
+  case IR_DIVIDE:
+  case IR_MODULO:
+  case IR_SHIFT_LEFT:
+  case IR_SHIFT_RIGHT_ARITHMETIC:
+  case IR_SHIFT_RIGHT_LOGICAL:
+  case IR_LOCAL_LOAD:
+  case IR_LOCAL_ADDRESS:
+  case IR_GLOBAL_LOAD:
+  case IR_GLOBAL_ADDRESS:
+  case IR_COMPARISON:
+  case IR_PARAMETER_REFERENCE:
+    return false;
 
-    default:
-      return true;
+  default:
+    return true;
   }
 }
 
@@ -78,48 +78,48 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
   DLIST_FOREACH (IRBlock*, b, f->blocks) {
     DLIST_FOREACH (IRInstruction*, i, b->instructions) {
       switch (i->type) {
-        case IR_ADD: IR_REDUCE_BINARY(+) break;
-        case IR_SUBTRACT: IR_REDUCE_BINARY(-) break;
-        case IR_MULTIPLY: IR_REDUCE_BINARY(*) break;
+      case IR_ADD: IR_REDUCE_BINARY(+) break;
+      case IR_SUBTRACT: IR_REDUCE_BINARY(-) break;
+      case IR_MULTIPLY: IR_REDUCE_BINARY(*) break;
 
         /// TODO: Division by 0 should be a compile error.
-        case IR_DIVIDE:
-          IR_REDUCE_BINARY(/)
-          else {
-            IRInstruction *cdr = i->value.pair.cdr;
-            if (cdr->type == IR_IMMEDIATE) {
-              /// Division by 1 does nothing.
-              if (cdr->value.immediate == 1) {
-                ir_remove_use(i->value.pair.car, i);
-                ir_remove_use(cdr, i);
-                ir_replace_uses(i, i->value.pair.car);
-              }
+      case IR_DIVIDE:
+        IR_REDUCE_BINARY(/)
+        else {
+          IRInstruction *cdr = i->value.pair.cdr;
+          if (cdr->type == IR_IMMEDIATE) {
+            /// Division by 1 does nothing.
+            if (cdr->value.immediate == 1) {
+              ir_remove_use(i->value.pair.car, i);
+              ir_remove_use(cdr, i);
+              ir_replace_uses(i, i->value.pair.car);
+            }
 
-              /// Replace division by a power of two with a shift.
-              else if (power_of_two(cdr->value.immediate)) {
-                i->type = IR_SHIFT_RIGHT_ARITHMETIC;
-                cdr->value.immediate = ctzll((uint64_t)cdr->value.immediate);
-                changed = true;
-              }
+            /// Replace division by a power of two with a shift.
+            else if (power_of_two(cdr->value.immediate)) {
+              i->type = IR_SHIFT_RIGHT_ARITHMETIC;
+              cdr->value.immediate = ctzll((uint64_t)cdr->value.immediate);
+              changed = true;
             }
           }
-          break;
-        case IR_MODULO: IR_REDUCE_BINARY(%) break;
+        }
+        break;
+      case IR_MODULO: IR_REDUCE_BINARY(%) break;
 
-        case IR_SHIFT_LEFT: IR_REDUCE_BINARY(<<) break;
-        case IR_SHIFT_RIGHT_ARITHMETIC: IR_REDUCE_BINARY(>>) break;
-        case IR_SHIFT_RIGHT_LOGICAL:
-          if (ipair(i)) {
-            IRInstruction *car = i->value.pair.car;
-            IRInstruction *cdr = i->value.pair.cdr;
-            i->type = IR_IMMEDIATE;
-            i->value.immediate = (int64_t) ((uint64_t) icar(i) >> (uint64_t) icdr(i));
-            ir_remove_use(car, i);
-            ir_remove_use(cdr, i);
-            changed = true;
-          }
-          break;
-        default: break;
+      case IR_SHIFT_LEFT: IR_REDUCE_BINARY(<<) break;
+      case IR_SHIFT_RIGHT_ARITHMETIC: IR_REDUCE_BINARY(>>) break;
+      case IR_SHIFT_RIGHT_LOGICAL:
+        if (ipair(i)) {
+          IRInstruction *car = i->value.pair.car;
+          IRInstruction *cdr = i->value.pair.cdr;
+          i->type = IR_IMMEDIATE;
+          i->value.immediate = (int64_t) ((uint64_t) icar(i) >> (uint64_t) icdr(i));
+          ir_remove_use(car, i);
+          ir_remove_use(cdr, i);
+          changed = true;
+        }
+        break;
+      default: break;
       }
     }
   }
@@ -178,7 +178,7 @@ static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
     if (i->type == IR_BRANCH) { return tail_call_possible_iter(tc, i->value.block); }
     if (i->type == IR_BRANCH_CONDITIONAL) {
       return tail_call_possible_iter(tc, i->value.conditional_branch.true_branch) &&
-             tail_call_possible_iter(tc, i->value.conditional_branch.false_branch);
+        tail_call_possible_iter(tc, i->value.conditional_branch.false_branch);
     }
 
     /// Any other instruction means that the call is not the last
@@ -238,49 +238,49 @@ static bool opt_mem2reg(IRFunction *f) {
     DLIST_FOREACH (IRInstruction*, i, b->instructions) {
       switch (i->type) {
         /// New variable.
-        case IR_STACK_ALLOCATE: {
-          stack_var v = {0};
-          v.alloca = i;
-          VECTOR_PUSH(vars, v);
-        } break;
+      case IR_STACK_ALLOCATE: {
+        stack_var v = {0};
+        v.alloca = i;
+        VECTOR_PUSH(vars, v);
+      } break;
 
         /// Record the first store into a variable.
-        case IR_LOCAL_STORE: {
-          VECTOR_FOREACH (stack_var, a, vars) {
-            if (!a->unoptimisable && a->alloca == i->value.pair.car) {
-              /// If there are multiple stores, mark the variable as unoptimisable.
-              if (a->store) a->unoptimisable = true;
-              else a->store = i;
-              break;
-            }
+      case IR_LOCAL_STORE: {
+        VECTOR_FOREACH (stack_var, a, vars) {
+          if (!a->unoptimisable && a->alloca == i->value.pair.car) {
+            /// If there are multiple stores, mark the variable as unoptimisable.
+            if (a->store) a->unoptimisable = true;
+            else a->store = i;
+            break;
           }
-        } break;
+        }
+      } break;
 
         /// Record all loads; also check for loads before the first store.
-        case IR_LOCAL_LOAD: {
-          VECTOR_FOREACH (stack_var, a, vars) {
-            if (!a->unoptimisable && a->alloca == i->value.reference) {
-              /// Load before store.
-              if (!a->store) {
-                a->unoptimisable = true;
-                fprintf(stderr, "Warning: Load of uninitialised variable in function %s", f->name);
-              } else {
-                VECTOR_PUSH(a->loads, i);
-              }
-              break;
+      case IR_LOCAL_LOAD: {
+        VECTOR_FOREACH (stack_var, a, vars) {
+          if (!a->unoptimisable && a->alloca == i->value.reference) {
+            /// Load before store.
+            if (!a->store) {
+              a->unoptimisable = true;
+              fprintf(stderr, "Warning: Load of uninitialised variable in function %s", f->name);
+            } else {
+              VECTOR_PUSH(a->loads, i);
             }
+            break;
           }
-        } break;
+        }
+      } break;
 
         /// If the address of a variable is taken, mark it as unoptimisable.
-        case IR_LOCAL_ADDRESS: {
-          VECTOR_FOREACH (stack_var, a, vars) {
-            if (a->alloca == i->value.reference) {
-              a->unoptimisable = true;
-              break;
-            }
+      case IR_LOCAL_ADDRESS: {
+        VECTOR_FOREACH (stack_var, a, vars) {
+          if (a->alloca == i->value.reference) {
+            a->unoptimisable = true;
+            break;
           }
-        } break;
+        }
+      } break;
       }
     }
   }
@@ -335,41 +335,42 @@ void opt_inline_global_vars(CodegenContext *ctx) {
   FOREACH_INSTRUCTION (ctx) {
     switch (instruction->type) {
       /// Record the first store into a variable.
-      case IR_GLOBAL_STORE: {
-        VECTOR_FOREACH (global_var, a, vars) {
-          if (!a->unoptimisable && !strcmp(a->name, instruction->value.global_assignment.name)) {
-            /// If there are multiple stores, mark the variable as unoptimisable.
-            if (a->store || function != main) a->unoptimisable = true;
-            else a->store = instruction;
-            goto next_instruction;
-          }
+    case IR_GLOBAL_STORE: {
+      VECTOR_FOREACH (global_var, a, vars) {
+        if (!a->unoptimisable && !strcmp(a->name, instruction->value.global_assignment.name)) {
+          /// If there are multiple stores, mark the variable as unoptimisable.
+          if (a->store || function != main) a->unoptimisable = true;
+          else a->store = instruction;
+          goto next_instruction;
         }
+      }
 
-        /// Add a new variable.
-        global_var v = {0};
-        v.name = instruction->value.global_assignment.name;
-        v.store = function == main ? instruction : NULL;
-        v.unoptimisable = function != main;
-        VECTOR_PUSH(vars, v);
-      } break;
+      /// Add a new variable.
+      global_var v = {0};
+      v.name = instruction->value.global_assignment.name;
+      v.store = function == main ? instruction : NULL;
+      v.unoptimisable = function != main;
+      VECTOR_PUSH(vars, v);
+    } break;
 
       /// Record all loads; also check for loads before the first store.
-      case IR_GLOBAL_LOAD: {
-        VECTOR_FOREACH (global_var, a, vars) {
-          if (!a->unoptimisable && !strcmp(a->name, instruction->value.name)) {
-            /// Load before store.
-            if (!a->store) a->unoptimisable = true;
-            else VECTOR_PUSH(a->loads, instruction);
-            goto next_instruction;
-          }
+    case IR_GLOBAL_LOAD: {
+      VECTOR_FOREACH (global_var, a, vars) {
+        if (!a->unoptimisable && !strcmp(a->name, instruction->value.name)) {
+          /// Load before store.
+          if (!a->store) a->unoptimisable = true;
+          else VECTOR_PUSH(a->loads, instruction);
+          goto next_instruction;
         }
+      }
 
-        /// Unoptimisable because the variable is loaded before it is stored to.
-        global_var v = {0};
-        v.name = instruction->value.name;
-        v.unoptimisable = true;
-        VECTOR_PUSH(vars, v);
-      } break;
+      /// Unoptimisable because the variable is loaded before it is stored to.
+      global_var v = {0};
+      v.name = instruction->value.name;
+      v.unoptimisable = true;
+      VECTOR_PUSH(vars, v);
+    } break;
+
     }
   next_instruction:;
   }
