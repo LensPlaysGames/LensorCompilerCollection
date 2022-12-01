@@ -693,14 +693,26 @@ void coalesce(RegisterAllocationInfo *info, IRInstructions *instructions, Adjace
         goto eliminate;
       }
 
-      /// From is precoloured, to is not, and to does not interfere
-      /// with the precoloured register: assign the precoloured register to
-      /// any PHI nodes that use to if those PHI nodes are uncoloured or
-      /// precoloured with the same register; if the are any PHI nodes that
-      /// are precoloured with a different register, then the copy cannot
-      /// be eliminated. Otherwise, replace all uses of to with from and
-      /// eliminate the copy.
-      if (!to->result &&
+      /// From is precoloured, to is not, and to nor any of it's uses
+      /// interfere with the precoloured register: assign the
+      /// precoloured register to any PHI nodes that use to if those
+      /// PHI nodes are uncoloured or precoloured with the same
+      /// register; if the are any PHI nodes that are precoloured with
+      /// a different register, then the copy cannot be eliminated.
+      /// Otherwise, replace all uses of to with from and eliminate the
+      /// copy.
+      // TODO: Lens_r added this without full confidence of whether or
+      // not it is actually correct. :)
+      bool to_use_from_interference = false;
+      VECTOR_FOREACH_PTR(IRInstruction*, user, to->users) {
+        if (user->result == to->result) {
+          to_use_from_interference = true;
+          break;
+        }
+      }
+
+      if (!to_use_from_interference &&
+          !to->result &&
            from->result &&
           !adjm(G->matrix, to->index, from->index) &&
           !check_register_interference(G->regmasks[to->index], from)) {
