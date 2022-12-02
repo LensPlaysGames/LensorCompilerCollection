@@ -175,6 +175,20 @@
     }                                         \
   } while (0)
 
+#define VECTOR_FIND_IF(vector, out, index, ...) \
+    do {                                              \
+        size_t index = 0;                             \
+        for (; index < (vector).size; index++) {      \
+            if (__VA_ARGS__) {                        \
+                (out) = (vector).data + index;        \
+                break;                                \
+            }                                         \
+        }                                             \
+        if (index == (vector).size) {                 \
+            (out) = NULL;                             \
+        }                                             \
+    } while (0)
+
 #define DLIST_NODE(type) \
   struct {               \
     type *prev;          \

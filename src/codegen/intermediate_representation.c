@@ -406,17 +406,25 @@ IRInstruction *ir_parameter_reference
   return param;
 }
 
+void ir_phi_add_argument
+(IRInstruction *phi,
+ IRPhiArgument *argument)
+{
+  VECTOR_PUSH(phi->value.phi_arguments, argument);
+  mark_used(argument->value, phi);
+}
+
 void ir_phi_argument
 (IRInstruction *phi,
  IRBlock *phi_predecessor,
  IRInstruction *argument
  )
 {
-  IRPhiArgument phi_argument = {
-    .block = phi_predecessor,
-    .value = argument
-  };
-  VECTOR_PUSH(phi->value.phi_arguments, phi_argument);
+  IRPhiArgument *arg = calloc(1, sizeof *arg);
+  arg->block = phi_predecessor;
+  arg->value = argument;
+
+  VECTOR_PUSH(phi->value.phi_arguments, arg);
   mark_used(argument, phi);
 }
 
@@ -463,7 +471,7 @@ IRFunction *ir_function_create() {
 
 IRFunction *ir_function(CodegenContext *context, const char *name) {
   IRFunction *function = ir_function_create();
-  function->name = name;
+  function->name = strdup(name);
   // A function *must* contain at least one block, so we start new
   // functions out with an empty block.
   IRBlock *block = ir_block_create();

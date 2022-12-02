@@ -137,7 +137,7 @@ typedef union IRValue {
   IRInstruction *reference;
   int64_t immediate;
   IRCall call;
-  VECTOR(IRPhiArgument) phi_arguments;
+  VECTOR(IRPhiArgument*) phi_arguments; /// For unfortunate reasons, these *have* to be on the heap.
   IRBranchConditional conditional_branch;
   IRPair pair;
   IRComparison comparison;
@@ -288,6 +288,10 @@ void insert_instruction_after(IRInstruction *i, IRInstruction *after);
 IRInstruction *ir_parameter_reference
 (CodegenContext *context,
  int64_t index);
+
+void ir_phi_add_argument
+(IRInstruction *phi,
+ IRPhiArgument *argument);
 
 void ir_phi_argument
 (IRInstruction *phi,

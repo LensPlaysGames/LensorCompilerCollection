@@ -12,7 +12,7 @@
 <instruction>       ::= [ <temp> [ ":" <register> ] "=" ] <value-instruction> "\n"
                       | <void-instruction> "\n"
 <value-instruction> ::= NUMBER
-                      | CALL ( <name> | <temp> ) "(" <parameters> ")"
+                      | [ TAIL ] CALL ( <name> | <temp> ) "(" <parameters> ")"
                       | PHI { "[" <name> ":" <temp> "]" }
                       | <unary> <temp>
                       | <binary> <temp> "," <temp>
