@@ -65,11 +65,12 @@ struct CodegenContext {
 extern char codegen_verbose;
 
 Error codegen
-(enum CodegenOutputFormat,
+(enum CodegenLanguage,
+ enum CodegenOutputFormat,
  enum CodegenCallingConvention,
  enum CodegenAssemblyDialect,
- char *output_filepath,
+ const char *infile,
+ const char *outfile,
  ParsingContext *context,
- Node *program);
-
+ ...);
 #endif /* CODEGEN_H */

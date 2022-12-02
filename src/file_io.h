@@ -5,6 +5,6 @@
 #include <stdio.h>
 
 size_t file_size(FILE *file);
-char *file_contents(char *path);
+char *file_contents(const char *path);
 
 #endif /* COMPILER_FILE_IO_H */

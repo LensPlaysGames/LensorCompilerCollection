@@ -35,6 +35,14 @@ enum CodegenCallingConvention {
   CG_CALL_CONV_DEFAULT = CG_CALL_CONV_MSWIN,
 };
 
+enum CodegenLanguage {
+  LANG_FUN,
+  LANG_IR,
+  LANG_COUNT,
+
+  LANG_DEFAULT = LANG_FUN,
+};
+
 // Types of comparison to be implemented by codegen backend.
 enum ComparisonType {
   COMPARE_EQ,

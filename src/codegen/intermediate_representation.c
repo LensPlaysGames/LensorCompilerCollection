@@ -279,7 +279,7 @@ void ir_femit_instruction
   case IR_PHI: {
     fprintf(file, "phi ");
     bool first = true;
-    VECTOR_FOREACH (IRPhiArgument, arg, instruction->value.phi_arguments) {
+    VECTOR_FOREACH_PTR (IRPhiArgument*, arg, instruction->value.phi_arguments) {
       if (first) { first = false; }
       else { fprintf(file, ", "); }
       fprintf(file, "[bb%zu : %%%zu]",
@@ -429,10 +429,10 @@ void ir_phi_argument
 }
 
 void ir_phi_remove_argument(IRInstruction *phi, IRBlock *block) {
-  VECTOR_FOREACH (IRPhiArgument, argument, phi->value.phi_arguments) {
+  VECTOR_FOREACH_PTR (IRPhiArgument*, argument, phi->value.phi_arguments) {
     if (argument->block == block) {
       ir_remove_use(argument->value, phi);
-      VECTOR_REMOVE_ELEMENT_UNORDERED(phi->value.phi_arguments, *argument);
+      VECTOR_REMOVE_ELEMENT_UNORDERED(phi->value.phi_arguments, argument);
       return;
     }
   }
@@ -809,7 +809,7 @@ IRInstruction *ir_stack_allocate
   INSTRUCTION(stack_allocation, IR_STACK_ALLOCATE);
   // TODO: Should we set offset here? Or just wait to calculate it like
   // we do currently?
-  stack_allocation->value.stack_allocation.size = size;
+  stack_allocation->value.stack_allocation.size = (size_t) size; /// FIXME: param should be size_t.
   INSERT(stack_allocation);
   return stack_allocation;
 }
@@ -850,7 +850,7 @@ static void ir_for_each_child(
   STATIC_ASSERT(IR_COUNT == 28);
   switch (user->type) {
   case IR_PHI:
-    VECTOR_FOREACH (IRPhiArgument, arg, user->value.phi_arguments) {
+    VECTOR_FOREACH_PTR (IRPhiArgument*, arg, user->value.phi_arguments) {
       callback(user, &arg->value, data);
     }
     break;

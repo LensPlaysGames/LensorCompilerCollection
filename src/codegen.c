@@ -6,6 +6,7 @@
 #include <environment.h>
 #include <error.h>
 #include <inttypes.h>
+#include <ir_parser.h>
 #include <opt.h>
 #include <parser.h>
 #include <stdarg.h>
@@ -778,30 +779,55 @@ void codegen_emit(CodegenContext *context) {
 }
 
 Error codegen
-(enum CodegenOutputFormat format,
+(enum CodegenLanguage lang,
+ enum CodegenOutputFormat format,
  enum CodegenCallingConvention call_convention,
  enum CodegenAssemblyDialect dialect,
- char *filepath,
+ const char *infile,
+ const char *outfile,
  ParsingContext *parse_context,
- Node *program
+ ...
  )
 {
   Error err = ok;
-  if (!filepath) {
-    ERROR_PREP(err, ERROR_ARGUMENTS, "codegen(): filepath can not be NULL!");
+  if (!outfile) {
+    ERROR_PREP(err, ERROR_ARGUMENTS, "codegen(): outfile can not be NULL!");
     return err;
   }
   // Open file for writing.
-  FILE *code = fopen(filepath, "w");
+  FILE *code = fopen(outfile, "w");
   if (!code) {
-    printf("Filepath: \"%s\"\n", filepath);
+    printf("Filepath: \"%s\"\n", outfile);
     ERROR_PREP(err, ERROR_GENERIC, "codegen(): fopen failed to open file at path.");
     return err;
   }
 
   CodegenContext *context = codegen_context_create_top_level
     (parse_context, format, call_convention, dialect, code);
-  err = codegen_program(context, program);
+
+  va_list ap;
+  va_start(ap, parse_context);
+  switch (lang) {
+    /// Parse an IR file.
+    case LANG_IR: {
+        const char* ir = va_arg(ap, const char*);
+        size_t sz = va_arg(ap, size_t);
+        if (!ir_parse(context, infile, ir, sz)) {
+          ERROR_PREP(err, ERROR_GENERIC, "codegen(): ir_parse failed.")
+          return err;
+        }
+    } break;
+
+    /// Parse a FUN file.
+    case LANG_FUN: {
+        Node *program = va_arg(ap, Node *);
+        err = codegen_program(context, program);
+    } break;
+
+    /// Anything else is not supported.
+    default: ASSERT(false, "Language %d not supported.", lang);
+  }
+  va_end(ap);
 
   codegen_lower(context);
 
@@ -814,3 +840,4 @@ Error codegen
   fclose(code);
   return err;
 }
+

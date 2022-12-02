@@ -221,7 +221,7 @@ typedef enum CreatesStackframe {
 ParsingContext *parse_context_create(ParsingContext *parent, CreatesStackframe creates_stackframe);
 ParsingContext *parse_context_default_create();
 
-Error parse_program(char *filepath, ParsingContext *context, Node *result);
+Error parse_program(const char *filepath, ParsingContext *context, Node *result);
 
 Error parse_expr(ParsingContext *context,
                  char *source, char **end,

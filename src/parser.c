@@ -1674,7 +1674,7 @@ Error parse_expr
 }
 
 
-Error parse_program(char *filepath, ParsingContext *context, Node *result) {
+Error parse_program(const char *filepath, ParsingContext *context, Node *result) {
   Error err = ok;
   char *contents = file_contents(filepath);
   if (!contents) {

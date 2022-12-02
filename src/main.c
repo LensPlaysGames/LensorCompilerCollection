@@ -203,39 +203,68 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  Node *program = node_allocate();
-  ParsingContext *context = parse_context_default_create();
-  Error err = parse_program(argv[input_filepath_index], context, program);
+  const char *infile = argv[input_filepath_index];
+  const char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
+  size_t len = strlen(infile);
 
-  if (verbosity) {
-    printf("----- Abstract Syntax Tree\n");
-    print_node(program, 0);
-    printf("----- Parsing Context\n");
-    parse_context_print(context,0);
-    printf("-----\n");
+  /// The input is an IR file.
+  if (len >= 3 && memcmp(infile + len - 1, ".ir", 3) == 0) {
+    codegen(
+      LANG_IR,
+      output_format,
+      output_calling_convention,
+      output_assembly_dialect,
+      infile,
+      output_filepath,
+      parse_context_default_create(),
+      infile,
+      len
+     );
   }
 
-  if (err.type) {
-    print_error(err);
-    return 1;
-  }
+  /// The input is a FUN file.
+  else {
+    Node *program = node_allocate();
+    ParsingContext *context = parse_context_default_create();
+    Error err = parse_program(infile, context, program);
 
-  err = typecheck_program(context, program);
-  if (err.type) {
-    print_error(err);
-    return 2;
-  }
+    if (verbosity) {
+      printf("----- Abstract Syntax Tree\n");
+      print_node(program, 0);
+      printf("----- Parsing Context\n");
+      parse_context_print(context,0);
+      printf("-----\n");
+    }
 
-  char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
-  err = codegen(output_format, output_calling_convention, output_assembly_dialect, output_filepath, context, program);
-  if (err.type) {
-    print_error(err);
-    return 3;
+    if (err.type) {
+      print_error(err);
+      return 1;
+    }
+
+    err = typecheck_program(context, program);
+    if (err.type) {
+      print_error(err);
+      return 2;
+    }
+
+    err = codegen(
+      LANG_FUN,
+      output_format,
+      output_calling_convention,
+      output_assembly_dialect,
+      infile,
+      output_filepath,
+      context,
+      program
+    );
+    if (err.type) {
+      print_error(err);
+      return 3;
+    }
+
+    node_free(program);
   }
 
   printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
-
-  node_free(program);
-
   return 0;
 }
