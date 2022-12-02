@@ -778,6 +778,17 @@ IRInstruction *ir_shift_left
   return shl;
 }
 
+IRInstruction *ir_shift_right_logical
+(CodegenContext *context,
+ IRInstruction *lhs,
+ IRInstruction *rhs)
+{
+  INSTRUCTION(shr, IR_SHIFT_RIGHT_LOGICAL);
+  set_pair_and_mark(shr, &shr->value.pair, lhs, rhs);
+  INSERT(shr);
+  return shr;
+}
+
 IRInstruction *ir_shift_right_arithmetic
 (CodegenContext *context,
  IRInstruction *lhs,

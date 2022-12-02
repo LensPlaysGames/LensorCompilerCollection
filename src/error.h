@@ -28,10 +28,12 @@ extern Error ok;
 
 #ifndef _MSC_VER
 #  define NORETURN __attribute__((noreturn))
+#  define FALLTHROUGH __attribute__((fallthrough))
 #  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
 #  define PRETTY_FUNCTION __PRETTY_FUNCTION__
 #else
 #  define NORETURN __declspec(noreturn)
+#  define FALLTHROUGH
 #  define FORMAT(...)
 #  define PRETTY_FUNCTION __FUNCSIG__
 #endif

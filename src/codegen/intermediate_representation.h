@@ -24,51 +24,59 @@
 #define FOREACH_INSTRUCTION(context) FOREACH_INSTRUCTION_N(context, function, block, instruction)
 #define FOREACH_INSTRUCTION_IN_FUNCTION(function) FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block)
 
+/// Some of these are also used in the parser, and until C implements
+/// inheriting from enums (i.e. never), this is the best we can do.
+#define ALL_IR_INSTRUCTION_TYPES(F)                                \
+    F(IMMEDIATE)                                                   \
+    F(CALL)                                                        \
+    F(LOAD)                                                        \
+                                                                   \
+    F(RETURN)                                                      \
+    F(BRANCH)                                                      \
+    F(BRANCH_CONDITIONAL)                                          \
+    F(UNREACHABLE)                                                 \
+                                                                   \
+    F(PHI)                                                         \
+    F(COPY)                                                        \
+                                                                   \
+    F(ADD)                                                         \
+    F(SUBTRACT)                                                    \
+    F(MULTIPLY)                                                    \
+    F(DIVIDE)                                                      \
+    F(MODULO)                                                      \
+                                                                   \
+    F(SHIFT_LEFT)                                                  \
+    F(SHIFT_RIGHT_ARITHMETIC)                                      \
+    F(SHIFT_RIGHT_LOGICAL)                                         \
+                                                                   \
+    F(LOCAL_LOAD)                                                  \
+    F(LOCAL_STORE)                                                 \
+    F(LOCAL_ADDRESS)                                               \
+                                                                   \
+    F(GLOBAL_LOAD)                                                 \
+    F(GLOBAL_STORE)                                                \
+    F(GLOBAL_ADDRESS)                                              \
+                                                                   \
+    /** Store data at an address. **/                              \
+    F(STORE)                                                       \
+                                                                   \
+    F(COMPARISON)                                                  \
+                                                                   \
+    F(PARAMETER_REFERENCE)                                         \
+                                                                   \
+    /**                                                            \
+     * A lot of backends have these instructions, but the IR isn't \
+     * generated with them in it.                                  \
+     **/                                                           \
+    F(REGISTER)                                                    \
+    F(STACK_ALLOCATE)
+
+#define DEFINE_IR_INSTRUCTION_TYPE(type) CAT(IR_, type),
 typedef enum IRType {
-  IR_IMMEDIATE,
-  IR_CALL,
-  IR_LOAD,
-
-  IR_RETURN,
-  IR_BRANCH,
-  IR_BRANCH_CONDITIONAL,
-  IR_UNREACHABLE,
-
-  IR_PHI,
-  IR_COPY,
-
-  IR_ADD,
-  IR_SUBTRACT,
-  IR_MULTIPLY,
-  IR_DIVIDE,
-  IR_MODULO,
-
-  IR_SHIFT_LEFT,
-  IR_SHIFT_RIGHT_ARITHMETIC,
-  IR_SHIFT_RIGHT_LOGICAL,
-
-  IR_LOCAL_LOAD,
-  IR_LOCAL_STORE,
-  IR_LOCAL_ADDRESS,
-
-  IR_GLOBAL_LOAD,
-  IR_GLOBAL_STORE,
-  IR_GLOBAL_ADDRESS,
-
-  /// Store data at an address.
-  IR_STORE,
-
-  IR_COMPARISON,
-
-  IR_PARAMETER_REFERENCE,
-
-  // A lot of backends have these instructions, but the IR isn't
-  // generated with them in it.
-  IR_REGISTER,
-  IR_STACK_ALLOCATE,
-
+  ALL_IR_INSTRUCTION_TYPES(DEFINE_IR_INSTRUCTION_TYPE)
   IR_COUNT
 } IRType;
+#undef DEFINE_IR_INSTRUCTION_TYPE
 
 typedef struct IRPhiArgument {
   /// The value of the argument itself.
@@ -410,6 +418,11 @@ IRInstruction *ir_modulo
  IRInstruction *rhs);
 
 IRInstruction *ir_shift_left
+(CodegenContext *context,
+ IRInstruction *lhs,
+ IRInstruction *rhs);
+
+IRInstruction *ir_shift_right_logical
 (CodegenContext *context,
  IRInstruction *lhs,
  IRInstruction *rhs);

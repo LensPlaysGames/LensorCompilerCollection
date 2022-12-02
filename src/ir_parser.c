@@ -76,6 +76,22 @@ enum tk {
     tk_assign,
 };
 
+#define DEFINE_IR_INSTRUCTION_TYPE(type) type,
+enum IrParserInstructionType {
+    ALL_IR_INSTRUCTION_TYPES(DEFINE_IR_INSTRUCTION_TYPE)
+    IR_INSTRUCTIONS_COUNT,
+
+    /// These are only used internally by the parser.
+    TAIL,
+    EQ,
+    NE,
+    LT,
+    LE,
+    GT,
+    GE,
+};
+#undef DEFINE_IR_INSTRUCTION_TYPE
+
 /// String span.
 typedef struct {
     const char *data;
@@ -164,7 +180,8 @@ static bool spans_equal(span a, span b) {
 
 /// Check if a span is the name of an instruction.
 /// Returns IR_COUNT if the span is not the name of an instruction.
-static enum IRType irtype_from_span(span s) {
+static enum IrParserInstructionType irtype_from_span(span s) {
+    STATIC_ASSERT((int)IR_INSTRUCTIONS_COUNT == (int)IR_COUNT, "IR Parser must implement all IR instructions");
     TODO();
 }
 
@@ -172,7 +189,6 @@ static enum IRType irtype_from_span(span s) {
 static void next_token(IRParser *p) {
     TODO();
 }
-
 
 /// ===========================================================================
 ///  Parser
@@ -222,7 +238,9 @@ static bool parse_instruction_or_branch(IRParser *p) {
     span name = {0};
     loc name_location = {0};
     IRInstruction *i = NULL;
+    bool void_instruction = false;
     bool have_temp = false;
+    bool is_tail_call = false;
 
     /// Parse the temporary or physical register if there is one.
     if (p->tok_type != tk_ident) {
@@ -247,46 +265,24 @@ static bool parse_instruction_or_branch(IRParser *p) {
     else if (p->tok_type != tk_ident) ERR("Expected instruction name");
 
     /// The current token is an identifier; we now need to parse the instruction.
-    ///                       | PHI { "[" <name> ":" <temp> "]" }
-    ///                       | <unary> <temp>
-    ///                       | <binary> <temp> "," <temp>
-    ///                       | LOAD ( <temp> | <name> )
-    ///                       | REGISTER <register>
-    ///                       | ALLOCA
-    /// <void-instruction>  ::= STORE <temp> "," ( <temp> | <name> )
-    ///
-    ///
-    /// <unary>  ::= COPY
-    /// <binary> ::= ADD | SUB | MUL | DIV | MOD | EQ | NE | LT | LE | GT | GE | SHL | SHR | SAR
-    ///
-    /// <branch>    ::= UNREACHABLE "\n"
-    ///               | RETURN "\n"
-    ///               | RETURN <temp> "\n"
-    ///               | BR <name> "\n"
-    ///               | BR-COND <temp> "," <name> "," <name> "\n"
     else {
         /// Get the instruction type.
-        enum IRType type = irtype_from_span(p->tok);
+        enum IrParserInstructionType type = irtype_from_span(p->tok);
         loc i_loc = p->location;
-        bool is_tail_call = false;
-
-        /// Instruction prefixes.
-        if (type == IR_COUNT) {
-            if (IDENT("tail")) {
-                next_token(p);
-                if (p->tok_type != tk_ident || irtype_from_span(p->tok) != IR_CALL) ERR_AT(i_loc, "Expected 'call' after 'tail'");
-                is_tail_call = true;
-                type = IR_CALL;
-                i_loc = p->location;
-            } else {
-                ERR("Unknown instruction");
-            }
-        }
 
         /// Parse the instruction.
         switch (type) {
+            /// Should never happen.
+            default: ASSERT(false, "Unhandled instruction type %d", type);
+
             /// [ TAIL ] CALL ( <name> | <temp> ) "(" <parameters> ")"
-            case IR_CALL: {
+            case TAIL:
+                next_token(p);
+                if (p->tok_type != tk_ident || irtype_from_span(p->tok) != IR_CALL) ERR_AT(i_loc, "Expected 'call' after 'tail'");
+                is_tail_call = true;
+                i_loc = p->location;
+                FALLTHROUGH;
+            case CALL: {
                 next_token(p);
 
                 /// We need to create the call manually here.
@@ -330,13 +326,14 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
                 /// Yeet ")".
                 if (p->tok_type != tk_rparen) ERR("Expected ')' after function parameters");
+                i = call;
                 next_token(p);
             } break;
 
             /// PHI { "[" <name> ":" <temp> "]" }
-            case IR_PHI: {
+            case PHI: {
                 next_token(p);
-                IRInstruction *phi = ir_phi(p->context);
+                i = ir_phi(p->context);
 
                 /// Parse the phi arguments.
                 while (p->tok_type == tk_lbrack) {
@@ -360,7 +357,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
                     next_token(p);
 
                     /// Add the argument to the PHI.
-                    ir_phi_add_argument(phi, arg);
+                    ir_phi_add_argument(i, arg);
 
                     /// Yeet ",".
                     if (p->tok_type != tk_comma) break;
@@ -371,6 +368,190 @@ static bool parse_instruction_or_branch(IRParser *p) {
                 if (p->tok_type != tk_rbrack) ERR("Expected ']' after PHI arguments");
                 next_token(p);
             } break;
+
+            /// <unary> <temp>
+            /// <unary> ::= COPY
+            case COPY: {
+                next_token(p);
+
+                /// Parse the temporary.
+                if (p->tok_type != tk_temp) ERR_AT(i_loc, "Expected temporary after unary instruction");
+                i = ir_copy(p->context, resolve_curr_temp(p));
+                ir_insert(p->context, i);
+                next_token(p);
+            } break;
+
+            /// <binary> <temp> "," <temp>
+            /// <binary> ::= ADD | SUB | MUL | DIV | MOD | EQ | NE | LT | LE | GT | GE | SHL | SHR | SAR
+            case ADD:
+            case SUBTRACT:
+            case MULTIPLY:
+            case DIVIDE:
+            case MODULO:
+            case EQ:
+            case NE:
+            case LT:
+            case LE:
+            case GT:
+            case GE:
+            case IR_SHIFT_LEFT:
+            case IR_SHIFT_RIGHT_LOGICAL:
+            case IR_SHIFT_RIGHT_ARITHMETIC: {
+                next_token(p);
+
+                /// Parse the first temporary.
+                if (p->tok_type != tk_temp) ERR_AT(i_loc, "Expected temporary after binary instruction");
+                IRInstruction *a = resolve_curr_temp(p);
+                next_token(p);
+
+                /// Yeet ",".
+                if (p->tok_type != tk_comma) ERR_AT(i_loc, "Expected ',' after first temporary in binary instruction");
+                next_token(p);
+
+                /// Parse the second temporary.
+                if (p->tok_type != tk_temp) ERR_AT(i_loc, "Expected temporary after ',' in binary instruction");
+                IRInstruction *b = resolve_curr_temp(p);
+                next_token(p);
+
+                /// Create the instruction.
+                switch (type) {
+                    case ADD: i = ir_add(p->context, a, b); break;
+                    case SUBTRACT: i = ir_subtract(p->context, a, b); break;
+                    case MULTIPLY: i = ir_multiply(p->context, a, b); break;
+                    case DIVIDE: i = ir_divide(p->context, a, b); break;
+                    case MODULO: i = ir_modulo(p->context, a, b); break;
+                    case EQ: i = ir_comparison(p->context, COMPARE_EQ, a, b); break;
+                    case NE: i = ir_comparison(p->context, COMPARE_NE, a, b); break;
+                    case LT: i = ir_comparison(p->context, COMPARE_LT, a, b); break;
+                    case LE: i = ir_comparison(p->context, COMPARE_LE, a, b); break;
+                    case GT: i = ir_comparison(p->context, COMPARE_GT, a, b); break;
+                    case GE: i = ir_comparison(p->context, COMPARE_GE, a, b); break;
+                    case IR_SHIFT_LEFT: i = ir_shift_left(p->context, a, b); break;
+                    case IR_SHIFT_RIGHT_LOGICAL: i = ir_shift_right_logical(p->context, a, b); break;
+                    case IR_SHIFT_RIGHT_ARITHMETIC: i = ir_shift_right_arithmetic(p->context, a, b); break;
+                    default: UNREACHABLE();
+                }
+            } break;
+
+            /// LOAD ( <temp> | <name> )
+            case LOAD: {
+                next_token(p);
+
+                /// Parse the temporary or name.
+                if (p->tok_type == tk_temp) i = ir_load(p->context, resolve_curr_temp(p));
+                else if (p->tok_type == tk_ident) i = ir_load_global(p->context, strndup(p->tok.data, p->tok.size));
+                else ERR_AT(i_loc, "Expected temporary or name after LOAD");
+            } break;
+
+            /// REGISTER NUMBER
+            case REGISTER: {
+                next_token(p);
+
+                /// Parse the register.
+                if (p->tok_type != tk_number) ERR_AT(i_loc, "Expected physical register after REGISTER");
+                INSTRUCTION(reg, IR_REGISTER)
+                ir_insert(p->context, reg);
+                reg->result = (Register) p->integer;
+                i = reg;
+                next_token(p);
+            } break;
+
+            /// ALLOCA
+            case STACK_ALLOCATE: {
+                next_token(p);
+                i = ir_stack_allocate(p->context, 8);
+            } break;
+
+            /// <void-instruction> ::= STORE <temp> "," ( <temp> | <name> )
+            case STORE: {
+                next_token(p);
+                void_instruction = true;
+
+                /// Parse the temporary.
+                if (p->tok_type != tk_temp) ERR_AT(i_loc, "Expected temporary after STORE");
+                IRInstruction *a = resolve_curr_temp(p);
+                next_token(p);
+
+                /// Yeet ",".
+                if (p->tok_type != tk_comma) ERR_AT(i_loc, "Expected ',' after temporary in STORE");
+                next_token(p);
+
+                /// Parse the temporary or name.
+                if (p->tok_type == tk_temp) i = ir_store(p->context, a, resolve_curr_temp(p));
+                else if (p->tok_type == tk_ident) i = ir_store_global(p->context, a, strndup(p->tok.data, p->tok.size));
+                else ERR_AT(i_loc, "Expected temporary or name after ',' in STORE");
+                next_token(p);
+            } break;
+
+            /// <branch> ::= UNREACHABLE "\n" | ...
+            case UNREACHABLE: {
+                next_token(p);
+                void_instruction = true;
+                INSTRUCTION(u, IR_UNREACHABLE)
+                ir_insert(p->context, u);
+                i = u;
+            } break;
+
+            /// RETURN [ <temp> ] "\n"
+            case IR_RETURN: {
+                next_token(p);
+                void_instruction = true;
+                INSTRUCTION(r, IR_RETURN)
+                ir_insert(p->context, r);
+                i = r;
+
+                /// Parse the return value if there is one.
+                if (p->tok_type == tk_temp) {
+                    r->value.reference = resolve_curr_temp(p);
+                    next_token(p);
+                }
+            } break;
+
+            /// BR <name> "\n"
+            case BRANCH: {
+                next_token(p);
+                void_instruction = true;
+                INSTRUCTION(b, IR_BRANCH)
+                ir_insert(p->context, b);
+                i = b;
+
+                /// Parse the name.
+                if (p->tok_type != tk_ident) ERR_AT(i_loc, "Expected block name after BR");
+                resolve_or_declare_block(p, p->tok, &b->value.block);
+                next_token(p);
+            } break;
+
+            /// BR-COND <temp> "," <name> "," <name> "\n"
+            case BRANCH_CONDITIONAL: {
+                next_token(p);
+                void_instruction = true;
+                INSTRUCTION(b, IR_BRANCH_CONDITIONAL)
+                ir_insert(p->context, b);
+                i = b;
+
+                /// Parse the temporary.
+                if (p->tok_type != tk_temp) ERR_AT(i_loc, "Expected temporary after BR.COND");
+                b->value.conditional_branch.condition = resolve_curr_temp(p);
+                next_token(p);
+
+                /// Yeet ",".
+                if (p->tok_type != tk_comma) ERR_AT(i_loc, "Expected ',' after temporary in BR.COND");
+                next_token(p);
+
+                /// Parse the first name.
+                if (p->tok_type != tk_ident) ERR_AT(i_loc, "Expected block name after ',' in BR.COND");
+                resolve_or_declare_block(p, p->tok, &b->value.conditional_branch.true_branch);
+                next_token(p);
+
+                /// Yeet ",".
+                if (p->tok_type != tk_comma) ERR_AT(i_loc, "Expected ',' after block name in BR-COND");
+                next_token(p);
+
+                /// Parse the second name.
+                if (p->tok_type != tk_ident) ERR_AT(i_loc, "Expected block name after ',' in BR-COND");
+                resolve_or_declare_block(p, p->tok, &b->value.conditional_branch.false_branch);
+                next_token(p);
+            } break;
         }
     }
 
@@ -378,7 +559,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
     /// If the instruction is a void instruction, then a name is not allowed.
     /// Otherwise, add it to the symbol table.
     if (have_temp) {
-        if (void_instruction(i)) ERR_AT(name_location, "Void instructions cannot be assigned a temporary");
+        if (void_instruction) ERR_AT(name_location, "Instructions that return nothing cannot be assigned to a temporary");
         make_temporary(p, name_location, name, i);
     }
 
