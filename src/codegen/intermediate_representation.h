@@ -62,7 +62,7 @@
                                                                    \
     F(COMPARISON)                                                  \
                                                                    \
-    F(PARAMETER_REFERENCE)                                         \
+    F(PARAMETER)                                                   \
                                                                    \
     /**                                                            \
      * A lot of backends have these instructions, but the IR isn't \
@@ -219,6 +219,8 @@ typedef struct IRFunction {
 
   DLIST(IRBlock) blocks;
 
+  VECTOR(IRInstruction*) parameters;
+
   // Unique ID (among functions)
   size_t id;
 
@@ -276,8 +278,10 @@ void ir_block_attach
 (CodegenContext *context,
  IRBlock *new_block);
 
-IRFunction *ir_function_create();
-IRFunction *ir_function(CodegenContext *context, const char *name);
+IRFunction *ir_function
+(CodegenContext *context,
+ const char *name,
+ size_t params);
 
 void ir_force_insert_into_block
 (IRBlock *block,
@@ -294,9 +298,11 @@ void ir_insert
 void insert_instruction_before(IRInstruction *i, IRInstruction *before);
 void insert_instruction_after(IRInstruction *i, IRInstruction *after);
 
-IRInstruction *ir_parameter_reference
+IRInstruction *ir_parameter
 (CodegenContext *context,
- int64_t index);
+ size_t index);
+
+void ir_add_parameter_to_function(IRFunction *);
 
 void ir_phi_add_argument
 (IRInstruction *phi,

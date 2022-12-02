@@ -27,49 +27,8 @@ void codegen_context_ir_free(CodegenContext *ctx) {
 }
 
 void codegen_lower_ir_backend(CodegenContext *context) {
-  /// Eliminate .params and loads from them.
-  typedef VECTOR(IRInstruction*) IRVector;
-  typedef struct {
-    IRInstruction *param;
-    IRVector loads;
-  } param;
-  VECTOR(param) param_loads = {0};
-
-  VECTOR_FOREACH_PTR (IRFunction*, f, *context->functions) {
-    VECTOR_FOREACH (param, p, param_loads) VECTOR_DELETE(p->loads);
-    VECTOR_CLEAR(param_loads);
-    FOREACH_INSTRUCTION_IN_FUNCTION(f) {
-      switch (instruction->type) {
-        /// Add the parameter to the param loads.
-        case IR_PARAMETER_REFERENCE: {
-          param *p;
-          VECTOR_FIND_IF(param_loads, p, i, param_loads.data[i].param == instruction);
-          if (!p) VECTOR_PUSH(param_loads, ((param){instruction, {0}}));
-        } break;
-
-        /// Add loads from parameter to the list.
-        case IR_LOCAL_LOAD:
-        case IR_LOAD: {
-          param *p;
-          VECTOR_FIND_IF(param_loads, p, i, param_loads.data[i].param == instruction->value.reference);
-          if (p) VECTOR_PUSH(p->loads, instruction);
-        } break;
-      }
-    }
-
-    /// Keep the param refs for now so that ids are assigned correctly
-    /// later on, but replace all uses of all loads from params w/ a
-    /// reference to the param and delete the load.
-    ///
-    /// NOTE: This transformation results in internally invalid IR.
-    /// However this is fine since this is just for printing.
-    VECTOR_FOREACH (param, p, param_loads) {
-      VECTOR_FOREACH_PTR (IRInstruction*, load, p->loads) {
-        ir_replace_uses(load, p->param);
-        ir_remove(load);
-      }
-    }
-  }
+  (void) context;
+  /// No-op.
 }
 
 void codegen_emit_ir_backend(CodegenContext *context) {

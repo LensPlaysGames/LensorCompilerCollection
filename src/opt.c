@@ -65,7 +65,7 @@ static bool has_side_effects(IRInstruction *i) {
     case IR_GLOBAL_LOAD:
     case IR_GLOBAL_ADDRESS:
     case IR_COMPARISON:
-    case IR_PARAMETER_REFERENCE:
+    case IR_PARAMETER:
       return false;
 
     default:

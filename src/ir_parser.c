@@ -1093,19 +1093,19 @@ static void parse_attributes(IRParser *p) {
 
 /// <parameters> ::= "(" [ <temp> { "," <temp> } ] ")"
 static void parse_parameters(IRParser *p) {
-    int64_t param_count = 1;
-
     /// Parameter list.
     if (p->tok_type != tk_lparen) ERR("Expected '(' after function name");
     next_token(p);
 
     /// Parse the parameters.
+    size_t param_count = 0;
     while (p->tok_type != tk_rparen) {
         /// Create a parameter reference.
         if (p->tok_type != tk_temp) ERR("Expected temporary after '(' or ','");
         if (p->tok.data[0] == '#') ERR("Function parameter must be a temporary register");
-        IRInstruction *alloca = ir_parameter_reference(p->context, param_count++);
-        make_temp(p, here(p), p->tok, ir_load_local(p->context, alloca));
+        ir_add_parameter_to_function(VECTOR_BACK(*p->context->functions));
+        IRInstruction *param = ir_parameter(p->context, param_count++);
+        make_temp(p, here(p), p->tok, ir_load_local(p->context, param));
         next_token(p);
 
         /// Yeet the comma if there is one.
@@ -1131,7 +1131,7 @@ static void parse_function(IRParser *p) {
     if (p->tok_type != tk_ident) ERR("Expected function name after 'defun'");
     span name = p->tok;
     loc location = here(p);
-    ir_function(p->context, strndup(p->tok.data, p->tok.size));
+    ir_function(p->context, strndup(p->tok.data, p->tok.size), 0);
     next_token(p);
 
     /// Function parameters.

@@ -706,17 +706,33 @@ Error codegen_function
 
   cg_context = codegen_context_create(cg_context);
 
-  ir_function(cg_context, name);
+  /// Create a new function.
+  {
+    /// Determine the number of parameters.
+    /// TODO: Pass the actual to ir_function() instead.
+    size_t param_count = 0;
+    Node *parameter = function->children->next_child->children;
+    while (parameter) {
+      param_count++;
+      parameter = parameter->next_child;
+    }
 
-  // Store base pointer integer offset within locals environment
-  // Start at one to make space for pushed RBP in function header.
-  size_t param_count = 1;
+    /// Create the function.
+    ir_function(cg_context, name, param_count);
+  }
+
+
+  /// Create a variable for each parameter.
+  size_t param_count = 0;
   Node *parameter = function->children->next_child->children;
   while (parameter) {
     Node *param_node = node_allocate();
 
-    IRInstruction *param = ir_parameter_reference(cg_context, (int64_t) param_count++);
-    param_node->value.ir_instruction = param;
+    /// Get the parameter value and store it in a local variable.
+    IRInstruction *param = ir_parameter(cg_context, param_count++);
+    IRInstruction *alloca = ir_stack_allocate(cg_context, 8);
+    ir_store_local(cg_context, param, alloca);
+    param_node->value.ir_instruction = alloca;
     environment_set(cg_context->locals, parameter->children, param_node);
 
     parameter = parameter->next_child;
@@ -725,7 +741,10 @@ Error codegen_function
   // Function body
   ParsingContext *ctx = context;
   ParsingContext *next_child_ctx = *next_child_context;
-  // FIXME: Should this NULL check create error rather than silently be allowed?
+  /// FIXME: Should this NULL check create error rather than silently be allowed?
+  /// FIXME (Sirraide): The next line currently does nothing. Dereferencing `next_child_context`
+  ///     already implies that it cannot be NULL. Is this supposed to be `if (*next_child_context)`
+  ///     instead?
   if (next_child_context) {
     ctx = *next_child_context;
     next_child_ctx = ctx->children;
@@ -757,7 +776,7 @@ Error codegen_function
 Error codegen_program(CodegenContext *context, Node *program) {
   Error err = ok;
 
-  ir_function(context, "main");
+  ir_function(context, "main", 2);
 
   ParsingContext *next_child_context = context->parse_context->children;
   Node *last_expression = NULL;
@@ -849,9 +868,9 @@ Error codegen
     default: ASSERT(false, "Language %d not supported.", lang);
   }
 
-  codegen_lower(context);
-
   if (optimise) codegen_optimise(context);
+
+  codegen_lower(context);
 
   codegen_emit(context);
 

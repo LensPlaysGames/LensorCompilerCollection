@@ -1408,38 +1408,16 @@ static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
     switch (instruction->type) {
-    case IR_PARAMETER_REFERENCE:
-      if (instruction->value.immediate >= (int64_t)argument_register_count) {
-        TODO("arch_x86_64 doesn't yet support passing arguments on the stack, sorry.");
-      }
-
-      // Create instruction to save parameter on function entry onto stack from register.
-      IRInstruction *store = calloc(1, sizeof(IRInstruction));
-      ASSERT(store, "Could not allocate IRInstruction");
-      store->type = IR_LOCAL_STORE;
-
-      IRInstruction *register_instruction = calloc(1, sizeof(IRInstruction));
-      ASSERT(register_instruction, "Could not allocate IRInstruction");
-      register_instruction->type = IR_REGISTER;
-      register_instruction->result = argument_registers[instruction->value.immediate - 1];
-
-      set_pair_and_mark(store, &store->value.pair, instruction, register_instruction);
-
-      insert_instruction_after(store, instruction);
-      insert_instruction_after(register_instruction, instruction);
-
-      // Overwrite current instruction to allocate space for parameter on stack.
-      instruction->type = IR_STACK_ALLOCATE;
-      // TODO: Size here be dictated by size of type of parameter.
-      // We would first have to know which function we are within,
-      // that way we can lookup the parameters, that way we can
-      // lookup the type of the parameter
-      // (based on parameter index). Basically, lots of environment
-      // lookups.
-      instruction->value.stack_allocation.size = 8;
-      break;
-    default:
-      break;
+      case IR_PARAMETER:
+        ASSERT(instruction->value.immediate >= 0);
+        if ((size_t)instruction->value.immediate >= argument_register_count) {
+          TODO("arch_x86_64 doesn't yet support passing arguments on the stack, sorry.");
+        }
+        instruction->type = IR_REGISTER;
+        instruction->result = argument_registers[instruction->value.immediate];
+        break;
+      default:
+        break;
     }
   }
 }

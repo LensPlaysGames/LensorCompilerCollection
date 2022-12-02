@@ -250,10 +250,8 @@ void ir_femit_instruction
   case IR_LOCAL_ADDRESS:
     fprintf(file, ".addr %%%zu", instruction->value.reference->id);
     break;
-  case IR_PARAMETER_REFERENCE:
-    fprintf(file, ".param %%%"PRId64,
-            instruction->value.immediate);
-    break;
+  /// Nothing to do here.
+  case IR_PARAMETER: break;
   case IR_COMPARISON:
     switch (instruction->value.comparison.type) {
     case COMPARE_EQ:
@@ -373,12 +371,13 @@ void ir_femit
 void ir_set_func_ids(IRFunction *f) {
   /// We start counting at 1 so that 0 can indicate an invalid/removed element.
   size_t block_id = 1;
-  size_t instruction_id = 1;
+  size_t instruction_id = f->parameters.size;
 
   DLIST_FOREACH (IRBlock *, block, f->blocks) {
     block->id = block_id++;
     DLIST_FOREACH (IRInstruction *, instruction, block->instructions) {
-    instruction->id = instruction_id++;
+        if (instruction->type == IR_PARAMETER) continue;
+        instruction->id = instruction_id++;
     }
   }
 }
@@ -420,13 +419,21 @@ IRBlock *ir_block_create() {
   return block;
 }
 
-IRInstruction *ir_parameter_reference
+IRInstruction *ir_parameter
 (CodegenContext *context,
- int64_t index) {
-  INSTRUCTION(param, IR_PARAMETER_REFERENCE)
-  param->value.immediate = index;
-  INSERT(param);
-  return param;
+ size_t index) {
+  ASSERT(context->function, "No function!");
+  ASSERT(index < context->function->parameters.size, "Parameter index out of bounds.");
+  return context->function->parameters.data[index];
+}
+
+/// Add a parameter to a function. This alters the number of
+/// parameters the function takes, so use it with caution.
+void ir_add_parameter_to_function(IRFunction *f) {
+  INSTRUCTION(parameter, IR_PARAMETER)
+  parameter->value.immediate = (int64_t) f->parameters.size;
+  parameter->id = f->parameters.size;
+  VECTOR_PUSH(f->parameters, parameter);
 }
 
 void ir_phi_add_argument
@@ -486,21 +493,27 @@ void ir_block_attach
   context->block = new_block;
 }
 
-IRFunction *ir_function_create() {
+IRFunction *ir_function(CodegenContext *context, const char *name, size_t params) {
   IRFunction *function = calloc(1, sizeof(IRFunction));
-  ASSERT(function, "Could not allocate memory for new IRFunction.");
-  return function;
-}
-
-IRFunction *ir_function(CodegenContext *context, const char *name) {
-  IRFunction *function = ir_function_create();
   function->name = strdup(name);
-  // A function *must* contain at least one block, so we start new
-  // functions out with an empty block.
+
+  /// A function *must* contain at least one block, so we start new
+  /// functions out with an empty block.
   IRBlock *block = ir_block_create();
+
+  /// Set the current function and add it to the list of functions.
   context->function = function;
   ir_block_attach(context, block);
   VECTOR_PUSH(*context->functions, function);
+
+  /// Generate param refs.
+  for (size_t i = 0; i < params; i++) {
+    INSTRUCTION(param, IR_PARAMETER)
+    param->value.immediate = (int64_t) i;
+    param->id = i;
+    VECTOR_PUSH(function->parameters, param);
+    INSERT(param);
+  }
   return function;
 }
 
@@ -921,7 +934,7 @@ static void ir_for_each_child(
     callback(user, &user->value.comparison.pair.car, data);
     callback(user, &user->value.comparison.pair.cdr, data);
     break;
-  case IR_PARAMETER_REFERENCE:
+  case IR_PARAMETER:
   case IR_GLOBAL_ADDRESS:
   case IR_GLOBAL_LOAD:
   case IR_IMMEDIATE:
