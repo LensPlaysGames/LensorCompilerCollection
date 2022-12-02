@@ -1,7 +1,7 @@
 <ir>         ::= { <function> | <extern> }
-<function>   ::= DEFUN <name> "(" <parameters> ")" <attributes> "{" <body> "}"
-<extern>     ::= DECLARE <name> "(" <parameters> ")" <attributes> "\n"
-<parameters> ::= <temp> { "," <temp> }
+<function>   ::= DEFUN <name> <parameters> <attributes> "{" <body> "}"
+<extern>     ::= DECLARE <name> <parameters> <attributes> "\n"
+<parameters> ::= "(" [ <temp> { "," <temp> } ] ")"
 <attributes> ::= <attribute>*
 
 <body>        ::= <first-block> <block>*

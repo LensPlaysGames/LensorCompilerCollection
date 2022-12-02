@@ -207,7 +207,7 @@ typedef struct IRBlock {
 } IRBlock;
 
 typedef struct IRFunction {
-  const char *name;
+  char *name;
 
   DLIST(IRBlock) blocks;
 
@@ -218,7 +218,19 @@ typedef struct IRFunction {
   size_t locals_total_size;
 
   size_t registers_in_use;
+
+  uint32_t attr_consteval : 1;
+  uint32_t attr_forceinline : 1;
+  uint32_t attr_global : 1;
+  uint32_t attr_leaf : 1;
+  uint32_t attr_noreturn : 1;
+  uint32_t attr_pure : 1;
+  uint32_t : 26;
 } IRFunction;
+
+struct IR {
+  VECTOR (IRFunction*) functions;
+};
 
 void ir_set_ids(CodegenContext *context);
 
@@ -272,6 +284,10 @@ void ir_insert
 
 void insert_instruction_before(IRInstruction *i, IRInstruction *before);
 void insert_instruction_after(IRInstruction *i, IRInstruction *after);
+
+IRInstruction *ir_parameter_reference
+(CodegenContext *context,
+ int64_t index);
 
 void ir_phi_argument
 (IRInstruction *phi,

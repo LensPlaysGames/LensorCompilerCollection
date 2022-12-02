@@ -82,4 +82,7 @@ void assert_impl (
 #define PANIC(...)    ASSERT(0, "PANIC: "__VA_ARGS__)
 #define UNREACHABLE() ASSERT(0, "Unreachable")
 
+#define CAT_(a, b) a ## b
+#define CAT(a, b) CAT_(a, b)
+
 #endif /* COMPILER_ERROR_H */

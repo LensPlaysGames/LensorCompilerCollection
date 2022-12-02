@@ -692,10 +692,7 @@ Error codegen_function
   while (parameter) {
     Node *param_node = node_allocate();
 
-    INSTRUCTION(param, IR_PARAMETER_REFERENCE);
-    param->value.immediate = (int64_t) param_count++;
-    ir_insert(cg_context, param);
-
+    IRInstruction *param = ir_parameter_reference(cg_context, (int64_t) param_count++);
     param_node->value.ir_instruction = param;
     environment_set(cg_context->locals, parameter->children, param_node);
 

@@ -18,6 +18,7 @@ add_executable(
   src/environment.c
   src/file_io.c
   src/main.c
+  src/ir_parser.c
   src/parser.c
   src/typechecker.c
   src/opt.c

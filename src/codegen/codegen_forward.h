@@ -4,6 +4,7 @@
 typedef struct IRInstruction IRInstruction;
 typedef struct IRBlock IRBlock;
 typedef struct IRFunction IRFunction;
+typedef struct IR IR;
 
 typedef unsigned RegisterDescriptor;
 typedef struct RegisterPool RegisterPool;

@@ -397,6 +397,15 @@ IRBlock *ir_block_create() {
   return block;
 }
 
+IRInstruction *ir_parameter_reference
+(CodegenContext *context,
+ int64_t index) {
+  INSTRUCTION(param, IR_PARAMETER_REFERENCE)
+  param->value.immediate = index;
+  INSERT(param);
+  return param;
+}
+
 void ir_phi_argument
 (IRInstruction *phi,
  IRBlock *phi_predecessor,
