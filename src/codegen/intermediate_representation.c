@@ -160,16 +160,16 @@ void ir_femit_instruction
   STATIC_ASSERT(IR_COUNT == 28);
   switch (instruction->type) {
   case IR_IMMEDIATE:
-    fprintf(file, "%"PRId64, instruction->value.immediate);
+    fprintf(file, "imm %"PRId64, instruction->value.immediate);
     break;
   case IR_CALL:
     if (instruction->value.call.tail_call) { fprintf(file, "tail "); }
     switch (instruction->value.call.type) {
     case IR_CALLTYPE_DIRECT:
-      fprintf(file, "%s", instruction->value.call.value.name);
+      fprintf(file, "call %s", instruction->value.call.value.name);
       break;
     case IR_CALLTYPE_INDIRECT:
-      fprintf(file, "%%%zu", instruction->value.call.value.callee->id);
+      fprintf(file, "call %%%zu", instruction->value.call.value.callee->id);
       break;
     default:
       TODO("Handle %d IRCallType.", instruction->value.call.type);
@@ -187,7 +187,7 @@ void ir_femit_instruction
     fputc(')', file);
     break;
   case IR_RETURN:
-    fprintf(file, "return %%%zu", instruction->value.reference->id);
+    fprintf(file, "ret %%%zu", instruction->value.reference->id);
     break;
   case IR_ADD:
     fprintf(file, "add %%%zu, %%%zu",
@@ -221,37 +221,37 @@ void ir_femit_instruction
     break;
 
   case IR_SUBTRACT:
-    fprintf(file, "subtract %%%zu, %%%zu",
+    fprintf(file, "sub %%%zu, %%%zu",
             instruction->value.pair.car->id,
             instruction->value.pair.cdr->id);
     break;
   case IR_GLOBAL_LOAD:
-    fprintf(file, "g.load %s", instruction->value.name);
+    fprintf(file, "load %s", instruction->value.name);
     break;
   case IR_GLOBAL_STORE:
-    fprintf(file, "g.store %%%zu, %s",
+    fprintf(file, "store %%%zu, %s",
             instruction->value.global_assignment.new_value->id,
             instruction->value.global_assignment.name);
     break;
   case IR_GLOBAL_ADDRESS:
-    fprintf(file, "g.address %s", instruction->value.name);
+    fprintf(file, ".addr %s", instruction->value.name);
     break;
   case IR_COPY:
     fprintf(file, "copy %%%zu", instruction->value.reference->id);
     break;
   case IR_LOCAL_LOAD:
-    fprintf(file, "l.load %%%zu", instruction->value.reference->id);
+    fprintf(file, "load %%%zu", instruction->value.reference->id);
     break;
   case IR_LOCAL_STORE:
-    fprintf(file, "l.store %%%zu, %%%zu",
+    fprintf(file, "store %%%zu, %%%zu",
             instruction->value.pair.car->id,
             instruction->value.pair.cdr->id);
     break;
   case IR_LOCAL_ADDRESS:
-    fprintf(file, "l.address %%%zu", instruction->value.reference->id);
+    fprintf(file, ".addr %%%zu", instruction->value.reference->id);
     break;
   case IR_PARAMETER_REFERENCE:
-    fprintf(file, "parameter.reference %%%"PRId64,
+    fprintf(file, ".param %%%"PRId64,
             instruction->value.immediate);
     break;
   case IR_COMPARISON:
@@ -283,10 +283,10 @@ void ir_femit_instruction
             instruction->value.comparison.pair.cdr->id);
     break;
   case IR_BRANCH:
-    fprintf(file, "branch bb%zu", instruction->value.block->id);
+    fprintf(file, "br bb%zu", instruction->value.block->id);
     break;
   case IR_BRANCH_CONDITIONAL:
-    fprintf(file, "branch.conditional %%%zu, bb%zu, bb%zu",
+    fprintf(file, "br.cond %%%zu, bb%zu, bb%zu",
             instruction->value.conditional_branch.condition->id,
             instruction->value.conditional_branch.true_branch->id,
             instruction->value.conditional_branch.false_branch->id);
@@ -314,7 +314,7 @@ void ir_femit_instruction
     fprintf(file, "register r%d", instruction->result);
     break;
   case IR_STACK_ALLOCATE:
-    fprintf(file, "stack.allocate %"PRId64, instruction->value.immediate);
+    fprintf(file, "alloca %"PRId64, instruction->value.immediate);
     break;
   /// No-op
   case IR_UNREACHABLE:
@@ -341,7 +341,7 @@ void ir_femit_block
  IRBlock *block
  )
 {
-  fprintf(file, "  bb%zu\n", block->id);
+  fprintf(file, "bb%zu:\n", block->id);
   DLIST_FOREACH (IRInstruction*, instruction, block->instructions) {
     ir_femit_instruction(file, instruction);
   }
@@ -352,10 +352,11 @@ void ir_femit_function
  IRFunction *function
  )
 {
-  fprintf(file, "f%zu\n", function->id);
+  fprintf(file, "\ndefun f%zu {\n", function->id);
   DLIST_FOREACH (IRBlock*, block, function->blocks) {
     ir_femit_block(file, block);
   }
+  fprintf(file, "}\n");
 }
 
 void ir_femit
@@ -363,11 +364,10 @@ void ir_femit
  CodegenContext *context
  )
 {
-  fprintf(file, "=======================================================================================\n\n");
+  fprintf(file, "=======================================================================================");
   VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
     ir_femit_function(file, function);
   }
-  putchar('\n');
 }
 
 void ir_set_func_ids(IRFunction *f) {

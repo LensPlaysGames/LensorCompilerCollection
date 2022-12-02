@@ -24,6 +24,7 @@ add_executable(
   src/opt.c
   src/codegen/intermediate_representation.c
   src/codegen/register_allocation.c
+  src/codegen/ir/ir.c
   src/codegen/x86_64/arch_x86_64.c
 )
 target_include_directories(

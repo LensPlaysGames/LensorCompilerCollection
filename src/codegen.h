@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <vector.h>
 
-extern bool dump_ir;
+extern bool debug_ir;
 
 char *label_generate();
 

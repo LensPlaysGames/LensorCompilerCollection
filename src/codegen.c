@@ -3,6 +3,7 @@
 #include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/x86_64/arch_x86_64.h>
+#include <codegen/ir/ir.h>
 #include <environment.h>
 #include <error.h>
 #include <inttypes.h>
@@ -29,19 +30,25 @@ CodegenContext *codegen_context_create_top_level
 {
   CodegenContext *context;
 
-  if (format == CG_FMT_x86_64_GAS) {
-    // TODO: Handle call_convention for creating codegen context!
-    if (call_convention == CG_CALL_CONV_MSWIN) {
-      context = codegen_context_x86_64_mswin_create(NULL);
-      ASSERT(context);
-    } else if (call_convention == CG_CALL_CONV_LINUX) {
-      // TODO: Create codegen context for GAS linux assembly.
-      panic("Not implemented: Create codegen context for GAS linux x86_64 assembly.");
-    } else {
-      panic("Unrecognized calling convention!");
-    }
-  } else {
-    panic("Unrecognized codegen format");
+  STATIC_ASSERT(CG_FMT_COUNT == 2, "codegen_context_create_top_level() must exhaustively handle all codegen output formats.");
+  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_create_top_level() must exhaustively handle all calling conventions.");
+  switch (format) {
+    case CG_FMT_x86_64_GAS:
+      // TODO: Handle call_convention for creating codegen context!
+      if (call_convention == CG_CALL_CONV_MSWIN) {
+        context = codegen_context_x86_64_mswin_create(NULL);
+        ASSERT(context);
+      } else if (call_convention == CG_CALL_CONV_LINUX) {
+        // TODO: Create codegen context for GAS linux assembly.
+        panic("Not implemented: Create codegen context for GAS linux x86_64 assembly.");
+      } else {
+        panic("Unrecognized calling convention!");
+      }
+      break;
+    case CG_FMT_IR:
+      context = codegen_context_ir_create(NULL);
+      break;
+    default: UNREACHABLE();
   }
 
   context->parse_context = parse_context;
@@ -52,26 +59,29 @@ CodegenContext *codegen_context_create_top_level
 }
 
 CodegenContext *codegen_context_create(CodegenContext *parent) {
-  ASSERT(parent, "create_codegen_context() can only create contexts when a parent is given.");
-  ASSERT(CG_FMT_COUNT == 1, "create_codegen_context() must exhaustively handle all codegen output formats.");
-  ASSERT(CG_CALL_CONV_COUNT == 2, "create_codegen_context() must exhaustively handle all calling conventions.");
+  ASSERT(parent, "codegen_context_create() can only create contexts when a parent is given.");
+  STATIC_ASSERT(CG_FMT_COUNT == 2, "codegen_context_create() must exhaustively handle all codegen output formats.");
+  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_create() must exhaustively handle all calling conventions.");
 
   CodegenContext *new_context = NULL;
 
   switch (parent->format) {
-  case CG_FMT_x86_64_GAS:
-    switch (parent->call_convention) {
-    case CG_CALL_CONV_MSWIN:
-      new_context = codegen_context_x86_64_mswin_create(parent);
+    case CG_FMT_x86_64_GAS:
+      switch (parent->call_convention) {
+      case CG_CALL_CONV_MSWIN:
+        new_context = codegen_context_x86_64_mswin_create(parent);
+        break;
+      default:
+        TODO("Handle %d codegen call convention.", parent->call_convention);
+        break;
+      }
+      break;
+    case CG_FMT_IR:
+      new_context = codegen_context_ir_create(parent);
       break;
     default:
-      TODO("Handle %d codegen call convention.", parent->call_convention);
+      TODO("Handle %d codegen output format.", parent->format);
       break;
-    }
-    break;
-  default:
-    TODO("Handle %d codegen output format.", parent->format);
-    break;
   }
 
   new_context->parse_context    = parent->parse_context;
@@ -87,14 +97,26 @@ CodegenContext *codegen_context_create(CodegenContext *parent) {
 }
 
 void codegen_context_free(CodegenContext *context) {
-  if (context->format == CG_FMT_x86_64_GAS) {
-    if (context->call_convention == CG_CALL_CONV_MSWIN) {
-      return codegen_context_x86_64_mswin_free(context);
-    } else if (context->call_convention == CG_CALL_CONV_LINUX) {
-      // return codegen_context_x86_64_gas_linux_free(parent);
-    }
+  STATIC_ASSERT(CG_FMT_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen output formats.");
+  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all calling conventions.");
+
+  if (!context->parent) {
+    VECTOR_DELETE(*context->functions);
+    context->functions = NULL;
   }
-  PANIC("Could not free the given context.");
+
+  switch (context->format) {
+    default: UNREACHABLE();
+    case CG_FMT_x86_64_GAS:
+      if (context->call_convention == CG_CALL_CONV_MSWIN) {
+        return codegen_context_x86_64_mswin_free(context);
+      } else if (context->call_convention == CG_CALL_CONV_LINUX) {
+        // return codegen_context_x86_64_gas_linux_free(parent);
+      }
+      break;
+    case CG_FMT_IR:
+      return codegen_context_ir_free(context);
+  }
 }
 
 //================================================================ BEG CG_FMT_x86_64_MSWIN
@@ -763,6 +785,9 @@ void codegen_lower(CodegenContext *context) {
     case CG_FMT_x86_64_GAS:
       codegen_lower_x86_64(context);
       break;
+    case CG_FMT_IR:
+      codegen_lower_ir_backend(context);
+      break;
     default:
       TODO("Handle %d code generation format.", context->format);
   }
@@ -770,11 +795,14 @@ void codegen_lower(CodegenContext *context) {
 
 void codegen_emit(CodegenContext *context) {
   switch (context->format) {
-  case CG_FMT_x86_64_GAS:
-    codegen_emit_x86_64(context);
-    break;
-  default:
-    TODO("Handle %d code generation format.", context->format);
+    case CG_FMT_x86_64_GAS:
+      codegen_emit_x86_64(context);
+      break;
+    case CG_FMT_IR:
+      codegen_emit_ir_backend(context);
+      break;
+    default:
+      TODO("Handle %d code generation format.", context->format);
   }
 }
 

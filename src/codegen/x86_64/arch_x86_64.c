@@ -1569,7 +1569,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   ra(info);
 
-  if (dump_ir) ir_femit(stdout, context);
+  if (debug_ir) ir_femit(stdout, context);
 
   // Assign block labels.
   VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {

@@ -16,7 +16,7 @@ void print_usage(char **argv) {
          "   `--formats`       :: List acceptable output formats.\n"
          "   `--callings`      :: List acceptable calling conventions.\n"
          "   `--dialects`      :: List acceptable assembly dialects.\n"
-         "   `--dump-ir`       :: Dump intermediate representation to stdout.\n"
+         "   `--debug-ir`      :: Dump IR to stdout (in debug format).\n"
          "   `-O`, `--optimize`:: Optimize the generated code.\n"
          "   `-v`, `--verbose` :: Print out more information.\n");
   printf("Options:\n"
@@ -36,12 +36,13 @@ enum CodegenAssemblyDialect output_assembly_dialect = CG_ASM_DIALECT_DEFAULT;
 /// TODO: should be bools.
 int verbosity = 0;
 int optimise = 0;
-bool dump_ir = 0;
+bool debug_ir = false;
 
 void print_acceptable_formats() {
   printf("Acceptable formats include:\n"
          " -> default\n"
-         " -> x86_64_gas\n");
+         " -> x86_64_gas\n"
+         " -> ir\n");
 }
 
 void print_acceptable_calling_conventions() {
@@ -78,8 +79,8 @@ int handle_command_line_arguments(int argc, char **argv) {
     } else if (strcmp(argument, "--dialects") == 0) {
       print_acceptable_asm_dialects();
       exit(0);
-    } else if (strcmp(argument, "--dump-ir") == 0) {
-      dump_ir = 1;
+    } else if (strcmp(argument, "--debug-ir") == 0) {
+      debug_ir = 1;
     } else if (strcmp(argument, "-O") == 0
                || strcmp(argument, "--optimise") == 0) {
       optimise = 1;
@@ -92,8 +93,9 @@ int handle_command_line_arguments(int argc, char **argv) {
       if (i >= argc) {
         panic("ERROR: Expected filepath after output command line argument");
       }
-      // FIXME: This very well may be a valid filepath. We may want to
-      //        check that it isn't a valid filepath with fopen or something.
+      /// Anything that starts w/ `-` is treated as a command line argument.
+      /// If the user has a filepath that starts w/ `-...`, then they should use
+      /// `./-...` instead.
       if (*argv[i] == '-') {
         panic("ERROR: Expected filepath after output command line argument\n"
                "Instead, got what looks like another command line argument.\n"
@@ -115,6 +117,8 @@ int handle_command_line_arguments(int argc, char **argv) {
         output_format = CG_FMT_DEFAULT;
       } else if (strcmp(argv[i], "x86_64_gas") == 0) {
         output_format = CG_FMT_x86_64_GAS;
+      } else if (strcmp(argv[i], "ir") == 0) {
+        output_format = CG_FMT_IR;
       } else {
         printf("ERROR: Expected format after format command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
