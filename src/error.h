@@ -30,11 +30,13 @@ extern Error ok;
 #  define NORETURN __attribute__((noreturn))
 #  define FALLTHROUGH __attribute__((fallthrough))
 #  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
+#  define FORCEINLINE __attribute__((always_inline)) inline
 #  define PRETTY_FUNCTION __PRETTY_FUNCTION__
 #else
 #  define NORETURN __declspec(noreturn)
 #  define FALLTHROUGH
 #  define FORMAT(...)
+#  define FORCEINLINE __forceinline inline
 #  define PRETTY_FUNCTION __FUNCSIG__
 #endif
 
