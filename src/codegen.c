@@ -786,7 +786,8 @@ Error codegen
  const char *infile,
  const char *outfile,
  ParsingContext *parse_context,
- ...
+ Node *program,
+ string ir
  )
 {
   Error err = ok;
@@ -805,29 +806,20 @@ Error codegen
   CodegenContext *context = codegen_context_create_top_level
     (parse_context, format, call_convention, dialect, code);
 
-  va_list ap;
-  va_start(ap, parse_context);
   switch (lang) {
     /// Parse an IR file.
     case LANG_IR: {
-        const char* ir = va_arg(ap, const char*);
-        size_t sz = va_arg(ap, size_t);
-        if (!ir_parse(context, infile, ir, sz)) {
-          ERROR_PREP(err, ERROR_GENERIC, "codegen(): ir_parse failed.")
-          return err;
-        }
+        if (!ir_parse(context, infile, ir)) exit(2);
     } break;
 
     /// Parse a FUN file.
     case LANG_FUN: {
-        Node *program = va_arg(ap, Node *);
         err = codegen_program(context, program);
     } break;
 
     /// Anything else is not supported.
     default: ASSERT(false, "Language %d not supported.", lang);
   }
-  va_end(ap);
 
   codegen_lower(context);
 

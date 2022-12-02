@@ -208,7 +208,10 @@ int main(int argc, char **argv) {
   size_t len = strlen(infile);
 
   /// The input is an IR file.
-  if (len >= 3 && memcmp(infile + len - 1, ".ir", 3) == 0) {
+  if (len >= 3 && memcmp(infile + len - 3, ".ir", 3) == 0) {
+    string s = file_contents(infile);
+    ASSERT(s.data);
+
     codegen(
       LANG_IR,
       output_format,
@@ -217,9 +220,11 @@ int main(int argc, char **argv) {
       infile,
       output_filepath,
       parse_context_default_create(),
-      infile,
-      len
+      NULL,
+      s
      );
+
+    free(s.data);
   }
 
   /// The input is a FUN file.
@@ -255,7 +260,8 @@ int main(int argc, char **argv) {
       infile,
       output_filepath,
       context,
-      program
+      program,
+      (string){0}
     );
     if (err.type) {
       print_error(err);

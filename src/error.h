@@ -1,6 +1,8 @@
 #ifndef COMPILER_ERROR_H
 #define COMPILER_ERROR_H
 
+#include <stddef.h>
+
 // TODO: Add file path, byte offset, etc.
 typedef struct Error {
   enum ErrorType {
@@ -18,6 +20,18 @@ typedef struct Error {
 void print_error(Error err);
 
 extern Error ok;
+
+/// String span.
+typedef struct {
+  const char *data;
+  size_t size;
+} span;
+
+/// Owning string.
+typedef struct {
+  char *data;
+  size_t size;
+} string;
 
 #define ERROR_CREATE(n, t, msg)                 \
   Error (n) = { (t), (msg) }

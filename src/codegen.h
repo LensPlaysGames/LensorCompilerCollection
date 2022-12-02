@@ -72,5 +72,6 @@ Error codegen
  const char *infile,
  const char *outfile,
  ParsingContext *context,
- ...);
+ Node *program,
+ string ir);
 #endif /* CODEGEN_H */

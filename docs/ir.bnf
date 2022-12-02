@@ -11,7 +11,7 @@
 
 <instruction>       ::= [ <temp> [ ":" <register> ] "=" ] <value-instruction> "\n"
                       | <void-instruction> "\n"
-<value-instruction> ::= NUMBER
+<value-instruction> ::= IMM NUMBER
                       | [ TAIL ] CALL ( <name> | <temp> ) "(" <parameters> ")"
                       | PHI { "[" <name> ":" <temp> "]" }
                       | <unary> <temp>

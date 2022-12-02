@@ -23,11 +23,11 @@ size_t file_size(FILE *file) {
   return (size_t)out;
 }
 
-char *file_contents(const char *path) {
+string file_contents(const char *path) {
   FILE *file = fopen(path, "r");
   if (!file) {
     printf("Could not open file at %s\n", path);
-    return NULL;
+    return (string){0};
   }
   size_t size = file_size(file);
   char *contents = malloc(size + 1);
@@ -39,7 +39,7 @@ char *file_contents(const char *path) {
     if (ferror(file)) {
       printf("Error while reading: %i\n", errno);
       free(contents);
-      return NULL;
+      return (string){0};
     }
 
     bytes_read += bytes_read_this_iteration;
@@ -50,5 +50,5 @@ char *file_contents(const char *path) {
     }
   }
   contents[bytes_read] = '\0';
-  return contents;
+  return (string){.data = contents, .size = size};
 }
