@@ -1127,7 +1127,7 @@ static void parse_function(IRParser *p) {
     if (p->tok_type != tk_ident) ERR("Expected function name after 'defun'");
     span name = p->tok;
     loc location = here(p);
-    IRFunction *f = ir_function(p->context, strndup(p->tok.data, p->tok.size));
+    ir_function(p->context, strndup(p->tok.data, p->tok.size));
     next_token(p);
 
     /// Function parameters.

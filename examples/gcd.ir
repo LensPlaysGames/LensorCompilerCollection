@@ -1,4 +1,4 @@
-defun main () {
+defun main () global {
     %0 = imm 88
     %1 = imm 32
     tail call gcd (%0, %1)
