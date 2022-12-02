@@ -1,0 +1,38 @@
+<ir>         ::= { <function> | <extern> }
+<function>   ::= DEFUN <name> "(" <parameters> ")" <attributes> "{" <body> "}"
+<extern>     ::= DECLARE <name> "(" <parameters> ")" <attributes> "\n"
+<parameters> ::= <temp> { "," <temp> }
+<attributes> ::= <attribute>*
+
+<body>        ::= <first-block> <block>*
+<block>       ::= <name> ":" <block-body>
+<first-block> ::= ( <name> ":" ) <block-body>
+<block-body>  ::= <instruction>* <branch>
+
+<instruction>       ::= [ <temp> [ ":" <register> ] "=" ] <value-instruction> "\n"
+                      | <void-instruction> "\n"
+<value-instruction> ::= NUMBER
+                      | CALL ( <name> | <temp> ) "(" <parameters> ")"
+                      | PHI { "[" <name> ":" <temp> "]" }
+                      | <unary> <temp>
+                      | <binary> <temp> "," <temp>
+                      | LOAD ( <temp> | <name> )
+                      | REGISTER <register>
+                      | ALLOCA
+<void-instruction>  ::= STORE <temp> "," ( <temp> | <name> )
+
+
+<unary>  ::= COPY
+<binary> ::= ADD | SUB | MUL | DIV | MOD | EQ | NE | LT | LE | GT | GE | SHL | SHR | SAR
+
+<attribute> ::= CONSTEVAL | FORCEINLINE | GLOBAL | NORETURN | PURE | LEAF
+<branch>    ::= UNREACHABLE "\n"
+              | RETURN "\n"
+              | RETURN <temp> "\n"
+              | BR <name> "\n"
+              | BR-COND <temp> "," <name> "," <name> "\n"
+
+<name>       ::= IDENTIFIER
+<temp>       ::= "%" IDENTIFIER
+<register>   ::= "#" IDENTIFIER
+
