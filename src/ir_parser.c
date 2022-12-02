@@ -1,10 +1,10 @@
 #include <codegen/intermediate_representation.h>
+#include <ctype.h>
+#include <errno.h>
 #include <error.h>
 #include <ir_parser.h>
 #include <math.h>
 #include <setjmp.h>
-#include <ctype.h>
-#include <errno.h>
 
 /// For isatty().
 #ifdef _WIN32
@@ -217,7 +217,7 @@ typedef struct {
     span name;
     loc location;
     IRInstruction *instruction;
-    VECTOR(char **) unresolved;
+    VECTOR(IRInstruction **) unresolved;
 } temp_sym;
 
 /// Function in the symbol table.
@@ -225,7 +225,7 @@ typedef struct {
     span name;
     loc location;
     IRFunction *function;
-    VECTOR(IRFunction **) unresolved;
+    VECTOR(const char **) unresolved;
 } function_sym;
 
 /// IR parser context.
@@ -247,6 +247,7 @@ typedef struct {
 
     /// The source code that we’re parsing.
     const char *source_start;
+    const char *source_end;
     const char *source_curr;
 
     /// The text that makes up the current token.
@@ -316,6 +317,7 @@ static enum IrParserInstructionType irtype_from_span(span s) {
     TYPE("shl", SHIFT_LEFT)
     TYPE("shr", SHIFT_RIGHT_LOGICAL)
     TYPE("sar", SHIFT_RIGHT_ARITHMETIC)
+    TYPE("alloca", STACK_ALLOCATE)
     TYPE("load", LOAD)
     TYPE("store", STORE)
     TYPE("register", REGISTER)
@@ -339,7 +341,10 @@ static bool is_delim(char c) {
 /// Lex the next character.
 static void next_char(IRParser *p) {
     /// Keep returning EOF once EOF has been reached.
-    if (!p->lastc) return;
+    if (p->source_curr >= p->source_end) {
+        p->lastc = 0;
+        return;
+    }
 
     /// Read the next character.
     p->lastc = *p->source_curr++;
@@ -350,7 +355,7 @@ static void next_char(IRParser *p) {
         p->lastc = '\n';
 
         /// Last character.
-        if (!*p->source_curr) return;
+        if (p->source_curr >= p->source_end) return;
 
         /// Replace CRLF and LFCR with a single newline.
         char c = *p->source_curr;
@@ -527,13 +532,35 @@ static void next_token(IRParser *p) {
 /// ===========================================================================
 
 /// Add a temporary to the current symbol table.
-static bool make_temporary(IRParser *p, loc location, span name, IRInstruction *temp) {
-    TODO();
+static void make_temporary(IRParser *p, loc location, span name, IRInstruction *temp) {
+    /// Issue an error if the temporary already exists.
+    temp_sym *index;
+    VECTOR_FIND_IF(p->temp_syms, index, i, spans_equal(p->temp_syms.data[i].name, name));
+    if (index) ERR("Redefinition of temporary '%.*s'", (int) name.size, name.data);
+
+    /// Add the temporary to the symbol table.
+    temp_sym sym = {
+        .name = name,
+        .instruction = temp,
+        .location = location,
+        .unresolved = {0}};
+    VECTOR_PUSH(p->temp_syms, sym);
 }
 
 /// Add a block to the current symbol table.
-static bool make_block(IRParser *p, loc location, span name, IRBlock *block) {
-    TODO();
+static void make_block(IRParser *p, loc location, span name, IRBlock *block) {
+    /// Issue an error if the block already exists.
+    block_sym *index;
+    VECTOR_FIND_IF(p->block_syms, index, i, spans_equal(p->block_syms.data[i].name, name));
+    if (index) ERR("Redefinition of block '%.*s'", (int) name.size, name.data);
+
+    /// Add the block to the symbol table.
+    block_sym sym = {
+        .name = name,
+        .block = block,
+        .location = location,
+        .unresolved = {0}};
+    VECTOR_PUSH(p->block_syms, sym);
 }
 
 /// Find a temporary in the current parser context.
@@ -556,6 +583,106 @@ static IRInstruction *resolve_curr_temp(IRParser *p) {
     return resolve_temp(p, p->location, p->tok);
 }
 
+#define RESOLVE_OR_DECLARE(type, param_type, null_field_name, assign_field_name)                           \
+    static void CAT(resolve_or_declare_, type)(IRParser * p, loc location, span name, param_type * user) { \
+        /** Try to find the thing. **/                                                                     \
+        CAT(type, _sym) * ptr;                                                                             \
+        VECTOR_FIND_IF(p->CAT(type, _syms), ptr, i, spans_equal(p->CAT(type, _syms).data[i].name, name));  \
+                                                                                                           \
+        /** If the thing does not exist yet, add it. **/                                                   \
+        if (!ptr) {                                                                                        \
+            CAT(type, _sym)                                                                                \
+            sym = {                                                                                        \
+                .name = name,                                                                              \
+                .location = location,                                                                      \
+                .null_field_name = NULL,                                                                   \
+                .unresolved = {0},                                                                         \
+            };                                                                                             \
+                                                                                                           \
+            VECTOR_PUSH(sym.unresolved, user);                                                             \
+            VECTOR_PUSH(p->CAT(type, _syms), sym);                                                         \
+        }                                                                                                  \
+                                                                                                           \
+        /** Otherwise, resolve it. **/                                                                     \
+        else {                                                                                             \
+            *user = ptr->assign_field_name;                                                                \
+        }                                                                                                  \
+    }
+
+RESOLVE_OR_DECLARE(function, const char *, function, function->name)
+RESOLVE_OR_DECLARE(block, IRBlock *, block, block)
+RESOLVE_OR_DECLARE(temp, IRInstruction *, instruction, instruction)
+
+#define RESOLVE_ALL(p, err_name, type, param_type, field, value, on_err) \
+    do {                                                                 \
+        bool success = true;                                             \
+        VECTOR_FOREACH (CAT(type, _sym), sym, (p)->CAT(type, _syms)) {   \
+            /** An unresolved function is a parse error. **/             \
+            if (!sym->field) {                                           \
+                issue_diagnostic(                                        \
+                    DIAG_ERR,                                            \
+                    (p)->filename,                                       \
+                    (p)->source_start,                                   \
+                    sym->location,                                       \
+                    "Unknown " err_name " '%.*s'",                       \
+                    (int) sym->name.size, sym->name.data);               \
+                success = false;                                         \
+            } /** Otherwise, resolve the function. **/                   \
+            else {                                                       \
+                VECTOR_FOREACH (param_type *, user, sym->unresolved)     \
+                    **user = sym->value;                                 \
+            }                                                            \
+        }                                                                \
+        if (!success) { on_err; }                                        \
+    } while (0)
+
+/*
+/// Resolve or declare a function.
+static void _resolve_or_declare_function(IRParser *p, loc location, span name, const char **user) {
+    /// Try to find the function.
+    function_sym *f;
+    VECTOR_FIND_IF(p->function_syms, f, i, spans_equal(p->function_syms.data[i].name, name));
+
+    /// If the function doesn’t yet exist, add it.
+    /// TODO: Support extern functions.
+    if (!f) {
+        function_sym fsym = {
+            .name = name,
+            .location = location,
+            .function = NULL,
+            .unresolved = {0}};
+
+        VECTOR_PUSH(fsym.unresolved, user);
+        VECTOR_PUSH(p->function_syms, fsym);
+    }
+
+    /// Otherwise, resolve it.
+    else { *user = f->function->name; }
+}
+
+/// Resolve or declare a block.
+static void resolve_or_declare_block(IRParser *p, loc location, span name, IRBlock **user) {
+    /// Try to find the function.
+    block_sym *b;
+    VECTOR_FIND_IF(p->block_syms, b, i, spans_equal(p->block_syms.data[i].name, name));
+
+    /// If the function doesn’t yet exist, add it.
+    /// TODO: Support extern functions.
+    if (!b) {
+        block_sym bsym = {
+            .name = name,
+            .location = location,
+            .block = NULL,
+            .unresolved = {0}};
+
+        VECTOR_PUSH(bsym.unresolved, user);
+        VECTOR_PUSH(p->block_syms, bsym);
+    }
+
+    /// Otherwise, resolve it.
+    else { *user = b->block; }
+}*/
+
 /// This function handles the bulk of the parsing.
 /// It returns true if the parsed instruction was a branch, and false otherwise.
 ///
@@ -572,6 +699,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
     bool void_instruction = false;
     bool have_temp = false;
     bool is_tail_call = false;
+    bool is_branch = false;
 
     /// Parse the temporary or physical register if there is one.
     if (p->tok_type != tk_ident) {
@@ -610,7 +738,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
             /// [ TAIL ] CALL ( <name> | <temp> ) "(" <parameters> ")"
             case TAIL:
                 next_token(p);
-                if (p->tok_type != tk_ident || irtype_from_span(p->tok) != IR_CALL) ERR_AT(i_loc, "Expected 'call' after 'tail'");
+                if (p->tok_type != tk_ident || irtype_from_span(p->tok) != CALL) ERR_AT(i_loc, "Expected 'call' after 'tail'");
                 is_tail_call = true;
                 i_loc = p->location;
                 FALLTHROUGH;
@@ -629,7 +757,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
                     /// Direct call.
                     case tk_ident: {
                         call->value.call.type = IR_CALLTYPE_DIRECT;
-                        resolve_or_declare_function(p, p->tok, &call->value.call.value.name);
+                        resolve_or_declare_function(p, p->location, p->tok, &call->value.call.value.name);
                     } break;
 
                     /// Indirect call.
@@ -676,7 +804,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
                     /// Block.
                     if (p->tok_type != tk_ident) ERR("Expected block name after '[' in PHI");
-                    resolve_or_declare_block(p, p->tok, &arg->block);
+                    resolve_or_declare_block(p, p->location, p->tok, &arg->block);
                     next_token(p);
 
                     /// Yeet ":".
@@ -685,7 +813,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
                     /// Temporary. This is the *only* place in the grammar
                     /// where a we allow forward references to temporaries.
-                    resolve_or_declare_temp(p, p->tok, &arg->value);
+                    resolve_or_declare_temp(p, p->location, p->tok, &arg->value);
                     next_token(p);
 
                     /// Add the argument to the PHI.
@@ -819,6 +947,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
             case UNREACHABLE: {
                 next_token(p);
                 void_instruction = true;
+                is_branch = true;
                 INSTRUCTION(u, IR_UNREACHABLE)
                 ir_insert(p->context, u);
                 i = u;
@@ -828,6 +957,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
             case IR_RETURN: {
                 next_token(p);
                 void_instruction = true;
+                is_branch = true;
                 INSTRUCTION(r, IR_RETURN)
                 ir_insert(p->context, r);
                 i = r;
@@ -843,13 +973,14 @@ static bool parse_instruction_or_branch(IRParser *p) {
             case BRANCH: {
                 next_token(p);
                 void_instruction = true;
+                is_branch = true;
                 INSTRUCTION(b, IR_BRANCH)
                 ir_insert(p->context, b);
                 i = b;
 
                 /// Parse the name.
                 if (p->tok_type != tk_ident) ERR_AT(i_loc, "Expected block name after BR");
-                resolve_or_declare_block(p, p->tok, &b->value.block);
+                resolve_or_declare_block(p, p->location, p->tok, &b->value.block);
                 next_token(p);
             } break;
 
@@ -857,6 +988,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
             case BRANCH_CONDITIONAL: {
                 next_token(p);
                 void_instruction = true;
+                is_branch = true;
                 INSTRUCTION(b, IR_BRANCH_CONDITIONAL)
                 ir_insert(p->context, b);
                 i = b;
@@ -872,7 +1004,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
                 /// Parse the first name.
                 if (p->tok_type != tk_ident) ERR_AT(i_loc, "Expected block name after ',' in BR.COND");
-                resolve_or_declare_block(p, p->tok, &b->value.conditional_branch.true_branch);
+                resolve_or_declare_block(p, p->location, p->tok, &b->value.conditional_branch.true_branch);
                 next_token(p);
 
                 /// Yeet ",".
@@ -881,7 +1013,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
                 /// Parse the second name.
                 if (p->tok_type != tk_ident) ERR_AT(i_loc, "Expected block name after ',' in BR-COND");
-                resolve_or_declare_block(p, p->tok, &b->value.conditional_branch.false_branch);
+                resolve_or_declare_block(p, p->location, p->tok, &b->value.conditional_branch.false_branch);
                 next_token(p);
             } break;
         }
@@ -897,12 +1029,16 @@ static bool parse_instruction_or_branch(IRParser *p) {
     /// An instruction must be followed by a newline.
     if (p->tok_type != tk_newline) ERR("Expected newline after instruction");
     next_token(p);
+
+    /// Return true if the instruction is a branch.
+    return is_branch;
 }
 
-/// <block-body>  ::= <instruction>* <branch>
+/// <block-body> ::= <instruction>* <branch>
 static void parse_block_body(IRParser *p) {
     for (;;) {
         /// An rbrace is not allowed here since we haven’t seen the branch yet.
+        /// This check is just so we issue a better diagnostic in this case.
         if (p->tok_type == tk_rbrace) {
             loc current_block_location;
             if (!p->block_syms.size) current_block_location = p->location;
@@ -915,11 +1051,12 @@ static void parse_block_body(IRParser *p) {
     }
 }
 
-/// <block>       ::= <name> ":" <block-body>
+/// <block> ::= <name> ":" <block-body>
 static void parse_block(IRParser *p) {
     /// Parse the block name and create a new block.
     if (p->tok_type != tk_ident) ERR("Expected block");
-    make_block(p, p->tok, ir_block_attach_to_function(VECTOR_BACK(*p->context->functions), ir_block_create()));
+    ir_block_attach_to_function(VECTOR_BACK(*p->context->functions), ir_block_create());
+    make_block(p, p->location, p->tok, VECTOR_BACK(*p->context->functions)->blocks.last);
     next_token(p);
     if (p->tok_type != tk_colon) ERR("expected ':' after block name");
 
@@ -932,12 +1069,28 @@ static void parse_block(IRParser *p) {
     p->keep_newlines = false;
 }
 
+/// Check if the parser is currently looking at a block name.
+///
+/// Since this is the only place in the language that would
+/// require a token of lookahead, we instead resort to a
+/// rather ugly hack that involves scanning forward until
+/// we find the next newline or non-whitespace token. If it
+/// is a colon, then this is a block name.
+static bool at_block_name(IRParser *p) {
+    /// A block name is an identifier followed by a colon.
+    if (p->tok_type != tk_ident) return false;
+
+    /// Equivalent to: return lookahead(p)->tok_type == tk_colon.
+    while (isspace(p->lastc) && p->lastc != '\n') next_char(p);
+    return p->lastc == ':';
+}
+
 /// <body> ::= <first-block> <block>*
 /// <first-block> ::= ( <name> ":" ) <block-body>
 static void parse_body(IRParser *p) {
     /// The first block is special, because it can be unnamed.
-    if (p->tok_type == tk_ident && lookahead(p)->tok_type == tk_colon) {
-        make_block(p, p->tok, VECTOR_BACK(*p->context->functions)->blocks.first);
+    if (at_block_name(p)) {
+        make_block(p, p->location, p->tok, VECTOR_BACK(*p->context->functions)->blocks.first);
         next_token(p);
         next_token(p);
 
@@ -1012,7 +1165,7 @@ static void parse_extern(IRParser *p) {
 }
 
 /// <function> ::= DEFUN <name> <parameters> <attributes> "{" <body> "}"
-static bool parse_function(IRParser *p) {
+static void parse_function(IRParser *p) {
     next_token(p); /// Yeet 'defun'.
 
     /// Function name.
@@ -1064,17 +1217,92 @@ static bool parse_ir(IRParser *p) {
                 if (IDENT("defun")) parse_function(p);
                 else if (IDENT("declare")) parse_extern(p);
                 else ERR("Expected 'defun' or 'declare'");
+
+                /// After parsing a function, resolve temporaries and blocks.
+                RESOLVE_ALL(p, "block", block, IRBlock *, block, block, return false);
+                RESOLVE_ALL(p, "temporary", temp, IRInstruction *, instruction, instruction, return false);
+                VECTOR_CLEAR(p->block_syms);
+                VECTOR_CLEAR(p->temp_syms);
+                break;
             case tk_eof: return true;
             default: ERR("Expected 'defun' or 'declare'");
         }
     }
 }
 
-bool ir_parse(CodegenContext *context, const char *ir, size_t sz) {
+/// Do *not* use ERR() after this point
+#undef ERR
+
+bool ir_parse(CodegenContext *context, const char *filename, const char *ir, size_t sz) {
+    /// Save and restore this at end of scope.
     IRFunction *f = context->function;
+    IRBlock *b = context->block;
+    filename = filename ? filename : "<string>";
 
-    TODO();
+    /// Create a parser.
+    IRParser parser = {
+        .tok_type = tk_invalid,
+        .lastc = ' ', /// Cause the lexer to skip whitespace.
+        .keep_newlines = false,
+        .context = context,
+        .filename = filename,
+        .source_start = ir,
+        .source_end = ir + sz,
+        .source_curr = ir,
+        .tok = {0},
+        .integer = 0,
+        .location = {0},
+        .block_syms = {0},
+        .temp_syms = {0},
+        .function_syms = {0},
+    };
 
+    /// Parse the IR.
+    bool parse_ok = parse_ir(&parser);
+
+    /// Restore the current function and block.
     context->function = f;
-    return true;
+    context->block = b;
+
+    /// Resolve functions.
+    if (parse_ok) {
+        RESOLVE_ALL(&parser, "function", function, const char*, function, function->name, parse_ok = false);
+        if (parse_ok) return parse_ok;
+    }
+
+    /// There was an error. First, clean up the parser context.
+    VECTOR_DELETE(parser.temp_syms);
+    VECTOR_DELETE(parser.block_syms);
+    VECTOR_DELETE(parser.function_syms);
+
+    /// Remove all functions we added from the context.
+    bool found = false;
+    usz removed = 0;
+    VECTOR_FOREACH_PTR (IRFunction*, func, *context->functions) {
+        /// Do *not* delete anything before f!
+        if (func == f) {
+            found = true;
+            continue;
+        }
+        if (!found) continue;
+
+        /// Delete all blocks and all instructions.
+        for (IRBlock *block = func->blocks.first; block;) {
+            IRBlock *next = block->next;
+            for (IRInstruction *i = block->instructions.first; i;) {
+                IRInstruction *next_i = i->next;
+                free(i);
+                i = next_i;
+            }
+            free(block);
+            block = next;
+        }
+
+        /// Delete the function.
+        free(func->name);
+        free(func);
+        removed++;
+    }
+    context->functions->size -= removed;
+    return false;
 }

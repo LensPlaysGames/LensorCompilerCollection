@@ -89,4 +89,7 @@ void assert_impl (
 #define CAT_(a, b) a ## b
 #define CAT(a, b) CAT_(a, b)
 
+#define STR_(s) #s
+#define STR(s) STR_(s)
+
 #endif /* COMPILER_ERROR_H */

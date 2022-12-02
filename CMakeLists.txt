@@ -30,6 +30,7 @@ target_include_directories(
   func
   PUBLIC src/
 )
+target_link_libraries(func PRIVATE m)
 
 if (NOT MSVC)
   target_compile_options(

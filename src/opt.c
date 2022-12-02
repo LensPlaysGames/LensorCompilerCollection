@@ -154,7 +154,7 @@ static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
     if (i->type == IR_PHI) {
       /// If this is a phi node, then the call or a previous phi
       /// must be an argument of the phi.
-      VECTOR_FOREACH (IRPhiArgument, arg, i->value.phi_arguments) {
+      VECTOR_FOREACH_PTR (IRPhiArgument*, arg, i->value.phi_arguments) {
         if (arg->value == tc->call) { goto phi; }
         VECTOR_FOREACH_PTR (IRInstruction *, a, tc->phis) {
           if (a == arg->value) { goto phi; }
@@ -720,7 +720,7 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
         /// Also update PHIs.
         DLIST_FOREACH (IRInstruction*, i, b2->instructions) {
           if (i->type == IR_PHI) {
-            VECTOR_FOREACH (IRPhiArgument, arg, i->value.phi_arguments) {
+            VECTOR_FOREACH_PTR (IRPhiArgument*, arg, i->value.phi_arguments) {
               if (arg->block == b) {
                 arg->block = last->value.block;
                 changed = true;
