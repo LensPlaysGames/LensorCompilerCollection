@@ -710,6 +710,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
                         /// Resolve the temporary.
                         call->value.call.type = IR_CALLTYPE_INDIRECT;
                         call->value.call.value.callee = resolve_curr_temp(p);
+                        mark_used(call->value.call.value.callee, i);
                     } break;
                 }
 
@@ -920,6 +921,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
                 /// Parse the return value if there is one.
                 if (p->tok_type == tk_temp) {
                     r->value.reference = resolve_curr_temp(p);
+                    mark_used(r->value.reference, i);
                     next_token(p);
                 }
             } break;
@@ -951,6 +953,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
                 /// Parse the temporary.
                 if (p->tok_type != tk_temp) ERR_AT(i_loc, "Expected temporary after BR.COND");
                 b->value.conditional_branch.condition = resolve_curr_temp(p);
+                mark_used(b->value.conditional_branch.condition, i);
                 next_token(p);
 
                 /// Yeet ",".
@@ -1090,7 +1093,7 @@ static void parse_attributes(IRParser *p) {
 
 /// <parameters> ::= "(" [ <temp> { "," <temp> } ] ")"
 static void parse_parameters(IRParser *p) {
-    int64_t param_count = 0;
+    int64_t param_count = 1;
 
     /// Parameter list.
     if (p->tok_type != tk_lparen) ERR("Expected '(' after function name");
@@ -1101,7 +1104,8 @@ static void parse_parameters(IRParser *p) {
         /// Create a parameter reference.
         if (p->tok_type != tk_temp) ERR("Expected temporary after '(' or ','");
         if (p->tok.data[0] == '#') ERR("Function parameter must be a temporary register");
-        make_temp(p, here(p), p->tok, ir_parameter_reference(p->context, param_count++));
+        IRInstruction *alloca = ir_parameter_reference(p->context, param_count++);
+        make_temp(p, here(p), p->tok, ir_load_local(p->context, alloca));
         next_token(p);
 
         /// Yeet the comma if there is one.
@@ -1226,8 +1230,6 @@ bool ir_parse(CodegenContext *context, const char *filename, string ir) {
     /// Resolve functions.
     if (parse_ok) {
         RESOLVE_ALL(&parser, "function", function, const char *, function, function->name, parse_ok = false);
-        ir_set_ids(context);
-        ir_femit(stdout, context);
         if (parse_ok) return parse_ok;
     }
 

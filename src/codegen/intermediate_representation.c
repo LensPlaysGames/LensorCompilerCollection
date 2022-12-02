@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <inttypes.h>
 
+//#define DEBUG_USES
+
 void mark_used(IRInstruction *usee, IRInstruction *user) {
   VECTOR_FOREACH_PTR (IRInstruction *, i_user, usee->users) {
     ASSERT(i_user != user, "Instruction already marked as user.");
@@ -13,6 +15,10 @@ void mark_used(IRInstruction *usee, IRInstruction *user) {
 }
 
 void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
+#ifdef DEBUG_USES
+  fprintf(stderr, "[Use] Removing use of %%%zu in %%%zu\n", usee->id, user->id);
+#endif
+
   VECTOR_REMOVE_ELEMENT_UNORDERED(usee->users, user);
 }
 
@@ -85,7 +91,16 @@ void insert_instruction_after(IRInstruction *i, IRInstruction *after) {
 }
 
 void ir_remove(IRInstruction* instruction) {
-  ASSERT(!instruction->users.size, "Cannot remove used instruction.");
+  if (instruction->users.size) {
+    fprintf(stderr, "Cannot remove used instruction."
+                    "Instruction:\n");
+    ir_set_func_ids(instruction->block->function);
+    ir_femit_instruction(stderr, instruction);
+    fprintf(stderr, "In function:\n");
+    ir_femit_function(stderr, instruction->block->function);
+    PANIC("Cannot remove used instruction.");
+  }
+
   DLIST_REMOVE(instruction->block->instructions, instruction);
   VECTOR_DELETE(instruction->users);
   ir_unmark_usees(instruction);
@@ -310,11 +325,13 @@ void ir_femit_instruction
     break;
   }
 
+#ifdef DEBUG_USES
   /// Print users
-  /*fprintf(file, "\033[60GUsers: ");
+  fprintf(file, "\033[60GUsers: ");
   VECTOR_FOREACH_PTR (IRInstruction*, user, instruction->users) {
     fprintf(file, "%%%zu, ", user->id);
-  }*/
+  }
+#endif
 
   fputc('\n', file);
 }
@@ -353,19 +370,25 @@ void ir_femit
   putchar('\n');
 }
 
+void ir_set_func_ids(IRFunction *f) {
+  /// We start counting at 1 so that 0 can indicate an invalid/removed element.
+  size_t block_id = 1;
+  size_t instruction_id = 1;
+
+  DLIST_FOREACH (IRBlock *, block, f->blocks) {
+    block->id = block_id++;
+    DLIST_FOREACH (IRInstruction *, instruction, block->instructions) {
+    instruction->id = instruction_id++;
+    }
+  }
+}
+
 void ir_set_ids(CodegenContext *context) {
   size_t function_id = 0;
-  size_t block_id = 0;
-  size_t instruction_id = 0;
 
   VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
     function->id = function_id++;
-    DLIST_FOREACH (IRBlock*, block, function->blocks) {
-      block->id = block_id++;
-      DLIST_FOREACH (IRInstruction*, instruction, block->instructions) {
-        instruction->id = instruction_id++;
-      }
-    }
+    ir_set_func_ids(function);
   }
 }
 
@@ -832,6 +855,11 @@ typedef struct {
 static void ir_internal_replace_use(IRInstruction *user, IRInstruction **child, void *data) {
   ir_internal_replace_use_t *replace = data;
 
+#ifdef DEBUG_USES
+  fprintf(stderr, "  Replacing uses of %%%zu in %%%zu with %%%zu\n",
+    replace->usee->id, user->id, replace->replacement->id);
+#endif
+
   if (user == replace->replacement) {
     return;
   }
@@ -909,6 +937,9 @@ static void ir_for_each_child(
 
 void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
   if (instruction == replacement) { return; }
+#ifdef DEBUG_USES
+  fprintf(stderr, "[Use] Replacing uses of %%%zu with %%%zu\n", instruction->id, replacement->id);
+#endif
   VECTOR_FOREACH_PTR (IRInstruction *, user, instruction->users) {
     ir_internal_replace_use_t replace = { instruction, replacement };
     ir_for_each_child(user, ir_internal_replace_use, &replace);

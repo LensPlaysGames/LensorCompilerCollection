@@ -240,6 +240,7 @@ struct IR {
   VECTOR (IRFunction*) functions;
 };
 
+void ir_set_func_ids(IRFunction *f);
 void ir_set_ids(CodegenContext *context);
 
 bool ir_is_branch(IRInstruction*);
