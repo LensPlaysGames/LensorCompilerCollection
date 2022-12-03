@@ -37,10 +37,8 @@ CodegenContext *codegen_context_create_top_level
       // TODO: Handle call_convention for creating codegen context!
       if (call_convention == CG_CALL_CONV_MSWIN) {
         context = codegen_context_x86_64_mswin_create(NULL);
-        ASSERT(context);
       } else if (call_convention == CG_CALL_CONV_LINUX) {
-        // TODO: Create codegen context for GAS linux assembly.
-        panic("Not implemented: Create codegen context for GAS linux x86_64 assembly.");
+        context = codegen_context_x86_64_linux_create(NULL);
       } else {
         panic("Unrecognized calling convention!");
       }
