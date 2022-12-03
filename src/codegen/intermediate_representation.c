@@ -157,6 +157,7 @@ void ir_femit_instruction
   }
 # undef RESULT_FORMAT
 
+
   STATIC_ASSERT(IR_COUNT == 28);
   switch (instruction->type) {
   case IR_IMMEDIATE:
@@ -250,8 +251,9 @@ void ir_femit_instruction
   case IR_LOCAL_ADDRESS:
     fprintf(file, ".addr %%%zu", instruction->value.reference->id);
     break;
-  /// Nothing to do here.
-  case IR_PARAMETER: break;
+  case IR_PARAMETER:
+    fprintf(file, ".param %%%zu", instruction->value.reference->id);
+    break;
   case IR_COMPARISON:
     switch (instruction->value.comparison.type) {
     case COMPARE_EQ:
@@ -350,7 +352,9 @@ void ir_femit_function
  IRFunction *function
  )
 {
-  fprintf(file, "\ndefun f%zu {\n", function->id);
+  fprintf(file, "\n");
+  ir_print_defun(file, function);
+  fprintf(file, " {\n");
   DLIST_FOREACH (IRBlock*, block, function->blocks) {
     ir_femit_block(file, block);
   }
@@ -363,6 +367,7 @@ void ir_femit
  )
 {
   fprintf(file, "=======================================================================================");
+  ir_set_ids(context);
   VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
     ir_femit_function(file, function);
   }
@@ -376,7 +381,7 @@ void ir_set_func_ids(IRFunction *f) {
   DLIST_FOREACH (IRBlock *, block, f->blocks) {
     block->id = block_id++;
     DLIST_FOREACH (IRInstruction *, instruction, block->instructions) {
-        if (instruction->type == IR_PARAMETER) continue;
+        if (instruction->type == IR_PARAMETER || !ir_is_value(instruction)) continue;
         instruction->id = instruction_id++;
     }
   }
@@ -433,6 +438,7 @@ void ir_add_parameter_to_function(IRFunction *f) {
   INSTRUCTION(parameter, IR_PARAMETER)
   parameter->value.immediate = (int64_t) f->parameters.size;
   parameter->id = f->parameters.size;
+  ir_insert(f->context, parameter);
   VECTOR_PUSH(f->parameters, parameter);
 }
 
@@ -503,6 +509,7 @@ IRFunction *ir_function(CodegenContext *context, const char *name, size_t params
 
   /// Set the current function and add it to the list of functions.
   context->function = function;
+  function->context = context;
   ir_block_attach(context, block);
   VECTOR_PUSH(*context->functions, function);
 
@@ -946,6 +953,69 @@ static void ir_for_each_child(
     TODO("Handle IR instruction type %d", user->type);
     break;
   }
+}
+
+bool ir_is_value(IRInstruction *instruction) {
+  STATIC_ASSERT(IR_COUNT == 28);
+  switch (instruction->type) {
+    default: UNREACHABLE();
+    case IR_IMMEDIATE:
+    case IR_CALL:
+    case IR_LOAD:
+    case IR_PHI:
+    case IR_COPY:
+    case IR_ADD:
+    case IR_SUBTRACT:
+    case IR_MULTIPLY:
+    case IR_DIVIDE:
+    case IR_MODULO:
+    case IR_SHIFT_LEFT:
+    case IR_SHIFT_RIGHT_ARITHMETIC:
+    case IR_SHIFT_RIGHT_LOGICAL:
+    case IR_LOCAL_LOAD:
+    case IR_LOCAL_ADDRESS:
+    case IR_GLOBAL_LOAD:
+    case IR_GLOBAL_ADDRESS:
+    case IR_COMPARISON:
+    case IR_PARAMETER:
+    case IR_REGISTER:
+    case IR_STACK_ALLOCATE:
+      return true;
+
+    case IR_LOCAL_STORE:
+    case IR_GLOBAL_STORE:
+    case IR_STORE:
+
+    case IR_RETURN:
+    case IR_BRANCH:
+    case IR_BRANCH_CONDITIONAL:
+    case IR_UNREACHABLE:
+      return false;
+  }
+}
+
+void ir_print_defun(FILE *file, IRFunction *f) {
+  /// Function signature.
+  fprintf(file, "defun %s (", f->name);
+
+  /// Parameters.
+  bool first_param = true;
+  for (size_t i = 0; i < f->parameters.size; i++) {
+    if (first_param) first_param = false;
+    else fprintf(file, ", ");
+    fprintf(file, "%%%zu", f->parameters.data[i]->id);
+  }
+
+  /// End of param list.
+  fprintf(file, ")");
+
+  /// Attributes, if any.
+  if (f->attr_consteval) fprintf(file, " consteval");
+  if (f->attr_forceinline) fprintf(file, " forceinline");
+  if (f->attr_global) fprintf(file, " global");
+  if (f->attr_leaf) fprintf(file, " leaf");
+  if (f->attr_noreturn) fprintf(file, " noreturn");
+  if (f->attr_pure) fprintf(file, " pure");
 }
 
 void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {

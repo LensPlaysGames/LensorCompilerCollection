@@ -1324,6 +1324,10 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
 }
 
 void emit_block(CodegenContext *context, IRBlock *block) {
+  if (codegen_verbose) {
+    fprintf(context->code, ";;#; %s\n", block->name);
+  }
+
   /// Emit block label if it is used.
   if (block->name != unreferenced_block_name) {
     fprintf(context->code,
@@ -1601,8 +1605,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     }
   }
 
-  /*ir_set_ids(context);
-  ir_femit(stdout, context);*/
+  ir_femit(stdout, context);
 
   calculate_stack_offsets(context);
 

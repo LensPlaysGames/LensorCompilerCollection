@@ -221,6 +221,9 @@ typedef struct IRFunction {
 
   VECTOR(IRInstruction*) parameters;
 
+  /// Pointer to the context that owns this function.
+  CodegenContext *context;
+
   // Unique ID (among functions)
   size_t id;
 
@@ -446,6 +449,12 @@ IRInstruction *ir_stack_allocate
 IRFunction *ir_get_function
 (CodegenContext *context,
  const char *name);
+
+/// Check if an instruction returns a value.
+bool ir_is_value(IRInstruction *instruction);
+
+/// Print the defun signature of a function.
+void ir_print_defun(FILE *file, IRFunction *function);
 
 /// Replace all uses of instruction with replacement.
 void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement);

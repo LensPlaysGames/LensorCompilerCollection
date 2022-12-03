@@ -323,6 +323,16 @@ static bool is_delim(char c) {
            c == ';';
 }
 
+/// Check if a character may start an identifier.
+static bool isstart(char c) {
+    return isalpha(c) || c == '_' || c == '$' || c == '.' || c == '@';
+}
+
+/// Check if a character may be part of an identifier.
+static bool iscontinue(char c) {
+    return isstart(c) || isdigit(c) || c == '%';
+}
+
 static loc here(IRParser *p) {
     u32 start = (u32) (p->tok.data - p->source_start);
     return (loc){.start = (u32) start, .end = start + (u32) p->tok.size};
@@ -355,7 +365,7 @@ static void next_char(IRParser *p) {
 
 /// Lex an identifier.
 static void next_identifier(IRParser *p) {
-    while (isalnum(p->lastc) || p->lastc == '_' || p->lastc == '.' || p->lastc == '%') {
+    while (iscontinue(p->lastc)) {
         p->tok.size++;
         next_char(p);
     }
@@ -495,7 +505,7 @@ static void next_token(IRParser *p) {
         /// Number or identifier.
         default:
             /// Identifier.
-            if (isalpha(p->lastc) || p->lastc == '_') {
+            if (isstart(p->lastc)) {
                 p->tok.size = 0;
                 p->tok_type = tk_ident;
                 next_identifier(p);
@@ -515,6 +525,19 @@ static void next_token(IRParser *p) {
             /// Anything else is invalid.
             ERR("Unknown token");
     }
+}
+
+/// Currently, our function namespace conflicts with the block namespace.
+/// This is a horrible hack to ‘fix’ that for the time being.
+span funcname(IRParser *p, span name) {
+    /// Remove leading dots from the function name.
+    span name2 = name;
+    while (name.size && name.data[0] == '.') {
+        name.data++;
+        name.size--;
+    }
+    if (!name.size) ERR("Not a valid function name: '%.*s'", (int) name2.size, name2.data);
+    return name;
 }
 
 /// ===========================================================================
@@ -702,7 +725,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
                     /// Direct call.
                     case tk_ident: {
                         call->value.call.type = IR_CALLTYPE_DIRECT;
-                        resolve_or_declare_function(p, here(p), p->tok, &call->value.call.value.name);
+                        resolve_or_declare_function(p, here(p), funcname(p, p->tok), &call->value.call.value.name);
                     } break;
 
                     /// Indirect call.
@@ -980,7 +1003,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
     /// If the instruction is a void instruction, then a name is not allowed.
     /// Otherwise, add it to the symbol table.
     if (have_temp) {
-        if (void_instruction) ERR_AT(name_location, "Instructions that return nothing cannot be assigned to a temporary");
+        if (void_instruction) ERR_AT(name_location, "Instructions that return nothing cannot be assigned a temporary");
         make_temp(p, name_location, name, i);
     }
 
@@ -1012,12 +1035,14 @@ static void parse_block_body(IRParser *p) {
 }
 
 /// <block> ::= <name> ":" <block-body>
-static void parse_block(IRParser *p) {
+static void parse_block(IRParser *p, bool first_block) {
     /// Parse the block name and create a new block.
     if (p->tok_type != tk_ident) ERR("Expected block");
-    IRBlock *block = ir_block_create();
-    ir_block_attach_to_function(VECTOR_BACK(*p->context->functions), block);
-    p->context->block = block;
+    if (!first_block) {
+      IRBlock *block = ir_block_create();
+      ir_block_attach_to_function(VECTOR_BACK(*p->context->functions), block);
+      p->context->block = block;
+    }
     make_block(p, here(p), p->tok, VECTOR_BACK(*p->context->functions)->blocks.last);
     next_token(p);
     if (p->tok_type != tk_colon) ERR("expected ':' after block name");
@@ -1048,21 +1073,20 @@ static bool at_block_name(IRParser *p) {
 /// <body> ::= <first-block> <block>*
 /// <first-block> ::= ( <name> ":" ) <block-body>
 static void parse_body(IRParser *p) {
-    /// The first block is special, because it can be unnamed.
+    /// The first block is special, because it can be unnamed. If there
+    /// is no unnamed first block, there must still be at least one block.
     if (!at_block_name(p)) {
         make_block(p, here(p), p->tok, VECTOR_BACK(*p->context->functions)->blocks.first);
 
         /// Parse the body of the first block.
         parse_block_body(p);
-
-        /// Parse the remaining blocks.
-        while (p->tok_type != tk_rbrace) parse_block(p);
-        return;
     }
 
-    /// If there is no unnamed first block, there must still be at least one block.
-    do parse_block(p);
-    while (p->tok_type != tk_rbrace);
+    /// Parse the a named first block.
+    else { parse_block(p, true); }
+
+    /// Parse the remaining blocks.
+    while (p->tok_type != tk_rbrace) parse_block(p, false);
 }
 
 /// <attributes> ::= <attribute>*
@@ -1105,7 +1129,7 @@ static void parse_parameters(IRParser *p) {
         if (p->tok.data[0] == '#') ERR("Function parameter must be a temporary register");
         ir_add_parameter_to_function(VECTOR_BACK(*p->context->functions));
         IRInstruction *param = ir_parameter(p->context, param_count++);
-        make_temp(p, here(p), p->tok, ir_load_local(p->context, param));
+        make_temp(p, here(p), p->tok, param);
         next_token(p);
 
         /// Yeet the comma if there is one.
@@ -1129,9 +1153,10 @@ static void parse_function(IRParser *p) {
 
     /// Function name.
     if (p->tok_type != tk_ident) ERR("Expected function name after 'defun'");
-    span name = p->tok;
+    span name = funcname(p, p->tok);
+
     loc location = here(p);
-    ir_function(p->context, strndup(p->tok.data, p->tok.size), 0);
+    ir_function(p->context, strndup(name.data, name.size), 0);
     next_token(p);
 
     /// Function parameters.
@@ -1230,6 +1255,7 @@ bool ir_parse(CodegenContext *context, const char *filename, string ir) {
     /// Resolve functions.
     if (parse_ok) {
         RESOLVE_ALL(&parser, "function", function, const char *, function, function->name, parse_ok = false);
+/*        ir_femit(stderr, context);*/
         if (parse_ok) return parse_ok;
     }
 

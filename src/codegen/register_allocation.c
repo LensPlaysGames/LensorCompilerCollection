@@ -12,6 +12,7 @@
 #ifdef DEBUG_RA
 #define IR_FEMIT(file, context) ir_femit(file, context)
 #define DEBUG(...) fprintf(stdout, __VA_ARGS__)
+CodegenContext *debug_context = NULL;
 #else
 #define IR_FEMIT(file, context)
 #define DEBUG(...)
@@ -945,6 +946,9 @@ void track_registers(RegisterAllocationInfo *info) {
 
 void ra(RegisterAllocationInfo *info) {
   if (!info) { return; }
+#ifdef DEBUG_RA
+  debug_context = info->context;
+#endif
 
   ir_set_ids(info->context);
   IR_FEMIT(stdout, info->context);
