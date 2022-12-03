@@ -69,6 +69,9 @@ CodegenContext *codegen_context_create(CodegenContext *parent) {
       case CG_CALL_CONV_MSWIN:
         new_context = codegen_context_x86_64_mswin_create(parent);
         break;
+      case CG_CALL_CONV_LINUX:
+        new_context = codegen_context_x86_64_linux_create(parent);
+        break;
       default:
         TODO("Handle %d codegen call convention.", parent->call_convention);
         break;

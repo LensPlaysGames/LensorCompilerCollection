@@ -61,7 +61,7 @@ void phi2copy(RegisterAllocationInfo *info) {
       /// Single PHI argument means that we can replace it with a simple copy.
       if (phi->value.phi_arguments.size == 1) {
         phi->type = IR_COPY;
-        IRInstruction *value = phi->value.phi_arguments.data[0].value;
+        IRInstruction *value = phi->value.phi_arguments.data[0]->value;
         VECTOR_DELETE(phi->value.phi_arguments);
         phi->value.reference = value;
         continue;
