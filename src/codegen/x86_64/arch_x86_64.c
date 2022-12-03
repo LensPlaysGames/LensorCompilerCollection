@@ -1205,7 +1205,7 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     ASSERT(instruction->block->function, "block has null function");
 
     // Tail call.
-    if (optimise && instruction->value.call.tail_call) {
+    if (instruction->value.call.tail_call) {
       // Restore the frame pointer if we have one.
       codegen_epilogue_x86_64(context, instruction->block->function);
       if (instruction->value.call.type == IR_CALLTYPE_INDIRECT) {
