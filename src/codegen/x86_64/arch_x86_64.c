@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <typechecker.h>
+#include <vector.h>
 
 #define DEFINE_REGISTER_ENUM(name, ...) REG_##name,
 #define REGISTER_NAME_64(ident, name, ...) name,
@@ -1420,10 +1421,6 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
 }
 
 void emit_block(CodegenContext *context, IRBlock *block) {
-  if (codegen_verbose) {
-    fprintf(context->code, ";;#; %s\n", block->name);
-  }
-
   /// Emit block label if it is used.
   if (block->name != unreferenced_block_name) {
     fprintf(context->code,
@@ -1504,6 +1501,37 @@ static Register linux_caller_saved_registers[LINUX_CALLER_SAVED_REGISTER_COUNT] 
   REG_RAX, REG_RCX, REG_RDX, REG_R8, REG_R9, REG_R10, REG_R11, REG_RSI, REG_RDI
 };
 
+typedef enum TwoAddressClobbers {
+  CLOBBERS_NEITHER,
+  CLOBBERS_LEFT,
+  CLOBBERS_RIGHT,
+  CLOBBERS_BOTH,
+  CLOBBERS_OTHER,
+} TwoAddressClobbers;
+
+TwoAddressClobbers is_two_address(IRInstruction *instruction) {
+  STATIC_ASSERT(IR_COUNT == 28, "Exhaustive handling of IR types.");
+  switch (instruction->type) {
+  case IR_ADD:
+  case IR_DIVIDE:
+  case IR_MULTIPLY:
+  case IR_MODULO:
+  case IR_SHIFT_LEFT:
+  case IR_SHIFT_RIGHT_LOGICAL:
+  case IR_SHIFT_RIGHT_ARITHMETIC:
+    return CLOBBERS_RIGHT;
+    break;
+
+  case IR_SUBTRACT:
+    return CLOBBERS_LEFT;
+    break;
+
+  default:
+    break;
+  }
+  return CLOBBERS_NEITHER;
+}
+
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
@@ -1518,6 +1546,34 @@ static void lower(CodegenContext *context) {
         break;
       default:
         break;
+    }
+  }
+
+  FOREACH_INSTRUCTION (context) {
+    TwoAddressClobbers status;
+    if ((status = is_two_address(instruction))) {
+      switch (status) {
+      case CLOBBERS_BOTH:
+        TODO("Handle clobbering of both registers by a two address instruction.");
+        break;
+      case CLOBBERS_LEFT: {
+        IRInstruction *copy = ir_copy(context, instruction->value.pair.car);
+        ir_remove_use(instruction->value.pair.car, instruction);
+        mark_used(copy, instruction);
+        insert_instruction_before(copy, instruction);
+        instruction->value.pair.car = copy;
+      } break;
+      case CLOBBERS_RIGHT: {
+        IRInstruction *copy = ir_copy(context, instruction->value.pair.cdr);
+        ir_remove_use(instruction->value.pair.cdr, instruction);
+        mark_used(copy, instruction);
+        insert_instruction_before(copy, instruction);
+        instruction->value.pair.cdr = copy;
+      } break;
+      default:
+      case CLOBBERS_NEITHER:
+        break;
+      }
     }
   }
 }
@@ -1701,7 +1757,8 @@ void codegen_emit_x86_64(CodegenContext *context) {
     }
   }
 
-  ir_femit(stdout, context);
+  /*ir_set_ids(context);
+  ir_femit(stdout, context);*/
 
   calculate_stack_offsets(context);
 

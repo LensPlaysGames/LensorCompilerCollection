@@ -370,6 +370,16 @@ void opt_inline_global_vars(CodegenContext *ctx) {
         v.unoptimisable = true;
         VECTOR_PUSH(vars, v);
       } break;
+
+      case IR_GLOBAL_ADDRESS: {
+        VECTOR_FOREACH (global_var, a, vars) {
+          if (strcmp(a->name, instruction->value.name) == 0) {
+            /// Unoptimisable because the variable is loaded before it is stored to.
+            a->unoptimisable = true;
+            break;
+          }
+        }
+      } break;
     }
   next_instruction:;
   }

@@ -59,14 +59,13 @@ void phi2copy(RegisterAllocationInfo *info) {
       last_block = phi->block;
 
       /// Single PHI argument means that we can replace it with a simple copy.
-      /// FIXME: Disabled for now because it would have to mark uses correctly.
-      /*if (phi->value.phi_arguments.size == 1) {
+      if (phi->value.phi_arguments.size == 1) {
         phi->type = IR_COPY;
         IRInstruction *value = phi->value.phi_arguments.data[0].value;
         VECTOR_DELETE(phi->value.phi_arguments);
         phi->value.reference = value;
         continue;
-      }*/
+      }
 
       /// For each of the PHI arguments, we basically insert a copy.
       /// Where we insert it depends on some complicated factors
@@ -491,9 +490,6 @@ bool check_values_interfere(RegisterAllocationInfo *info, IRInstruction *v1, IRI
 /// \see check_values_interfere()
 bool values_interfere(RegisterAllocationInfo *info, IRInstruction *v1, IRInstruction *v2) {
   if (v1 == v2) { return false; }
-  if (v1->type == IR_COPY && v1->value.reference == v2) { return false; }
-  if (v2->type == IR_COPY && v2->value.reference == v1) { return false; }
-  //if (v1->index == 19 && v2->index == 9) asm volatile ("int $3;");
   if (check_values_interfere(info, v1, v2)) { return true; }
   return check_values_interfere(info, v2, v1);
 }
@@ -695,14 +691,26 @@ void coalesce(RegisterAllocationInfo *info, IRInstructions *instructions, Adjace
         goto eliminate;
       }
 
-      /// From is precoloured, to is not, and to does not interfere
-      /// with the precoloured register: assign the precoloured register to
-      /// any PHI nodes that use to if those PHI nodes are uncoloured or
-      /// precoloured with the same register; if the are any PHI nodes that
-      /// are precoloured with a different register, then the copy cannot
-      /// be eliminated. Otherwise, replace all uses of to with from and
-      /// eliminate the copy.
-      if (!to->result &&
+      /// From is precoloured, to is not, and to nor any of it's uses
+      /// interfere with the precoloured register: assign the
+      /// precoloured register to any PHI nodes that use to if those
+      /// PHI nodes are uncoloured or precoloured with the same
+      /// register; if the are any PHI nodes that are precoloured with
+      /// a different register, then the copy cannot be eliminated.
+      /// Otherwise, replace all uses of to with from and eliminate the
+      /// copy.
+      // TODO: Lens_r added this without full confidence of whether or
+      // not it is actually correct. :)
+      bool to_use_from_interference = false;
+      VECTOR_FOREACH_PTR(IRInstruction*, user, to->users) {
+        if (user->result == to->result) {
+          to_use_from_interference = true;
+          break;
+        }
+      }
+
+      if (!to_use_from_interference &&
+          !to->result &&
            from->result &&
           !adjm(G->matrix, to->index, from->index) &&
           !check_register_interference(G->regmasks[to->index], from)) {
@@ -976,6 +984,10 @@ void ra(RegisterAllocationInfo *info) {
 
   PRINT_ADJACENCY_MATRIX(G.matrix);
 
+  ir_set_ids(info->context);
+  build_adjacency_lists(&instructions, &G);
+  PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
+
   DEBUG("Before Coalescing\n");
   ir_set_ids(info->context);
   IR_FEMIT(stdout, info->context);
@@ -991,17 +1003,30 @@ void ra(RegisterAllocationInfo *info) {
   build_adjacency_lists(&instructions, &G);
 
   ir_set_ids(info->context);
-  //PRINT_ADJACENCY_MATRIX(G.matrix);
-  //PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
+  DEBUG("After Rebuild\n");
+  ir_set_ids(info->context);
+  IR_FEMIT(stdout, info->context);
+  PRINT_ADJACENCY_MATRIX(G.matrix);
+  PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
 
   NumberStack *stack = build_coloring_stack(info, &instructions, &G);
-  //PRINT_NUMBER_STACK(stack);
+
+  DEBUG("After build color stack\n");
+  ir_set_ids(info->context);
+  IR_FEMIT(stdout, info->context);
+  PRINT_ADJACENCY_MATRIX(G.matrix);
+  PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
+  PRINT_NUMBER_STACK(stack);
 
   color(info, stack, &instructions, G.list, G.matrix.size);
 
-  //PRINT_INSTRUCTION_LIST(&instructions);
-
+  DEBUG("After coloring\n");
+  ir_set_ids(info->context);
   IR_FEMIT(stdout, info->context);
+  PRINT_ADJACENCY_MATRIX(G.matrix);
+  PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
+  PRINT_INSTRUCTION_LIST(&instructions);
+  PRINT_NUMBER_STACK(stack);
 
   track_registers(info);
 
