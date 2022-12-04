@@ -112,37 +112,62 @@
   "un keywords for tree-sitter font-locking.")
 
 (defvar un-ts-mode--operators
-  '(":"
-    "-" "*" "/" "+" "%"
-    "|" "&" "<<" ">>"
-    "= ""<" ">" "!" "&&" "||")
+  '(  "+" "-" "*" "/" "%"
+      "&"
+      "<<"
+      ">>"
+      "="
+      "<"
+      ">"
+      ":"
+      ":="
+      "@"
+    )
   "un operators for tree-sitter font-locking.")
+
+(defvar un-ts-mode--delimiters
+  '("(" ")"
+    "[" "]"
+    "{" "}"
+    )
+  "un delimiters for tree-sitter font-locking.")
 
 (defun un-ts-mode--font-lock-settings()
   "Tree-sitter font-lock settings."
   (treesit-font-lock-rules
    :language 'un
    :feature 'type
-   `((primitive_type) @font-lock-type-face
-     (array_type)     @font-lock-type-face
-     (pointer_type)   @font-lock-type-face)
+   `(;;((type_function)
+     ;;  return_type: @font-lock-type-face)
+     (type_primitive) @font-lock-type-face
+     (type_array)     @font-lock-type-face
+     (type_pointer)   @font-lock-type-face
+     )
    :language 'un
    :feature 'keyword
    `([,@un-ts-mode--keywords] @font-lock-keyword-face)
    :language 'un
+   :feature 'operator
+   `([,@un-ts-mode--operators] @font-lock-operator-face)
+   :language 'un
+   :feature 'punctuation
+   `([,@un-ts-mode--delimiters] @font-lock-delimiter-face)
+   ;;:language 'un
+   ;;:feature 'variable
+   ;;`((identifer) @font-lock-variable-face)
+   :language 'un
    :feature 'function
-   `((function_call
-      name: (identifier) @font-lock-function-name-face)
-     (function_definition
+   `((expr_call
+      callee: (identifier) @font-lock-function-name-face)
+     (stmt_function
       name: (identifier) @font-lock-function-name-face)
      )
    :language 'un
-   :feature 'variable
-   `((variable_definition
-      name: (identifier) @font-lock-variable-name-face))
-   :language 'un
    :feature 'number
    `((number) @font-lock-number-face)
+   :language 'un
+   :feature 'comment
+   `((comment) @font-lock-comment-face)
    ))
 
 ;;;###autoload
@@ -155,10 +180,10 @@
               (append "{}():," electric-indent-chars))
 
   (setq-local treesit-font-lock-feature-list
-              '(( type keyword )
-                ( function variable )
-                ( number )
-                ( operator ))))
+              '(( function variable comment )
+                ( keyword type)
+                ( number operator punctuation )
+                ( ))))
 
 ;;;###autoload
 (define-derived-mode un-ts-mode un-ts-mode--base-mode "un"
@@ -171,7 +196,7 @@
   (treesit-parser-create 'un)
 
   ;; Comments.
-  (setq-local comment-start ";")
+  (setq-local comment-start ";;")
   (setq-local comment-end   "")
 
   ;; TODO: What do we set this to?
