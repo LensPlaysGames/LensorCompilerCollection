@@ -1,4 +1,4 @@
-foo : integer() = integer () {
+foo : integer() {
   a : integer = 0
   b : integer = 42
 
@@ -23,7 +23,8 @@ foo()
 
 ;; Using a pointer to mutate an integer variable that may be created at
 ;; any time!
-bar : integer (ptr : @integer) = integer (ptr : @integer) {
+
+bar : integer (ptr : @integer) {
   @ptr := 69
   0
 }
