@@ -11,6 +11,13 @@ with a brand new language that has still not even been named.
 Running the compiler executable with no arguments will display a usage
 message that contains compiler flags and options as well as command layout.
 
+For writing in the language FUNCompiler compiles in Emacs or Vim, there
+are helpful plugins in the =editor= subdirectory. For syntax
+highlighting in any editor that supports ~tree-sitter~, there is a
+tree-sitter parser that can be found [[https://github.com/LensPlaysGames/tree-sitter-un][here]]. It is /highly/ recommended
+to use tree-sitter if you can, as it provides much better syntax
+highlighting.
+
 ** Building
 
 Dependencies:
