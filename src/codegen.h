@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <vector.h>
 
-extern bool dump_ir;
+extern bool debug_ir;
 
 char *label_generate();
 
@@ -65,11 +65,13 @@ struct CodegenContext {
 extern char codegen_verbose;
 
 Error codegen
-(enum CodegenOutputFormat,
+(enum CodegenLanguage,
+ enum CodegenOutputFormat,
  enum CodegenCallingConvention,
  enum CodegenAssemblyDialect,
- char *output_filepath,
+ const char *infile,
+ const char *outfile,
  ParsingContext *context,
- Node *program);
-
+ Node *program,
+ string ir);
 #endif /* CODEGEN_H */

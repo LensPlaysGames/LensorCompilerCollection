@@ -18,17 +18,20 @@ add_executable(
   src/environment.c
   src/file_io.c
   src/main.c
+  src/ir_parser.c
   src/parser.c
   src/typechecker.c
   src/opt.c
   src/codegen/intermediate_representation.c
   src/codegen/register_allocation.c
+  src/codegen/ir/ir.c
   src/codegen/x86_64/arch_x86_64.c
 )
 target_include_directories(
   func
   PUBLIC src/
 )
+target_link_libraries(func PRIVATE m)
 
 if (NOT MSVC)
   target_compile_options(

@@ -3,9 +3,11 @@
 #include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/x86_64/arch_x86_64.h>
+#include <codegen/ir/ir.h>
 #include <environment.h>
 #include <error.h>
 #include <inttypes.h>
+#include <ir_parser.h>
 #include <opt.h>
 #include <parser.h>
 #include <stdarg.h>
@@ -28,19 +30,23 @@ CodegenContext *codegen_context_create_top_level
 {
   CodegenContext *context;
 
-  if (format == CG_FMT_x86_64_GAS) {
-    // TODO: Handle call_convention for creating codegen context!
-    if (call_convention == CG_CALL_CONV_MSWIN) {
-      context = codegen_context_x86_64_mswin_create(NULL);
-      ASSERT(context);
-    } else if (call_convention == CG_CALL_CONV_LINUX) {
-      // TODO: Create codegen context for GAS linux assembly.
-      panic("Not implemented: Create codegen context for GAS linux x86_64 assembly.");
-    } else {
-      panic("Unrecognized calling convention!");
-    }
-  } else {
-    panic("Unrecognized codegen format");
+  STATIC_ASSERT(CG_FMT_COUNT == 2, "codegen_context_create_top_level() must exhaustively handle all codegen output formats.");
+  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_create_top_level() must exhaustively handle all calling conventions.");
+  switch (format) {
+    case CG_FMT_x86_64_GAS:
+      // TODO: Handle call_convention for creating codegen context!
+      if (call_convention == CG_CALL_CONV_MSWIN) {
+        context = codegen_context_x86_64_mswin_create(NULL);
+      } else if (call_convention == CG_CALL_CONV_LINUX) {
+        context = codegen_context_x86_64_linux_create(NULL);
+      } else {
+        panic("Unrecognized calling convention!");
+      }
+      break;
+    case CG_FMT_IR:
+      context = codegen_context_ir_create(NULL);
+      break;
+    default: UNREACHABLE();
   }
 
   context->parse_context = parse_context;
@@ -51,26 +57,32 @@ CodegenContext *codegen_context_create_top_level
 }
 
 CodegenContext *codegen_context_create(CodegenContext *parent) {
-  ASSERT(parent, "create_codegen_context() can only create contexts when a parent is given.");
-  ASSERT(CG_FMT_COUNT == 1, "create_codegen_context() must exhaustively handle all codegen output formats.");
-  ASSERT(CG_CALL_CONV_COUNT == 2, "create_codegen_context() must exhaustively handle all calling conventions.");
+  ASSERT(parent, "codegen_context_create() can only create contexts when a parent is given.");
+  STATIC_ASSERT(CG_FMT_COUNT == 2, "codegen_context_create() must exhaustively handle all codegen output formats.");
+  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_create() must exhaustively handle all calling conventions.");
 
   CodegenContext *new_context = NULL;
 
   switch (parent->format) {
-  case CG_FMT_x86_64_GAS:
-    switch (parent->call_convention) {
-    case CG_CALL_CONV_MSWIN:
-      new_context = codegen_context_x86_64_mswin_create(parent);
+    case CG_FMT_x86_64_GAS:
+      switch (parent->call_convention) {
+      case CG_CALL_CONV_MSWIN:
+        new_context = codegen_context_x86_64_mswin_create(parent);
+        break;
+      case CG_CALL_CONV_LINUX:
+        new_context = codegen_context_x86_64_linux_create(parent);
+        break;
+      default:
+        TODO("Handle %d codegen call convention.", parent->call_convention);
+        break;
+      }
+      break;
+    case CG_FMT_IR:
+      new_context = codegen_context_ir_create(parent);
       break;
     default:
-      TODO("Handle %d codegen call convention.", parent->call_convention);
+      TODO("Handle %d codegen output format.", parent->format);
       break;
-    }
-    break;
-  default:
-    TODO("Handle %d codegen output format.", parent->format);
-    break;
   }
 
   new_context->parse_context    = parent->parse_context;
@@ -86,14 +98,26 @@ CodegenContext *codegen_context_create(CodegenContext *parent) {
 }
 
 void codegen_context_free(CodegenContext *context) {
-  if (context->format == CG_FMT_x86_64_GAS) {
-    if (context->call_convention == CG_CALL_CONV_MSWIN) {
-      return codegen_context_x86_64_mswin_free(context);
-    } else if (context->call_convention == CG_CALL_CONV_LINUX) {
-      // return codegen_context_x86_64_gas_linux_free(parent);
-    }
+  STATIC_ASSERT(CG_FMT_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen output formats.");
+  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all calling conventions.");
+
+  if (!context->parent) {
+    VECTOR_DELETE(*context->functions);
+    context->functions = NULL;
   }
-  PANIC("Could not free the given context.");
+
+  switch (context->format) {
+    default: UNREACHABLE();
+    case CG_FMT_x86_64_GAS:
+      if (context->call_convention == CG_CALL_CONV_MSWIN) {
+        return codegen_context_x86_64_mswin_free(context);
+      } else if (context->call_convention == CG_CALL_CONV_LINUX) {
+        // return codegen_context_x86_64_gas_linux_free(parent);
+      }
+      break;
+    case CG_FMT_IR:
+      return codegen_context_ir_free(context);
+  }
 }
 
 //================================================================ BEG CG_FMT_x86_64_MSWIN
@@ -683,20 +707,33 @@ Error codegen_function
 
   cg_context = codegen_context_create(cg_context);
 
-  ir_function(cg_context, name);
+  /// Create a new function.
+  {
+    /// Determine the number of parameters.
+    /// TODO: Pass the actual to ir_function() instead.
+    size_t param_count = 0;
+    Node *parameter = function->children->next_child->children;
+    while (parameter) {
+      param_count++;
+      parameter = parameter->next_child;
+    }
 
-  // Store base pointer integer offset within locals environment
-  // Start at one to make space for pushed RBP in function header.
-  size_t param_count = 1;
+    /// Create the function.
+    ir_function(cg_context, name, param_count);
+  }
+
+
+  /// Create a variable for each parameter.
+  size_t param_count = 0;
   Node *parameter = function->children->next_child->children;
   while (parameter) {
     Node *param_node = node_allocate();
 
-    INSTRUCTION(param, IR_PARAMETER_REFERENCE);
-    param->value.immediate = (int64_t) param_count++;
-    ir_insert(cg_context, param);
-
-    param_node->value.ir_instruction = param;
+    /// Get the parameter value and store it in a local variable.
+    IRInstruction *param = ir_parameter(cg_context, param_count++);
+    IRInstruction *alloca = ir_stack_allocate(cg_context, 8);
+    ir_store_local(cg_context, param, alloca);
+    param_node->value.ir_instruction = alloca;
     environment_set(cg_context->locals, parameter->children, param_node);
 
     parameter = parameter->next_child;
@@ -705,7 +742,10 @@ Error codegen_function
   // Function body
   ParsingContext *ctx = context;
   ParsingContext *next_child_ctx = *next_child_context;
-  // FIXME: Should this NULL check create error rather than silently be allowed?
+  /// FIXME: Should this NULL check create error rather than silently be allowed?
+  /// FIXME (Sirraide): The next line currently does nothing. Dereferencing `next_child_context`
+  ///     already implies that it cannot be NULL. Is this supposed to be `if (*next_child_context)`
+  ///     instead?
   if (next_child_context) {
     ctx = *next_child_context;
     next_child_ctx = ctx->children;
@@ -737,7 +777,7 @@ Error codegen_function
 Error codegen_program(CodegenContext *context, Node *program) {
   Error err = ok;
 
-  ir_function(context, "main");
+  ir_function(context, "main", 2);
 
   ParsingContext *next_child_context = context->parse_context->children;
   Node *last_expression = NULL;
@@ -765,6 +805,9 @@ void codegen_lower(CodegenContext *context) {
     case CG_FMT_x86_64_GAS:
       codegen_lower_x86_64(context);
       break;
+    case CG_FMT_IR:
+      codegen_lower_ir_backend(context);
+      break;
     default:
       TODO("Handle %d code generation format.", context->format);
   }
@@ -772,43 +815,63 @@ void codegen_lower(CodegenContext *context) {
 
 void codegen_emit(CodegenContext *context) {
   switch (context->format) {
-  case CG_FMT_x86_64_GAS:
-    codegen_emit_x86_64(context);
-    break;
-  default:
-    TODO("Handle %d code generation format.", context->format);
+    case CG_FMT_x86_64_GAS:
+      codegen_emit_x86_64(context);
+      break;
+    case CG_FMT_IR:
+      codegen_emit_ir_backend(context);
+      break;
+    default:
+      TODO("Handle %d code generation format.", context->format);
   }
 }
 
 Error codegen
-(enum CodegenOutputFormat format,
+(enum CodegenLanguage lang,
+ enum CodegenOutputFormat format,
  enum CodegenCallingConvention call_convention,
  enum CodegenAssemblyDialect dialect,
- char *filepath,
+ const char *infile,
+ const char *outfile,
  ParsingContext *parse_context,
- Node *program
+ Node *program,
+ string ir
  )
 {
   Error err = ok;
-  if (!filepath) {
-    ERROR_PREP(err, ERROR_ARGUMENTS, "codegen(): filepath can not be NULL!");
+  if (!outfile) {
+    ERROR_PREP(err, ERROR_ARGUMENTS, "codegen(): outfile can not be NULL!");
     return err;
   }
   // Open file for writing.
-  FILE *code = fopen(filepath, "w");
+  FILE *code = fopen(outfile, "w");
   if (!code) {
-    printf("Filepath: \"%s\"\n", filepath);
+    printf("Filepath: \"%s\"\n", outfile);
     ERROR_PREP(err, ERROR_GENERIC, "codegen(): fopen failed to open file at path.");
     return err;
   }
 
   CodegenContext *context = codegen_context_create_top_level
     (parse_context, format, call_convention, dialect, code);
-  err = codegen_program(context, program);
 
-  codegen_lower(context);
+  switch (lang) {
+    /// Parse an IR file.
+    case LANG_IR: {
+        if (!ir_parse(context, infile, ir)) exit(2);
+    } break;
+
+    /// Parse a FUN file.
+    case LANG_FUN: {
+        err = codegen_program(context, program);
+    } break;
+
+    /// Anything else is not supported.
+    default: ASSERT(false, "Language %d not supported.", lang);
+  }
 
   if (optimise) codegen_optimise(context);
+
+  codegen_lower(context);
 
   codegen_emit(context);
 
@@ -817,3 +880,4 @@ Error codegen
   fclose(code);
   return err;
 }
+

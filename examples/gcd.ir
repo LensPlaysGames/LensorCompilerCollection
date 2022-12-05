@@ -1,0 +1,25 @@
+defun main () global {
+    %0 = imm 88
+    %1 = imm 32
+    tail call gcd (%0, %1)
+    unreachable
+}
+
+defun gcd (%0, %1) global leaf pure {
+    %2 = eq %0, %1
+    br.cond %2, bb5, bb2
+bb2:
+    %3 = lt %0, %1
+    br.cond %3, bb3, bb4
+bb3:
+    %4 = sub %1, %0
+    tail call gcd (%0, %4)
+    unreachable
+bb4:
+    %5 = sub %0, %1
+    tail call gcd (%5, %1)
+    unreachable
+bb5:
+    ret %0
+}
+

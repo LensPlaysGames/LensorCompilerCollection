@@ -12,6 +12,7 @@
 #ifdef DEBUG_RA
 #define IR_FEMIT(file, context) ir_femit(file, context)
 #define DEBUG(...) fprintf(stdout, __VA_ARGS__)
+CodegenContext *debug_context = NULL;
 #else
 #define IR_FEMIT(file, context)
 #define DEBUG(...)
@@ -60,7 +61,7 @@ void phi2copy(RegisterAllocationInfo *info) {
       /// Single PHI argument means that we can replace it with a simple copy.
       if (phi->value.phi_arguments.size == 1) {
         phi->type = IR_COPY;
-        IRInstruction *value = phi->value.phi_arguments.data[0].value;
+        IRInstruction *value = phi->value.phi_arguments.data[0]->value;
         VECTOR_DELETE(phi->value.phi_arguments);
         phi->value.reference = value;
         continue;
@@ -69,7 +70,7 @@ void phi2copy(RegisterAllocationInfo *info) {
       /// For each of the PHI arguments, we basically insert a copy.
       /// Where we insert it depends on some complicated factors
       /// that have to do with control flow.
-      VECTOR_FOREACH (IRPhiArgument, arg, phi->value.phi_arguments) {
+      VECTOR_FOREACH_PTR (IRPhiArgument*, arg, phi->value.phi_arguments) {
         STATIC_ASSERT(IR_COUNT == 28, "Handle all branch types");
         IRInstruction *branch = arg->block->instructions.last;
         switch (branch->type) {
@@ -187,9 +188,10 @@ bool needs_register(IRInstruction *instruction) {
   case IR_COPY:
   case IR_IMMEDIATE:
   case IR_CALL:
-  case IR_PARAMETER_REFERENCE:
   case IR_REGISTER:
     return true;
+  case IR_PARAMETER:
+    PANIC("Unlowered parameter instruction in register allocator");
   case IR_COMPARISON:
     /// TODO: Should we always return false if dont_emit is true?
     return !instruction->dont_emit;
@@ -716,7 +718,7 @@ void coalesce(RegisterAllocationInfo *info, IRInstructions *instructions, Adjace
         VECTOR_CLEAR(phis);
         VECTOR_FOREACH_PTR (IRInstruction*, phi, *instructions) {
           if (phi->type != IR_PHI) { continue; }
-          VECTOR_FOREACH (IRPhiArgument, arg, phi->value.phi_arguments) {
+          VECTOR_FOREACH_PTR (IRPhiArgument*, arg, phi->value.phi_arguments) {
             if (arg->value == to) {
               /// If a PHI node that uses to is already precoloured with
               /// a different register, then we need to keep the copy.
@@ -925,7 +927,7 @@ void color
     IRInstruction *instruction = node.instruction;
     Register r = node.color;
     if (instruction->type == IR_PHI) {
-      VECTOR_FOREACH (IRPhiArgument, phi, instruction->value.phi_arguments) {
+      VECTOR_FOREACH_PTR (IRPhiArgument*, phi, instruction->value.phi_arguments) {
         if (needs_register(phi->value)) {
           AdjacencyListNode *phi_node = array + phi->value->index;
           phi_node->color = r;
@@ -952,6 +954,9 @@ void track_registers(RegisterAllocationInfo *info) {
 
 void ra(RegisterAllocationInfo *info) {
   if (!info) { return; }
+#ifdef DEBUG_RA
+  debug_context = info->context;
+#endif
 
   ir_set_ids(info->context);
   IR_FEMIT(stdout, info->context);

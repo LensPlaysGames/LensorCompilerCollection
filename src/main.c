@@ -16,7 +16,7 @@ void print_usage(char **argv) {
          "   `--formats`       :: List acceptable output formats.\n"
          "   `--callings`      :: List acceptable calling conventions.\n"
          "   `--dialects`      :: List acceptable assembly dialects.\n"
-         "   `--dump-ir`       :: Dump intermediate representation to stdout.\n"
+         "   `--debug-ir`      :: Dump IR to stdout (in debug format).\n"
          "   `-O`, `--optimize`:: Optimize the generated code.\n"
          "   `-v`, `--verbose` :: Print out more information.\n");
   printf("Options:\n"
@@ -36,12 +36,13 @@ enum CodegenAssemblyDialect output_assembly_dialect = CG_ASM_DIALECT_DEFAULT;
 /// TODO: should be bools.
 int verbosity = 0;
 int optimise = 0;
-bool dump_ir = 0;
+bool debug_ir = false;
 
 void print_acceptable_formats() {
   printf("Acceptable formats include:\n"
          " -> default\n"
-         " -> x86_64_gas\n");
+         " -> x86_64_gas\n"
+         " -> ir\n");
 }
 
 void print_acceptable_calling_conventions() {
@@ -78,8 +79,8 @@ int handle_command_line_arguments(int argc, char **argv) {
     } else if (strcmp(argument, "--dialects") == 0) {
       print_acceptable_asm_dialects();
       exit(0);
-    } else if (strcmp(argument, "--dump-ir") == 0) {
-      dump_ir = 1;
+    } else if (strcmp(argument, "--debug-ir") == 0) {
+      debug_ir = 1;
     } else if (strcmp(argument, "-O") == 0
                || strcmp(argument, "--optimise") == 0) {
       optimise = 1;
@@ -92,8 +93,9 @@ int handle_command_line_arguments(int argc, char **argv) {
       if (i >= argc) {
         panic("ERROR: Expected filepath after output command line argument");
       }
-      // FIXME: This very well may be a valid filepath. We may want to
-      //        check that it isn't a valid filepath with fopen or something.
+      /// Anything that starts w/ `-` is treated as a command line argument.
+      /// If the user has a filepath that starts w/ `-...`, then they should use
+      /// `./-...` instead.
       if (*argv[i] == '-') {
         panic("ERROR: Expected filepath after output command line argument\n"
                "Instead, got what looks like another command line argument.\n"
@@ -115,6 +117,8 @@ int handle_command_line_arguments(int argc, char **argv) {
         output_format = CG_FMT_DEFAULT;
       } else if (strcmp(argv[i], "x86_64_gas") == 0) {
         output_format = CG_FMT_x86_64_GAS;
+      } else if (strcmp(argv[i], "ir") == 0) {
+        output_format = CG_FMT_IR;
       } else {
         printf("ERROR: Expected format after format command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
@@ -203,39 +207,74 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  Node *program = node_allocate();
-  ParsingContext *context = parse_context_default_create();
-  Error err = parse_program(argv[input_filepath_index], context, program);
+  const char *infile = argv[input_filepath_index];
+  const char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
+  size_t len = strlen(infile);
 
-  if (verbosity) {
-    printf("----- Abstract Syntax Tree\n");
-    print_node(program, 0);
-    printf("----- Parsing Context\n");
-    parse_context_print(context,0);
-    printf("-----\n");
+  /// The input is an IR file.
+  if (len >= 3 && memcmp(infile + len - 3, ".ir", 3) == 0) {
+    string s = file_contents(infile);
+    ASSERT(s.data);
+
+    codegen(
+      LANG_IR,
+      output_format,
+      output_calling_convention,
+      output_assembly_dialect,
+      infile,
+      output_filepath,
+      parse_context_default_create(),
+      NULL,
+      s
+     );
+
+    free(s.data);
   }
 
-  if (err.type) {
-    print_error(err);
-    return 1;
-  }
+  /// The input is a FUN file.
+  else {
+    Node *program = node_allocate();
+    ParsingContext *context = parse_context_default_create();
+    Error err = parse_program(infile, context, program);
 
-  err = typecheck_program(context, program);
-  if (err.type) {
-    print_error(err);
-    return 2;
-  }
+    if (verbosity) {
+      printf("----- Abstract Syntax Tree\n");
+      print_node(program, 0);
+      printf("----- Parsing Context\n");
+      parse_context_print(context,0);
+      printf("-----\n");
+    }
 
-  char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
-  err = codegen(output_format, output_calling_convention, output_assembly_dialect, output_filepath, context, program);
-  if (err.type) {
-    print_error(err);
-    return 3;
+    if (err.type) {
+      print_error(err);
+      return 1;
+    }
+
+    err = typecheck_program(context, program);
+    if (err.type) {
+      print_error(err);
+      return 2;
+    }
+
+    err = codegen(
+      LANG_FUN,
+      output_format,
+      output_calling_convention,
+      output_assembly_dialect,
+      infile,
+      output_filepath,
+      context,
+      program,
+      (string){0}
+    );
+    if (err.type) {
+      print_error(err);
+      return 3;
+    }
+
+    node_free(program);
   }
 
   printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
-
-  node_free(program);
-
   return 0;
 }

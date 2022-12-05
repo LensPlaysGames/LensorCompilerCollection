@@ -4,6 +4,7 @@
 typedef struct IRInstruction IRInstruction;
 typedef struct IRBlock IRBlock;
 typedef struct IRFunction IRFunction;
+typedef struct IR IR;
 
 typedef unsigned RegisterDescriptor;
 typedef struct RegisterPool RegisterPool;
@@ -21,6 +22,7 @@ enum CodegenAssemblyDialect {
 
 enum CodegenOutputFormat {
   CG_FMT_x86_64_GAS,
+  CG_FMT_IR,
   CG_FMT_COUNT,
 
   CG_FMT_DEFAULT = CG_FMT_x86_64_GAS,
@@ -32,6 +34,14 @@ enum CodegenCallingConvention {
   CG_CALL_CONV_COUNT,
 
   CG_CALL_CONV_DEFAULT = CG_CALL_CONV_MSWIN,
+};
+
+enum CodegenLanguage {
+  LANG_FUN,
+  LANG_IR,
+  LANG_COUNT,
+
+  LANG_DEFAULT = LANG_FUN,
 };
 
 // Types of comparison to be implemented by codegen backend.

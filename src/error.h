@@ -1,6 +1,8 @@
 #ifndef COMPILER_ERROR_H
 #define COMPILER_ERROR_H
 
+#include <stddef.h>
+
 // TODO: Add file path, byte offset, etc.
 typedef struct Error {
   enum ErrorType {
@@ -19,6 +21,18 @@ void print_error(Error err);
 
 extern Error ok;
 
+/// String span.
+typedef struct {
+  const char *data;
+  size_t size;
+} span;
+
+/// Owning string.
+typedef struct {
+  char *data;
+  size_t size;
+} string;
+
 #define ERROR_CREATE(n, t, msg)                 \
   Error (n) = { (t), (msg) }
 
@@ -28,11 +42,15 @@ extern Error ok;
 
 #ifndef _MSC_VER
 #  define NORETURN __attribute__((noreturn))
+#  define FALLTHROUGH __attribute__((fallthrough))
 #  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
+#  define FORCEINLINE __attribute__((always_inline)) inline
 #  define PRETTY_FUNCTION __PRETTY_FUNCTION__
 #else
 #  define NORETURN __declspec(noreturn)
+#  define FALLTHROUGH
 #  define FORMAT(...)
+#  define FORCEINLINE __forceinline inline
 #  define PRETTY_FUNCTION __FUNCSIG__
 #endif
 
@@ -81,5 +99,11 @@ void assert_impl (
 #define TODO(...)     ASSERT(0, "TODO: "__VA_ARGS__)
 #define PANIC(...)    ASSERT(0, "PANIC: "__VA_ARGS__)
 #define UNREACHABLE() ASSERT(0, "Unreachable")
+
+#define CAT_(a, b) a ## b
+#define CAT(a, b) CAT_(a, b)
+
+#define STR_(s) #s
+#define STR(s) STR_(s)
 
 #endif /* COMPILER_ERROR_H */

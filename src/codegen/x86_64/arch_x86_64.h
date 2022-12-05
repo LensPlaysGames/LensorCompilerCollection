@@ -27,7 +27,9 @@
 
 /// Context allocation/deallocation
 CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent);
+CodegenContext *codegen_context_x86_64_linux_create(CodegenContext *parent);
 void codegen_context_x86_64_mswin_free(CodegenContext *ctx);
+void codegen_context_x86_64_linux_free(CodegenContext *ctx);
 
 void codegen_lower_x86_64(CodegenContext *context);
 void codegen_emit_x86_64(CodegenContext *context);

@@ -781,6 +781,58 @@ CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
   return cg_ctx;
 }
 
+/// Creates a context for the x86_64/CG_CALL_CONV_LINUX.
+CodegenContext *codegen_context_x86_64_linux_create(CodegenContext *parent) {
+  RegisterPool pool;
+
+  // If this is the top level context, create the registers.
+  // Otherwise, shallow copy register pool to child context.
+  if (!parent) {
+    Register *registers = calloc(REG_COUNT, sizeof(Register));
+
+    /// Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling function
+    /// and the called function is required to preserve their values.
+    size_t number_of_scratch_registers = 7;
+    Register **scratch_registers = calloc(number_of_scratch_registers, sizeof(Register *));
+    scratch_registers[0] = registers + REG_RAX;
+    scratch_registers[1] = registers + REG_RCX;
+    scratch_registers[2] = registers + REG_RDX;
+    scratch_registers[3] = registers + REG_R8;
+    scratch_registers[4] = registers + REG_R9;
+    scratch_registers[5] = registers + REG_R10;
+    scratch_registers[6] = registers + REG_R11;
+
+    pool.registers = registers;
+    pool.scratch_registers = scratch_registers;
+    pool.num_scratch_registers = number_of_scratch_registers;
+    pool.num_registers = REG_COUNT;
+  } else {
+    pool = parent->register_pool;
+  }
+
+  CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
+
+  // Shallow-copy state from the parent.
+  if (parent) {
+    cg_ctx->code = parent->code;
+    cg_ctx->arch_data = parent->arch_data;
+    cg_ctx->format = parent->format;
+    cg_ctx->call_convention = parent->call_convention;
+    cg_ctx->dialect = parent->dialect;
+  } else {
+    cg_ctx->arch_data = calloc(1, sizeof(ArchData));
+    cg_ctx->format = CG_FMT_x86_64_GAS;
+    cg_ctx->call_convention = CG_CALL_CONV_LINUX;
+    cg_ctx->dialect = CG_ASM_DIALECT_ATT;
+  }
+
+  cg_ctx->parent = parent;
+  cg_ctx->locals = environment_create(NULL);
+  cg_ctx->locals_offset = -32;
+  cg_ctx->register_pool = pool;
+  return cg_ctx;
+}
+
 /// Free a context created by codegen_context_x86_64_mswin_create.
 void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
   // Only free the registers and arch data if this is the top-level context.
@@ -791,6 +843,11 @@ void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
   }
   // TODO(sirraide): Free environment.
   free(ctx);
+}
+
+/// Free a context created by codegen_context_x86_64_linux_create.
+void codegen_context_x86_64_linux_free(CodegenContext *ctx) {
+  codegen_context_x86_64_mswin_free(ctx);
 }
 
 /// Save state before a function call.
@@ -991,33 +1048,25 @@ RegisterDescriptor codegen_multiply_x86_64
   return rhs;
 }
 
-bool needs_prologue(CodegenContext *context, size_t locals_offset) {
-  // TODO: Check that, if we are in MSWIN call_conv, then we only need
-  // a prologue if the function makes function calls (simplified).
-  // Tail calls can muddy the waters, but in general recursive tail
-  // calls do not mean a prologue/epilogue is needed.
-  // REAL TODO: Write a pass on the IR that keeps track of whether or
-  // not each function requires a prologue and epilogue. Better than
-  // recomputing every time.
-  if (optimise
-      && !locals_offset
-      && context->call_convention != CG_CALL_CONV_MSWIN
-      ) {
-    return false;
-  }
-  return true;
-}
+enum StackFrameKind {
+  FRAME_FULL,
+  FRAME_MINIMAL,
+  FRAME_NONE,
+};
 
-bool needs_epilogue(CodegenContext *context, IRFunction *function) {
-  // TODO: MSWIN call conv isn't handled perfectly here.
-  // See needs_prologue().
-  if (!optimise
-      || function->locals_total_size
-      || context->call_convention == CG_CALL_CONV_MSWIN
-      ) {
-    return true;
-  }
-  return false;
+enum StackFrameKind stack_frame_kind(CodegenContext *context, IRFunction *f) {
+  /// Always emit a frame if we’re not optimising.
+  if (!optimise) return FRAME_FULL;
+
+  /// Emit a frame if we have local variables.
+  if (f->locals_total_size) return FRAME_FULL;
+
+  /// We need *some* sort of prologue if we don’t use the stack but
+  /// still call other functions.
+  if (!f->attr_leaf) return FRAME_MINIMAL;
+
+  /// Otherwise, no frame is required.
+  return FRAME_NONE;
 }
 
 /// Allocate space on the stack.
@@ -1026,30 +1075,70 @@ void codegen_stack_allocate_x86_64(CodegenContext *cg_context, long long int siz
 }
 
 /// Emit the function prologue.
-void codegen_prologue_x86_64(CodegenContext *cg_context, size_t locals_offset) {
-  if (!needs_prologue(cg_context, locals_offset)) {
-    return;
+void codegen_prologue_x86_64(CodegenContext *cg_context, IRFunction *f) {
+  enum StackFrameKind frame_kind = stack_frame_kind(cg_context, f);
+  switch (frame_kind) {
+    case FRAME_NONE: break;
+
+    case FRAME_FULL: {
+      size_t locals_offset = f->locals_total_size;
+
+      femit(cg_context, I_PUSH, REGISTER, REG_RBP);
+      femit(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RSP, REG_RBP);
+      switch (cg_context->call_convention) {
+        ///> Even if the called function has fewer than 4 parameters, these 4
+        ///> stack locations are effectively owned by the called function, and
+        ///> may be used by the called function for other purposes besides
+        ///> saving parameter register values.
+        ///  – https://learn.microsoft.com/en-us/cpp/build/stack-usage?view=msvc-170
+        case CG_CALL_CONV_MSWIN:
+          locals_offset += 4 * 8 + 8;
+          break;
+        case CG_CALL_CONV_LINUX: break;
+        default: PANIC("Unknown calling convention");
+      }
+      femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, locals_offset, REG_RSP);
+    } break;
+
+    case FRAME_MINIMAL: {
+      switch (cg_context->call_convention) {
+        /// See comment above.
+        case CG_CALL_CONV_MSWIN:
+          femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, (int64_t)(4 * 8 + 8), REG_RSP);
+          break;
+        case CG_CALL_CONV_LINUX:
+          femit(cg_context, I_PUSH, REGISTER, REG_RBP);
+          break;
+        default: PANIC("Unknown calling convention");
+      }
+    }
   }
-  femit(cg_context, I_PUSH, REGISTER, REG_RBP);
-  femit(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RSP, REG_RBP);
-  if (cg_context->call_convention == CG_CALL_CONV_MSWIN) {
-    // https://learn.microsoft.com/en-us/cpp/build/stack-usage?view=msvc-170
-    //> Even if the called function has fewer than 4 parameters, these 4
-    //> stack locations are effectively owned by the called function, and
-    //> may be used by the called function for other purposes besides
-    //> saving parameter register values.
-    locals_offset += 4 * 8 + 8;
-  }
-  femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, locals_offset, REG_RSP);
 }
 
 /// Emit the function epilogue.
 void codegen_epilogue_x86_64(CodegenContext *cg_context, IRFunction *f) {
-  if (needs_epilogue(cg_context, f)) {
-    femit(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
-    femit(cg_context, I_POP, REGISTER, REG_RBP);
+  enum StackFrameKind frame_kind = stack_frame_kind(cg_context, f);
+  switch (frame_kind) {
+    case FRAME_NONE: break;
+
+    case FRAME_FULL: {
+      femit(cg_context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
+      femit(cg_context, I_POP, REGISTER, REG_RBP);
+    } break;
+
+    case FRAME_MINIMAL: {
+      switch (cg_context->call_convention) {
+        /// See comment above.
+        case CG_CALL_CONV_MSWIN:
+          femit(cg_context, I_ADD, IMMEDIATE_TO_REGISTER, (int64_t)(4 * 8 + 8), REG_RSP);
+          break;
+        case CG_CALL_CONV_LINUX:
+          femit(cg_context, I_POP, REGISTER, REG_RBP);
+          break;
+        default: PANIC("Unknown calling convention");
+      }
+    }
   }
-  femit(cg_context, I_RET);
 }
 
 /// Set the return value of a function.
@@ -1117,12 +1206,9 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     ASSERT(instruction->block->function, "block has null function");
 
     // Tail call.
-    if (optimise && instruction->value.call.tail_call) {
+    if (instruction->value.call.tail_call) {
       // Restore the frame pointer if we have one.
-      if (needs_epilogue(context, instruction->block->function)) {
-        femit(context, I_MOV, REGISTER_TO_REGISTER, REG_RBP, REG_RSP);
-        femit(context, I_POP, REGISTER, REG_RBP);
-      }
+      codegen_epilogue_x86_64(context, instruction->block->function);
       if (instruction->value.call.type == IR_CALLTYPE_INDIRECT) {
         femit(context, I_JMP, REGISTER, instruction->value.call.value.callee->result);
       } else {
@@ -1179,6 +1265,7 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
       }
     }
     codegen_epilogue_x86_64(context, instruction->block->function);
+    femit(context, I_RET);
     if (optimise && instruction->block) instruction->block->done = true;
     break;
 
@@ -1351,7 +1438,7 @@ void emit_function(CodegenContext *context, IRFunction *function) {
   fprintf(context->code,
           "\n%s:\n",
           function->name);
-  codegen_prologue_x86_64(context, function->locals_total_size);
+  codegen_prologue_x86_64(context, function);
   // Save all callee-saved registers in use in the function.
   for (Register i = 1; i < sizeof(function->registers_in_use) * 8; ++i) {
     if ((size_t)function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i)) {
@@ -1449,38 +1536,16 @@ static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
     switch (instruction->type) {
-    case IR_PARAMETER_REFERENCE:
-      if (instruction->value.immediate >= (int64_t)argument_register_count) {
-        TODO("arch_x86_64 doesn't yet support passing arguments on the stack, sorry.");
-      }
-
-      // Create instruction to save parameter on function entry onto stack from register.
-      IRInstruction *store = calloc(1, sizeof(IRInstruction));
-      ASSERT(store, "Could not allocate IRInstruction");
-      store->type = IR_LOCAL_STORE;
-
-      IRInstruction *register_instruction = calloc(1, sizeof(IRInstruction));
-      ASSERT(register_instruction, "Could not allocate IRInstruction");
-      register_instruction->type = IR_REGISTER;
-      register_instruction->result = argument_registers[instruction->value.immediate - 1];
-
-      set_pair_and_mark(store, &store->value.pair, instruction, register_instruction);
-
-      insert_instruction_after(store, instruction);
-      insert_instruction_after(register_instruction, instruction);
-
-      // Overwrite current instruction to allocate space for parameter on stack.
-      instruction->type = IR_STACK_ALLOCATE;
-      // TODO: Size here be dictated by size of type of parameter.
-      // We would first have to know which function we are within,
-      // that way we can lookup the parameters, that way we can
-      // lookup the type of the parameter
-      // (based on parameter index). Basically, lots of environment
-      // lookups.
-      instruction->value.stack_allocation.size = 8;
-      break;
-    default:
-      break;
+      case IR_PARAMETER:
+        ASSERT(instruction->value.immediate >= 0);
+        if ((size_t)instruction->value.immediate >= argument_register_count) {
+          TODO("arch_x86_64 doesn't yet support passing arguments on the stack, sorry.");
+        }
+        instruction->type = IR_REGISTER;
+        instruction->result = argument_registers[instruction->value.immediate];
+        break;
+      default:
+        break;
     }
   }
 
@@ -1595,7 +1660,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
       if (optimise) {
         bool found = false;
         FOREACH_INSTRUCTION (context) {
-          if (instruction->type == IR_GLOBAL_ADDRESS &&
+          if ((instruction->type == IR_GLOBAL_ADDRESS ||
+               instruction->type == IR_GLOBAL_LOAD ||
+               instruction->type == IR_GLOBAL_STORE)  &&
               strcmp(instruction->value.name, var_id->value.symbol) == 0) {
             found = true;
             goto break_loop;
@@ -1638,7 +1705,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   ra(info);
 
-  if (dump_ir) ir_femit(stdout, context);
+  if (debug_ir) ir_femit(stdout, context);
 
   // Assign block labels.
   VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {

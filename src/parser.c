@@ -80,14 +80,14 @@ Error lex_extend(Token *token) {
   return err;
 }
 
-bool token_string_equalp(char* string, Token *token) {
-  if (!string || !token) { return 0; }
+bool token_string_equalp(char* str, Token *token) {
+  if (!str || !token) { return 0; }
   char *beg = token->beginning;
-  while (*string && token->beginning < token->end) {
-    if (*string != *beg) {
+  while (*str && token->beginning < token->end) {
+    if (*str != *beg) {
       return false;
     }
-    string++;
+    str++;
     beg++;
   }
   return true;
@@ -1674,9 +1674,9 @@ Error parse_expr
 }
 
 
-Error parse_program(char *filepath, ParsingContext *context, Node *result) {
+Error parse_program(const char *filepath, ParsingContext *context, Node *result) {
   Error err = ok;
-  char *contents = file_contents(filepath);
+  char *contents = file_contents(filepath).data;
   if (!contents) {
     printf("Filepath: \"%s\"\n", filepath);
     ERROR_PREP(err, ERROR_GENERIC, "parse_program(): Couldn't get file contents");
