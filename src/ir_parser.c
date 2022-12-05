@@ -5,15 +5,26 @@
 #include <ir_parser.h>
 #include <math.h>
 #include <setjmp.h>
+#include <stdarg.h>
+#include <string.h>
 
 /// For isatty().
 #ifdef _WIN32
 #    include <io.h>
 #    define isatty _isatty
+
+/// Basically strndup(), but for Windows.
+char *strndup(const char *str, size_t sz) {
+    char *dup = malloc(sz + 1);
+    memcpy(dup, str, sz);
+    dup[sz] = 0;
+    return dup;
+}
+
 #else
-#    include <stdarg.h>
 #    include <unistd.h>
 #endif
+
 
 typedef uint32_t u32;
 typedef uint64_t u64;
