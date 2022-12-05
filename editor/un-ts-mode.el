@@ -137,9 +137,7 @@
   (treesit-font-lock-rules
    :language 'un
    :feature 'type
-   `(;;((type_function)
-     ;;  return_type: @font-lock-type-face)
-     (type_primitive) @font-lock-type-face
+   `((type_primitive) @font-lock-type-face
      (type_array)     @font-lock-type-face
      (type_pointer)   @font-lock-type-face
      )
@@ -152,13 +150,14 @@
    :language 'un
    :feature 'punctuation
    `([,@un-ts-mode--delimiters] @font-lock-delimiter-face)
+   ;; TODO: Figure out why variable query breaks things...
    ;;:language 'un
    ;;:feature 'variable
-   ;;`((identifer) @font-lock-variable-face)
+   ;;`((variable) @font-lock-variable-face)
    :language 'un
    :feature 'function
    `((expr_call
-      callee: (identifier) @font-lock-function-name-face)
+      callee: (variable) @font-lock-function-name-face)
      (stmt_function
       name: (identifier) @font-lock-function-name-face)
      )
