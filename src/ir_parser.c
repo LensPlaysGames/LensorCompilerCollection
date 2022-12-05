@@ -1107,7 +1107,7 @@ static void parse_attributes(IRParser *p) {
 
 #define ATTR(a)                                                        \
     if (IDENT(#a)) {                                                   \
-        if (f->CAT(attr_, a)) WARN("Duplicate 'consteval' attribute"); \
+        if (f->CAT(attr_, a)) WARN("Duplicate '" STR(a) "' attribute"); \
         f->CAT(attr_, a) = true;                                       \
         next_token(p);                                                 \
         continue;                                                      \
