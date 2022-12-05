@@ -6,7 +6,7 @@
 #include <string.h>
 #include <vector.h>
 
-#ifdef _MSVC_VER
+#ifdef _MSC_VER
 #include <intrin.h>
 
 uint32_t ctzll(uint64_t value) {
