@@ -847,7 +847,7 @@ void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
 
 /// Free a context created by codegen_context_x86_64_linux_create.
 void codegen_context_x86_64_linux_free(CodegenContext *ctx) {
-  codegen_context_x86_64_mswin_create(ctx);
+  codegen_context_x86_64_mswin_free(ctx);
 }
 
 /// Save state before a function call.
