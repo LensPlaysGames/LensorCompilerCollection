@@ -106,7 +106,7 @@ Examples include addition (+) and subtraction (-)."
                                  "<" ">"
                                  ":" "=" ":="
                                  "&" "@"
-                                 ">>" "<<"))
+                                 ">>" "<<" "&" "|" "~"))
 
              (keywords-regex         (regexp-opt keywords 'words))
              (binary-operators-regex (regexp-opt binary-operators))

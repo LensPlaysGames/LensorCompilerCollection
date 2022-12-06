@@ -112,16 +112,14 @@
   "un keywords for tree-sitter font-locking.")
 
 (defvar un-ts-mode--operators
-  '(  "+" "-" "*" "/" "%"
-      "&"
-      "<<"
-      ">>"
-      "="
-      "<"
-      ">"
-      ":"
-      ":="
-      "@"
+  '("+" "-" "*" "/" "%"
+    "<<" ">>" "&" "|" "~"
+    "="
+    "<"
+    ">"
+    ":"
+    ":="
+    "@"
     )
   "un operators for tree-sitter font-locking.")
 
