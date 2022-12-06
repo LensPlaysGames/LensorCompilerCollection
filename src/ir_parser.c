@@ -77,15 +77,15 @@ static const char *diagnostic_level_colours[DIAG_COUNT] = {
 /// at first, but failed horribly. – Sirraide.
 FORMAT(printf, 5, 6)
   void issue_diagnostic(
-                        /// Error level and source location.
-                        enum diagnostic_level level,
-                        const char *filename,
-                        span source,
-                        loc location,
+  /// Error level and source location.
+  enum diagnostic_level level,
+  const char *filename,
+  span source,
+  loc location,
 
-                        /// The actual error message.
-                        const char *fmt,
-                        ...) {
+  /// The actual error message.
+  const char *fmt,
+  ...) {
   ASSERT(level >= 0 && level < DIAG_COUNT);
 
   /// Check if stderr is a terminal.

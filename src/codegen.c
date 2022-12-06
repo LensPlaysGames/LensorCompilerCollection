@@ -242,6 +242,7 @@ Error codegen_expression
     IRInstruction *call = NULL;
 
     if (strcmp(variable_type->value.symbol, "external function") == 0) {
+      /// TODO: direct calls should store a reference to a function, not its name.
       call = ir_direct_call(cg_context, expression->children->value.symbol);
     } else {
       err = codegen_expression(cg_context, context, next_child_context, expression->children);

@@ -6,6 +6,9 @@
 #include <string.h>
 #include <vector.h>
 
+/// ===========================================================================
+///  Helpers
+/// ===========================================================================
 #ifdef _MSC_VER
 #include <intrin.h>
 
@@ -76,366 +79,9 @@ static bool has_side_effects(IRInstruction *i) {
   }
 }
 
-static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
-  bool changed = false;
-  DLIST_FOREACH (IRBlock*, b, f->blocks) {
-    DLIST_FOREACH (IRInstruction*, i, b->instructions) {
-      switch (i->type) {
-        case IR_ADD: IR_REDUCE_BINARY(+) break;
-        case IR_SUBTRACT: IR_REDUCE_BINARY(-) break;
-        case IR_MULTIPLY: IR_REDUCE_BINARY(*) break;
-
-        /// TODO: Division by 0 should be a compile error.
-        case IR_DIVIDE:
-          IR_REDUCE_BINARY(/)
-          else {
-            IRInstruction *cdr = i->value.pair.cdr;
-            if (cdr->type == IR_IMMEDIATE) {
-              /// Division by 1 does nothing.
-              if (cdr->value.immediate == 1) {
-                ir_remove_use(i->value.pair.car, i);
-                ir_remove_use(cdr, i);
-                ir_replace_uses(i, i->value.pair.car);
-              }
-
-              /// Replace division by a power of two with a shift.
-              else if (power_of_two(cdr->value.immediate)) {
-                i->type = IR_SHIFT_RIGHT_ARITHMETIC;
-                cdr->value.immediate = ctzll((uint64_t)cdr->value.immediate);
-                changed = true;
-              }
-            }
-          }
-          break;
-        case IR_MODULO: IR_REDUCE_BINARY(%) break;
-
-        case IR_SHIFT_LEFT: IR_REDUCE_BINARY(<<) break;
-        case IR_SHIFT_RIGHT_ARITHMETIC: IR_REDUCE_BINARY(>>) break;
-        case IR_SHIFT_RIGHT_LOGICAL:
-          if (ipair(i)) {
-            IRInstruction *car = i->value.pair.car;
-            IRInstruction *cdr = i->value.pair.cdr;
-            i->type = IR_IMMEDIATE;
-            i->value.immediate = (int64_t) ((uint64_t) icar(i) >> (uint64_t) icdr(i));
-            ir_remove_use(car, i);
-            ir_remove_use(cdr, i);
-            changed = true;
-          }
-          break;
-        case IR_AND: IR_REDUCE_BINARY(&) break;
-        case IR_OR: IR_REDUCE_BINARY(|) break;
-        case IR_NOT:
-          if (i->value.reference->type == IR_IMMEDIATE) {
-            IRInstruction *imm = i->value.reference;
-            i->type = IR_IMMEDIATE;
-            i->value.immediate = ~imm->value.immediate;
-            ir_remove_use(imm, i);
-            changed = true;
-          }
-          break;
-
-        default: break;
-      }
-    }
-  }
-  return changed;
-}
-
-static bool opt_dce(IRFunction *f) {
-  bool changed = false;
-  DLIST_FOREACH (IRBlock*, b, f->blocks) {
-    for (IRInstruction *i = b->instructions.first; i;) {
-      if (!i->users.size && !has_side_effects(i)) {
-        IRInstruction *next = i->next;
-        ir_remove(i);
-        changed = true;
-        i = next;
-      } else {
-        i = i->next;
-      }
-    }
-  }
-  return changed;
-}
-
-typedef struct {
-  IRInstruction *call;
-  VECTOR(IRInstruction *) phis;
-} tail_call_info;
-
-/// See opt_tail_call_elim() for more info.
-static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
-  for (IRInstruction *i = b == tc->call->block ? tc->call->next : b->instructions.first; i; i = i->next) {
-    if (i->type == IR_PHI) {
-      /// If this is a phi node, then the call or a previous phi
-      /// must be an argument of the phi.
-      VECTOR_FOREACH_PTR (IRPhiArgument*, arg, i->value.phi_arguments) {
-        if (arg->value == tc->call) { goto phi; }
-        VECTOR_FOREACH_PTR (IRInstruction *, a, tc->phis) {
-          if (a == arg->value) { goto phi; }
-        }
-      }
-      return false;
-
-    phi:
-      VECTOR_PUSH(tc->phis, i);
-      continue;
-    }
-
-    /// If we encounter a return instruction, then a tail call
-    /// is only possible if the return value is the call, or
-    /// any of the PHIs.
-    if (i->type == IR_RETURN) {
-      VECTOR_FOREACH_PTR (IRInstruction *, a, tc->phis) { if (a == i->value.reference) { return true; } }
-      return i->value.reference == tc->call;
-    }
-
-    if (i->type == IR_BRANCH) { return tail_call_possible_iter(tc, i->value.block); }
-    if (i->type == IR_BRANCH_CONDITIONAL) {
-      return tail_call_possible_iter(tc, i->value.conditional_branch.true_branch) &&
-             tail_call_possible_iter(tc, i->value.conditional_branch.false_branch);
-    }
-
-    /// Any other instruction means that the call is not the last
-    /// relevant instruction before a return.
-    return false;
-  }
-  UNREACHABLE();
-}
-
-static bool tail_call_possible(IRInstruction *i) {
-  tail_call_info tc_info = {0};
-  tc_info.call = i;
-  bool possible = tail_call_possible_iter(&tc_info, i->block);
-  VECTOR_DELETE(tc_info.phis);
-  return possible;
-}
-
-static bool opt_tail_call_elim(IRFunction *f) {
-  bool changed = false;
-  DLIST_FOREACH (IRBlock*, b, f->blocks) {
-    DLIST_FOREACH (IRInstruction*, i, b->instructions) {
-      if (i->type != IR_CALL) { continue; }
-
-      /// An instruction is a tail call iff there are no other instruction
-      /// between it and the next return instruction other than branches
-      /// and phis.
-      if (tail_call_possible(i)) {
-        /// The actual tail call optimisation takes place in the code generator.
-        i->value.call.tail_call = true;
-        ir_mark_unreachable(b);
-        changed = true;
-
-        /// We can’t have more than two tail calls in a single block.
-        goto next_block;
-      }
-    }
-  next_block:;
-  }
-  return changed;
-}
-
-static bool opt_mem2reg(IRFunction *f) {
-  bool changed = false;
-
-  /// A stack variable.
-  typedef struct {
-    IRInstruction *alloca;
-    IRInstruction *store;
-    VECTOR(IRInstruction *) loads;
-    bool unoptimisable;
-  } stack_var;
-  VECTOR(stack_var) vars = {0};
-
-  /// Collect all stack variables that are stored into once, and
-  /// whose address is never taken.
-  DLIST_FOREACH (IRBlock*, b, f->blocks) {
-    DLIST_FOREACH (IRInstruction*, i, b->instructions) {
-      switch (i->type) {
-        /// New variable.
-        case IR_STACK_ALLOCATE: {
-          stack_var v = {0};
-          v.alloca = i;
-          VECTOR_PUSH(vars, v);
-        } break;
-
-        /// Record the first store into a variable.
-        case IR_LOCAL_STORE: {
-          VECTOR_FOREACH (stack_var, a, vars) {
-            if (!a->unoptimisable && a->alloca == i->value.pair.car) {
-              /// If there are multiple stores, mark the variable as unoptimisable.
-              if (a->store) a->unoptimisable = true;
-              else a->store = i;
-              break;
-            }
-          }
-        } break;
-
-        /// Record all loads; also check for loads before the first store.
-        case IR_LOCAL_LOAD: {
-          VECTOR_FOREACH (stack_var, a, vars) {
-            if (!a->unoptimisable && a->alloca == i->value.reference) {
-              /// Load before store.
-              if (!a->store) {
-                a->unoptimisable = true;
-                fprintf(stderr, "Warning: Load of uninitialised variable in function %s", f->name);
-              } else {
-                VECTOR_PUSH(a->loads, i);
-              }
-              break;
-            }
-          }
-        } break;
-
-        /// If the address of a variable is taken, mark it as unoptimisable.
-        case IR_LOCAL_ADDRESS: {
-          VECTOR_FOREACH (stack_var, a, vars) {
-            if (a->alloca == i->value.reference) {
-              a->unoptimisable = true;
-              break;
-            }
-          }
-        } break;
-      }
-    }
-  }
-
-  /// Optimise all optimisable variables.
-  VECTOR_FOREACH (stack_var, a, vars) {
-    if (a->unoptimisable) {
-      VECTOR_DELETE(a->loads);
-      continue;
-    }
-
-    changed = true;
-
-    /// Replace all loads with the stored value.
-    VECTOR_FOREACH_PTR (IRInstruction*, i, a->loads) {
-      ir_replace_uses(i, a->store->value.pair.cdr);
-      ir_remove(i);
-    }
-    VECTOR_DELETE(a->loads);
-
-    /// Remove the store.
-    ASSERT(a->store->users.size <= 1);
-    VECTOR_CLEAR(a->store->users);
-    ir_remove(a->store);
-
-    /// Remove the alloca.
-    ir_remove(a->alloca);
-  }
-
-  VECTOR_DELETE(vars);
-  return changed;
-}
-
-/// Keep track of stores to global variables, and if there is only
-/// one, inline the value if it is also global.
-void opt_inline_global_vars(CodegenContext *ctx) {
-  /// A global variable.
-  typedef struct {
-    const char* name;
-    IRInstruction *store;
-    VECTOR(IRInstruction *) loads;
-    bool unoptimisable;
-  } global_var;
-  VECTOR(global_var) vars = {0};
-
-  /// Since loads from global variables before the first store
-  /// are possible, we only check if the first store occurs
-  /// before any loads and in main() for now.
-  IRFunction *main = ir_get_function(ctx, "main");
-  ASSERT(main, "No main() function!");
-
-  FOREACH_INSTRUCTION (ctx) {
-    switch (instruction->type) {
-      /// Record the first store into a variable.
-      case IR_GLOBAL_STORE: {
-        VECTOR_FOREACH (global_var, a, vars) {
-          if (!a->unoptimisable && !strcmp(a->name, instruction->value.global_assignment.name)) {
-            /// If there are multiple stores, mark the variable as unoptimisable.
-            if (a->store || function != main) a->unoptimisable = true;
-            else a->store = instruction;
-            goto next_instruction;
-          }
-        }
-
-        /// Add a new variable.
-        global_var v = {0};
-        v.name = instruction->value.global_assignment.name;
-        v.store = function == main ? instruction : NULL;
-        v.unoptimisable = function != main;
-        VECTOR_PUSH(vars, v);
-      } break;
-
-      /// Record all loads; also check for loads before the first store.
-      case IR_GLOBAL_LOAD: {
-        VECTOR_FOREACH (global_var, a, vars) {
-          if (!a->unoptimisable && !strcmp(a->name, instruction->value.name)) {
-            /// Load before store.
-            if (!a->store) a->unoptimisable = true;
-            else VECTOR_PUSH(a->loads, instruction);
-            goto next_instruction;
-          }
-        }
-
-        /// Unoptimisable because the variable is loaded before it is stored to.
-        global_var v = {0};
-        v.name = instruction->value.name;
-        v.unoptimisable = true;
-        VECTOR_PUSH(vars, v);
-      } break;
-
-      case IR_GLOBAL_ADDRESS: {
-        VECTOR_FOREACH (global_var, a, vars) {
-          if (strcmp(a->name, instruction->value.name) == 0) {
-            /// Unoptimisable because the variable is loaded before it is stored to.
-            a->unoptimisable = true;
-            break;
-          }
-        }
-      } break;
-    }
-  next_instruction:;
-  }
-
-  /// Optimise all optimisable variables.
-  VECTOR_FOREACH (global_var, a, vars) {
-    if (a->unoptimisable) {
-      VECTOR_DELETE(a->loads);
-      continue;
-    }
-
-    /// Replace all loads with the stored value.
-    VECTOR_FOREACH_PTR (IRInstruction*, i, a->loads) {
-      ir_replace_uses(i, a->store->value.global_assignment.new_value);
-      ir_remove(i);
-    }
-    VECTOR_DELETE(a->loads);
-
-    /// Remove the store.
-    ASSERT(a->store->users.size <= 1);
-    VECTOR_CLEAR(a->store->users);
-    ir_remove(a->store);
-  }
-
-  /// Convert indirect calls to a global address to direct calls.
-  FOREACH_INSTRUCTION (ctx) {
-    switch (instruction->type) {
-      case IR_CALL: {
-        if (instruction->value.call.type == IR_CALLTYPE_INDIRECT &&
-            instruction->value.call.value.callee->type == IR_GLOBAL_ADDRESS) {
-          const char* name = instruction->value.call.value.callee->value.name;
-          ir_remove_use(instruction->value.call.value.callee, instruction);
-
-          instruction->value.call.type = IR_CALLTYPE_DIRECT;
-          instruction->value.call.value.name = name;
-        }
-      } break;
-    }
-  }
-}
-
+/// ===========================================================================
+///  Dominator Info
+/// ===========================================================================
 /// A node in the dominator tree.
 typedef struct DomTreeNode {
   IRBlock *block;
@@ -668,6 +314,500 @@ static void build_and_prune_dominator_tree(IRFunction *f, DominatorInfo* info) {
   VECTOR_DELETE(to_remove);
 }
 
+/// ===========================================================================
+///  Instruction combination
+/// ===========================================================================
+static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
+  bool changed = false;
+  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    DLIST_FOREACH (IRInstruction*, i, b->instructions) {
+      switch (i->type) {
+        case IR_ADD: IR_REDUCE_BINARY(+) break;
+        case IR_SUBTRACT: IR_REDUCE_BINARY(-) break;
+        case IR_MULTIPLY: IR_REDUCE_BINARY(*) break;
+
+        /// TODO: Division by 0 should be a compile error.
+        case IR_DIVIDE:
+          IR_REDUCE_BINARY(/)
+          else {
+            IRInstruction *cdr = i->value.pair.cdr;
+            if (cdr->type == IR_IMMEDIATE) {
+              /// Division by 1 does nothing.
+              if (cdr->value.immediate == 1) {
+                ir_remove_use(i->value.pair.car, i);
+                ir_remove_use(cdr, i);
+                ir_replace_uses(i, i->value.pair.car);
+              }
+
+              /// Replace division by a power of two with a shift.
+              else if (power_of_two(cdr->value.immediate)) {
+                i->type = IR_SHIFT_RIGHT_ARITHMETIC;
+                cdr->value.immediate = ctzll((uint64_t)cdr->value.immediate);
+                changed = true;
+              }
+            }
+          }
+          break;
+        case IR_MODULO: IR_REDUCE_BINARY(%) break;
+
+        case IR_SHIFT_LEFT: IR_REDUCE_BINARY(<<) break;
+        case IR_SHIFT_RIGHT_ARITHMETIC: IR_REDUCE_BINARY(>>) break;
+        case IR_SHIFT_RIGHT_LOGICAL:
+          if (ipair(i)) {
+            IRInstruction *car = i->value.pair.car;
+            IRInstruction *cdr = i->value.pair.cdr;
+            i->type = IR_IMMEDIATE;
+            i->value.immediate = (int64_t) ((uint64_t) icar(i) >> (uint64_t) icdr(i));
+            ir_remove_use(car, i);
+            ir_remove_use(cdr, i);
+            changed = true;
+          }
+          break;
+        case IR_AND: IR_REDUCE_BINARY(&) break;
+        case IR_OR: IR_REDUCE_BINARY(|) break;
+        case IR_NOT:
+          if (i->value.reference->type == IR_IMMEDIATE) {
+            IRInstruction *imm = i->value.reference;
+            i->type = IR_IMMEDIATE;
+            i->value.immediate = ~imm->value.immediate;
+            ir_remove_use(imm, i);
+            changed = true;
+          }
+          break;
+
+        default: break;
+      }
+    }
+  }
+  return changed;
+}
+
+/// ===========================================================================
+///  DCE
+/// ===========================================================================
+static bool opt_dce(IRFunction *f) {
+  bool changed = false;
+  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    for (IRInstruction *i = b->instructions.first; i;) {
+      if (!i->users.size && !has_side_effects(i)) {
+        IRInstruction *next = i->next;
+        ir_remove(i);
+        changed = true;
+        i = next;
+      } else {
+        i = i->next;
+      }
+    }
+  }
+  return changed;
+}
+
+/// ===========================================================================
+///  TCE
+/// ===========================================================================
+typedef struct {
+  IRInstruction *call;
+  VECTOR(IRInstruction *) phis;
+} tail_call_info;
+
+/// See opt_tail_call_elim() for more info.
+static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
+  for (IRInstruction *i = b == tc->call->block ? tc->call->next : b->instructions.first; i; i = i->next) {
+    if (i->type == IR_PHI) {
+      /// If this is a phi node, then the call or a previous phi
+      /// must be an argument of the phi.
+      VECTOR_FOREACH_PTR (IRPhiArgument*, arg, i->value.phi_arguments) {
+        if (arg->value == tc->call) { goto phi; }
+        VECTOR_FOREACH_PTR (IRInstruction *, a, tc->phis) {
+          if (a == arg->value) { goto phi; }
+        }
+      }
+      return false;
+
+    phi:
+      VECTOR_PUSH(tc->phis, i);
+      continue;
+    }
+
+    /// If we encounter a return instruction, then a tail call
+    /// is only possible if the return value is the call, or
+    /// any of the PHIs.
+    if (i->type == IR_RETURN) {
+      VECTOR_FOREACH_PTR (IRInstruction *, a, tc->phis) { if (a == i->value.reference) { return true; } }
+      return i->value.reference == tc->call;
+    }
+
+    if (i->type == IR_BRANCH) { return tail_call_possible_iter(tc, i->value.block); }
+    if (i->type == IR_BRANCH_CONDITIONAL) {
+      return tail_call_possible_iter(tc, i->value.conditional_branch.true_branch) &&
+             tail_call_possible_iter(tc, i->value.conditional_branch.false_branch);
+    }
+
+    /// Any other instruction means that the call is not the last
+    /// relevant instruction before a return.
+    return false;
+  }
+  UNREACHABLE();
+}
+
+static bool tail_call_possible(IRInstruction *i) {
+  tail_call_info tc_info = {0};
+  tc_info.call = i;
+  bool possible = tail_call_possible_iter(&tc_info, i->block);
+  VECTOR_DELETE(tc_info.phis);
+  return possible;
+}
+
+static bool opt_tail_call_elim(IRFunction *f) {
+  bool changed = false;
+  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    DLIST_FOREACH (IRInstruction*, i, b->instructions) {
+      if (i->type != IR_CALL) { continue; }
+
+      /// An instruction is a tail call iff there are no other instruction
+      /// between it and the next return instruction other than branches
+      /// and phis.
+      if (tail_call_possible(i)) {
+        /// The actual tail call optimisation takes place in the code generator.
+        i->value.call.tail_call = true;
+        ir_mark_unreachable(b);
+        changed = true;
+
+        /// We can’t have more than two tail calls in a single block.
+        goto next_block;
+      }
+    }
+  next_block:;
+  }
+  return changed;
+}
+
+/// ===========================================================================
+///  Mem2Reg
+/// ===========================================================================
+static bool opt_mem2reg(IRFunction *f) {
+  bool changed = false;
+
+  /// A stack variable.
+  typedef struct {
+    IRInstruction *alloca;
+    IRInstruction *store;
+    VECTOR(IRInstruction *) loads;
+    bool unoptimisable;
+  } stack_var;
+  VECTOR(stack_var) vars = {0};
+
+  /// Collect all stack variables that are stored into once, and
+  /// whose address is never taken.
+  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    DLIST_FOREACH (IRInstruction*, i, b->instructions) {
+      switch (i->type) {
+        /// New variable.
+        case IR_STACK_ALLOCATE: {
+          stack_var v = {0};
+          v.alloca = i;
+          VECTOR_PUSH(vars, v);
+        } break;
+
+        /// Record the first store into a variable.
+        case IR_LOCAL_STORE: {
+          VECTOR_FOREACH (stack_var, a, vars) {
+            if (!a->unoptimisable && a->alloca == i->value.pair.car) {
+              /// If there are multiple stores, mark the variable as unoptimisable.
+              if (a->store) a->unoptimisable = true;
+              else a->store = i;
+              break;
+            }
+          }
+        } break;
+
+        /// Record all loads; also check for loads before the first store.
+        case IR_LOCAL_LOAD: {
+          VECTOR_FOREACH (stack_var, a, vars) {
+            if (!a->unoptimisable && a->alloca == i->value.reference) {
+              /// Load before store.
+              if (!a->store) {
+                a->unoptimisable = true;
+                fprintf(stderr, "Warning: Load of uninitialised variable in function %s", f->name);
+              } else {
+                VECTOR_PUSH(a->loads, i);
+              }
+              break;
+            }
+          }
+        } break;
+
+        /// If the address of a variable is taken, mark it as unoptimisable.
+        case IR_LOCAL_ADDRESS: {
+          VECTOR_FOREACH (stack_var, a, vars) {
+            if (a->alloca == i->value.reference) {
+              a->unoptimisable = true;
+              break;
+            }
+          }
+        } break;
+      }
+    }
+  }
+
+  /// Optimise all optimisable variables.
+  VECTOR_FOREACH (stack_var, a, vars) {
+    if (a->unoptimisable) {
+      VECTOR_DELETE(a->loads);
+      continue;
+    }
+
+    changed = true;
+
+    /// Replace all loads with the stored value.
+    VECTOR_FOREACH_PTR (IRInstruction*, i, a->loads) {
+      ir_replace_uses(i, a->store->value.pair.cdr);
+      ir_remove(i);
+    }
+    VECTOR_DELETE(a->loads);
+
+    /// Remove the store.
+    ASSERT(a->store->users.size <= 1);
+    VECTOR_CLEAR(a->store->users);
+    ir_remove(a->store);
+
+    /// Remove the alloca.
+    ir_remove(a->alloca);
+  }
+
+  VECTOR_DELETE(vars);
+  return changed;
+}
+
+/// ===========================================================================
+///  Inline Globals
+/// ===========================================================================
+/// Keep track of stores to global variables, and if there is only
+/// one, inline the value if it is also global.
+bool opt_inline_global_vars(CodegenContext *ctx) {
+  /// A global variable.
+  typedef struct {
+    const char* name;
+    IRInstruction *store;
+    VECTOR(IRInstruction *) loads;
+    bool unoptimisable;
+  } global_var;
+  VECTOR(global_var) vars = {0};
+
+  /// Since loads from global variables before the first store
+  /// are possible, we only check if the first store occurs
+  /// before any loads and in main() for now.
+  IRFunction *main = ir_get_function(ctx, "main");
+  ASSERT(main, "No main() function!");
+
+  FOREACH_INSTRUCTION (ctx) {
+    switch (instruction->type) {
+      /// Record the first store into a variable.
+      case IR_GLOBAL_STORE: {
+        VECTOR_FOREACH (global_var, a, vars) {
+          if (!a->unoptimisable && !strcmp(a->name, instruction->value.global_assignment.name)) {
+            /// If there are multiple stores, mark the variable as unoptimisable.
+            if (a->store || function != main) a->unoptimisable = true;
+            else a->store = instruction;
+            goto next_instruction;
+          }
+        }
+
+        /// Add a new variable.
+        global_var v = {0};
+        v.name = instruction->value.global_assignment.name;
+        v.store = function == main ? instruction : NULL;
+        v.unoptimisable = function != main;
+        VECTOR_PUSH(vars, v);
+      } break;
+
+      /// Record all loads; also check for loads before the first store.
+      case IR_GLOBAL_LOAD: {
+        VECTOR_FOREACH (global_var, a, vars) {
+          if (!a->unoptimisable && !strcmp(a->name, instruction->value.name)) {
+            /// Load before store.
+            if (!a->store) a->unoptimisable = true;
+            else VECTOR_PUSH(a->loads, instruction);
+            goto next_instruction;
+          }
+        }
+
+        /// Unoptimisable because the variable is loaded before it is stored to.
+        global_var v = {0};
+        v.name = instruction->value.name;
+        v.unoptimisable = true;
+        VECTOR_PUSH(vars, v);
+      } break;
+
+      case IR_GLOBAL_ADDRESS: {
+        VECTOR_FOREACH (global_var, a, vars) {
+          if (strcmp(a->name, instruction->value.name) == 0) {
+            /// Unoptimisable because the variable is loaded before it is stored to.
+            a->unoptimisable = true;
+            break;
+          }
+        }
+      } break;
+    }
+  next_instruction:;
+  }
+
+  /// Optimise all optimisable variables.
+  VECTOR_FOREACH (global_var, a, vars) {
+    if (a->unoptimisable) {
+      VECTOR_DELETE(a->loads);
+      continue;
+    }
+
+    /// Replace all loads with the stored value.
+    VECTOR_FOREACH_PTR (IRInstruction*, i, a->loads) {
+      ir_replace_uses(i, a->store->value.global_assignment.new_value);
+      ir_remove(i);
+    }
+    VECTOR_DELETE(a->loads);
+
+    /// Remove the store.
+    ASSERT(a->store->users.size <= 1);
+    VECTOR_CLEAR(a->store->users);
+    ir_remove(a->store);
+  }
+
+  /// Convert indirect calls to a global address to direct calls.
+  FOREACH_INSTRUCTION (ctx) {
+    switch (instruction->type) {
+      case IR_CALL: {
+        if (instruction->value.call.type == IR_CALLTYPE_INDIRECT &&
+            instruction->value.call.value.callee->type == IR_GLOBAL_ADDRESS) {
+          const char* name = instruction->value.call.value.callee->value.name;
+          ir_remove_use(instruction->value.call.value.callee, instruction);
+
+          instruction->value.call.type = IR_CALLTYPE_DIRECT;
+          instruction->value.call.value.name = name;
+        }
+      } break;
+    }
+  }
+
+  /// Done.
+  bool changed = vars.size;
+  VECTOR_DELETE(vars);
+  return changed;
+}
+
+/// ===========================================================================
+///  Analyse functions.
+/// ===========================================================================
+/// This function returns whether the purity of the function has changed, *not*
+/// whether it’s pure or not.
+bool opt_check_pure(IRFunction *f) {
+  /// Iterate over all instructions and check if they have nonlocal side effects.
+  FOREACH_INSTRUCTION_IN_FUNCTION (f) {
+    if (!has_side_effects(instruction)) continue;
+    if (ir_is_branch(instruction)) continue;
+
+    /// Even if an instruction in a function has side effects, the function
+    /// may still be pure, e.g. if the instruction is a call to a pure function
+    /// or a store to a local variable.
+    switch (instruction->type) {
+      case IR_LOCAL_STORE: continue;
+      case IR_CALL: {
+        /// TODO: direct calls should store a reference to a function, not its name.
+        if (instruction->value.call.type == IR_CALLTYPE_DIRECT) {
+          IRFunction *callee = ir_get_function(f->context, instruction->value.call.value.name);
+          if (callee && callee->attr_pure) continue;
+        }
+      } break;
+      default: break;
+    }
+
+    /// Function is not pure.
+    if (!f->attr_pure) return false;
+    f->attr_pure = false;
+    return true;
+  }
+
+  /// Function is pure.
+  if (f->attr_pure) return false;
+  f->attr_pure = true;
+  return true;
+}
+
+/// Check if a function is a leaf function. This function returns whether
+/// the leafness of the function has changed, *not* whether it’s a leaf or not.
+bool opt_check_leaf(IRFunction *f) {
+  /// A leaf function may not contain any calls except for recursive tail calls
+  /// or tail calls to other leaf functions.
+  FOREACH_INSTRUCTION_IN_FUNCTION (f) {
+    if (instruction->type != IR_CALL) continue;
+    if (instruction->value.call.type == IR_CALLTYPE_DIRECT && instruction->value.call.tail_call) {
+      IRFunction *callee = ir_get_function(f->context, instruction->value.call.value.name);
+      if (callee == f || callee->attr_leaf) continue;
+    }
+
+    /// Function is not a leaf.
+    if (!f->attr_leaf) return false;
+    f->attr_leaf = false;
+    return true;
+  }
+
+  /// Function is a leaf.
+  if (f->attr_leaf) return false;
+  f->attr_leaf = true;
+  return true;
+}
+
+/// Check whether a function does not return. This function returns whether
+/// the noreturn attribute of the function has changed, *not* whether it actually
+/// returns or not.
+bool opt_check_noreturn(IRFunction *f) {
+  FOREACH_INSTRUCTION_IN_FUNCTION (f) {
+    /// A function that contains a tail call returns, unless the callee does not return.
+    if (instruction->type == IR_CALL && instruction->value.call.tail_call) {
+      /// If the call is a direct call, we can check the noreturn attribute of the callee.
+      if (instruction->value.call.type == IR_CALLTYPE_DIRECT) {
+        IRFunction *callee = ir_get_function(f->context, instruction->value.call.value.name);
+        if (!callee || !callee->attr_noreturn) goto returns;
+      }
+
+      /// We can’t know whether an indirect tail call returns, so we must assume that we return.
+      else goto returns;
+    }
+
+    /// If a return instruction is encountered, then this function obviously returns.
+    else if (instruction->type == IR_RETURN) {
+    returns:
+      if (!f->attr_noreturn) return false;
+      f->attr_noreturn = false;
+      return true;
+    }
+  }
+
+  /// Function does not return.
+  if (f->attr_noreturn) return false;
+  f->attr_noreturn = true;
+  return true;
+}
+
+/// Analyse functions to determine whether they’re pure, leaf functions, etc.
+bool opt_analyse_functions(CodegenContext *ctx) {
+  bool ever_changed = false, changed;
+  do {
+    changed = false;
+
+    VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
+      changed |= opt_check_pure(f);
+      changed |= opt_check_leaf(f);
+      changed |= opt_check_noreturn(f);
+    }
+
+    if (changed) ever_changed = true;
+  } while (changed);
+  return ever_changed;
+}
+
+/// ===========================================================================
+///  Block reordering etc.
+/// ===========================================================================
 /// Rearrange the blocks in a function according to the dominator tree.
 static void opt_reorder_blocks(IRFunction *f, DominatorInfo* info) {
   /// Clear the block list.
@@ -712,7 +852,6 @@ static void opt_reorder_blocks(IRFunction *f, DominatorInfo* info) {
   }
   VECTOR_DELETE(stack);
 }
-
 
 static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
   bool changed = false;
@@ -763,6 +902,9 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
   return changed;
 }
 
+/// ===========================================================================
+///  Instruction Selection
+/// ===========================================================================
 /// Mark comparisons as `dont_emit` if they’re immediately
 /// used by a conditional branch.
 static bool opt_inline_comparisons(IRFunction *f) {
@@ -777,27 +919,34 @@ static bool opt_inline_comparisons(IRFunction *f) {
   return changed;
 }
 
-static void optimise_function(CodegenContext *ctx, IRFunction *f) {
-  DominatorInfo dom = {0};
-  do {
-    build_and_prune_dominator_tree(f, &dom);
-    opt_reorder_blocks(f, &dom);
-  } while (
-    opt_const_folding_and_strengh_reduction(f) ||
-    opt_dce(f) ||
-    opt_mem2reg(f) ||
-    opt_jump_threading(f, &dom) ||
-    opt_tail_call_elim(f) ||
-    opt_inline_comparisons(f)
-  );
-  free_dominator_info(&dom);
-}
-
+/// ===========================================================================
+///  Driver
+/// ===========================================================================
 void codegen_optimise(CodegenContext *ctx) {
   opt_inline_global_vars(ctx);
-  VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
-    optimise_function(ctx, f);
+  opt_analyse_functions(ctx);
+
+  /// Optimise each function individually.
+  do {
+    VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
+      DominatorInfo dom = {0};
+      do {
+        build_and_prune_dominator_tree(f, &dom);
+        opt_reorder_blocks(f, &dom);
+      } while (
+          opt_const_folding_and_strengh_reduction(f) ||
+          opt_dce(f) ||
+          opt_mem2reg(f) ||
+          opt_jump_threading(f, &dom) ||
+          opt_tail_call_elim(f) ||
+          opt_inline_comparisons(f)
+      );
+      free_dominator_info(&dom);
+    }
   }
+
+  /// Cross-function optimisations.
+  while (opt_inline_global_vars(ctx) || opt_analyse_functions(ctx));
 }
 
 /// Called after RA.
