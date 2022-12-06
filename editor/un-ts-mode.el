@@ -108,7 +108,7 @@
 
 
 (defvar un-ts-mode--keywords
-  '("if" "else" "ext")
+  '("if" "else" "ext" "while")
   "un keywords for tree-sitter font-locking.")
 
 (defvar un-ts-mode--operators

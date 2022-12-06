@@ -101,7 +101,7 @@ Examples include addition (+) and subtraction (-)."
 
 ;; Gather all keyword font locks together into big daddy keyword font-lock
 (setq un--font-lock-defaults
-      (let* ((keywords '("if" "else" "ext"))
+      (let* ((keywords '("if" "else" "ext" "while"))
              (binary-operators '("+" "*" "-" "/" "%"
                                  "<" ">"
                                  ":" "=" ":="
