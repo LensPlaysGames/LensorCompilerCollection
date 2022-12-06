@@ -1388,6 +1388,8 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
                  instruction->result);
     break;
   case IR_SHIFT_LEFT:
+    ASSERT(instruction->value.pair.car->result != REG_RCX,
+           "Register allocation must not allocate RCX to result of lhs of shift.");
     femit(context, I_MOV, REGISTER_TO_REGISTER,
                  instruction->value.pair.cdr->result,
                  REG_RCX);
