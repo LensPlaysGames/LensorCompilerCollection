@@ -19,6 +19,7 @@
                       | LOAD ( <temp> | <name> )
                       | REGISTER NUMBER
                       | ALLOCA
+                      | ADDR <name>
 <void-instruction>  ::= STORE <temp> "," ( <temp> | <name> )
 
 
