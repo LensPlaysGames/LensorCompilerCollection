@@ -163,6 +163,9 @@ enum Instruction {
   I_SHL = I_SAL,
   I_SAR, ///< Reg reg | Immediate imm, Reg reg
   I_SHR, ///< Reg reg | Immediate imm, Reg reg
+  I_AND, ///< Reg reg | Immediate imm, Reg reg
+  I_OR,  ///< Reg reg | Immediate imm, Reg reg
+  I_NOT,
 
   /// Stack instructions.
   I_PUSH,
@@ -210,47 +213,50 @@ const char *setcc_suffixes_x86_64[COMPARE_COUNT] = {
 };
 
 static const char *instruction_mnemonic(CodegenContext *context, enum Instruction instruction) {
-  ASSERT(I_COUNT == 21, "ERROR: instruction_mnemonic() must exhaustively handle all instructions.");
+  STATIC_ASSERT(I_COUNT == 24, "ERROR: instruction_mnemonic() must exhaustively handle all instructions.");
   // x86_64 instructions that aren't different across syntaxes can go here!
   switch (instruction) {
-    default: break;
-    case I_ADD: return "add";
-    case I_SUB: return "sub";
+  default: break;
+  case I_ADD: return "add";
+  case I_SUB: return "sub";
     // case I_MUL: return "mul";
-    case I_IMUL: return "imul";
+  case I_IMUL: return "imul";
     // case I_DIV: return "div";
-    case I_IDIV: return "idiv";
-    case I_SAL: return "sal";
-    case I_SAR: return "sar";
-    case I_SHR: return "shr";
-    case I_PUSH: return "push";
-    case I_POP: return "pop";
-    case I_XOR: return "xor";
-    case I_CMP: return "cmp";
-    case I_CALL: return "call";
-    case I_JMP: return "jmp";
-    case I_RET: return "ret";
-    case I_MOV: return "mov";
-    case I_XCHG: return "xchg";
-    case I_LEA: return "lea";
-    case I_SETCC: return "set";
-    case I_TEST: return "test";
-    case I_JCC: return "j";
+  case I_IDIV: return "idiv";
+  case I_SAL: return "sal";
+  case I_SAR: return "sar";
+  case I_SHR: return "shr";
+  case I_AND: return "and";
+  case I_OR: return "or";
+  case I_NOT: return "not";
+  case I_PUSH: return "push";
+  case I_POP: return "pop";
+  case I_XOR: return "xor";
+  case I_CMP: return "cmp";
+  case I_CALL: return "call";
+  case I_JMP: return "jmp";
+  case I_RET: return "ret";
+  case I_MOV: return "mov";
+  case I_XCHG: return "xchg";
+  case I_LEA: return "lea";
+  case I_SETCC: return "set";
+  case I_TEST: return "test";
+  case I_JCC: return "j";
   }
 
   switch (context->dialect) {
-    default: panic("instruction_mnemonic(): Unknown output format.");
+  default: panic("instruction_mnemonic(): Unknown output format.");
 
-    case CG_ASM_DIALECT_ATT:
+  case CG_ASM_DIALECT_ATT:
     switch (instruction) {
-      default: panic("instruction_mnemonic(): Unknown instruction.");
-      case I_CQO: return "cqto";
+    default: panic("instruction_mnemonic(): Unknown instruction.");
+    case I_CQO: return "cqto";
     }
 
-    case CG_ASM_DIALECT_INTEL:
+  case CG_ASM_DIALECT_INTEL:
     switch (instruction) {
-      default: panic("instruction_mnemonic(): Unknown instruction.");
-      case I_CQO: return "cqo";
+    default: panic("instruction_mnemonic(): Unknown instruction.");
+    case I_CQO: return "cqo";
     }
   }
 }
@@ -527,11 +533,13 @@ static void femit
   va_start(args, instruction);
 
   ASSERT(context);
-  STATIC_ASSERT(I_COUNT == 21, "femit() must exhaustively handle all x86_64 instructions.");
+  STATIC_ASSERT(I_COUNT == 24, "femit() must exhaustively handle all x86_64 instructions.");
 
   switch (instruction) {
     case I_ADD:
     case I_SUB:
+    case I_AND:
+    case I_OR:
     case I_TEST:
     case I_XOR:
     case I_CMP:
@@ -637,6 +645,7 @@ static void femit
       }
     } break;
 
+    case I_NOT:
     case I_POP: {
       enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
       switch (operand) {
@@ -1147,7 +1156,7 @@ void codegen_set_return_value_x86_64(CodegenContext *cg_context, RegisterDescrip
 }
 
 void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 28);
+  STATIC_ASSERT(IR_COUNT == 31);
   if (instruction->dont_emit) return;
   switch (instruction->type) {
   case IR_PHI:
@@ -1158,6 +1167,13 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
   case IR_IMMEDIATE:
     femit(context, I_MOV, IMMEDIATE_TO_REGISTER,
                  instruction->value.immediate,
+                 instruction->result);
+    break;
+  case IR_NOT:
+    femit(context, I_NOT, REGISTER,
+          instruction->value.reference->result);
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
+                 instruction->value.reference->result,
                  instruction->result);
     break;
   case IR_COPY:
@@ -1401,6 +1417,22 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
                  instruction->value.pair.car->result,
                  instruction->result);
     break;
+  case IR_AND:
+    femit(context, I_AND, REGISTER_TO_REGISTER,
+          instruction->value.pair.car->result,
+          instruction->value.pair.cdr->result);
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
+          instruction->value.pair.cdr->result,
+          instruction->result);
+    break;
+  case IR_OR:
+    femit(context, I_OR, REGISTER_TO_REGISTER,
+          instruction->value.pair.car->result,
+          instruction->value.pair.cdr->result);
+    femit(context, I_MOV, REGISTER_TO_REGISTER,
+          instruction->value.pair.cdr->result,
+          instruction->result);
+    break;
   case IR_LOAD:
     femit(context, I_MOV, MEMORY_TO_REGISTER,
                  instruction->value.reference->result,
@@ -1501,16 +1533,17 @@ static Register linux_caller_saved_registers[LINUX_CALLER_SAVED_REGISTER_COUNT] 
   REG_RAX, REG_RCX, REG_RDX, REG_R8, REG_R9, REG_R10, REG_R11, REG_RSI, REG_RDI
 };
 
-typedef enum TwoAddressClobbers {
+typedef enum Clobbers {
   CLOBBERS_NEITHER,
+  CLOBBERS_REFERENCE,
   CLOBBERS_LEFT,
   CLOBBERS_RIGHT,
   CLOBBERS_BOTH,
   CLOBBERS_OTHER,
-} TwoAddressClobbers;
+} Clobbers;
 
-TwoAddressClobbers is_two_address(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 28, "Exhaustive handling of IR types.");
+Clobbers does_clobber(IRInstruction *instruction) {
+  STATIC_ASSERT(IR_COUNT == 31, "Exhaustive handling of IR types.");
   switch (instruction->type) {
   case IR_ADD:
   case IR_DIVIDE:
@@ -1519,11 +1552,17 @@ TwoAddressClobbers is_two_address(IRInstruction *instruction) {
   case IR_SHIFT_LEFT:
   case IR_SHIFT_RIGHT_LOGICAL:
   case IR_SHIFT_RIGHT_ARITHMETIC:
+  case IR_AND:
+  case IR_OR:
     return CLOBBERS_RIGHT;
     break;
 
   case IR_SUBTRACT:
     return CLOBBERS_LEFT;
+    break;
+
+  case IR_NOT:
+    return CLOBBERS_REFERENCE;
     break;
 
   default:
@@ -1550,12 +1589,20 @@ static void lower(CodegenContext *context) {
   }
 
   FOREACH_INSTRUCTION (context) {
-    TwoAddressClobbers status;
-    if ((status = is_two_address(instruction))) {
+    Clobbers status;
+    if ((status = does_clobber(instruction))) {
       switch (status) {
       case CLOBBERS_BOTH:
         TODO("Handle clobbering of both registers by a two address instruction.");
         break;
+      case CLOBBERS_REFERENCE: {
+        // TODO: Reduce code duplication.
+        IRInstruction *copy = ir_copy(context, instruction->value.reference);
+        ir_remove_use(instruction->value.reference, instruction);
+        mark_used(copy, instruction);
+        insert_instruction_before(copy, instruction);
+        instruction->value.reference = copy;
+      } break;
       case CLOBBERS_LEFT: {
         IRInstruction *copy = ir_copy(context, instruction->value.pair.car);
         ir_remove_use(instruction->value.pair.car, instruction);

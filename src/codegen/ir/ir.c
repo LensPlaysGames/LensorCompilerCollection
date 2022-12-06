@@ -44,7 +44,7 @@ void codegen_emit_ir_backend(CodegenContext *context) {
         if (instruction->type == IR_PARAMETER) continue;
 
         fprintf(context->code, "    ");
-        STATIC_ASSERT(IR_COUNT == 28, "Handle all IR instructions");
+        STATIC_ASSERT(IR_COUNT == 31, "Handle all IR instructions");
 
         if (instruction->id) fprintf(context->code, "%%%zu = ", instruction->id);
         switch (instruction->type) {
@@ -108,6 +108,16 @@ void codegen_emit_ir_backend(CodegenContext *context) {
                 instruction->value.pair.car->id,
                 instruction->value.pair.cdr->id);
             break;
+          case IR_AND:
+            fprintf(context->code, "and %%%zu, %%%zu",
+                instruction->value.pair.car->id,
+                instruction->value.pair.cdr->id);
+            break;
+          case IR_OR:
+            fprintf(context->code, "or %%%zu, %%%zu",
+                instruction->value.pair.car->id,
+                instruction->value.pair.cdr->id);
+            break;
 
           case IR_SUBTRACT:
             fprintf(context->code, "sub %%%zu, %%%zu",
@@ -127,6 +137,9 @@ void codegen_emit_ir_backend(CodegenContext *context) {
             break;
           case IR_COPY:
             fprintf(context->code, "copy %%%zu", instruction->value.reference->id);
+            break;
+          case IR_NOT:
+            fprintf(context->code, "not %%%zu", instruction->value.reference->id);
             break;
           case IR_LOCAL_LOAD:
             fprintf(context->code, "load %%%zu", instruction->value.reference->id);

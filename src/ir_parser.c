@@ -291,7 +291,10 @@ static FORCEINLINE bool spans_equal(span a, span b) {
 /// Check if a span is the name of an instruction.
 /// Returns IR_COUNT if the span is not the name of an instruction.
 static enum IrParserInstructionType irtype_from_span(span s) {
-  STATIC_ASSERT((int) IR_INSTRUCTIONS_COUNT == (int) IR_COUNT, "IR Parser must implement all IR instructions");
+  // FIXME: If a new IR_TYPE is added, this check will pass, even
+  // though it's not handled.
+  STATIC_ASSERT((int) IR_INSTRUCTIONS_COUNT == (int) IR_COUNT,
+                "IR Parser must implement all IR instructions");
 
 #define TYPE(string, type)                                              \
   static const span CAT(span_, type) = {.data = string, .size = sizeof(string) - 1}; \
@@ -306,6 +309,9 @@ static enum IrParserInstructionType irtype_from_span(span s) {
     TYPE("mul", MULTIPLY)
     TYPE("div", DIVIDE)
     TYPE("mod", MODULO)
+    TYPE("not", NOT)
+    TYPE("and", AND)
+    TYPE("or", OR)
     TYPE("eq", EQ)
     TYPE("ne", NE)
     TYPE("lt", LT)
@@ -331,10 +337,10 @@ static enum IrParserInstructionType irtype_from_span(span s) {
 
 /// Check if a character is a delimiter.
 static bool is_delim(char c) {
-  return c == ',' || c == ':' || c == '=' || //
-    c == '}' || c == ']' || c == ')' || //
-    c == '{' || c == '[' || c == '(' || //
-    c == ';';
+  return c == ',' || c == ':' || c == '=' ||
+         c == '}' || c == ']' || c == ')' ||
+         c == '{' || c == '[' || c == '(' ||
+         c == ';';
 }
 
 /// Check if a character may start an identifier.

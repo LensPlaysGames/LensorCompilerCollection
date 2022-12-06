@@ -125,12 +125,24 @@ Error typecheck_expression
     break;
   case NODE_TYPE_VARIABLE_DECLARATION:
     break;
-  case NODE_TYPE_INTEGER:
-    if (0) { ; }
+  case NODE_TYPE_INTEGER: {
     Node *integer_type = node_symbol("integer");
     *result_type = *integer_type;
     free(integer_type);
-    break;
+    } break;
+  case NODE_TYPE_NOT: {
+    Node *not_child_type = node_allocate();
+    typecheck_expression(context, context_to_enter, expression->children, not_child_type);
+
+    Node *integer_type = node_symbol("integer");
+    *result_type = *integer_type;
+    free(integer_type);
+
+    if (type_compare_symbol(result_type, not_child_type) == 0) {
+      ERROR_PREP(err, ERROR_TYPE, "NOT operator may only operate on integers!");
+      return err;
+    }
+  } break;
   case NODE_TYPE_VARIABLE_ACCESS:
     // Get type symbol from variables environment using variable symbol.
     while (context_it) {

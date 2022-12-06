@@ -14,7 +14,7 @@
 const char *comment_delimiters = ";#";
 const char *whitespace         = " \t\r\n";
 // TODO: Think harder about delimiters.
-const char *delimiters         = " \t\r\n,{}()[]<>:&@";
+const char *delimiters         = " \t\r\n,{}()[]<>:&|~!@";
 
 bool comment_at_beginning(Token token) {
   const char *comment_it = comment_delimiters;
@@ -157,7 +157,7 @@ void node_add_child(Node *parent, Node *new_child) {
 }
 
 int node_compare(Node *a, Node *b) {
-  STATIC_ASSERT(NODE_TYPE_MAX == 16, "node_compare() must handle all node types");
+  STATIC_ASSERT(NODE_TYPE_MAX == 17, "node_compare() must handle all node types");
 
   // Actually really nice debug output when you need it.
   //printf("Comparing nodes:\n");
@@ -281,7 +281,7 @@ Error define_type(Environment *types, int type, Node *type_symbol, long long byt
 #define NODE_TEXT_BUFFER_SIZE 512
 char node_text_buffer[512];
 char *node_text(Node *node) {
-  STATIC_ASSERT(NODE_TYPE_MAX == 16, "print_node() must handle all node types");
+  STATIC_ASSERT(NODE_TYPE_MAX == 17, "print_node() must handle all node types");
   if (!node) {
     return "NULL";
   }
@@ -303,6 +303,9 @@ char *node_text(Node *node) {
     break;
   case NODE_TYPE_BINARY_OPERATOR:
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "BINARY OPERATOR:%s", node->value.symbol);
+    break;
+  case NODE_TYPE_NOT:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "NOT");
     break;
   case NODE_TYPE_VARIABLE_REASSIGNMENT:
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "VARIABLE REASSIGNMENT");
@@ -549,6 +552,10 @@ ParsingContext *parse_context_default_create() {
   err = define_binary_operator(ctx, "<<", 4, "integer", "integer", "integer");
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
   err = define_binary_operator(ctx, ">>", 4, "integer", "integer", "integer");
+  if (err.type != ERROR_NONE) { puts(binop_error_message); }
+  err = define_binary_operator(ctx, "&", 4, "integer", "integer", "integer");
+  if (err.type != ERROR_NONE) { puts(binop_error_message); }
+  err = define_binary_operator(ctx, "|", 4, "integer", "integer", "integer");
   if (err.type != ERROR_NONE) { puts(binop_error_message); }
 
   err = define_binary_operator(ctx, "+", 5, "integer", "integer", "integer");
@@ -1379,6 +1386,14 @@ Error parse_expr
             return err;
           }
 
+          Node *child = node_allocate();
+          node_add_child(working_result, child);
+          working_result = child;
+          continue;
+        }
+
+        if (strcmp("~", symbol->value.symbol) == 0) {
+          working_result->type = NODE_TYPE_NOT;
           Node *child = node_allocate();
           node_add_child(working_result, child);
           working_result = child;

@@ -48,6 +48,8 @@
     F(SHIFT_LEFT)                                                  \
     F(SHIFT_RIGHT_ARITHMETIC)                                      \
     F(SHIFT_RIGHT_LOGICAL)                                         \
+    F(AND)                                                         \
+    F(OR)                                                          \
                                                                    \
     F(LOCAL_LOAD)                                                  \
     F(LOCAL_STORE)                                                 \
@@ -60,6 +62,7 @@
     /** Store data at an address. **/                              \
     F(STORE)                                                       \
                                                                    \
+    F(NOT)                                                         \
     F(COMPARISON)                                                  \
                                                                    \
     F(PARAMETER)                                                   \
@@ -396,6 +399,10 @@ IRInstruction *ir_copy
 (CodegenContext *context,
  IRInstruction *source);
 
+IRInstruction *ir_not
+(CodegenContext *context,
+ IRInstruction *source);
+
 IRInstruction *ir_comparison
 (CodegenContext *context,
  enum ComparisonType type,
@@ -438,6 +445,16 @@ IRInstruction *ir_shift_right_logical
  IRInstruction *rhs);
 
 IRInstruction *ir_shift_right_arithmetic
+(CodegenContext *context,
+ IRInstruction *lhs,
+ IRInstruction *rhs);
+
+IRInstruction *ir_and
+(CodegenContext *context,
+ IRInstruction *lhs,
+ IRInstruction *rhs);
+
+IRInstruction *ir_or
 (CodegenContext *context,
  IRInstruction *lhs,
  IRInstruction *rhs);

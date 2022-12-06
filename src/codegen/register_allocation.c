@@ -71,7 +71,7 @@ void phi2copy(RegisterAllocationInfo *info) {
       /// Where we insert it depends on some complicated factors
       /// that have to do with control flow.
       VECTOR_FOREACH_PTR (IRPhiArgument*, arg, phi->value.phi_arguments) {
-        STATIC_ASSERT(IR_COUNT == 28, "Handle all branch types");
+        STATIC_ASSERT(IR_COUNT == 31, "Handle all branch types");
         IRInstruction *branch = arg->block->instructions.last;
         switch (branch->type) {
           /// If the predecessor returns or is unreachable, then the PHI
@@ -169,6 +169,7 @@ void fixup_precoloured(RegisterAllocationInfo *info) {
 
 /// Return non-zero iff given instruction needs a register.
 bool needs_register(IRInstruction *instruction) {
+  STATIC_ASSERT(IR_COUNT == 31, "Exhaustively handle all instruction types");
   ASSERT(instruction);
   switch(instruction->type) {
   case IR_ADD:
@@ -179,6 +180,8 @@ bool needs_register(IRInstruction *instruction) {
   case IR_SHIFT_LEFT:
   case IR_SHIFT_RIGHT_LOGICAL:
   case IR_SHIFT_RIGHT_ARITHMETIC:
+  case IR_AND:
+  case IR_OR:
   case IR_LOAD:
   case IR_LOCAL_LOAD:
   case IR_LOCAL_ADDRESS:
@@ -190,11 +193,11 @@ bool needs_register(IRInstruction *instruction) {
   case IR_CALL:
   case IR_REGISTER:
     return true;
-  case IR_PARAMETER:
-    PANIC("Unlowered parameter instruction in register allocator");
   case IR_COMPARISON:
     /// TODO: Should we always return false if dont_emit is true?
     return !instruction->dont_emit;
+  case IR_PARAMETER:
+    PANIC("Unlowered parameter instruction in register allocator");
   default:
     return false;
   }
@@ -322,7 +325,7 @@ bool block_reachable_from_successor(BlockVector *visited, IRBlock *from, IRBlock
 /// Check if a block is reachable from any of the successors of another block.
 /// Do not call this directly. Use block_reachable() instead.
 bool block_reachable_from_successors(BlockVector *visited, IRBlock *from, IRBlock *block) {
-  STATIC_ASSERT(IR_COUNT == 28, "Handle all branch instructions");
+  STATIC_ASSERT(IR_COUNT == 31, "Handle all branch instructions");
   IRInstruction *branch = from->instructions.last;
   switch (branch->type) {
     case IR_UNREACHABLE:
@@ -371,7 +374,7 @@ bool has_use_after_def_in_block(BlockVector *visited, IRBlock *B, IRInstruction 
 /// Check if there is a use of v1 in any of the successors of B.
 /// \see values_interfere()
 bool interferes_after_def(BlockVector *visited, IRBlock *B, IRInstruction *v1) {
-  STATIC_ASSERT(IR_COUNT == 28, "Handle all branch instructions");
+  STATIC_ASSERT(IR_COUNT == 31, "Handle all branch instructions");
   IRInstruction *branch = B->instructions.last;
   switch (branch->type) {
     case IR_UNREACHABLE:

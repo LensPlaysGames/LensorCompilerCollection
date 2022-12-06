@@ -48,7 +48,7 @@ static bool power_of_two(int64_t value) {
 }
 
 static bool has_side_effects(IRInstruction *i) {
-  STATIC_ASSERT(IR_COUNT == 28, "Handle all instructions");
+  STATIC_ASSERT(IR_COUNT == 31, "Handle all instructions");
   switch (i->type) {
     case IR_IMMEDIATE:
     case IR_LOAD:
@@ -66,6 +66,9 @@ static bool has_side_effects(IRInstruction *i) {
     case IR_GLOBAL_ADDRESS:
     case IR_COMPARISON:
     case IR_PARAMETER:
+    case IR_AND:
+    case IR_OR:
+    case IR_NOT:
       return false;
 
     default:
@@ -119,6 +122,18 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
             changed = true;
           }
           break;
+        case IR_AND: IR_REDUCE_BINARY(&) break;
+        case IR_OR: IR_REDUCE_BINARY(|) break;
+        case IR_NOT:
+          if (i->value.reference->type == IR_IMMEDIATE) {
+            IRInstruction *imm = i->value.reference;
+            i->type = IR_IMMEDIATE;
+            i->value.immediate = ~imm->value.immediate;
+            ir_remove_use(imm, i);
+            changed = true;
+          }
+          break;
+
         default: break;
       }
     }
@@ -509,7 +524,7 @@ static BlockVector collect_reachable_blocks(IRBlock *block, IRBlock *ignore) {
     IRBlock *b = VECTOR_POP(dfs_stack);
     if (b == ignore) continue;
 
-    STATIC_ASSERT(IR_COUNT == 28, "Handle all branch types");
+    STATIC_ASSERT(IR_COUNT == 31, "Handle all branch types");
     bool out = false;
     IRInstruction *i = b->instructions.last;
     switch (i->type) {
@@ -711,7 +726,7 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
       DLIST_FOREACH (IRBlock*, b2, f->blocks) {
         if (b == b2) continue;
 
-        STATIC_ASSERT(IR_COUNT == 28, "Handle all branch instructions");
+        STATIC_ASSERT(IR_COUNT == 31, "Handle all branch instructions");
         IRInstruction *branch = b2->instructions.last;
         if (branch->type == IR_BRANCH && branch->value.block == b) {
           branch->value.block = last->value.block;

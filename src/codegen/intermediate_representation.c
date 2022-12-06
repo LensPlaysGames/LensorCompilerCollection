@@ -23,7 +23,7 @@ void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
 }
 
 bool ir_is_branch(IRInstruction* i) {
-  STATIC_ASSERT(IR_COUNT == 28, "Handle all branch types.");
+  STATIC_ASSERT(IR_COUNT == 31, "Handle all branch types.");
   switch (i->type) {
     case IR_BRANCH:
     case IR_BRANCH_CONDITIONAL:
@@ -161,7 +161,7 @@ void ir_femit_instruction
 # undef RESULT_FORMAT
 
 
-  STATIC_ASSERT(IR_COUNT == 28);
+  STATIC_ASSERT(IR_COUNT == 31);
   switch (instruction->type) {
   case IR_IMMEDIATE:
     fprintf(file, "imm %"PRId64, instruction->value.immediate);
@@ -215,6 +215,20 @@ void ir_femit_instruction
     break;
   case IR_SHIFT_LEFT:
     fprintf(file, "shl %%%zu, %%%zu",
+            instruction->value.pair.car->id,
+            instruction->value.pair.cdr->id);
+    break;
+  case IR_AND:
+    fprintf(file, "and %%%zu, %%%zu",
+            instruction->value.pair.car->id,
+            instruction->value.pair.cdr->id);
+    break;
+  case IR_NOT:
+    fprintf(file, "not %%%zu",
+            instruction->value.reference->id);
+    break;
+  case IR_OR:
+    fprintf(file, "or %%%zu, %%%zu",
             instruction->value.pair.car->id,
             instruction->value.pair.cdr->id);
     break;
@@ -736,6 +750,18 @@ IRInstruction *ir_copy
   return copy;
 }
 
+IRInstruction *ir_not
+(CodegenContext *context,
+ IRInstruction *source
+ )
+{
+  INSTRUCTION(x, IR_NOT);
+  x->value.reference = source;
+  mark_used(source, x);
+  INSERT(x);
+  return x;
+}
+
 IRInstruction *ir_comparison
 (CodegenContext *context,
  enum ComparisonType type,
@@ -847,6 +873,26 @@ IRInstruction *ir_shift_right_arithmetic
   return sar;
 }
 
+IRInstruction *ir_and
+(CodegenContext *context,
+ IRInstruction *lhs,
+ IRInstruction *rhs) {
+  INSTRUCTION(i, IR_AND);
+  set_pair_and_mark(i, &i->value.pair, lhs, rhs);
+  INSERT(i);
+  return i;
+}
+
+IRInstruction *ir_or
+(CodegenContext *context,
+ IRInstruction *lhs,
+ IRInstruction *rhs) {
+  INSTRUCTION(i, IR_OR);
+  set_pair_and_mark(i, &i->value.pair, lhs, rhs);
+  INSERT(i);
+  return i;
+}
+
 IRInstruction *ir_stack_allocate
 (CodegenContext *context,
  int64_t size
@@ -898,7 +944,7 @@ static void ir_for_each_child(
   void callback(IRInstruction *user, IRInstruction **child, void *data),
   void *data
 ) {
-  STATIC_ASSERT(IR_COUNT == 28);
+  STATIC_ASSERT(IR_COUNT == 31);
   switch (user->type) {
   case IR_PHI:
     VECTOR_FOREACH_PTR (IRPhiArgument*, arg, user->value.phi_arguments) {
@@ -910,6 +956,7 @@ static void ir_for_each_child(
   case IR_LOCAL_LOAD:
   case IR_COPY:
   case IR_RETURN:
+  case IR_NOT:
     callback(user, &user->value.reference, data);
     break;
   case IR_GLOBAL_STORE:
@@ -925,6 +972,8 @@ static void ir_for_each_child(
   case IR_SHIFT_LEFT:
   case IR_SHIFT_RIGHT_ARITHMETIC:
   case IR_SHIFT_RIGHT_LOGICAL:
+  case IR_AND:
+  case IR_OR:
     callback(user, &user->value.pair.car, data);
     callback(user, &user->value.pair.cdr, data);
     break;
@@ -959,7 +1008,7 @@ static void ir_for_each_child(
 }
 
 bool ir_is_value(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 28);
+  STATIC_ASSERT(IR_COUNT == 31);
   switch (instruction->type) {
     default: UNREACHABLE();
     case IR_IMMEDIATE:
@@ -975,6 +1024,9 @@ bool ir_is_value(IRInstruction *instruction) {
     case IR_SHIFT_LEFT:
     case IR_SHIFT_RIGHT_ARITHMETIC:
     case IR_SHIFT_RIGHT_LOGICAL:
+    case IR_AND:
+    case IR_OR:
+    case IR_NOT:
     case IR_LOCAL_LOAD:
     case IR_LOCAL_ADDRESS:
     case IR_GLOBAL_LOAD:
@@ -1049,7 +1101,7 @@ void ir_unmark_usees(IRInstruction *instruction) {
 }
 
 void ir_mark_unreachable(IRBlock *block) {
-  STATIC_ASSERT(IR_COUNT == 28, "Handle all branch types");
+  STATIC_ASSERT(IR_COUNT == 31, "Handle all branch types");
   IRInstruction *i = block->instructions.last;
   switch (i->type) {
     case IR_BRANCH: {

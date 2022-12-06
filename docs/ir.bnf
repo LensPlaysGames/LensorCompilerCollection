@@ -23,8 +23,8 @@
 <void-instruction>  ::= STORE <temp> "," ( <temp> | <name> )
 
 
-<unary>  ::= COPY
-<binary> ::= ADD | SUB | MUL | DIV | MOD | EQ | NE | LT | LE | GT | GE | SHL | SHR | SAR
+<unary>  ::= COPY | NOT
+<binary> ::= ADD | SUB | MUL | DIV | MOD | EQ | NE | LT | LE | GT | GE | SHL | SHR | SAR | AND | OR
 
 <attribute> ::= CONSTEVAL | FORCEINLINE | GLOBAL | NORETURN | PURE | LEAF
 <branch>    ::= UNREACHABLE "\n"

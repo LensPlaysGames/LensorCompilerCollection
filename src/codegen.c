@@ -225,7 +225,7 @@ Error codegen_expression
 
   ParsingContext *original_context = context;
 
-  ASSERT(NODE_TYPE_MAX == 16, "codegen_expression_x86_64() must exhaustively handle node types!");
+  STATIC_ASSERT(NODE_TYPE_MAX == 17, "codegen_expression_x86_64() must exhaustively handle node types!");
   switch (expression->type) {
   default:
     break;
@@ -294,6 +294,14 @@ Error codegen_expression
     if (err.type) { return err; }
     expression->result = ir_load(cg_context, expression->children->result);
     break;
+  case NODE_TYPE_NOT:
+    err = codegen_expression(cg_context,
+                             context, next_child_context,
+                             expression->children);
+    if (err.type) { return err; }
+    expression->result = ir_not(cg_context, expression->children->result);
+    break;
+
   case NODE_TYPE_ADDRESSOF: {
     SymbolAddress address = symbol_to_address(cg_context, expression->children);
     switch (address.mode) {
@@ -620,6 +628,16 @@ Error codegen_expression
          expression->children->next_child->result);
     } else if (strcmp(expression->value.symbol, ">>") == 0) {
       expression->result = ir_shift_right_arithmetic
+        (cg_context,
+         expression->children->result,
+         expression->children->next_child->result);
+    } else if (strcmp(expression->value.symbol, "&") == 0) {
+      expression->result = ir_and
+        (cg_context,
+         expression->children->result,
+         expression->children->next_child->result);
+    } else if (strcmp(expression->value.symbol, "|") == 0) {
+      expression->result = ir_or
         (cg_context,
          expression->children->result,
          expression->children->next_child->result);

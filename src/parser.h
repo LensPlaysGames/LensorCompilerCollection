@@ -69,6 +69,8 @@ typedef enum NodeType {
   NODE_TYPE_ADDRESSOF,
   NODE_TYPE_DEREFERENCE,
 
+  NODE_TYPE_NOT,
+
   /// Contains one child.
   /// 1. VARIABLE ACCESS of "array" type
   NODE_TYPE_INDEX,
