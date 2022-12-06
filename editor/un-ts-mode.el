@@ -114,11 +114,8 @@
 (defvar un-ts-mode--operators
   '("+" "-" "*" "/" "%"
     "<<" ">>" "&" "|" "~"
-    "="
-    "<"
-    ">"
-    ":"
-    ":="
+    "=" "<" ">"
+    ":" ":="
     "@"
     )
   "un operators for tree-sitter font-locking.")
@@ -158,7 +155,12 @@
       callee: (variable) @font-lock-function-name-face)
      (stmt_function
       name: (identifier) @font-lock-function-name-face)
-     )
+     (stmt_external
+      name: (identifier) @font-lock-function-name-face
+      (type_function))
+     (stmt_decl
+      name: (identifier) @font-lock-function-name-face
+      (type_function)))
    :language 'un
    :feature 'number
    `((number) @font-lock-number-face)
