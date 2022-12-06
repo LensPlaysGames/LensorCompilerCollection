@@ -2,6 +2,7 @@
 #define COMPILER_ERROR_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 // TODO: Add file path, byte offset, etc.
 typedef struct Error {
@@ -21,17 +22,39 @@ void print_error(Error err);
 
 extern Error ok;
 
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef int32_t i32;
+typedef int64_t i64;
+typedef size_t usz;
+
 /// String span.
 typedef struct {
   const char *data;
-  size_t size;
+  usz size;
 } span;
 
 /// Owning string.
 typedef struct {
   char *data;
-  size_t size;
+  usz size;
 } string;
+
+enum diagnostic_level {
+  DIAG_NOTE,
+  DIAG_WARN,
+  DIAG_ERR,
+  DIAG_ICE,
+  DIAG_SORRY,
+
+  DIAG_COUNT,
+};
+
+/// Source location.
+typedef struct {
+  u32 start;
+  u32 end;
+} loc;
 
 #define ERROR_CREATE(n, t, msg)                 \
   Error (n) = { (t), (msg) }
@@ -53,6 +76,18 @@ typedef struct {
 #  define FORCEINLINE __forceinline inline
 #  define PRETTY_FUNCTION __FUNCSIG__
 #endif
+
+FORMAT(printf, 5, 6)
+void issue_diagnostic
+(/// Error level and source location.
+ enum diagnostic_level level,
+ const char *filename,
+ span source,
+ loc location,
+
+ /// The actual error message.
+ const char *fmt,
+ ...);
 
 NORETURN
 FORMAT(printf, 1, 2)

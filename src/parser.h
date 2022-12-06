@@ -168,6 +168,10 @@ typedef struct ParsingStack {
 
 // TODO: Shove ParsingContext within an AST Node.
 typedef struct ParsingContext {
+  /// Name of the file being parsed.
+  const char *filename;
+  /// Start of the source code being parsed.
+  span source;
   /// Used for upward scope searching, mainly.
   struct ParsingContext *parent;
   /// Used for entering scopes as different stages of the compiler

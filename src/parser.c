@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/// Parser error.
+#define ERR(...) issue_diagnostic(DIAG_ERR, context->filename, context->source, token_span(context->source.data, current_token), __VA_ARGS__);
+
 //================================================================ BEG lexer
 
 // TODO: Allow multi-byte comment delimiters.
@@ -99,6 +102,14 @@ void print_token(Token t) {
   } else {
     printf("%.*s", (int)(t.end - t.beginning), t.beginning);
   }
+}
+
+/// Get the location of a token.
+loc token_span(const char* source, Token tok) {
+  loc location;
+  location.start = (u32)(tok.beginning - source);
+  location.end   = (u32)(tok.end - source);
+  return location;
 }
 
 //================================================================ END lexer
@@ -1715,7 +1726,7 @@ Error parse_expr
 
           } else {
             // Symbol is unknown and is not followed by an assignment operator `:`.
-            printf("Symbol: \"%s\"\n", node_text(symbol));
+            ERR("Unknown symbol: \"%s\".", node_text(symbol));
             ERROR_PREP(err, ERROR_SYNTAX, "Unknown symbol");
             return err;
           }
@@ -1763,20 +1774,22 @@ Error parse_expr
 
 Error parse_program(const char *filepath, ParsingContext *context, Node *result) {
   Error err = ok;
-  char *contents = file_contents(filepath).data;
-  if (!contents) {
+  string contents = file_contents(filepath);
+  if (!contents.data) {
     printf("Filepath: \"%s\"\n", filepath);
     ERROR_PREP(err, ERROR_GENERIC, "parse_program(): Couldn't get file contents");
     return err;
   }
   result->type = NODE_TYPE_PROGRAM;
-  char *contents_it = contents;
+  context->filename = filepath;
+  context->source = (span){.data = contents.data, .size = contents.size};
+  char *contents_it = contents.data;
   for (;;) {
     Node *expression = node_allocate();
     node_add_child(result, expression);
     err = parse_expr(context, contents_it, &contents_it, expression);
     if (err.type != ERROR_NONE) {
-      free(contents);
+      free(contents.data);
       return err;
     }
 
@@ -1788,7 +1801,7 @@ Error parse_program(const char *filepath, ParsingContext *context, Node *result)
     //putchar('\n');
 
   }
-  free(contents);
+  free(contents.data);
   return ok;
 }
 
