@@ -225,7 +225,7 @@ Error codegen_expression
 
   ParsingContext *original_context = context;
 
-  ASSERT(NODE_TYPE_MAX == 15, "codegen_expression_x86_64() must exhaustively handle node types!");
+  ASSERT(NODE_TYPE_MAX == 16, "codegen_expression_x86_64() must exhaustively handle node types!");
   switch (expression->type) {
   default:
     break;
@@ -468,6 +468,89 @@ Error codegen_expression
     ir_phi_argument(phi, last_otherwise_block, otherwise_return_value);
 
     expression->result = phi;
+
+  } break;
+  case NODE_TYPE_WHILE: {
+
+    /**
+     *    +---------+
+     *    | current |
+     *    +---------+        ,--------------------------+
+     *         |             |                          |
+     *    +--------------------------+                  |
+     *    | compute condition        |                  |
+     *    | conditional branch       |                  |
+     *    +--------------------------+                  |
+     *         |             |                          |
+     *         |      +-----------------------------+   |
+     *         |      | body                        |   |
+     *         |      +-----------------------------+   |
+     *         |             |                          |
+     *         |            ...                         |
+     *         |             |                          |
+     *     +----------+      `--------------------------+
+     *     | join     |
+     *     +----------+
+     *
+     */
+
+    IRBlock *while_cond_block = ir_block_create();
+    IRBlock *join_block = ir_block_create();
+
+    ir_branch(cg_context, while_cond_block);
+
+    ir_block_attach(cg_context, while_cond_block);
+    err = codegen_expression(cg_context,
+                             context, next_child_context,
+                             expression->children);
+    if (err.type) { return err; }
+
+    // If while body is empty, don't use body block.
+    if (!expression->children->next_child->children) {
+      ir_branch_conditional(cg_context, expression->children->result, while_cond_block, join_block);
+      ir_block_attach(cg_context, join_block);
+      return ok;
+    }
+
+
+    IRBlock *while_body_block = ir_block_create();
+    ir_branch_conditional(cg_context, expression->children->result, while_body_block, join_block);
+
+    ir_block_attach(cg_context, while_body_block);
+
+    Node *last_expr = expression->children->next_child->children;
+
+    // Enter while body context
+    {
+      ParsingContext *ctx = context;
+      ParsingContext *next_child_ctx = *next_child_context;
+      // FIXME: This makes no sense! We dereference and *then* check if it's NULL?
+      if (next_child_context) {
+        ctx = *next_child_context;
+        next_child_ctx = ctx->children;
+        *next_child_context = (*next_child_context)->next_child;
+
+        // printf("Entered if context:\n");
+        // parse_context_print(ctx, 0);
+      }
+
+      // Generate WHILE expression body.
+      Node *expr = expression->children->next_child->children;
+      while (expr) {
+        err = codegen_expression(cg_context,
+                                 ctx, &next_child_ctx,
+                                 expr);
+        if (err.type) { return err; }
+        last_expr = expr;
+        expr = expr->next_child;
+      }
+    }
+
+    if (!ir_is_closed(cg_context->block)) {
+      ir_branch(cg_context, while_cond_block);
+    }
+
+    ir_block_attach(cg_context, join_block);
 
   } break;
   case NODE_TYPE_BINARY_OPERATOR:
@@ -872,6 +955,11 @@ Error codegen
   if (optimise) codegen_optimise(context);
 
   codegen_lower(context);
+
+  if (debug_ir) {
+    printf("Backend Lowered\n");
+    ir_femit(stdout, context);
+  }
 
   codegen_emit(context);
 

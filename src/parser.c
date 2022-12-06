@@ -157,7 +157,7 @@ void node_add_child(Node *parent, Node *new_child) {
 }
 
 int node_compare(Node *a, Node *b) {
-  ASSERT(NODE_TYPE_MAX == 15, "node_compare() must handle all node types");
+  STATIC_ASSERT(NODE_TYPE_MAX == 16, "node_compare() must handle all node types");
 
   // Actually really nice debug output when you need it.
   //printf("Comparing nodes:\n");
@@ -199,7 +199,8 @@ int node_compare(Node *a, Node *b) {
   // Compare value of node.
   switch (a->type) {
   default:
-    return 1;
+    PANIC("Unhandled AST node comparison of type %d\n", a->type);
+    return 0;
   case NODE_TYPE_INDEX:
   case NODE_TYPE_INTEGER:
     if (a->value.integer == b->value.integer) {
@@ -280,7 +281,7 @@ Error define_type(Environment *types, int type, Node *type_symbol, long long byt
 #define NODE_TEXT_BUFFER_SIZE 512
 char node_text_buffer[512];
 char *node_text(Node *node) {
-  ASSERT(NODE_TYPE_MAX == 15, "print_node() must handle all node types");
+  STATIC_ASSERT(NODE_TYPE_MAX == 16, "print_node() must handle all node types");
   if (!node) {
     return "NULL";
   }
@@ -314,6 +315,9 @@ char *node_text(Node *node) {
     break;
   case NODE_TYPE_IF:
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "IF");
+    break;
+  case NODE_TYPE_WHILE:
+    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "WHILE");
     break;
   case NODE_TYPE_ADDRESSOF:
     snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "ADDRESSOF");
@@ -910,6 +914,58 @@ Error handle_stack_operator
     return err;
   }
 
+  if (strcmp(operator->value.symbol, "while-body") == 0) {
+    // Evaluate next expression unless it's a closing brace.
+    EXPECT(expected, "}", state);
+    if (expected.done || expected.found) {
+      *context = (*context)->parent;
+      *stack = (*stack)->parent;
+      *status = STACK_HANDLED_CHECK;
+      return ok;
+    }
+    Node *next_expr = node_allocate();
+    (*stack)->result->next_child = next_expr;
+    (*stack)->result = next_expr;
+    *working_result = next_expr;
+    *status = STACK_HANDLED_PARSE;
+    return ok;
+  }
+
+  if (strcmp(operator->value.symbol, "while-condition") == 0) {
+    // TODO: Maybe eventually allow multiple expressions in an if
+    // condition, or something like that.
+    EXPECT(expected, "{", state);
+    if (expected.found) {
+      Node *while_body = node_allocate();
+      (*stack)->result->next_child = while_body;
+      Node *while_body_first_expr = node_allocate();
+      node_add_child(while_body, while_body_first_expr);
+
+      // Empty while-body handling.
+      // TODO: Maybe warn?
+      EXPECT(expected, "}", state);
+      if (expected.found) {
+        *context = (*context)->parent;
+        *stack = (*stack)->parent;
+        *status = STACK_HANDLED_CHECK;
+        return ok;
+      }
+
+      // TODO: Don't leak stack->operator.
+      (*stack)->operator = node_symbol("while-body");
+      (*stack)->body = while_body;
+      (*stack)->result = while_body_first_expr;
+
+      *working_result = while_body_first_expr;
+      *status = STACK_HANDLED_PARSE;
+      return ok;
+    }
+    // TODO/FIXME: Ask the user how to proceed when if has no body.
+    ERROR_PREP(err, ERROR_SYNTAX,
+               "Expected `{` after `if` condition. `if` expression requires a \"then\" body.");
+    return err;
+  }
+
   if (strcmp(operator->value.symbol, "if-then-body") == 0) {
     // Evaluate next expression unless it's a closing brace.
     EXPECT(expected, "}", state);
@@ -1355,6 +1411,22 @@ Error parse_expr
 
           stack = parse_stack_create(stack);
           stack->operator = node_symbol("if-condition");
+          stack->result = condition_expression;
+
+          working_result = condition_expression;
+          continue;
+        }
+
+        if (strcmp("while", symbol->value.symbol) == 0) {
+          Node *while_node = working_result;
+          while_node->type = NODE_TYPE_WHILE;
+          Node *condition_expression = node_allocate();
+          node_add_child(while_node, condition_expression);
+
+          context = parse_context_create(context, DOESNT_CREATE_STACKFRAME);
+
+          stack = parse_stack_create(stack);
+          stack->operator = node_symbol("while-condition");
           stack->result = condition_expression;
 
           working_result = condition_expression;

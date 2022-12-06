@@ -63,6 +63,9 @@ typedef enum NodeType {
   /// 3. "ELSE" Expression List
   NODE_TYPE_IF,
 
+  /// Contains an expression list with the condition at the beginning.
+  NODE_TYPE_WHILE,
+
   NODE_TYPE_ADDRESSOF,
   NODE_TYPE_DEREFERENCE,
 

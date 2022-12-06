@@ -104,7 +104,10 @@ void ir_remove(IRInstruction* instruction) {
   DLIST_REMOVE(instruction->block->instructions, instruction);
   VECTOR_DELETE(instruction->users);
   ir_unmark_usees(instruction);
-  free(instruction);
+  // Parameters should not be optimised out.
+  if (instruction->type != IR_PARAMETER) {
+    free(instruction);
+  }
 }
 
 void ir_remove_and_free_block(IRBlock *block) {
@@ -376,7 +379,7 @@ void ir_femit
 void ir_set_func_ids(IRFunction *f) {
   /// We start counting at 1 so that 0 can indicate an invalid/removed element.
   size_t block_id = 1;
-  size_t instruction_id = f->parameters.size;
+  size_t instruction_id = f->parameters.size + 1;
 
   DLIST_FOREACH (IRBlock *, block, f->blocks) {
     block->id = block_id++;
@@ -514,9 +517,9 @@ IRFunction *ir_function(CodegenContext *context, const char *name, size_t params
   VECTOR_PUSH(*context->functions, function);
 
   /// Generate param refs.
-  for (size_t i = 0; i < params; i++) {
+  for (size_t i = 1; i <= params; i++) {
     INSTRUCTION(param, IR_PARAMETER)
-    param->value.immediate = (int64_t) i;
+    param->value.immediate = (int64_t) i - 1;
     param->id = i;
     VECTOR_PUSH(function->parameters, param);
     INSERT(param);
@@ -1000,10 +1003,10 @@ void ir_print_defun(FILE *file, IRFunction *f) {
 
   /// Parameters.
   bool first_param = true;
-  for (size_t i = 0; i < f->parameters.size; i++) {
+  for (size_t i = 1; i <= f->parameters.size; ++i) {
     if (first_param) first_param = false;
     else fprintf(file, ", ");
-    fprintf(file, "%%%zu", f->parameters.data[i]->id);
+    fprintf(file, "%%%zu", f->parameters.data[i - 1]->id);
   }
 
   /// End of param list.

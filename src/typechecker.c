@@ -197,8 +197,8 @@ Error typecheck_expression
     }
     result_type->pointer_indirection -= 1;
     break;
-  case NODE_TYPE_IF:
-    if (0) { ; }
+  case NODE_TYPE_IF: {
+    // TODO: Typecheck the condition maybe?
 
     // Enter `if` THEN context.
     to_enter = (*context_to_enter)->children;
@@ -256,7 +256,32 @@ Error typecheck_expression
       }
       free(otherwise_type);
     }
-    break;
+  } break;
+  case NODE_TYPE_WHILE: {
+    // TODO: Typecheck condition, maybe?
+
+    // Enter `while` context.
+    to_enter = (*context_to_enter)->children;
+    Node *last_while_expression = NULL;
+    Node *body_expression = expression->children->next_child->children;
+    while (body_expression) {
+      err = typecheck_expression(*context_to_enter, &to_enter, body_expression, result_type);
+      if (err.type) { return err; }
+      last_while_expression = body_expression;
+      body_expression = body_expression->next_child;
+    }
+    if (!last_while_expression) {
+      TODO("Compiler doesn't yet handle empty if expression bodies. Put a zero or something.");
+    }
+    // Ensure last expression of IF THEN body returns a value.
+    if (!node_returns_value(last_while_expression)) {
+      printf("\n%s does not return a value!\n", node_text(last_while_expression));
+      ERROR_PREP(err, ERROR_TYPE, "Last expression of IF THEN body must return a value.");
+      return err;
+    }
+    // Eat `while` context.
+    *context_to_enter = (*context_to_enter)->next_child;
+  } break;
   case NODE_TYPE_FUNCTION:
     // Only handle function body when it exists.
     if (expression->children->next_child->next_child->children) {
