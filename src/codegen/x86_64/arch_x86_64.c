@@ -1661,9 +1661,14 @@ void codegen_emit_x86_64(CodegenContext *context) {
         bool found = false;
         FOREACH_INSTRUCTION (context) {
           if ((instruction->type == IR_GLOBAL_ADDRESS ||
-               instruction->type == IR_GLOBAL_LOAD ||
-               instruction->type == IR_GLOBAL_STORE)  &&
-              strcmp(instruction->value.name, var_id->value.symbol) == 0) {
+               instruction->type == IR_GLOBAL_LOAD) &&
+              strcmp(instruction->value.name, var_id->value.symbol) == 0
+              ) {
+            found = true;
+            goto break_loop;
+          } else if ((instruction->type == IR_GLOBAL_STORE) &&
+                     strcmp(instruction->value.global_assignment.name, var_id->value.symbol) == 0
+                     ) {
             found = true;
             goto break_loop;
           }
