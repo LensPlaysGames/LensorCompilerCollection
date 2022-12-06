@@ -269,7 +269,7 @@ void ir_femit_instruction
     fprintf(file, ".addr %%%zu", instruction->value.reference->id);
     break;
   case IR_PARAMETER:
-    fprintf(file, ".param %%%zu", instruction->value.reference->id);
+    fprintf(file, ".param %%%zu", instruction->id);
     break;
   case IR_COMPARISON:
     switch (instruction->value.comparison.type) {
