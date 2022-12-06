@@ -1,4 +1,5 @@
 #include <codegen.h>
+#include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/register_allocation.h>
 #include <error.h>
@@ -521,7 +522,19 @@ void build_adjacency_graph(RegisterAllocationInfo *info, IRInstructions *instruc
       regmask |= info->instruction_register_interference(B);
       if (B->result) regmask |= 1 << (B->result - 1);
     }
-    G->regmasks[A->index] = regmask;
+    G->regmasks[A->index] |= regmask;
+    // Mask RCX in both sides of bitwise shift binary operator.
+    // FIXME: This is a horrid fix, we should probably deal with this
+    // in some generic way.
+    if (info->context->format == CG_FMT_x86_64_GAS &&
+        (A->type == IR_SHIFT_LEFT
+         || A->type == IR_SHIFT_RIGHT_LOGICAL
+         || A->type == IR_SHIFT_RIGHT_ARITHMETIC)
+        ) {
+      size_t regmask_rcx = 1 << (2 - 1);
+      G->regmasks[A->value.pair.car->index] |= regmask_rcx;
+      G->regmasks[A->value.pair.cdr->index] |= regmask_rcx;
+    }
   }
 }
 
