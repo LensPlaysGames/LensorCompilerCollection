@@ -13,6 +13,7 @@
 #    define isatty _isatty
 #else
 #    include <unistd.h>
+#    include <execinfo.h>
 #endif
 
 Error ok = { ERROR_NONE, NULL };
@@ -152,26 +153,80 @@ void issue_diagnostic(
   if (is_terminal) fprintf(stderr, "\033[m\n");
 }
 
+static void print_backtrace() {
+#ifndef _WIN32
+  bool term = isatty(fileno(stderr));
+
+  void *array[15];
+  int size = backtrace(array, 10);
+  char **strings = backtrace_symbols(array + 2, size - 2);
+
+  /// backtrace_symbols() may fail if we’re out of memory
+  if (!strings) {
+    write(STDERR_FILENO, "Out of memory: Cannot format stack trace\n", 41);
+    backtrace_symbols_fd(array + 2, size - 2, STDERR_FILENO);
+    return;
+  }
+
+  /// Format the stack traces. No need to demangle anything since this is C
+  for (char** func = strings; func < strings + size - 2; func++) {
+    char *name_begin = strchr(*func, '(');
+    char *name_end = strchr(*func, '+');
+    char *address_end = strchr(*func, ')');
+    if (name_begin && name_end && address_end) {
+      *name_end = 0;
+      *address_end = 0;
+      fprintf(stderr, "  in function %s%s()%s at offset %s%s%s\n",
+        term ? "\033[m\033[1;38m" : "", name_begin + 1, term ? "\033[m" : "",
+        term ? "\033[m\033[1;38m" : "", name_end + 1, term ? "\033[m" : "");
+
+      /// Don’t go any higher than main().
+      if (strcmp(name_begin + 1, "main") == 0) break;
+    }
+  }
+
+#else
+#warning "Backtraces not supported on Windows"
+#endif
+}
+
 NORETURN
-static void vpanic(int code, const char *fmt, va_list args) {
-  fprintf(stderr, "Panic: ");
+FORMAT(printf, 4, 5)
+void ice_impl (
+    const char *file,
+    const char *func,
+    int line,
+    const char *fmt,
+    ...
+) {
+  /// Check if stderr is a terminal.
+  bool is_terminal = isatty(fileno(stderr));
+  if (is_terminal) fprintf(stderr, "\033[m\033[1;38m");
+  fprintf(stderr, "%s: ", file);
+  if (is_terminal) fprintf(stderr, "\033[m");
+  fprintf(stderr, "In function '");
+  if (is_terminal) fprintf(stderr, "\033[1;38m");
+  fprintf(stderr, "%s", func);
+  if (is_terminal) fprintf(stderr, "\033[m");
+  fprintf(stderr, "':\n");
+
+  if (is_terminal) fprintf(stderr, "\033[1;38m");
+  fprintf(stderr, "%s:%d: ", file, line);
+  if (is_terminal) fprintf(stderr, "%s", diagnostic_level_colours[DIAG_ICE]);
+  fprintf(stderr, "%s: ", diagnostic_level_names[DIAG_ICE]);
+  if (is_terminal) fprintf(stderr, "\033[m");
+
+  va_list args;
+  va_start(args, fmt);
   vfprintf(stderr, fmt, args);
-  fputc('\n', stderr);
-  _Exit(code);
-}
+  va_end(args);
 
-void panic(const char *fmt, ...) {
-  va_list va;
-  va_start(va, fmt);
-  vpanic(1, fmt, va);
-  UNREACHABLE();
-}
+  if (is_terminal) fprintf(stderr, "\033[m");
+  fprintf(stderr, "\n");
 
-void panic_with_code(int code, const char *fmt, ...) {
-  va_list va;
-  va_start(va, fmt);
-  vpanic(code, fmt, va);
-  UNREACHABLE();
+  print_backtrace();
+
+  _Exit(1);
 }
 
 void assert_impl (
@@ -195,7 +250,7 @@ void assert_impl (
   fprintf(stderr, "    In file %s:%d\n", file, line);
   fprintf(stderr, "    In function %s", func);
 
-  if (strcmp(fmt, "!") != 0) {
+  if (strcmp(fmt, "") != 0) {
     fprintf(stderr, "\n    Message: ");
 
     // Skip '!' placeholder for non-empty format string.
@@ -208,5 +263,8 @@ void assert_impl (
   }
 
   fputc('\n', stderr);
+
+  print_backtrace();
+
   _Exit(1);
 }

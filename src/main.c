@@ -91,13 +91,13 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--output") == 0) {
       i++;
       if (i >= argc) {
-        panic("ERROR: Expected filepath after output command line argument");
+        PANIC("ERROR: Expected filepath after output command line argument");
       }
       /// Anything that starts w/ `-` is treated as a command line argument.
       /// If the user has a filepath that starts w/ `-...`, then they should use
       /// `./-...` instead.
       if (*argv[i] == '-') {
-        panic("ERROR: Expected filepath after output command line argument\n"
+        PANIC("ERROR: Expected filepath after output command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);
       }
@@ -106,10 +106,10 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--format") == 0) {
       i++;
       if (i >= argc) {
-        panic("ERROR: Expected format after format command line argument");
+        PANIC("ERROR: Expected format after format command line argument");
       }
       if (*argv[i] == '-') {
-        panic("ERROR: Expected format after format command line argument\n"
+        PANIC("ERROR: Expected format after format command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);
       }
@@ -129,10 +129,10 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--calling") == 0) {
       i++;
       if (i >= argc) {
-        panic("ERROR: Expected calling convention after format command line argument");
+        PANIC("ERROR: Expected calling convention after format command line argument");
       }
       if (*argv[i] == '-') {
-        panic("ERROR: Expected calling convention after format command line argument\n"
+        PANIC("ERROR: Expected calling convention after format command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);
       }
@@ -152,10 +152,10 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--dialect") == 0) {
       i++;
       if (i >= argc) {
-        panic("ERROR: Expected assembly dialect after format command line argument");
+        PANIC("ERROR: Expected assembly dialect after format command line argument");
       }
       if (*argv[i] == '-') {
-        panic("ERROR: Expected assembly dialect after format command line argument\n"
+        PANIC("ERROR: Expected assembly dialect after format command line argument\n"
               "Instead, got what looks like another command line argument.\n"
               " -> \"%s\"", argv[i]);
       }

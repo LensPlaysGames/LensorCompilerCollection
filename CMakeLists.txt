@@ -44,10 +44,12 @@ if (NOT MSVC)
     -Werror=return-type -Werror=implicit-function-declaration
     -Werror=implicit-int -Werror=pointer-arith
     -Wno-unused-parameter -Wno-unused-function
+    -Wno-format-zero-length
   )
 
   if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(func PRIVATE -O0 -g)
+    target_compile_options(func PRIVATE -O0 -g -rdynamic)
+    target_link_options(func PRIVATE -O0 -g -rdynamic)
   else()
     target_compile_options(func PRIVATE -O3)
   endif()

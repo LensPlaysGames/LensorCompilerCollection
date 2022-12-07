@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 // TODO: Add file path, byte offset, etc.
 typedef struct Error {
@@ -89,14 +90,6 @@ void issue_diagnostic
  const char *fmt,
  ...);
 
-NORETURN
-FORMAT(printf, 1, 2)
-void panic(const char *fmt, ...);
-
-NORETURN
-FORMAT(printf, 2, 3)
-void panic_with_code(int code, const char *fmt, ...);
-
 /// Used by ASSERT(). You probably don't want to use this directly.
 NORETURN
 FORMAT(printf, 5, 6)
@@ -109,31 +102,36 @@ void assert_impl (
     ...
 );
 
+/// Used by ICE(). You probably don't want to use this directly.
+NORETURN
+FORMAT(printf, 4, 5)
+void ice_impl (
+    const char *file,
+    const char *func,
+    int line,
+    const char *fmt,
+    ...
+);
+
+#define ICE(...) ice_impl(__FILE__, PRETTY_FUNCTION, __LINE__, __VA_ARGS__)
+
 /// Usage:
 ///   ASSERT(condition);
-///   ASSERT(condition, "message", ...);
-#define ASSERT(cond, ...)  \
-  do {                     \
-    if (!(cond)) {         \
-      assert_impl          \
-        (__FILE__,         \
-         PRETTY_FUNCTION,  \
-         __LINE__ ,        \
-         #cond,            \
-         "!" __VA_ARGS__   \
-         );                \
-    }                      \
-  } while (0)
+///   ASSERT(condition, "format string", ...);
+///
+/// We use `||` instead of `if` here so that this is an expression.
+#define ASSERT(cond, ...) \
+  ((cond) ? (void)(0) : (assert_impl(__FILE__, PRETTY_FUNCTION, __LINE__, #cond, "" __VA_ARGS__)));
 
 #if __STDC_VERSION__ >= 201112L
-#  define STATIC_ASSERT(cond, ...) _Static_assert(cond, "" __VA_ARGS__)
+#  define STATIC_ASSERT(...) _Static_assert(__VA_ARGS__)
 #else
-#  define STATIC_ASSERT(cond, ...) ASSERT(cond, "" __VA_ARGS__)
+#  define STATIC_ASSERT(...) ASSERT(__VA_ARGS__)
 #endif
 
-#define TODO(...)     ASSERT(0, "TODO: "__VA_ARGS__)
-#define PANIC(...)    ASSERT(0, "PANIC: "__VA_ARGS__)
-#define UNREACHABLE() ASSERT(0, "Unreachable")
+#define TODO(...)     ASSERT(false, "TODO: "__VA_ARGS__)
+#define PANIC(...)    ASSERT(false, "PANIC: "__VA_ARGS__)
+#define UNREACHABLE() ASSERT(false, "Unreachable")
 
 #define CAT_(a, b) a ## b
 #define CAT(a, b) CAT_(a, b)

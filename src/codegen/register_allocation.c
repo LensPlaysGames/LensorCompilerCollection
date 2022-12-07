@@ -974,6 +974,8 @@ void ra(RegisterAllocationInfo *info) {
   debug_context = info->context;
 #endif
 
+  ICE("TEST");
+
   ir_set_ids(info->context);
   IR_FEMIT(stdout, info->context);
 
