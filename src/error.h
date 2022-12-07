@@ -113,7 +113,7 @@ void ice_impl (
     ...
 );
 
-#define ICE(...) ice_impl(__FILE__, PRETTY_FUNCTION, __LINE__, __VA_ARGS__)
+#define ICE(...) ice_impl(__FILE__, __func__, __LINE__, __VA_ARGS__)
 
 /// Usage:
 ///   ASSERT(condition);

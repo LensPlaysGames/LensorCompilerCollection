@@ -8,12 +8,14 @@
 #include <math.h>
 
 /// For isatty().
-#ifdef _WIN32
-#    include <io.h>
-#    define isatty _isatty
-#else
+#ifndef _WIN32
 #    include <unistd.h>
 #    include <execinfo.h>
+#else
+#    include <Windows.h>
+#    include <dbghelp.h>
+#    include <io.h>
+#    define isatty _isatty
 #endif
 
 Error ok = { ERROR_NONE, NULL };
@@ -154,9 +156,9 @@ void issue_diagnostic(
 }
 
 static void print_backtrace() {
-#ifndef _WIN32
   bool term = isatty(fileno(stderr));
-
+  
+#ifndef _WIN32
   void *array[15];
   int size = backtrace(array, 10);
   char **strings = backtrace_symbols(array + 2, size - 2);
@@ -186,7 +188,58 @@ static void print_backtrace() {
   }
 
 #else
-#warning "Backtraces not supported on Windows"
+    typedef BOOL IMAGEAPI SymInitializeFunc(
+        _In_ HANDLE hProcess,
+        _In_ PCSTR  UserSearchPath,
+        _In_ BOOL   fInvadeProcess
+    );
+
+    typedef BOOL IMAGEAPI SymFromAddrFunc(
+        _In_    HANDLE       hProcess,
+        _In_    DWORD64      Address,
+        _Out_   PDWORD64     Displacement,
+        _Inout_ PSYMBOL_INFO Symbol
+    );
+
+    /// Get the stacktrace.
+    void* stack[100];
+    WORD frames = CaptureStackBackTrace(0, 100, stack, NULL);
+
+    /// Load DbgHelp.dll.
+    HMODULE dbghelp = LoadLibrary(TEXT("DbgHelp.dll"));
+    if (!dbghelp) {
+        /// Loading failed. Print just the addresses.
+    print_raw:
+        fprintf(stderr, "  Cannot obtain symbols from backtrace: Could not load DbgHelp.dll\n");
+        for (WORD i = 0; i < frames; i++)
+            fprintf(stderr, "  at address %p", stack[i]);
+        return;
+    }
+
+    SymInitializeFunc *SymInitialize = (SymInitializeFunc*)GetProcAddress(dbghelp, "SymInitialize");
+    if (!SymInitialize) goto print_raw;
+
+    SymFromAddrFunc *SymFromAddr = (SymFromAddrFunc*)GetProcAddress(dbghelp, "SymFromAddr");
+    if (!SymFromAddr) goto print_raw;
+
+    HANDLE process = GetCurrentProcess();
+    SymInitialize(process, NULL, TRUE);
+
+
+    char* symbol_info_data[sizeof(SYMBOL_INFO) + 256 * sizeof(char)];
+    SYMBOL_INFO* symbol = (SYMBOL_INFO*)symbol_info_data;
+    symbol->MaxNameLen = 255;
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+
+    for (int i = 0; i < frames; i++) {
+        SymFromAddr(process, (DWORD64)(stack[i]), 0, symbol);
+        fprintf(stderr, "  in function %s%s()%s at offset %s%llx%s\n",
+            term ? "\033[m\033[1;38m" : "", symbol->Name, term ? "\033[m" : "",
+            term ? "\033[m\033[1;38m" : "", symbol->Address, term ? "\033[m" : "");
+        if (strcmp(symbol->Name, "main") == 0) break;
+    }
+
+    FreeLibrary(dbghelp);
 #endif
 }
 
