@@ -15,7 +15,7 @@ typedef struct Token {
 } Token;
 
 void print_token(Token t);
-Error lex(char *source, Token *token);
+void lex(char *source, Token *token);
 
 typedef enum NodeType {
   // BEGIN NULL DENOTATION TYPES
@@ -96,6 +96,7 @@ typedef struct Node {
   struct Node *parent;
   struct Node *children;
   struct Node *next_child;
+  loc source_location;
 
   // Tagged union.
   int type;
@@ -146,7 +147,7 @@ void node_copy(Node *a, Node *b);
 bool token_string_equalp(char* string, Token *token);
 
 /// @return Boolean-like value; 1 upon success, 0 for failure.
-bool parse_integer(Token *token, Node *node);
+NODISCARD bool parse_integer(Token *token, Node *node);
 
 typedef struct ParsingState {
   Token *current;
@@ -204,23 +205,23 @@ void parse_context_print(ParsingContext *top, size_t indent);
 /// PARENT is modified, CHILD is used verbatim.
 void parse_context_add_child(ParsingContext *parent, ParsingContext *child);
 
-Error define_binary_operator
+NODISCARD bool define_binary_operator
 (ParsingContext *context,
  char *operator,
  int precedence,
  char *return_type, char *lhs_type, char *rhs_type);
 
-Error parse_type(ParsingContext *context, ParsingState *state, Node *type, Node *parameter_names);
+NODISCARD bool parse_type(ParsingContext *context, ParsingState *state, Node *type, Node *parameter_names);
 
 /** Get the value of a type symbol/ID in types environment.
  *  Return an error if type is not a valid symbol/ID found in context.
  */
-Error parse_get_type(ParsingContext *context, Node *id, Node *result);
+NODISCARD bool parse_get_type(ParsingContext *context, Node *id, Node *result);
 
 /** Get the value of a variable symbol/ID in variables environment.
  *  Return an error if variable is not a valid symbol/ID found in context.
  */
-Error parse_get_variable(ParsingContext *context, Node *id, Node *result);
+NODISCARD bool parse_get_variable(ParsingContext *context, Node *id, Node *result);
 
 typedef enum CreatesStackframe {
   DOESNT_CREATE_STACKFRAME = false,
@@ -230,9 +231,9 @@ typedef enum CreatesStackframe {
 ParsingContext *parse_context_create(ParsingContext *parent, CreatesStackframe creates_stackframe);
 ParsingContext *parse_context_default_create();
 
-Error parse_program(const char *filepath, ParsingContext *context, Node *result);
+NODISCARD bool parse_program(const char *filepath, ParsingContext *context, Node *result);
 
-Error parse_expr(ParsingContext *context,
+NODISCARD bool parse_expr(ParsingContext *context,
                  char *source, char **end,
                  Node *result);
 

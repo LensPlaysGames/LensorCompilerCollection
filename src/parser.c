@@ -9,7 +9,17 @@
 #include <string.h>
 
 /// Parser error.
-#define ERR(...) issue_diagnostic(DIAG_ERR, context->filename, context->source, token_span(context->source.data, current_token), __VA_ARGS__);
+/// FIXME: Too many of these. Clean this up a bit.
+#define ERR_AT_CONTEXT(loc, context, ...)                                                              \
+  do {                                                                                \
+    issue_diagnostic(DIAG_ERR, (context)->filename, (context)->source, (loc), __VA_ARGS__); \
+    return false;                                                                     \
+  } while (0)
+#define ERR_AT_STATE_CTX(state, context, ...) ERR_AT(token_span((context)->source.data, (state)->current), __VA_ARGS__)
+#define ERR_AT_STATE(state, ...) ERR_AT(token_span((context)->source.data, (state)->current), __VA_ARGS__)
+#define ERR_CTX(context, ...) ERR_AT_CONTEXT(token_span((context)->source.data, *(state)->current), (context), __VA_ARGS__)
+#define ERR_AT(loc, ...) ERR_AT_CONTEXT(loc, context, __VA_ARGS__)
+#define ERR(...) ERR_CTX(context, __VA_ARGS__)
 
 //================================================================ BEG lexer
 
@@ -37,18 +47,12 @@ bool comment_at_beginning(Token token) {
 
 /// Lex the next token from SOURCE, and point to it with BEG and END.
 /// If BEG and END of token are equal, there is nothing more to lex.
-Error lex(char *source, Token *token) {
-  Error err = ok;
-  if (!source || !token) {
-    ERROR_PREP(err, ERROR_ARGUMENTS, "Can not lex empty source.");
-    return err;
-  }
+void lex(char *source, Token *token) {
+  if (!source || !token) ICE("Cannot lex from NULL source or token.");
   token->beginning = source;
   token->beginning += strspn(token->beginning, whitespace);
   token->end = token->beginning;
-  if (*(token->end) == '\0') {
-    return err;
-  }
+  if (*(token->end) == '\0') return;
   // Check if current line is a comment, and skip past it.
   while (comment_at_beginning(*token)) {
     // Skip to next newline.
@@ -56,32 +60,29 @@ Error lex(char *source, Token *token) {
     if (!token->beginning) {
       // If last line of file is comment, we're done lexing.
       token->end = token->beginning;
-      return err;
+      return;
     }
     // Skip to beginning of next token after comment.
     token->beginning += strspn(token->beginning, whitespace);
     token->end = token->beginning;
   }
-  if (*(token->end) == '\0') { return err; }
+  if (*(token->end) == '\0') { return; }
   token->end += strcspn(token->beginning, delimiters);
   if (token->end == token->beginning) {
     token->end += 1;
   }
-  return err;
 }
 
 /** Keep beginning of token the same, but extend the end by another token.
  *
  * Begin lexing at the end of the given token.
  */
-Error lex_extend(Token *token) {
-  Error err = ok;
+/// Currently unused
+/*void lex_extend(Token *token) {
   Token new_token;
-  err = lex(token->end, &new_token);
+  lex(token->end, &new_token);
   token->end = new_token.end;
-  if (err.type) { return err; }
-  return err;
-}
+}*/
 
 bool token_string_equalp(char* str, Token *token) {
   if (!str || !token) { return 0; }
@@ -209,9 +210,7 @@ int node_compare(Node *a, Node *b) {
 
   // Compare value of node.
   switch (a->type) {
-  default:
-    PANIC("Unhandled AST node comparison of type %d\n", a->type);
-    return 0;
+  default: ICE("Unhandled AST node comparison of type %d\n", a->type);
   case NODE_TYPE_INDEX:
   case NODE_TYPE_INTEGER:
     if (a->value.integer == b->value.integer) {
@@ -267,7 +266,7 @@ Node *node_symbol_from_buffer(char *buffer, size_t length) {
 }
 
 // Take ownership of type_symbol.
-Error define_type(Environment *types, int type, Node *type_symbol, long long byte_size) {
+static NODISCARD bool define_type(Environment *types, int type, Node *type_symbol, long long byte_size) {
   ASSERT(types, "Can not add type to NULL types environment");
   ASSERT(type_symbol, "Can not add NULL type symbol to types environment");
   ASSERT(byte_size >= 0, "Can not define new type with zero or negative byte size");
@@ -280,13 +279,7 @@ Error define_type(Environment *types, int type, Node *type_symbol, long long byt
   type_node->type = type;
   type_node->children = size_node;
 
-  if(environment_set(types, type_symbol, type_node) == 1) {
-    return ok;
-  }
-  // TYPE REDEFINITION ERROR
-  printf("Type that was redefined: \"%s\"\n", type_symbol->value.symbol);
-  ERROR_CREATE(err, ERROR_TYPE, "Redefinition of type!");
-  return err;
+  return environment_set(types, type_symbol, type_node) == 1;
 }
 
 #define NODE_TEXT_BUFFER_SIZE 512
@@ -540,89 +533,57 @@ ParsingContext *parse_context_create(ParsingContext *parent, CreatesStackframe c
 
 ParsingContext *parse_context_default_create() {
   ParsingContext *ctx = parse_context_create(NULL, CREATES_STACKFRAME);
-  Error err = ok;
-  err = define_type(ctx->types,
-                    NODE_TYPE_INTEGER,
-                    node_symbol("integer"),
-                    sizeof(long long));
-  if (err.type != ERROR_NONE) {
-    printf("ERROR: Failed to set builtin integer type in types environment.\n");
-  }
+  bool ok = define_type(ctx->types, NODE_TYPE_INTEGER, node_symbol("integer"), sizeof(long long));
+  if (!ok) ICE("Could not define primitive type 'integer'.");
   // TODO: Should we use type IDs vs type symbols?
-  // FIXME: Use precedence enum!
-  const char *binop_error_message = "ERROR: Failed to set builtin binary operator in environment.";
 
-  err = define_binary_operator(ctx, "=", 3, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
-  err = define_binary_operator(ctx, "<", 3, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
-  err = define_binary_operator(ctx, ">", 3, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
-
-  // TODO/FIXME: These are very much so temporary bitshifting operators!!!
-  err = define_binary_operator(ctx, "<<", 4, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
-  err = define_binary_operator(ctx, ">>", 4, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
-  err = define_binary_operator(ctx, "&", 4, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
-  err = define_binary_operator(ctx, "|", 4, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
-
-  err = define_binary_operator(ctx, "+", 5, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
-  err = define_binary_operator(ctx, "-", 5, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
-
-  err = define_binary_operator(ctx, "*", 10, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
-  err = define_binary_operator(ctx, "/", 10, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
-  err = define_binary_operator(ctx, "%", 10, "integer", "integer", "integer");
-  if (err.type != ERROR_NONE) { puts(binop_error_message); }
+  if (!define_binary_operator(ctx, "=", 3, "integer", "integer", "integer")  ||
+      !define_binary_operator(ctx, "<", 3, "integer", "integer", "integer")  ||
+      !define_binary_operator(ctx, ">", 3, "integer", "integer", "integer")  ||
+      !define_binary_operator(ctx, "<<", 4, "integer", "integer", "integer") ||
+      !define_binary_operator(ctx, ">>", 4, "integer", "integer", "integer") ||
+      !define_binary_operator(ctx, "&", 4, "integer", "integer", "integer")  ||
+      !define_binary_operator(ctx, "|", 4, "integer", "integer", "integer")  ||
+      !define_binary_operator(ctx, "+", 5, "integer", "integer", "integer")  ||
+      !define_binary_operator(ctx, "-", 5, "integer", "integer", "integer")  ||
+      !define_binary_operator(ctx, "*", 10, "integer", "integer", "integer") ||
+      !define_binary_operator(ctx, "/", 10, "integer", "integer", "integer") ||
+      !define_binary_operator(ctx, "%", 10, "integer", "integer", "integer")) {
+    ICE("Failed to define builtin binary operators.");
+  }
 
   return ctx;
 }
 
 /// Update token, token length, and end of current token pointer.
-Error lex_advance(ParsingState *state) {
-  if (!state || !state->current || !state->length || !state->end) {
-    ERROR_CREATE(err, ERROR_ARGUMENTS,
-                 "lex_advance(): pointer arguments must not be NULL!");
-    return err;
-  }
-  Error err = lex(state->current->end, state->current);
+void lex_advance(ParsingState *state) {
+  if (!state || !state->current || !state->length || !state->end)
+    ICE("Pointer arguments must not be NULL!");
+
+  lex(state->current->end, state->current);
   *state->end = state->current->end;
-  if (err.type != ERROR_NONE) { return err; }
   *state->length = (size_t) (state->current->end - state->current->beginning);
-  return err;
 }
 
-typedef struct ExpectReturnValue {
-  Error err;
-  char found;
-  char done;
-} ExpectReturnValue;
-
-ExpectReturnValue lex_expect(char *expected, ParsingState *state) {
-  ExpectReturnValue out;
-  out.done = 0;
-  out.found = 0;
-  out.err = ok;
-  if (!expected || !state || !state->current || !state->length || !state->end) {
-    ERROR_PREP(out.err, ERROR_ARGUMENTS,
-               "lex_expect() must not be passed NULL pointers!");
-    return out;
-  }
+/// Returns true if the expected token was found, and sets
+/// `done` to true if we’re at end of file if `done` is not NULL.
+static bool lex_expect(const char *expected, ParsingState *state, bool *done) {
+  if (!expected || !state || !state->current || !state->length || !state->end)
+    ICE("lex_expect() must not be passed NULL pointers!");
   Token current_copy = *state->current;
   size_t length_copy = *state->length;
   char *end_copy     = *state->end;
   ParsingState state_copy = parse_state_create(&current_copy, &length_copy, &end_copy);
-  out.err = lex_advance(&state_copy);
-  if (out.err.type != ERROR_NONE) { return out; }
+  lex_advance(&state_copy);
   if (length_copy == 0) {
-    out.done = 1;
-    return out;
+    if (done) {
+      *done = true;
+      return false;
+    } else {
+      /// FIXME: No context here, so we can’t print the line, or the filename, or anything.
+      issue_diagnostic(DIAG_ERR, "<input>", (span){.data = "", .size = 0}, (loc){0}, "Unexpected end of file.");
+      exit(1);
+    }
   }
 
   //printf("Expecting \"%s\", got \"", expected);
@@ -630,34 +591,34 @@ ExpectReturnValue lex_expect(char *expected, ParsingState *state) {
   //printf("\"\n");
 
   if (token_string_equalp(expected, state_copy.current)) {
-    out.found = 1;
     parse_state_update_from(state, state_copy);
+    return true;
   }
 
-  return out;
+  return false;
 }
 
-Error parse_get_type(ParsingContext *context, Node *id, Node *result) {
-  Error err = ok;
+#define EXPECT(expected) lex_expect(expected, state, NULL)
 
+bool parse_get_type(ParsingContext *context, Node *id, Node *result) {
   // Handle pointers and functions, as they are both memory addresses.
   // This should ideally return target format dependant address size.
   if (id->pointer_indirection > 0
       || strcmp(id->value.symbol, "function") == 0
       || strcmp(id->value.symbol, "external function") == 0) {
     result->children = node_integer(8);
-    return ok;
+    return true;
   }
 
   if (strcmp(id->value.symbol, "array") == 0) {
     // Get size of base type!
     Node *base_type = node_allocate();
-    err = parse_get_type(context, id->children->next_child, base_type);
-    if (err.type) { return err; }
+    bool ok = parse_get_type(context, id->children->next_child, base_type);
+    if (!ok) return false;
     // Size of array is equal to size of base type multiplied by capacity of array.
     result->children = node_integer(id->children->value.integer * base_type->children->value.integer);
     free(base_type);
-    return ok;
+    return true;
   }
 
   //printf("Searching following context for ");
@@ -665,37 +626,29 @@ Error parse_get_type(ParsingContext *context, Node *id, Node *result) {
   //environment_print(*context->types,0);
   //putchar('\n');
 
-  while (context) {
+  for (; context; context = context->parent) {
     int status = environment_get(*context->types, id, result);
     if (status) {
       //printf("Got thing:\n");
       //print_node(result,2);
-      return ok;
+      return true;
     }
-    context = context->parent;
   }
+
   result->type = NODE_TYPE_NONE;
-  //printf("Type not found: \"%s\"\n", id->value.symbol);
-  ERROR_PREP(err, ERROR_GENERIC, "Type is not found in environment.");
-  return err;
+  ERR_AT(id->source_location, "Type not found: \"%s\"\n", id->value.symbol);
 }
 
-Error parse_get_variable(ParsingContext *context, Node *id, Node *result) {
-  Error err = ok;
+bool parse_get_variable(ParsingContext *context, Node *id, Node *result) {
   while (context) {
     int status = environment_get(*context->variables, id, result);
-    if (status) { return ok; }
+    if (status) return true;
     context = context->parent;
   }
-  result->type = NODE_TYPE_NONE;
-  //printf("Variable not found: \"%s\"\n", id->value.symbol);
-  ERROR_PREP(err, ERROR_GENERIC, "Variable is not found in environment.");
-  return err;
-}
 
-#define EXPECT(expected, expected_string, state) \
-  expected = lex_expect(expected_string, state); \
-  if (expected.err.type) { return expected.err; }
+  result->type = NODE_TYPE_NONE;
+  ERR_AT(id->source_location, "Variable not found: \"%s\"\n", id->value.symbol);
+}
 
 bool parse_integer(Token *token, Node *node) {
   if (!token || !node) { return false; }
@@ -712,23 +665,20 @@ bool parse_integer(Token *token, Node *node) {
   return true;
 }
 
-/// Set FOUND to 1 if an infix operator is found and parsing should continue, otherwise 0.
-Error parse_binary_infix_operator
+/// Return true if an infix operator is found and parsing should continue, otherwise false.
+static NODISCARD bool parse_binary_infix_operator
 (ParsingContext *context, ParsingStack *stack, ParsingState *state,
- int *found,
  long long *working_precedence, Node **working_result,
  Node *result
  )
 {
-  Error err = ok;
   // Look ahead for a binary infix operator.
-  *found = 0;
+  bool found = false;
   Token current_copy = *state->current;
   size_t length_copy = *state->length;
   char *end_copy     = *state->end;
   ParsingState state_copy = parse_state_create(&current_copy, &length_copy, &end_copy);
-  err = lex_advance(&state_copy);
-  if (err.type != ERROR_NONE) { return err; }
+  lex_advance(&state_copy);
 
   // While state_copy.current->end isn't whitespace, is delimiter,
   // and is not null terminator, extend binary operator.
@@ -783,16 +733,14 @@ Error parse_binary_infix_operator
 
     *working_precedence = precedence;
 
-    *found = 1;
+    found = true;
   }
 
   // TODO: Iterate advanced token end backwards until reaching a valid binary operator.
-
   free(operator_symbol);
   free(operator_value);
-  return ok;
+  return found;
 }
-
 
 enum StackOperatorReturnValue {
   STACK_HANDLED_INVALID = 0,
@@ -802,11 +750,11 @@ enum StackOperatorReturnValue {
 };
 
 /**
- * @retval 1 Break (stack was NULL most likely)
- * @retval 2 Continue Parsing (working_result was updated, possibly stack as well)
- * @retval 3 Continue Checking (stack was updated, may need to handle it as well)
+ * @retval STACK_HANDLED_BREAK: Break (stack was NULL most likely)
+ * @retval STACK_HANDLED_PARSE: Continue Parsing (working_result was updated, possibly stack as well)
+ * @retval STACK_HANDLED_CHECK: Continue Checking (stack was updated, may need to handle it as well)
  */
-Error handle_stack_operator
+bool handle_stack_operator
 (int *status,
  ParsingContext **context,
  ParsingStack **stack,
@@ -818,23 +766,15 @@ Error handle_stack_operator
 {
   if (!(*stack)) {
     *status = STACK_HANDLED_BREAK;
-    return ok;
+    return true;
   }
-
-  Error err = ok;
-  ExpectReturnValue expected;
-  memset(&expected, 0, sizeof(ExpectReturnValue));
 
   Node *operator = (*stack)->operator;
-  if (!operator || operator->type != NODE_TYPE_SYMBOL) {
-    ERROR_PREP(err, ERROR_TYPE,
-               "Parsing context operator must be symbol. Likely internal error :(");
-    return err;
-  }
+  if (!operator || operator->type != NODE_TYPE_SYMBOL)
+    ICE("Parsing context operator must be symbol.");
 
   if (strcmp(operator->value.symbol, "lambda-body") == 0) {
-    EXPECT(expected, "}", state);
-    if (expected.found) {
+    if (EXPECT("}")) {
 
       // TODO: Lookahead for immediate lambda function call.
 
@@ -843,26 +783,21 @@ Error handle_stack_operator
       // Stack is handled
       *stack = (*stack)->parent;
       *status = STACK_HANDLED_CHECK;
-      return ok;
+      return true;
     }
+
     Node *next_expr = node_allocate();
     (*stack)->result->next_child = next_expr;
     (*stack)->result = next_expr;
     *working_result = next_expr;
     *status = STACK_HANDLED_PARSE;
-    return ok;
+    return true;
   }
 
   if (strcmp(operator->value.symbol, "lambdarameters") == 0) {
-    EXPECT(expected, ")", state);
-    if (expected.found) {
+    if (EXPECT(")")) {
       // Pass stack to lambda-body
-      EXPECT(expected, "{", state);
-      if (!expected.found) {
-        ERROR_PREP(err, ERROR_SYNTAX,
-                   "Expected lambda body following lambda signature");
-        return err;
-      }
+      if (!EXPECT("{")) ERR_CTX(*context, "Expected lambda body following lambda signature");
 
       Node *body = node_allocate();
       (*stack)->body->next_child = body;
@@ -875,29 +810,26 @@ Error handle_stack_operator
       (*stack)->result = first_expression;
       *working_result = first_expression;
       *status = STACK_HANDLED_PARSE;
-      return ok;
+      return true;
     }
 
     // Eat the comma in-between variable declarations.
-    EXPECT(expected, ",", state);
-    if (expected.done) {
-      ERROR_PREP(err, ERROR_SYNTAX, "Expected another parameter definition but got EOF!");
-      return err;
-    }
+    bool done = false;
+    lex_expect(",", state, &done);
+    if (done) ERR_CTX(*context,"Expected another parameter definition but got EOF!");
 
     Node *next_expr = node_allocate();
     (*stack)->result->next_child = next_expr;
     (*stack)->result = next_expr;
     *working_result = next_expr;
     *status = STACK_HANDLED_PARSE;
-    return ok;
+    return true;
   }
 
   if (strcmp(operator->value.symbol, "if-condition") == 0) {
     // TODO: Maybe eventually allow multiple expressions in an if
     // condition, or something like that.
-    EXPECT(expected, "{", state);
-    if (expected.found) {
+    if (EXPECT("{")) {
       Node *if_then_body = node_allocate();
       (*stack)->result->next_child = if_then_body;
       Node *if_then_first_expr = node_allocate();
@@ -905,8 +837,7 @@ Error handle_stack_operator
 
       // Empty if-then-body handling.
       // TODO: Maybe warn?
-      EXPECT(expected, "}", state);
-      if (expected.found) {
+      if (EXPECT("}")) {
 
         // TODO: First check for else...
 
@@ -914,7 +845,7 @@ Error handle_stack_operator
 
         *stack = (*stack)->parent;
         *status = STACK_HANDLED_CHECK;
-        return ok;
+        return true;
       }
 
       // TODO: Don't leak stack->operator.
@@ -924,36 +855,33 @@ Error handle_stack_operator
 
       *working_result = if_then_first_expr;
       *status = STACK_HANDLED_PARSE;
-      return ok;
+      return true;
     }
     // TODO/FIXME: Ask the user how to proceed when if has no body.
-    ERROR_PREP(err, ERROR_SYNTAX,
-               "Expected `{` after `if` condition. `if` expression requires a \"then\" body.");
-    return err;
+    ERR_CTX(*context, "Expected `{` after `if` condition. `if` expression requires a \"then\" body.");
   }
 
   if (strcmp(operator->value.symbol, "while-body") == 0) {
     // Evaluate next expression unless it's a closing brace.
-    EXPECT(expected, "}", state);
-    if (expected.done || expected.found) {
+    bool done = false;
+    if (lex_expect("}", state, &done) || done) {
       *context = (*context)->parent;
       *stack = (*stack)->parent;
       *status = STACK_HANDLED_CHECK;
-      return ok;
+      return true;
     }
     Node *next_expr = node_allocate();
     (*stack)->result->next_child = next_expr;
     (*stack)->result = next_expr;
     *working_result = next_expr;
     *status = STACK_HANDLED_PARSE;
-    return ok;
+    return true;
   }
 
   if (strcmp(operator->value.symbol, "while-condition") == 0) {
     // TODO: Maybe eventually allow multiple expressions in an if
     // condition, or something like that.
-    EXPECT(expected, "{", state);
-    if (expected.found) {
+    if (EXPECT("{")) {
       Node *while_body = node_allocate();
       (*stack)->result->next_child = while_body;
       Node *while_body_first_expr = node_allocate();
@@ -961,12 +889,11 @@ Error handle_stack_operator
 
       // Empty while-body handling.
       // TODO: Maybe warn?
-      EXPECT(expected, "}", state);
-      if (expected.found) {
+      if (EXPECT("}")) {
         *context = (*context)->parent;
         *stack = (*stack)->parent;
         *status = STACK_HANDLED_CHECK;
-        return ok;
+        return true;
       }
 
       // TODO: Don't leak stack->operator.
@@ -976,30 +903,21 @@ Error handle_stack_operator
 
       *working_result = while_body_first_expr;
       *status = STACK_HANDLED_PARSE;
-      return ok;
+      return true;
     }
     // TODO/FIXME: Ask the user how to proceed when if has no body.
-    ERROR_PREP(err, ERROR_SYNTAX,
-               "Expected `{` after `if` condition. `if` expression requires a \"then\" body.");
-    return err;
+    ERR_CTX(*context, "Expected `{` after `if` condition. `if` expression requires a \"then\" body.");
   }
 
   if (strcmp(operator->value.symbol, "if-then-body") == 0) {
     // Evaluate next expression unless it's a closing brace.
-    EXPECT(expected, "}", state);
-    if (expected.done) {
-      ERROR_PREP(err, ERROR_SYNTAX, "EOF reached before end of if-then-body.");
-      return err;
-    }
-    if (expected.found) {
+    if (EXPECT("}")) {
       // Eat if-then-body context.
       *context = (*context)->parent;
 
       // Lookahead for else then parse if-else-body.
-      EXPECT(expected, "else", state);
-      if (expected.found) {
-        EXPECT(expected, "{", state);
-        if (expected.found) {
+      if (EXPECT("else")) {
+        if (EXPECT("{")) {
 
           *context = parse_context_create(*context, DOESNT_CREATE_STACKFRAME);
 
@@ -1015,69 +933,56 @@ Error handle_stack_operator
           (*stack)->result = if_else_first_expr;
           *working_result = if_else_first_expr;
           *status = STACK_HANDLED_PARSE;
-          return ok;
+          return true;
         }
-        ERROR_PREP(err, ERROR_SYNTAX, "`else` must be followed by body.");
-        return err;
+
+        ERR_CTX(*context, "`else` must be followed by body.");
       }
 
       *stack = (*stack)->parent;
       *status = STACK_HANDLED_CHECK;
-      return ok;
+      return true;
     }
     Node *next_expr = node_allocate();
     (*stack)->result->next_child = next_expr;
     (*stack)->result = next_expr;
     *working_result = next_expr;
     *status = STACK_HANDLED_PARSE;
-    return ok;
+    return true;
   }
 
   if (strcmp(operator->value.symbol, "if-else-body") == 0) {
     // Evaluate next expression unless it's a closing brace.
-    EXPECT(expected, "}", state);
-    if (expected.done || expected.found) {
+    bool done = false;
+    if (lex_expect("}", state, &done) || done) {
       *context = (*context)->parent;
       *stack = (*stack)->parent;
       *status = STACK_HANDLED_CHECK;
-      return ok;
+      return true;
     }
     Node *next_expr = node_allocate();
     (*stack)->result->next_child = next_expr;
     (*stack)->result = next_expr;
     *working_result = next_expr;
     *status = STACK_HANDLED_PARSE;
-    return ok;
+    return true;
   }
 
   if (strcmp(operator->value.symbol, "funcall") == 0) {
-    EXPECT(expected, ")", state);
-    if (expected.done) {
-      ERROR_PREP(err, ERROR_SYNTAX, "Expected closing parenthesis for functionc all before end of file.");
-      return err;
-    }
-    if (expected.found) {
-
+    if (EXPECT(")")) {
       *stack = (*stack)->parent;
-
-      int found = 0;
-      err = parse_binary_infix_operator(*context, *stack, state, &found,
+      bool found = parse_binary_infix_operator(*context, *stack, state,
                                         working_precedence, working_result,
                                         result);
-      if (found) {
-        *status = STACK_HANDLED_PARSE;
-      } else {
-        *status = STACK_HANDLED_CHECK;
-      }
-      return ok;
+      *status = found ? STACK_HANDLED_PARSE : STACK_HANDLED_CHECK;
+      return true;
     }
 
-    EXPECT(expected, ",", state);
-    if (expected.done) {
+    bool done = false;
+    lex_expect(",", state, &done);
+    if (done) {
       print_token(*state->current);
-      ERROR_PREP(err, ERROR_SYNTAX,
-                 "Parameter list expected closing parenthesis or comma for another parameter");
-      return err;
+      ERR_CTX(*context, "Parameter list expected closing parenthesis or comma for another parameter");
     }
 
     Node *next_expr = node_allocate();
@@ -1085,22 +990,20 @@ Error handle_stack_operator
     (*stack)->result = next_expr;
     *working_result = next_expr;
     *status = STACK_HANDLED_PARSE;
-    return ok;
+    return true;
   }
+
   *status = STACK_HANDLED_INVALID;
-  printf("Invalid stack operator: \"%s\"\n", (*stack)->operator->value.symbol);
-  ERROR_PREP(err, ERROR_GENERIC, "Internal error: Could not handle stack operator!");
-  return err;
+  ICE("Invalid stack operator: \"%s\"\n", (*stack)->operator->value.symbol);
 }
 
-Error parse_base_type
+bool parse_base_type
 (ParsingContext *context,
  ParsingState *state,
- Node *type
+ Node *type,
+ bool may_fail
  )
 {
-  Error err = ok;
-
   Token current_copy = *state->current;
   size_t length_copy = *state->length;
   char *end_copy = *state->end;
@@ -1112,11 +1015,10 @@ Error parse_base_type
     // Add one level of pointer indirection.
     indirection_level += 1;
     // Advance lexer.
-    err = lex_advance(&state_copy);
-    if (err.type != ERROR_NONE) { return err; }
+    lex_advance(&state_copy);
     if (length_copy == 0) {
-      ERROR_PREP(err, ERROR_SYNTAX, "Expected a valid type following pointer type declaration symbol: `@`");
-      return err;
+      if (may_fail) return false;
+      ERR("Expected a valid type following pointer type declaration symbol: `@`");
     }
   }
 
@@ -1126,24 +1028,23 @@ Error parse_base_type
   type->pointer_indirection = indirection_level;
 
   Node *type_validator = node_allocate();
-  err = parse_get_type(context, type_symbol, type_validator);
-  if (err.type) { return err; }
+  bool ok = parse_get_type(context, type_symbol, type_validator);
+  if (!ok) {
+    if (may_fail) return false;
+    ERR("Unknown type: %s", type_symbol->value.symbol);
+  }
   if (nonep(*type_validator)) {
-    ERROR_PREP(err, ERROR_TYPE, "Invalid type within variable declaration");
-    printf("\nINVALID TYPE: \"%s\"\n", type_symbol->value.symbol);
-    return err;
+    if (may_fail) return false;
+    ERR("Invalid type in variable declaration: \"%s\"", type_symbol->value.symbol);
   }
   free(type_symbol);
   free(type_validator);
 
   parse_state_update_from(state, state_copy);
-
-  return err;
+  return true;
 }
 
-Error parse_type(ParsingContext *context, ParsingState *state, Node *type, Node *parameter_names) {
-  Error err = ok;
-  ExpectReturnValue expected;
+bool parse_type(ParsingContext *context, ParsingState *state, Node *type, Node *parameter_names) {
   bool external = 0;
 
   Node *parameter_names_last = NULL;
@@ -1152,21 +1053,16 @@ Error parse_type(ParsingContext *context, ParsingState *state, Node *type, Node 
 
   // If state is at EXT, then advance lexer and mark external.
   if (external = token_string_equalp("ext", state->current), external) {
-    err = lex_advance(state);
-    if (err.type) { return err; }
-    if (*state->length == 0) {
-      ERROR_PREP(err, ERROR_SYNTAX, "Expected base type following \"ext\" type annotation keyword.");
-      return err;
-    }
+    lex_advance(state);
+    if (*state->length == 0)
+      ERR("Expected base type following \"ext\" type annotation keyword.");
   }
 
-  err = parse_base_type(context, state, type);
-  if (err.type) { return err; }
+  if (!parse_base_type(context, state, type, false)) return false;
 
   // Parse function signature as type (instead of custom)
 
-  EXPECT(expected, "(", state);
-  if (expected.found) {
+  if (EXPECT("(")) {
     Node *return_type = node_allocate();
     node_copy(type, return_type);
     free(type->value.symbol);
@@ -1181,23 +1077,14 @@ Error parse_type(ParsingContext *context, ParsingState *state, Node *type, Node 
     // Parse parameters of function signature
 
     for (;;) {
-      EXPECT(expected, ")", state);
-      if (expected.done) {
-        ERROR_PREP(err, ERROR_SYNTAX,
-                   "Expected closing paren, `)`, at end of function signature type");
-        return err;
-      }
-      if (expected.found) {
-        break;
-      }
+      bool done = false;
+      bool found = lex_expect(")", state, &done);
+      if (done) ERR("Expected closing paren, `)`, at end of function signature type");
+      if (found) break;
 
       // Parse parameter name
-      err = lex_advance(state);
-      if (err.type != ERROR_NONE) { return err; }
-      if (*state->length == 0) {
-        ERROR_PREP(err, ERROR_SYNTAX, "I hope we never see this error");
-        return err;
-      }
+      lex_advance(state);
+      if (*state->length == 0) ICE("I hope we never see this error");
 
       Node *parameter_name = node_symbol_from_buffer(state->current->beginning,
         (size_t)(state->current->end - state->current->beginning));
@@ -1214,38 +1101,28 @@ Error parse_type(ParsingContext *context, ParsingState *state, Node *type, Node 
         node_free(parameter_name);
       }
 
-      EXPECT(expected, ":", state);
-      if (!expected.found) {
-        ERROR_PREP(err, ERROR_SYNTAX,
-                   "Expected type annotation operator following function parameter name");
-        return err;
-      }
+      if (!EXPECT(":")) ERR("Expected type annotation operator following function parameter name");
 
-      err = lex_advance(state);
-      if (err.type != ERROR_NONE) { return err; }
-      if (*state->length == 0) {
-        ERROR_PREP(err, ERROR_SYNTAX, "Expected type following type annotation operator for function parameter");
-        return err;
-      }
+      lex_advance(state);
+      if (*state->length == 0) ERR("Expected type following type annotation operator for function parameter");
       Node *parameter_type = node_allocate();
-      err = parse_type(context, state, parameter_type, NULL);
-      if (err.type) { return err; }
+      if (!parse_type(context, state, parameter_type, NULL)) return false;
 
       // With finished parameter, add as child to function, or add to function context?
       node_add_child(type, parameter_type);
     }
 
-    return err;
+    return true;
   }
 
   if (external) {
     // This is a non-function "ext" type.
-    ERROR_PREP(err, ERROR_TYPE, "\"ext\" may only be used on function types (for now).");
-    return err;
+    issue_diagnostic(DIAG_SORRY, context->filename, context->source,
+      token_span(context->source.data, *state->current),
+      "\"ext\" may only be used on function types (for now).");
   }
 
-  EXPECT(expected, "[", state);
-  if (expected.found) {
+  if (EXPECT("[")) {
     // Copy base type
     Node *base_type = node_allocate();
     node_copy(type, base_type);
@@ -1256,41 +1133,30 @@ Error parse_type(ParsingContext *context, ParsingState *state, Node *type, Node 
     free(array_type);
 
     // Parse size integer
-    err = lex_advance(state);
-    if (err.type) { return err; }
+    lex_advance(state);
 
     Node *array_size = node_allocate();
-    if (parse_integer(state->current, array_size) == 0) {
-      ERROR_PREP(err, ERROR_SYNTAX, "Array type annotation expects array size (an integer) after opening '['.");
-      return err;
-    };
+    if (!parse_integer(state->current, array_size))
+      ERR("Array type annotation expects array size (an integer) after opening '['.");
 
     node_add_child(type, array_size);
 
-    EXPECT(expected, "]", state);
-    if (!expected.found) {
-      ERROR_PREP(err, ERROR_SYNTAX,
-                 "Array type annotation must have closing ']' after array size.");
-      return err;
-    }
+    if (!EXPECT("]")) ERR("Array type annotation must have closing ']' after array size.");
 
     node_add_child(type, base_type);
   }
 
-  return err;
+  return true;
 }
 
 
-Error parse_expr
+bool parse_expr
 (ParsingContext *context,
  char *source,
  char **end,
  Node *result
  )
 {
-  Error err = ok;
-
-  ExpectReturnValue expected;
   ParsingStack *stack = NULL;
 
   size_t token_length = 0;
@@ -1298,13 +1164,15 @@ Error parse_expr
   current_token.beginning  = source;
   current_token.end        = source;
 
-  ParsingState state = parse_state_create(&current_token, &token_length, end);
+  ParsingState _state = parse_state_create(&current_token, &token_length, end);
+  ParsingState *const state = &_state;
   Node *working_result = result;
   long long working_precedence = 0;
 
-  while ((err = lex_advance(&state)).type == ERROR_NONE) {
+  for (;;) {
     //printf("lexed: "); print_token(current_token); putchar('\n');
-    if (token_length == 0) { return ok; }
+    lex_advance(state);
+    if (token_length == 0) { return true; }
 
     if (parse_integer(&current_token, working_result)) {
 
@@ -1312,8 +1180,8 @@ Error parse_expr
 
       // Check for lambda
       Node *type = node_allocate();
-      err = parse_base_type(context, &state, type);
-      if (err.type == ERROR_NONE) {
+      /// TODO: Construct error and return it rather than printing it immediately
+      if (parse_base_type(context, state, type, true)) {
 
         context = parse_context_create(context, CREATES_STACKFRAME);
 
@@ -1321,26 +1189,16 @@ Error parse_expr
         lambda->type = NODE_TYPE_FUNCTION;
         node_add_child(lambda, type);
 
-        EXPECT(expected, "(", &state);
-        if (!expected.found) {
+        if (!EXPECT("(")) {
           // Nothing except a lambda starts with a type annotation.
-          ERROR_PREP(err, ERROR_SYNTAX,
-                     "Expected parameter declaration(s) following lambda return type");
-          return err;
+          ERR("Expected parameter declaration(s) following lambda return type");
         }
 
         Node *parameters = node_allocate();
         node_add_child(lambda, parameters);
 
-        EXPECT(expected, ")", &state);
-        if (expected.found) {
-
-          EXPECT(expected, "{", &state);
-          if (!expected.found) {
-            ERROR_PREP(err, ERROR_SYNTAX,
-                       "Expected lambda body following lambda signature");
-            return err;
-          }
+        if (EXPECT(")")) {
+          if (!EXPECT("{")) ERR("Expected lambda body following lambda signature");
 
           // TODO: Handle empty function body.
 
@@ -1371,31 +1229,20 @@ Error parse_expr
 
       } else {
         // Error generated by parse_base_type() is discarded here.
-        err = ok;
-
         Node *symbol = node_symbol_from_buffer(current_token.beginning, token_length);
-
 
         // FIXME: Experimental and not implemented in typechecker or codegen backends yet.
         // NOTE: Square bracket syntax is for sure experimental, and likely temporary.
         if (strcmp("[", symbol->value.symbol) == 0) {
           working_result->type = NODE_TYPE_CAST;
 
-          err = lex_advance(&state);
-          if (err.type) { return err; }
-
+          lex_advance(state);
           Node *cast_type = node_allocate();
-          err = parse_base_type(context, &state, cast_type);
-          if (err.type) { return err; }
+          if (!parse_base_type(context, state, cast_type, false)) return false;
 
           node_add_child(working_result, cast_type);
 
-          EXPECT(expected, "]", &state);
-          if (!expected.found) {
-            ERROR_PREP(err, ERROR_SYNTAX,
-                       "There must be a closing square bracket, ']', after a type within a type cast expression.");
-            return err;
-          }
+          if (!EXPECT("]")) ERR("Expected ']' after type in cast");
 
           Node *child = node_allocate();
           node_add_child(working_result, child);
@@ -1467,17 +1314,14 @@ Error parse_expr
 
         // Check for variable access here.
         Node *var_binding = node_allocate();
-        err = parse_get_variable(context, symbol, var_binding);
+        if (!parse_get_variable(context, symbol, var_binding)) return false;
         if (!nonep(*var_binding)) {
-          if (err.type) { return err; }
-
           // Create variable access node.
           working_result->type = NODE_TYPE_VARIABLE_ACCESS;
           working_result->value.symbol = strdup(symbol->value.symbol);
 
           // Lookahead for function call
-          EXPECT(expected, "(", &state);
-          if (expected.found) {
+          if (EXPECT("(")) {
             // This is a function call!
 
             Node *var_access = node_allocate();
@@ -1489,8 +1333,7 @@ Error parse_expr
             Node *parameters = node_allocate();
             node_add_child(working_result, parameters);
 
-            EXPECT(expected, ")", &state);
-            if (!expected.found) {
+            if (!EXPECT(")")) {
               Node *first_parameter = node_allocate();
               node_add_child(parameters, first_parameter);
               stack = parse_stack_create(stack);
@@ -1502,87 +1345,59 @@ Error parse_expr
           } else {
 
             // Lookahead for array index operator.
-            EXPECT(expected, "[", &state);
-            if (expected.found) {
-
+            if (EXPECT("[")) {
               Node *var_access = node_allocate();
               node_copy(working_result, var_access);
               working_result->type = NODE_TYPE_INDEX;
               node_add_child(working_result, var_access);
 
-              err = lex_advance(&state);
-              if (err.type) { return err; }
-
+              lex_advance(state);
               Node *integer_offset = node_allocate();
-              if (parse_integer(state.current, integer_offset) == 0) {
-                ERROR_PREP(err, ERROR_SYNTAX,
-                           "Expected integer following opening index operator: '['.");
-                return err;
-              }
+              if (parse_integer(state->current, integer_offset) == 0)
+                ERR("Expected integer literal in subscript");
 
               working_result->value.integer = integer_offset->value.integer;
               node_free(integer_offset);
 
-              EXPECT(expected, "]", &state);
-              if (!expected.found) {
-                ERROR_PREP(err, ERROR_SYNTAX,
-                           "Expected closing index operator following index integer: ']'.");
-                return err;
-              }
-
+              if (!EXPECT("]")) ERR("Missing ']' in subscript");
             }
 
             // Lookahead for variable reassignment.
-            EXPECT(expected, ":", &state);
-            if (expected.found) {
-              EXPECT(expected, "=", &state);
-              if (expected.found) {
-                Node *result_pointer = result;
-                if (stack && stack->result) {
-                  result_pointer = stack->result;
-                }
-                Node *lhs = node_allocate();
-                node_copy(result_pointer, lhs);
-                memset(result_pointer, 0, sizeof(Node));
-                result_pointer->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
-                node_add_child(result_pointer, lhs);
-                Node *reassign_expr = node_allocate();
-                node_add_child(result_pointer, reassign_expr);
-                working_result = reassign_expr;
-                continue;
+            if (EXPECT(":") && EXPECT("=")) {
+              Node *result_pointer = result;
+              if (stack && stack->result) {
+                result_pointer = stack->result;
               }
+              Node *lhs = node_allocate();
+              node_copy(result_pointer, lhs);
+              memset(result_pointer, 0, sizeof(Node));
+              result_pointer->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
+              node_add_child(result_pointer, lhs);
+              Node *reassign_expr = node_allocate();
+              node_add_child(result_pointer, reassign_expr);
+              working_result = reassign_expr;
+              continue;
             }
           }
         } else {
           // Symbol is not a valid variable name. Check for function call
           // or new variable declaration.
+          bool done = false;
+          bool found = lex_expect(":", state, &done);
+          if (!done && found) {
+            lex_expect("=", state, &done);
+            if (!done && found)
+              ERR("Invalid Variable Symbol: \"%s\"\n", symbol->value.symbol);
 
-          EXPECT(expected, ":", &state);
-          if (!expected.done && expected.found) {
-
-            EXPECT(expected, "=", &state);
-            if (!expected.done && expected.found) {
-              printf("Invalid Variable Symbol: \"%s\"\n", symbol->value.symbol);
-              ERROR_PREP(err, ERROR_SYNTAX,
-                         "Reassignment of undeclared variable is not allowed!");
-              return err;
-            }
-
-            err = lex_advance(&state);
-            if (err.type != ERROR_NONE) { return err; }
+            lex_advance(state);
             if (token_length == 0) { break; }
             Node *decl_type = node_allocate();
             Node *param_names = node_allocate();
-            err = parse_type(context, &state, decl_type, param_names);
-            if (err.type) { return err; }
+            if (!parse_type(context, state, decl_type, param_names)) return false;
 
             Node *variable_binding = node_allocate();
-            if (environment_get(*context->variables, symbol, variable_binding)) {
-              // TODO: Create new error type.
-              printf("ID of redefined variable: \"%s\"\n", symbol->value.symbol);
-              ERROR_PREP(err, ERROR_GENERIC, "Redefinition of variable!");
-              return err;
-            }
+            if (environment_get(*context->variables, symbol, variable_binding))
+              ERR("Redefinition of variable: \"%s\"\n", symbol->value.symbol);
             // Variable binding is shell-node for environment value contents.
             free(variable_binding);
 
@@ -1597,16 +1412,11 @@ Error parse_expr
             node_copy(symbol, symbol_for_env);
 
             int status = environment_set(context->variables, symbol_for_env, decl_type);
-            if (status != 1) {
-              printf("Variable: \"%s\", status: %d\n", symbol_for_env->value.symbol, status);
-              ERROR_PREP(err, ERROR_GENERIC, "Failed to define variable!");
-              return err;
-            }
+            if (status != 1)
+              ICE("Failed to define variable: \"%s\", status: %d\n", symbol_for_env->value.symbol, status);
 
             if (strcmp(decl_type->value.symbol, "function") == 0) {
-              EXPECT(expected, "{", &state);
-              if (expected.found) {
-
+              if (EXPECT("{")) {
                 Node **local_result = &result;
                 if (stack) { local_result = &stack->result; }
 
@@ -1665,11 +1475,8 @@ Error parse_expr
                   node_copy(param_name, param_symbol_for_env);
 
                   int v_status = environment_set(context->variables, param_symbol_for_env, param_type);
-                  if (v_status != 1) {
-                    printf("Variable: \"%s\", status: %d\n", param_symbol_for_env->value.symbol, v_status);
-                    ERROR_PREP(err, ERROR_GENERIC, "Failed to define parameter variable!");
-                    return err;
-                  }
+                  if (v_status != 1)
+                    ICE("Failed to define parameter variable: \"%s\", status: %d\n", param_symbol_for_env->value.symbol, v_status);
 
                   param_type = param_type->next_child;
                   param_name = param_name->next_child;
@@ -1695,9 +1502,7 @@ Error parse_expr
             // TODO: Free param_names list
 
             // Check for initialization after declaration.
-            EXPECT(expected, "=", &state);
-            if (expected.found) {
-
+            if (EXPECT("=")) {
               Node **local_result = &result;
               if (stack) { local_result = &stack->result; }
 
@@ -1727,8 +1532,6 @@ Error parse_expr
           } else {
             // Symbol is unknown and is not followed by an assignment operator `:`.
             ERR("Unknown symbol: \"%s\".", node_text(symbol));
-            ERROR_PREP(err, ERROR_SYNTAX, "Unknown symbol");
-            return err;
           }
         }
         free(var_binding);
@@ -1737,10 +1540,9 @@ Error parse_expr
 
     // NOTE: We often need to continue from here.
 
-    int found = 0;
-    err = parse_binary_infix_operator(context, stack, &state, &found,
-                                      &working_precedence, &working_result,
-                                      result);
+    bool found = parse_binary_infix_operator(context, stack, state,
+      &working_precedence, &working_result,
+      result);
     if (found) { continue; }
 
     // If no more parser stack, return with current result.
@@ -1749,37 +1551,23 @@ Error parse_expr
 
     int status = 1;
     do {
-      err = handle_stack_operator(&status, &context, &stack, &state,
-                                  &working_result, result,
-                                  &working_precedence);
-      if (err.type) { return err; }
+      if (!handle_stack_operator(&status, &context, &stack, state,
+             &working_result, result,
+             &working_precedence)) return false;
     } while (status == STACK_HANDLED_CHECK);
 
-    if (status == STACK_HANDLED_BREAK) {
-      break;
-    }
-    if (status == STACK_HANDLED_PARSE) {
-      continue;
-    }
+    if (status == STACK_HANDLED_BREAK) break;
+    if (status == STACK_HANDLED_PARSE) continue;
 
-    printf("status: %d\n", status);
-    ERROR_PREP(err, ERROR_GENERIC,
-               "Internal Compiler Error :(. Unhandled parse stack operator.");
-    return err;
+    ICE("Unhandled parse stack operator. Status: %d", status);
   }
-
-  return err;
+  return true;
 }
 
 
-Error parse_program(const char *filepath, ParsingContext *context, Node *result) {
-  Error err = ok;
+bool parse_program(const char *filepath, ParsingContext *context, Node *result) {
   string contents = file_contents(filepath);
-  if (!contents.data) {
-    printf("Filepath: \"%s\"\n", filepath);
-    ERROR_PREP(err, ERROR_GENERIC, "parse_program(): Couldn't get file contents");
-    return err;
-  }
+  if (!contents.data) ICE("parse_program(): Could not read file: \"%s\"", filepath);
   result->type = NODE_TYPE_PROGRAM;
   context->filename = filepath;
   context->source = (span){.data = contents.data, .size = contents.size};
@@ -1787,10 +1575,9 @@ Error parse_program(const char *filepath, ParsingContext *context, Node *result)
   for (;;) {
     Node *expression = node_allocate();
     node_add_child(result, expression);
-    err = parse_expr(context, contents_it, &contents_it, expression);
-    if (err.type != ERROR_NONE) {
+    if (!parse_expr(context, contents_it, &contents_it, expression)) {
       free(contents.data);
-      return err;
+      return false;
     }
 
     // Check for end-of-parsing case (source and end are the same).
@@ -1802,10 +1589,10 @@ Error parse_program(const char *filepath, ParsingContext *context, Node *result)
 
   }
   free(contents.data);
-  return ok;
+  return true;
 }
 
-Error define_binary_operator
+bool define_binary_operator
 (ParsingContext *context,
  char *operator,
  int precedence,
@@ -1822,10 +1609,5 @@ Error define_binary_operator
 
   // FIXME: Every binary operator definition is global for now!
   while (context->parent) { context = context->parent; }
-  int status = environment_set(context->binary_operators, node_symbol(operator), binop);
-  if (status == 0) {
-    ERROR_CREATE(err, ERROR_GENERIC, "Could not define binary operator in environment");
-    return err;
-  }
-  return ok;
+  return environment_set(context->binary_operators, node_symbol(operator), binop) != 0;
 }

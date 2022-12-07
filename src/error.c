@@ -208,7 +208,7 @@ static void print_backtrace() {
     /// Load DbgHelp.dll.
     HMODULE dbghelp = LoadLibrary(TEXT("DbgHelp.dll"));
     if (!dbghelp) {
-        /// Loading failed. Print just the addresses.
+    /// Loading failed. Print just the addresses.
     print_raw:
         fprintf(stderr, "  Cannot obtain symbols from backtrace: Could not load DbgHelp.dll\n");
         for (WORD i = 0; i < frames; i++)
