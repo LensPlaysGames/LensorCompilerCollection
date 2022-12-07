@@ -203,7 +203,7 @@ static void print_backtrace() {
 
     /// Get the stacktrace.
     void* stack[100];
-    WORD frames = CaptureStackBackTrace(0, 100, stack, NULL);
+    WORD frames = CaptureStackBackTrace(2, 100, stack, NULL);
 
     /// Load DbgHelp.dll.
     HMODULE dbghelp = LoadLibrary(TEXT("DbgHelp.dll"));
