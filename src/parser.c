@@ -84,7 +84,7 @@ void lex(char *source, Token *token) {
   token->end = new_token.end;
 }*/
 
-bool token_string_equalp(char* str, Token *token) {
+bool token_string_equalp(const char* str, Token *token) {
   if (!str || !token) { return 0; }
   char *beg = token->beginning;
   while (*str && token->beginning < token->end) {
@@ -528,6 +528,10 @@ ParsingContext *parse_context_create(ParsingContext *parent, CreatesStackframe c
   ctx->functions = environment_create(NULL);
   ctx->binary_operators = environment_create(NULL);
   ctx->creates_stackframe = (bool)creates_stackframe;
+  if (parent) {
+    ctx->source = parent->source;
+    ctx->filename = parent->filename;
+  }
   return ctx;
 }
 
@@ -600,7 +604,7 @@ static bool lex_expect(const char *expected, ParsingState *state, bool *done) {
 
 #define EXPECT(expected) lex_expect(expected, state, NULL)
 
-bool parse_get_type(ParsingContext *context, Node *id, Node *result) {
+bool parse_get_type(ParsingContext *const context, Node *id, Node *result, bool may_fail) {
   // Handle pointers and functions, as they are both memory addresses.
   // This should ideally return target format dependant address size.
   if (id->pointer_indirection > 0
@@ -613,7 +617,7 @@ bool parse_get_type(ParsingContext *context, Node *id, Node *result) {
   if (strcmp(id->value.symbol, "array") == 0) {
     // Get size of base type!
     Node *base_type = node_allocate();
-    bool ok = parse_get_type(context, id->children->next_child, base_type);
+    bool ok = parse_get_type(context, id->children->next_child, base_type, false);
     if (!ok) return false;
     // Size of array is equal to size of base type multiplied by capacity of array.
     result->children = node_integer(id->children->value.integer * base_type->children->value.integer);
@@ -626,8 +630,8 @@ bool parse_get_type(ParsingContext *context, Node *id, Node *result) {
   //environment_print(*context->types,0);
   //putchar('\n');
 
-  for (; context; context = context->parent) {
-    int status = environment_get(*context->types, id, result);
+  for (ParsingContext *ctx = context; ctx; ctx = ctx->parent) {
+    int status = environment_get(*ctx->types, id, result);
     if (status) {
       //printf("Got thing:\n");
       //print_node(result,2);
@@ -636,18 +640,19 @@ bool parse_get_type(ParsingContext *context, Node *id, Node *result) {
   }
 
   result->type = NODE_TYPE_NONE;
-  ERR_AT(id->source_location, "Type not found: \"%s\"\n", id->value.symbol);
+  if (!may_fail) ERR_AT(id->source_location, "Type not found: \"%s\"", id->value.symbol);
+  return false;
 }
 
-bool parse_get_variable(ParsingContext *context, Node *id, Node *result) {
-  while (context) {
-    int status = environment_get(*context->variables, id, result);
+bool parse_get_variable(ParsingContext *const context, Node *id, Node *result, bool may_fail) {
+  for (ParsingContext *ctx = context; ctx; ctx = ctx->parent) {
+    int status = environment_get(*ctx->variables, id, result);
     if (status) return true;
-    context = context->parent;
   }
 
   result->type = NODE_TYPE_NONE;
-  ERR_AT(id->source_location, "Variable not found: \"%s\"\n", id->value.symbol);
+  if (!may_fail) ERR_AT(id->source_location, "Variable not found: \"%s\"", id->value.symbol);
+  return false;
 }
 
 bool parse_integer(Token *token, Node *node) {
@@ -667,7 +672,7 @@ bool parse_integer(Token *token, Node *node) {
 
 /// Return true if an infix operator is found and parsing should continue, otherwise false.
 static NODISCARD bool parse_binary_infix_operator
-(ParsingContext *context, ParsingStack *stack, ParsingState *state,
+(ParsingContext *const context, ParsingStack *stack, ParsingState *state,
  long long *working_precedence, Node **working_result,
  Node *result
  )
@@ -1028,10 +1033,10 @@ bool parse_base_type
   type->pointer_indirection = indirection_level;
 
   Node *type_validator = node_allocate();
-  bool ok = parse_get_type(context, type_symbol, type_validator);
-  if (!ok) {
-    if (may_fail) return false;
-    ERR("Unknown type: %s", type_symbol->value.symbol);
+  if (!parse_get_type(context, type_symbol, type_validator, may_fail)) {
+    /*if (may_fail) return false;
+    ERR("Unknown type: %s", type_symbol->value.symbol);*/
+    return false;
   }
   if (nonep(*type_validator)) {
     if (may_fail) return false;
@@ -1314,8 +1319,7 @@ bool parse_expr
 
         // Check for variable access here.
         Node *var_binding = node_allocate();
-        if (!parse_get_variable(context, symbol, var_binding)) return false;
-        if (!nonep(*var_binding)) {
+        if (!parse_get_variable(context, symbol, var_binding, true) || !nonep(*var_binding)) {
           // Create variable access node.
           working_result->type = NODE_TYPE_VARIABLE_ACCESS;
           working_result->value.symbol = strdup(symbol->value.symbol);
@@ -1387,7 +1391,7 @@ bool parse_expr
           if (!done && found) {
             lex_expect("=", state, &done);
             if (!done && found)
-              ERR("Invalid Variable Symbol: \"%s\"\n", symbol->value.symbol);
+              ERR("Invalid Variable Symbol: \"%s\"", symbol->value.symbol);
 
             lex_advance(state);
             if (token_length == 0) { break; }
@@ -1397,7 +1401,7 @@ bool parse_expr
 
             Node *variable_binding = node_allocate();
             if (environment_get(*context->variables, symbol, variable_binding))
-              ERR("Redefinition of variable: \"%s\"\n", symbol->value.symbol);
+              ERR("Redefinition of variable: \"%s\"", symbol->value.symbol);
             // Variable binding is shell-node for environment value contents.
             free(variable_binding);
 
@@ -1413,7 +1417,7 @@ bool parse_expr
 
             int status = environment_set(context->variables, symbol_for_env, decl_type);
             if (status != 1)
-              ICE("Failed to define variable: \"%s\", status: %d\n", symbol_for_env->value.symbol, status);
+              ICE("Failed to define variable: \"%s\", status: %d", symbol_for_env->value.symbol, status);
 
             if (strcmp(decl_type->value.symbol, "function") == 0) {
               if (EXPECT("{")) {

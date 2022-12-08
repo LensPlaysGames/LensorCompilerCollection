@@ -9,6 +9,22 @@
 #include <parser.h>
 #include <typechecker.h>
 
+#ifndef _WIN32
+#include <signal.h>
+
+/// SIGSEGV/SIGILL/SIGABRT handler.
+void ice_signal_handler(int signal, siginfo_t *info, void* unused) {
+  (void) unused;
+  switch (signal) {
+    case SIGSEGV: ICE_SIGNAL("Segmentation fault at 0x%lx", (uintptr_t)info->si_addr);
+    case SIGILL: ICE_SIGNAL("Illegal instruction");
+    case SIGABRT: ICE_SIGNAL("Aborted");
+    default: ICE_SIGNAL("UNREACHABLE");
+  }
+}
+
+#endif
+
 void print_usage(char **argv) {
   printf("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", argv[0]);
   printf("Flags:\n"
@@ -194,6 +210,19 @@ int handle_command_line_arguments(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+#ifndef _WIN32
+  {
+    /// Install signal handlers.
+    struct sigaction sa = {0};
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_SIGINFO;
+    sa.sa_sigaction = ice_signal_handler;
+    if (sigaction(SIGSEGV, &sa, NULL)) ICE("Failed to install SIGSEGV handler");
+    if (sigaction(SIGABRT, &sa, NULL)) ICE("Failed to install SIGABRT handler");
+    if (sigaction(SIGILL, &sa, NULL)) ICE("Failed to install SIGILL handler");
+  }
+#endif
+
   if (argc < 2) {
     print_usage(argv);
     return 0;
@@ -216,7 +245,7 @@ int main(int argc, char **argv) {
     string s = file_contents(infile);
     ASSERT(s.data);
 
-    codegen(
+    if (!codegen(
       LANG_IR,
       output_format,
       output_calling_convention,
@@ -226,7 +255,9 @@ int main(int argc, char **argv) {
       parse_context_default_create(),
       NULL,
       s
-     );
+     )) {
+      exit(1);
+     }
 
     free(s.data);
   }
@@ -235,7 +266,7 @@ int main(int argc, char **argv) {
   else {
     Node *program = node_allocate();
     ParsingContext *context = parse_context_default_create();
-    Error err = parse_program(infile, context, program);
+    if (!parse_program(infile, context, program)) exit(1);
 
     if (verbosity) {
       printf("----- Abstract Syntax Tree\n");
@@ -245,18 +276,9 @@ int main(int argc, char **argv) {
       printf("-----\n");
     }
 
-    if (err.type) {
-      print_error(err);
-      return 1;
-    }
+    if (!typecheck_program(context, program)) exit(2);
 
-    err = typecheck_program(context, program);
-    if (err.type) {
-      print_error(err);
-      return 2;
-    }
-
-    err = codegen(
+    if (!codegen(
       LANG_FUN,
       output_format,
       output_calling_convention,
@@ -266,15 +288,11 @@ int main(int argc, char **argv) {
       context,
       program,
       (string){0}
-    );
-    if (err.type) {
-      print_error(err);
-      return 3;
-    }
+    )) exit(3);
 
     node_free(program);
   }
 
-  printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
+  if (verbosity) printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
   return 0;
 }

@@ -64,7 +64,7 @@ struct CodegenContext {
 // TODO/FIXME: Make this a parameter affectable by command line arguments.
 extern char codegen_verbose;
 
-Error codegen
+NODISCARD bool codegen
 (enum CodegenLanguage,
  enum CodegenOutputFormat,
  enum CodegenCallingConvention,

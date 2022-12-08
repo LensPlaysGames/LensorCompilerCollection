@@ -18,6 +18,12 @@
 #include <string.h>
 #include <typechecker.h>
 
+#define ERR(loc, ...)                                                                                                   \
+  do {                                                                                                                  \
+    issue_diagnostic(DIAG_ERR, (cg_ctx)->parse_context->filename, (cg_ctx)->parse_context->source, (loc), __VA_ARGS__); \
+    return false;                                                                                                       \
+  } while (0)
+
 char codegen_verbose = 1;
 
 CodegenContext *codegen_context_create_top_level
@@ -132,7 +138,7 @@ char *label_generate() {
     ".L%zu", label_count);
   label_index++;
   if (label_index >= label_buffer_size) {
-    PANIC("Label overflow!");
+    ICE("Label overflow!");
     label_index = 0;
     return label_generate();
   }
@@ -152,16 +158,14 @@ typedef struct SymbolAddress {
     SYMBOL_ADDRESS_MODE_ERROR,
   } mode;
   union {
-    Error error;
     char *global;
     IRInstruction *local;
   };
 } SymbolAddress;
 
 SymbolAddress symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
-  SymbolAddress out;
+  SymbolAddress out = {0};
   out.mode = SYMBOL_ADDRESS_MODE_ERROR;
-  out.error = ok;
 
   ASSERT(cg_ctx, "symbol_to_address(): Context must not be NULL (pass global).");
   ASSERT(symbol && symbol->value.symbol, "symbol_to_address(): A symbol must be passed.");
@@ -181,18 +185,10 @@ SymbolAddress symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
     putchar('\n');
     print_node(symbol,0);
     environment_print(*cg_ctx->locals, 0);
-
-    // FIXME(Sirraide): This is ugly. Should this be heap-allocated?
-    //   Maybe we should have a way to store a heap allocated string in
-    //   an `Error`? I would recommend either adding a flag indicating
-    //   that the messages needs to be free()’d or just leaking the
-    //   memory since we're probably going to terminate anyway if there
-    //   was an error.
-    static char err_buf[1024];
-    snprintf(err_buf, sizeof(err_buf), "symbol_to_address(): Could not find symbol '%s' in environment.", symbol->value.symbol);
-    ERROR_CREATE(err, ERROR_GENERIC, err_buf);
-    out.mode = SYMBOL_ADDRESS_MODE_ERROR;
-    out.error = err;
+    issue_diagnostic(DIAG_ERR,
+                     (cg_ctx)->parse_context->filename, (cg_ctx)->parse_context->source,
+                     (symbol->source_location),
+                     "Could not find symbol '%s' in environment.", symbol->value.symbol);
     return out;
   }
 
@@ -204,21 +200,20 @@ SymbolAddress symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
 }
 
 // Forward declare codegen_function for codegen_expression
-Error codegen_function
+NODISCARD bool codegen_function
 (CodegenContext *cg_context,
  ParsingContext *context,
  ParsingContext **next_child_context,
  char *name,
  Node *function);
 
-Error codegen_expression
+NODISCARD bool codegen_expression
 (CodegenContext *cg_context,
  ParsingContext *context,
  ParsingContext **next_child_context,
  Node *expression
  )
 {
-  Error err = ok;
   char *result = NULL;
   Node *tmpnode = node_allocate();
   Node *iterator = NULL;
@@ -227,86 +222,81 @@ Error codegen_expression
 
   STATIC_ASSERT(NODE_TYPE_MAX == 17, "codegen_expression_x86_64() must exhaustively handle node types!");
   switch (expression->type) {
-  default:
-    break;
+  default: break;
+
   case NODE_TYPE_INTEGER:
     expression->result = ir_immediate(cg_context, expression->value.integer);
     break;
-  case NODE_TYPE_FUNCTION_CALL:
-    if (0) {}
+  case NODE_TYPE_FUNCTION_CALL: {
     // Use `typecheck_expression()` to get type of variable.
     Node *variable_type = node_allocate();
+
     // err is ignored purposefully, program already type-checked valid.
-    typecheck_expression(context, NULL, expression->children, variable_type);
+    bool _ = typecheck_expression(context, NULL, expression->children, variable_type);
+    (void) _;
 
     IRInstruction *call = NULL;
 
     if (strcmp(variable_type->value.symbol, "external function") == 0) {
-      /// TODO: direct calls should store a reference to a function, not its name.
-      call = ir_direct_call(cg_context, expression->children->value.symbol);
+        /// TODO: direct calls should store a reference to a function, not its name.
+        call = ir_direct_call(cg_context, expression->children->value.symbol);
     } else {
-      err = codegen_expression(cg_context, context, next_child_context, expression->children);
-      if (err.type) { return err; }
-      call = ir_indirect_call(cg_context, expression->children->result);
+        if (!codegen_expression(cg_context, context, next_child_context, expression->children)) return false;
+        call = ir_indirect_call(cg_context, expression->children->result);
     }
 
     for (iterator = expression->children->next_child->children;
          iterator;
-         iterator = iterator->next_child
-         ) {
-      err = codegen_expression(cg_context, context, next_child_context, iterator);
-      if (err.type) { return err; }
-      ir_add_function_call_argument(cg_context, call, iterator->result);
+         iterator = iterator->next_child) {
+        if (!codegen_expression(cg_context, context, next_child_context, iterator)) return false;
+        ir_add_function_call_argument(cg_context, call, iterator->result);
     }
 
     ir_insert(cg_context, call);
     expression->result = call;
+  } break;
 
-    break;
-  case NODE_TYPE_FUNCTION:
-    if (0) {}
+  case NODE_TYPE_FUNCTION: {
     // TODO/FIXME: Obviously this is not ideal to do backwards lookup,
     // especially for function nodes which contain the body... Oh well!
     ParsingContext *context_it = context;
     while (context_it) {
-      if (environment_get_by_value(*context_it->functions, expression, tmpnode)) {
+        if (environment_get_by_value(*context_it->functions, expression, tmpnode)) {
         result = tmpnode->value.symbol;
         break;
-      }
-      context_it = context_it->parent;
+        }
+        context_it = context_it->parent;
     }
     if (!result) {
-      // TODO: Keep track of local lambda label in environment or something.
-      // FIXME: Completely memory leaked here, no chance of freeing!
-      result = label_generate();
+        // TODO: Keep track of local lambda label in environment or something.
+        // FIXME: Completely memory leaked here, no chance of freeing!
+        result = label_generate();
     }
-    err = codegen_function
-      (cg_context,
-       context, next_child_context,
-       result, expression);
-    if (err.type) { return err; }
+    if (!codegen_function(cg_context,
+                          context, next_child_context,
+                          result, expression)) return false;
     // Function returns beginning of instructions address.
     expression->result = ir_load_global_address(cg_context, result);
-    break;
+  } break;
+
   case NODE_TYPE_DEREFERENCE:
-    err = codegen_expression(cg_context,
-                             context, next_child_context,
-                             expression->children);
-    if (err.type) { return err; }
+    if (!codegen_expression(cg_context,
+                            context, next_child_context,
+                            expression->children)) return false;
     expression->result = ir_load(cg_context, expression->children->result);
     break;
+
   case NODE_TYPE_NOT:
-    err = codegen_expression(cg_context,
-                             context, next_child_context,
-                             expression->children);
-    if (err.type) { return err; }
+    if (!codegen_expression(cg_context,
+                            context, next_child_context,
+                            expression->children)) return false;
     expression->result = ir_not(cg_context, expression->children->result);
     break;
 
   case NODE_TYPE_ADDRESSOF: {
     SymbolAddress address = symbol_to_address(cg_context, expression->children);
     switch (address.mode) {
-    case SYMBOL_ADDRESS_MODE_ERROR: return address.error;
+    case SYMBOL_ADDRESS_MODE_ERROR: return false;
     case SYMBOL_ADDRESS_MODE_GLOBAL:
       expression->result = ir_load_global_address(cg_context, address.global);
       break;
@@ -314,17 +304,15 @@ Error codegen_expression
       expression->result = ir_load_local_address(cg_context, address.local);
       break;
     }
-    break;
-  }
+  } break;
+
   case NODE_TYPE_INDEX: {
     // Get type of accessed array.
-    err = parse_get_variable(context, expression->children, tmpnode);
-    if (err.type) { return err; }
+    if (!parse_get_variable(context, expression->children, tmpnode, false)) return false;
 
     // Get size of base type of accessed array.
     Node *base_type_info = node_allocate();
-    err = parse_get_type(context, tmpnode->children->next_child, base_type_info);
-    if (err.type) { return err; }
+    if (!parse_get_type(context, tmpnode->children->next_child, base_type_info, false)) return false;
     long long base_type_size = base_type_info->children->value.integer;
     free(base_type_info);
 
@@ -334,7 +322,7 @@ Error codegen_expression
     SymbolAddress address = symbol_to_address(cg_context, expression->children);
     switch (address.mode) {
       case SYMBOL_ADDRESS_MODE_ERROR:
-        return address.error;
+        return false;
       case SYMBOL_ADDRESS_MODE_GLOBAL:
         expression->result = ir_load_global_address(cg_context, address.global);
         break;
@@ -351,14 +339,13 @@ Error codegen_expression
       IRInstruction *add = ir_add(cg_context, expression->result, imm);
       expression->result = add;
     }
-    break;
-  }
+  } break;
+
   case NODE_TYPE_IF: {
     // Generate if condition expression code.
-    err = codegen_expression(cg_context,
+    if (!codegen_expression(cg_context,
         context, next_child_context,
-        expression->children);
-    if (err.type) { return err; }
+        expression->children)) return false;
 
     /** Each box is a basic block within intermediate representation,
      *  and edges represent control flow from top to bottom.
@@ -406,10 +393,9 @@ Error codegen_expression
       // Generate THEN expression body.
       Node *expr = expression->children->next_child->children;
       while (expr) {
-        err = codegen_expression(cg_context,
+        if (!codegen_expression(cg_context,
             ctx, &next_child_ctx,
-            expr);
-        if (err.type) { return err; }
+            expr)) return false;
         expr = expr->next_child;
       }
     }
@@ -441,10 +427,9 @@ Error codegen_expression
 
       Node *expr = expression->children->next_child->next_child->children;
       while (expr) {
-        err = codegen_expression(cg_context,
+        if (!codegen_expression(cg_context,
             ctx, &next_child_ctx,
-            expr);
-        if (err.type) { return err; }
+            expr)) return false;
         expr = expr->next_child;
       }
 
@@ -479,6 +464,7 @@ Error codegen_expression
     expression->result = phi;
 
   } break;
+
   case NODE_TYPE_WHILE: {
 
     /**
@@ -509,16 +495,15 @@ Error codegen_expression
     ir_branch(cg_context, while_cond_block);
 
     ir_block_attach(cg_context, while_cond_block);
-    err = codegen_expression(cg_context,
-                             context, next_child_context,
-                             expression->children);
-    if (err.type) { return err; }
+    if (!codegen_expression(cg_context,
+         context, next_child_context,
+         expression->children)) return false;
 
     // If while body is empty, don't use body block.
     if (!expression->children->next_child->children) {
       ir_branch_conditional(cg_context, expression->children->result, while_cond_block, join_block);
       ir_block_attach(cg_context, join_block);
-      return ok;
+      return true;
     }
 
 
@@ -526,8 +511,6 @@ Error codegen_expression
     ir_branch_conditional(cg_context, expression->children->result, while_body_block, join_block);
 
     ir_block_attach(cg_context, while_body_block);
-
-    Node *last_expr = expression->children->next_child->children;
 
     // Enter while body context
     {
@@ -546,11 +529,9 @@ Error codegen_expression
       // Generate WHILE expression body.
       Node *expr = expression->children->next_child->children;
       while (expr) {
-        err = codegen_expression(cg_context,
-                                 ctx, &next_child_ctx,
-                                 expr);
-        if (err.type) { return err; }
-        last_expr = expr;
+        if (!codegen_expression(cg_context,
+             ctx, &next_child_ctx,
+             expr)) return false;
         expr = expr->next_child;
       }
     }
@@ -562,6 +543,7 @@ Error codegen_expression
     ir_block_attach(cg_context, join_block);
 
   } break;
+
   case NODE_TYPE_BINARY_OPERATOR:
     while (context->parent) { context = context->parent; }
     // FIXME: Second argument is memory leaked! :^(
@@ -570,14 +552,12 @@ Error codegen_expression
     //printf("Codegenning binary operator %s\n", expression->value.symbol);
     //print_node(tmpnode,0);
 
-    err = codegen_expression(cg_context,
-                             context, next_child_context,
-                             expression->children);
-    if (err.type) { return err; }
-    err = codegen_expression(cg_context,
-                             context, next_child_context,
-                             expression->children->next_child);
-    if (err.type) { return err; }
+    if (!codegen_expression(cg_context,
+         context, next_child_context,
+         expression->children)) return false;
+    if (!codegen_expression(cg_context,
+         context, next_child_context,
+         expression->children->next_child)) return false;
 
     if (strcmp(expression->value.symbol, ">") == 0) {
       expression->result = ir_comparison
@@ -643,11 +623,10 @@ Error codegen_expression
          expression->children->result,
          expression->children->next_child->result);
     } else {
-      fprintf(stderr, "Unrecognized binary operator: \"%s\"\n", expression->value.symbol);
-      ERROR_PREP(err, ERROR_GENERIC, "codegen_expression() does not recognize binary operator");
-      return err;
+      ICE("Unrecognized binary operator: \"%s\"\n", expression->value.symbol);
     }
     break;
+
   case NODE_TYPE_VARIABLE_ACCESS: {
     // Find context that local variable resides in.
 
@@ -669,6 +648,7 @@ Error codegen_expression
       expression->result = ir_load_local(cg_context, tmpnode->value.ir_instruction);
     }
   } break;
+
   case NODE_TYPE_VARIABLE_DECLARATION:
     if (!cg_context->parent) { break; }
     // Allocate space on stack
@@ -681,16 +661,14 @@ Error codegen_expression
       context = context->parent;
     }
     if (!context) {
-      printf("Variable Symbol: \"%s\"\n", expression->children->value.symbol);
-      ERROR_PREP(err, ERROR_GENERIC, "Invalid AST/context fed to codegen. Could not find variable declaration in environment");
-      return err;
+      ICE("Invalid AST/context fed to codegen. Could not find variable declaration in environment: \"%s\"\n",
+          expression->children->value.symbol);
     }
     if (strcmp(tmpnode->value.symbol, "external function") == 0) {
       break;
     }
     // Get size in bytes from types environment.
-    err = parse_get_type(original_context, tmpnode, tmpnode);
-    if (err.type) { return err; }
+    if (!parse_get_type(original_context, tmpnode, tmpnode, false)) return false;
     size_in_bytes = tmpnode->children->value.integer;
 
     IRInstruction *local = ir_stack_allocate(cg_context, size_in_bytes);
@@ -708,16 +686,16 @@ Error codegen_expression
     ASSERT(iterator, "Invalid or mishapen AST.");
 
     // Codegen RHS
-    err = codegen_expression(cg_context, context, next_child_context,
-                             expression->children->next_child);
-    if (err.type) { break; }
+    if (!codegen_expression(cg_context, context,
+         next_child_context,
+         expression->children->next_child)) return false;
 
     if (expression->children->type == NODE_TYPE_VARIABLE_ACCESS) {
       // LHS is simple variable access. No pointers, array indices, etc.
       SymbolAddress address = symbol_to_address(cg_context, iterator);
       switch (address.mode) {
       case SYMBOL_ADDRESS_MODE_ERROR:
-        return address.error;
+        return false;
       case SYMBOL_ADDRESS_MODE_GLOBAL:
         expression->result = ir_store_global
           (cg_context,
@@ -744,9 +722,9 @@ Error codegen_expression
       // there are dereferences (minus one), getting the new address
       // each time.
 
-      codegen_expression(cg_context, context,
-                         next_child_context,
-                         expression->children->children);
+      if (!codegen_expression(cg_context, context,
+           next_child_context,
+           expression->children->children)) return false;
 
       expression->result =
         ir_store(cg_context,
@@ -754,23 +732,19 @@ Error codegen_expression
                  expression->children->children->result);
     }
   } break;
-  case NODE_TYPE_CAST:
-    if (0) {}
 
+  case NODE_TYPE_CAST: {
     Node *cast_type = expression->children;
     // TODO: Somehow avoid typechecking twice; this is only needed to get result type of expression.
     Node *expression_type = node_allocate();
-    err = typecheck_expression(context, next_child_context, expression->children->next_child, expression_type);
-    if (err.type) { return err; }
+    if (!typecheck_expression(context, next_child_context, expression->children->next_child, expression_type)) return false;
 
     // Get size of cast_type and expression_type to determine kind of
     // typecast.
     Node *cast_type_info = node_allocate();
     Node *expression_type_info = node_allocate();
-    err = parse_get_type(context, cast_type, cast_type_info);
-    if (err.type) { return err; }
-    err = parse_get_type(context, expression_type, expression_type_info);
-    if (err.type) { return err; }
+    if (!parse_get_type(context, cast_type, cast_type_info, false)) return false;
+    if (!parse_get_type(context, expression_type, expression_type_info, false)) return false;
     size_t cast_type_size = (size_t) cast_type_info->children->value.integer;
     size_t expression_type_size = (size_t) expression_type_info->children->value.integer;
     free(cast_type_info);
@@ -788,16 +762,16 @@ Error codegen_expression
       TODO("Handle TYPECAST truncation in codegen_platform.c!");
     }
 
-    break;
+    } break;
   }
 
   free(tmpnode);
-  return err;
+  return true;
 }
 
 #define LABEL_NAME_BUFFER_SIZE (1024)
 
-Error codegen_function
+bool codegen_function
 (CodegenContext *cg_context,
  ParsingContext *context,
  ParsingContext **next_child_context,
@@ -805,8 +779,6 @@ Error codegen_function
  Node *function
  )
 {
-  Error err = ok;
-
   cg_context = codegen_context_create(cg_context);
 
   /// Create a new function.
@@ -860,11 +832,7 @@ Error codegen_function
   Node *last_expression = NULL;
   Node *expression = function->children->next_child->next_child->children;
   while (expression) {
-    err = codegen_expression(cg_context, ctx, &next_child_ctx, expression);
-    if (err.type) {
-      print_error(err);
-      return err;
-    }
+    if (!codegen_expression(cg_context, ctx, &next_child_ctx, expression)) return false;
     last_expression = expression;
     expression = expression->next_child;
   }
@@ -873,12 +841,10 @@ Error codegen_function
 
   // Free context;
   codegen_context_free(cg_context);
-  return ok;
+  return true;
 }
 
-Error codegen_program(CodegenContext *context, Node *program) {
-  Error err = ok;
-
+NODISCARD bool codegen_program(CodegenContext *context, Node *program) {
   ir_function(context, "main", 2);
 
   ParsingContext *next_child_context = context->parse_context->children;
@@ -889,8 +855,7 @@ Error codegen_program(CodegenContext *context, Node *program) {
       expression = expression->next_child;
       continue;
     }
-    err = codegen_expression(context, context->parse_context, &next_child_context, expression);
-    if (err.type) { return err; }
+    if (!codegen_expression(context, context->parse_context, &next_child_context, expression)) return false;
     last_expression = expression;
     expression = expression->next_child;
   }
@@ -898,7 +863,7 @@ Error codegen_program(CodegenContext *context, Node *program) {
     ir_return(context,
               last_expression ? last_expression->result : ir_immediate(context, 0));
   }
-  return err;
+  return true;
 }
 
 //================================================================ END CG_FMT_x86_64_MSWIN
@@ -928,7 +893,7 @@ void codegen_emit(CodegenContext *context) {
   }
 }
 
-Error codegen
+bool codegen
 (enum CodegenLanguage lang,
  enum CodegenOutputFormat format,
  enum CodegenCallingConvention call_convention,
@@ -940,18 +905,10 @@ Error codegen
  string ir
  )
 {
-  Error err = ok;
-  if (!outfile) {
-    ERROR_PREP(err, ERROR_ARGUMENTS, "codegen(): outfile can not be NULL!");
-    return err;
-  }
+  if (!outfile) ICE("codegen(): outfile can not be NULL!");
   // Open file for writing.
   FILE *code = fopen(outfile, "w");
-  if (!code) {
-    printf("Filepath: \"%s\"\n", outfile);
-    ERROR_PREP(err, ERROR_GENERIC, "codegen(): fopen failed to open file at path.");
-    return err;
-  }
+  if (!code) ICE("codegen(): failed to open file at path: \"%s\"\n", outfile);
 
   CodegenContext *context = codegen_context_create_top_level
     (parse_context, format, call_convention, dialect, code);
@@ -959,16 +916,22 @@ Error codegen
   switch (lang) {
     /// Parse an IR file.
     case LANG_IR: {
-        if (!ir_parse(context, infile, ir)) exit(2);
+        if (!ir_parse(context, infile, ir)) {
+          fclose(code);
+          return false;
+        }
     } break;
 
     /// Parse a FUN file.
     case LANG_FUN: {
-        err = codegen_program(context, program);
+        if (!codegen_program(context, program)) {
+          fclose(code);
+          return false;
+        }
     } break;
 
     /// Anything else is not supported.
-    default: ASSERT(false, "Language %d not supported.", lang);
+    default: ICE("Language %d not supported.", lang);
   }
 
   if (optimise) codegen_optimise(context);
@@ -985,6 +948,6 @@ Error codegen
   codegen_context_free(context);
 
   fclose(code);
-  return err;
+  return true;
 }
 

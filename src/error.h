@@ -83,16 +83,19 @@ void assert_impl (
 
 /// Used by ICE(). You probably don't want to use this directly.
 NORETURN
-FORMAT(printf, 4, 5)
+FORMAT(printf, 2, 3)
 void ice_impl (
-    const char *file,
-    const char *func,
-    int line,
+    int ignore_frames_n,
     const char *fmt,
     ...
 );
 
-#define ICE(...) (ice_impl(__FILE__, __func__, __LINE__, __VA_ARGS__), builtin_unreachable())
+#define ICE(...)        (ice_impl(2, __VA_ARGS__), builtin_unreachable())
+
+/// Call this if you’re in a signal handler.
+#ifndef _WIN32
+#  define ICE_SIGNAL(...) (ice_impl(4, __VA_ARGS__), builtin_unreachable())
+#endif
 
 /// Usage:
 ///   ASSERT(condition);

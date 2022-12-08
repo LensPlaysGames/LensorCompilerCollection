@@ -144,7 +144,7 @@ void node_free(Node *root);
 /// Copy A into B, asserting allocations.
 void node_copy(Node *a, Node *b);
 
-bool token_string_equalp(char* string, Token *token);
+bool token_string_equalp(const char* string, Token *token);
 
 /// @return Boolean-like value; 1 upon success, 0 for failure.
 NODISCARD bool parse_integer(Token *token, Node *node);
@@ -216,12 +216,12 @@ NODISCARD bool parse_type(ParsingContext *context, ParsingState *state, Node *ty
 /** Get the value of a type symbol/ID in types environment.
  *  Return an error if type is not a valid symbol/ID found in context.
  */
-NODISCARD bool parse_get_type(ParsingContext *context, Node *id, Node *result);
+NODISCARD bool parse_get_type(ParsingContext *context, Node *id, Node *result, bool may_fail);
 
 /** Get the value of a variable symbol/ID in variables environment.
  *  Return an error if variable is not a valid symbol/ID found in context.
  */
-NODISCARD bool parse_get_variable(ParsingContext *context, Node *id, Node *result);
+NODISCARD bool parse_get_variable(ParsingContext *context, Node *id, Node *result, bool may_fail);
 
 typedef enum CreatesStackframe {
   DOESNT_CREATE_STACKFRAME = false,
