@@ -617,8 +617,7 @@ bool parse_get_type(ParsingContext *const context, Node *id, Node *result, bool 
   if (strcmp(id->value.symbol, "array") == 0) {
     // Get size of base type!
     Node *base_type = node_allocate();
-    bool ok = parse_get_type(context, id->children->next_child, base_type, false);
-    if (!ok) return false;
+    if (!parse_get_type(context, id->children->next_child, base_type, false)) return false;
     // Size of array is equal to size of base type multiplied by capacity of array.
     result->children = node_integer(id->children->value.integer * base_type->children->value.integer);
     free(base_type);
@@ -655,7 +654,7 @@ bool parse_get_variable(ParsingContext *const context, Node *id, Node *result, b
   return false;
 }
 
-bool parse_integer(Token *token, Node *node) {
+NODISCARD bool parse_integer(Token *token, Node *node) {
   if (!token || !node) { return false; }
   char *end = NULL;
   if (token->end - token->beginning == 1 && *(token->beginning) == '0') {
@@ -759,7 +758,7 @@ enum StackOperatorReturnValue {
  * @retval STACK_HANDLED_PARSE: Continue Parsing (working_result was updated, possibly stack as well)
  * @retval STACK_HANDLED_CHECK: Continue Checking (stack was updated, may need to handle it as well)
  */
-bool handle_stack_operator
+static NODISCARD bool handle_stack_operator
 (int *status,
  ParsingContext **context,
  ParsingStack **stack,
@@ -1319,7 +1318,10 @@ bool parse_expr
 
         // Check for variable access here.
         Node *var_binding = node_allocate();
-        if (!parse_get_variable(context, symbol, var_binding, true) || !nonep(*var_binding)) {
+        bool found = parse_get_variable(context, symbol, var_binding, true);
+        if (!nonep(*var_binding)) {
+          if (!found) ERR("Unknown variable: \"%s\"", symbol->value.symbol);
+
           // Create variable access node.
           working_result->type = NODE_TYPE_VARIABLE_ACCESS;
           working_result->value.symbol = strdup(symbol->value.symbol);
@@ -1386,12 +1388,8 @@ bool parse_expr
         } else {
           // Symbol is not a valid variable name. Check for function call
           // or new variable declaration.
-          bool done = false;
-          bool found = lex_expect(":", state, &done);
-          if (!done && found) {
-            lex_expect("=", state, &done);
-            if (!done && found)
-              ERR("Invalid Variable Symbol: \"%s\"", symbol->value.symbol);
+          if (EXPECT(":")) {
+            if (EXPECT("=")) ERR("Invalid Variable Symbol: \"%s\"", symbol->value.symbol);
 
             lex_advance(state);
             if (token_length == 0) { break; }
