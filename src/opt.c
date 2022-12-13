@@ -856,6 +856,9 @@ static void opt_reorder_blocks(IRFunction *f, DominatorInfo* info) {
 static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
   bool changed = false;
 
+  /// Avoid iterator invalidation.
+  BlockVector blocks_to_remove = {0};
+
   /// Remove blocks that consist of a single direct branch.
   DLIST_FOREACH (IRBlock*, b, f->blocks) {
     IRInstruction *last = b->instructions.last;
@@ -894,11 +897,20 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
         }
       }
 
-      ir_remove_and_free_block(b);
+      bool found = false;
+      VECTOR_CONTAINS(blocks_to_remove, b, found);
+      if (!found) VECTOR_PUSH(blocks_to_remove, b);
       changed = true;
     }
   }
 
+  /// Remove the blocks.
+  VECTOR_FOREACH_PTR (IRBlock*, b, blocks_to_remove) {
+    ir_remove_and_free_block(b);
+  }
+
+  /// Done.
+  VECTOR_DELETE(blocks_to_remove);
   return changed;
 }
 
