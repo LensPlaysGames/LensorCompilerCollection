@@ -656,6 +656,7 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
   }
 
   /// Optimise all optimisable variables.
+  bool changed = false;
   VECTOR_FOREACH (global_var, a, vars) {
     if (a->unoptimisable) {
       VECTOR_DELETE(a->loads);
@@ -663,6 +664,7 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
     }
 
     /// Replace all loads with the stored value.
+    changed = true;
     VECTOR_FOREACH_PTR (IRInstruction*, i, a->loads) {
       ir_replace_uses(i, a->store->value.global_assignment.new_value);
       ir_remove(i);
@@ -692,7 +694,6 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
   }
 
   /// Done.
-  bool changed = vars.size;
   VECTOR_DELETE(vars);
   return changed;
 }
