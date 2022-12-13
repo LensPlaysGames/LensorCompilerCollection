@@ -560,13 +560,18 @@ ParsingContext *parse_context_default_create() {
 }
 
 /// Update token, token length, and end of current token pointer.
-void lex_advance(ParsingState *state) {
+/// \return true if we lexed a token, false if we reached the end of the source.
+bool lex_advance(ParsingState *state) {
   if (!state || !state->current || !state->length || !state->end)
     ICE("Pointer arguments must not be NULL!");
 
   lex(state->current->end, state->current);
   *state->end = state->current->end;
   *state->length = (size_t) (state->current->end - state->current->beginning);
+  char *end = *state->end;
+  end += strspn(end, whitespace);
+  if (*end == 0) return false;
+  return true;
 }
 
 /// Returns true if the expected token was found, and sets
@@ -1175,7 +1180,7 @@ bool parse_expr
 
   for (;;) {
     //printf("lexed: "); print_token(current_token); putchar('\n');
-    lex_advance(state);
+    bool at_end_of_file = !lex_advance(state);
     if (token_length == 0) { return true; }
 
     if (parse_integer(&current_token, working_result)) {
@@ -1325,6 +1330,9 @@ bool parse_expr
           // Create variable access node.
           working_result->type = NODE_TYPE_VARIABLE_ACCESS;
           working_result->value.symbol = strdup(symbol->value.symbol);
+
+          // Break if we have a variable at end of file.
+          if (at_end_of_file) goto end_of_file;
 
           // Lookahead for function call
           if (EXPECT("(")) {
@@ -1541,6 +1549,7 @@ bool parse_expr
     }
 
     // NOTE: We often need to continue from here.
+  end_of_file:;
 
     bool found = parse_binary_infix_operator(context, stack, state,
       &working_precedence, &working_result,
