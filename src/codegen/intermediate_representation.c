@@ -524,9 +524,13 @@ IRFunction *ir_function(CodegenContext *context, const char *name, size_t params
   /// functions out with an empty block.
   IRBlock *block = ir_block_create();
 
+  /// Get the top-level context.
+  CodegenContext *top = context;
+  while (top->parent) top = top->parent;
+
   /// Set the current function and add it to the list of functions.
   context->function = function;
-  function->context = context;
+  function->context = top;
   ir_block_attach(context, block);
   VECTOR_PUSH(*context->functions, function);
 

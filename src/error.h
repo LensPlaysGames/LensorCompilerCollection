@@ -2,43 +2,42 @@
 #define COMPILER_ERROR_H
 
 #include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
 
-// TODO: Add file path, byte offset, etc.
-typedef struct Error {
-  enum ErrorType {
-    ERROR_NONE = 0,
-    ERROR_ARGUMENTS,
-    ERROR_TYPE,
-    ERROR_GENERIC,
-    ERROR_SYNTAX,
-    ERROR_TODO,
-    ERROR_MAX,
-  } type;
-  char *msg;
-} Error;
-
-void print_error(Error err);
-
-extern Error ok;
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef int32_t i32;
+typedef int64_t i64;
+typedef size_t usz;
 
 /// String span.
 typedef struct {
   const char *data;
-  size_t size;
+  usz size;
 } span;
 
 /// Owning string.
 typedef struct {
   char *data;
-  size_t size;
+  usz size;
 } string;
 
-#define ERROR_CREATE(n, t, msg)                 \
-  Error (n) = { (t), (msg) }
+enum diagnostic_level {
+  DIAG_NOTE,
+  DIAG_WARN,
+  DIAG_ERR,
+  DIAG_ICE,
+  DIAG_SORRY,
 
-#define ERROR_PREP(n, t, message)               \
-  (n).type = (t);                               \
-  (n).msg = (message);
+  DIAG_COUNT,
+};
+
+/// Source location.
+typedef struct {
+  u32 start;
+  u32 end;
+} loc;
 
 #ifndef _MSC_VER
 #  define NORETURN __attribute__((noreturn))
@@ -46,21 +45,29 @@ typedef struct {
 #  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
 #  define FORCEINLINE __attribute__((always_inline)) inline
 #  define PRETTY_FUNCTION __PRETTY_FUNCTION__
+#  define NODISCARD __attribute__((warn_unused_result))
+#  define builtin_unreachable() __builtin_unreachable()
 #else
 #  define NORETURN __declspec(noreturn)
 #  define FALLTHROUGH
 #  define FORMAT(...)
 #  define FORCEINLINE __forceinline inline
 #  define PRETTY_FUNCTION __FUNCSIG__
+#  define NODISCARD
+#  define builtin_unreachable() __assume(0)
 #endif
 
-NORETURN
-FORMAT(printf, 1, 2)
-void panic(const char *fmt, ...);
+FORMAT(printf, 5, 6)
+void issue_diagnostic
+(/// Error level and source location.
+ enum diagnostic_level level,
+ const char *filename,
+ span source,
+ loc location,
 
-NORETURN
-FORMAT(printf, 2, 3)
-void panic_with_code(int code, const char *fmt, ...);
+ /// The actual error message.
+ const char *fmt,
+ ...);
 
 /// Used by ASSERT(). You probably don't want to use this directly.
 NORETURN
@@ -74,31 +81,39 @@ void assert_impl (
     ...
 );
 
-/// Usage:
-///   ASSERT(condition);
-///   ASSERT(condition, "message", ...);
-#define ASSERT(cond, ...)  \
-  do {                     \
-    if (!(cond)) {         \
-      assert_impl          \
-        (__FILE__,         \
-         PRETTY_FUNCTION,  \
-         __LINE__ ,        \
-         #cond,            \
-         "!" __VA_ARGS__   \
-         );                \
-    }                      \
-  } while (0)
+/// Used by ICE(). You probably don't want to use this directly.
+NORETURN
+FORMAT(printf, 2, 3)
+void ice_impl (
+    int ignore_frames_n,
+    const char *fmt,
+    ...
+);
 
-#if __STDC_VERSION__ >= 201112L
-#  define STATIC_ASSERT(cond, ...) _Static_assert(cond, "" __VA_ARGS__)
-#else
-#  define STATIC_ASSERT(cond, ...) ASSERT(cond, "" __VA_ARGS__)
+#define ICE(...)        (ice_impl(2, __VA_ARGS__), builtin_unreachable())
+
+/// Call this if you’re in a signal handler.
+#ifndef _WIN32
+#  define ICE_SIGNAL(...) (ice_impl(4, __VA_ARGS__), builtin_unreachable())
 #endif
 
-#define TODO(...)     ASSERT(0, "TODO: "__VA_ARGS__)
-#define PANIC(...)    ASSERT(0, "PANIC: "__VA_ARGS__)
-#define UNREACHABLE() ASSERT(0, "Unreachable")
+/// Usage:
+///   ASSERT(condition);
+///   ASSERT(condition, "format string", ...);
+///
+/// We use `||` instead of `if` here so that this is an expression.
+#define ASSERT(cond, ...) \
+  ((cond) ? (void)(0) : (assert_impl(__FILE__, PRETTY_FUNCTION, __LINE__, #cond, "" __VA_ARGS__), builtin_unreachable()))
+
+#if __STDC_VERSION__ >= 201112L
+#  define STATIC_ASSERT(...) _Static_assert(__VA_ARGS__)
+#else
+#  define STATIC_ASSERT(...) ASSERT(__VA_ARGS__)
+#endif
+
+#define TODO(...)     (ASSERT(false, "TODO: "__VA_ARGS__), builtin_unreachable())
+#define PANIC(...)    (ASSERT(false, "PANIC: "__VA_ARGS__), builtin_unreachable())
+#define UNREACHABLE() (ASSERT(false, "Unreachable"), builtin_unreachable())
 
 #define CAT_(a, b) a ## b
 #define CAT(a, b) CAT_(a, b)

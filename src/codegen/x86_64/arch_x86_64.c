@@ -29,7 +29,7 @@
     static const char* register_names[] =                               \
       { FOR_ALL_X86_64_REGISTERS(REGISTER_NAME_##bits) };               \
     if (descriptor <= 0 || descriptor > REG_COUNT) {                    \
-      panic("ERROR::" #name "(): Could not find register with descriptor of %d\n", descriptor); \
+      PANIC("ERROR::" #name "(): Could not find register with descriptor of %d\n", descriptor); \
     }                                                                   \
     return register_names[descriptor - 1];                              \
   }
@@ -245,17 +245,17 @@ static const char *instruction_mnemonic(CodegenContext *context, enum Instructio
   }
 
   switch (context->dialect) {
-  default: panic("instruction_mnemonic(): Unknown output format.");
+  default: PANIC("instruction_mnemonic(): Unknown output format.");
 
   case CG_ASM_DIALECT_ATT:
     switch (instruction) {
-    default: panic("instruction_mnemonic(): Unknown instruction.");
+    default: PANIC("instruction_mnemonic(): Unknown instruction.");
     case I_CQO: return "cqto";
     }
 
   case CG_ASM_DIALECT_INTEL:
     switch (instruction) {
-    default: panic("instruction_mnemonic(): Unknown instruction.");
+    default: PANIC("instruction_mnemonic(): Unknown instruction.");
     case I_CQO: return "cqo";
     }
   }
@@ -269,7 +269,7 @@ static enum IndirectJumpType comparison_to_jump_type(enum ComparisonType compari
     case COMPARE_LE: return JUMP_TYPE_LE;
     case COMPARE_GT: return JUMP_TYPE_G;
     case COMPARE_GE: return JUMP_TYPE_GE;
-    default: panic("comparison_to_jump_type_x86_64(): Unknown comparison type.");
+    default: PANIC("comparison_to_jump_type_x86_64(): Unknown comparison type.");
   }
 }
 
@@ -281,7 +281,7 @@ static enum IndirectJumpType negate_jump(enum IndirectJumpType j) {
     case JUMP_TYPE_LE: return JUMP_TYPE_G;
     case JUMP_TYPE_G: return JUMP_TYPE_LE;
     case JUMP_TYPE_GE: return JUMP_TYPE_L;
-    default: panic("negate_jump(): Unknown jump type.");
+    default: PANIC("negate_jump(): Unknown jump type.");
   }
 }
 
@@ -301,7 +301,7 @@ static void femit_imm_to_reg(CodegenContext *context, enum Instruction inst, va_
       fprintf(context->code, "    %s %s, %" PRId64 "\n",
           mnemonic, destination, immediate);
       break;
-    default: panic("ERROR: femit_imm_to_reg(): Unsupported dialect %d", context->dialect);
+    default: PANIC("ERROR: femit_imm_to_reg(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -322,7 +322,7 @@ static void femit_imm_to_mem(CodegenContext *context, enum Instruction inst, va_
       fprintf(context->code, "    %s [%s + %" PRId64 "], %" PRId64 "\n",
           mnemonic, address, offset, immediate);
       break;
-    default: panic("ERROR: femit_imm_to_mem(): Unsupported dialect %d", context->dialect);
+    default: PANIC("ERROR: femit_imm_to_mem(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -344,7 +344,7 @@ static void femit_mem_to_reg(CodegenContext *context, enum Instruction inst, va_
       fprintf(context->code, "    %s %s, [%s + %" PRId64 "]\n",
           mnemonic, destination, address, offset);
       break;
-    default: panic("ERROR: femit_mem_to_reg(): Unsupported dialect %d", context->dialect);
+    default: PANIC("ERROR: femit_mem_to_reg(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -366,7 +366,7 @@ static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, va
       fprintf(context->code, "    %s %s, [%s + %s]\n",
           mnemonic, destination, address, name);
       break;
-    default: panic("ERROR: femit_name_to_reg(): Unsupported dialect %d", context->dialect);
+    default: PANIC("ERROR: femit_name_to_reg(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -398,7 +398,7 @@ static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, va_
                 mnemonic, address, source);
       }
       break;
-    default: panic("ERROR: femit_reg_to_mem(): Unsupported dialect %d", context->dialect);
+    default: PANIC("ERROR: femit_reg_to_mem(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -422,7 +422,7 @@ static void femit_reg_to_reg(CodegenContext *context, enum Instruction inst, va_
       fprintf(context->code, "    %s %s, %s\n",
           mnemonic, destination, source);
       break;
-    default: panic("ERROR: femit_reg_to_reg(): Unsupported dialect %d", context->dialect);
+    default: PANIC("ERROR: femit_reg_to_reg(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -444,7 +444,7 @@ static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, va
       fprintf(context->code, "    %s [%s + %s], %s\n",
           mnemonic, address, name, source);
       break;
-    default: panic("ERROR: femit_reg_to_name(): Unsupported dialect %d", context->dialect);
+    default: PANIC("ERROR: femit_reg_to_name(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -464,7 +464,7 @@ static void femit_mem(CodegenContext *context, enum Instruction inst, va_list ar
       fprintf(context->code, "    %s [%s + %" PRId64 "]\n",
           mnemonic, address, offset);
       break;
-    default: panic("ERROR: femit_mem(): Unsupported dialect %d", context->dialect);
+    default: PANIC("ERROR: femit_mem(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -483,7 +483,7 @@ static void femit_reg(CodegenContext *context, enum Instruction inst, va_list ar
       fprintf(context->code, "    %s %s\n",
           mnemonic, source);
       break;
-    default: panic("ERROR: femit_reg(): Unsupported dialect %d", context->dialect);
+    default: PANIC("ERROR: femit_reg(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -501,7 +501,7 @@ static void femit_imm(CodegenContext *context, enum Instruction inst, va_list ar
       fprintf(context->code, "    %s %" PRId64 "\n",
           mnemonic, immediate);
       break;
-    default: panic("ERROR: femit_imm(): Unsupported dialect %d", context->dialect);
+    default: PANIC("ERROR: femit_imm(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -520,7 +520,7 @@ static void femit_indirect_branch(CodegenContext *context, enum Instruction inst
       fprintf(context->code, "    %s %s\n",
           mnemonic, address);
       break;
-    default: panic("ERROR: femit_indirect_branch(): Unsupported dialect %d", context->dialect);
+    default: PANIC("ERROR: femit_indirect_branch(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -546,7 +546,7 @@ static void femit
     case I_MOV: {
       enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
       switch (operands) {
-        default: panic("Unhandled operand type %d in x86_64 code generation for %d.", operands, instruction);
+        default: PANIC("Unhandled operand type %d in x86_64 code generation for %d.", operands, instruction);
         case IMMEDIATE_TO_REGISTER: femit_imm_to_reg(context, instruction, args); break;
         case IMMEDIATE_TO_MEMORY: femit_imm_to_mem(context, instruction, args); break;
         case MEMORY_TO_REGISTER: femit_mem_to_reg(context, instruction, args); break;
@@ -560,7 +560,7 @@ static void femit
     case I_LEA: {
       enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
       switch (operands) {
-        default: panic("femit() only accepts MEMORY_TO_REGISTER or NAME_TO_REGISTER operand type with LEA instruction.");
+        default: PANIC("femit() only accepts MEMORY_TO_REGISTER or NAME_TO_REGISTER operand type with LEA instruction.");
         case MEMORY_TO_REGISTER: femit_mem_to_reg(context, instruction, args); break;
         case NAME_TO_REGISTER: femit_name_to_reg(context, instruction, args); break;
       }
@@ -569,7 +569,7 @@ static void femit
     case I_IMUL: {
       enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
       switch (operands) {
-        default: panic("femit() only accepts MEMORY_TO_REGISTER or REGISTER_TO_REGISTER operand type with IMUL instruction.");
+        default: PANIC("femit() only accepts MEMORY_TO_REGISTER or REGISTER_TO_REGISTER operand type with IMUL instruction.");
         case MEMORY_TO_REGISTER: femit_mem_to_reg(context, instruction, args); break;
         case REGISTER_TO_REGISTER: femit_reg_to_reg(context, instruction, args); break;
       }
@@ -578,7 +578,7 @@ static void femit
     case I_IDIV: {
       enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
       switch (operand) {
-        default: panic("femit() only accepts MEMORY or REGISTER operand type with IDIV instruction.");
+        default: PANIC("femit() only accepts MEMORY or REGISTER operand type with IDIV instruction.");
         case MEMORY: femit_mem(context, instruction, args); break;
         case REGISTER: femit_reg(context, instruction, args); break;
       }
@@ -589,7 +589,7 @@ static void femit
     case I_SHR: {
       enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
       switch (operand) {
-        default: panic("femit() only accepts REGISTER OR IMMEDIATE_TO_REGISTER operand type with shift instructions.");
+        default: PANIC("femit() only accepts REGISTER OR IMMEDIATE_TO_REGISTER operand type with shift instructions.");
         case IMMEDIATE_TO_REGISTER: femit_imm_to_reg(context, instruction, args); break;
         case REGISTER: {
           RegisterDescriptor register_to_shift = va_arg(args, RegisterDescriptor);
@@ -605,7 +605,7 @@ static void femit
               fprintf(context->code, "    %s %s, %s\n",
                   mnemonic, register_name(register_to_shift), cl);
               break;
-            default: panic("ERROR: femit(): Unsupported dialect %d for shift instruction", context->dialect);
+            default: PANIC("ERROR: femit(): Unsupported dialect %d for shift instruction", context->dialect);
           }
         } break;
       }
@@ -615,7 +615,7 @@ static void femit
     case I_CALL: {
       enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
       switch (operand) {
-        default: panic("femit() only accepts REGISTER or NAME operand type with CALL/JMP instruction.");
+        default: PANIC("femit() only accepts REGISTER or NAME operand type with CALL/JMP instruction.");
         case REGISTER: femit_indirect_branch(context, instruction, args); break;
         case NAME: {
           char *label = va_arg(args, char *);
@@ -629,7 +629,7 @@ static void femit
               fprintf(context->code, "    %s %s\n",
                   mnemonic, label);
               break;
-            default: panic("ERROR: femit(): Unsupported dialect %d for CALL/JMP instruction", context->dialect);
+            default: PANIC("ERROR: femit(): Unsupported dialect %d for CALL/JMP instruction", context->dialect);
           }
         } break;
       }
@@ -638,7 +638,7 @@ static void femit
     case I_PUSH: {
       enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
       switch (operand) {
-        default: panic("femit() only accepts REGISTER, MEMORY, or IMMEDIATE operand type with PUSH instruction.");
+        default: PANIC("femit() only accepts REGISTER, MEMORY, or IMMEDIATE operand type with PUSH instruction.");
         case REGISTER: femit_reg(context, instruction, args); break;
         case MEMORY: femit_mem(context, instruction, args); break;
         case IMMEDIATE: femit_imm(context, instruction, args); break;
@@ -649,7 +649,7 @@ static void femit
     case I_POP: {
       enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
       switch (operand) {
-        default: panic("femit() only accepts REGISTER or MEMORY operand type with POP instruction.");
+        default: PANIC("femit() only accepts REGISTER or MEMORY operand type with POP instruction.");
         case REGISTER: femit_reg(context, instruction, args); break;
         case MEMORY: femit_mem(context, instruction, args); break;
       }
@@ -658,7 +658,7 @@ static void femit
     case I_XCHG: {
       enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
       switch (operands) {
-        default: panic("femit(): invalid operands for XCHG instruction: %d", operands);
+        default: PANIC("femit(): invalid operands for XCHG instruction: %d", operands);
         case REGISTER_TO_REGISTER: femit_reg_to_reg(context, instruction, args); break;
         case MEMORY_TO_REGISTER: femit_mem_to_reg(context, instruction, args); break;
       }
@@ -682,7 +682,7 @@ static void femit
               mnemonic,
               setcc_suffixes_x86_64[comparison_type], value);
           break;
-        default: panic("ERROR: femit(): Unsupported dialect %d", context->dialect);
+        default: PANIC("ERROR: femit(): Unsupported dialect %d", context->dialect);
       }
     } break;
 
@@ -700,7 +700,7 @@ static void femit
           fprintf(context->code, "    %s%s %s\n",
               mnemonic, jump_type_names_x86_64[type], label);
           break;
-        default: panic("ERROR: femit_direct_branch(): Unsupported dialect %d", context->dialect);
+        default: PANIC("ERROR: femit_direct_branch(): Unsupported dialect %d", context->dialect);
       }
     } break;
 
@@ -710,7 +710,7 @@ static void femit
       fprintf(context->code, "    %s\n", mnemonic);
     } break;
 
-    default: panic("Unhandled instruction in x86_64 code generation: %d.", instruction);
+    default: PANIC("Unhandled instruction in x86_64 code generation: %d.", instruction);
   }
 
   va_end(args);
@@ -888,7 +888,7 @@ void codegen_cleanup_call_x86_64(CodegenContext *cg_context) {
       break;
     case FUNCTION_CALL_TYPE_EXTERNAL:
       break;
-    default: panic("No call to clean up");
+    default: PANIC("No call to clean up");
   }
 
   // Restore rax if it was in use, because function return value clobbered it.
@@ -1734,12 +1734,8 @@ void codegen_emit_x86_64(CodegenContext *context) {
         fprintf(context->code, ".section .data\n");
       }
 
-      Error err = parse_get_type(context->parse_context, type_id, type_info);
-      if (err.type) {
-        print_node(type_id, 0);
-        print_error(err);
-        PANIC();
-      }
+      if (!parse_get_type(context->parse_context, type_id, type_info, false))
+        ICE("Backend failed to get type '%s'.", type_id->value.symbol);
       fprintf(context->code, "%s: .space %" PRId64 "\n", var_id->value.symbol, type_info->children->value.integer);
     }
     var_it = var_it->next;

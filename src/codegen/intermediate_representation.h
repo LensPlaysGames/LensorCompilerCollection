@@ -111,6 +111,7 @@ typedef enum IRCallType {
 } IRCallType;
 
 typedef union IRCallValue {
+  /// TODO: direct calls should store a reference to a function, not its name.
   const char *name;
   IRInstruction *callee;
 } IRCallValue;
