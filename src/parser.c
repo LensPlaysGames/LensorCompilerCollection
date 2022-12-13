@@ -559,9 +559,10 @@ ParsingContext *parse_context_default_create() {
   return ctx;
 }
 
+static bool at_end_of_file = false;
+
 /// Update token, token length, and end of current token pointer.
-/// \return true if we lexed a token, false if we reached the end of the source.
-bool lex_advance(ParsingState *state) {
+void lex_advance(ParsingState *state) {
   if (!state || !state->current || !state->length || !state->end)
     ICE("Pointer arguments must not be NULL!");
 
@@ -570,8 +571,7 @@ bool lex_advance(ParsingState *state) {
   *state->length = (size_t) (state->current->end - state->current->beginning);
   char *end = *state->end;
   end += strspn(end, whitespace);
-  if (*end == 0) return false;
-  return true;
+  if (*end == 0) at_end_of_file = true;
 }
 
 /// Returns true if the expected token was found, and sets
@@ -1180,7 +1180,7 @@ bool parse_expr
 
   for (;;) {
     //printf("lexed: "); print_token(current_token); putchar('\n');
-    bool at_end_of_file = !lex_advance(state);
+    lex_advance(state);
     if (token_length == 0) { return true; }
 
     if (parse_integer(&current_token, working_result)) {
@@ -1375,6 +1375,9 @@ bool parse_expr
 
               if (!EXPECT("]")) ERR("Missing ']' in subscript");
             }
+
+            // Break if we have a subscript at end of file.
+            if (at_end_of_file) goto end_of_file;
 
             // Lookahead for variable reassignment.
             if (EXPECT(":") && EXPECT("=")) {
