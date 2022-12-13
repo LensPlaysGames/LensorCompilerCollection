@@ -225,16 +225,19 @@ static bool strictly_dominates(DomTreeNode *dominator, DomTreeNode *node) {
 static void build_and_prune_dominator_tree(IRFunction *f, DominatorInfo* info) {
   /// Determine all blocks that are reachable from the entry block.
   BlockVector reachable = collect_reachable_blocks(f->blocks.first, NULL);
+  BlockVector blocks_to_remove = {0};
 
   /// Remove any unreachable blocks.
   DLIST_FOREACH (IRBlock*, b, f->blocks) {
     bool out = false;
     VECTOR_CONTAINS(reachable, b, out);
-    if (!out) ir_remove_and_free_block(b);
+    if (!out) VECTOR_PUSH(blocks_to_remove, b);
   }
 
-  /// We no longer need this.
+  /// Remove unreachable blocks and free vectors.
+  VECTOR_FOREACH_PTR (IRBlock*, b, blocks_to_remove) ir_remove_and_free_block(b);
   VECTOR_DELETE(reachable);
+  VECTOR_DELETE(blocks_to_remove);
 
   /// Free old dominator tree.
   VECTOR_FOREACH (DomTreeNode, n, info->nodes) {
