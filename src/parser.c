@@ -559,6 +559,8 @@ ParsingContext *parse_context_default_create() {
   return ctx;
 }
 
+/// This is a bit scuffed but it’s the simplest way of doing it,
+/// simply because we don’t have a global parser state.
 static bool at_end_of_file = false;
 
 /// Update token, token length, and end of current token pointer.
