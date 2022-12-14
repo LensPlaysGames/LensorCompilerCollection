@@ -103,20 +103,11 @@ bool typecheck_expression
 {
   if (!context || !expression) ICE("typecheck_expression(): Arguments must not be NULL!");
   ParsingContext *context_it = context;
-  Node *value = node_allocate();
-  Node *tmpnode = node_allocate();
+  Node *value    = node_allocate();
+  Node *tmpnode  = node_allocate();
   Node *iterator = NULL;
-  Node *result = node_allocate();
-  Node *type = node_allocate();
-
-  // TODO: I feel like children should only be checked when parent type is handled.
-  // Typecheck all the children of node before typechecking node.
-  //Node *child_it = expression->children;
-  //while (child_it) {
-  //  err = typecheck_expression(context, child_it);
-  //  if (err.type) { return err; }
-  //  child_it = child_it->next_child;
-  //}
+  Node *result   = node_allocate();
+  Node *type     = node_allocate();
 
   ParsingContext *to_enter;
 

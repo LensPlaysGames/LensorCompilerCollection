@@ -1734,9 +1734,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
         fprintf(context->code, ".section .data\n");
       }
 
-      if (!parse_get_type(context->parse_context, type_id, type_info, false))
-        ICE("Backend failed to get type '%s'.", type_id->value.symbol);
-      fprintf(context->code, "%s: .space %" PRId64 "\n", var_id->value.symbol, type_info->children->value.integer);
+      if (parse_get_type(context->parse_context, type_id, type_info, false)) {
+        fprintf(context->code, "%s: .space %" PRId64 "\n", var_id->value.symbol, type_info->children->value.integer);
+      }
     }
     var_it = var_it->next;
   }

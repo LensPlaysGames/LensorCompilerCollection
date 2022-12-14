@@ -214,8 +214,8 @@ NODISCARD bool codegen_expression
  Node *expression
  )
 {
-  char *result = NULL;
-  Node *tmpnode = node_allocate();
+  char *result   = NULL;
+  Node *tmpnode  = node_allocate();
   Node *iterator = NULL;
 
   ParsingContext *original_context = context;
@@ -231,18 +231,28 @@ NODISCARD bool codegen_expression
     // Use `typecheck_expression()` to get type of variable.
     Node *variable_type = node_allocate();
 
-    // err is ignored purposefully, program already type-checked valid.
-    bool _ = typecheck_expression(context, NULL, expression->children, variable_type);
-    (void) _;
-
     IRInstruction *call = NULL;
 
-    if (strcmp(variable_type->value.symbol, "external function") == 0) {
-        /// TODO: direct calls should store a reference to a function, not its name.
-        call = ir_direct_call(cg_context, expression->children->value.symbol);
+    // FIXME: A variable with no type info is attempting to be called.
+    // This means that it is a named function, *clearly*.
+    if (!parse_get_variable(context, expression->children, tmpnode, true)) {
+      call = ir_direct_call(cg_context, expression->children->value.symbol);
     } else {
-        if (!codegen_expression(cg_context, context, next_child_context, expression->children)) return false;
+      // err is ignored purposefully, program already type-checked valid.
+      bool _ = typecheck_expression(context, NULL, expression->children, variable_type);
+      (void) _;
+
+      if (strcmp(variable_type->value.symbol, "external function") == 0) {
+        /// TODO: direct calls should store a reference to a function, not its name.
+
+        call = ir_direct_call(cg_context, expression->children->value.symbol);
+      } else {
+        if (!codegen_expression(cg_context, context, next_child_context, expression->children)) {
+          return false;
+        }
         call = ir_indirect_call(cg_context, expression->children->result);
+      }
+
     }
 
     for (iterator = expression->children->next_child->children;
@@ -257,15 +267,20 @@ NODISCARD bool codegen_expression
   } break;
 
   case NODE_TYPE_FUNCTION: {
-    // TODO/FIXME: Obviously this is not ideal to do backwards lookup,
-    // especially for function nodes which contain the body... Oh well!
-    ParsingContext *context_it = context;
-    while (context_it) {
-        if (environment_get_by_value(*context_it->functions, expression, tmpnode)) {
-        result = tmpnode->value.symbol;
-        break;
-        }
-        context_it = context_it->parent;
+    bool is_special_function_name_handling_stupid_variable_thing = false;
+    if (expression->children->next_child->next_child->next_child) {
+      result = expression->children->next_child->next_child->next_child->value.symbol;
+
+      // Remove type info.
+      // `result` refers to the name of the function.
+      // Find and remove binding from variables parse context.
+
+      ParsingContext *ctx_it = context;
+      while (ctx_it && !environment_remove(ctx_it->variables, expression->children->next_child->next_child->next_child)) {
+        ctx_it = ctx_it->parent;
+      }
+      ASSERT(ctx_it, "Parser generated malformed lambda AST");
+      is_special_function_name_handling_stupid_variable_thing = true;
     }
     if (!result) {
         // TODO: Keep track of local lambda label in environment or something.
@@ -275,8 +290,10 @@ NODISCARD bool codegen_expression
     if (!codegen_function(cg_context,
                           context, next_child_context,
                           result, expression)) return false;
-    // Function returns beginning of instructions address.
-    expression->result = ir_load_global_address(cg_context, result);
+    if (!is_special_function_name_handling_stupid_variable_thing) {
+      // Function returns beginning of instructions address.
+      expression->result = ir_load_global_address(cg_context, result);
+    }
   } break;
 
   case NODE_TYPE_DEREFERENCE:
@@ -676,6 +693,7 @@ NODISCARD bool codegen_expression
     local_reference->value.ir_instruction = local;
     environment_set(cg_context->locals, expression->children, local_reference);
     break;
+
   case NODE_TYPE_VARIABLE_REASSIGNMENT: {
     // Recurse LHS into children until LHS is a var. access.
     // Set iterator to the var. access node.
@@ -689,6 +707,14 @@ NODISCARD bool codegen_expression
     if (!codegen_expression(cg_context, context,
          next_child_context,
          expression->children->next_child)) return false;
+
+    // If variable has no type information, don't do anything, just skip it.
+    if (!parse_get_variable(context, iterator, tmpnode, true)) {
+      printf("Skipping codegen of %s variable\n", iterator->value.symbol);
+      break;
+    } else {
+      printf("Codegenning %s variable reassignment\n", iterator->value.symbol);
+    }
 
     if (expression->children->type == NODE_TYPE_VARIABLE_ACCESS) {
       // LHS is simple variable access. No pointers, array indices, etc.

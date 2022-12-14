@@ -32,7 +32,7 @@ typedef enum NodeType {
 
   // END NULL DENOTATION TYPES
 
-  /// Contains three children.
+  /// Contains four children.
   /// 1. Parameter List
   ///      Var. Decl.
   ///        <name symbol>
