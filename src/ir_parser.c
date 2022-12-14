@@ -511,13 +511,13 @@ RESOLVE_OR_DECLARE(function, const char *, function, function->name)
     VECTOR_FOREACH (CAT(type, _sym), sym, (p)->CAT(type, _syms)) {      \
       /** An unresolved function is a parse error. **/                  \
       if (!sym->field) {                                                \
-        issue_diagnostic(                                               \
-                                                                 DIAG_ERR, \
-                                                                 (p)->filename, \
-                                                                 (p)->source, \
-                                                                 sym->location, \
-                                                                 "Unknown " err_name " '%.*s'", \
-                                                                 (int) sym->name.size, sym->name.data); \
+        issue_diagnostic                                                \
+          ( DIAG_ERR,                                                   \
+            (p)->filename,                                              \
+            (p)->source,                                                \
+            sym->location,                                              \
+            "Unknown " err_name " '%.*s'",                              \
+            (int) sym->name.size, sym->name.data);                      \
         success = false;                                                \
       } /** Otherwise, resolve the function. **/                        \
       else {                                                            \
