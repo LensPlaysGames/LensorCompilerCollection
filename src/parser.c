@@ -10,10 +10,10 @@
 
 /// Parser error.
 /// FIXME: Too many of these. Clean this up a bit.
-#define ERR_AT_CONTEXT(loc, context, ...)                                                              \
-  do {                                                                                \
+#define ERR_AT_CONTEXT(loc, context, ...)                               \
+  do {                                                                  \
     issue_diagnostic(DIAG_ERR, (context)->filename, (context)->source, (loc), __VA_ARGS__); \
-    return false;                                                                     \
+    return false;                                                       \
   } while (0)
 #define ERR_AT_STATE_CTX(state, context, ...) ERR_AT(token_span((context)->source.data, (state)->current), __VA_ARGS__)
 #define ERR_AT_STATE(state, ...) ERR_AT(token_span((context)->source.data, (state)->current), __VA_ARGS__)
@@ -1501,6 +1501,11 @@ bool parse_expr
 
                 Node *body = node_allocate();
                 node_add_child(lambda, body);
+
+                Node *function_name = node_allocate();
+                node_copy(symbol, function_name);
+                node_add_child(lambda, function_name);
+
                 Node *first_expression = node_allocate();
                 node_add_child(body, first_expression);
 
