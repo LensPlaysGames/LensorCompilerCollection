@@ -36,7 +36,7 @@ Environment *environment_create(Environment *parent) {
 int environment_set(Environment *env, Node *id, Node *value) {
   // Over-write existing value if ID is already bound in environment.
   if (!env || !id || !value) {
-    return 0;
+    ICE("environment_set(): Arguments must not be null.");
   }
   Binding *binding_it = env->bind;
   while (binding_it) {
@@ -54,6 +54,27 @@ int environment_set(Environment *env, Node *id, Node *value) {
   binding->next = env->bind;
   env->bind = binding;
   return 1;
+}
+
+bool environment_remove(Environment *env, Node *id) {
+  if (!env || !id) {
+    ICE("environment_remove(): Arguments must not be null.");
+  }
+  Binding *bind = env->bind;
+  Binding *last_bind = NULL;
+  while (bind) {
+    if (node_compare(id, bind->id)) {
+      if (last_bind) {
+        last_bind->next = bind->next;
+      } else {
+        env->bind = bind->next;
+      }
+      return true;
+    }
+    last_bind = bind;
+    bind = bind->next;
+  }
+  return false;
 }
 
 int environment_set_end(Environment *env, Node *id, Node *value) {

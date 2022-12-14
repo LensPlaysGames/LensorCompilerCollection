@@ -1,20 +1,17 @@
 #ifndef COMPILER_ENVIRONMENT_H
 #define COMPILER_ENVIRONMENT_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 typedef struct Node Node;
 
-// TODO:
-// |-- API to create new Binding.
-// `-- API to add Binding to environment.
 typedef struct Binding {
   Node *id;
   Node *value;
   struct Binding *next;
 } Binding;
 
-// TODO: API to create new Environment.
 typedef struct Environment {
   struct Environment *parent;
   Binding *bind;
@@ -38,6 +35,14 @@ int environment_set(Environment *env, Node *id, Node *value);
  * @retval 2 Existing binding value overwrite (ID unused).
  */
 int environment_set_end(Environment *env, Node *id, Node *value);
+
+/** Remove binding with matching ID.
+ *
+ * @retval false Did not remove binding.
+ * @retval true  Did remove binding.
+ * @return whether or not the binding is removed.
+ */
+bool environment_remove(Environment *env, Node *id);
 
 /** Fill RESULT with value bound to ID in ENV, if successful.
  *
