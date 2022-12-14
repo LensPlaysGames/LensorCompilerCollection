@@ -337,11 +337,14 @@ bool typecheck_expression
     *context_to_enter = (*context_to_enter)->next_child;
     break;
 
-  case NODE_TYPE_VARIABLE_REASSIGNMENT:
+  case NODE_TYPE_VARIABLE_REASSIGNMENT: {
     // Get return type of left hand side variable, dereference adjusted.
     if (!typecheck_expression(context, context_to_enter,
          expression->children,
          result_type)) return false;
+
+    // TODO: Ensure type of LHS is actually assignable, like not an
+    // external function lol.
 
     //printf("\n");
     //printf("LHS\n");
@@ -370,7 +373,8 @@ bool typecheck_expression
       ERR(expression->source_location, "Type of LHS of variable reassignment must match RHS return type.");
     }
     free(rhs_return_value);
-    break;
+
+    } break;
 
   case NODE_TYPE_BINARY_OPERATOR:
     // Get global context.
