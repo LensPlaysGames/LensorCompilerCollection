@@ -9,14 +9,6 @@
 
 typedef struct Environment Environment;
 
-typedef struct Token {
-  char *beginning;
-  char *end;
-} Token;
-
-void print_token(Token t);
-void lex(char *source, Token *token);
-
 typedef enum NodeType {
   // BEGIN NULL DENOTATION TYPES
 
@@ -145,28 +137,6 @@ void node_free(Node *root);
 /// Copy A into B, asserting allocations.
 void node_copy(Node *a, Node *b);
 
-bool token_string_equalp(const char* string, Token *token);
-
-/// @return Boolean-like value; 1 upon success, 0 for failure.
-NODISCARD bool parse_integer(Token *token, Node *node);
-
-typedef struct ParsingState {
-  Token *current;
-  size_t *length;
-  char **end;
-} ParsingState;
-
-ParsingState parse_state_create(Token *token, size_t *length, char **end);
-void parse_state_update(ParsingState *state, Token token, size_t length, char *end);
-void parse_state_update_from(ParsingState *state, ParsingState new_state);
-
-// TODO: Separate context from stack.
-typedef struct ParsingStack {
-  struct ParsingStack *parent;
-  Node *operator;
-  Node *result;
-  Node *body;
-} ParsingStack;
 
 // TODO: Shove ParsingContext within an AST Node.
 typedef struct ParsingContext {

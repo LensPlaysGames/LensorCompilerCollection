@@ -29,7 +29,8 @@ enum NodeKind {
   NODE_TYPE_FUNCTION,
 };
 
-/// The type of a token.
+/// The type of a token. These are only in this header
+/// because some of them are also used in the AST.
 enum TokenType {
   TK_INVALID,
   TK_EOF,
@@ -42,6 +43,40 @@ enum TokenType {
   TK_ELSE,
   TK_WHILE,
   TK_EXT,
+
+  TK_LPAREN,
+  TK_RPAREN,
+  TK_LBRACK,
+  TK_RBRACK,
+  TK_LBRACE,
+  TK_RBRACE,
+
+  TK_COMMA,
+  TK_COLON,
+  TK_SEMICOLON,
+
+  TK_PLUS,
+  TK_MINUS,
+  TK_STAR,
+  TK_SLASH,
+  TK_PERCENT,
+  TK_AMPERSAND,
+  TK_PIPE,
+  TK_CARET,
+  TK_TILDE,
+  TK_EXCLAM,
+
+  TK_SHL,
+  TK_SHR,
+
+  TK_EQ,
+  TK_NE,
+  TK_LT,
+  TK_GT,
+  TK_LE,
+  TK_GE,
+
+  TK_COLON_EQ,
 };
 
 /// The type of a symbol in the symbol table.
@@ -49,14 +84,6 @@ enum SymbolKind {
   SYM_VARIABLE,
   SYM_FUNCTION,
   SYM_TYPE,
-};
-
-/// The type of a type.
-enum TypeKind {
-  TYPE_NAMED,
-  TYPE_POINTER,
-  TYPE_ARRAY,
-  TYPE_FUNCTION,
 };
 
 /// ===========================================================================
