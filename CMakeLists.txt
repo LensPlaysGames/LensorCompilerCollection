@@ -22,6 +22,7 @@ add_executable(
   src/parser.c
   src/typechecker.c
   src/opt.c
+  src/codegen/dom.c
   src/codegen/intermediate_representation.c
   src/codegen/register_allocation.c
   src/codegen/ir/ir.c

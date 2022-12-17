@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 
-//#define DEBUG_USES
+#define DEBUG_USES
 
 void mark_used(IRInstruction *usee, IRInstruction *user) {
   VECTOR_FOREACH_PTR (IRInstruction *, i_user, usee->users) {
