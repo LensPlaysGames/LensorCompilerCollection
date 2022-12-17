@@ -942,8 +942,7 @@ static void ir_internal_replace_use(IRInstruction *user, IRInstruction **child, 
   }
 }
 
-/// Iterate over all children of an instruction.
-static void ir_for_each_child(
+void ir_for_each_child(
   IRInstruction *user,
   void callback(IRInstruction *user, IRInstruction **child, void *data),
   void *data
@@ -1004,10 +1003,10 @@ static void ir_for_each_child(
   case IR_BRANCH:
   case IR_STACK_ALLOCATE:
   case IR_UNREACHABLE:
+  case IR_REGISTER:
     break;
   default:
     TODO("Handle IR instruction type %d", user->type);
-    break;
   }
 }
 

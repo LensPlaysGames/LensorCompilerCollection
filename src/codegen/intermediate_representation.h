@@ -490,4 +490,15 @@ void ir_remove_and_free_block(IRBlock *block);
 /// from PHIs.
 void ir_mark_unreachable(IRBlock *block);
 
+/// Iterate over each child of an instruction.
+///
+/// \param instruction The instruction to iterate over.
+/// \param callback A callback that is called with the instruction and the child.
+/// \param data User data that is passed to the callback.
+void ir_for_each_child(
+    IRInstruction *inst,
+    void callback(IRInstruction *user, IRInstruction **child, void *data),
+    void *data
+);
+
 #endif /* INTERMEDIATE_REPRESENTATION_H */

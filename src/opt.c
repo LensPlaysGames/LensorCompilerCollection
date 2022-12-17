@@ -713,7 +713,7 @@ void codegen_optimise(CodegenContext *ctx) {
     VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
       DominatorInfo dom = {0};
       do {
-        build_and_prune_dominator_tree(f, &dom);
+        build_dominator_tree(f, &dom, true);
         opt_reorder_blocks(f, &dom);
       } while (
           opt_const_folding_and_strengh_reduction(f) ||
@@ -736,7 +736,7 @@ void codegen_optimise_blocks(CodegenContext *ctx) {
   VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
     DominatorInfo dom = {0};
     do {
-      build_and_prune_dominator_tree(f, &dom);
+      build_dominator_tree(f, &dom, true);
       opt_reorder_blocks(f, &dom);
     } while (opt_jump_threading(f, &dom));
     free_dominator_info(&dom);

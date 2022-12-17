@@ -8,8 +8,8 @@
 /// A node in the dominator tree.
 typedef struct DomTreeNode {
   IRBlock *block;
-  VECTOR(struct DomTreeNode*) dominators;
-  VECTOR(struct DomTreeNode*) children;
+  VECTOR(struct DomTreeNode *) dominators;
+  VECTOR(struct DomTreeNode *) children;
 } DomTreeNode;
 
 /// Structure used to store dominator information such as the
@@ -76,12 +76,18 @@ typedef struct DominatorInfo {
   DomTreeNode *dominator_tree;
 } DominatorInfo;
 
-/// Build the dominator tree for a function and remove unused blocks.
+/// Build the dominator tree for a function.
+///
+/// \param f The function to build the dominator tree for.
+/// \param info Out parameter for the dominator info. This must be a valid
+///     DominatorInfo struct that has been used before or is initialised to {0}.
+/// \param prune Whether to remove unreachable blocks.
+///
 /// \see struct DominatorInfo
-void build_and_prune_dominator_tree(IRFunction *f, DominatorInfo* info);
+void build_dominator_tree(IRFunction *f, DominatorInfo *info, bool prune);
 
 /// Free the memory used by the dominator tree.
-void free_dominator_info(DominatorInfo* info);
+void free_dominator_info(DominatorInfo *info);
 
 /// Check if a node dominates another node.
 bool dominates(DomTreeNode *dominator, DomTreeNode *node);

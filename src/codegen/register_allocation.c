@@ -1,4 +1,5 @@
 #include <codegen.h>
+#include <codegen/dom.h>
 #include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/register_allocation.h>
@@ -18,6 +19,9 @@ CodegenContext *debug_context = NULL;
 #  define IR_FEMIT(file, context)
 #  define DEBUG(...)
 #endif
+
+/// Used all over the place.
+typedef VECTOR(IRBlock *) BlockVector;
 
 //==== BEG REGISTER ALLOCATION PASSES ====
 
@@ -268,216 +272,77 @@ void allocate_adjacency_graph(AdjacencyGraph *G, size_t size) {
   G->regmasks = calloc(1, size * sizeof(size_t));
 }
 
-/// Vector of blocks for interference checking.
-typedef VECTOR(IRBlock *) BlockVector;
+/// Callback called by `ir_for_each_child()` in `build_adjacency_graph()`.
+static void collect_interferences(IRInstruction *inst, IRInstruction **child, void* data) {
+  (void) inst;
+  IRInstructions *live_vals = data;
+  if (needs_register(*child)) VECTOR_PUSH(*live_vals, *child);
+}
 
-/// Forward declarations.
-bool interferes_after_def(BlockVector *visited, IRBlock *B, IRInstruction *v1);
-bool block_reachable_from_successors(BlockVector *visited, IRBlock *from, IRBlock *block);
+/// Walk over all possible paths in the dominator tree, starting at a leaf and up to the root.
+/// For each path, compute instruction interferences based on the values that are currently live.
+static void collect_interferences_for_node(DomTreeNode *leaf, IRInstructions *live_vals, BlockVector *visited, AdjacencyGraph *G) {
+  IRBlock *b = leaf->block;
 
-/// Check if a block has already been visited.
-bool block_visited(BlockVector *visited, IRBlock *block) {
-  VECTOR_FOREACH_PTR (IRBlock *, b, *visited) {
-    if (b == block) { return true; }
+  /// Don't visit the same block twice.
+  bool found;
+  VECTOR_CONTAINS(*visited, b, found);
+  if (found) return;
+  VECTOR_PUSH(*visited, b);
+
+  /// Collect interferences for instructions in this block.
+  for (IRInstruction *inst = b->instructions.last; inst; inst = inst->prev) {
+    /// Make this value interfere with all values that are live at this point.
+    VECTOR_FOREACH_PTR (IRInstruction *, live_val, *live_vals)
+      adjm_set(G->matrix, inst->index, live_val->index);
+
+    /// Remove its result from the set of live variables;
+    VECTOR_REMOVE_ELEMENT_UNORDERED(*live_vals, inst);
+
+    /// Add its operands to the set of live variables.
+    ir_for_each_child(inst, collect_interferences, live_vals);
   }
 
-  return false;
+  /// Do the same for all dominators of this block.
+  VECTOR_FOREACH_PTR (DomTreeNode *, dominator, leaf->dominators)
+    collect_interferences_for_node(dominator, live_vals, visited, G);
 }
 
-/// Check if a block is reachable from this block or any of its successors.
-/// Do not call this directly. Use block_reachable() instead.
-bool block_reachable_from_successor(BlockVector *visited, IRBlock *from, IRBlock *block) {
-  if (from == block) return true;
-
-  VECTOR_PUSH(*visited, from);
-  return block_reachable_from_successors(visited, from, block);
-}
-
-/// Check if a block is reachable from any of the successors of another block.
-/// Do not call this directly. Use block_reachable() instead.
-bool block_reachable_from_successors(BlockVector *visited, IRBlock *from, IRBlock *block) {
-  STATIC_ASSERT(IR_COUNT == 31, "Handle all branch instructions");
-  IRInstruction *branch = from->instructions.last;
-  switch (branch->type) {
-    case IR_UNREACHABLE:
-    case IR_RETURN: return false;
-    case IR_BRANCH:
-      if (block_visited(visited, branch->value.block)) { return false; }
-      return block_reachable_from_successor(visited, branch->value.block, block);
-    case IR_BRANCH_CONDITIONAL:
-      if (!block_visited(visited, branch->value.conditional_branch.true_branch)) {
-        if (block_reachable_from_successor(visited, branch->value.conditional_branch.true_branch, block)) {
-          return true;
-        }
-      }
-      if (!block_visited(visited, branch->value.conditional_branch.false_branch)) {
-        if (block_reachable_from_successor(visited, branch->value.conditional_branch.false_branch, block)) {
-          return true;
-        }
-      }
-      return false;
-    default: UNREACHABLE();
-  }
-}
-
-/// Check if a block is reachable from another block.
-bool block_reachable(IRBlock *from, IRBlock *block) {
-  if (block == from) { return true; }
-
-  BlockVector visited = {0};
-  VECTOR_PUSH(visited, from);
-  bool reachable = block_reachable_from_successors(&visited, from, block);
-  VECTOR_DELETE(visited);
-  return reachable;
-}
-
-/// Check if there is a use of v1 in B or any of its successors.
-/// \see values_interfere()
-bool has_use_after_def_in_block(BlockVector *visited, IRBlock *B, IRInstruction *v1) {
-  VECTOR_FOREACH_PTR (IRInstruction *, user, v1->users) {
-    if (user->block == B) { return true; }
-  }
-
-  VECTOR_PUSH(*visited, B);
-  return interferes_after_def(visited, B, v1);
-}
-
-/// Check if there is a use of v1 in any of the successors of B.
-/// \see values_interfere()
-bool interferes_after_def(BlockVector *visited, IRBlock *B, IRInstruction *v1) {
-  STATIC_ASSERT(IR_COUNT == 31, "Handle all branch instructions");
-  IRInstruction *branch = B->instructions.last;
-  switch (branch->type) {
-    case IR_UNREACHABLE:
-    case IR_RETURN: return false;
-
-    case IR_BRANCH:
-      if (block_visited(visited, branch->value.block)) { return false; }
-      return has_use_after_def_in_block(visited, branch->value.block, v1);
-
-    case IR_BRANCH_CONDITIONAL:
-      if (!block_visited(visited, branch->value.conditional_branch.true_branch)) {
-        if (has_use_after_def_in_block(visited, branch->value.conditional_branch.true_branch, v1)) {
-          return true;
-        }
-      }
-      if (!block_visited(visited, branch->value.conditional_branch.false_branch)) {
-        if (has_use_after_def_in_block(visited, branch->value.conditional_branch.false_branch, v1)) {
-          return true;
-        }
-      }
-      return false;
-    default: UNREACHABLE();
-  }
-}
-
-/// Check if a value interferes with another value in the block containing
-/// the second value’s definition.
-/// \see values_interfere()
-bool inteferes_at_def(IRBlock *b, IRInstruction *v1, IRInstruction *v2) {
-  VECTOR_FOREACH_PTR (IRInstruction *, user, v1->users) {
-    if (user->block != b) { continue; }
-    if (user->index > v2->index) { return true; }
-  }
-
-  BlockVector visited = {0};
-  VECTOR_PUSH(visited, b);
-  bool interferes = interferes_after_def(&visited, b, v1);
-  VECTOR_DELETE(visited);
-  return interferes;
-}
-
-/// Check if two values interfere if the definition of the first precedes
-/// that of the second.
-/// \see values_interfere()
-bool check_values_interfere(IRInstruction *v1, IRInstruction *v2) {
-  IRBlock *B1 = v1->block, *B2 = v2->block;
-  if (B1 == B2) {
-    /// This case will be handled by the second invocation of this function
-    /// in values_interfere().
-    if (v1->index > v2->index) { return false; }
-    return inteferes_at_def(B1, v1, v2);
-  }
-
-  if (!block_reachable(B1, B2)) { return false; }
-  return inteferes_at_def(B2, v1, v2);
-}
-
-/// Determine whether two values interfere.
-///
-/// Two values interfere if either one is live at the definition point
-/// of the other. A value is live starting at its definition point until
-/// just before its last use. If a value’s last use is in a different
-/// block than its definition, then it is live in all blocks between
-/// the definition and the use, in control flow order.
-///
-/// Whether a value V is live at its own definition point is undefined,
-/// simply because it’s not relevant: the only situation in which this
-/// would matter is if there were a value V' whose last use was in the
-/// definition of V. If V were considered live at its own definition,
-/// one might erroneously assume that the two would interfere, and that
-/// the RA might think that V' could not be assigned the same register
-/// as V. However, this is incorrect, since, as mentioned above, a value
-/// is live up to just *before* its last use. Therefore, V' would not
-/// interfere with V in this case, and the question of whether or not a
-/// value is live at its own definition point is irrelevant.
-///
-/// The algorithm that is used to determine whether two values interfere
-/// is described below and implemented across several mutually recursive
-/// functions.
-///
-/// The algorithm is as follows:
-///
-///   ## has-use-after-def-in-block (visited, B, v1)
-///      1. If there is a use of v1 in B, return true.
-///      2. Return interferes-after-def (visited, B, v1).
-///
-///   ## interferes-after-def (visited, B, v1)
-///      1. For each successor S of B:
-///         1a. If S is in visited, continue.
-///         1b. Add S to visited.
-///         1c. If has-use-after-def-in-block (S, v1) returns true, return true.
-///      2. Return false.
-///
-///   ## interferes-at-def (B, v1, v2)
-///      1. For each use U of v1 in B, if U->idx > v2->idx, return true.
-///      2. Let visited be a set of blocks containing B.
-///      3. Return interferes-after-def (visited, B, v1)
-///
-///   ## check-values-interfere (v1, v2)
-///      1. Let B1, B2 be the blocks containing the definitions of v1, v2.
-///      2. If B1 == B2, then
-///         2a. If v1->idx > v2->idx, return false.
-///         2b. Return interferes-at-def (B1, v1, v2)
-///      3. If B2 is not reachable from B1, return false.
-///      4. Return interferes-at-def (B2, v1, v2).
-///
-///   ## values-interfere (v1, v2)
-///      1. If v1 == v2, return false.
-///      2. If v1 is a COPY instruction and its argument is v2, or vice versa, return false.
-///      3. If check-values-interfere (v1, v2) returns true, return true.
-///      4. Return check-values-interfere (v2, v1).
-///
-/// \see has_use_after_def_in_block()
-/// \see interferes_after_def()
-/// \see interferes_at_def()
-/// \see check_values_interfere()
-bool values_interfere(IRInstruction *v1, IRInstruction *v2) {
-  if (v1 == v2) { return false; }
-  if (check_values_interfere(v1, v2)) { return true; }
-  return check_values_interfere(v2, v1);
-}
-
-void build_adjacency_graph(const MachineDescription *desc, IRInstructions *instructions, AdjacencyGraph *G) {
+/// Build the adjacency graph for the given function.
+static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc, IRInstructions *instructions, AdjacencyGraph *G) {
   ASSERT(instructions, "Can not build adjacency matrix of NULL instruction list.");
   allocate_adjacency_graph(G, instructions->size);
-  VECTOR_FOREACH_PTR (IRInstruction *, A, *instructions) {
-    VECTOR_FOREACH_PTR (IRInstruction *, B, *instructions) {
-      if (A == B) { break; } // (!)
-      if (adjm(G->matrix, A->index, B->index)) { continue; }
-      if (values_interfere(A, B)) { adjm_set(G->matrix, A->index, B->index); }
+
+  /// Build the dominator tree.
+  DominatorInfo dom_info = {0};
+  build_dominator_tree(f, &dom_info, false);
+
+  /// Collect the leaves of the dominator tree.
+  VECTOR(DomTreeNode*) leaves = {0};
+  VECTOR_FOREACH (DomTreeNode, node, dom_info.nodes) {
+    if (node->children.size == 0) {
+      VECTOR_PUSH(leaves, node);
     }
   }
+
+  /// Values that are currently live.
+  IRInstructions live_vals = {0};
+
+  /// Blocks that have been visited.
+  BlockVector visited = {0};
+
+  /// Collect the interferences for each leaf.
+  VECTOR_FOREACH_PTR (DomTreeNode*, node, leaves) {
+    VECTOR_CLEAR(live_vals);
+    VECTOR_CLEAR(visited);
+    collect_interferences_for_node(node, &live_vals, &visited, G);
+  }
+
+  /// Free dominator and liveness info.
+  free_dominator_info(&dom_info);
+  VECTOR_DELETE(leaves);
+  VECTOR_DELETE(live_vals);
+  VECTOR_DELETE(visited);
 
   /// While were at it, also check for interferences with physical registers.
   /// For that, we need to iterate over all values that interfere with A and
@@ -738,7 +603,7 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
       collect_instructions_into(f, instructions, 0);
 
       /// TODO: Ideally, we don’t want to rebuild the entire matrix on every iteration.
-      build_adjacency_graph(desc, instructions, G);
+      build_adjacency_graph(f, desc, instructions, G);
     } else {
       break;
     }
@@ -950,7 +815,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
 
   AdjacencyGraph G = {0};
   G.order = desc->register_count;
-  build_adjacency_graph(desc, &instructions, &G);
+  build_adjacency_graph(f, desc, &instructions, &G);
 
   PRINT_ADJACENCY_MATRIX(G.matrix);
 
@@ -969,7 +834,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
   IR_FEMIT(stdout, f->context);
 
   instructions = collect_instructions(f, 1);
-  build_adjacency_graph(desc, &instructions, &G);
+  build_adjacency_graph(f, desc, &instructions, &G);
   build_adjacency_lists(&instructions, &G);
 
   ir_set_func_ids(f);
