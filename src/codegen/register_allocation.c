@@ -276,7 +276,11 @@ void allocate_adjacency_graph(AdjacencyGraph *G, size_t size) {
 static void collect_interferences(IRInstruction *inst, IRInstruction **child, void* data) {
   (void) inst;
   IRInstructions *live_vals = data;
-  if (needs_register(*child)) VECTOR_PUSH(*live_vals, *child);
+  if (needs_register(*child)) {
+    bool found;
+    VECTOR_CONTAINS(*live_vals, *child, found);
+    if (!found) VECTOR_PUSH(*live_vals, *child);
+  }
 }
 
 /// Walk over all possible paths in the dominator tree, starting at a leaf and up to the root.
