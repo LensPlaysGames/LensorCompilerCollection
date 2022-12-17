@@ -17,12 +17,12 @@
     DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
       DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
 
-#define FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block) \
+#define FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block, instruction) \
   DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
     DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
 
 #define FOREACH_INSTRUCTION(context) FOREACH_INSTRUCTION_N(context, function, block, instruction)
-#define FOREACH_INSTRUCTION_IN_FUNCTION(function) FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block)
+#define FOREACH_INSTRUCTION_IN_FUNCTION(function) FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block, instruction)
 
 /// Some of these are also used in the parser, and until C implements
 /// inheriting from enums (i.e. never), this is the best we can do.

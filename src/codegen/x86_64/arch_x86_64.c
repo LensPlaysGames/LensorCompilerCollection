@@ -1646,7 +1646,7 @@ void calculate_stack_offsets(CodegenContext *context) {
   }
 }
 
-size_t x86_64_instruction_register_interference(IRInstruction *instruction) {
+static size_t interfering_regs(IRInstruction *instruction) {
   ASSERT(instruction, "Can not get register interference of NULL instruction.");
   size_t mask = 0;
   switch(instruction->type) {
@@ -1743,17 +1743,17 @@ void codegen_emit_x86_64(CodegenContext *context) {
   free(type_info);
 
   // Allocate registers to each temporary within the program.
-  RegisterAllocationInfo *info = ra_allocate_info
-    (context,
-     REG_RAX,
-     GENERAL_REGISTER_COUNT,
-     general,
-     argument_register_count,
-     argument_registers,
-     x86_64_instruction_register_interference
-     );
+  const MachineDescription desc = {
+    .registers = general,
+    .register_count = GENERAL_REGISTER_COUNT,
+    .argument_registers = argument_registers,
+    .argument_register_count = argument_register_count,
+    .result_register = REG_RAX,
+    .instruction_register_interference = interfering_regs
+  };
 
-  ra(info);
+  VECTOR_FOREACH_PTR (IRFunction*, f, *context->functions)
+    allocate_registers(f, &desc);
 
   if (debug_ir) ir_femit(stdout, context);
 

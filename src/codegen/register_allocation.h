@@ -3,9 +3,7 @@
 
 #include <codegen.h>
 
-typedef struct RegisterAllocationInfo {
-  CodegenContext *context;
-
+typedef struct MachineDescription {
   size_t register_count;
   Register *registers;
 
@@ -16,18 +14,9 @@ typedef struct RegisterAllocationInfo {
   Register result_register;
 
   size_t (*instruction_register_interference)(IRInstruction *instruction);
-} RegisterAllocationInfo;
+} MachineDescription;
 
-RegisterAllocationInfo *ra_allocate_info
-(CodegenContext *context,
- Register result_register,
- size_t general_registers_count,
- Register *general_registers,
- size_t argument_registers_count,
- Register *argument_registers,
- size_t instruction_register_interference(IRInstruction *instruction)
- );
-
-void ra(RegisterAllocationInfo *info);
+/// Peform register allocation for a function.
+void allocate_registers(IRFunction *f, const MachineDescription *desc);
 
 #endif /* REGISTER_ALLOCATION_H */
