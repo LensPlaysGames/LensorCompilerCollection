@@ -23,6 +23,7 @@ enum NodeKind {
   NODE_LITERAL,
   NODE_VARIABLE_REFERENCE,
 
+  NODE_TYPE_PRIMITIVE,
   NODE_TYPE_NAMED,
   NODE_TYPE_POINTER,
   NODE_TYPE_ARRAY,
@@ -65,6 +66,7 @@ enum TokenType {
   TK_CARET,
   TK_TILDE,
   TK_EXCLAM,
+  TK_AT,
 
   TK_SHL,
   TK_SHR,
@@ -93,7 +95,6 @@ enum SymbolKind {
 typedef struct Node Node;
 typedef struct Scope Scope;
 typedef VECTOR(Node *) Nodes;
-typedef VECTOR(char*) Strings;
 
 /// A symbol in the symbol table.
 typedef struct Symbol {
@@ -101,7 +102,7 @@ typedef struct Symbol {
   enum SymbolKind kind;
 
   /// The name of the symbol.
-  char* name;
+  string name;
 
   /// The scope in which the symbol is defined.
   Scope *scope;
@@ -133,16 +134,15 @@ typedef struct NodeRoot {
 
 /// Named function.
 typedef struct NodeFunction {
-  Nodes parameters;
-  Node *return_type;
+  Node *type;
   Node *body;
-  char* name;
+  string name;
 } NodeFunction;
 
 /// Variable declaration.
 typedef struct NodeDeclaration {
   Node *type;
-  char* name;
+  string name;
 } NodeDeclaration;
 
 /// If expression.
@@ -165,7 +165,7 @@ typedef struct NodeBlock {
 
 /// Function call.
 typedef struct NodeCall {
-  Symbol *callee;
+  Node *callee;
   Nodes arguments;
 } NodeCall;
 
@@ -193,7 +193,7 @@ typedef struct NodeUnary {
 typedef struct NodeLiteral {
   enum TokenType type;
   union {
-    int64_t integer;
+    u64 integer;
     size_t string_index;
   };
 } NodeLiteral;
@@ -204,9 +204,18 @@ typedef Symbol *NodeVariableReference;
 /// Named type.
 typedef Symbol *NodeTypeNamed;
 
+/// Primitive type.
+typedef struct NodeTypePrimitive {
+  usz size;
+  usz alignment;
+  bool is_signed;
+  span name;
+} NodeTypePrimitive;
+
 /// Pointer type.
 typedef struct NodeTypePointer {
   Node *to;
+  usz level;
 } NodeTypePointer;
 
 /// Array type.
@@ -246,6 +255,7 @@ struct Node {
     NodeUnary unary;
     NodeLiteral literal;
     NodeVariableReference var;
+    NodeTypePrimitive type_primitive;
     NodeTypeNamed type_named;
     NodeTypePointer type_pointer;
     NodeTypeArray type_array;
@@ -261,11 +271,17 @@ typedef struct AST {
   /// All nodes in the AST.
   Nodes nodes;
 
+  /// Counter used for generating unique names.
+  usz counter;
+
+  /// Builtin types.
+  Node *t_integer;
+
   /// Scopes.
   VECTOR(Scope *) scopes;
 
   /// String table.
-  Strings strings;
+  VECTOR(string) strings;
 } AST;
 
 /// ===========================================================================
@@ -279,15 +295,15 @@ void scope_pop(AST *ast);
 
 /// Add an empty symbol to a scope.
 /// \return The symbol that was added, or NULL if the symbol already exists.
-Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, const char* name);
+Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, Node *value);
 
 /// Find a symbol in a scope.
 /// \return The symbol, or NULL if it was not found.
-Symbol *scope_find_symbol(Scope *scope, const char* name, bool current_scope_only);
+Symbol *scope_find_symbol(Scope *scope, span name, bool this_scope_only);
 
 /// Find a symbol in a scope or add it if it does not exist.
 /// \return The symbol.
-Symbol *scope_find_or_add_symbol(Scope *scope, enum SymbolKind kind, const char* name);
+Symbol *scope_find_or_add_symbol(Scope *scope, enum SymbolKind kind, span name, bool this_scope_only);
 
 /// ===========================================================================
 ///  Functions to create ast nodes.
@@ -296,10 +312,9 @@ Symbol *scope_find_or_add_symbol(Scope *scope, enum SymbolKind kind, const char*
 Node *ast_make_function(
     AST *ast,
     loc source_location,
-    Nodes parameters,
-    Node *return_type,
+    Node *type,
     Node *body,
-    const char* name
+    span name
 );
 
 /// Create a new declaration node.
@@ -307,7 +322,7 @@ Node *ast_make_declaration(
     AST *ast,
     loc source_location,
     Node *type,
-    const char* name
+    span name
 );
 
 /// Create a new if expression.
@@ -338,7 +353,7 @@ Node *ast_make_block(
 Node *ast_make_call(
     AST *ast,
     loc source_location,
-    Symbol *callee,
+    Node *callee,
     Nodes arguments
 );
 
@@ -372,14 +387,14 @@ Node *ast_make_unary(
 Node *ast_make_integer_literal(
     AST *ast,
     loc source_location,
-    int64_t value
+    u64 value
 );
 
 /// Create a new string literal.
 Node *ast_make_string_literal(
     AST *ast,
     loc source_location,
-    const char* string
+    span string
 );
 
 /// Create a new variable reference.
@@ -400,7 +415,8 @@ Node *ast_make_type_named(
 Node *ast_make_type_pointer(
     AST *ast,
     loc source_location,
-    Node *to
+    Node *to,
+    usz level
 );
 
 /// Create a new array type.
@@ -415,8 +431,8 @@ Node *ast_make_type_array(
 Node *ast_make_type_function(
     AST *ast,
     loc source_location,
-    Nodes parameters,
-    Node *return_type
+    Node *return_type,
+    Nodes parameters
 );
 
 /// ===========================================================================
@@ -435,6 +451,6 @@ void ast_print(const AST *ast);
 void ast_print_node(const Node *node, size_t indent);
 
 /// Intern a string.
-size_t ast_intern_string(AST *ast, const char* string);
+size_t ast_intern_string(AST *ast, span string);
 
 #endif // FUNCOMPILER_AST_H

@@ -11,7 +11,7 @@ static Scope *scope_create(Scope *parent) {
 
 static void scope_delete(Scope *scope) {
   VECTOR_FOREACH_PTR (Symbol *, symbol, scope->symbols) {
-    free(symbol->name);
+    free(symbol->name.data);
     free(symbol);
   }
 
@@ -30,23 +30,24 @@ void scope_pop(AST *ast) {
   VECTOR_POP(ast->scopes);
 }
 
-Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, const char *name) {
+Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, Node *value) {
   Symbol *symbol = calloc(1, sizeof(Symbol));
   symbol->kind = kind;
-  symbol->name = strdup(name);
+  symbol->name = string_dup(name);
+  symbol->value = value;
   VECTOR_PUSH(scope->symbols, symbol);
   return symbol;
 }
 
-Symbol *scope_find_symbol(Scope *scope, const char *name, bool current_scope_only) {
+Symbol *scope_find_symbol(Scope *scope, span name, bool this_scope_only) {
   while (scope) {
     /// Return the symbol if it exists.
     VECTOR_FOREACH_PTR (Symbol *, symbol, scope->symbols)
-      if (strcmp(symbol->name, name) == 0)
+      if (string_eq(symbol->name, name))
         return symbol;
 
     /// If we're only looking in the current scope, return NULL.
-    if (current_scope_only) return NULL;
+    if (this_scope_only) return NULL;
 
     /// Otherwise, search the parent scope.
     scope = scope->parent;
@@ -56,8 +57,8 @@ Symbol *scope_find_symbol(Scope *scope, const char *name, bool current_scope_onl
   return NULL;
 }
 
-Symbol *scope_find_or_add_symbol(Scope *scope, enum SymbolKind kind, const char *name) {
-  Symbol *symbol = scope_find_symbol(scope, name, true);
+Symbol *scope_find_or_add_symbol(Scope *scope, enum SymbolKind kind, span name, bool this_scope_only) {
+  Symbol *symbol = scope_find_symbol(scope, name, this_scope_only);
   if (symbol) return symbol;
   return scope_add_symbol(scope, kind, name);
 }
@@ -78,15 +79,13 @@ static Node *mknode(AST *ast, enum NodeKind kind, loc source_location) {
 Node *ast_make_function(
     AST *ast,
     loc source_location,
-    Nodes parameters,
-    Node *return_type,
+    Node *type,
     Node *body,
-    const char *name
+    span name
 ) {
   Node *node = mknode(ast, NODE_FUNCTION, source_location);
-  node->function.name = strdup(name);
-  node->function.parameters = parameters;
-  node->function.return_type = return_type;
+  node->function.name = string_dup(name);
+  node->function.type = type;
   node->function.body = body;
   return node;
 }
@@ -96,10 +95,10 @@ Node *ast_make_declaration(
     AST *ast,
     loc source_location,
     Node *type,
-    const char *name
+    span name
 ) {
   Node *node = mknode(ast, NODE_DECLARATION, source_location);
-  node->declaration.name = strdup(name);
+  node->declaration.name = string_dup(name);
   node->declaration.type = type;
   return node;
 }
@@ -147,7 +146,7 @@ Node *ast_make_block(
 Node *ast_make_call(
     AST *ast,
     loc source_location,
-    Symbol *callee,
+    Node *callee,
     Nodes arguments
 ) {
   Node *node = mknode(ast, NODE_CALL, source_location);
@@ -203,7 +202,7 @@ Node *ast_make_unary(
 Node *ast_make_integer_literal(
     AST *ast,
     loc source_location,
-    int64_t value
+    u64 value
 ) {
   Node *node = mknode(ast, NODE_LITERAL, source_location);
   node->literal.type = TK_NUMBER;
@@ -215,11 +214,11 @@ Node *ast_make_integer_literal(
 Node *ast_make_string_literal(
     AST *ast,
     loc source_location,
-    const char *string_index
+    span string
 ) {
   Node *node = mknode(ast, NODE_LITERAL, source_location);
   node->literal.type = TK_STRING;
-  node->literal.string_index = ast_intern_string(ast, string_index);
+  node->literal.string_index = ast_intern_string(ast, string);
   return node;
 }
 
@@ -249,10 +248,12 @@ Node *ast_make_type_named(
 Node *ast_make_type_pointer(
     AST *ast,
     loc source_location,
-    Node *to
+    Node *to,
+    usz level
 ) {
   Node *node = mknode(ast, NODE_TYPE_POINTER, source_location);
   node->type_pointer.to = to;
+  node->type_pointer.level = level;
   return node;
 }
 
@@ -273,8 +274,8 @@ Node *ast_make_type_array(
 Node *ast_make_type_function(
     AST *ast,
     loc source_location,
-    Nodes parameters,
-    Node *return_type
+    Node *return_type,
+    Nodes parameters
 ) {
   Node *node = mknode(ast, NODE_TYPE_FUNCTION, source_location);
   node->type_function.parameters = parameters;
@@ -295,6 +296,16 @@ AST *ast_create() {
   /// Create the global scope.
   VECTOR_PUSH(ast->scopes, scope_create(NULL));
 
+  /// Initialise the builtin types.
+  ast->t_integer = mknode(ast, NODE_TYPE_PRIMITIVE, (loc){0, 0});
+  ast->t_integer->type_primitive.size = 8;
+  ast->t_integer->type_primitive.alignment = 8;
+  ast->t_integer->type_primitive.is_signed = true;
+  ast->t_integer->type_primitive.name = literal_span("integer");
+
+  /// Add the builtin types to the global scope.
+  scope_add_symbol(ast->scopes.data[0], SYM_TYPE, literal_span("integer"), ast->t_integer);
+
   /// Done.
   return ast;
 }
@@ -310,7 +321,7 @@ void ast_free(AST *ast) {
   VECTOR_DELETE(ast->scopes);
 
   /// Free all interned strings.
-  VECTOR_FOREACH_PTR (char *, string, ast->strings) free(string);
+  VECTOR_FOREACH (string, string, ast->strings) free(string->data);
   VECTOR_DELETE(ast->strings);
 
   /// Free the AST.
@@ -329,14 +340,12 @@ void ast_print_node(const Node *node, size_t indent) {
 }
 
 /// Intern a string.
-size_t ast_intern_string(AST *ast, const char *string) {
+size_t ast_intern_string(AST *ast, span str) {
   /// Check if the string is already interned.
   VECTOR_FOREACH_INDEX (i, ast->strings)
-    if (strcmp(string, ast->strings.data[i]) == 0)
-      return i;
+    if (string_eq(ast->strings.data[i], str)) return i;
 
   /// Intern the string.
-  char *copy = strdup(string);
-  VECTOR_PUSH(ast->strings, copy);
+  VECTOR_PUSH(ast->strings, string_dup(str));
   return ast->strings.size - 1;
 }

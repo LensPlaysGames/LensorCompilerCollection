@@ -10,7 +10,7 @@
 
 #ifdef _WIN32
 /// Basically strndup(), but for Windows.
-char *strndup(const char *str, size_t sz) {
+static char *strndup(const char *str, size_t sz) {
   char *dup = malloc(sz + 1);
   memcpy(dup, str, sz);
   dup[sz] = 0;

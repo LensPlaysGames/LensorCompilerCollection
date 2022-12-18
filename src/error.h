@@ -6,24 +6,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdlib.h>
-
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef int32_t i32;
-typedef int64_t i64;
-typedef size_t usz;
-
-/// String span.
-typedef struct {
-  const char *data;
-  usz size;
-} span;
-
-/// Owning string.
-typedef struct {
-  char *data;
-  usz size;
-} string;
+#include <string_utils.h>
 
 enum diagnostic_level {
   DIAG_NOTE,

@@ -8,6 +8,7 @@ endif()
 
 # Export compilation database in JSON format.
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
+set(CMAKE_C_STANDARD 11)
 
 project(FUNCompiler C)
 
