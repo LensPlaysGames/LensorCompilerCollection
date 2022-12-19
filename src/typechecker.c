@@ -32,14 +32,50 @@
         (int) from_str.size, from_str.data, (int) to_str.size, to_str.data); \
   } while (0)
 
+/// Check if two types are equal.
+NODISCARD static bool types_equal(Type *a, Type *b) {
+  ASSERT(a && b);
+
+  /// Expand named types.
+  while (a->kind == TYPE_NAMED && a->named->type) a = a->named->type;
+  while (b->kind == TYPE_NAMED && b->named->type) b = b->named->type;
+
+  /// If the type kinds are not the same, the the types are obviously not equal.
+  if (a->kind != b->kind) return false;
+
+  /// Compare the types.
+  switch (a->kind) {
+    default: ICE("Invalid type kind %d", a->kind);
+    case TYPE_NAMED: UNREACHABLE();
+    case TYPE_PRIMITIVE: return a->primitive.id == b->primitive.id;
+    case TYPE_POINTER: return types_equal(a->pointer.to, b->pointer.to);
+    case TYPE_ARRAY: return a->array.size == b->array.size && types_equal(a->array.of, b->array.of);
+    case TYPE_FUNCTION: {
+      if (a->function.parameters.size != b->function.parameters.size) return false;
+      if (!types_equal(a->function.return_type, b->function.return_type)) return false;
+      VECTOR_FOREACH_INDEX (i, a->function.parameters)
+        if (!types_equal(a->function.parameters.data[i].type, b->function.parameters.data[i].type))
+          return false;
+      return true;
+    }
+  }
+}
+
 /// Check if from is convertible to to.
 NODISCARD static bool convertible(Type *to, Type *from) {
-  TODO();
+  /// If the types are the same, they are convertible.
+  if (types_equal(to, from)) return true;
+
+  /// Otherwise, the types are not convertible.
+  /// TODO: Once we have more than one integer type, do we want implicit conversions?
+  return false;
 }
 
 /// Get the common type of two types.
 NODISCARD static Type *common_type(Type *a, Type *b) {
-  TODO();
+  /// TODO: integer stuff.
+  if (types_equal(a, b)) return a;
+  return NULL;
 }
 
 /// Check if a type is a pointer type.
@@ -279,6 +315,23 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
           expr->type = lhs->type;
           return true;
+
+        /// This is the complicated one.
+        case TK_COLON_EQ:
+          /// Make sure the lhs is an lvalue.
+          if (!is_lvalue(lhs)) {
+            string name = ast_typename(lhs->type, false);
+            ERR_DO(free(name.data), lhs->source_location,
+              "Cannot assign to non-lvalue type \"%.*s\".",
+                (int) name.size, name.data);
+          }
+
+          /// Make sure the rhs is convertible to the lhs.
+          if (!convertible(lhs->type, rhs->type)) ERR_NOT_CONVERTIBLE(lhs->type, rhs->type);
+
+          /// Set the type of the expression to the type of the lhs.
+          expr->type = lhs->type;
+          return true;
       }
     }
 
@@ -317,14 +370,23 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           return true;
       }
 
-    /// Nothing to do here.
+    /// Just set the type.
     case NODE_LITERAL:
+      if (expr->literal.type == TK_NUMBER) expr->type = ast->t_integer;
+      else TODO("Literal type \"%s\".", token_type_to_string(expr->literal.type));
+      return true;
+
+    /// The type of a variable reference is the type of the variable.
     case NODE_VARIABLE_REFERENCE:
+      if (!typecheck_expression(ast, expr->var->node)) return false;
+      expr->type = expr->var->node->type;
       return true;
 
     /// Resolve the function reference and typecheck the function.
     case NODE_FUNCTION_REFERENCE:
       if (!resolve_function(ast, expr->funcref->node)) return false;
-      return typecheck_expression(ast, expr->funcref->node);
+      if (!typecheck_expression(ast, expr->funcref->node)) return false;
+      expr->type = expr->funcref->node->type;
+      return true;
   }
 }

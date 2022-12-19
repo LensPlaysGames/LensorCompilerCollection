@@ -416,11 +416,13 @@ AST *ast_create() {
   VECTOR_PUSH(ast->scopes, scope_create(NULL));
 
   /// Initialise the builtin types.
+  uint8_t primitive_type_id = 0;
   ast->t_integer = mktype(ast, TYPE_PRIMITIVE, (loc){0, 0});
   ast->t_integer->primitive.size = 8;
   ast->t_integer->primitive.alignment = 8;
   ast->t_integer->primitive.is_signed = true;
   ast->t_integer->primitive.name = literal_span("integer");
+  ast->t_integer->primitive.id = primitive_type_id++;
 
   /// Declare void as a named type with no node associated with it.
   /// This implicitly means that void is an incomplete type.
