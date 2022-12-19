@@ -91,7 +91,7 @@ void codegen_context_free(CodegenContext *context) {
 ///  Code generation.
 /// ===========================================================================
 /// Emit an expression.
-NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
+static void codegen_expr(CodegenContext *ctx, Node *expr) {
   switch (expr->kind) {
   default: ICE("Unrecognized expression kind: %d", expr->kind);
 
@@ -118,18 +118,18 @@ NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
     VECTOR_FOREACH_PTR (Node *, child, expr->root.children) {
       if (child->kind == NODE_FUNCTION) continue;
       last = child;
-      if (!codegen_expr(ctx, child)) return false;
+      codegen_expr(ctx, child);
     }
 
     /// If the last expression doesn’t return anything, return 0.
     if (!ir_is_closed(ctx->block)) ir_return(ctx, last ? last->ir : ir_immediate(ctx, 0));
-    return true;
+    return;
   }
 
   /// Variable declaration.
   case NODE_DECLARATION:
       expr->ir = ir_stack_allocate(ctx, ast_sizeof(expr));
-      return true;
+      return;
 
   /// If expression.
   ///
@@ -150,7 +150,7 @@ NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
   ///
   case NODE_IF: {
     /// Emit the condition.
-    if (!codegen_expr(ctx, expr->if_.condition)) return false;
+    codegen_expr(ctx, expr->if_.condition);
 
     IRBlock *then_block = ir_block_create();
     IRBlock *last_then_block = then_block;
@@ -163,7 +163,7 @@ NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
 
     /// Emit the then block.
     ir_block_attach(ctx, then_block);
-    if (!codegen_expr(ctx, expr->if_.then)) return false;
+    codegen_expr(ctx, expr->if_.then);
 
     /// Branch to the join block to skip the else branch.
     last_then_block = ctx->block;
@@ -172,7 +172,7 @@ NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
     /// Generate the else block if there is one.
     ir_block_attach(ctx, else_block);
     if (expr->if_.else_) {
-      if (!codegen_expr(ctx, expr->if_.else_)) return false;
+      codegen_expr(ctx, expr->if_.else_);
       last_else_block = ctx->block;
     } else {
       ir_immediate(ctx, 0);
@@ -203,7 +203,7 @@ NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
     ir_phi_argument(phi, last_then_block, then_return_value);
     ir_phi_argument(phi, last_else_block, else_return_value);
     expr->ir = phi;
-    return true;
+    return;
   }
 
   /// While expression.
@@ -233,25 +233,25 @@ NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
       /// Branch to the condition block and emit the condition.
       ir_branch(ctx, while_cond_block);
       ir_block_attach(ctx, while_cond_block);
-      if (!codegen_expr(ctx, expr->while_.condition)) return false;
+      codegen_expr(ctx, expr->while_.condition);
 
       /// If while body is empty, don't use body block.
       if (expr->while_.body->block.children.size == 0) {
         ir_branch_conditional(ctx, expr->while_.condition->ir, while_cond_block, join_block);
         ir_block_attach(ctx, join_block);
-        return true;
+        return;
       }
 
       /// Otherwise, emit the body of the while loop.
       IRBlock *while_body_block = ir_block_create();
       ir_branch_conditional(ctx, expr->while_.condition->ir, while_body_block, join_block);
       ir_block_attach(ctx, while_body_block);
-      if (!codegen_expr(ctx, expr->while_.body)) return false;
+      codegen_expr(ctx, expr->while_.body);
 
       /// Emit a branch to the join block and attach the join block.
       if (!ir_is_closed(ctx->block)) ir_branch(ctx, while_cond_block);
       ir_block_attach(ctx, join_block);
-      return true;
+      return;
   }
 
   /// Block expression.
@@ -261,12 +261,12 @@ NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
       VECTOR_FOREACH_PTR (Node *, child, expr->block.children) {
         if (child->kind == NODE_FUNCTION) continue;
         last = child;
-        if (!codegen_expr(ctx, child)) return false;
+        codegen_expr(ctx, child);
       }
 
       /// If the last expression doesn’t return anything, return 0.
       expr->ir = last ? last->ir : ir_immediate(ctx, 0);
-      return true;
+      return;
   }
 
   /// Function call.
@@ -280,19 +280,19 @@ NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
 
     /// Indirect call.
     else {
-      if (!codegen_expr(ctx, expr->call.callee)) return false;
+      codegen_expr(ctx, expr->call.callee);
       call = ir_indirect_call(ctx, expr->call.callee->ir);
     }
 
     /// Emit the arguments.
     VECTOR_FOREACH_PTR (Node*, arg, expr->call.arguments) {
-      if (!codegen_expr(ctx, arg)) return false;
+      codegen_expr(ctx, arg);
       ir_add_function_call_argument(ctx, call, arg->ir);
     }
 
     ir_insert(ctx, call);
     expr->ir = call;
-    return true;
+    return;
   }
 
   /// Typecast.
@@ -305,53 +305,50 @@ NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
     /// Assignment needs to be handled separately.
     if (expr->binary.op == TK_COLON_EQ) {
       /// Emit the RHS because we need that in any case.
-      if (!codegen_expr(ctx, rhs)) return false;
+      codegen_expr(ctx, rhs);
 
       /// If the LHS is a variable, just emit a direct store to the memory address,
       /// which we can get from the declaration which has to have been emitted already.
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
         expr->ir = ir_store(ctx, lhs->var->value->ir, rhs->ir);
-        return true;
+        return;
       }
 
       /// Otherwise, actually emit the LHS and load from that.
-      if (!codegen_expr(ctx, lhs)) return false;
+      codegen_expr(ctx, lhs);
       expr->ir = ir_store(ctx, lhs->ir, rhs->ir);
-      return true;
+      return;
     }
 
     /// Emit the operands.
-    if (!codegen_expr(ctx, lhs)) return false;
-    if (!codegen_expr(ctx, rhs)) return false;
+    codegen_expr(ctx, lhs);
+    codegen_expr(ctx, rhs);
 
     /// Emit the binary instruction.
     switch (expr->binary.op) {
       default: ICE("Cannot emit binary expression of type %d", expr->binary.op);
       case TK_LBRACK: ICE("Array subscript should have been lowered to a pointer dereference");
-      case TK_GT: expr->ir = ir_comparison(ctx, COMPARE_GT, lhs->ir, rhs->ir); break;
-      case TK_LT: expr->ir = ir_comparison(ctx, COMPARE_LT, lhs->ir, rhs->ir); break;
-      case TK_GE: expr->ir = ir_comparison(ctx, COMPARE_GE, lhs->ir, rhs->ir); break;
-      case TK_LE: expr->ir = ir_comparison(ctx, COMPARE_LE, lhs->ir, rhs->ir); break;
-      case TK_EQ: expr->ir = ir_comparison(ctx, COMPARE_EQ, lhs->ir, rhs->ir); break;
-      case TK_NE: expr->ir = ir_comparison(ctx, COMPARE_NE, lhs->ir, rhs->ir); break;
-      case TK_PLUS: expr->ir = ir_add(ctx, lhs->ir, rhs->ir); break;
-      case TK_MINUS: expr->ir = ir_subtract(ctx, lhs->ir, rhs->ir); break;
-      case TK_STAR: expr->ir = ir_multiply(ctx, lhs->ir, rhs->ir); break;
-      case TK_SLASH: expr->ir = ir_divide(ctx, lhs->ir, rhs->ir); break;
-      case TK_PERCENT: expr->ir = ir_modulo(ctx, lhs->ir, rhs->ir); break;
-      case TK_SHL: expr->ir = ir_shift_left(ctx, lhs->ir, rhs->ir); break;
-      case TK_SHR: expr->ir = ir_shift_right_arithmetic(ctx, lhs->ir, rhs->ir); break;
-      case TK_AMPERSAND: expr->ir = ir_and(ctx, lhs->ir, rhs->ir); break;
-      case TK_PIPE: expr->ir = ir_or(ctx, lhs->ir, rhs->ir); break;
+      case TK_GT: expr->ir = ir_comparison(ctx, COMPARE_GT, lhs->ir, rhs->ir); return;
+      case TK_LT: expr->ir = ir_comparison(ctx, COMPARE_LT, lhs->ir, rhs->ir); return;
+      case TK_GE: expr->ir = ir_comparison(ctx, COMPARE_GE, lhs->ir, rhs->ir); return;
+      case TK_LE: expr->ir = ir_comparison(ctx, COMPARE_LE, lhs->ir, rhs->ir); return;
+      case TK_EQ: expr->ir = ir_comparison(ctx, COMPARE_EQ, lhs->ir, rhs->ir); return;
+      case TK_NE: expr->ir = ir_comparison(ctx, COMPARE_NE, lhs->ir, rhs->ir); return;
+      case TK_PLUS: expr->ir = ir_add(ctx, lhs->ir, rhs->ir); return;
+      case TK_MINUS: expr->ir = ir_subtract(ctx, lhs->ir, rhs->ir); return;
+      case TK_STAR: expr->ir = ir_multiply(ctx, lhs->ir, rhs->ir); return;
+      case TK_SLASH: expr->ir = ir_divide(ctx, lhs->ir, rhs->ir); return;
+      case TK_PERCENT: expr->ir = ir_modulo(ctx, lhs->ir, rhs->ir); return;
+      case TK_SHL: expr->ir = ir_shift_left(ctx, lhs->ir, rhs->ir); return;
+      case TK_SHR: expr->ir = ir_shift_right_arithmetic(ctx, lhs->ir, rhs->ir); return;
+      case TK_AMPERSAND: expr->ir = ir_and(ctx, lhs->ir, rhs->ir); return;
+      case TK_PIPE: expr->ir = ir_or(ctx, lhs->ir, rhs->ir); return;
     }
-
-    /// Done.
-    return true;
   }
 
   /// Unary expression.
   case NODE_UNARY: {
-    if (!codegen_expr(ctx, expr->unary.value)) return false;
+    codegen_expr(ctx, expr->unary.value);
 
     /// Prefix expressions.
     if (!expr->unary.postfix) {
@@ -359,19 +356,13 @@ NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
         default: ICE("Cannot emit unary prefix expression of type %d", expr->unary.op);
 
         /// Load a value from an lvalue.
-        case TK_STAR:
-          expr->ir = ir_load(ctx, expr->unary.value->ir);
-          return true;
+        case TK_STAR: expr->ir = ir_load(ctx, expr->unary.value->ir); return;
 
         /// Address of lvalue.
-        case TK_AMPERSAND:
-          expr->ir = ir_address_of(ctx, expr->unary.value->ir);
-          return true;
+        case TK_AMPERSAND: expr->ir = ir_address_of(ctx, expr->unary.value->ir); return;
 
         /// One’s complement negation.
-        case TK_TILDE:
-          expr->ir = ir_not(ctx, expr->unary.value->ir);
-          return true;
+        case TK_TILDE: expr->ir = ir_not(ctx, expr->unary.value->ir); return;
       }
     }
 
@@ -387,25 +378,22 @@ NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_LITERAL:
     if (expr->literal.type != TK_NUMBER) DIAG(DIAG_SORRY, expr->source_location, "Emitting non-integer literals not supported");
     expr->ir = ir_immediate(ctx, expr->literal.integer);
-    return true;
+    return;
 
   /// Variable reference.
-  case NODE_VARIABLE_REFERENCE: {
+  case NODE_VARIABLE_REFERENCE:
     expr->ir = ir_load(ctx, expr->var->value->ir);
-    return true;
-  }
+    return;
 
   /// Function reference.
-  case NODE_FUNCTION_REFERENCE: {
+  case NODE_FUNCTION_REFERENCE:
     expr->ir = ir_address_of_function(ctx, expr->funcref->value->function.ir);
-    return true;
-  }
-
+    return;
   }
 }
 
 /// Emit a function.
-NODISCARD bool codegen_function(CodegenContext *ctx, Node *node) {
+void codegen_function(CodegenContext *ctx, Node *node) {
   /// Create a new function.
   ir_function(ctx, as_span(node->function.name), node->function.type->type_function.parameters.size);
 
@@ -415,7 +403,7 @@ NODISCARD bool codegen_function(CodegenContext *ctx, Node *node) {
   size_t i = 0;
   for (; i < node->function.type->type_function.parameters.size; i++) {
     Node * decl = node->function.body->block.children.data[i];
-    if (!codegen_expr(ctx, decl)) return false;
+    codegen_expr(ctx, decl);
   }
 
   /// Then, store the initial values of the parameters in those variables.
@@ -431,12 +419,12 @@ NODISCARD bool codegen_function(CodegenContext *ctx, Node *node) {
     Node *expr = node->function.body->block.children.data[i];
     if (expr->kind == NODE_FUNCTION) continue;
     last = expr;
-    if (!codegen_expr(ctx, expr)) return false;
+    codegen_expr(ctx, expr);
   }
 
   /// If the last expression doesn’t return anything, return 0.
   if (!ir_is_closed(ctx->block)) ir_return(ctx, last ? last->ir : ir_immediate(ctx, 0));
-  return true;
+  return;
 }
 
 /// ===========================================================================
@@ -494,13 +482,8 @@ bool codegen
         }
     } break;
 
-    /// Parse a FUN file.
-    case LANG_FUN: {
-        if (!codegen_expr(context, ast->root)) {
-          fclose(code);
-          return false;
-        }
-    } break;
+    /// Codegen a FUN program.
+    case LANG_FUN: codegen_expr(context, ast->root); break;
 
     /// Anything else is not supported.
     default: ICE("Language %d not supported.", lang);
