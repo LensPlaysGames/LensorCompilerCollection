@@ -32,6 +32,8 @@ void print_usage(char **argv) {
          "   `--callings`      :: List acceptable calling conventions.\n"
          "   `--dialects`      :: List acceptable assembly dialects.\n"
          "   `--debug-ir`      :: Dump IR to stdout (in debug format).\n"
+         "   `--print-ast      :: Print the AST and exit.\n"
+         "   `--syntax-only    :: Perform no semantic analysis.\n"
          "   `-O`, `--optimize`:: Optimize the generated code.\n"
          "   `-v`, `--verbose` :: Print out more information.\n");
   printf("Options:\n"
@@ -52,6 +54,8 @@ enum CodegenAssemblyDialect output_assembly_dialect = CG_ASM_DIALECT_DEFAULT;
 int verbosity = 0;
 int optimise = 0;
 bool debug_ir = false;
+bool print_ast = false;
+bool syntax_only = false;
 
 void print_acceptable_formats() {
   printf("Acceptable formats include:\n"
@@ -95,7 +99,11 @@ int handle_command_line_arguments(int argc, char **argv) {
       print_acceptable_asm_dialects();
       exit(0);
     } else if (strcmp(argument, "--debug-ir") == 0) {
-      debug_ir = 1;
+      debug_ir = true;
+    } else if (strcmp(argument, "--print-ast") == 0) {
+      print_ast = true;
+    } else if (strcmp(argument, "--syntax-only") == 0) {
+      syntax_only = true;
     } else if (strcmp(argument, "-O") == 0
                || strcmp(argument, "--optimise") == 0) {
       optimise = 1;
@@ -264,10 +272,27 @@ int main(int argc, char **argv) {
 
   /// The input is a FUN file.
   else {
-    __auto_type ast = parse(as_span(s), infile);
-    if (ast) ast_print(stdout, ast);
-    else exit(1);
-/*    Node *program = node_allocate();
+    /// Parse the file.
+    AST *ast = parse(as_span(s), infile);
+    if (!ast) exit(1);
+
+    /// Print if requested.
+    if (syntax_only) {
+      if (print_ast) ast_print(stdout, ast);
+      goto done;
+    }
+
+    /// Perform semantic analysis.
+    bool ok = typecheck_expression(ast, ast->root);
+    if (!ok) exit(2);
+
+    /// Print if requested.
+    if (print_ast) {
+      ast_print(stdout, ast);
+      goto done;
+    }
+
+    /*    Node *program = node_allocate();
     ParsingContext *context = parse_context_default_create();
     if (!parse_program(infile, context, program)) exit(1);
 
@@ -294,8 +319,12 @@ int main(int argc, char **argv) {
     )) exit(3);
 
     node_free(program);*/
+
+  done:
+    ast_free(ast);
+    return 0;
   }
 
   if (verbosity) printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
-  return 0;
+
 }

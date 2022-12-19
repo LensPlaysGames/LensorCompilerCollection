@@ -130,7 +130,6 @@ struct Scope {
 /// ===========================================================================
 ///  AST Nodes.
 /// ===========================================================================
-
 /// Root node.
 typedef struct NodeRoot {
   Nodes children;
@@ -138,7 +137,6 @@ typedef struct NodeRoot {
 
 /// Named function.
 typedef struct NodeFunction {
-  Node *type;
   Node *body;
   string name;
   IRFunction *ir;
@@ -146,7 +144,6 @@ typedef struct NodeFunction {
 
 /// Variable declaration.
 typedef struct NodeDeclaration {
-  Node *type;
   Node *init;
   string name;
 } NodeDeclaration;
@@ -177,7 +174,6 @@ typedef struct NodeCall {
 
 /// Typecast.
 typedef struct NodeCast {
-  Node *to_type;
   Node *value;
 } NodeCast;
 
@@ -247,11 +243,19 @@ struct Node {
   /// Location of the node.
   loc source_location;
 
+  /// The cached type of the node.
+  Node *type;
+
   /// The parent node.
   Node *parent;
 
   /// The IR instruction that this node is compiled to.
   IRInstruction *ir;
+
+  /// Various flags.
+  bool type_checked : 1;      /// Whether this node has been type checked.
+  bool is_lvalue : 1;         /// Whether this node is an lvalue.
+  bool is_lvalue_checked : 1; /// Whether we know if this node is an lvalue.
 
   /// Node data.
   union {
@@ -294,6 +298,7 @@ typedef struct AST {
   usz counter;
 
   /// Builtin types.
+  Node *t_void;
   Node *t_integer;
 
   /// Scopes.
@@ -475,14 +480,12 @@ typedef struct TypeInfo {
 } TypeInfo;
 
 /// Get a string representation of a type.
+/// \return The string representation of the type. The string is allocated
+///         as if with `malloc` and must be freed by the caller.
 string ast_typename(const Node *type, bool colour);
 
 /// Get type information for a type.
 TypeInfo ast_typeinfo(const Node *type);
-
-/// Get the type of a node.
-/// \return The type of the node, or NULL if the node does not have a type.
-const Node *ast_typeof(const Node *node);
 
 /// Get the size of a type.
 usz ast_sizeof(const Node *type);

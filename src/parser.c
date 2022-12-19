@@ -22,6 +22,13 @@
 #define ERR_AT(loc, ...) ISSUE_DIAGNOSTIC(DIAG_ERR, loc, p, __VA_ARGS__)
 #define ERR(...)         ERR_AT(p->tok.source_location, __VA_ARGS__)
 
+#define ERR_DO(code, loc, ...)                                                  \
+  do {                                                                          \
+    issue_diagnostic(DIAG_ERR, (p)->filename, (p)->source, (loc), __VA_ARGS__); \
+    code;                                                                       \
+    longjmp(p->error_buffer, 1);                                                \
+  } while (0)
+
 /// ===========================================================================
 ///  Types and enums.
 /// ===========================================================================
@@ -565,7 +572,7 @@ static Node *parse_function_body(Parser *p, Node *function_type) {
   /// Create a declaration for each parameter.
   Nodes body_exprs = {0};
   VECTOR_FOREACH_PTR (Node *, param, function_type->type_function.parameters) {
-    Node *var = ast_make_declaration(p->ast, param->source_location, param->declaration.type, as_span(param->declaration.name), NULL);
+    Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->declaration.name), NULL);
     scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var);
     VECTOR_PUSH(body_exprs, var);
   }
@@ -746,6 +753,21 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     /// may appear in its initialiser, albeit only in unevaluated contexts.
     decl->declaration.init = parse_expr(p);
     decl->declaration.init->parent = decl;
+  }
+
+  /// Strip array types and resolve named types.
+  Node * const saved_type = type;
+  while (type) {
+    if (type->kind == NODE_TYPE_NAMED) type = type->type_named->value;
+    else if (type->kind == NODE_TYPE_ARRAY) type = type->type_array.of;
+    else break;
+  }
+
+  /// Make sure we’re not trying to declare a variable of incomplete type.
+  if (!type) {
+    string name = ast_typename(saved_type, false);
+    ERR_DO(free(name.data), decl->source_location, "Cannot declare a variable of incomplete type \"%.*s\"",
+      (int) name.size, name.data);
   }
 
   /// Done.

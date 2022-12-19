@@ -1,7 +1,6 @@
 #include <typechecker.h>
 
 #include <error.h>
-#include <environment.h>
 #include <parser.h>
 
 #include <stddef.h>
@@ -9,90 +8,263 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DIAG(diag, loc, ...)                                                                       \
-  do {                                                                                      \
-    issue_diagnostic(diag, (context)->filename, (context)->source, (loc), __VA_ARGS__); \
-    return false;                                                                           \
+#define DIAG(diag, loc, ...)                                                                  \
+  do {                                                                                        \
+    issue_diagnostic(diag, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__); \
+    return false;                                                                             \
   } while (0)
-#define ERR(loc, ...) DIAG(DIAG_ERR, loc, __VA_ARGS__)
+#define ERR(loc, ...)   DIAG(DIAG_ERR, loc, __VA_ARGS__)
 #define SORRY(loc, ...) DIAG(DIAG_SORRY, loc, __VA_ARGS__)
 
-#define TYPE_NODE_TEXT_BUFFER_SIZE 1024
-char type_node_text_buffer[TYPE_NODE_TEXT_BUFFER_SIZE];
-char *type_node_text(Node *type) {
-  static size_t offset = 0;
-  char *outstring = type_node_text_buffer + offset;
-  for (unsigned i = 0; i < type->pointer_indirection; ++i) {
-    offset += (size_t) snprintf(type_node_text_buffer + offset,
-      TYPE_NODE_TEXT_BUFFER_SIZE - offset,
-      "@");
-  }
-  offset += (size_t) snprintf(type_node_text_buffer + offset,
-    TYPE_NODE_TEXT_BUFFER_SIZE - offset,
-    "%s", type->value.symbol);
-  offset += 1;
-  if (offset >= TYPE_NODE_TEXT_BUFFER_SIZE) {
-    offset = 0;
-  }
-  return outstring;
+#define ERR_DO(code, loc, ...)                                                                    \
+  do {                                                                                            \
+    issue_diagnostic(DIAG_ERR, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__); \
+    code;                                                                                         \
+    return false;                                                                                 \
+  } while (0)
+
+#define ERR_NOT_CONVERTIBLE(to, from)                                                                                     \
+  do {                                                                                                                    \
+    string to_str = ast_typename(to, false);                                                                              \
+    string from_str = ast_typename(from, false);                                                                          \
+    ERR_DO(free(to_str.data); free(from_str.data), from->source_location, "Type \"%.*s\" is not convertible to \"%.*s\"", \
+                              (int) from_str.size, from_str.data, (int) to_str.size, to_str.data);                        \
+  } while (0)
+
+/// Check if from is convertible to to.
+NODISCARD static bool convertible(Node *to, Node *from) {
+  TODO();
 }
 
-void print_type_node(Node *type, size_t indent) {
-  size_t indent_it = indent;
-  while (indent_it--) {
-    putchar(' ');
-  }
-  printf("%s\n", type_node_text(type));
+/// Get the common type of two types.
+NODISCARD static Node *common_type(Node *a, Node *b) {
+  TODO();
 }
 
-bool type_compare(Node *a, Node *b) {
-  if (a->type != b->type
-      || a->pointer_indirection != b->pointer_indirection) {
-    return false;
-  }
-  Node *child_it_a = a->children;
-  Node *child_it_b = b->children;
-  while (child_it_a && child_it_b) {
-    if (type_compare(child_it_a, child_it_b) == 0) {
-      return false;
+/// Check if a type is a pointer type.
+NODISCARD static bool is_pointer(Node *type) { return type->kind == NODE_TYPE_POINTER; }
+
+/// Check if a type is an array type.
+NODISCARD static bool is_array(Node *type) { return type->kind == NODE_TYPE_ARRAY; }
+
+/// Check if a type is an integer type.
+NODISCARD static bool is_integer(Node *type) {
+  /// Currently, all primitive types are integers.
+  return type->kind == NODE_TYPE_PRIMITIVE;
+}
+
+NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
+  /// Don’t typecheck the same expression twice.
+  if (expr->type_checked) return true;
+
+  /// Typecheck the expression.
+  switch (expr->kind) {
+    /// Typecheck each child of the root.
+    case NODE_ROOT: {
+      VECTOR_FOREACH_PTR (Node *, node, expr->root.children) {
+        if (!typecheck_expression(ast, node))
+          return false;
+        return true;
+      }
+
+      /// Typecheck the function body.
+    case NODE_FUNCTION:
+      if (!typecheck_expression(ast, expr->function.body)) return false;
+
+      /// Make sure the return type of the body is convertible to that of the function.
+      if (!convertible(expr->type->type_function.return_type, expr->function.body->type)) {
+        string ret = ast_typename(expr->type->type_function.return_type, false);
+        string body = ast_typename(expr->function.body->type, false);
+        ERR_DO(free(ret.data); free(body.data), expr->source_location,
+          "Type \"%.*s\" of function body is not convertible to return type \"%.*s\".",
+            (int) body.size, body.data, (int) ret.size, ret.data);
+      }
+
+      return true;
+
+    /// Typecheck declarations.
+    case NODE_DECLARATION:
+      /// If there is an intialiser, then its type must match the type of the variable.
+      if (expr->declaration.init) {
+        if (!typecheck_expression(ast, expr->declaration.init)) return false;
+        if (!convertible(expr->type, expr->declaration.init->type))
+          ERR_NOT_CONVERTIBLE(expr, expr->declaration.init);
+      }
+      return true;
+
+    /// If expression.
+    case NODE_IF:
+      if (!typecheck_expression(ast, expr->if_.condition)) return false;
+      if (!typecheck_expression(ast, expr->if_.then)) return false;
+
+      /// If the then and else branch of an if expression both exist and have
+      /// the a common type, then the type of the if expression is that type.
+      if (expr->if_.else_) {
+        if (!typecheck_expression(ast, expr->if_.else_)) return false;
+        Node *common = common_type(expr->if_.then->type, expr->if_.else_->type);
+        if (common) expr->type = common;
+        else expr->type = ast->t_void;
+      }
+
+      /// Otherwise, the type of the if expression is void.
+      else { expr->type = ast->t_void; }
+      return true;
+
+    /// A while expression has type void.
+    case NODE_WHILE:
+      if (!typecheck_expression(ast, expr->while_.condition)) return false;
+      if (!typecheck_expression(ast, expr->while_.body)) return false;
+      expr->type = ast->t_void;
+      return true;
+
+    /// Typecheck all children and set the type of the block
+    /// to the type of the last child. TODO: noreturn?
+    case NODE_BLOCK: {
+      VECTOR_FOREACH_PTR (Node *, node, expr->block.children)
+        if (!typecheck_expression(ast, node))
+          return false;
+      expr->type = VECTOR_BACK_OR(expr->block.children, ast->t_void)->type;
+      return true;
     }
-    child_it_a = child_it_a->next_child;
-    child_it_b = child_it_b->next_child;
-  }
-  if (child_it_a == NULL && child_it_b == NULL) {
-    return true;
-  }
-  return false;
-}
 
-bool type_compare_symbol(Node *a, Node *b) {
-  if (!a || !b) {
-    printf("DEVELOPER WARNING: type_compare_symbol() called with NULL args!\n");
-    return false;
-  }
-  if (a->type != NODE_TYPE_SYMBOL || b->type != NODE_TYPE_SYMBOL) {
-    printf("DEVELOPER WARNING: type_compare_symbol() called on non-symbol nodes!\n");
-    return false;
-  }
-  if (a->pointer_indirection != b->pointer_indirection
-      || strcmp(a->value.symbol, b->value.symbol) != 0) {
-    return false;
-  }
-  Node *a_child = a->children;
-  Node *b_child = b->children;
-  while (a_child && b_child) {
-    if (type_compare_symbol(a_child, b_child) == 0) {
-      return false;
+    /// First, resolve the function. Then, typecheck all parameters
+    /// and set the type to the return type of the callee.
+    case NODE_CALL: {
+      /// Resolve the function if applicable.
+      Node *callee = expr->call.callee;
+      if (callee->kind == NODE_FUNCTION_REFERENCE && !callee->funcref->value) {
+        Symbol *sym = scope_find_symbol(callee->funcref->scope, as_span(callee->funcref->name), false);
+        if (!sym || !sym->value) ERR(callee->source_location, "No such function \"%.*s\".",
+          (int) callee->funcref->name.size, callee->funcref->name.data);
+        callee->funcref->value = sym->value;
+      }
+
+      /// Typecheck the callee.
+      if (!typecheck_expression(ast, expr->call.callee)) return false;
+
+      /// Typecheck all arguments.
+      VECTOR_FOREACH_PTR (Node *, param, expr->call.arguments)
+        if (!typecheck_expression(ast, param))
+          return false;
+
+      /// Make sure we have the right number of arguments.
+      if (expr->call.arguments.size != callee->type->type_function.parameters.size)
+        ERR(callee->source_location, "Expected %zu arguments, got %zu.",
+          callee->type->type_function.parameters.size, expr->call.arguments.size);
+
+      /// Make sure all arguments are convertible to the parameter types.
+      VECTOR_FOREACH_INDEX (i, expr->call.arguments) {
+        Node *param = expr->call.arguments.data[i];
+        Node *arg = callee->type->type_function.parameters.data[i];
+        if (!convertible(param->type, arg->type)) ERR_NOT_CONVERTIBLE(param, arg);
+      }
+
+      /// Set the type of the call to the return type of the callee.
+      expr->type = callee->type->type_function.return_type;
+      return true;
     }
-    a_child = a_child->next_child;
-    b_child = b_child->next_child;
-  }
-  if (a_child != b_child) {
-    return false;
-  }
-  return true;
-}
 
+    /// Make sure a cast is even possible.
+    case NODE_CAST: TODO();
+
+    /// Binary expression. This is a complicated one.
+    case NODE_BINARY: {
+      /// Get this out of the way early.
+      Node *const lhs = expr->binary.lhs, *const rhs = expr->binary.rhs;
+      if (!typecheck_expression(ast, lhs)) return false;
+      if (!typecheck_expression(ast, rhs)) return false;
+      
+      /// Typecheck the operator.
+      switch (expr->binary.op) {
+        default: ICE("Invalid binary operator \"%s\".", token_type_to_string(expr->binary.op));
+
+        /// The subscript operator is basically pointer arithmetic.
+        case TK_LBRACK:
+          /// We can only subscript pointers and arrays.
+          if (!is_pointer(lhs->type) && !is_array(lhs->type)) {
+            string name = ast_typename(lhs->type, false);
+            ERR_DO(free(name.data), lhs->source_location, "Cannot subscript non-pointer, non-array type \"%.*s\".",
+                (int) name.size, name.data);
+          }
+
+          /// The RHS has to be an integer.
+          if (!is_integer(rhs->type)) {
+            string name = ast_typename(rhs->type, false);
+            ERR_DO(free(name.data), rhs->source_location, "Cannot subscript with non-integer type \"%.*s\".",
+                (int) name.size, name.data);
+          }
+
+          /// The type of the subscript expression is the type of the pointer/array.
+          expr->type = lhs->type;
+          return true;
+
+        /// All of these are basically the same when it comes to types.
+        case TK_GT:
+        case TK_LT:
+        case TK_GE:
+        case TK_LE:
+        case TK_EQ:
+        case TK_NE:
+          if (!is_integer(lhs->type)) {
+            string name = ast_typename(lhs->type, false);
+            ERR_DO(free(name.data), lhs->source_location, "Cannot compare non-integer type \"%.*s\".",
+                (int) name.size, name.data);
+          }
+
+          if (!is_integer(rhs->type)) {
+            string name = ast_typename(rhs->type, false);
+            ERR_DO(free(name.data), rhs->source_location, "Cannot compare non-integer type \"%.*s\".",
+                (int) name.size, name.data);
+          }
+
+          /// TODO: Change this to bool if we ever add a bool type.
+          expr->type = ast->t_integer;
+          return true;
+
+        /// Since pointer arithmetic is handled by the subscript operator,
+        /// type checking for these is basically all the same.
+        /// TODO: Implicit conversions when we add the `byte` type.
+        case TK_PLUS:
+        case TK_MINUS:
+        case TK_STAR:
+        case TK_SLASH:
+        case TK_PERCENT:
+        case TK_SHL:
+        case TK_SHR:
+        case TK_AMPERSAND:
+        case TK_PIPE:
+        case TK_CARET:
+          if (!is_integer(lhs->type)) {
+            string name = ast_typename(lhs->type, false);
+            ERR_DO(free(name.data), lhs->source_location, "Cannot perform arithmetic on non-integer type \"%.*s\".",
+                (int) name.size, name.data);
+          }
+
+          if (!is_integer(rhs->type)) {
+            string name = ast_typename(rhs->type, false);
+            ERR_DO(free(name.data), rhs->source_location, "Cannot perform arithmetic on non-integer type \"%.*s\".",
+                (int) name.size, name.data);
+          }
+
+          expr->type = lhs->type;
+          return true;
+      }
+    }
+
+    /// Here be dragons.
+    case NODE_UNARY:
+      break;
+
+    case NODE_LITERAL: break;
+    case NODE_VARIABLE_REFERENCE: break;
+    case NODE_FUNCTION_REFERENCE: break;
+    case NODE_TYPE_PRIMITIVE: break;
+    case NODE_TYPE_NAMED: break;
+    case NODE_TYPE_POINTER: break;
+    case NODE_TYPE_ARRAY: break;
+    case NODE_TYPE_FUNCTION: break;
+  }
+}
 
 bool typecheck_expression
 (ParsingContext *const context,
@@ -542,14 +714,3 @@ bool typecheck_expression
   return true;
 }
 
-bool typecheck_program(ParsingContext *context, Node *program) {
-  Node *expression = program->children;
-  Node *type = node_allocate();
-  ParsingContext *to_enter = context->children;
-  bool ok = true;
-  while (expression) {
-    if (!typecheck_expression(context, &to_enter, expression, type)) ok = false;
-    expression = expression->next_child;
-  }
-  return ok;
-}

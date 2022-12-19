@@ -88,7 +88,7 @@ Node *ast_make_function(
 ) {
   Node *node = mknode(ast, NODE_FUNCTION, source_location);
   node->function.name = string_dup(name);
-  node->function.type = type;
+  node->type = type;
   node->function.body = body;
 
   type->parent = node;
@@ -108,7 +108,7 @@ Node *ast_make_declaration(
 ) {
   Node *node = mknode(ast, NODE_DECLARATION, source_location);
   node->declaration.name = string_dup(name);
-  node->declaration.type = type;
+  node->type = type;
   type->parent = node;
 
   if (init) {
@@ -186,7 +186,7 @@ Node *ast_make_cast(
     Node *value
 ) {
   Node *node = mknode(ast, NODE_CAST, source_location);
-  node->cast.to_type = to_type;
+  node->type = to_type;
   node->cast.value = value;
   to_type->parent = node;
   value->parent = node;
@@ -333,14 +333,12 @@ Node *ast_make_type_function(
 /// Used by `ast_typename`.
 void write_typename(string *s, const Node *type, bool colour) {
   if (!type) {
+    if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[m");
     s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "(\?\?\?)");
     return;
   }
 
-  /// Make sure this is actually a type.
-  type = ast_typeof(type);
-
-  /// Print thet type.
+  /// Print the type.
   switch (type->kind) {
     default:
       s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "(\?\?\?)");
@@ -395,42 +393,13 @@ void write_typename(string *s, const Node *type, bool colour) {
   }
 }
 
-/// Get the type of a node.
-const Node *ast_typeof(const Node *node) {
-  switch (node->kind) {
-    default: ICE("Invalid node kind %d", node->kind);
-
-    /// TODO: This is rather scuffed. Pass in AST; also, sema should store the type of each node in the node.
-    case NODE_ROOT: return NULL;
-    case NODE_FUNCTION: return node->function.type;
-    case NODE_DECLARATION: return node->declaration.type;
-    case NODE_IF: return NULL;
-    case NODE_WHILE: return NULL;
-    case NODE_BLOCK: return node->block.children.size ? ast_typeof(VECTOR_BACK(node->block.children)) : NULL;
-    case NODE_CALL: return node->call.callee ? ast_typeof(node->call.callee)->type_function.return_type : NULL;
-    case NODE_CAST: return node->cast.to_type;
-    case NODE_BINARY: return node->binary.lhs ? ast_typeof(node->binary.lhs) : NULL;
-    case NODE_UNARY: return ast_typeof(node->unary.value);
-    case NODE_LITERAL: return NULL;
-    case NODE_VARIABLE_REFERENCE: return ast_typeof(node->var->value);
-    case NODE_FUNCTION_REFERENCE: return ast_typeof(node->funcref->value);
-
-    case NODE_TYPE_PRIMITIVE:
-    case NODE_TYPE_NAMED:
-    case NODE_TYPE_POINTER:
-    case NODE_TYPE_ARRAY:
-    case NODE_TYPE_FUNCTION:
-      return node;
-  }
-}
-
-/// Get a string representation of a type,
+/// Get a string representation of a type.
 string ast_typename(const Node *type, bool colour) {
   string s = {
     .data = calloc(1, TYPENAME_MAX_SIZE),
     .size = 0
   };
-  write_typename(&s, ast_typeof(type), colour);
+  write_typename(&s, type, colour);
   if (colour) s.size += (usz) snprintf(s.data + s.size, TYPENAME_MAX_SIZE - s.size, "\033[m");
   return s;
 }
@@ -454,6 +423,12 @@ AST *ast_create() {
   ast->t_integer->type_primitive.alignment = 8;
   ast->t_integer->type_primitive.is_signed = true;
   ast->t_integer->type_primitive.name = literal_span("integer");
+  ast->t_integer->type = ast->t_integer;
+
+  /// Declare void as a named type with no node associated with it.
+  /// This implicitly means that void is an incomplete type.
+  ast->t_void = mknode(ast, NODE_TYPE_NAMED, (loc){0, 0});
+  ast->t_void->type = ast->t_void;
 
   /// Add the builtin types to the global scope.
   scope_add_symbol(ast->scopes.data[0], SYM_TYPE, literal_span("integer"), ast->t_integer);
@@ -534,7 +509,7 @@ void ast_print_node(
 
     case NODE_FUNCTION: {
       /// Print the function name and type.
-      string type_name = ast_typename(node->function.type, true);
+      string type_name = ast_typename(node->type, true);
       fprintf(file, "\033[31mFunction \033[35m<%d> \033[32m%.*s \033[31m: %.*s\n",
         node->source_location.start,
         (int) node->function.name.size, node->function.name.data,
@@ -550,7 +525,7 @@ void ast_print_node(
 
     case NODE_DECLARATION: {
       /// Print the declaration name and type.
-      string type_name = ast_typename(node->declaration.type, true);
+      string type_name = ast_typename(node->type, true);
       fprintf(file, "\033[31mDeclaration \033[35m<%d> \033[m\033[38m%.*s \033[31m: %.*s\n",
         node->source_location.start,
         (int) node->declaration.name.size, node->declaration.name.data,
@@ -568,8 +543,12 @@ void ast_print_node(
 
     case NODE_IF: {
       /// Print the condition.
-      fprintf(file, "\033[31mIf \033[35m<%d>\n", node->source_location.start);
+      string type_name = ast_typename(node->type, true);
+      fprintf(file, "\033[31mIf \033[35m<%d> %.*s\n",
+        node->source_location.start,
+        (int) type_name.size, type_name.data);
       ast_print_node(file, node->if_.condition, leading_text);
+      free(type_name.data);
 
       /// Print the branches.
       ast_print_children(file, &(Nodes) {
@@ -587,12 +566,21 @@ void ast_print_node(
     } break;
 
     case NODE_BLOCK: {
-      fprintf(file, "\033[31mBlock \033[35m<%d>\n", node->source_location.start);
+      string type_name = ast_typename(node->type, true);
+      fprintf(file, "\033[31mBlock \033[35m<%d> %.*s\n",
+        node->source_location.start,
+        (int) type_name.size, type_name.data);
       ast_print_children(file, &node->block.children, leading_text);
+      free(type_name.data);
     } break;
 
     case NODE_CALL: {
-      fprintf(file, "\033[31mCall \033[35m<%d>\n", node->source_location.start);
+      string type_name = ast_typename(node->type, true);
+      fprintf(file, "\033[31mCall \033[35m<%d> %.*s\n",
+        node->source_location.start,
+        (int) type_name.size, type_name.data);
+      free(type_name.data);
+
       Nodes nodes = {0};
       if (node->call.callee) VECTOR_PUSH(nodes, node->call.callee);
       VECTOR_APPEND_ALL(nodes, node->call.arguments);
@@ -601,7 +589,7 @@ void ast_print_node(
     } break;
 
     case NODE_CAST: {
-      string type_name = ast_typename(node->cast.to_type, true);
+      string type_name = ast_typename(node->type, true);
       fprintf(file, "\033[31mCast \033[35m<%d> %.*s\n",
         node->source_location.start,
         (int) type_name.size, type_name.data);
@@ -613,9 +601,13 @@ void ast_print_node(
     } break;
 
     case NODE_BINARY: {
-      fprintf(file, "\033[31mBinary \033[35m<%d> \033[32m%s\n",
+      string type_name = ast_typename(node->type, true);
+      fprintf(file, "\033[31mBinary \033[35m<%d> \033[32m%s \033[31m: %.*s\n",
         node->source_location.start,
-        token_type_to_string(node->binary.op));
+        token_type_to_string(node->binary.op),
+        (int) type_name.size, type_name.data);
+      free(type_name.data);
+
       ast_print_children(file, &(Nodes) {
         .data = (Node *[]) {node->binary.lhs, node->binary.rhs},
         .size = 2
@@ -623,9 +615,13 @@ void ast_print_node(
     } break;
 
     case NODE_UNARY: {
-      fprintf(file, "\033[31mUnary \033[35m<%d> \033[32m%s\n",
+      string type_name = ast_typename(node->type, true);
+      fprintf(file, "\033[31mUnary \033[35m<%d> \033[32m%s \033[31m: %.*s\n",
         node->source_location.start,
-        token_type_to_string(node->unary.op));
+        token_type_to_string(node->unary.op),
+        (int) type_name.size, type_name.data);
+      free(type_name.data);
+
       ast_print_children(file, &(Nodes) {
         .data = (Node *[]) {node->unary.value},
         .size = 1
@@ -635,14 +631,14 @@ void ast_print_node(
     case NODE_LITERAL: {
       switch (node->literal.type) {
         case TK_NUMBER: {
-          fprintf(file, "\033[31mLiteral \033[35m<%d> \033[35m%zi\n",
+          fprintf(file, "\033[31mLiteral \033[35m<%d> \033[35m%zi \033[36minteger\n",
             node->source_location.start,
             (isz) node->literal.integer);
         } break;
 
         case TK_STRING: {
           /// TODO: Get the actual string data from the AST.
-          fprintf(file, "\033[31mLiteral \033[35m<%d> \033[33m%zu\n",
+          fprintf(file, "\033[31mLiteral \033[35m<%d> \033[33m%zu \033[36mstring\n",
             node->source_location.start,
             (isz) node->literal.string_index);
         } break;
@@ -652,7 +648,7 @@ void ast_print_node(
     } break;
 
     case NODE_VARIABLE_REFERENCE: {
-      string type_name = ast_typename(node, true);
+      string type_name = ast_typename(node->type, true);
       fprintf(file, "\033[31mVar \033[35m<%d> \033[m\033[38m%.*s \033[31m: %.*s\n",
         node->source_location.start,
         (int) node->var->name.size, node->var->name.data,
@@ -665,7 +661,7 @@ void ast_print_node(
         return ast_print_node(file, node->funcref->value, leading_text);
 
       /// Otherwise, print the function reference.
-      string type_name = ast_typename(node, true);
+      string type_name = ast_typename(node->type, true);
       fprintf(file, "\033[31mFunction \033[35m<%d> \033[32m%.*s \033[31m: %.*s\n",
         node->source_location.start,
         (int) node->funcref->name.size, node->funcref->name.data,

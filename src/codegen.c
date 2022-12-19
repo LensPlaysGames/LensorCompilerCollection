@@ -327,7 +327,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     /// Emit the binary instruction.
     switch (expr->binary.op) {
       default: ICE("Cannot emit binary expression of type %d", expr->binary.op);
-      case TK_LBRACK: ICE("Array subscript should have been lowered to a pointer dereference");
+      case TK_LBRACK: expr->ir = ir_add(ctx, lhs->ir, rhs->ir); return;
       case TK_GT: expr->ir = ir_comparison(ctx, COMPARE_GT, lhs->ir, rhs->ir); return;
       case TK_LT: expr->ir = ir_comparison(ctx, COMPARE_LT, lhs->ir, rhs->ir); return;
       case TK_GE: expr->ir = ir_comparison(ctx, COMPARE_GE, lhs->ir, rhs->ir); return;
