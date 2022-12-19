@@ -3,6 +3,7 @@
 
 #include <codegen/codegen_forward.h>
 
+#include <ast.h>
 #include <environment.h>
 #include <error.h>
 #include <parser.h>
@@ -11,16 +12,13 @@
 
 extern bool debug_ir;
 
-char *label_generate();
-
-CodegenContext *codegen_context_create_top_level
-(ParsingContext *parse_context,
+CodegenContext *codegen_context_create
+(AST *ast,
  enum CodegenOutputFormat format,
  enum CodegenCallingConvention call_convention,
  enum CodegenAssemblyDialect dialect,
  FILE* code);
 
-CodegenContext *codegen_context_create(CodegenContext *parent);
 void codegen_context_free(CodegenContext *context);
 
 struct Register {
@@ -40,25 +38,17 @@ struct RegisterPool {
 };
 
 struct CodegenContext {
-  CodegenContext *parent;
-  ParsingContext *parse_context;
-  FILE* code;
+  FILE *code;
+  AST *ast;
 
-  VECTOR (IRFunction *) *functions;
+  VECTOR(IRFunction *) *functions;
   IRFunction *function;
   IRBlock *block;
 
-  /// LOCALS
-  /// `-- SYMBOL (NAME) -> INTEGER (STACK OFFSET)
-  Environment *locals;
-
-  long long locals_offset;
   RegisterPool register_pool;
   enum CodegenOutputFormat format;
   enum CodegenCallingConvention call_convention;
   enum CodegenAssemblyDialect dialect;
-  /// Architecture-specific data.
-  void *arch_data;
 };
 
 // TODO/FIXME: Make this a parameter affectable by command line arguments.
@@ -71,7 +61,6 @@ NODISCARD bool codegen
  enum CodegenAssemblyDialect,
  const char *infile,
  const char *outfile,
- ParsingContext *context,
- Node *program,
+ AST *ast,
  string ir);
 #endif /* CODEGEN_H */

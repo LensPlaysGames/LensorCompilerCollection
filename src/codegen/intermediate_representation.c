@@ -547,7 +547,7 @@ IRFunction *ir_function(CodegenContext *context, const char *name, size_t params
 
 IRInstruction *ir_immediate
 (CodegenContext *context,
- int64_t immediate
+ u64 immediate
  )
 {
   INSTRUCTION(imm, IR_IMMEDIATE);

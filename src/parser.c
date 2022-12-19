@@ -479,7 +479,6 @@ static bool is_right_associative(Parser *p, Token t) {
   }
 }
 
-
 /// ===========================================================================
 ///  Parser
 /// ===========================================================================
@@ -502,7 +501,7 @@ static Node *parse_block(Parser *p) {
 }
 
 /// <expr-if>        ::= IF <expression> <expr-block> [ ELSE <expr-block> ]
-static Node* parse_if_expr(Parser *p) {
+static Node *parse_if_expr(Parser *p) {
   /// Yeet "if".
   loc if_loc = p->tok.source_location;
   consume(p, TK_IF);
@@ -560,6 +559,35 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
   return ast_make_call(p->ast, call_loc, callee, args);
 }
 
+/// Parse the body of a function.
+///
+/// This is basically just a wrapper around `parse_block()` that
+/// also injects declarations for all the function parameters.
+static Node *parse_function_body(Parser *p, Node *function_type) {
+  /// Push a new scope and add the parameters to it.
+  scope_push(p->ast);
+
+  /// Create a declaration for each parameter.
+  Nodes body_exprs = {0};
+  VECTOR_FOREACH_PTR (Node *, param, function_type->type_function.parameters) {
+    Node *var = ast_make_declaration(p->ast, param->source_location, param->declaration.type, as_span(param->declaration.name));
+    scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var);
+    VECTOR_PUSH(body_exprs, var);
+  }
+
+  /// Parse the body.
+  /// TODO: We could also just allow <expression> here.
+  Node *expr = parse_block(p);
+  VECTOR_APPEND_ALL(body_exprs, expr->block.children);
+  VECTOR_CLEAR(expr->block.children);
+
+  /// Pop the scope created for the function body.
+  scope_pop(p->ast);
+
+  /// Create a block to hold the parameters and the body.
+  return ast_make_block(p->ast, expr->source_location, body_exprs);
+}
+
 /// Parse an expression that starts with a type.
 ///
 /// <expr-cast>      ::= <type> <expression>
@@ -568,18 +596,8 @@ static Node *parse_type_expr(Parser *p, Node *type) {
   /// If this is a function type, and the next token is "{", then this
   /// is a lambda expression.
   if (type->kind == NODE_TYPE_FUNCTION && p->tok.type == TK_LBRACE) {
-    /// Push a new scope and add the parameters to it.
-    scope_push(p->ast);
-    VECTOR_FOREACH_PTR (Node *, param, type->type_function.parameters) {
-      scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(param->declaration.name), param);
-    }
-
-    /// Parse the body.
-    /// TODO: We could also just allow <expression> here.
-    Node *body = parse_block(p);
-
-    /// Pop the scope created for the function body.
-    scope_pop(p->ast);
+    /// Parse the function body.
+    Node *body = parse_function_body(p, type);
 
     /// Create a function for the lambda.
     char num[64] = {0};
@@ -602,9 +620,8 @@ static Node *parse_param_decl(Parser *p) {
   Node *type = parse_type(p);
 
   /// Done.
-  return ast_make_declaration(p->ast, (loc) {start.start, type->source_location.end}, type, name);
+  return ast_make_declaration(p->ast, (loc){start.start, type->source_location.end}, type, name);
 }
-
 
 /// <type-derived>  ::= <type-array> | <type-function>
 /// <type-array>    ::= <type> "[" <expression> "]"
@@ -678,7 +695,7 @@ static Node *parse_type(Parser *p) {
     Node *base = ast_make_type_named(p->ast, p->tok.source_location, sym);
 
     /// If we have pointer indirection levels, wrap the type in a pointer.
-    if (level) base = ast_make_type_pointer(p->ast, (loc) {start.start, p->tok.source_location.end}, base, level);
+    if (level) base = ast_make_type_pointer(p->ast, (loc){start.start, p->tok.source_location.end}, base, level);
 
     /// Yeet the identifier and parse the rest of the type.
     next_token(p);
@@ -711,30 +728,18 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   /// If the next token is "{", and the type is a function type, and this
   /// is not an external declaration, then this is a function definition.
   if (!is_ext && p->tok.type == TK_LBRACE && type->kind == NODE_TYPE_FUNCTION) {
-    /// Push a new scope and add the parameters to it.
-    scope_push(p->ast);
-    VECTOR_FOREACH_PTR (Node *, param, type->type_function.parameters) {
-      scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(param->declaration.name), param);
-    }
-
-    /// Parse the body.
-    /// TODO: We could also just allow <expression> here.
-    Node *body = parse_block(p);
-
-    /// Pop the scope created for the function body.
-    scope_pop(p->ast);
-
-    /// Create the function and add it to the symbol table.
+    /// Parse the body, create the function, and add it to the symbol table.
+    Node *body = parse_function_body(p, type);
     Node *func = ast_make_function(p->ast, ident.source_location, type, body, ident.text);
-    scope_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, func);
-    return func;
+    Symbol *sym = scope_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, func);
+    return ast_make_function_reference(p->ast, ident.source_location, sym);
   }
 
   /// Otherwise, this is a variable declaration.
   Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text);
 
   /// Add the declaration to the current scope.
-  scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
+  Symbol *sym = scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
 
   /// A non-external declaration may have an initialiser.
   /// TODO: Should we just allow this instead?
@@ -742,7 +747,10 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     if (is_ext) ERR("An \"ext\" declaration may not have an initialiser");
     next_token(p);
     Node *init = parse_expr(p);
-    return ast_make_binary(p->ast, ident.source_location, TK_COLON_EQ, decl, init);
+
+    /// Create a variable reference and store to that to simplify codegen.
+    Node *var = ast_make_variable_reference(p->ast, decl->source_location, sym);
+    return ast_make_binary(p->ast, ident.source_location, TK_COLON_EQ, var, init);
   }
 
   /// Done.
@@ -800,7 +808,7 @@ static Node *parse_ident_expr(Parser *p) {
 ///              | <expr-prefix>
 ///              | <expr-binary>
 ///              | <expr-primary>
-/// 
+///
 /// <expr-subs>    ::= <expression> "[" <expression> "]"
 /// <expr-paren>   ::= "(" <expression> ")"
 /// <expr-prefix>  ::= <prefix> <expression>
@@ -808,7 +816,7 @@ static Node *parse_ident_expr(Parser *p) {
 /// <expr-primary> ::= NUMBER | IDENTIFIER
 static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
   /// Left-hand side of operator.
-  Node* lhs = NULL;
+  Node *lhs = NULL;
 
   /// Parse the LHS.
   switch (p->tok.type) {
@@ -916,6 +924,8 @@ AST *parse(span source, const char *filename) {
   p.end = source.data + source.size;
   p.lastc = ' ';
   p.ast = ast_create();
+  p.ast->filename = string_create(filename);
+  p.ast->source = string_dup(source);
 
   /// Set up error handling.
   if (setjmp(p.error_buffer)) {

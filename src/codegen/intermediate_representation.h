@@ -341,7 +341,7 @@ IRInstruction *ir_load_global_address
 
 IRInstruction *ir_immediate
 (CodegenContext *context,
- int64_t immediate);
+ u64 immediate);
 
 IRInstruction *ir_load
 (CodegenContext *context,

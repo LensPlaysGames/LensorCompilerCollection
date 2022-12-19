@@ -22,6 +22,7 @@ enum NodeKind {
   NODE_UNARY,
   NODE_LITERAL,
   NODE_VARIABLE_REFERENCE,
+  NODE_FUNCTION_REFERENCE,
 
   NODE_TYPE_PRIMITIVE,
   NODE_TYPE_NAMED,
@@ -137,6 +138,7 @@ typedef struct NodeFunction {
   Node *type;
   Node *body;
   string name;
+  IRFunction *ir;
 } NodeFunction;
 
 /// Variable declaration.
@@ -201,6 +203,9 @@ typedef struct NodeLiteral {
 /// Variable reference.
 typedef Symbol *NodeVariableReference;
 
+/// Function refernece.
+typedef Symbol *NodeFunctionReference;
+
 /// Named type.
 typedef Symbol *NodeTypeNamed;
 
@@ -255,6 +260,7 @@ struct Node {
     NodeUnary unary;
     NodeLiteral literal;
     NodeVariableReference var;
+    NodeFunctionReference funcref;
     NodeTypePrimitive type_primitive;
     NodeTypeNamed type_named;
     NodeTypePointer type_pointer;
@@ -268,8 +274,14 @@ typedef struct AST {
   /// The root node of the AST.
   Node *root;
 
-  /// All nodes in the AST.
-  Nodes nodes;
+  /// Filename of the source file and source code.
+  /// TODO: If we ever allow multiple source files, then we
+  ///       need to store (an index to) the source file in `loc`.
+  string filename;
+  string source;
+
+  /// All nodes in the AST. NEVER iterate over this, ever.
+  Nodes _nodes_;
 
   /// Counter used for generating unique names.
   usz counter;
@@ -282,6 +294,9 @@ typedef struct AST {
 
   /// String table.
   VECTOR(string) strings;
+
+  /// Functions.
+  VECTOR(Node *) functions;
 } AST;
 
 /// ===========================================================================
@@ -399,6 +414,13 @@ Node *ast_make_string_literal(
 
 /// Create a new variable reference.
 Node *ast_make_variable_reference(
+    AST *ast,
+    loc source_location,
+    Symbol *symbol
+);
+
+/// Create a new function reference.
+Node *ast_make_function_reference(
     AST *ast,
     loc source_location,
     Symbol *symbol

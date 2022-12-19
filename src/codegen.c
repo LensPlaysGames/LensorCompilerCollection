@@ -18,16 +18,21 @@
 #include <string.h>
 #include <typechecker.h>
 
-#define ERR(loc, ...)                                                                                                   \
+#define DIAG(sev, loc, ...)                                                                                                   \
   do {                                                                                                                  \
-    issue_diagnostic(DIAG_ERR, (cg_ctx)->parse_context->filename, (cg_ctx)->parse_context->source, (loc), __VA_ARGS__); \
+    issue_diagnostic(DIAG_ERR, (ctx)->ast->filename.data, as_span((ctx)->ast->source), (loc), __VA_ARGS__); \
     return false;                                                                                                       \
   } while (0)
 
+#define ERR(...) DIAG(DIAG_ERR, expr->source_location, __VA_ARGS__)
+
 char codegen_verbose = 1;
 
-CodegenContext *codegen_context_create_top_level
-(ParsingContext *parse_context,
+/// ===========================================================================
+///  Context creation.
+/// ===========================================================================
+CodegenContext *codegen_context_create
+(AST *ast,
  enum CodegenOutputFormat format,
  enum CodegenCallingConvention call_convention,
  enum CodegenAssemblyDialect dialect,
@@ -55,62 +60,18 @@ CodegenContext *codegen_context_create_top_level
     default: UNREACHABLE();
   }
 
-  context->parse_context = parse_context;
+  context->ast = ast;
   context->code = code;
   context->dialect = dialect;
   context->functions = calloc(1, sizeof *context->functions);
   return context;
 }
 
-CodegenContext *codegen_context_create(CodegenContext *parent) {
-  ASSERT(parent, "codegen_context_create() can only create contexts when a parent is given.");
-  STATIC_ASSERT(CG_FMT_COUNT == 2, "codegen_context_create() must exhaustively handle all codegen output formats.");
-  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_create() must exhaustively handle all calling conventions.");
-
-  CodegenContext *new_context = NULL;
-
-  switch (parent->format) {
-    case CG_FMT_x86_64_GAS:
-      switch (parent->call_convention) {
-      case CG_CALL_CONV_MSWIN:
-        new_context = codegen_context_x86_64_mswin_create(parent);
-        break;
-      case CG_CALL_CONV_LINUX:
-        new_context = codegen_context_x86_64_linux_create(parent);
-        break;
-      default:
-        TODO("Handle %d codegen call convention.", parent->call_convention);
-        break;
-      }
-      break;
-    case CG_FMT_IR:
-      new_context = codegen_context_ir_create(parent);
-      break;
-    default:
-      TODO("Handle %d codegen output format.", parent->format);
-      break;
-  }
-
-  new_context->parse_context    = parent->parse_context;
-  new_context->functions        = parent->functions;
-  new_context->function         = parent->function;
-  new_context->block            = parent->block;
-  new_context->dialect          = parent->dialect;
-  new_context->call_convention  = parent->call_convention;
-  new_context->format           = parent->format;
-  new_context->code             = parent->code;
-
-  return new_context;
-}
-
 void codegen_context_free(CodegenContext *context) {
   STATIC_ASSERT(CG_FMT_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen output formats.");
   STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all calling conventions.");
 
-  if (!context->parent) {
-    VECTOR_DELETE(*context->functions);
-    context->functions = NULL;
-  }
+  VECTOR_DELETE(*context->functions);
 
   switch (context->format) {
     default: UNREACHABLE();
@@ -126,773 +87,361 @@ void codegen_context_free(CodegenContext *context) {
   }
 }
 
-//================================================================ BEG CG_FMT_x86_64_MSWIN
+/// ===========================================================================
+///  Code generation.
+/// ===========================================================================
+/// Emit an expression.
+NODISCARD static bool codegen_expr(CodegenContext *ctx, Node *expr) {
+  switch (expr->kind) {
+  default: ICE("Unrecognized expression kind: %d", expr->kind);
 
-#define label_buffer_size 1024
-char label_buffer[label_buffer_size];
-size_t label_index = 0;
-size_t label_count = 0;
-char *label_generate() {
-  char *label = label_buffer + label_index;
-  label_index += (size_t) snprintf(label, label_buffer_size - label_index,
-    ".L%zu", label_count);
-  label_index++;
-  if (label_index >= label_buffer_size) {
-    ICE("Label overflow!");
-    label_index = 0;
-    return label_generate();
-  }
-  label_count++;
-  return label;
-}
-
-/// The address of a local or global symbol, or an error
-/// indicating why the symbol could not be found.
-typedef struct SymbolAddress {
-  enum {
-    /// Global variable. The address is in `global`.
-    SYMBOL_ADDRESS_MODE_GLOBAL,
-    /// Local variable. The address is in `local`.
-    SYMBOL_ADDRESS_MODE_LOCAL,
-    /// There was an error. The error is in `error`.
-    SYMBOL_ADDRESS_MODE_ERROR,
-  } mode;
-  union {
-    char *global;
-    IRInstruction *local;
-  };
-} SymbolAddress;
-
-SymbolAddress symbol_to_address(CodegenContext *cg_ctx, Node *symbol) {
-  SymbolAddress out = {0};
-  out.mode = SYMBOL_ADDRESS_MODE_ERROR;
-
-  ASSERT(cg_ctx, "symbol_to_address(): Context must not be NULL (pass global).");
-  ASSERT(symbol && symbol->value.symbol, "symbol_to_address(): A symbol must be passed.");
-
-  // Global variable access.
-  if (!cg_ctx->parent) {
-    out.mode = SYMBOL_ADDRESS_MODE_GLOBAL;
-    out.global = symbol->value.symbol;
-    return out;
-  }
-
-  // Local variable access.
-  // TODO: Make a custom symbol to local instruction hash map/table.
-  // That way, we can get rid of IR node type in the AST.
-  Node *stack_offset = node_allocate();
-  if (!environment_get(*cg_ctx->locals, symbol, stack_offset)) {
-    putchar('\n');
-    print_node(symbol,0);
-    environment_print(*cg_ctx->locals, 0);
-    issue_diagnostic(DIAG_ERR,
-                     (cg_ctx)->parse_context->filename, (cg_ctx)->parse_context->source,
-                     (symbol->source_location),
-                     "Could not find symbol '%s' in environment.", symbol->value.symbol);
-    return out;
-  }
-
-  IRInstruction *address = stack_offset->value.ir_instruction;
-  free(stack_offset);
-  out.mode = SYMBOL_ADDRESS_MODE_LOCAL;
-  out.local = address;
-  return out;
-}
-
-// Forward declare codegen_function for codegen_expression
-NODISCARD bool codegen_function
-(CodegenContext *cg_context,
- ParsingContext *context,
- ParsingContext **next_child_context,
- char *name,
- Node *function);
-
-NODISCARD bool codegen_expression
-(CodegenContext *cg_context,
- ParsingContext *context,
- ParsingContext **next_child_context,
- Node *expression
- )
-{
-  char *result   = NULL;
-  Node *tmpnode  = node_allocate();
-  Node *iterator = NULL;
-
-  ParsingContext *original_context = context;
-
-  STATIC_ASSERT(NODE_TYPE_MAX == 17, "codegen_expression_x86_64() must exhaustively handle node types!");
-  switch (expression->type) {
-  default: break;
-
-  case NODE_TYPE_INTEGER:
-    expression->result = ir_immediate(cg_context, expression->value.integer);
-    break;
-  case NODE_TYPE_FUNCTION_CALL: {
-    // Use `typecheck_expression()` to get type of variable.
-    Node *variable_type = node_allocate();
-
-    IRInstruction *call = NULL;
-
-    // FIXME: A variable with no type info is attempting to be called.
-    // This means that it is a named function, *clearly*.
-    if (!parse_get_variable(context, expression->children, tmpnode, true)) {
-      call = ir_direct_call(cg_context, expression->children->value.symbol);
-    } else {
-      // err is ignored purposefully, program already type-checked valid.
-      bool _ = typecheck_expression(context, NULL, expression->children, variable_type);
-      (void) _;
-
-      if (strcmp(variable_type->value.symbol, "external function") == 0) {
-        /// TODO: direct calls should store a reference to a function, not its name.
-
-        call = ir_direct_call(cg_context, expression->children->value.symbol);
-      } else {
-        if (!codegen_expression(cg_context, context, next_child_context, expression->children)) {
-          return false;
-        }
-        call = ir_indirect_call(cg_context, expression->children->result);
-      }
-
-    }
-
-    for (iterator = expression->children->next_child->children;
-         iterator;
-         iterator = iterator->next_child) {
-        if (!codegen_expression(cg_context, context, next_child_context, iterator)) return false;
-        ir_add_function_call_argument(cg_context, call, iterator->result);
-    }
-
-    ir_insert(cg_context, call);
-    expression->result = call;
-  } break;
-
-  case NODE_TYPE_FUNCTION: {
-    bool is_special_function_name_handling_stupid_variable_thing = false;
-    if (expression->children->next_child->next_child->next_child) {
-      result = expression->children->next_child->next_child->next_child->value.symbol;
-
-      // Remove type info.
-      // `result` refers to the name of the function.
-      // Find and remove binding from variables parse context.
-
-      ParsingContext *ctx_it = context;
-      while (ctx_it && !environment_remove(ctx_it->variables, expression->children->next_child->next_child->next_child)) {
-        ctx_it = ctx_it->parent;
-      }
-      ASSERT(ctx_it, "Parser generated malformed lambda AST");
-      is_special_function_name_handling_stupid_variable_thing = true;
-    }
-    if (!result) {
-        // TODO: Keep track of local lambda label in environment or something.
-        // FIXME: Completely memory leaked here, no chance of freeing!
-        result = label_generate();
-    }
-    if (!codegen_function(cg_context,
-                          context, next_child_context,
-                          result, expression)) return false;
-    if (!is_special_function_name_handling_stupid_variable_thing) {
-      // Function returns beginning of instructions address.
-      expression->result = ir_load_global_address(cg_context, result);
-    }
-  } break;
-
-  case NODE_TYPE_DEREFERENCE:
-    if (!codegen_expression(cg_context,
-                            context, next_child_context,
-                            expression->children)) return false;
-    expression->result = ir_load(cg_context, expression->children->result);
+  /// Types don’t need to be emitted.
+  case NODE_TYPE_PRIMITIVE:
+  case NODE_TYPE_NAMED:
+  case NODE_TYPE_POINTER:
+  case NODE_TYPE_ARRAY:
+  case NODE_TYPE_FUNCTION:
     break;
 
-  case NODE_TYPE_NOT:
-    if (!codegen_expression(cg_context,
-                            context, next_child_context,
-                            expression->children)) return false;
-    expression->result = ir_not(cg_context, expression->children->result);
-    break;
+  /// A function returns its address. This has already been taken care of.
+  case NODE_FUNCTION: break;
 
-  case NODE_TYPE_ADDRESSOF: {
-    SymbolAddress address = symbol_to_address(cg_context, expression->children);
-    switch (address.mode) {
-    case SYMBOL_ADDRESS_MODE_ERROR: return false;
-    case SYMBOL_ADDRESS_MODE_GLOBAL:
-      expression->result = ir_load_global_address(cg_context, address.global);
-      break;
-    case SYMBOL_ADDRESS_MODE_LOCAL:
-      expression->result = ir_load_local_address(cg_context, address.local);
-      break;
+  /// Root node.
+  case NODE_ROOT: {
+    /// Main function.
+    ir_function(ctx, "main", 2);
+
+    /// TODO: ‘declare’ all functions in the IR and add IRFunction refs to the function syms.
+
+    /// Emit everything that isn’t a function.
+    Node *last = NULL;
+    VECTOR_FOREACH_PTR (Node *, child, expr->root.children) {
+      if (child->kind == NODE_FUNCTION) continue;
+      last = child;
+      if (!codegen_expr(ctx, child)) return false;
     }
-  } break;
 
-  case NODE_TYPE_INDEX: {
-    // Get type of accessed array.
-    if (!parse_get_variable(context, expression->children, tmpnode, false)) return false;
+    /// If the last expression doesn’t return anything, return 0.
+    if (!ir_is_closed(ctx->block)) ir_return(ctx, last ? last->ir : ir_immediate(ctx, 0));
+    return true;
+  }
 
-    // Get size of base type of accessed array.
-    Node *base_type_info = node_allocate();
-    if (!parse_get_type(context, tmpnode->children->next_child, base_type_info, false)) return false;
-    long long base_type_size = base_type_info->children->value.integer;
-    free(base_type_info);
+  /// Variable declaration.
+  case NODE_DECLARATION:
+      expr->ir = ir_stack_allocate(ctx, ast_sizeof(expr));
+      return true;
 
-    long long offset = base_type_size * expression->value.integer;
-
-    // Load memory address of beginning of array.
-    SymbolAddress address = symbol_to_address(cg_context, expression->children);
-    switch (address.mode) {
-      case SYMBOL_ADDRESS_MODE_ERROR:
-        return false;
-      case SYMBOL_ADDRESS_MODE_GLOBAL:
-        expression->result = ir_load_global_address(cg_context, address.global);
-        break;
-      case SYMBOL_ADDRESS_MODE_LOCAL:
-        expression->result = ir_load_local_address(cg_context, address.local);
-        break;
-    }
-    // Offset memory address by index.
-    if (offset) {
-      // TODO: We should probably have IR_ARRAY_INDEX or something as
-      // it's own instruction, that way we can take advantage of
-      // hardware address calculation.
-      IRInstruction *imm = ir_immediate(cg_context, offset);
-      IRInstruction *add = ir_add(cg_context, expression->result, imm);
-      expression->result = add;
-    }
-  } break;
-
-  case NODE_TYPE_IF: {
-    // Generate if condition expression code.
-    if (!codegen_expression(cg_context,
-        context, next_child_context,
-        expression->children)) return false;
-
-    /** Each box is a basic block within intermediate representation,
-     *  and edges represent control flow from top to bottom.
-     *
-     *      +---------+
-     *      | current |
-     *      +---------+
-     *     /           \
-     * +------+    +-----------+
-     * | then |    | otherwise |
-     * +------+    +-----------+
-     *         \  /
-     *       +------+
-     *       | join |
-     *       +------+
-     */
+  /// If expression.
+  ///
+  /// Each box is a basic block within intermediate representation,
+  /// and edges represent control flow from top to bottom.
+  ///
+  ///      +---------+
+  ///      | current |
+  ///      +---------+
+  ///     /           \
+  /// +------+    +------+
+  /// | then |    | else |
+  /// +------+    +------+
+  ///         \  /
+  ///       +------+
+  ///       | join |
+  ///       +------+
+  ///
+  case NODE_IF: {
+    /// Emit the condition.
+    if (!codegen_expr(ctx, expr->if_.condition)) return false;
 
     IRBlock *then_block = ir_block_create();
     IRBlock *last_then_block = then_block;
-    IRBlock *otherwise_block = ir_block_create();
-    IRBlock *last_otherwise_block = otherwise_block;
+    IRBlock *else_block = ir_block_create();
+    IRBlock *last_else_block = else_block;
     IRBlock *join_block = ir_block_create();
 
-    // Generate if instruction with then, otherwise blocks
-    ir_branch_conditional(cg_context, expression->children->result, then_block, otherwise_block);
+    /// Generate the branch.
+    ir_branch_conditional(ctx, expr->if_.condition->ir, then_block, else_block);
 
-    // Attach then_block to current function and make it active as our
-    // context block.
-    ir_block_attach(cg_context, then_block);
+    /// Emit the then block.
+    ir_block_attach(ctx, then_block);
+    if (!codegen_expr(ctx, expr->if_.then)) return false;
 
-    // Enter if then body context
-    {
-      ParsingContext *ctx = context;
-      ParsingContext *next_child_ctx = *next_child_context;
-      // FIXME: Should this NULL check create error rather than silently be allowed?
-      if (next_child_context) {
-        ctx = *next_child_context;
-        next_child_ctx = ctx->children;
-        *next_child_context = (*next_child_context)->next_child;
+    /// Branch to the join block to skip the else branch.
+    last_then_block = ctx->block;
+    if (!ir_is_closed(ctx->block)) ir_branch(ctx, join_block);
 
-        // printf("Entered if context:\n");
-        // parse_context_print(ctx, 0);
-      }
-
-      // Generate THEN expression body.
-      Node *expr = expression->children->next_child->children;
-      while (expr) {
-        if (!codegen_expression(cg_context,
-            ctx, &next_child_ctx,
-            expr)) return false;
-        expr = expr->next_child;
-      }
-    }
-
-    // Generate an unconditional branch to the join_block.
-    ir_branch(cg_context, join_block);
-
-    last_then_block = cg_context->block;
-
-    // Generate OTHERWISE
-
-    // Attach otherwise_block to current function and make it active as
-    // our context block.
-    ir_block_attach(cg_context, otherwise_block);
-
-    if (expression->children->next_child->next_child) {
-      // Enter if otherwise body context
-      ParsingContext *ctx = context;
-      ParsingContext *next_child_ctx = *next_child_context;
-      // FIXME: Should this NULL check create error rather than silently be allowed?
-      if (next_child_context) {
-        ctx = *next_child_context;
-        next_child_ctx = ctx->children;
-        *next_child_context = (*next_child_context)->next_child;
-
-        // printf("Entered if else context:\n");
-        // parse_context_print(ctx, 0);
-      }
-
-      Node *expr = expression->children->next_child->next_child->children;
-      while (expr) {
-        if (!codegen_expression(cg_context,
-            ctx, &next_child_ctx,
-            expr)) return false;
-        expr = expr->next_child;
-      }
-
-      last_otherwise_block = cg_context->block;
-
+    /// Generate the else block if there is one.
+    ir_block_attach(ctx, else_block);
+    if (expr->if_.else_) {
+      if (!codegen_expr(ctx, expr->if_.else_)) return false;
+      last_else_block = ctx->block;
     } else {
-      ir_immediate(cg_context, 0);
+      ir_immediate(ctx, 0);
     }
 
-    ir_branch(cg_context, join_block);
+    /// Branch to the join block from the else branch.
+    if (!ir_is_closed(ctx->block)) ir_branch(ctx, join_block);
 
-    // This assumes that the last instruction in a block returns a
-    // value; if it doesn't, we will simply return zero. This should
-    // probably be ensured in the type checker in the future.
-    // TODO: This should actually be the last instruction *that actually yields a value*.
+    /// This assumes that the last instruction in a block returns a
+    /// value; if it doesn't, we will simply return zero. This should
+    /// probably be ensured in the type checker in the future.
+    /// TODO: This should actually be the last instruction *that actually yields a value*.
+    ///
+    /// NOTE: `block->instructions.last->prev` is the last instruction in `block`
+    /// before the branch.
     IRInstruction *then_return_value = last_then_block->instructions.last->prev
       ? last_then_block->instructions.last->prev
-      : ir_immediate(cg_context, 0);
-    IRInstruction *otherwise_return_value = last_otherwise_block->instructions.last->prev
-      ? last_otherwise_block->instructions.last->prev
-      : ir_immediate(cg_context, 0);
+      : ir_immediate(ctx, 0);
+    IRInstruction *else_return_value = last_else_block->instructions.last->prev
+      ? last_else_block->instructions.last->prev
+      : ir_immediate(ctx, 0);
 
-    // Attach join_block to function and set it as the active context
-    // block.
-    ir_block_attach(cg_context, join_block);
+    /// Attach the join block.
+    ir_block_attach(ctx, join_block);
 
-    // Insert phi node for result of if expression in join block.
-    IRInstruction *phi = ir_phi(cg_context);
+    /// Insert a phi node for the result of the if in the join block.
+    IRInstruction *phi = ir_phi(ctx);
     ir_phi_argument(phi, last_then_block, then_return_value);
-    ir_phi_argument(phi, last_otherwise_block, otherwise_return_value);
+    ir_phi_argument(phi, last_else_block, else_return_value);
+    expr->ir = phi;
+    return true;
+  }
 
-    expression->result = phi;
+  /// While expression.
+  ///
+  /// +---------+
+  /// | current |
+  /// +---------+        ,---------+
+  ///      |             |         |
+  /// +--------------------+       |
+  /// | compute condition  |       |
+  /// | conditional branch |       |
+  /// +--------------------+       |
+  ///      |             |         |
+  ///      |      +------------+   |
+  ///      |      | body       |   |
+  ///      |      +------------+   |
+  ///      |             |         |
+  ///      |            ...        |
+  ///      |             |         |
+  ///  +----------+      `---------+
+  ///  | join     |
+  ///  +----------+
+  case NODE_WHILE: {
+      IRBlock *while_cond_block = ir_block_create();
+      IRBlock *join_block = ir_block_create();
 
-  } break;
+      /// Branch to the condition block and emit the condition.
+      ir_branch(ctx, while_cond_block);
+      ir_block_attach(ctx, while_cond_block);
+      if (!codegen_expr(ctx, expr->while_.condition)) return false;
 
-  case NODE_TYPE_WHILE: {
+      /// If while body is empty, don't use body block.
+      if (expr->while_.body->block.children.size == 0) {
+        ir_branch_conditional(ctx, expr->while_.condition->ir, while_cond_block, join_block);
+        ir_block_attach(ctx, join_block);
+        return true;
+      }
 
-    /**
-     *    +---------+
-     *    | current |
-     *    +---------+        ,--------------------------+
-     *         |             |                          |
-     *    +--------------------------+                  |
-     *    | compute condition        |                  |
-     *    | conditional branch       |                  |
-     *    +--------------------------+                  |
-     *         |             |                          |
-     *         |      +-----------------------------+   |
-     *         |      | body                        |   |
-     *         |      +-----------------------------+   |
-     *         |             |                          |
-     *         |            ...                         |
-     *         |             |                          |
-     *     +----------+      `--------------------------+
-     *     | join     |
-     *     +----------+
-     *
-     */
+      /// Otherwise, emit the body of the while loop.
+      IRBlock *while_body_block = ir_block_create();
+      ir_branch_conditional(ctx, expr->while_.condition->ir, while_body_block, join_block);
+      ir_block_attach(ctx, while_body_block);
+      if (!codegen_expr(ctx, expr->while_.body)) return false;
 
-    IRBlock *while_cond_block = ir_block_create();
-    IRBlock *join_block = ir_block_create();
+      /// Emit a branch to the join block and attach the join block.
+      if (!ir_is_closed(ctx->block)) ir_branch(ctx, while_cond_block);
+      ir_block_attach(ctx, join_block);
+      return true;
+  }
 
-    ir_branch(cg_context, while_cond_block);
+  /// Block expression.
+  case NODE_BLOCK: {
+      /// Emit everything that isn’t a function.
+      Node *last = NULL;
+      VECTOR_FOREACH_PTR (Node *, child, expr->block.children) {
+        if (child->kind == NODE_FUNCTION) continue;
+        last = child;
+        if (!codegen_expr(ctx, child)) return false;
+      }
 
-    ir_block_attach(cg_context, while_cond_block);
-    if (!codegen_expression(cg_context,
-         context, next_child_context,
-         expression->children)) return false;
+      /// If the last expression doesn’t return anything, return 0.
+      expr->ir = last ? last->ir : ir_immediate(ctx, 0);
+      return true;
+  }
 
-    // If while body is empty, don't use body block.
-    if (!expression->children->next_child->children) {
-      ir_branch_conditional(cg_context, expression->children->result, while_cond_block, join_block);
-      ir_block_attach(cg_context, join_block);
+  /// Function call.
+  case NODE_CALL: {
+    IRInstruction *call = NULL;
+
+    /// Direct call.
+    if (expr->call.callee->kind == NODE_TYPE_FUNCTION) {
+      call = ir_direct_call(ctx, expr->call.callee->function.ir);
+    }
+
+    /// Indirect call.
+    else {
+      if (!codegen_expr(ctx, expr->call.callee)) return false;
+      call = ir_indirect_call(ctx, expr->call.callee->ir);
+    }
+
+    /// Emit the arguments.
+    VECTOR_FOREACH_PTR (Node*, arg, expr->call.arguments) {
+      if (!codegen_expr(ctx, arg)) return false;
+      ir_add_function_call_argument(ctx, call, arg->ir);
+    }
+
+    ir_insert(ctx, call);
+    expr->ir = call;
+    return true;
+  }
+
+  /// Typecast.
+  case NODE_CAST: { TODO(); }
+
+  /// Binary expression.
+  case NODE_BINARY: {
+    Node * const lhs = expr->binary.lhs, * const rhs = expr->binary.rhs;
+
+    /// Assignment needs to be handled separately.
+    if (expr->binary.op == TK_COLON_EQ) {
+      /// Emit the RHS because we need that in any case.
+      if (!codegen_expr(ctx, rhs)) return false;
+
+      /// If the LHS is a variable, just emit a direct store to the memory address,
+      /// which we can get from the declaration which has to have been emitted already.
+      if (lhs->kind == NODE_VARIABLE_REFERENCE) {
+        expr->ir = ir_store(ctx, lhs->var->value->ir, rhs->ir);
+        return true;
+      }
+
+      /// Otherwise, actually emit the LHS and load from that.
+      if (!codegen_expr(ctx, lhs)) return false;
+      expr->ir = ir_store(ctx, lhs->ir, rhs->ir);
       return true;
     }
 
+    /// Emit the operands.
+    if (!codegen_expr(ctx, lhs)) return false;
+    if (!codegen_expr(ctx, rhs)) return false;
 
-    IRBlock *while_body_block = ir_block_create();
-    ir_branch_conditional(cg_context, expression->children->result, while_body_block, join_block);
-
-    ir_block_attach(cg_context, while_body_block);
-
-    // Enter while body context
-    {
-      ParsingContext *ctx = context;
-      ParsingContext *next_child_ctx = *next_child_context;
-      // FIXME: This makes no sense! We dereference and *then* check if it's NULL?
-      if (next_child_context) {
-        ctx = *next_child_context;
-        next_child_ctx = ctx->children;
-        *next_child_context = (*next_child_context)->next_child;
-
-        // printf("Entered if context:\n");
-        // parse_context_print(ctx, 0);
-      }
-
-      // Generate WHILE expression body.
-      Node *expr = expression->children->next_child->children;
-      while (expr) {
-        if (!codegen_expression(cg_context,
-             ctx, &next_child_ctx,
-             expr)) return false;
-        expr = expr->next_child;
-      }
+    /// Emit the binary instruction.
+    switch (expr->binary.op) {
+      default: ICE("Cannot emit binary expression of type %d", expr->binary.op);
+      case TK_LBRACK: ICE("Array subscript should have been lowered to a pointer dereference");
+      case TK_GT: expr->ir = ir_comparison(ctx, COMPARE_GT, lhs->ir, rhs->ir); break;
+      case TK_LT: expr->ir = ir_comparison(ctx, COMPARE_LT, lhs->ir, rhs->ir); break;
+      case TK_GE: expr->ir = ir_comparison(ctx, COMPARE_GE, lhs->ir, rhs->ir); break;
+      case TK_LE: expr->ir = ir_comparison(ctx, COMPARE_LE, lhs->ir, rhs->ir); break;
+      case TK_EQ: expr->ir = ir_comparison(ctx, COMPARE_EQ, lhs->ir, rhs->ir); break;
+      case TK_NE: expr->ir = ir_comparison(ctx, COMPARE_NE, lhs->ir, rhs->ir); break;
+      case TK_PLUS: expr->ir = ir_add(ctx, lhs->ir, rhs->ir); break;
+      case TK_MINUS: expr->ir = ir_subtract(ctx, lhs->ir, rhs->ir); break;
+      case TK_STAR: expr->ir = ir_multiply(ctx, lhs->ir, rhs->ir); break;
+      case TK_SLASH: expr->ir = ir_divide(ctx, lhs->ir, rhs->ir); break;
+      case TK_PERCENT: expr->ir = ir_modulo(ctx, lhs->ir, rhs->ir); break;
+      case TK_SHL: expr->ir = ir_shift_left(ctx, lhs->ir, rhs->ir); break;
+      case TK_SHR: expr->ir = ir_shift_right_arithmetic(ctx, lhs->ir, rhs->ir); break;
+      case TK_AMPERSAND: expr->ir = ir_and(ctx, lhs->ir, rhs->ir); break;
+      case TK_PIPE: expr->ir = ir_or(ctx, lhs->ir, rhs->ir); break;
     }
 
-    if (!ir_is_closed(cg_context->block)) {
-      ir_branch(cg_context, while_cond_block);
-    }
-
-    ir_block_attach(cg_context, join_block);
-
-  } break;
-
-  case NODE_TYPE_BINARY_OPERATOR:
-    while (context->parent) { context = context->parent; }
-    // FIXME: Second argument is memory leaked! :^(
-    environment_get(*context->binary_operators, node_symbol(expression->value.symbol), tmpnode);
-
-    //printf("Codegenning binary operator %s\n", expression->value.symbol);
-    //print_node(tmpnode,0);
-
-    if (!codegen_expression(cg_context,
-         context, next_child_context,
-         expression->children)) return false;
-    if (!codegen_expression(cg_context,
-         context, next_child_context,
-         expression->children->next_child)) return false;
-
-    if (strcmp(expression->value.symbol, ">") == 0) {
-      expression->result = ir_comparison
-        (cg_context,
-         COMPARE_GT,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else if (strcmp(expression->value.symbol, "<") == 0) {
-      expression->result = ir_comparison
-        (cg_context,
-         COMPARE_LT,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else if (strcmp(expression->value.symbol, "=") == 0) {
-      expression->result = ir_comparison
-        (cg_context,
-         COMPARE_EQ,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else if (strcmp(expression->value.symbol, "+") == 0) {
-      expression->result = ir_add
-        (cg_context,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else if (strcmp(expression->value.symbol, "-") == 0) {
-      expression->result = ir_subtract
-        (cg_context,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else if (strcmp(expression->value.symbol, "*") == 0) {
-      expression->result = ir_multiply
-        (cg_context,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else if (strcmp(expression->value.symbol, "/") == 0) {
-      expression->result = ir_divide
-        (cg_context,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else if (strcmp(expression->value.symbol, "%") == 0) {
-      expression->result = ir_modulo
-        (cg_context,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else if (strcmp(expression->value.symbol, "<<") == 0) {
-      expression->result = ir_shift_left
-        (cg_context,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else if (strcmp(expression->value.symbol, ">>") == 0) {
-      expression->result = ir_shift_right_arithmetic
-        (cg_context,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else if (strcmp(expression->value.symbol, "&") == 0) {
-      expression->result = ir_and
-        (cg_context,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else if (strcmp(expression->value.symbol, "|") == 0) {
-      expression->result = ir_or
-        (cg_context,
-         expression->children->result,
-         expression->children->next_child->result);
-    } else {
-      ICE("Unrecognized binary operator: \"%s\"\n", expression->value.symbol);
-    }
-    break;
-
-  case NODE_TYPE_VARIABLE_ACCESS: {
-    // Find context that local variable resides in.
-
-    CodegenContext *variable_residency = cg_context;
-    while (variable_residency) {
-      if (environment_get_by_symbol(*variable_residency->locals, expression->value.symbol, tmpnode)) {
-        break;
-      }
-      variable_residency = variable_residency->parent;
-    }
-    if (!variable_residency) {
-      // Global variable
-      expression->result = ir_load_global(cg_context, expression->value.symbol);
-    } else {
-      // TODO: For each context change upwards (base pointer load), emit a call to load caller RBP
-      // from current RBP into some register, and use that register as offset for memory access.
-      // This will require us to differentiate scopes from stack frames, which is a problem for
-      // another time :^). Good luck, future me!
-      expression->result = ir_load_local(cg_context, tmpnode->value.ir_instruction);
-    }
-  } break;
-
-  case NODE_TYPE_VARIABLE_DECLARATION:
-    if (!cg_context->parent) { break; }
-    // Allocate space on stack
-    //   Get the size in bytes of the type of the variable
-    long long size_in_bytes = 0;
-    while (context) {
-      if (environment_get(*context->variables, expression->children, tmpnode)) {
-        break;
-      }
-      context = context->parent;
-    }
-    if (!context) {
-      ICE("Invalid AST/context fed to codegen. Could not find variable declaration in environment: \"%s\"\n",
-          expression->children->value.symbol);
-    }
-    if (strcmp(tmpnode->value.symbol, "external function") == 0) {
-      break;
-    }
-    // Get size in bytes from types environment.
-    if (!parse_get_type(original_context, tmpnode, tmpnode, false)) return false;
-    size_in_bytes = tmpnode->children->value.integer;
-
-    IRInstruction *local = ir_stack_allocate(cg_context, size_in_bytes);
-    Node *local_reference = node_allocate();
-    local_reference->value.ir_instruction = local;
-    environment_set(cg_context->locals, expression->children, local_reference);
-    break;
-
-  case NODE_TYPE_VARIABLE_REASSIGNMENT: {
-    // Recurse LHS into children until LHS is a var. access.
-    // Set iterator to the var. access node.
-    iterator = expression->children;
-    while (iterator && iterator->type != NODE_TYPE_VARIABLE_ACCESS) {
-      iterator = iterator->children;
-    }
-    ASSERT(iterator, "Invalid or mishapen AST.");
-
-    // Codegen RHS
-    if (!codegen_expression(cg_context, context,
-         next_child_context,
-         expression->children->next_child)) return false;
-
-    // If variable has no type information, don't do anything, just skip it.
-    if (!parse_get_variable(context, iterator, tmpnode, true)) {
-      printf("Skipping codegen of %s variable\n", iterator->value.symbol);
-      break;
-    } else {
-      printf("Codegenning %s variable reassignment\n", iterator->value.symbol);
-    }
-
-    if (expression->children->type == NODE_TYPE_VARIABLE_ACCESS) {
-      // LHS is simple variable access. No pointers, array indices, etc.
-      SymbolAddress address = symbol_to_address(cg_context, iterator);
-      switch (address.mode) {
-      case SYMBOL_ADDRESS_MODE_ERROR:
-        return false;
-      case SYMBOL_ADDRESS_MODE_GLOBAL:
-        expression->result = ir_store_global
-          (cg_context,
-           expression->children->next_child->result,
-           address.global);
-        break;
-      case SYMBOL_ADDRESS_MODE_LOCAL:
-        expression->result = ir_store_local
-          (cg_context,
-           expression->children->next_child->result,
-           address.local);
-        break;
-      }
-    } else {
-      // LHS contains complex stuff like dereference that needs handled
-      // differently than the expression is codegenned.
-
-      // When a dereference is codegenned, it loads the value at the
-      // address; we actually just need the dereference for type
-      // checking. When we codegen as a result of the following call, a
-      // value is attempted to be used as an address in future
-      // instructions. This is not correct, and obviously not wanted.
-      // A better solution would be to loop the amount of times that
-      // there are dereferences (minus one), getting the new address
-      // each time.
-
-      if (!codegen_expression(cg_context, context,
-           next_child_context,
-           expression->children->children)) return false;
-
-      expression->result =
-        ir_store(cg_context,
-                 expression->children->next_child->result,
-                 expression->children->children->result);
-    }
-  } break;
-
-  case NODE_TYPE_CAST: {
-    Node *cast_type = expression->children;
-    // TODO: Somehow avoid typechecking twice; this is only needed to get result type of expression.
-    Node *expression_type = node_allocate();
-    if (!typecheck_expression(context, next_child_context, expression->children->next_child, expression_type)) return false;
-
-    // Get size of cast_type and expression_type to determine kind of
-    // typecast.
-    Node *cast_type_info = node_allocate();
-    Node *expression_type_info = node_allocate();
-    if (!parse_get_type(context, cast_type, cast_type_info, false)) return false;
-    if (!parse_get_type(context, expression_type, expression_type_info, false)) return false;
-    size_t cast_type_size = (size_t) cast_type_info->children->value.integer;
-    size_t expression_type_size = (size_t) expression_type_info->children->value.integer;
-    free(cast_type_info);
-    free(expression_type_info);
-
-    if (cast_type_size > expression_type_size) {
-      // TODO: Set `expression_signed` to `1` iff expression_type is of signed type.
-      char expression_signed = 0;
-      if (expression_signed) {
-        TODO("Handle TYPECAST sign extension in codegen_platform.c!");
-      } else {
-        TODO("Handle TYPECAST zero extension in codegen_platform.c!");
-      }
-    } else if (cast_type_size < expression_type_size) {
-      TODO("Handle TYPECAST truncation in codegen_platform.c!");
-    }
-
-    } break;
+    /// Done.
+    return true;
   }
 
-  free(tmpnode);
-  return true;
+  /// Unary expression.
+  case NODE_UNARY: {
+    if (!codegen_expr(ctx, expr->unary.value)) return false;
+
+    /// Prefix expressions.
+    if (!expr->unary.postfix) {
+      switch (expr->unary.op) {
+        default: ICE("Cannot emit unary prefix expression of type %d", expr->unary.op);
+
+        /// Load a value from an lvalue.
+        case TK_STAR:
+          expr->ir = ir_load(ctx, expr->unary.value->ir);
+          return true;
+
+        /// Address of lvalue.
+        case TK_AMPERSAND:
+          expr->ir = ir_address_of(ctx, expr->unary.value->ir);
+          return true;
+
+        /// One’s complement negation.
+        case TK_TILDE:
+          expr->ir = ir_not(ctx, expr->unary.value->ir);
+          return true;
+      }
+    }
+
+    /// Postfix expressions.
+    else {
+      switch (expr->unary.op) {
+        default: ICE("Cannot emit unary postfix expression of type %d", expr->unary.op);
+      }
+    }
+  }
+
+  /// Literal expression. Only integer literals are supported for now.
+  case NODE_LITERAL:
+    if (expr->literal.type != TK_NUMBER) DIAG(DIAG_SORRY, expr->source_location, "Emitting non-integer literals not supported");
+    expr->ir = ir_immediate(ctx, expr->literal.integer);
+    return true;
+
+  /// Variable reference.
+  case NODE_VARIABLE_REFERENCE: {
+    expr->ir = ir_load(ctx, expr->var->value->ir);
+    return true;
+  }
+
+  /// Function reference.
+  case NODE_FUNCTION_REFERENCE: {
+    expr->ir = ir_address_of_function(ctx, expr->funcref->value->function.ir);
+    return true;
+  }
+
+  }
 }
 
-#define LABEL_NAME_BUFFER_SIZE (1024)
-
-bool codegen_function
-(CodegenContext *cg_context,
- ParsingContext *context,
- ParsingContext **next_child_context,
- char *name,
- Node *function
- )
-{
-  cg_context = codegen_context_create(cg_context);
-
+/// Emit a function.
+NODISCARD bool codegen_function(CodegenContext *ctx, Node *node) {
   /// Create a new function.
-  {
-    /// Determine the number of parameters.
-    /// TODO: Pass the actual to ir_function() instead.
-    size_t param_count = 0;
-    Node *parameter = function->children->next_child->children;
-    while (parameter) {
-      param_count++;
-      parameter = parameter->next_child;
-    }
+  ir_function(ctx, as_span(node->function.name), node->function.type->type_function.parameters.size);
 
-    /// Create the function.
-    ir_function(cg_context, name, param_count);
+  /// The first N nodes in the body of a function, where N is the number
+  /// of parameters, are variable declarations that correspond to the
+  /// parameters. First, emit all of them.
+  size_t i = 0;
+  for (; i < node->function.type->type_function.parameters.size; i++) {
+    Node * decl = node->function.body->block.children.data[i];
+    if (!codegen_expr(ctx, decl)) return false;
   }
 
-
-  /// Create a variable for each parameter.
-  size_t param_count = 0;
-  Node *parameter = function->children->next_child->children;
-  while (parameter) {
-    Node *param_node = node_allocate();
-
-    /// Get the parameter value and store it in a local variable.
-    IRInstruction *param = ir_parameter(cg_context, param_count++);
-    IRInstruction *alloca = ir_stack_allocate(cg_context, 8);
-    ir_store_local(cg_context, param, alloca);
-    param_node->value.ir_instruction = alloca;
-    environment_set(cg_context->locals, parameter->children, param_node);
-
-    parameter = parameter->next_child;
+  /// Then, store the initial values of the parameters in those variables.
+  VECTOR_FOREACH_INDEX (j, node->function.type->type_function.parameters) {
+    /// Get each parameter value and store in its corresponding local variable.
+    IRInstruction *p = ir_parameter(ctx, j);
+    ir_store_local(ctx, p, node->function.body->block.children.data[i]->ir);
   }
 
-  // Function body
-  ParsingContext *ctx = context;
-  ParsingContext *next_child_ctx = *next_child_context;
-  /// FIXME: Should this NULL check create error rather than silently be allowed?
-  /// FIXME (Sirraide): The next line currently does nothing. Dereferencing `next_child_context`
-  ///     already implies that it cannot be NULL. Is this supposed to be `if (*next_child_context)`
-  ///     instead?
-  if (next_child_context) {
-    ctx = *next_child_context;
-    next_child_ctx = ctx->children;
-    *next_child_context = (*next_child_context)->next_child;
-
-    //printf("Entered function context:\n");
-    //parse_context_print(ctx, 0);
+  /// Emit the rest of the function body.
+  Node *last = NULL;
+  for (; i < node->function.body->block.children.size; i++) {
+    Node *expr = node->function.body->block.children.data[i];
+    if (expr->kind == NODE_FUNCTION) continue;
+    last = expr;
+    if (!codegen_expr(ctx, expr)) return false;
   }
 
-  Node *last_expression = NULL;
-  Node *expression = function->children->next_child->next_child->children;
-  while (expression) {
-    if (!codegen_expression(cg_context, ctx, &next_child_ctx, expression)) return false;
-    last_expression = expression;
-    expression = expression->next_child;
-  }
-
-  ir_return(cg_context, last_expression->result);
-
-  // Free context;
-  codegen_context_free(cg_context);
+  /// If the last expression doesn’t return anything, return 0.
+  if (!ir_is_closed(ctx->block)) ir_return(ctx, last ? last->ir : ir_immediate(ctx, 0));
   return true;
 }
 
-NODISCARD bool codegen_program(CodegenContext *context, Node *program) {
-  ir_function(context, "main", 2);
-
-  ParsingContext *next_child_context = context->parse_context->children;
-  Node *last_expression = NULL;
-  Node *expression = program->children;
-  while (expression) {
-    if (nonep(*expression)) {
-      expression = expression->next_child;
-      continue;
-    }
-    if (!codegen_expression(context, context->parse_context, &next_child_context, expression)) return false;
-    last_expression = expression;
-    expression = expression->next_child;
-  }
-  if (!ir_is_closed(context->block)) {
-    ir_return(context,
-              last_expression ? last_expression->result : ir_immediate(context, 0));
-  }
-  return true;
-}
-
-//================================================================ END CG_FMT_x86_64_MSWIN
+/// ===========================================================================
+///  Driver
+/// ===========================================================================
 void codegen_lower(CodegenContext *context) {
   switch (context->format) {
     case CG_FMT_x86_64_GAS:
@@ -926,8 +475,7 @@ bool codegen
  enum CodegenAssemblyDialect dialect,
  const char *infile,
  const char *outfile,
- ParsingContext *parse_context,
- Node *program,
+ AST *ast,
  string ir
  )
 {
@@ -936,9 +484,7 @@ bool codegen
   FILE *code = fopen(outfile, "w");
   if (!code) ICE("codegen(): failed to open file at path: \"%s\"\n", outfile);
 
-  CodegenContext *context = codegen_context_create_top_level
-    (parse_context, format, call_convention, dialect, code);
-
+  CodegenContext *context = codegen_context_create(ast, format, call_convention, dialect, code);
   switch (lang) {
     /// Parse an IR file.
     case LANG_IR: {
@@ -950,7 +496,7 @@ bool codegen
 
     /// Parse a FUN file.
     case LANG_FUN: {
-        if (!codegen_program(context, program)) {
+        if (!codegen_expr(context, ast->root)) {
           fclose(code);
           return false;
         }

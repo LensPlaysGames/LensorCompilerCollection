@@ -27,6 +27,9 @@ typedef struct {
 string string_dup_impl(const char *src, usz size);
 #define string_dup(src) string_dup_impl((src).data, (src).size)
 
+/// Create a string from a const char*
+inline string string_create(const char* src) { return string_dup_impl(src, strlen(src)); }
+
 /// Check if two strings are equal.
 #define string_eq(a, b) ((a).size == (b).size && memcmp((a).data, (b).data, (a).size) == 0)
 

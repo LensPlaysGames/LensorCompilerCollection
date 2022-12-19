@@ -60,7 +60,7 @@ Symbol *scope_find_symbol(Scope *scope, span name, bool this_scope_only) {
 Symbol *scope_find_or_add_symbol(Scope *scope, enum SymbolKind kind, span name, bool this_scope_only) {
   Symbol *symbol = scope_find_symbol(scope, name, this_scope_only);
   if (symbol) return symbol;
-  return scope_add_symbol(scope, kind, name);
+  return scope_add_symbol(scope, kind, name, NULL);
 }
 
 /// ===========================================================================
@@ -71,7 +71,7 @@ static Node *mknode(AST *ast, enum NodeKind kind, loc source_location) {
   Node *node = calloc(1, sizeof(Node));
   node->kind = kind;
   node->source_location = source_location;
-  VECTOR_PUSH(ast->nodes, node);
+  VECTOR_PUSH(ast->_nodes_, node);
   return node;
 }
 
@@ -87,6 +87,7 @@ Node *ast_make_function(
   node->function.name = string_dup(name);
   node->function.type = type;
   node->function.body = body;
+  VECTOR_PUSH(ast->functions, node);
   return node;
 }
 
@@ -233,6 +234,17 @@ Node *ast_make_variable_reference(
   return node;
 }
 
+/// Create a new function reference.
+Node *ast_make_function_reference(
+    AST *ast,
+    loc source_location,
+    Symbol *symbol
+) {
+  Node *node = mknode(ast, NODE_FUNCTION_REFERENCE, source_location);
+  node->funcref = symbol;
+  return node;
+}
+
 /// Create a new named type.
 Node *ast_make_type_named(
     AST *ast,
@@ -313,8 +325,8 @@ AST *ast_create() {
 /// Free an AST.
 void ast_free(AST *ast) {
   /// Free all nodes.
-  VECTOR_FOREACH_PTR (Node *, node, ast->nodes) free(node);
-  VECTOR_DELETE(ast->nodes);
+  VECTOR_FOREACH_PTR (Node *, node, ast->_nodes_) free(node);
+  VECTOR_DELETE(ast->_nodes_);
 
   /// Free all scopes.
   VECTOR_FOREACH_PTR (Scope *, scope, ast->scopes) scope_delete(scope);
@@ -323,6 +335,10 @@ void ast_free(AST *ast) {
   /// Free all interned strings.
   VECTOR_FOREACH (string, string, ast->strings) free(string->data);
   VECTOR_DELETE(ast->strings);
+
+  /// Free the filename and source code.
+  free(ast->filename.data);
+  free(ast->source.data);
 
   /// Free the AST.
   free(ast);
