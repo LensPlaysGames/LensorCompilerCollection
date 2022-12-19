@@ -292,12 +292,10 @@ Type *ast_make_type_named(
 Type *ast_make_type_pointer(
     AST *ast,
     loc source_location,
-    Type *to,
-    usz level
+    Type *to
 ) {
   Type *type = mktype(ast, TYPE_POINTER, source_location);
   type->pointer.to = to;
-  type->pointer.level = level;
   return type;
 }
 
@@ -358,9 +356,8 @@ void write_typename(string *s, const Type *type, bool colour) {
       break;
 
     case TYPE_POINTER: {
-      usz level = type->pointer.level;
       if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[36m");
-      while (level--) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "@");
+      s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "@");
       write_typename(s, type->pointer.to, colour);
     } break;
 

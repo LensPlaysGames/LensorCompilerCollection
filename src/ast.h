@@ -230,7 +230,6 @@ typedef struct TypePrimitive {
 /// Pointer type.
 typedef struct TypePointer {
   Type *to;
-  usz level;
 } TypePointer;
 
 /// Array type.
@@ -481,8 +480,7 @@ Type *ast_make_type_named(
 Type *ast_make_type_pointer(
     AST *ast,
     loc source_location,
-    Type *to,
-    usz level
+    Type *to
 );
 
 /// Create a new array type.

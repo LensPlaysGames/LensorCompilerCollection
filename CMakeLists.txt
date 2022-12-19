@@ -21,7 +21,7 @@ add_executable(
   src/main.c
   #src/ir_parser.c
   src/parser.c
-  #src/typechecker.c
+  src/typechecker.c
   #src/opt.c
   src/string_utils.c
   #src/codegen/dom.c
