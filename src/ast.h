@@ -26,12 +26,15 @@ enum NodeKind {
   NODE_LITERAL,
   NODE_VARIABLE_REFERENCE,
   NODE_FUNCTION_REFERENCE,
+};
 
-  NODE_TYPE_PRIMITIVE,
-  NODE_TYPE_NAMED,
-  NODE_TYPE_POINTER,
-  NODE_TYPE_ARRAY,
-  NODE_TYPE_FUNCTION,
+/// The kind of a type.
+enum TypeKind {
+  TYPE_PRIMITIVE,
+  TYPE_NAMED,
+  TYPE_POINTER,
+  TYPE_ARRAY,
+  TYPE_FUNCTION,
 };
 
 /// The type of a token. These are only in this header
@@ -97,8 +100,12 @@ enum SymbolKind {
 /// ===========================================================================
 /// Forward declarations.
 typedef struct Node Node;
+typedef struct Type Type;
+typedef struct Parameter Parameter;
 typedef struct Scope Scope;
 typedef VECTOR(Node *) Nodes;
+typedef VECTOR(Type *) Types;
+typedef VECTOR(Parameter) Parameters;
 
 /// A symbol in the symbol table.
 typedef struct Symbol {
@@ -112,7 +119,10 @@ typedef struct Symbol {
   Scope *scope;
 
   /// The actual value of the symbol.
-  Node *value;
+  union {
+    Node *node;
+    Type *type;
+  };
 } Symbol;
 
 /// A scope in the AST.
@@ -196,7 +206,7 @@ typedef struct NodeLiteral {
   enum TokenType type;
   union {
     u64 integer;
-    size_t string_index;
+    usz string_index;
   };
 } NodeLiteral;
 
@@ -207,33 +217,58 @@ typedef Symbol *NodeVariableReference;
 typedef Symbol *NodeFunctionReference;
 
 /// Named type.
-typedef Symbol *NodeTypeNamed;
+typedef Symbol *TypeNamed;
 
 /// Primitive type.
-typedef struct NodeTypePrimitive {
+typedef struct TypePrimitive {
   usz size;
   usz alignment;
   bool is_signed;
   span name;
-} NodeTypePrimitive;
+} TypePrimitive;
 
 /// Pointer type.
-typedef struct NodeTypePointer {
-  Node *to;
+typedef struct TypePointer {
+  Type *to;
   usz level;
-} NodeTypePointer;
+} TypePointer;
 
 /// Array type.
-typedef struct NodeTypeArray {
-  Node *of;
+typedef struct TypeArray {
+  Type *of;
   size_t size;
-} NodeTypeArray;
+} TypeArray;
+
+/// A function parameter.
+struct Parameter {
+  Type *type;
+  string name;
+  loc source_location;
+};
 
 /// Function type.
-typedef struct NodeTypeFunction {
-  Nodes parameters;
-  Node *return_type;
-} NodeTypeFunction;
+typedef struct TypeFunction {
+  Parameters parameters;
+  Type *return_type;
+} TypeFunction;
+
+/// A type.
+struct Type {
+  /// The kind of the type.
+  enum TypeKind kind;
+
+  /// Location of the type in the source code.
+  loc source_location;
+
+  /// The actual type data.
+  union {
+    TypePrimitive primitive;
+    TypeNamed named;
+    TypePointer pointer;
+    TypeArray array;
+    TypeFunction function;
+  };
+};
 
 /// A node in the AST.
 struct Node {
@@ -244,7 +279,7 @@ struct Node {
   loc source_location;
 
   /// The cached type of the node.
-  Node *type;
+  Type *type;
 
   /// The parent node.
   Node *parent;
@@ -272,11 +307,6 @@ struct Node {
     NodeLiteral literal;
     NodeVariableReference var;
     NodeFunctionReference funcref;
-    NodeTypePrimitive type_primitive;
-    NodeTypeNamed type_named;
-    NodeTypePointer type_pointer;
-    NodeTypeArray type_array;
-    NodeTypeFunction type_function;
   };
 };
 
@@ -291,15 +321,16 @@ typedef struct AST {
   string filename;
   string source;
 
-  /// All nodes in the AST. NEVER iterate over this, ever.
+  /// All nodes/types in the AST. NEVER iterate over this, ever.
   Nodes _nodes_;
+  Types _types_;
 
   /// Counter used for generating unique names.
   usz counter;
 
   /// Builtin types.
-  Node *t_void;
-  Node *t_integer;
+  Type *t_void;
+  Type *t_integer;
 
   /// Scopes.
   VECTOR(Scope *) scopes;
@@ -322,7 +353,7 @@ void scope_pop(AST *ast);
 
 /// Add an empty symbol to a scope.
 /// \return The symbol that was added, or NULL if the symbol already exists.
-Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, Node *value);
+Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, void *value);
 
 /// Find a symbol in a scope.
 /// \return The symbol, or NULL if it was not found.
@@ -339,7 +370,7 @@ Symbol *scope_find_or_add_symbol(Scope *scope, enum SymbolKind kind, span name, 
 Node *ast_make_function(
     AST *ast,
     loc source_location,
-    Node *type,
+    Type *type,
     Node *body,
     span name
 );
@@ -348,7 +379,7 @@ Node *ast_make_function(
 Node *ast_make_declaration(
     AST *ast,
     loc source_location,
-    Node *type,
+    Type *type,
     span name,
     Node *init
 );
@@ -389,7 +420,7 @@ Node *ast_make_call(
 Node *ast_make_cast(
     AST *ast,
     loc source_location,
-    Node *to_type,
+    Type *to,
     Node *value
 );
 
@@ -440,34 +471,34 @@ Node *ast_make_function_reference(
 );
 
 /// Create a new named type.
-Node *ast_make_type_named(
+Type *ast_make_type_named(
     AST *ast,
     loc source_location,
     Symbol *symbol
 );
 
 /// Create a new pointer type.
-Node *ast_make_type_pointer(
+Type *ast_make_type_pointer(
     AST *ast,
     loc source_location,
-    Node *to,
+    Type *to,
     usz level
 );
 
 /// Create a new array type.
-Node *ast_make_type_array(
+Type *ast_make_type_array(
     AST *ast,
     loc source_location,
-    Node *of,
+    Type *of,
     size_t size
 );
 
 /// Create a new function type.
-Node *ast_make_type_function(
+Type *ast_make_type_function(
     AST *ast,
     loc source_location,
-    Node *return_type,
-    Nodes parameters
+    Type *return_type,
+    Parameters parameters
 );
 
 /// ===========================================================================
@@ -482,13 +513,13 @@ typedef struct TypeInfo {
 /// Get a string representation of a type.
 /// \return The string representation of the type. The string is allocated
 ///         as if with `malloc` and must be freed by the caller.
-string ast_typename(const Node *type, bool colour);
+string ast_typename(const Type *type, bool colour);
 
 /// Get type information for a type.
 TypeInfo ast_typeinfo(const Node *type);
 
 /// Get the size of a type.
-usz ast_sizeof(const Node *type);
+usz ast_sizeof(const Type *type);
 
 /// ===========================================================================
 ///  Miscellaneous AST functions.

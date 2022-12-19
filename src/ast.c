@@ -33,11 +33,12 @@ void scope_pop(AST *ast) {
   (void) VECTOR_POP(ast->scopes);
 }
 
-Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, Node *value) {
+Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, void *value) {
   Symbol *symbol = calloc(1, sizeof(Symbol));
   symbol->kind = kind;
   symbol->name = string_dup(name);
-  symbol->value = value;
+  if (kind == SYM_TYPE) symbol->type = value;
+  else symbol->node = value;
   VECTOR_PUSH(scope->symbols, symbol);
   return symbol;
 }
@@ -70,7 +71,7 @@ Symbol *scope_find_or_add_symbol(Scope *scope, enum SymbolKind kind, span name, 
 ///  Functions to create ast nodes.
 /// ===========================================================================
 /// Internal helper to create a node.
-static Node *mknode(AST *ast, enum NodeKind kind, loc source_location) {
+NODISCARD static Node *mknode(AST *ast, enum NodeKind kind, loc source_location) {
   Node *node = calloc(1, sizeof(Node));
   node->kind = kind;
   node->source_location = source_location;
@@ -78,11 +79,20 @@ static Node *mknode(AST *ast, enum NodeKind kind, loc source_location) {
   return node;
 }
 
+/// Internal helper to create a type.
+NODISCARD static Type *mktype(AST *ast, enum TypeKind kind, loc source_location) {
+  Type *type = calloc(1, sizeof(Type));
+  type->kind = kind;
+  type->source_location = source_location;
+  VECTOR_PUSH(ast->_types_, type);
+  return type;
+}
+
 /// Create a new function node.
 Node *ast_make_function(
     AST *ast,
     loc source_location,
-    Node *type,
+    Type *type,
     Node *body,
     span name
 ) {
@@ -90,8 +100,6 @@ Node *ast_make_function(
   node->function.name = string_dup(name);
   node->type = type;
   node->function.body = body;
-
-  type->parent = node;
   body->parent = node;
 
   VECTOR_PUSH(ast->functions, node);
@@ -102,15 +110,13 @@ Node *ast_make_function(
 Node *ast_make_declaration(
     AST *ast,
     loc source_location,
-    Node *type,
+    Type *type,
     span name,
     Node *init
 ) {
   Node *node = mknode(ast, NODE_DECLARATION, source_location);
   node->declaration.name = string_dup(name);
   node->type = type;
-  type->parent = node;
-
   if (init) {
     node->declaration.init = init;
     init->parent = node;
@@ -182,13 +188,12 @@ Node *ast_make_call(
 Node *ast_make_cast(
     AST *ast,
     loc source_location,
-    Node *to_type,
+    Type *to,
     Node *value
 ) {
   Node *node = mknode(ast, NODE_CAST, source_location);
-  node->type = to_type;
+  node->type = to;
   node->cast.value = value;
-  to_type->parent = node;
   value->parent = node;
   return node;
 }
@@ -273,57 +278,53 @@ Node *ast_make_function_reference(
 }
 
 /// Create a new named type.
-Node *ast_make_type_named(
+Type *ast_make_type_named(
     AST *ast,
     loc source_location,
     Symbol *symbol
 ) {
-  Node *node = mknode(ast, NODE_TYPE_NAMED, source_location);
-  node->type_named = symbol;
-  return node;
+  Type *type = mktype(ast, TYPE_NAMED, source_location);
+  type->named = symbol;
+  return type;
 }
 
 /// Create a new pointer type.
-Node *ast_make_type_pointer(
+Type *ast_make_type_pointer(
     AST *ast,
     loc source_location,
-    Node *to,
+    Type *to,
     usz level
 ) {
-  Node *node = mknode(ast, NODE_TYPE_POINTER, source_location);
-  node->type_pointer.to = to;
-  node->type_pointer.level = level;
-  to->parent = node;
-  return node;
+  Type *type = mktype(ast, TYPE_POINTER, source_location);
+  type->pointer.to = to;
+  type->pointer.level = level;
+  return type;
 }
 
 /// Create a new array type.
-Node *ast_make_type_array(
+Type *ast_make_type_array(
     AST *ast,
     loc source_location,
-    Node *of,
+    Type *of,
     size_t size
 ) {
-  Node *node = mknode(ast, NODE_TYPE_ARRAY, source_location);
-  node->type_array.of = of;
-  node->type_array.size = size;
-  of->parent = node;
-  return node;
+  Type *type = mktype(ast, TYPE_ARRAY, source_location);
+  type->array.of = of;
+  type->array.size = size;
+  return type;
 }
 
 /// Create a new function type.
-Node *ast_make_type_function(
+Type *ast_make_type_function(
     AST *ast,
     loc source_location,
-    Node *return_type,
-    Nodes parameters
+    Type *return_type,
+    Parameters parameters
 ) {
-  Node *node = mknode(ast, NODE_TYPE_FUNCTION, source_location);
-  node->type_function.parameters = parameters;
-  node->type_function.return_type = return_type;
-  return_type->parent = node;
-  VECTOR_FOREACH_PTR (Node *, parameter, parameters) parameter->parent = node;
-  return node;
+  Type *type = mktype(ast, TYPE_FUNCTION, source_location);
+  type->function.parameters = parameters;
+  type->function.return_type = return_type;
+  return type;
 }
 
 
@@ -331,7 +332,7 @@ Node *ast_make_type_function(
 ///  AST query functions.
 /// ===========================================================================
 /// Used by `ast_typename`.
-void write_typename(string *s, const Node *type, bool colour) {
+void write_typename(string *s, const Type *type, bool colour) {
   if (!type) {
     if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[m");
     s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "(\?\?\?)");
@@ -344,44 +345,44 @@ void write_typename(string *s, const Node *type, bool colour) {
       s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "(\?\?\?)");
       break;
 
-    case NODE_TYPE_PRIMITIVE:
+    case TYPE_PRIMITIVE:
       if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[36m");
       s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "%.*s",
-        (int) type->type_primitive.name.size, type->type_primitive.name.data);
+        (int) type->primitive.name.size, type->primitive.name.data);
       break;
 
-    case NODE_TYPE_NAMED:
+    case TYPE_NAMED:
       if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[36m");
       s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "%.*s",
-        (int) type->type_named->name.size, type->type_named->name.data);
+        (int) type->named->name.size, type->named->name.data);
       break;
 
-    case NODE_TYPE_POINTER: {
-      usz level = type->type_pointer.level;
+    case TYPE_POINTER: {
+      usz level = type->pointer.level;
       if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[36m");
       while (level--) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "@");
-      write_typename(s, type->type_pointer.to, colour);
+      write_typename(s, type->pointer.to, colour);
     } break;
 
-    case NODE_TYPE_ARRAY:
-      write_typename(s, type->type_array.of, colour);
+    case TYPE_ARRAY:
+      write_typename(s, type->array.of, colour);
       if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[31m");
       s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "[");
       if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[35m");
-      s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "%zu", type->type_array.size);
+      s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "%zu", type->array.size);
       if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[31m");
       s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "]");
       break;
 
-    case NODE_TYPE_FUNCTION:
-      write_typename(s, type->type_function.return_type, colour);
+    case TYPE_FUNCTION:
+      write_typename(s, type->function.return_type, colour);
       if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[31m");
       s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, " (");
 
       /// Parameters.
-      VECTOR_FOREACH_PTR (Node*, param, type->type_function.parameters) {
-        write_typename(s, param, colour);
-        if (param != VECTOR_BACK(type->type_function.parameters)) {
+      VECTOR_FOREACH (Parameter, param, type->function.parameters) {
+        write_typename(s, param->type, colour);
+        if (param != type->function.parameters.data + type->function.parameters.size - 1) {
           if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[31m");
           s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, ", ");
         }
@@ -394,7 +395,7 @@ void write_typename(string *s, const Node *type, bool colour) {
 }
 
 /// Get a string representation of a type.
-string ast_typename(const Node *type, bool colour) {
+string ast_typename(const Type *type, bool colour) {
   string s = {
     .data = calloc(1, TYPENAME_MAX_SIZE),
     .size = 0
@@ -418,17 +419,15 @@ AST *ast_create() {
   VECTOR_PUSH(ast->scopes, scope_create(NULL));
 
   /// Initialise the builtin types.
-  ast->t_integer = mknode(ast, NODE_TYPE_PRIMITIVE, (loc){0, 0});
-  ast->t_integer->type_primitive.size = 8;
-  ast->t_integer->type_primitive.alignment = 8;
-  ast->t_integer->type_primitive.is_signed = true;
-  ast->t_integer->type_primitive.name = literal_span("integer");
-  ast->t_integer->type = ast->t_integer;
+  ast->t_integer = mktype(ast, TYPE_PRIMITIVE, (loc){0, 0});
+  ast->t_integer->primitive.size = 8;
+  ast->t_integer->primitive.alignment = 8;
+  ast->t_integer->primitive.is_signed = true;
+  ast->t_integer->primitive.name = literal_span("integer");
 
   /// Declare void as a named type with no node associated with it.
   /// This implicitly means that void is an incomplete type.
-  ast->t_void = mknode(ast, NODE_TYPE_NAMED, (loc){0, 0});
-  ast->t_void->type = ast->t_void;
+  ast->t_void = mktype(ast, TYPE_NAMED, (loc){0, 0});
 
   /// Add the builtin types to the global scope.
   scope_add_symbol(ast->scopes.data[0], SYM_TYPE, literal_span("integer"), ast->t_integer);
@@ -658,7 +657,7 @@ void ast_print_node(
     case NODE_FUNCTION_REFERENCE: {
       /// If our parent is the root, print the function instead.
       if (node->parent && node->parent->kind == NODE_ROOT)
-        return ast_print_node(file, node->funcref->value, leading_text);
+        return ast_print_node(file, node->funcref->node, leading_text);
 
       /// Otherwise, print the function reference.
       string type_name = ast_typename(node->type, true);
@@ -667,13 +666,6 @@ void ast_print_node(
         (int) node->funcref->name.size, node->funcref->name.data,
         (int) type_name.size, type_name.data);
     } break;
-
-    case NODE_TYPE_PRIMITIVE:
-    case NODE_TYPE_NAMED:
-    case NODE_TYPE_POINTER:
-    case NODE_TYPE_ARRAY:
-    case NODE_TYPE_FUNCTION:
-      break;
   }
 }
 

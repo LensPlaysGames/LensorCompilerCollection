@@ -2,8 +2,6 @@
 #include <ctype.h>
 #include <errno.h>
 #include <error.h>
-#include <file_io.h>
-#include <inttypes.h>
 #include <parser.h>
 #include <setjmp.h>
 #include <stdio.h>
@@ -485,7 +483,7 @@ static bool is_right_associative(Parser *p, Token t) {
 ///  Parser
 /// ===========================================================================
 static Node *parse_expr_with_precedence(Parser *p, isz current_precedence);
-static Node *parse_type(Parser *p);
+static Type *parse_type(Parser *p);
 static Node *parse_expr(Parser *p) { return parse_expr_with_precedence(p, 0); }
 
 /// <expr-block>     ::= "{" { <expression> } "}"
@@ -565,14 +563,14 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
 ///
 /// This is basically just a wrapper around `parse_block()` that
 /// also injects declarations for all the function parameters.
-static Node *parse_function_body(Parser *p, Node *function_type) {
+static Node *parse_function_body(Parser *p, Type *function_type) {
   /// Push a new scope and add the parameters to it.
   scope_push(p->ast);
 
   /// Create a declaration for each parameter.
   Nodes body_exprs = {0};
-  VECTOR_FOREACH_PTR (Node *, param, function_type->type_function.parameters) {
-    Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->declaration.name), NULL);
+  VECTOR_FOREACH (Parameter , param, function_type->function.parameters) {
+    Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
     scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var);
     VECTOR_PUSH(body_exprs, var);
   }
@@ -594,10 +592,10 @@ static Node *parse_function_body(Parser *p, Node *function_type) {
 ///
 /// <expr-cast>      ::= <type> <expression>
 /// <expr-lambda>    ::= <type-function> <expr-block>
-static Node *parse_type_expr(Parser *p, Node *type) {
+static Node *parse_type_expr(Parser *p, Type *type) {
   /// If this is a function type, and the next token is "{", then this
   /// is a lambda expression.
-  if (type->kind == NODE_TYPE_FUNCTION && p->tok.type == TK_LBRACE) {
+  if (type->kind == TYPE_FUNCTION && p->tok.type == TK_LBRACE) {
     /// Parse the function body.
     Node *body = parse_function_body(p, type);
 
@@ -612,23 +610,23 @@ static Node *parse_type_expr(Parser *p, Node *type) {
 }
 
 /// <param-decl> ::= <decl-start> <type>
-static Node *parse_param_decl(Parser *p) {
+static Parameter parse_param_decl(Parser *p) {
   loc start = p->tok.source_location;
 
   /// Parse the name, colon, and type.
   span name = p->tok.text;
   consume(p, TK_IDENT);
   consume(p, TK_COLON);
-  Node *type = parse_type(p);
+  Type *type = parse_type(p);
 
   /// Done.
-  return ast_make_declaration(p->ast, (loc){start.start, type->source_location.end}, type, name, NULL);
+  return (Parameter){.source_location = start, .type = type, .name = string_dup(name)};
 }
 
 /// <type-derived>  ::= <type-array> | <type-function>
 /// <type-array>    ::= <type> "[" <expression> "]"
 /// <type-function> ::= <type> "(" [ <param-decl> { "," <param-decl>  } ] ")"
-static Node *parse_type_derived(Parser *p, Node *base) {
+static Type *parse_type_derived(Parser *p, Type *base) {
   ASSERT(base);
 
   /// Parse the rest of the type.
@@ -656,7 +654,7 @@ static Node *parse_type_derived(Parser *p, Node *base) {
         next_token(p);
 
         /// Collect the arguments.
-        Nodes args = {0};
+        Parameters args = {0};
         if (p->tok.type != TK_RPAREN) {
           VECTOR_PUSH(args, parse_param_decl(p));
           while (p->tok.type == TK_COMMA) {
@@ -678,7 +676,7 @@ static Node *parse_type_derived(Parser *p, Node *base) {
 
 /// <type>      ::= <type-base> | <type-rest>
 /// <type-base> ::= [ "@" ] IDENTIFIER
-static Node *parse_type(Parser *p) {
+static Type *parse_type(Parser *p) {
   /// Collect pointers.
   loc start = p->tok.source_location;
   usz level = 0;
@@ -694,7 +692,7 @@ static Node *parse_type(Parser *p) {
     if (!sym || sym->kind != SYM_TYPE) ERR("Unknown type '%.*s'", (int) p->tok.text.size, p->tok.text.data);
 
     /// Create a named type from it.
-    Node *base = ast_make_type_named(p->ast, p->tok.source_location, sym);
+    Type *base = ast_make_type_named(p->ast, p->tok.source_location, sym);
 
     /// If we have pointer indirection levels, wrap the type in a pointer.
     if (level) base = ast_make_type_pointer(p->ast, (loc){start.start, p->tok.source_location.end}, base, level);
@@ -725,11 +723,11 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   }
 
   /// Parse the type.
-  Node *type = parse_type(p);
+  Type *type = parse_type(p);
 
   /// If the next token is "{", and the type is a function type, and this
   /// is not an external declaration, then this is a function definition.
-  if (!is_ext && p->tok.type == TK_LBRACE && type->kind == NODE_TYPE_FUNCTION) {
+  if (!is_ext && p->tok.type == TK_LBRACE && type->kind == TYPE_FUNCTION) {
     /// Parse the body, create the function, and add it to the symbol table.
     Node *body = parse_function_body(p, type);
     Node *func = ast_make_function(p->ast, ident.source_location, type, body, ident.text);
@@ -756,10 +754,10 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   }
 
   /// Strip array types and resolve named types.
-  Node * const saved_type = type;
+  Type *const saved_type = type;
   while (type) {
-    if (type->kind == NODE_TYPE_NAMED) type = type->type_named->value;
-    else if (type->kind == NODE_TYPE_ARRAY) type = type->type_array.of;
+    if (type->kind == TYPE_NAMED) type = type->named->type;
+    else if (type->kind == TYPE_ARRAY) type = type->array.of;
     else break;
   }
 
@@ -802,7 +800,7 @@ static Node *parse_ident_expr(Parser *p) {
 
   /// If the symbol is a type, then parse the rest of the type and delegate.
   if (sym->kind == SYM_TYPE) {
-    Node *type = parse_type_derived(p, ast_make_type_named(p->ast, ident.source_location, sym));
+    Type *type = parse_type_derived(p, ast_make_type_named(p->ast, ident.source_location, sym));
     return parse_type_expr(p, type);
   }
 
@@ -875,7 +873,7 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
       if (p->tok.type == TK_IDENT) {
         Symbol *sym = scope_find_symbol(curr_scope(p), p->tok.text, false);
         if (sym && sym->kind == SYM_TYPE) {
-          Node *type = ast_make_type_named(p->ast, p->tok.source_location, sym);
+          Type *type = ast_make_type_named(p->ast, p->tok.source_location, sym);
           next_token(p);
           type = ast_make_type_pointer(p->ast, p->tok.source_location, parse_type_derived(p, type), at_count);
           lhs = parse_type_expr(p, type);

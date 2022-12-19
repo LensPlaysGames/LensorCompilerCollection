@@ -356,7 +356,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         default: ICE("Cannot emit unary prefix expression of type %d", expr->unary.op);
 
         /// Load a value from an lvalue.
-        case TK_STAR: expr->ir = ir_load(ctx, expr->unary.value->ir); return;
+        case TK_AT: expr->ir = ir_load(ctx, expr->unary.value->ir); return;
 
         /// Address of lvalue.
         case TK_AMPERSAND: expr->ir = ir_address_of(ctx, expr->unary.value->ir); return;

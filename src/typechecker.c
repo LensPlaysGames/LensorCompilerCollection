@@ -53,6 +53,11 @@ NODISCARD static bool is_integer(Node *type) {
   return type->kind == NODE_TYPE_PRIMITIVE;
 }
 
+/// Check if an expression is an lvalue.
+NODISCARD static bool is_lvalue(Node *expr) {
+
+}
+
 NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
   /// Don’t typecheck the same expression twice.
   if (expr->type_checked) return true;
@@ -253,6 +258,37 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Here be dragons.
     case NODE_UNARY:
+      if (!typecheck_expression(ast, expr->unary.value)) return false;
+      switch (expr->unary.op) {
+        default: ICE("Invalid unary operator \"%s\".", token_type_to_string(expr->unary.op));
+
+        /// Load a value from an lvalue.
+        case TK_AT:
+          if (!is_lvalue(expr->unary.value))
+            ERR(expr->unary.value->source_location,
+              "Argument of \"@\" must be an lvalue.");
+
+          expr->type = element_type(expr->unary.value->type);
+          return true;
+
+        /// Address of lvalue.
+        case TK_AMPERSAND:
+          if (!is_lvalue(expr->unary.value))
+            ERR(expr->unary.value->source_location,
+              "Argument of \"&\" must be an lvalue.");
+
+          expr->type = ast_make_type_pointer(ast, expr->source_location, expr->unary.value->type, 1);
+          return true;
+
+        /// One’s complement negation.
+        case TK_TILDE:
+          if (!is_integer(expr->unary.value->type))
+            ERR(expr->unary.value->source_location,
+              "Argument of \"~\" must be an integer.");
+
+          expr->type = expr->unary.value->type;
+          return true;
+      }
       break;
 
     case NODE_LITERAL: break;
