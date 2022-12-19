@@ -4,7 +4,6 @@
 #include <codegen/codegen_forward.h>
 
 #include <ast.h>
-#include <environment.h>
 #include <error.h>
 #include <parser.h>
 #include <stdio.h>

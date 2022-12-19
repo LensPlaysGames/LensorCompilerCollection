@@ -4,7 +4,6 @@
 
 #include <codegen.h>
 #include <error.h>
-#include <environment.h>
 #include <file_io.h>
 #include <parser.h>
 #include <typechecker.h>
@@ -239,11 +238,12 @@ int main(int argc, char **argv) {
   const char *infile = argv[input_filepath_index];
   const char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
   size_t len = strlen(infile);
+  string s = file_contents(infile);
 
   /// The input is an IR file.
   if (len >= 3 && memcmp(infile + len - 3, ".ir", 3) == 0) {
-    string s = file_contents(infile);
     ASSERT(s.data);
+/*
 
     if (!codegen(
       LANG_IR,
@@ -252,19 +252,22 @@ int main(int argc, char **argv) {
       output_assembly_dialect,
       infile,
       output_filepath,
-      parse_context_default_create(),
       NULL,
       s
      )) {
       exit(1);
      }
+*/
 
     free(s.data);
   }
 
   /// The input is a FUN file.
   else {
-    Node *program = node_allocate();
+    __auto_type ast = parse(as_span(s), infile);
+    if (ast) ast_print(stdout, ast);
+    else exit(1);
+/*    Node *program = node_allocate();
     ParsingContext *context = parse_context_default_create();
     if (!parse_program(infile, context, program)) exit(1);
 
@@ -276,8 +279,8 @@ int main(int argc, char **argv) {
       printf("-----\n");
     }
 
-    if (!typecheck_program(context, program)) exit(2);
-
+    if (!typecheck_program(context, program)) exit(2);*/
+/*
     if (!codegen(
       LANG_FUN,
       output_format,
@@ -290,7 +293,7 @@ int main(int argc, char **argv) {
       (string){0}
     )) exit(3);
 
-    node_free(program);
+    node_free(program);*/
   }
 
   if (verbosity) printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);

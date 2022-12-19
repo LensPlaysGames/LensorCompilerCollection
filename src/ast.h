@@ -3,7 +3,10 @@
 
 #include <codegen/codegen_forward.h>
 #include <error.h>
+#include <stdio.h>
 #include <vector.h>
+
+#define AST_PRINT_BUFFER_SIZE 1024
 
 /// ===========================================================================
 ///  Enums.
@@ -144,6 +147,7 @@ typedef struct NodeFunction {
 /// Variable declaration.
 typedef struct NodeDeclaration {
   Node *type;
+  Node *init;
   string name;
 } NodeDeclaration;
 
@@ -243,6 +247,9 @@ struct Node {
   /// Location of the node.
   loc source_location;
 
+  /// The parent node.
+  Node *parent;
+
   /// The IR instruction that this node is compiled to.
   IRInstruction *ir;
 
@@ -337,7 +344,8 @@ Node *ast_make_declaration(
     AST *ast,
     loc source_location,
     Node *type,
-    span name
+    span name,
+    Node *init
 );
 
 /// Create a new if expression.
@@ -458,6 +466,28 @@ Node *ast_make_type_function(
 );
 
 /// ===========================================================================
+///  AST query functions.
+/// ===========================================================================
+typedef struct TypeInfo {
+  usz size;
+  usz alignment;
+  const Node *element_type;
+} TypeInfo;
+
+/// Get a string representation of a type.
+string ast_typename(const Node *type, bool colour);
+
+/// Get type information for a type.
+TypeInfo ast_typeinfo(const Node *type);
+
+/// Get the type of a node.
+/// \return The type of the node, or NULL if the node does not have a type.
+const Node *ast_typeof(const Node *node);
+
+/// Get the size of a type.
+usz ast_sizeof(const Node *type);
+
+/// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================
 /// Create a new AST.
@@ -467,10 +497,14 @@ AST *ast_create();
 void ast_free(AST *ast);
 
 /// Print an AST.
-void ast_print(const AST *ast);
+void ast_print(FILE *file, const AST *ast);
 
 /// Print a node.
-void ast_print_node(const Node *node, size_t indent);
+void ast_print_node(
+  FILE *file,
+  const Node *node,
+  char leading_text[static AST_PRINT_BUFFER_SIZE]
+);
 
 /// Intern a string.
 size_t ast_intern_string(AST *ast, span string);

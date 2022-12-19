@@ -117,6 +117,10 @@
 #define VECTOR_BACK(vector) ((vector).data[(vector).size - 1])
 #define VECTOR_BACK_OR(vector, default) ((vector).size ? VECTOR_BACK(vector) : (default))
 
+/// Get the first element of a vector.
+#define VECTOR_FRONT(vector) ((vector).data[0])
+#define VECTOR_FRONT_OR(vector, default) ((vector).size ? VECTOR_FRONT(vector) : (default))
+
 /// Insert an element into a vector at before the given index.
 #define VECTOR_INSERT(vector, pos, element)                                                      \
   do {                                                                                           \

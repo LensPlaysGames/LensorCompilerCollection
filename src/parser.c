@@ -1,6 +1,5 @@
 #include <ast.h>
 #include <ctype.h>
-#include <environment.h>
 #include <errno.h>
 #include <error.h>
 #include <file_io.h>
@@ -26,6 +25,9 @@
 /// ===========================================================================
 ///  Types and enums.
 /// ===========================================================================
+enum {
+  PREFIX_PRECEDENCE = 10000,
+};
 
 typedef struct Token {
   enum TokenType type;
@@ -100,6 +102,7 @@ static void next_identifier(Parser *p) {
   /// The start of the identifier.
   p->tok.text.data = p->curr - 1;
   p->tok.text.size = 1;
+  p->tok.type = TK_IDENT;
   next_char(p);
 
   /// Read the rest of the identifier.
@@ -123,6 +126,8 @@ static void next_number(Parser *p) {
   /// Record the start of the number.
   p->tok.text.data = p->curr - 1;
   p->tok.text.size = 1;
+  p->tok.integer = 0;
+  p->tok.type = TK_NUMBER;
   next_char(p);
 
   /// Discard leading zeroes.
@@ -161,11 +166,6 @@ static void next_number(Parser *p) {
     return parse_number(p, 16);
   }
 
-  /// Some people might think that a leading zero is an octal number.
-  /// To prevent bugs, we simply do not permit leading zeroes.
-  if (p->tok.text.size > 1 || (p->tok.text.size && isdigit(p->lastc)))
-    ERR("Invalid integer literal. For octal numbers, use the 0o prefix.");
-
   /// Any other digit means we have a decimal number.
   if (isdigit(p->lastc)) {
     do {
@@ -197,7 +197,7 @@ static void next_token(Parser *p) {
   while (isspace(p->lastc)) next_char(p);
 
   /// Start of the token.
-  p->tok.source_location.start = (u32) (p->curr - p->source.data);
+  p->tok.source_location.start = (u32) (p->curr - p->source.data - 1);
 
   /// Lex the token.
   switch (p->lastc) {
@@ -257,14 +257,9 @@ static void next_token(Parser *p) {
       break;
 
     case ';':
-      next_char(p);
-      if (p->lastc == '#') {
-        /// Yeet comment.
-        while (p->lastc && p->lastc != '\n') next_char(p);
-        return next_token(p);
-      }
-      p->tok.type = TK_SEMICOLON;
-      break;
+    case '#':
+      while (p->lastc && p->lastc != '\n') next_char(p);
+      return next_token(p);
 
     case '+':
       next_char(p);
@@ -386,7 +381,7 @@ static void next_token(Parser *p) {
 
 done:
   /// Set the end of the token.
-  p->tok.source_location.end = (u32) (p->curr - p->source.data);
+  p->tok.source_location.end = (u32) (p->curr - p->source.data - 1);
 }
 
 /// ===========================================================================
@@ -397,8 +392,8 @@ static Scope *curr_scope(Parser *p) { return p->ast->scopes.data[0]; }
 
 /// Consume a token; error if it's not the expected type.
 static void consume(Parser *p, enum TokenType tt) {
-  /// TODO: Format token type.
-  if (p->tok.type != tt) ERR("Expected token of type %d, got %d", tt, p->tok.type);
+  if (p->tok.type != tt) ERR("Expected token of type %s, got %s",
+    token_type_to_string(tt), token_type_to_string(p->tok.type));
   next_token(p);
 }
 
@@ -570,7 +565,7 @@ static Node *parse_function_body(Parser *p, Node *function_type) {
   /// Create a declaration for each parameter.
   Nodes body_exprs = {0};
   VECTOR_FOREACH_PTR (Node *, param, function_type->type_function.parameters) {
-    Node *var = ast_make_declaration(p->ast, param->source_location, param->declaration.type, as_span(param->declaration.name));
+    Node *var = ast_make_declaration(p->ast, param->source_location, param->declaration.type, as_span(param->declaration.name), NULL);
     scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var);
     VECTOR_PUSH(body_exprs, var);
   }
@@ -620,7 +615,7 @@ static Node *parse_param_decl(Parser *p) {
   Node *type = parse_type(p);
 
   /// Done.
-  return ast_make_declaration(p->ast, (loc){start.start, type->source_location.end}, type, name);
+  return ast_make_declaration(p->ast, (loc){start.start, type->source_location.end}, type, name, NULL);
 }
 
 /// <type-derived>  ::= <type-array> | <type-function>
@@ -736,21 +731,21 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   }
 
   /// Otherwise, this is a variable declaration.
-  Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text);
+  Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
 
   /// Add the declaration to the current scope.
-  Symbol *sym = scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
+  scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
 
   /// A non-external declaration may have an initialiser.
   /// TODO: Should we just allow this instead?
   if (p->tok.type == TK_EQ) {
     if (is_ext) ERR("An \"ext\" declaration may not have an initialiser");
     next_token(p);
-    Node *init = parse_expr(p);
 
-    /// Create a variable reference and store to that to simplify codegen.
-    Node *var = ast_make_variable_reference(p->ast, decl->source_location, sym);
-    return ast_make_binary(p->ast, ident.source_location, TK_COLON_EQ, var, init);
+    /// Need to do this manually because the symbol that is the variable
+    /// may appear in its initialiser, albeit only in unevaluated contexts.
+    decl->declaration.init = parse_expr(p);
+    decl->declaration.init->parent = decl;
   }
 
   /// Done.
@@ -780,9 +775,8 @@ static Node *parse_ident_expr(Parser *p) {
   Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, false);
 
   /// If the symbol is a variable or function, then we’re done here.
-  if (sym->kind == SYM_VARIABLE || sym->kind == SYM_FUNCTION) {
-    return ast_make_variable_reference(p->ast, ident.source_location, sym);
-  }
+  if (sym->kind == SYM_VARIABLE) return ast_make_variable_reference(p->ast, ident.source_location, sym);
+  if (sym->kind == SYM_FUNCTION) return ast_make_function_reference(p->ast, ident.source_location, sym);
 
   /// If the symbol is a type, then parse the rest of the type and delegate.
   if (sym->kind == SYM_TYPE) {
@@ -820,18 +814,22 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
 
   /// Parse the LHS.
   switch (p->tok.type) {
-    /// TODO: Print the token type as a string.
-    default: ERR("Expected expression, got %i", p->tok.type);
+    default: ERR("Expected expression, got %s", token_type_to_string(p->tok.type));
 
     /// An identifier can either be a declaration, function call, or cast.
-    case TK_AT: lhs = parse_type_expr(p, parse_type(p)); break;
     case TK_IDENT: lhs = parse_ident_expr(p); break;
-    case TK_NUMBER: lhs = ast_make_integer_literal(p->ast, p->tok.source_location, p->tok.integer); break;
-    case TK_STRING: lhs = ast_make_string_literal(p->ast, p->tok.source_location, p->tok.text); break;
     case TK_IF: lhs = parse_if_expr(p); break;
     case TK_ELSE: ERR("'else' without 'if'");
     case TK_WHILE: lhs = parse_while_expr(p); break;
     case TK_LBRACE: lhs = parse_block(p); break;
+    case TK_NUMBER:
+      lhs = ast_make_integer_literal(p->ast, p->tok.source_location, p->tok.integer);
+      next_token(p);
+      break;
+    case TK_STRING:
+      lhs = ast_make_string_literal(p->ast, p->tok.source_location, p->tok.text);
+      next_token(p);
+      break;
     case TK_LPAREN:
       next_token(p);
       lhs = parse_expr(p);
@@ -840,6 +838,38 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
     case TK_RPAREN: ERR("Unmatched ')'");
     case TK_RBRACK: ERR("Unmatched ']'");
     case TK_RBRACE: ERR("Unmatched '}'");
+
+    /// '@' is complicated because it can either be a dereference or a cast.
+    case TK_AT: {
+      /// Collect all at signs.
+      usz at_count = 0;
+      do {
+        at_count++;
+        next_token(p);
+      } while (p->tok.type == TK_AT);
+
+      /// If the next token can be the start of a <type-base>, then this is
+      /// a type; parse the type and wrap it in a pointer type.
+      if (p->tok.type == TK_IDENT) {
+        Symbol *sym = scope_find_symbol(curr_scope(p), p->tok.text, false);
+        if (sym && sym->kind == SYM_TYPE) {
+          Node *type = ast_make_type_named(p->ast, p->tok.source_location, sym);
+          next_token(p);
+          type = ast_make_type_pointer(p->ast, p->tok.source_location, parse_type_derived(p, type), at_count);
+          lhs = parse_type_expr(p, type);
+          break;
+        }
+      }
+
+      /// Otherwise, this is a dereference.
+      lhs = parse_expr_with_precedence(p, PREFIX_PRECEDENCE);
+
+      /// Wrap it in an appropriate number of dereferences.
+      for (usz i = 0; i < at_count; i++) {
+        loc l = lhs->source_location;
+        lhs = ast_make_unary(p->ast, (loc){.start = l.start - 1, .end = l.end}, TK_AT, false, lhs);
+      }
+    } break;
 
     /// Unary operators.
     case TK_MINUS:
@@ -850,10 +880,13 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
       u32 start = p->tok.source_location.start;
       enum TokenType tt = p->tok.type;
       next_token(p);
-      Node *operand = parse_expr(p);
+      Node *operand = parse_expr_with_precedence(p, PREFIX_PRECEDENCE);
       lhs = ast_make_unary(p->ast, (loc){.start = start, .end = operand->source_location.end}, tt, false, operand);
     } break;
   }
+
+  /// This *must* not be NULL.
+  if (!lhs) ICE("LHS is NULL");
 
   /// The rules for operator precedence parsing are as follows:
   ///     - unary prefix operators are unambiguously handled up above;
@@ -940,8 +973,54 @@ AST *parse(span source, const char *filename) {
   /// Parse the file.
   /// <file> ::= { <expression> }
   while (p.tok.type != TK_EOF) {
-    next_token(&p);
+    Node *expr = parse_expr(&p);
+    VECTOR_PUSH(p.ast->root->root.children, expr);
+    expr->parent = p.ast->root;
+  }
+  return p.ast;
+}
+
+NODISCARD const char *token_type_to_string(enum TokenType type) {
+  switch (type) {
+    case TK_INVALID: return "invalid";
+    case TK_EOF: return "EOF";
+    case TK_IDENT: return "identifier";
+    case TK_NUMBER: return "number";
+    case TK_STRING: return "string";
+    case TK_IF: return "if";
+    case TK_ELSE: return "else";
+    case TK_WHILE: return "while";
+    case TK_EXT: return "ext";
+    case TK_LPAREN: return "(";
+    case TK_RPAREN: return ")";
+    case TK_LBRACK: return "[";
+    case TK_RBRACK: return "]";
+    case TK_LBRACE: return "{";
+    case TK_RBRACE: return "}";
+    case TK_COMMA: return ",";
+    case TK_COLON: return ":";
+    case TK_SEMICOLON: return ";";
+    case TK_PLUS: return "+";
+    case TK_MINUS: return "-";
+    case TK_STAR: return "*";
+    case TK_SLASH: return "/";
+    case TK_PERCENT: return "%";
+    case TK_AMPERSAND: return "&";
+    case TK_PIPE: return "|";
+    case TK_CARET: return "^";
+    case TK_TILDE: return "~";
+    case TK_EXCLAM: return "!";
+    case TK_AT: return "@";
+    case TK_SHL: return "<<";
+    case TK_SHR: return ">>";
+    case TK_EQ: return "=";
+    case TK_NE: return "!=";
+    case TK_LT: return "<";
+    case TK_GT: return ">";
+    case TK_LE: return "<=";
+    case TK_GE: return ">=";
+    case TK_COLON_EQ: return ":=";
   }
 
-  return p.ast;
+  return "\?\?\?";
 }

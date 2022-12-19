@@ -13,7 +13,7 @@ static char *strndup(const char *str, usz sz) {
 #endif
 
 
-string string_copy_impl(const char *src, usz size) {
+string string_dup_impl(const char *src, usz size) {
   string dest;
   dest.data = strndup(src, size);
   dest.size = size;

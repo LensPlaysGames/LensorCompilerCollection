@@ -281,9 +281,6 @@ void assert_impl (
   if (strcmp(fmt, "") != 0) {
     fprintf(stderr, "\n    Message: ");
 
-    // Skip '!' placeholder for non-empty format string.
-    fmt += 1;
-
     va_list va;
     va_start(va, fmt);
     vfprintf(stderr, fmt, va);
