@@ -55,6 +55,9 @@ typedef struct Parser {
   const char *curr;
   const char *end;
 
+  /// Whether we’re in a function.
+  bool in_function;
+
   /// The current token.
   Token tok;
 
@@ -564,6 +567,10 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
 /// This is basically just a wrapper around `parse_block()` that
 /// also injects declarations for all the function parameters.
 static Node *parse_function_body(Parser *p, Type *function_type) {
+  /// Save state.
+  bool save_in_function = p->in_function;
+  p->in_function = true;
+
   /// Push a new scope and add the parameters to it.
   scope_push(p->ast);
 
@@ -583,6 +590,7 @@ static Node *parse_function_body(Parser *p, Type *function_type) {
 
   /// Pop the scope created for the function body.
   scope_pop(p->ast);
+  p->in_function = save_in_function;
 
   /// Create a block to hold the parameters and the body.
   return ast_make_block(p->ast, expr->source_location, body_exprs);
@@ -737,6 +745,7 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
 
   /// Otherwise, this is a variable declaration.
   Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
+  decl->declaration.global = !p->in_function;
 
   /// Add the declaration to the current scope.
   scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);

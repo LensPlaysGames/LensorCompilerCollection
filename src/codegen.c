@@ -4,7 +4,6 @@
 #include <codegen/intermediate_representation.h>
 #include <codegen/x86_64/arch_x86_64.h>
 #include <codegen/ir/ir.h>
-#include <environment.h>
 #include <error.h>
 #include <inttypes.h>
 #include <ir_parser.h>
@@ -18,10 +17,10 @@
 #include <string.h>
 #include <typechecker.h>
 
-#define DIAG(sev, loc, ...)                                                                                                   \
-  do {                                                                                                                  \
+#define DIAG(sev, loc, ...)                                                                                 \
+  do {                                                                                                      \
     issue_diagnostic(DIAG_ERR, (ctx)->ast->filename.data, as_span((ctx)->ast->source), (loc), __VA_ARGS__); \
-    return false;                                                                                                       \
+    return;                                                                                                 \
   } while (0)
 
 #define ERR(...) DIAG(DIAG_ERR, expr->source_location, __VA_ARGS__)
@@ -95,24 +94,11 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   switch (expr->kind) {
   default: ICE("Unrecognized expression kind: %d", expr->kind);
 
-  /// Types don’t need to be emitted.
-  case NODE_TYPE_PRIMITIVE:
-  case NODE_TYPE_NAMED:
-  case NODE_TYPE_POINTER:
-  case NODE_TYPE_ARRAY:
-  case NODE_TYPE_FUNCTION:
-    break;
-
   /// A function returns its address. This has already been taken care of.
   case NODE_FUNCTION: break;
 
   /// Root node.
   case NODE_ROOT: {
-    /// Main function.
-    ir_function(ctx, "main", 2);
-
-    /// TODO: ‘declare’ all functions in the IR and add IRFunction refs to the function syms.
-
     /// Emit everything that isn’t a function.
     Node *last = NULL;
     VECTOR_FOREACH_PTR (Node *, child, expr->root.children) {
@@ -128,7 +114,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Variable declaration.
   case NODE_DECLARATION:
-      expr->ir = ir_stack_allocate(ctx, ast_sizeof(expr));
+      expr->ir = expr->declaration.global
+        ? ir_create_global(ctx, as_span(expr->declaration.name), ast_sizeof(expr->type))
+        : ir_stack_allocate(ctx, ast_sizeof(expr->type));
       return;
 
   /// If expression.
@@ -274,7 +262,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     IRInstruction *call = NULL;
 
     /// Direct call.
-    if (expr->call.callee->kind == NODE_TYPE_FUNCTION) {
+    if (expr->call.callee->kind == NODE_FUNCTION) {
       call = ir_direct_call(ctx, expr->call.callee->function.ir);
     }
 
@@ -310,7 +298,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       /// If the LHS is a variable, just emit a direct store to the memory address,
       /// which we can get from the declaration which has to have been emitted already.
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
-        expr->ir = ir_store(ctx, lhs->var->value->ir, rhs->ir);
+        expr->ir = ir_store(ctx, lhs->var->node->ir, rhs->ir);
         return;
       }
 
@@ -359,7 +347,12 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         case TK_AT: expr->ir = ir_load(ctx, expr->unary.value->ir); return;
 
         /// Address of lvalue.
-        case TK_AMPERSAND: expr->ir = ir_address_of(ctx, expr->unary.value->ir); return;
+        case TK_AMPERSAND:
+          switch (expr->unary.value->kind) {
+            case NODE_DECLARATION: expr->ir = expr->unary.value->ir; return;
+            case NODE_VARIABLE_REFERENCE: expr->ir = expr->unary.value->var->node->ir; return;
+            default: ICE("Cannot take address of expression of type %d", expr->unary.value->kind);
+          }
 
         /// One’s complement negation.
         case TK_TILDE: expr->ir = ir_not(ctx, expr->unary.value->ir); return;
@@ -382,35 +375,32 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Variable reference.
   case NODE_VARIABLE_REFERENCE:
-    expr->ir = ir_load(ctx, expr->var->value->ir);
+    expr->ir = ir_load(ctx, expr->var->node->ir);
     return;
 
   /// Function reference.
   case NODE_FUNCTION_REFERENCE:
-    expr->ir = ir_address_of_function(ctx, expr->funcref->value->function.ir);
+    expr->ir = expr->funcref->node->function.ir->address;
     return;
   }
 }
 
 /// Emit a function.
 void codegen_function(CodegenContext *ctx, Node *node) {
-  /// Create a new function.
-  ir_function(ctx, as_span(node->function.name), node->function.type->type_function.parameters.size);
-
   /// The first N nodes in the body of a function, where N is the number
   /// of parameters, are variable declarations that correspond to the
   /// parameters. First, emit all of them.
   size_t i = 0;
-  for (; i < node->function.type->type_function.parameters.size; i++) {
+  for (; i < node->type->function.parameters.size; i++) {
     Node * decl = node->function.body->block.children.data[i];
     codegen_expr(ctx, decl);
   }
 
   /// Then, store the initial values of the parameters in those variables.
-  VECTOR_FOREACH_INDEX (j, node->function.type->type_function.parameters) {
+  VECTOR_FOREACH_INDEX (j, node->type->function.parameters) {
     /// Get each parameter value and store in its corresponding local variable.
     IRInstruction *p = ir_parameter(ctx, j);
-    ir_store_local(ctx, p, node->function.body->block.children.data[i]->ir);
+    ir_store(ctx, p, node->function.body->block.children.data[i]->ir);
   }
 
   /// Emit the rest of the function body.
@@ -424,7 +414,6 @@ void codegen_function(CodegenContext *ctx, Node *node) {
 
   /// If the last expression doesn’t return anything, return 0.
   if (!ir_is_closed(ctx->block)) ir_return(ctx, last ? last->ir : ir_immediate(ctx, 0));
-  return;
 }
 
 /// ===========================================================================
@@ -483,7 +472,24 @@ bool codegen
     } break;
 
     /// Codegen a FUN program.
-    case LANG_FUN: codegen_expr(context, ast->root); break;
+    case LANG_FUN: {
+      /// Create the main function.
+      ir_function(context, literal_span("main"), 2);
+
+      /// Create the remaining functions.
+      VECTOR_FOREACH_PTR (Node*, func, ast->functions)
+        func->function.ir = ir_function(context, as_span(func->function.name),
+          func->type->function.parameters.size);
+
+      /// Emit the main function.
+      codegen_expr(context, ast->root);
+
+      /// Emit the remaining functions.
+      VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
+        context->block = func->function.ir->blocks.first;
+        codegen_function(context, func);
+      }
+    } break;
 
     /// Anything else is not supported.
     default: ICE("Language %d not supported.", lang);
@@ -505,4 +511,3 @@ bool codegen
   fclose(code);
   return true;
 }
-

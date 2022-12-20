@@ -51,13 +51,7 @@
     F(AND)                                                         \
     F(OR)                                                          \
                                                                    \
-    F(LOCAL_LOAD)                                                  \
-    F(LOCAL_STORE)                                                 \
-    F(LOCAL_ADDRESS)                                               \
-                                                                   \
-    F(GLOBAL_LOAD)                                                 \
-    F(GLOBAL_STORE)                                                \
-    F(GLOBAL_ADDRESS)                                              \
+    F(GLOBAL_REF)                                                  \
                                                                    \
     /** Store data at an address. **/                              \
     F(STORE)                                                       \
@@ -111,8 +105,7 @@ typedef enum IRCallType {
 } IRCallType;
 
 typedef union IRCallValue {
-  /// TODO: direct calls should store a reference to a function, not its name.
-  const char *name;
+  IRFunction *function;
   IRInstruction *callee;
 } IRCallValue;
 
@@ -147,13 +140,13 @@ typedef struct IRStackAllocation {
 typedef union IRValue {
   IRBlock *block;
   IRInstruction *reference;
-  int64_t immediate;
+  u64 immediate;
   IRCall call;
   VECTOR(IRPhiArgument*) phi_arguments; /// For unfortunate reasons, these *have* to be on the heap.
   IRBranchConditional conditional_branch;
   IRPair pair;
   IRComparison comparison;
-  char *name;
+  /*char *name;*/
   IRGlobalAssignment global_assignment;
   IRStackAllocation stack_allocation;
 } IRValue;
@@ -169,7 +162,7 @@ void set_pair_and_mark
 
 
 typedef struct IRInstruction {
-  int type;
+  enum IRType type;
   IRValue value;
 
   /// A unique identifier (mainly for debug purposes).
@@ -202,7 +195,7 @@ typedef struct IRInstruction {
 /// A block is a list of instructions that have control flow enter at
 /// the beginning and leave at the end.
 typedef struct IRBlock {
-  const char *name;
+  string name;
 
   DLIST(IRInstruction) instructions;
 
@@ -219,11 +212,14 @@ typedef struct IRBlock {
 } IRBlock;
 
 typedef struct IRFunction {
-  char *name;
+  string name;
 
   DLIST(IRBlock) blocks;
 
   VECTOR(IRInstruction*) parameters;
+
+  /// Reference to the function
+  IRInstruction *address;
 
   /// Pointer to the context that owns this function.
   CodegenContext *context;
@@ -287,7 +283,7 @@ void ir_block_attach
 
 IRFunction *ir_function
 (CodegenContext *context,
- const char *name,
+ span name,
  size_t params);
 
 void ir_force_insert_into_block
@@ -328,16 +324,18 @@ IRInstruction *ir_phi
 /// NOTE: Does not insert call instruction.
 IRInstruction *ir_direct_call
 (CodegenContext *context,
- char* function_name);
+ IRFunction *callee);
 
 /// NOTE: Does not insert call instruction.
 IRInstruction *ir_indirect_call
 (CodegenContext *context,
  IRInstruction *function);
+/*
 
 IRInstruction *ir_load_global_address
 (CodegenContext *context,
  char *name);
+*/
 
 IRInstruction *ir_immediate
 (CodegenContext *context,
@@ -346,6 +344,8 @@ IRInstruction *ir_immediate
 IRInstruction *ir_load
 (CodegenContext *context,
  IRInstruction *address);
+
+/*
 
 IRInstruction *ir_load_local_address
 (CodegenContext *context,
@@ -368,6 +368,7 @@ IRInstruction *ir_store_local
 (CodegenContext *context,
  IRInstruction *source,
  IRInstruction *local);
+*/
 
 IRInstruction *ir_store
 (CodegenContext *context,
@@ -460,13 +461,15 @@ IRInstruction *ir_or
  IRInstruction *lhs,
  IRInstruction *rhs);
 
+/// Create a global variable.
+IRInstruction *ir_create_global
+(CodegenContext *context,
+ span name,
+ usz size);
+
 IRInstruction *ir_stack_allocate
 (CodegenContext *context,
- int64_t size);
-
-IRFunction *ir_get_function
-(CodegenContext *context,
- const char *name);
+ usz size);
 
 /// Check if an instruction returns a value.
 bool ir_is_value(IRInstruction *instruction);

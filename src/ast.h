@@ -156,6 +156,7 @@ typedef struct NodeFunction {
 typedef struct NodeDeclaration {
   Node *init;
   string name;
+  bool global;
 } NodeDeclaration;
 
 /// If expression.

@@ -61,7 +61,7 @@ DEFINE_REGISTER_NAME_LOOKUP_FUNCTION(register_name_8, 8)
 static Register *caller_saved_registers = NULL;
 static size_t caller_saved_register_count = 0;
 
-char is_caller_saved(Register r) {
+NODISCARD static bool is_caller_saved(Register r) {
   for (size_t i = 0; i < caller_saved_register_count; ++i) {
     if (caller_saved_registers[i] == r) {
       return 1;
@@ -70,11 +70,9 @@ char is_caller_saved(Register r) {
   return 0;
 }
 
-char is_callee_saved(Register r) {
-  return !is_caller_saved(r);
-}
+NODISCARD static bool is_callee_saved(Register r) { return !is_caller_saved(r); }
 
-const char *unreferenced_block_name = "unreferenced";
+span unreferenced_block_name = literal_span("");
 
 /// Types of conditional jump instructions (Jcc).
 /// Do NOT reorder these.
@@ -739,53 +737,33 @@ typedef struct ArchData {
 CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
   RegisterPool pool;
 
-  // If this is the top level context, create the registers.
-  // Otherwise, shallow copy register pool to child context.
-  if (!parent) {
-    Register *registers = calloc(REG_COUNT, sizeof(Register));
+  /// Create the registers.
+  Register *registers = calloc(REG_COUNT, sizeof(Register));
 
-    // Link to MSDN documentation (surely will fall away, but it's been Internet Archive'd).
-    // https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170#callercallee-saved-registers
-    // https://web.archive.org/web/20220916164241/https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170
-    // "The x64 ABI considers the registers RAX, RCX, RDX, R8, R9, R10, R11, and XMM0-XMM5 volatile."
-    // "The x64 ABI considers registers RBX, RBP, RDI, RSI, RSP, R12, R13, R14, R15, and XMM6-XMM15 nonvolatile."
-    size_t number_of_scratch_registers = 7;
-    Register **scratch_registers = calloc(number_of_scratch_registers, sizeof(Register *));
-    scratch_registers[0] = registers + REG_RAX;
-    scratch_registers[1] = registers + REG_RCX;
-    scratch_registers[2] = registers + REG_RDX;
-    scratch_registers[3] = registers + REG_R8;
-    scratch_registers[4] = registers + REG_R9;
-    scratch_registers[5] = registers + REG_R10;
-    scratch_registers[6] = registers + REG_R11;
+  /// Link to MSDN documentation (surely will fall away, but it's been Internet Archive'd).
+  /// https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170#callercallee-saved-registers
+  /// https://web.archive.org/web/20220916164241/https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170
+  /// "The x64 ABI considers the registers RAX, RCX, RDX, R8, R9, R10, R11, and XMM0-XMM5 volatile."
+  /// "The x64 ABI considers registers RBX, RBP, RDI, RSI, RSP, R12, R13, R14, R15, and XMM6-XMM15 nonvolatile."
+  size_t number_of_scratch_registers = 7;
+  Register **scratch_registers = calloc(number_of_scratch_registers, sizeof(Register *));
+  scratch_registers[0] = registers + REG_RAX;
+  scratch_registers[1] = registers + REG_RCX;
+  scratch_registers[2] = registers + REG_RDX;
+  scratch_registers[3] = registers + REG_R8;
+  scratch_registers[4] = registers + REG_R9;
+  scratch_registers[5] = registers + REG_R10;
+  scratch_registers[6] = registers + REG_R11;
 
-    pool.registers = registers;
-    pool.scratch_registers = scratch_registers;
-    pool.num_scratch_registers = number_of_scratch_registers;
-    pool.num_registers = REG_COUNT;
-  } else {
-    pool = parent->register_pool;
-  }
+  pool.registers = registers;
+  pool.scratch_registers = scratch_registers;
+  pool.num_scratch_registers = number_of_scratch_registers;
+  pool.num_registers = REG_COUNT;
 
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
-
-  // Shallow-copy state from the parent.
-  if (parent) {
-    cg_ctx->code = parent->code;
-    cg_ctx->arch_data = parent->arch_data;
-    cg_ctx->format = parent->format;
-    cg_ctx->call_convention = parent->call_convention;
-    cg_ctx->dialect = parent->dialect;
-  } else {
-    cg_ctx->arch_data = calloc(1, sizeof(ArchData));
-    cg_ctx->format = CG_FMT_x86_64_GAS;
-    cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
-    cg_ctx->dialect = CG_ASM_DIALECT_ATT;
-  }
-
-  cg_ctx->parent = parent;
-  cg_ctx->locals = environment_create(NULL);
-  cg_ctx->locals_offset = -32;
+  cg_ctx->format = CG_FMT_x86_64_GAS;
+  cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
+  cg_ctx->dialect = CG_ASM_DIALECT_ATT;
   cg_ctx->register_pool = pool;
   return cg_ctx;
 }
@@ -794,221 +772,45 @@ CodegenContext *codegen_context_x86_64_mswin_create(CodegenContext *parent) {
 CodegenContext *codegen_context_x86_64_linux_create(CodegenContext *parent) {
   RegisterPool pool;
 
-  // If this is the top level context, create the registers.
-  // Otherwise, shallow copy register pool to child context.
-  if (!parent) {
-    Register *registers = calloc(REG_COUNT, sizeof(Register));
+  /// Create the registers.
+  Register *registers = calloc(REG_COUNT, sizeof(Register));
 
-    /// Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling function
-    /// and the called function is required to preserve their values.
-    size_t number_of_scratch_registers = 7;
-    Register **scratch_registers = calloc(number_of_scratch_registers, sizeof(Register *));
-    scratch_registers[0] = registers + REG_RAX;
-    scratch_registers[1] = registers + REG_RCX;
-    scratch_registers[2] = registers + REG_RDX;
-    scratch_registers[3] = registers + REG_R8;
-    scratch_registers[4] = registers + REG_R9;
-    scratch_registers[5] = registers + REG_R10;
-    scratch_registers[6] = registers + REG_R11;
+  /// Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling function
+  /// and the called function is required to preserve their values.
+  size_t number_of_scratch_registers = 7;
+  Register **scratch_registers = calloc(number_of_scratch_registers, sizeof(Register *));
+  scratch_registers[0] = registers + REG_RAX;
+  scratch_registers[1] = registers + REG_RCX;
+  scratch_registers[2] = registers + REG_RDX;
+  scratch_registers[3] = registers + REG_R8;
+  scratch_registers[4] = registers + REG_R9;
+  scratch_registers[5] = registers + REG_R10;
+  scratch_registers[6] = registers + REG_R11;
 
-    pool.registers = registers;
-    pool.scratch_registers = scratch_registers;
-    pool.num_scratch_registers = number_of_scratch_registers;
-    pool.num_registers = REG_COUNT;
-  } else {
-    pool = parent->register_pool;
-  }
+  pool.registers = registers;
+  pool.scratch_registers = scratch_registers;
+  pool.num_scratch_registers = number_of_scratch_registers;
+  pool.num_registers = REG_COUNT;
 
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
 
   // Shallow-copy state from the parent.
-  if (parent) {
-    cg_ctx->code = parent->code;
-    cg_ctx->arch_data = parent->arch_data;
-    cg_ctx->format = parent->format;
-    cg_ctx->call_convention = parent->call_convention;
-    cg_ctx->dialect = parent->dialect;
-  } else {
-    cg_ctx->arch_data = calloc(1, sizeof(ArchData));
-    cg_ctx->format = CG_FMT_x86_64_GAS;
-    cg_ctx->call_convention = CG_CALL_CONV_LINUX;
-    cg_ctx->dialect = CG_ASM_DIALECT_ATT;
-  }
-
-  cg_ctx->parent = parent;
-  cg_ctx->locals = environment_create(NULL);
-  cg_ctx->locals_offset = -32;
+  cg_ctx->format = CG_FMT_x86_64_GAS;
+  cg_ctx->call_convention = CG_CALL_CONV_LINUX;
+  cg_ctx->dialect = CG_ASM_DIALECT_ATT;
   cg_ctx->register_pool = pool;
   return cg_ctx;
 }
 
 /// Free a context created by codegen_context_x86_64_mswin_create.
 void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
-  // Only free the registers and arch data if this is the top-level context.
-  if (!ctx->parent) {
-    free(ctx->register_pool.registers);
-    free(ctx->register_pool.scratch_registers);
-    free(ctx->arch_data);
-  }
-  // TODO(sirraide): Free environment.
+  free(ctx->register_pool.registers);
+  free(ctx->register_pool.scratch_registers);
   free(ctx);
 }
 
-/// Free a context created by codegen_context_x86_64_linux_create.
-void codegen_context_x86_64_linux_free(CodegenContext *ctx) {
-  codegen_context_x86_64_mswin_free(ctx);
-}
-
-/// Save state before a function call.
-void codegen_prepare_call_x86_64(CodegenContext *cg_context) {
-  ArchData *arch_data = cg_context->arch_data;
-
-  // Create a new stack frame and push it onto the call stack.
-  StackFrame *parent = arch_data->current_call;
-  StackFrame *frame = calloc(1, sizeof(StackFrame));
-  frame->parent = parent;
-  arch_data->current_call = frame;
-
-  //arch_data->current_call->rax_in_use = cg_context->register_pool.registers[REG_RAX].in_use;
-  if (arch_data->current_call->rax_in_use) femit(cg_context, I_PUSH, REGISTER, REG_RAX);
-}
-
-/// Clean up after a function call.
-void codegen_cleanup_call_x86_64(CodegenContext *cg_context) {
-  ArchData *arch_data = cg_context->arch_data;
-  ASSERT(arch_data->current_call, "Cannot clean up call if there is no call in progress.");
-  ASSERT(arch_data->current_call->call_performed, "Cannot clean up call that hasn't been performed yet.");
-
-  // Clean up stack from function call. This is only needed if
-  // arguments were passed on the stack.
-  switch (arch_data->current_call->call_type) {
-    case FUNCTION_CALL_TYPE_INTERNAL:
-      femit(cg_context, I_ADD, IMMEDIATE_TO_REGISTER,
-                   (int64_t)(arch_data->current_call->call_arg_count * 8), REG_RSP);
-      break;
-    case FUNCTION_CALL_TYPE_EXTERNAL:
-      break;
-    default: PANIC("No call to clean up");
-  }
-
-  // Restore rax if it was in use, because function return value clobbered it.
-  if (arch_data->current_call->rax_in_use) {
-    femit(cg_context, I_POP, REGISTER, REG_RAX);
-  }
-
-  // Clean up the call state.
-  StackFrame *parent = arch_data->current_call->parent;
-  free(arch_data->current_call);
-  arch_data->current_call = parent;
-}
-
-/// Load the address of a global variable into a newly allocated register and return it.
-void codegen_load_global_address_into_x86_64
-(CodegenContext *cg_context,
- const char *name,
- RegisterDescriptor target) {
-  femit(cg_context, I_LEA, NAME_TO_REGISTER,
-      REG_RIP, name,
-      target);
-}
-
-/// Load the address of a local variable into a newly allocated register and return it.
-void codegen_load_local_address_into_x86_64
-(CodegenContext *cg_context,
- long long int offset,
- RegisterDescriptor target)  {
-  femit(cg_context, I_LEA, MEMORY_TO_REGISTER,
-               REG_RBP, offset,
-               target);
-}
-
-/// Load the value of a global variable into a newly allocated register and return it.
-void codegen_load_global_into_x86_64
-(CodegenContext *cg_context,
- const char *name,
- RegisterDescriptor target) {
-  femit(cg_context, I_MOV, NAME_TO_REGISTER,
-      REG_RIP, name,
-      target);
-}
-
-/// Load the value of a local variable into a newly allocated register and return it.
-void codegen_load_local_into_x86_64(CodegenContext *cg_context,
- long long int offset,
- RegisterDescriptor target)  {
-  femit(cg_context, I_MOV, MEMORY_TO_REGISTER,
-      REG_RBP, offset,
-      target);
-}
-
-/// Store a global variable.
-void codegen_store_global_x86_64
-(CodegenContext *cg_context,
- RegisterDescriptor source,
- const char *name) {
-  femit(cg_context, I_MOV, REGISTER_TO_NAME,
-               source, REG_RIP, name);
-}
-
-/// Store a local variable.
-void codegen_store_local_x86_64
-(CodegenContext *cg_context,
- RegisterDescriptor source,
- long long int offset) {
-  femit(cg_context, I_MOV, REGISTER_TO_MEMORY,
-               source, REG_RBP, offset);
-}
-
-/// Store data in the memory pointed to by the given address.
-void codegen_store_x86_64
-(CodegenContext *cg_context,
- RegisterDescriptor source,
- RegisterDescriptor address) {
-  femit(cg_context, I_MOV, REGISTER_TO_MEMORY, source, address, (int64_t)0);
-}
-
-/// Add an immediate value to a register.
-void codegen_add_immediate_x86_64
-(CodegenContext *cg_context,
- RegisterDescriptor reg,
- long long int immediate) {
-  femit(cg_context, I_ADD, IMMEDIATE_TO_REGISTER,
-               immediate, reg);
-}
-
-/// Branch to a label if a register is zero.
-void codegen_branch_if_zero_x86_64
-(CodegenContext *cg_context,
- RegisterDescriptor reg,
- const char *label) {
-  femit(cg_context, I_TEST, REGISTER_TO_REGISTER, reg, reg);
-  femit(cg_context, I_JCC, JUMP_TYPE_Z, label);
-}
-
-/// Branch to a label.
-void codegen_branch_x86_64
-(CodegenContext *cg_context,
- const char *label) {
-  femit(cg_context, I_JMP, NAME, label);
-}
-
-/// Copy a register to another register.
-void codegen_copy_register_x86_64
-(CodegenContext *cg_context,
- RegisterDescriptor src,
- RegisterDescriptor dest) {
-  femit(cg_context, I_MOV, REGISTER_TO_REGISTER, src, dest);
-}
-
-/// Zero out a register.
-void codegen_zero_register_x86_64
-(CodegenContext *cg_context,
- RegisterDescriptor reg) {
-  femit(cg_context, I_XOR, REGISTER_TO_REGISTER, reg, reg);
-}
-
 /// Generate a comparison between two registers.
-RegisterDescriptor codegen_comparison_x86_64
+static RegisterDescriptor codegen_comparison
 (CodegenContext *cg_context,
  enum ComparisonType type,
  RegisterDescriptor lhs,
@@ -1027,43 +829,13 @@ RegisterDescriptor codegen_comparison_x86_64
   return result;
 }
 
-/// Add two registers together.
-RegisterDescriptor codegen_add_x86_64
-(CodegenContext *cg_context,
- RegisterDescriptor lhs,
- RegisterDescriptor rhs) {
-  femit(cg_context, I_ADD, REGISTER_TO_REGISTER, lhs, rhs);
-  //register_deallocate(cg_context, lhs);
-  return rhs;
-}
-
-/// Subtract rhs from lhs.
-RegisterDescriptor codegen_subtract_x86_64
-(CodegenContext *cg_context,
- RegisterDescriptor lhs,
- RegisterDescriptor rhs) {
-  femit(cg_context, I_SUB, REGISTER_TO_REGISTER, rhs, lhs);
-  //register_deallocate(cg_context, rhs);
-  return lhs;
-}
-
-/// Multiply two registers together.
-RegisterDescriptor codegen_multiply_x86_64
-(CodegenContext *cg_context,
- RegisterDescriptor lhs,
- RegisterDescriptor rhs) {
-  femit(cg_context, I_IMUL, REGISTER_TO_REGISTER, lhs, rhs);
-  //register_deallocate(cg_context, lhs);
-  return rhs;
-}
-
 enum StackFrameKind {
   FRAME_FULL,
   FRAME_MINIMAL,
   FRAME_NONE,
 };
 
-enum StackFrameKind stack_frame_kind(CodegenContext *context, IRFunction *f) {
+static enum StackFrameKind stack_frame_kind(CodegenContext *context, IRFunction *f) {
   /// Always emit a frame if we’re not optimising.
   if (!optimise) return FRAME_FULL;
 
@@ -1078,13 +850,8 @@ enum StackFrameKind stack_frame_kind(CodegenContext *context, IRFunction *f) {
   return FRAME_NONE;
 }
 
-/// Allocate space on the stack.
-void codegen_stack_allocate_x86_64(CodegenContext *cg_context, long long int size) {
-  femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, size, REG_RSP);
-}
-
 /// Emit the function prologue.
-void codegen_prologue_x86_64(CodegenContext *cg_context, IRFunction *f) {
+static void codegen_prologue(CodegenContext *cg_context, IRFunction *f) {
   enum StackFrameKind frame_kind = stack_frame_kind(cg_context, f);
   switch (frame_kind) {
     case FRAME_NONE: break;
@@ -1125,7 +892,7 @@ void codegen_prologue_x86_64(CodegenContext *cg_context, IRFunction *f) {
 }
 
 /// Emit the function epilogue.
-void codegen_epilogue_x86_64(CodegenContext *cg_context, IRFunction *f) {
+static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
   enum StackFrameKind frame_kind = stack_frame_kind(cg_context, f);
   switch (frame_kind) {
     case FRAME_NONE: break;
@@ -1150,12 +917,7 @@ void codegen_epilogue_x86_64(CodegenContext *cg_context, IRFunction *f) {
   }
 }
 
-/// Set the return value of a function.
-void codegen_set_return_value_x86_64(CodegenContext *cg_context, RegisterDescriptor value) {
-  femit(cg_context, I_MOV, REGISTER_TO_REGISTER, value, REG_RAX);
-}
-
-void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
+static void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
   STATIC_ASSERT(IR_COUNT == 31);
   if (instruction->dont_emit) return;
   switch (instruction->type) {
@@ -1224,11 +986,11 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     // Tail call.
     if (instruction->value.call.tail_call) {
       // Restore the frame pointer if we have one.
-      codegen_epilogue_x86_64(context, instruction->block->function);
+      codegen_epilogue(context, instruction->block->function);
       if (instruction->value.call.type == IR_CALLTYPE_INDIRECT) {
         femit(context, I_JMP, REGISTER, instruction->value.call.value.callee->result);
       } else {
-        femit(context, I_JMP, NAME, instruction->value.call.value.name);
+        femit(context, I_JMP, NAME, instruction->value.call.value.function->name.data);
       }
       if (instruction->block) instruction->block->done = true;
       break;
@@ -1256,7 +1018,7 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
             instruction->value.call.value.callee->result);
     } else {
       femit(context, I_CALL, NAME,
-            instruction->value.call.value.name);
+            instruction->value.call.value.function->name.data);
     }
     // Restore caller saved registers used in called function.
     for (Register i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i) {
@@ -1280,7 +1042,7 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
         femit(context, I_POP, REGISTER, i);
       }
     }
-    codegen_epilogue_x86_64(context, instruction->block->function);
+    codegen_epilogue(context, instruction->block->function);
     femit(context, I_RET);
     if (optimise && instruction->block) instruction->block->done = true;
     break;
@@ -1332,7 +1094,7 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
     if (optimise && instruction->block) instruction->block->done = true;
   } break;
   case IR_COMPARISON:
-    codegen_comparison_x86_64(context, instruction->value.comparison.type,
+    codegen_comparison(context, instruction->value.comparison.type,
                               instruction->value.comparison.pair.car->result,
                               instruction->value.comparison.pair.cdr->result,
                               instruction->result);
@@ -1456,10 +1218,10 @@ void emit_instruction(CodegenContext *context, IRInstruction *instruction) {
 
 void emit_block(CodegenContext *context, IRBlock *block) {
   /// Emit block label if it is used.
-  if (block->name != unreferenced_block_name) {
+  if (!block->name.size) {
     fprintf(context->code,
             "%s:\n",
-            block->name);
+            block->name.data);
   }
 
   DLIST_FOREACH (IRInstruction*, instruction, block->instructions) {
@@ -1471,8 +1233,8 @@ void emit_function(CodegenContext *context, IRFunction *function) {
   // Generate function entry.
   fprintf(context->code,
           "\n%s:\n",
-          function->name);
-  codegen_prologue_x86_64(context, function);
+          function->name.data);
+  codegen_prologue(context, function);
   // Save all callee-saved registers in use in the function.
   for (Register i = 1; i < sizeof(function->registers_in_use) * 8; ++i) {
     if ((size_t)function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i)) {
@@ -1694,7 +1456,7 @@ void codegen_lower_x86_64(CodegenContext *context) {
 
 void codegen_emit_x86_64(CodegenContext *context) {
   // Generate global variables.
-  bool have_data_section = false;
+/*  bool have_data_section = false;
   Binding *var_it = context->parse_context->variables->bind;
   Node *type_info = node_allocate();
   while (var_it) {
@@ -1739,8 +1501,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
       }
     }
     var_it = var_it->next;
-  }
-  free(type_info);
+  }*/
 
   // Allocate registers to each temporary within the program.
   const MachineDescription desc = {
@@ -1759,6 +1520,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   // Assign block labels.
   VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
+    usz block_cnt = 0;
     DLIST_FOREACH (IRBlock *, block, function->blocks) {
       if (optimise) {
         /// Determine whether this block is ever referenced anywhere.
@@ -1766,6 +1528,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         for (IRBlock *b = (function->blocks).first; b; b = b->next) {
           for (IRInstruction *i = (b->instructions).first; i; i = i->next) {
             switch (i->type) {
+              default: ICE("Invalid branch."); break;
               case IR_UNREACHABLE: goto next_block;
               case IR_BRANCH:
                 if (i->value.block == block) {
@@ -1794,17 +1557,13 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
       done:
         if (!referenced) {
-          block->name = unreferenced_block_name;
+          block->name = string_dup(unreferenced_block_name);
           continue;
         }
-      }
 
-      // If block doesn't have a name, give it one!
-      if (!block->name) {
-        // TODO: Heap allocate or something (UGHGHGUOEHHGEH).
-        // We could also have a static buffer where we write the block
-        // id as a string to and then use that as a label all around.
-        block->name = label_generate();
+        char number[64];
+        usz sz = (usz) snprintf(number, 32, ".L%" PRIu64, block_cnt++);
+        block->name = string_dup_impl(number, sz);
       }
     }
   }

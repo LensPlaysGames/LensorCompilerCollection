@@ -85,7 +85,7 @@ typedef struct {
   span name;
   loc location;
   IRFunction *function;
-  VECTOR(const char **) unresolved;
+  VECTOR(string*) unresolved;
 } function_sym;
 
 /// IR parser context.
@@ -501,9 +501,9 @@ static IRInstruction *resolve_curr_temp(IRParser *p) {
     }                                                                   \
   }
 
-RESOLVE_OR_DECLARE(function, const char *, function, function->name)
-  RESOLVE_OR_DECLARE(block, IRBlock *, block, block)
-  RESOLVE_OR_DECLARE(temp, IRInstruction *, instruction, instruction)
+RESOLVE_OR_DECLARE(function, string, function, function->name)
+RESOLVE_OR_DECLARE(block, IRBlock *, block, block)
+RESOLVE_OR_DECLARE(temp, IRInstruction *, instruction, instruction)
 
 #define RESOLVE_ALL(p, err_name, type, param_type, field, value, on_err) \
   do {                                                                  \
@@ -590,8 +590,8 @@ static bool parse_instruction_or_branch(IRParser *p) {
         ERR("Expected name/label after '.addr' instruction");
 
       INSTRUCTION(addr, IR_GLOBAL_ADDRESS)
-        ir_insert(p->context, addr);
-      resolve_or_declare_function(p, here(p), funcname(p, p->tok), (const char **)&addr->value.name);
+      ir_insert(p->context, addr);
+      resolve_or_declare_function(p, here(p), funcname(p, p->tok), &addr->value.name);
       next_token(p);
       } break;
 

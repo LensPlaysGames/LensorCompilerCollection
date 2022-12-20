@@ -169,9 +169,10 @@ void ir_femit_instruction
   case IR_CALL:
     if (instruction->value.call.tail_call) { fprintf(file, "tail "); }
     switch (instruction->value.call.type) {
-    case IR_CALLTYPE_DIRECT:
-      fprintf(file, "call %s", instruction->value.call.value.name);
-      break;
+    case IR_CALLTYPE_DIRECT: {
+      string name = instruction->value.call.value.function->name;
+      fprintf(file, "call %.*s", (int) name.size, name.data);
+    } break;
     case IR_CALLTYPE_INDIRECT:
       fprintf(file, "call %%%zu", instruction->value.call.value.callee->id);
       break;
@@ -453,7 +454,7 @@ IRInstruction *ir_parameter
 /// parameters the function takes, so use it with caution.
 void ir_add_parameter_to_function(IRFunction *f) {
   INSTRUCTION(parameter, IR_PARAMETER)
-  parameter->value.immediate = (int64_t) f->parameters.size;
+  parameter->value.immediate = f->parameters.size;
   parameter->id = f->parameters.size;
   ir_insert(f->context, parameter);
   VECTOR_PUSH(f->parameters, parameter);
@@ -516,28 +517,24 @@ void ir_block_attach
   context->block = new_block;
 }
 
-IRFunction *ir_function(CodegenContext *context, const char *name, size_t params) {
+IRFunction *ir_function(CodegenContext *context, span name, size_t params) {
   IRFunction *function = calloc(1, sizeof(IRFunction));
-  function->name = strdup(name);
+  function->name = string_dup(name);
 
   /// A function *must* contain at least one block, so we start new
   /// functions out with an empty block.
   IRBlock *block = ir_block_create();
 
-  /// Get the top-level context.
-  CodegenContext *top = context;
-  while (top->parent) top = top->parent;
-
   /// Set the current function and add it to the list of functions.
   context->function = function;
-  function->context = top;
+  function->context = context;
   ir_block_attach(context, block);
   VECTOR_PUSH(*context->functions, function);
 
   /// Generate param refs.
-  for (size_t i = 1; i <= params; i++) {
+  for (u64 i = 1; i <= params; i++) {
     INSTRUCTION(param, IR_PARAMETER)
-    param->value.immediate = (int64_t) i - 1;
+    param->value.immediate = i - 1;
     param->id = i;
     VECTOR_PUSH(function->parameters, param);
     INSERT(param);
@@ -572,12 +569,12 @@ IRInstruction *ir_load
 
 IRInstruction *ir_direct_call
 (CodegenContext *context,
- char* function_name
+ IRFunction *callee
  )
 {
   INSTRUCTION(call, IR_CALL);
   call->value.call.type = IR_CALLTYPE_DIRECT;
-  call->value.call.value.name = function_name;
+  call->value.call.value.function = callee;
   return call;
 }
 
@@ -899,7 +896,7 @@ IRInstruction *ir_or
 
 IRInstruction *ir_stack_allocate
 (CodegenContext *context,
- int64_t size
+ usz size
  )
 {
   INSTRUCTION(stack_allocation, IR_STACK_ALLOCATE);
@@ -908,17 +905,6 @@ IRInstruction *ir_stack_allocate
   stack_allocation->value.stack_allocation.size = (size_t) size; /// FIXME: param should be size_t.
   INSERT(stack_allocation);
   return stack_allocation;
-}
-
-IRFunction *ir_get_function
-(CodegenContext *context,
- const char *name) {
-  VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
-    if (strcmp(function->name, name) == 0) {
-      return function;
-    }
-  }
-  return NULL;
 }
 
 typedef struct {
@@ -1054,7 +1040,7 @@ bool ir_is_value(IRInstruction *instruction) {
 
 void ir_print_defun(FILE *file, IRFunction *f) {
   /// Function signature.
-  fprintf(file, "defun %s (", f->name);
+  fprintf(file, "defun %.*s (", (int) f->name.size, f->name.data);
 
   /// Parameters.
   bool first_param = true;
@@ -1107,6 +1093,7 @@ void ir_mark_unreachable(IRBlock *block) {
   STATIC_ASSERT(IR_COUNT == 31, "Handle all branch types");
   IRInstruction *i = block->instructions.last;
   switch (i->type) {
+    default: break;
     case IR_BRANCH: {
       IRInstruction *first = i->value.block->instructions.first;
       while (first && first->type == IR_PHI) {

@@ -292,20 +292,7 @@ int main(int argc, char **argv) {
       goto done;
     }
 
-    /*    Node *program = node_allocate();
-    ParsingContext *context = parse_context_default_create();
-    if (!parse_program(infile, context, program)) exit(1);
-
-    if (verbosity) {
-      printf("----- Abstract Syntax Tree\n");
-      print_node(program, 0);
-      printf("----- Parsing Context\n");
-      parse_context_print(context,0);
-      printf("-----\n");
-    }
-
-    if (!typecheck_program(context, program)) exit(2);*/
-/*
+    /// Generate code.
     if (!codegen(
       LANG_FUN,
       output_format,
@@ -313,12 +300,9 @@ int main(int argc, char **argv) {
       output_assembly_dialect,
       infile,
       output_filepath,
-      context,
-      program,
+      ast,
       (string){0}
     )) exit(3);
-
-    node_free(program);*/
 
   done:
     ast_free(ast);

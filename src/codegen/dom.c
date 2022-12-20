@@ -22,6 +22,7 @@ static BlockVector collect_reachable_blocks(IRBlock *block, IRBlock *ignore) {
     bool out = false;
     IRInstruction *i = b->instructions.last;
     switch (i->type) {
+      default: break;
       case IR_BRANCH:
         VECTOR_CONTAINS(reachable, i->value.block, out);
         if (!out) {

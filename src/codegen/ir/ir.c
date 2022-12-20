@@ -3,21 +3,9 @@
 
 CodegenContext *codegen_context_ir_create(CodegenContext *parent) {
     CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
-
-    if (parent) {
-        cg_ctx->code = parent->code;
-        cg_ctx->arch_data = parent->arch_data;
-        cg_ctx->format = parent->format;
-        cg_ctx->call_convention = parent->call_convention;
-        cg_ctx->dialect = parent->dialect;
-    } else {
-        cg_ctx->format = CG_FMT_IR;
-        cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
-        cg_ctx->dialect = CG_ASM_DIALECT_ATT;
-    }
-
-    cg_ctx->parent = parent;
-    cg_ctx->locals = environment_create(NULL);
+    cg_ctx->format = CG_FMT_IR;
+    cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
+    cg_ctx->dialect = CG_ASM_DIALECT_ATT;
     return cg_ctx;
 }
 
@@ -55,7 +43,7 @@ void codegen_emit_ir_backend(CodegenContext *context) {
             if (instruction->value.call.tail_call) { fprintf(context->code, "tail "); }
             switch (instruction->value.call.type) {
               case IR_CALLTYPE_DIRECT:
-                fprintf(context->code, "call %s", instruction->value.call.value.name);
+                fprintf(context->code, "call %s", instruction->value.call.value.function->name.data);
                 break;
               case IR_CALLTYPE_INDIRECT:
                 fprintf(context->code, "call %%%zu", instruction->value.call.value.callee->id);

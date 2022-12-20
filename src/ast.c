@@ -402,6 +402,18 @@ string ast_typename(const Type *type, bool colour) {
   return s;
 }
 
+/// Get the size of a type.
+usz ast_sizeof(const Type *type) {
+  switch (type->kind) {
+    default: ICE("Invalid type kind: %d", type->kind);
+    case TYPE_PRIMITIVE: return type->primitive.size;
+    case TYPE_NAMED: return type->named ? ast_sizeof(type->named->type) : 0;
+    case TYPE_POINTER: return sizeof(void *);
+    case TYPE_ARRAY: return type->array.size * ast_sizeof(type->array.of);
+    case TYPE_FUNCTION: return sizeof(void *);
+  }
+}
+
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================
