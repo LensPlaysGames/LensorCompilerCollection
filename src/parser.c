@@ -647,10 +647,17 @@ static Type *parse_type_derived(Parser *p, Type *base) {
         consume(p, TK_RBRACK);
 
         /// TODO: Evaluate the size as a constant expression.
-        if (size->kind != NODE_LITERAL) {
-          ISSUE_DIAGNOSTIC(DIAG_SORRY, size->source_location, p, "Non-literal array size not supported");
-        }
+        if (size->kind != NODE_LITERAL || size->literal.type != TK_NUMBER)
+          ISSUE_DIAGNOSTIC(DIAG_SORRY, size->source_location, p,
+            "Non-literal array size not supported");
         usz dim = size->literal.integer;
+
+        /// Base type must not be incomplete.
+        if (ast_type_is_incomplete(base)) {
+          string name = ast_typename(base, false);
+          ERR_DO(free(name.data), base->source_location, "Cannot create array of incomplete type: %.*s",
+            (int) name.size, name.data);
+        }
 
         /// Create the array type.
         base = ast_make_type_array(p->ast, base->source_location, base, dim);
@@ -745,7 +752,7 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
 
   /// Otherwise, this is a variable declaration.
   Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
-  decl->declaration.global = !p->in_function;
+  decl->declaration.static_ = !p->in_function;
 
   /// Add the declaration to the current scope.
   scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);

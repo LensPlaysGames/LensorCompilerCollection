@@ -106,4 +106,6 @@ void ice_impl (
 #define STR_(s) #s
 #define STR(s) STR_(s)
 
+#define VA_FIRST(X, ...) X
+
 #endif /* COMPILER_ERROR_H */

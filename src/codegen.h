@@ -32,15 +32,24 @@ struct Register {
 struct RegisterPool {
   Register *registers;
   Register **scratch_registers;
-  size_t num_scratch_registers;
-  size_t num_registers;
+  usz num_scratch_registers;
+  usz num_registers;
 };
+
+typedef struct IRStaticVariable {
+  string name;
+  Type *type;
+  usz cached_size;
+  usz cached_alignment;
+  usz refcount;
+} IRStaticVariable;
 
 struct CodegenContext {
   FILE *code;
   AST *ast;
 
   VECTOR(IRFunction *) *functions;
+  VECTOR(IRStaticVariable *) static_vars;
   IRFunction *function;
   IRBlock *block;
 

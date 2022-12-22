@@ -18,7 +18,7 @@ static BlockVector collect_reachable_blocks(IRBlock *block, IRBlock *ignore) {
     IRBlock *b = VECTOR_POP(dfs_stack);
     if (b == ignore) continue;
 
-    STATIC_ASSERT(IR_COUNT == 31, "Handle all branch types");
+    STATIC_ASSERT(IR_COUNT == 26, "Handle all branch types");
     bool out = false;
     IRInstruction *i = b->instructions.last;
     switch (i->type) {

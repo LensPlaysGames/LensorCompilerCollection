@@ -156,7 +156,7 @@ typedef struct NodeFunction {
 typedef struct NodeDeclaration {
   Node *init;
   string name;
-  bool global;
+  bool static_;
 } NodeDeclaration;
 
 /// If expression.
@@ -504,19 +504,13 @@ Type *ast_make_type_function(
 /// ===========================================================================
 ///  AST query functions.
 /// ===========================================================================
-typedef struct TypeInfo {
-  usz size;
-  usz alignment;
-  const Node *element_type;
-} TypeInfo;
-
 /// Get a string representation of a type.
 /// \return The string representation of the type. The string is allocated
 ///         as if with `malloc` and must be freed by the caller.
 string ast_typename(const Type *type, bool colour);
 
-/// Get type information for a type.
-TypeInfo ast_typeinfo(const Node *type);
+/// Check if a type is incomplete.
+bool ast_type_is_incomplete(const Type *type);
 
 /// Get the size of a type.
 usz ast_sizeof(const Type *type);

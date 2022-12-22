@@ -42,20 +42,20 @@ static bool ipair(IRInstruction *i) {
          i->value.pair.cdr->type == IR_IMMEDIATE;
 }
 
-static int64_t icar(IRInstruction *i) {
+static u64 icar(IRInstruction *i) {
   return i->value.pair.car->value.immediate;
 }
 
-static int64_t icdr(IRInstruction *i) {
+static u64 icdr(IRInstruction *i) {
   return i->value.pair.cdr->value.immediate;
 }
 
-static bool power_of_two(int64_t value) {
+static bool power_of_two(u64 value) {
   return value > 0 && (value & (value - 1)) == 0;
 }
 
 static bool has_side_effects(IRInstruction *i) {
-  STATIC_ASSERT(IR_COUNT == 31, "Handle all instructions");
+  STATIC_ASSERT(IR_COUNT == 26, "Handle all instructions");
   switch (i->type) {
     case IR_IMMEDIATE:
     case IR_LOAD:
@@ -67,10 +67,6 @@ static bool has_side_effects(IRInstruction *i) {
     case IR_SHIFT_LEFT:
     case IR_SHIFT_RIGHT_ARITHMETIC:
     case IR_SHIFT_RIGHT_LOGICAL:
-    case IR_LOCAL_LOAD:
-    case IR_LOCAL_ADDRESS:
-    case IR_GLOBAL_LOAD:
-    case IR_GLOBAL_ADDRESS:
     case IR_COMPARISON:
     case IR_PARAMETER:
     case IR_AND:
@@ -111,7 +107,7 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
               /// Replace division by a power of two with a shift.
               else if (power_of_two(cdr->value.immediate)) {
                 i->type = IR_SHIFT_RIGHT_ARITHMETIC;
-                cdr->value.immediate = ctzll((uint64_t)cdr->value.immediate);
+                cdr->value.immediate = (u64) ctzll(cdr->value.immediate);
                 changed = true;
               }
             }
@@ -120,13 +116,13 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
         case IR_MODULO: IR_REDUCE_BINARY(%) break;
 
         case IR_SHIFT_LEFT: IR_REDUCE_BINARY(<<) break;
-        case IR_SHIFT_RIGHT_ARITHMETIC: IR_REDUCE_BINARY(>>) break;
-        case IR_SHIFT_RIGHT_LOGICAL:
+        case IR_SHIFT_RIGHT_LOGICAL: IR_REDUCE_BINARY(>>) break;
+        case IR_SHIFT_RIGHT_ARITHMETIC:
           if (ipair(i)) {
             IRInstruction *car = i->value.pair.car;
             IRInstruction *cdr = i->value.pair.cdr;
             i->type = IR_IMMEDIATE;
-            i->value.immediate = (int64_t) ((uint64_t) icar(i) >> (uint64_t) icdr(i));
+            i->value.immediate = (u64) ((i64)icar(i) >> icdr(i));
             ir_remove_use(car, i);
             ir_remove_use(cdr, i);
             changed = true;
@@ -279,7 +275,7 @@ static bool opt_mem2reg(IRFunction *f) {
         } break;
 
         /// Record the first store into a variable.
-        case IR_LOCAL_STORE: {
+        case IR_STORE: {
           VECTOR_FOREACH (stack_var, a, vars) {
             if (!a->unoptimisable && a->alloca == i->value.pair.car) {
               /// If there are multiple stores, mark the variable as unoptimisable.

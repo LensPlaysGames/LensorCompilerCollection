@@ -402,6 +402,12 @@ string ast_typename(const Type *type, bool colour) {
   return s;
 }
 
+/// Check if a type is incomplete.
+bool ast_type_is_incomplete(const Type *type) {
+  while (type && type->kind == TYPE_NAMED) type = type->named->type;
+  return !type;
+}
+
 /// Get the size of a type.
 usz ast_sizeof(const Type *type) {
   switch (type->kind) {

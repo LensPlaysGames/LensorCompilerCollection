@@ -130,7 +130,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       VECTOR_FOREACH_PTR (Node *, node, expr->root.children)
         if (!typecheck_expression(ast, node))
           return false;
-      return true;
+      break;
 
     /// Typecheck the function body.
     case NODE_FUNCTION:
@@ -145,7 +145,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
             (int) body.size, body.data, (int) ret.size, ret.data);
       }
 
-      return true;
+      break;
 
     /// Typecheck declarations.
     case NODE_DECLARATION:
@@ -155,7 +155,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         if (!convertible(expr->type, expr->declaration.init->type))
           ERR_NOT_CONVERTIBLE(expr->type, expr->declaration.init->type);
       }
-      return true;
+      break;
 
     /// If expression.
     case NODE_IF:
@@ -173,14 +173,14 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       /// Otherwise, the type of the if expression is void.
       else { expr->type = ast->t_void; }
-      return true;
+      break;
 
     /// A while expression has type void.
     case NODE_WHILE:
       if (!typecheck_expression(ast, expr->while_.condition)) return false;
       if (!typecheck_expression(ast, expr->while_.body)) return false;
       expr->type = ast->t_void;
-      return true;
+      break;
 
     /// Typecheck all children and set the type of the block
     /// to the type of the last child. TODO: noreturn?
@@ -189,8 +189,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         if (!typecheck_expression(ast, node))
           return false;
       expr->type = expr->block.children.size ? VECTOR_BACK(expr->block.children)->type : ast->t_void;
-      return true;
-    }
+    } break;
 
     /// First, resolve the function. Then, typecheck all parameters
     /// and set the type to the return type of the callee.
@@ -221,8 +220,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       /// Set the type of the call to the return type of the callee.
       expr->type = callee->type->function.return_type;
-      return true;
-    }
+    } break;
 
     /// Make sure a cast is even possible.
     case NODE_CAST: TODO();
@@ -259,7 +257,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           /// The result of a subscript expression is a pointer to the
           /// start of the array, offset by the RHS.
           expr->type = ast_make_type_pointer(ast, lhs->source_location, lhs->type->array.of);
-          return true;
+          break;
 
         /// All of these are basically the same when it comes to types.
         case TK_GT:
@@ -284,7 +282,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
           /// TODO: Change this to bool if we ever add a bool type.
           expr->type = ast->t_integer;
-          return true;
+          break;
 
         /// Since pointer arithmetic is handled by the subscript operator,
         /// type checking for these is basically all the same.
@@ -314,7 +312,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           }
 
           expr->type = lhs->type;
-          return true;
+          break;
 
         /// This is the complicated one.
         case TK_COLON_EQ:
@@ -331,9 +329,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
           /// Set the type of the expression to the type of the lhs.
           expr->type = lhs->type;
-          return true;
+          break;
       }
-    }
+    } break;
 
     /// Here be dragons.
     case NODE_UNARY:
@@ -349,7 +347,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
           /// The result type of a dereference is the pointee.
           expr->type = expr->unary.value->type->pointer.to;
-          return true;
+          break;
 
         /// Address of lvalue.
         case TK_AMPERSAND:
@@ -358,7 +356,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                 "Argument of \"&\" must be an lvalue.");
 
           expr->type = ast_make_type_pointer(ast, expr->source_location, expr->unary.value->type);
-          return true;
+          break;
 
         /// One’s complement negation.
         case TK_TILDE:
@@ -367,26 +365,37 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                 "Argument of \"~\" must be an integer.");
 
           expr->type = expr->unary.value->type;
-          return true;
+          break;
       }
+      break;
 
     /// Just set the type.
     case NODE_LITERAL:
       if (expr->literal.type == TK_NUMBER) expr->type = ast->t_integer;
       else TODO("Literal type \"%s\".", token_type_to_string(expr->literal.type));
-      return true;
+      break;
 
     /// The type of a variable reference is the type of the variable.
     case NODE_VARIABLE_REFERENCE:
       if (!typecheck_expression(ast, expr->var->node)) return false;
       expr->type = expr->var->node->type;
-      return true;
+      break;
 
     /// Resolve the function reference and typecheck the function.
     case NODE_FUNCTION_REFERENCE:
       if (!resolve_function(ast, expr->funcref->node)) return false;
       if (!typecheck_expression(ast, expr->funcref->node)) return false;
       expr->type = expr->funcref->node->type;
-      return true;
+      break;
+  }
+
+  /// If this is a pointer type, make sure it doesn’t point to an incomplete type.
+  Type *base = expr->type;
+  while (is_pointer(base)) base = base->pointer.to;
+  if (is_pointer(expr->type /** (!) **/) && ast_type_is_incomplete(base)) {
+    string name = ast_typename(expr->type->pointer.to, false);
+    ERR_DO(free(name.data), expr->source_location,
+      "Cannot use pointer to incomplete type \"%.*s\".",
+        (int) name.size, name.data);
   }
 }

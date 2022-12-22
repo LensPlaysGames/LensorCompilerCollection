@@ -114,8 +114,8 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Variable declaration.
   case NODE_DECLARATION:
-      expr->ir = expr->declaration.global
-        ? ir_create_global(ctx, as_span(expr->declaration.name), ast_sizeof(expr->type))
+      expr->ir = expr->declaration.static_
+        ? ir_create_static(ctx, expr->type, as_span(expr->declaration.name))
         : ir_stack_allocate(ctx, ast_sizeof(expr->type));
       return;
 
@@ -162,35 +162,21 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     if (expr->if_.else_) {
       codegen_expr(ctx, expr->if_.else_);
       last_else_block = ctx->block;
-    } else {
-      ir_immediate(ctx, 0);
     }
 
     /// Branch to the join block from the else branch.
     if (!ir_is_closed(ctx->block)) ir_branch(ctx, join_block);
 
-    /// This assumes that the last instruction in a block returns a
-    /// value; if it doesn't, we will simply return zero. This should
-    /// probably be ensured in the type checker in the future.
-    /// TODO: This should actually be the last instruction *that actually yields a value*.
-    ///
-    /// NOTE: `block->instructions.last->prev` is the last instruction in `block`
-    /// before the branch.
-    IRInstruction *then_return_value = last_then_block->instructions.last->prev
-      ? last_then_block->instructions.last->prev
-      : ir_immediate(ctx, 0);
-    IRInstruction *else_return_value = last_else_block->instructions.last->prev
-      ? last_else_block->instructions.last->prev
-      : ir_immediate(ctx, 0);
-
     /// Attach the join block.
     ir_block_attach(ctx, join_block);
 
     /// Insert a phi node for the result of the if in the join block.
-    IRInstruction *phi = ir_phi(ctx);
-    ir_phi_argument(phi, last_then_block, then_return_value);
-    ir_phi_argument(phi, last_else_block, else_return_value);
-    expr->ir = phi;
+    if (expr->type != ctx->ast->t_void) {
+      IRInstruction *phi = ir_phi(ctx);
+      ir_phi_argument(phi, last_then_block, expr->if_.then->ir);
+      ir_phi_argument(phi, last_else_block, expr->if_.else_->ir);
+      expr->ir = phi;
+    }
     return;
   }
 
@@ -252,8 +238,13 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         codegen_expr(ctx, child);
       }
 
-      /// If the last expression doesn’t return anything, return 0.
-      expr->ir = last ? last->ir : ir_immediate(ctx, 0);
+      /// The yield of a block is that of its last expression;
+      /// If a block doesn’t yield `void`, then it is guaranteed
+      /// to not be empty, which is why we don’t check its size here.
+      if (expr->type != ctx->ast->t_void) {
+        ASSERT(last && last->ir);
+        expr->ir = last->ir;
+      }
       return;
   }
 
@@ -316,19 +307,19 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     switch (expr->binary.op) {
       default: ICE("Cannot emit binary expression of type %d", expr->binary.op);
       case TK_LBRACK: expr->ir = ir_add(ctx, lhs->ir, rhs->ir); return;
-      case TK_GT: expr->ir = ir_comparison(ctx, COMPARE_GT, lhs->ir, rhs->ir); return;
-      case TK_LT: expr->ir = ir_comparison(ctx, COMPARE_LT, lhs->ir, rhs->ir); return;
-      case TK_GE: expr->ir = ir_comparison(ctx, COMPARE_GE, lhs->ir, rhs->ir); return;
-      case TK_LE: expr->ir = ir_comparison(ctx, COMPARE_LE, lhs->ir, rhs->ir); return;
-      case TK_EQ: expr->ir = ir_comparison(ctx, COMPARE_EQ, lhs->ir, rhs->ir); return;
-      case TK_NE: expr->ir = ir_comparison(ctx, COMPARE_NE, lhs->ir, rhs->ir); return;
+      case TK_LT: expr->ir = ir_lt(ctx, lhs->ir, rhs->ir); return;
+      case TK_LE: expr->ir = ir_lt(ctx, lhs->ir, rhs->ir); return;
+      case TK_GT: expr->ir = ir_gt(ctx, lhs->ir, rhs->ir); return;
+      case TK_GE: expr->ir = ir_gt(ctx, lhs->ir, rhs->ir); return;
+      case TK_EQ: expr->ir = ir_eq(ctx, lhs->ir, rhs->ir); return;
+      case TK_NE: expr->ir = ir_ne(ctx, lhs->ir, rhs->ir); return;
       case TK_PLUS: expr->ir = ir_add(ctx, lhs->ir, rhs->ir); return;
-      case TK_MINUS: expr->ir = ir_subtract(ctx, lhs->ir, rhs->ir); return;
-      case TK_STAR: expr->ir = ir_multiply(ctx, lhs->ir, rhs->ir); return;
-      case TK_SLASH: expr->ir = ir_divide(ctx, lhs->ir, rhs->ir); return;
-      case TK_PERCENT: expr->ir = ir_modulo(ctx, lhs->ir, rhs->ir); return;
-      case TK_SHL: expr->ir = ir_shift_left(ctx, lhs->ir, rhs->ir); return;
-      case TK_SHR: expr->ir = ir_shift_right_arithmetic(ctx, lhs->ir, rhs->ir); return;
+      case TK_MINUS: expr->ir = ir_sub(ctx, lhs->ir, rhs->ir); return;
+      case TK_STAR: expr->ir = ir_mul(ctx, lhs->ir, rhs->ir); return;
+      case TK_SLASH: expr->ir = ir_div(ctx, lhs->ir, rhs->ir); return;
+      case TK_PERCENT: expr->ir = ir_mod(ctx, lhs->ir, rhs->ir); return;
+      case TK_SHL: expr->ir = ir_shl(ctx, lhs->ir, rhs->ir); return;
+      case TK_SHR: expr->ir = ir_sar(ctx, lhs->ir, rhs->ir); return;
       case TK_AMPERSAND: expr->ir = ir_and(ctx, lhs->ir, rhs->ir); return;
       case TK_PIPE: expr->ir = ir_or(ctx, lhs->ir, rhs->ir); return;
     }
@@ -387,6 +378,10 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
 /// Emit a function.
 void codegen_function(CodegenContext *ctx, Node *node) {
+  /// Currently, we assume that the body of a function is a block.
+  /// TODO: All of this is messy; perhaps parameter declarations ought to be stored elsewhere?
+  ASSERT(node->function.body->kind == NODE_BLOCK);
+
   /// The first N nodes in the body of a function, where N is the number
   /// of parameters, are variable declarations that correspond to the
   /// parameters. First, emit all of them.
@@ -413,7 +408,11 @@ void codegen_function(CodegenContext *ctx, Node *node) {
   }
 
   /// If the last expression doesn’t return anything, return 0.
-  if (!ir_is_closed(ctx->block)) ir_return(ctx, last ? last->ir : ir_immediate(ctx, 0));
+  if (!ir_is_closed(ctx->block) && node->type->function.return_type != ctx->ast->t_void) {
+    ASSERT(last && last->ir);
+    node->function.body->ir = last->ir;
+    ir_return(ctx, node->function.body->ir);
+  }
 }
 
 /// ===========================================================================
