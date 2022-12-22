@@ -13,13 +13,13 @@ typedef size_t usz;
 typedef ptrdiff_t isz;
 
 /// String span.
-typedef struct {
+typedef struct span {
   const char *data;
   usz size;
 } span;
 
 /// Owning string.
-typedef struct {
+typedef struct string {
   char *data;
   usz size;
 } string;
