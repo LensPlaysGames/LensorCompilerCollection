@@ -41,7 +41,6 @@ typedef struct IRStaticVariable {
   Type *type;
   usz cached_size;
   usz cached_alignment;
-  usz refcount;
 } IRStaticVariable;
 
 struct CodegenContext {

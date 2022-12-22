@@ -62,6 +62,7 @@
   ALL_BINARY_INSTRUCTION_TYPES(F)                                \
                                                                  \
   F(STATIC_REF)                                                  \
+  F(FUNC_REF)                                                    \
                                                                  \
   /** Store data at an address. **/                              \
   F(STORE)                                                       \
@@ -75,7 +76,10 @@
    * generated with them in it.                                  \
    **/                                                           \
   F(REGISTER)                                                    \
-  F(STACK_ALLOCATE)
+  F(ALLOCA)
+
+#define BINARY_INSTRUCTION_CASE_HELPER(enumerator, name) case IR_##enumerator:
+#define ALL_BINARY_INSTRUCTION_CASES() ALL_BINARY_INSTRUCTION_TYPES(BINARY_INSTRUCTION_CASE_HELPER)
 
 #define DEFINE_IR_INSTRUCTION_TYPE(type, ...) CAT(IR_, type),
 typedef enum IRType {
@@ -154,19 +158,6 @@ typedef struct IRInstruction {
     IRFunction *function_ref;
     IRStackAllocation alloca;
   };
-
-  /// Sometimes we don’t want to allocate a register for an instruction
-  /// or emit it, but we still want to use it as an operand and keep it
-  /// in the block so that we don’t leak it.
-  ///
-  /// An example of this are comparisons that are immediately used in
-  /// a conditional branch, and unused after.
-  ///
-  /// This is a bit of a hack, but it works. A dedicated instruction
-  /// selection pass would be better.
-  ///
-  /// TODO: instruction selection and then yeet this.
-  bool dont_emit;
 } IRInstruction;
 
 /// A block is a list of instructions that have control flow enter at
@@ -196,7 +187,7 @@ typedef struct IRFunction {
   VECTOR(IRInstruction*) parameters;
 
   /// Reference to the function
-  IRInstruction *address;
+  IRInstruction *funcref;
 
   /// Pointer to the context that owns this function.
   CodegenContext *context;
@@ -246,6 +237,7 @@ void ir_block_attach_to_function(IRFunction *function, IRBlock *new_block);
 void ir_block_attach(CodegenContext *context, IRBlock *new_block);
 
 IRFunction *ir_function(CodegenContext *context, span name, size_t params);
+IRInstruction *ir_funcref(CodegenContext *context, IRFunction *function);
 
 void ir_force_insert_into_block(IRBlock *block, IRInstruction *new_instruction);
 void ir_insert_into_block(IRBlock *block, IRInstruction *new_instruction);

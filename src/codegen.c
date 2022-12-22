@@ -5,17 +5,11 @@
 #include <codegen/x86_64/arch_x86_64.h>
 #include <codegen/ir/ir.h>
 #include <error.h>
-#include <inttypes.h>
 #include <ir_parser.h>
 #include <opt.h>
-#include <parser.h>
-#include <stdarg.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <typechecker.h>
 
 #define DIAG(sev, loc, ...)                                                                                 \
   do {                                                                                                      \
@@ -308,9 +302,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       default: ICE("Cannot emit binary expression of type %d", expr->binary.op);
       case TK_LBRACK: expr->ir = ir_add(ctx, lhs->ir, rhs->ir); return;
       case TK_LT: expr->ir = ir_lt(ctx, lhs->ir, rhs->ir); return;
-      case TK_LE: expr->ir = ir_lt(ctx, lhs->ir, rhs->ir); return;
+      case TK_LE: expr->ir = ir_le(ctx, lhs->ir, rhs->ir); return;
       case TK_GT: expr->ir = ir_gt(ctx, lhs->ir, rhs->ir); return;
-      case TK_GE: expr->ir = ir_gt(ctx, lhs->ir, rhs->ir); return;
+      case TK_GE: expr->ir = ir_ge(ctx, lhs->ir, rhs->ir); return;
       case TK_EQ: expr->ir = ir_eq(ctx, lhs->ir, rhs->ir); return;
       case TK_NE: expr->ir = ir_ne(ctx, lhs->ir, rhs->ir); return;
       case TK_PLUS: expr->ir = ir_add(ctx, lhs->ir, rhs->ir); return;
@@ -371,7 +365,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Function reference.
   case NODE_FUNCTION_REFERENCE:
-    expr->ir = expr->funcref->node->function.ir->address;
+    expr->ir = expr->funcref->node->function.ir->funcref;
     return;
   }
 }
@@ -473,12 +467,15 @@ bool codegen
     /// Codegen a FUN program.
     case LANG_FUN: {
       /// Create the main function.
-      ir_function(context, literal_span("main"), 2);
+      IRFunction *main = ir_function(context, literal_span("main"), 2);
+      main->funcref = ir_funcref(context, main);
 
-      /// Create the remaining functions.
-      VECTOR_FOREACH_PTR (Node*, func, ast->functions)
-        func->function.ir = ir_function(context, as_span(func->function.name),
-          func->type->function.parameters.size);
+      /// Create the remaining functions and set the address of each function.
+      VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
+          func->function.ir = ir_function(context, as_span(func->function.name),
+            func->type->function.parameters.size);
+          func->function.ir->funcref = ir_funcref(context, func->function.ir);
+      }
 
       /// Emit the main function.
       codegen_expr(context, ast->root);

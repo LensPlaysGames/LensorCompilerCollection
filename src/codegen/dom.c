@@ -18,29 +18,29 @@ static BlockVector collect_reachable_blocks(IRBlock *block, IRBlock *ignore) {
     IRBlock *b = VECTOR_POP(dfs_stack);
     if (b == ignore) continue;
 
-    STATIC_ASSERT(IR_COUNT == 26, "Handle all branch types");
+    STATIC_ASSERT(IR_COUNT == 32, "Handle all branch types");
     bool out = false;
     IRInstruction *i = b->instructions.last;
     switch (i->type) {
       default: break;
       case IR_BRANCH:
-        VECTOR_CONTAINS(reachable, i->value.block, out);
+        VECTOR_CONTAINS(reachable, i->destination_block, out);
         if (!out) {
-          VECTOR_PUSH(reachable, i->value.block);
-          VECTOR_PUSH(dfs_stack, i->value.block);
+          VECTOR_PUSH(reachable, i->destination_block);
+          VECTOR_PUSH(dfs_stack, i->destination_block);
         }
         break;
 
       case IR_BRANCH_CONDITIONAL:
-        VECTOR_CONTAINS(reachable, i->value.conditional_branch.true_branch, out);
+        VECTOR_CONTAINS(reachable, i->cond_br.then, out);
         if (!out) {
-          VECTOR_PUSH(reachable, i->value.conditional_branch.true_branch);
-          VECTOR_PUSH(dfs_stack, i->value.conditional_branch.true_branch);
+          VECTOR_PUSH(reachable, i->cond_br.then);
+          VECTOR_PUSH(dfs_stack, i->cond_br.then);
         }
-        VECTOR_CONTAINS(reachable, i->value.conditional_branch.false_branch, out);
+        VECTOR_CONTAINS(reachable, i->cond_br.else_, out);
         if (!out) {
-          VECTOR_PUSH(reachable, i->value.conditional_branch.false_branch);
-          VECTOR_PUSH(dfs_stack, i->value.conditional_branch.false_branch);
+          VECTOR_PUSH(reachable, i->cond_br.else_);
+          VECTOR_PUSH(dfs_stack, i->cond_br.else_);
         }
         break;
     }

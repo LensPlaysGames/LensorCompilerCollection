@@ -22,7 +22,7 @@ void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
 }
 
 bool ir_is_branch(IRInstruction* i) {
-  STATIC_ASSERT(IR_COUNT == 31, "Handle all branch types.");
+  STATIC_ASSERT(IR_COUNT == 32, "Handle all branch types.");
   switch (i->type) {
     case IR_BRANCH:
     case IR_BRANCH_CONDITIONAL:
@@ -158,7 +158,7 @@ void ir_femit_instruction
   }
 # undef RESULT_FORMAT
 
-  STATIC_ASSERT(IR_COUNT == 31, "Handle all inst types.");
+  STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
   switch (inst->type) {
   case IR_IMMEDIATE:
     fprintf(file, "imm %"PRId64, inst->imm);
@@ -183,6 +183,9 @@ void ir_femit_instruction
   } break;
   case IR_STATIC_REF:
     fprintf(file, ".ref %.*s", (int) inst->static_ref->name.size, inst->static_ref->name.data);
+    break;
+  case IR_FUNC_REF:
+    fprintf(file, ".ref %.*s", (int) inst->function_ref->name.size, inst->function_ref->name.data);
     break;
 
   case IR_RETURN: fprintf(file, "ret %%%u", inst->operand->id); break;
@@ -222,7 +225,7 @@ void ir_femit_instruction
   case IR_REGISTER:
     fprintf(file, "register r%d", inst->result);
     break;
-  case IR_STACK_ALLOCATE:
+  case IR_ALLOCA:
     fprintf(file, "alloca %"PRId64, inst->imm);
     break;
   /// No-op
@@ -417,6 +420,13 @@ IRFunction *ir_function(CodegenContext *context, span name, size_t params) {
   return function;
 }
 
+IRInstruction *ir_funcref(CodegenContext *context, IRFunction *function) {
+  INSTRUCTION(funcref, IR_FUNC_REF);
+  funcref->function_ref = function;
+  INSERT(funcref);
+  return funcref;
+}
+
 IRInstruction *ir_immediate
 (CodegenContext *context,
  u64 immediate
@@ -581,10 +591,9 @@ IRInstruction *ir_create_static
   v->type = ty;
   v->cached_size = ast_sizeof(ty);
   v->cached_alignment = 8; /// TODO.
-  v->refcount = 1;
   VECTOR_PUSH(context->static_vars, v);
 
-  /// Create a reference to it and return it.
+  /// Create an instruction to reference it and return it.
   INSTRUCTION(ref, IR_STATIC_REF);
   ref->static_ref = v;
   INSERT(ref);
@@ -596,7 +605,7 @@ IRInstruction *ir_stack_allocate
  usz size
  )
 {
-  INSTRUCTION(alloca, IR_STACK_ALLOCATE);
+  INSTRUCTION(alloca, IR_ALLOCA);
   alloca->alloca.size = size;
   INSERT(alloca);
   return alloca;
@@ -623,7 +632,7 @@ void ir_for_each_child(
   void callback(IRInstruction *user, IRInstruction **child, void *data),
   void *data
 ) {
-  STATIC_ASSERT(IR_COUNT == 31, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
   switch (user->type) {
   case IR_PHI:
     VECTOR_FOREACH_PTR (IRPhiArgument*, arg, user->phi_args) {
@@ -642,12 +651,10 @@ void ir_for_each_child(
     callback(user, &user->store.value, data);
     break;
 
-#define BINARY_INSTRUCTION_CASE(enumerator, name) case IR_##enumerator:
-  ALL_BINARY_INSTRUCTION_TYPES(BINARY_INSTRUCTION_CASE)
+  ALL_BINARY_INSTRUCTION_CASES()
     callback(user, &user->lhs, data);
     callback(user, &user->rhs, data);
     break;
-#undef BINARY_INSTRUCTION_CASE
 
   case IR_CALL:
     if (user->call.is_indirect) callback(user, &user->call.callee_instruction, data);
@@ -661,7 +668,7 @@ void ir_for_each_child(
   case IR_PARAMETER:
   case IR_IMMEDIATE:
   case IR_BRANCH:
-  case IR_STACK_ALLOCATE:
+  case IR_ALLOCA:
   case IR_UNREACHABLE:
   case IR_REGISTER:
   case IR_STATIC_REF:
@@ -672,7 +679,7 @@ void ir_for_each_child(
 }
 
 bool ir_is_value(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 31, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
   switch (instruction->type) {
     default: UNREACHABLE();
     case IR_IMMEDIATE:
@@ -682,11 +689,10 @@ bool ir_is_value(IRInstruction *instruction) {
     case IR_COPY:
     case IR_PARAMETER:
     case IR_REGISTER:
-    case IR_STACK_ALLOCATE:
+    case IR_ALLOCA:
     case IR_STATIC_REF:
-#define BINARY_INSTRUCTION_CASE(enumerator, name) case IR_##enumerator:
-    ALL_BINARY_INSTRUCTION_TYPES(BINARY_INSTRUCTION_CASE)
-#undef BINARY_INSTRUCTION_CASE
+    case IR_FUNC_REF:
+    ALL_BINARY_INSTRUCTION_CASES()
       return true;
 
     case IR_STORE:
@@ -751,7 +757,7 @@ void ir_unmark_usees(IRInstruction *instruction) {
 }
 
 void ir_mark_unreachable(IRBlock *block) {
-  STATIC_ASSERT(IR_COUNT == 31, "Handle all branch types");
+  STATIC_ASSERT(IR_COUNT == 32, "Handle all branch types");
   IRInstruction *i = block->instructions.last;
   switch (i->type) {
     default: break;
