@@ -673,6 +673,7 @@ void ir_for_each_child(
   case IR_UNREACHABLE:
   case IR_REGISTER:
   case IR_STATIC_REF:
+  case IR_FUNC_REF:
     break;
   default:
     ICE("Invalid IR instruction type %d", user->type);

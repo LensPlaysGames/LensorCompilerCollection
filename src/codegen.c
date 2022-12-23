@@ -485,6 +485,10 @@ bool codegen
         context->block = func->function.ir->blocks.first;
         codegen_function(context, func);
       }
+
+      ir_set_ids(context);
+      ir_femit(stdout, context);
+      exit(42);
     } break;
 
     /// Anything else is not supported.

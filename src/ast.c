@@ -34,9 +34,14 @@ void scope_pop(AST *ast) {
 }
 
 Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, void *value) {
+  /// Check if the symbol already exists.
+  if (scope_find_symbol(scope, name, true)) return NULL;
+
   Symbol *symbol = calloc(1, sizeof(Symbol));
   symbol->kind = kind;
   symbol->name = string_dup(name);
+  symbol->scope = scope;
+
   if (kind == SYM_TYPE) symbol->type = value;
   else symbol->node = value;
   VECTOR_PUSH(scope->symbols, symbol);
@@ -563,13 +568,12 @@ void ast_print_node(
       fprintf(file, "\033[31mIf \033[35m<%d> %.*s\n",
         node->source_location.start,
         (int) type_name.size, type_name.data);
-      ast_print_node(file, node->if_.condition, leading_text);
       free(type_name.data);
 
-      /// Print the branches.
+      /// Print the condition and branches.
       ast_print_children(file, &(Nodes) {
-        .data = (Node *[]) {node->if_.then, node->if_.else_},
-        .size = node->if_.else_ ? 2 : 1
+        .data = (Node *[]) {node->if_.condition, node->if_.then, node->if_.else_},
+        .size = node->if_.else_ ? 3 : 2
       }, leading_text);
     } break;
 

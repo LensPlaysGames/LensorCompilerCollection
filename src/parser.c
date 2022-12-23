@@ -578,7 +578,8 @@ static Node *parse_function_body(Parser *p, Type *function_type) {
   Nodes body_exprs = {0};
   VECTOR_FOREACH (Parameter , param, function_type->function.parameters) {
     Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
-    scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var);
+    if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var))
+      ERR_AT(var->source_location, "Redefinition of parameter '%.*s'", (int) var->declaration.name.size, var->declaration.name.data);
     VECTOR_PUSH(body_exprs, var);
   }
 
@@ -747,7 +748,10 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     /// Parse the body, create the function, and add it to the symbol table.
     Node *body = parse_function_body(p, type);
     Node *func = ast_make_function(p->ast, ident.source_location, type, body, ident.text);
-    Symbol *sym = scope_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, func);
+    Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+    if (sym->kind != SYM_FUNCTION || sym->node)
+      ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+    sym->node = func;
     return ast_make_function_reference(p->ast, ident.source_location, sym);
   }
 
@@ -756,7 +760,8 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   decl->declaration.static_ = !p->in_function;
 
   /// Add the declaration to the current scope.
-  scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
+  if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl))
+    ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
 
   /// A non-external declaration may have an initialiser.
   /// TODO: Should we just allow this instead?

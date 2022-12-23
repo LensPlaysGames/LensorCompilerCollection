@@ -1267,7 +1267,6 @@ static void lower(CodegenContext *context) {
   FOREACH_INSTRUCTION (context) {
     switch (instruction->type) {
       case IR_PARAMETER:
-        ASSERT(instruction->imm >= 0);
         if ((size_t)instruction->imm >= argument_register_count) {
           TODO("arch_x86_64 doesn't yet support passing arguments on the stack, sorry.");
         }

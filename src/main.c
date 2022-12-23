@@ -247,6 +247,7 @@ int main(int argc, char **argv) {
   const char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
   size_t len = strlen(infile);
   string s = file_contents(infile);
+  if (!s.data) exit(1);
 
   /// The input is an IR file.
   if (len >= 3 && memcmp(infile + len - 3, ".ir", 3) == 0) {

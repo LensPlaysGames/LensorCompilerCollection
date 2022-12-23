@@ -87,6 +87,7 @@ NODISCARD static bool is_array(Type *type) { return type->kind == TYPE_ARRAY; }
 /// Check if a type is an integer type.
 NODISCARD static bool is_integer(Type *type) {
   /// Currently, all primitive types are integers.
+  while (type->kind == TYPE_NAMED && type->named->type) type = type->named->type;
   return type->kind == TYPE_PRIMITIVE;
 }
 
@@ -391,11 +392,14 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
   /// If this is a pointer type, make sure it doesn’t point to an incomplete type.
   Type *base = expr->type;
-  while (is_pointer(base)) base = base->pointer.to;
-  if (is_pointer(expr->type /** (!) **/) && ast_type_is_incomplete(base)) {
+  while (base && is_pointer(base)) base = base->pointer.to;
+  if (base && is_pointer(expr->type /** (!) **/) && ast_type_is_incomplete(base)) {
     string name = ast_typename(expr->type->pointer.to, false);
     ERR_DO(free(name.data), expr->source_location,
       "Cannot use pointer to incomplete type \"%.*s\".",
         (int) name.size, name.data);
   }
+
+  /// Done.
+  return true;
 }
