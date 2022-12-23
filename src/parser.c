@@ -742,6 +742,7 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
 
   /// If the next token is "{", and the type is a function type, and this
   /// is not an external declaration, then this is a function definition.
+  /// TODO: are we handling external symbols correctly?
   if (!is_ext && p->tok.type == TK_LBRACE && type->kind == TYPE_FUNCTION) {
     /// Parse the body, create the function, and add it to the symbol table.
     Node *body = parse_function_body(p, type);

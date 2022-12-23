@@ -40,15 +40,15 @@ CodegenContext *codegen_context_create
     case CG_FMT_x86_64_GAS:
       // TODO: Handle call_convention for creating codegen context!
       if (call_convention == CG_CALL_CONV_MSWIN) {
-        context = codegen_context_x86_64_mswin_create(NULL);
+        context = codegen_context_x86_64_mswin_create();
       } else if (call_convention == CG_CALL_CONV_LINUX) {
-        context = codegen_context_x86_64_linux_create(NULL);
+        context = codegen_context_x86_64_linux_create();
       } else {
         PANIC("Unrecognized calling convention!");
       }
       break;
     case CG_FMT_IR:
-      context = codegen_context_ir_create(NULL);
+      context = codegen_context_ir_create();
       break;
     default: UNREACHABLE();
   }

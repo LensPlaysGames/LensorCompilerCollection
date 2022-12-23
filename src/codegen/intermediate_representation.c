@@ -102,8 +102,8 @@ void ir_remove(IRInstruction* instruction) {
   DLIST_REMOVE(instruction->parent_block->instructions, instruction);
   VECTOR_DELETE(instruction->users);
   ir_unmark_usees(instruction);
-  // Parameters should not be optimised out.
-  if (instruction->type != IR_PARAMETER) {
+  /// Parameters / static refs should not be freed here.
+  if (instruction->type != IR_PARAMETER && instruction->type != IR_STATIC_REF) {
     free(instruction);
   }
 }
@@ -596,6 +596,7 @@ IRInstruction *ir_create_static
   /// Create an instruction to reference it and return it.
   INSTRUCTION(ref, IR_STATIC_REF);
   ref->static_ref = v;
+  v->reference = ref;
   INSERT(ref);
   return ref;
 }

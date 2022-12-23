@@ -1,8 +1,7 @@
 #include <codegen/ir/ir.h>
 #include <codegen/intermediate_representation.h>
 
-CodegenContext *codegen_context_ir_create(CodegenContext *parent) {
-  (void)parent;
+CodegenContext *codegen_context_ir_create() {
   CodegenContext *cg_ctx = calloc(1, sizeof(CodegenContext));
   cg_ctx->format = CG_FMT_IR;
   cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
