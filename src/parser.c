@@ -132,59 +132,58 @@ static void parse_number(Parser *p, int base) {
 /// Lex a number.
 static void next_number(Parser *p) {
   /// Record the start of the number.
-  p->tok.text.data = p->curr - 1;
-  p->tok.text.size = 1;
+  p->tok.text.size = 0;
   p->tok.integer = 0;
   p->tok.type = TK_NUMBER;
-  next_char(p);
 
-  /// Discard leading zeroes.
-  while (p->lastc == '0') {
-    p->tok.text.size++;
+  /// At least one leading zero.
+  if (p->lastc == '0') {
+    /// Discard the zero.
     next_char(p);
+
+    /// Another zero is an error.
+    if (p->lastc == '0') ERR("Leading zeroes are not allowed in decimal literals. Use 0o/0O for octal literals.");
+
+#define DO_PARSE_NUMBER(name, chars, condition, base)                       \
+  /** Read all chars that are part of the literal. **/                      \
+  if (p->lastc == chars[0] || p->lastc == chars[1]) {                       \
+    next_char(p);                                                           \
+    p->tok.text.data = p->curr - 1;                                         \
+    while (condition) {                                                     \
+      p->tok.text.size++;                                                   \
+      next_char(p);                                                         \
+    }                                                                       \
+                                                                            \
+    /** We need at least one digit. **/                                     \
+    p->tok.source_location.end = (u32) ((p->curr - 1) - p->source.data);    \
+    if (p->tok.text.size == 0) ERR("Expected at least one " name " digit"); \
+                                                                            \
+    /** Actually parse the number. **/                                      \
+    return parse_number(p, base);                                           \
   }
 
-  /// Binary.
-  if (p->lastc == 'b' || p->lastc == 'B') {
-    next_char(p);
-    while (p->lastc == '0' || p->lastc == '1') {
-      p->tok.text.size++;
-      next_char(p);
-    }
-    return parse_number(p, 2);
-  }
+    DO_PARSE_NUMBER("binary", "bB", p->lastc == '0' || p->lastc == '1', 2)
+    DO_PARSE_NUMBER("octal", "oO", isdigit(p->lastc) && p->lastc < '8', 8)
+    DO_PARSE_NUMBER("hexadecimal", "xX", isxdigit(p->lastc), 16)
 
-  /// Octal.
-  else if (p->lastc == 'o' || p->lastc == 'O') {
-    next_char(p);
-    while (p->lastc >= '0' && p->lastc <= '7') {
-      p->tok.text.size++;
-      next_char(p);
-    }
-    return parse_number(p, 8);
-  }
+#undef DO_PARSE_NUMBER
 
-  /// Hexadecimal.
-  else if (p->lastc == 'x' || p->lastc == 'X') {
-    next_char(p);
-    while (isxdigit(p->lastc)) {
-      p->tok.text.size++;
-      next_char(p);
-    }
-    return parse_number(p, 16);
+    /// If the next character is a space or delimiter, then this is a literal 0.
+    if (isspace(p->lastc) || !isalpha(p->lastc)) return;
+
+    /// Anything else is an error.
+    ERR("Invalid integer literal");
   }
 
   /// Any other digit means we have a decimal number.
   if (isdigit(p->lastc)) {
+    p->tok.text.data = p->curr - 1;
     do {
       p->tok.text.size++;
       next_char(p);
     } while (isdigit(p->lastc));
     return parse_number(p, 10);
   }
-
-  /// If the next character is a space or delimiter, then this is a literal 0.
-  if (isspace(p->lastc) || !isalpha(p->lastc)) return;
 
   /// Anything else is an error.
   ERR("Invalid integer literal");
@@ -280,6 +279,9 @@ static void next_token(Parser *p) {
         p->tok.type = TK_NUMBER;
         next_number(p);
         p->tok.integer = -p->tok.integer;
+
+        /// The character after a number must be a whitespace or delimiter.
+        if (isalpha(p->lastc)) ERR("Invalid integer literal");
       } else {
         p->tok.type = TK_MINUS;
       }
@@ -380,6 +382,9 @@ static void next_token(Parser *p) {
       /// Number.
       if (isdigit(p->lastc)) {
         next_number(p);
+
+        /// The character after a number must be a whitespace or delimiter.
+        if (isalpha(p->lastc)) ERR("Invalid integer literal");
         break;
       }
 
@@ -745,13 +750,15 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   /// is not an external declaration, then this is a function definition.
   /// TODO: are we handling external symbols correctly?
   if (!is_ext && p->tok.type == TK_LBRACE && type->kind == TYPE_FUNCTION) {
-    /// Parse the body, create the function, and add it to the symbol table.
-    Nodes params = {0};
-    Node *body = parse_function_body(p, type, &params);
-    Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
+    /// Create a symbol table entry before parsing the body.
     Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
     if (sym->kind != SYM_FUNCTION || sym->node)
       ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+
+    /// Parse the body, create the function, and update the symbol table.
+    Nodes params = {0};
+    Node *body = parse_function_body(p, type, &params);
+    Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
     sym->node = func;
     return ast_make_function_reference(p->ast, ident.source_location, sym);
   }
