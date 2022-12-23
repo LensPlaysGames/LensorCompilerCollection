@@ -41,7 +41,7 @@ void print_usage(char **argv) {
          "    `-o`, `--output`   :: Set the output filepath to the one given.\n"
          "    `-f`, `--format`   :: Set the output format to the one given.\n"
          "    `-cc`, `--calling` :: Set the calling convention to the one given.\n"
-         "    `-d`, `--dialect`   :: Set the output assembly dialect to the one given.\n"
+         "    `-d`, `--dialect`  :: Set the output assembly dialect to the one given.\n"
          "Anything other arguments are treated as input filepaths (source code).\n");
 }
 
