@@ -131,6 +131,14 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       VECTOR_FOREACH_PTR (Node *, node, expr->root.children)
         if (!typecheck_expression(ast, node))
           return false;
+
+      /// Remove all function references. There is no iterator
+      /// invalidation here because we are accessing elements
+      /// by index.
+      VECTOR_FOREACH_INDEX(i, expr->root.children) {
+        Node *node = expr->root.children.data[i];
+        if (node->kind == NODE_FUNCTION_REFERENCE) VECTOR_REMOVE_INDEX(expr->root.children, i);
+      }
       break;
 
     /// Typecheck the function body.

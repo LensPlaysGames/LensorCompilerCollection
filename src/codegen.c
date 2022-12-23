@@ -365,9 +365,8 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     expr->ir = ir_load(ctx, expr->var->node->ir);
     return;
 
-  /// Function reference.
-  case NODE_FUNCTION_REFERENCE:
-    ICE("Function reference in codegen should have been converted to function during sema.");
+  /// Function reference. These should have all been removed by the semantic analyser.
+  case NODE_FUNCTION_REFERENCE: UNREACHABLE();
   }
 }
 
@@ -474,7 +473,7 @@ bool codegen
 
       ir_set_ids(context);
       ir_femit(stdout, context);
-      exit(42);
+      //exit(42);
     } break;
 
     /// Anything else is not supported.
