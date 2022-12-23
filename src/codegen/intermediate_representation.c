@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 
-#define DEBUG_USES
+//#define DEBUG_USES
 
 void mark_used(IRInstruction *usee, IRInstruction *user) {
   VECTOR_FOREACH_PTR (IRInstruction *, i_user, usee->users) {
@@ -143,7 +143,8 @@ void ir_femit_instruction
   while (difference--) {
     fputc(' ', file);
   }
-  fprintf(file, ID_FORMAT);
+  if (inst->id) fprintf(file, ID_FORMAT);
+  else fprintf(file, "   | ");
 # undef ID_FORMAT
 
 # define RESULT_FORMAT "r%d | ", inst->result
@@ -222,7 +223,7 @@ void ir_femit_instruction
     fprintf(file, "load %%%u", inst->operand->id);
     break;
   case IR_STORE:
-    fprintf(file, "store %%%u, %%%u", inst->store.addr->id, inst->store.value->id);
+    fprintf(file, "store into %%%u, %%%u", inst->store.addr->id, inst->store.value->id);
     break;
   case IR_REGISTER:
     fprintf(file, "register r%d", inst->result);
@@ -486,7 +487,10 @@ IRInstruction *ir_store
  )
 {
   INSTRUCTION(store, IR_STORE);
-  set_pair_and_mark(store, address, data);
+  store->store.addr = address;
+  store->store.value = data;
+  mark_used(address, store);
+  mark_used(data, store);
   INSERT(store);
   return store;
 }

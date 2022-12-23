@@ -285,13 +285,21 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       /// If the LHS is a variable, just emit a direct store to the memory address,
       /// which we can get from the declaration which has to have been emitted already.
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
-        expr->ir = ir_store(ctx, lhs->var->node->ir, rhs->ir);
+        expr->ir = ir_store(ctx, rhs->ir, lhs->var->node->ir);
         return;
       }
 
+      /// If the LHS is a pointer dereference, emit an indirect store to the argument.
+      if (lhs->kind == NODE_UNARY && lhs->unary.op == TK_AT) {
+        codegen_expr(ctx, lhs->unary.value);
+        expr->ir = ir_store(ctx, rhs->ir, lhs->unary.value->ir);
+        return;
+      }
+
+      /// Anything else is an error (I think?).
       /// Otherwise, actually emit the LHS and load from that.
-      codegen_expr(ctx, lhs);
-      expr->ir = ir_store(ctx, lhs->ir, rhs->ir);
+      /*codegen_expr(ctx, lhs);
+      expr->ir = ir_store(ctx, lhs->ir, rhs->ir);*/
       return;
     }
 
@@ -323,6 +331,16 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Unary expression.
   case NODE_UNARY: {
+    /// Addressof expressions are special because we don’t emit their operand.
+    if (expr->unary.op == TK_AMPERSAND && !expr->unary.postfix) {
+      switch (expr->unary.value->kind) {
+        case NODE_DECLARATION: expr->ir = expr->unary.value->ir; return;
+        case NODE_VARIABLE_REFERENCE: expr->ir = expr->unary.value->var->node->ir; return;
+        default: ICE("Cannot take address of expression of type %d", expr->unary.value->kind);
+      }
+    }
+
+    /// Emit the operand.
     codegen_expr(ctx, expr->unary.value);
 
     /// Prefix expressions.
@@ -332,14 +350,6 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
         /// Load a value from an lvalue.
         case TK_AT: expr->ir = ir_load(ctx, expr->unary.value->ir); return;
-
-        /// Address of lvalue.
-        case TK_AMPERSAND:
-          switch (expr->unary.value->kind) {
-            case NODE_DECLARATION: expr->ir = expr->unary.value->ir; return;
-            case NODE_VARIABLE_REFERENCE: expr->ir = expr->unary.value->var->node->ir; return;
-            default: ICE("Cannot take address of expression of type %d", expr->unary.value->kind);
-          }
 
         /// One’s complement negation.
         case TK_TILDE: expr->ir = ir_not(ctx, expr->unary.value->ir); return;
