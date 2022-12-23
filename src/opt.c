@@ -286,7 +286,7 @@ static bool opt_mem2reg(IRFunction *f) {
               /// Load before store.
               if (!a->store) {
                 a->unoptimisable = true;
-                fprintf(stderr, "Warning: Load of uninitialised variable in function %.*s", (int) f->name.size, f->name.data);
+                fprintf(stderr, "Warning: Load of uninitialised variable in function %.*s\n", (int) f->name.size, f->name.data);
               } else {
                 VECTOR_PUSH(a->loads, i);
               }
@@ -305,7 +305,7 @@ static bool opt_mem2reg(IRFunction *f) {
     /// Since we don’t have `addressof` instructions or anything like
     /// that, check if the address is taken anywhere by checking if
     /// there are any uses of the alloca excepting the store and loads.
-    if (a->unoptimisable || a->alloca->users.size != a->loads.size + 1) {
+    if (a->unoptimisable || !a->store || a->alloca->users.size != a->loads.size + 1) {
       VECTOR_DELETE(a->loads);
       continue;
     }

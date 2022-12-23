@@ -113,6 +113,12 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       expr->ir = expr->declaration.static_
         ? ir_create_static(ctx, expr->type, as_span(expr->declaration.name))
         : ir_stack_allocate(ctx, ast_sizeof(expr->type));
+
+      /// Emit the initialiser if there is one.
+      if (expr->declaration.init) {
+        codegen_expr(ctx, expr->declaration.init);
+        ir_store(ctx, expr->declaration.init->ir, expr->ir);
+      }
       return;
 
   /// If expression.
@@ -495,10 +501,10 @@ bool codegen
 
   codegen_lower(context);
 
-  if (debug_ir) {
+/*  if (debug_ir) {
     printf("Backend Lowered\n");
     ir_femit(stdout, context);
-  }
+  }*/
 
   codegen_emit(context);
 
