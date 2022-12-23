@@ -1420,7 +1420,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         for (IRBlock *b = (function->blocks).first; b; b = b->next) {
           for (IRInstruction *i = (b->instructions).first; i; i = i->next) {
             switch (i->type) {
-              default: ICE("Invalid branch.");
+              default: break;
               case IR_UNREACHABLE: goto next_block;
               case IR_BRANCH:
                 if (i->destination_block == block) {

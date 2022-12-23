@@ -661,7 +661,7 @@ void ir_for_each_child(
 
   case IR_CALL:
     if (user->call.is_indirect) callback(user, &user->call.callee_instruction, data);
-    VECTOR_FOREACH_PTR (IRInstruction*, arg, user->call.arguments) callback(user, &arg, data);
+    VECTOR_FOREACH_PTR (IRInstruction*, arg, user->call.arguments) callback(user, arg_ptr, data);
     break;
 
   case IR_BRANCH_CONDITIONAL:

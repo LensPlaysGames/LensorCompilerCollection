@@ -470,10 +470,6 @@ bool codegen
         context->block = func->function.ir->blocks.first;
         codegen_function(context, func);
       }
-
-      ir_set_ids(context);
-      ir_femit(stdout, context);
-      //exit(42);
     } break;
 
     /// Anything else is not supported.
@@ -481,6 +477,11 @@ bool codegen
   }
 
   if (optimise) codegen_optimise(context);
+
+/*
+  ir_set_ids(context);
+  ir_femit(stdout, context);
+  exit(42);*/
 
   codegen_lower(context);
 
