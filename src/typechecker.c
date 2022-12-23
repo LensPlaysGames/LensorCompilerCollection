@@ -137,7 +137,18 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// by index.
       VECTOR_FOREACH_INDEX(i, expr->root.children) {
         Node *node = expr->root.children.data[i];
-        if (node->kind == NODE_FUNCTION_REFERENCE) VECTOR_REMOVE_INDEX(expr->root.children, i);
+        if (node->kind == NODE_FUNCTION_REFERENCE) {
+          VECTOR_REMOVE_INDEX(expr->root.children, i);
+          i--;
+        }
+      }
+
+      /// Add all functions back to the root if they are not
+      /// already there.
+      VECTOR_FOREACH_PTR (Node*, f, ast->functions) {
+        bool found = false;
+        VECTOR_CONTAINS(expr->root.children, f, found);
+        if (!found) VECTOR_PUSH(expr->root.children, f);
       }
       break;
 
