@@ -147,6 +147,7 @@ typedef struct NodeRoot {
 
 /// Named function.
 typedef struct NodeFunction {
+  Nodes param_decls;
   Node *body;
   string name;
   IRFunction *ir;
@@ -289,9 +290,7 @@ struct Node {
   IRInstruction *ir;
 
   /// Various flags.
-  bool type_checked : 1;      /// Whether this node has been type checked.
-  bool is_lvalue : 1;         /// Whether this node is an lvalue.
-  bool is_lvalue_checked : 1; /// Whether we know if this node is an lvalue.
+  bool type_checked : 1; /// Whether this node has been type checked.
 
   /// Node data.
   union {
@@ -372,6 +371,7 @@ Node *ast_make_function(
     AST *ast,
     loc source_location,
     Type *type,
+    Nodes param_decls,
     Node *body,
     span name
 );
@@ -526,13 +526,6 @@ void ast_free(AST *ast);
 
 /// Print an AST.
 void ast_print(FILE *file, const AST *ast);
-
-/// Print a node.
-void ast_print_node(
-  FILE *file,
-  const Node *node,
-  char leading_text[static AST_PRINT_BUFFER_SIZE]
-);
 
 /// Intern a string.
 size_t ast_intern_string(AST *ast, span string);

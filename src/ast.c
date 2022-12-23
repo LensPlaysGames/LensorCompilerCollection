@@ -98,6 +98,7 @@ Node *ast_make_function(
     AST *ast,
     loc source_location,
     Type *type,
+    Nodes param_decls,
     Node *body,
     span name
 ) {
@@ -105,6 +106,8 @@ Node *ast_make_function(
   node->function.name = string_dup(name);
   node->type = type;
   node->function.body = body;
+  node->function.param_decls = param_decls;
+  node->parent = ast->root;
   body->parent = node;
 
   VECTOR_PUSH(ast->functions, node);
@@ -480,43 +483,19 @@ void ast_free(AST *ast) {
   free(ast);
 }
 
-/// Print an AST.
-void ast_print(FILE *file, const AST *ast) {
-  char buffer[AST_PRINT_BUFFER_SIZE] = {0};
-
-  /// Print the root node.
-  ast_print_node(file, ast->root, buffer);
-}
-
-/// Print the children of a node.
+/// Print the children of a node. Has more options.
 static void ast_print_children(
-  FILE *file,
-  const Nodes* nodes,
-  char leading_text[static AST_PRINT_BUFFER_SIZE]
-) {
-  /// Make sure we can append to the leading text.
-  usz len = strlen(leading_text);
-  ASSERT(len + sizeof("│ ") < AST_PRINT_BUFFER_SIZE);
-
-  /// Print the children.
-  VECTOR_FOREACH_PTR (Node*, node, *nodes) {
-    /// Print the indentation and continue any lines from parent nodes.
-    fprintf(file, "\033[31m%s%s", leading_text, node == VECTOR_BACK(*nodes) ? "└─" : "├─");
-
-    /// Update the leading text.
-    strncat(leading_text, node == VECTOR_BACK(*nodes) ? "  " : "│ ", AST_PRINT_BUFFER_SIZE - len);
-
-    /// Print the node.
-    ast_print_node(file, node, leading_text);
-
-    /// Restore the leading text.
-    leading_text[len] = 0;
-  }
-}
+    FILE *file,
+    const Node *logical_grandparent,
+    const Node *logical_parent,
+    const Nodes *nodes,
+    char leading_text[static AST_PRINT_BUFFER_SIZE]
+);
 
 /// Print a node.
-void ast_print_node(
+static void ast_print_node(
   FILE *file,
+  const Node *logical_parent,
   const Node *node,
   char leading_text[static AST_PRINT_BUFFER_SIZE]
 ) {
@@ -525,7 +504,7 @@ void ast_print_node(
 
     case NODE_ROOT: {
       fprintf(file, "\033[31mRoot \033[35m<%d>\n", node->source_location.start);
-      ast_print_children(file, &node->root.children, leading_text);
+      ast_print_children(file, logical_parent, node, &node->root.children, leading_text);
     } break;
 
     case NODE_FUNCTION: {
@@ -538,7 +517,7 @@ void ast_print_node(
       free(type_name.data);
 
       /// Print the body.
-      ast_print_children(file, &(Nodes) {
+      ast_print_children(file, logical_parent, node, &(Nodes) {
         .data = (Node *[]) {node->function.body},
         .size = 1
       }, leading_text);
@@ -555,7 +534,7 @@ void ast_print_node(
 
       /// Print the initialiser if there is one exists.
       if (node->declaration.init) {
-        ast_print_children(file, &(Nodes) {
+        ast_print_children(file, logical_parent, node, &(Nodes) {
           .data = (Node *[]) {node->declaration.init},
           .size = 1
         }, leading_text);
@@ -571,7 +550,7 @@ void ast_print_node(
       free(type_name.data);
 
       /// Print the condition and branches.
-      ast_print_children(file, &(Nodes) {
+      ast_print_children(file, logical_parent, node, &(Nodes) {
         .data = (Node *[]) {node->if_.condition, node->if_.then, node->if_.else_},
         .size = node->if_.else_ ? 3 : 2
       }, leading_text);
@@ -579,7 +558,7 @@ void ast_print_node(
 
     case NODE_WHILE: {
       fprintf(file, "\033[31mWhile \033[35m<%d>\n", node->source_location.start);
-      ast_print_children(file, &(Nodes) {
+      ast_print_children(file, logical_parent, node, &(Nodes) {
         .data = (Node *[]) {node->while_.condition, node->while_.body},
         .size = 2
       }, leading_text);
@@ -590,7 +569,7 @@ void ast_print_node(
       fprintf(file, "\033[31mBlock \033[35m<%d> %.*s\n",
         node->source_location.start,
         (int) type_name.size, type_name.data);
-      ast_print_children(file, &node->block.children, leading_text);
+      ast_print_children(file, logical_parent, node, &node->block.children, leading_text);
       free(type_name.data);
     } break;
 
@@ -604,7 +583,7 @@ void ast_print_node(
       Nodes nodes = {0};
       if (node->call.callee) VECTOR_PUSH(nodes, node->call.callee);
       VECTOR_APPEND_ALL(nodes, node->call.arguments);
-      ast_print_children(file, &nodes, leading_text);
+      ast_print_children(file, logical_parent, node, &nodes, leading_text);
       VECTOR_DELETE(nodes);
     } break;
 
@@ -614,7 +593,7 @@ void ast_print_node(
         node->source_location.start,
         (int) type_name.size, type_name.data);
       free(type_name.data);
-      ast_print_children(file, &(Nodes) {
+      ast_print_children(file, logical_parent, node, &(Nodes) {
         .data = (Node *[]) {node->cast.value},
         .size = 1
       }, leading_text);
@@ -628,7 +607,7 @@ void ast_print_node(
         (int) type_name.size, type_name.data);
       free(type_name.data);
 
-      ast_print_children(file, &(Nodes) {
+      ast_print_children(file, logical_parent, node, &(Nodes) {
         .data = (Node *[]) {node->binary.lhs, node->binary.rhs},
         .size = 2
       }, leading_text);
@@ -642,7 +621,7 @@ void ast_print_node(
         (int) type_name.size, type_name.data);
       free(type_name.data);
 
-      ast_print_children(file, &(Nodes) {
+      ast_print_children(file, logical_parent, node, &(Nodes) {
         .data = (Node *[]) {node->unary.value},
         .size = 1
       }, leading_text);
@@ -678,15 +657,56 @@ void ast_print_node(
     case NODE_FUNCTION_REFERENCE: {
       /// If our parent is the root, print the function instead.
       if (node->parent && node->parent->kind == NODE_ROOT)
-        return ast_print_node(file, node->funcref->node, leading_text);
+        return ast_print_node(file, logical_parent, node->funcref->node, leading_text);
 
       /// Otherwise, print the function reference.
       string type_name = ast_typename(node->type, true);
-      fprintf(file, "\033[31mFunction \033[35m<%d> \033[32m%.*s \033[31m: %.*s\n",
+      fprintf(file, "\033[31mFunction Ref \033[35m<%d> \033[32m%.*s \033[31m: %.*s\n",
         node->source_location.start,
         (int) node->funcref->name.size, node->funcref->name.data,
         (int) type_name.size, type_name.data);
     } break;
+  }
+}
+
+
+/// Print an AST.
+void ast_print(FILE *file, const AST *ast) {
+  char buffer[AST_PRINT_BUFFER_SIZE] = {0};
+
+  /// Print the root node.
+  ast_print_node(file, NULL, ast->root, buffer);
+}
+
+/// Print the children of a node.
+static void ast_print_children(
+    FILE *file,
+    const Node *logical_grandparent,
+    const Node *logical_parent,
+    const Nodes *nodes,
+    char leading_text[static AST_PRINT_BUFFER_SIZE]
+) {
+  /// If the logical parent is merely used here, and not defined,
+  /// then don’t do anything just yet.
+  if (logical_parent->parent != logical_grandparent) return;
+
+  /// Make sure we can append to the leading text.
+  usz len = strlen(leading_text);
+  ASSERT(len + sizeof("│ ") < AST_PRINT_BUFFER_SIZE);
+
+  /// Print the children.
+  VECTOR_FOREACH_PTR (Node*, node, *nodes) {
+    /// Print the indentation and continue any lines from parent nodes.
+    fprintf(file, "\033[31m%s%s", leading_text, node == VECTOR_BACK(*nodes) ? "└─" : "├─");
+
+    /// Update the leading text.
+    strncat(leading_text, node == VECTOR_BACK(*nodes) ? "  " : "│ ", AST_PRINT_BUFFER_SIZE - len);
+
+    /// Print the node.
+    ast_print_node(file, logical_parent, node, leading_text);
+
+    /// Restore the leading text.
+    leading_text[len] = 0;
   }
 }
 

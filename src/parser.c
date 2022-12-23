@@ -566,7 +566,7 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
 ///
 /// This is basically just a wrapper around `parse_block()` that
 /// also injects declarations for all the function parameters.
-static Node *parse_function_body(Parser *p, Type *function_type) {
+static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_decls) {
   /// Save state.
   bool save_in_function = p->in_function;
   p->in_function = true;
@@ -575,26 +575,20 @@ static Node *parse_function_body(Parser *p, Type *function_type) {
   scope_push(p->ast);
 
   /// Create a declaration for each parameter.
-  Nodes body_exprs = {0};
   VECTOR_FOREACH (Parameter , param, function_type->function.parameters) {
     Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
     if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var))
       ERR_AT(var->source_location, "Redefinition of parameter '%.*s'", (int) var->declaration.name.size, var->declaration.name.data);
-    VECTOR_PUSH(body_exprs, var);
+    VECTOR_PUSH(*param_decls, var);
   }
 
-  /// Parse the body.
-  /// TODO: We could also just allow <expression> here.
-  Node *expr = parse_block(p);
-  VECTOR_APPEND_ALL(body_exprs, expr->block.children);
-  VECTOR_CLEAR(expr->block.children);
-
-  /// Pop the scope created for the function body.
+  /// Pop the scope created for the parameters.
   scope_pop(p->ast);
   p->in_function = save_in_function;
 
-  /// Create a block to hold the parameters and the body.
-  return ast_make_block(p->ast, expr->source_location, body_exprs);
+  /// Parse the body.
+  /// TODO: We could also just allow <expression> here.
+  return parse_block(p);
 }
 
 /// Parse an expression that starts with a type.
@@ -606,12 +600,13 @@ static Node *parse_type_expr(Parser *p, Type *type) {
   /// is a lambda expression.
   if (type->kind == TYPE_FUNCTION && p->tok.type == TK_LBRACE) {
     /// Parse the function body.
-    Node *body = parse_function_body(p, type);
+    Nodes params = {0};
+    Node *body = parse_function_body(p, type, &params);
 
     /// Create a function for the lambda.
     char num[64] = {0};
     usz sz = (usz) snprintf(num, sizeof num, "_XLambda_%zu", p->ast->counter++);
-    return ast_make_function(p->ast, type->source_location, type, body, (span){.data = num, .size = sz});
+    return ast_make_function(p->ast, type->source_location, type, params, body, (span){.data = num, .size = sz});
   }
 
   /// Otherwise, this is a cast expression.
@@ -727,10 +722,6 @@ static Type *parse_type(Parser *p) {
 ///                    | <type> [ "=" <expression> ]
 ///                    | <decl-start> EXT <type-function>
 static Node *parse_decl_rest(Parser *p, Token ident) {
-  /// Re-declaring symbols is not allowed.
-  if (scope_find_symbol(curr_scope(p), ident.text, true))
-    ERR("Redeclaration of symbol '%.*s'", (int) ident.text.size, ident.text.data);
-
   /// If the next token is "ext", then this is an external declaration.
   bool is_ext = false;
   if (p->tok.type == TK_EXT) {
@@ -746,13 +737,14 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   /// TODO: are we handling external symbols correctly?
   if (!is_ext && p->tok.type == TK_LBRACE && type->kind == TYPE_FUNCTION) {
     /// Parse the body, create the function, and add it to the symbol table.
-    Node *body = parse_function_body(p, type);
-    Node *func = ast_make_function(p->ast, ident.source_location, type, body, ident.text);
+    Nodes params = {0};
+    Node *body = parse_function_body(p, type, &params);
+    Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
     Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
     if (sym->kind != SYM_FUNCTION || sym->node)
       ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
     sym->node = func;
-    return func;
+    return ast_make_function_reference(p->ast, ident.source_location, sym);
   }
 
   /// Otherwise, this is a variable declaration.
@@ -760,8 +752,26 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   decl->declaration.static_ = !p->in_function;
 
   /// Add the declaration to the current scope.
-  if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl))
+  Symbol *sym = scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
+  if (!sym) {
+    /// If the symbol already exists, then this is an error; the exception
+    /// to this is if the symbol is a forward-declared function and this is
+    /// a declaration of a variable of function type.
+    Type *actual_type = type;
+    while (actual_type->kind == TYPE_NAMED && actual_type->named->type) actual_type = actual_type->named->type;
+    if (actual_type->kind == TYPE_FUNCTION) {
+      sym = scope_find_symbol(curr_scope(p), ident.text, true);
+      if (sym->kind == SYM_FUNCTION && !sym->node) {
+        sym->kind = SYM_VARIABLE;
+        sym->node = decl;
+        goto ok;
+      }
+    }
+
+    /// Otherwise, this is an error.
     ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+  }
+ok:
 
   /// A non-external declaration may have an initialiser.
   /// TODO: Should we just allow this instead?
@@ -818,9 +828,7 @@ static Node *parse_ident_expr(Parser *p) {
 
   /// If the symbol is a variable or function, then we’re done here.
   if (sym->kind == SYM_VARIABLE) return ast_make_variable_reference(p->ast, ident.source_location, sym);
-  if (sym->kind == SYM_FUNCTION) {
-    return sym->node ? sym->node : ast_make_function_reference(p->ast, ident.source_location, sym);
-  }
+  if (sym->kind == SYM_FUNCTION) return ast_make_function_reference(p->ast, ident.source_location, sym);
 
   /// If the symbol is a type, then parse the rest of the type and delegate.
   if (sym->kind == SYM_TYPE) {

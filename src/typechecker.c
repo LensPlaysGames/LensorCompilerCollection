@@ -199,6 +199,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       Node *callee = expr->call.callee;
       if (!resolve_function(ast, callee)) return false;
 
+      /// Set the resolved function as the new callee.
+      expr->call.callee = callee = callee->funcref->node;
+
       /// Typecheck the callee.
       if (!typecheck_expression(ast, callee)) return false;
 

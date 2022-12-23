@@ -373,39 +373,25 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
 /// Emit a function.
 void codegen_function(CodegenContext *ctx, Node *node) {
-  /// Currently, we assume that the body of a function is a block.
-  /// TODO: All of this is messy; perhaps parameter declarations ought to be stored elsewhere?
-  ASSERT(node->function.body->kind == NODE_BLOCK);
-
-  /// The first N nodes in the body of a function, where N is the number
-  /// of parameters, are variable declarations that correspond to the
-  /// parameters. First, emit all of them.
-  size_t i = 0;
-  for (; i < node->type->function.parameters.size; i++) {
-    Node * decl = node->function.body->block.children.data[i];
+  /// First, emit all parameter declarations and store
+  /// the initial parameter values in them.
+  VECTOR_FOREACH_INDEX(i, node->function.param_decls) {
+    /// Allocate a variable for the parameter.
+    Node *decl = node->function.param_decls.data[i];
     codegen_expr(ctx, decl);
+
+    /// Store the parameter value in the variable.
+    IRInstruction *p = ir_parameter(ctx, i);
+    ir_store(ctx, p, decl->ir);
   }
 
-  /// Then, store the initial values of the parameters in those variables.
-  VECTOR_FOREACH_INDEX (j, node->type->function.parameters) {
-    /// Get each parameter value and store in its corresponding local variable.
-    IRInstruction *p = ir_parameter(ctx, j);
-    ir_store(ctx, p, node->function.body->block.children.data[i]->ir);
-  }
+  /// Emit the function body.
+  codegen_expr(ctx, node->function.body);
 
-  /// Emit the rest of the function body.
-  Node *last = NULL;
-  for (; i < node->function.body->block.children.size; i++) {
-    Node *expr = node->function.body->block.children.data[i];
-    if (expr->kind == NODE_FUNCTION) continue;
-    last = expr;
-    codegen_expr(ctx, expr);
-  }
-
-  /// If the last expression doesn’t return anything, return 0.
+  /// If the we can return from here, and this function doesn’t return void,
+  /// then emit a return instruction; otherwise, just return 0 for now.
+  /// TODO: Allow ir_return(ctx, NULL) to be valid.
   if (!ir_is_closed(ctx->block) && node->type->function.return_type != ctx->ast->t_void) {
-    ASSERT(last && last->ir);
-    node->function.body->ir = last->ir;
     ir_return(ctx, node->function.body->ir);
   }
 }
