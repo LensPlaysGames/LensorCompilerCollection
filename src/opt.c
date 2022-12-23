@@ -193,7 +193,7 @@ static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
       return i->operand == tc->call;
     }
 
-    if (i->type == IR_BRANCH) { return tail_call_possible_iter(tc, i->parent_block); }
+    if (i->type == IR_BRANCH) { return tail_call_possible_iter(tc, i->destination_block); }
     if (i->type == IR_BRANCH_CONDITIONAL) {
       return tail_call_possible_iter(tc, i->cond_br.then) &&
              tail_call_possible_iter(tc, i->cond_br.else_);
