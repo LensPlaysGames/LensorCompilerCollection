@@ -2,11 +2,12 @@
 #include <codegen/intermediate_representation.h>
 
 CodegenContext *codegen_context_ir_create(CodegenContext *parent) {
-    CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
-    cg_ctx->format = CG_FMT_IR;
-    cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
-    cg_ctx->dialect = CG_ASM_DIALECT_ATT;
-    return cg_ctx;
+  (void)parent;
+  CodegenContext *cg_ctx = calloc(1, sizeof(CodegenContext));
+  cg_ctx->format = CG_FMT_IR;
+  cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
+  cg_ctx->dialect = CG_ASM_DIALECT_ATT;
+  return cg_ctx;
 }
 
 void codegen_context_ir_free(CodegenContext *ctx) {
@@ -32,184 +33,83 @@ void codegen_emit_ir_backend(CodegenContext *context) {
         if (instruction->type == IR_PARAMETER) continue;
 
         fprintf(context->code, "    ");
-        STATIC_ASSERT(IR_COUNT == 31, "Handle all IR instructions");
+        STATIC_ASSERT(IR_COUNT == 32, "Handle all IR instructions");
 
-        if (instruction->id) fprintf(context->code, "%%%zu = ", instruction->id);
+        if (instruction->id) fprintf(context->code, "%%%u = ", instruction->id);
         switch (instruction->type) {
           case IR_IMMEDIATE:
-            fprintf(context->code, "imm %"PRId64,instruction->value.immediate);
-            break;
-          case IR_CALL:
-            if (instruction->value.call.tail_call) { fprintf(context->code, "tail "); }
-            switch (instruction->value.call.type) {
-              case IR_CALLTYPE_DIRECT:
-                fprintf(context->code, "call %s", instruction->value.call.value.function->name.data);
-                break;
-              case IR_CALLTYPE_INDIRECT:
-                fprintf(context->code, "call %%%zu", instruction->value.call.value.callee->id);
-                break;
-              default:
-                TODO("Handle %d IRCallType.", instruction->value.call.type);
-                break;
-            }
-            fputc('(', context->code);
-            IRCallArgument *argument = instruction->value.call.arguments;
-            if (argument) {
-              fprintf(context->code, "%%%zu", argument->value->id);
-              argument = argument->next;
-            }
-            for (; argument; argument = argument->next) {
-              fprintf(context->code, ", %%%zu", argument->value->id);
-            }
-            fputc(')', context->code);
-            break;
-          case IR_RETURN:
-            fprintf(context->code, "ret %%%zu", instruction->value.reference->id);
-            break;
-          case IR_ADD:
-            fprintf(context->code, "add %%%zu, %%%zu",
-                instruction->value.pair.car->id,
-                instruction->value.pair.cdr->id);
-            break;
-          case IR_MULTIPLY:
-            fprintf(context->code, "mul %%%zu, %%%zu",
-                instruction->value.pair.car->id,
-                instruction->value.pair.cdr->id);
-            break;
-          case IR_DIVIDE:
-            fprintf(context->code, "div %%%zu, %%%zu",
-                instruction->value.pair.car->id,
-                instruction->value.pair.cdr->id);
-            break;
-          case IR_MODULO:
-            fprintf(context->code, "mod %%%zu, %%%zu",
-                instruction->value.pair.car->id,
-                instruction->value.pair.cdr->id);
-            break;
-          case IR_SHIFT_LEFT:
-            fprintf(context->code, "shl %%%zu, %%%zu",
-                instruction->value.pair.car->id,
-                instruction->value.pair.cdr->id);
-            break;
-          case IR_SHIFT_RIGHT_ARITHMETIC:
-            fprintf(context->code, "sar %%%zu, %%%zu",
-                instruction->value.pair.car->id,
-                instruction->value.pair.cdr->id);
-            break;
-          case IR_AND:
-            fprintf(context->code, "and %%%zu, %%%zu",
-                instruction->value.pair.car->id,
-                instruction->value.pair.cdr->id);
-            break;
-          case IR_OR:
-            fprintf(context->code, "or %%%zu, %%%zu",
-                instruction->value.pair.car->id,
-                instruction->value.pair.cdr->id);
+            fprintf(context->code, "imm %"PRId64,instruction->imm);
             break;
 
-          case IR_SUBTRACT:
-            fprintf(context->code, "sub %%%zu, %%%zu",
-                instruction->value.pair.car->id,
-                instruction->value.pair.cdr->id);
+          case IR_CALL: {
+            if (instruction->call.tail_call) { fprintf(context->code, "tail "); }
+            if (instruction->call.is_indirect) fprintf(context->code, "call %%%u", instruction->call.callee_instruction->id);
+            else fprintf(context->code, "call %s", instruction->call.callee_function->name.data);
+
+            fputc('(', context->code);
+            bool first = true;
+            VECTOR_FOREACH_PTR (IRInstruction*, arg, instruction->call.arguments) {
+              if (!first) fprintf(context->code, ", ");
+              else first = false;
+              fprintf(context->code, "%%%u", arg->id);
+            }
+            fputc(')', context->code);
+          } break;
+
+          case IR_RETURN:
+            fprintf(context->code, "ret %%%u", instruction->operand->id);
             break;
-          case IR_GLOBAL_LOAD:
-            fprintf(context->code, "load %s", instruction->value.name);
-            break;
-          case IR_GLOBAL_STORE:
-            fprintf(context->code, "store %%%zu, %s",
-                instruction->value.global_assignment.new_value->id,
-                instruction->value.global_assignment.name);
-            break;
-          case IR_GLOBAL_ADDRESS:
-            fprintf(context->code, ".addr %s", instruction->value.name);
-            break;
+#define PRINT_BINARY_INSTRUCTION(enumerator, name) \
+  case IR_##enumerator: fprintf(context->code, #name " %%%u, %%%u", instruction->lhs->id, instruction->rhs->id); break;
+          ALL_BINARY_INSTRUCTION_TYPES(PRINT_BINARY_INSTRUCTION)
+#undef PRINT_BINARY_INSTRUCTION
+
           case IR_COPY:
-            fprintf(context->code, "copy %%%zu", instruction->value.reference->id);
+            fprintf(context->code, "copy %%%u", instruction->operand->id);
             break;
           case IR_NOT:
-            fprintf(context->code, "not %%%zu", instruction->value.reference->id);
-            break;
-          case IR_LOCAL_LOAD:
-            fprintf(context->code, "load %%%zu", instruction->value.reference->id);
-            break;
-          case IR_LOCAL_STORE:
-            fprintf(context->code, "store %%%zu, %%%zu",
-                instruction->value.pair.car->id,
-                instruction->value.pair.cdr->id);
-            break;
-          case IR_LOCAL_ADDRESS:
-            fprintf(context->code, ".addr %%%zu", instruction->value.reference->id);
+            fprintf(context->code, "not %%%u", instruction->operand->id);
             break;
           case IR_PARAMETER: UNREACHABLE();
-          case IR_COMPARISON:
-            switch (instruction->value.comparison.type) {
-              case COMPARE_EQ:
-                fprintf(context->code, "eq");
-                break;
-              case COMPARE_GE:
-                fprintf(context->code, "ge");
-                break;
-              case COMPARE_LE:
-                fprintf(context->code, "le");
-                break;
-              case COMPARE_GT:
-                fprintf(context->code, "gt");
-                break;
-              case COMPARE_LT:
-                fprintf(context->code, "lt");
-                break;
-              case COMPARE_NE:
-                fprintf(context->code, "ne");
-                break;
-              default:
-                PANIC("Unhandled comparison type: %d", instruction->value.comparison.type);
-                break;
-            }
-            fprintf(context->code, " %%%zu, %%%zu",
-                instruction->value.comparison.pair.car->id,
-                instruction->value.comparison.pair.cdr->id);
-            break;
           case IR_BRANCH:
-            fprintf(context->code, "br bb%zu", instruction->value.block->id);
+            fprintf(context->code, "br bb%zu", instruction->destination_block->id);
             break;
           case IR_BRANCH_CONDITIONAL:
-            fprintf(context->code, "br.cond %%%zu, bb%zu, bb%zu",
-                instruction->value.conditional_branch.condition->id,
-                instruction->value.conditional_branch.true_branch->id,
-                instruction->value.conditional_branch.false_branch->id);
+            fprintf(context->code, "br.cond %%%u, bb%zu, bb%zu",
+                instruction->cond_br.condition->id,
+                instruction->cond_br.then->id,
+                instruction->cond_br.else_->id);
             break;
           case IR_PHI: {
             fprintf(context->code, "phi ");
             bool first = true;
-            VECTOR_FOREACH_PTR (IRPhiArgument*, arg, instruction->value.phi_arguments) {
+            VECTOR_FOREACH_PTR (IRPhiArgument*, arg, instruction->phi_args) {
               if (first) { first = false; }
               else { fprintf(context->code, ", "); }
-              fprintf(context->code, "[bb%zu : %%%zu]",
+              fprintf(context->code, "[bb%zu : %%%u]",
                   arg->block->id,
                   arg->value->id);
             }
           } break;
           case IR_LOAD:
-            fprintf(context->code, "load %%%zu", instruction->value.reference->id);
+            fprintf(context->code, "load %%%u", instruction->operand->id);
             break;
           case IR_STORE:
-            fprintf(context->code, "store %%%zu, %%%zu",
-                instruction->value.pair.cdr->id,
-                instruction->value.pair.car->id);
+            fprintf(context->code, "store %%%u, %%%u",
+                instruction->lhs->id,
+                instruction->rhs->id);
             break;
           case IR_REGISTER:
             fprintf(context->code, "register r%d", instruction->result);
             break;
-          case IR_STACK_ALLOCATE:
-            fprintf(context->code, "alloca %"PRId64, instruction->value.immediate);
+          case IR_ALLOCA:
+            fprintf(context->code, "alloca %"PRId64, instruction->imm);
             break;
-          /// No-op
           case IR_UNREACHABLE:
             fprintf(context->code, "unreachable");
             break;
           default:
             TODO("Handle IRType %d\n", instruction->type);
-            break;
         }
         fprintf(context->code, "\n");
       }
