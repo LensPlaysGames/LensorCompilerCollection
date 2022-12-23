@@ -752,7 +752,7 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     if (sym->kind != SYM_FUNCTION || sym->node)
       ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
     sym->node = func;
-    return ast_make_function_reference(p->ast, ident.source_location, sym);
+    return func;
   }
 
   /// Otherwise, this is a variable declaration.
@@ -818,7 +818,9 @@ static Node *parse_ident_expr(Parser *p) {
 
   /// If the symbol is a variable or function, then we’re done here.
   if (sym->kind == SYM_VARIABLE) return ast_make_variable_reference(p->ast, ident.source_location, sym);
-  if (sym->kind == SYM_FUNCTION) return ast_make_function_reference(p->ast, ident.source_location, sym);
+  if (sym->kind == SYM_FUNCTION) {
+    return sym->node ? sym->node : ast_make_function_reference(p->ast, ident.source_location, sym);
+  }
 
   /// If the symbol is a type, then parse the rest of the type and delegate.
   if (sym->kind == SYM_TYPE) {

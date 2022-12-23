@@ -88,8 +88,10 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   switch (expr->kind) {
   default: ICE("Unrecognized expression kind: %d", expr->kind);
 
-  /// A function returns its address. This has already been taken care of.
-  case NODE_FUNCTION: break;
+  /// A function node yields its address.
+  case NODE_FUNCTION:
+      expr->ir = ir_funcref(ctx, expr->funcref->node->function.ir);
+      return;
 
   /// Root node.
   case NODE_ROOT: {
@@ -365,8 +367,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Function reference.
   case NODE_FUNCTION_REFERENCE:
-    expr->ir = expr->funcref->node->function.ir->funcref;
-    return;
+    ICE("Function reference in codegen should have been converted to function during sema.");
   }
 }
 
@@ -467,17 +468,16 @@ bool codegen
     /// Codegen a FUN program.
     case LANG_FUN: {
       /// Create the main function.
-      IRFunction *main = ir_function(context, literal_span("main"), 2);
-      main->funcref = ir_funcref(context, main);
+      context->entry = ir_function(context, literal_span("main"), 2);
 
       /// Create the remaining functions and set the address of each function.
       VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
           func->function.ir = ir_function(context, as_span(func->function.name),
             func->type->function.parameters.size);
-          func->function.ir->funcref = ir_funcref(context, func->function.ir);
       }
 
       /// Emit the main function.
+      context->block = context->entry->blocks.first;
       codegen_expr(context, ast->root);
 
       /// Emit the remaining functions.

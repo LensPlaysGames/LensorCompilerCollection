@@ -51,6 +51,7 @@ struct CodegenContext {
   VECTOR(IRFunction *) *functions;
   VECTOR(IRStaticVariable *) static_vars;
   IRFunction *function;
+  IRFunction *entry;
   IRBlock *block;
 
   RegisterPool register_pool;

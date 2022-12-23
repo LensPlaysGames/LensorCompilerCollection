@@ -186,9 +186,6 @@ typedef struct IRFunction {
 
   VECTOR(IRInstruction*) parameters;
 
-  /// Reference to the function
-  IRInstruction *funcref;
-
   /// Pointer to the context that owns this function.
   CodegenContext *context;
 

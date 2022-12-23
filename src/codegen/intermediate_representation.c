@@ -53,7 +53,9 @@ void set_pair_and_mark
 void ir_insert_into_block(IRBlock *block, IRInstruction *instruction) {
   IRInstruction *branch = block->instructions.last;
   if (branch && ir_is_branch(branch)) {
-    PANIC("Cannot insert into closed block. Use ir_force_insert_into_block() instead if that was intended.");
+    ir_set_ids(block->function->context);
+    ir_femit(stdout, block->function->context);
+    ICE("Cannot insert into closed block. Use ir_force_insert_into_block() instead if that was intended.");
   }
   ir_force_insert_into_block(block, instruction);
 }
