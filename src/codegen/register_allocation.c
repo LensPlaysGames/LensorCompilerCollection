@@ -12,7 +12,7 @@
 //#define DEBUG_RA
 
 #ifdef DEBUG_RA
-#  define IR_FEMIT(file, context) ir_femit(file, context)
+#  define IR_FEMIT(file, f) ir_femit_function(file, f)
 #  define DEBUG(...)              fprintf(stdout, __VA_ARGS__)
 CodegenContext *debug_context = NULL;
 #else
@@ -219,10 +219,10 @@ typedef struct AdjacencyMatrix {
 
 char *adjm_entry(AdjacencyMatrix m, usz x, usz y) {
   if (x > m.size) {
-    PANIC("Can not access adjacency matrix because X is out of bounds.");
+    ICE("Can not access adjacency matrix because X is out of bounds.");
   }
   if (y > m.size) {
-    PANIC("Can not access adjacency matrix because Y is out of bounds.");
+    ICE("Can not access adjacency matrix because Y is out of bounds.");
   }
   // Coordinate translation for lower left triangle matrix
   if (y > x) {
@@ -288,10 +288,11 @@ static void collect_interferences_for_node(DomTreeNode *leaf, IRInstructions *li
   for (IRInstruction *inst = b->instructions.last; inst; inst = inst->prev) {
     /// Make this value interfere with all values that are live at this point.
     VECTOR_FOREACH_PTR (IRInstruction *, live_val, *live_vals)
-      adjm_set(G->matrix, inst->index, live_val->index);
+      if (needs_register(inst))
+        adjm_set(G->matrix, inst->index, live_val->index);
 
     /// Remove its result from the set of live variables;
-    VECTOR_REMOVE_ELEMENT_UNORDERED(*live_vals, inst);
+    if (needs_register(inst)) VECTOR_REMOVE_ELEMENT_UNORDERED(*live_vals, inst);
 
     /// Add its operands to the set of live variables.
     ir_for_each_child(inst, collect_interferences, live_vals);
@@ -790,6 +791,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
   ir_set_func_ids(f);
 
 #ifdef DEBUG_RA
+  fprintf(stdout, "======================= RA =======================\n");
   debug_context = f->context;
   ir_femit_function(stdout, f);
 #endif
@@ -799,7 +801,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
 
   DEBUG("After PHI2COPY\n");
   ir_set_func_ids(f);
-  IR_FEMIT(stdout, f->context);
+  IR_FEMIT(stdout, f);
 
   function_call_arguments(f, desc);
   function_return_values(f, desc);
@@ -810,7 +812,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
 
   DEBUG("MTX\n");
   ir_set_func_ids(f);
-  IR_FEMIT(stdout, f->context);
+  IR_FEMIT(stdout, f);
 
   AdjacencyGraph G = {0};
   G.order = desc->register_count;
@@ -824,13 +826,13 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
 
   DEBUG("Before Coalescing\n");
   ir_set_func_ids(f);
-  IR_FEMIT(stdout, f->context);
+  IR_FEMIT(stdout, f);
 
   coalesce(f, desc, &instructions, &G);
 
   DEBUG("After Coalescing\n");
   ir_set_func_ids(f);
-  IR_FEMIT(stdout, f->context);
+  IR_FEMIT(stdout, f);
 
   instructions = collect_instructions(f, 1);
   build_adjacency_graph(f, desc, &instructions, &G);
@@ -839,7 +841,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
   ir_set_func_ids(f);
   DEBUG("After Rebuild\n");
   ir_set_func_ids(f);
-  IR_FEMIT(stdout, f->context);
+  IR_FEMIT(stdout, f);
   PRINT_ADJACENCY_MATRIX(G.matrix);
   PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
 
@@ -847,7 +849,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
 
   DEBUG("After build color stack\n");
   ir_set_func_ids(f);
-  IR_FEMIT(stdout, f->context);
+  IR_FEMIT(stdout, f);
   PRINT_ADJACENCY_MATRIX(G.matrix);
   PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
   PRINT_NUMBER_STACK(stack);
@@ -856,7 +858,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
 
   DEBUG("After coloring\n");
   ir_set_func_ids(f);
-  IR_FEMIT(stdout, f->context);
+  IR_FEMIT(stdout, f);
   PRINT_ADJACENCY_MATRIX(G.matrix);
   PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
   PRINT_INSTRUCTION_LIST(&instructions);
