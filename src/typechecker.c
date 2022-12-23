@@ -110,7 +110,7 @@ NODISCARD static bool is_lvalue(Node *expr) {
 NODISCARD static bool resolve_function(AST *ast, Node *func) {
   if (func->kind == NODE_FUNCTION_REFERENCE && !func->funcref->node) {
     Symbol *sym = scope_find_symbol(func->funcref->scope, as_span(func->funcref->name), false);
-    if (!sym || !sym->node) ERR(func->source_location, "No such function \"%.*s\".",
+    if (!sym || !sym->node) ERR(func->source_location, "Unknown symbol \"%.*s\".",
       (int) func->funcref->name.size, func->funcref->name.data);
     func->funcref->node = sym->node;
   }
@@ -406,7 +406,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Resolve the function reference and typecheck the function.
     case NODE_FUNCTION_REFERENCE:
-      if (!resolve_function(ast, expr->funcref->node)) return false;
+      if (!resolve_function(ast, expr)) return false;
       if (!typecheck_expression(ast, expr->funcref->node)) return false;
       expr->type = expr->funcref->node->type;
       break;

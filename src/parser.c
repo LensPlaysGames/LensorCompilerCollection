@@ -396,7 +396,7 @@ done:
 ///  Parser helpers.
 /// ===========================================================================
 /// Get the current scope.
-static Scope *curr_scope(Parser *p) { return p->ast->scopes.data[0]; }
+static Scope *curr_scope(Parser *p) { return VECTOR_BACK(p->ast->scope_stack); }
 
 /// Consume a token; error if it's not the expected type.
 static void consume(Parser *p, enum TokenType tt) {
@@ -490,14 +490,20 @@ static Type *parse_type(Parser *p);
 static Node *parse_expr(Parser *p) { return parse_expr_with_precedence(p, 0); }
 
 /// <expr-block>     ::= "{" { <expression> } "}"
-static Node *parse_block(Parser *p) {
+static Node *parse_block(Parser *p, bool create_new_scope) {
   loc pos = p->tok.source_location;
   consume(p, TK_LBRACE);
+
+  /// Create a new scope.
+  if (create_new_scope) scope_push(p->ast);
 
   /// Collect the children.
   Nodes children = {0};
   while (p->tok.type != TK_RBRACE) VECTOR_PUSH(children, parse_expr(p));
   consume(p, TK_RBRACE);
+
+  /// Pop the scope.
+  if (create_new_scope) scope_pop(p->ast);
 
   /// Create the node.
   return ast_make_block(p->ast, pos, children);
@@ -513,13 +519,13 @@ static Node *parse_if_expr(Parser *p) {
   Node *cond = parse_expr(p);
 
   /// Parse the "then" block.
-  Node *then_block = parse_block(p);
+  Node *then_block = parse_block(p, true);
 
   /// Parse the "else" block if there is one.
   Node *else_block = NULL;
   if (p->tok.type == TK_ELSE) {
     next_token(p);
-    else_block = parse_block(p);
+    else_block = parse_block(p, true);
   }
 
   /// Done.
@@ -536,7 +542,7 @@ static Node *parse_while_expr(Parser *p) {
   Node *cond = parse_expr(p);
 
   /// Parse the body.
-  Node *body = parse_block(p);
+  Node *body = parse_block(p, true);
 
   /// Done.
   return ast_make_while(p->ast, while_loc, cond, body);
@@ -571,7 +577,7 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
   bool save_in_function = p->in_function;
   p->in_function = true;
 
-  /// Push a new scope and add the parameters to it.
+  /// Push a new scope for the body and parameters.
   scope_push(p->ast);
 
   /// Create a declaration for each parameter.
@@ -582,13 +588,16 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
     VECTOR_PUSH(*param_decls, var);
   }
 
-  /// Pop the scope created for the parameters.
+  /// Parse the body.
+  /// TODO: We could also just allow <expression> here.
+  Node *block = parse_block(p, false);
+
+  /// Pop the scope.
   scope_pop(p->ast);
   p->in_function = save_in_function;
 
-  /// Parse the body.
-  /// TODO: We could also just allow <expression> here.
-  return parse_block(p);
+  /// Done.
+  return block;
 }
 
 /// Parse an expression that starts with a type.
@@ -873,7 +882,7 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
     case TK_IF: lhs = parse_if_expr(p); break;
     case TK_ELSE: ERR("'else' without 'if'");
     case TK_WHILE: lhs = parse_while_expr(p); break;
-    case TK_LBRACE: lhs = parse_block(p); break;
+    case TK_LBRACE: lhs = parse_block(p, true); break;
     case TK_NUMBER:
       lhs = ast_make_integer_literal(p->ast, p->tok.source_location, p->tok.integer);
       next_token(p);

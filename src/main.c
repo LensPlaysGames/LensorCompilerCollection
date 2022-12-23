@@ -34,6 +34,7 @@ void print_usage(char **argv) {
          "   `--debug-ir`      :: Dump IR to stdout (in debug format).\n"
          "   `--print-ast      :: Print the AST and exit.\n"
          "   `--syntax-only    :: Perform no semantic analysis.\n"
+         "   `--print-scopes   :: Print the scope tree and exit.\n"
          "   `-O`, `--optimize`:: Optimize the generated code.\n"
          "   `-v`, `--verbose` :: Print out more information.\n");
   printf("Options:\n"
@@ -56,6 +57,7 @@ int optimise = 0;
 bool debug_ir = false;
 bool print_ast = false;
 bool syntax_only = false;
+bool print_scopes = false;
 
 void print_acceptable_formats() {
   printf("Acceptable formats include:\n"
@@ -102,6 +104,8 @@ int handle_command_line_arguments(int argc, char **argv) {
       debug_ir = true;
     } else if (strcmp(argument, "--print-ast") == 0) {
       print_ast = true;
+    } else if (strcmp(argument, "--print-scopes") == 0) {
+      print_scopes = true;
     } else if (strcmp(argument, "--syntax-only") == 0) {
       syntax_only = true;
     } else if (strcmp(argument, "-O") == 0
@@ -252,7 +256,6 @@ int main(int argc, char **argv) {
   /// The input is an IR file.
   if (len >= 3 && memcmp(infile + len - 3, ".ir", 3) == 0) {
     ASSERT(s.data);
-/*
 
     if (!codegen(
       LANG_IR,
@@ -266,7 +269,6 @@ int main(int argc, char **argv) {
      )) {
       exit(1);
      }
-*/
 
     free(s.data);
   }
@@ -280,6 +282,7 @@ int main(int argc, char **argv) {
     /// Print if requested.
     if (syntax_only) {
       if (print_ast) ast_print(stdout, ast);
+      if (print_scopes) ast_print_scope_tree(stdout, ast);
       goto done;
     }
 
@@ -288,8 +291,9 @@ int main(int argc, char **argv) {
     if (!ok) exit(2);
 
     /// Print if requested.
-    if (print_ast) {
-      ast_print(stdout, ast);
+    if (print_ast || print_scopes) {
+      if (print_ast) ast_print(stdout, ast);
+      if (print_scopes) ast_print_scope_tree(stdout, ast);
       goto done;
     }
 

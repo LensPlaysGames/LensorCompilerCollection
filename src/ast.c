@@ -23,14 +23,15 @@ static void scope_delete(Scope *scope) {
 }
 
 void scope_push(AST *ast) {
-  ASSERT(ast->scopes.size, "AST must have a global scope.");
-  Scope *scope = scope_create(VECTOR_BACK(ast->scopes));
-  VECTOR_PUSH(ast->scopes, scope);
+  ASSERT(ast->scope_stack.size, "AST must have a global scope.");
+  Scope *scope = scope_create(VECTOR_BACK(ast->scope_stack));
+  VECTOR_PUSH(ast->scope_stack, scope);
+  VECTOR_PUSH(ast->_scopes_, scope);
 }
 
 void scope_pop(AST *ast) {
-  ASSERT(ast->scopes.size > 1, "Cannot pop the global scope.");
-  (void) VECTOR_POP(ast->scopes);
+  ASSERT(ast->scope_stack.size > 1, "Cannot pop the global scope.");
+  (void) VECTOR_POP(ast->scope_stack);
 }
 
 Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, void *value) {
@@ -439,7 +440,8 @@ AST *ast_create() {
   ast->root = mknode(ast, NODE_ROOT, (loc){0, 0});
 
   /// Create the global scope.
-  VECTOR_PUSH(ast->scopes, scope_create(NULL));
+  VECTOR_PUSH(ast->scope_stack, scope_create(NULL));
+  VECTOR_PUSH(ast->_scopes_, VECTOR_BACK(ast->scope_stack));
 
   /// Initialise the builtin types.
   uint8_t primitive_type_id = 0;
@@ -455,7 +457,7 @@ AST *ast_create() {
   ast->t_void = mktype(ast, TYPE_NAMED, (loc){0, 0});
 
   /// Add the builtin types to the global scope.
-  scope_add_symbol(ast->scopes.data[0], SYM_TYPE, literal_span("integer"), ast->t_integer);
+  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("integer"), ast->t_integer);
 
   /// Done.
   return ast;
@@ -468,8 +470,8 @@ void ast_free(AST *ast) {
   VECTOR_DELETE(ast->_nodes_);
 
   /// Free all scopes.
-  VECTOR_FOREACH_PTR (Scope *, scope, ast->scopes) scope_delete(scope);
-  VECTOR_DELETE(ast->scopes);
+  VECTOR_FOREACH_PTR (Scope *, scope, ast->_scopes_) scope_delete(scope);
+  VECTOR_DELETE(ast->_scopes_);
 
   /// Free all interned strings.
   VECTOR_FOREACH (string, s, ast->strings) free(s->data);
@@ -669,6 +671,110 @@ static void ast_print_node(
   }
 }
 
+/// Scope tree for printing scopes.
+typedef struct scope_tree_node {
+  const Scope *scope;
+  VECTOR (struct scope_tree_node*) children;
+} scope_tree_node;
+
+/// Print a scope and the symbols it contains.
+static void print_scope(FILE *file, scope_tree_node *node, char buffer[static AST_PRINT_BUFFER_SIZE]) {
+    fprintf(file, "\033[31mScope\n");
+    const Scope *s = node->scope;
+
+    /// Print all symbols in this scope.
+    VECTOR_FOREACH_PTR (Symbol*, sym, s->symbols) {
+        /// Print the leading text.
+        bool last_child = sym_ptr == s->symbols.data + s->symbols.size - 1 && !node->children.size;
+        fprintf(file, "\033[31m%s%s", buffer, last_child ? "└─" : "├─");
+
+        /// Print symbol.
+        switch (sym->kind) {
+            case SYM_TYPE:
+                fprintf(file, "Type: \033[36m%.*s\033[31m -> ", (int) sym->name.size, sym->name.data);
+                if (sym->type) {
+                    string type_name = ast_typename(sym->type, true);
+                    fprintf(file, "%.*s", (int) type_name.size, type_name.data);
+                    free(type_name.data);
+                } else {
+                    fprintf(file, "\033[m???");
+                }
+                break;
+
+            case SYM_VARIABLE:
+                fprintf(file, "Variable: \033[m%.*s\033[31m : ", (int) sym->name.size, sym->name.data);
+                if (sym->node->type) {
+                    string type_name = ast_typename(sym->node->type, true);
+                    fprintf(file, "%.*s", (int) type_name.size, type_name.data);
+                    free(type_name.data);
+                } else {
+                    fprintf(file, "\033[m???");
+                }
+                break;
+
+            case SYM_FUNCTION:
+                fprintf(file, "Function \033[32m%.*s\033[31m : ", (int) sym->name.size, sym->name.data);
+                if (sym->node->type) {
+                    string type_name = ast_typename(sym->node->type, true);
+                    fprintf(file, "%.*s", (int) type_name.size, type_name.data);
+                    free(type_name.data);
+                } else {
+                    fprintf(file, "\033[m???");
+                }
+                break;
+            default: UNREACHABLE();
+        }
+
+        /// Line break.
+        fprintf(file, "\n");
+    }
+
+    /// Next, print all child scopes.
+    VECTOR_FOREACH_PTR (scope_tree_node *, child, node->children) {
+        /// Print the leading text.
+        bool last_child = child_ptr == node->children.data + node->children.size - 1;
+        fprintf(file, "\033[31m%s%s", buffer, last_child ? "└─" : "├─");
+
+        /// Append the leading text for the next scope.
+        usz sz = strlen(last_child ? "  " : "│ ");
+        strncat(buffer, last_child ? "  " : "│ ", AST_PRINT_BUFFER_SIZE - strlen(buffer) - 1);
+
+        /// Print the scope.
+        print_scope(file, child, buffer);
+
+        /// Remove the leading text for the next scope.
+        buffer[strlen(buffer) - sz] = 0;
+    }
+}
+
+/// Print the scope tree of an AST.
+void ast_print_scope_tree(FILE *file, const AST *ast) {
+    /// First, we need to build the scope tree.
+    VECTOR(scope_tree_node) scope_tree = {0};
+
+    /// Create a node for each scope.
+    VECTOR_FOREACH_PTR (Scope*, sc, ast->_scopes_) {
+        scope_tree_node node = {0};
+        node.scope = sc;
+        VECTOR_PUSH(scope_tree, node);
+    }
+
+    /// Now, we need to build the tree.
+    VECTOR_FOREACH (scope_tree_node, node, scope_tree) {
+        /// If this scope has a parent, add it to the parent's children.
+        if (node->scope->parent) {
+            scope_tree_node *n;
+            VECTOR_FIND_IF(scope_tree, n, i, scope_tree.data[i].scope == node->scope->parent);
+            ASSERT(n);
+            VECTOR_PUSH(n->children, node);
+        }
+    }
+
+    /// Now, we can print the tree.
+    char buffer[AST_PRINT_BUFFER_SIZE] = {0};
+    print_scope(file, scope_tree.data, buffer);
+    VECTOR_DELETE(scope_tree);
+}
 
 /// Print an AST.
 void ast_print(FILE *file, const AST *ast) {

@@ -321,9 +321,10 @@ typedef struct AST {
   string filename;
   string source;
 
-  /// All nodes/types in the AST. NEVER iterate over this, ever.
+  /// All nodes/types/scopes in the AST. NEVER iterate over this, ever.
   Nodes _nodes_;
   Types _types_;
+  VECTOR(Scope *) _scopes_;
 
   /// Counter used for generating unique names.
   usz counter;
@@ -332,8 +333,8 @@ typedef struct AST {
   Type *t_void;
   Type *t_integer;
 
-  /// Scopes.
-  VECTOR(Scope *) scopes;
+  /// Scopes that are currently being parsed.
+  VECTOR(Scope *) scope_stack;
 
   /// String table.
   VECTOR(string) strings;
@@ -526,6 +527,9 @@ void ast_free(AST *ast);
 
 /// Print an AST.
 void ast_print(FILE *file, const AST *ast);
+
+/// Print the scope tree of an AST.
+void ast_print_scope_tree(FILE *file, const AST *ast);
 
 /// Intern a string.
 size_t ast_intern_string(AST *ast, span string);
