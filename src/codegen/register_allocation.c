@@ -154,8 +154,15 @@ bool needs_register(IRInstruction *instruction) {
     case IR_REGISTER:
     ALL_BINARY_INSTRUCTION_CASES()
       return true;
+
     case IR_PARAMETER:
       PANIC("Unlowered parameter instruction in register allocator");
+
+    /// Allocas and static refs need a register iff they are actually used.
+    case IR_ALLOCA:
+    case IR_STATIC_REF:
+      return instruction->users.size;
+
     default:
       return false;
   }

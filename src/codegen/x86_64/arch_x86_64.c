@@ -1136,7 +1136,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   case IR_ALLOCA:
     femit(context, I_LEA, MEMORY_TO_REGISTER,
           REG_RBP,
-          (int64_t)-inst->operand->alloca.offset, inst->result);
+          (int64_t)-inst->alloca.offset, inst->result);
     break;
 
   default:
@@ -1148,7 +1148,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
 void emit_block(CodegenContext *context, IRBlock *block) {
   /// Emit block label if it is used.
-  if (!block->name.size) {
+  if (block->name.size) {
     fprintf(context->code,
             "%s:\n",
             block->name.data);
@@ -1411,8 +1411,8 @@ void codegen_emit_x86_64(CodegenContext *context) {
   if (debug_ir) ir_femit(stdout, context);
 
   // Assign block labels.
+  usz block_cnt = 0;
   VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
-    usz block_cnt = 0;
     DLIST_FOREACH (IRBlock *, block, function->blocks) {
       if (optimise) {
         /// Determine whether this block is ever referenced anywhere.
@@ -1452,11 +1452,11 @@ void codegen_emit_x86_64(CodegenContext *context) {
           block->name = string_dup(unreferenced_block_name);
           continue;
         }
-
-        char number[64];
-        usz sz = (usz) snprintf(number, 32, ".L%" PRIu64, block_cnt++);
-        block->name = string_dup_impl(number, sz);
       }
+
+      char number[64];
+      usz sz = (usz) snprintf(number, 32, ".L%" PRIu64, block_cnt++);
+      block->name = string_dup_impl(number, sz);
     }
   }
 
