@@ -21,7 +21,8 @@ void ice_signal_handler(int signal, siginfo_t *info, void* unused) {
     default: ICE_SIGNAL("UNREACHABLE");
   }
 }
-
+#else
+#include <Windows.h>
 #endif
 
 void print_usage(char **argv) {
@@ -232,7 +233,21 @@ int main(int argc, char **argv) {
     if (sigaction(SIGABRT, &sa, NULL)) ICE("Failed to install SIGABRT handler");
     if (sigaction(SIGILL, &sa, NULL)) ICE("Failed to install SIGILL handler");
   }
+#else
+# if defined (ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+  {
+    /// Enable console colours explicitly in case the user is using CMD for some reason.
+    DWORD omode, emode;
+    HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
+    HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
+    GetConsoleMode(out, &omode);
+    GetConsoleMode(err, &emode);
+    SetConsoleMode(out, omode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    SetConsoleMode(err, emode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+  }
+# endif
 #endif
+
 
   if (argc < 2) {
     print_usage(argv);
