@@ -7,15 +7,16 @@
 #include <stdbool.h>
 #include <math.h>
 
-/// For isatty().
 #ifndef _WIN32
 #    include <unistd.h>
 #    include <execinfo.h>
+#    define PATH_SEPARATOR "/"
 #else
 #    include <Windows.h>
 #    include <dbghelp.h>
 #    include <io.h>
 #    define isatty _isatty
+#    define PATH_SEPARATOR "\\"
 #endif
 
 static const char *diagnostic_level_names[DIAG_COUNT] = {
@@ -34,6 +35,20 @@ static const char *diagnostic_level_colours[DIAG_COUNT] = {
     "\033[1;31m",
 };
 
+/// This just calls vissue_diagnostic().
+void issue_diagnostic(
+    enum diagnostic_level level,
+    const char *filename,
+    span source,
+    loc location,
+    const char *fmt,
+    ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vissue_diagnostic(level, filename, source, location, fmt, ap);
+  va_end(ap);
+}
+
 /// Issue a compiler diagnostic.
 ///
 /// WARNING: ALTER THIS FUNCTION AT YOUR OWN PERIL.
@@ -42,13 +57,16 @@ static const char *diagnostic_level_colours[DIAG_COUNT] = {
 /// off-by-one errors and banging my head against the nearest wall. It
 /// was copied from a previous project because I tried reproducing it
 /// at first, but failed horribly. – Sirraide.
-void issue_diagnostic(
-    enum diagnostic_level level,
-    const char *filename,
-    span source,
-    loc location,
-    const char *fmt,
-    ...) {
+void vissue_diagnostic
+(/// Error level and source location.
+ enum diagnostic_level level,
+ const char *filename,
+ span source,
+ loc location,
+
+ /// The actual error message.
+ const char *fmt,
+ va_list ap) {
   ASSERT(level >= 0 && level < DIAG_COUNT);
 
   /// Check if stderr is a terminal.
@@ -64,8 +82,8 @@ void issue_diagnostic(
     u32 line_start = 0;
     for (u32 i = location.start; i > 0; --i) {
       if (source.data[i] == '\n') {
-      if (!line_start) line_start = i + 1;
-      ++line;
+        if (!line_start) line_start = i + 1;
+        ++line;
       }
     }
 
@@ -82,10 +100,7 @@ void issue_diagnostic(
     if (is_terminal) fprintf(stderr, "%s", diagnostic_level_colours[level]);
     fprintf(stderr, "%s: ", diagnostic_level_names[level]);
     if (is_terminal) fprintf(stderr, "\033[m\033[1;38m");
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
+    vfprintf(stderr, fmt, ap);
     if (is_terminal) fprintf(stderr, "\033[m");
 
     /// Print the line.
@@ -130,14 +145,11 @@ void issue_diagnostic(
     if (is_terminal) fprintf(stderr, "%s", diagnostic_level_colours[level]);
     fprintf(stderr, "%s: ", diagnostic_level_names[level]);
     if (is_terminal) fprintf(stderr, "\033[m\033[1;38m");
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
+    vfprintf(stderr, fmt, ap);
     if (is_terminal) fprintf(stderr, "\033[m");
     fprintf(stderr, "\n");
   }
-}
+ }
 
 static void print_backtrace(int ignore) {
   bool term = isatty(fileno(stderr));
@@ -232,64 +244,56 @@ static void print_backtrace(int ignore) {
 #endif
 }
 
-NORETURN
-void ice_impl (
-    int ignore_frames_n,
-    const char *fmt,
-    ...
-) {
-  /// Check if stderr is a terminal.
-  bool is_terminal = isatty(fileno(stderr));
-  if (is_terminal) fprintf(stderr, "%s", diagnostic_level_colours[DIAG_ICE]);
-  fprintf(stderr, "%s: ", diagnostic_level_names[DIAG_ICE]);
-  if (is_terminal) fprintf(stderr, "\033[m");
-
-  va_list args;
-  va_start(args, fmt);
-  vfprintf(stderr, fmt, args);
-  va_end(args);
-
-  if (is_terminal) fprintf(stderr, "\033[m");
-  fprintf(stderr, "\n");
-
-  print_backtrace(ignore_frames_n);
-
-  _Exit(1);
-}
-
-void assert_impl (
+void raise_fatal_error_impl (
     const char *file,
     const char *func,
     int line,
-    const char *condition,
+    bool in_signal_handler,
+    bool is_sorry,
+    const char *assert_condition,
     const char *fmt,
     ...
 ) {
-/// Prettier file name
-#ifndef _MSC_VER
-  const char path_separator = '/';
-#else
-  const char path_separator = '\\';
-#endif
-  const char *basename = strrchr(file, path_separator);
-  file = basename ? basename + 1 : file;
+  /// Print the file and line.
+  bool is_terminal = isatty(fileno(stderr));
 
-  fprintf(stderr, "Assertion failed: %s\n", condition);
-  fprintf(stderr, "    In file %s:%d\n", file, line);
-  fprintf(stderr, "    In function %s", func);
+  /// Removing everything up to and including the `src` prefix.
+  const char *filename = file, *src_prefix;
+  while (src_prefix = strstr(filename, "src" PATH_SEPARATOR), src_prefix) filename = src_prefix + 4;
 
-  if (strcmp(fmt, "") != 0) {
-    fprintf(stderr, "\n    Message: ");
+  /// To make this less atrocious,
+  const char *const reset = is_terminal ? "\033[m" : "";
+  const char *const w = is_terminal ? "\033[m\033[1;38m" : "";
+  const char *const colour = is_terminal ? diagnostic_level_colours[is_sorry ? DIAG_SORRY : DIAG_ICE] : "";
 
-    va_list va;
-    va_start(va, fmt);
-    vfprintf(stderr, fmt, va);
-    va_end(va);
+  /// Print a shorter message if this is a TODO() w/ no message.
+  if (is_sorry && strcmp(fmt, "") == 0) {
+    fprintf(stderr, "%s%s:%d:%s %s", w, filename, line, reset, colour);
+    fprintf(stderr, "Sorry, unimplemented:%s Function ‘%s%s%s’\n", reset, w, func, reset);
   }
 
-  fputc('\n', stderr);
+  /// Print a longer message.
+  else {
+    /// File, line, message header.
+    fprintf(stderr, "%s%s:%s In function ‘%s%s%s’\n", w, filename, reset, w, func, reset);
+    fprintf(stderr, "%s%s:%d:%s %s", w, filename, line, reset, colour);
+    if (assert_condition) {
+      fprintf(stderr, "Assertion failed:%s ‘%s%s%s’: ", reset, w, assert_condition, reset);
+    } else {
+      fprintf(stderr, "%s:%s ", diagnostic_level_names[is_sorry ? DIAG_SORRY : DIAG_ICE], reset);
+    }
 
-  print_backtrace(2);
+    /// Message.
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fprintf(stderr, "\n");
+  }
 
+  /// Print the stack trace.
+  print_backtrace(in_signal_handler ? 4 : 2);
+
+  /// Exit.
   _Exit(1);
 }

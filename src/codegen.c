@@ -44,7 +44,7 @@ CodegenContext *codegen_context_create
       } else if (call_convention == CG_CALL_CONV_LINUX) {
         context = codegen_context_x86_64_linux_create();
       } else {
-        PANIC("Unrecognized calling convention!");
+        ICE("Unrecognized calling convention!");
       }
       break;
     case CG_FMT_IR:

@@ -98,7 +98,7 @@ void ir_remove(IRInstruction* instruction) {
     ir_femit_instruction(stderr, instruction);
     fprintf(stderr, "In function:\n");
     ir_femit_function(stderr, instruction->parent_block->function);
-    PANIC("Cannot remove used instruction.");
+    ICE("Cannot remove used instruction.");
   }
 
   DLIST_REMOVE(instruction->parent_block->instructions, instruction);

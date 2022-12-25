@@ -156,7 +156,7 @@ bool needs_register(IRInstruction *instruction) {
       return true;
 
     case IR_PARAMETER:
-      PANIC("Unlowered parameter instruction in register allocator");
+      ICE("Unlowered parameter instruction in register allocator");
 
     /// Allocas and static refs need a register iff they are actually used.
     case IR_ALLOCA:

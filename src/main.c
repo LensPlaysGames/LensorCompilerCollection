@@ -118,13 +118,13 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--output") == 0) {
       i++;
       if (i >= argc) {
-        PANIC("ERROR: Expected filepath after output command line argument");
+        ICE("Expected filepath after output command line argument");
       }
       /// Anything that starts w/ `-` is treated as a command line argument.
       /// If the user has a filepath that starts w/ `-...`, then they should use
       /// `./-...` instead.
       if (*argv[i] == '-') {
-        PANIC("ERROR: Expected filepath after output command line argument\n"
+        ICE("Expected filepath after output command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);
       }
@@ -133,10 +133,10 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--format") == 0) {
       i++;
       if (i >= argc) {
-        PANIC("ERROR: Expected format after format command line argument");
+        ICE("Expected format after format command line argument");
       }
       if (*argv[i] == '-') {
-        PANIC("ERROR: Expected format after format command line argument\n"
+        ICE("Expected format after format command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);
       }
@@ -147,7 +147,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       } else if (strcmp(argv[i], "ir") == 0) {
         output_format = CG_FMT_IR;
       } else {
-        printf("ERROR: Expected format after format command line argument\n"
+        printf("Expected format after format command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
         print_acceptable_formats();
         return 1;
@@ -156,10 +156,10 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--calling") == 0) {
       i++;
       if (i >= argc) {
-        PANIC("ERROR: Expected calling convention after format command line argument");
+        ICE("Expected calling convention after format command line argument");
       }
       if (*argv[i] == '-') {
-        PANIC("ERROR: Expected calling convention after format command line argument\n"
+        ICE("Expected calling convention after format command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);
       }
@@ -170,7 +170,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       } else if (strcmp(argv[i], "LINUX") == 0) {
         output_calling_convention = CG_CALL_CONV_LINUX;
       } else {
-        printf("ERROR: Expected calling convention after calling convention command line argument\n"
+        printf("Expected calling convention after calling convention command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
         print_acceptable_calling_conventions();
         return 1;
@@ -179,10 +179,10 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--dialect") == 0) {
       i++;
       if (i >= argc) {
-        PANIC("ERROR: Expected assembly dialect after format command line argument");
+        ICE("Expected assembly dialect after format command line argument");
       }
       if (*argv[i] == '-') {
-        PANIC("ERROR: Expected assembly dialect after format command line argument\n"
+        ICE("Expected assembly dialect after format command line argument\n"
               "Instead, got what looks like another command line argument.\n"
               " -> \"%s\"", argv[i]);
       }
@@ -193,7 +193,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       } else if (strcmp(argv[i], "intel") == 0) {
         output_assembly_dialect = CG_ASM_DIALECT_INTEL;
       } else {
-        printf("ERROR: Expected assembly dialect after calling convention command line argument\n"
+        printf("Expected assembly dialect after calling convention command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
         print_acceptable_asm_dialects();
         return 1;
@@ -211,7 +211,7 @@ int handle_command_line_arguments(int argc, char **argv) {
 #     endif
     } else {
       if (input_filepath_index != -1) {
-        printf("ERROR: Only a single input filepath is used, but multiple were given.\n"
+        printf("Only a single input filepath is used, but multiple were given.\n"
                "Using the latest one.\n");
       }
       input_filepath_index = i;
