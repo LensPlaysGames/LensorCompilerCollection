@@ -189,20 +189,20 @@ static void print_backtrace(int ignore) {
   }
 
 #else
-    typedef BOOL IMAGEAPI SymInitializeFunc(
+    typedef BOOL SymInitializeFunc(
         _In_ HANDLE hProcess,
         _In_ PCSTR  UserSearchPath,
         _In_ BOOL   fInvadeProcess
     );
 
-    typedef BOOL IMAGEAPI SymFromAddrFunc(
+    typedef BOOL SymFromAddrFunc(
         _In_    HANDLE       hProcess,
         _In_    DWORD64      Address,
         _Out_   PDWORD64     Displacement,
         _Inout_ PSYMBOL_INFO Symbol
     );
 
-    typedef BOOL IMAGEAPI SymGetLineFromAddr64Func(
+    typedef BOOL SymGetLineFromAddr64Func(
         _In_  HANDLE hProcess,
         _In_  DWORD64 qwAddr,
         _Out_ PDWORD pdwDisplacement,
@@ -254,7 +254,7 @@ static void print_backtrace(int ignore) {
         }
 
         if (have_line) {
-            fprintf(stderr, "  in function %s%s():%d%s\n",
+            fprintf(stderr, "  in function %s%s():%li%s\n",
                 term ? "\033[m\033[1;38m" : "", symbol->Name, line.LineNumber, term ? "\033[m" : "");
         } else {
             fprintf(stderr, "  in function %s%s()%s at offset %s%llx%s\n",

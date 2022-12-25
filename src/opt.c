@@ -17,9 +17,9 @@ typedef VECTOR(IRBlock*) BlockVector;
 #include <intrin.h>
 
 uint32_t ctzll(uint64_t value) {
-  uint32_t zero = 0;
+  unsigned long zero = 0;
   return _BitScanForward64(&zero, value)
-    ? zero
+    ? (uint32_t) zero
     : 64;
 }
 #else

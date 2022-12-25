@@ -27,7 +27,6 @@ typedef VECTOR(IRBlock *) BlockVector;
 
 void phi2copy(IRFunction *f) {
   IRBlock *last_block = NULL;
-  TODO();
   FOREACH_INSTRUCTION_IN_FUNCTION_N(f, b, phi) {
     if (phi->type == IR_PHI) {
       ASSERT(phi->parent_block != last_block,

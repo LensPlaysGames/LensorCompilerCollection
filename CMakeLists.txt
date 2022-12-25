@@ -38,6 +38,28 @@ if (NOT WIN32)
   target_link_libraries(func PRIVATE m)
 endif()
 
+## Debug/Release flags.
+if (NOT MSVC)
+  target_compile_options(func PRIVATE
+    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
+    $<$<CONFIG:RELEASE>:-O3 -march=native>
+  )
+  target_link_options(func PRIVATE
+    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
+    $<$<CONFIG:RELEASE>:-O3 -march=native>
+  )
+else()
+  target_compile_options(func PRIVATE
+    $<$<CONFIG:DEBUG>:/Od>
+    $<$<CONFIG:RELEASE>:/O2>
+  )
+endif()
+
+if (DEFINED DEBUG AND NOT WIN32)
+  target_compile_options(func PRIVATE -fsanitize=address)
+  target_link_options(func PRIVATE -fsanitize=address)
+endif()
+
 if (NOT MSVC)
   target_compile_options(
     func
@@ -49,18 +71,31 @@ if (NOT MSVC)
     -Wno-unused-parameter -Wno-unused-function
     -Wno-format-zero-length
   )
-
-  if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(func PRIVATE -O0 -g -rdynamic)
-    target_link_options(func PRIVATE -O0 -g -rdynamic)
-  else()
-    target_compile_options(func PRIVATE -O3)
-  endif()
-
-  if (DEFINED DEBUG AND NOT WIN32)
-    target_compile_options(func PRIVATE -fsanitize=address)
-    target_link_options(func PRIVATE -fsanitize=address)
-  endif()
 else()
-  target_compile_options(func PRIVATE /W4 /utf-8)
+  target_compile_options(func PRIVATE 
+    # Enable ‘all’ warnings.
+    /W4
+    
+    # Source character set is UTF-8
+    /utf-8
+  
+    # Allow unnamed structs/unions.
+    /wd4201
+
+    # Don’t warn about unused functions.
+    /wd4505
+
+    # Don’t suggest the _s nonsense functions.
+    /D_CRT_SECURE_NO_WARNINGS
+    /D_CRT_SECURE_NO_WARNINGS_GLOBALS
+    /D_CRT_NONSTDC_NO_WARNINGS
+  )
+
+  # clang-cl
+  if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(func PRIVATE 
+        -Wno-unused-function -Wno-unused-parameter
+        -Wno-format-zero-length
+    )
+  endif()
 endif()
