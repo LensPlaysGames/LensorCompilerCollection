@@ -8,15 +8,17 @@
 #include <math.h>
 
 #ifndef _WIN32
-#    include <unistd.h>
-#    include <execinfo.h>
-#    define PATH_SEPARATOR "/"
+#  include <execinfo.h>
+#  include <linux/limits.h>
+#  include <unistd.h>
+#  define PATH_SEPARATOR "/"
+#  define ADDR2LINE_BUFFER_SIZE 1024
 #else
-#    include <Windows.h>
-#    include <dbghelp.h>
-#    include <io.h>
-#    define isatty _isatty
-#    define PATH_SEPARATOR "\\"
+#  include <Windows.h>
+#  include <dbghelp.h>
+#  include <io.h>
+#  define isatty _isatty
+#  define PATH_SEPARATOR "\\"
 #endif
 
 static const char *diagnostic_level_names[DIAG_COUNT] = {
@@ -153,7 +155,7 @@ void vissue_diagnostic
 
 static void print_backtrace(int ignore) {
   bool term = isatty(fileno(stderr));
-  
+
 #ifndef _WIN32
   void *array[15];
   int size = backtrace(array, 10);
@@ -166,22 +168,78 @@ static void print_backtrace(int ignore) {
     return;
   }
 
+  /// Check if we have addr2line, and if so, get the name of this executable.
+  bool have_addr2line = system("which addr2line > /dev/null 2>&1") == 0;
+  static __thread char execname[PATH_MAX];
+  usz execname_len = 0;
+  if (have_addr2line) {
+    ssize_t len = readlink("/proc/self/exe", execname, sizeof(execname));
+    if (len > 0) execname_len = (usz) len;
+    else have_addr2line = false;
+  }
+
   /// Format the stack traces. No need to demangle anything since this is C
   for (char** func = strings; func < strings + size - 2; func++) {
     char *name_begin = strchr(*func, '(');
     char *name_end = strchr(*func, '+');
     char *address_end = strchr(*func, ')');
+
+    /// Print the function if it is a valid stack trace entry.
     if (name_begin && name_end && address_end) {
+      /// If we have addr2line, attempt to get the source location.
+      static __thread char buffer[ADDR2LINE_BUFFER_SIZE];
+      static __thread char name_buffer[ADDR2LINE_BUFFER_SIZE];
+      const char *line_start = NULL;
+      if (have_addr2line) {
+        /// Run addr2line.
+        snprintf(buffer, sizeof(buffer), "addr2line -f -C -e %.*s %.*s",
+          (int) execname_len, execname,
+          (int) (address_end - name_begin - 1), name_begin + 1);
+        FILE *fp = popen(buffer, "r");
+        if (fp) {
+          /// Attempt to read the result.
+          if (fgets(name_buffer, sizeof(name_buffer), fp) && fgets(buffer, sizeof(buffer), fp)) {
+            /// If the first character is '?', then we couldn’t find the symbol.
+            if (buffer[0] != '?') {
+              /// Skip the filename.
+              char *ptr = buffer;
+              while (ptr = strchr(ptr, ':'), ptr) line_start = ptr = ptr + 1;
+
+              /// Ignore discriminators.
+              if (line_start) {
+                ptr = strpbrk(line_start, " \r\n");
+                if (ptr) *ptr = 0;
+              }
+
+              /// Remove the newline in the function name.
+              ptr = strpbrk(name_buffer, "\r\n");
+              if (ptr) *ptr = 0;
+            }
+          }
+          pclose(fp);
+        }
+      }
+
       *name_end = 0;
       *address_end = 0;
-      fprintf(stderr, "  in function %s%s%s%s at offset %s%s%s\n",
-        term ? "\033[m\033[1;38m" : "",
-        name_begin + 1 == name_end ? "\?\?\?" : name_begin + 1,
-        name_begin + 1 == name_end ? "" : "()",
-        term ? "\033[m" : "",
-        term ? "\033[m\033[1;38m" : "",
-        name_end + 1,
-        term ? "\033[m" : "");
+
+      if (line_start) {
+        fprintf(stderr, "  in function %s%s():%s%s\n",
+          term ? "\033[m\033[1;38m" : "",
+          name_buffer,
+          line_start,
+          term ? "\033[m" : "");
+      } else {
+        fprintf(stderr, "  in function %s%s%s%s at offset %s%s%s\n",
+          term ? "\033[m\033[1;38m" : "",
+          name_begin + 1 == name_end ? "\?\?\?" : name_begin + 1,
+          name_begin + 1 == name_end ? "" : "()",
+          term ? "\033[m" : "",
+          term ? "\033[m\033[1;38m" : "",
+          name_end + 1,
+          term ? "\033[m" : "");
+      }
+
 
       /// Don’t go any higher than main().
       if (strcmp(name_begin + 1, "main") == 0) break;

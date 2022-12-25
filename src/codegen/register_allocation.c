@@ -25,7 +25,7 @@ typedef VECTOR(IRBlock *) BlockVector;
 
 //==== BEG REGISTER ALLOCATION PASSES ====
 
-void phi2copy(IRFunction *f) {
+static void phi2copy(IRFunction *f) {
   IRBlock *last_block = NULL;
   FOREACH_INSTRUCTION_IN_FUNCTION_N(f, b, phi) {
     if (phi->type == IR_PHI) {
