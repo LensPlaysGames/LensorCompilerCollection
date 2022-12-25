@@ -55,10 +55,8 @@ typedef struct {
 /// Raise an internal compiler error.
 #define ICE(...) (raise_fatal_error_impl(__FILE__, PRETTY_FUNCTION, __LINE__, false, false, NULL, __VA_ARGS__), BUILTIN_UNREACHABLE())
 
-/// Call this if you’re in a signal handler.
-#ifndef _WIN32
-#  define ICE_SIGNAL(...) (raise_fatal_error_impl(__FILE__, PRETTY_FUNCTION, __LINE__, true, false, NULL, __VA_ARGS__), BUILTIN_UNREACHABLE())
-#endif
+/// Call this if you’re in a signal/exception handler.
+#define ICE_EXCEPTION(...) (raise_fatal_error_impl(__FILE__, PRETTY_FUNCTION, __LINE__, true, false, NULL, __VA_ARGS__), BUILTIN_UNREACHABLE())
 
 /// Usage:
 ///   ASSERT(condition);
@@ -121,7 +119,7 @@ void raise_fatal_error_impl (
     const char *file,
     const char *func,
     int line,
-    bool in_signal_handler,
+    bool is_signal_or_exception,
     bool is_sorry,
     const char *assert_condition,
     const char *fmt,

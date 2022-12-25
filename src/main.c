@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <locale.h>
 
 #include <codegen.h>
 #include <error.h>
@@ -15,14 +16,25 @@
 void ice_signal_handler(int signal, siginfo_t *info, void* unused) {
   (void) unused;
   switch (signal) {
-    case SIGSEGV: ICE_SIGNAL("Segmentation fault at 0x%lx", (uintptr_t)info->si_addr);
-    case SIGILL: ICE_SIGNAL("Illegal instruction");
-    case SIGABRT: ICE_SIGNAL("Aborted");
-    default: ICE_SIGNAL("UNREACHABLE");
+    case SIGSEGV: ICE_EXCEPTION("Segmentation fault at 0x%lx", (uintptr_t)info->si_addr);
+    case SIGILL: ICE_EXCEPTION("Illegal instruction");
+    case SIGABRT: ICE_EXCEPTION("Aborted");
+    default: ICE_EXCEPTION("UNREACHABLE");
   }
 }
 #else
 #include <Windows.h>
+
+/// Unhandled SEH exception handler.
+LONG WINAPI unhandled_exception_handler(EXCEPTION_POINTERS* info) {
+  switch (info->ExceptionRecord->ExceptionCode) {
+    case EXCEPTION_ACCESS_VIOLATION: ICE_EXCEPTION("Segmentation Fault at 0x%lx", (uintptr_t)info->ExceptionRecord->ExceptionInformation[1]);
+    case EXCEPTION_ILLEGAL_INSTRUCTION: ICE_EXCEPTION("Illegal instruction");
+    case EXCEPTION_STACK_OVERFLOW: ICE_EXCEPTION("Stack Overflow");
+    case EXCEPTION_INT_DIVIDE_BY_ZERO: ICE_EXCEPTION("Division by Zero");
+    default: ICE_EXCEPTION("Unhandled exception 0x%lx", (uintptr_t)info->ExceptionRecord->ExceptionCode);
+  }
+}
 #endif
 
 void print_usage(char **argv) {
@@ -245,9 +257,15 @@ int main(int argc, char **argv) {
     SetConsoleMode(out, omode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
     SetConsoleMode(err, emode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
   }
+
+  /// Set the unhandled exception handler.
+  SetUnhandledExceptionFilter(unhandled_exception_handler);
+
+  /// Make sure that the system knows that we're using UTF-8.
+  SetConsoleOutputCP(CP_UTF8);
+  SetConsoleCP(CP_UTF8);
 # endif
 #endif
-
 
   if (argc < 2) {
     print_usage(argv);

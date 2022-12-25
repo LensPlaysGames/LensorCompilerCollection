@@ -202,6 +202,13 @@ static void print_backtrace(int ignore) {
         _Inout_ PSYMBOL_INFO Symbol
     );
 
+    typedef BOOL IMAGEAPI SymGetLineFromAddr64Func(
+        _In_  HANDLE hProcess,
+        _In_  DWORD64 qwAddr,
+        _Out_ PDWORD pdwDisplacement,
+        _Out_ PIMAGEHLP_LINE64 Line64
+    );
+
     /// Get the stacktrace.
     void* stack[100];
     WORD frames = CaptureStackBackTrace(ignore, 100, stack, NULL);
@@ -223,6 +230,8 @@ static void print_backtrace(int ignore) {
     SymFromAddrFunc *SymFromAddr = (SymFromAddrFunc*)GetProcAddress(dbghelp, "SymFromAddr");
     if (!SymFromAddr) goto print_raw;
 
+    SymGetLineFromAddr64Func *SymGetLineFromAddr64 = (SymGetLineFromAddr64Func*)GetProcAddress(dbghelp, "SymGetLineFromAddr64");
+
     HANDLE process = GetCurrentProcess();
     SymInitialize(process, NULL, TRUE);
 
@@ -234,9 +243,25 @@ static void print_backtrace(int ignore) {
 
     for (int i = 0; i < frames; i++) {
         SymFromAddr(process, (DWORD64)(stack[i]), 0, symbol);
-        fprintf(stderr, "  in function %s%s()%s at offset %s%llx%s\n",
-            term ? "\033[m\033[1;38m" : "", symbol->Name, term ? "\033[m" : "",
-            term ? "\033[m\033[1;38m" : "", symbol->Address, term ? "\033[m" : "");
+
+        /// Attempt to get the line from the address.
+        IMAGEHLP_LINE64 line = { 0 };
+        line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+        DWORD displacement = 0;
+        bool have_line = false;
+        if (SymGetLineFromAddr64) {
+            have_line = SymGetLineFromAddr64(process, (DWORD64)(stack[i]), &displacement, &line);
+        }
+
+        if (have_line) {
+            fprintf(stderr, "  in function %s%s():%d%s\n",
+                term ? "\033[m\033[1;38m" : "", symbol->Name, line.LineNumber, term ? "\033[m" : "");
+        } else {
+            fprintf(stderr, "  in function %s%s()%s at offset %s%llx%s\n",
+                term ? "\033[m\033[1;38m" : "", symbol->Name, term ? "\033[m" : "",
+                term ? "\033[m\033[1;38m" : "", symbol->Address, term ? "\033[m" : "");
+        }
+
         if (strcmp(symbol->Name, "main") == 0) break;
     }
 
@@ -248,7 +273,7 @@ void raise_fatal_error_impl (
     const char *file,
     const char *func,
     int line,
-    bool in_signal_handler,
+    bool is_signal_or_exception,
     bool is_sorry,
     const char *assert_condition,
     const char *fmt,
@@ -274,9 +299,15 @@ void raise_fatal_error_impl (
 
   /// Print a longer message.
   else {
-    /// File, line, message header.
-    fprintf(stderr, "%s%s:%s In function ‘%s%s%s’\n", w, filename, reset, w, func, reset);
-    fprintf(stderr, "%s%s:%d:%s %s", w, filename, line, reset, colour);
+    /// File, line, message header; if they make sense, that is.
+    if (!is_signal_or_exception) {
+      fprintf(stderr, "%s%s:%s In function ‘%s%s%s’\n", w, filename, reset, w, func, reset);
+      fprintf(stderr, "%s%s:%d:%s %s", w, filename, line, reset, colour);
+    } else {
+      fprintf(stderr, "%s", colour);
+    }
+
+    /// Assert condition (if any) and message.
     if (assert_condition) {
       fprintf(stderr, "Assertion failed:%s ‘%s%s%s’: ", reset, w, assert_condition, reset);
     } else {
@@ -292,7 +323,11 @@ void raise_fatal_error_impl (
   }
 
   /// Print the stack trace.
-  print_backtrace(in_signal_handler ? 4 : 2);
+#ifndef _WIN32
+  print_backtrace(is_signal_or_exception ? 4 : 2);
+#else
+  print_backtrace(is_signal_or_exception ? 9 : 2);
+#endif
 
   /// Exit.
   _Exit(1);
