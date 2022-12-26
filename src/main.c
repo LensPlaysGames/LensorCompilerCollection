@@ -2,7 +2,6 @@
 
 #include <codegen.h>
 #include <error.h>
-#include <file_io.h>
 #include <locale.h>
 #include <parser.h>
 #include <stdio.h>
@@ -225,8 +224,9 @@ int main(int argc, char **argv) {
   const char *infile = argv[input_filepath_index];
   const char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
   size_t len = strlen(infile);
-  string s = file_contents(infile);
-  if (!s.data) exit(1);
+  bool ok = false;
+  string s = platform_read_file(infile, &ok);
+  if (!ok) ICE("%.*s", (int) s.size, s.data);
 
   /// The input is an IR file.
   if (len >= 3 && memcmp(infile + len - 3, ".ir", 3) == 0) {
@@ -262,7 +262,7 @@ int main(int argc, char **argv) {
     }
 
     /// Perform semantic analysis.
-    bool ok = typecheck_expression(ast, ast->root);
+    ok = typecheck_expression(ast, ast->root);
     if (!ok) exit(2);
 
     /// Print if requested.

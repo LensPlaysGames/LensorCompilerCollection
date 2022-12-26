@@ -1,13 +1,13 @@
 #ifndef COMPILER_ERROR_H
 #define COMPILER_ERROR_H
 
+#include <stdarg.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
 #include <stdlib.h>
-#include <stdarg.h>
-#include <string_utils.h>
+#include <string.h>
+#include <utils.h>
 
 /// ===========================================================================
 ///  Enums and structures
@@ -27,27 +27,6 @@ typedef struct {
   u32 start;
   u32 end;
 } loc;
-
-/// ===========================================================================
-///  Attributes and platform-specific macros.
-/// ===========================================================================
-#ifndef _MSC_VER
-#  define NORETURN __attribute__((noreturn))
-#  define FALLTHROUGH __attribute__((fallthrough))
-#  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
-#  define FORCEINLINE __attribute__((always_inline)) inline
-#  define PRETTY_FUNCTION __PRETTY_FUNCTION__
-#  define NODISCARD __attribute__((warn_unused_result))
-#  define BUILTIN_UNREACHABLE() __builtin_unreachable()
-#else
-#  define NORETURN __declspec(noreturn)
-#  define FALLTHROUGH
-#  define FORMAT(...)
-#  define FORCEINLINE __forceinline inline
-#  define PRETTY_FUNCTION __FUNCSIG__
-#  define NODISCARD
-#  define BUILTIN_UNREACHABLE() __assume(0)
-#endif
 
 /// ===========================================================================
 ///  Error handling macros.
@@ -72,17 +51,6 @@ typedef struct {
 
 #define TODO(...)     (raise_fatal_error_impl(__FILE__, PRETTY_FUNCTION, __LINE__, false, true, NULL, "" __VA_ARGS__), BUILTIN_UNREACHABLE())
 #define UNREACHABLE() ICE("Unreachable")
-
-/// ===========================================================================
-///  Miscellaneous macros.
-/// ===========================================================================
-#define CAT_(a, b) a ## b
-#define CAT(a, b) CAT_(a, b)
-
-#define STR_(s) #s
-#define STR(s) STR_(s)
-
-#define VA_FIRST(X, ...) X
 
 /// ===========================================================================
 ///  Error handling functions.

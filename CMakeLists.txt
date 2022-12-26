@@ -17,13 +17,12 @@ add_executable(
   src/ast.c
   src/codegen.c
   src/error.c
-  src/file_io.c
   src/main.c
   src/ir_parser.c
   src/parser.c
   src/typechecker.c
   src/opt.c
-  src/string_utils.c
+  src/utils.c
   src/platform.c
   src/codegen/dom.c
   src/codegen/intermediate_representation.c

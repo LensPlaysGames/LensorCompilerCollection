@@ -3,6 +3,10 @@
 #  include <linux/limits.h>
 #  include <unistd.h>
 #  include <signal.h>
+#  include <fcntl.h>
+#  include <sys/stat.h>
+#  include <sys/mman.h>
+#  include <errno.h>
 #  define ADDR2LINE_BUFFER_SIZE 1024
 #else
 #  include <Windows.h>
@@ -256,5 +260,82 @@ void platform_print_backtrace(int ignore) {
   }
 
   FreeLibrary(dbghelp);
+#endif
+}
+
+static string standard_read_file_contents(const char *path, bool *success) {
+  /// Open the file.
+  if (success) *success = false;
+  FILE *file = fopen(path, "r");
+  if (!file) return format("Could not open file \"%s\" for reading: %s", path, strerror(errno));
+
+  /// Determine its size by seeking to the end.
+  fseek(file, 0, SEEK_END);
+  long tell = ftell(file);
+  if (tell < 0) return format("Could not determine size of file \"%s\": %s", path, strerror(errno));
+  usz size = (usz)tell;
+
+  /// Read the contents into a string.
+  string str = {0};
+  str.size = size + 1;
+  str.data = malloc(str.size);
+  rewind(file);
+  if (fread(str.data, 1, size, file) != size) {
+    free(str.data);
+    return format("Could not read contents of file \"%s\": %s", path, strerror(errno));
+  }
+  str.data[size] = 0;
+
+  /// Close the file.
+  fclose(file);
+
+  /// Return the string.
+  if (success) *success = true;
+  return str;
+}
+
+string platform_read_file(const char *path, bool *success) {
+#ifndef _WIN32
+  /// Try to open the file.
+  if (success) *success = false;
+  int fd = open(path, O_RDONLY);
+  if (fd < 0) return format("Could not open file \"%s\" for reading: %s", path, strerror(errno));
+
+  /// Stat it to determine its size.
+  struct stat st;
+  if (fstat(fd, &st) < 0) return format("Could not stat file \"%s\": %s", path, strerror(errno));
+
+  /// Make sure it’s a regular file.
+  if (!S_ISREG(st.st_mode)) return format("Path \"%s\" is not a regular file", path);
+
+  /// If the size is 0, mmap() is both unnecessary and would fail,
+  /// so just return an empty string.
+  if (st.st_size == 0) {
+    if (success) *success = true;
+    return (string){0};
+  }
+
+  /// Map the file into memory.
+  void *data = mmap(NULL, (usz)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  if (data == MAP_FAILED) return standard_read_file_contents(path, success);
+
+  /// Close the file descriptor.
+  (void) close(fd);
+
+  /// Copy the data into a string.
+  string str = {0};
+  str.size = (usz)st.st_size + 1;
+  str.data = malloc(str.size);
+  memcpy(str.data, data, str.size - 1);
+  str.data[str.size - 1] = 0;
+
+  /// Unmap the file.
+  (void) munmap(data, (usz)st.st_size);
+
+  /// Return the string.
+  if (success) *success = true;
+  return str;
+#else
+  return standard_read_file_contents(path, success);
 #endif
 }
