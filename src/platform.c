@@ -266,7 +266,7 @@ void platform_print_backtrace(int ignore) {
 static string standard_read_file_contents(const char *path, bool *success) {
   /// Open the file.
   if (success) *success = false;
-  FILE *file = fopen(path, "r");
+  FILE *file = fopen(path, "rb");
   if (!file) return format("Could not open file \"%s\" for reading: %s", path, strerror(errno));
 
   /// Determine its size by seeking to the end.
