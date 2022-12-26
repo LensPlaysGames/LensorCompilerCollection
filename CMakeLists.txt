@@ -24,6 +24,7 @@ add_executable(
   src/typechecker.c
   src/opt.c
   src/string_utils.c
+  src/platform.c
   src/codegen/dom.c
   src/codegen/intermediate_representation.c
   src/codegen/register_allocation.c
@@ -73,7 +74,7 @@ if (NOT MSVC)
   )
 else()
   target_compile_options(func PRIVATE 
-    # Enable ‘all’ warnings.
+    # Enable ï¿½allï¿½ warnings.
     /W4
     
     # Source character set is UTF-8
@@ -82,10 +83,10 @@ else()
     # Allow unnamed structs/unions.
     /wd4201
 
-    # Don’t warn about unused functions.
+    # Donï¿½t warn about unused functions.
     /wd4505
 
-    # Don’t suggest the _s nonsense functions.
+    # Donï¿½t suggest the _s nonsense functions.
     /D_CRT_SECURE_NO_WARNINGS
     /D_CRT_SECURE_NO_WARNINGS_GLOBALS
     /D_CRT_NONSTDC_NO_WARNINGS
