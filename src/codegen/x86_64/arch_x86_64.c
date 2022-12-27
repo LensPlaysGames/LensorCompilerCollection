@@ -787,7 +787,11 @@ CodegenContext *codegen_context_x86_64_linux_create() {
 void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
   free(ctx->register_pool.registers);
   free(ctx->register_pool.scratch_registers);
-  free(ctx);
+}
+
+void codegen_context_x86_64_linux_free(CodegenContext *ctx) {
+  free(ctx->register_pool.registers);
+  free(ctx->register_pool.scratch_registers);
 }
 
 /// Generate a comparison between two registers.

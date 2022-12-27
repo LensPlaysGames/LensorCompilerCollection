@@ -9,9 +9,9 @@ CodegenContext *codegen_context_ir_create() {
   return cg_ctx;
 }
 
-void codegen_context_ir_free(CodegenContext *ctx) {
-  /// TODO (Sirraide): Free environment.
-  free(ctx);
+void codegen_context_ir_free(CodegenContext *context) {
+  (void) context;
+  /// No-op.
 }
 
 void codegen_lower_ir_backend(CodegenContext *context) {

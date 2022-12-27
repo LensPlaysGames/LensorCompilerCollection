@@ -104,15 +104,16 @@ void codegen_context_free(CodegenContext *context) {
   /// Free backend-specific data.
   switch (context->format) {
     default: UNREACHABLE();
+
     case CG_FMT_x86_64_GAS:
-      if (context->call_convention == CG_CALL_CONV_MSWIN) {
-        return codegen_context_x86_64_mswin_free(context);
-      } else if (context->call_convention == CG_CALL_CONV_LINUX) {
-        // return codegen_context_x86_64_gas_linux_free(parent);
-      }
+      if (context->call_convention == CG_CALL_CONV_MSWIN) codegen_context_x86_64_mswin_free(context);
+      else if (context->call_convention == CG_CALL_CONV_LINUX) codegen_context_x86_64_linux_free(context);
+      else ICE("Unrecognized calling convention!");
       break;
+
     case CG_FMT_IR:
-      return codegen_context_ir_free(context);
+      codegen_context_ir_free(context);
+      break;
   }
 
   /// Free the context itself.
