@@ -245,13 +245,14 @@ char adjm(AdjacencyMatrix m, usz x, usz y) {
   return *adjm_entry(m, x, y);
 }
 
-typedef struct AdjacencyListNode AdjacencyListNode;
+typedef struct AdjacencyList AdjacencyList;
+typedef VECTOR(AdjacencyList*) AdjacencyLists;
 
 typedef struct AdjacencyGraph {
   usz order;
   AdjacencyMatrix matrix;
   usz *regmasks;
-  AdjacencyListNode *list;
+  AdjacencyLists lists;
 } AdjacencyGraph;
 
 void allocate_adjacency_graph(AdjacencyGraph *G, usz size) {
@@ -390,13 +391,11 @@ void print_adjacency_matrix(AdjacencyMatrix m) {
 
 //==== BEG ADJACENCY LISTS ====
 
-typedef struct AdjacencyList AdjacencyList;
-
-typedef struct AdjacencyListNode {
+typedef struct AdjacencyList {
   // Degree refers to how many adjacencies this vertex/node has.
   usz degree;
 
-  AdjacencyList *adjacencies;
+  VECTOR(usz) adjacencies;
 
   IRInstruction *instruction;
 
@@ -413,86 +412,52 @@ typedef struct AdjacencyListNode {
   char spill_flag;
   usz spill_offset;
   usz spill_cost;
-} AdjacencyListNode;
-
-typedef struct AdjacencyList {
-  AdjacencyListNode *node;
-  struct AdjacencyList *next;
 } AdjacencyList;
 
-/// Be sure to assign given head to return value.
-AdjacencyList *adjl_create(AdjacencyList *head) {
-  AdjacencyList *list = calloc(1, sizeof(AdjacencyList));
-  AdjacencyListNode *node = calloc(1, sizeof(AdjacencyListNode));
-  list->next = head;
-  list->node = node;
-  return list;
-}
-
-void adjl_add_impl(AdjacencyListNode *node, AdjacencyListNode *adjacent) {
-  node->adjacencies = adjl_create(node->adjacencies);
-  node->adjacencies->node = adjacent;
-  node->degree++;
-}
-
-void adjl_add(AdjacencyListNode *A, AdjacencyListNode *B) {
-  adjl_add_impl(A, B);
-  adjl_add_impl(B, A);
-}
-
 void build_adjacency_lists(IRInstructions *instructions, AdjacencyGraph *G) {
-  G->list = calloc(G->matrix.size + 1, sizeof(AdjacencyListNode));
+  VECTOR_RESERVE(G->lists, G->matrix.size + 1);
+  G->lists.size = G->matrix.size + 1;
 
   VECTOR_FOREACH_PTR (IRInstruction *, i, *instructions) {
-    G->list[i->index].index = i->index;
-    G->list[i->index].color = i->result;
-    G->list[i->index].instruction = i;
-    G->list[i->index].regmask = G->regmasks[i->index];
+    AdjacencyList *list = G->lists.data[i->index] = calloc(1, sizeof(AdjacencyList));
+    list->index = i->index;
+    list->color = i->result;
+    list->instruction = i;
+    list->regmask = G->regmasks[i->index];
   }
 
   VECTOR_FOREACH_PTR (IRInstruction *, A, *instructions) {
     VECTOR_FOREACH_PTR (IRInstruction *, B, *instructions) {
-      if (A == B) { continue; }
+      if (A == B) { break; } /// (!)
       if (adjm(G->matrix, A->index, B->index)) {
-        adjl_add_impl(&G->list[A->index], &G->list[B->index]);
+        AdjacencyList *a_list = G->lists.data[A->index];
+        AdjacencyList *b_list = G->lists.data[B->index];
+        VECTOR_PUSH(a_list->adjacencies, B->index);
+        VECTOR_PUSH(b_list->adjacencies, A->index);
       }
     }
   }
 }
 
-void print_adjacency_list(AdjacencyList *list) {
-  if (list) {
-    printf("%zu", list->node->index);
-    list = list->next;
-  }
-  for (; list; list = list->next) {
-    printf(", %zu", list->node->index);
-  }
-  printf("\n");
-}
+void print_adjacency_lists(AdjacencyLists *array) {
+  VECTOR_FOREACH_PTR (AdjacencyList*, list, *array) {
+    printf("%%%u::%u: ", list->instruction->id, list->instruction->index);
+    if (list->color) printf("(r%u) ", list->color);
 
-#ifdef DEBUG_RA
-#  define PRINT_ADJACENCY_LIST(list) print_adjacency_list(list)
-#else
-#  define PRINT_ADJACENCY_LIST(list)
-#endif
-
-void print_adjacency_array(AdjacencyListNode *array, usz size) {
-  AdjacencyListNode it = array[0];
-  for (usz i = 0; i < size; ++i, it = array[i]) {
-    printf("%%%u::%u: ", it.instruction->id, it.instruction->index);
-    if (it.color) {
-      printf("(r%u) ", it.color);
+    /// Print the adjacent nodes.
+    VECTOR_FOREACH_INDEX (i, list->adjacencies) {
+      if (i) { printf(", "); }
+      printf("%zu", list->adjacencies.data[i]);
     }
-    print_adjacency_list(it.adjacencies);
+    printf("\n");
   }
   printf("\n");
 }
 
 #ifdef DEBUG_RA
-#  define PRINT_ADJACENCY_ARRAY(arr, sz) print_adjacency_array(arr, sz)
+#  define PRINT_ADJACENCY_LISTS(arr) print_adjacency_lists(arr)
 #else
-#  define PRINT_ADJACENCY_ARRAY(arr, sz)
+#  define PRINT_ADJACENCY_LISTS(arr)
 #endif
 
 //==== END ADJACENCY LISTS ====
@@ -610,18 +575,12 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
   VECTOR_DELETE(phis);
 }
 
-typedef struct NumberStack {
-  usz number;
-  struct NumberStack *next;
-} NumberStack;
+typedef VECTOR(usz) NumberStack;
 
 void print_number_stack(NumberStack *stack) {
-  if (stack) {
-    printf("%zu", stack->number);
-    stack = stack->next;
-  }
-  for (; stack; stack = stack->next) {
-    printf(", %zu", stack->number);
+  VECTOR_FOREACH_INDEX(i, *stack) {
+    if (i) { printf(", "); }
+    printf("%zu", stack->data[i]);
   }
   printf("\n");
 }
@@ -632,150 +591,110 @@ void print_number_stack(NumberStack *stack) {
 #  define PRINT_NUMBER_STACK(stack)
 #endif
 
-NumberStack *build_coloring_stack(const MachineDescription *desc, IRInstructions *instructions, AdjacencyGraph *G) {
-  NumberStack *stack = NULL;
-
-  AdjacencyListNode *array = calloc(G->matrix.size + 1, sizeof(AdjacencyListNode));
-  for (usz i = 0; i < G->matrix.size; ++i) {
-    AdjacencyListNode *new_node = array + i;
-    AdjacencyListNode *node = G->list + i;
-    *new_node = *node;
-    for (AdjacencyList *adj_it = node->adjacencies; adj_it; adj_it = adj_it->next) {
-      adjl_add_impl(new_node, adj_it->node);
-    }
-  }
+NumberStack build_coloring_stack(const MachineDescription *desc, IRInstructions *instructions, AdjacencyGraph *G) {
+  NumberStack stack = {0};
 
   usz k = desc->register_count;
   usz count = G->matrix.size;
   while (count) {
-    // degree < k rule:
-    //   A graph G is k-colorable if, for every node N in G, the degree
-    //   of N < k.
+    /// degree < k rule:
+    ///   A graph G is k-colorable if, for every node N in G, the degree
+    ///   of N < k.
     bool done;
     do {
       done = true;
-      for (usz i = 0; i < G->matrix.size; ++i) {
-        AdjacencyListNode *node = array + i;
-        if (node->color || node->allocated) {
-          continue;
-        }
-        if (node->degree < k) {
+      VECTOR_FOREACH_INDEX (i, G->lists) {
+        AdjacencyList *list = G->lists.data[i];
+        if (list->color || list->allocated) continue;
+        if (list->degree < k) {
+          list->allocated = 1;
           done = false;
+          count--;
 
-          // push onto color allocation stack
-          NumberStack *new_number = calloc(1, sizeof(NumberStack));
-          new_number->number = i;
-          new_number->next = stack;
-          stack = new_number;
-
-          node->allocated = 1;
-
-          --count;
+          /// Push onto color allocation stack.
+          VECTOR_PUSH(stack, i);
         }
       }
     } while (!done && count);
 
     if (count) {
-      // Determine node with minimal spill cost.
-      usz min_cost = (usz) -1;
+      /// Determine node with minimal spill cost.
+      usz min_cost = (usz) -1; /// (!)
       usz node_to_spill = 0;
 
       VECTOR_FOREACH_PTR (IRInstruction *, instruction, *instructions) {
-        AdjacencyListNode *node = array + instruction->index;
-        if (node->color || node->allocated) {
-          continue;
-        }
-        node->spill_cost = node->degree ? (node->spill_cost / node->degree) : 0;
-        if (node->degree && node->spill_cost <= min_cost) {
-          min_cost = node->spill_cost;
+        AdjacencyList *list = G->lists.data[instruction->index];
+        if (list->color || list->allocated) continue;
+
+        list->spill_cost = list->degree ? (list->spill_cost / list->degree) : 0;
+        if (list->degree && list->spill_cost <= min_cost) {
+          min_cost = list->spill_cost;
           node_to_spill = instruction->index;
-          // node->allocated = 1;
-          if (!min_cost) {
-            break;
-          }
+          if (!min_cost) break;
         }
       }
 
-      // push onto color allocation stack
-      NumberStack *new_number = calloc(1, sizeof(NumberStack));
-      new_number->number = node_to_spill;
-      new_number->next = stack;
-      stack = new_number;
-
-      (array + node_to_spill)->allocated = 1;
-
-      --count;
+      /// Push onto color allocation stack.
+      VECTOR_PUSH(stack, node_to_spill);
+      G->lists.data[node_to_spill]->allocated = 1;
+      count--;
     }
   }
 
   return stack;
 }
 
-void color(
+static void color(
   const MachineDescription *desc,
   NumberStack *stack,
   IRInstructions *instructions,
-  AdjacencyListNode *array,
-  usz length
+  AdjacencyGraph *g
 ) {
   (void) instructions;
 
-  for (NumberStack *i = stack; i; i = i->next) {
-    AdjacencyListNode *node = array + i->number;
-    if (node->color || node->instruction->result) {
-      continue;
+  VECTOR_FOREACH (usz, i, *stack) {
+    AdjacencyList *list = g->lists.data[*i];
+    if (list->color || list->instruction->result) continue;
+
+    /// Each bit that is set refers to register in register list that
+    /// must not be assigned to this.
+    usz register_interferences = list->regmask | desc->instruction_register_interference(list->instruction);
+    VECTOR_FOREACH (usz, adj, list->adjacencies) {
+      AdjacencyList *adjacent = g->lists.data[*adj];
+      register_interferences |= desc->instruction_register_interference(adjacent->instruction);
+      if (adjacent->color) register_interferences |= 1 << (adjacent->color - 1);
     }
 
     Register r = 0;
-
-    usz k = desc->register_count;
-    // Each bit that is set refers to register in register list that
-    // must not be assigned to this.
-    usz register_interferences = node->regmask;
-    register_interferences |=
-        desc->instruction_register_interference(node->instruction);
-    for (AdjacencyList *adj_it = node->adjacencies; adj_it; adj_it = adj_it->next) {
-      register_interferences |=
-          desc->instruction_register_interference(adj_it->node->instruction);
-      if (adj_it->node->color) {
-        register_interferences |= 1 << (adj_it->node->color - 1);
-      }
-    }
-
-    for (usz x = 0; x < k; ++x) {
+    for (usz x = 0; x < desc->register_count; ++x) {
       if (!(register_interferences & 1 << x)) {
         r = (Register) (x + 1);
         break;
       }
     }
 
-    if (!r) {
-      TODO("Can not color graph with %zu colors until stack spilling is implemented!", k);
-    }
-
-    node->color = r;
+    if (!r) TODO("Can not color graph with %zu colors until stack spilling is implemented!", desc->register_count);
+    list->color = r;
   }
 
-  for (usz i = 0; i < length; ++i) {
-    AdjacencyListNode node = array[i];
-    IRInstruction *instruction = node.instruction;
-    Register r = node.color;
-    if (instruction->type == IR_PHI) {
-      VECTOR_FOREACH_PTR (IRPhiArgument *, phi, instruction->phi_args) {
+  VECTOR_FOREACH_PTR (AdjacencyList*, list, g->lists) {
+    IRInstruction *inst = list->instruction;
+    Register r = list->color;
+    if (inst->type == IR_PHI) {
+      VECTOR_FOREACH_PTR (IRPhiArgument *, phi, inst->phi_args) {
         if (needs_register(phi->value)) {
-          AdjacencyListNode *phi_node = array + phi->value->index;
-          phi_node->color = r;
-          phi->value->result = r;
+          AdjacencyList *phi_list = g->lists.data[phi->value->index];
+          if (!phi_list->color) {
+            phi_list->color = r;
+            phi->value->result = r;
+          }
           // TODO: Should we follow argument recursively if it is also PHI?
         }
       }
     }
 
-    // Do not over-write preallocated registers.
-    if (instruction->result) {
-      continue;
-    }
-    instruction->result = r;
+    /// Do not over-write preallocated registers.
+    if (!inst->result) inst->result = r;
   }
 }
 
@@ -822,7 +741,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
 
   ir_set_func_ids(f);
   build_adjacency_lists(&instructions, &G);
-  PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
+  PRINT_ADJACENCY_LISTS(G.list);
 
   DEBUG("Before Coalescing\n");
   ir_set_func_ids(f);
@@ -843,28 +762,31 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
   ir_set_func_ids(f);
   IR_FEMIT(stdout, f);
   PRINT_ADJACENCY_MATRIX(G.matrix);
-  PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
+  PRINT_ADJACENCY_LISTS(G.list);
 
-  NumberStack *stack = build_coloring_stack(desc, &instructions, &G);
+  NumberStack stack = build_coloring_stack(desc, &instructions, &G);
 
   DEBUG("After build color stack\n");
   ir_set_func_ids(f);
   IR_FEMIT(stdout, f);
   PRINT_ADJACENCY_MATRIX(G.matrix);
-  PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
+  PRINT_ADJACENCY_LISTS(G.list);
   PRINT_NUMBER_STACK(stack);
 
-  color(desc, stack, &instructions, G.list, G.matrix.size);
+  color(desc, &stack, &instructions, &G);
 
   DEBUG("After coloring\n");
   ir_set_func_ids(f);
   IR_FEMIT(stdout, f);
   PRINT_ADJACENCY_MATRIX(G.matrix);
-  PRINT_ADJACENCY_ARRAY(G.list, G.matrix.size);
+  PRINT_ADJACENCY_LISTS(G.list);
   PRINT_INSTRUCTION_LIST(&instructions);
   PRINT_NUMBER_STACK(stack);
 
   track_registers(f);
 
   if (optimise) codegen_optimise_blocks(f->context);
+
+  /// Free allocated resources.
+  /// TODO: Clean up adjacency lists because that’s too many linked lists, honestly.
 }
