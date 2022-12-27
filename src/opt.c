@@ -680,6 +680,8 @@ void codegen_optimise(CodegenContext *ctx) {
   /// Optimise each function individually.
   do {
     VECTOR_FOREACH_PTR (IRFunction*, f, ctx->functions) {
+      if (f->is_extern) continue;
+
       DominatorInfo dom = {0};
       do {
         build_dominator_tree(f, &dom, true);
@@ -702,6 +704,8 @@ void codegen_optimise(CodegenContext *ctx) {
 /// Called after RA.
 void codegen_optimise_blocks(CodegenContext *ctx) {
   VECTOR_FOREACH_PTR (IRFunction*, f, ctx->functions) {
+    if (f->is_extern) continue;
+
     DominatorInfo dom = {0};
     do {
       build_dominator_tree(f, &dom, true);
