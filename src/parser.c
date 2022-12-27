@@ -553,19 +553,16 @@ static Node *parse_while_expr(Parser *p) {
   return ast_make_while(p->ast, while_loc, cond, body);
 }
 
-/// <expr-call> ::= <expression> "(" [ <expression> { "," <expression> } ] ")"
+/// <expr-call> ::= <expression> "(" { <expression> [ "," ] } ")"
 static Node *parse_call_expr(Parser *p, Node *callee) {
   loc call_loc = p->tok.source_location;
   consume(p, TK_LPAREN);
 
   /// Collect the arguments.
   Nodes args = {0};
-  if (p->tok.type != TK_RPAREN) {
+  while (p->tok.type != TK_RPAREN) {
     VECTOR_PUSH(args, parse_expr(p));
-    while (p->tok.type == TK_COMMA) {
-      next_token(p);
-      VECTOR_PUSH(args, parse_expr(p));
-    }
+    if (p->tok.type == TK_COMMA) next_token(p);
   }
   consume(p, TK_RPAREN);
 
@@ -643,7 +640,7 @@ static Parameter parse_param_decl(Parser *p) {
 
 /// <type-derived>  ::= <type-array> | <type-function>
 /// <type-array>    ::= <type> "[" <expression> "]"
-/// <type-function> ::= <type> "(" [ <param-decl> { "," <param-decl>  } ] ")"
+/// <type-function> ::= <type> "(" { <param-decl> [ "," ]  } ")"
 static Type *parse_type_derived(Parser *p, Type *base) {
   ASSERT(base);
 
@@ -680,12 +677,9 @@ static Type *parse_type_derived(Parser *p, Type *base) {
 
         /// Collect the arguments.
         Parameters args = {0};
-        if (p->tok.type != TK_RPAREN) {
+        while (p->tok.type != TK_RPAREN) {
           VECTOR_PUSH(args, parse_param_decl(p));
-          while (p->tok.type == TK_COMMA) {
-            next_token(p);
-            VECTOR_PUSH(args, parse_param_decl(p));
-          }
+          if (p->tok.type == TK_COMMA) next_token(p);
         }
         consume(p, TK_RPAREN);
 
