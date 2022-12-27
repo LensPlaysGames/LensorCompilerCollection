@@ -94,6 +94,13 @@ void codegen_context_free(CodegenContext *context) {
   }
   VECTOR_DELETE(context->static_vars);
 
+  /// Free instructions that were removed, but not freed.
+  VECTOR_FOREACH_PTR (IRInstruction*, i, context->removed_instructions) {
+    ir_free_instruction_data(i);
+    free(i);
+  }
+  VECTOR_DELETE(context->removed_instructions);
+
   /// Free backend-specific data.
   switch (context->format) {
     default: UNREACHABLE();

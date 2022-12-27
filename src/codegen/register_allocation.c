@@ -415,19 +415,18 @@ typedef struct AdjacencyList {
 } AdjacencyList;
 
 void build_adjacency_lists(IRInstructions *instructions, AdjacencyGraph *G) {
-  /// Free old lists that are no longer needed.
-  if (G->matrix.size + 1 < G->lists.size) {
-    for (usz i = G->matrix.size + 1; i < G->lists.size; ++i) {
-      if (!G->lists.data[i]) continue;
-      VECTOR_DELETE(G->lists.data[i]->adjacencies);
-      free(G->lists.data[i]);
-      G->lists.data[i] = NULL;
-    }
+  /// Free old lists. This could be more efficient, but we’ve
+  /// had bugs where we were trying to use out-of-date lists,
+  /// so we’re keeping this for now.
+  VECTOR_FOREACH_PTR (AdjacencyList*, list, G->lists) {
+    if (list) VECTOR_DELETE(list->adjacencies);
+    free(list);
   }
+  VECTOR_DELETE(G->lists);
 
   /// Allocate memory for the new lists.
-  VECTOR_RESERVE(G->lists, G->matrix.size + 1);
-  G->lists.size = G->matrix.size + 1;
+  VECTOR_RESERVE(G->lists, instructions->size);
+  G->lists.size = instructions->size;
 
   VECTOR_FOREACH_PTR (IRInstruction *, i, *instructions) {
     if (G->lists.data[i->index]) VECTOR_DELETE(G->lists.data[i->index]->adjacencies);

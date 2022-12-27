@@ -51,6 +51,7 @@ struct CodegenContext {
   /// TODO: This no longer needs to be a pointer to a vector.
   VECTOR(IRFunction *) functions;
   VECTOR(IRStaticVariable *) static_vars;
+  VECTOR(IRInstruction*) removed_instructions;
   IRFunction *function;
   IRFunction *entry;
   IRBlock *block;
