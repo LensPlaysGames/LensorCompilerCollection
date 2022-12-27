@@ -983,7 +983,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     /// Only emit a jump if the target isn’t the next block.
     if (!optimise || (inst->parent_block
           && inst->destination_block != inst->parent_block->next && !inst->parent_block->done)) {
-      femit(context, I_JMP, NAME, inst->destination_block->name);
+      femit(context, I_JMP, NAME, inst->destination_block->name.data);
     }
     if (optimise && inst->parent_block) inst->parent_block->done = true;
     break;
@@ -997,12 +997,12 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     /// If either target is the next block, arrange the jumps in such a way
     /// that we can save one and simply fallthrough to the next block.
     if (optimise && branch->then == inst->parent_block->next) {
-      femit(context, I_JCC, JUMP_TYPE_Z, branch->else_->name);
+      femit(context, I_JCC, JUMP_TYPE_Z, branch->else_->name.data);
     } else if (optimise && branch->else_ == inst->parent_block->next) {
-      femit(context, I_JCC, JUMP_TYPE_NZ, branch->then->name);
+      femit(context, I_JCC, JUMP_TYPE_NZ, branch->then->name.data);
     } else {
-      femit(context, I_JCC, JUMP_TYPE_Z, branch->else_->name);
-      femit(context, I_JMP, NAME, branch->then->name);
+      femit(context, I_JCC, JUMP_TYPE_Z, branch->else_->name.data);
+      femit(context, I_JMP, NAME, branch->then->name.data);
     }
 
     if (optimise && inst->parent_block) inst->parent_block->done = true;
