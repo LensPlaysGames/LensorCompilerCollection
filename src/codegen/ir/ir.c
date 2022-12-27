@@ -20,6 +20,9 @@ void codegen_lower_ir_backend(CodegenContext *context) {
 }
 
 void codegen_emit_ir_backend(CodegenContext *context) {
+  bool use_colour = _thread_use_diagnostics_colours_;
+  disable_colours();
+
   ir_set_ids(context);
   VECTOR_FOREACH_PTR (IRFunction*, f, *context->functions) {
     ir_print_defun(context->code, f);
@@ -117,4 +120,6 @@ void codegen_emit_ir_backend(CodegenContext *context) {
     /// End of function.
     fprintf(context->code, "}\n\n");
   }
+
+  if (use_colour) enable_colours();
 }

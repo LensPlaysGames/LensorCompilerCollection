@@ -27,6 +27,7 @@ void print_usage(char **argv) {
          "    `-f`, `--format`   :: Set the output format to the one given.\n"
          "    `-cc`, `--calling` :: Set the calling convention to the one given.\n"
          "    `-d`, `--dialect`  :: Set the output assembly dialect to the one given.\n"
+         "    `--colours`        :: Set whether to use colours in diagnostics.\n"
          "Anything other arguments are treated as input filepaths (source code).\n");
 }
 
@@ -36,13 +37,13 @@ enum CodegenOutputFormat output_format = CG_FMT_DEFAULT;
 enum CodegenCallingConvention output_calling_convention = CG_CALL_CONV_DEFAULT;
 enum CodegenAssemblyDialect output_assembly_dialect = CG_ASM_DIALECT_DEFAULT;
 
-/// TODO: should be bools.
 int verbosity = 0;
 int optimise = 0;
 bool debug_ir = false;
 bool print_ast = false;
 bool syntax_only = false;
 bool print_scopes = false;
+bool prefer_using_diagnostics_colours = true;
 
 void print_acceptable_formats() {
   printf("Acceptable formats include:\n"
@@ -65,8 +66,18 @@ void print_acceptable_asm_dialects() {
          " -> intel\n");
 }
 
+void print_acceptable_colour_settings() {
+  printf("Acceptable values for `--colours` include:\n"
+         " -> auto\n"
+         " -> always\n"
+         " -> never\n");
+}
+
 /// @return Zero if everything goes well, otherwise return non-zero value.
 int handle_command_line_arguments(int argc, char **argv) {
+  /// Default settings.
+  prefer_using_diagnostics_colours = platform_isatty(fileno(stdout));
+
   for (int i = 1; i < argc; ++i) {
     char *argument = argv[i];
 
@@ -137,7 +148,26 @@ int handle_command_line_arguments(int argc, char **argv) {
         print_acceptable_formats();
         return 1;
       }
-    } else if (strcmp(argument, "-cc") == 0
+    } else if (strcmp(argument, "--colours") == 0) {
+      i++;
+      if (i >= argc) {
+        fprintf(stderr, "Error: Expected option value after `--colours`\n");
+        print_acceptable_colour_settings();
+        exit(1);
+      }
+      if (strcmp(argv[i], "auto") == 0) {
+        prefer_using_diagnostics_colours = platform_isatty(fileno(stdout));
+      } else if (strcmp(argv[i], "never") == 0) {
+        prefer_using_diagnostics_colours = false;
+      } else if (strcmp(argv[i], "always") == 0) {
+        prefer_using_diagnostics_colours = true;
+      } else {
+        printf("Expected calling convention after calling convention command line argument\n"
+               "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
+        print_acceptable_calling_conventions();
+        return 1;
+      }
+    }else if (strcmp(argument, "-cc") == 0
                || strcmp(argument, "--calling") == 0) {
       i++;
       if (i >= argc) {
@@ -220,6 +250,8 @@ int main(int argc, char **argv) {
     print_usage(argv);
     return 1;
   }
+
+  _thread_use_diagnostics_colours_ = prefer_using_diagnostics_colours;
 
   const char *infile = argv[input_filepath_index];
   const char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];

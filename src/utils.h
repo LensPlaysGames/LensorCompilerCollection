@@ -24,6 +24,7 @@ typedef ptrdiff_t isz;
 #  define PRETTY_FUNCTION __PRETTY_FUNCTION__
 #  define NODISCARD __attribute__((warn_unused_result))
 #  define BUILTIN_UNREACHABLE() __builtin_unreachable()
+#  define THREAD_LOCAL __thread
 #else
 #  define NORETURN __declspec(noreturn)
 #  define FALLTHROUGH
@@ -32,8 +33,8 @@ typedef ptrdiff_t isz;
 #  define PRETTY_FUNCTION __FUNCSIG__
 #  define NODISCARD
 #  define BUILTIN_UNREACHABLE() __assume(0)
+#  define THREAD_LOCAL __declspec(thread)
 #endif
-
 
 /// ===========================================================================
 ///  Miscellaneous macros.
@@ -45,6 +46,21 @@ typedef ptrdiff_t isz;
 #define STR(s) STR_(s)
 
 #define VA_FIRST(X, ...) X
+
+/// ===========================================================================
+///  Global settings.
+/// ===========================================================================
+/// This is a command-line setting.
+extern bool prefer_using_diagnostics_colours;
+
+/// Don’t use this directly.
+extern THREAD_LOCAL bool _thread_use_diagnostics_colours_;
+
+/// Enable colours in diagnostics.
+static inline void enable_colours() { _thread_use_diagnostics_colours_ = true; }
+
+/// Disable colours in diagnostics.
+static inline void disable_colours() { _thread_use_diagnostics_colours_ = false; }
 
 /// ===========================================================================
 ///  Strings.
@@ -83,5 +99,12 @@ string format(const char *fmt, ...);
 
 /// Convert a string literal to a span.
 #define literal_span(lit) ((span){(lit), sizeof(lit) - 1})
+
+/// ===========================================================================
+///  Other.
+/// ===========================================================================
+/// Determine the width of a number.
+NODISCARD usz number_width(u64 n);
+
 
 #endif // FUNCOMPILER_UTILS_H

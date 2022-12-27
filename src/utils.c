@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <utils.h>
 #include <error.h>
+#include <math.h>
 
 #ifdef _WIN32
 /// Basically strndup(), but for Windows.
@@ -14,6 +15,8 @@ static char *strndup(const char *str, usz sz) {
   return dup;
 }
 #endif
+
+THREAD_LOCAL bool _thread_use_diagnostics_colours_ = false;
 
 string string_dup_impl(const char *src, usz size) {
   string dest;
@@ -45,3 +48,5 @@ string format(const char *fmt, ...) {
   /// Done.
   return dest;
 }
+
+usz number_width(u64 n) { return n ? (usz) log10((double)n) + 1 : 1; }
