@@ -225,11 +225,8 @@ int handle_command_line_arguments(int argc, char **argv) {
       system("xdg-open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #     endif
     } else {
-      if (input_filepath_index != -1) {
-        printf("Only a single input filepath is used, but multiple were given.\n"
-               "Using the latest one.\n");
-      }
-      input_filepath_index = i;
+      if (input_filepath_index == -1) input_filepath_index = i;
+      else ICE("Error: Unrecognized command line argument: \"%s\"", argument);
     }
   }
   return 0;
