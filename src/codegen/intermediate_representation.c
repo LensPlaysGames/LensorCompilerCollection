@@ -137,6 +137,19 @@ void ir_remove_and_free_block(IRBlock *block) {
   free(block);
 }
 
+void ir_free_instruction_data(IRInstruction *i) {
+  if (!i) return;
+  STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
+  switch (i->type) {
+    case IR_CALL: VECTOR_DELETE(i->call.arguments); break;
+    case IR_PHI: VECTOR_DELETE(i->phi_args); break;
+    default: break;
+  }
+
+  /// Free usage data.
+  VECTOR_DELETE(i->users);
+}
+
 #define INSERT(instruction) ir_insert(context, (instruction))
 
 void ir_femit_instruction
@@ -286,7 +299,7 @@ void ir_femit
 {
   fprintf(file, "=======================================================================================");
   ir_set_ids(context);
-  VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
+  VECTOR_FOREACH_PTR (IRFunction*, function, context->functions) {
     ir_femit_function(file, function);
   }
 }
@@ -308,7 +321,7 @@ void ir_set_func_ids(IRFunction *f) {
 void ir_set_ids(CodegenContext *context) {
   size_t function_id = 0;
 
-  VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
+  VECTOR_FOREACH_PTR (IRFunction*, function, context->functions) {
     function->id = function_id++;
     ir_set_func_ids(function);
   }
@@ -414,7 +427,7 @@ IRFunction *ir_function(CodegenContext *context, span name, size_t params) {
   context->function = function;
   function->context = context;
   ir_block_attach(context, block);
-  VECTOR_PUSH(*context->functions, function);
+  VECTOR_PUSH(context->functions, function);
 
   /// Generate param refs.
   for (u64 i = 1; i <= params; i++) {

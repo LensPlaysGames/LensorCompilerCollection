@@ -27,10 +27,10 @@
 /// Define a vector on the heap.
 #define MAKE_VECTOR_HEAP(type) \
   calloc(1, sizeof(struct {    \
-    type *data;                \
-    size_t size;               \
-    size_t capacity;           \
-  }))
+           type *data;         \
+           size_t size;        \
+           size_t capacity;    \
+         }))
 
 #if 0
 /// Iterate over each element of a vector.
@@ -210,6 +210,16 @@
     type *first;    \
     type *last;     \
   }
+
+#define DLIST_DELETE(type, list) \
+  do {                           \
+    type *node = (list).first;   \
+    while (node) {               \
+      type *next = node->next;   \
+      free(node);                \
+      node = next;               \
+    }                            \
+  } while (0)
 
 #define DLIST_PUSH_BACK(list, element) \
   do {                                 \

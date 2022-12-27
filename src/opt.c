@@ -352,7 +352,7 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
   /// are possible, we only check if the first store occurs
   /// before any loads and in main() for now.
   IRFunction **main = NULL;
-  VECTOR_FIND_IF(*ctx->functions, main, i, string_eq(ctx->functions->data[i]->name, literal_span("main")));
+  VECTOR_FIND_IF(ctx->functions, main, i, string_eq(ctx->functions.data[i]->name, literal_span("main")));
   ASSERT(main, "No main() function!");
 
   FOREACH_INSTRUCTION (ctx) {
@@ -550,7 +550,7 @@ bool opt_analyse_functions(CodegenContext *ctx) {
   do {
     changed = false;
 
-    VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
+    VECTOR_FOREACH_PTR (IRFunction*, f, ctx->functions) {
       changed |= opt_check_pure(f);
       changed |= opt_check_leaf(f);
       changed |= opt_check_noreturn(f);
@@ -679,7 +679,7 @@ void codegen_optimise(CodegenContext *ctx) {
 
   /// Optimise each function individually.
   do {
-    VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
+    VECTOR_FOREACH_PTR (IRFunction*, f, ctx->functions) {
       DominatorInfo dom = {0};
       do {
         build_dominator_tree(f, &dom, true);
@@ -701,7 +701,7 @@ void codegen_optimise(CodegenContext *ctx) {
 
 /// Called after RA.
 void codegen_optimise_blocks(CodegenContext *ctx) {
-  VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
+  VECTOR_FOREACH_PTR (IRFunction*, f, ctx->functions) {
     DominatorInfo dom = {0};
     do {
       build_dominator_tree(f, &dom, true);

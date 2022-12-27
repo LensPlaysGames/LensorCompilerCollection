@@ -318,8 +318,11 @@ int main(int argc, char **argv) {
 
   done:
     ast_free(ast);
-    return 0;
   }
 
+  /// Free the input file.
+  free(s.data);
+
+  /// Done!
   if (verbosity) printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
 }

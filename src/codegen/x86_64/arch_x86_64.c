@@ -1183,7 +1183,7 @@ void emit_entry(CodegenContext *context) {
 
   /// TODO: Maybe make some functions not global.
   fprintf(context->code, "\n");
-  VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
+  VECTOR_FOREACH_PTR (IRFunction*, function, context->functions) {
     fprintf(context->code, ".global %.*s\n", (int) function->name.size, function->name.data);
   }
 }
@@ -1315,7 +1315,7 @@ static void lower(CodegenContext *context) {
 }
 
 void calculate_stack_offsets(CodegenContext *context) {
-  VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
+  VECTOR_FOREACH_PTR (IRFunction*, function, context->functions) {
     size_t offset = 0;
     DLIST_FOREACH (IRBlock *, block, function->blocks) {
       DLIST_FOREACH (IRInstruction *, instruction, block->instructions) {
@@ -1405,14 +1405,14 @@ void codegen_emit_x86_64(CodegenContext *context) {
     .instruction_register_interference = interfering_regs
   };
 
-  VECTOR_FOREACH_PTR (IRFunction*, f, *context->functions)
+  VECTOR_FOREACH_PTR (IRFunction*, f, context->functions)
     allocate_registers(f, &desc);
 
   if (debug_ir) ir_femit(stdout, context);
 
   // Assign block labels.
   usz block_cnt = 0;
-  VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
+  VECTOR_FOREACH_PTR (IRFunction*, function, context->functions) {
     DLIST_FOREACH (IRBlock *, block, function->blocks) {
       if (optimise) {
         /// Determine whether this block is ever referenced anywhere.
@@ -1466,7 +1466,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   calculate_stack_offsets(context);
 
   emit_entry(context);
-  VECTOR_FOREACH_PTR (IRFunction*, function, *context->functions) {
+  VECTOR_FOREACH_PTR (IRFunction*, function, context->functions) {
     emit_function(context, function);
   }
 }

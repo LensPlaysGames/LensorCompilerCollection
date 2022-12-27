@@ -909,10 +909,10 @@ static void parse_block(IRParser *p, bool first_block) {
   if (p->tok_type != tk_ident) ERR("Expected block");
   if (!first_block) {
     IRBlock *block = ir_block_create();
-    ir_block_attach_to_function(VECTOR_BACK(*p->context->functions), block);
+    ir_block_attach_to_function(VECTOR_BACK(p->context->functions), block);
     p->context->block = block;
   }
-  make_block(p, here(p), p->tok, VECTOR_BACK(*p->context->functions)->blocks.last);
+  make_block(p, here(p), p->tok, VECTOR_BACK(p->context->functions)->blocks.last);
   next_token(p);
   if (p->tok_type != tk_colon) ERR("expected ':' after block name");
 
@@ -945,7 +945,7 @@ static void parse_body(IRParser *p) {
   /// The first block is special, because it can be unnamed. If there
   /// is no unnamed first block, there must still be at least one block.
   if (!at_block_name(p)) {
-    make_block(p, here(p), p->tok, VECTOR_BACK(*p->context->functions)->blocks.first);
+    make_block(p, here(p), p->tok, VECTOR_BACK(p->context->functions)->blocks.first);
 
     /// Parse the body of the first block.
     parse_block_body(p);
@@ -961,7 +961,7 @@ static void parse_body(IRParser *p) {
 /// <attributes> ::= <attribute>*
 /// <attribute>  ::= CONSTEVAL | FORCEINLINE | GLOBAL | NORETURN | PURE | LEAF
 static void parse_attributes(IRParser *p) {
-  IRFunction *f = VECTOR_BACK(*p->context->functions);
+  IRFunction *f = VECTOR_BACK(p->context->functions);
 
 #define ATTR(a)                                                     \
   if (IDENT(#a)) {                                                  \
@@ -996,7 +996,7 @@ static void parse_parameters(IRParser *p) {
     /// Create a parameter reference.
     if (p->tok_type != tk_temp) ERR("Expected temporary after '(' or ','");
     if (p->tok.data[0] == '#') ERR("Function parameter must be a temporary register");
-    ir_add_parameter_to_function(VECTOR_BACK(*p->context->functions));
+    ir_add_parameter_to_function(VECTOR_BACK(p->context->functions));
     IRInstruction *param = ir_parameter(p->context, param_count++);
     make_temp(p, here(p), p->tok, param);
     next_token(p);
@@ -1052,7 +1052,7 @@ static void parse_function(IRParser *p) {
   next_token(p);
 
   /// Add an entry for the function.
-  make_function(p, location, name, VECTOR_BACK(*p->context->functions));
+  make_function(p, location, name, VECTOR_BACK(p->context->functions));
 }
 
 /// <ir> ::= { <function> | <extern> }
@@ -1151,7 +1151,7 @@ bool ir_parse(CodegenContext *context, const char *filename, string ir) {
   /// Remove all functions we added from the context.
   bool found = false;
   usz removed = 0;
-  VECTOR_FOREACH_PTR (IRFunction *, func, *context->functions) {
+  VECTOR_FOREACH_PTR (IRFunction *, func, context->functions) {
     /// Do *not* delete anything before f!
     if (func == f) {
       found = true;
@@ -1176,6 +1176,6 @@ bool ir_parse(CodegenContext *context, const char *filename, string ir) {
     free(func);
     removed++;
   }
-  context->functions->size -= removed;
+  context->functions.size -= removed;
   return false;
 }

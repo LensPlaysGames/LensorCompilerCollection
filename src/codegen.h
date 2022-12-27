@@ -48,7 +48,8 @@ struct CodegenContext {
   FILE *code;
   AST *ast;
 
-  VECTOR(IRFunction *) *functions;
+  /// TODO: This no longer needs to be a pointer to a vector.
+  VECTOR(IRFunction *) functions;
   VECTOR(IRStaticVariable *) static_vars;
   IRFunction *function;
   IRFunction *entry;

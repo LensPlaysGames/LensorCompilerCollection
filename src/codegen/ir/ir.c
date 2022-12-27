@@ -24,7 +24,7 @@ void codegen_emit_ir_backend(CodegenContext *context) {
   disable_colours();
 
   ir_set_ids(context);
-  VECTOR_FOREACH_PTR (IRFunction*, f, *context->functions) {
+  VECTOR_FOREACH_PTR (IRFunction*, f, context->functions) {
     ir_print_defun(context->code, f);
 
     /// Function body.

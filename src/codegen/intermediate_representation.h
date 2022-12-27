@@ -12,7 +12,7 @@
   (name)->type = (given_type)
 
 #define FOREACH_INSTRUCTION_N(context, function, block, instruction)  \
-  VECTOR_FOREACH_PTR (IRFunction *, function, *context->functions)    \
+  VECTOR_FOREACH_PTR (IRFunction *, function, context->functions)    \
     DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
       DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
 
@@ -340,6 +340,11 @@ void ir_unmark_usees(IRInstruction *instruction);
 void ir_remove(IRInstruction* instruction);
 void ir_remove_use(IRInstruction *usee, IRInstruction *user);
 void ir_remove_and_free_block(IRBlock *block);
+
+/// Free memory used by an instruction. This is unsafe as
+/// it doesn’t check whether the instruction is used by other
+/// instructions, so use this only when freeing the entire IR.
+void ir_free_instruction_data(IRInstruction *instruction);
 
 /// Mark a block as ending w/ `unreachable` and remove it
 /// from PHIs.

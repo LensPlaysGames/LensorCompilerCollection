@@ -415,10 +415,23 @@ typedef struct AdjacencyList {
 } AdjacencyList;
 
 void build_adjacency_lists(IRInstructions *instructions, AdjacencyGraph *G) {
+  /// Free old lists that are no longer needed.
+  if (G->matrix.size + 1 < G->lists.size) {
+    for (usz i = G->matrix.size + 1; i < G->lists.size; ++i) {
+      if (!G->lists.data[i]) continue;
+      VECTOR_DELETE(G->lists.data[i]->adjacencies);
+      free(G->lists.data[i]);
+      G->lists.data[i] = NULL;
+    }
+  }
+
+  /// Allocate memory for the new lists.
   VECTOR_RESERVE(G->lists, G->matrix.size + 1);
   G->lists.size = G->matrix.size + 1;
 
   VECTOR_FOREACH_PTR (IRInstruction *, i, *instructions) {
+    if (G->lists.data[i->index]) VECTOR_DELETE(G->lists.data[i->index]->adjacencies);
+    free(G->lists.data[i->index]);
     AdjacencyList *list = G->lists.data[i->index] = calloc(1, sizeof(AdjacencyList));
     list->index = i->index;
     list->color = i->result;
@@ -753,7 +766,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
   ir_set_func_ids(f);
   IR_FEMIT(stdout, f);
 
-  instructions = collect_instructions(f, 1);
+  collect_instructions_into(f, &instructions, 1);
   build_adjacency_graph(f, desc, &instructions, &G);
   build_adjacency_lists(&instructions, &G);
 
@@ -788,5 +801,13 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
   if (optimise) codegen_optimise_blocks(f->context);
 
   /// Free allocated resources.
-  /// TODO: Clean up adjacency lists because that’s too many linked lists, honestly.
+  VECTOR_FOREACH_PTR (AdjacencyList*, list, G.lists) {
+    VECTOR_DELETE(list->adjacencies);
+    free(list);
+  }
+  VECTOR_DELETE(G.lists);
+  VECTOR_DELETE(instructions);
+  VECTOR_DELETE(stack);
+  free(G.matrix.data);
+  free(G.regmasks);
 }

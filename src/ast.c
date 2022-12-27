@@ -19,6 +19,7 @@ static void scope_delete(Scope *scope) {
   }
 
   VECTOR_DELETE(scope->symbols);
+  VECTOR_DELETE(scope->children);
   free(scope);
 }
 
@@ -465,13 +466,51 @@ AST *ast_create() {
 
 /// Free an AST.
 void ast_free(AST *ast) {
-  /// Free all nodes.
+  /// Some nodes may contain strings, vectors, etc.. Iterate over all
+  /// nodes and free all resources they may have.
+  VECTOR_FOREACH_PTR (Node *, node, ast->_nodes_) {
+    switch (node->kind) {
+      case NODE_FUNCTION:
+        free(node->function.name.data);
+        VECTOR_DELETE(node->function.param_decls);
+        continue;
+
+      case NODE_ROOT: VECTOR_DELETE(node->root.children); continue;
+      case NODE_BLOCK: VECTOR_DELETE(node->block.children); continue;
+      case NODE_CALL: VECTOR_DELETE(node->call.arguments); continue;
+      case NODE_DECLARATION: free(node->declaration.name.data); continue;
+
+      case NODE_IF:
+      case NODE_WHILE:
+      case NODE_CAST:
+      case NODE_BINARY:
+      case NODE_UNARY:
+      case NODE_LITERAL:
+      case NODE_VARIABLE_REFERENCE:
+      case NODE_FUNCTION_REFERENCE: continue;
+    }
+    UNREACHABLE();
+  }
+
+  /// Now that that’s done, free all nodes.
   VECTOR_FOREACH_PTR (Node *, node, ast->_nodes_) free(node);
   VECTOR_DELETE(ast->_nodes_);
+  VECTOR_DELETE(ast->functions);
+
+  /// Free all types.
+  VECTOR_FOREACH_PTR (Type *, type, ast->_types_) {
+    if (type->kind == TYPE_FUNCTION) {
+      VECTOR_FOREACH (Parameter, param, type->function.parameters) free(param->name.data);
+      VECTOR_DELETE(type->function.parameters);
+    }
+    free(type);
+  }
+  VECTOR_DELETE(ast->_types_);
 
   /// Free all scopes.
   VECTOR_FOREACH_PTR (Scope *, scope, ast->_scopes_) scope_delete(scope);
   VECTOR_DELETE(ast->_scopes_);
+  VECTOR_DELETE(ast->scope_stack);
 
   /// Free all interned strings.
   VECTOR_FOREACH (string, s, ast->strings) free(s->data);

@@ -56,7 +56,6 @@ CodegenContext *codegen_context_create
   context->ast = ast;
   context->code = code;
   context->dialect = dialect;
-  context->functions = calloc(1, sizeof *context->functions);
   return context;
 }
 
@@ -64,8 +63,38 @@ void codegen_context_free(CodegenContext *context) {
   STATIC_ASSERT(CG_FMT_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen output formats.");
   STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all calling conventions.");
 
-  VECTOR_DELETE(*context->functions);
+  /// Free all IR Functions.
+  VECTOR_FOREACH_PTR (IRFunction *, f, context->functions) {
+    /// Free each block.
+    DLIST_FOREACH (IRBlock*, b, f->blocks) {
+      /// Free each instruction.
+      DLIST_FOREACH (IRInstruction *, i, b->instructions) ir_free_instruction_data(i);
+      DLIST_DELETE(IRInstruction, b->instructions);
 
+      /// Free the block name.
+      free(b->name.data);
+    }
+
+    /// Free the name, params, and block list.
+    free(f->name.data);
+    VECTOR_DELETE(f->parameters);
+    DLIST_DELETE(IRBlock, f->blocks);
+
+    /// Free the function itself.
+    free(f);
+  }
+
+  /// Finally, delete the function vector.
+  VECTOR_DELETE(context->functions);
+
+  /// Free static variables.
+  VECTOR_FOREACH_PTR (IRStaticVariable*, var, context->static_vars) {
+    free(var->name.data);
+    free(var);
+  }
+  VECTOR_DELETE(context->static_vars);
+
+  /// Free backend-specific data.
   switch (context->format) {
     default: UNREACHABLE();
     case CG_FMT_x86_64_GAS:
@@ -78,6 +107,9 @@ void codegen_context_free(CodegenContext *context) {
     case CG_FMT_IR:
       return codegen_context_ir_free(context);
   }
+
+  /// Free the context itself.
+  free(context);
 }
 
 /// ===========================================================================
