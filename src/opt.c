@@ -67,6 +67,9 @@ static bool has_side_effects(IRInstruction *i) {
     ALL_BINARY_INSTRUCTION_CASES()
       return false;
 
+    case IR_CALL:
+      return i->call.is_indirect || i->call.callee_function->is_extern;
+
     default:
       return true;
   }
@@ -551,6 +554,7 @@ bool opt_analyse_functions(CodegenContext *ctx) {
     changed = false;
 
     VECTOR_FOREACH_PTR (IRFunction*, f, ctx->functions) {
+      if (f->is_extern) continue;
       changed |= opt_check_pure(f);
       changed |= opt_check_leaf(f);
       changed |= opt_check_noreturn(f);
