@@ -514,14 +514,18 @@ bool codegen
       VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
           func->function.ir = ir_function(context, as_span(func->function.name),
             func->type->function.parameters.size);
+
+          /// Mark the function as extern if it is.
+          if (!func->function.body) func->function.ir->is_extern = true;
       }
 
       /// Emit the main function.
       context->block = context->entry->blocks.first;
       codegen_expr(context, ast->root);
 
-      /// Emit the remaining functions.
+      /// Emit the remaining functions that aren’t extern.
       VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
+        if (!func->function.body) continue;
         context->block = func->function.ir->blocks.first;
         codegen_function(context, func);
       }

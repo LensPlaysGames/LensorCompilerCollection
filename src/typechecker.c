@@ -152,8 +152,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       }
       break;
 
-    /// Typecheck the function body.
+    /// Typecheck the function body if there is one.
     case NODE_FUNCTION:
+      if (!expr->function.body) break;
       if (!typecheck_expression(ast, expr->function.body)) return false;
 
       /// Make sure the return type of the body is convertible to that of the function.

@@ -110,7 +110,7 @@ Node *ast_make_function(
   node->function.body = body;
   node->function.param_decls = param_decls;
   node->parent = ast->root;
-  body->parent = node;
+  if (body) body->parent = node;
 
   VECTOR_PUSH(ast->functions, node);
   return node;
@@ -558,10 +558,12 @@ static void ast_print_node(
       free(type_name.data);
 
       /// Print the body.
-      ast_print_children(file, logical_parent, node, &(Nodes) {
-        .data = (Node *[]) {node->function.body},
-        .size = 1
-      }, leading_text);
+      if (node->function.body) {
+        ast_print_children(file, logical_parent, node, &(Nodes) {
+          .data = (Node *[]) {node->function.body},
+          .size = 1
+        }, leading_text);
+      }
     } break;
 
     case NODE_DECLARATION: {
@@ -693,6 +695,7 @@ static void ast_print_node(
         node->source_location.start,
         (int) node->var->name.size, node->var->name.data,
         (int) type_name.size, type_name.data);
+      free(type_name.data);
     } break;
 
     case NODE_FUNCTION_REFERENCE: {
@@ -706,6 +709,7 @@ static void ast_print_node(
         node->source_location.start,
         (int) node->funcref->name.size, node->funcref->name.data,
         (int) type_name.size, type_name.data);
+      free(type_name.data);
     } break;
   }
 }

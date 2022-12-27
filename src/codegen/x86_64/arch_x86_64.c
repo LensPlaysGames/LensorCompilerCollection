@@ -1379,6 +1379,7 @@ void codegen_lower_x86_64(CodegenContext *context) {
 
 void codegen_emit_x86_64(CodegenContext *context) {
   /// Emit static variables.
+  /// TODO: interning.
   bool have_data_section = false;
   VECTOR_FOREACH_PTR (IRStaticVariable*, var, context->static_vars) {
     /// Do not emit unused variables.
@@ -1467,6 +1468,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   emit_entry(context);
   VECTOR_FOREACH_PTR (IRFunction*, function, context->functions) {
-    emit_function(context, function);
+    if (!function->is_extern) emit_function(context, function);
   }
 }

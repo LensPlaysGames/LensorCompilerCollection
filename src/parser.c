@@ -757,6 +757,20 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     return ast_make_function_reference(p->ast, ident.source_location, sym);
   }
 
+  /// If this is an EXT declaration, and the type is a function type,
+  /// then this is an external function declaration.
+  if (is_ext && type->kind == TYPE_FUNCTION) {
+    /// Create a symbol table entry.
+    Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+    if (sym->kind != SYM_FUNCTION || sym->node)
+      ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+
+    /// Create the function.
+    Node *func = ast_make_function(p->ast, ident.source_location, type, (Nodes){0}, NULL, ident.text);
+    sym->node = func;
+    return ast_make_function_reference(p->ast, ident.source_location, sym);
+  }
+
   /// Otherwise, this is a variable declaration.
   Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
   decl->declaration.static_ = !p->in_function;

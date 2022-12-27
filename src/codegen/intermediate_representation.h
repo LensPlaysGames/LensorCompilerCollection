@@ -197,13 +197,13 @@ typedef struct IRFunction {
 
   size_t registers_in_use;
 
-  uint32_t attr_consteval : 1;
-  uint32_t attr_forceinline : 1;
-  uint32_t attr_global : 1;
-  uint32_t attr_leaf : 1;
-  uint32_t attr_noreturn : 1;
-  uint32_t attr_pure : 1;
-  uint32_t : 26;
+  bool attr_consteval : 1;
+  bool attr_forceinline : 1;
+  bool attr_global : 1;
+  bool attr_leaf : 1;
+  bool attr_noreturn : 1;
+  bool attr_pure : 1;
+  bool is_extern : 1;
 } IRFunction;
 
 struct IR {
