@@ -288,13 +288,13 @@ void ir_femit_function
  IRFunction *function
  )
 {
-  fprintf(file, "\n");
   ir_print_defun(file, function);
-  fprintf(file, " %s{\n", KW);
-  DLIST_FOREACH (IRBlock*, block, function->blocks) {
-    ir_femit_block(file, block);
+  if (!function->is_extern) {
+    fprintf(file, " %s{\n", KW);
+    DLIST_FOREACH (IRBlock*, block, function->blocks) ir_femit_block(file, block);
+    fprintf(file, "%s}", KW);
   }
-  fprintf(file, "%s}\n", KW);
+  fprintf(file, "\n");
 }
 
 void ir_femit
@@ -302,9 +302,9 @@ void ir_femit
  CodegenContext *context
  )
 {
-  fprintf(file, "=======================================================================================");
   ir_set_ids(context);
   VECTOR_FOREACH_PTR (IRFunction*, function, context->functions) {
+    if (function_ptr != context->functions.data) fprintf(file, "\n");
     ir_femit_function(file, function);
   }
 }
@@ -736,7 +736,7 @@ bool ir_is_value(IRInstruction *instruction) {
 
 void ir_print_defun(FILE *file, IRFunction *f) {
   /// Function signature.
-  fprintf(file, "%sdefun %s%.*s %s(", KW, FUNC, (int) f->name.size, f->name.data, KW);
+  fprintf(file, "%s%s %s%.*s %s(", KW, f->is_extern ? "declare" : "defun", FUNC, (int) f->name.size, f->name.data, KW);
 
   /// Parameters.
   bool first_param = true;
