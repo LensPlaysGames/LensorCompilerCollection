@@ -144,7 +144,10 @@ void ir_free_instruction_data(IRInstruction *i) {
   STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
   switch (i->type) {
     case IR_CALL: VECTOR_DELETE(i->call.arguments); break;
-    case IR_PHI: VECTOR_DELETE(i->phi_args); break;
+    case IR_PHI:
+      VECTOR_FOREACH_PTR (IRPhiArgument*, arg, i->phi_args) free(arg);
+      VECTOR_DELETE(i->phi_args);
+      break;
     default: break;
   }
 
