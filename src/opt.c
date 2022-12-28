@@ -68,7 +68,7 @@ static bool has_side_effects(IRInstruction *i) {
       return false;
 
     case IR_CALL:
-      return i->call.is_indirect || i->call.callee_function->is_extern;
+      return i->call.is_indirect || !i->call.callee_function->attr_pure;
 
     default:
       return true;
