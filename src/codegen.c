@@ -432,6 +432,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
 /// Emit a function.
 void codegen_function(CodegenContext *ctx, Node *node) {
+  ctx->block = node->function.ir->blocks.first;
+  ctx->function = node->function.ir;
+
   /// First, emit all parameter declarations and store
   /// the initial parameter values in them.
   VECTOR_FOREACH_INDEX(i, node->function.param_decls) {
@@ -530,12 +533,12 @@ bool codegen
 
       /// Emit the main function.
       context->block = context->entry->blocks.first;
+      context->function = context->entry;
       codegen_expr(context, ast->root);
 
       /// Emit the remaining functions that aren’t extern.
       VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
         if (!func->function.body) continue;
-        context->block = func->function.ir->blocks.first;
         codegen_function(context, func);
       }
     } break;
