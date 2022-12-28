@@ -3,7 +3,7 @@
 
 #include <codegen/codegen_forward.h>
 
-#include <environment.h>
+#include <ast.h>
 #include <error.h>
 #include <parser.h>
 #include <stdio.h>
@@ -11,16 +11,13 @@
 
 extern bool debug_ir;
 
-char *label_generate();
-
-CodegenContext *codegen_context_create_top_level
-(ParsingContext *parse_context,
+CodegenContext *codegen_context_create
+(AST *ast,
  enum CodegenOutputFormat format,
  enum CodegenCallingConvention call_convention,
  enum CodegenAssemblyDialect dialect,
  FILE* code);
 
-CodegenContext *codegen_context_create(CodegenContext *parent);
 void codegen_context_free(CodegenContext *context);
 
 struct Register {
@@ -35,30 +32,33 @@ struct Register {
 struct RegisterPool {
   Register *registers;
   Register **scratch_registers;
-  size_t num_scratch_registers;
-  size_t num_registers;
+  usz num_scratch_registers;
+  usz num_registers;
 };
 
-struct CodegenContext {
-  CodegenContext *parent;
-  ParsingContext *parse_context;
-  FILE* code;
+typedef struct IRStaticVariable {
+  string name;
+  Type *type;
+  usz cached_size;
+  usz cached_alignment;
+  IRInstruction *reference;
+} IRStaticVariable;
 
-  VECTOR (IRFunction *) *functions;
+struct CodegenContext {
+  FILE *code;
+  AST *ast;
+
+  VECTOR(IRFunction *) functions;
+  VECTOR(IRStaticVariable *) static_vars;
+  VECTOR(IRInstruction*) removed_parameter_instructions;
   IRFunction *function;
+  IRFunction *entry;
   IRBlock *block;
 
-  /// LOCALS
-  /// `-- SYMBOL (NAME) -> INTEGER (STACK OFFSET)
-  Environment *locals;
-
-  long long locals_offset;
   RegisterPool register_pool;
   enum CodegenOutputFormat format;
   enum CodegenCallingConvention call_convention;
   enum CodegenAssemblyDialect dialect;
-  /// Architecture-specific data.
-  void *arch_data;
 };
 
 // TODO/FIXME: Make this a parameter affectable by command line arguments.
@@ -71,7 +71,6 @@ NODISCARD bool codegen
  enum CodegenAssemblyDialect,
  const char *infile,
  const char *outfile,
- ParsingContext *context,
- Node *program,
+ AST *ast,
  string ir);
 #endif /* CODEGEN_H */

@@ -1,3 +1,5 @@
+gcd_euclid(88, 32)
+
 gcd_euclid : integer (a : integer b : integer) {
   if a = b {
     a
@@ -9,5 +11,3 @@ gcd_euclid : integer (a : integer b : integer) {
     }
   }
 }
-
-gcd_euclid(88, 32)

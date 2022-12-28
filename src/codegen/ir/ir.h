@@ -3,7 +3,7 @@
 
 #include <codegen/codegen_forward.h>
 
-CodegenContext *codegen_context_ir_create(CodegenContext *parent);
+CodegenContext *codegen_context_ir_create();
 void codegen_context_ir_free(CodegenContext *ctx);
 
 /// The `_backend` is so we don’t confuse these w/ frontent functions.

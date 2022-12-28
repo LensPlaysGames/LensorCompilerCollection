@@ -6,17 +6,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <math.h>
-
-/// For isatty().
-#ifndef _WIN32
-#    include <unistd.h>
-#    include <execinfo.h>
-#else
-#    include <Windows.h>
-#    include <dbghelp.h>
-#    include <io.h>
-#    define isatty _isatty
-#endif
+#include <platform.h>
 
 static const char *diagnostic_level_names[DIAG_COUNT] = {
     "Note",
@@ -34,6 +24,20 @@ static const char *diagnostic_level_colours[DIAG_COUNT] = {
     "\033[1;31m",
 };
 
+/// This just calls vissue_diagnostic().
+void issue_diagnostic(
+    enum diagnostic_level level,
+    const char *filename,
+    span source,
+    loc location,
+    const char *fmt,
+    ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vissue_diagnostic(level, filename, source, location, fmt, ap);
+  va_end(ap);
+}
+
 /// Issue a compiler diagnostic.
 ///
 /// WARNING: ALTER THIS FUNCTION AT YOUR OWN PERIL.
@@ -42,17 +46,20 @@ static const char *diagnostic_level_colours[DIAG_COUNT] = {
 /// off-by-one errors and banging my head against the nearest wall. It
 /// was copied from a previous project because I tried reproducing it
 /// at first, but failed horribly. – Sirraide.
-void issue_diagnostic(
-    enum diagnostic_level level,
-    const char *filename,
-    span source,
-    loc location,
-    const char *fmt,
-    ...) {
+void vissue_diagnostic
+(/// Error level and source location.
+ enum diagnostic_level level,
+ const char *filename,
+ span source,
+ loc location,
+
+ /// The actual error message.
+ const char *fmt,
+ va_list ap) {
   ASSERT(level >= 0 && level < DIAG_COUNT);
 
   /// Check if stderr is a terminal.
-  bool is_terminal = isatty(fileno(stderr));
+  bool is_terminal = platform_isatty(fileno(stderr));
 
   /// Print a detailed error message if we have access to the source code.
   if (source.data && source.size) {
@@ -64,8 +71,8 @@ void issue_diagnostic(
     u32 line_start = 0;
     for (u32 i = location.start; i > 0; --i) {
       if (source.data[i] == '\n') {
-      if (!line_start) line_start = i + 1;
-      ++line;
+        if (!line_start) line_start = i + 1;
+        ++line;
       }
     }
 
@@ -82,10 +89,7 @@ void issue_diagnostic(
     if (is_terminal) fprintf(stderr, "%s", diagnostic_level_colours[level]);
     fprintf(stderr, "%s: ", diagnostic_level_names[level]);
     if (is_terminal) fprintf(stderr, "\033[m\033[1;38m");
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
+    vfprintf(stderr, fmt, ap);
     if (is_terminal) fprintf(stderr, "\033[m");
 
     /// Print the line.
@@ -130,169 +134,72 @@ void issue_diagnostic(
     if (is_terminal) fprintf(stderr, "%s", diagnostic_level_colours[level]);
     fprintf(stderr, "%s: ", diagnostic_level_names[level]);
     if (is_terminal) fprintf(stderr, "\033[m\033[1;38m");
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
+    vfprintf(stderr, fmt, ap);
     if (is_terminal) fprintf(stderr, "\033[m");
     fprintf(stderr, "\n");
   }
-}
+ }
 
-static void print_backtrace(int ignore) {
-  bool term = isatty(fileno(stderr));
-  
-#ifndef _WIN32
-  void *array[15];
-  int size = backtrace(array, 10);
-  char **strings = backtrace_symbols(array + ignore, size - ignore);
-
-  /// backtrace_symbols() may fail if we’re out of memory
-  if (!strings) {
-    write(STDERR_FILENO, "Out of memory: Cannot format stack trace\n", 41);
-    backtrace_symbols_fd(array + ignore, size - ignore, STDERR_FILENO);
-    return;
-  }
-
-  /// Format the stack traces. No need to demangle anything since this is C
-  for (char** func = strings; func < strings + size - 2; func++) {
-    char *name_begin = strchr(*func, '(');
-    char *name_end = strchr(*func, '+');
-    char *address_end = strchr(*func, ')');
-    if (name_begin && name_end && address_end) {
-      *name_end = 0;
-      *address_end = 0;
-      fprintf(stderr, "  in function %s%s%s%s at offset %s%s%s\n",
-        term ? "\033[m\033[1;38m" : "",
-        name_begin + 1 == name_end ? "\?\?\?" : name_begin + 1,
-        name_begin + 1 == name_end ? "" : "()",
-        term ? "\033[m" : "",
-        term ? "\033[m\033[1;38m" : "",
-        name_end + 1,
-        term ? "\033[m" : "");
-
-      /// Don’t go any higher than main().
-      if (strcmp(name_begin + 1, "main") == 0) break;
-    }
-  }
-
-#else
-    typedef BOOL IMAGEAPI SymInitializeFunc(
-        _In_ HANDLE hProcess,
-        _In_ PCSTR  UserSearchPath,
-        _In_ BOOL   fInvadeProcess
-    );
-
-    typedef BOOL IMAGEAPI SymFromAddrFunc(
-        _In_    HANDLE       hProcess,
-        _In_    DWORD64      Address,
-        _Out_   PDWORD64     Displacement,
-        _Inout_ PSYMBOL_INFO Symbol
-    );
-
-    /// Get the stacktrace.
-    void* stack[100];
-    WORD frames = CaptureStackBackTrace(ignore, 100, stack, NULL);
-
-    /// Load DbgHelp.dll.
-    HMODULE dbghelp = LoadLibrary(TEXT("DbgHelp.dll"));
-    if (!dbghelp) {
-    /// Loading failed. Print just the addresses.
-    print_raw:
-        fprintf(stderr, "  Cannot obtain symbols from backtrace: Could not load DbgHelp.dll\n");
-        for (WORD i = 0; i < frames; i++)
-            fprintf(stderr, "  at address %p", stack[i]);
-        return;
-    }
-
-    SymInitializeFunc *SymInitialize = (SymInitializeFunc*)GetProcAddress(dbghelp, "SymInitialize");
-    if (!SymInitialize) goto print_raw;
-
-    SymFromAddrFunc *SymFromAddr = (SymFromAddrFunc*)GetProcAddress(dbghelp, "SymFromAddr");
-    if (!SymFromAddr) goto print_raw;
-
-    HANDLE process = GetCurrentProcess();
-    SymInitialize(process, NULL, TRUE);
-
-
-    char* symbol_info_data[sizeof(SYMBOL_INFO) + 256 * sizeof(char)];
-    SYMBOL_INFO* symbol = (SYMBOL_INFO*)symbol_info_data;
-    symbol->MaxNameLen = 255;
-    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-
-    for (int i = 0; i < frames; i++) {
-        SymFromAddr(process, (DWORD64)(stack[i]), 0, symbol);
-        fprintf(stderr, "  in function %s%s()%s at offset %s%llx%s\n",
-            term ? "\033[m\033[1;38m" : "", symbol->Name, term ? "\033[m" : "",
-            term ? "\033[m\033[1;38m" : "", symbol->Address, term ? "\033[m" : "");
-        if (strcmp(symbol->Name, "main") == 0) break;
-    }
-
-    FreeLibrary(dbghelp);
-#endif
-}
-
-NORETURN
-void ice_impl (
-    int ignore_frames_n,
-    const char *fmt,
-    ...
-) {
-  /// Check if stderr is a terminal.
-  bool is_terminal = isatty(fileno(stderr));
-  if (is_terminal) fprintf(stderr, "%s", diagnostic_level_colours[DIAG_ICE]);
-  fprintf(stderr, "%s: ", diagnostic_level_names[DIAG_ICE]);
-  if (is_terminal) fprintf(stderr, "\033[m");
-
-  va_list args;
-  va_start(args, fmt);
-  vfprintf(stderr, fmt, args);
-  va_end(args);
-
-  if (is_terminal) fprintf(stderr, "\033[m");
-  fprintf(stderr, "\n");
-
-  print_backtrace(ignore_frames_n);
-
-  _Exit(1);
-}
-
-void assert_impl (
+void raise_fatal_error_impl (
     const char *file,
     const char *func,
     int line,
-    const char *condition,
+    bool is_signal_or_exception,
+    bool is_sorry,
+    const char *assert_condition,
     const char *fmt,
     ...
 ) {
-/// Prettier file name
-#ifndef _MSC_VER
-  const char path_separator = '/';
-#else
-  const char path_separator = '\\';
-#endif
-  const char *basename = strrchr(file, path_separator);
-  file = basename ? basename + 1 : file;
+  /// Print the file and line.
+  bool is_terminal = platform_isatty(fileno(stderr));
 
-  fprintf(stderr, "Assertion failed: %s\n", condition);
-  fprintf(stderr, "    In file %s:%d\n", file, line);
-  fprintf(stderr, "    In function %s", func);
+  /// Removing everything up to and including the `src` prefix.
+  const char *filename = file, *src_prefix;
+  while (src_prefix = strstr(filename, "src" PLATFORM_PATH_SEPARATOR), src_prefix) filename = src_prefix + 4;
 
-  if (strcmp(fmt, "") != 0) {
-    fprintf(stderr, "\n    Message: ");
+  /// To make this less atrocious,
+  const char *const reset = is_terminal ? "\033[m" : "";
+  const char *const w = is_terminal ? "\033[m\033[1;38m" : "";
+  const char *const colour = is_terminal ? diagnostic_level_colours[is_sorry ? DIAG_SORRY : DIAG_ICE] : "";
 
-    // Skip '!' placeholder for non-empty format string.
-    fmt += 1;
-
-    va_list va;
-    va_start(va, fmt);
-    vfprintf(stderr, fmt, va);
-    va_end(va);
+  /// Print a shorter message if this is a TODO() w/ no message.
+  if (is_sorry && strcmp(fmt, "") == 0) {
+    fprintf(stderr, "%s%s:%d:%s %s", w, filename, line, reset, colour);
+    fprintf(stderr, "Sorry, unimplemented:%s Function ‘%s%s%s’\n", reset, w, func, reset);
   }
 
-  fputc('\n', stderr);
+  /// Print a longer message.
+  else {
+    /// File, line, message header; if they make sense, that is.
+    if (!is_signal_or_exception) {
+      fprintf(stderr, "%s%s:%s In function ‘%s%s%s’\n", w, filename, reset, w, func, reset);
+      fprintf(stderr, "%s%s:%d:%s %s", w, filename, line, reset, colour);
+    } else {
+      fprintf(stderr, "%s", colour);
+    }
 
-  print_backtrace(2);
+    /// Assert condition (if any) and message.
+    if (assert_condition) {
+      fprintf(stderr, "Assertion failed:%s ‘%s%s%s’: ", reset, w, assert_condition, reset);
+    } else {
+      fprintf(stderr, "%s:%s ", diagnostic_level_names[is_sorry ? DIAG_SORRY : DIAG_ICE], reset);
+    }
 
+    /// Message.
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fprintf(stderr, "\n");
+  }
+
+  /// Print the stack trace.
+#ifndef _WIN32
+  platform_print_backtrace(is_signal_or_exception ? 4 : 2);
+#else
+  platform_print_backtrace(is_signal_or_exception ? 9 : 2);
+#endif
+
+  /// Exit.
   _Exit(1);
 }

@@ -1,29 +1,13 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "platform.h"
 
 #include <codegen.h>
 #include <error.h>
-#include <environment.h>
-#include <file_io.h>
+#include <locale.h>
 #include <parser.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <typechecker.h>
-
-#ifndef _WIN32
-#include <signal.h>
-
-/// SIGSEGV/SIGILL/SIGABRT handler.
-void ice_signal_handler(int signal, siginfo_t *info, void* unused) {
-  (void) unused;
-  switch (signal) {
-    case SIGSEGV: ICE_SIGNAL("Segmentation fault at 0x%lx", (uintptr_t)info->si_addr);
-    case SIGILL: ICE_SIGNAL("Illegal instruction");
-    case SIGABRT: ICE_SIGNAL("Aborted");
-    default: ICE_SIGNAL("UNREACHABLE");
-  }
-}
-
-#endif
 
 void print_usage(char **argv) {
   printf("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", argv[0]);
@@ -33,13 +17,17 @@ void print_usage(char **argv) {
          "   `--callings`      :: List acceptable calling conventions.\n"
          "   `--dialects`      :: List acceptable assembly dialects.\n"
          "   `--debug-ir`      :: Dump IR to stdout (in debug format).\n"
+         "   `--print-ast      :: Print the AST and exit.\n"
+         "   `--syntax-only    :: Perform no semantic analysis.\n"
+         "   `--print-scopes   :: Print the scope tree and exit.\n"
          "   `-O`, `--optimize`:: Optimize the generated code.\n"
          "   `-v`, `--verbose` :: Print out more information.\n");
   printf("Options:\n"
          "    `-o`, `--output`   :: Set the output filepath to the one given.\n"
          "    `-f`, `--format`   :: Set the output format to the one given.\n"
          "    `-cc`, `--calling` :: Set the calling convention to the one given.\n"
-         "    `-d`, `--dialect`   :: Set the output assembly dialect to the one given.\n"
+         "    `-d`, `--dialect`  :: Set the output assembly dialect to the one given.\n"
+         "    `--colours`        :: Set whether to use colours in diagnostics.\n"
          "Anything other arguments are treated as input filepaths (source code).\n");
 }
 
@@ -49,10 +37,13 @@ enum CodegenOutputFormat output_format = CG_FMT_DEFAULT;
 enum CodegenCallingConvention output_calling_convention = CG_CALL_CONV_DEFAULT;
 enum CodegenAssemblyDialect output_assembly_dialect = CG_ASM_DIALECT_DEFAULT;
 
-/// TODO: should be bools.
 int verbosity = 0;
 int optimise = 0;
 bool debug_ir = false;
+bool print_ast = false;
+bool syntax_only = false;
+bool print_scopes = false;
+bool prefer_using_diagnostics_colours = true;
 
 void print_acceptable_formats() {
   printf("Acceptable formats include:\n"
@@ -75,8 +66,18 @@ void print_acceptable_asm_dialects() {
          " -> intel\n");
 }
 
+void print_acceptable_colour_settings() {
+  printf("Acceptable values for `--colours` include:\n"
+         " -> auto\n"
+         " -> always\n"
+         " -> never\n");
+}
+
 /// @return Zero if everything goes well, otherwise return non-zero value.
 int handle_command_line_arguments(int argc, char **argv) {
+  /// Default settings.
+  prefer_using_diagnostics_colours = platform_isatty(fileno(stdout));
+
   for (int i = 1; i < argc; ++i) {
     char *argument = argv[i];
 
@@ -96,7 +97,13 @@ int handle_command_line_arguments(int argc, char **argv) {
       print_acceptable_asm_dialects();
       exit(0);
     } else if (strcmp(argument, "--debug-ir") == 0) {
-      debug_ir = 1;
+      debug_ir = true;
+    } else if (strcmp(argument, "--print-ast") == 0) {
+      print_ast = true;
+    } else if (strcmp(argument, "--print-scopes") == 0) {
+      print_scopes = true;
+    } else if (strcmp(argument, "--syntax-only") == 0) {
+      syntax_only = true;
     } else if (strcmp(argument, "-O") == 0
                || strcmp(argument, "--optimise") == 0) {
       optimise = 1;
@@ -107,13 +114,13 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--output") == 0) {
       i++;
       if (i >= argc) {
-        PANIC("ERROR: Expected filepath after output command line argument");
+        ICE("Expected filepath after output command line argument");
       }
       /// Anything that starts w/ `-` is treated as a command line argument.
       /// If the user has a filepath that starts w/ `-...`, then they should use
       /// `./-...` instead.
       if (*argv[i] == '-') {
-        PANIC("ERROR: Expected filepath after output command line argument\n"
+        ICE("Expected filepath after output command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);
       }
@@ -122,10 +129,10 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--format") == 0) {
       i++;
       if (i >= argc) {
-        PANIC("ERROR: Expected format after format command line argument");
+        ICE("Expected format after format command line argument");
       }
       if (*argv[i] == '-') {
-        PANIC("ERROR: Expected format after format command line argument\n"
+        ICE("Expected format after format command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);
       }
@@ -136,19 +143,38 @@ int handle_command_line_arguments(int argc, char **argv) {
       } else if (strcmp(argv[i], "ir") == 0) {
         output_format = CG_FMT_IR;
       } else {
-        printf("ERROR: Expected format after format command line argument\n"
+        printf("Expected format after format command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
         print_acceptable_formats();
         return 1;
       }
-    } else if (strcmp(argument, "-cc") == 0
+    } else if (strcmp(argument, "--colours") == 0) {
+      i++;
+      if (i >= argc) {
+        fprintf(stderr, "Error: Expected option value after `--colours`\n");
+        print_acceptable_colour_settings();
+        exit(1);
+      }
+      if (strcmp(argv[i], "auto") == 0) {
+        prefer_using_diagnostics_colours = platform_isatty(fileno(stdout));
+      } else if (strcmp(argv[i], "never") == 0) {
+        prefer_using_diagnostics_colours = false;
+      } else if (strcmp(argv[i], "always") == 0) {
+        prefer_using_diagnostics_colours = true;
+      } else {
+        printf("Expected calling convention after calling convention command line argument\n"
+               "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
+        print_acceptable_calling_conventions();
+        return 1;
+      }
+    }else if (strcmp(argument, "-cc") == 0
                || strcmp(argument, "--calling") == 0) {
       i++;
       if (i >= argc) {
-        PANIC("ERROR: Expected calling convention after format command line argument");
+        ICE("Expected calling convention after format command line argument");
       }
       if (*argv[i] == '-') {
-        PANIC("ERROR: Expected calling convention after format command line argument\n"
+        ICE("Expected calling convention after format command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);
       }
@@ -159,7 +185,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       } else if (strcmp(argv[i], "LINUX") == 0) {
         output_calling_convention = CG_CALL_CONV_LINUX;
       } else {
-        printf("ERROR: Expected calling convention after calling convention command line argument\n"
+        printf("Expected calling convention after calling convention command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
         print_acceptable_calling_conventions();
         return 1;
@@ -168,10 +194,10 @@ int handle_command_line_arguments(int argc, char **argv) {
                || strcmp(argument, "--dialect") == 0) {
       i++;
       if (i >= argc) {
-        PANIC("ERROR: Expected assembly dialect after format command line argument");
+        ICE("Expected assembly dialect after format command line argument");
       }
       if (*argv[i] == '-') {
-        PANIC("ERROR: Expected assembly dialect after format command line argument\n"
+        ICE("Expected assembly dialect after format command line argument\n"
               "Instead, got what looks like another command line argument.\n"
               " -> \"%s\"", argv[i]);
       }
@@ -182,7 +208,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       } else if (strcmp(argv[i], "intel") == 0) {
         output_assembly_dialect = CG_ASM_DIALECT_INTEL;
       } else {
-        printf("ERROR: Expected assembly dialect after calling convention command line argument\n"
+        printf("Expected assembly dialect after calling convention command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
         print_acceptable_asm_dialects();
         return 1;
@@ -199,29 +225,15 @@ int handle_command_line_arguments(int argc, char **argv) {
       system("xdg-open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #     endif
     } else {
-      if (input_filepath_index != -1) {
-        printf("ERROR: Only a single input filepath is used, but multiple were given.\n"
-               "Using the latest one.\n");
-      }
-      input_filepath_index = i;
+      if (input_filepath_index == -1) input_filepath_index = i;
+      else ICE("Error: Unrecognized command line argument: \"%s\"", argument);
     }
   }
   return 0;
 }
 
 int main(int argc, char **argv) {
-#ifndef _WIN32
-  {
-    /// Install signal handlers.
-    struct sigaction sa = {0};
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_SIGINFO;
-    sa.sa_sigaction = ice_signal_handler;
-    if (sigaction(SIGSEGV, &sa, NULL)) ICE("Failed to install SIGSEGV handler");
-    if (sigaction(SIGABRT, &sa, NULL)) ICE("Failed to install SIGABRT handler");
-    if (sigaction(SIGILL, &sa, NULL)) ICE("Failed to install SIGILL handler");
-  }
-#endif
+  platform_init();
 
   if (argc < 2) {
     print_usage(argv);
@@ -236,13 +248,17 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  _thread_use_diagnostics_colours_ = prefer_using_diagnostics_colours;
+
   const char *infile = argv[input_filepath_index];
   const char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
   size_t len = strlen(infile);
+  bool ok = false;
+  string s = platform_read_file(infile, &ok);
+  if (!ok) ICE("%.*s", (int) s.size, s.data);
 
   /// The input is an IR file.
   if (len >= 3 && memcmp(infile + len - 3, ".ir", 3) == 0) {
-    string s = file_contents(infile);
     ASSERT(s.data);
 
     if (!codegen(
@@ -252,7 +268,6 @@ int main(int argc, char **argv) {
       output_assembly_dialect,
       infile,
       output_filepath,
-      parse_context_default_create(),
       NULL,
       s
      )) {
@@ -264,20 +279,29 @@ int main(int argc, char **argv) {
 
   /// The input is a FUN file.
   else {
-    Node *program = node_allocate();
-    ParsingContext *context = parse_context_default_create();
-    if (!parse_program(infile, context, program)) exit(1);
+    /// Parse the file.
+    AST *ast = parse(as_span(s), infile);
+    if (!ast) exit(1);
 
-    if (verbosity) {
-      printf("----- Abstract Syntax Tree\n");
-      print_node(program, 0);
-      printf("----- Parsing Context\n");
-      parse_context_print(context,0);
-      printf("-----\n");
+    /// Print if requested.
+    if (syntax_only) {
+      if (print_ast) ast_print(stdout, ast);
+      if (print_scopes) ast_print_scope_tree(stdout, ast);
+      goto done;
     }
 
-    if (!typecheck_program(context, program)) exit(2);
+    /// Perform semantic analysis.
+    ok = typecheck_expression(ast, ast->root);
+    if (!ok) exit(2);
 
+    /// Print if requested.
+    if (print_ast || print_scopes) {
+      if (print_ast) ast_print(stdout, ast);
+      if (print_scopes) ast_print_scope_tree(stdout, ast);
+      goto done;
+    }
+
+    /// Generate code.
     if (!codegen(
       LANG_FUN,
       output_format,
@@ -285,14 +309,17 @@ int main(int argc, char **argv) {
       output_assembly_dialect,
       infile,
       output_filepath,
-      context,
-      program,
+      ast,
       (string){0}
     )) exit(3);
 
-    node_free(program);
+  done:
+    ast_free(ast);
   }
 
+  /// Free the input file.
+  free(s.data);
+
+  /// Done!
   if (verbosity) printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
-  return 0;
 }

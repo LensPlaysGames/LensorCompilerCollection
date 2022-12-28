@@ -10,7 +10,7 @@
 
 #ifdef _WIN32
 /// Basically strndup(), but for Windows.
-char *strndup(const char *str, size_t sz) {
+static char *strndup(const char *str, size_t sz) {
   char *dup = malloc(sz + 1);
   memcpy(dup, str, sz);
   dup[sz] = 0;
@@ -42,7 +42,7 @@ enum tk {
   tk_number,
 };
 
-#define DEFINE_IR_INSTRUCTION_TYPE(type) type,
+#define DEFINE_IR_INSTRUCTION_TYPE(type, ...) type,
 enum IrParserInstructionType {
   ALL_IR_INSTRUCTION_TYPES(DEFINE_IR_INSTRUCTION_TYPE)
 
@@ -52,41 +52,24 @@ enum IrParserInstructionType {
 
   /// These are only used internally by the parser.
   TAIL,
-  EQ,
-  NE,
-  LT,
-  LE,
-  GT,
-  GE,
-
-  ADDR,
 };
 #undef DEFINE_IR_INSTRUCTION_TYPE
 
-/// Block in the symbol table.
-typedef struct {
-  span name;
-  loc location;
-  IRBlock *block;
-  VECTOR(IRBlock **) unresolved;
-} block_sym;
+#define SYMBOL_TYPE(_name, type, thing) typedef struct _name##_sym {\
+  span name;\
+  loc location;\
+  thing _name;\
+  VECTOR(type) unresolved;\
+} _name##_sym
 
-/// Temporary in the symbol table.
-/// The sigil ('%' or '#') is included in the name.
-typedef struct {
-  span name;
-  loc location;
-  IRInstruction *instruction;
-  VECTOR(IRInstruction **) unresolved;
-} temp_sym;
+typedef struct temp_sym_entry {
+  IRInstruction **slot;
+  IRInstruction *parent;
+} temp_sym_entry;
 
-/// Function in the symbol table.
-typedef struct {
-  span name;
-  loc location;
-  IRFunction *function;
-  VECTOR(const char **) unresolved;
-} function_sym;
+SYMBOL_TYPE(block, IRBlock**, IRBlock*);
+SYMBOL_TYPE(function, IRFunction**, IRFunction*);
+SYMBOL_TYPE(temp, temp_sym_entry, IRInstruction*);
 
 /// IR parser context.
 typedef struct {
@@ -115,7 +98,7 @@ typedef struct {
   span tok;
 
   /// Numeric value of the current token.
-  i64 integer;
+  u64 integer;
 
   /// Symbol tables.
   VECTOR(block_sym) block_syms;
@@ -161,38 +144,36 @@ static enum IrParserInstructionType irtype_from_span(span s) {
   static const span CAT(span_, type) = {.data = string, .size = sizeof(string) - 1}; \
   if (spans_equal(s, CAT(span_, type))) return type;
   TYPE("tail", TAIL)
-    TYPE("call", CALL)
-    TYPE("phi", PHI)
-    TYPE("copy", COPY)
-    TYPE("imm", IMMEDIATE)
-    TYPE("add", ADD)
-    TYPE("sub", SUBTRACT)
-    TYPE("mul", MULTIPLY)
-    TYPE("div", DIVIDE)
-    TYPE("mod", MODULO)
-    TYPE("not", NOT)
-    TYPE("and", AND)
-    TYPE("or", OR)
-    TYPE("eq", EQ)
-    TYPE("ne", NE)
-    TYPE("lt", LT)
-    TYPE("le", LE)
-    TYPE("gt", GT)
-    TYPE("ge", GE)
-    TYPE("shl", SHIFT_LEFT)
-    TYPE("shr", SHIFT_RIGHT_LOGICAL)
-    TYPE("sar", SHIFT_RIGHT_ARITHMETIC)
-    TYPE("alloca", STACK_ALLOCATE)
-    TYPE("load", LOAD)
-    TYPE("store", STORE)
-    TYPE("register", REGISTER)
-    TYPE("unreachable", UNREACHABLE)
-    TYPE("ret", RETURN)
-    TYPE("br", BRANCH)
-    TYPE("br.cond", BRANCH_CONDITIONAL)
-    TYPE(".addr", ADDR)
+  TYPE("call", CALL)
+  TYPE("phi", PHI)
+  TYPE("copy", COPY)
+  TYPE("imm", IMMEDIATE)
+  TYPE("add", ADD)
+  TYPE("sub", SUB)
+  TYPE("mul", MUL)
+  TYPE("div", DIV)
+  TYPE("mod", MOD)
+  TYPE("not", NOT)
+  TYPE("and", AND)
+  TYPE("or", OR)
+  TYPE("eq", EQ)
+  TYPE("ne", NE)
+  TYPE("lt", LT)
+  TYPE("le", LE)
+  TYPE("gt", GT)
+  TYPE("ge", GE)
+  TYPE("shl", SHL)
+  TYPE("shr", SHR)
+  TYPE("sar", SAR)
+  TYPE("alloca", ALLOCA)
+  TYPE("load", LOAD)
+  TYPE("store", STORE)
+  TYPE("register", REGISTER)
+  TYPE("unreachable", UNREACHABLE)
+  TYPE("ret", RETURN)
+  TYPE("br", BRANCH)
+  TYPE("br.cond", BRANCH_CONDITIONAL)
 #undef TYPE
-
     return IR_INSTRUCTIONS_COUNT;
 }
 
@@ -259,7 +240,7 @@ static void next_identifier(IRParser *p) {
 static void parse_number(IRParser *p, int base) {
   char *end;
   errno = 0;
-  p->integer = (i64) strtoll(p->tok.data, &end, base);
+  p->integer = (u64) strtoull(p->tok.data, &end, base);
   if (errno == ERANGE) WARN("Integer literal out of range");
   if (end != p->tok.data + p->tok.size) ERR("Invalid integer literal");
 }
@@ -424,37 +405,37 @@ span funcname(IRParser *p, span name) {
 /// ===========================================================================
 ///  Parser
 /// ===========================================================================
-#define MAKE(thing_name, type, param_type, field)                       \
-  /** Add a thing to the current symbol table. **/                      \
-  static void CAT(make_, type)(IRParser * p, loc location, span name, param_type param) { \
-    /** Issue an error if the thing already exists. **/                 \
-    CAT(type, _sym) * index;                                            \
+#define MAKE(thing_name, type, param_type)                                                              \
+  /** Add a thing to the current symbol table. **/                                                      \
+  static void CAT(make_, type)(IRParser * p, loc location, span name, param_type param) {               \
+    /** Issue an error if the thing already exists. **/                                                 \
+    CAT(type, _sym) * index;                                                                            \
     VECTOR_FIND_IF(p->CAT(type, _syms), index, i, spans_equal(p->CAT(type, _syms).data[i].name, name)); \
-    if (index) {                                                        \
-      if (index->field) ERR("Redefinition of " thing_name " '%.*s'", (int) name.size, name.data); \
-      index->field = param;                                             \
-      return;                                                           \
-    }                                                                   \
-                                                                        \
-    /** Add the thing to the symbol table. **/                          \
-    CAT(type, _sym)                                                     \
-      sym = {                                                           \
-      .name = name,                                                     \
-      .field = param,                                                   \
-      .location = location,                                             \
-      .unresolved = {0}};                                               \
-    VECTOR_PUSH(p->CAT(type, _syms), sym);                              \
+    if (index) {                                                                                        \
+      if (index->type) ERR("Redefinition of " thing_name " '%.*s'", (int) name.size, name.data);        \
+      index->type = param;                                                                              \
+      return;                                                                                           \
+    }                                                                                                   \
+                                                                                                        \
+    /** Add the thing to the symbol table. **/                                                          \
+    CAT(type, _sym)                                                                                     \
+    sym = {                                                                                             \
+        .name = name,                                                                                   \
+        .type = param,                                                                                  \
+        .location = location,                                                                           \
+        .unresolved = {0}};                                                                             \
+    VECTOR_PUSH(p->CAT(type, _syms), sym);                                                              \
   }
 
-MAKE("temporary", temp, IRInstruction *, instruction)
-MAKE("block", block, IRBlock *, block)
-MAKE("function", function, IRFunction *, function)
+MAKE("temporary", temp, IRInstruction *)
+MAKE("block", block, IRBlock *)
+MAKE("function", function, IRFunction *)
 
 /// Find a temporary in the current parser context.
 static IRInstruction *try_resolve_temp(IRParser *p, span name) {
   temp_sym *inst;
   VECTOR_FIND_IF(p->temp_syms, inst, i, spans_equal(p->temp_syms.data[i].name, name));
-  return inst ? inst->instruction : NULL;
+  return inst ? inst->temp : NULL;
 }
 
 /// Find a temporary in the current parser context. If the temporary
@@ -470,62 +451,92 @@ static IRInstruction *resolve_curr_temp(IRParser *p) {
   return resolve_temp(p, here(p), p->tok);
 }
 
-#define RESOLVE_OR_DECLARE(type, param_type, null_field_name, assign_field_name) \
+/// Resolve the current token as a static variable.
+static IRInstruction *resolve_curr_static_var(IRParser *p) {
+  TODO();
+}
+
+#define RESOLVE_OR_DECLARE(type, param_type)                                                             \
   static void CAT(resolve_or_declare_, type)(IRParser * p, loc location, span name, param_type * user) { \
-    /** Try to find the thing. **/                                      \
-    CAT(type, _sym) * ptr;                                              \
-    VECTOR_FIND_IF(p->CAT(type, _syms), ptr, i, spans_equal(p->CAT(type, _syms).data[i].name, name)); \
-                                                                        \
-    /** If the thing does not exist yet, add it. **/                    \
-    if (!ptr) {                                                         \
-      CAT(type, _sym)                                                   \
-        sym = {                                                         \
-        .name = name,                                                   \
-        .location = location,                                           \
-        .null_field_name = NULL,                                        \
-        .unresolved = {0},                                              \
-      };                                                                \
-                                                                        \
-      VECTOR_PUSH(sym.unresolved, user);                                \
-      VECTOR_PUSH(p->CAT(type, _syms), sym);                            \
-    }                                                                   \
-                                                                        \
-    /** Add an entry to the thing if it exists, but isn't resolved yet. **/ \
-    else if (!ptr->null_field_name) {                                   \
-      VECTOR_PUSH(ptr->unresolved, user);                               \
-    }                                                                   \
-                                                                        \
-    /** Otherwise, resolve it. **/                                      \
-    else {                                                              \
-      *user = ptr->assign_field_name;                                   \
-    }                                                                   \
+    /** Try to find the thing. **/                                                                       \
+    CAT(type, _sym) * ptr;                                                                               \
+    VECTOR_FIND_IF(p->CAT(type, _syms), ptr, i, spans_equal(p->CAT(type, _syms).data[i].name, name));    \
+                                                                                                         \
+    /** If the thing does not exist yet, add it. **/                                                     \
+    if (!ptr) {                                                                                          \
+      CAT(type, _sym)                                                                                    \
+      sym = {                                                                                            \
+          .name = name,                                                                                  \
+          .location = location,                                                                          \
+          .type = NULL,                                                                                  \
+          .unresolved = {0},                                                                             \
+      };                                                                                                 \
+                                                                                                         \
+      VECTOR_PUSH(sym.unresolved, user);                                                                 \
+      VECTOR_PUSH(p->CAT(type, _syms), sym);                                                             \
+    }                                                                                                    \
+                                                                                                         \
+    /** Add an entry to the thing if it exists, but isn't resolved yet. **/                              \
+    else if (!ptr->type) {                                                                               \
+      VECTOR_PUSH(ptr->unresolved, user);                                                                \
+    }                                                                                                    \
+                                                                                                         \
+    /** Otherwise, resolve it. **/                                                                       \
+    else {                                                                                               \
+      *user = ptr->type;                                                                                 \
+    }                                                                                                    \
   }
 
-RESOLVE_OR_DECLARE(function, const char *, function, function->name)
-  RESOLVE_OR_DECLARE(block, IRBlock *, block, block)
-  RESOLVE_OR_DECLARE(temp, IRInstruction *, instruction, instruction)
+RESOLVE_OR_DECLARE(function, IRFunction *)
+RESOLVE_OR_DECLARE(block, IRBlock *)
 
-#define RESOLVE_ALL(p, err_name, type, param_type, field, value, on_err) \
-  do {                                                                  \
-    bool success = true;                                                \
-    VECTOR_FOREACH (CAT(type, _sym), sym, (p)->CAT(type, _syms)) {      \
-      /** An unresolved function is a parse error. **/                  \
-      if (!sym->field) {                                                \
-        issue_diagnostic                                                \
-          ( DIAG_ERR,                                                   \
-            (p)->filename,                                              \
-            (p)->source,                                                \
-            sym->location,                                              \
-            "Unknown " err_name " '%.*s'",                              \
-            (int) sym->name.size, sym->name.data);                      \
-        success = false;                                                \
-      } /** Otherwise, resolve the function. **/                        \
-      else {                                                            \
-        VECTOR_FOREACH (param_type *, user, sym->unresolved)            \
-          **user = sym->value;                                          \
-      }                                                                 \
-    }                                                                   \
-    if (!success) { on_err; }                                           \
+static void resolve_or_declare_temp(IRParser *p, loc location, span name, IRInstruction **slot, IRInstruction *parent) {
+  temp_sym *ptr;
+  VECTOR_FIND_IF(p->temp_syms, ptr, i, spans_equal(p->temp_syms.data[i].name, name));
+
+  /// If the thing does not exist yet, add it.
+  if (!ptr) {
+    temp_sym sym = {
+        .name = name,
+        .location = location,
+        .temp = NULL,
+        .unresolved = {0},
+    };
+
+    temp_sym_entry entry = {.slot = slot, .parent = parent};
+    VECTOR_PUSH(sym.unresolved, entry);
+    VECTOR_PUSH(p->temp_syms, sym);
+  }
+
+  /// Add an entry to the thing if it exists, but isn't resolved yet.
+  else if (!ptr->temp) {
+    temp_sym_entry entry = {.slot = slot, .parent = parent};
+    VECTOR_PUSH(ptr->unresolved, entry);
+  }
+
+  /// Otherwise, resolve it.
+  else {
+    *slot = ptr->temp;
+    mark_used(ptr->temp, parent);
+  }
+}
+
+#define RESOLVE_ALL(p, err_name, type, param_type, on_err)                                                                                          \
+  do {                                                                                                                                              \
+    bool success = true;                                                                                                                            \
+    VECTOR_FOREACH (CAT(type, _sym), sym, (p)->CAT(type, _syms)) {                                                                                  \
+      /** An unresolved function is a parse error. **/                                                                                              \
+      if (!sym->type) {                                                                                                                             \
+        issue_diagnostic(DIAG_ERR, (p)->filename, (p)->source, sym->location, "Unknown " err_name " '%.*s'", (int) sym->name.size, sym->name.data); \
+        success = false;                                                                                                                            \
+      } /** Otherwise, resolve the function. **/                                                                                                    \
+      else {                                                                                                                                        \
+        VECTOR_FOREACH (param_type *, user, sym->unresolved) {                                                                                      \
+          **user = sym->type;                                                                                                                       \
+        }                                                                                                                                           \
+      }                                                                                                                                             \
+    }                                                                                                                                               \
+    if (!success) { on_err; }                                                                                                                       \
   } while (0)
 
 /// This function handles the bulk of the parsing.
@@ -583,18 +594,6 @@ static bool parse_instruction_or_branch(IRParser *p) {
     /// Invalid instruction name.
     case IR_INSTRUCTIONS_COUNT: ERR("Unknown instruction name '%.*s'", (int) p->tok.size, p->tok.data);
 
-    /// <name>
-    case ADDR: {
-      next_token(p);
-      if (p->tok_type != tk_ident)
-        ERR("Expected name/label after '.addr' instruction");
-
-      INSTRUCTION(addr, IR_GLOBAL_ADDRESS)
-        ir_insert(p->context, addr);
-      resolve_or_declare_function(p, here(p), funcname(p, p->tok), (const char **)&addr->value.name);
-      next_token(p);
-      } break;
-
     /// [ TAIL ] CALL ( <name> | <temp> ) "(" <parameters> ")"
     case TAIL:
       next_token(p);
@@ -603,31 +602,31 @@ static bool parse_instruction_or_branch(IRParser *p) {
       is_tail_call = true;
       i_loc = here(p);
       FALLTHROUGH;
+
     case CALL: {
       next_token(p);
 
       /// We need to create the call manually here.
-      INSTRUCTION(call, IR_CALL)
-        ir_insert(p->context, call);
-      call->value.call.tail_call = is_tail_call;
+      INSTRUCTION(call, IR_CALL);
+      ir_insert(p->context, call);
+      call->call.tail_call = is_tail_call;
 
       /// Set the call type and target.
       switch (p->tok_type) {
-      default: ERR_AT(i_loc, "Expected function name or temporary after call");
+        default: ERR_AT(i_loc, "Expected function name or temporary after call");
 
-      /// Direct call.
-      case tk_ident: {
-        call->value.call.type = IR_CALLTYPE_DIRECT;
-        resolve_or_declare_function(p, here(p), funcname(p, p->tok), &call->value.call.value.name);
-      } break;
+        /// Direct call.
+        case tk_ident: {
+          resolve_or_declare_function(p, here(p), funcname(p, p->tok), &call->call.callee_function);
+        } break;
 
-      /// Indirect call.
-      case tk_temp: {
-        /// Resolve the temporary.
-        call->value.call.type = IR_CALLTYPE_INDIRECT;
-        call->value.call.value.callee = resolve_curr_temp(p);
-        mark_used(call->value.call.value.callee, i);
-      } break;
+        /// Indirect call.
+        case tk_temp: {
+          /// Resolve the temporary.
+          call->call.is_indirect = true;
+          call->call.callee_instruction = resolve_curr_temp(p);
+          mark_used(call->call.callee_instruction, i);
+        } break;
       }
 
       /// Parameter list.
@@ -676,7 +675,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
         /// Temporary. This is the *only* place in the grammar
         /// where a we allow forward references to temporaries.
-        resolve_or_declare_temp(p, here(p), p->tok, &arg->value);
+        resolve_or_declare_temp(p, here(p), p->tok, &arg->value, i);
         next_token(p);
 
         /// Add the argument to the PHI.
@@ -715,20 +714,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
     /// <binary> <temp> "," <temp>
     /// <binary> ::= ADD | SUB | MUL | DIV | MOD | EQ | NE | LT | LE | GT | GE | SHL | SHR | SAR
-    case ADD:
-    case SUBTRACT:
-    case MULTIPLY:
-    case DIVIDE:
-    case MODULO:
-    case EQ:
-    case NE:
-    case LT:
-    case LE:
-    case GT:
-    case GE:
-    case SHIFT_LEFT:
-    case SHIFT_RIGHT_LOGICAL:
-    case SHIFT_RIGHT_ARITHMETIC: {
+    ALL_BINARY_INSTRUCTION_CASES() {
       next_token(p);
 
       /// Parse the first temporary.
@@ -747,21 +733,11 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
       /// Create the instruction.
       switch (type) {
-      case ADD: i = ir_add(p->context, a, b); break;
-      case SUBTRACT: i = ir_subtract(p->context, a, b); break;
-      case MULTIPLY: i = ir_multiply(p->context, a, b); break;
-      case DIVIDE: i = ir_divide(p->context, a, b); break;
-      case MODULO: i = ir_modulo(p->context, a, b); break;
-      case EQ: i = ir_comparison(p->context, COMPARE_EQ, a, b); break;
-      case NE: i = ir_comparison(p->context, COMPARE_NE, a, b); break;
-      case LT: i = ir_comparison(p->context, COMPARE_LT, a, b); break;
-      case LE: i = ir_comparison(p->context, COMPARE_LE, a, b); break;
-      case GT: i = ir_comparison(p->context, COMPARE_GT, a, b); break;
-      case GE: i = ir_comparison(p->context, COMPARE_GE, a, b); break;
-      case SHIFT_LEFT: i = ir_shift_left(p->context, a, b); break;
-      case SHIFT_RIGHT_LOGICAL: i = ir_shift_right_logical(p->context, a, b); break;
-      case SHIFT_RIGHT_ARITHMETIC: i = ir_shift_right_arithmetic(p->context, a, b); break;
-      default: UNREACHABLE();
+        default: UNREACHABLE();
+#define MAKE_BINARY_INSTRUCTION(enumerator, name) \
+        case enumerator: i = ir_##name(p->context, a, b); break;
+        ALL_BINARY_INSTRUCTION_TYPES(MAKE_BINARY_INSTRUCTION)
+#undef MAKE_BINARY_INSTRUCTION
       }
     } break;
 
@@ -771,7 +747,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
       /// Parse the temporary or name.
       if (p->tok_type == tk_temp) i = ir_load(p->context, resolve_curr_temp(p));
-      else if (p->tok_type == tk_ident) i = ir_load_global(p->context, strndup(p->tok.data, p->tok.size));
+      else if (p->tok_type == tk_ident) ir_load(p->context, resolve_curr_static_var(p));
       else ERR_AT(i_loc, "Expected temporary or name after LOAD");
     } break;
 
@@ -791,7 +767,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
       /// Parse the temporary or name.
       if (p->tok_type == tk_temp) i = ir_store(p->context, a, resolve_curr_temp(p));
-      else if (p->tok_type == tk_ident) i = ir_store_global(p->context, a, strndup(p->tok.data, p->tok.size));
+      else if (p->tok_type == tk_ident) ir_store(p->context, a, resolve_curr_static_var(p));
       else ERR_AT(i_loc, "Expected temporary or name after ',' in STORE");
       next_token(p);
     } break;
@@ -802,15 +778,15 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
       /// Parse the register.
       if (p->tok_type != tk_number) ERR_AT(i_loc, "Expected physical register after REGISTER");
-      INSTRUCTION(reg, IR_REGISTER)
-        ir_insert(p->context, reg);
+      INSTRUCTION(reg, IR_REGISTER);
+      ir_insert(p->context, reg);
       reg->result = (Register) p->integer;
       i = reg;
       next_token(p);
     } break;
 
     /// ALLOCA
-    case STACK_ALLOCATE: {
+    case ALLOCA: {
       next_token(p);
       i = ir_stack_allocate(p->context, 8);
     } break;
@@ -820,8 +796,8 @@ static bool parse_instruction_or_branch(IRParser *p) {
       next_token(p);
       void_instruction = true;
       is_branch = true;
-      INSTRUCTION(u, IR_UNREACHABLE)
-        ir_insert(p->context, u);
+      INSTRUCTION(u, IR_UNREACHABLE);
+      ir_insert(p->context, u);
       i = u;
     } break;
 
@@ -830,14 +806,14 @@ static bool parse_instruction_or_branch(IRParser *p) {
       next_token(p);
       void_instruction = true;
       is_branch = true;
-      INSTRUCTION(r, IR_RETURN)
-        ir_insert(p->context, r);
+      INSTRUCTION(r, IR_RETURN);
+      ir_insert(p->context, r);
       i = r;
 
       /// Parse the return value if there is one.
       if (p->tok_type == tk_temp) {
-        r->value.reference = resolve_curr_temp(p);
-        mark_used(r->value.reference, i);
+        r->operand = resolve_curr_temp(p);
+        mark_used(r->operand, i);
         next_token(p);
       }
     } break;
@@ -847,13 +823,13 @@ static bool parse_instruction_or_branch(IRParser *p) {
       next_token(p);
       void_instruction = true;
       is_branch = true;
-      INSTRUCTION(b, IR_BRANCH)
-        ir_insert(p->context, b);
+      INSTRUCTION(b, IR_BRANCH);
+      ir_insert(p->context, b);
       i = b;
 
       /// Parse the name.
       if (p->tok_type != tk_ident) ERR_AT(i_loc, "Expected block name after BR");
-      resolve_or_declare_block(p, here(p), p->tok, &b->value.block);
+      resolve_or_declare_block(p, here(p), p->tok, &b->destination_block);
       next_token(p);
     } break;
 
@@ -862,14 +838,14 @@ static bool parse_instruction_or_branch(IRParser *p) {
       next_token(p);
       void_instruction = true;
       is_branch = true;
-      INSTRUCTION(b, IR_BRANCH_CONDITIONAL)
-        ir_insert(p->context, b);
+      INSTRUCTION(b, IR_BRANCH_CONDITIONAL);
+      ir_insert(p->context, b);
       i = b;
 
       /// Parse the temporary.
       if (p->tok_type != tk_temp) ERR_AT(i_loc, "Expected temporary after BR.COND");
-      b->value.conditional_branch.condition = resolve_curr_temp(p);
-      mark_used(b->value.conditional_branch.condition, i);
+      b->cond_br.condition = resolve_curr_temp(p);
+      mark_used(b->cond_br.condition, i);
       next_token(p);
 
       /// Yeet ",".
@@ -878,7 +854,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
       /// Parse the first name.
       if (p->tok_type != tk_ident) ERR_AT(i_loc, "Expected block name after ',' in BR.COND");
-      resolve_or_declare_block(p, here(p), p->tok, &b->value.conditional_branch.true_branch);
+      resolve_or_declare_block(p, here(p), p->tok, &b->cond_br.then);
       next_token(p);
 
       /// Yeet ",".
@@ -887,7 +863,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
 
       /// Parse the second name.
       if (p->tok_type != tk_ident) ERR_AT(i_loc, "Expected block name after ',' in BR-COND");
-      resolve_or_declare_block(p, here(p), p->tok, &b->value.conditional_branch.false_branch);
+      resolve_or_declare_block(p, here(p), p->tok, &b->cond_br.else_);
       next_token(p);
     } break;
     }
@@ -933,10 +909,10 @@ static void parse_block(IRParser *p, bool first_block) {
   if (p->tok_type != tk_ident) ERR("Expected block");
   if (!first_block) {
     IRBlock *block = ir_block_create();
-    ir_block_attach_to_function(VECTOR_BACK(*p->context->functions), block);
+    ir_block_attach_to_function(VECTOR_BACK(p->context->functions), block);
     p->context->block = block;
   }
-  make_block(p, here(p), p->tok, VECTOR_BACK(*p->context->functions)->blocks.last);
+  make_block(p, here(p), p->tok, VECTOR_BACK(p->context->functions)->blocks.last);
   next_token(p);
   if (p->tok_type != tk_colon) ERR("expected ':' after block name");
 
@@ -969,7 +945,7 @@ static void parse_body(IRParser *p) {
   /// The first block is special, because it can be unnamed. If there
   /// is no unnamed first block, there must still be at least one block.
   if (!at_block_name(p)) {
-    make_block(p, here(p), p->tok, VECTOR_BACK(*p->context->functions)->blocks.first);
+    make_block(p, here(p), p->tok, VECTOR_BACK(p->context->functions)->blocks.first);
 
     /// Parse the body of the first block.
     parse_block_body(p);
@@ -985,7 +961,7 @@ static void parse_body(IRParser *p) {
 /// <attributes> ::= <attribute>*
 /// <attribute>  ::= CONSTEVAL | FORCEINLINE | GLOBAL | NORETURN | PURE | LEAF
 static void parse_attributes(IRParser *p) {
-  IRFunction *f = VECTOR_BACK(*p->context->functions);
+  IRFunction *f = VECTOR_BACK(p->context->functions);
 
 #define ATTR(a)                                                     \
   if (IDENT(#a)) {                                                  \
@@ -1020,7 +996,7 @@ static void parse_parameters(IRParser *p) {
     /// Create a parameter reference.
     if (p->tok_type != tk_temp) ERR("Expected temporary after '(' or ','");
     if (p->tok.data[0] == '#') ERR("Function parameter must be a temporary register");
-    ir_add_parameter_to_function(VECTOR_BACK(*p->context->functions));
+    ir_add_parameter_to_function(VECTOR_BACK(p->context->functions));
     IRInstruction *param = ir_parameter(p->context, param_count++);
     make_temp(p, here(p), p->tok, param);
     next_token(p);
@@ -1049,7 +1025,7 @@ static void parse_function(IRParser *p) {
   span name = funcname(p, p->tok);
 
   loc location = here(p);
-  ir_function(p->context, strndup(name.data, name.size), 0);
+  ir_function(p->context, name, 0);
   next_token(p);
 
   /// Function parameters.
@@ -1076,7 +1052,7 @@ static void parse_function(IRParser *p) {
   next_token(p);
 
   /// Add an entry for the function.
-  make_function(p, location, name, VECTOR_BACK(*p->context->functions));
+  make_function(p, location, name, VECTOR_BACK(p->context->functions));
 }
 
 /// <ir> ::= { <function> | <extern> }
@@ -1100,8 +1076,23 @@ static bool parse_ir(IRParser *p) {
       else ERR("Expected 'defun' or 'declare'");
 
       /// After parsing a function, resolve temporaries and blocks.
-      RESOLVE_ALL(p, "block", block, IRBlock *, block, block, return false);
-      RESOLVE_ALL(p, "temporary", temp, IRInstruction *, instruction, instruction, return false);
+      RESOLVE_ALL(p, "block", block, IRBlock *, return false);
+      /** Resolve temporaries **/ {
+        bool success = true;
+        VECTOR_FOREACH (temp_sym, sym, p->temp_syms) {
+          if (!sym->temp) {
+            issue_diagnostic(DIAG_ERR, (p)->filename, (p)->source, sym->location,
+              "Unknown temporary '%.*s'", (int) sym->name.size, sym->name.data);
+            success = false;
+          } else {
+            VECTOR_FOREACH (temp_sym_entry, entry, sym->unresolved) {
+              *entry->slot = sym->temp;
+              mark_used(sym->temp, entry->parent);
+            }
+          }
+        }
+        if (!success) { return false; }
+      }
       VECTOR_CLEAR(p->block_syms);
       VECTOR_CLEAR(p->temp_syms);
     } break;
@@ -1145,9 +1136,9 @@ bool ir_parse(CodegenContext *context, const char *filename, string ir) {
   context->function = f;
   context->block = b;
 
-  /// Resolve functions.
+  /// Resolve functions and global vars.
   if (parse_ok) {
-    RESOLVE_ALL(&parser, "function", function, const char *, function, function->name, parse_ok = false);
+    RESOLVE_ALL(&parser, "function", function, IRFunction *, parse_ok = false);
     /*        ir_femit(stderr, context);*/
     if (parse_ok) return parse_ok;
   }
@@ -1160,7 +1151,7 @@ bool ir_parse(CodegenContext *context, const char *filename, string ir) {
   /// Remove all functions we added from the context.
   bool found = false;
   usz removed = 0;
-  VECTOR_FOREACH_PTR (IRFunction *, func, *context->functions) {
+  VECTOR_FOREACH_PTR (IRFunction *, func, context->functions) {
     /// Do *not* delete anything before f!
     if (func == f) {
       found = true;
@@ -1181,10 +1172,10 @@ bool ir_parse(CodegenContext *context, const char *filename, string ir) {
     }
 
     /// Delete the function.
-    free(func->name);
+    free(func->name.data);
     free(func);
     removed++;
   }
-  context->functions->size -= removed;
+  context->functions.size -= removed;
   return false;
 }

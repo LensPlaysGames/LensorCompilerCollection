@@ -9,72 +9,79 @@
 
 #define INSTRUCTION(name, given_type)                       \
   IRInstruction *(name) = calloc(1, sizeof(IRInstruction)); \
-  ASSERT((name), "Could not allocate new IRInstruction.");  \
-  (name)->type = (given_type);
+  (name)->type = (given_type)
 
 #define FOREACH_INSTRUCTION_N(context, function, block, instruction)  \
-  VECTOR_FOREACH_PTR (IRFunction *, function, *context->functions)    \
+  VECTOR_FOREACH_PTR (IRFunction *, function, context->functions)    \
     DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
       DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
 
-#define FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block) \
+#define FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block, instruction) \
   DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
     DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
 
 #define FOREACH_INSTRUCTION(context) FOREACH_INSTRUCTION_N(context, function, block, instruction)
-#define FOREACH_INSTRUCTION_IN_FUNCTION(function) FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block)
+#define FOREACH_INSTRUCTION_IN_FUNCTION(function) FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block, instruction)
+
+/// All instructions that take two arguments.
+#define ALL_BINARY_INSTRUCTION_TYPES(F) \
+  F(ADD, add)                           \
+  F(SUB, sub)                           \
+  F(MUL, mul)                           \
+  F(DIV, div)                           \
+  F(MOD, mod)                           \
+                                        \
+  F(SHL, shl)                           \
+  F(SAR, sar)                           \
+  F(SHR, shr)                           \
+  F(AND, and)                           \
+  F(OR, or)                             \
+                                        \
+  F(LT, lt)                             \
+  F(LE, le)                             \
+  F(GT, gt)                             \
+  F(GE, ge)                             \
+  F(EQ, eq)                             \
+  F(NE, ne)
 
 /// Some of these are also used in the parser, and until C implements
 /// inheriting from enums (i.e. never), this is the best we can do.
-#define ALL_IR_INSTRUCTION_TYPES(F)                                \
-    F(IMMEDIATE)                                                   \
-    F(CALL)                                                        \
-    F(LOAD)                                                        \
-                                                                   \
-    F(RETURN)                                                      \
-    F(BRANCH)                                                      \
-    F(BRANCH_CONDITIONAL)                                          \
-    F(UNREACHABLE)                                                 \
-                                                                   \
-    F(PHI)                                                         \
-    F(COPY)                                                        \
-                                                                   \
-    F(ADD)                                                         \
-    F(SUBTRACT)                                                    \
-    F(MULTIPLY)                                                    \
-    F(DIVIDE)                                                      \
-    F(MODULO)                                                      \
-                                                                   \
-    F(SHIFT_LEFT)                                                  \
-    F(SHIFT_RIGHT_ARITHMETIC)                                      \
-    F(SHIFT_RIGHT_LOGICAL)                                         \
-    F(AND)                                                         \
-    F(OR)                                                          \
-                                                                   \
-    F(LOCAL_LOAD)                                                  \
-    F(LOCAL_STORE)                                                 \
-    F(LOCAL_ADDRESS)                                               \
-                                                                   \
-    F(GLOBAL_LOAD)                                                 \
-    F(GLOBAL_STORE)                                                \
-    F(GLOBAL_ADDRESS)                                              \
-                                                                   \
-    /** Store data at an address. **/                              \
-    F(STORE)                                                       \
-                                                                   \
-    F(NOT)                                                         \
-    F(COMPARISON)                                                  \
-                                                                   \
-    F(PARAMETER)                                                   \
-                                                                   \
-    /**                                                            \
-     * A lot of backends have these instructions, but the IR isn't \
-     * generated with them in it.                                  \
-     **/                                                           \
-    F(REGISTER)                                                    \
-    F(STACK_ALLOCATE)
+#define ALL_IR_INSTRUCTION_TYPES(F)                              \
+  F(IMMEDIATE)                                                   \
+  F(CALL)                                                        \
+  F(LOAD)                                                        \
+                                                                 \
+  F(RETURN)                                                      \
+  F(BRANCH)                                                      \
+  F(BRANCH_CONDITIONAL)                                          \
+  F(UNREACHABLE)                                                 \
+                                                                 \
+  F(PHI)                                                         \
+  F(COPY)                                                        \
+                                                                 \
+  ALL_BINARY_INSTRUCTION_TYPES(F)                                \
+                                                                 \
+  F(STATIC_REF)                                                  \
+  F(FUNC_REF)                                                    \
+                                                                 \
+  /** Store data at an address. **/                              \
+  F(STORE)                                                       \
+                                                                 \
+  F(NOT)                                                         \
+                                                                 \
+  F(PARAMETER)                                                   \
+                                                                 \
+  /**                                                            \
+   * A lot of backends have these instructions, but the IR isn't \
+   * generated with them in it.                                  \
+   **/                                                           \
+  F(REGISTER)                                                    \
+  F(ALLOCA)
 
-#define DEFINE_IR_INSTRUCTION_TYPE(type) CAT(IR_, type),
+#define BINARY_INSTRUCTION_CASE_HELPER(enumerator, name) case IR_##enumerator:
+#define ALL_BINARY_INSTRUCTION_CASES() ALL_BINARY_INSTRUCTION_TYPES(BINARY_INSTRUCTION_CASE_HELPER)
+
+#define DEFINE_IR_INSTRUCTION_TYPE(type, ...) CAT(IR_, type),
 typedef enum IRType {
   ALL_IR_INSTRUCTION_TYPES(DEFINE_IR_INSTRUCTION_TYPE)
   IR_COUNT
@@ -94,115 +101,69 @@ typedef struct IRPhiArgument {
   IRBlock *block;
 } IRPhiArgument;
 
-typedef struct IRPair {
-  IRInstruction *car;
-  IRInstruction *cdr;
-} IRPair;
-
-typedef struct IRCallArgument {
-  IRInstruction *value;
-  struct IRCallArgument *next;
-} IRCallArgument;
-
-typedef enum IRCallType {
-  IR_CALLTYPE_DIRECT,
-  IR_CALLTYPE_INDIRECT,
-  IR_CALLTYPE_COUNT
-} IRCallType;
-
-typedef union IRCallValue {
-  /// TODO: direct calls should store a reference to a function, not its name.
-  const char *name;
-  IRInstruction *callee;
-} IRCallValue;
-
 typedef struct IRCall {
-  IRCallType type;
-  IRCallValue value;
-  IRCallArgument *arguments;
-  bool tail_call;
+  VECTOR(IRInstruction *) arguments;
+  union {
+    IRInstruction *callee_instruction;
+    IRFunction *callee_function;
+  };
+  bool is_indirect : 1;
+  bool tail_call : 1;
 } IRCall;
 
 typedef struct IRBranchConditional {
   IRInstruction *condition;
-  IRBlock *true_branch;
-  IRBlock *false_branch;
+  IRBlock *then;
+  IRBlock *else_;
 } IRBranchConditional;
 
-typedef struct IRComparison {
-  enum ComparisonType type;
-  IRPair pair;
-} IRComparison;
-
-typedef struct IRGlobalAssignment {
-  IRInstruction *new_value;
-  char *name;
-} IRGlobalAssignment;
-
 typedef struct IRStackAllocation {
-  size_t size;
-  size_t offset;
+  usz size;
+  usz offset;
 } IRStackAllocation;
-
-typedef union IRValue {
-  IRBlock *block;
-  IRInstruction *reference;
-  int64_t immediate;
-  IRCall call;
-  VECTOR(IRPhiArgument*) phi_arguments; /// For unfortunate reasons, these *have* to be on the heap.
-  IRBranchConditional conditional_branch;
-  IRPair pair;
-  IRComparison comparison;
-  char *name;
-  IRGlobalAssignment global_assignment;
-  IRStackAllocation stack_allocation;
-} IRValue;
-
 
 void mark_used(IRInstruction *usee, IRInstruction *user);
 
-void set_pair_and_mark
-(IRInstruction *parent,
- IRPair *pair,
- IRInstruction *lhs,
- IRInstruction *rhs);
-
-
 typedef struct IRInstruction {
-  int type;
-  IRValue value;
-
-  /// A unique identifier (mainly for debug purposes).
-  size_t id;
-
-  IRBlock *block;
-
-  DLIST_NODE(struct IRInstruction);
-
-  // Register allocation.
-  size_t index;
-
+  enum IRType type;
   Register result;
 
-  /// Sometimes we don’t want to allocate a register for an instruction
-  /// or emit it, but we still want to use it as an operand and keep it
-  /// in the block so that we don’t leak it.
-  ///
-  /// An example of this are comparisons that are immediately used in
-  /// a conditional branch, and unused after.
-  ///
-  /// This is a bit of a hack, but it works. A dedicated instruction
-  /// selection pass would be better.
-  bool dont_emit;
+  /// TODO: do we really need both of these?
+  u32 id;
+  u32 index;
 
   /// List of instructions using this instruction.
   VECTOR(IRInstruction*) users;
+
+  DLIST_NODE(struct IRInstruction);
+
+  IRBlock *parent_block;
+
+  union {
+    IRBlock *destination_block;
+    IRInstruction *operand;
+    u64 imm;
+    IRCall call;
+    VECTOR(IRPhiArgument*) phi_args; /// For unfortunate reasons, these *have* to be on the heap.
+    IRBranchConditional cond_br;
+    struct {
+      IRInstruction *addr;
+      IRInstruction *value;
+    } store;
+    struct {
+      IRInstruction *lhs;
+      IRInstruction *rhs;
+    };
+    IRStaticVariable* static_ref;
+    IRFunction *function_ref;
+    IRStackAllocation alloca;
+  };
 } IRInstruction;
 
 /// A block is a list of instructions that have control flow enter at
 /// the beginning and leave at the end.
 typedef struct IRBlock {
-  const char *name;
+  string name;
 
   DLIST(IRInstruction) instructions;
 
@@ -219,7 +180,7 @@ typedef struct IRBlock {
 } IRBlock;
 
 typedef struct IRFunction {
-  char *name;
+  string name;
 
   DLIST(IRBlock) blocks;
 
@@ -236,13 +197,13 @@ typedef struct IRFunction {
 
   size_t registers_in_use;
 
-  uint32_t attr_consteval : 1;
-  uint32_t attr_forceinline : 1;
-  uint32_t attr_global : 1;
-  uint32_t attr_leaf : 1;
-  uint32_t attr_noreturn : 1;
-  uint32_t attr_pure : 1;
-  uint32_t : 26;
+  bool attr_consteval : 1;
+  bool attr_forceinline : 1;
+  bool attr_global : 1;
+  bool attr_leaf : 1;
+  bool attr_noreturn : 1;
+  bool attr_pure : 1;
+  bool is_extern : 1;
 } IRFunction;
 
 struct IR {
@@ -257,18 +218,10 @@ bool ir_is_branch(IRInstruction*);
 /// Check whether a block is closed.
 bool ir_is_closed(IRBlock *block);
 
-void ir_femit_instruction
-(FILE *file,
- IRInstruction *instruction);
-void ir_femit_block
-(FILE *file,
- IRBlock *block);
-void ir_femit_function
-(FILE *file,
- IRFunction *function);
-void ir_femit
-(FILE *file,
- CodegenContext *context);
+void ir_femit_instruction(FILE *file, IRInstruction *instruction);
+void ir_femit_block(FILE *file, IRBlock *block);
+void ir_femit_function(FILE *file, IRFunction *function);
+void ir_femit(FILE *file, CodegenContext *context);
 
 void ir_add_function_call_argument
 (CodegenContext *context,
@@ -277,97 +230,48 @@ void ir_add_function_call_argument
 
 IRBlock *ir_block_create();
 
-void ir_block_attach_to_function
-(IRFunction *function,
- IRBlock *new_block);
+void ir_block_attach_to_function(IRFunction *function, IRBlock *new_block);
+void ir_block_attach(CodegenContext *context, IRBlock *new_block);
 
-void ir_block_attach
-(CodegenContext *context,
- IRBlock *new_block);
+IRFunction *ir_function(CodegenContext *context, span name, size_t params);
+IRInstruction *ir_funcref(CodegenContext *context, IRFunction *function);
 
-IRFunction *ir_function
-(CodegenContext *context,
- const char *name,
- size_t params);
+void ir_force_insert_into_block(IRBlock *block, IRInstruction *new_instruction);
+void ir_insert_into_block(IRBlock *block, IRInstruction *new_instruction);
 
-void ir_force_insert_into_block
-(IRBlock *block,
- IRInstruction *new_instruction);
-
-void ir_insert_into_block
-(IRBlock *block,
- IRInstruction *new_instruction);
-
-void ir_insert
-(CodegenContext *context,
- IRInstruction *new_instruction);
+void ir_insert(CodegenContext *context, IRInstruction *new_instruction);
 
 void insert_instruction_before(IRInstruction *i, IRInstruction *before);
 void insert_instruction_after(IRInstruction *i, IRInstruction *after);
 
-IRInstruction *ir_parameter
-(CodegenContext *context,
- size_t index);
-
+IRInstruction *ir_parameter(CodegenContext *context, size_t index);
 void ir_add_parameter_to_function(IRFunction *);
 
-void ir_phi_add_argument
-(IRInstruction *phi,
- IRPhiArgument *argument);
-
+IRInstruction *ir_phi(CodegenContext *context);
+void ir_phi_add_argument(IRInstruction *phi, IRPhiArgument *argument);
+void ir_phi_remove_argument(IRInstruction *phi, IRBlock *block);
 void ir_phi_argument
 (IRInstruction *phi,
  IRBlock *phi_predecessor,
  IRInstruction *argument);
 
-void ir_phi_remove_argument(IRInstruction *phi, IRBlock *block);
-
-IRInstruction *ir_phi
-(CodegenContext *context);
-
 /// NOTE: Does not insert call instruction.
 IRInstruction *ir_direct_call
 (CodegenContext *context,
- char* function_name);
+ IRFunction *callee);
 
 /// NOTE: Does not insert call instruction.
 IRInstruction *ir_indirect_call
 (CodegenContext *context,
  IRInstruction *function);
 
-IRInstruction *ir_load_global_address
-(CodegenContext *context,
- char *name);
-
 IRInstruction *ir_immediate
 (CodegenContext *context,
- int64_t immediate);
+ u64 immediate);
 
 IRInstruction *ir_load
 (CodegenContext *context,
  IRInstruction *address);
-
-IRInstruction *ir_load_local_address
-(CodegenContext *context,
- IRInstruction *local);
-
-IRInstruction *ir_load_global
-(CodegenContext *context,
- char *name);
-
-IRInstruction *ir_load_local
-(CodegenContext *context,
- IRInstruction *local);
-
-IRInstruction *ir_store_global
-(CodegenContext *context,
- IRInstruction *source,
- char *name);
-
-IRInstruction *ir_store_local
-(CodegenContext *context,
- IRInstruction *source,
- IRInstruction *local);
 
 IRInstruction *ir_store
 (CodegenContext *context,
@@ -404,69 +308,20 @@ IRInstruction *ir_not
 (CodegenContext *context,
  IRInstruction *source);
 
-IRInstruction *ir_comparison
-(CodegenContext *context,
- enum ComparisonType type,
- IRInstruction *lhs,
- IRInstruction *rhs);
+#define DECLARE_BINARY_INSTRUCTION(_, name) \
+  IRInstruction *ir_##name(CodegenContext *context, IRInstruction *lhs, IRInstruction *rhs);
+ALL_BINARY_INSTRUCTION_TYPES(DECLARE_BINARY_INSTRUCTION)
+#undef DECLARE_BINARY_INSTRUCTION
 
-IRInstruction *ir_add
+/// Create a variable with static storage duration.
+IRInstruction *ir_create_static
 (CodegenContext *context,
- IRInstruction *lhs,
- IRInstruction *rhs);
-
-IRInstruction *ir_subtract
-(CodegenContext *context,
- IRInstruction *lhs,
- IRInstruction *rhs);
-
-IRInstruction *ir_multiply
-(CodegenContext *context,
- IRInstruction *lhs,
- IRInstruction *rhs);
-
-IRInstruction *ir_divide
-(CodegenContext *context,
- IRInstruction *lhs,
- IRInstruction *rhs);
-
-IRInstruction *ir_modulo
-(CodegenContext *context,
- IRInstruction *lhs,
- IRInstruction *rhs);
-
-IRInstruction *ir_shift_left
-(CodegenContext *context,
- IRInstruction *lhs,
- IRInstruction *rhs);
-
-IRInstruction *ir_shift_right_logical
-(CodegenContext *context,
- IRInstruction *lhs,
- IRInstruction *rhs);
-
-IRInstruction *ir_shift_right_arithmetic
-(CodegenContext *context,
- IRInstruction *lhs,
- IRInstruction *rhs);
-
-IRInstruction *ir_and
-(CodegenContext *context,
- IRInstruction *lhs,
- IRInstruction *rhs);
-
-IRInstruction *ir_or
-(CodegenContext *context,
- IRInstruction *lhs,
- IRInstruction *rhs);
+ Type *ty,
+ span name);
 
 IRInstruction *ir_stack_allocate
 (CodegenContext *context,
- int64_t size);
-
-IRFunction *ir_get_function
-(CodegenContext *context,
- const char *name);
+ usz size);
 
 /// Check if an instruction returns a value.
 bool ir_is_value(IRInstruction *instruction);
@@ -486,8 +341,24 @@ void ir_remove(IRInstruction* instruction);
 void ir_remove_use(IRInstruction *usee, IRInstruction *user);
 void ir_remove_and_free_block(IRBlock *block);
 
+/// Free memory used by an instruction. This is unsafe as
+/// it doesn’t check whether the instruction is used by other
+/// instructions, so use this only when freeing the entire IR.
+void ir_free_instruction_data(IRInstruction *instruction);
+
 /// Mark a block as ending w/ `unreachable` and remove it
 /// from PHIs.
 void ir_mark_unreachable(IRBlock *block);
+
+/// Iterate over each child of an instruction.
+///
+/// \param instruction The instruction to iterate over.
+/// \param callback A callback that is called with the instruction and the child.
+/// \param data User data that is passed to the callback.
+void ir_for_each_child(
+    IRInstruction *inst,
+    void callback(IRInstruction *user, IRInstruction **child, void *data),
+    void *data
+);
 
 #endif /* INTERMEDIATE_REPRESENTATION_H */

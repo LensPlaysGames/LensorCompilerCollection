@@ -1,10 +1,14 @@
 #include <opt.h>
 #include <codegen.h>
+#include <codegen/dom.h>
 #include <codegen/intermediate_representation.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <vector.h>
+
+typedef VECTOR(IRBlock*) BlockVector;
+
 
 /// ===========================================================================
 ///  Helpers
@@ -13,308 +17,62 @@
 #include <intrin.h>
 
 uint32_t ctzll(uint64_t value) {
-  uint32_t zero = 0;
+  unsigned long zero = 0;
   return _BitScanForward64(&zero, value)
-    ? zero
+    ? (uint32_t) zero
     : 64;
 }
 #else
 #define ctzll __builtin_ctzll
 #endif
 
-#define IR_REDUCE_BINARY(op)                 \
-  if (ipair(i)) {                            \
-    IRInstruction *car = i->value.pair.car;  \
-    IRInstruction *cdr = i->value.pair.cdr;  \
-    i->type = IR_IMMEDIATE;                  \
-    i->value.immediate = icar(i) op icdr(i); \
-    ir_remove_use(car, i);                   \
-    ir_remove_use(cdr, i);                   \
-    changed = true;                          \
+#define IR_REDUCE_BINARY(op)           \
+  if (is_immediate_pair(i)) {          \
+    IRInstruction *lhs = i->lhs;       \
+    IRInstruction *rhs = i->rhs;       \
+    i->type = IR_IMMEDIATE;            \
+    i->imm = imm_lhs(i) op imm_rhs(i); \
+    ir_remove_use(lhs, i);             \
+    ir_remove_use(rhs, i);             \
+    changed = true;                    \
   }
 
-static bool ipair(IRInstruction *i) {
-  return i->value.pair.car->type == IR_IMMEDIATE &&
-         i->value.pair.cdr->type == IR_IMMEDIATE;
+static bool is_immediate_pair(IRInstruction *i) {
+  return i->lhs->type == IR_IMMEDIATE &&
+         i->rhs->type == IR_IMMEDIATE;
 }
 
-static int64_t icar(IRInstruction *i) {
-  return i->value.pair.car->value.immediate;
+static u64 imm_lhs(IRInstruction *i) {
+  return i->lhs->imm;
 }
 
-static int64_t icdr(IRInstruction *i) {
-  return i->value.pair.cdr->value.immediate;
+static u64 imm_rhs(IRInstruction *i) {
+  return i->rhs->imm;
 }
 
-static bool power_of_two(int64_t value) {
+static bool power_of_two(u64 value) {
   return value > 0 && (value & (value - 1)) == 0;
 }
 
 static bool has_side_effects(IRInstruction *i) {
-  STATIC_ASSERT(IR_COUNT == 31, "Handle all instructions");
+  STATIC_ASSERT(IR_COUNT == 32, "Handle all instructions");
   switch (i->type) {
+    /// These do NOT have side effects.
     case IR_IMMEDIATE:
     case IR_LOAD:
-    case IR_ADD:
-    case IR_SUBTRACT:
-    case IR_MULTIPLY:
-    case IR_DIVIDE:
-    case IR_MODULO:
-    case IR_SHIFT_LEFT:
-    case IR_SHIFT_RIGHT_ARITHMETIC:
-    case IR_SHIFT_RIGHT_LOGICAL:
-    case IR_LOCAL_LOAD:
-    case IR_LOCAL_ADDRESS:
-    case IR_GLOBAL_LOAD:
-    case IR_GLOBAL_ADDRESS:
-    case IR_COMPARISON:
     case IR_PARAMETER:
-    case IR_AND:
-    case IR_OR:
     case IR_NOT:
+    case IR_STATIC_REF:
+    case IR_FUNC_REF:
+    ALL_BINARY_INSTRUCTION_CASES()
       return false;
+
+    case IR_CALL:
+      return i->call.is_indirect || !i->call.callee_function->attr_pure;
 
     default:
       return true;
   }
-}
-
-/// ===========================================================================
-///  Dominator Info
-/// ===========================================================================
-/// A node in the dominator tree.
-typedef struct DomTreeNode {
-  IRBlock *block;
-  VECTOR(struct DomTreeNode*) dominators;
-  VECTOR(struct DomTreeNode*) children;
-} DomTreeNode;
-
-/// Structure used to store dominator information such as the
-/// dominator tree and the list of dominators of each block.
-///
-/// The following definitions may be useful in understanding
-/// the concept of dominance and dominator trees:
-///
-///   *dominates*:
-/// A block B1 *dominates* another block B2, iff all paths from the
-/// entry block to B2 go through B1. That is, when control flow
-/// reaches B2, it must have come from B1. By definition, every
-/// block dominates itself.
-///
-///   *strictly dominates*:
-/// A block B1 *strictly dominates* another block B2, iff B1 dominates
-/// B2 and B1 != B2.
-///
-///   *immediately dominates*:
-/// A block B1 *immediately dominates* another block B2, iff B1 strictly
-/// dominates B2 and there is no other block B3 such that B1 strictly
-/// dominates B3 and B3 strictly dominates B2. To put it differently, the
-/// immediate dominator of a block B2 is the closest block B1 that strictly
-/// dominates it, such that there is no other block in between that is
-/// strictly dominated by B1 and strictly dominates B2. Every block (except
-/// the entry block) has exactly one immediate dominator.
-///
-///   *dominator tree*:
-/// The *dominator tree* of a control flow graph is a tree containing a node
-/// for each block in the CFG such that each node’s children are the blocks
-/// that it immediately dominates.
-///
-/// By way of illustration, consider the following CFG:
-///
-///                   B0
-///                  ╱  ╲
-///                 B1  B3
-///                ╱  ╲ ╱
-///               B2  B4
-///               |   |
-///               B5  B6
-///
-/// In the graph above,
-///    - B0 dominates all blocks since it is the root.
-///    - B1 dominates B2 and B5, but *not* e.g. B4 since B4 can
-///      also be reached from B3.
-///    - B2 dominates B5.
-///    - B4 dominates B6.
-///
-/// The dominator tree for this CFG is:
-///
-///                    B0
-///                 ╱  |  ╲
-///                B1  B3  B4
-///                |       |
-///                B2      B6
-///                |
-///                B5
-typedef struct DominatorInfo {
-  /// Nodes that make up the dominator tree. The first
-  /// node is the root of the tree and corresponds to
-  /// the entry block.
-  VECTOR(DomTreeNode) nodes;
-  DomTreeNode *dominator_tree;
-} DominatorInfo;
-
-typedef VECTOR(IRBlock*) BlockVector;
-
-/// Perform DFS on the control flow graph to find blocks
-/// that are reachable from `block`. If `ignore` is encountered,
-/// it is ignored. This allows us to effectively ‘remove’ blocks
-/// from the CFG without having to actually remove them.
-static BlockVector collect_reachable_blocks(IRBlock *block, IRBlock *ignore) {
-  BlockVector reachable = {0};
-  VECTOR_PUSH(reachable, block);
-
-  /// Stack for DFS.
-  VECTOR(IRBlock*) dfs_stack = {0};
-  VECTOR_PUSH(dfs_stack, block);
-  while (dfs_stack.size) {
-    IRBlock *b = VECTOR_POP(dfs_stack);
-    if (b == ignore) continue;
-
-    STATIC_ASSERT(IR_COUNT == 31, "Handle all branch types");
-    bool out = false;
-    IRInstruction *i = b->instructions.last;
-    switch (i->type) {
-      case IR_BRANCH:
-        VECTOR_CONTAINS(reachable, i->value.block, out);
-        if (!out) {
-          VECTOR_PUSH(reachable, i->value.block);
-          VECTOR_PUSH(dfs_stack, i->value.block);
-        }
-        break;
-
-      case IR_BRANCH_CONDITIONAL:
-        VECTOR_CONTAINS(reachable, i->value.conditional_branch.true_branch, out);
-        if (!out) {
-          VECTOR_PUSH(reachable, i->value.conditional_branch.true_branch);
-          VECTOR_PUSH(dfs_stack, i->value.conditional_branch.true_branch);
-        }
-        VECTOR_CONTAINS(reachable, i->value.conditional_branch.false_branch, out);
-        if (!out) {
-          VECTOR_PUSH(reachable, i->value.conditional_branch.false_branch);
-          VECTOR_PUSH(dfs_stack, i->value.conditional_branch.false_branch);
-        }
-        break;
-    }
-  }
-  VECTOR_DELETE(dfs_stack);
-  return reachable;
-}
-
-static void free_dominator_info(DominatorInfo* info) {
-  VECTOR_FOREACH (DomTreeNode, n, info->nodes) {
-    VECTOR_DELETE(n->dominators);
-    VECTOR_DELETE(n->children);
-  }
-  VECTOR_DELETE(info->nodes);
-}
-
-/// Check if a node dominates another node.
-static bool dominates(DomTreeNode *dominator, DomTreeNode *node) {
-  bool out = false;
-  VECTOR_CONTAINS(node->dominators, dominator, out);
-  return out;
-}
-
-/// Check if a node strictly dominates another node.
-static bool strictly_dominates(DomTreeNode *dominator, DomTreeNode *node) {
-  return dominator != node && dominates(dominator, node);
-}
-
-/// Build the dominator tree for a function and remove unused blocks.
-/// \see struct DominatorInfo
-static void build_and_prune_dominator_tree(IRFunction *f, DominatorInfo* info) {
-  /// Determine all blocks that are reachable from the entry block.
-  BlockVector reachable = collect_reachable_blocks(f->blocks.first, NULL);
-  BlockVector blocks_to_remove = {0};
-
-  /// Remove any unreachable blocks.
-  DLIST_FOREACH (IRBlock*, b, f->blocks) {
-    bool out = false;
-    VECTOR_CONTAINS(reachable, b, out);
-    if (!out) VECTOR_PUSH(blocks_to_remove, b);
-  }
-
-  /// Remove unreachable blocks and free vectors.
-  VECTOR_FOREACH_PTR (IRBlock*, b, blocks_to_remove) ir_remove_and_free_block(b);
-  VECTOR_DELETE(reachable);
-  VECTOR_DELETE(blocks_to_remove);
-
-  /// Free old dominator tree.
-  VECTOR_FOREACH (DomTreeNode, n, info->nodes) {
-    VECTOR_DELETE(n->dominators);
-    VECTOR_DELETE(n->children);
-  }
-  VECTOR_CLEAR(info->nodes);
-
-  /// Add a node for each block.
-  ASSERT(f->blocks.first);
-  DLIST_FOREACH (IRBlock*, b, f->blocks) {
-    DomTreeNode node = {0};
-    node.block = b;
-    VECTOR_PUSH(info->nodes, node);
-  }
-
-  /// The only dominator of the root is the root itself.
-  /// We assume that the first block in a function is
-  /// the entry block.
-  VECTOR_PUSH(info->nodes.data[0].dominators, info->nodes.data);
-  info->dominator_tree = info->nodes.data;
-
-  /// To find all dominators of a block, remove that block
-  /// from the function; then, find all blocks that are still
-  /// reachable from the root. Any unreachable are dominated
-  /// by the removed block.
-  for (DomTreeNode *dominator = (info->nodes).data + 1;
-       dominator < (info->nodes).data + (info->nodes).size;
-       dominator++) {
-    /// Find all blocks that are still reachable from the root.
-    BlockVector still_reachable = collect_reachable_blocks(f->blocks.first, dominator->block);
-
-    /// Find all blocks that are no longer reachable.
-    VECTOR_FOREACH (DomTreeNode, d, info->nodes) {
-      bool out = false;
-      VECTOR_CONTAINS(still_reachable, d->block, out);
-      if (!out) {
-        /// Add the block to the dominators of the current node.
-        VECTOR_PUSH(d->dominators, dominator);
-
-        /// Add the current node to the children of the block.
-        /// This is used to build the dominator tree below.
-        VECTOR_PUSH(dominator->children, d);
-      }
-    }
-
-    VECTOR_DELETE(still_reachable);
-  }
-
-  /// Now that we know the dominators of each block, we can
-  /// build the dominator tree. Currently, the children of each
-  /// node contains all nodes that are dominated by that node.
-  ///
-  /// However, we only want all nodes that are immediately
-  /// dominated by that node. The algorithm for this is simple:
-  /// For each node N, remove from N’s children any nodes that are
-  /// also strictly dominated by another child of N.
-  VECTOR (DomTreeNode*) to_remove = {0};
-  VECTOR_FOREACH (DomTreeNode, n, info->nodes) {
-    VECTOR_CLEAR(to_remove);
-
-    /// For each child of N, check if it is strictly dominated by another child.
-    VECTOR_FOREACH_PTR (DomTreeNode*, c, n->children) {
-      VECTOR_FOREACH_PTR (DomTreeNode*, c2, n->children) {
-        if (strictly_dominates(c, c2)) {
-          VECTOR_PUSH(to_remove, c2);
-          break;
-        }
-      }
-    }
-
-    /// Remove the nodes.
-    VECTOR_FOREACH_PTR (DomTreeNode*, c, to_remove) {
-      VECTOR_REMOVE_ELEMENT(n->children, c);
-    }
-  }
-  VECTOR_DELETE(to_remove);
 }
 
 /// ===========================================================================
@@ -326,58 +84,56 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
     DLIST_FOREACH (IRInstruction*, i, b->instructions) {
       switch (i->type) {
         case IR_ADD: IR_REDUCE_BINARY(+) break;
-        case IR_SUBTRACT: IR_REDUCE_BINARY(-) break;
-        case IR_MULTIPLY: IR_REDUCE_BINARY(*) break;
+        case IR_SUB: IR_REDUCE_BINARY(-) break;
+        case IR_MUL: IR_REDUCE_BINARY(*) break;
 
         /// TODO: Division by 0 should be a compile error.
-        case IR_DIVIDE:
+        case IR_DIV:
           IR_REDUCE_BINARY(/)
           else {
-            IRInstruction *cdr = i->value.pair.cdr;
-            if (cdr->type == IR_IMMEDIATE) {
+            IRInstruction *divisor = i->rhs;
+            if (divisor->type == IR_IMMEDIATE) {
               /// Division by 1 does nothing.
-              if (cdr->value.immediate == 1) {
-                ir_remove_use(i->value.pair.car, i);
-                ir_remove_use(cdr, i);
-                ir_replace_uses(i, i->value.pair.car);
+              if (divisor->imm == 1) {
+                ir_remove_use(i->lhs, i);
+                ir_remove_use(divisor, i);
+                ir_replace_uses(i, i->rhs);
               }
 
               /// Replace division by a power of two with a shift.
-              else if (power_of_two(cdr->value.immediate)) {
-                i->type = IR_SHIFT_RIGHT_ARITHMETIC;
-                cdr->value.immediate = ctzll((uint64_t)cdr->value.immediate);
+              else if (power_of_two(divisor->imm)) {
+                i->type = IR_SAR;
+                divisor->imm = (u64) ctzll(divisor->imm);
                 changed = true;
               }
             }
           }
           break;
-        case IR_MODULO: IR_REDUCE_BINARY(%) break;
+        case IR_MOD: IR_REDUCE_BINARY(%) break;
 
-        case IR_SHIFT_LEFT: IR_REDUCE_BINARY(<<) break;
-        case IR_SHIFT_RIGHT_ARITHMETIC: IR_REDUCE_BINARY(>>) break;
-        case IR_SHIFT_RIGHT_LOGICAL:
-          if (ipair(i)) {
-            IRInstruction *car = i->value.pair.car;
-            IRInstruction *cdr = i->value.pair.cdr;
+        case IR_SHL: IR_REDUCE_BINARY(<<) break;
+        case IR_SHR: IR_REDUCE_BINARY(>>) break;
+        case IR_SAR:
+          if (is_immediate_pair(i)) {
+            IRInstruction *lhs = i->lhs;
+            IRInstruction *rhs = i->rhs;
             i->type = IR_IMMEDIATE;
-            i->value.immediate = (int64_t) ((uint64_t) icar(i) >> (uint64_t) icdr(i));
-            ir_remove_use(car, i);
-            ir_remove_use(cdr, i);
+            i->imm = (u64) ((i64)imm_lhs(i) >> imm_rhs(i));
+            ir_remove_use(lhs, i);
+            ir_remove_use(rhs, i);
             changed = true;
           }
           break;
         case IR_AND: IR_REDUCE_BINARY(&) break;
         case IR_OR: IR_REDUCE_BINARY(|) break;
         case IR_NOT:
-          if (i->value.reference->type == IR_IMMEDIATE) {
-            IRInstruction *imm = i->value.reference;
+          if (i->operand->type == IR_IMMEDIATE) {
             i->type = IR_IMMEDIATE;
-            i->value.immediate = ~imm->value.immediate;
-            ir_remove_use(imm, i);
+            i->imm = ~i->operand->imm;
+            ir_remove_use(i->operand, i);
             changed = true;
           }
           break;
-
         default: break;
       }
     }
@@ -415,11 +171,11 @@ typedef struct {
 
 /// See opt_tail_call_elim() for more info.
 static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
-  for (IRInstruction *i = b == tc->call->block ? tc->call->next : b->instructions.first; i; i = i->next) {
+  for (IRInstruction *i = b == tc->call->parent_block ? tc->call->next : b->instructions.first; i; i = i->next) {
     if (i->type == IR_PHI) {
       /// If this is a phi node, then the call or a previous phi
       /// must be an argument of the phi.
-      VECTOR_FOREACH_PTR (IRPhiArgument*, arg, i->value.phi_arguments) {
+      VECTOR_FOREACH_PTR (IRPhiArgument*, arg, i->phi_args) {
         if (arg->value == tc->call) { goto phi; }
         VECTOR_FOREACH_PTR (IRInstruction *, a, tc->phis) {
           if (a == arg->value) { goto phi; }
@@ -436,14 +192,14 @@ static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
     /// is only possible if the return value is the call, or
     /// any of the PHIs.
     if (i->type == IR_RETURN) {
-      VECTOR_FOREACH_PTR (IRInstruction *, a, tc->phis) { if (a == i->value.reference) { return true; } }
-      return i->value.reference == tc->call;
+      VECTOR_FOREACH_PTR (IRInstruction *, a, tc->phis) { if (a == i->operand) { return true; } }
+      return i->operand == tc->call;
     }
 
-    if (i->type == IR_BRANCH) { return tail_call_possible_iter(tc, i->value.block); }
+    if (i->type == IR_BRANCH) { return tail_call_possible_iter(tc, i->destination_block); }
     if (i->type == IR_BRANCH_CONDITIONAL) {
-      return tail_call_possible_iter(tc, i->value.conditional_branch.true_branch) &&
-             tail_call_possible_iter(tc, i->value.conditional_branch.false_branch);
+      return tail_call_possible_iter(tc, i->cond_br.then) &&
+             tail_call_possible_iter(tc, i->cond_br.else_);
     }
 
     /// Any other instruction means that the call is not the last
@@ -456,7 +212,7 @@ static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
 static bool tail_call_possible(IRInstruction *i) {
   tail_call_info tc_info = {0};
   tc_info.call = i;
-  bool possible = tail_call_possible_iter(&tc_info, i->block);
+  bool possible = tail_call_possible_iter(&tc_info, i->parent_block);
   VECTOR_DELETE(tc_info.phis);
   return possible;
 }
@@ -472,7 +228,7 @@ static bool opt_tail_call_elim(IRFunction *f) {
       /// and phis.
       if (tail_call_possible(i)) {
         /// The actual tail call optimisation takes place in the code generator.
-        i->value.call.tail_call = true;
+        i->call.tail_call = true;
         ir_mark_unreachable(b);
         changed = true;
 
@@ -505,17 +261,19 @@ static bool opt_mem2reg(IRFunction *f) {
   DLIST_FOREACH (IRBlock*, b, f->blocks) {
     DLIST_FOREACH (IRInstruction*, i, b->instructions) {
       switch (i->type) {
+        default: break;
+
         /// New variable.
-        case IR_STACK_ALLOCATE: {
+        case IR_ALLOCA: {
           stack_var v = {0};
           v.alloca = i;
           VECTOR_PUSH(vars, v);
         } break;
 
         /// Record the first store into a variable.
-        case IR_LOCAL_STORE: {
+        case IR_STORE: {
           VECTOR_FOREACH (stack_var, a, vars) {
-            if (!a->unoptimisable && a->alloca == i->value.pair.car) {
+            if (!a->unoptimisable && a->alloca == i->store.addr) {
               /// If there are multiple stores, mark the variable as unoptimisable.
               if (a->store) a->unoptimisable = true;
               else a->store = i;
@@ -525,26 +283,16 @@ static bool opt_mem2reg(IRFunction *f) {
         } break;
 
         /// Record all loads; also check for loads before the first store.
-        case IR_LOCAL_LOAD: {
+        case IR_LOAD: {
           VECTOR_FOREACH (stack_var, a, vars) {
-            if (!a->unoptimisable && a->alloca == i->value.reference) {
+            if (!a->unoptimisable && a->alloca == i->operand) {
               /// Load before store.
               if (!a->store) {
                 a->unoptimisable = true;
-                fprintf(stderr, "Warning: Load of uninitialised variable in function %s", f->name);
+                fprintf(stderr, "Warning: Load of uninitialised variable in function %.*s\n", (int) f->name.size, f->name.data);
               } else {
                 VECTOR_PUSH(a->loads, i);
               }
-              break;
-            }
-          }
-        } break;
-
-        /// If the address of a variable is taken, mark it as unoptimisable.
-        case IR_LOCAL_ADDRESS: {
-          VECTOR_FOREACH (stack_var, a, vars) {
-            if (a->alloca == i->value.reference) {
-              a->unoptimisable = true;
               break;
             }
           }
@@ -555,16 +303,22 @@ static bool opt_mem2reg(IRFunction *f) {
 
   /// Optimise all optimisable variables.
   VECTOR_FOREACH (stack_var, a, vars) {
-    if (a->unoptimisable) {
+    /// If the variable is unoptimisable, do nothing.
+    ///
+    /// Since we don’t have `addressof` instructions or anything like
+    /// that, check if the address is taken anywhere by checking if
+    /// there are any uses of the alloca excepting the store and loads.
+    if (a->unoptimisable || !a->store || a->alloca->users.size != a->loads.size + 1) {
       VECTOR_DELETE(a->loads);
       continue;
     }
 
+    /// If we get here, we can yeet the variable.
     changed = true;
 
     /// Replace all loads with the stored value.
     VECTOR_FOREACH_PTR (IRInstruction*, i, a->loads) {
-      ir_replace_uses(i, a->store->value.pair.cdr);
+      ir_replace_uses(i, a->store->store.value);
       ir_remove(i);
     }
     VECTOR_DELETE(a->loads);
@@ -590,7 +344,7 @@ static bool opt_mem2reg(IRFunction *f) {
 bool opt_inline_global_vars(CodegenContext *ctx) {
   /// A global variable.
   typedef struct {
-    const char* name;
+    IRInstruction *var;
     IRInstruction *store;
     VECTOR(IRInstruction *) loads;
     bool unoptimisable;
@@ -600,17 +354,20 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
   /// Since loads from global variables before the first store
   /// are possible, we only check if the first store occurs
   /// before any loads and in main() for now.
-  IRFunction *main = ir_get_function(ctx, "main");
+  IRFunction **main = NULL;
+  VECTOR_FIND_IF(ctx->functions, main, i, string_eq(ctx->functions.data[i]->name, literal_span("main")));
   ASSERT(main, "No main() function!");
 
   FOREACH_INSTRUCTION (ctx) {
     switch (instruction->type) {
+      default: break;
+
       /// Record the first store into a variable.
-      case IR_GLOBAL_STORE: {
+      case IR_STORE: {
         VECTOR_FOREACH (global_var, a, vars) {
-          if (!a->unoptimisable && !strcmp(a->name, instruction->value.global_assignment.name)) {
+          if (!a->unoptimisable && a->store->store.addr == a->var) {
             /// If there are multiple stores, mark the variable as unoptimisable.
-            if (a->store || function != main) a->unoptimisable = true;
+            if (a->store || function != *main) a->unoptimisable = true;
             else a->store = instruction;
             goto next_instruction;
           }
@@ -618,16 +375,16 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
 
         /// Add a new variable.
         global_var v = {0};
-        v.name = instruction->value.global_assignment.name;
-        v.store = function == main ? instruction : NULL;
-        v.unoptimisable = function != main;
+        v.var = instruction->store.addr;
+        v.store = function == *main ? instruction : NULL;
+        v.unoptimisable = function != *main;
         VECTOR_PUSH(vars, v);
       } break;
 
       /// Record all loads; also check for loads before the first store.
-      case IR_GLOBAL_LOAD: {
+      case IR_LOAD: {
         VECTOR_FOREACH (global_var, a, vars) {
-          if (!a->unoptimisable && !strcmp(a->name, instruction->value.name)) {
+          if (!a->unoptimisable && a->store->store.addr == a->var) {
             /// Load before store.
             if (!a->store) a->unoptimisable = true;
             else VECTOR_PUSH(a->loads, instruction);
@@ -637,19 +394,9 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
 
         /// Unoptimisable because the variable is loaded before it is stored to.
         global_var v = {0};
-        v.name = instruction->value.name;
+        v.var = instruction->store.addr;
         v.unoptimisable = true;
         VECTOR_PUSH(vars, v);
-      } break;
-
-      case IR_GLOBAL_ADDRESS: {
-        VECTOR_FOREACH (global_var, a, vars) {
-          if (strcmp(a->name, instruction->value.name) == 0) {
-            /// Unoptimisable because the variable is loaded before it is stored to.
-            a->unoptimisable = true;
-            break;
-          }
-        }
       } break;
     }
   next_instruction:;
@@ -658,7 +405,12 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
   /// Optimise all optimisable variables.
   bool changed = false;
   VECTOR_FOREACH (global_var, a, vars) {
-    if (a->unoptimisable) {
+    /// If the variable is unoptimisable, do nothing.
+    ///
+    /// Since we don’t have `addressof` instructions or anything like
+    /// that, check if the address is taken anywhere by checking if
+    /// there are any uses of the alloca excepting the store and loads.
+    if (a->unoptimisable || a->var->users.size != a->loads.size + 1) {
       VECTOR_DELETE(a->loads);
       continue;
     }
@@ -666,7 +418,7 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
     /// Replace all loads with the stored value.
     changed = true;
     VECTOR_FOREACH_PTR (IRInstruction*, i, a->loads) {
-      ir_replace_uses(i, a->store->value.global_assignment.new_value);
+      ir_replace_uses(i, a->store->store.value);
       ir_remove(i);
     }
     VECTOR_DELETE(a->loads);
@@ -677,17 +429,18 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
     ir_remove(a->store);
   }
 
-  /// Convert indirect calls to a global address to direct calls.
+  /// Convert indirect calls to function references to direct calls.
   FOREACH_INSTRUCTION (ctx) {
     switch (instruction->type) {
+      default: break;
       case IR_CALL: {
-        if (instruction->value.call.type == IR_CALLTYPE_INDIRECT &&
-            instruction->value.call.value.callee->type == IR_GLOBAL_ADDRESS) {
-          const char* name = instruction->value.call.value.callee->value.name;
-          ir_remove_use(instruction->value.call.value.callee, instruction);
+        if (instruction->call.is_indirect &&
+            instruction->call.callee_instruction->type == IR_FUNC_REF) {
+          IRInstruction *func = instruction->call.callee_instruction;
+          ir_remove_use(instruction->call.callee_instruction, instruction);
 
-          instruction->value.call.type = IR_CALLTYPE_DIRECT;
-          instruction->value.call.value.name = name;
+          instruction->call.is_indirect = false;
+          instruction->call.callee_function = func->function_ref;
         }
       } break;
     }
@@ -701,8 +454,8 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
 /// ===========================================================================
 ///  Analyse functions.
 /// ===========================================================================
-/// This function returns whether the purity of the function has changed, *not*
-/// whether it’s pure or not.
+/// This function returns whether the pure attribute of the function has changed,
+/// *not* whether it’s pure or not.
 bool opt_check_pure(IRFunction *f) {
   /// Iterate over all instructions and check if they have nonlocal side effects.
   FOREACH_INSTRUCTION_IN_FUNCTION (f) {
@@ -713,14 +466,12 @@ bool opt_check_pure(IRFunction *f) {
     /// may still be pure, e.g. if the instruction is a call to a pure function
     /// or a store to a local variable.
     switch (instruction->type) {
-      case IR_LOCAL_STORE: continue;
-      case IR_CALL: {
-        /// TODO: direct calls should store a reference to a function, not its name.
-        if (instruction->value.call.type == IR_CALLTYPE_DIRECT) {
-          IRFunction *callee = ir_get_function(f->context, instruction->value.call.value.name);
-          if (callee && callee->attr_pure) continue;
-        }
-      } break;
+      case IR_STORE:
+        if (instruction->store.addr->type == IR_ALLOCA) continue;
+        break;
+      case IR_CALL:
+        if (!instruction->call.is_indirect && instruction->call.callee_function->attr_pure) continue;
+        break;
       default: break;
     }
 
@@ -737,14 +488,15 @@ bool opt_check_pure(IRFunction *f) {
 }
 
 /// Check if a function is a leaf function. This function returns whether
-/// the leafness of the function has changed, *not* whether it’s a leaf or not.
+/// the leaf attribute of the function has changed, *not* whether it’s a
+/// leaf or not.
 bool opt_check_leaf(IRFunction *f) {
   /// A leaf function may not contain any calls except for recursive tail calls
   /// or tail calls to other leaf functions.
   FOREACH_INSTRUCTION_IN_FUNCTION (f) {
     if (instruction->type != IR_CALL) continue;
-    if (instruction->value.call.type == IR_CALLTYPE_DIRECT && instruction->value.call.tail_call) {
-      IRFunction *callee = ir_get_function(f->context, instruction->value.call.value.name);
+    if (!instruction->call.is_indirect && instruction->call.tail_call) {
+      IRFunction *callee = instruction->call.callee_function;
       if (callee == f || callee->attr_leaf) continue;
     }
 
@@ -763,23 +515,26 @@ bool opt_check_leaf(IRFunction *f) {
 /// Check whether a function does not return. This function returns whether
 /// the noreturn attribute of the function has changed, *not* whether it actually
 /// returns or not.
+///
+/// If a function is marked as noreturn, then that means that it NEVER returns.
+/// A function that only sometimes doesn’t return is *not* noreturn.
 bool opt_check_noreturn(IRFunction *f) {
   FOREACH_INSTRUCTION_IN_FUNCTION (f) {
     /// A function that contains a tail call returns, unless the callee does not return.
-    if (instruction->type == IR_CALL && instruction->value.call.tail_call) {
+    ///
+    /// Checking regular calls doesn’t help, since we’re checking whether a function may
+    /// return, not whether it might not return; tail calls, however, are different, since
+    /// they are basically like return statements. We don’t care whether or not regular calls
+    /// return, but if a tail call returns, then we must also return.
+    if (instruction->type == IR_CALL && instruction->call.tail_call) {
       /// If the call is a direct call, we can check the noreturn attribute of the callee.
-      if (instruction->value.call.type == IR_CALLTYPE_DIRECT) {
-        IRFunction *callee = ir_get_function(f->context, instruction->value.call.value.name);
-        if (!callee || !callee->attr_noreturn) goto returns;
-      }
-
-      /// We can’t know whether an indirect tail call returns, so we must assume that we return.
-      else goto returns;
+      /// We can’t know whether an indirect call returns, so we must assume that we return.
+      if (instruction->call.is_indirect || !instruction->call.callee_function->attr_noreturn) goto may_return;
     }
 
     /// If a return instruction is encountered, then this function obviously returns.
     else if (instruction->type == IR_RETURN) {
-    returns:
+    may_return:
       if (!f->attr_noreturn) return false;
       f->attr_noreturn = false;
       return true;
@@ -798,7 +553,8 @@ bool opt_analyse_functions(CodegenContext *ctx) {
   do {
     changed = false;
 
-    VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
+    VECTOR_FOREACH_PTR (IRFunction*, f, ctx->functions) {
+      if (f->is_extern) continue;
       changed |= opt_check_pure(f);
       changed |= opt_check_leaf(f);
       changed |= opt_check_noreturn(f);
@@ -833,8 +589,8 @@ static void opt_reorder_blocks(IRFunction *f, DominatorInfo* info) {
     IRBlock *next = NULL;
     IRInstruction *last = node->block->instructions.last;
     DomTreeNode *next_node = NULL;
-    if (last->type == IR_BRANCH) next = last->value.block;
-    else if (last->type == IR_BRANCH_CONDITIONAL) next = last->value.conditional_branch.true_branch;
+    if (last->type == IR_BRANCH) next = last->destination_block;
+    else if (last->type == IR_BRANCH_CONDITIONAL) next = last->cond_br.then;
 
     /// Insert all children except for the next node.
     VECTOR_FOREACH_PTR (DomTreeNode*, child, node->children) {
@@ -872,18 +628,18 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
       DLIST_FOREACH (IRBlock*, b2, f->blocks) {
         if (b == b2) continue;
 
-        STATIC_ASSERT(IR_COUNT == 31, "Handle all branch instructions");
+        STATIC_ASSERT(IR_COUNT == 32, "Handle all branch instructions");
         IRInstruction *branch = b2->instructions.last;
-        if (branch->type == IR_BRANCH && branch->value.block == b) {
-          branch->value.block = last->value.block;
+        if (branch->type == IR_BRANCH && branch->destination_block == b) {
+          branch->destination_block = last->destination_block;
           changed = true;
         } else if (branch->type == IR_BRANCH_CONDITIONAL) {
-          if (branch->value.conditional_branch.true_branch == b) {
-            branch->value.conditional_branch.true_branch = last->value.block;
+          if (branch->cond_br.then == b) {
+            branch->cond_br.then = last->destination_block;
             changed = true;
           }
-          if (branch->value.conditional_branch.false_branch == b) {
-            branch->value.conditional_branch.false_branch = last->value.block;
+          if (branch->cond_br.else_ == b) {
+            branch->cond_br.else_ = last->destination_block;
             changed = true;
           }
         }
@@ -891,9 +647,9 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
         /// Also update PHIs.
         DLIST_FOREACH (IRInstruction*, i, b2->instructions) {
           if (i->type == IR_PHI) {
-            VECTOR_FOREACH_PTR (IRPhiArgument*, arg, i->value.phi_arguments) {
+            VECTOR_FOREACH_PTR (IRPhiArgument*, arg, i->phi_args) {
               if (arg->block == b) {
-                arg->block = last->value.block;
+                arg->block = last->destination_block;
                 changed = true;
               }
             }
@@ -919,23 +675,6 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
 }
 
 /// ===========================================================================
-///  Instruction Selection
-/// ===========================================================================
-/// Mark comparisons as `dont_emit` if they’re immediately
-/// used by a conditional branch.
-static bool opt_inline_comparisons(IRFunction *f) {
-  bool changed = false;
-  FOREACH_INSTRUCTION_IN_FUNCTION (f) {
-    if (instruction->dont_emit) continue;
-    if (instruction->type != IR_COMPARISON) continue;
-    if (instruction->next->type != IR_BRANCH_CONDITIONAL) continue;
-    if (instruction->users.size != 1 || instruction->users.data[0] != instruction->next) continue;
-    instruction->dont_emit = changed = true;
-  }
-  return changed;
-}
-
-/// ===========================================================================
 ///  Driver
 /// ===========================================================================
 void codegen_optimise(CodegenContext *ctx) {
@@ -944,18 +683,19 @@ void codegen_optimise(CodegenContext *ctx) {
 
   /// Optimise each function individually.
   do {
-    VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
+    VECTOR_FOREACH_PTR (IRFunction*, f, ctx->functions) {
+      if (f->is_extern) continue;
+
       DominatorInfo dom = {0};
       do {
-        build_and_prune_dominator_tree(f, &dom);
+        build_dominator_tree(f, &dom, true);
         opt_reorder_blocks(f, &dom);
       } while (
           opt_const_folding_and_strengh_reduction(f) ||
           opt_dce(f) ||
           opt_mem2reg(f) ||
           opt_jump_threading(f, &dom) ||
-          opt_tail_call_elim(f) ||
-          opt_inline_comparisons(f)
+          opt_tail_call_elim(f)
       );
       free_dominator_info(&dom);
     }
@@ -967,10 +707,12 @@ void codegen_optimise(CodegenContext *ctx) {
 
 /// Called after RA.
 void codegen_optimise_blocks(CodegenContext *ctx) {
-  VECTOR_FOREACH_PTR (IRFunction*, f, *ctx->functions) {
+  VECTOR_FOREACH_PTR (IRFunction*, f, ctx->functions) {
+    if (f->is_extern) continue;
+
     DominatorInfo dom = {0};
     do {
-      build_and_prune_dominator_tree(f, &dom);
+      build_dominator_tree(f, &dom, true);
       opt_reorder_blocks(f, &dom);
     } while (opt_jump_threading(f, &dom));
     free_dominator_info(&dom);

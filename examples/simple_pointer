@@ -5,8 +5,6 @@ bar : integer (ptr : @integer) {
   0
 }
 
-number : integer = 0
-numptr : @integer
-numptr := &number
-bar(numptr)
+number : integer
+bar(&number)
 number

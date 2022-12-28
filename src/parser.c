@@ -1,1634 +1,1134 @@
-#include <parser.h>
-
+#include <ast.h>
+#include <ctype.h>
+#include <errno.h>
 #include <error.h>
-#include <environment.h>
-#include <file_io.h>
-#include <inttypes.h>
+#include <parser.h>
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vector.h>
 
-/// Parser error.
-/// FIXME: Too many of these. Clean this up a bit.
-#define ERR_AT_CONTEXT(loc, context, ...)                               \
-  do {                                                                  \
-    issue_diagnostic(DIAG_ERR, (context)->filename, (context)->source, (loc), __VA_ARGS__); \
-    return false;                                                       \
+/// ===========================================================================
+///  Error handling.
+/// ===========================================================================
+#define ISSUE_DIAGNOSTIC(sev, loc, parser, ...)                                        \
+  do {                                                                                 \
+    issue_diagnostic((sev), (parser)->filename, (parser)->source, (loc), __VA_ARGS__); \
+    longjmp(parser->error_buffer, 1);                                                  \
   } while (0)
-#define ERR_AT_STATE_CTX(state, context, ...) ERR_AT(token_span((context)->source.data, (state)->current), __VA_ARGS__)
-#define ERR_AT_STATE(state, ...) ERR_AT(token_span((context)->source.data, (state)->current), __VA_ARGS__)
-#define ERR_CTX(context, ...) ERR_AT_CONTEXT(token_span((context)->source.data, *(state)->current), (context), __VA_ARGS__)
-#define ERR_AT(loc, ...) ERR_AT_CONTEXT(loc, context, __VA_ARGS__)
-#define ERR(...) ERR_CTX(context, __VA_ARGS__)
-
-//================================================================ BEG lexer
-
-// TODO: Allow multi-byte comment delimiters.
-const char *comment_delimiters = ";#";
-const char *whitespace         = " \t\r\n";
-// TODO: Think harder about delimiters.
-const char *delimiters         = " \t\r\n,{}()[]<>:&|~!@";
-
-bool comment_at_beginning(Token token) {
-  const char *comment_it = comment_delimiters;
-  while (*comment_it) {
-    if (*(token.beginning) == *comment_it) {
-      return true;
-    }
-    comment_it++;
-  }
-  return false;
-}
-
-// "a +- 4" == "a + -4"
-// FIXME: If we removed whitespace from token string view during binary
-// operator comparison than this would work.
-// "a > > 4" != "a >> 4"
-
-/// Lex the next token from SOURCE, and point to it with BEG and END.
-/// If BEG and END of token are equal, there is nothing more to lex.
-void lex(char *source, Token *token) {
-  if (!source || !token) ICE("Cannot lex from NULL source or token.");
-  token->beginning = source;
-  token->beginning += strspn(token->beginning, whitespace);
-  token->end = token->beginning;
-  if (*(token->end) == '\0') return;
-  // Check if current line is a comment, and skip past it.
-  while (comment_at_beginning(*token)) {
-    // Skip to next newline.
-    token->beginning = strpbrk(token->beginning, "\n");
-    if (!token->beginning) {
-      // If last line of file is comment, we're done lexing.
-      token->end = token->beginning;
-      return;
-    }
-    // Skip to beginning of next token after comment.
-    token->beginning += strspn(token->beginning, whitespace);
-    token->end = token->beginning;
-  }
-  if (*(token->end) == '\0') { return; }
-  token->end += strcspn(token->beginning, delimiters);
-  if (token->end == token->beginning) {
-    token->end += 1;
-  }
-}
-
-/** Keep beginning of token the same, but extend the end by another token.
- *
- * Begin lexing at the end of the given token.
- */
-/// Currently unused
-/*void lex_extend(Token *token) {
-  Token new_token;
-  lex(token->end, &new_token);
-  token->end = new_token.end;
-}*/
-
-bool token_string_equalp(const char* str, Token *token) {
-  if (!str || !token) { return 0; }
-  char *beg = token->beginning;
-  while (*str && token->beginning < token->end) {
-    if (*str != *beg) {
-      return false;
-    }
-    str++;
-    beg++;
-  }
-  return true;
-}
-
-void print_token(Token t) {
-  if (t.end - t.beginning < 1) {
-    printf("INVALID TOKEN POINTERS");
-  } else {
-    printf("%.*s", (int)(t.end - t.beginning), t.beginning);
-  }
-}
-
-/// Get the location of a token.
-loc token_span(const char* source, Token tok) {
-  loc location;
-  location.start = (u32)(tok.beginning - source);
-  location.end   = (u32)(tok.end - source);
-  return location;
-}
-
-//================================================================ END lexer
-
-char node_returns_value(Node *node) {
-  if (!node) {
-    return 0;
-  }
-  switch(node->type) {
-  case NODE_TYPE_INTEGER:
-  case NODE_TYPE_FUNCTION:
-  case NODE_TYPE_FUNCTION_CALL:
-  case NODE_TYPE_VARIABLE_ACCESS:
-  case NODE_TYPE_IF:
-  case NODE_TYPE_ADDRESSOF:
-  case NODE_TYPE_DEREFERENCE:
-  case NODE_TYPE_INDEX:
-  case NODE_TYPE_BINARY_OPERATOR:
-  case NODE_TYPE_CAST:
-  case NODE_TYPE_PROGRAM:
-    return 1;
-    break;
-  default:
-    return 0;
-    break;
-  }
-  return 0;
-}
-
-Node *node_allocate() {
-  Node *node = calloc(1,sizeof(Node));
-  ASSERT(node, "Could not allocate memory for AST node");
-  return node;
-}
-
-void node_add_child(Node *parent, Node *new_child) {
-  if (!parent || !new_child) { return; }
-  new_child->parent = parent;
-  if (parent->children) {
-    Node *child = parent->children;
-    if (child == new_child) {
-      fprintf(stderr, "DEVELOPER WARNING: Refusal to make circular linked list in node_add_child()\n");
-      return;
-    }
-    while (child->next_child) {
-      child = child->next_child;
-      if (child == new_child) {
-        fprintf(stderr, "DEVELOPER WARNING: Refusal to make circular linked list in node_add_child()\n");
-        return;
-      }
-    }
-    child->next_child = new_child;
-  } else {
-    parent->children = new_child;
-  }
-}
-
-int node_compare(Node *a, Node *b) {
-  STATIC_ASSERT(NODE_TYPE_MAX == 17, "node_compare() must handle all node types");
-
-  // Actually really nice debug output when you need it.
-  //printf("Comparing nodes:\n");
-  //print_node(a, 2);
-  //print_node(b, 2);
-  //putchar('\n');
-
-  if (!a || !b) {
-    if (!a && !b) {
-      return 1;
-    }
-    return 0;
-  }
-
-  // Compare types of nodes.
-  // Variable access and symbol are not same type but share same comparison.
-  if (!((a->type == NODE_TYPE_SYMBOL || a->type == NODE_TYPE_VARIABLE_ACCESS)
-        && (b->type == NODE_TYPE_SYMBOL || b->type == NODE_TYPE_VARIABLE_ACCESS)))
-    {
-      if (a->type != b->type) {
-        return 0;
-      }
-    }
-
-  // Compare all children recursively!
-  Node *a_child = a->children;
-  Node *b_child = b->children;
-  while (a_child && b_child) {
-    if (node_compare(a_child, b_child) == 0) {
-      return 0;
-    }
-    a_child = a_child->next_child;
-    b_child = b_child->next_child;
-  }
-  if (a_child || b_child) {
-    return 0;
-  }
-
-  // Compare value of node.
-  switch (a->type) {
-  default: ICE("Unhandled AST node comparison of type %d\n", a->type);
-  case NODE_TYPE_INDEX:
-  case NODE_TYPE_INTEGER:
-    if (a->value.integer == b->value.integer) {
-      return 1;
-    }
-    break;
-  case NODE_TYPE_VARIABLE_ACCESS:
-  case NODE_TYPE_SYMBOL:
-  case NODE_TYPE_BINARY_OPERATOR:
-    if (a->value.symbol && b->value.symbol) {
-      if (strcmp(a->value.symbol, b->value.symbol) == 0) {
-        return 1;
-      }
-      break;
-    } else if (!a->value.symbol && !b->value.symbol) {
-      return 1;
-    }
-    break;
-  }
-  return 0;
-}
-
-Node *node_none() {
-  Node *none = node_allocate();
-  none->type = NODE_TYPE_NONE;
-  return none;
-}
-
-Node *node_integer(int64_t value) {
-  Node *integer = node_allocate();
-  integer->type = NODE_TYPE_INTEGER;
-  integer->value.integer = value;
-  return integer;
-}
-
-Node *node_symbol(char *symbol_string) {
-  Node *symbol = node_allocate();
-  symbol->type = NODE_TYPE_SYMBOL;
-  symbol->value.symbol = strdup(symbol_string);
-  return symbol;
-}
-
-Node *node_symbol_from_buffer(char *buffer, size_t length) {
-  ASSERT(buffer, "Can not create AST symbol node from NULL buffer");
-  char *symbol_string = malloc(length + 1);
-  ASSERT(symbol_string, "Could not allocate memory for symbol string");
-  memcpy(symbol_string, buffer, length);
-  symbol_string[length] = '\0';
-  Node *symbol = node_allocate();
-  symbol->type = NODE_TYPE_SYMBOL;
-  symbol->value.symbol = symbol_string;
-  return symbol;
-}
-
-// Take ownership of type_symbol.
-static NODISCARD bool define_type(Environment *types, int type, Node *type_symbol, long long byte_size) {
-  ASSERT(types, "Can not add type to NULL types environment");
-  ASSERT(type_symbol, "Can not add NULL type symbol to types environment");
-  ASSERT(byte_size >= 0, "Can not define new type with zero or negative byte size");
-
-  Node *size_node = node_allocate();
-  size_node->type = NODE_TYPE_INTEGER;
-  size_node->value.integer = byte_size;
-
-  Node *type_node = node_allocate();
-  type_node->type = type;
-  type_node->children = size_node;
-
-  return environment_set(types, type_symbol, type_node) == 1;
-}
-
-#define NODE_TEXT_BUFFER_SIZE 512
-char node_text_buffer[512];
-char *node_text(Node *node) {
-  STATIC_ASSERT(NODE_TYPE_MAX == 17, "print_node() must handle all node types");
-  if (!node) {
-    return "NULL";
-  }
-  switch (node->type) {
-  default:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "UNKNOWN");
-    break;
-  case NODE_TYPE_NONE:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "NONE");
-    break;
-  case NODE_TYPE_INTEGER:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "INT:%"PRId64, node->value.integer);
-    break;
-  case NODE_TYPE_SYMBOL:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE,
-             "SYM:%s (%d)",
-             node->value.symbol,
-             node->pointer_indirection);
-    break;
-  case NODE_TYPE_BINARY_OPERATOR:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "BINARY OPERATOR:%s", node->value.symbol);
-    break;
-  case NODE_TYPE_NOT:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "NOT");
-    break;
-  case NODE_TYPE_VARIABLE_REASSIGNMENT:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "VARIABLE REASSIGNMENT");
-    break;
-  case NODE_TYPE_VARIABLE_DECLARATION:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "VARIABLE DECLARATION");
-    break;
-  case NODE_TYPE_VARIABLE_ACCESS:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "VARIABLE ACCESS:%s", node->value.symbol);
-    break;
-  case NODE_TYPE_IF:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "IF");
-    break;
-  case NODE_TYPE_WHILE:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "WHILE");
-    break;
-  case NODE_TYPE_ADDRESSOF:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "ADDRESSOF");
-    break;
-  case NODE_TYPE_DEREFERENCE:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "DEREFERENCE");
-    break;
-  case NODE_TYPE_PROGRAM:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "PROGRAM");
-    break;
-  case NODE_TYPE_FUNCTION:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "FUNCTION");
-    break;
-  case NODE_TYPE_FUNCTION_CALL:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "FUNCTION CALL");
-    break;
-  case NODE_TYPE_INDEX:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "INDEX:%"PRId64, node->value.integer);
-    break;
-  case NODE_TYPE_CAST:
-    snprintf(node_text_buffer, NODE_TEXT_BUFFER_SIZE, "TYPECAST");
-    break;
-  }
-  return node_text_buffer;
-}
-
-void print_node(Node *node, size_t indent_level) {
-  if (!node) { return; }
-
-  // Print indent.
-  for (size_t i = 0; i < indent_level; ++i) {
-    putchar(' ');
-  }
-  // Print type + value.
-  printf("%s\n", node_text(node));
-  // Print children.
-  Node *child = node->children;
-  while (child) {
-    print_node(child, indent_level + 4);
-    child = child->next_child;
-  }
-}
-
-void node_free(Node *root) {
-  if (!root) { return; }
-  Node *child = root->children;
-  Node *next_child = NULL;
-  while (child) {
-    next_child = child->next_child;
-    node_free(child);
-    child = next_child;
-  }
-  if (symbolp(*root) && root->value.symbol) {
-    free(root->value.symbol);
-  }
-  free(root);
-}
-
-void node_copy(Node *a, Node *b) {
-  if (!a || !b) { return; }
-  b->type = a->type;
-  b->pointer_indirection = a->pointer_indirection;
-  // Handle all allocated values here.
-  switch (a->type) {
-  default:
-    b->value = a->value;
-    break;
-  case NODE_TYPE_SYMBOL:
-    b->value.symbol = strdup(a->value.symbol);
-    ASSERT(b->value.symbol, "node_copy(): Could not allocate memory for new symbol");
-    break;
-  }
-  Node *child = a->children;
-  Node *child_it = NULL;
-  while (child) {
-    Node *new_child = node_allocate();
-
-    if (child_it) {
-      child_it->next_child = new_child;
-      child_it = child_it->next_child;
-    } else {
-      b->children = new_child;
-      child_it = new_child;
-    }
-
-    node_copy(child, child_it);
-
-    child = child->next_child;
-  }
-}
-
-ParsingState parse_state_create(Token *current_token, size_t *token_length, char **end) {
-  ParsingState out;
-  out.current = current_token;
-  out.length = token_length;
-  out.end = end;
-  return out;
-}
-
-void parse_state_update
-(ParsingState *state,
- Token current_token,
- size_t token_length,
- char *end
- )
-{
-  *state->current = current_token;
-  *state->length = token_length;
-  *state->end = end;
-}
-
-void parse_state_update_from(ParsingState *state, ParsingState new_state) {
-  *state->current = *new_state.current;
-  *state->length  = *new_state.length;
-  *state->end     = *new_state.end;
-}
-
-ParsingStack *parse_stack_create(ParsingStack *parent) {
-  ParsingStack *stack = malloc(sizeof(ParsingStack));
-  ASSERT(stack, "Could not allocate memory for new parser continuation stack.");
-  stack->parent = parent;
-  stack->operator = NULL;
-  stack->result = NULL;
-  return stack;
-}
-
-void parse_context_print(ParsingContext *top, size_t indent) {
-  size_t indent_it;
-
-#define INDENT()                            \
-  indent_it = indent;                       \
-  while (indent_it--) { putchar(' '); }
-
-  INDENT();
-  if (top->creates_stackframe) {
-    printf("NEW STACKFRAME==================================================\n");
-  } else {
-    printf("NEW SCOPE=======================\n");
-  }
-
-  INDENT();
-  printf("TYPES:\n");
-  environment_print(*top->types,indent + 2);
-
-  INDENT();
-  printf("VARIABLES:\n");
-  environment_print(*top->variables,indent + 2);
-
-  if (top->parent == NULL) {
-    INDENT();
-    printf("BINARY OPERATORS:\n");
-    environment_print(*top->binary_operators,indent + 2);
-  }
-
-  INDENT();
-  printf("FUNCTIONS:\n");
-  environment_print(*top->functions,indent);
-
-  ParsingContext *child = top->children;
-  while (child) {
-    parse_context_print(child,indent + 2);
-    child = child->next_child;
-  }
-#undef INDENT
-}
-
-void parse_context_add_child(ParsingContext *parent, ParsingContext *child) {
-  if (parent) {
-    if (parent->children) {
-      parent = parent->children;
-      if (parent == child) {
-        fprintf(stderr, "DEVELOPER WARNING: Refusal to make circular linked list by parse_context_add_child()\n");
-        return;
-      }
-      while (parent->next_child) {
-        parent = parent->next_child;
-        if (parent == child) {
-          fprintf(stderr, "DEVELOPER WARNING: Refusal to make circular linked list by parse_context_add_child()\n");
-          return;
-        }
-      }
-      parent->next_child = child;
-    } else {
-      parent->children = child;
-    }
-
-  }
-}
-
-ParsingContext *parse_context_create(ParsingContext *parent, CreatesStackframe creates_stackframe) {
-  ParsingContext *ctx = calloc(1, sizeof(ParsingContext));
-  ASSERT(ctx, "Could not allocate memory for parsing context.");
-  if (!ctx) { return NULL; }
-  ctx->parent = parent;
-  // TODO: Add this new context as a child to given parent.
-  parse_context_add_child(parent, ctx);
-  ctx->children = NULL;
-  ctx->next_child = NULL;
-  ctx->types = environment_create(NULL);
-  ctx->variables = environment_create(NULL);
-  ctx->functions = environment_create(NULL);
-  ctx->binary_operators = environment_create(NULL);
-  ctx->creates_stackframe = (bool)creates_stackframe;
-  if (parent) {
-    ctx->source = parent->source;
-    ctx->filename = parent->filename;
-  }
-  return ctx;
-}
-
-ParsingContext *parse_context_default_create() {
-  ParsingContext *ctx = parse_context_create(NULL, CREATES_STACKFRAME);
-  bool ok = define_type(ctx->types, NODE_TYPE_INTEGER, node_symbol("integer"), sizeof(long long));
-  if (!ok) ICE("Could not define primitive type 'integer'.");
-  // TODO: Should we use type IDs vs type symbols?
-
-  if (!define_binary_operator(ctx, "=", 3, "integer", "integer", "integer")  ||
-      !define_binary_operator(ctx, "<", 3, "integer", "integer", "integer")  ||
-      !define_binary_operator(ctx, ">", 3, "integer", "integer", "integer")  ||
-      !define_binary_operator(ctx, "<<", 4, "integer", "integer", "integer") ||
-      !define_binary_operator(ctx, ">>", 4, "integer", "integer", "integer") ||
-      !define_binary_operator(ctx, "&", 4, "integer", "integer", "integer")  ||
-      !define_binary_operator(ctx, "|", 4, "integer", "integer", "integer")  ||
-      !define_binary_operator(ctx, "+", 5, "integer", "integer", "integer")  ||
-      !define_binary_operator(ctx, "-", 5, "integer", "integer", "integer")  ||
-      !define_binary_operator(ctx, "*", 10, "integer", "integer", "integer") ||
-      !define_binary_operator(ctx, "/", 10, "integer", "integer", "integer") ||
-      !define_binary_operator(ctx, "%", 10, "integer", "integer", "integer")) {
-    ICE("Failed to define builtin binary operators.");
-  }
-
-  return ctx;
-}
-
-/// This is a bit scuffed but it’s the simplest way of doing it,
-/// simply because we don’t have a global parser state.
-static bool at_end_of_file = false;
-
-/// Update token, token length, and end of current token pointer.
-void lex_advance(ParsingState *state) {
-  if (!state || !state->current || !state->length || !state->end)
-    ICE("Pointer arguments must not be NULL!");
-
-  lex(state->current->end, state->current);
-  *state->end = state->current->end;
-  *state->length = (size_t) (state->current->end - state->current->beginning);
-  char *end = *state->end;
-  end += strspn(end, whitespace);
-  if (*end == 0) at_end_of_file = true;
-}
-
-/// Returns true if the expected token was found, and sets
-/// `done` to true if we’re at end of file if `done` is not NULL.
-static bool lex_expect(const char *expected, ParsingState *state, bool *done) {
-  if (!expected || !state || !state->current || !state->length || !state->end)
-    ICE("lex_expect() must not be passed NULL pointers!");
-  Token current_copy = *state->current;
-  size_t length_copy = *state->length;
-  char *end_copy     = *state->end;
-  ParsingState state_copy = parse_state_create(&current_copy, &length_copy, &end_copy);
-  lex_advance(&state_copy);
-  if (length_copy == 0) {
-    if (done) {
-      *done = true;
-      return false;
-    } else {
-      /// FIXME: No context here, so we can’t print the line, or the filename, or anything.
-      issue_diagnostic(DIAG_ERR, "<input>", (span){.data = "", .size = 0}, (loc){0}, "Unexpected end of file.");
-      exit(1);
-    }
-  }
-
-  //printf("Expecting \"%s\", got \"", expected);
-  //print_token(*state_copy.current);
-  //printf("\"\n");
-
-  if (token_string_equalp(expected, state_copy.current)) {
-    parse_state_update_from(state, state_copy);
-    return true;
-  }
-
-  return false;
-}
-
-#define EXPECT(expected) lex_expect(expected, state, NULL)
-
-bool parse_get_type(ParsingContext *const context, Node *id, Node *result, bool may_fail) {
-  // Handle pointers and functions, as they are both memory addresses.
-  // This should ideally return target format dependant address size.
-  if (id->pointer_indirection > 0
-      || strcmp(id->value.symbol, "function") == 0
-      || strcmp(id->value.symbol, "external function") == 0) {
-    result->children = node_integer(8);
-    return true;
-  }
-
-  if (strcmp(id->value.symbol, "array") == 0) {
-    // Get size of base type!
-    Node *base_type = node_allocate();
-    if (!parse_get_type(context, id->children->next_child, base_type, false)) return false;
-    // Size of array is equal to size of base type multiplied by capacity of array.
-    result->children = node_integer(id->children->value.integer * base_type->children->value.integer);
-    free(base_type);
-    return true;
-  }
-
-  //printf("Searching following context for ");
-  //print_node(id,0);
-  //environment_print(*context->types,0);
-  //putchar('\n');
-
-  for (ParsingContext *ctx = context; ctx; ctx = ctx->parent) {
-    int status = environment_get(*ctx->types, id, result);
-    if (status) {
-      //printf("Got thing:\n");
-      //print_node(result,2);
-      return true;
-    }
-  }
-
-  result->type = NODE_TYPE_NONE;
-  if (!may_fail) ERR_AT(id->source_location, "Type not found: \"%s\"", id->value.symbol);
-  return false;
-}
-
-bool parse_get_variable(ParsingContext *const context, Node *id, Node *result, bool may_fail) {
-  for (ParsingContext *ctx = context; ctx; ctx = ctx->parent) {
-    int status = environment_get(*ctx->variables, id, result);
-    if (status) return true;
-  }
-
-  result->type = NODE_TYPE_NONE;
-  if (!may_fail) ERR_AT(id->source_location, "Variable not found: \"%s\"", id->value.symbol);
-  return false;
-}
-
-NODISCARD bool parse_integer(Token *token, Node *node) {
-  if (!token || !node) { return false; }
-  char *end = NULL;
-  if (token->end - token->beginning == 1 && *(token->beginning) == '0') {
-    node->type = NODE_TYPE_INTEGER;
-    node->value.integer = 0;
-  } else if ((node->value.integer = strtoll(token->beginning, &end, 10)) != 0) {
-    if (end != token->end) {
-      return false;
-    }
-    node->type = NODE_TYPE_INTEGER;
-  } else { return false; }
-  return true;
-}
-
-/// Return true if an infix operator is found and parsing should continue, otherwise false.
-static NODISCARD bool parse_binary_infix_operator
-(ParsingContext *const context, ParsingStack *stack, ParsingState *state,
- long long *working_precedence, Node **working_result,
- Node *result
- )
-{
-  // Look ahead for a binary infix operator.
-  bool found = false;
-  Token current_copy = *state->current;
-  size_t length_copy = *state->length;
-  char *end_copy     = *state->end;
-  ParsingState state_copy = parse_state_create(&current_copy, &length_copy, &end_copy);
-  lex_advance(&state_copy);
-
-  // While state_copy.current->end isn't whitespace, is delimiter,
-  // and is not null terminator, extend binary operator.
-  // This is needed to catch binary operators like "<<" made up of
-  // multiple delimiters.
-  while (*state_copy.current->end != '\0'
-         && strchr(whitespace, *state_copy.current->end) == NULL
-         && strchr(delimiters, *state_copy.current->end) != NULL) {
-    state_copy.current->end += 1;
-    *state_copy.length += 1;
-  }
-
-  Node *operator_symbol =
-    node_symbol_from_buffer(state_copy.current->beginning, *state_copy.length);
-
-  Node *operator_value = node_allocate();
-  ParsingContext *global = context;
-
-  while (global->parent) { global = global->parent; }
-  if (environment_get(*global->binary_operators, operator_symbol, operator_value)) {
-    parse_state_update_from(state, state_copy);
-    long long precedence = operator_value->children->value.integer;
-
-    //printf("Got op. %s with precedence %lld (working %lld)\n",
-    //       operator_symbol->value.symbol,
-    //       precedence, *working_precedence);
-    //printf("working precedence: %lld\n", *working_precedence);
-
-    // TODO: Handle grouped expressions through parentheses using precedence stack.
-
-    Node *result_pointer = precedence <= *working_precedence ? result : *working_result;
-    if (precedence  <= *working_precedence) {
-      if (stack) {
-        result_pointer = stack->result;
-      } else {
-        result_pointer = result;
-      }
-    } else {
-      result_pointer = *working_result;
-    }
-
-    Node *result_copy = node_allocate();
-    node_copy(result_pointer, result_copy);
-    result_pointer->type = NODE_TYPE_BINARY_OPERATOR;
-    result_pointer->value.symbol = operator_symbol->value.symbol;
-    result_pointer->children = result_copy;
-    result_pointer->next_child = NULL;
-
-    Node *rhs = node_allocate();
-    node_add_child(result_pointer, rhs);
-    *working_result = rhs;
-
-    *working_precedence = precedence;
-
-    found = true;
-  }
-
-  // TODO: Iterate advanced token end backwards until reaching a valid binary operator.
-  free(operator_symbol);
-  free(operator_value);
-  return found;
-}
-
-enum StackOperatorReturnValue {
-  STACK_HANDLED_INVALID = 0,
-  STACK_HANDLED_BREAK = 1,
-  STACK_HANDLED_PARSE = 2,
-  STACK_HANDLED_CHECK = 3
+#define ERR_AT(loc, ...) ISSUE_DIAGNOSTIC(DIAG_ERR, loc, p, __VA_ARGS__)
+#define ERR(...)         ERR_AT(p->tok.source_location, __VA_ARGS__)
+
+#define ERR_DO(code, loc, ...)                                                  \
+  do {                                                                          \
+    issue_diagnostic(DIAG_ERR, (p)->filename, (p)->source, (loc), __VA_ARGS__); \
+    code;                                                                       \
+    longjmp(p->error_buffer, 1);                                                \
+  } while (0)
+
+/// ===========================================================================
+///  Types and enums.
+/// ===========================================================================
+enum {
+  PREFIX_PRECEDENCE = 10000,
 };
 
-/**
- * @retval STACK_HANDLED_BREAK: Break (stack was NULL most likely)
- * @retval STACK_HANDLED_PARSE: Continue Parsing (working_result was updated, possibly stack as well)
- * @retval STACK_HANDLED_CHECK: Continue Checking (stack was updated, may need to handle it as well)
- */
-static NODISCARD bool handle_stack_operator
-(int *status,
- ParsingContext **context,
- ParsingStack **stack,
- ParsingState *state,
- Node **working_result,
- Node *result,
- long long *working_precedence
- )
-{
-  if (!(*stack)) {
-    *status = STACK_HANDLED_BREAK;
-    return true;
-  }
+typedef struct Token {
+  enum TokenType type;
+  loc source_location;
+  span text;
+  u64 integer;
+} Token;
 
-  Node *operator = (*stack)->operator;
-  if (!operator || operator->type != NODE_TYPE_SYMBOL)
-    ICE("Parsing context operator must be symbol.");
+typedef struct Parser {
+  /// The source code that we’re parsing.
+  span source;
 
-  if (strcmp(operator->value.symbol, "lambda-body") == 0) {
-    if (EXPECT("}")) {
+  /// The name of the file that we’re parsing.
+  const char *filename;
 
-      // TODO: Lookahead for immediate lambda function call.
+  /// The last character read.
+  char lastc;
 
-      // Eat lambda context.
-      *context = (*context)->parent;
-      // Stack is handled
-      *stack = (*stack)->parent;
-      *status = STACK_HANDLED_CHECK;
-      return true;
-    }
+  /// Lexer state.
+  const char *curr;
+  const char *end;
 
-    Node *next_expr = node_allocate();
-    (*stack)->result->next_child = next_expr;
-    (*stack)->result = next_expr;
-    *working_result = next_expr;
-    *status = STACK_HANDLED_PARSE;
-    return true;
-  }
+  /// Whether we’re in a function.
+  bool in_function;
 
-  if (strcmp(operator->value.symbol, "lambdarameters") == 0) {
-    if (EXPECT(")")) {
-      // Pass stack to lambda-body
-      if (!EXPECT("{")) ERR_CTX(*context, "Expected lambda body following lambda signature");
+  /// The current token.
+  Token tok;
 
-      Node *body = node_allocate();
-      (*stack)->body->next_child = body;
-      Node *first_expression = node_allocate();
-      node_add_child(body, first_expression);
+  /// The AST of the program.
+  AST *ast;
 
-      // Enter new ParsingStack to handle lambda body.
-      (*stack)->operator = node_symbol("lambda-body");
-      (*stack)->body = body;
-      (*stack)->result = first_expression;
-      *working_result = first_expression;
-      *status = STACK_HANDLED_PARSE;
-      return true;
-    }
+  /// For error handling.
+  jmp_buf error_buffer;
+} Parser;
 
-    // Eat the comma in-between variable declarations.
-    bool done = false;
-    lex_expect(",", state, &done);
-    if (done) ERR_CTX(*context,"Expected another parameter definition but got EOF!");
+/// ===========================================================================
+///  Lexer
+/// ===========================================================================
+/// All keywords.
+const struct {
+  const char *kw;
+  enum TokenType type;
+} keywords[4] = {
+    {"if", TK_IF},
+    {"else", TK_ELSE},
+    {"while", TK_WHILE},
+    {"ext", TK_EXT},
+};
 
-    Node *next_expr = node_allocate();
-    (*stack)->result->next_child = next_expr;
-    (*stack)->result = next_expr;
-    *working_result = next_expr;
-    *status = STACK_HANDLED_PARSE;
-    return true;
-  }
-
-  if (strcmp(operator->value.symbol, "if-condition") == 0) {
-    // TODO: Maybe eventually allow multiple expressions in an if
-    // condition, or something like that.
-    if (EXPECT("{")) {
-      Node *if_then_body = node_allocate();
-      (*stack)->result->next_child = if_then_body;
-      Node *if_then_first_expr = node_allocate();
-      node_add_child(if_then_body, if_then_first_expr);
-
-      // Empty if-then-body handling.
-      // TODO: Maybe warn?
-      if (EXPECT("}")) {
-
-        // TODO: First check for else...
-
-        *context = (*context)->parent;
-
-        *stack = (*stack)->parent;
-        *status = STACK_HANDLED_CHECK;
-        return true;
-      }
-
-      // TODO: Don't leak stack->operator.
-      (*stack)->operator = node_symbol("if-then-body");
-      (*stack)->body = if_then_body;
-      (*stack)->result = if_then_first_expr;
-
-      *working_result = if_then_first_expr;
-      *status = STACK_HANDLED_PARSE;
-      return true;
-    }
-    // TODO/FIXME: Ask the user how to proceed when if has no body.
-    ERR_CTX(*context, "Expected `{` after `if` condition. `if` expression requires a \"then\" body.");
-  }
-
-  if (strcmp(operator->value.symbol, "while-body") == 0) {
-    // Evaluate next expression unless it's a closing brace.
-    bool done = false;
-    if (lex_expect("}", state, &done) || done) {
-      *context = (*context)->parent;
-      *stack = (*stack)->parent;
-      *status = STACK_HANDLED_CHECK;
-      return true;
-    }
-    Node *next_expr = node_allocate();
-    (*stack)->result->next_child = next_expr;
-    (*stack)->result = next_expr;
-    *working_result = next_expr;
-    *status = STACK_HANDLED_PARSE;
-    return true;
-  }
-
-  if (strcmp(operator->value.symbol, "while-condition") == 0) {
-    // TODO: Maybe eventually allow multiple expressions in an if
-    // condition, or something like that.
-    if (EXPECT("{")) {
-      Node *while_body = node_allocate();
-      (*stack)->result->next_child = while_body;
-      Node *while_body_first_expr = node_allocate();
-      node_add_child(while_body, while_body_first_expr);
-
-      // Empty while-body handling.
-      // TODO: Maybe warn?
-      if (EXPECT("}")) {
-        *context = (*context)->parent;
-        *stack = (*stack)->parent;
-        *status = STACK_HANDLED_CHECK;
-        return true;
-      }
-
-      // TODO: Don't leak stack->operator.
-      (*stack)->operator = node_symbol("while-body");
-      (*stack)->body = while_body;
-      (*stack)->result = while_body_first_expr;
-
-      *working_result = while_body_first_expr;
-      *status = STACK_HANDLED_PARSE;
-      return true;
-    }
-    // TODO/FIXME: Ask the user how to proceed when if has no body.
-    ERR_CTX(*context, "Expected `{` after `if` condition. `if` expression requires a \"then\" body.");
-  }
-
-  if (strcmp(operator->value.symbol, "if-then-body") == 0) {
-    // Evaluate next expression unless it's a closing brace.
-    if (EXPECT("}")) {
-      // Eat if-then-body context.
-      *context = (*context)->parent;
-
-      // Lookahead for else then parse if-else-body.
-      if (EXPECT("else")) {
-        if (EXPECT("{")) {
-
-          *context = parse_context_create(*context, DOESNT_CREATE_STACKFRAME);
-
-          Node *if_else_body = node_allocate();
-          Node *if_else_first_expr = node_allocate();
-          node_add_child(if_else_body, if_else_first_expr);
-
-          (*stack)->body->next_child = if_else_body;
-
-          // TODO: Don't leak stack operator!
-          (*stack)->operator = node_symbol("if-else-body");
-          (*stack)->body = if_else_body;
-          (*stack)->result = if_else_first_expr;
-          *working_result = if_else_first_expr;
-          *status = STACK_HANDLED_PARSE;
-          return true;
-        }
-
-        ERR_CTX(*context, "`else` must be followed by body.");
-      }
-
-      *stack = (*stack)->parent;
-      *status = STACK_HANDLED_CHECK;
-      return true;
-    }
-    Node *next_expr = node_allocate();
-    (*stack)->result->next_child = next_expr;
-    (*stack)->result = next_expr;
-    *working_result = next_expr;
-    *status = STACK_HANDLED_PARSE;
-    return true;
-  }
-
-  if (strcmp(operator->value.symbol, "if-else-body") == 0) {
-    // Evaluate next expression unless it's a closing brace.
-    bool done = false;
-    if (lex_expect("}", state, &done) || done) {
-      *context = (*context)->parent;
-      *stack = (*stack)->parent;
-      *status = STACK_HANDLED_CHECK;
-      return true;
-    }
-    Node *next_expr = node_allocate();
-    (*stack)->result->next_child = next_expr;
-    (*stack)->result = next_expr;
-    *working_result = next_expr;
-    *status = STACK_HANDLED_PARSE;
-    return true;
-  }
-
-  if (strcmp(operator->value.symbol, "funcall") == 0) {
-    if (EXPECT(")")) {
-      *stack = (*stack)->parent;
-      bool found = parse_binary_infix_operator(*context, *stack, state,
-                                        working_precedence, working_result,
-                                        result);
-      *status = found ? STACK_HANDLED_PARSE : STACK_HANDLED_CHECK;
-      return true;
-    }
-
-    bool done = false;
-    lex_expect(",", state, &done);
-    if (done) {
-      print_token(*state->current);
-      ERR_CTX(*context, "Parameter list expected closing parenthesis or comma for another parameter");
-    }
-
-    Node *next_expr = node_allocate();
-    (*stack)->result->next_child = next_expr;
-    (*stack)->result = next_expr;
-    *working_result = next_expr;
-    *status = STACK_HANDLED_PARSE;
-    return true;
-  }
-
-  *status = STACK_HANDLED_INVALID;
-  ICE("Invalid stack operator: \"%s\"\n", (*stack)->operator->value.symbol);
+/// Check if a character may start an identifier.
+static bool isstart(char c) {
+  return isalpha(c) || c == '_' || c == '$' || c == '.' || c == '@';
 }
 
-bool parse_base_type
-(ParsingContext *context,
- ParsingState *state,
- Node *type,
- bool may_fail
- )
-{
-  Token current_copy = *state->current;
-  size_t length_copy = *state->length;
-  char *end_copy = *state->end;
-  ParsingState state_copy = parse_state_create(&current_copy, &length_copy, &end_copy);
-
-  unsigned indirection_level = 0;
-  // Loop over all pointer declaration symbols.
-  while (state_copy.current->beginning[0] == '@') {
-    // Add one level of pointer indirection.
-    indirection_level += 1;
-    // Advance lexer.
-    lex_advance(&state_copy);
-    if (length_copy == 0) {
-      if (may_fail) return false;
-      ERR("Expected a valid type following pointer type declaration symbol: `@`");
-    }
-  }
-
-  Node *type_symbol =
-    node_symbol_from_buffer(state_copy.current->beginning, *state_copy.length);
-  *type = *type_symbol;
-  type->pointer_indirection = indirection_level;
-
-  Node *type_validator = node_allocate();
-  if (!parse_get_type(context, type_symbol, type_validator, may_fail)) {
-    /*if (may_fail) return false;
-    ERR("Unknown type: %s", type_symbol->value.symbol);*/
-    return false;
-  }
-  if (nonep(*type_validator)) {
-    if (may_fail) return false;
-    ERR("Invalid type in variable declaration: \"%s\"", type_symbol->value.symbol);
-  }
-  free(type_symbol);
-  free(type_validator);
-
-  parse_state_update_from(state, state_copy);
-  return true;
+/// Check if a character may be part of an identifier.
+static bool iscontinue(char c) {
+  return isstart(c) || isdigit(c) || c == '%';
 }
 
-bool parse_type(ParsingContext *context, ParsingState *state, Node *type, Node *parameter_names) {
-  bool external = 0;
-
-  Node *parameter_names_last = NULL;
-
-  // Parse type prefix keywords.
-
-  // If state is at EXT, then advance lexer and mark external.
-  if (external = token_string_equalp("ext", state->current), external) {
-    lex_advance(state);
-    if (*state->length == 0)
-      ERR("Expected base type following \"ext\" type annotation keyword.");
+/// Lex the next character.
+static void next_char(Parser *p) {
+  /// Keep returning EOF once EOF has been reached.
+  if (p->curr >= p->end) {
+    p->lastc = 0;
+    return;
   }
 
-  if (!parse_base_type(context, state, type, false)) return false;
-
-  // Parse function signature as type (instead of custom)
-
-  if (EXPECT("(")) {
-    Node *return_type = node_allocate();
-    node_copy(type, return_type);
-    free(type->value.symbol);
-    Node *function_type =
-      external
-      ? node_symbol("external function")
-      : node_symbol("function");
-    *type = *function_type;
-    free(function_type);
-    node_add_child(type, return_type);
-
-    // Parse parameters of function signature
-
-    for (;;) {
-      bool done = false;
-      bool found = lex_expect(")", state, &done);
-      if (done) ERR("Expected closing paren, `)`, at end of function signature type");
-      if (found) break;
-
-      // Parse parameter name
-      lex_advance(state);
-      if (*state->length == 0) ICE("I hope we never see this error");
-
-      Node *parameter_name = node_symbol_from_buffer(state->current->beginning,
-        (size_t)(state->current->end - state->current->beginning));
-
-      // First time, write to parameter_names (or parameter_names_last)
-      // Then on, write to parameter_names_last->next_child
-
-      if (parameter_names_last) {
-        parameter_names_last->next_child = parameter_name;
-        parameter_names_last = parameter_names_last->next_child;
-      } else {
-        parameter_names_last = parameter_names;
-        node_copy(parameter_name, parameter_names_last);
-        node_free(parameter_name);
-      }
-
-      if (!EXPECT(":")) ERR("Expected type annotation operator following function parameter name");
-
-      lex_advance(state);
-      if (*state->length == 0) ERR("Expected type following type annotation operator for function parameter");
-      Node *parameter_type = node_allocate();
-      if (!parse_type(context, state, parameter_type, NULL)) return false;
-
-      // With finished parameter, add as child to function, or add to function context?
-      node_add_child(type, parameter_type);
-    }
-
-    return true;
-  }
-
-  if (external) {
-    // This is a non-function "ext" type.
-    issue_diagnostic(DIAG_SORRY, context->filename, context->source,
-      token_span(context->source.data, *state->current),
-      "\"ext\" may only be used on function types (for now).");
-  }
-
-  if (EXPECT("[")) {
-    // Copy base type
-    Node *base_type = node_allocate();
-    node_copy(type, base_type);
-    free(type->value.symbol);
-    // Create array type
-    Node *array_type = node_symbol("array");
-    *type = *array_type;
-    free(array_type);
-
-    // Parse size integer
-    lex_advance(state);
-
-    Node *array_size = node_allocate();
-    if (!parse_integer(state->current, array_size))
-      ERR("Array type annotation expects array size (an integer) after opening '['.");
-
-    node_add_child(type, array_size);
-
-    if (!EXPECT("]")) ERR("Array type annotation must have closing ']' after array size.");
-
-    node_add_child(type, base_type);
-  }
-
-  return true;
+  /// Read the next character.
+  p->lastc = *p->curr++;
+  if (p->lastc == '\r') p->lastc = '\n';
 }
 
-
-bool parse_expr
-(ParsingContext *context,
- char *source,
- char **end,
- Node *result
- )
-{
-  ParsingStack *stack = NULL;
-
-  size_t token_length = 0;
-  Token current_token;
-  current_token.beginning  = source;
-  current_token.end        = source;
-
-  ParsingState _state = parse_state_create(&current_token, &token_length, end);
-  ParsingState *const state = &_state;
-  Node *working_result = result;
-  long long working_precedence = 0;
-
-  for (;;) {
-    //printf("lexed: "); print_token(current_token); putchar('\n');
-    lex_advance(state);
-    if (token_length == 0) { return true; }
-
-    if (parse_integer(&current_token, working_result)) {
-
-    } else {
-
-      // Check for lambda
-      Node *type = node_allocate();
-      /// TODO: Construct error and return it rather than printing it immediately
-      if (parse_base_type(context, state, type, true)) {
-
-        context = parse_context_create(context, CREATES_STACKFRAME);
-
-        Node *lambda = working_result;
-        lambda->type = NODE_TYPE_FUNCTION;
-        node_add_child(lambda, type);
-
-        if (!EXPECT("(")) {
-          // Nothing except a lambda starts with a type annotation.
-          ERR("Expected parameter declaration(s) following lambda return type");
-        }
-
-        Node *parameters = node_allocate();
-        node_add_child(lambda, parameters);
-
-        if (EXPECT(")")) {
-          if (!EXPECT("{")) ERR("Expected lambda body following lambda signature");
-
-          // TODO: Handle empty function body.
-
-          Node *body = node_allocate();
-          node_add_child(lambda, body);
-          Node *first_expression = node_allocate();
-          node_add_child(body, first_expression);
-
-          // Enter new ParsingStack to handle lambda body.
-          stack = parse_stack_create(stack);
-          stack->operator = node_symbol("lambda-body");
-          stack->body = body;
-          stack->result = first_expression;
-          working_result = first_expression;
-          continue;
-        }
-
-        Node *first_parameter = node_allocate();
-        node_add_child(parameters, first_parameter);
-
-        // Enter new ParsingStack to handle lambda parameters.
-        stack = parse_stack_create(stack);
-        stack->operator = node_symbol("lambdarameters");
-        stack->body = parameters;
-        stack->result = first_parameter;
-        working_result = first_parameter;
-        continue;
-
-      } else {
-        // Error generated by parse_base_type() is discarded here.
-        Node *symbol = node_symbol_from_buffer(current_token.beginning, token_length);
-
-        // FIXME: Experimental and not implemented in typechecker or codegen backends yet.
-        // NOTE: Square bracket syntax is for sure experimental, and likely temporary.
-        if (strcmp("[", symbol->value.symbol) == 0) {
-          working_result->type = NODE_TYPE_CAST;
-
-          lex_advance(state);
-          Node *cast_type = node_allocate();
-          if (!parse_base_type(context, state, cast_type, false)) return false;
-
-          node_add_child(working_result, cast_type);
-
-          if (!EXPECT("]")) ERR("Expected ']' after type in cast");
-
-          Node *child = node_allocate();
-          node_add_child(working_result, child);
-          working_result = child;
-          continue;
-        }
-
-        if (strcmp("~", symbol->value.symbol) == 0) {
-          working_result->type = NODE_TYPE_NOT;
-          Node *child = node_allocate();
-          node_add_child(working_result, child);
-          working_result = child;
-          continue;
-        }
-
-        if (strcmp("@", symbol->value.symbol) == 0) {
-          working_result->type = NODE_TYPE_DEREFERENCE;
-          Node *child = node_allocate();
-          node_add_child(working_result, child);
-          working_result = child;
-          continue;
-        }
-
-        if (strcmp("&", symbol->value.symbol) == 0) {
-          working_result->type = NODE_TYPE_ADDRESSOF;
-          Node *child = node_allocate();
-          node_add_child(working_result, child);
-          working_result = child;
-          continue;
-        }
-
-        if (strcmp("if", symbol->value.symbol) == 0) {
-          Node *if_conditional = working_result;
-          if_conditional->type = NODE_TYPE_IF;
-          Node *condition_expression = node_allocate();
-          node_add_child(if_conditional, condition_expression);
-
-          context = parse_context_create(context, DOESNT_CREATE_STACKFRAME);
-
-          stack = parse_stack_create(stack);
-          stack->operator = node_symbol("if-condition");
-          stack->result = condition_expression;
-
-          working_result = condition_expression;
-          continue;
-        }
-
-        if (strcmp("while", symbol->value.symbol) == 0) {
-          Node *while_node = working_result;
-          while_node->type = NODE_TYPE_WHILE;
-          Node *condition_expression = node_allocate();
-          node_add_child(while_node, condition_expression);
-
-          context = parse_context_create(context, DOESNT_CREATE_STACKFRAME);
-
-          stack = parse_stack_create(stack);
-          stack->operator = node_symbol("while-condition");
-          stack->result = condition_expression;
-
-          working_result = condition_expression;
-          continue;
-        }
-
-        // TODO: Parse strings and other literal types.
-
-        // Check if valid symbol for variable environment, then
-        // attempt to pattern match variable access, assignment,
-        // declaration, or declaration with initialization.
-
-        // Check for variable access here.
-        Node *var_binding = node_allocate();
-        bool found = parse_get_variable(context, symbol, var_binding, true);
-        if (!nonep(*var_binding)) {
-          if (!found) ERR("Unknown variable: \"%s\"", symbol->value.symbol);
-
-          // Create variable access node.
-          working_result->type = NODE_TYPE_VARIABLE_ACCESS;
-          working_result->value.symbol = strdup(symbol->value.symbol);
-
-          // Break if we have a variable at end of file.
-          if (at_end_of_file) goto end_of_file;
-
-          // Lookahead for function call
-          if (EXPECT("(")) {
-            // This is a function call!
-
-            Node *var_access = node_allocate();
-            node_copy(working_result, var_access);
-            working_result->type = NODE_TYPE_FUNCTION_CALL;
-            working_result->value.integer = 0;
-            node_add_child(working_result, var_access);
-
-            Node *parameters = node_allocate();
-            node_add_child(working_result, parameters);
-
-            if (!EXPECT(")")) {
-              Node *first_parameter = node_allocate();
-              node_add_child(parameters, first_parameter);
-              stack = parse_stack_create(stack);
-              stack->operator = node_symbol("funcall");
-              stack->result = first_parameter;
-              working_result = first_parameter;
-              continue;
-            }
-          } else {
-
-            // Lookahead for array index operator.
-            if (EXPECT("[")) {
-              Node *var_access = node_allocate();
-              node_copy(working_result, var_access);
-              working_result->type = NODE_TYPE_INDEX;
-              node_add_child(working_result, var_access);
-
-              lex_advance(state);
-              Node *integer_offset = node_allocate();
-              if (parse_integer(state->current, integer_offset) == 0)
-                ERR("Expected integer literal in subscript");
-
-              working_result->value.integer = integer_offset->value.integer;
-              node_free(integer_offset);
-
-              if (!EXPECT("]")) ERR("Missing ']' in subscript");
-            }
-
-            // Break if we have a subscript at end of file.
-            if (at_end_of_file) goto end_of_file;
-
-            // Lookahead for variable reassignment.
-            if (EXPECT(":") && EXPECT("=")) {
-              Node *result_pointer = result;
-              if (stack && stack->result) {
-                result_pointer = stack->result;
-              }
-              Node *lhs = node_allocate();
-              node_copy(result_pointer, lhs);
-              memset(result_pointer, 0, sizeof(Node));
-              result_pointer->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
-              node_add_child(result_pointer, lhs);
-              Node *reassign_expr = node_allocate();
-              node_add_child(result_pointer, reassign_expr);
-              working_result = reassign_expr;
-              continue;
-            }
-          }
-        } else {
-          // Symbol is not a valid variable name. Check for function call
-          // or new variable declaration.
-          if (EXPECT(":")) {
-            if (EXPECT("=")) ERR("Invalid Variable Symbol: \"%s\"", symbol->value.symbol);
-
-            lex_advance(state);
-            if (token_length == 0) { break; }
-            Node *decl_type = node_allocate();
-            Node *param_names = node_allocate();
-            if (!parse_type(context, state, decl_type, param_names)) return false;
-
-            Node *variable_binding = node_allocate();
-            if (environment_get(*context->variables, symbol, variable_binding))
-              ERR("Redefinition of variable: \"%s\"", symbol->value.symbol);
-            // Variable binding is shell-node for environment value contents.
-            free(variable_binding);
-
-            Node *variable_declaration = working_result;
-            variable_declaration->type = NODE_TYPE_VARIABLE_DECLARATION;
-
-            // `symbol` is now owned by working_result, a var. decl.
-            node_add_child(variable_declaration, symbol);
-
-            // Context variables environment gains new binding.
-            Node *symbol_for_env = node_allocate();
-            node_copy(symbol, symbol_for_env);
-
-            int status = environment_set(context->variables, symbol_for_env, decl_type);
-            if (status != 1)
-              ICE("Failed to define variable: \"%s\", status: %d", symbol_for_env->value.symbol, status);
-
-            if (strcmp(decl_type->value.symbol, "function") == 0) {
-              if (EXPECT("{")) {
-                Node **local_result = &result;
-                if (stack) { local_result = &stack->result; }
-
-                Node *reassign = node_allocate();
-                reassign->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
-                Node *lambda = node_allocate();
-
-                Node *access = node_allocate();
-                node_copy(symbol, access);
-                access->type = NODE_TYPE_VARIABLE_ACCESS;
-                node_add_child(reassign, access);
-
-                node_add_child(reassign, lambda);
-
-                (*local_result)->next_child = reassign;
-                *local_result = reassign;
-
-                // TODO: Expect empty body and handle that accordingly.
-
-                context = parse_context_create(context, CREATES_STACKFRAME);
-
-                lambda->type = NODE_TYPE_FUNCTION;
-
-                // Add return type of function signature type (first
-                // child) as the first child of the lambda
-                // (return type).
-                Node *lambda_return_type = node_allocate();
-                node_copy(decl_type->children, lambda_return_type);
-                node_add_child(lambda, lambda_return_type);
-
-                Node *parameters = node_allocate();
-                node_add_child(lambda, parameters);
-
-                // type->children->next_child refers to the first parameter
-                // for each parameter, we need a new variable
-                // declaration node as a child of `parameters`
-
-                // TODO: parameter_names may be invalid, we should copy
-                // global and use that copy.
-
-                Node *param_name = param_names;
-                Node *param_type = decl_type->children->next_child;
-
-                while (param_type) {
-                  Node *new_param = node_allocate();
-                  new_param->type = NODE_TYPE_VARIABLE_DECLARATION;
-                  Node *new_param_name = node_allocate();
-
-                  node_copy(param_name, new_param_name);
-                  node_add_child(new_param, new_param_name);
-
-                  node_add_child(parameters, new_param);
-
-                  // Context variables environment gains new binding.
-                  Node *param_symbol_for_env = node_allocate();
-                  node_copy(param_name, param_symbol_for_env);
-
-                  int v_status = environment_set(context->variables, param_symbol_for_env, param_type);
-                  if (v_status != 1)
-                    ICE("Failed to define parameter variable: \"%s\", status: %d\n", param_symbol_for_env->value.symbol, v_status);
-
-                  param_type = param_type->next_child;
-                  param_name = param_name->next_child;
-                }
-
-                // TODO: Free param_names list
-
-                Node *body = node_allocate();
-                node_add_child(lambda, body);
-
-                Node *function_name = node_allocate();
-                node_copy(symbol, function_name);
-                node_add_child(lambda, function_name);
-
-                Node *first_expression = node_allocate();
-                node_add_child(body, first_expression);
-
-                // Enter new ParsingStack to handle lambda body.
-                stack = parse_stack_create(stack);
-                stack->operator = node_symbol("lambda-body");
-                stack->body = body;
-                stack->result = first_expression;
-                working_result = first_expression;
-                continue;
-              }
-            }
-
-            // TODO: Free param_names list
-
-            // Check for initialization after declaration.
-            if (EXPECT("=")) {
-              Node **local_result = &result;
-              if (stack) { local_result = &stack->result; }
-
-              // reassign
-              // |-- lhs
-              // `-- value_expression
-              // reassign == lhs = value_expression
-
-              Node *reassign = node_allocate();
-              reassign->type = NODE_TYPE_VARIABLE_REASSIGNMENT;
-              Node *value_expression = node_allocate();
-
-              // FIXME: This is a problem. We should use LHS copy.
-              Node *lhs = node_allocate();
-              lhs->type = NODE_TYPE_VARIABLE_ACCESS;
-              lhs->value.symbol = strdup(symbol->value.symbol);
-              node_add_child(reassign, lhs);
-              node_add_child(reassign, value_expression);
-
-              (*local_result)->next_child = reassign;
-              *local_result = reassign;
-
-              working_result = value_expression;
-              continue;
-            }
-
-          } else {
-            // Symbol is unknown and is not followed by an assignment operator `:`.
-            ERR("Unknown symbol: \"%s\".", node_text(symbol));
-          }
-        }
-        free(var_binding);
-      }
-    }
-
-    // NOTE: We often need to continue from here.
-  end_of_file:;
-
-    bool found = parse_binary_infix_operator(context, stack, state,
-      &working_precedence, &working_result,
-      result);
-    if (found) { continue; }
-
-    // If no more parser stack, return with current result.
-    // Otherwise, handle parser stack operator.
-    if (!stack) { break; }
-
-    int status = 1;
+/// Lex an identifier.
+static void next_identifier(Parser *p) {
+  /// The start of the identifier.
+  p->tok.text.data = p->curr - 1;
+  p->tok.text.size = 1;
+  p->tok.type = TK_IDENT;
+  next_char(p);
+
+  /// Read the rest of the identifier.
+  while (iscontinue(p->lastc)) {
+    p->tok.text.size++;
+    next_char(p);
+  }
+}
+
+/// Parse a number.
+static void parse_number(Parser *p, int base) {
+  char *end;
+  errno = 0;
+  p->tok.integer = (u64) strtoull(p->tok.text.data, &end, base);
+  if (errno == ERANGE) ERR("Integer literal too large");
+  if (end != p->tok.text.data + p->tok.text.size) ERR("Invalid integer literal");
+}
+
+/// Lex a number.
+static void next_number(Parser *p) {
+  /// Record the start of the number.
+  p->tok.text.size = 0;
+  p->tok.integer = 0;
+  p->tok.type = TK_NUMBER;
+
+  /// At least one leading zero.
+  if (p->lastc == '0') {
+    /// Discard the zero.
+    next_char(p);
+
+    /// Another zero is an error.
+    if (p->lastc == '0') ERR("Leading zeroes are not allowed in decimal literals. Use 0o/0O for octal literals.");
+
+#define DO_PARSE_NUMBER(name, chars, condition, base)                       \
+  /** Read all chars that are part of the literal. **/                      \
+  if (p->lastc == chars[0] || p->lastc == chars[1]) {                       \
+    next_char(p);                                                           \
+    p->tok.text.data = p->curr - 1;                                         \
+    while (condition) {                                                     \
+      p->tok.text.size++;                                                   \
+      next_char(p);                                                         \
+    }                                                                       \
+                                                                            \
+    /** We need at least one digit. **/                                     \
+    p->tok.source_location.end = (u32) ((p->curr - 1) - p->source.data);    \
+    if (p->tok.text.size == 0) ERR("Expected at least one " name " digit"); \
+                                                                            \
+    /** Actually parse the number. **/                                      \
+    return parse_number(p, base);                                           \
+  }
+
+    DO_PARSE_NUMBER("binary", "bB", p->lastc == '0' || p->lastc == '1', 2)
+    DO_PARSE_NUMBER("octal", "oO", isdigit(p->lastc) && p->lastc < '8', 8)
+    DO_PARSE_NUMBER("hexadecimal", "xX", isxdigit(p->lastc), 16)
+
+#undef DO_PARSE_NUMBER
+
+    /// If the next character is a space or delimiter, then this is a literal 0.
+    if (isspace(p->lastc) || !isalpha(p->lastc)) return;
+
+    /// Anything else is an error.
+    ERR("Invalid integer literal");
+  }
+
+  /// Any other digit means we have a decimal number.
+  if (isdigit(p->lastc)) {
+    p->tok.text.data = p->curr - 1;
     do {
-      if (!handle_stack_operator(&status, &context, &stack, state,
-             &working_result, result,
-             &working_precedence)) return false;
-    } while (status == STACK_HANDLED_CHECK);
-
-    if (status == STACK_HANDLED_BREAK) break;
-    if (status == STACK_HANDLED_PARSE) continue;
-
-    ICE("Unhandled parse stack operator. Status: %d", status);
+      p->tok.text.size++;
+      next_char(p);
+    } while (isdigit(p->lastc));
+    return parse_number(p, 10);
   }
-  return true;
+
+  /// Anything else is an error.
+  ERR("Invalid integer literal");
 }
 
+/// Lex the next token.
+static void next_token(Parser *p) {
+  /// Keep returning EOF once EOF has been reached.
+  if (!p->lastc) {
+    p->tok.type = TK_EOF;
+    return;
+  }
 
-bool parse_program(const char *filepath, ParsingContext *context, Node *result) {
-  string contents = file_contents(filepath);
-  if (!contents.data) ICE("parse_program(): Could not read file: \"%s\"", filepath);
-  result->type = NODE_TYPE_PROGRAM;
-  context->filename = filepath;
-  context->source = (span){.data = contents.data, .size = contents.size};
-  char *contents_it = contents.data;
-  for (;;) {
-    Node *expression = node_allocate();
-    node_add_child(result, expression);
-    if (!parse_expr(context, contents_it, &contents_it, expression)) {
-      free(contents.data);
+  /// Set the token to invalid in case there is an error.
+  p->tok.type = TK_INVALID;
+
+  /// Skip whitespace.
+  while (isspace(p->lastc)) next_char(p);
+
+  /// Start of the token.
+  p->tok.source_location.start = (u32) (p->curr - p->source.data - 1);
+
+  /// Lex the token.
+  switch (p->lastc) {
+    /// EOF.
+    case 0:
+      p->tok.type = TK_EOF;
+      break;
+
+    case '(':
+      p->tok.type = TK_LPAREN;
+      next_char(p);
+      break;
+
+    case ')':
+      p->tok.type = TK_RPAREN;
+      next_char(p);
+      break;
+
+    case '[':
+      p->tok.type = TK_LBRACK;
+      next_char(p);
+      break;
+
+    case ']':
+      p->tok.type = TK_RBRACK;
+      next_char(p);
+      break;
+
+    case '{':
+      p->tok.type = TK_LBRACE;
+      next_char(p);
+      break;
+
+    case '}':
+      p->tok.type = TK_RBRACE;
+      next_char(p);
+      break;
+
+    case ',':
+      p->tok.type = TK_COMMA;
+      next_char(p);
+      break;
+
+    case '@':
+      p->tok.type = TK_AT;
+      next_char(p);
+      break;
+
+    case ':':
+      next_char(p);
+      if (p->lastc == '=') {
+        p->tok.type = TK_COLON_EQ;
+        next_char(p);
+      } else {
+        p->tok.type = TK_COLON;
+      }
+      break;
+
+    case ';':
+    case '#':
+      while (p->lastc && p->lastc != '\n') next_char(p);
+      return next_token(p);
+
+    case '+':
+      next_char(p);
+      p->tok.type = TK_PLUS;
+      break;
+
+    case '-':
+      next_char(p);
+      if (isdigit(p->lastc)) {
+        p->tok.type = TK_NUMBER;
+        next_number(p);
+        p->tok.integer = -p->tok.integer;
+
+        /// The character after a number must be a whitespace or delimiter.
+        if (isalpha(p->lastc)) ERR("Invalid integer literal");
+      } else {
+        p->tok.type = TK_MINUS;
+      }
+      break;
+
+    case '*':
+      next_char(p);
+      p->tok.type = TK_STAR;
+      break;
+
+    case '/':
+      next_char(p);
+      p->tok.type = TK_SLASH;
+      break;
+
+    case '%':
+      next_char(p);
+      p->tok.type = TK_PERCENT;
+      break;
+
+    case '&':
+      next_char(p);
+      p->tok.type = TK_AMPERSAND;
+      break;
+
+    case '|':
+      next_char(p);
+      p->tok.type = TK_PIPE;
+      break;
+
+    case '^':
+      next_char(p);
+      p->tok.type = TK_CARET;
+      break;
+
+    case '~':
+      next_char(p);
+      p->tok.type = TK_TILDE;
+      break;
+
+    case '!':
+      next_char(p);
+      if (p->lastc == '=') {
+        p->tok.type = TK_NE;
+        next_char(p);
+      } else {
+        p->tok.type = TK_EXCLAM;
+      }
+      break;
+
+    case '=':
+      next_char(p);
+      p->tok.type = TK_EQ;
+      break;
+
+    case '<':
+      next_char(p);
+      if (p->lastc == '=') {
+        p->tok.type = TK_LE;
+        next_char(p);
+      } else if (p->lastc == '<') {
+        p->tok.type = TK_SHL;
+        next_char(p);
+      } else {
+        p->tok.type = TK_LT;
+      }
+      break;
+
+    case '>':
+      next_char(p);
+      if (p->lastc == '=') {
+        p->tok.type = TK_GE;
+        next_char(p);
+      } else if (p->lastc == '>') {
+        p->tok.type = TK_SHR;
+        next_char(p);
+      } else {
+        p->tok.type = TK_GT;
+      }
+      break;
+
+    /// Number or identifier.
+    default:
+      /// Identifier.
+      if (isstart(p->lastc)) {
+        next_identifier(p);
+
+        /// Check if the identifier is a keyword.
+        for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
+          if (strncmp(keywords[i].kw, p->tok.text.data, p->tok.text.size) == 0) {
+            p->tok.type = keywords[i].type;
+            goto done;
+          }
+        }
+        break;
+      }
+
+      /// Number.
+      if (isdigit(p->lastc)) {
+        next_number(p);
+
+        /// The character after a number must be a whitespace or delimiter.
+        if (isalpha(p->lastc)) ERR("Invalid integer literal");
+        break;
+      }
+
+      /// Anything else is invalid.
+      ERR("Invalid token");
+  }
+
+done:
+  /// Set the end of the token.
+  p->tok.source_location.end = (u32) (p->curr - p->source.data - 1);
+}
+
+/// ===========================================================================
+///  Parser helpers.
+/// ===========================================================================
+/// Get the current scope.
+static Scope *curr_scope(Parser *p) { return VECTOR_BACK(p->ast->scope_stack); }
+
+/// Consume a token; error if it's not the expected type.
+static void consume(Parser *p, enum TokenType tt) {
+  if (p->tok.type != tt) ERR("Expected %s, but got %s",
+    token_type_to_string(tt), token_type_to_string(p->tok.type));
+  next_token(p);
+}
+
+/// Check if a token can be a postfix operator.
+static bool is_postfix_operator(enum TokenType tt) {
+  switch (tt) {
+    default: return false;
+  }
+}
+
+/// Get the binary precedence of a token.
+/// TODO: User-defined operators.
+static isz binary_operator_precedence(Parser *p, Token t) {
+  (void) p;
+  switch (t.type) {
+    case TK_STAR:
+    case TK_SLASH:
+    case TK_PERCENT:
+      return 600;
+
+    case TK_PLUS:
+    case TK_MINUS:
+      return 500;
+
+    case TK_SHL:
+    case TK_SHR:
+      return 400;
+
+    case TK_AMPERSAND:
+    case TK_PIPE:
+    case TK_CARET:
+      return 300;
+
+    case TK_EQ:
+    case TK_NE:
+    case TK_LT:
+    case TK_GT:
+    case TK_LE:
+    case TK_GE:
+      return 200;
+
+    case TK_COLON_EQ:
+      return 100;
+
+    /// Not an operator.
+    default: return -1;
+  }
+}
+
+/// Check if an operator is right-associative.
+/// TODO: User-defined operators.
+static bool is_right_associative(Parser *p, Token t) {
+  (void) p;
+  switch (t.type) {
+    case TK_STAR:
+    case TK_SLASH:
+    case TK_PERCENT:
+    case TK_PLUS:
+    case TK_MINUS:
+    case TK_SHL:
+    case TK_SHR:
+    case TK_AMPERSAND:
+    case TK_PIPE:
+    case TK_CARET:
+    case TK_EQ:
+    case TK_NE:
+    case TK_LT:
+    case TK_GT:
+    case TK_LE:
+    case TK_GE:
       return false;
+
+    case TK_COLON_EQ:
+      return true;
+
+    /// Not an operator.
+    default: return false;
+  }
+}
+
+/// ===========================================================================
+///  Parser
+/// ===========================================================================
+static Node *parse_expr_with_precedence(Parser *p, isz current_precedence);
+static Type *parse_type(Parser *p);
+static Node *parse_expr(Parser *p) { return parse_expr_with_precedence(p, 0); }
+
+/// <expr-block>     ::= "{" { <expression> } "}"
+static Node *parse_block(Parser *p, bool create_new_scope) {
+  loc pos = p->tok.source_location;
+  consume(p, TK_LBRACE);
+
+  /// Create a new scope.
+  if (create_new_scope) scope_push(p->ast);
+
+  /// Collect the children.
+  Nodes children = {0};
+  while (p->tok.type != TK_RBRACE) VECTOR_PUSH(children, parse_expr(p));
+  consume(p, TK_RBRACE);
+
+  /// Pop the scope.
+  if (create_new_scope) scope_pop(p->ast);
+
+  /// Create the node.
+  return ast_make_block(p->ast, pos, children);
+}
+
+/// <expr-if>        ::= IF <expression> <expr-block> [ ELSE <expr-block> ]
+static Node *parse_if_expr(Parser *p) {
+  /// Yeet "if".
+  loc if_loc = p->tok.source_location;
+  consume(p, TK_IF);
+
+  /// Parse the condition.
+  Node *cond = parse_expr(p);
+
+  /// Parse the "then" block.
+  Node *then_block = parse_block(p, true);
+
+  /// Parse the "else" block if there is one.
+  Node *else_block = NULL;
+  if (p->tok.type == TK_ELSE) {
+    next_token(p);
+    else_block = parse_block(p, true);
+  }
+
+  /// Done.
+  return ast_make_if(p->ast, if_loc, cond, then_block, else_block);
+}
+
+/// <expr-while>     ::= WHILE <expression> <expr-block>
+static Node *parse_while_expr(Parser *p) {
+  /// Yeet "while".
+  loc while_loc = p->tok.source_location;
+  consume(p, TK_WHILE);
+
+  /// Parse the condition.
+  Node *cond = parse_expr(p);
+
+  /// Parse the body.
+  Node *body = parse_block(p, true);
+
+  /// Done.
+  return ast_make_while(p->ast, while_loc, cond, body);
+}
+
+/// <expr-call> ::= <expression> "(" { <expression> [ "," ] } ")"
+static Node *parse_call_expr(Parser *p, Node *callee) {
+  consume(p, TK_LPAREN);
+
+  /// Collect the arguments.
+  Nodes args = {0};
+  while (p->tok.type != TK_RPAREN) {
+    VECTOR_PUSH(args, parse_expr(p));
+    if (p->tok.type == TK_COMMA) next_token(p);
+  }
+
+  /// Done.
+  Node *call = ast_make_call(p->ast, (loc){callee->source_location.start, p->tok.source_location.end}, callee, args);
+  consume(p, TK_RPAREN);
+  return call;
+}
+
+/// Parse the body of a function.
+///
+/// This is basically just a wrapper around `parse_block()` that
+/// also injects declarations for all the function parameters.
+static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_decls) {
+  /// Save state.
+  bool save_in_function = p->in_function;
+  p->in_function = true;
+
+  /// Push a new scope for the body and parameters.
+  scope_push(p->ast);
+
+  /// Create a declaration for each parameter.
+  VECTOR_FOREACH (Parameter , param, function_type->function.parameters) {
+    Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
+    if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var))
+      ERR_AT(var->source_location, "Redefinition of parameter '%.*s'", (int) var->declaration.name.size, var->declaration.name.data);
+    VECTOR_PUSH(*param_decls, var);
+  }
+
+  /// Parse the body.
+  /// TODO: We could also just allow <expression> here.
+  Node *block = parse_block(p, false);
+
+  /// Pop the scope.
+  scope_pop(p->ast);
+  p->in_function = save_in_function;
+
+  /// Done.
+  return block;
+}
+
+/// Parse an expression that starts with a type.
+///
+/// <expr-cast>      ::= <type> <expression>
+/// <expr-lambda>    ::= <type-function> <expr-block>
+static Node *parse_type_expr(Parser *p, Type *type) {
+  /// If this is a function type, and the next token is "{", then this
+  /// is a lambda expression.
+  if (type->kind == TYPE_FUNCTION && p->tok.type == TK_LBRACE) {
+    /// Parse the function body.
+    Nodes params = {0};
+    Node *body = parse_function_body(p, type, &params);
+
+    /// Create a function for the lambda.
+    char num[64] = {0};
+    usz sz = (usz) snprintf(num, sizeof num, "_XLambda_%zu", p->ast->counter++);
+    Node *func = ast_make_function(p->ast, type->source_location, type, params, body, (span){.data = num, .size = sz});
+    func->function.global = false;
+    return func;
+  }
+
+  /// Otherwise, this is a cast expression.
+  return ast_make_cast(p->ast, type->source_location, type, parse_expr(p));
+}
+
+/// <param-decl> ::= <decl-start> <type>
+static Parameter parse_param_decl(Parser *p) {
+  loc start = p->tok.source_location;
+
+  /// Parse the name, colon, and type.
+  span name = p->tok.text;
+  consume(p, TK_IDENT);
+  consume(p, TK_COLON);
+  Type *type = parse_type(p);
+
+  /// Done.
+  return (Parameter){.source_location = start, .type = type, .name = string_dup(name)};
+}
+
+/// <type-derived>  ::= <type-array> | <type-function>
+/// <type-array>    ::= <type> "[" <expression> "]"
+/// <type-function> ::= <type> "(" { <param-decl> [ "," ]  } ")"
+static Type *parse_type_derived(Parser *p, Type *base) {
+  ASSERT(base);
+
+  /// Parse the rest of the type.
+  for (;;) {
+    switch (p->tok.type) {
+      /// Array type.
+      case TK_LBRACK: {
+        next_token(p);
+        Node *size = parse_expr(p);
+
+        /// TODO: Evaluate the size as a constant expression.
+        if (size->kind != NODE_LITERAL || size->literal.type != TK_NUMBER)
+          ISSUE_DIAGNOSTIC(DIAG_SORRY, size->source_location, p,
+            "Non-literal array size not supported");
+        usz dim = size->literal.integer;
+
+        /// Yeet "]" and record the location.
+        loc l = {.start = base->source_location.start, .end = p->tok.source_location.end};
+        consume(p, TK_RBRACK);
+
+        /// Base type must not be incomplete.
+        if (ast_type_is_incomplete(base)) {
+          string name = ast_typename(base, false);
+          ERR_DO(free(name.data), l, "Cannot create array of incomplete type: %.*s",
+            (int) name.size, name.data);
+        }
+
+        /// Create the array type.
+        base = ast_make_type_array(p->ast, l, base, dim);
+      } break;
+
+      /// Function type.
+      case TK_LPAREN: {
+        next_token(p);
+
+        /// Collect the arguments.
+        Parameters args = {0};
+        while (p->tok.type != TK_RPAREN) {
+          Parameter decl = parse_param_decl(p);
+          VECTOR_PUSH(args, decl);
+          if (p->tok.type == TK_COMMA) next_token(p);
+        }
+
+
+        /// Yeet ")".
+        loc l = {.start = base->source_location.start, .end = p->tok.source_location.end};
+        consume(p, TK_RPAREN);
+
+        /// Create the function type.
+        base = ast_make_type_function(p->ast, l, base, args);
+      } break;
+
+      /// Done.
+      default: return base;
+    }
+  }
+}
+
+/// <type>         ::= <type-base> | <type-pointer> | <type-derived>
+/// <type-pointer> ::= "@" { "@" } ( IDENTIFIER | "(" <type> ")" )
+/// <type-base>    ::= IDENTIFIER
+static Type *parse_type(Parser *p) {
+  loc start = p->tok.source_location;
+
+  /// Collect pointers.
+  usz level = 0;
+  while (p->tok.type == TK_AT) {
+    level++;
+    next_token(p);
+  }
+
+  /// Parse the base type.
+  if (p->tok.type == TK_IDENT) {
+    /// Make sure the identifier is a type.
+    Symbol *sym = scope_find_symbol(curr_scope(p), p->tok.text, false);
+    if (!sym || sym->kind != SYM_TYPE) ERR("Unknown type '%.*s'", (int) p->tok.text.size, p->tok.text.data);
+
+    /// Create a named type from it.
+    Type *base = ast_make_type_named(p->ast, p->tok.source_location, sym);
+
+    /// If we have pointer indirection levels, wrap the type in a pointer.
+    while (level--) base = ast_make_type_pointer(p->ast, (loc){start.start--, p->tok.source_location.end}, base);
+
+    /// Yeet the identifier and parse the rest of the type.
+    base->source_location.start = start.start;
+    next_token(p);
+    return parse_type_derived(p, base);
+  }
+
+  /// Alternatively, we allow any type, enclosed in parens.
+  if (p->tok.type == TK_LPAREN) {
+    next_token(p);
+    Type *base = parse_type(p);
+
+    /// If we have pointer indirection levels, wrap the type in a pointer.
+    while (level--) base = ast_make_type_pointer(p->ast, (loc){start.start--, p->tok.source_location.end}, base);
+
+    /// Yeet ")" and parse the rest of the type.
+    base->source_location.start = start.start;
+    consume(p, TK_RPAREN);
+    return parse_type_derived(p, base);
+  }
+
+  /// Invalid base type.
+  ERR("Expected base type, got %d", p->tok.type);
+}
+
+/// <expr-decl>      ::= <decl-start> <decl-rest>
+/// <decl-rest>      ::= <type-function> <expr-block>
+///                    | <type> [ "=" <expression> ]
+///                    | <decl-start> EXT <type-function>
+static Node *parse_decl_rest(Parser *p, Token ident) {
+  /// If the next token is "ext", then this is an external declaration.
+  bool is_ext = false;
+  if (p->tok.type == TK_EXT) {
+    is_ext = true;
+    next_token(p);
+  }
+
+  /// Parse the type.
+  Type *type = parse_type(p);
+
+  /// If the next token is "{", and the type is a function type, and this
+  /// is not an external declaration, then this is a function definition.
+  /// TODO: are we handling external symbols correctly?
+  if (!is_ext && p->tok.type == TK_LBRACE && type->kind == TYPE_FUNCTION) {
+    /// Create a symbol table entry before parsing the body.
+    Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+    if (sym->kind != SYM_FUNCTION || sym->node)
+      ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+
+    /// Parse the body, create the function, and update the symbol table.
+    Nodes params = {0};
+    Node *body = parse_function_body(p, type, &params);
+    Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
+    sym->node = func;
+    return ast_make_function_reference(p->ast, ident.source_location, sym);
+  }
+
+  /// If this is an EXT declaration, and the type is a function type,
+  /// then this is an external function declaration.
+  if (is_ext && type->kind == TYPE_FUNCTION) {
+    /// Create a symbol table entry.
+    Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+    if (sym->kind != SYM_FUNCTION || sym->node)
+      ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+
+    /// Create the function.
+    Node *func = ast_make_function(p->ast, ident.source_location, type, (Nodes){0}, NULL, ident.text);
+    sym->node = func;
+    return ast_make_function_reference(p->ast, ident.source_location, sym);
+  }
+
+  /// Otherwise, this is a variable declaration.
+  ///
+  /// If we’re declaring a variable of function type,
+  /// convert it to a function pointer instead.
+  if (type->kind == TYPE_FUNCTION) type = ast_make_type_pointer(p->ast, type->source_location, type);
+
+  /// Create the declaration.
+  Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
+  decl->declaration.static_ = !p->in_function;
+
+  /// Add the declaration to the current scope.
+  Symbol *sym = scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
+  if (!sym) {
+    /// If the symbol already exists, then this is an error; the exception
+    /// to this is if the symbol is a forward-declared function and this is
+    /// a declaration of a variable of function type.
+    Type *actual_type = type;
+    while (actual_type->kind == TYPE_NAMED && actual_type->named->type) actual_type = actual_type->named->type;
+    if (actual_type->kind == TYPE_FUNCTION) {
+      sym = scope_find_symbol(curr_scope(p), ident.text, true);
+      if (sym->kind == SYM_FUNCTION && !sym->node) {
+        sym->kind = SYM_VARIABLE;
+        sym->node = decl;
+        goto ok;
+      }
     }
 
-    // Check for end-of-parsing case (source and end are the same).
-    if (!(*contents_it)) { break; }
-
-    //printf("Parsed expression:\n");
-    //print_node(expression,0);
-    //putchar('\n');
-
+    /// Otherwise, this is an error.
+    ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
   }
-  free(contents.data);
-  return true;
+ok:
+
+  /// A non-external declaration may have an initialiser.
+  /// TODO: Should we just allow this instead?
+  if (p->tok.type == TK_EQ) {
+    if (is_ext) ERR("An \"ext\" declaration may not have an initialiser");
+    next_token(p);
+
+    /// Need to do this manually because the symbol that is the variable
+    /// may appear in its initialiser, albeit only in unevaluated contexts.
+    decl->declaration.init = parse_expr(p);
+    decl->declaration.init->parent = decl;
+  }
+
+  /// Strip array types and resolve named types.
+  Type *const saved_type = type;
+  while (type) {
+    if (type->kind == TYPE_NAMED) type = type->named->type;
+    else if (type->kind == TYPE_ARRAY) type = type->array.of;
+    else break;
+  }
+
+  /// Make sure we’re not trying to declare a variable of incomplete type.
+  if (!type) {
+    string name = ast_typename(saved_type, false);
+    ERR_DO(free(name.data), decl->source_location, "Cannot declare a variable of incomplete type \"%.*s\"",
+      (int) name.size, name.data);
+  }
+
+  /// Done.
+  return decl;
 }
 
-bool define_binary_operator
-(ParsingContext *context,
- char *operator,
- int precedence,
- char *return_type,
- char *lhs_type,
- char *rhs_type
- )
-{
-  Node *binop = node_allocate();
-  node_add_child(binop, node_integer(precedence));
-  node_add_child(binop, node_symbol(return_type));
-  node_add_child(binop, node_symbol(lhs_type));
-  node_add_child(binop, node_symbol(rhs_type));
+/// This function is a bit complicated because there are many rules in the
+/// grammar that (may), directly or indirectly, start with an identifier.
+///
+/// <decl-start>   ::= IDENTIFIER ":"
+/// <type>         ::= IDENTIFIER | ...
+/// <expr-primary> ::= NUMBER | IDENTIFIER
+static Node *parse_ident_expr(Parser *p) {
+  /// We know that we’re looking at an identifier; save it for later.
+  Token ident = p->tok;
+  next_token(p);
 
-  // FIXME: Every binary operator definition is global for now!
-  while (context->parent) { context = context->parent; }
-  return environment_set(context->binary_operators, node_symbol(operator), binop) != 0;
+  /// If the next token is a colon, then this is some sort of declaration.
+  if (p->tok.type == TK_COLON) {
+    /// Parse the rest of the declaration.
+    next_token(p);
+    return parse_decl_rest(p, ident);
+  }
+
+  /// Otherwise, check if the identifier is a declared symbol; if it isn’t,
+  /// it can only be a function name, so add it as a symbol.
+  Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, false);
+
+  /// If the symbol is a variable or function, then we’re done here.
+  if (sym->kind == SYM_VARIABLE) return ast_make_variable_reference(p->ast, ident.source_location, sym);
+  if (sym->kind == SYM_FUNCTION) return ast_make_function_reference(p->ast, ident.source_location, sym);
+
+  /// If the symbol is a type, then parse the rest of the type and delegate.
+  if (sym->kind == SYM_TYPE) {
+    Type *type = parse_type_derived(p, ast_make_type_named(p->ast, ident.source_location, sym));
+    return parse_type_expr(p, type);
+  }
+
+  /// Should never get here.
+  UNREACHABLE();
+}
+
+/// Parse an expression. This function handles the following rules:
+///
+/// <expression> ::= <expr-decl>
+///              | <expr-if>
+///              | <expr-while>
+///              | <expr-block>
+///              | <expr-lambda>
+///              | <expr-call>
+///              | <expr-cast>
+///              | <expr-subs>
+///              | <expr-paren>
+///              | <expr-prefix>
+///              | <expr-binary>
+///              | <expr-primary>
+///
+/// <expr-subs>    ::= <expression> "[" <expression> "]"
+/// <expr-paren>   ::= "(" <expression> ")"
+/// <expr-prefix>  ::= <prefix> <expression>
+/// <expr-binary>  ::= <expression> <binary> <expression>
+/// <expr-primary> ::= NUMBER | IDENTIFIER
+static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
+  /// Left-hand side of operator.
+  Node *lhs = NULL;
+
+  /// Parse the LHS.
+  switch (p->tok.type) {
+    default: ERR("Expected expression, got %s", token_type_to_string(p->tok.type));
+
+    /// An identifier can either be a declaration, function call, or cast.
+    case TK_IDENT: lhs = parse_ident_expr(p); break;
+    case TK_IF: lhs = parse_if_expr(p); break;
+    case TK_ELSE: ERR("'else' without 'if'");
+    case TK_WHILE: lhs = parse_while_expr(p); break;
+    case TK_LBRACE: lhs = parse_block(p, true); break;
+    case TK_NUMBER:
+      lhs = ast_make_integer_literal(p->ast, p->tok.source_location, p->tok.integer);
+      next_token(p);
+      break;
+    case TK_STRING:
+      lhs = ast_make_string_literal(p->ast, p->tok.source_location, p->tok.text);
+      next_token(p);
+      break;
+    case TK_LPAREN:
+      next_token(p);
+      lhs = parse_expr(p);
+      consume(p, TK_RPAREN);
+      break;
+    case TK_RPAREN: ERR("Unmatched ')'");
+    case TK_RBRACK: ERR("Unmatched ']'");
+    case TK_RBRACE: ERR("Unmatched '}'");
+
+    /// '@' is complicated because it can either be a dereference or a cast.
+    case TK_AT: {
+      /// Collect all at signs.
+      usz at_count = 0;
+      do {
+        at_count++;
+        next_token(p);
+      } while (p->tok.type == TK_AT);
+
+      /// If the next token can be the start of a <type-base>, then this is
+      /// a type; parse the type and wrap it in a pointer type.
+      if (p->tok.type == TK_IDENT) {
+        Symbol *sym = scope_find_symbol(curr_scope(p), p->tok.text, false);
+        if (sym && sym->kind == SYM_TYPE) {
+          Type *type = ast_make_type_named(p->ast, p->tok.source_location, sym);
+          next_token(p);
+          while (at_count--) type = ast_make_type_pointer(p->ast, p->tok.source_location, parse_type_derived(p, type));
+          lhs = parse_type_expr(p, type);
+          break;
+        }
+      }
+
+      /// Otherwise, this is a dereference.
+      lhs = parse_expr_with_precedence(p, PREFIX_PRECEDENCE);
+
+      /// Wrap it in an appropriate number of dereferences.
+      for (usz i = 0; i < at_count; i++) {
+        loc l = lhs->source_location;
+        lhs = ast_make_unary(p->ast, (loc){.start = l.start - 1, .end = l.end}, TK_AT, false, lhs);
+      }
+    } break;
+
+    /// Unary operators.
+    case TK_MINUS:
+    case TK_AMPERSAND:
+    case TK_TILDE:
+    case TK_EXCLAM:
+    case TK_STAR: {
+      u32 start = p->tok.source_location.start;
+      enum TokenType tt = p->tok.type;
+      next_token(p);
+      Node *operand = parse_expr_with_precedence(p, PREFIX_PRECEDENCE);
+      lhs = ast_make_unary(p->ast, (loc){.start = start, .end = operand->source_location.end}, tt, false, operand);
+    } break;
+  }
+
+  /// This *must* not be NULL.
+  if (!lhs) ICE("LHS is NULL");
+
+  /// The rules for operator precedence parsing are as follows:
+  ///     - unary prefix operators are unambiguously handled up above;
+  ///     - if the current token is a, unary postfix operator, then the
+  ///       current LHS is its operand;
+  ///     - if the current token is a binary operator whose precedence is
+  ///       higher than the current precedence, or higher than or equal to
+  ///       the current precedence if the operator is right-associative, then
+  ///       the current LHS is the LHS of that operator;
+  ///     - if the current token is "(" or "[", then this is a call/subscript
+  ///       expression. We handle these explicitly here since they usually have
+  ///       the highest precedence anyway.
+  ///     - otherwise, return the current LHS as its own expression.
+  for (;;) {
+    /// Handle unary postfix operators.
+    if (is_postfix_operator(p->tok.type)) {
+      lhs = ast_make_unary(p->ast, (loc){.start = lhs->source_location.start, p->tok.source_location.end}, p->tok.type, true, lhs);
+      next_token(p);
+      continue;
+    }
+
+    /// Handle calls.
+    if (p->tok.type == TK_LPAREN) {
+      lhs = parse_call_expr(p, lhs);
+      continue;
+    }
+
+    /// Handle subscripts.
+    if (p->tok.type == TK_LBRACK) {
+      next_token(p);
+      Node *index = parse_expr(p);
+      consume(p, TK_RBRACK);
+      lhs = ast_make_binary(p->ast, (loc){.start = lhs->source_location.start, .end = index->source_location.end}, TK_LBRACK, lhs, index);
+      continue;
+    }
+
+    /// Handle binary operators. We can just check if the precedence of the current
+    /// token is less than the current precedence, even if the current token is not
+    /// an operator because `binary_operator_precedence` returns -1 in that case.
+    isz prec = binary_operator_precedence(p, p->tok);
+
+    /// If the precedence of the current token is less than the current precedence,
+    /// then we're done.
+    if (prec < current_precedence) return lhs;
+
+    /// If the precedence is the same, we’re done if the token is left-associative.
+    if (prec == current_precedence && !is_right_associative(p, p->tok)) return lhs;
+
+    /// Otherwise, we need to parse the RHS.
+    u32 start = p->tok.source_location.start;
+    enum TokenType tt = p->tok.type;
+    next_token(p);
+    Node *rhs = parse_expr_with_precedence(p, prec);
+
+    /// Combine the LHS and RHS into a binary expression.
+    lhs = ast_make_binary(p->ast, (loc){.start = start, .end = rhs->source_location.end}, tt, lhs, rhs);
+  }
+}
+
+/// ===========================================================================
+///  API
+/// ===========================================================================
+AST *parse(span source, const char *filename) {
+  Parser p = {0};
+  p.source = source;
+  p.filename = filename;
+  p.curr = source.data;
+  p.end = source.data + source.size;
+  p.lastc = ' ';
+  p.ast = ast_create();
+  p.ast->filename = string_create(filename);
+  p.ast->source = string_dup(source);
+
+  /// Set up error handling.
+  if (setjmp(p.error_buffer)) {
+    ast_free(p.ast);
+    return NULL;
+  }
+
+  /// Lex the first character and token.
+  next_char(&p);
+  next_token(&p);
+
+  /// Parse the file.
+  /// <file> ::= { <expression> }
+  while (p.tok.type != TK_EOF) {
+    Node *expr = parse_expr(&p);
+    VECTOR_PUSH(p.ast->root->root.children, expr);
+    expr->parent = p.ast->root;
+  }
+  return p.ast;
+}
+
+NODISCARD const char *token_type_to_string(enum TokenType type) {
+  switch (type) {
+    case TK_INVALID: return "invalid";
+    case TK_EOF: return "EOF";
+    case TK_IDENT: return "identifier";
+    case TK_NUMBER: return "number";
+    case TK_STRING: return "string";
+    case TK_IF: return "if";
+    case TK_ELSE: return "else";
+    case TK_WHILE: return "while";
+    case TK_EXT: return "ext";
+    case TK_LPAREN: return "\"(\"";
+    case TK_RPAREN: return "\")\"";
+    case TK_LBRACK: return "\"[\"";
+    case TK_RBRACK: return "\"]\"";
+    case TK_LBRACE: return "\"{\"";
+    case TK_RBRACE: return "\"}\"";
+    case TK_COMMA: return "\",\"";
+    case TK_COLON: return "\":\"";
+    case TK_SEMICOLON: return "\";\"";
+    case TK_PLUS: return "\"+\"";
+    case TK_MINUS: return "\"-\"";
+    case TK_STAR: return "\"*\"";
+    case TK_SLASH: return "\"/\"";
+    case TK_PERCENT: return "\"%\"";
+    case TK_AMPERSAND: return "\"&\"";
+    case TK_PIPE: return "\"|\"";
+    case TK_CARET: return "\"^\"";
+    case TK_TILDE: return "\"~\"";
+    case TK_EXCLAM: return "\"!\"";
+    case TK_AT: return "\"@\"";
+    case TK_SHL: return "\"<<\"";
+    case TK_SHR: return "\">>\"";
+    case TK_EQ: return "\"=\"";
+    case TK_NE: return "\"!=\"";
+    case TK_LT: return "\"<\"";
+    case TK_GT: return "\">\"";
+    case TK_LE: return "\"<=\"";
+    case TK_GE: return "\">=\"";
+    case TK_COLON_EQ: return "\":=\"";
+  }
+
+  return "\?\?\?";
 }
