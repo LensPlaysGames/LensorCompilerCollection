@@ -36,8 +36,9 @@
 <expr-primary>   ::= NUMBER | IDENTIFIER
 
 /// Types.
-<type>           ::= <type-base> | <type-derived>
-<type-base>      ::= [ "@" ] IDENTIFIER
+<type>           ::= <type-base> | <type-pointer> | <type-derived>
+<type-pointer>   ::= "@" { "@" } ( IDENTIFIER | "(" <type> ")" )
+<type-base>      ::= IDENTIFIER
 <type-derived>   ::= <type-array> | <type-function>
 <type-array>     ::= <type> "[" <expression> "]"
 <type-function>  ::= <type> "(" { <param-decl> [ "," ]  } ")"

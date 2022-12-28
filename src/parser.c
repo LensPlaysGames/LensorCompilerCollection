@@ -702,8 +702,9 @@ static Type *parse_type_derived(Parser *p, Type *base) {
   }
 }
 
-/// <type>      ::= <type-base> | <type-rest>
-/// <type-base> ::= [ "@" ] IDENTIFIER
+/// <type>         ::= <type-base> | <type-pointer> | <type-derived>
+/// <type-pointer> ::= "@" { "@" } ( IDENTIFIER | "(" <type> ")" )
+/// <type-base>    ::= IDENTIFIER
 static Type *parse_type(Parser *p) {
   loc start = p->tok.source_location;
 
@@ -714,7 +715,7 @@ static Type *parse_type(Parser *p) {
     next_token(p);
   }
 
-  /// Parse the base type. Currently, this can only be an identifier.
+  /// Parse the base type.
   if (p->tok.type == TK_IDENT) {
     /// Make sure the identifier is a type.
     Symbol *sym = scope_find_symbol(curr_scope(p), p->tok.text, false);
@@ -727,8 +728,22 @@ static Type *parse_type(Parser *p) {
     while (level--) base = ast_make_type_pointer(p->ast, (loc){start.start--, p->tok.source_location.end}, base);
 
     /// Yeet the identifier and parse the rest of the type.
-    next_token(p);
     base->source_location.start = start.start;
+    next_token(p);
+    return parse_type_derived(p, base);
+  }
+
+  /// Alternatively, we allow any type, enclosed in parens.
+  if (p->tok.type == TK_LPAREN) {
+    next_token(p);
+    Type *base = parse_type(p);
+
+    /// If we have pointer indirection levels, wrap the type in a pointer.
+    while (level--) base = ast_make_type_pointer(p->ast, (loc){start.start--, p->tok.source_location.end}, base);
+
+    /// Yeet ")" and parse the rest of the type.
+    base->source_location.start = start.start;
+    consume(p, TK_RPAREN);
     return parse_type_derived(p, base);
   }
 
