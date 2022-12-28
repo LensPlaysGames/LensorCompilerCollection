@@ -427,6 +427,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Resolve the function reference and typecheck the function.
     case NODE_FUNCTION_REFERENCE:
+      /// TODO: Replace this w/ the resolved function node.
       if (!resolve_function(ast, expr)) return false;
       if (!typecheck_expression(ast, expr->funcref->node)) return false;
       expr->type = expr->funcref->node->type;

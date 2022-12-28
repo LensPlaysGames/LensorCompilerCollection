@@ -44,6 +44,7 @@ bool print_ast = false;
 bool syntax_only = false;
 bool print_scopes = false;
 bool prefer_using_diagnostics_colours = true;
+bool colours_blink = false;
 
 void print_acceptable_formats() {
   printf("Acceptable formats include:\n"
@@ -70,6 +71,7 @@ void print_acceptable_colour_settings() {
   printf("Acceptable values for `--colours` include:\n"
          " -> auto\n"
          " -> always\n"
+         " -> blink\n"
          " -> never\n");
 }
 
@@ -159,6 +161,9 @@ int handle_command_line_arguments(int argc, char **argv) {
         prefer_using_diagnostics_colours = platform_isatty(fileno(stdout));
       } else if (strcmp(argv[i], "never") == 0) {
         prefer_using_diagnostics_colours = false;
+      } else if (strcmp(argv[i], "blink") == 0) {
+        prefer_using_diagnostics_colours = true;
+        colours_blink = true;
       } else if (strcmp(argv[i], "always") == 0) {
         prefer_using_diagnostics_colours = true;
       } else {
