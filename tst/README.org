@@ -1,0 +1,40 @@
+#+created: <2022-12-28 Wed>
+
+* Algol End-to-End Testing Framework
+
+** Running Tests
+
+The ALGOL 68 Genie interpreter is required. Get it [[https://jmvdveer.home.xs4all.nl/en.download.algol-68-genie-current.html][here]].
+
+Then, it's just a one-line shell command to run the test driver. Be sure to run it from the ~tst~ directory of the repository.
+
+#+begin_src shell-script
+  a68g main.a68
+#+end_src
+
+Any and all files within the ~tests~ subdirectory will automatically be treated as, you guessed it, tests.
+
+
+** Writing New Tests
+
+A test MUST have a declared expected return status of the program as the first line, following two bytes (comment starter). Like so.
+
+#+begin_src un
+  ; 16
+
+  4 + 4 + 4 + 4
+#+end_src
+
+There MUST be an empty line between the beginning test expectation declaration and the following source code.
+
+One can also set an expected stdout with following test expectation declaration lines.
+
+#+begin_src
+  ; 16
+  ; E
+
+  putchar : ext integer(c : integer)
+  putchar(69)
+
+  4 + 4 + 4 + 4
+#+end_src

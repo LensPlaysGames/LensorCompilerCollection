@@ -1,0 +1,161 @@
+PROC platform is windows = BOOL: get env ("WINDIR") NE "";
+STRING platform dir sep = IF platform is windows THEN "\" ELSE "/" FI;
+
+PROC string to number = (STRING s) INT: BEGIN
+  INT out := 0;
+  FOR index FROM LWB s TO UPB s DO
+    CHAR c = s[index];
+    IF NOT is digit (c) THEN
+      print(("ERROR!  Expected digit but got ", c, new line));
+      stop
+    FI;
+    INT tmp := ABS c;
+    tmp -:= 48;
+    out *:= 10;
+    out +:= tmp
+  OD;
+  out
+END;
+
+PROC compare expected =
+(INT status,
+ STRING output,
+ INT actual status,
+ REF STRING actual output
+) BOOL:
+BEGIN
+  BOOL retval := TRUE;
+  CO open out.txt, compare contents with `output` CO
+  FILE out;
+  IF open (out, "out.txt", stand in channel) /= 0 THEN
+    print("ERROR!");
+    stop
+  FI;
+
+  on logical file end (out, (REF FILE f) BOOL: past);
+  STRING str;
+  DO
+    get(out, str);
+    actual output +:= str;
+    actual output +:= new line char;
+    new line (out)
+  UNTIL end of file (out) OD;
+
+  past: SKIP;
+
+  IF actual output /= output THEN
+    retval := FALSE;
+    return
+  FI;
+
+  close (out);
+
+  IF actual status /= status
+  THEN
+    retval := FALSE;
+    return
+  FI;
+
+  return: retval
+END;
+
+PROC run test = (STRING file name) VOID:
+BEGIN
+  FILE f;
+  IF open(f, file name, stand in channel) /= 0 THEN
+    print(("ERROR!  Could not open test file ", file name, new line));
+    stop
+  FI;
+
+  CO Save initial file contents as expected output. CO
+
+  STRING str;
+
+  CO TODO: maybe don't just assume that every test is perfectly formed. CO
+
+  CO Read first line as status return value CO
+  get(f, (str, new line));
+
+  IF UPB str < 3 THEN
+    print(("ERROR!  First line not even long enough to contain return status.", new line));
+    stop
+  FI;
+
+  IF str[1] /= REPR 59 THEN
+    print(("ERROR!  First line does not start with comment!.", new line));
+    stop
+  FI;
+
+  CO Cut off comment delimiters CO
+  str := str[3..];
+
+  CO Convert string into a number CO
+
+  INT return value = string to number(str);
+
+  CO Collect expected stdout... CO
+  STRING output;
+  WHILE get(f, (str, new line)); str /= "" DO
+    str := str[3..];
+    output +:= str;
+    output +:= new line char
+  OD;
+
+  CO Compile program CO
+  IF system(".." + platform dir sep +  "bld" + platform dir sep + "func -o test.S " + file name) /= 0 THEN
+    print("FUNC ERROR!");
+    stop
+  FI;
+  IF system("gcc test.S -o test.exe") /= 0 THEN
+    print("GCC ERROR!");
+    stop
+  FI;
+  INT actual return value := system("test.exe > out.txt");
+  STRING actual output := "";
+
+  IF compare expected (return value, output, actual return value, actual output)
+  THEN
+    print(("SUCCESS!              --  ", file name, new line))
+  ELSE
+    print(("FAILED!               --  ", file name, new line));
+    print((return value,         new line));
+    print((actual return value,  new line));
+    print(("=== EXPECTED ===", new line, output,        "===", new line));
+    print(("=== GOT ===",      new line, actual output, "===", new line));
+    stop
+  FI;
+
+  CO Compile optimised program CO
+  IF system(".." + platform dir sep +  "bld" + platform dir sep + "func -O -o test.S " + file name) /= 0 THEN
+    print("FUNC ERROR!");
+    stop
+  FI;
+  IF system("gcc test.S -o test.exe") /= 0 THEN
+    print("GCC ERROR!");
+    stop
+  FI;
+  actual return value := system("test.exe > out.txt");
+  actual output := "";
+
+  IF compare expected (return value, output, actual return value, actual output)
+  THEN
+    print(("SUCCESS (optimised)!  --  ", file name, new line))
+  ELSE
+    print(("FAILED! (optimised)   --  ", file name, new line));
+    print((return value,         new line));
+    print((actual return value,  new line));
+    print(("=== EXPECTED ===", new line, output,        "===", new line));
+    print(("=== GOT ===",      new line, actual output, "===", new line));
+    stop
+  FI;
+
+  close (f)
+END;
+
+[] STRING tests = get directory ("tests");
+
+FOR index FROM LWB tests TO UPB tests DO
+  IF file is regular ("tests/" + tests[index]) THEN
+    run test ("tests/" + tests[index])
+  FI
+OD
