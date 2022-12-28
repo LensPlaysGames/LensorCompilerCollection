@@ -72,20 +72,22 @@ if (NOT MSVC)
     -Wno-format-zero-length
   )
 else()
-  target_compile_options(func PRIVATE 
-    # Enable �all� warnings.
+  target_compile_options(
+    func
+    PRIVATE
+    # Enable "all" warnings.
     /W4
-    
+
     # Source character set is UTF-8
     /utf-8
-  
+
     # Allow unnamed structs/unions.
     /wd4201
 
-    # Don�t warn about unused functions.
+    # Don't warn about unused functions.
     /wd4505
 
-    # Don�t suggest the _s nonsense functions.
+    # Don't suggest the _s nonsense functions.
     /D_CRT_SECURE_NO_WARNINGS
     /D_CRT_SECURE_NO_WARNINGS_GLOBALS
     /D_CRT_NONSTDC_NO_WARNINGS
@@ -93,9 +95,33 @@ else()
 
   # clang-cl
   if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(func PRIVATE 
-        -Wno-unused-function -Wno-unused-parameter
-        -Wno-format-zero-length
+    target_compile_options(
+      func
+      PRIVATE
+      -Wno-unused-function -Wno-unused-parameter
+      -Wno-format-zero-length
     )
   endif()
+endif()
+
+find_program(A68G_PROGRAM a68g NO_CACHE)
+
+if (A68G_PROGRAM STREQUAL "A68G_PROGRAM-NOTFOUND")
+  message(NOTICE "
+
+[41m
+[m
+[31;5mERROR: MISSING PROGRAM!  Could not find `a68g` Algol 68 Genie Interpreter, test target has not been generated. See README in `tst` subdirectory.
+[41m
+[m
+
+")
+else()
+  add_custom_target(
+    test
+    COMMAND a68g main.a68
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tst
+    COMMENT "Running tests"
+    VERBATIM USES_TERMINAL
+  )
 endif()
