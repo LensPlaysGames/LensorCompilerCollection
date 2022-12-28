@@ -53,6 +53,9 @@ typedef ptrdiff_t isz;
 /// This is a command-line setting.
 extern bool prefer_using_diagnostics_colours;
 
+/// Don’t question this.
+extern bool colours_blink;
+
 /// Don’t use this directly.
 extern THREAD_LOCAL bool _thread_use_diagnostics_colours_;
 

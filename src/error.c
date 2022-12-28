@@ -59,7 +59,7 @@ void vissue_diagnostic
   ASSERT(level >= 0 && level < DIAG_COUNT);
 
   /// Check if stderr is a terminal.
-  bool is_terminal = platform_isatty(fileno(stderr));
+  bool use_colour = _thread_use_diagnostics_colours_;
 
   /// Print a detailed error message if we have access to the source code.
   if (source.data && source.size) {
@@ -84,13 +84,14 @@ void vissue_diagnostic
     while (line_end < source.size && source.data[line_end] != '\n') line_end++;
 
     /// Print the filename, line and column, severity and message.
-    if (is_terminal) fprintf(stderr, "\033[m\033[1;38m");
+    if (use_colour) fprintf(stderr, "\033[m\033[1;38m");
     fprintf(stderr, "%s:%u:%u: ", filename, line, location.start - line_start);
-    if (is_terminal) fprintf(stderr, "%s", diagnostic_level_colours[level]);
+    if (use_colour && colours_blink) fprintf(stderr, "\033[5m\a\a\a\a");
+    if (use_colour) fprintf(stderr, "%s", diagnostic_level_colours[level]);
     fprintf(stderr, "%s: ", diagnostic_level_names[level]);
-    if (is_terminal) fprintf(stderr, "\033[m\033[1;38m");
+    if (use_colour) fprintf(stderr, "\033[m\033[1;38m");
     vfprintf(stderr, fmt, ap);
-    if (is_terminal) fprintf(stderr, "\033[m");
+    if (use_colour) fprintf(stderr, "\033[m");
 
     /// Print the line.
     fprintf(stderr, "\n %d | ", line);
@@ -98,12 +99,12 @@ void vissue_diagnostic
       if (source.data[i] == '\t') fprintf(stderr, "    ");
       else fputc(source.data[i], stderr);
     }
-    if (is_terminal) fprintf(stderr, "%s", diagnostic_level_colours[level]);
+    if (use_colour) fprintf(stderr, "%s", diagnostic_level_colours[level]);
     for (u32 i = location.start; i < location.end; ++i) {
       if (source.data[i] == '\t') fprintf(stderr, "    ");
       else fputc(source.data[i], stderr);
     }
-    if (is_terminal) fprintf(stderr, "\033[m");
+    if (use_colour) fprintf(stderr, "\033[m");
     for (u32 i = location.end; i < line_end; ++i) {
       if (source.data[i] == '\t') fprintf(stderr, "    ");
       else fputc(source.data[i], stderr);
@@ -114,7 +115,9 @@ void vissue_diagnostic
     size_t spaces = !line ? 1 : (u32) (log10(line) + 1);
     for (size_t i = 0; i < spaces; i++)
       fprintf(stderr, " ");
-    fprintf(stderr, "  | %s", is_terminal ? diagnostic_level_colours[level] : "");
+    fprintf(stderr, "  | ");
+    if (use_colour && colours_blink) fprintf(stderr, "\033[5m");
+    if (use_colour) fprintf(stderr, "%s", diagnostic_level_colours[level]);
     for (u32 i = line_start; i < location.start; ++i) {
       if (source.data[i] == '\t') fprintf(stderr, "    ");
       else fputc(' ', stderr);
@@ -123,19 +126,20 @@ void vissue_diagnostic
       if (source.data[i] == '\t') fprintf(stderr, "~~~~");
       else fputc('~', stderr);
     }
-    if (is_terminal) fprintf(stderr, "\033[m");
+    if (use_colour) fprintf(stderr, "\033[m");
     fprintf(stderr, "\n");
   }
 
   /// Otherwise, just print a simple error message.
   else {
-    if (is_terminal) fprintf(stderr, "\033[m\033[1;38m");
+    if (use_colour) fprintf(stderr, "\033[m\033[1;38m");
     fprintf(stderr, "%s: ", filename);
-    if (is_terminal) fprintf(stderr, "%s", diagnostic_level_colours[level]);
+    if (use_colour && colours_blink) fprintf(stderr, "\033[5m");
+    if (use_colour) fprintf(stderr, "%s", diagnostic_level_colours[level]);
     fprintf(stderr, "%s: ", diagnostic_level_names[level]);
-    if (is_terminal) fprintf(stderr, "\033[m\033[1;38m");
+    if (use_colour) fprintf(stderr, "\033[m\033[1;38m");
     vfprintf(stderr, fmt, ap);
-    if (is_terminal) fprintf(stderr, "\033[m");
+    if (use_colour) fprintf(stderr, "\033[m");
     fprintf(stderr, "\n");
   }
  }
@@ -151,16 +155,20 @@ void raise_fatal_error_impl (
     ...
 ) {
   /// Print the file and line.
-  bool is_terminal = platform_isatty(fileno(stderr));
+  bool use_colour = _thread_use_diagnostics_colours_;
 
   /// Removing everything up to and including the `src` prefix.
   const char *filename = file, *src_prefix;
   while (src_prefix = strstr(filename, "src" PLATFORM_PATH_SEPARATOR), src_prefix) filename = src_prefix + 4;
 
   /// To make this less atrocious,
-  const char *const reset = is_terminal ? "\033[m" : "";
-  const char *const w = is_terminal ? "\033[m\033[1;38m" : "";
-  const char *const colour = is_terminal ? diagnostic_level_colours[is_sorry ? DIAG_SORRY : DIAG_ICE] : "";
+  const char *const reset = use_colour ? "\033[m" : "";
+  const char *const w = use_colour ? "\033[m\033[1;38m" : "";
+  const char *const colour = use_colour && colours_blink
+    ? "\033[31;5m\a\a\a\a\a"
+    : use_colour
+        ? diagnostic_level_colours[is_sorry ? DIAG_SORRY : DIAG_ICE]
+        : "";
 
   /// Print a shorter message if this is a TODO() w/ no message.
   if (is_sorry && strcmp(fmt, "") == 0) {
