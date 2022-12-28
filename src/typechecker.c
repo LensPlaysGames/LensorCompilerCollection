@@ -136,24 +136,25 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         if (!typecheck_expression(ast, node))
           return false;
 
-      /// Remove all function references. There is no iterator
-      /// invalidation here because we are accessing elements
-      /// by index.
+      /// Replace function references in the root with the function nodes
+      /// iff the source location of the function is the same as that of
+      /// the function reference.
+      ///
+      /// This is so that if someone, for whatever reason, puts the name
+      /// of the function as an expression in the root, it will just be
+      /// removed rather than replaced with the function.
       VECTOR_FOREACH_INDEX(i, expr->root.children) {
         Node *node = expr->root.children.data[i];
         if (node->kind == NODE_FUNCTION_REFERENCE) {
-          VECTOR_REMOVE_INDEX(expr->root.children, i);
-          i--;
+          Node *func = node->funcref->node;
+          if (
+            func &&
+            func->source_location.start == node->source_location.start &&
+            func->source_location.end == node->source_location.end
+          ) { expr->root.children.data[i] = func; }
         }
       }
 
-      /// Add all functions back to the root if they are not
-      /// already there.
-      VECTOR_FOREACH_PTR (Node*, f, ast->functions) {
-        bool found = false;
-        VECTOR_CONTAINS(expr->root.children, f, found);
-        if (!found) VECTOR_PUSH(expr->root.children, f);
-      }
       break;
 
     /// Typecheck the function body if there is one.
@@ -235,6 +236,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         /// Implicitly load the function pointer.
         if (callee->type->kind == TYPE_POINTER && callee->type->pointer.to->kind == TYPE_FUNCTION) {
           expr->call.callee = callee = ast_make_unary(ast, expr->source_location, TK_AT, false, callee);
+          callee->parent = expr;
           if (!typecheck_expression(ast, callee)) return false;
         } else {
           string name = ast_typename(callee->type, false);
