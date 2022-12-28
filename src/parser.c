@@ -405,7 +405,7 @@ static Scope *curr_scope(Parser *p) { return VECTOR_BACK(p->ast->scope_stack); }
 
 /// Consume a token; error if it's not the expected type.
 static void consume(Parser *p, enum TokenType tt) {
-  if (p->tok.type != tt) ERR("Expected token of type %s, got %s",
+  if (p->tok.type != tt) ERR("Expected %s, but got %s",
     token_type_to_string(tt), token_type_to_string(p->tok.type));
   next_token(p);
 }
@@ -682,7 +682,8 @@ static Type *parse_type_derived(Parser *p, Type *base) {
         /// Collect the arguments.
         Parameters args = {0};
         while (p->tok.type != TK_RPAREN) {
-          VECTOR_PUSH(args, parse_param_decl(p));
+          Parameter decl = parse_param_decl(p);
+          VECTOR_PUSH(args, decl);
           if (p->tok.type == TK_COMMA) next_token(p);
         }
 
@@ -1083,35 +1084,35 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_ELSE: return "else";
     case TK_WHILE: return "while";
     case TK_EXT: return "ext";
-    case TK_LPAREN: return "(";
-    case TK_RPAREN: return ")";
-    case TK_LBRACK: return "[";
-    case TK_RBRACK: return "]";
-    case TK_LBRACE: return "{";
-    case TK_RBRACE: return "}";
-    case TK_COMMA: return ",";
-    case TK_COLON: return ":";
-    case TK_SEMICOLON: return ";";
-    case TK_PLUS: return "+";
-    case TK_MINUS: return "-";
-    case TK_STAR: return "*";
-    case TK_SLASH: return "/";
-    case TK_PERCENT: return "%";
-    case TK_AMPERSAND: return "&";
-    case TK_PIPE: return "|";
-    case TK_CARET: return "^";
-    case TK_TILDE: return "~";
-    case TK_EXCLAM: return "!";
-    case TK_AT: return "@";
-    case TK_SHL: return "<<";
-    case TK_SHR: return ">>";
-    case TK_EQ: return "=";
-    case TK_NE: return "!=";
-    case TK_LT: return "<";
-    case TK_GT: return ">";
-    case TK_LE: return "<=";
-    case TK_GE: return ">=";
-    case TK_COLON_EQ: return ":=";
+    case TK_LPAREN: return "\"(\"";
+    case TK_RPAREN: return "\")\"";
+    case TK_LBRACK: return "\"[\"";
+    case TK_RBRACK: return "\"]\"";
+    case TK_LBRACE: return "\"{\"";
+    case TK_RBRACE: return "\"}\"";
+    case TK_COMMA: return "\",\"";
+    case TK_COLON: return "\":\"";
+    case TK_SEMICOLON: return "\";\"";
+    case TK_PLUS: return "\"+\"";
+    case TK_MINUS: return "\"-\"";
+    case TK_STAR: return "\"*\"";
+    case TK_SLASH: return "\"/\"";
+    case TK_PERCENT: return "\"%\"";
+    case TK_AMPERSAND: return "\"&\"";
+    case TK_PIPE: return "\"|\"";
+    case TK_CARET: return "\"^\"";
+    case TK_TILDE: return "\"~\"";
+    case TK_EXCLAM: return "\"!\"";
+    case TK_AT: return "\"@\"";
+    case TK_SHL: return "\"<<\"";
+    case TK_SHR: return "\">>\"";
+    case TK_EQ: return "\"=\"";
+    case TK_NE: return "\"!=\"";
+    case TK_LT: return "\"<\"";
+    case TK_GT: return "\">\"";
+    case TK_LE: return "\"<=\"";
+    case TK_GE: return "\">=\"";
+    case TK_COLON_EQ: return "\":=\"";
   }
 
   return "\?\?\?";
