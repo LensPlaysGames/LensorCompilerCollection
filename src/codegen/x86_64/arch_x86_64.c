@@ -1351,6 +1351,8 @@ static size_t interfering_regs(IRInstruction *instruction) {
     mask |= (1 << REG_RAX);
     mask |= (1 << REG_RDX);
     break;
+  case IR_CALL:
+    mask |= (1 << REG_RAX);
   default:
     break;
   }

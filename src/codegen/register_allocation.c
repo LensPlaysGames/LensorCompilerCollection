@@ -277,7 +277,13 @@ static void collect_interferences(IRInstruction *inst, IRInstruction **child, vo
 
 /// Walk over all possible paths in the dominator tree, starting at a leaf and up to the root.
 /// For each path, compute instruction interferences based on the values that are currently live.
-static void collect_interferences_for_node(DomTreeNode *leaf, IRInstructions *live_vals, BlockVector *visited, AdjacencyGraph *G) {
+static void collect_interferences_for_node(
+  const MachineDescription *desc,
+  DomTreeNode *leaf,
+  IRInstructions *live_vals,
+  BlockVector *visited,
+  AdjacencyGraph *G
+) {
   IRBlock *b = leaf->block;
 
   /// Don't visit the same block twice.
@@ -289,9 +295,15 @@ static void collect_interferences_for_node(DomTreeNode *leaf, IRInstructions *li
   /// Collect interferences for instructions in this block.
   for (IRInstruction *inst = b->instructions.last; inst; inst = inst->prev) {
     /// Make this value interfere with all values that are live at this point.
-    VECTOR_FOREACH_PTR (IRInstruction *, live_val, *live_vals)
+    usz mask = desc->instruction_register_interference(inst);
+    VECTOR_FOREACH_PTR (IRInstruction *, live_val, *live_vals) {
       if (needs_register(inst))
         adjm_set(G->matrix, inst->index, live_val->index);
+
+      /// Also take special interferences into account.
+      G->regmasks[live_val->index] |= mask;
+    }
+
 
     /// Remove its result from the set of live variables;
     if (needs_register(inst)) VECTOR_REMOVE_ELEMENT_UNORDERED(*live_vals, inst);
@@ -302,7 +314,7 @@ static void collect_interferences_for_node(DomTreeNode *leaf, IRInstructions *li
 
   /// Do the same for all dominators of this block.
   VECTOR_FOREACH_PTR (DomTreeNode *, dominator, leaf->dominators)
-    collect_interferences_for_node(dominator, live_vals, visited, G);
+    collect_interferences_for_node(desc, dominator, live_vals, visited, G);
 }
 
 /// Build the adjacency graph for the given function.
@@ -332,7 +344,7 @@ static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc,
   VECTOR_FOREACH_PTR (DomTreeNode*, node, leaves) {
     VECTOR_CLEAR(live_vals);
     VECTOR_CLEAR(visited);
-    collect_interferences_for_node(node, &live_vals, &visited, G);
+    collect_interferences_for_node(desc, node, &live_vals, &visited, G);
   }
 
   /// Free dominator and liveness info.
