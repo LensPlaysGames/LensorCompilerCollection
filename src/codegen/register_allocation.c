@@ -161,6 +161,7 @@ bool needs_register(IRInstruction *instruction) {
     /// Allocas and static refs need a register iff they are actually used.
     case IR_ALLOCA:
     case IR_STATIC_REF:
+    case IR_FUNC_REF:
       return instruction->users.size;
 
     default:

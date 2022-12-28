@@ -109,6 +109,7 @@ Node *ast_make_function(
   node->type = type;
   node->function.body = body;
   node->function.param_decls = param_decls;
+  node->function.global = true;
   node->parent = ast->root;
   if (body) body->parent = node;
 
@@ -368,7 +369,14 @@ void write_typename(string *s, const Type *type, bool colour) {
     case TYPE_POINTER: {
       if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[36m");
       s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "@");
+      if (type->pointer.to->kind == TYPE_FUNCTION) {
+        if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[31m");
+        s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "(");
+      }
       write_typename(s, type->pointer.to, colour);
+      if (type->pointer.to->kind == TYPE_FUNCTION) {
+        s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, ")");
+      }
     } break;
 
     case TYPE_ARRAY:

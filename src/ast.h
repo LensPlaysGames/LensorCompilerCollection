@@ -151,6 +151,7 @@ typedef struct NodeFunction {
   Node *body;
   string name;
   IRFunction *ir;
+  bool global : 1;
 } NodeFunction;
 
 /// Variable declaration.
@@ -291,6 +292,7 @@ struct Node {
 
   /// Various flags.
   bool type_checked : 1; /// Whether this node has been type checked.
+  bool emitted : 1;      /// Whether this node has been emitted.
 
   /// Node data.
   union {

@@ -555,7 +555,6 @@ static Node *parse_while_expr(Parser *p) {
 
 /// <expr-call> ::= <expression> "(" { <expression> [ "," ] } ")"
 static Node *parse_call_expr(Parser *p, Node *callee) {
-  loc call_loc = p->tok.source_location;
   consume(p, TK_LPAREN);
 
   /// Collect the arguments.
@@ -564,10 +563,11 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
     VECTOR_PUSH(args, parse_expr(p));
     if (p->tok.type == TK_COMMA) next_token(p);
   }
-  consume(p, TK_RPAREN);
 
   /// Done.
-  return ast_make_call(p->ast, call_loc, callee, args);
+  Node *call = ast_make_call(p->ast, (loc){callee->source_location.start, p->tok.source_location.end}, callee, args);
+  consume(p, TK_RPAREN);
+  return call;
 }
 
 /// Parse the body of a function.
@@ -617,7 +617,9 @@ static Node *parse_type_expr(Parser *p, Type *type) {
     /// Create a function for the lambda.
     char num[64] = {0};
     usz sz = (usz) snprintf(num, sizeof num, "_XLambda_%zu", p->ast->counter++);
-    return ast_make_function(p->ast, type->source_location, type, params, body, (span){.data = num, .size = sz});
+    Node *func = ast_make_function(p->ast, type->source_location, type, params, body, (span){.data = num, .size = sz});
+    func->function.global = false;
+    return func;
   }
 
   /// Otherwise, this is a cast expression.
@@ -651,7 +653,6 @@ static Type *parse_type_derived(Parser *p, Type *base) {
       case TK_LBRACK: {
         next_token(p);
         Node *size = parse_expr(p);
-        consume(p, TK_RBRACK);
 
         /// TODO: Evaluate the size as a constant expression.
         if (size->kind != NODE_LITERAL || size->literal.type != TK_NUMBER)
@@ -659,20 +660,23 @@ static Type *parse_type_derived(Parser *p, Type *base) {
             "Non-literal array size not supported");
         usz dim = size->literal.integer;
 
+        /// Yeet "]" and record the location.
+        loc l = {.start = base->source_location.start, .end = p->tok.source_location.end};
+        consume(p, TK_RBRACK);
+
         /// Base type must not be incomplete.
         if (ast_type_is_incomplete(base)) {
           string name = ast_typename(base, false);
-          ERR_DO(free(name.data), base->source_location, "Cannot create array of incomplete type: %.*s",
+          ERR_DO(free(name.data), l, "Cannot create array of incomplete type: %.*s",
             (int) name.size, name.data);
         }
 
         /// Create the array type.
-        base = ast_make_type_array(p->ast, base->source_location, base, dim);
+        base = ast_make_type_array(p->ast, l, base, dim);
       } break;
 
       /// Function type.
       case TK_LPAREN: {
-        loc fn_loc = p->tok.source_location;
         next_token(p);
 
         /// Collect the arguments.
@@ -681,10 +685,14 @@ static Type *parse_type_derived(Parser *p, Type *base) {
           VECTOR_PUSH(args, parse_param_decl(p));
           if (p->tok.type == TK_COMMA) next_token(p);
         }
+
+
+        /// Yeet ")".
+        loc l = {.start = base->source_location.start, .end = p->tok.source_location.end};
         consume(p, TK_RPAREN);
 
         /// Create the function type.
-        base = ast_make_type_function(p->ast, fn_loc, base, args);
+        base = ast_make_type_function(p->ast, l, base, args);
       } break;
 
       /// Done.
@@ -696,6 +704,8 @@ static Type *parse_type_derived(Parser *p, Type *base) {
 /// <type>      ::= <type-base> | <type-rest>
 /// <type-base> ::= [ "@" ] IDENTIFIER
 static Type *parse_type(Parser *p) {
+  loc start = p->tok.source_location;
+
   /// Collect pointers.
   usz level = 0;
   while (p->tok.type == TK_AT) {
@@ -704,7 +714,6 @@ static Type *parse_type(Parser *p) {
   }
 
   /// Parse the base type. Currently, this can only be an identifier.
-  loc start = p->tok.source_location;
   if (p->tok.type == TK_IDENT) {
     /// Make sure the identifier is a type.
     Symbol *sym = scope_find_symbol(curr_scope(p), p->tok.text, false);
@@ -718,6 +727,7 @@ static Type *parse_type(Parser *p) {
 
     /// Yeet the identifier and parse the rest of the type.
     next_token(p);
+    base->source_location.start = start.start;
     return parse_type_derived(p, base);
   }
 
@@ -772,6 +782,12 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   }
 
   /// Otherwise, this is a variable declaration.
+  ///
+  /// If we’re declaring a variable of function type,
+  /// convert it to a function pointer instead.
+  if (type->kind == TYPE_FUNCTION) type = ast_make_type_pointer(p->ast, type->source_location, type);
+
+  /// Create the declaration.
   Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
   decl->declaration.static_ = !p->in_function;
 

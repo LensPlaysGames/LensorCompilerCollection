@@ -125,12 +125,15 @@ void codegen_context_free(CodegenContext *context) {
 /// ===========================================================================
 /// Emit an expression.
 static void codegen_expr(CodegenContext *ctx, Node *expr) {
+  if (expr->emitted) return;
+  expr->emitted = true;
+
   switch (expr->kind) {
   default: ICE("Unrecognized expression kind: %d", expr->kind);
 
   /// A function node yields its address.
   case NODE_FUNCTION:
-      expr->ir = ir_funcref(ctx, expr->funcref->node->function.ir);
+      expr->ir = ir_funcref(ctx, expr->function.ir);
       return;
 
   /// Root node.
@@ -395,7 +398,8 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         default: ICE("Cannot emit unary prefix expression of type %d", expr->unary.op);
 
         /// Load a value from an lvalue.
-        case TK_AT: expr->ir = ir_load(ctx, expr->unary.value->ir); return;
+        /// Emitting an lvalue loads it, so we don’t need to do anything here.
+        case TK_AT: expr->ir = expr->unary.value->ir; return;
 
         /// One’s complement negation.
         case TK_TILDE: expr->ir = ir_not(ctx, expr->unary.value->ir); return;
@@ -510,6 +514,7 @@ bool codegen
     case LANG_FUN: {
       /// Create the main function.
       context->entry = ir_function(context, literal_span("main"), 2);
+      context->entry->attr_global = true;
 
       /// Create the remaining functions and set the address of each function.
       VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
@@ -518,6 +523,9 @@ bool codegen
 
           /// Mark the function as extern if it is.
           if (!func->function.body) func->function.ir->is_extern = true;
+
+          /// Mark the function as global if it is global.
+          if (func->function.global) func->function.ir->attr_global = true;
       }
 
       /// Emit the main function.

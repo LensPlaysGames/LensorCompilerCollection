@@ -1,4 +1,4 @@
-foo : integer() {
+foo : integer() = integer() {
   a : integer = 0
   b : integer = 42
 

@@ -66,8 +66,12 @@ NODISCARD static bool convertible(Type *to, Type *from) {
   /// If the types are the same, they are convertible.
   if (types_equal(to, from)) return true;
 
+  /// A function type is implicitly convertible to its
+  /// corresponding pointer type.
+  if (to->kind == TYPE_POINTER && from->kind == TYPE_FUNCTION)
+    return types_equal(to->pointer.to, from);
+
   /// Otherwise, the types are not convertible.
-  /// TODO: Once we have more than one integer type, do we want implicit conversions?
   return false;
 }
 
@@ -219,11 +223,25 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       Node *callee = expr->call.callee;
       if (!resolve_function(ast, callee)) return false;
 
-      /// Set the resolved function as the new callee.
-      expr->call.callee = callee = callee->funcref->node;
-
       /// Typecheck the callee.
       if (!typecheck_expression(ast, callee)) return false;
+
+      /// Callee must be a function or a function pointer.
+      if (callee->type->kind == TYPE_FUNCTION) {
+        /// Set the resolved function as the new callee.
+        expr->call.callee = callee = callee->funcref->node;
+        if (!typecheck_expression(ast, callee)) return false;
+      } else {
+        /// Implicitly load the function pointer.
+        if (callee->type->kind == TYPE_POINTER && callee->type->pointer.to->kind == TYPE_FUNCTION) {
+          expr->call.callee = callee = ast_make_unary(ast, expr->source_location, TK_AT, false, callee);
+          if (!typecheck_expression(ast, callee)) return false;
+        } else {
+          string name = ast_typename(callee->type, false);
+          ERR_DO(free(name.data), expr->source_location, "Cannot call non-function type \"%.*s\".",
+            (int) name.size, name.data);
+        }
+      }
 
       /// Typecheck all arguments.
       VECTOR_FOREACH_PTR (Node *, param, expr->call.arguments)

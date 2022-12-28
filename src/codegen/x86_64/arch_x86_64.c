@@ -1185,9 +1185,9 @@ void emit_entry(CodegenContext *context) {
           ".section .text\n",
           context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
 
-  /// TODO: Maybe make some functions not global.
   fprintf(context->code, "\n");
   VECTOR_FOREACH_PTR (IRFunction*, function, context->functions) {
+    if (!function->attr_global) continue;
     fprintf(context->code, ".global %.*s\n", (int) function->name.size, function->name.data);
   }
 }
