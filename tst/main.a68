@@ -77,11 +77,11 @@ BEGIN
              + (optimise | " -O " | "") 
              + "-cc " + calling convention + " "
              + file name) /= 0 THEN
-    print("FUNC ERROR!");
+    print(((optimise | "FUNC ERROR! (optimised)  --  " | "FUNC ERROR!              --  "), file name, new line));
     stop
   FI;
   IF sh("gcc test.S -o test" + executable suffix) /= 0 THEN
-    print("GCC ERROR!");
+    print(((optimise | "GCC ERROR! (optimised)   --  " | "GCC ERROR!               --  "), file name, new line));
     stop
   FI;
 
@@ -90,9 +90,9 @@ BEGIN
 
   IF compare expected (return value, output, actual return value, actual output)
   THEN
-    print(((optimise | "SUCCESS! (optimised)  --  " | "SUCCESS!              --  "), file name, new line))
+    print(((optimise | "SUCCESS! (optimised)     --  " | "SUCCESS!                 --  "), file name, new line))
   ELSE
-    print(((optimise | "FAILED! (optimised)   --  " | "FAILED!               --  "), file name, new line));
+    print(((optimise | "FAILED! (optimised)      --  " | "FAILED!                  --  "), file name, new line));
     printf(($"Expected exit code " g(0) ", but got " g(0)l$, return value, actual return value));
     print(("=== EXPECTED OUTPUT ===", new line, output,        "===", new line));
     print(("=== GOT OUTPUT ===",      new line, actual output, "===", new line));
