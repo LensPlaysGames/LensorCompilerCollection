@@ -524,20 +524,24 @@ static Node *parse_if_expr(Parser *p) {
   Node *cond = parse_expr(p);
 
   /// Parse the "then" block.
-  Node *then_block = parse_block(p, true);
+  scope_push(p->ast);
+  Node *then_block = parse_expr(p);
+  scope_pop(p->ast);
 
   /// Parse the "else" block if there is one.
   Node *else_block = NULL;
   if (p->tok.type == TK_ELSE) {
     next_token(p);
-    else_block = parse_block(p, true);
+    scope_push(p->ast);
+    else_block = parse_expr(p);
+    scope_pop(p->ast);
   }
 
   /// Done.
   return ast_make_if(p->ast, if_loc, cond, then_block, else_block);
 }
 
-/// <expr-while>     ::= WHILE <expression> <expr-block>
+/// <expr-while>     ::= WHILE <expression> <expression>
 static Node *parse_while_expr(Parser *p) {
   /// Yeet "while".
   loc while_loc = p->tok.source_location;
@@ -547,7 +551,9 @@ static Node *parse_while_expr(Parser *p) {
   Node *cond = parse_expr(p);
 
   /// Parse the body.
-  Node *body = parse_block(p, true);
+  scope_push(p->ast);
+  Node *body = parse_expr(p);
+  scope_pop(p->ast);
 
   /// Done.
   return ast_make_while(p->ast, while_loc, cond, body);

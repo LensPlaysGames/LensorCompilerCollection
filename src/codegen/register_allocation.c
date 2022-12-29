@@ -115,6 +115,7 @@ void function_call_arguments(IRFunction *f, const MachineDescription *desc) {
 }
 
 void function_return_values(IRFunction *f, const MachineDescription *desc) {
+  if (f->type->function.return_type == f->context->ast->t_void) return;
   FOREACH_INSTRUCTION_IN_FUNCTION(f) {
     if (instruction->type == IR_RETURN) {
       IRInstruction *value = instruction->operand;

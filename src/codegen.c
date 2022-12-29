@@ -452,7 +452,6 @@ void codegen_function(CodegenContext *ctx, Node *node) {
 
   /// If the we can return from here, and this function doesn’t return void,
   /// then emit a return instruction; otherwise, just return 0 for now.
-  /// TODO: Allow ir_return(ctx, NULL) to be valid.
   if (!ir_is_closed(ctx->block) && node->type->function.return_type != ctx->ast->t_void) {
     ir_return(ctx, node->function.body->ir);
   }
@@ -516,13 +515,27 @@ bool codegen
     /// Codegen a FUN program.
     case LANG_FUN: {
       /// Create the main function.
-      context->entry = ir_function(context, literal_span("main"), 2);
+      Parameter argc =  {
+        .name = string_create("__argc__"),
+        .type = ast->t_integer,
+      };
+      Parameter argv =  {
+        .name = string_create("__argv__"),
+        .type = ast_make_type_pointer(ast, (loc){0}, ast_make_type_pointer(ast, (loc){0}, ast->t_integer)),
+      };
+
+      Parameters main_params = {0};
+      VECTOR_PUSH(main_params, argc);
+      VECTOR_PUSH(main_params, argv);
+
+      Type *main_type = ast_make_type_function(context->ast, (loc){0}, context->ast->t_integer, main_params);
+      context->entry = ir_function(context, literal_span("main"), main_type);
       context->entry->attr_global = true;
 
       /// Create the remaining functions and set the address of each function.
       VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
           func->function.ir = ir_function(context, as_span(func->function.name),
-            func->type->function.parameters.size);
+            func->type);
 
           /// Mark the function as extern if it is.
           if (!func->function.body) func->function.ir->is_extern = true;

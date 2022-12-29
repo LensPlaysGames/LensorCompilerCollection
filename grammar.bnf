@@ -23,8 +23,8 @@
                    | <decl-start> EXT <type-function>
 
 /// Other expressions.
-<expr-if>        ::= IF <expression> <expr-block> [ ELSE <expr-block> ]
-<expr-while>     ::= WHILE <expression> <expr-block>
+<expr-if>        ::= IF <expression> <expression> [ ELSE <expression> ]
+<expr-while>     ::= WHILE <expression> <expression>
 <expr-block>     ::= "{" { <expression> } "}"
 <expr-lambda>    ::= <type-function> <expr-block>
 <expr-call>      ::= <expression> "(" { <expression> [ "," ] } ")"

@@ -1,9 +1,6 @@
 fact : integer (n : integer) {
-  if n < 2 {
-    1
-  } else {
-    n * fact(n - 1)
-  }
+  if n < 2 1
+  else n * fact(n - 1)
 }
 
 fact(5)

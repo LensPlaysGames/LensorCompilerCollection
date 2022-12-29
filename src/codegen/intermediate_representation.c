@@ -420,9 +420,12 @@ void ir_block_attach
   context->block = new_block;
 }
 
-IRFunction *ir_function(CodegenContext *context, span name, size_t params) {
+IRFunction *ir_function(CodegenContext *context, span name, Type *function_type) {
+  ASSERT(function_type->kind == TYPE_FUNCTION, "Cannot create function of non-function type");
+
   IRFunction *function = calloc(1, sizeof(IRFunction));
   function->name = string_dup(name);
+  function->type = function_type;
 
   /// A function *must* contain at least one block, so we start new
   /// functions out with an empty block.
@@ -435,7 +438,7 @@ IRFunction *ir_function(CodegenContext *context, span name, size_t params) {
   VECTOR_PUSH(context->functions, function);
 
   /// Generate param refs.
-  for (u64 i = 1; i <= params; i++) {
+  for (u64 i = 1; i <= function_type->function.parameters.size; i++) {
     INSTRUCTION(param, IR_PARAMETER);
     param->imm = i - 1;
     param->id = (u32) i;
@@ -560,7 +563,7 @@ IRInstruction *ir_return(CodegenContext *context, IRInstruction* return_value) {
   INSTRUCTION(branch, IR_RETURN);
   branch->operand = return_value;
   INSERT(branch);
-  mark_used(return_value, branch);
+  if (return_value) mark_used(return_value, branch);
   return branch;
 }
 

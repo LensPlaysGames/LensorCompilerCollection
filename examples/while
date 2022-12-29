@@ -6,4 +6,4 @@ while cond {
   putchar(48 + cond)
   putchar(10)
 }
-cond
+

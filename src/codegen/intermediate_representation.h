@@ -189,6 +189,9 @@ typedef struct IRFunction {
   /// Pointer to the context that owns this function.
   CodegenContext *context;
 
+  /// The type of the function.
+  Type *type;
+
   // Unique ID (among functions)
   size_t id;
 
@@ -233,7 +236,7 @@ IRBlock *ir_block_create();
 void ir_block_attach_to_function(IRFunction *function, IRBlock *new_block);
 void ir_block_attach(CodegenContext *context, IRBlock *new_block);
 
-IRFunction *ir_function(CodegenContext *context, span name, size_t params);
+IRFunction *ir_function(CodegenContext *context, span name, Type *function_type);
 IRInstruction *ir_funcref(CodegenContext *context, IRFunction *function);
 
 void ir_force_insert_into_block(IRBlock *block, IRInstruction *new_instruction);
