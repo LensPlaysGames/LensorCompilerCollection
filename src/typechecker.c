@@ -157,7 +157,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       /// If the last expression in the root is not of type integer,
       /// add a literal 0 so that `main()` returns 0.
-      if (!expr->root.children.size || VECTOR_BACK(expr->root.children)->type != ast->t_integer) {
+      if (!expr->root.children.size || !types_equal(VECTOR_BACK(expr->root.children)->type, ast->t_integer)) {
         Node *lit = ast_make_integer_literal(ast, (loc){0}, 0);
         VECTOR_PUSH(expr->root.children, lit);
         lit->parent = expr;
