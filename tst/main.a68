@@ -1,9 +1,10 @@
 #!/usr/bin/a68g
 
 PROC platform is windows = BOOL: get env ("WINDIR") NE "";
-STRING platform dir sep  = (platform is windows | "\"    | "/" );
-STRING executable suffix = (platform is windows | ".exe" | ""  );
-STRING executable prefix = (platform is windows | ""     | "./");
+STRING platform dir sep   = (platform is windows | "\"     | "/"    );
+STRING executable suffix  = (platform is windows | ".exe"  | ""     );
+STRING executable prefix  = (platform is windows | ""      | "./"   );
+STRING calling convention = (platform is windows | "MSWIN" | "LINUX");
 
 CO Get the exit code of a program. CO
 PROC wexitstatus = (INT status) INT: (platform is windows | status | ABS ((BIN status SHR 8) AND BIN 255));
@@ -73,7 +74,9 @@ CO Compile a test and check if it passes CO
 PROC compile and test = (STRING file name, INT return value, STRING output, BOOL optimise) VOID:
 BEGIN
   IF sh(".." + platform dir sep + "bld" + platform dir sep + "func -o test.S " 
-             + (optimise | " -O " | "") + file name) /= 0 THEN
+             + (optimise | " -O " | "") 
+             + "-cc " + calling convention + " "
+             + file name) /= 0 THEN
     print("FUNC ERROR!");
     stop
   FI;
