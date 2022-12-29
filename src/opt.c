@@ -620,6 +620,9 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
   BlockVector blocks_to_remove = {0};
 
   /// Remove blocks that consist of a single direct branch.
+  ///
+  /// Also simplify conditional branches whose true and false
+  /// blocks are the same.
   DLIST_FOREACH (IRBlock*, b, f->blocks) {
     IRInstruction *last = b->instructions.last;
     if (last == b->instructions.first && last->type == IR_BRANCH) {
@@ -660,6 +663,14 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
       bool found = false;
       VECTOR_CONTAINS(blocks_to_remove, b, found);
       if (!found) VECTOR_PUSH(blocks_to_remove, b);
+      changed = true;
+    }
+
+    /// Simplify branches.
+    else if (last->type == IR_BRANCH_CONDITIONAL && last->cond_br.then == last->cond_br.else_) {
+      last->type = IR_BRANCH;
+      ir_remove_use(last->cond_br.condition, last);
+      last->destination_block = last->cond_br.then;
       changed = true;
     }
   }

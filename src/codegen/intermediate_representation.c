@@ -117,8 +117,8 @@ void ir_remove(IRInstruction* instruction) {
   /// Parameters / static refs should not be freed here.
   if (instruction->type != IR_PARAMETER && instruction->type != IR_STATIC_REF) {
     free(instruction);
-  } else if (instruction->type == IR_PARAMETER) {
-    VECTOR_PUSH(instruction->parent_block->function->context->removed_parameter_instructions, instruction);
+  } else {
+    VECTOR_PUSH(instruction->parent_block->function->context->removed_instructions, instruction);
   }
 }
 

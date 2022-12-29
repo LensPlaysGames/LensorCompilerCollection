@@ -51,7 +51,7 @@ struct CodegenContext {
 
   VECTOR(IRFunction *) functions;
   VECTOR(IRStaticVariable *) static_vars;
-  VECTOR(IRInstruction*) removed_parameter_instructions;
+  VECTOR(IRInstruction*) removed_instructions;
   IRFunction *function;
   IRFunction *entry;
   IRBlock *block;
