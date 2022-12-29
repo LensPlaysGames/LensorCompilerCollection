@@ -1,5 +1,15 @@
+#!/usr/bin/a68g
+
 PROC platform is windows = BOOL: get env ("WINDIR") NE "";
-STRING platform dir sep = IF platform is windows THEN "\" ELSE "/" FI;
+STRING platform dir sep  = (platform is windows | "\"    | "/" );
+STRING executable suffix = (platform is windows | ".exe" | ""  );
+STRING executable prefix = (platform is windows | ""     | "./");
+
+CO Get the exit code of a program. CO
+PROC wexitstatus = (INT status) INT: (platform is windows | status | ABS ((BIN status SHR 8) AND BIN 255));
+
+CO Helper because system() returns the exit status, not the exit code CO
+PROC sh = (STRING cmd) INT: (platform is windows | system(cmd) | wexitstatus (system (cmd)));
 
 PROC string to number = (STRING s) INT: BEGIN
   INT out := 0;
@@ -59,6 +69,34 @@ BEGIN
   return: retval
 END;
 
+CO Compile a test and check if it passes CO
+PROC compile and test = (STRING file name, INT return value, STRING output, BOOL optimise) VOID:
+BEGIN
+  IF sh(".." + platform dir sep + "bld" + platform dir sep + "func -o test.S " 
+             + (optimise | " -O " | "") + file name) /= 0 THEN
+    print("FUNC ERROR!");
+    stop
+  FI;
+  IF sh("gcc test.S -o test" + executable suffix) /= 0 THEN
+    print("GCC ERROR!");
+    stop
+  FI;
+
+  INT actual return value := sh(executable prefix + "test" + executable suffix + " > out.txt");
+  STRING actual output := "";
+
+  IF compare expected (return value, output, actual return value, actual output)
+  THEN
+    print(((optimise | "SUCCESS! (optimised)  --  " | "SUCCESS!              --  "), file name, new line))
+  ELSE
+    print(((optimise | "FAILED! (optimised)   --  " | "FAILED!               --  "), file name, new line));
+    printf(($"Expected exit code " g(0) ", but got " g(0)l$, return value, actual return value));
+    print(("=== EXPECTED OUTPUT ===", new line, output,        "===", new line));
+    print(("=== GOT OUTPUT ===",      new line, actual output, "===", new line));
+    stop
+  FI
+END;
+
 PROC run test = (STRING file name) VOID:
 BEGIN
   FILE f;
@@ -99,55 +137,12 @@ BEGIN
     output +:= new line char
   OD;
 
+  CO Close the file CO
+  close (f);
+
   CO Compile program CO
-  IF system(".." + platform dir sep +  "bld" + platform dir sep + "func -o test.S " + file name) /= 0 THEN
-    print("FUNC ERROR!");
-    stop
-  FI;
-  IF system("gcc test.S -o test.exe") /= 0 THEN
-    print("GCC ERROR!");
-    stop
-  FI;
-  INT actual return value := system("test.exe > out.txt");
-  STRING actual output := "";
-
-  IF compare expected (return value, output, actual return value, actual output)
-  THEN
-    print(("SUCCESS!              --  ", file name, new line))
-  ELSE
-    print(("FAILED!               --  ", file name, new line));
-    print((return value,         new line));
-    print((actual return value,  new line));
-    print(("=== EXPECTED ===", new line, output,        "===", new line));
-    print(("=== GOT ===",      new line, actual output, "===", new line));
-    stop
-  FI;
-
-  CO Compile optimised program CO
-  IF system(".." + platform dir sep +  "bld" + platform dir sep + "func -O -o test.S " + file name) /= 0 THEN
-    print("FUNC ERROR!");
-    stop
-  FI;
-  IF system("gcc test.S -o test.exe") /= 0 THEN
-    print("GCC ERROR!");
-    stop
-  FI;
-  actual return value := system("test.exe > out.txt");
-  actual output := "";
-
-  IF compare expected (return value, output, actual return value, actual output)
-  THEN
-    print(("SUCCESS (optimised)!  --  ", file name, new line))
-  ELSE
-    print(("FAILED! (optimised)   --  ", file name, new line));
-    print((return value,         new line));
-    print((actual return value,  new line));
-    print(("=== EXPECTED ===", new line, output,        "===", new line));
-    print(("=== GOT ===",      new line, actual output, "===", new line));
-    stop
-  FI;
-
-  close (f)
+  compile and test (file name, return value, output, FALSE);
+  compile and test (file name, return value, output, TRUE)
 END;
 
 [] STRING tests = get directory ("tests");
