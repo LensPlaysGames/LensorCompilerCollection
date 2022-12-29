@@ -6,6 +6,12 @@ STRING executable suffix  = (platform is windows | ".exe"  | ""     );
 STRING executable prefix  = (platform is windows | ""      | "./"   );
 STRING calling convention = (platform is windows | "MSWIN" | "LINUX");
 
+CO Statistics CO
+INT tests run := 0;
+INT tests failed := 0;
+INT tests errored := 0;
+INT tests skipped := 0;
+
 CO Get the exit code of a program. CO
 PROC wexitstatus = (INT status) INT: (platform is windows | status | ABS ((BIN status SHR 8) AND BIN 255));
 
@@ -39,7 +45,7 @@ BEGIN
   CO open out.txt, compare contents with `output` CO
   FILE out;
   IF open (out, "out.txt", stand in channel) /= 0 THEN
-    print("ERROR!");
+    print(("ERROR: Could not open 'out.txt'", new line));
     stop
   FI;
 
@@ -71,18 +77,43 @@ BEGIN
 END;
 
 CO Compile a test and check if it passes CO
-PROC compile and test = (STRING file name, INT return value, STRING output, BOOL optimise) VOID:
+PROC compile and test = (
+  STRING file name, 
+  INT return value, 
+  STRING output, 
+  BOOL expect error,
+  BOOL optimise
+) VOID:
 BEGIN
+  tests run +:= 1;
+
+  CO Compile the program to ASM CO
   IF sh(".." + platform dir sep + "bld" + platform dir sep + "func -o test.S " 
              + (optimise | " -O " | "") 
              + "-cc " + calling convention + " "
              + file name) /= 0 THEN
-    print(((optimise | "FUNC ERROR! (optimised)  --  " | "FUNC ERROR!              --  "), file name, new line));
-    stop
+    IF expect error THEN
+      print(((optimise | "SUCCESS! (optimised)     --  " | "SUCCESS!                 --  "), file name, new line))
+    ELSE
+      print(((optimise | "ERRORED! (optimised)     --  " | "ERRORED!                 --  "), file name, new line));
+      tests errored +:= 1
+    FI;
+    GO TO return
   FI;
+
+  CO Assemble it CO
   IF sh("gcc test.S -o test" + executable suffix) /= 0 THEN
-    print(((optimise | "GCC ERROR! (optimised)   --  " | "GCC ERROR!               --  "), file name, new line));
-    stop
+    print(((optimise | "ERRORED! (optimised)     --  " | "ERRORED!                 --  "), file name, new line));
+    tests errored +:= 1;
+    GO TO return
+  FI;
+
+  CO If the test should error, then we shouldn’t even get here CO
+  IF expect error THEN
+    print(((optimise | "FAILED!  (optimised)     --  " | "FAILED!                  --  "), file name, new line));    
+    print(("    Expected error, but test compiled successfully", new line));
+    tests failed +:= 1;
+    GO TO return
   FI;
 
   INT actual return value := sh(executable prefix + "test" + executable suffix + " > out.txt");
@@ -96,8 +127,10 @@ BEGIN
     printf(($"Expected exit code " g(0) ", but got " g(0)l$, return value, actual return value));
     print(("=== EXPECTED OUTPUT ===", new line, output,        "===", new line));
     print(("=== GOT OUTPUT ===",      new line, actual output, "===", new line));
-    stop
-  FI
+    tests failed +:= 1
+  FI;
+
+  return: SKIP
 END;
 
 PROC run test = (STRING file name) VOID:
@@ -129,13 +162,27 @@ BEGIN
   IF str[1] /= REPR 59 THEN
     print(("ERROR!  First line does not start with comment!.", new line));
     stop
-  FI;
+  FI;  
 
   CO Cut off comment delimiters CO
   str := str[3..];
 
-  CO Convert string into a number CO
+  CO Check for special strings CO
+  IF str EQ "SKIP" THEN
+    print(("SKIPPED!                 --  ", file name, new line));
+    print(("SKIPPED! (optimised)     --  ", file name, new line));
+    tests skipped +:= 1;
+    GO TO return
+  FI;
 
+  BOOL expect error := FALSE;
+  IF str EQ "ERROR" THEN     
+    expect error := TRUE;
+    get (f, (str, new line));
+    str := str[3..]
+  FI; 
+
+  CO Convert string into a number CO
   INT return value = string to number(str);
 
   CO Collect expected stdout... CO
@@ -150,14 +197,25 @@ BEGIN
   close (f);
 
   CO Compile program CO
-  compile and test (file name, return value, output, FALSE);
-  compile and test (file name, return value, output, TRUE)
+  compile and test (file name, return value, output, expect error, FALSE);
+  compile and test (file name, return value, output, expect error, TRUE);
+
+  return: SKIP
 END;
 
 [] STRING tests = get directory ("tests");
 
+CO Run tests CO
 FOR index FROM LWB tests TO UPB tests DO
   IF file is regular ("tests/" + tests[index]) THEN
     run test ("tests/" + tests[index])
   FI
-OD
+OD;
+
+CO Print summary CO 
+printf (($"SUMMARY:" l
+          "    Tests run:     " g(0) l
+          "    Tests failed:  " g(0) l
+          "    Tests errored: " g(0) l
+          "    Tests skipped: " g(0) l$,
+          tests run, tests failed, tests errored, tests skipped))
