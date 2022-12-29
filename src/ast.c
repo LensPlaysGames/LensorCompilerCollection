@@ -438,6 +438,23 @@ usz ast_sizeof(const Type *type) {
   }
 }
 
+Typeinfo ast_typeinfo(AST *ast, Type * const type) {
+  /// Resolve aliases.
+  Type *base = type;
+  Type *alias = type;
+  while (base && base->kind == TYPE_NAMED) {
+    alias = base;
+    base = base->named ? base->named->type : NULL;
+  }
+
+  return (Typeinfo){
+    .type = base,
+    .last_alias = alias,
+    .is_incomplete = !base,
+    .is_void = alias == ast->t_void,
+  };
+}
+
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================
@@ -467,6 +484,7 @@ AST *ast_create() {
 
   /// Add the builtin types to the global scope.
   scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("integer"), ast->t_integer);
+  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("void"), ast->t_void);
 
   /// Done.
   return ast;

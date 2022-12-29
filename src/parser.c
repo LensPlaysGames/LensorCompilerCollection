@@ -802,34 +802,39 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     }
   }
 
+  /// Strip typedefs.
+  Typeinfo actual_type = ast_typeinfo(p->ast, type);
+
+  /// Strip arrays and recursive typedefs.
+  Type *base_type = actual_type.type;
+  while (base_type) {
+    if (base_type->kind == TYPE_NAMED) base_type = base_type->named ? base_type->named->type : NULL;
+    else if (base_type->kind == TYPE_ARRAY) base_type = base_type->array.of;
+    else break;
+  }
+
+  /// Make sure this isn’t an array of incomplete type.
+  if (actual_type.is_incomplete || !base_type) {
+    string name = ast_typename(type, false);
+    ERR_DO(free(name.data), type->source_location, "Cannot declare %s of incomplete type '%.*s'",
+      actual_type.is_incomplete ? "variable" : "array", (int) name.size, name.data);
+  }
+
+  /// This is also not allowed.
+  if (actual_type.type->kind == TYPE_FUNCTION || base_type->kind == TYPE_FUNCTION) {
+    string name = ast_typename(type, false);
+    ERR_DO(free(name.data), type->source_location, "Cannot declare %s of function type '%.*s'",
+     actual_type.is_incomplete ? "variable" : "array", (int) name.size, name.data);
+  }
+
   /// Create the declaration.
   Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
   decl->declaration.static_ = !p->in_function;
 
   /// Add the declaration to the current scope.
-  Symbol *sym = scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
-  if (!sym) {
-    /// If the symbol already exists, then this is an error; the exception
-    /// to this is if the symbol is a forward-declared function and this is
-    /// a declaration of a variable of function type.
-    Type *actual_type = type;
-    while (actual_type->kind == TYPE_NAMED && actual_type->named->type) actual_type = actual_type->named->type;
-    if (actual_type->kind == TYPE_FUNCTION) {
-      sym = scope_find_symbol(curr_scope(p), ident.text, true);
-      if (sym->kind == SYM_FUNCTION && !sym->node) {
-        sym->kind = SYM_VARIABLE;
-        sym->node = decl;
-        goto ok;
-      }
-    }
-
-    /// Otherwise, this is an error.
-    ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
-  }
-ok:
+  scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
 
   /// A non-external declaration may have an initialiser.
-  /// TODO: Should we just allow this instead?
   if (p->tok.type == TK_EQ) {
     if (is_ext) ERR("An \"ext\" declaration may not have an initialiser");
     next_token(p);
@@ -838,21 +843,6 @@ ok:
     /// may appear in its initialiser, albeit only in unevaluated contexts.
     decl->declaration.init = parse_expr(p);
     decl->declaration.init->parent = decl;
-  }
-
-  /// Strip array types and resolve named types.
-  Type *const saved_type = type;
-  while (type) {
-    if (type->kind == TYPE_NAMED) type = type->named->type;
-    else if (type->kind == TYPE_ARRAY) type = type->array.of;
-    else break;
-  }
-
-  /// Make sure we’re not trying to declare a variable of incomplete type.
-  if (!type) {
-    string name = ast_typename(saved_type, false);
-    ERR_DO(free(name.data), decl->source_location, "Cannot declare a variable of incomplete type \"%.*s\"",
-      (int) name.size, name.data);
   }
 
   /// Done.

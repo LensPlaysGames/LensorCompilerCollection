@@ -507,6 +507,20 @@ Type *ast_make_type_function(
 /// ===========================================================================
 ///  AST query functions.
 /// ===========================================================================
+/// Info about a type.
+typedef struct Typeinfo {
+  /// The type stripped of aliases etc. May be NULL
+  /// if the type is incomplete.
+  Type *type;
+
+  /// The last alias in the chain.
+  Type *last_alias;
+
+  /// Flags.
+  bool is_void : 1;
+  bool is_incomplete : 1;
+} Typeinfo;
+
 /// Get a string representation of a type.
 /// \return The string representation of the type. The string is allocated
 ///         as if with `malloc` and must be freed by the caller.
@@ -517,6 +531,9 @@ bool ast_type_is_incomplete(const Type *type);
 
 /// Get the size of a type.
 usz ast_sizeof(const Type *type);
+
+/// Get information about a type.
+Typeinfo ast_typeinfo(AST *ast, Type *type);
 
 /// ===========================================================================
 ///  Miscellaneous AST functions.
