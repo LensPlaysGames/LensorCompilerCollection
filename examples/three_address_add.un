@@ -1,0 +1,6 @@
+add : integer (a: integer, b : integer) {
+    ; This is optimised to a single LEA instruction.
+    a + b
+}
+
+add(1, 2)
