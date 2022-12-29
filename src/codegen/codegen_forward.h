@@ -33,7 +33,11 @@ enum CodegenCallingConvention {
   CG_CALL_CONV_LINUX,
   CG_CALL_CONV_COUNT,
 
+#ifndef _WIN32
+  CG_CALL_CONV_DEFAULT = CG_CALL_CONV_LINUX,
+#else
   CG_CALL_CONV_DEFAULT = CG_CALL_CONV_MSWIN,
+#endif
 };
 
 enum CodegenLanguage {
