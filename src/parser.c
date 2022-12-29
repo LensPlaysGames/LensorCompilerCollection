@@ -597,8 +597,7 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
   }
 
   /// Parse the body.
-  /// TODO: We could also just allow <expression> here.
-  Node *block = parse_block(p, false);
+  Node *block = parse_expr(p);
 
   /// Pop the scope.
   scope_pop(p->ast);
@@ -758,7 +757,7 @@ static Type *parse_type(Parser *p) {
 }
 
 /// <expr-decl>      ::= <decl-start> <decl-rest>
-/// <decl-rest>      ::= <type-function> <expr-block>
+/// <decl-rest>      ::= <type-function> <expression>
 ///                    | <type> [ "=" <expression> ]
 ///                    | <decl-start> EXT <type-function>
 static Node *parse_decl_rest(Parser *p, Token ident) {
@@ -772,42 +771,36 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   /// Parse the type.
   Type *type = parse_type(p);
 
-  /// If the next token is "{", and the type is a function type, and this
-  /// is not an external declaration, then this is a function definition.
-  /// TODO: are we handling external symbols correctly?
-  if (!is_ext && p->tok.type == TK_LBRACE && type->kind == TYPE_FUNCTION) {
-    /// Create a symbol table entry before parsing the body.
-    Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
-    if (sym->kind != SYM_FUNCTION || sym->node)
-      ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+  /// If the type is a function type, parse the body if it isn’t extern.
+  if (type->kind == TYPE_FUNCTION) {
+    /// Not external.
+    if (!is_ext) {
+      /// Create a symbol table entry before parsing the body.
+      Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+      if (sym->kind != SYM_FUNCTION || sym->node)
+        ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
 
-    /// Parse the body, create the function, and update the symbol table.
-    Nodes params = {0};
-    Node *body = parse_function_body(p, type, &params);
-    Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
-    sym->node = func;
-    return ast_make_function_reference(p->ast, ident.source_location, sym);
+      /// Parse the body, create the function, and update the symbol table.
+      Nodes params = {0};
+      Node *body = parse_function_body(p, type, &params);
+      Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
+      sym->node = func;
+      return ast_make_function_reference(p->ast, ident.source_location, sym);
+    }
+
+    /// External.
+    else {
+      /// Create a symbol table entry.
+      Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+      if (sym->kind != SYM_FUNCTION || sym->node)
+        ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+
+      /// Create the function.
+      Node *func = ast_make_function(p->ast, ident.source_location, type, (Nodes){0}, NULL, ident.text);
+      sym->node = func;
+      return ast_make_function_reference(p->ast, ident.source_location, sym);
+    }
   }
-
-  /// If this is an EXT declaration, and the type is a function type,
-  /// then this is an external function declaration.
-  if (is_ext && type->kind == TYPE_FUNCTION) {
-    /// Create a symbol table entry.
-    Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
-    if (sym->kind != SYM_FUNCTION || sym->node)
-      ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
-
-    /// Create the function.
-    Node *func = ast_make_function(p->ast, ident.source_location, type, (Nodes){0}, NULL, ident.text);
-    sym->node = func;
-    return ast_make_function_reference(p->ast, ident.source_location, sym);
-  }
-
-  /// Otherwise, this is a variable declaration.
-  ///
-  /// If we’re declaring a variable of function type,
-  /// convert it to a function pointer instead.
-  if (type->kind == TYPE_FUNCTION) type = ast_make_type_pointer(p->ast, type->source_location, type);
 
   /// Create the declaration.
   Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
