@@ -71,8 +71,6 @@ BEGIN
 
   STRING str;
 
-  CO TODO: maybe don't just assume that every test is perfectly formed. CO
-
   CO Read first line as status return value CO
   get(f, (str, new line));
 
