@@ -108,6 +108,12 @@ BEGIN
     stop
   FI;
 
+  on logical file end (f, (REF FILE unused) BOOL: 
+  BEGIN
+    print(("ERROR! Test file ", file name, " does not contain a valid test!", new line));
+    stop
+  END);
+
   CO Save initial file contents as expected output. CO
 
   STRING str;
