@@ -113,7 +113,7 @@ Examples include addition (+) and subtraction (-)."
              (negation-char-regex    (regexp-opt '("!")))
              (number-regex           (rx (one-or-more digit)))
              (builtin-types-regex    (rx (zero-or-more "@")
-                                         (or "integer")))
+                                         (or "integer" "void")))
              (function-name-regex
               (rx (seq
                    ;; Function name
