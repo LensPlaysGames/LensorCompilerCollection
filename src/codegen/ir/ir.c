@@ -59,7 +59,8 @@ void codegen_emit_ir_backend(CodegenContext *context) {
           } break;
 
           case IR_RETURN:
-            fprintf(context->code, "ret %%%u", instruction->operand->id);
+            if (instruction->operand) fprintf(context->code, "ret %%%u", instruction->operand->id);
+            else fprintf(context->code, "ret");
             break;
 #define PRINT_BINARY_INSTRUCTION(enumerator, name) \
   case IR_##enumerator: fprintf(context->code, #name " %%%u, %%%u", instruction->lhs->id, instruction->rhs->id); break;

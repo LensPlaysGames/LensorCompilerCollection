@@ -17,6 +17,7 @@ void print_usage(char **argv) {
          "   `--callings`      :: List acceptable calling conventions.\n"
          "   `--dialects`      :: List acceptable assembly dialects.\n"
          "   `--debug-ir`      :: Dump IR to stdout (in debug format).\n"
+         "   `--codegen-only`  :: When --debug-ir is enabled: Dump IR after codegen.\n"
          "   `--print-ast      :: Print the AST and exit.\n"
          "   `--syntax-only    :: Perform no semantic analysis.\n"
          "   `--print-scopes   :: Print the scope tree and exit.\n"
@@ -45,6 +46,7 @@ bool syntax_only = false;
 bool print_scopes = false;
 bool prefer_using_diagnostics_colours = true;
 bool colours_blink = false;
+bool codegen_only = false;
 
 void print_acceptable_formats() {
   printf("Acceptable formats include:\n"
@@ -98,6 +100,8 @@ int handle_command_line_arguments(int argc, char **argv) {
     } else if (strcmp(argument, "--dialects") == 0) {
       print_acceptable_asm_dialects();
       exit(0);
+    } else if (strcmp(argument, "--codegen-only") == 0) {
+      codegen_only = true;
     } else if (strcmp(argument, "--debug-ir") == 0) {
       debug_ir = true;
     } else if (strcmp(argument, "--print-ast") == 0) {

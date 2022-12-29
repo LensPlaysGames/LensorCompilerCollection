@@ -215,7 +215,10 @@ void ir_femit_instruction
     fprintf(file, "%s.ref %s%.*s", KW, FUNC, (int) inst->function_ref->name.size, inst->function_ref->name.data);
     break;
 
-  case IR_RETURN: fprintf(file, "%sret %s%%%u", Y, TMP, inst->operand->id); break;
+  case IR_RETURN:
+    if (inst->operand) fprintf(file, "%sret %s%%%u", Y, TMP, inst->operand->id);
+    else fprintf(file, "%sret", Y);
+    break;
 
 #define PRINT_BINARY_INSTRUCTION(enumerator, name) case IR_##enumerator: \
     fprintf(file, "%s" #name " %s%%%u%s, %s%%%u", Y, TMP, inst->lhs->id, KW, TMP, inst->rhs->id); break;
@@ -673,9 +676,12 @@ void ir_for_each_child(
     break;
   case IR_LOAD:
   case IR_COPY:
-  case IR_RETURN:
   case IR_NOT:
     callback(user, &user->operand, data);
+    break;
+
+  case IR_RETURN:
+    if (user->operand) callback(user, &user->operand, data);
     break;
 
   case IR_STORE:

@@ -455,6 +455,10 @@ Typeinfo ast_typeinfo(AST *ast, Type * const type) {
   };
 }
 
+bool ast_is_void(AST *ast, Type *type) {
+  return ast_typeinfo(ast, type).is_void;
+}
+
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================

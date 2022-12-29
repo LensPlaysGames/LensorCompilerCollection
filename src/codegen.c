@@ -139,15 +139,13 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// Root node.
   case NODE_ROOT: {
     /// Emit everything that isn’t a function.
-    Node *last = NULL;
     VECTOR_FOREACH_PTR (Node *, child, expr->root.children) {
       if (child->kind == NODE_FUNCTION) continue;
-      last = child;
       codegen_expr(ctx, child);
     }
 
     /// If the last expression doesn’t return anything, return 0.
-    if (!ir_is_closed(ctx->block)) ir_return(ctx, last ? last->ir : ir_immediate(ctx, 0));
+    if (!ir_is_closed(ctx->block)) ir_return(ctx, VECTOR_BACK(expr->root.children)->ir);
     return;
   }
 
@@ -216,7 +214,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     ir_block_attach(ctx, join_block);
 
     /// Insert a phi node for the result of the if in the join block.
-    if (expr->type != ctx->ast->t_void) {
+    if (!ast_is_void(ctx->ast, expr->type)) {
       IRInstruction *phi = ir_phi(ctx);
       ir_phi_argument(phi, last_then_block, expr->if_.then->ir);
       ir_phi_argument(phi, last_else_block, expr->if_.else_->ir);
@@ -286,7 +284,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       /// The yield of a block is that of its last expression;
       /// If a block doesn’t yield `void`, then it is guaranteed
       /// to not be empty, which is why we don’t check its size here.
-      if (expr->type != ctx->ast->t_void) {
+      if (!ast_is_void(ctx->ast, expr->type)) {
         ASSERT(last && last->ir);
         expr->ir = last->ir;
       }
@@ -451,9 +449,11 @@ void codegen_function(CodegenContext *ctx, Node *node) {
   codegen_expr(ctx, node->function.body);
 
   /// If the we can return from here, and this function doesn’t return void,
-  /// then emit a return instruction; otherwise, just return 0 for now.
-  if (!ir_is_closed(ctx->block) && node->type->function.return_type != ctx->ast->t_void) {
+  /// then return the return value; otherwise, just return nothing.
+  if (!ir_is_closed(ctx->block) && !ast_is_void(ctx->ast, node->type->function.return_type)) {
     ir_return(ctx, node->function.body->ir);
+  } else {
+    ir_return(ctx, NULL);
   }
 }
 
@@ -562,17 +562,12 @@ bool codegen
 
   if (optimise) codegen_optimise(context);
 
-/*
-  ir_set_ids(context);
-  ir_femit(stdout, context);
-  exit(42);*/
+  if (debug_ir && codegen_only) {
+    ir_femit(stdout, context);
+    exit(0);
+  }
 
   codegen_lower(context);
-
-/*  if (debug_ir) {
-    printf("Backend Lowered\n");
-    ir_femit(stdout, context);
-  }*/
 
   codegen_emit(context);
 

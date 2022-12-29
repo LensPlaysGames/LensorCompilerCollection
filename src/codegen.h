@@ -10,6 +10,7 @@
 #include <vector.h>
 
 extern bool debug_ir;
+extern bool codegen_only;
 
 CodegenContext *codegen_context_create
 (AST *ast,

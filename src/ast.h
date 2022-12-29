@@ -535,6 +535,9 @@ usz ast_sizeof(const Type *type);
 /// Get information about a type.
 Typeinfo ast_typeinfo(AST *ast, Type *type);
 
+/// Check if a type is void.
+bool ast_is_void(AST *ast, Type *type);
+
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================
