@@ -829,7 +829,9 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
 
   /// Create the declaration.
   Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
-  decl->declaration.static_ = !p->in_function;
+
+  /// Make the variable static if we’re at global scope.
+  decl->declaration.static_ = p->ast->scope_stack.size == 1;
 
   /// Add the declaration to the current scope.
   scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
