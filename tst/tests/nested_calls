@@ -1,0 +1,7 @@
+; 2
+
+a : integer(n : integer) {
+  n + 1
+}
+
+a(a(0))

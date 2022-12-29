@@ -1,0 +1,12 @@
+; 69
+
+;; Using a pointer to mutate an integer variable that may be created at
+;; any time!
+bar : integer (ptr : @integer) {
+  @ptr := 69
+  0
+}
+
+number : integer
+bar(&number)
+number

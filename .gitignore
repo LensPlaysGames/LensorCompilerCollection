@@ -13,9 +13,7 @@
 **/debug
 **/rls
 **/release
-**/test*
-**/*test
-**/*out*
+*/*out*
 # Language Server
 **/compile_commands.json
 
