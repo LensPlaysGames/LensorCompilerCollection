@@ -169,6 +169,45 @@
    `((comment) @font-lock-comment-face)
    ))
 
+(defcustom un-ts-mode-indent-amount 2
+  "The amount of space characters that each level of parenthesis nesting
+in the unnamed language source code will be indented."
+  :group 'un-ts-mode)
+
+(defun un-ts--indent-line ()
+  "Indent a line in the unnamed programming language Lens made for fun."
+  (let ((indent)
+        (boi-predicate)
+        (should-move-eol)
+        (point (point)))
+    (save-excursion
+      ;; Move 'point' backwards to end of indentation, if any.
+      (back-to-indentation)
+      ;; Use the partial parsing syntax state or whatever to get
+      ;; parenthesis nesting level. This value is calculated using
+      ;; data from the syntax table up above.
+      (setq indent (car (syntax-ppss))
+            boi-predicate (= (point) point))
+      (if boi-predicate
+          ;; If we began at the beginning of the line (after indentation),
+          ;; we need to move point to after inserted indentation.
+          (setq should-move-eol t)
+        ;; If not at beginning of indentation but at a newline, do not
+        ;; indent anything at all. FIXME: Is this misleading?
+        (when (eq (char-after) ?\n)
+          (setq indent 0)))
+      ;; Closing parenthesis characters are indented at parent level.
+      (when (or
+             (eq (char-after) ?\))
+             (eq (char-after) ?\}))
+        (setq indent (1- indent)))
+      ;; Get rid of existing indentation, if any.
+      (delete-region (line-beginning-position) (point))
+      ;; Indent to proper amount based on customizable value.
+      (indent-to (* indent un-ts-mode-indent-amount)))
+    (when should-move-eol
+      (move-end-of-line nil))))
+
 ;;;###autoload
 (define-derived-mode un-ts-mode--base-mode prog-mode "un"
   "Major mode for editing un, powered by tree-sitter. "
@@ -198,8 +237,12 @@
   (setq-local comment-start ";;")
   (setq-local comment-end   "")
 
-  ;; TODO: What do we set this to?
-  ;;(setq-local treesit-simple-indent-rules nil)
+  ;; TODO: Maybe actually write a tree sitter indent function.
+  ;; Use `C-h f treesit-simple-indent RET`
+  (setq-local treesit-simple-indent-rules nil)
+
+  ;; Syntax table indent
+  (setq indent-line-function #'un--indent-line)
 
   ;; Font-lock.
   (setq-local treesit-font-lock-settings
