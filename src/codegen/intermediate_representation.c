@@ -710,8 +710,10 @@ void ir_for_each_child(
 
 bool ir_is_value(IRInstruction *instruction) {
   STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
+  // NOTE: If you are changing this switch, you also need to change
+  // `needs_register()` in register_allocation.c
   switch (instruction->type) {
-    default: UNREACHABLE();
+    default: TODO("Handle %d IR instruction type in ir_is_value()", instruction->type);
     case IR_IMMEDIATE:
     case IR_CALL:
     case IR_LOAD:
@@ -722,6 +724,7 @@ bool ir_is_value(IRInstruction *instruction) {
     case IR_ALLOCA:
     case IR_STATIC_REF:
     case IR_FUNC_REF:
+    case IR_NOT:
     ALL_BINARY_INSTRUCTION_CASES()
       return true;
 

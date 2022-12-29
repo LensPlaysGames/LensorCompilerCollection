@@ -152,6 +152,7 @@ bool needs_register(IRInstruction *instruction) {
     case IR_IMMEDIATE:
     case IR_CALL:
     case IR_REGISTER:
+    case IR_NOT:
     ALL_BINARY_INSTRUCTION_CASES()
       return true;
 
