@@ -397,7 +397,15 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
         /// Load a value from an lvalue.
         /// Emitting an lvalue loads it, so we don’t need to do anything here.
-        case TK_AT: expr->ir = expr->unary.value->ir; return;
+        case TK_AT:
+          /// TODO: This check for a function pointer is a bit sus. We shouldn’t
+          ///       even get here if this is actually a function pointer...
+          if (expr->unary.value->type->pointer.to->kind == TYPE_FUNCTION) {
+            expr->ir = expr->unary.value->ir;
+          } else {
+            expr->ir = ir_load(ctx, expr->unary.value->ir);
+          }
+          return;
 
         /// One’s complement negation.
         case TK_TILDE: expr->ir = ir_not(ctx, expr->unary.value->ir); return;
