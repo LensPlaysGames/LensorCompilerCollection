@@ -33,7 +33,7 @@ void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
 
 bool ir_is_branch(IRInstruction* i) {
   STATIC_ASSERT(IR_COUNT == 32, "Handle all branch types.");
-  switch (i->type) {
+  switch (i->kind) {
     case IR_BRANCH:
     case IR_BRANCH_CONDITIONAL:
     case IR_RETURN:
@@ -115,7 +115,7 @@ void ir_remove(IRInstruction* instruction) {
   vector_delete(instruction->users);
   ir_unmark_usees(instruction);
   /// Parameters / static refs should not be freed here.
-  if (instruction->type != IR_PARAMETER && instruction->type != IR_STATIC_REF) {
+  if (instruction->kind != IR_PARAMETER && instruction->kind != IR_STATIC_REF) {
     free(instruction);
   } else {
     vector_push(instruction->parent_block->function->context->removed_instructions, instruction);
@@ -126,9 +126,9 @@ void ir_remove_and_free_block(IRBlock *block) {
   /// Remove all instructions from the block.
   while (block->instructions.first) {
     /// Remove this instruction from PHIs.
-    if (block->instructions.first->type == IR_PHI) {
+    if (block->instructions.first->kind == IR_PHI) {
       foreach_ptr (IRInstruction *, user, block->instructions.first->users) {
-            if (user->type == IR_PHI) ir_phi_remove_argument(user, block);
+            if (user->kind == IR_PHI) ir_phi_remove_argument(user, block);
         }
     }
 
@@ -142,7 +142,7 @@ void ir_remove_and_free_block(IRBlock *block) {
 void ir_free_instruction_data(IRInstruction *i) {
   if (!i) return;
   STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
-  switch (i->type) {
+  switch (i->kind) {
     case IR_CALL: vector_delete(i->call.arguments); break;
     case IR_PHI:
         foreach_ptr (IRPhiArgument*, arg, i->phi_args) free(arg);
@@ -186,7 +186,7 @@ void ir_femit_instruction
   }
 
   STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
-  switch (inst->type) {
+  switch (inst->kind) {
   case IR_IMMEDIATE:
     fprintf(file, "%simm %s%"PRId64, Y, M, inst->imm);
     break;
@@ -261,7 +261,7 @@ void ir_femit_instruction
     fprintf(file, "%sunreachable", Y);
     break;
   default:
-    ICE("Invalid IRType %d\n", inst->type);
+    ICE("Invalid IRType %d\n", inst->kind);
   }
 
 #ifdef DEBUG_USES
@@ -320,7 +320,7 @@ void ir_set_func_ids(IRFunction *f) {
   list_foreach (IRBlock *, block, f->blocks) {
     block->id = block_id++;
     list_foreach (IRInstruction *, instruction, block->instructions) {
-        if (instruction->type == IR_PARAMETER || !ir_is_value(instruction)) continue;
+        if (instruction->kind == IR_PARAMETER || !ir_is_value(instruction)) continue;
         instruction->id = instruction_id++;
     }
   }
@@ -668,7 +668,7 @@ void ir_for_each_child(
   void *data
 ) {
   STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
-  switch (user->type) {
+  switch (user->kind) {
   case IR_PHI:
       foreach_ptr (IRPhiArgument*, arg, user->phi_args) {
       callback(user, &arg->value, data);
@@ -713,7 +713,7 @@ void ir_for_each_child(
   case IR_FUNC_REF:
     break;
   default:
-    ICE("Invalid IR instruction type %d", user->type);
+    ICE("Invalid IR instruction type %d", user->kind);
   }
 }
 
@@ -721,8 +721,8 @@ bool ir_is_value(IRInstruction *instruction) {
   STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
   // NOTE: If you are changing this switch, you also need to change
   // `needs_register()` in register_allocation.c
-  switch (instruction->type) {
-    default: TODO("Handle %d IR instruction type in ir_is_value()", instruction->type);
+  switch (instruction->kind) {
+    default: TODO("Handle %d IR instruction type in ir_is_value()", instruction->kind);
     case IR_IMMEDIATE:
     case IR_CALL:
     case IR_LOAD:
@@ -801,29 +801,29 @@ void ir_unmark_usees(IRInstruction *instruction) {
 void ir_mark_unreachable(IRBlock *block) {
   STATIC_ASSERT(IR_COUNT == 32, "Handle all branch types");
   IRInstruction *i = block->instructions.last;
-  switch (i->type) {
+  switch (i->kind) {
     default: break;
     case IR_BRANCH: {
       IRInstruction *first = i->destination_block->instructions.first;
-      while (first && first->type == IR_PHI) {
+      while (first && first->kind == IR_PHI) {
         ir_phi_remove_argument(first, block);
         first = first->next;
       }
     } break;
     case IR_BRANCH_CONDITIONAL: {
       IRInstruction *first = i->cond_br.then->instructions.first;
-      while (first && first->type == IR_PHI) {
+      while (first && first->kind == IR_PHI) {
         ir_phi_remove_argument(first, block);
         first = first->next;
       }
       first = i->cond_br.else_->instructions.first;
-      while (first && first->type == IR_PHI) {
+      while (first && first->kind == IR_PHI) {
         ir_phi_remove_argument(first, block);
         first = first->next;
       }
     } break;
   }
-  i->type = IR_UNREACHABLE;
+  i->kind = IR_UNREACHABLE;
 }
 
 #undef INSERT

@@ -30,7 +30,7 @@ uint32_t ctzll(uint64_t value) {
   if (is_immediate_pair(i)) {          \
     IRInstruction *lhs = i->lhs;       \
     IRInstruction *rhs = i->rhs;       \
-    i->type = IR_IMMEDIATE;            \
+    i->kind = IR_IMMEDIATE;            \
     i->imm = imm_lhs(i) op imm_rhs(i); \
     ir_remove_use(lhs, i);             \
     ir_remove_use(rhs, i);             \
@@ -38,8 +38,8 @@ uint32_t ctzll(uint64_t value) {
   }
 
 static bool is_immediate_pair(IRInstruction *i) {
-  return i->lhs->type == IR_IMMEDIATE &&
-         i->rhs->type == IR_IMMEDIATE;
+  return i->lhs->kind == IR_IMMEDIATE &&
+         i->rhs->kind == IR_IMMEDIATE;
 }
 
 static u64 imm_lhs(IRInstruction *i) {
@@ -56,7 +56,7 @@ static bool power_of_two(u64 value) {
 
 static bool has_side_effects(IRInstruction *i) {
   STATIC_ASSERT(IR_COUNT == 32, "Handle all instructions");
-  switch (i->type) {
+  switch (i->kind) {
     /// These do NOT have side effects.
     case IR_IMMEDIATE:
     case IR_LOAD:
@@ -82,7 +82,7 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
   bool changed = false;
   list_foreach (IRBlock*, b, f->blocks) {
     list_foreach (IRInstruction*, i, b->instructions) {
-      switch (i->type) {
+      switch (i->kind) {
         case IR_ADD: IR_REDUCE_BINARY(+) break;
         case IR_SUB: IR_REDUCE_BINARY(-) break;
         case IR_MUL: IR_REDUCE_BINARY(*) break;
@@ -92,7 +92,7 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
           IR_REDUCE_BINARY(/)
           else {
             IRInstruction *divisor = i->rhs;
-            if (divisor->type == IR_IMMEDIATE) {
+            if (divisor->kind == IR_IMMEDIATE) {
               /// Division by 1 does nothing.
               if (divisor->imm == 1) {
                 ir_remove_use(i->lhs, i);
@@ -102,7 +102,7 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
 
               /// Replace division by a power of two with a shift.
               else if (power_of_two(divisor->imm)) {
-                i->type = IR_SAR;
+                i->kind = IR_SAR;
                 divisor->imm = (u64) ctzll(divisor->imm);
                 changed = true;
               }
@@ -117,7 +117,7 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
           if (is_immediate_pair(i)) {
             IRInstruction *lhs = i->lhs;
             IRInstruction *rhs = i->rhs;
-            i->type = IR_IMMEDIATE;
+            i->kind = IR_IMMEDIATE;
             i->imm = (u64) ((i64)imm_lhs(i) >> imm_rhs(i));
             ir_remove_use(lhs, i);
             ir_remove_use(rhs, i);
@@ -127,8 +127,8 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
         case IR_AND: IR_REDUCE_BINARY(&) break;
         case IR_OR: IR_REDUCE_BINARY(|) break;
         case IR_NOT:
-          if (i->operand->type == IR_IMMEDIATE) {
-            i->type = IR_IMMEDIATE;
+          if (i->operand->kind == IR_IMMEDIATE) {
+            i->kind = IR_IMMEDIATE;
             i->imm = ~i->operand->imm;
             ir_remove_use(i->operand, i);
             changed = true;
@@ -172,7 +172,7 @@ typedef struct {
 /// See opt_tail_call_elim() for more info.
 static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
   for (IRInstruction *i = b == tc->call->parent_block ? tc->call->next : b->instructions.first; i; i = i->next) {
-    if (i->type == IR_PHI) {
+    if (i->kind == IR_PHI) {
       /// If this is a phi node, then the call or a previous phi
       /// must be an argument of the phi.
       foreach_ptr (IRPhiArgument*, arg, i->phi_args) {
@@ -191,13 +191,13 @@ static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
     /// If we encounter a return instruction, then a tail call
     /// is only possible if the return value is the call, or
     /// any of the PHIs.
-    if (i->type == IR_RETURN) {
+    if (i->kind == IR_RETURN) {
       foreach_ptr (IRInstruction *, a, tc->phis) { if (a == i->operand) { return true; } }
       return i->operand == tc->call;
     }
 
-    if (i->type == IR_BRANCH) { return tail_call_possible_iter(tc, i->destination_block); }
-    if (i->type == IR_BRANCH_CONDITIONAL) {
+    if (i->kind == IR_BRANCH) { return tail_call_possible_iter(tc, i->destination_block); }
+    if (i->kind == IR_BRANCH_CONDITIONAL) {
       return tail_call_possible_iter(tc, i->cond_br.then) &&
              tail_call_possible_iter(tc, i->cond_br.else_);
     }
@@ -221,7 +221,7 @@ static bool opt_tail_call_elim(IRFunction *f) {
   bool changed = false;
   list_foreach (IRBlock*, b, f->blocks) {
     list_foreach (IRInstruction*, i, b->instructions) {
-      if (i->type != IR_CALL) { continue; }
+      if (i->kind != IR_CALL) { continue; }
 
       /// An instruction is a tail call iff there are no other instruction
       /// between it and the next return instruction other than branches
@@ -260,7 +260,7 @@ static bool opt_mem2reg(IRFunction *f) {
   /// whose address is never taken.
   list_foreach (IRBlock*, b, f->blocks) {
     list_foreach (IRInstruction*, i, b->instructions) {
-      switch (i->type) {
+      switch (i->kind) {
         default: break;
 
         /// New variable.
@@ -359,7 +359,7 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
   ASSERT(main, "No main() function!");
 
   FOREACH_INSTRUCTION (ctx) {
-    switch (instruction->type) {
+    switch (instruction->kind) {
       default: break;
 
       /// Record the first store into a variable.
@@ -431,11 +431,11 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
 
   /// Convert indirect calls to function references to direct calls.
   FOREACH_INSTRUCTION (ctx) {
-    switch (instruction->type) {
+    switch (instruction->kind) {
       default: break;
       case IR_CALL: {
         if (instruction->call.is_indirect &&
-            instruction->call.callee_instruction->type == IR_FUNC_REF) {
+            instruction->call.callee_instruction->kind == IR_FUNC_REF) {
           IRInstruction *func = instruction->call.callee_instruction;
           ir_remove_use(instruction->call.callee_instruction, instruction);
 
@@ -465,9 +465,9 @@ bool opt_check_pure(IRFunction *f) {
     /// Even if an instruction in a function has side effects, the function
     /// may still be pure, e.g. if the instruction is a call to a pure function
     /// or a store to a local variable.
-    switch (instruction->type) {
+    switch (instruction->kind) {
       case IR_STORE:
-        if (instruction->store.addr->type == IR_ALLOCA) continue;
+        if (instruction->store.addr->kind == IR_ALLOCA) continue;
         break;
       case IR_CALL:
         if (!instruction->call.is_indirect && instruction->call.callee_function->attr_pure) continue;
@@ -494,7 +494,7 @@ bool opt_check_leaf(IRFunction *f) {
   /// A leaf function may not contain any calls except for recursive tail calls
   /// or tail calls to other leaf functions.
   FOREACH_INSTRUCTION_IN_FUNCTION (f) {
-    if (instruction->type != IR_CALL) continue;
+    if (instruction->kind != IR_CALL) continue;
     if (!instruction->call.is_indirect && instruction->call.tail_call) {
       IRFunction *callee = instruction->call.callee_function;
       if (callee == f || callee->attr_leaf) continue;
@@ -526,14 +526,14 @@ bool opt_check_noreturn(IRFunction *f) {
     /// return, not whether it might not return; tail calls, however, are different, since
     /// they are basically like return statements. We don’t care whether or not regular calls
     /// return, but if a tail call returns, then we must also return.
-    if (instruction->type == IR_CALL && instruction->call.tail_call) {
+    if (instruction->kind == IR_CALL && instruction->call.tail_call) {
       /// If the call is a direct call, we can check the noreturn attribute of the callee.
       /// We can’t know whether an indirect call returns, so we must assume that we return.
       if (instruction->call.is_indirect || !instruction->call.callee_function->attr_noreturn) goto may_return;
     }
 
     /// If a return instruction is encountered, then this function obviously returns.
-    else if (instruction->type == IR_RETURN) {
+    else if (instruction->kind == IR_RETURN) {
     may_return:
       if (!f->attr_noreturn) return false;
       f->attr_noreturn = false;
@@ -589,8 +589,8 @@ static void opt_reorder_blocks(IRFunction *f, DominatorInfo* info) {
     IRBlock *next = NULL;
     IRInstruction *last = node->block->instructions.last;
     DomTreeNode *next_node = NULL;
-    if (last->type == IR_BRANCH) next = last->destination_block;
-    else if (last->type == IR_BRANCH_CONDITIONAL) next = last->cond_br.then;
+    if (last->kind == IR_BRANCH) next = last->destination_block;
+    else if (last->kind == IR_BRANCH_CONDITIONAL) next = last->cond_br.then;
 
     /// Insert all children except for the next node.
     foreach_ptr (DomTreeNode*, child, node->children) {
@@ -621,7 +621,7 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
   /// blocks are the same.
   list_foreach (IRBlock*, b, f->blocks) {
     IRInstruction *last = b->instructions.last;
-    if (last == b->instructions.first && last->type == IR_BRANCH) {
+    if (last == b->instructions.first && last->kind == IR_BRANCH) {
       /// Update any blocks that branch to this to branch to our
       /// target instead.
       list_foreach (IRBlock*, b2, f->blocks) {
@@ -629,10 +629,10 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
 
         STATIC_ASSERT(IR_COUNT == 32, "Handle all branch instructions");
         IRInstruction *branch = b2->instructions.last;
-        if (branch->type == IR_BRANCH && branch->destination_block == b) {
+        if (branch->kind == IR_BRANCH && branch->destination_block == b) {
           branch->destination_block = last->destination_block;
           changed = true;
-        } else if (branch->type == IR_BRANCH_CONDITIONAL) {
+        } else if (branch->kind == IR_BRANCH_CONDITIONAL) {
           if (branch->cond_br.then == b) {
             branch->cond_br.then = last->destination_block;
             changed = true;
@@ -645,7 +645,7 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
 
         /// Also update PHIs.
         list_foreach (IRInstruction*, i, b2->instructions) {
-          if (i->type == IR_PHI) {
+          if (i->kind == IR_PHI) {
             foreach_ptr (IRPhiArgument*, arg, i->phi_args) {
               if (arg->block == b) {
                 arg->block = last->destination_block;
@@ -661,8 +661,8 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
     }
 
     /// Simplify branches.
-    else if (last->type == IR_BRANCH_CONDITIONAL && last->cond_br.then == last->cond_br.else_) {
-      last->type = IR_BRANCH;
+    else if (last->kind == IR_BRANCH_CONDITIONAL && last->cond_br.then == last->cond_br.else_) {
+      last->kind = IR_BRANCH;
       ir_remove_use(last->cond_br.condition, last);
       last->destination_block = last->cond_br.then;
       changed = true;

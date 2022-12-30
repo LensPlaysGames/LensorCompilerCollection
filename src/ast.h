@@ -340,7 +340,9 @@ typedef struct AST {
 
   /// Builtin types.
   Type *t_void;
+  Type *t_integer_literal;
   Type *t_integer;
+  Type *t_byte;
 
   /// Scopes that are currently being parsed.
   Vector(Scope *) scope_stack;

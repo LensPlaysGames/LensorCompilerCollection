@@ -477,6 +477,17 @@ AST *ast_create() {
 
   /// Initialise the builtin types.
   uint8_t primitive_type_id = 0;
+
+  /// Integer literal; this is a special type that is implicitly
+  /// to any integer type, and equivalent to integer.
+  ast->t_integer_literal = mktype(ast, TYPE_PRIMITIVE, (loc){0, 0});
+  ast->t_integer_literal->primitive.size = 8;
+  ast->t_integer_literal->primitive.alignment = 8;
+  ast->t_integer_literal->primitive.is_signed = true;
+  ast->t_integer_literal->primitive.name = literal_span("<integer literal>");
+  ast->t_integer_literal->primitive.id = primitive_type_id++;
+
+  /// Integer.
   ast->t_integer = mktype(ast, TYPE_PRIMITIVE, (loc){0, 0});
   ast->t_integer->primitive.size = 8;
   ast->t_integer->primitive.alignment = 8;
@@ -484,12 +495,21 @@ AST *ast_create() {
   ast->t_integer->primitive.name = literal_span("integer");
   ast->t_integer->primitive.id = primitive_type_id++;
 
+  /// Byte.
+  ast->t_byte = mktype(ast, TYPE_PRIMITIVE, (loc){0, 0});
+  ast->t_byte->primitive.size = 1;
+  ast->t_byte->primitive.alignment = 1;
+  ast->t_byte->primitive.is_signed = true;
+  ast->t_byte->primitive.name = literal_span("byte");
+  ast->t_byte->primitive.id = primitive_type_id++;
+
   /// Declare void as a named type with no node associated with it.
   /// This implicitly means that void is an incomplete type.
   ast->t_void = mktype(ast, TYPE_NAMED, (loc){0, 0});
 
   /// Add the builtin types to the global scope.
   scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("integer"), ast->t_integer);
+  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("byte"), ast->t_byte);
   scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("void"), ast->t_void);
 
   /// Done.

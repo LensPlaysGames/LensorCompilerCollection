@@ -906,7 +906,7 @@ static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
 
 static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   STATIC_ASSERT(IR_COUNT == 32, "Handle all IR instructions");
-  switch (inst->type) {
+  switch (inst->kind) {
   case IR_PHI:
   case IR_REGISTER:
   case IR_UNREACHABLE:
@@ -1092,13 +1092,13 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
   case IR_LOAD:
     /// Load from a static variable.
-    if (inst->operand->type == IR_STATIC_REF) {
+    if (inst->operand->kind == IR_STATIC_REF) {
       femit(context, I_MOV, NAME_TO_REGISTER, REG_RIP, inst->operand->static_ref->name.data,
             inst->result);
     }
 
     /// Load from a local.
-    else if (inst->operand->type == IR_ALLOCA) {
+    else if (inst->operand->kind == IR_ALLOCA) {
       femit(context, I_MOV, MEMORY_TO_REGISTER,
             REG_RBP, (int64_t)-inst->operand->alloca.offset, inst->result);
     }
@@ -1112,13 +1112,13 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
   case IR_STORE:
     /// Store to a static variable.
-    if (inst->store.addr->type == IR_STATIC_REF) {
+    if (inst->store.addr->kind == IR_STATIC_REF) {
       femit(context, I_MOV, REGISTER_TO_NAME, inst->store.value->result,
             REG_RIP, inst->store.addr->static_ref->name.data);
     }
 
     /// Store to a local.
-    else if (inst->store.addr->type == IR_ALLOCA) {
+    else if (inst->store.addr->kind == IR_ALLOCA) {
       femit(context, I_MOV, REGISTER_TO_MEMORY, inst->store.value->result,
             REG_RBP, (int64_t)-inst->store.addr->alloca.offset);
       break;
@@ -1145,7 +1145,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
   default:
     ir_femit_instruction(stderr, inst);
-    TODO("Handle IRType %d\n", inst->type);
+    TODO("Handle IRType %d\n", inst->kind);
     break;
   }
 }
@@ -1242,7 +1242,7 @@ typedef enum Clobbers {
 
 Clobbers does_clobber(IRInstruction *instruction) {
   STATIC_ASSERT(IR_COUNT == 32, "Exhaustive handling of IR types.");
-  switch (instruction->type) {
+  switch (instruction->kind) {
   case IR_ADD:
   case IR_DIV:
   case IR_MUL:
@@ -1269,12 +1269,12 @@ Clobbers does_clobber(IRInstruction *instruction) {
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
-    switch (instruction->type) {
+    switch (instruction->kind) {
       case IR_PARAMETER:
         if ((size_t)instruction->imm >= argument_register_count) {
           TODO("arch_x86_64 doesn't yet support passing arguments on the stack, sorry.");
         }
-        instruction->type = IR_REGISTER;
+        instruction->kind = IR_REGISTER;
         instruction->result = argument_registers[instruction->imm];
         break;
       default:
@@ -1323,7 +1323,7 @@ void calculate_stack_offsets(CodegenContext *context) {
     size_t offset = 0;
     list_foreach (IRBlock *, block, function->blocks) {
       list_foreach (IRInstruction *, instruction, block->instructions) {
-        switch (instruction->type) {
+        switch (instruction->kind) {
         case IR_ALLOCA:
           offset += instruction->alloca.size;
           instruction->alloca.offset = offset;
@@ -1340,7 +1340,7 @@ void calculate_stack_offsets(CodegenContext *context) {
 static size_t interfering_regs(IRInstruction *instruction) {
   ASSERT(instruction, "Can not get register interference of NULL instruction.");
   size_t mask = 0;
-  switch(instruction->type) {
+  switch(instruction->kind) {
   case IR_SHL:
   case IR_SHR:
   case IR_SAR:
@@ -1426,7 +1426,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         bool referenced = false;
         for (IRBlock *b = (function->blocks).first; b; b = b->next) {
           for (IRInstruction *i = (b->instructions).first; i; i = i->next) {
-            switch (i->type) {
+            switch (i->kind) {
               default: break;
               case IR_UNREACHABLE: goto next_block;
               case IR_BRANCH:

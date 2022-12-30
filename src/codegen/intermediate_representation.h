@@ -9,7 +9,7 @@
 
 #define INSTRUCTION(name, given_type)                       \
   IRInstruction *(name) = calloc(1, sizeof(IRInstruction)); \
-  (name)->type = (given_type)
+  (name)->kind = (given_type)
 
 #define FOREACH_INSTRUCTION_N(context, function, block, instruction) \
   foreach_ptr (IRFunction *, function, context->functions)           \
@@ -125,7 +125,7 @@ typedef struct IRStackAllocation {
 void mark_used(IRInstruction *usee, IRInstruction *user);
 
 typedef struct IRInstruction {
-  enum IRType type;
+  enum IRType kind;
   Register result;
 
   /// TODO: do we really need both of these?

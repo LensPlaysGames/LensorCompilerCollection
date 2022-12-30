@@ -32,13 +32,13 @@ void codegen_emit_ir_backend(CodegenContext *context) {
     list_foreach (IRBlock *, b, f->blocks) {
       fprintf(context->code, "bb%zu:\n", b->id);
       list_foreach (IRInstruction *, instruction, b->instructions) {
-        if (instruction->type == IR_PARAMETER) continue;
+        if (instruction->kind == IR_PARAMETER) continue;
 
         fprintf(context->code, "    ");
         STATIC_ASSERT(IR_COUNT == 32, "Handle all IR instructions");
 
         if (instruction->id) fprintf(context->code, "%%%u = ", instruction->id);
-        switch (instruction->type) {
+        switch (instruction->kind) {
           case IR_IMMEDIATE:
             fprintf(context->code, "imm %"PRId64,instruction->imm);
             break;
@@ -112,7 +112,7 @@ void codegen_emit_ir_backend(CodegenContext *context) {
             fprintf(context->code, "unreachable");
             break;
           default:
-            TODO("Handle IRType %d\n", instruction->type);
+            TODO("Handle IRType %d\n", instruction->kind);
         }
         fprintf(context->code, "\n");
       }

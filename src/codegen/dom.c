@@ -20,7 +20,7 @@ static BlockVector collect_reachable_blocks(IRBlock *block, IRBlock *ignore) {
 
     STATIC_ASSERT(IR_COUNT == 32, "Handle all branch types");
     IRInstruction *i = b->instructions.last;
-    switch (i->type) {
+    switch (i->kind) {
       default: break;
       case IR_BRANCH:
         if (!vector_contains(reachable, i->destination_block)) {

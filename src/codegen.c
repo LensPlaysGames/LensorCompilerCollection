@@ -139,7 +139,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// Root node.
   case NODE_ROOT: {
     /// Emit everything that isn’t a function.
-      foreach_ptr (Node *, child, expr->root.children) {
+    foreach_ptr (Node *, child, expr->root.children) {
       if (child->kind == NODE_FUNCTION) continue;
       codegen_expr(ctx, child);
     }

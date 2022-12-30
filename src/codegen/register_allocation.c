@@ -28,14 +28,14 @@ typedef Vector(IRBlock *) BlockVector;
 static void phi2copy(IRFunction *f) {
   IRBlock *last_block = NULL;
   FOREACH_INSTRUCTION_IN_FUNCTION_N(f, b, phi) {
-    if (phi->type == IR_PHI) {
+    if (phi->kind == IR_PHI) {
       ASSERT(phi->parent_block != last_block,
           "Multiple PHI instructions in a single block are not allowed within register allocation!");
       last_block = phi->parent_block;
 
       /// Single PHI argument means that we can replace it with a simple copy.
       if (phi->phi_args.size == 1) {
-        phi->type = IR_COPY;
+        phi->kind = IR_COPY;
         IRInstruction *value = phi->phi_args.data[0]->value;
         vector_delete(phi->phi_args);
         phi->operand = value;
@@ -48,7 +48,7 @@ static void phi2copy(IRFunction *f) {
       foreach_ptr (IRPhiArgument *, arg, phi->phi_args) {
         STATIC_ASSERT(IR_COUNT == 32, "Handle all branch types");
         IRInstruction *branch = arg->block->instructions.last;
-        switch (branch->type) {
+        switch (branch->kind) {
           /// If the predecessor returns or is unreachable, then the PHI
           /// is never going to be reached anyway, so we can just ignore
           /// this argument.
@@ -96,7 +96,7 @@ static void phi2copy(IRFunction *f) {
 
 void function_call_arguments(IRFunction *f, const MachineDescription *desc) {
   FOREACH_INSTRUCTION_IN_FUNCTION(f) {
-    if (instruction->type == IR_CALL) {
+    if (instruction->kind == IR_CALL) {
       foreach_index(i, instruction->call.arguments) {
         if (i >= desc->argument_register_count) {
           TODO("Handle stack allocated function parameters, somehow :p");
@@ -118,7 +118,7 @@ void function_return_values(IRFunction *f, const MachineDescription *desc) {
   Typeinfo info = ast_typeinfo(f->context->ast, f->type->function.return_type);
   if (info.is_void) return;
   FOREACH_INSTRUCTION_IN_FUNCTION(f) {
-    if (instruction->type == IR_RETURN) {
+    if (instruction->kind == IR_RETURN) {
       IRInstruction *value = instruction->operand;
       IRInstruction *copy = ir_copy(f->context, value);
       mark_used(copy, instruction);
@@ -133,7 +133,7 @@ void function_return_values(IRFunction *f, const MachineDescription *desc) {
 /// Insert copies for precoloured REGISTER instructions.
 void fixup_precoloured(IRFunction *f) {
   FOREACH_INSTRUCTION_IN_FUNCTION(f) {
-    if (instruction->type == IR_REGISTER && instruction->result) {
+    if (instruction->kind == IR_REGISTER && instruction->result) {
       IRInstruction *copy = ir_copy_unused(f->context, instruction);
       insert_instruction_after(copy, instruction);
       ir_replace_uses(instruction, copy);
@@ -147,7 +147,7 @@ void fixup_precoloured(IRFunction *f) {
 bool needs_register(IRInstruction *instruction) {
   STATIC_ASSERT(IR_COUNT == 32, "Exhaustively handle all instruction types");
   ASSERT(instruction);
-  switch (instruction->type) {
+  switch (instruction->kind) {
     case IR_LOAD:
     case IR_PHI:
     case IR_COPY:
@@ -369,7 +369,7 @@ static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc,
     // FIXME: This is a horrid fix, we should probably deal with this
     // in some generic way.
     if (A->parent_block->function->context->format == CG_FMT_x86_64_GAS
-    && (A->type == IR_SHL || A->type == IR_SHR || A->type == IR_SAR)) {
+    && (A->kind == IR_SHL || A->kind == IR_SHR || A->kind == IR_SAR)) {
       usz regmask_rcx = 1 << (2 - 1);
       G->regmasks[A->lhs->index] |= regmask_rcx;
       G->regmasks[A->rhs->index] |= regmask_rcx;
@@ -503,7 +503,7 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
   for (;;) {
     vector_clear(removed_instructions);
     foreach_ptr (IRInstruction *, to, *instructions) {
-      if (to->type != IR_COPY) { continue; }
+      if (to->kind != IR_COPY) { continue; }
       IRInstruction *from = to->operand;
 
       /// From and to are precoloured: eliminate the copy if they
@@ -540,7 +540,7 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
         /// Collect all PHI nodes that use to.
         vector_clear(phis);
         foreach_ptr (IRInstruction *, phi, *instructions) {
-          if (phi->type != IR_PHI) { continue; }
+          if (phi->kind != IR_PHI) { continue; }
           foreach_ptr (IRPhiArgument *, arg, phi->phi_args) {
             if (arg->value == to) {
               /// If a PHI node that uses to is already precoloured with
@@ -704,7 +704,7 @@ static void color(
   foreach_ptr (AdjacencyList*, list, g->lists) {
     IRInstruction *inst = list->instruction;
     Register r = list->color;
-    if (inst->type == IR_PHI) {
+    if (inst->kind == IR_PHI) {
       foreach_ptr (IRPhiArgument *, phi, inst->phi_args) {
         if (needs_register(phi->value)) {
           AdjacencyList *phi_list = g->lists.data[phi->value->index];
