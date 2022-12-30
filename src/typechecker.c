@@ -197,24 +197,41 @@ NODISCARD static bool is_lvalue(Node *expr) {
 ///
 ///        2dε. Otherwise, resolve F to the last remaining element of O(F).
 ///
-///    2e. Go to step 4.
+///    2e. Remove from O all functions except those with the least number of
+///        implicit conversions as per step 2c.
 ///
-/// 3. If the parent expression is an assignment expression *or declaration*,
-///    remove from O all functions whose signatures are not an *exact* match
-///    for the signature of the lvalue being assigned to. If the lvalue is not
-///    of function or function pointer type, this is a type error.
+/// 3. Otherwise, depending on the type of the parent expression,
+///
+///    3a. If the parent expression is a unary prefix expression with operator @,
+///        then replace the parent expression with the unresolved function and go
+///        to step 2/3 depending on the type of the new parent.
+///
+///    3b. If the parent expression is an assignment expression *or declaration*,
+///        remove from O all functions whose signatures are not an *exact* match—
+///        save function pointer conversion—for the signature of the lvalue being
+///        assigned to. If the lvalue is not of function or function pointer type,
+///        this is a type error.
+///
+///    3c. If the parent expression is a return expression, then remove from O all
+///        functions whose signatures are not an *exact* match—save function pointer
+///        conversion—for the return type of the function. If the return type of the
+///        function is not of function pointer type, this is a type error.
+///
+///    3d. If the parent expression is a cast expression, then remove from O all
+///        functions whose signatures are not an *exact* match—save function pointer
+///        conversion—for the result type of the cast expression. If the type of the
+///        cast expression is not of function pointer type, this is a type error.
+///
+///    3e. If the parent expression is the root of the AST, then this is a compiler
+///        error: the function reference is ambiguous and quite frankly pointless.
 ///
 /// 4. If O is empty, then this is a compiler error: there is no matching
 ///    overload for the function being resolved.
 ///
-/// 6. If we got here via step 2e, then remove from O all functions except
-///    those with the least number of implicit conversions as per step 2c.
-///
-/// 7. If O contains more than one element, then this is a compiler error:
+/// 5. If O contains more than one element, then this is a compiler error:
 ///    the function being resolved is ambiguous.
 ///
-/// 8. Otherwise, resolve the function reference to the last remaining element
-///    of O.
+/// 6. Otherwise, resolve the function reference to the last remaining element of O.
 NODISCARD static bool resolve_function(AST *ast, Node *func) {
   if (func->kind == NODE_FUNCTION_REFERENCE && !func->funcref->node) {
     Symbol *sym = scope_find_symbol(func->funcref->scope, as_span(func->funcref->name), false);
