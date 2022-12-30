@@ -233,11 +233,12 @@ NODISCARD static bool is_lvalue(Node *expr) {
 ///
 /// 6. Otherwise, resolve the function reference to the last remaining element of O.
 NODISCARD static bool resolve_function(AST *ast, Node *func) {
-  if (func->kind == NODE_FUNCTION_REFERENCE && !func->funcref->node) {
-    Symbol *sym = scope_find_symbol(func->funcref->scope, as_span(func->funcref->name), false);
+  if (func->kind == NODE_FUNCTION_REFERENCE && !func->funcref.resolved) {
+    Symbol *sym = scope_find_symbol(func->funcref.scope, as_span(func->funcref.name), false);
     if (!sym || !sym->node) ERR(func->source_location, "Unknown symbol \"%.*s\".",
-      (int) func->funcref->name.size, func->funcref->name.data);
-    func->funcref->node = sym->node;
+      (int) func->funcref.name.size, func->funcref.name.data);
+    func->funcref.resolved = sym;
+    func->type = sym->node->type;
   }
   return true;
 }
@@ -267,7 +268,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       VECTOR_FOREACH_INDEX(i, expr->root.children) {
         Node *node = expr->root.children.data[i];
         if (node->kind == NODE_FUNCTION_REFERENCE) {
-          Node *func = node->funcref->node;
+          Node *func = node->funcref.resolved->node;
           if (
             func &&
             func->source_location.start == node->source_location.start &&
@@ -361,7 +362,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       if (callee->type->kind == TYPE_FUNCTION) {
         /// Set the resolved function as the new callee.
         if (callee->kind != NODE_FUNCTION) {
-          expr->call.callee = callee = callee->funcref->node;
+          expr->call.callee = callee = callee->funcref.resolved->node;
           if (!typecheck_expression(ast, callee)) return false;
         }
       } else {
@@ -559,10 +560,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Resolve the function reference and typecheck the function.
     case NODE_FUNCTION_REFERENCE:
-      /// TODO: Replace this w/ the resolved function node.
       if (!resolve_function(ast, expr)) return false;
-      if (!typecheck_expression(ast, expr->funcref->node)) return false;
-      expr->type = expr->funcref->node->type;
+      if (!typecheck_expression(ast, expr->funcref.resolved->node)) return false;
+      ast_replace_node(ast, expr, expr->funcref.resolved->node);
       break;
   }
 

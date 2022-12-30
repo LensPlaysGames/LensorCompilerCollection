@@ -216,11 +216,15 @@ typedef struct NodeLiteral {
   };
 } NodeLiteral;
 
+/// Function refernece.
+typedef struct NodeFunctionReference {
+  string name;
+  Symbol *resolved;
+  Scope *scope;
+} NodeFunctionReference;
+
 /// Variable reference.
 typedef Symbol *NodeVariableReference;
-
-/// Function refernece.
-typedef Symbol *NodeFunctionReference;
 
 /// Named type.
 typedef Symbol *TypeNamed;
@@ -474,7 +478,7 @@ Node *ast_make_variable_reference(
 Node *ast_make_function_reference(
     AST *ast,
     loc source_location,
-    Symbol *symbol
+    span symbol
 );
 
 /// Create a new named type.
@@ -558,5 +562,8 @@ void ast_print_scope_tree(FILE *file, const AST *ast);
 
 /// Intern a string.
 size_t ast_intern_string(AST *ast, span string);
+
+/// Replace a node with another node.
+void ast_replace_node(AST *ast, Node *old, Node *new);
 
 #endif // FUNCOMPILER_AST_H

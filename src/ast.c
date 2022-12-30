@@ -281,10 +281,12 @@ Node *ast_make_variable_reference(
 Node *ast_make_function_reference(
     AST *ast,
     loc source_location,
-    Symbol *symbol
+    span symbol
 ) {
   Node *node = mknode(ast, NODE_FUNCTION_REFERENCE, source_location);
-  node->funcref = symbol;
+  node->funcref.name = string_dup(symbol);
+  node->funcref.resolved = NULL;
+  node->funcref.scope = VECTOR_BACK(ast->scope_stack);
   return node;
 }
 
@@ -517,7 +519,10 @@ void ast_free(AST *ast) {
       case NODE_UNARY:
       case NODE_LITERAL:
       case NODE_VARIABLE_REFERENCE:
-      case NODE_FUNCTION_REFERENCE: continue;
+        continue;
+      case NODE_FUNCTION_REFERENCE:
+        free(node->funcref.name.data);
+        continue;
     }
     UNREACHABLE();
   }
@@ -730,14 +735,14 @@ static void ast_print_node(
 
     case NODE_FUNCTION_REFERENCE: {
       /// If our parent is the root, print the function instead.
-      if (node->parent && node->parent->kind == NODE_ROOT)
-        return ast_print_node(file, logical_parent, node->funcref->node, leading_text);
+      /*if (node->parent && node->parent->kind == NODE_ROOT)
+        return ast_print_node(file, logical_parent, node->funcref->node, leading_text);*/
 
       /// Otherwise, print the function reference.
       string type_name = ast_typename(node->type, true);
       fprintf(file, "\033[31mFunction Ref \033[35m<%d> \033[32m%.*s \033[31m: %.*s\n",
         node->source_location.start,
-        (int) node->funcref->name.size, node->funcref->name.data,
+        (int) node->funcref.name.size, node->funcref.name.data,
         (int) type_name.size, type_name.data);
       free(type_name.data);
     } break;
@@ -898,4 +903,71 @@ size_t ast_intern_string(AST *ast, span str) {
   /// Intern the string.
   VECTOR_PUSH(ast->strings, string_dup(str));
   return ast->strings.size - 1;
+}
+
+/// Replace a node with another node.
+void ast_replace_node(AST *ast, Node *old, Node *new) {
+#define REPLACE_IN_CHILDREN(children)                              \
+  do {                                                             \
+    Node **ptr = NULL;                                             \
+    VECTOR_FIND_IF((children), ptr, i, (children).data[i] == old); \
+    if (ptr) *ptr = new;                                           \
+  } while (0)
+
+  /// Find the node in the parent.
+  ASSERT(old->parent);
+  switch (old->parent->kind) {
+    case NODE_ROOT:
+      REPLACE_IN_CHILDREN(old->parent->root.children);
+      break;
+
+    case NODE_FUNCTION:
+      REPLACE_IN_CHILDREN(old->parent->function.param_decls);
+      if (old->parent->function.body == old) old->parent->function.body = new;
+      break;
+
+    case NODE_DECLARATION:
+      if (old->parent->declaration.init == old) old->parent->declaration.init = new;
+      break;
+
+    case NODE_IF:
+      if (old->parent->if_.condition == old) old->parent->if_.condition = new;
+      else if (old->parent->if_.then == old) old->parent->if_.then = new;
+      else if (old->parent->if_.else_ == old) old->parent->if_.else_ = new;
+      break;
+
+    case NODE_WHILE:
+      if (old->parent->while_.condition == old) old->parent->while_.condition = new;
+      else if (old->parent->while_.body == old) old->parent->while_.body = new;
+      break;
+
+    case NODE_BLOCK:
+      REPLACE_IN_CHILDREN(old->parent->block.children);
+      break;
+
+    case NODE_CALL:
+      REPLACE_IN_CHILDREN(old->parent->call.arguments);
+      if (old->parent->call.callee == old) old->parent->call.callee = new;
+      break;
+
+    case NODE_CAST:
+      if (old->parent->cast.value == old) old->parent->cast.value = new;
+      break;
+
+    case NODE_BINARY:
+      if (old->parent->binary.lhs == old) old->parent->binary.lhs = new;
+      else if (old->parent->binary.rhs == old) old->parent->binary.rhs = new;
+      break;
+
+    case NODE_UNARY:
+      if (old->parent->unary.value == old) old->parent->unary.value = new;
+      break;
+
+    case NODE_LITERAL:
+    case NODE_VARIABLE_REFERENCE:
+    case NODE_FUNCTION_REFERENCE:
+      break;
+  }
+
+#undef REPLACE_IN_CHILDREN
 }

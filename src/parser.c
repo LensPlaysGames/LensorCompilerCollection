@@ -827,7 +827,7 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
       Node *body = parse_function_body(p, type, &params);
       Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
       sym->node = func;
-      return ast_make_function_reference(p->ast, ident.source_location, sym);
+      return ast_make_function_reference(p->ast, ident.source_location, ident.text);
     }
 
     /// External.
@@ -840,7 +840,7 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
       /// Create the function.
       Node *func = ast_make_function(p->ast, ident.source_location, type, (Nodes){0}, NULL, ident.text);
       sym->node = func;
-      return ast_make_function_reference(p->ast, ident.source_location, sym);
+      return ast_make_function_reference(p->ast, ident.source_location, ident.text);
     }
   }
 
@@ -891,11 +891,11 @@ static Node *parse_ident_expr(Parser *p) {
 
   /// Otherwise, check if the identifier is a declared symbol; if it isn’t,
   /// it can only be a function name, so add it as a symbol.
-  Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, false);
+  Symbol *sym = scope_find_symbol(curr_scope(p), ident.text, false);
 
   /// If the symbol is a variable or function, then we’re done here.
+  if (!sym || sym->kind == SYM_FUNCTION) return ast_make_function_reference(p->ast, ident.source_location, ident.text);
   if (sym->kind == SYM_VARIABLE) return ast_make_variable_reference(p->ast, ident.source_location, sym);
-  if (sym->kind == SYM_FUNCTION) return ast_make_function_reference(p->ast, ident.source_location, sym);
 
   /// If the symbol is a type, then parse the rest of the type and delegate.
   if (sym->kind == SYM_TYPE) {
