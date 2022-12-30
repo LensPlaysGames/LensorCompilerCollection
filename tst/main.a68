@@ -1,10 +1,10 @@
 #!/usr/bin/a68g
 
 PROC platform is windows = BOOL: get env ("WINDIR") NE "";
-STRING platform dir sep   = (platform is windows | "\"     | "/"    );
-STRING executable suffix  = (platform is windows | ".exe"  | ""     );
-STRING executable prefix  = (platform is windows | ""      | "./"   );
-STRING calling convention = (platform is windows | "MSWIN" | "LINUX");
+STRING platform dir sep   = (platform is windows | "\"     | "/"        );
+STRING executable suffix  = (platform is windows | ".exe"  | ""         );
+STRING executable prefix  = (platform is windows | ""      | "./"       );
+STRING calling convention = (platform is windows | "MSWIN" | "LINUX"    );
 
 CO Statistics CO
 INT tests run := 0;
@@ -29,9 +29,12 @@ PROC sh = (STRING cmd) INT: (platform is windows | system(cmd) | wexitstatus (sy
 CO Helper function to abort the program CO
 PROC die = ([] UNION (PROC (REF FILE) VOID, CHAR, [] CHAR, INT) message) VOID:
 BEGIN
+    print ((red, "FATAL: "));
     print (message);
     print ((new line, resetc));
-    abend ("")
+
+    CO ‘stop’ unfortunately only lets us exit w/ code 0 CO
+    abend ("FATAL ERROR")
 END;
 
 CO Open a file and ensure that there was no error CO 
@@ -105,12 +108,38 @@ BEGIN
   tests run +:= 1;
 
   CO Compile the program to ASM CO
-  IF sh(".." + platform dir sep + "bld" + platform dir sep + "func -o test.S " 
+  IF sh(".." + platform dir sep + "bld" + platform dir sep + "func" 
+             + " -o test.S "
              + (optimise | " -O " | "") 
+             + (expect error | " > out.txt 2>&1 " | "")
+             + (enable colours | " --colours always " | "")
              + "-cc " + calling convention + " "
              + file name) /= 0 THEN
     IF expect error THEN
-      print((green, (optimise | "SUCCESS! (optimised)     --  " | "SUCCESS!                 --  "), file name, new line))
+      CO Error message CO
+      STRING line := "";
+      STRING contents := "";
+
+      CO Read the error message CO
+      FILE f := secure open ("out.txt", stand in channel);
+      on logical file end (f, (REF FILE unused) BOOL: end);
+      DO 
+        get (f, line);
+        contents +:= line;
+        contents +:= new line char;
+        new line (f)
+      OD;
+      end:
+      
+      CO Make sure this is not an ICE CO
+      IF string in string ("Internal Compiler Error", LOC INT, contents) THEN
+        print (contents);
+        print ((red, (optimise | "ERRORED! (optimised)     --  " | "ERRORED!                 --  "), file name, new line));
+        tests errored +:= 1
+      ELSE 
+        print((green, (optimise | "SUCCESS! (optimised)     --  " | "SUCCESS!                 --  "), file name, new line));
+        GO TO return
+      FI
     ELSE
       print((red, (optimise | "ERRORED! (optimised)     --  " | "ERRORED!                 --  "), file name, new line));
       tests errored +:= 1
@@ -180,22 +209,24 @@ BEGIN
   FI;
 
   BOOL expect error := FALSE;
+  INT return value := 0;
+  STRING output := "";
+
   IF str EQ "ERROR" THEN     
     expect error := TRUE;
     get (f, (str, new line));
     str := str[3..]
+  ELSE
+    CO Convert string into a number CO
+    return value := string to number(str);
+
+    CO Collect expected stdout CO
+    WHILE get(f, (str, new line)); str /= "" DO
+      str := str[3..];
+      output +:= str;
+      output +:= new line char
+    OD
   FI; 
-
-  CO Convert string into a number CO
-  INT return value = string to number(str);
-
-  CO Collect expected stdout... CO
-  STRING output;
-  WHILE get(f, (str, new line)); str /= "" DO
-    str := str[3..];
-    output +:= str;
-    output +:= new line char
-  OD;
 
   CO Close the file CO
   close (f);

@@ -1,4 +1,4 @@
-; SKIP
+; ERROR
 
 a : integer
 a : integer
