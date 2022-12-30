@@ -683,6 +683,10 @@ static Parameter parse_param_decl(Parser *p) {
   consume(p, TK_COLON);
   Type *type = parse_type(p);
 
+  /// Function types are converted to their corresponding pointer type
+  /// when used as a parameter type.
+  if (type->kind == TYPE_FUNCTION) type = ast_make_type_pointer(p->ast, type->source_location, type);
+
   /// Done.
   return (Parameter){.source_location = start, .type = type, .name = string_dup(name)};
 }
