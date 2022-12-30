@@ -411,7 +411,7 @@ done:
 ///  Parser helpers.
 /// ===========================================================================
 /// Get the current scope.
-static Scope *curr_scope(Parser *p) { return VECTOR_BACK(p->ast->scope_stack); }
+static Scope *curr_scope(Parser *p) { return vector_back(p->ast->scope_stack); }
 
 /// Consume a token; error if it's not the expected type.
 static void consume(Parser *p, enum TokenType tt) {
@@ -517,7 +517,7 @@ static Node *parse_block(Parser *p, bool create_new_scope) {
 
   /// Collect the children.
   Nodes children = {0};
-  while (p->tok.type != TK_RBRACE) VECTOR_PUSH(children, parse_expr(p));
+  while (p->tok.type != TK_RBRACE) vector_push(children, parse_expr(p));
   consume(p, TK_RBRACE);
 
   /// Pop the scope.
@@ -579,7 +579,7 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
   /// Collect the arguments.
   Nodes args = {0};
   while (p->tok.type != TK_RPAREN) {
-    VECTOR_PUSH(args, parse_expr(p));
+    vector_push(args, parse_expr(p));
     if (p->tok.type == TK_COMMA) next_token(p);
   }
 
@@ -630,12 +630,12 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
   scope_push(p->ast);
 
   /// Create a declaration for each parameter.
-  VECTOR_FOREACH (Parameter , param, function_type->function.parameters) {
+  foreach (Parameter , param, function_type->function.parameters) {
     validate_decltype(p, param->type);
     Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
     if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var))
       ERR_AT(var->source_location, "Redefinition of parameter '%.*s'", (int) var->declaration.name.size, var->declaration.name.data);
-    VECTOR_PUSH(*param_decls, var);
+    vector_push(*param_decls, var);
   }
 
   /// Parse the body.
@@ -734,7 +734,7 @@ static Type *parse_type_derived(Parser *p, Type *base) {
         Parameters args = {0};
         while (p->tok.type != TK_RPAREN) {
           Parameter decl = parse_param_decl(p);
-          VECTOR_PUSH(args, decl);
+          vector_push(args, decl);
           if (p->tok.type == TK_COMMA) next_token(p);
         }
 
@@ -1108,7 +1108,7 @@ AST *parse(span source, const char *filename) {
   /// <file> ::= { <expression> }
   while (p.tok.type != TK_EOF) {
     Node *expr = parse_expr(&p);
-    VECTOR_PUSH(p.ast->root->root.children, expr);
+    vector_push(p.ast->root->root.children, expr);
     expr->parent = p.ast->root;
   }
   return p.ast;

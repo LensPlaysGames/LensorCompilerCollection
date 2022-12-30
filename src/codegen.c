@@ -64,12 +64,12 @@ void codegen_context_free(CodegenContext *context) {
   STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all calling conventions.");
 
   /// Free all IR Functions.
-  VECTOR_FOREACH_PTR (IRFunction *, f, context->functions) {
+  foreach_ptr (IRFunction *, f, context->functions) {
     /// Free each block.
-    DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    list_foreach (IRBlock*, b, f->blocks) {
       /// Free each instruction.
-      DLIST_FOREACH (IRInstruction *, i, b->instructions) ir_free_instruction_data(i);
-      DLIST_DELETE(IRInstruction, b->instructions);
+      list_foreach (IRInstruction *, i, b->instructions) ir_free_instruction_data(i);
+      list_delete(IRInstruction, b->instructions);
 
       /// Free the block name.
       free(b->name.data);
@@ -77,29 +77,29 @@ void codegen_context_free(CodegenContext *context) {
 
     /// Free the name, params, and block list.
     free(f->name.data);
-    VECTOR_DELETE(f->parameters);
-    DLIST_DELETE(IRBlock, f->blocks);
+    vector_delete(f->parameters);
+    list_delete(IRBlock, f->blocks);
 
     /// Free the function itself.
     free(f);
   }
 
   /// Finally, delete the function vector.
-  VECTOR_DELETE(context->functions);
+  vector_delete(context->functions);
 
   /// Free static variables.
-  VECTOR_FOREACH_PTR (IRStaticVariable*, var, context->static_vars) {
+  foreach_ptr (IRStaticVariable*, var, context->static_vars) {
     free(var->name.data);
     free(var);
   }
-  VECTOR_DELETE(context->static_vars);
+  vector_delete(context->static_vars);
 
   /// Free parameter instructions that were removed, but not freed.
-  VECTOR_FOREACH_PTR (IRInstruction*, i, context->removed_instructions) {
+  foreach_ptr (IRInstruction*, i, context->removed_instructions) {
     ir_free_instruction_data(i);
     free(i);
   }
-  VECTOR_DELETE(context->removed_instructions);
+  vector_delete(context->removed_instructions);
 
   /// Free backend-specific data.
   switch (context->format) {
@@ -139,13 +139,13 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// Root node.
   case NODE_ROOT: {
     /// Emit everything that isn’t a function.
-    VECTOR_FOREACH_PTR (Node *, child, expr->root.children) {
+      foreach_ptr (Node *, child, expr->root.children) {
       if (child->kind == NODE_FUNCTION) continue;
       codegen_expr(ctx, child);
     }
 
     /// If the last expression doesn’t return anything, return 0.
-    if (!ir_is_closed(ctx->block)) ir_return(ctx, VECTOR_BACK(expr->root.children)->ir);
+    if (!ir_is_closed(ctx->block)) ir_return(ctx, vector_back(expr->root.children)->ir);
     return;
   }
 
@@ -275,7 +275,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_BLOCK: {
       /// Emit everything that isn’t a function.
       Node *last = NULL;
-      VECTOR_FOREACH_PTR (Node *, child, expr->block.children) {
+      foreach_ptr (Node *, child, expr->block.children) {
         if (child->kind == NODE_FUNCTION) continue;
         last = child;
         codegen_expr(ctx, child);
@@ -307,7 +307,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     }
 
     /// Emit the arguments.
-    VECTOR_FOREACH_PTR (Node*, arg, expr->call.arguments) {
+    foreach_ptr (Node*, arg, expr->call.arguments) {
       codegen_expr(ctx, arg);
       ir_add_function_call_argument(ctx, call, arg->ir);
     }
@@ -443,7 +443,7 @@ void codegen_function(CodegenContext *ctx, Node *node) {
 
   /// First, emit all parameter declarations and store
   /// the initial parameter values in them.
-  VECTOR_FOREACH_INDEX(i, node->function.param_decls) {
+  foreach_index(i, node->function.param_decls) {
     /// Allocate a variable for the parameter.
     Node *decl = node->function.param_decls.data[i];
     codegen_expr(ctx, decl);
@@ -533,15 +533,15 @@ bool codegen
       };
 
       Parameters main_params = {0};
-      VECTOR_PUSH(main_params, argc);
-      VECTOR_PUSH(main_params, argv);
+      vector_push(main_params, argc);
+      vector_push(main_params, argv);
 
       Type *main_type = ast_make_type_function(context->ast, (loc){0}, context->ast->t_integer, main_params);
       context->entry = ir_function(context, literal_span("main"), main_type);
       context->entry->attr_global = true;
 
       /// Create the remaining functions and set the address of each function.
-      VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
+      foreach_ptr (Node*, func, ast->functions) {
           func->function.ir = ir_function(context, as_span(func->function.name),
             func->type);
 
@@ -558,7 +558,7 @@ bool codegen
       codegen_expr(context, ast->root);
 
       /// Emit the remaining functions that aren’t extern.
-      VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
+      foreach_ptr (Node*, func, ast->functions) {
         if (!func->function.body) continue;
         codegen_function(context, func);
       }

@@ -49,9 +49,9 @@ struct CodegenContext {
   FILE *code;
   AST *ast;
 
-  VECTOR(IRFunction *) functions;
-  VECTOR(IRStaticVariable *) static_vars;
-  VECTOR(IRInstruction*) removed_instructions;
+  Vector(IRFunction *) functions;
+  Vector(IRStaticVariable *) static_vars;
+  Vector(IRInstruction*) removed_instructions;
   IRFunction *function;
   IRFunction *entry;
   IRBlock *block;

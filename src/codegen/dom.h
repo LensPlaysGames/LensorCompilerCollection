@@ -8,8 +8,8 @@
 /// A node in the dominator tree.
 typedef struct DomTreeNode {
   IRBlock *block;
-  VECTOR(struct DomTreeNode *) dominators;
-  VECTOR(struct DomTreeNode *) children;
+  Vector(struct DomTreeNode *) dominators;
+  Vector(struct DomTreeNode *) children;
 } DomTreeNode;
 
 /// Structure used to store dominator information such as the
@@ -72,7 +72,7 @@ typedef struct DominatorInfo {
   /// Nodes that make up the dominator tree. The first
   /// node is the root of the tree and corresponds to
   /// the entry block.
-  VECTOR(DomTreeNode) nodes;
+  Vector(DomTreeNode) nodes;
   DomTreeNode *dominator_tree;
 } DominatorInfo;
 

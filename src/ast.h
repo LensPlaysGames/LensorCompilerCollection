@@ -106,9 +106,9 @@ typedef struct Node Node;
 typedef struct Type Type;
 typedef struct Parameter Parameter;
 typedef struct Scope Scope;
-typedef VECTOR(Node *) Nodes;
-typedef VECTOR(Type *) Types;
-typedef VECTOR(Parameter) Parameters;
+typedef Vector(Node *) Nodes;
+typedef Vector(Type *) Types;
+typedef Vector(Parameter) Parameters;
 
 /// A symbol in the symbol table.
 typedef struct Symbol {
@@ -134,10 +134,10 @@ struct Scope {
   struct Scope *parent;
 
   /// The symbols in this scope.
-  VECTOR(Symbol *) symbols;
+  Vector(Symbol *) symbols;
 
   /// All child scopes.
-  VECTOR(Scope *) children;
+  Vector(Scope *) children;
 };
 
 /// ===========================================================================
@@ -333,7 +333,7 @@ typedef struct AST {
   /// All nodes/types/scopes in the AST. NEVER iterate over this, ever.
   Nodes _nodes_;
   Types _types_;
-  VECTOR(Scope *) _scopes_;
+  Vector(Scope *) _scopes_;
 
   /// Counter used for generating unique names.
   usz counter;
@@ -343,13 +343,13 @@ typedef struct AST {
   Type *t_integer;
 
   /// Scopes that are currently being parsed.
-  VECTOR(Scope *) scope_stack;
+  Vector(Scope *) scope_stack;
 
   /// String table.
-  VECTOR(string) strings;
+  Vector(string) strings;
 
   /// Functions.
-  VECTOR(Node *) functions;
+  Vector(Node *) functions;
 } AST;
 
 /// ===========================================================================

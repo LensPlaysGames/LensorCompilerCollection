@@ -17,10 +17,10 @@
 #define TMP B
 
 void mark_used(IRInstruction *usee, IRInstruction *user) {
-  VECTOR_FOREACH_PTR (IRInstruction *, i_user, usee->users) {
+  foreach_ptr (IRInstruction *, i_user, usee->users) {
     ASSERT(i_user != user, "Instruction already marked as user.");
   }
-  VECTOR_PUSH(usee->users, user);
+  vector_push(usee->users, user);
 }
 
 void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
@@ -28,7 +28,7 @@ void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
   fprintf(stderr, "[Use] Removing use of %%%u in %%%u\n", usee->id, user->id);
 #endif
 
-  VECTOR_REMOVE_ELEMENT_UNORDERED(usee->users, user);
+  vector_remove_element_unordered(usee->users, user);
 }
 
 bool ir_is_branch(IRInstruction* i) {
@@ -76,7 +76,7 @@ void ir_force_insert_into_block
  )
 {
   i->parent_block = block;
-  DLIST_PUSH_BACK(block->instructions, i);
+  list_push_back(block->instructions, i);
 }
 
 void ir_insert
@@ -90,13 +90,13 @@ void ir_insert
 
 void insert_instruction_before(IRInstruction *i, IRInstruction *before) {
   ASSERT(i && before);
-  DLIST_INSERT_BEFORE(before->parent_block->instructions, i, before);
+  list_insert_before(before->parent_block->instructions, i, before);
   i->parent_block = before->parent_block;
 }
 
 void insert_instruction_after(IRInstruction *i, IRInstruction *after) {
   ASSERT(i && after);
-  DLIST_INSERT_AFTER(after->parent_block->instructions, i, after);
+  list_insert_after(after->parent_block->instructions, i, after);
   i->parent_block = after->parent_block;
 }
 
@@ -111,14 +111,14 @@ void ir_remove(IRInstruction* instruction) {
     ICE("Cannot remove used instruction.");
   }
 
-  DLIST_REMOVE(instruction->parent_block->instructions, instruction);
-  VECTOR_DELETE(instruction->users);
+  list_remove(instruction->parent_block->instructions, instruction);
+  vector_delete(instruction->users);
   ir_unmark_usees(instruction);
   /// Parameters / static refs should not be freed here.
   if (instruction->type != IR_PARAMETER && instruction->type != IR_STATIC_REF) {
     free(instruction);
   } else {
-    VECTOR_PUSH(instruction->parent_block->function->context->removed_instructions, instruction);
+    vector_push(instruction->parent_block->function->context->removed_instructions, instruction);
   }
 }
 
@@ -127,7 +127,7 @@ void ir_remove_and_free_block(IRBlock *block) {
   while (block->instructions.first) {
     /// Remove this instruction from PHIs.
     if (block->instructions.first->type == IR_PHI) {
-        VECTOR_FOREACH_PTR (IRInstruction *, user, block->instructions.first->users) {
+      foreach_ptr (IRInstruction *, user, block->instructions.first->users) {
             if (user->type == IR_PHI) ir_phi_remove_argument(user, block);
         }
     }
@@ -135,7 +135,7 @@ void ir_remove_and_free_block(IRBlock *block) {
     /// Remove it from the blocks.
     ir_remove(block->instructions.first);
   }
-  DLIST_REMOVE(block->function->blocks, block);
+  list_remove(block->function->blocks, block);
   free(block);
 }
 
@@ -143,16 +143,16 @@ void ir_free_instruction_data(IRInstruction *i) {
   if (!i) return;
   STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
   switch (i->type) {
-    case IR_CALL: VECTOR_DELETE(i->call.arguments); break;
+    case IR_CALL: vector_delete(i->call.arguments); break;
     case IR_PHI:
-      VECTOR_FOREACH_PTR (IRPhiArgument*, arg, i->phi_args) free(arg);
-      VECTOR_DELETE(i->phi_args);
+        foreach_ptr (IRPhiArgument*, arg, i->phi_args) free(arg);
+      vector_delete(i->phi_args);
       break;
     default: break;
   }
 
   /// Free usage data.
-  VECTOR_DELETE(i->users);
+  vector_delete(i->users);
 }
 
 #define INSERT(instruction) ir_insert(context, (instruction))
@@ -201,7 +201,7 @@ void ir_femit_instruction
     }
     fprintf(file, "%s(", KW);
     bool first = true;
-    VECTOR_FOREACH_PTR (IRInstruction*, i, inst->call.arguments) {
+    foreach_ptr (IRInstruction*, i, inst->call.arguments) {
       if (!first) { fprintf(file, "%s, ", KW); }
       else first = false;
       fprintf(file, "%s%%%u", TMP, i->id);
@@ -238,7 +238,7 @@ void ir_femit_instruction
   case IR_PHI: {
     fprintf(file, "%sphi ", Y);
     bool first = true;
-    VECTOR_FOREACH_PTR (IRPhiArgument*, arg, inst->phi_args) {
+    foreach_ptr (IRPhiArgument*, arg, inst->phi_args) {
       if (first) { first = false; }
       else { fprintf(file, "%s, ", KW); }
       fprintf(file, "%s[%sbb%zu%s : %s%%%u%s]", KW, BLK, arg->block->id, KW, TMP, arg->value->id, KW);
@@ -281,7 +281,7 @@ void ir_femit_block
  )
 {
   fprintf(file, "%sbb%zu%s:\n", BLK, block->id, KW);
-  DLIST_FOREACH (IRInstruction*, instruction, block->instructions) {
+  list_foreach (IRInstruction*, instruction, block->instructions) {
     ir_femit_instruction(file, instruction);
   }
 }
@@ -294,7 +294,7 @@ void ir_femit_function
   ir_print_defun(file, function);
   if (!function->is_extern) {
     fprintf(file, " %s{\n", KW);
-    DLIST_FOREACH (IRBlock*, block, function->blocks) ir_femit_block(file, block);
+    list_foreach (IRBlock*, block, function->blocks) ir_femit_block(file, block);
     fprintf(file, "%s}", KW);
   }
   fprintf(file, "\n");
@@ -306,7 +306,7 @@ void ir_femit
  )
 {
   ir_set_ids(context);
-  VECTOR_FOREACH_PTR (IRFunction*, function, context->functions) {
+  foreach_ptr (IRFunction*, function, context->functions) {
     if (function_ptr != context->functions.data) fprintf(file, "\n");
     ir_femit_function(file, function);
   }
@@ -317,9 +317,9 @@ void ir_set_func_ids(IRFunction *f) {
   size_t block_id = 1;
   u32 instruction_id = (u32) f->parameters.size + 1;
 
-  DLIST_FOREACH (IRBlock *, block, f->blocks) {
+  list_foreach (IRBlock *, block, f->blocks) {
     block->id = block_id++;
-    DLIST_FOREACH (IRInstruction *, instruction, block->instructions) {
+    list_foreach (IRInstruction *, instruction, block->instructions) {
         if (instruction->type == IR_PARAMETER || !ir_is_value(instruction)) continue;
         instruction->id = instruction_id++;
     }
@@ -329,7 +329,7 @@ void ir_set_func_ids(IRFunction *f) {
 void ir_set_ids(CodegenContext *context) {
   size_t function_id = 0;
 
-  VECTOR_FOREACH_PTR (IRFunction*, function, context->functions) {
+  foreach_ptr (IRFunction*, function, context->functions) {
     function->id = function_id++;
     ir_set_func_ids(function);
   }
@@ -342,7 +342,7 @@ void ir_add_function_call_argument
  )
 {
   (void) context;
-  VECTOR_PUSH(call->call.arguments, argument);
+  vector_push(call->call.arguments, argument);
   mark_used(argument, call);
 }
 
@@ -363,14 +363,14 @@ void ir_add_parameter_to_function(IRFunction *f) {
   parameter->imm = f->parameters.size;
   parameter->id = (u32) f->parameters.size;
   ir_insert(f->context, parameter);
-  VECTOR_PUSH(f->parameters, parameter);
+  vector_push(f->parameters, parameter);
 }
 
 void ir_phi_add_argument
 (IRInstruction *phi,
  IRPhiArgument *argument)
 {
-  VECTOR_PUSH(phi->phi_args, argument);
+  vector_push(phi->phi_args, argument);
   mark_used(argument->value, phi);
 }
 
@@ -384,15 +384,15 @@ void ir_phi_argument
   arg->block = phi_predecessor;
   arg->value = argument;
 
-  VECTOR_PUSH(phi->phi_args, arg);
+  vector_push(phi->phi_args, arg);
   mark_used(argument, phi);
 }
 
 void ir_phi_remove_argument(IRInstruction *phi, IRBlock *block) {
-  VECTOR_FOREACH_PTR (IRPhiArgument*, argument, phi->phi_args) {
+  foreach_ptr (IRPhiArgument*, argument, phi->phi_args) {
     if (argument->block == block) {
       ir_remove_use(argument->value, phi);
-      VECTOR_REMOVE_ELEMENT_UNORDERED(phi->phi_args, argument);
+      vector_remove_element_unordered(phi->phi_args, argument);
       return;
     }
   }
@@ -409,7 +409,7 @@ void ir_block_attach_to_function
  IRBlock *new_block
  )
 {
-  DLIST_PUSH_BACK(function->blocks, new_block);
+  list_push_back(function->blocks, new_block);
   new_block->function = function;
 }
 
@@ -438,14 +438,14 @@ IRFunction *ir_function(CodegenContext *context, span name, Type *function_type)
   context->function = function;
   function->context = context;
   ir_block_attach(context, block);
-  VECTOR_PUSH(context->functions, function);
+  vector_push(context->functions, function);
 
   /// Generate param refs.
   for (u64 i = 1; i <= function_type->function.parameters.size; i++) {
     INSTRUCTION(param, IR_PARAMETER);
     param->imm = i - 1;
     param->id = (u32) i;
-    VECTOR_PUSH(function->parameters, param);
+    vector_push(function->parameters, param);
     INSERT(param);
   }
   return function;
@@ -550,7 +550,7 @@ IRInstruction *ir_branch_into_block
   INSTRUCTION(branch, IR_BRANCH);
   branch->destination_block = destination;
   branch->parent_block = block;
-  DLIST_PUSH_BACK(block->instructions, branch);
+  list_push_back(block->instructions, branch);
   return branch;
 }
 
@@ -625,7 +625,7 @@ IRInstruction *ir_create_static
   v->type = ty;
   v->cached_size = ast_sizeof(ty);
   v->cached_alignment = 8; /// TODO.
-  VECTOR_PUSH(context->static_vars, v);
+  vector_push(context->static_vars, v);
 
   /// Create an instruction to reference it and return it.
   INSTRUCTION(ref, IR_STATIC_REF);
@@ -670,7 +670,7 @@ void ir_for_each_child(
   STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
   switch (user->type) {
   case IR_PHI:
-    VECTOR_FOREACH_PTR (IRPhiArgument*, arg, user->phi_args) {
+      foreach_ptr (IRPhiArgument*, arg, user->phi_args) {
       callback(user, &arg->value, data);
     }
     break;
@@ -696,7 +696,7 @@ void ir_for_each_child(
 
   case IR_CALL:
     if (user->call.is_indirect) callback(user, &user->call.callee_instruction, data);
-    VECTOR_FOREACH (IRInstruction*, arg, user->call.arguments) callback(user, arg, data);
+    foreach (IRInstruction*, arg, user->call.arguments) callback(user, arg, data);
     break;
 
   case IR_BRANCH_CONDITIONAL:
@@ -775,20 +775,20 @@ void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
 #ifdef DEBUG_USES
   fprintf(stderr, "[Use] Replacing uses of %%%u with %%%u\n", instruction->id, replacement->id);
 #endif
-  VECTOR_FOREACH_PTR (IRInstruction *, user, instruction->users) {
+  foreach_ptr (IRInstruction *, user, instruction->users) {
     ir_internal_replace_use_t replace = { instruction, replacement };
     ir_for_each_child(user, ir_internal_replace_use, &replace);
   }
 
-  VECTOR_APPEND_ALL(replacement->users, instruction->users);
-  VECTOR_CLEAR(instruction->users);
+  vector_append_all(replacement->users, instruction->users);
+  vector_clear(instruction->users);
 }
 
 static void ir_internal_unmark_usee(IRInstruction *user, IRInstruction **child, void *_) {
   (void) _;
-  VECTOR_FOREACH_PTR (IRInstruction *, child_user, (*child)->users) {
+  foreach_ptr (IRInstruction *, child_user, (*child)->users) {
     if (child_user == user) {
-      VECTOR_REMOVE_ELEMENT_UNORDERED((*child)->users, child_user);
+      vector_remove_element_unordered((*child)->users, child_user);
       break;
     }
   }

@@ -57,7 +57,7 @@ NODISCARD static bool types_equal_impl(AST *ast, Type *a, Type *b) {
     case TYPE_FUNCTION: {
       if (a->function.parameters.size != b->function.parameters.size) return false;
       if (!types_equal(ast, a->function.return_type, b->function.return_type)) return false;
-      VECTOR_FOREACH_INDEX (i, a->function.parameters)
+      foreach_index(i, a->function.parameters)
         if (!types_equal(ast, a->function.parameters.data[i].type, b->function.parameters.data[i].type))
           return false;
       return true;
@@ -254,7 +254,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Typecheck each child of the root.
     case NODE_ROOT:
-      VECTOR_FOREACH_PTR (Node *, node, expr->root.children)
+      foreach_ptr (Node *, node, expr->root.children)
         if (!typecheck_expression(ast, node))
           return false;
 
@@ -265,7 +265,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// This is so that if someone, for whatever reason, puts the name
       /// of the function as an expression in the root, it will just be
       /// removed rather than replaced with the function.
-      VECTOR_FOREACH_INDEX(i, expr->root.children) {
+      foreach_index(i, expr->root.children) {
         Node *node = expr->root.children.data[i];
         if (node->kind == NODE_FUNCTION_REFERENCE) {
           Node *func = node->funcref.resolved->node;
@@ -279,9 +279,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       /// If the last expression in the root is not of type integer,
       /// add a literal 0 so that `main()` returns 0.
-      if (!expr->root.children.size || !convertible(ast, ast->t_integer, VECTOR_BACK(expr->root.children)->type)) {
+      if (!expr->root.children.size || !convertible(ast, ast->t_integer, vector_back(expr->root.children)->type)) {
         Node *lit = ast_make_integer_literal(ast, (loc){0}, 0);
-        VECTOR_PUSH(expr->root.children, lit);
+        vector_push(expr->root.children, lit);
         lit->parent = expr;
         ASSERT(typecheck_expression(ast, lit));
       }
@@ -342,10 +342,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Typecheck all children and set the type of the block
     /// to the type of the last child. TODO: noreturn?
     case NODE_BLOCK: {
-      VECTOR_FOREACH_PTR (Node *, node, expr->block.children)
+      foreach_ptr (Node *, node, expr->block.children)
         if (!typecheck_expression(ast, node))
           return false;
-      expr->type = expr->block.children.size ? VECTOR_BACK(expr->block.children)->type : ast->t_void;
+      expr->type = expr->block.children.size ? vector_back(expr->block.children)->type : ast->t_void;
     } break;
 
     /// First, resolve the function. Then, typecheck all parameters
@@ -379,7 +379,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       }
 
       /// Typecheck all arguments.
-      VECTOR_FOREACH_PTR (Node *, param, expr->call.arguments)
+      foreach_ptr (Node *, param, expr->call.arguments)
         if (!typecheck_expression(ast, param))
           return false;
 
@@ -389,7 +389,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
             callee->type->function.parameters.size, expr->call.arguments.size);
 
       /// Make sure all arguments are convertible to the parameter types.
-      VECTOR_FOREACH_INDEX(i, expr->call.arguments) {
+      foreach_index(i, expr->call.arguments) {
         Parameter *param = &callee->type->function.parameters.data[i];
         Node *arg = expr->call.arguments.data[i];
         if (!convertible(ast, param->type, arg->type)) ERR_NOT_CONVERTIBLE(param->type, arg->type);
