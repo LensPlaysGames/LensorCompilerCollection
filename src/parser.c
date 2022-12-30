@@ -73,13 +73,14 @@ typedef struct Parser {
 /// ===========================================================================
 /// All keywords.
 const struct {
-  const char *kw;
+  span kw;
   enum TokenType type;
-} keywords[4] = {
-    {"if", TK_IF},
-    {"else", TK_ELSE},
-    {"while", TK_WHILE},
-    {"ext", TK_EXT},
+} keywords[5] = {
+    {literal_span("if"), TK_IF},
+    {literal_span("else"), TK_ELSE},
+    {literal_span("while"), TK_WHILE},
+    {literal_span("ext"), TK_EXT},
+    {literal_span("as"), TK_AS},
 };
 
 /// Check if a character may start an identifier.
@@ -264,9 +265,18 @@ static void next_token(Parser *p) {
       break;
 
     case ';':
-    case '#':
       while (p->lastc && p->lastc != '\n') next_char(p);
       return next_token(p);
+
+    case '#':
+      next_char(p);
+      p->tok.type = TK_HASH;
+      break;
+
+    case '.':
+      next_char(p);
+      p->tok.type = TK_DOT;
+      break;
 
     case '+':
       next_char(p);
@@ -371,7 +381,7 @@ static void next_token(Parser *p) {
 
         /// Check if the identifier is a keyword.
         for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
-          if (strncmp(keywords[i].kw, p->tok.text.data, p->tok.text.size) == 0) {
+          if (string_eq(keywords[i].kw, p->tok.text)) {
             p->tok.type = keywords[i].type;
             goto done;
           }
@@ -422,6 +432,9 @@ static bool is_postfix_operator(enum TokenType tt) {
 static isz binary_operator_precedence(Parser *p, Token t) {
   (void) p;
   switch (t.type) {
+    case TK_DOT: return 10000;
+    case TK_AS: return 1000;
+
     case TK_STAR:
     case TK_SLASH:
     case TK_PERCENT:
@@ -860,11 +873,9 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   return decl;
 }
 
-/// This function is a bit complicated because there are many rules in the
-/// grammar that (may), directly or indirectly, start with an identifier.
+/// Declaration, call, or cast.
 ///
 /// <decl-start>   ::= IDENTIFIER ":"
-/// <type>         ::= IDENTIFIER | ...
 /// <expr-primary> ::= NUMBER | IDENTIFIER
 static Node *parse_ident_expr(Parser *p) {
   /// We know that we’re looking at an identifier; save it for later.
@@ -886,14 +897,9 @@ static Node *parse_ident_expr(Parser *p) {
   if (sym->kind == SYM_VARIABLE) return ast_make_variable_reference(p->ast, ident.source_location, sym);
   if (sym->kind == SYM_FUNCTION) return ast_make_function_reference(p->ast, ident.source_location, sym);
 
-  /// If the symbol is a type, then parse the rest of the type and delegate.
-  if (sym->kind == SYM_TYPE) {
-    Type *type = parse_type_derived(p, ast_make_type_named(p->ast, ident.source_location, sym));
-    return parse_type_expr(p, type);
-  }
-
-  /// Should never get here.
-  UNREACHABLE();
+  /// Otherwise, this is an error.
+  /// TODO: Allow types here once we have struct literals.
+  ERR_AT(ident.source_location, "Symbol '%.*s' is not allowed here", (int) ident.text.size, ident.text.data);
 }
 
 /// Parse an expression. This function handles the following rules:
@@ -1047,10 +1053,21 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
     u32 start = p->tok.source_location.start;
     enum TokenType tt = p->tok.type;
     next_token(p);
-    Node *rhs = parse_expr_with_precedence(p, prec);
 
-    /// Combine the LHS and RHS into a binary expression.
-    lhs = ast_make_binary(p->ast, (loc){.start = start, .end = rhs->source_location.end}, tt, lhs, rhs);
+    /// The `as` operator is special because its RHS is a type.
+    if (tt == TK_AS) {
+      Type *type = parse_type(p);
+      lhs = ast_make_cast(p->ast, (loc){.start = start, .end = type->source_location.end}, type, lhs);
+      continue;
+    }
+
+    /// Otherwise, the RHS is a regular expression.
+    else {
+      Node *rhs = parse_expr_with_precedence(p, prec);
+
+      /// Combine the LHS and RHS into a binary expression.
+      lhs = ast_make_binary(p->ast, (loc){.start = start, .end = rhs->source_location.end}, tt, lhs, rhs);
+    }
   }
 }
 
@@ -1099,6 +1116,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_ELSE: return "else";
     case TK_WHILE: return "while";
     case TK_EXT: return "ext";
+    case TK_AS: return "as";
     case TK_LPAREN: return "\"(\"";
     case TK_RPAREN: return "\")\"";
     case TK_LBRACK: return "\"[\"";
@@ -1108,6 +1126,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_COMMA: return "\",\"";
     case TK_COLON: return "\":\"";
     case TK_SEMICOLON: return "\";\"";
+    case TK_DOT: return "\".\"";
     case TK_PLUS: return "\"+\"";
     case TK_MINUS: return "\"-\"";
     case TK_STAR: return "\"*\"";
@@ -1119,6 +1138,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_TILDE: return "\"~\"";
     case TK_EXCLAM: return "\"!\"";
     case TK_AT: return "\"@\"";
+    case TK_HASH: return "\"#\"";
     case TK_SHL: return "\"<<\"";
     case TK_SHR: return "\">>\"";
     case TK_EQ: return "\"=\"";

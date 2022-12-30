@@ -51,6 +51,7 @@ enum TokenType {
   TK_ELSE,
   TK_WHILE,
   TK_EXT,
+  TK_AS,
 
   TK_LPAREN,
   TK_RPAREN,
@@ -62,6 +63,7 @@ enum TokenType {
   TK_COMMA,
   TK_COLON,
   TK_SEMICOLON,
+  TK_DOT,
 
   TK_PLUS,
   TK_MINUS,
@@ -74,6 +76,7 @@ enum TokenType {
   TK_TILDE,
   TK_EXCLAM,
   TK_AT,
+  TK_HASH,
 
   TK_SHL,
   TK_SHR,

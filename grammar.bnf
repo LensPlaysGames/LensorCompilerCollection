@@ -28,7 +28,7 @@
 <expr-block>     ::= "{" { <expression> } "}"
 <expr-lambda>    ::= <type-function> <expression>
 <expr-call>      ::= <expression> "(" { <expression> [ "," ] } ")"
-<expr-cast>      ::= <type> <expression>
+<expr-cast>      ::= <expression> AS <type>
 <expr-subs>      ::= <expression> "[" <expression> "]"
 <expr-paren>     ::= "(" <expression> ")"
 <expr-prefix>    ::= <prefix> <expression>
