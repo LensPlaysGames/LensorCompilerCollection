@@ -1,0 +1,4 @@
+; ERROR
+
+foo : void (x : integer) {}
+foo : integer (x: integer) 42

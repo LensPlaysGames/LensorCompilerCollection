@@ -239,7 +239,7 @@ BEGIN
 END;
 
 CO Collect the tests CO
-[] STRING tests = get directory ("tests");
+[] STRING tests = SORT get directory ("tests");
 
 CO Run tests CO
 FOR index FROM LWB tests TO UPB tests DO

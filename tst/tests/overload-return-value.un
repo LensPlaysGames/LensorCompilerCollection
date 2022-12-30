@@ -1,0 +1,7 @@
+; SKIP
+; 42
+
+foo : integer (x : byte) 42
+foo : void (x : integer) {}
+
+foo (1 as byte)
