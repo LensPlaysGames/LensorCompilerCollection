@@ -654,9 +654,8 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
 /// <expr-cast>      ::= <type> <expression>
 /// <expr-lambda>    ::= <type-function> <expr-block>
 static Node *parse_type_expr(Parser *p, Type *type) {
-  /// If this is a function type, and the next token is "{", then this
-  /// is a lambda expression.
-  if (type->kind == TYPE_FUNCTION && p->tok.type == TK_LBRACE) {
+  /// If this is a function type, then this is a lambda expression.
+  if (type->kind == TYPE_FUNCTION) {
     /// Parse the function body.
     Nodes params = {0};
     Node *body = parse_function_body(p, type, &params);
@@ -669,8 +668,9 @@ static Node *parse_type_expr(Parser *p, Type *type) {
     return func;
   }
 
-  /// Otherwise, this is a cast expression.
-  return ast_make_cast(p->ast, type->source_location, type, parse_expr(p));
+  /// Otherwise, this is an error.
+  /// TODO: Struct literals.
+  ERR_AT(type->source_location, "Expected expression, got type");
 }
 
 /// <param-decl> ::= <decl-start> <type>
@@ -897,9 +897,14 @@ static Node *parse_ident_expr(Parser *p) {
   if (sym->kind == SYM_VARIABLE) return ast_make_variable_reference(p->ast, ident.source_location, sym);
   if (sym->kind == SYM_FUNCTION) return ast_make_function_reference(p->ast, ident.source_location, sym);
 
-  /// Otherwise, this is an error.
-  /// TODO: Allow types here once we have struct literals.
-  ERR_AT(ident.source_location, "Symbol '%.*s' is not allowed here", (int) ident.text.size, ident.text.data);
+  /// If the symbol is a type, then parse the rest of the type and delegate.
+  if (sym->kind == SYM_TYPE) {
+    Type *type = parse_type_derived(p, ast_make_type_named(p->ast, ident.source_location, sym));
+    return parse_type_expr(p, type);
+  }
+
+  /// Should never get here.
+  UNREACHABLE();
 }
 
 /// Parse an expression. This function handles the following rules:
