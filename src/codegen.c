@@ -64,12 +64,12 @@ void codegen_context_free(CodegenContext *context) {
   STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all calling conventions.");
 
   /// Free all IR Functions.
-  VECTOR_FOREACH_PTR (IRFunction *, f, context->functions) {
+  foreach_ptr (IRFunction *, f, context->functions) {
     /// Free each block.
-    DLIST_FOREACH (IRBlock*, b, f->blocks) {
+    list_foreach (IRBlock*, b, f->blocks) {
       /// Free each instruction.
-      DLIST_FOREACH (IRInstruction *, i, b->instructions) ir_free_instruction_data(i);
-      DLIST_DELETE(IRInstruction, b->instructions);
+      list_foreach (IRInstruction *, i, b->instructions) ir_free_instruction_data(i);
+      list_delete(IRInstruction, b->instructions);
 
       /// Free the block name.
       free(b->name.data);
@@ -77,29 +77,29 @@ void codegen_context_free(CodegenContext *context) {
 
     /// Free the name, params, and block list.
     free(f->name.data);
-    VECTOR_DELETE(f->parameters);
-    DLIST_DELETE(IRBlock, f->blocks);
+    vector_delete(f->parameters);
+    list_delete(IRBlock, f->blocks);
 
     /// Free the function itself.
     free(f);
   }
 
   /// Finally, delete the function vector.
-  VECTOR_DELETE(context->functions);
+  vector_delete(context->functions);
 
   /// Free static variables.
-  VECTOR_FOREACH_PTR (IRStaticVariable*, var, context->static_vars) {
+  foreach_ptr (IRStaticVariable*, var, context->static_vars) {
     free(var->name.data);
     free(var);
   }
-  VECTOR_DELETE(context->static_vars);
+  vector_delete(context->static_vars);
 
   /// Free parameter instructions that were removed, but not freed.
-  VECTOR_FOREACH_PTR (IRInstruction*, i, context->removed_parameter_instructions) {
+  foreach_ptr (IRInstruction*, i, context->removed_instructions) {
     ir_free_instruction_data(i);
     free(i);
   }
-  VECTOR_DELETE(context->removed_parameter_instructions);
+  vector_delete(context->removed_instructions);
 
   /// Free backend-specific data.
   switch (context->format) {
@@ -139,15 +139,13 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// Root node.
   case NODE_ROOT: {
     /// Emit everything that isn’t a function.
-    Node *last = NULL;
-    VECTOR_FOREACH_PTR (Node *, child, expr->root.children) {
+    foreach_ptr (Node *, child, expr->root.children) {
       if (child->kind == NODE_FUNCTION) continue;
-      last = child;
       codegen_expr(ctx, child);
     }
 
     /// If the last expression doesn’t return anything, return 0.
-    if (!ir_is_closed(ctx->block)) ir_return(ctx, last ? last->ir : ir_immediate(ctx, 0));
+    if (!ir_is_closed(ctx->block)) ir_return(ctx, vector_back(expr->root.children)->ir);
     return;
   }
 
@@ -216,7 +214,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     ir_block_attach(ctx, join_block);
 
     /// Insert a phi node for the result of the if in the join block.
-    if (expr->type != ctx->ast->t_void) {
+    if (!ast_is_void(ctx->ast, expr->type)) {
       IRInstruction *phi = ir_phi(ctx);
       ir_phi_argument(phi, last_then_block, expr->if_.then->ir);
       ir_phi_argument(phi, last_else_block, expr->if_.else_->ir);
@@ -277,7 +275,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_BLOCK: {
       /// Emit everything that isn’t a function.
       Node *last = NULL;
-      VECTOR_FOREACH_PTR (Node *, child, expr->block.children) {
+      foreach_ptr (Node *, child, expr->block.children) {
         if (child->kind == NODE_FUNCTION) continue;
         last = child;
         codegen_expr(ctx, child);
@@ -286,7 +284,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       /// The yield of a block is that of its last expression;
       /// If a block doesn’t yield `void`, then it is guaranteed
       /// to not be empty, which is why we don’t check its size here.
-      if (expr->type != ctx->ast->t_void) {
+      if (!ast_is_void(ctx->ast, expr->type)) {
         ASSERT(last && last->ir);
         expr->ir = last->ir;
       }
@@ -309,7 +307,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     }
 
     /// Emit the arguments.
-    VECTOR_FOREACH_PTR (Node*, arg, expr->call.arguments) {
+    foreach_ptr (Node*, arg, expr->call.arguments) {
       codegen_expr(ctx, arg);
       ir_add_function_call_argument(ctx, call, arg->ir);
     }
@@ -399,7 +397,15 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
         /// Load a value from an lvalue.
         /// Emitting an lvalue loads it, so we don’t need to do anything here.
-        case TK_AT: expr->ir = expr->unary.value->ir; return;
+        case TK_AT:
+          /// TODO: This check for a function pointer is a bit sus. We shouldn’t
+          ///       even get here if this is actually a function pointer...
+          if (expr->unary.value->type->pointer.to->kind == TYPE_FUNCTION) {
+            expr->ir = expr->unary.value->ir;
+          } else {
+            expr->ir = ir_load(ctx, expr->unary.value->ir);
+          }
+          return;
 
         /// One’s complement negation.
         case TK_TILDE: expr->ir = ir_not(ctx, expr->unary.value->ir); return;
@@ -437,7 +443,7 @@ void codegen_function(CodegenContext *ctx, Node *node) {
 
   /// First, emit all parameter declarations and store
   /// the initial parameter values in them.
-  VECTOR_FOREACH_INDEX(i, node->function.param_decls) {
+  foreach_index(i, node->function.param_decls) {
     /// Allocate a variable for the parameter.
     Node *decl = node->function.param_decls.data[i];
     codegen_expr(ctx, decl);
@@ -451,10 +457,11 @@ void codegen_function(CodegenContext *ctx, Node *node) {
   codegen_expr(ctx, node->function.body);
 
   /// If the we can return from here, and this function doesn’t return void,
-  /// then emit a return instruction; otherwise, just return 0 for now.
-  /// TODO: Allow ir_return(ctx, NULL) to be valid.
-  if (!ir_is_closed(ctx->block) && node->type->function.return_type != ctx->ast->t_void) {
+  /// then return the return value; otherwise, just return nothing.
+  if (!ir_is_closed(ctx->block) && !ast_is_void(ctx->ast, node->type->function.return_type)) {
     ir_return(ctx, node->function.body->ir);
+  } else {
+    ir_return(ctx, NULL);
   }
 }
 
@@ -516,13 +523,27 @@ bool codegen
     /// Codegen a FUN program.
     case LANG_FUN: {
       /// Create the main function.
-      context->entry = ir_function(context, literal_span("main"), 2);
+      Parameter argc =  {
+        .name = string_create("__argc__"),
+        .type = ast->t_integer,
+      };
+      Parameter argv =  {
+        .name = string_create("__argv__"),
+        .type = ast_make_type_pointer(ast, (loc){0}, ast_make_type_pointer(ast, (loc){0}, ast->t_integer)),
+      };
+
+      Parameters main_params = {0};
+      vector_push(main_params, argc);
+      vector_push(main_params, argv);
+
+      Type *main_type = ast_make_type_function(context->ast, (loc){0}, context->ast->t_integer, main_params);
+      context->entry = ir_function(context, literal_span("main"), main_type);
       context->entry->attr_global = true;
 
       /// Create the remaining functions and set the address of each function.
-      VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
+      foreach_ptr (Node*, func, ast->functions) {
           func->function.ir = ir_function(context, as_span(func->function.name),
-            func->type->function.parameters.size);
+            func->type);
 
           /// Mark the function as extern if it is.
           if (!func->function.body) func->function.ir->is_extern = true;
@@ -537,7 +558,7 @@ bool codegen
       codegen_expr(context, ast->root);
 
       /// Emit the remaining functions that aren’t extern.
-      VECTOR_FOREACH_PTR (Node*, func, ast->functions) {
+      foreach_ptr (Node*, func, ast->functions) {
         if (!func->function.body) continue;
         codegen_function(context, func);
       }
@@ -549,17 +570,12 @@ bool codegen
 
   if (optimise) codegen_optimise(context);
 
-/*
-  ir_set_ids(context);
-  ir_femit(stdout, context);
-  exit(42);*/
+  if (debug_ir && codegen_only) {
+    ir_femit(stdout, context);
+    exit(0);
+  }
 
   codegen_lower(context);
-
-/*  if (debug_ir) {
-    printf("Backend Lowered\n");
-    ir_femit(stdout, context);
-  }*/
 
   codegen_emit(context);
 

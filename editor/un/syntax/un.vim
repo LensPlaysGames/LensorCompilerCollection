@@ -7,6 +7,7 @@ syntax region unCommentLine2 start="#" end="$"
 
 syntax keyword unPrimitiveTypes
   \ integer
+  \ void
 
 syntax keyword unKeywords
   \ if

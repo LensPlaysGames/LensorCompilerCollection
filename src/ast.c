@@ -13,26 +13,26 @@ static Scope *scope_create(Scope *parent) {
 }
 
 static void scope_delete(Scope *scope) {
-  VECTOR_FOREACH_PTR (Symbol *, symbol, scope->symbols) {
+  foreach_ptr (Symbol *, symbol, scope->symbols) {
     free(symbol->name.data);
     free(symbol);
   }
 
-  VECTOR_DELETE(scope->symbols);
-  VECTOR_DELETE(scope->children);
+  vector_delete(scope->symbols);
+  vector_delete(scope->children);
   free(scope);
 }
 
 void scope_push(AST *ast) {
   ASSERT(ast->scope_stack.size, "AST must have a global scope.");
-  Scope *scope = scope_create(VECTOR_BACK(ast->scope_stack));
-  VECTOR_PUSH(ast->scope_stack, scope);
-  VECTOR_PUSH(ast->_scopes_, scope);
+  Scope *scope = scope_create(vector_back(ast->scope_stack));
+  vector_push(ast->scope_stack, scope);
+  vector_push(ast->_scopes_, scope);
 }
 
 void scope_pop(AST *ast) {
   ASSERT(ast->scope_stack.size > 1, "Cannot pop the global scope.");
-  (void) VECTOR_POP(ast->scope_stack);
+  (void) vector_pop(ast->scope_stack);
 }
 
 Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, void *value) {
@@ -46,14 +46,14 @@ Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, void *va
 
   if (kind == SYM_TYPE) symbol->type = value;
   else symbol->node = value;
-  VECTOR_PUSH(scope->symbols, symbol);
+  vector_push(scope->symbols, symbol);
   return symbol;
 }
 
 Symbol *scope_find_symbol(Scope *scope, span name, bool this_scope_only) {
   while (scope) {
     /// Return the symbol if it exists.
-    VECTOR_FOREACH_PTR (Symbol *, symbol, scope->symbols)
+    foreach_ptr (Symbol *, symbol, scope->symbols)
       if (string_eq(symbol->name, name))
         return symbol;
 
@@ -82,7 +82,7 @@ NODISCARD static Node *mknode(AST *ast, enum NodeKind kind, loc source_location)
   Node *node = calloc(1, sizeof(Node));
   node->kind = kind;
   node->source_location = source_location;
-  VECTOR_PUSH(ast->_nodes_, node);
+  vector_push(ast->_nodes_, node);
   return node;
 }
 
@@ -91,7 +91,7 @@ NODISCARD static Type *mktype(AST *ast, enum TypeKind kind, loc source_location)
   Type *type = calloc(1, sizeof(Type));
   type->kind = kind;
   type->source_location = source_location;
-  VECTOR_PUSH(ast->_types_, type);
+  vector_push(ast->_types_, type);
   return type;
 }
 
@@ -113,7 +113,7 @@ Node *ast_make_function(
   node->parent = ast->root;
   if (body) body->parent = node;
 
-  VECTOR_PUSH(ast->functions, node);
+  vector_push(ast->functions, node);
   return node;
 }
 
@@ -176,7 +176,7 @@ Node *ast_make_block(
 ) {
   Node *node = mknode(ast, NODE_BLOCK, source_location);
   node->block.children = children;
-  VECTOR_FOREACH_PTR (Node *, child, children) child->parent = node;
+  foreach_ptr (Node *, child, children) child->parent = node;
   return node;
 }
 
@@ -191,7 +191,7 @@ Node *ast_make_call(
   node->call.callee = callee;
   node->call.arguments = arguments;
   callee->parent = node;
-  VECTOR_FOREACH_PTR (Node *, argument, arguments) argument->parent = node;
+  foreach_ptr (Node *, argument, arguments) argument->parent = node;
   return node;
 }
 
@@ -281,10 +281,12 @@ Node *ast_make_variable_reference(
 Node *ast_make_function_reference(
     AST *ast,
     loc source_location,
-    Symbol *symbol
+    span symbol
 ) {
   Node *node = mknode(ast, NODE_FUNCTION_REFERENCE, source_location);
-  node->funcref = symbol;
+  node->funcref.name = string_dup(symbol);
+  node->funcref.resolved = NULL;
+  node->funcref.scope = vector_back(ast->scope_stack);
   return node;
 }
 
@@ -395,7 +397,7 @@ void write_typename(string *s, const Type *type, bool colour) {
       s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, " (");
 
       /// Parameters.
-      VECTOR_FOREACH (Parameter, param, type->function.parameters) {
+      foreach (Parameter, param, type->function.parameters) {
         write_typename(s, param->type, colour);
         if (param != type->function.parameters.data + type->function.parameters.size - 1) {
           if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[31m");
@@ -438,6 +440,27 @@ usz ast_sizeof(const Type *type) {
   }
 }
 
+Typeinfo ast_typeinfo(AST *ast, Type * const type) {
+  /// Resolve aliases.
+  Type *base = type;
+  Type *alias = type;
+  while (base && base->kind == TYPE_NAMED) {
+    alias = base;
+    base = base->named ? base->named->type : NULL;
+  }
+
+  return (Typeinfo){
+    .type = base,
+    .last_alias = alias,
+    .is_incomplete = !base,
+    .is_void = alias == ast->t_void,
+  };
+}
+
+bool ast_is_void(AST *ast, Type *type) {
+  return ast_typeinfo(ast, type).is_void;
+}
+
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================
@@ -449,11 +472,22 @@ AST *ast_create() {
   ast->root = mknode(ast, NODE_ROOT, (loc){0, 0});
 
   /// Create the global scope.
-  VECTOR_PUSH(ast->scope_stack, scope_create(NULL));
-  VECTOR_PUSH(ast->_scopes_, VECTOR_BACK(ast->scope_stack));
+  vector_push(ast->scope_stack, scope_create(NULL));
+  vector_push(ast->_scopes_, vector_back(ast->scope_stack));
 
   /// Initialise the builtin types.
   uint8_t primitive_type_id = 0;
+
+  /// Integer literal; this is a special type that is implicitly
+  /// to any integer type, and equivalent to integer.
+  ast->t_integer_literal = mktype(ast, TYPE_PRIMITIVE, (loc){0, 0});
+  ast->t_integer_literal->primitive.size = 8;
+  ast->t_integer_literal->primitive.alignment = 8;
+  ast->t_integer_literal->primitive.is_signed = true;
+  ast->t_integer_literal->primitive.name = literal_span("<integer literal>");
+  ast->t_integer_literal->primitive.id = primitive_type_id++;
+
+  /// Integer.
   ast->t_integer = mktype(ast, TYPE_PRIMITIVE, (loc){0, 0});
   ast->t_integer->primitive.size = 8;
   ast->t_integer->primitive.alignment = 8;
@@ -461,12 +495,22 @@ AST *ast_create() {
   ast->t_integer->primitive.name = literal_span("integer");
   ast->t_integer->primitive.id = primitive_type_id++;
 
+  /// Byte.
+  ast->t_byte = mktype(ast, TYPE_PRIMITIVE, (loc){0, 0});
+  ast->t_byte->primitive.size = 1;
+  ast->t_byte->primitive.alignment = 1;
+  ast->t_byte->primitive.is_signed = true;
+  ast->t_byte->primitive.name = literal_span("byte");
+  ast->t_byte->primitive.id = primitive_type_id++;
+
   /// Declare void as a named type with no node associated with it.
   /// This implicitly means that void is an incomplete type.
   ast->t_void = mktype(ast, TYPE_NAMED, (loc){0, 0});
 
   /// Add the builtin types to the global scope.
   scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("integer"), ast->t_integer);
+  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("byte"), ast->t_byte);
+  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("void"), ast->t_void);
 
   /// Done.
   return ast;
@@ -476,16 +520,16 @@ AST *ast_create() {
 void ast_free(AST *ast) {
   /// Some nodes may contain strings, vectors, etc.. Iterate over all
   /// nodes and free all resources they may have.
-  VECTOR_FOREACH_PTR (Node *, node, ast->_nodes_) {
+  foreach_ptr (Node *, node, ast->_nodes_) {
     switch (node->kind) {
       case NODE_FUNCTION:
         free(node->function.name.data);
-        VECTOR_DELETE(node->function.param_decls);
+        vector_delete(node->function.param_decls);
         continue;
 
-      case NODE_ROOT: VECTOR_DELETE(node->root.children); continue;
-      case NODE_BLOCK: VECTOR_DELETE(node->block.children); continue;
-      case NODE_CALL: VECTOR_DELETE(node->call.arguments); continue;
+      case NODE_ROOT: vector_delete(node->root.children); continue;
+      case NODE_BLOCK: vector_delete(node->block.children); continue;
+      case NODE_CALL: vector_delete(node->call.arguments); continue;
       case NODE_DECLARATION: free(node->declaration.name.data); continue;
 
       case NODE_IF:
@@ -495,34 +539,37 @@ void ast_free(AST *ast) {
       case NODE_UNARY:
       case NODE_LITERAL:
       case NODE_VARIABLE_REFERENCE:
-      case NODE_FUNCTION_REFERENCE: continue;
+        continue;
+      case NODE_FUNCTION_REFERENCE:
+        free(node->funcref.name.data);
+        continue;
     }
     UNREACHABLE();
   }
 
   /// Now that that’s done, free all nodes.
-  VECTOR_FOREACH_PTR (Node *, node, ast->_nodes_) free(node);
-  VECTOR_DELETE(ast->_nodes_);
-  VECTOR_DELETE(ast->functions);
+  foreach_ptr (Node *, node, ast->_nodes_) free(node);
+  vector_delete(ast->_nodes_);
+  vector_delete(ast->functions);
 
   /// Free all types.
-  VECTOR_FOREACH_PTR (Type *, type, ast->_types_) {
+  foreach_ptr (Type *, type, ast->_types_) {
     if (type->kind == TYPE_FUNCTION) {
-      VECTOR_FOREACH (Parameter, param, type->function.parameters) free(param->name.data);
-      VECTOR_DELETE(type->function.parameters);
+      foreach (Parameter, param, type->function.parameters) free(param->name.data);
+      vector_delete(type->function.parameters);
     }
     free(type);
   }
-  VECTOR_DELETE(ast->_types_);
+  vector_delete(ast->_types_);
 
   /// Free all scopes.
-  VECTOR_FOREACH_PTR (Scope *, scope, ast->_scopes_) scope_delete(scope);
-  VECTOR_DELETE(ast->_scopes_);
-  VECTOR_DELETE(ast->scope_stack);
+  foreach_ptr (Scope *, scope, ast->_scopes_) scope_delete(scope);
+  vector_delete(ast->_scopes_);
+  vector_delete(ast->scope_stack);
 
   /// Free all interned strings.
-  VECTOR_FOREACH (string, s, ast->strings) free(s->data);
-  VECTOR_DELETE(ast->strings);
+  foreach (string, s, ast->strings) free(s->data);
+  vector_delete(ast->strings);
 
   /// Free the filename and source code.
   free(ast->filename.data);
@@ -632,10 +679,10 @@ static void ast_print_node(
       free(type_name.data);
 
       Nodes nodes = {0};
-      if (node->call.callee) VECTOR_PUSH(nodes, node->call.callee);
-      VECTOR_APPEND_ALL(nodes, node->call.arguments);
+      if (node->call.callee) vector_push(nodes, node->call.callee);
+      vector_append_all(nodes, node->call.arguments);
       ast_print_children(file, logical_parent, node, &nodes, leading_text);
-      VECTOR_DELETE(nodes);
+      vector_delete(nodes);
     } break;
 
     case NODE_CAST: {
@@ -708,14 +755,14 @@ static void ast_print_node(
 
     case NODE_FUNCTION_REFERENCE: {
       /// If our parent is the root, print the function instead.
-      if (node->parent && node->parent->kind == NODE_ROOT)
-        return ast_print_node(file, logical_parent, node->funcref->node, leading_text);
+      /*if (node->parent && node->parent->kind == NODE_ROOT)
+        return ast_print_node(file, logical_parent, node->funcref->node, leading_text);*/
 
       /// Otherwise, print the function reference.
       string type_name = ast_typename(node->type, true);
       fprintf(file, "\033[31mFunction Ref \033[35m<%d> \033[32m%.*s \033[31m: %.*s\n",
         node->source_location.start,
-        (int) node->funcref->name.size, node->funcref->name.data,
+        (int) node->funcref.name.size, node->funcref.name.data,
         (int) type_name.size, type_name.data);
       free(type_name.data);
     } break;
@@ -725,7 +772,7 @@ static void ast_print_node(
 /// Scope tree for printing scopes.
 typedef struct scope_tree_node {
   const Scope *scope;
-  VECTOR (struct scope_tree_node*) children;
+  Vector(struct scope_tree_node*) children;
 } scope_tree_node;
 
 /// Print a scope and the symbols it contains.
@@ -734,7 +781,7 @@ static void print_scope(FILE *file, scope_tree_node *node, char buffer[static AS
     const Scope *s = node->scope;
 
     /// Print all symbols in this scope.
-    VECTOR_FOREACH_PTR (Symbol*, sym, s->symbols) {
+    foreach_ptr (Symbol*, sym, s->symbols) {
         /// Print the leading text.
         bool last_child = sym_ptr == s->symbols.data + s->symbols.size - 1 && !node->children.size;
         fprintf(file, "\033[31m%s%s", buffer, last_child ? "└─" : "├─");
@@ -781,7 +828,7 @@ static void print_scope(FILE *file, scope_tree_node *node, char buffer[static AS
     }
 
     /// Next, print all child scopes.
-    VECTOR_FOREACH_PTR (scope_tree_node *, child, node->children) {
+    foreach_ptr (scope_tree_node *, child, node->children) {
         /// Print the leading text.
         bool last_child = child_ptr == node->children.data + node->children.size - 1;
         fprintf(file, "\033[31m%s%s", buffer, last_child ? "└─" : "├─");
@@ -801,30 +848,30 @@ static void print_scope(FILE *file, scope_tree_node *node, char buffer[static AS
 /// Print the scope tree of an AST.
 void ast_print_scope_tree(FILE *file, const AST *ast) {
     /// First, we need to build the scope tree.
-    VECTOR(scope_tree_node) scope_tree = {0};
+    Vector(scope_tree_node) scope_tree = {0};
 
     /// Create a node for each scope.
-    VECTOR_FOREACH_PTR (Scope*, sc, ast->_scopes_) {
+    foreach_ptr (Scope*, sc, ast->_scopes_) {
         scope_tree_node node = {0};
         node.scope = sc;
-        VECTOR_PUSH(scope_tree, node);
+        vector_push(scope_tree, node);
     }
 
     /// Now, we need to build the tree.
-    VECTOR_FOREACH (scope_tree_node, node, scope_tree) {
+    foreach (scope_tree_node, node, scope_tree) {
         /// If this scope has a parent, add it to the parent's children.
         if (node->scope->parent) {
             scope_tree_node *n;
-            VECTOR_FIND_IF(scope_tree, n, i, scope_tree.data[i].scope == node->scope->parent);
+            vector_find_if(scope_tree, n, i, scope_tree.data[i].scope == node->scope->parent);
             ASSERT(n);
-            VECTOR_PUSH(n->children, node);
+            vector_push(n->children, node);
         }
     }
 
     /// Now, we can print the tree.
     char buffer[AST_PRINT_BUFFER_SIZE] = {0};
     print_scope(file, scope_tree.data, buffer);
-    VECTOR_DELETE(scope_tree);
+    vector_delete(scope_tree);
 }
 
 /// Print an AST.
@@ -852,12 +899,12 @@ static void ast_print_children(
   ASSERT(len + sizeof("│ ") < AST_PRINT_BUFFER_SIZE);
 
   /// Print the children.
-  VECTOR_FOREACH_PTR (Node*, node, *nodes) {
+  foreach_ptr (Node*, node, *nodes) {
     /// Print the indentation and continue any lines from parent nodes.
-    fprintf(file, "\033[31m%s%s", leading_text, node == VECTOR_BACK(*nodes) ? "└─" : "├─");
+    fprintf(file, "\033[31m%s%s", leading_text, node == vector_back(*nodes) ? "└─" : "├─");
 
     /// Update the leading text.
-    strncat(leading_text, node == VECTOR_BACK(*nodes) ? "  " : "│ ", AST_PRINT_BUFFER_SIZE - len);
+    strncat(leading_text, node == vector_back(*nodes) ? "  " : "│ ", AST_PRINT_BUFFER_SIZE - len);
 
     /// Print the node.
     ast_print_node(file, logical_parent, node, leading_text);
@@ -870,10 +917,77 @@ static void ast_print_children(
 /// Intern a string.
 size_t ast_intern_string(AST *ast, span str) {
   /// Check if the string is already interned.
-  VECTOR_FOREACH_INDEX (i, ast->strings)
+  foreach_index(i, ast->strings)
     if (string_eq(ast->strings.data[i], str)) return i;
 
   /// Intern the string.
-  VECTOR_PUSH(ast->strings, string_dup(str));
+    vector_push(ast->strings, string_dup(str));
   return ast->strings.size - 1;
+}
+
+/// Replace a node with another node.
+void ast_replace_node(AST *ast, Node *old, Node *new) {
+#define REPLACE_IN_CHILDREN(children)                              \
+  do {                                                             \
+    Node **ptr = NULL;                                             \
+    vector_find_if((children), ptr, i, (children).data[i] == old); \
+    if (ptr) *ptr = new;                                           \
+  } while (0)
+
+  /// Find the node in the parent.
+  ASSERT(old->parent);
+  switch (old->parent->kind) {
+    case NODE_ROOT:
+      REPLACE_IN_CHILDREN(old->parent->root.children);
+      break;
+
+    case NODE_FUNCTION:
+      REPLACE_IN_CHILDREN(old->parent->function.param_decls);
+      if (old->parent->function.body == old) old->parent->function.body = new;
+      break;
+
+    case NODE_DECLARATION:
+      if (old->parent->declaration.init == old) old->parent->declaration.init = new;
+      break;
+
+    case NODE_IF:
+      if (old->parent->if_.condition == old) old->parent->if_.condition = new;
+      else if (old->parent->if_.then == old) old->parent->if_.then = new;
+      else if (old->parent->if_.else_ == old) old->parent->if_.else_ = new;
+      break;
+
+    case NODE_WHILE:
+      if (old->parent->while_.condition == old) old->parent->while_.condition = new;
+      else if (old->parent->while_.body == old) old->parent->while_.body = new;
+      break;
+
+    case NODE_BLOCK:
+      REPLACE_IN_CHILDREN(old->parent->block.children);
+      break;
+
+    case NODE_CALL:
+      REPLACE_IN_CHILDREN(old->parent->call.arguments);
+      if (old->parent->call.callee == old) old->parent->call.callee = new;
+      break;
+
+    case NODE_CAST:
+      if (old->parent->cast.value == old) old->parent->cast.value = new;
+      break;
+
+    case NODE_BINARY:
+      if (old->parent->binary.lhs == old) old->parent->binary.lhs = new;
+      else if (old->parent->binary.rhs == old) old->parent->binary.rhs = new;
+      break;
+
+    case NODE_UNARY:
+      if (old->parent->unary.value == old) old->parent->unary.value = new;
+      break;
+
+    case NODE_LITERAL:
+    case NODE_VARIABLE_REFERENCE:
+    case NODE_FUNCTION_REFERENCE:
+      break;
+  }
+
+#undef REPLACE_IN_CHILDREN
 }

@@ -1,0 +1,10 @@
+; 2
+
+a : integer = 2
+
+if 1 {
+    a : integer
+    a := 3
+}
+
+a

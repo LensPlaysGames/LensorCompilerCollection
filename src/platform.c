@@ -115,7 +115,7 @@ void platform_print_backtrace(int ignore) {
   }
 
   /// Format the stack traces. No need to demangle anything since this is C
-  for (char** func = strings; func < strings + size - 2; func++) {
+  for (char** func = strings; func < strings + size - ignore; func++) {
     char *name_begin = strchr(*func, '(');
     char *name_end = strchr(*func, '+');
     char *address_end = strchr(*func, ')');

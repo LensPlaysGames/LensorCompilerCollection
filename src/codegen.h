@@ -10,6 +10,7 @@
 #include <vector.h>
 
 extern bool debug_ir;
+extern bool codegen_only;
 
 CodegenContext *codegen_context_create
 (AST *ast,
@@ -48,9 +49,9 @@ struct CodegenContext {
   FILE *code;
   AST *ast;
 
-  VECTOR(IRFunction *) functions;
-  VECTOR(IRStaticVariable *) static_vars;
-  VECTOR(IRInstruction*) removed_parameter_instructions;
+  Vector(IRFunction *) functions;
+  Vector(IRStaticVariable *) static_vars;
+  Vector(IRInstruction*) removed_instructions;
   IRFunction *function;
   IRFunction *entry;
   IRBlock *block;

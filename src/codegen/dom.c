@@ -1,7 +1,7 @@
 #include <codegen/dom.h>
 #include <codegen/intermediate_representation.h>
 
-typedef VECTOR(IRBlock*) BlockVector;
+typedef Vector(IRBlock*) BlockVector;
 
 /// Perform DFS on the control flow graph to find blocks
 /// that are reachable from `block`. If `ignore` is encountered,
@@ -9,59 +9,55 @@ typedef VECTOR(IRBlock*) BlockVector;
 /// from the CFG without having to actually remove them.
 static BlockVector collect_reachable_blocks(IRBlock *block, IRBlock *ignore) {
   BlockVector reachable = {0};
-  VECTOR_PUSH(reachable, block);
+  vector_push(reachable, block);
 
   /// Stack for DFS.
-  VECTOR(IRBlock*) dfs_stack = {0};
-  VECTOR_PUSH(dfs_stack, block);
+  Vector(IRBlock*) dfs_stack = {0};
+  vector_push(dfs_stack, block);
   while (dfs_stack.size) {
-    IRBlock *b = VECTOR_POP(dfs_stack);
+    IRBlock *b = vector_pop(dfs_stack);
     if (b == ignore) continue;
 
     STATIC_ASSERT(IR_COUNT == 32, "Handle all branch types");
-    bool out = false;
     IRInstruction *i = b->instructions.last;
-    switch (i->type) {
+    switch (i->kind) {
       default: break;
       case IR_BRANCH:
-        VECTOR_CONTAINS(reachable, i->destination_block, out);
-        if (!out) {
-          VECTOR_PUSH(reachable, i->destination_block);
-          VECTOR_PUSH(dfs_stack, i->destination_block);
+        if (!vector_contains(reachable, i->destination_block)) {
+          vector_push(reachable, i->destination_block);
+          vector_push(dfs_stack, i->destination_block);
         }
         break;
 
       case IR_BRANCH_CONDITIONAL:
-        VECTOR_CONTAINS(reachable, i->cond_br.then, out);
-        if (!out) {
-          VECTOR_PUSH(reachable, i->cond_br.then);
-          VECTOR_PUSH(dfs_stack, i->cond_br.then);
+        if (!vector_contains(reachable, i->cond_br.then)) {
+          vector_push(reachable, i->cond_br.then);
+          vector_push(dfs_stack, i->cond_br.then);
         }
-        VECTOR_CONTAINS(reachable, i->cond_br.else_, out);
-        if (!out) {
-          VECTOR_PUSH(reachable, i->cond_br.else_);
-          VECTOR_PUSH(dfs_stack, i->cond_br.else_);
+
+        if (!vector_contains(reachable, i->cond_br.else_)) {
+          vector_push(reachable, i->cond_br.else_);
+          vector_push(dfs_stack, i->cond_br.else_);
         }
+
         break;
     }
   }
-  VECTOR_DELETE(dfs_stack);
+  vector_delete(dfs_stack);
   return reachable;
 }
 
 void free_dominator_info(DominatorInfo* info) {
-  VECTOR_FOREACH (DomTreeNode, n, info->nodes) {
-    VECTOR_DELETE(n->dominators);
-    VECTOR_DELETE(n->children);
+  foreach (DomTreeNode, n, info->nodes) {
+    vector_delete(n->dominators);
+    vector_delete(n->children);
   }
-  VECTOR_DELETE(info->nodes);
+  vector_delete(info->nodes);
 }
 
 /// Check if a node dominates another node.
 bool dominates(DomTreeNode *dominator, DomTreeNode *node) {
-  bool out = false;
-  VECTOR_CONTAINS(node->dominators, dominator, out);
-  return out;
+  return vector_contains(node->dominators, dominator);
 }
 
 /// Check if a node strictly dominates another node.
@@ -78,37 +74,35 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
     BlockVector reachable = collect_reachable_blocks(f->blocks.first, NULL);
     BlockVector blocks_to_remove = {0};
 
-    DLIST_FOREACH (IRBlock*, b, f->blocks) {
-      bool out = false;
-      VECTOR_CONTAINS(reachable, b, out);
-      if (!out) VECTOR_PUSH(blocks_to_remove, b);
+    list_foreach (IRBlock*, b, f->blocks) {
+      if (!vector_contains(reachable, b)) vector_push(blocks_to_remove, b);
     }
 
     /// Remove unreachable blocks and free vectors.
-    VECTOR_FOREACH_PTR (IRBlock*, b, blocks_to_remove) ir_remove_and_free_block(b);
-    VECTOR_DELETE(reachable);
-    VECTOR_DELETE(blocks_to_remove);
+    foreach_ptr (IRBlock*, b, blocks_to_remove) ir_remove_and_free_block(b);
+    vector_delete(reachable);
+    vector_delete(blocks_to_remove);
   }
 
   /// Free old dominator tree.
-  VECTOR_FOREACH (DomTreeNode, n, info->nodes) {
-    VECTOR_DELETE(n->dominators);
-    VECTOR_DELETE(n->children);
+  foreach (DomTreeNode, n, info->nodes) {
+    vector_delete(n->dominators);
+    vector_delete(n->children);
   }
-  VECTOR_CLEAR(info->nodes);
+  vector_clear(info->nodes);
 
   /// Add a node for each block.
   ASSERT(f->blocks.first);
-  DLIST_FOREACH (IRBlock*, b, f->blocks) {
+  list_foreach (IRBlock*, b, f->blocks) {
     DomTreeNode node = {0};
     node.block = b;
-    VECTOR_PUSH(info->nodes, node);
+    vector_push(info->nodes, node);
   }
 
   /// The only dominator of the root is the root itself.
   /// We assume that the first block in a function is
   /// the entry block.
-  VECTOR_PUSH(info->nodes.data[0].dominators, info->nodes.data);
+  vector_push(info->nodes.data[0].dominators, info->nodes.data);
   info->dominator_tree = info->nodes.data;
 
   /// To find all dominators of a block, remove that block
@@ -122,20 +116,18 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
     BlockVector still_reachable = collect_reachable_blocks(f->blocks.first, dominator->block);
 
     /// Find all blocks that are no longer reachable.
-    VECTOR_FOREACH (DomTreeNode, d, info->nodes) {
-      bool out = false;
-      VECTOR_CONTAINS(still_reachable, d->block, out);
-      if (!out) {
+    foreach (DomTreeNode, d, info->nodes) {
+      if (!vector_contains(still_reachable, d->block)) {
         /// Add the block to the dominators of the current node.
-        VECTOR_PUSH(d->dominators, dominator);
+        vector_push(d->dominators, dominator);
 
         /// Add the current node to the children of the block.
         /// This is used to build the dominator tree below.
-        VECTOR_PUSH(dominator->children, d);
+        vector_push(dominator->children, d);
       }
     }
 
-    VECTOR_DELETE(still_reachable);
+    vector_delete(still_reachable);
   }
 
   /// Now that we know the dominators of each block, we can
@@ -146,24 +138,24 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
   /// dominated by that node. The algorithm for this is simple:
   /// For each node N, remove from N’s children any nodes that are
   /// also strictly dominated by another child of N.
-  VECTOR (DomTreeNode*) to_remove = {0};
-  VECTOR_FOREACH (DomTreeNode, n, info->nodes) {
-    VECTOR_CLEAR(to_remove);
+  Vector(DomTreeNode*) to_remove = {0};
+  foreach (DomTreeNode, n, info->nodes) {
+    vector_clear(to_remove);
 
     /// For each child of N, check if it is strictly dominated by another child.
-    VECTOR_FOREACH_PTR (DomTreeNode*, c, n->children) {
-      VECTOR_FOREACH_PTR (DomTreeNode*, c2, n->children) {
+    foreach_ptr (DomTreeNode*, c, n->children) {
+      foreach_ptr (DomTreeNode*, c2, n->children) {
         if (strictly_dominates(c, c2)) {
-          VECTOR_PUSH(to_remove, c2);
+          vector_push(to_remove, c2);
           break;
         }
       }
     }
 
     /// Remove the nodes.
-    VECTOR_FOREACH_PTR (DomTreeNode*, c, to_remove) {
-      VECTOR_REMOVE_ELEMENT(n->children, c);
+    foreach_ptr (DomTreeNode*, c, to_remove) {
+      vector_remove_element(n->children, c);
     }
   }
-  VECTOR_DELETE(to_remove);
+  vector_delete(to_remove);
 }

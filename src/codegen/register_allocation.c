@@ -21,23 +21,23 @@ CodegenContext *debug_context = NULL;
 #endif
 
 /// Used all over the place.
-typedef VECTOR(IRBlock *) BlockVector;
+typedef Vector(IRBlock *) BlockVector;
 
 //==== BEG REGISTER ALLOCATION PASSES ====
 
 static void phi2copy(IRFunction *f) {
   IRBlock *last_block = NULL;
   FOREACH_INSTRUCTION_IN_FUNCTION_N(f, b, phi) {
-    if (phi->type == IR_PHI) {
+    if (phi->kind == IR_PHI) {
       ASSERT(phi->parent_block != last_block,
           "Multiple PHI instructions in a single block are not allowed within register allocation!");
       last_block = phi->parent_block;
 
       /// Single PHI argument means that we can replace it with a simple copy.
       if (phi->phi_args.size == 1) {
-        phi->type = IR_COPY;
+        phi->kind = IR_COPY;
         IRInstruction *value = phi->phi_args.data[0]->value;
-        VECTOR_DELETE(phi->phi_args);
+        vector_delete(phi->phi_args);
         phi->operand = value;
         continue;
       }
@@ -45,10 +45,10 @@ static void phi2copy(IRFunction *f) {
       /// For each of the PHI arguments, we basically insert a copy.
       /// Where we insert it depends on some complicated factors
       /// that have to do with control flow.
-      VECTOR_FOREACH_PTR (IRPhiArgument *, arg, phi->phi_args) {
+      foreach_ptr (IRPhiArgument *, arg, phi->phi_args) {
         STATIC_ASSERT(IR_COUNT == 32, "Handle all branch types");
         IRInstruction *branch = arg->block->instructions.last;
-        switch (branch->type) {
+        switch (branch->kind) {
           /// If the predecessor returns or is unreachable, then the PHI
           /// is never going to be reached anyway, so we can just ignore
           /// this argument.
@@ -96,8 +96,8 @@ static void phi2copy(IRFunction *f) {
 
 void function_call_arguments(IRFunction *f, const MachineDescription *desc) {
   FOREACH_INSTRUCTION_IN_FUNCTION(f) {
-    if (instruction->type == IR_CALL) {
-      VECTOR_FOREACH_INDEX(i, instruction->call.arguments) {
+    if (instruction->kind == IR_CALL) {
+      foreach_index(i, instruction->call.arguments) {
         if (i >= desc->argument_register_count) {
           TODO("Handle stack allocated function parameters, somehow :p");
         }
@@ -115,8 +115,10 @@ void function_call_arguments(IRFunction *f, const MachineDescription *desc) {
 }
 
 void function_return_values(IRFunction *f, const MachineDescription *desc) {
+  Typeinfo info = ast_typeinfo(f->context->ast, f->type->function.return_type);
+  if (info.is_void) return;
   FOREACH_INSTRUCTION_IN_FUNCTION(f) {
-    if (instruction->type == IR_RETURN) {
+    if (instruction->kind == IR_RETURN) {
       IRInstruction *value = instruction->operand;
       IRInstruction *copy = ir_copy(f->context, value);
       mark_used(copy, instruction);
@@ -131,7 +133,7 @@ void function_return_values(IRFunction *f, const MachineDescription *desc) {
 /// Insert copies for precoloured REGISTER instructions.
 void fixup_precoloured(IRFunction *f) {
   FOREACH_INSTRUCTION_IN_FUNCTION(f) {
-    if (instruction->type == IR_REGISTER && instruction->result) {
+    if (instruction->kind == IR_REGISTER && instruction->result) {
       IRInstruction *copy = ir_copy_unused(f->context, instruction);
       insert_instruction_after(copy, instruction);
       ir_replace_uses(instruction, copy);
@@ -145,7 +147,7 @@ void fixup_precoloured(IRFunction *f) {
 bool needs_register(IRInstruction *instruction) {
   STATIC_ASSERT(IR_COUNT == 32, "Exhaustively handle all instruction types");
   ASSERT(instruction);
-  switch (instruction->type) {
+  switch (instruction->kind) {
     case IR_LOAD:
     case IR_PHI:
     case IR_COPY:
@@ -172,17 +174,17 @@ bool needs_register(IRInstruction *instruction) {
 
 //==== BEG INSTRUCTION LIST ====
 
-typedef VECTOR(IRInstruction *) IRInstructions;
+typedef Vector(IRInstruction *) IRInstructions;
 
 /// If needs_register is non-zero, return only instructions that need a register allocated.
 void collect_instructions_into(IRFunction *f, IRInstructions *instructions, char needs_register_filter) {
-  VECTOR_CLEAR(*instructions);
+  vector_clear(*instructions);
   FOREACH_INSTRUCTION_IN_FUNCTION(f) {
     // Add instruction to flat list iff instruction needs register
     // allocated.
     if (!needs_register_filter || needs_register(instruction)) {
       instruction->index = (u32) instructions->size;
-      VECTOR_PUSH(*instructions, instruction);
+      vector_push(*instructions, instruction);
     }
   }
 }
@@ -194,7 +196,7 @@ IRInstructions collect_instructions(IRFunction *f, char needs_register_filter) {
 }
 
 void print_instruction_list(IRInstructions *list) {
-  VECTOR_FOREACH_PTR (IRInstruction *, instruction, *list) {
+  foreach_ptr (IRInstruction *, instruction, *list) {
     ir_femit_instruction(stdout, instruction);
   }
 }
@@ -248,7 +250,7 @@ char adjm(AdjacencyMatrix m, usz x, usz y) {
 }
 
 typedef struct AdjacencyList AdjacencyList;
-typedef VECTOR(AdjacencyList*) AdjacencyLists;
+typedef Vector(AdjacencyList*) AdjacencyLists;
 
 typedef struct AdjacencyGraph {
   usz order;
@@ -270,9 +272,7 @@ static void collect_interferences(IRInstruction *inst, IRInstruction **child, vo
   (void) inst;
   IRInstructions *live_vals = data;
   if (needs_register(*child)) {
-    bool found;
-    VECTOR_CONTAINS(*live_vals, *child, found);
-    if (!found) VECTOR_PUSH(*live_vals, *child);
+    if (!vector_contains(*live_vals, *child)) vector_push(*live_vals, *child);
   }
 }
 
@@ -288,16 +288,14 @@ static void collect_interferences_for_node(
   IRBlock *b = leaf->block;
 
   /// Don't visit the same block twice.
-  bool found;
-  VECTOR_CONTAINS(*visited, b, found);
-  if (found) return;
-  VECTOR_PUSH(*visited, b);
+  if (vector_contains(*visited, b)) return;
+  vector_push(*visited, b);
 
   /// Collect interferences for instructions in this block.
   for (IRInstruction *inst = b->instructions.last; inst; inst = inst->prev) {
     /// Make this value interfere with all values that are live at this point.
     usz mask = desc->instruction_register_interference(inst);
-    VECTOR_FOREACH_PTR (IRInstruction *, live_val, *live_vals) {
+    foreach_ptr (IRInstruction *, live_val, *live_vals) {
       if (needs_register(inst))
         adjm_set(G->matrix, inst->index, live_val->index);
 
@@ -307,14 +305,14 @@ static void collect_interferences_for_node(
 
 
     /// Remove its result from the set of live variables;
-    if (needs_register(inst)) VECTOR_REMOVE_ELEMENT_UNORDERED(*live_vals, inst);
+    if (needs_register(inst)) vector_remove_element_unordered(*live_vals, inst);
 
     /// Add its operands to the set of live variables.
     ir_for_each_child(inst, collect_interferences, live_vals);
   }
 
   /// Do the same for all dominators of this block.
-  VECTOR_FOREACH_PTR (DomTreeNode *, dominator, leaf->dominators)
+  foreach_ptr (DomTreeNode *, dominator, leaf->dominators)
     collect_interferences_for_node(desc, dominator, live_vals, visited, G);
 }
 
@@ -328,10 +326,10 @@ static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc,
   build_dominator_tree(f, &dom_info, false);
 
   /// Collect the leaves of the dominator tree.
-  VECTOR(DomTreeNode*) leaves = {0};
-  VECTOR_FOREACH (DomTreeNode, node, dom_info.nodes) {
+  Vector(DomTreeNode*) leaves = {0};
+  foreach (DomTreeNode, node, dom_info.nodes) {
     if (node->children.size == 0) {
-      VECTOR_PUSH(leaves, node);
+      vector_push(leaves, node);
     }
   }
 
@@ -342,25 +340,25 @@ static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc,
   BlockVector visited = {0};
 
   /// Collect the interferences for each leaf.
-  VECTOR_FOREACH_PTR (DomTreeNode*, node, leaves) {
-    VECTOR_CLEAR(live_vals);
-    VECTOR_CLEAR(visited);
+  foreach_ptr (DomTreeNode*, node, leaves) {
+    vector_clear(live_vals);
+    vector_clear(visited);
     collect_interferences_for_node(desc, node, &live_vals, &visited, G);
   }
 
   /// Free dominator and liveness info.
   free_dominator_info(&dom_info);
-  VECTOR_DELETE(leaves);
-  VECTOR_DELETE(live_vals);
-  VECTOR_DELETE(visited);
+  vector_delete(leaves);
+  vector_delete(live_vals);
+  vector_delete(visited);
 
   /// While were at it, also check for interferences with physical registers.
   /// For that, we need to iterate over all values that interfere with A and
   /// collect the physical registers that are clobbered by or precoloured to
   /// those values.
-  VECTOR_FOREACH_PTR (IRInstruction *, A, *instructions) {
+  foreach_ptr (IRInstruction *, A, *instructions) {
     usz regmask = 0;
-    VECTOR_FOREACH_PTR (IRInstruction *, B, *instructions) {
+    foreach_ptr (IRInstruction *, B, *instructions) {
       if (A == B) { break; } /// (!)
       if (!adjm(G->matrix, A->index, B->index)) { continue; }
       regmask |= desc->instruction_register_interference(B);
@@ -371,7 +369,7 @@ static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc,
     // FIXME: This is a horrid fix, we should probably deal with this
     // in some generic way.
     if (A->parent_block->function->context->format == CG_FMT_x86_64_GAS
-    && (A->type == IR_SHL || A->type == IR_SHR || A->type == IR_SAR)) {
+    && (A->kind == IR_SHL || A->kind == IR_SHR || A->kind == IR_SAR)) {
       usz regmask_rcx = 1 << (2 - 1);
       G->regmasks[A->lhs->index] |= regmask_rcx;
       G->regmasks[A->rhs->index] |= regmask_rcx;
@@ -409,7 +407,7 @@ typedef struct AdjacencyList {
   // Degree refers to how many adjacencies this vertex/node has.
   usz degree;
 
-  VECTOR(usz) adjacencies;
+  Vector(usz) adjacencies;
 
   IRInstruction *instruction;
 
@@ -432,18 +430,18 @@ void build_adjacency_lists(IRInstructions *instructions, AdjacencyGraph *G) {
   /// Free old lists. This could be more efficient, but we’ve
   /// had bugs where we were trying to use out-of-date lists,
   /// so we’re keeping this for now.
-  VECTOR_FOREACH_PTR (AdjacencyList*, list, G->lists) {
-    if (list) VECTOR_DELETE(list->adjacencies);
+  foreach_ptr (AdjacencyList*, list, G->lists) {
+    if (list) vector_delete(list->adjacencies);
     free(list);
   }
-  VECTOR_DELETE(G->lists);
+  vector_delete(G->lists);
 
   /// Allocate memory for the new lists.
-  VECTOR_RESERVE(G->lists, instructions->size);
+  vector_reserve(G->lists, instructions->size);
   G->lists.size = instructions->size;
 
-  VECTOR_FOREACH_PTR (IRInstruction *, i, *instructions) {
-    if (G->lists.data[i->index]) VECTOR_DELETE(G->lists.data[i->index]->adjacencies);
+  foreach_ptr (IRInstruction *, i, *instructions) {
+    if (G->lists.data[i->index]) vector_delete(G->lists.data[i->index]->adjacencies);
     free(G->lists.data[i->index]);
     AdjacencyList *list = G->lists.data[i->index] = calloc(1, sizeof(AdjacencyList));
     list->index = i->index;
@@ -452,26 +450,26 @@ void build_adjacency_lists(IRInstructions *instructions, AdjacencyGraph *G) {
     list->regmask = G->regmasks[i->index];
   }
 
-  VECTOR_FOREACH_PTR (IRInstruction *, A, *instructions) {
-    VECTOR_FOREACH_PTR (IRInstruction *, B, *instructions) {
+  foreach_ptr (IRInstruction *, A, *instructions) {
+    foreach_ptr (IRInstruction *, B, *instructions) {
       if (A == B) { break; } /// (!)
       if (adjm(G->matrix, A->index, B->index)) {
         AdjacencyList *a_list = G->lists.data[A->index];
         AdjacencyList *b_list = G->lists.data[B->index];
-        VECTOR_PUSH(a_list->adjacencies, B->index);
-        VECTOR_PUSH(b_list->adjacencies, A->index);
+        vector_push(a_list->adjacencies, B->index);
+        vector_push(b_list->adjacencies, A->index);
       }
     }
   }
 }
 
 void print_adjacency_lists(AdjacencyLists *array) {
-  VECTOR_FOREACH_PTR (AdjacencyList*, list, *array) {
+  foreach_ptr (AdjacencyList*, list, *array) {
     printf("%%%u::%u: ", list->instruction->id, list->instruction->index);
     if (list->color) printf("(r%u) ", list->color);
 
     /// Print the adjacent nodes.
-    VECTOR_FOREACH_INDEX (i, list->adjacencies) {
+    foreach_index(i, list->adjacencies) {
       if (i) { printf(", "); }
       printf("%zu", list->adjacencies.data[i]);
     }
@@ -499,13 +497,13 @@ bool check_register_interference(usz regmask, IRInstruction *instruction) {
 /// Whether copy elimination is possible depends whether the values in
 /// question interfere, both with each other and with hardware registers.
 void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *instructions, AdjacencyGraph *G) {
-  VECTOR(IRInstruction *) removed_instructions = {0};
-  VECTOR(IRInstruction *) phis = {0};
+  Vector(IRInstruction *) removed_instructions = {0};
+  Vector(IRInstruction *) phis = {0};
 
   for (;;) {
-    VECTOR_CLEAR(removed_instructions);
-    VECTOR_FOREACH_PTR (IRInstruction *, to, *instructions) {
-      if (to->type != IR_COPY) { continue; }
+    vector_clear(removed_instructions);
+    foreach_ptr (IRInstruction *, to, *instructions) {
+      if (to->kind != IR_COPY) { continue; }
       IRInstruction *from = to->operand;
 
       /// From and to are precoloured: eliminate the copy if they
@@ -531,7 +529,7 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
       // TODO: Lens_r added this without full confidence of whether or
       // not it is actually correct. :)
       bool to_use_from_interference = false;
-      VECTOR_FOREACH_PTR (IRInstruction *, user, to->users) {
+      foreach_ptr (IRInstruction *, user, to->users) {
         if (user->result == to->result) {
           to_use_from_interference = true;
           break;
@@ -540,15 +538,15 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
 
       if (!to_use_from_interference && !to->result && from->result && !adjm(G->matrix, to->index, from->index) && !check_register_interference(G->regmasks[to->index], from)) {
         /// Collect all PHI nodes that use to.
-        VECTOR_CLEAR(phis);
-        VECTOR_FOREACH_PTR (IRInstruction *, phi, *instructions) {
-          if (phi->type != IR_PHI) { continue; }
-          VECTOR_FOREACH_PTR (IRPhiArgument *, arg, phi->phi_args) {
+        vector_clear(phis);
+        foreach_ptr (IRInstruction *, phi, *instructions) {
+          if (phi->kind != IR_PHI) { continue; }
+          foreach_ptr (IRPhiArgument *, arg, phi->phi_args) {
             if (arg->value == to) {
               /// If a PHI node that uses to is already precoloured with
               /// a different register, then we need to keep the copy.
               if (phi->result && phi->result != from->result) { goto keep_copy; }
-              VECTOR_PUSH(phis, phi);
+              vector_push(phis, phi);
               break;
             }
           }
@@ -556,7 +554,7 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
 
         /// If we get here, then we know that all PHI node that use to
         /// can be precoloured with the same register as from.
-        VECTOR_FOREACH_PTR (IRInstruction *, phi, phis) { phi->result = from->result; }
+        foreach_ptr (IRInstruction *, phi, phis) { phi->result = from->result; }
         goto eliminate;
       }
 
@@ -577,11 +575,11 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
       ir_replace_uses(to, from);
 
       /// Yeet to.
-      VECTOR_PUSH(removed_instructions, to);
+      vector_push(removed_instructions, to);
     }
 
     /// Remove all instructions that were marked for removal.
-    VECTOR_FOREACH_PTR (IRInstruction *, instruction, removed_instructions) {
+    foreach_ptr (IRInstruction *, instruction, removed_instructions) {
       ir_remove(instruction);
     }
 
@@ -597,14 +595,14 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
   }
 
   /// Cleanup.
-  VECTOR_DELETE(removed_instructions);
-  VECTOR_DELETE(phis);
+  vector_delete(removed_instructions);
+  vector_delete(phis);
 }
 
-typedef VECTOR(usz) NumberStack;
+typedef Vector(usz) NumberStack;
 
 void print_number_stack(NumberStack *stack) {
-  VECTOR_FOREACH_INDEX(i, *stack) {
+  foreach_index(i, *stack) {
     if (i) { printf(", "); }
     printf("%zu", stack->data[i]);
   }
@@ -629,7 +627,7 @@ NumberStack build_coloring_stack(const MachineDescription *desc, IRInstructions 
     bool done;
     do {
       done = true;
-      VECTOR_FOREACH_INDEX (i, G->lists) {
+      foreach_index(i, G->lists) {
         AdjacencyList *list = G->lists.data[i];
         if (list->color || list->allocated) continue;
         if (list->degree < k) {
@@ -638,7 +636,7 @@ NumberStack build_coloring_stack(const MachineDescription *desc, IRInstructions 
           count--;
 
           /// Push onto color allocation stack.
-          VECTOR_PUSH(stack, i);
+          vector_push(stack, i);
         }
       }
     } while (!done && count);
@@ -648,7 +646,7 @@ NumberStack build_coloring_stack(const MachineDescription *desc, IRInstructions 
       usz min_cost = (usz) -1; /// (!)
       usz node_to_spill = 0;
 
-      VECTOR_FOREACH_PTR (IRInstruction *, instruction, *instructions) {
+      foreach_ptr (IRInstruction *, instruction, *instructions) {
         AdjacencyList *list = G->lists.data[instruction->index];
         if (list->color || list->allocated) continue;
 
@@ -661,7 +659,7 @@ NumberStack build_coloring_stack(const MachineDescription *desc, IRInstructions 
       }
 
       /// Push onto color allocation stack.
-      VECTOR_PUSH(stack, node_to_spill);
+      vector_push(stack, node_to_spill);
       G->lists.data[node_to_spill]->allocated = 1;
       count--;
     }
@@ -678,14 +676,14 @@ static void color(
 ) {
   (void) instructions;
 
-  VECTOR_FOREACH (usz, i, *stack) {
+  foreach (usz, i, *stack) {
     AdjacencyList *list = g->lists.data[*i];
     if (list->color || list->instruction->result) continue;
 
     /// Each bit that is set refers to register in register list that
     /// must not be assigned to this.
     usz register_interferences = list->regmask | desc->instruction_register_interference(list->instruction);
-    VECTOR_FOREACH (usz, adj, list->adjacencies) {
+    foreach (usz, adj, list->adjacencies) {
       AdjacencyList *adjacent = g->lists.data[*adj];
       register_interferences |= desc->instruction_register_interference(adjacent->instruction);
       if (adjacent->color) register_interferences |= 1 << (adjacent->color - 1);
@@ -703,11 +701,11 @@ static void color(
     list->color = r;
   }
 
-  VECTOR_FOREACH_PTR (AdjacencyList*, list, g->lists) {
+  foreach_ptr (AdjacencyList*, list, g->lists) {
     IRInstruction *inst = list->instruction;
     Register r = list->color;
-    if (inst->type == IR_PHI) {
-      VECTOR_FOREACH_PTR (IRPhiArgument *, phi, inst->phi_args) {
+    if (inst->kind == IR_PHI) {
+      foreach_ptr (IRPhiArgument *, phi, inst->phi_args) {
         if (needs_register(phi->value)) {
           AdjacencyList *phi_list = g->lists.data[phi->value->index];
           if (!phi_list->color) {
@@ -814,13 +812,13 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
   if (optimise) codegen_optimise_blocks(f->context);
 
   /// Free allocated resources.
-  VECTOR_FOREACH_PTR (AdjacencyList*, list, G.lists) {
-    VECTOR_DELETE(list->adjacencies);
+  foreach_ptr (AdjacencyList*, list, G.lists) {
+    vector_delete(list->adjacencies);
     free(list);
   }
-  VECTOR_DELETE(G.lists);
-  VECTOR_DELETE(instructions);
-  VECTOR_DELETE(stack);
+  vector_delete(G.lists);
+  vector_delete(instructions);
+  vector_delete(stack);
   free(G.matrix.data);
   free(G.regmasks);
 }

@@ -1,14 +1,55 @@
+#!/usr/bin/a68g
+
 PROC platform is windows = BOOL: get env ("WINDIR") NE "";
-STRING platform dir sep = IF platform is windows THEN "\" ELSE "/" FI;
+STRING platform dir sep   = (platform is windows | "\"     | "/"        );
+STRING executable suffix  = (platform is windows | ".exe"  | ""         );
+STRING executable prefix  = (platform is windows | ""      | "./"       );
+STRING calling convention = (platform is windows | "MSWIN" | "LINUX"    );
+
+CO Statistics CO
+INT tests run := 0;
+INT tests failed := 0;
+INT tests errored := 0;
+INT tests skipped := 0;
+
+CO Handle command line args CO
+BOOL enable colours := get env ("ENABLE_TEST_COLOURS") EQ "1";
+
+PROC red    = (REF FILE f) VOID: (enable colours | put(f, (REPR 27, "[31m")));
+PROC green  = (REF FILE f) VOID: (enable colours | put(f, (REPR 27, "[32m")));
+PROC yellow = (REF FILE f) VOID: (enable colours | put(f, (REPR 27, "[33m")));
+PROC resetc = (REF FILE f) VOID: (enable colours | put(f, (REPR 27, "[m")));
+
+CO Get the exit code of a program. CO
+PROC wexitstatus = (INT status) INT: (platform is windows | status | ABS ((BIN status SHR 8) AND BIN 255));
+
+CO Helper because system() returns the exit status, not the exit code CO
+PROC sh = (STRING cmd) INT: (platform is windows | system(cmd) | wexitstatus (system (cmd)));
+
+CO Helper function to abort the program CO
+PROC die = ([] UNION (PROC (REF FILE) VOID, CHAR, [] CHAR, INT) message) VOID:
+BEGIN
+    print ((red, "FATAL: "));
+    print (message);
+    print ((new line, resetc));
+
+    CO ‘stop’ unfortunately only lets us exit w/ code 0 CO
+    abend ("FATAL ERROR")
+END;
+
+CO Open a file and ensure that there was no error CO 
+PROC secure open = (STRING file name, CHANNEL channel) FILE:
+BEGIN
+  FILE f;
+  IF open (f, file name, channel) /= 0 THEN die(("ERROR: Could not open 'out.txt'")) FI;
+  f
+END;
 
 PROC string to number = (STRING s) INT: BEGIN
   INT out := 0;
   FOR index FROM LWB s TO UPB s DO
     CHAR c = s[index];
-    IF NOT is digit (c) THEN
-      print(("ERROR!  Expected digit but got ", c, new line));
-      stop
-    FI;
+    IF NOT is digit (c) THEN die((red, "ERROR!  Expected digit but got ", c)) FI;
     INT tmp := ABS c;
     tmp -:= 48;
     out *:= 10;
@@ -25,13 +66,9 @@ PROC compare expected =
 ) BOOL:
 BEGIN
   BOOL retval := TRUE;
-  CO open out.txt, compare contents with `output` CO
-  FILE out;
-  IF open (out, "out.txt", stand in channel) /= 0 THEN
-    print("ERROR!");
-    stop
-  FI;
 
+  CO open out.txt, compare contents with `output` CO
+  FILE out := secure open ("out.txt", stand in channel);
   on logical file end (out, (REF FILE f) BOOL: past);
   STRING str;
   DO
@@ -59,101 +96,163 @@ BEGIN
   return: retval
 END;
 
-PROC run test = (STRING file name) VOID:
+CO Compile a test and check if it passes CO
+PROC compile and test = (
+  STRING file name, 
+  INT return value, 
+  STRING output, 
+  BOOL expect error,
+  BOOL optimise
+) VOID:
 BEGIN
-  FILE f;
-  IF open(f, file name, stand in channel) /= 0 THEN
-    print(("ERROR!  Could not open test file ", file name, new line));
-    stop
+  tests run +:= 1;
+
+  CO Compile the program to ASM CO
+  IF sh(".." + platform dir sep + "bld" + platform dir sep + "func" 
+             + " -o test.S "
+             + (optimise | " -O " | "") 
+             + (expect error | " > out.txt 2>&1 " | "")
+             + (enable colours | " --colours always " | "")
+             + "-cc " + calling convention + " "
+             + file name) /= 0 THEN
+    IF expect error THEN
+      CO Error message CO
+      STRING line := "";
+      STRING contents := "";
+
+      CO Read the error message CO
+      FILE f := secure open ("out.txt", stand in channel);
+      on logical file end (f, (REF FILE unused) BOOL: end);
+      DO 
+        get (f, line);
+        contents +:= line;
+        contents +:= new line char;
+        new line (f)
+      OD;
+      end:
+      
+      CO Make sure this is not an ICE CO
+      IF string in string ("Internal Compiler Error", LOC INT, contents) THEN
+        print (contents);
+        print ((red, (optimise | "ERRORED! (optimised)     --  " | "ERRORED!                 --  "), file name, new line));
+        tests errored +:= 1
+      ELSE 
+        print((green, (optimise | "SUCCESS! (optimised)     --  " | "SUCCESS!                 --  "), file name, new line));
+        GO TO return
+      FI
+    ELSE
+      print((red, (optimise | "ERRORED! (optimised)     --  " | "ERRORED!                 --  "), file name, new line));
+      tests errored +:= 1
+    FI;
+    GO TO return
   FI;
 
-  CO Save initial file contents as expected output. CO
+  CO Assemble it CO
+  IF sh("gcc test.S -o test" + executable suffix) /= 0 THEN
+    print((red, (optimise | "ERRORED! (optimised)     --  " | "ERRORED!                 --  "), file name, new line));
+    tests errored +:= 1;
+    GO TO return
+  FI;
 
+  CO If the test should error, then we shouldn’t even get here CO
+  IF expect error THEN
+    print((red, (optimise | "FAILED!  (optimised)     --  " | "FAILED!                  --  "), file name, new line));    
+    print(("    Expected error, but test compiled successfully", new line));
+    tests failed +:= 1;
+    GO TO return
+  FI;
+
+  INT actual return value := sh(executable prefix + "test" + executable suffix + " > out.txt");
+  STRING actual output := "";
+
+  IF compare expected (return value, output, actual return value, actual output)
+  THEN
+    print((green, (optimise | "SUCCESS! (optimised)     --  " | "SUCCESS!                 --  "), file name, new line))
+  ELSE
+    print((red, (optimise | "FAILED! (optimised)      --  " | "FAILED!                  --  "), file name, new line, resetc));
+    printf(($"Expected exit code " g(0) ", but got " g(0)l$, return value, actual return value));
+    print(("=== EXPECTED OUTPUT ===", new line, output,        "===", new line));
+    print(("=== GOT OUTPUT ===",      new line, actual output, "===", new line));
+    tests failed +:= 1
+  FI;
+
+  return: SKIP
+END;
+
+PROC run test = (STRING file name) VOID:
+BEGIN
+  FILE f := secure open(file name, stand in channel);
+  on logical file end (f, (REF FILE unused) BOOL: 
+  BEGIN
+    die(("ERROR! Test file ", file name, " does not contain a valid test!"));
+    SKIP
+  END);
+
+  CO Save initial file contents as expected output. CO
   STRING str;
 
   CO Read first line as status return value CO
   get(f, (str, new line));
 
-  IF UPB str < 3 THEN
-    print(("ERROR!  First line not even long enough to contain return status.", new line));
-    stop
-  FI;
-
-  IF str[1] /= REPR 59 THEN
-    print(("ERROR!  First line does not start with comment!.", new line));
-    stop
-  FI;
+  IF UPB str < 3 THEN die(("ERROR!  First line not even long enough to contain return status.")) FI;
+  IF str[1] /= REPR 59 THEN die(("ERROR!  First line does not start with comment!.")) FI;  
 
   CO Cut off comment delimiters CO
   str := str[3..];
 
-  CO Convert string into a number CO
+  CO Check for special strings CO
+  IF str EQ "SKIP" THEN
+    print((yellow, "SKIPPED!                 --  ", file name, new line));
+    print(("SKIPPED! (optimised)     --  ", file name, new line));
+    tests skipped +:= 1;
+    GO TO return
+  FI;
 
-  INT return value = string to number(str);
+  BOOL expect error := FALSE;
+  INT return value := 0;
+  STRING output := "";
 
-  CO Collect expected stdout... CO
-  STRING output;
-  WHILE get(f, (str, new line)); str /= "" DO
-    str := str[3..];
-    output +:= str;
-    output +:= new line char
-  OD;
+  IF str EQ "ERROR" THEN     
+    expect error := TRUE;
+    get (f, (str, new line));
+    str := str[3..]
+  ELSE
+    CO Convert string into a number CO
+    return value := string to number(str);
+
+    CO Collect expected stdout CO
+    WHILE get(f, (str, new line)); str /= "" DO
+      str := str[3..];
+      output +:= str;
+      output +:= new line char
+    OD
+  FI; 
+
+  CO Close the file CO
+  close (f);
 
   CO Compile program CO
-  IF system(".." + platform dir sep +  "bld" + platform dir sep + "func -o test.S " + file name) /= 0 THEN
-    print("FUNC ERROR!");
-    stop
-  FI;
-  IF system("gcc test.S -o test.exe") /= 0 THEN
-    print("GCC ERROR!");
-    stop
-  FI;
-  INT actual return value := system("test.exe > out.txt");
-  STRING actual output := "";
+  compile and test (file name, return value, output, expect error, FALSE);
+  compile and test (file name, return value, output, expect error, TRUE);
 
-  IF compare expected (return value, output, actual return value, actual output)
-  THEN
-    print(("SUCCESS!              --  ", file name, new line))
-  ELSE
-    print(("FAILED!               --  ", file name, new line));
-    print((return value,         new line));
-    print((actual return value,  new line));
-    print(("=== EXPECTED ===", new line, output,        "===", new line));
-    print(("=== GOT ===",      new line, actual output, "===", new line));
-    stop
-  FI;
-
-  CO Compile optimised program CO
-  IF system(".." + platform dir sep +  "bld" + platform dir sep + "func -O -o test.S " + file name) /= 0 THEN
-    print("FUNC ERROR!");
-    stop
-  FI;
-  IF system("gcc test.S -o test.exe") /= 0 THEN
-    print("GCC ERROR!");
-    stop
-  FI;
-  actual return value := system("test.exe > out.txt");
-  actual output := "";
-
-  IF compare expected (return value, output, actual return value, actual output)
-  THEN
-    print(("SUCCESS (optimised)!  --  ", file name, new line))
-  ELSE
-    print(("FAILED! (optimised)   --  ", file name, new line));
-    print((return value,         new line));
-    print((actual return value,  new line));
-    print(("=== EXPECTED ===", new line, output,        "===", new line));
-    print(("=== GOT ===",      new line, actual output, "===", new line));
-    stop
-  FI;
-
-  close (f)
+  return: SKIP
 END;
 
-[] STRING tests = get directory ("tests");
+CO Collect the tests CO
+[] STRING tests = SORT get directory ("tests");
 
+CO Run tests CO
 FOR index FROM LWB tests TO UPB tests DO
   IF file is regular ("tests/" + tests[index]) THEN
     run test ("tests/" + tests[index])
   FI
-OD
+OD;
+
+CO Print summary CO 
+print (resetc);
+printf (($"SUMMARY:" l
+          "    Tests run:     " g(0) l
+          "    Tests failed:  " g(0) l
+          "    Tests errored: " g(0) l
+          "    Tests skipped: " g(0) l$,
+          tests run, tests failed, tests errored, tests skipped))

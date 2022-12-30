@@ -16,5 +16,6 @@
 */*out*
 # Language Server
 **/compile_commands.json
+.Random.seed
 
 # Backup Files

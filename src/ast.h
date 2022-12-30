@@ -51,6 +51,7 @@ enum TokenType {
   TK_ELSE,
   TK_WHILE,
   TK_EXT,
+  TK_AS,
 
   TK_LPAREN,
   TK_RPAREN,
@@ -62,6 +63,7 @@ enum TokenType {
   TK_COMMA,
   TK_COLON,
   TK_SEMICOLON,
+  TK_DOT,
 
   TK_PLUS,
   TK_MINUS,
@@ -74,6 +76,7 @@ enum TokenType {
   TK_TILDE,
   TK_EXCLAM,
   TK_AT,
+  TK_HASH,
 
   TK_SHL,
   TK_SHR,
@@ -103,9 +106,9 @@ typedef struct Node Node;
 typedef struct Type Type;
 typedef struct Parameter Parameter;
 typedef struct Scope Scope;
-typedef VECTOR(Node *) Nodes;
-typedef VECTOR(Type *) Types;
-typedef VECTOR(Parameter) Parameters;
+typedef Vector(Node *) Nodes;
+typedef Vector(Type *) Types;
+typedef Vector(Parameter) Parameters;
 
 /// A symbol in the symbol table.
 typedef struct Symbol {
@@ -131,10 +134,10 @@ struct Scope {
   struct Scope *parent;
 
   /// The symbols in this scope.
-  VECTOR(Symbol *) symbols;
+  Vector(Symbol *) symbols;
 
   /// All child scopes.
-  VECTOR(Scope *) children;
+  Vector(Scope *) children;
 };
 
 /// ===========================================================================
@@ -213,11 +216,15 @@ typedef struct NodeLiteral {
   };
 } NodeLiteral;
 
+/// Function refernece.
+typedef struct NodeFunctionReference {
+  string name;
+  Symbol *resolved;
+  Scope *scope;
+} NodeFunctionReference;
+
 /// Variable reference.
 typedef Symbol *NodeVariableReference;
-
-/// Function refernece.
-typedef Symbol *NodeFunctionReference;
 
 /// Named type.
 typedef Symbol *TypeNamed;
@@ -326,23 +333,25 @@ typedef struct AST {
   /// All nodes/types/scopes in the AST. NEVER iterate over this, ever.
   Nodes _nodes_;
   Types _types_;
-  VECTOR(Scope *) _scopes_;
+  Vector(Scope *) _scopes_;
 
   /// Counter used for generating unique names.
   usz counter;
 
   /// Builtin types.
   Type *t_void;
+  Type *t_integer_literal;
   Type *t_integer;
+  Type *t_byte;
 
   /// Scopes that are currently being parsed.
-  VECTOR(Scope *) scope_stack;
+  Vector(Scope *) scope_stack;
 
   /// String table.
-  VECTOR(string) strings;
+  Vector(string) strings;
 
   /// Functions.
-  VECTOR(Node *) functions;
+  Vector(Node *) functions;
 } AST;
 
 /// ===========================================================================
@@ -471,7 +480,7 @@ Node *ast_make_variable_reference(
 Node *ast_make_function_reference(
     AST *ast,
     loc source_location,
-    Symbol *symbol
+    span symbol
 );
 
 /// Create a new named type.
@@ -507,6 +516,20 @@ Type *ast_make_type_function(
 /// ===========================================================================
 ///  AST query functions.
 /// ===========================================================================
+/// Info about a type.
+typedef struct Typeinfo {
+  /// The type stripped of aliases etc. May be NULL
+  /// if the type is incomplete.
+  Type *type;
+
+  /// The last alias in the chain.
+  Type *last_alias;
+
+  /// Flags.
+  bool is_void : 1;
+  bool is_incomplete : 1;
+} Typeinfo;
+
 /// Get a string representation of a type.
 /// \return The string representation of the type. The string is allocated
 ///         as if with `malloc` and must be freed by the caller.
@@ -517,6 +540,12 @@ bool ast_type_is_incomplete(const Type *type);
 
 /// Get the size of a type.
 usz ast_sizeof(const Type *type);
+
+/// Get information about a type.
+Typeinfo ast_typeinfo(AST *ast, Type *type);
+
+/// Check if a type is void.
+bool ast_is_void(AST *ast, Type *type);
 
 /// ===========================================================================
 ///  Miscellaneous AST functions.
@@ -535,5 +564,8 @@ void ast_print_scope_tree(FILE *file, const AST *ast);
 
 /// Intern a string.
 size_t ast_intern_string(AST *ast, span string);
+
+/// Replace a node with another node.
+void ast_replace_node(AST *ast, Node *old, Node *new);
 
 #endif // FUNCOMPILER_AST_H

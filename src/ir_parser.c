@@ -58,8 +58,8 @@ enum IrParserInstructionType {
 #define SYMBOL_TYPE(_name, type, thing) typedef struct _name##_sym {\
   span name;\
   loc location;\
-  thing _name;\
-  VECTOR(type) unresolved;\
+  thing _name;                        \
+    Vector(type) unresolved;\
 } _name##_sym
 
 typedef struct temp_sym_entry {
@@ -101,9 +101,9 @@ typedef struct {
   u64 integer;
 
   /// Symbol tables.
-  VECTOR(block_sym) block_syms;
-  VECTOR(temp_sym) temp_syms;
-  VECTOR(function_sym) function_syms;
+  Vector(block_sym) block_syms;
+  Vector(temp_sym) temp_syms;
+  Vector(function_sym) function_syms;
 
   /// Jump buffer. I don't feel like checking for errors
   /// all the time, and it’s not like we’re going to try
@@ -410,7 +410,7 @@ span funcname(IRParser *p, span name) {
   static void CAT(make_, type)(IRParser * p, loc location, span name, param_type param) {               \
     /** Issue an error if the thing already exists. **/                                                 \
     CAT(type, _sym) * index;                                                                            \
-    VECTOR_FIND_IF(p->CAT(type, _syms), index, i, spans_equal(p->CAT(type, _syms).data[i].name, name)); \
+    vector_find_if(p->CAT(type, _syms), index, i, spans_equal(p->CAT(type, _syms).data[i].name, name)); \
     if (index) {                                                                                        \
       if (index->type) ERR("Redefinition of " thing_name " '%.*s'", (int) name.size, name.data);        \
       index->type = param;                                                                              \
@@ -424,7 +424,7 @@ span funcname(IRParser *p, span name) {
         .type = param,                                                                                  \
         .location = location,                                                                           \
         .unresolved = {0}};                                                                             \
-    VECTOR_PUSH(p->CAT(type, _syms), sym);                                                              \
+    vector_push(p->CAT(type, _syms), sym);                                                              \
   }
 
 MAKE("temporary", temp, IRInstruction *)
@@ -434,7 +434,7 @@ MAKE("function", function, IRFunction *)
 /// Find a temporary in the current parser context.
 static IRInstruction *try_resolve_temp(IRParser *p, span name) {
   temp_sym *inst;
-  VECTOR_FIND_IF(p->temp_syms, inst, i, spans_equal(p->temp_syms.data[i].name, name));
+  vector_find_if(p->temp_syms, inst, i, spans_equal(p->temp_syms.data[i].name, name));
   return inst ? inst->temp : NULL;
 }
 
@@ -460,7 +460,7 @@ static IRInstruction *resolve_curr_static_var(IRParser *p) {
   static void CAT(resolve_or_declare_, type)(IRParser * p, loc location, span name, param_type * user) { \
     /** Try to find the thing. **/                                                                       \
     CAT(type, _sym) * ptr;                                                                               \
-    VECTOR_FIND_IF(p->CAT(type, _syms), ptr, i, spans_equal(p->CAT(type, _syms).data[i].name, name));    \
+    vector_find_if(p->CAT(type, _syms), ptr, i, spans_equal(p->CAT(type, _syms).data[i].name, name));    \
                                                                                                          \
     /** If the thing does not exist yet, add it. **/                                                     \
     if (!ptr) {                                                                                          \
@@ -472,13 +472,13 @@ static IRInstruction *resolve_curr_static_var(IRParser *p) {
           .unresolved = {0},                                                                             \
       };                                                                                                 \
                                                                                                          \
-      VECTOR_PUSH(sym.unresolved, user);                                                                 \
-      VECTOR_PUSH(p->CAT(type, _syms), sym);                                                             \
+      vector_push(sym.unresolved, user);                                                                 \
+      vector_push(p->CAT(type, _syms), sym);                                                             \
     }                                                                                                    \
                                                                                                          \
     /** Add an entry to the thing if it exists, but isn't resolved yet. **/                              \
     else if (!ptr->type) {                                                                               \
-      VECTOR_PUSH(ptr->unresolved, user);                                                                \
+      vector_push(ptr->unresolved, user);                                                                \
     }                                                                                                    \
                                                                                                          \
     /** Otherwise, resolve it. **/                                                                       \
@@ -492,7 +492,7 @@ RESOLVE_OR_DECLARE(block, IRBlock *)
 
 static void resolve_or_declare_temp(IRParser *p, loc location, span name, IRInstruction **slot, IRInstruction *parent) {
   temp_sym *ptr;
-  VECTOR_FIND_IF(p->temp_syms, ptr, i, spans_equal(p->temp_syms.data[i].name, name));
+  vector_find_if(p->temp_syms, ptr, i, spans_equal(p->temp_syms.data[i].name, name));
 
   /// If the thing does not exist yet, add it.
   if (!ptr) {
@@ -504,14 +504,14 @@ static void resolve_or_declare_temp(IRParser *p, loc location, span name, IRInst
     };
 
     temp_sym_entry entry = {.slot = slot, .parent = parent};
-    VECTOR_PUSH(sym.unresolved, entry);
-    VECTOR_PUSH(p->temp_syms, sym);
+    vector_push(sym.unresolved, entry);
+    vector_push(p->temp_syms, sym);
   }
 
   /// Add an entry to the thing if it exists, but isn't resolved yet.
   else if (!ptr->temp) {
     temp_sym_entry entry = {.slot = slot, .parent = parent};
-    VECTOR_PUSH(ptr->unresolved, entry);
+    vector_push(ptr->unresolved, entry);
   }
 
   /// Otherwise, resolve it.
@@ -524,14 +524,14 @@ static void resolve_or_declare_temp(IRParser *p, loc location, span name, IRInst
 #define RESOLVE_ALL(p, err_name, type, param_type, on_err)                                                                                          \
   do {                                                                                                                                              \
     bool success = true;                                                                                                                            \
-    VECTOR_FOREACH (CAT(type, _sym), sym, (p)->CAT(type, _syms)) {                                                                                  \
+    foreach (CAT(type, _sym), sym, (p)->CAT(type, _syms)) {                                                                                  \
       /** An unresolved function is a parse error. **/                                                                                              \
       if (!sym->type) {                                                                                                                             \
         issue_diagnostic(DIAG_ERR, (p)->filename, (p)->source, sym->location, "Unknown " err_name " '%.*s'", (int) sym->name.size, sym->name.data); \
         success = false;                                                                                                                            \
       } /** Otherwise, resolve the function. **/                                                                                                    \
       else {                                                                                                                                        \
-        VECTOR_FOREACH (param_type *, user, sym->unresolved) {                                                                                      \
+        foreach (param_type *, user, sym->unresolved) {                                                                                      \
           **user = sym->type;                                                                                                                       \
         }                                                                                                                                           \
       }                                                                                                                                             \
@@ -909,10 +909,10 @@ static void parse_block(IRParser *p, bool first_block) {
   if (p->tok_type != tk_ident) ERR("Expected block");
   if (!first_block) {
     IRBlock *block = ir_block_create();
-    ir_block_attach_to_function(VECTOR_BACK(p->context->functions), block);
+    ir_block_attach_to_function(vector_back(p->context->functions), block);
     p->context->block = block;
   }
-  make_block(p, here(p), p->tok, VECTOR_BACK(p->context->functions)->blocks.last);
+  make_block(p, here(p), p->tok, vector_back(p->context->functions)->blocks.last);
   next_token(p);
   if (p->tok_type != tk_colon) ERR("expected ':' after block name");
 
@@ -945,7 +945,7 @@ static void parse_body(IRParser *p) {
   /// The first block is special, because it can be unnamed. If there
   /// is no unnamed first block, there must still be at least one block.
   if (!at_block_name(p)) {
-    make_block(p, here(p), p->tok, VECTOR_BACK(p->context->functions)->blocks.first);
+    make_block(p, here(p), p->tok, vector_back(p->context->functions)->blocks.first);
 
     /// Parse the body of the first block.
     parse_block_body(p);
@@ -961,7 +961,7 @@ static void parse_body(IRParser *p) {
 /// <attributes> ::= <attribute>*
 /// <attribute>  ::= CONSTEVAL | FORCEINLINE | GLOBAL | NORETURN | PURE | LEAF
 static void parse_attributes(IRParser *p) {
-  IRFunction *f = VECTOR_BACK(p->context->functions);
+  IRFunction *f = vector_back(p->context->functions);
 
 #define ATTR(a)                                                     \
   if (IDENT(#a)) {                                                  \
@@ -996,7 +996,7 @@ static void parse_parameters(IRParser *p) {
     /// Create a parameter reference.
     if (p->tok_type != tk_temp) ERR("Expected temporary after '(' or ','");
     if (p->tok.data[0] == '#') ERR("Function parameter must be a temporary register");
-    ir_add_parameter_to_function(VECTOR_BACK(p->context->functions));
+    ir_add_parameter_to_function(vector_back(p->context->functions));
     IRInstruction *param = ir_parameter(p->context, param_count++);
     make_temp(p, here(p), p->tok, param);
     next_token(p);
@@ -1052,7 +1052,7 @@ static void parse_function(IRParser *p) {
   next_token(p);
 
   /// Add an entry for the function.
-  make_function(p, location, name, VECTOR_BACK(p->context->functions));
+  make_function(p, location, name, vector_back(p->context->functions));
 }
 
 /// <ir> ::= { <function> | <extern> }
@@ -1079,13 +1079,13 @@ static bool parse_ir(IRParser *p) {
       RESOLVE_ALL(p, "block", block, IRBlock *, return false);
       /** Resolve temporaries **/ {
         bool success = true;
-        VECTOR_FOREACH (temp_sym, sym, p->temp_syms) {
+        foreach (temp_sym, sym, p->temp_syms) {
           if (!sym->temp) {
             issue_diagnostic(DIAG_ERR, (p)->filename, (p)->source, sym->location,
               "Unknown temporary '%.*s'", (int) sym->name.size, sym->name.data);
             success = false;
           } else {
-            VECTOR_FOREACH (temp_sym_entry, entry, sym->unresolved) {
+            foreach (temp_sym_entry, entry, sym->unresolved) {
               *entry->slot = sym->temp;
               mark_used(sym->temp, entry->parent);
             }
@@ -1093,8 +1093,8 @@ static bool parse_ir(IRParser *p) {
         }
         if (!success) { return false; }
       }
-      VECTOR_CLEAR(p->block_syms);
-      VECTOR_CLEAR(p->temp_syms);
+      vector_clear(p->block_syms);
+      vector_clear(p->temp_syms);
     } break;
     case tk_eof: return true;
     default: ERR("Expected 'defun' or 'declare'");
@@ -1144,14 +1144,14 @@ bool ir_parse(CodegenContext *context, const char *filename, string ir) {
   }
 
   /// There was an error. First, clean up the parser context.
-  VECTOR_DELETE(parser.temp_syms);
-  VECTOR_DELETE(parser.block_syms);
-  VECTOR_DELETE(parser.function_syms);
+  vector_delete(parser.temp_syms);
+  vector_delete(parser.block_syms);
+  vector_delete(parser.function_syms);
 
   /// Remove all functions we added from the context.
   bool found = false;
   usz removed = 0;
-  VECTOR_FOREACH_PTR (IRFunction *, func, context->functions) {
+  foreach_ptr (IRFunction *, func, context->functions) {
     /// Do *not* delete anything before f!
     if (func == f) {
       found = true;

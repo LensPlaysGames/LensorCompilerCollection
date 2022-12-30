@@ -32,13 +32,18 @@
         (int) from_str.size, from_str.data, (int) to_str.size, to_str.data); \
   } while (0)
 
-/// Check if two types are equal.
-NODISCARD static bool types_equal(Type *a, Type *b) {
-  ASSERT(a && b);
+NODISCARD static bool types_equal(AST *ast, Type *a, Type *b);
 
-  /// Expand named types.
-  while (a->kind == TYPE_NAMED && a->named->type) a = a->named->type;
-  while (b->kind == TYPE_NAMED && b->named->type) b = b->named->type;
+/// Check if two types are equal. You probably want to use
+/// `convertible()` or `equivalent()` instead.
+///
+/// \param a A type that is not NULL and not of kind NAMED.
+/// \param b A type that is not NULL and not of kind NAMED.
+/// \return Whether the types are equal.
+NODISCARD static bool types_equal_impl(AST *ast, Type *a, Type *b) {
+  ASSERT(a && b);
+  ASSERT(a->kind != TYPE_NAMED);
+  ASSERT(b->kind != TYPE_NAMED);
 
   /// If the type kinds are not the same, the the types are obviously not equal.
   if (a->kind != b->kind) return false;
@@ -47,38 +52,106 @@ NODISCARD static bool types_equal(Type *a, Type *b) {
   switch (a->kind) {
     default: ICE("Invalid type kind %d", a->kind);
     case TYPE_NAMED: UNREACHABLE();
-    case TYPE_PRIMITIVE: return a->primitive.id == b->primitive.id;
-    case TYPE_POINTER: return types_equal(a->pointer.to, b->pointer.to);
-    case TYPE_ARRAY: return a->array.size == b->array.size && types_equal(a->array.of, b->array.of);
+    case TYPE_PRIMITIVE:
+      if (a == ast->t_integer_literal) return b == ast->t_integer_literal || b == ast->t_integer;
+      if (b == ast->t_integer_literal) return a == ast->t_integer_literal || a == ast->t_integer;
+      return a->primitive.id == b->primitive.id;
+    case TYPE_POINTER: return types_equal(ast, a->pointer.to, b->pointer.to);
+    case TYPE_ARRAY: return a->array.size == b->array.size && types_equal(ast, a->array.of, b->array.of);
     case TYPE_FUNCTION: {
       if (a->function.parameters.size != b->function.parameters.size) return false;
-      if (!types_equal(a->function.return_type, b->function.return_type)) return false;
-      VECTOR_FOREACH_INDEX (i, a->function.parameters)
-        if (!types_equal(a->function.parameters.data[i].type, b->function.parameters.data[i].type))
+      if (!types_equal(ast, a->function.return_type, b->function.return_type)) return false;
+      foreach_index(i, a->function.parameters)
+        if (!types_equal(ast, a->function.parameters.data[i].type, b->function.parameters.data[i].type))
           return false;
       return true;
     }
   }
 }
 
+/// Check if two types are equal. You probably want to use `convertible` instead.
+NODISCARD static bool types_equal(AST *ast, Type *a, Type *b) {
+  Typeinfo ta = ast_typeinfo(ast, a);
+  Typeinfo tb = ast_typeinfo(ast, b);
+
+  /// If both are incomplete, compare the names.
+  if (ta.is_incomplete && tb.is_incomplete) {
+    ASSERT(ta.last_alias && tb.last_alias);
+    return string_eq(ta.last_alias->named->name, tb.last_alias->named->name);
+  }
+
+  /// If one is incomplete, the types are not equal.
+  if (ta.is_incomplete || tb.is_incomplete) return false;
+
+  /// Compare the types.
+  return types_equal_impl(ast, ta.type, tb.type);
+}
+
+/// Check if a type is an integer type.
+NODISCARD static bool is_integer_impl(AST *ast, Typeinfo t) {
+  /// Currently, all primitive types are integers.
+  return t.type == ast->t_integer || t.type == ast->t_integer_literal  || t.type == ast->t_byte;
+}
+
+/// Check if a type is an integer type.
+NODISCARD static bool is_integer(AST *ast, Type *type) {
+  /// Currently, all primitive types are integers.
+  Typeinfo t = ast_typeinfo(ast, type);
+  return is_integer_impl(ast, t);
+}
+
 /// Check if from is convertible to to.
-NODISCARD static bool convertible(Type *to, Type *from) {
+NODISCARD static bool convertible(AST *ast, Type * to_type, Type * from_type) {
+  /// Expand types.
+  Typeinfo to = ast_typeinfo(ast, to_type);
+  Typeinfo from = ast_typeinfo(ast, from_type);
+
+  /// Any type is implicitly convertible to void.
+  if (to.is_void) return true;
+
+  /// If the types are both incomplete, compare their names.
+  if (to.is_incomplete && from.is_incomplete) {
+    ASSERT(to.last_alias && from.last_alias);
+    return string_eq(to.last_alias->named->name, from.last_alias->named->name);
+  }
+
+  /// If either type is incomplete, they are not convertible.
+  if (to.is_incomplete || from.is_incomplete) return false;
+
   /// If the types are the same, they are convertible.
-  if (types_equal(to, from)) return true;
+  if (types_equal(ast, to.type, from.type)) return true;
 
   /// A function type is implicitly convertible to its
   /// corresponding pointer type.
-  if (to->kind == TYPE_POINTER && from->kind == TYPE_FUNCTION)
-    return types_equal(to->pointer.to, from);
+  if (to.type->kind == TYPE_POINTER && from.type->kind == TYPE_FUNCTION) {
+    Typeinfo base = ast_typeinfo(ast, to.type->pointer.to);
+    return !base.is_incomplete && types_equal_impl(ast, base.type, from.type);
+  }
+
+  /// Smaller integer types are implicitly convertible to larger
+  /// integer types if the type being converted to is signed, or
+  /// if the smaller type is unsigned.
+  bool to_is_int = is_integer_impl(ast, to);
+  bool from_is_int = is_integer_impl(ast, from);
+  if (to_is_int && from_is_int) {
+    if (
+      to.type->primitive.size > from.type->primitive.size
+      && (to.type->primitive.is_signed
+         || !from.type->primitive.is_signed)
+    ) return true;
+  }
+
+  /// Integer literals are convertible to any integer type.
+  if (from.type == ast->t_integer_literal && to_is_int) return true;
 
   /// Otherwise, the types are not convertible.
   return false;
 }
 
 /// Get the common type of two types.
-NODISCARD static Type *common_type(Type *a, Type *b) {
+NODISCARD static Type *common_type(AST *ast, Type *a, Type *b) {
   /// TODO: integer stuff.
-  if (types_equal(a, b)) return a;
+  if (types_equal(ast, a, b)) return a;
   return NULL;
 }
 
@@ -87,13 +160,6 @@ NODISCARD static bool is_pointer(Type *type) { return type->kind == TYPE_POINTER
 
 /// Check if a type is an array type.
 NODISCARD static bool is_array(Type *type) { return type->kind == TYPE_ARRAY; }
-
-/// Check if a type is an integer type.
-NODISCARD static bool is_integer(Type *type) {
-  /// Currently, all primitive types are integers.
-  while (type->kind == TYPE_NAMED && type->named->type) type = type->named->type;
-  return type->kind == TYPE_PRIMITIVE;
-}
 
 /// Check if an expression is an lvalue.
 NODISCARD static bool is_lvalue(Node *expr) {
@@ -111,12 +177,116 @@ NODISCARD static bool is_lvalue(Node *expr) {
 }
 
 /// Resolve a function reference.
+///
+/// Terminology:
+///
+///   - A (formal) parameter is a parameter (type) of a function type or signature.
+///
+///   - An (actual) argument is a subexpression of a function call that is not
+///     the callee.
+///
+///   - Two types, A and B, are *equivalent* iff
+///       - 1. A and B are the same type, or
+///       - 2. one is a function type and the other its corresponding function
+///            pointer type, or
+///       - 3. one is a named type whose underlying type is equivalent to the
+///            other.
+///
+///   - A type A is *convertible* to a type B if there is a series of implicit
+///     conversions that transforms A to B or if A and B are equivalent.
+///
+///   - An argument A is convertible/equivalent to a parameter P iff the type
+///     of A is convertible/equivalent to the type of P.
+///
+/// To resolve an unresolved function reference, execute the following steps in
+/// order. The unresolved function reference in question is hereinafter referred
+/// to as ‘the function being resolved’.
+///
+/// 1. Collect all functions with the same name as the function being
+///    resolved into an *overload set* O. We cannot filter out any
+///    functions just yet.
+///
+/// 2. If the parent expression is a call expression, and the function being
+///    resolved is the callee of the call, then:
+///
+///    2a  Typecheck all arguments of the call that are not unresolved
+///        function references themselves. Note: This takes care of
+///        resolving nested calls.
+///
+///    2b. Remove from O all functions that have a different number of
+///        parameters than the call expression has arguments.
+///
+///    2c. Let A_1, ... A_n be the arguments of the call expression.
+///
+///    2d. For candidate C in O, let P_1, ... P_n be the parameters of C.
+///        For each argument A_i of the call, iff it is not an unresolved
+///        function, check if it is convertible to P_i. Remove C from O if
+///        it is not. Note down the number of A_i’s that required a (series
+///        of) implicit conversions to their corresponding P_i’s.
+///
+///    2e. If any of the A_i are unresolved functions, then each of those arguments:
+///
+///        2eα. Let F be that argument.
+///
+///        2eβ. Collect all functions with the same name as F into a set O(F).
+///
+///        2eγ. Remove from O all functions whose parameter P_F that corresponds
+///             to F does not not match any of the functions in O(F), and from
+///             O(F) all functions whose signature does not match any of the P_F
+///             of any of the functions in O.
+///
+///        2eδ. If O(F) is empty, then this is a compiler error: there is no
+///             matching overload for F.
+///
+///        2dε. If O(F) contains more than one element, then this is a compiler
+///             error: F is ambiguous.
+///
+///        2dζ. Otherwise, resolve F to the last remaining element of O(F).
+///
+///    2f. Remove from O all functions except those with the least number of
+///        implicit conversions as per step 2d.
+///
+/// 3. Otherwise, depending on the type of the parent expression,
+///
+///    3a. If the parent expression is a unary prefix expression with operator @,
+///        then replace the parent expression with the unresolved function and go
+///        to step 2/3 depending on the type of the new parent.
+///
+///    3b. If the parent expression is an assignment expression *or declaration*,
+///        and the lvalue is not of function or function pointer type, this is a
+///        type error. Otherwise, remove from O all functions that are not equivalent
+///        to the lvalue being assigned to.
+///
+///    3c. If the parent expression is a return expression, and the return type of the
+///        function F containing that return expression is not of function pointer type,
+///        this is a type error. Otherwise, remove from O all functions that are not
+///        equivalent to the return type of F.
+///
+///    3d. If the parent expression is a cast expression, then
+///
+///        3dα. If the result type of the cast is a function or function pointer type,
+///             then remove from O all functions that are not equivalent to that type.
+///
+///        3dβ. Otherwise, if the O contains more than one element, then this is a
+///             compiler error: the cast is ambiguous; we can’t infer the type of the
+///             function here if we’re not casting to a function or function pointer type.
+///
+///    3e. Otherwise, do nothing and move on to step 4.
+///
+/// 4. If O is empty, then this is a compiler error: there is no matching
+///    overload for the function being resolved.
+///
+/// 5. If O contains more than one element, then this is a compiler error:
+///    the function being resolved is ambiguous.
+///
+/// 6. Otherwise, resolve the function reference to the last remaining element of O.
 NODISCARD static bool resolve_function(AST *ast, Node *func) {
-  if (func->kind == NODE_FUNCTION_REFERENCE && !func->funcref->node) {
-    Symbol *sym = scope_find_symbol(func->funcref->scope, as_span(func->funcref->name), false);
+  if (func->kind == NODE_FUNCTION_REFERENCE && !func->funcref.resolved) {
+    Symbol *sym = scope_find_symbol(func->funcref.scope, as_span(func->funcref.name), false);
     if (!sym || !sym->node) ERR(func->source_location, "Unknown symbol \"%.*s\".",
-      (int) func->funcref->name.size, func->funcref->name.data);
-    func->funcref->node = sym->node;
+      (int) func->funcref.name.size, func->funcref.name.data);
+    func->funcref.resolved = sym;
+    func->type = sym->node->type;
   }
   return true;
 }
@@ -132,7 +302,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Typecheck each child of the root.
     case NODE_ROOT:
-      VECTOR_FOREACH_PTR (Node *, node, expr->root.children)
+      foreach_ptr (Node *, node, expr->root.children)
         if (!typecheck_expression(ast, node))
           return false;
 
@@ -143,16 +313,25 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// This is so that if someone, for whatever reason, puts the name
       /// of the function as an expression in the root, it will just be
       /// removed rather than replaced with the function.
-      VECTOR_FOREACH_INDEX(i, expr->root.children) {
+      foreach_index(i, expr->root.children) {
         Node *node = expr->root.children.data[i];
         if (node->kind == NODE_FUNCTION_REFERENCE) {
-          Node *func = node->funcref->node;
+          Node *func = node->funcref.resolved->node;
           if (
             func &&
             func->source_location.start == node->source_location.start &&
             func->source_location.end == node->source_location.end
           ) { expr->root.children.data[i] = func; }
         }
+      }
+
+      /// If the last expression in the root is not of type integer,
+      /// add a literal 0 so that `main()` returns 0.
+      if (!expr->root.children.size || !convertible(ast, ast->t_integer, vector_back(expr->root.children)->type)) {
+        Node *lit = ast_make_integer_literal(ast, (loc){0}, 0);
+        vector_push(expr->root.children, lit);
+        lit->parent = expr;
+        ASSERT(typecheck_expression(ast, lit));
       }
 
       break;
@@ -163,7 +342,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       if (!typecheck_expression(ast, expr->function.body)) return false;
 
       /// Make sure the return type of the body is convertible to that of the function.
-      if (!convertible(expr->type->function.return_type, expr->function.body->type)) {
+      if (!convertible(ast, expr->type->function.return_type, expr->function.body->type)) {
         string ret = ast_typename(expr->type->function.return_type, false);
         string body = ast_typename(expr->function.body->type, false);
         ERR_DO(free(ret.data); free(body.data), expr->source_location,
@@ -178,7 +357,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// If there is an initialiser, then its type must match the type of the variable.
       if (expr->declaration.init) {
         if (!typecheck_expression(ast, expr->declaration.init)) return false;
-        if (!convertible(expr->type, expr->declaration.init->type))
+        if (!convertible(ast, expr->type, expr->declaration.init->type))
           ERR_NOT_CONVERTIBLE(expr->type, expr->declaration.init->type);
       }
       break;
@@ -192,7 +371,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// the a common type, then the type of the if expression is that type.
       if (expr->if_.else_) {
         if (!typecheck_expression(ast, expr->if_.else_)) return false;
-        Type *common = common_type(expr->if_.then->type, expr->if_.else_->type);
+        Type *common = common_type(ast, expr->if_.then->type, expr->if_.else_->type);
         if (common) expr->type = common;
         else expr->type = ast->t_void;
       }
@@ -211,10 +390,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Typecheck all children and set the type of the block
     /// to the type of the last child. TODO: noreturn?
     case NODE_BLOCK: {
-      VECTOR_FOREACH_PTR (Node *, node, expr->block.children)
+      foreach_ptr (Node *, node, expr->block.children)
         if (!typecheck_expression(ast, node))
           return false;
-      expr->type = expr->block.children.size ? VECTOR_BACK(expr->block.children)->type : ast->t_void;
+      expr->type = expr->block.children.size ? vector_back(expr->block.children)->type : ast->t_void;
     } break;
 
     /// First, resolve the function. Then, typecheck all parameters
@@ -230,8 +409,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// Callee must be a function or a function pointer.
       if (callee->type->kind == TYPE_FUNCTION) {
         /// Set the resolved function as the new callee.
-        expr->call.callee = callee = callee->funcref->node;
-        if (!typecheck_expression(ast, callee)) return false;
+        if (callee->kind != NODE_FUNCTION) {
+          expr->call.callee = callee = callee->funcref.resolved->node;
+          if (!typecheck_expression(ast, callee)) return false;
+        }
       } else {
         /// Implicitly load the function pointer.
         if (callee->type->kind == TYPE_POINTER && callee->type->pointer.to->kind == TYPE_FUNCTION) {
@@ -246,7 +427,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       }
 
       /// Typecheck all arguments.
-      VECTOR_FOREACH_PTR (Node *, param, expr->call.arguments)
+      foreach_ptr (Node *, param, expr->call.arguments)
         if (!typecheck_expression(ast, param))
           return false;
 
@@ -256,10 +437,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
             callee->type->function.parameters.size, expr->call.arguments.size);
 
       /// Make sure all arguments are convertible to the parameter types.
-      VECTOR_FOREACH_INDEX(i, expr->call.arguments) {
+      foreach_index(i, expr->call.arguments) {
         Parameter *param = &callee->type->function.parameters.data[i];
         Node *arg = expr->call.arguments.data[i];
-        if (!convertible(param->type, arg->type)) ERR_NOT_CONVERTIBLE(param->type, arg->type);
+        if (!convertible(ast, param->type, arg->type)) ERR_NOT_CONVERTIBLE(param->type, arg->type);
       }
 
       /// Set the type of the call to the return type of the callee.
@@ -291,7 +472,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           }
 
           /// The RHS has to be an integer.
-          if (!is_integer(rhs->type)) {
+          if (!is_integer(ast, rhs->type)) {
             string name = ast_typename(rhs->type, false);
             ERR_DO(free(name.data), rhs->source_location,
               "Cannot subscript with non-integer type \"%.*s\".",
@@ -310,14 +491,14 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_LE:
         case TK_EQ:
         case TK_NE:
-          if (!is_integer(lhs->type)) {
+          if (!is_integer(ast, lhs->type)) {
             string name = ast_typename(lhs->type, false);
             ERR_DO(free(name.data), lhs->source_location,
               "Cannot compare non-integer type \"%.*s\".",
                 (int) name.size, name.data);
           }
 
-          if (!is_integer(rhs->type)) {
+          if (!is_integer(ast, rhs->type)) {
             string name = ast_typename(rhs->type, false);
             ERR_DO(free(name.data), rhs->source_location,
               "Cannot compare non-integer type \"%.*s\".",
@@ -341,14 +522,14 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_AMPERSAND:
         case TK_PIPE:
         case TK_CARET:
-          if (!is_integer(lhs->type)) {
+          if (!is_integer(ast, lhs->type)) {
             string name = ast_typename(lhs->type, false);
             ERR_DO(free(name.data), lhs->source_location,
               "Cannot perform arithmetic on non-integer type \"%.*s\".",
                 (int) name.size, name.data);
           }
 
-          if (!is_integer(rhs->type)) {
+          if (!is_integer(ast, rhs->type)) {
             string name = ast_typename(rhs->type, false);
             ERR_DO(free(name.data), rhs->source_location,
               "Cannot perform arithmetic on non-integer type \"%.*s\".",
@@ -369,7 +550,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           }
 
           /// Make sure the rhs is convertible to the lhs.
-          if (!convertible(lhs->type, rhs->type)) ERR_NOT_CONVERTIBLE(lhs->type, rhs->type);
+          if (!convertible(ast, lhs->type, rhs->type)) ERR_NOT_CONVERTIBLE(lhs->type, rhs->type);
 
           /// Set the type of the expression to the type of the lhs.
           expr->type = lhs->type;
@@ -404,7 +585,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
         /// One’s complement negation.
         case TK_TILDE:
-          if (!is_integer(expr->unary.value->type))
+          if (!is_integer(ast, expr->unary.value->type))
             ERR(expr->unary.value->source_location,
                 "Argument of \"~\" must be an integer.");
 
@@ -415,7 +596,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Just set the type.
     case NODE_LITERAL:
-      if (expr->literal.type == TK_NUMBER) expr->type = ast->t_integer;
+      if (expr->literal.type == TK_NUMBER) expr->type = ast->t_integer_literal;
       else TODO("Literal type \"%s\".", token_type_to_string(expr->literal.type));
       break;
 
@@ -427,10 +608,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Resolve the function reference and typecheck the function.
     case NODE_FUNCTION_REFERENCE:
-      /// TODO: Replace this w/ the resolved function node.
       if (!resolve_function(ast, expr)) return false;
-      if (!typecheck_expression(ast, expr->funcref->node)) return false;
-      expr->type = expr->funcref->node->type;
+      if (!typecheck_expression(ast, expr->funcref.resolved->node)) return false;
+      ast_replace_node(ast, expr, expr->funcref.resolved->node);
       break;
   }
 

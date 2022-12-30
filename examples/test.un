@@ -1,0 +1,12 @@
+func: integer () = integer () {
+    42
+}
+
+a : integer = 1
+b : integer
+b := func()
+if b = 42 {
+    0
+} else {
+    1
+}

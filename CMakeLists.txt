@@ -55,7 +55,7 @@ else()
   )
 endif()
 
-if (DEFINED DEBUG AND NOT WIN32)
+if (DEFINED ENABLE_ASAN AND NOT WIN32)
   target_compile_options(func PRIVATE -fsanitize=address)
   target_link_options(func PRIVATE -fsanitize=address)
 endif()

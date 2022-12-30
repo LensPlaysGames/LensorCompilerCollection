@@ -73,13 +73,14 @@ typedef struct Parser {
 /// ===========================================================================
 /// All keywords.
 const struct {
-  const char *kw;
+  span kw;
   enum TokenType type;
-} keywords[4] = {
-    {"if", TK_IF},
-    {"else", TK_ELSE},
-    {"while", TK_WHILE},
-    {"ext", TK_EXT},
+} keywords[5] = {
+    {literal_span("if"), TK_IF},
+    {literal_span("else"), TK_ELSE},
+    {literal_span("while"), TK_WHILE},
+    {literal_span("ext"), TK_EXT},
+    {literal_span("as"), TK_AS},
 };
 
 /// Check if a character may start an identifier.
@@ -264,9 +265,18 @@ static void next_token(Parser *p) {
       break;
 
     case ';':
-    case '#':
       while (p->lastc && p->lastc != '\n') next_char(p);
       return next_token(p);
+
+    case '#':
+      next_char(p);
+      p->tok.type = TK_HASH;
+      break;
+
+    case '.':
+      next_char(p);
+      p->tok.type = TK_DOT;
+      break;
 
     case '+':
       next_char(p);
@@ -371,7 +381,7 @@ static void next_token(Parser *p) {
 
         /// Check if the identifier is a keyword.
         for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
-          if (strncmp(keywords[i].kw, p->tok.text.data, p->tok.text.size) == 0) {
+          if (string_eq(keywords[i].kw, p->tok.text)) {
             p->tok.type = keywords[i].type;
             goto done;
           }
@@ -401,7 +411,7 @@ done:
 ///  Parser helpers.
 /// ===========================================================================
 /// Get the current scope.
-static Scope *curr_scope(Parser *p) { return VECTOR_BACK(p->ast->scope_stack); }
+static Scope *curr_scope(Parser *p) { return vector_back(p->ast->scope_stack); }
 
 /// Consume a token; error if it's not the expected type.
 static void consume(Parser *p, enum TokenType tt) {
@@ -422,6 +432,9 @@ static bool is_postfix_operator(enum TokenType tt) {
 static isz binary_operator_precedence(Parser *p, Token t) {
   (void) p;
   switch (t.type) {
+    case TK_DOT: return 10000;
+    case TK_AS: return 1000;
+
     case TK_STAR:
     case TK_SLASH:
     case TK_PERCENT:
@@ -504,7 +517,7 @@ static Node *parse_block(Parser *p, bool create_new_scope) {
 
   /// Collect the children.
   Nodes children = {0};
-  while (p->tok.type != TK_RBRACE) VECTOR_PUSH(children, parse_expr(p));
+  while (p->tok.type != TK_RBRACE) vector_push(children, parse_expr(p));
   consume(p, TK_RBRACE);
 
   /// Pop the scope.
@@ -524,20 +537,24 @@ static Node *parse_if_expr(Parser *p) {
   Node *cond = parse_expr(p);
 
   /// Parse the "then" block.
-  Node *then_block = parse_block(p, true);
+  scope_push(p->ast);
+  Node *then_block = parse_expr(p);
+  scope_pop(p->ast);
 
   /// Parse the "else" block if there is one.
   Node *else_block = NULL;
   if (p->tok.type == TK_ELSE) {
     next_token(p);
-    else_block = parse_block(p, true);
+    scope_push(p->ast);
+    else_block = parse_expr(p);
+    scope_pop(p->ast);
   }
 
   /// Done.
   return ast_make_if(p->ast, if_loc, cond, then_block, else_block);
 }
 
-/// <expr-while>     ::= WHILE <expression> <expr-block>
+/// <expr-while>     ::= WHILE <expression> <expression>
 static Node *parse_while_expr(Parser *p) {
   /// Yeet "while".
   loc while_loc = p->tok.source_location;
@@ -547,7 +564,9 @@ static Node *parse_while_expr(Parser *p) {
   Node *cond = parse_expr(p);
 
   /// Parse the body.
-  Node *body = parse_block(p, true);
+  scope_push(p->ast);
+  Node *body = parse_expr(p);
+  scope_pop(p->ast);
 
   /// Done.
   return ast_make_while(p->ast, while_loc, cond, body);
@@ -560,7 +579,7 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
   /// Collect the arguments.
   Nodes args = {0};
   while (p->tok.type != TK_RPAREN) {
-    VECTOR_PUSH(args, parse_expr(p));
+    vector_push(args, parse_expr(p));
     if (p->tok.type == TK_COMMA) next_token(p);
   }
 
@@ -568,6 +587,34 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
   Node *call = ast_make_call(p->ast, (loc){callee->source_location.start, p->tok.source_location.end}, callee, args);
   consume(p, TK_RPAREN);
   return call;
+}
+
+/// Check if a type is valid as a declaration type.
+static void validate_decltype(Parser *p, Type *type) {
+  /// Strip typedefs.
+  Typeinfo actual_type = ast_typeinfo(p->ast, type);
+
+  /// Strip arrays and recursive typedefs.
+  Type *base_type = actual_type.type;
+  while (base_type) {
+    if (base_type->kind == TYPE_NAMED) base_type = base_type->named ? base_type->named->type : NULL;
+    else if (base_type->kind == TYPE_ARRAY) base_type = base_type->array.of;
+    else break;
+  }
+
+  /// Make sure this isn’t an array of incomplete type.
+  if (actual_type.is_incomplete || !base_type) {
+    string name = ast_typename(type, false);
+    ERR_DO(free(name.data), type->source_location, "Cannot declare %s of incomplete type '%.*s'",
+           actual_type.is_incomplete ? "variable" : "array", (int) name.size, name.data);
+  }
+
+  /// This is also not allowed.
+  if (actual_type.type->kind == TYPE_FUNCTION || base_type->kind == TYPE_FUNCTION) {
+    string name = ast_typename(type, false);
+    ERR_DO(free(name.data), type->source_location, "Cannot declare %s of function type '%.*s'",
+           actual_type.is_incomplete ? "variable" : "array", (int) name.size, name.data);
+  }
 }
 
 /// Parse the body of a function.
@@ -583,16 +630,16 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
   scope_push(p->ast);
 
   /// Create a declaration for each parameter.
-  VECTOR_FOREACH (Parameter , param, function_type->function.parameters) {
+  foreach (Parameter , param, function_type->function.parameters) {
+    validate_decltype(p, param->type);
     Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
     if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var))
       ERR_AT(var->source_location, "Redefinition of parameter '%.*s'", (int) var->declaration.name.size, var->declaration.name.data);
-    VECTOR_PUSH(*param_decls, var);
+    vector_push(*param_decls, var);
   }
 
   /// Parse the body.
-  /// TODO: We could also just allow <expression> here.
-  Node *block = parse_block(p, false);
+  Node *block = parse_expr(p);
 
   /// Pop the scope.
   scope_pop(p->ast);
@@ -607,9 +654,8 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
 /// <expr-cast>      ::= <type> <expression>
 /// <expr-lambda>    ::= <type-function> <expr-block>
 static Node *parse_type_expr(Parser *p, Type *type) {
-  /// If this is a function type, and the next token is "{", then this
-  /// is a lambda expression.
-  if (type->kind == TYPE_FUNCTION && p->tok.type == TK_LBRACE) {
+  /// If this is a function type, then this is a lambda expression.
+  if (type->kind == TYPE_FUNCTION) {
     /// Parse the function body.
     Nodes params = {0};
     Node *body = parse_function_body(p, type, &params);
@@ -622,8 +668,9 @@ static Node *parse_type_expr(Parser *p, Type *type) {
     return func;
   }
 
-  /// Otherwise, this is a cast expression.
-  return ast_make_cast(p->ast, type->source_location, type, parse_expr(p));
+  /// Otherwise, this is an error.
+  /// TODO: Struct literals.
+  ERR_AT(type->source_location, "Expected expression, got type");
 }
 
 /// <param-decl> ::= <decl-start> <type>
@@ -635,6 +682,10 @@ static Parameter parse_param_decl(Parser *p) {
   consume(p, TK_IDENT);
   consume(p, TK_COLON);
   Type *type = parse_type(p);
+
+  /// Function types are converted to their corresponding pointer type
+  /// when used as a parameter type.
+  if (type->kind == TYPE_FUNCTION) type = ast_make_type_pointer(p->ast, type->source_location, type);
 
   /// Done.
   return (Parameter){.source_location = start, .type = type, .name = string_dup(name)};
@@ -683,7 +734,7 @@ static Type *parse_type_derived(Parser *p, Type *base) {
         Parameters args = {0};
         while (p->tok.type != TK_RPAREN) {
           Parameter decl = parse_param_decl(p);
-          VECTOR_PUSH(args, decl);
+          vector_push(args, decl);
           if (p->tok.type == TK_COMMA) next_token(p);
         }
 
@@ -752,7 +803,7 @@ static Type *parse_type(Parser *p) {
 }
 
 /// <expr-decl>      ::= <decl-start> <decl-rest>
-/// <decl-rest>      ::= <type-function> <expr-block>
+/// <decl-rest>      ::= <type-function> <expression>
 ///                    | <type> [ "=" <expression> ]
 ///                    | <decl-start> EXT <type-function>
 static Node *parse_decl_rest(Parser *p, Token ident) {
@@ -766,71 +817,52 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   /// Parse the type.
   Type *type = parse_type(p);
 
-  /// If the next token is "{", and the type is a function type, and this
-  /// is not an external declaration, then this is a function definition.
-  /// TODO: are we handling external symbols correctly?
-  if (!is_ext && p->tok.type == TK_LBRACE && type->kind == TYPE_FUNCTION) {
-    /// Create a symbol table entry before parsing the body.
-    Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
-    if (sym->kind != SYM_FUNCTION || sym->node)
-      ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+  /// If the type is a function type, parse the body if it isn’t extern.
+  if (type->kind == TYPE_FUNCTION) {
+    /// Not external.
+    if (!is_ext) {
+      /// Create a symbol table entry before parsing the body.
+      Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+      if (sym->kind != SYM_FUNCTION || sym->node)
+        ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
 
-    /// Parse the body, create the function, and update the symbol table.
-    Nodes params = {0};
-    Node *body = parse_function_body(p, type, &params);
-    Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
-    sym->node = func;
-    return ast_make_function_reference(p->ast, ident.source_location, sym);
+      /// Parse the body, create the function, and update the symbol table.
+      Nodes params = {0};
+      Node *body = parse_function_body(p, type, &params);
+      Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
+      sym->node = func;
+      return ast_make_function_reference(p->ast, ident.source_location, ident.text);
+    }
+
+    /// External.
+    else {
+      /// Create a symbol table entry.
+      Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+      if (sym->kind != SYM_FUNCTION || sym->node)
+        ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+
+      /// Create the function.
+      Node *func = ast_make_function(p->ast, ident.source_location, type, (Nodes){0}, NULL, ident.text);
+      sym->node = func;
+      return ast_make_function_reference(p->ast, ident.source_location, ident.text);
+    }
   }
 
-  /// If this is an EXT declaration, and the type is a function type,
-  /// then this is an external function declaration.
-  if (is_ext && type->kind == TYPE_FUNCTION) {
-    /// Create a symbol table entry.
-    Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
-    if (sym->kind != SYM_FUNCTION || sym->node)
-      ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
-
-    /// Create the function.
-    Node *func = ast_make_function(p->ast, ident.source_location, type, (Nodes){0}, NULL, ident.text);
-    sym->node = func;
-    return ast_make_function_reference(p->ast, ident.source_location, sym);
-  }
-
-  /// Otherwise, this is a variable declaration.
-  ///
-  /// If we’re declaring a variable of function type,
-  /// convert it to a function pointer instead.
-  if (type->kind == TYPE_FUNCTION) type = ast_make_type_pointer(p->ast, type->source_location, type);
+  /// Make sure we can perform this declaration.
+  validate_decltype(p, type);
 
   /// Create the declaration.
   Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
-  decl->declaration.static_ = !p->in_function;
+
+  /// Make the variable static if we’re at global scope.
+  decl->declaration.static_ = p->ast->scope_stack.size == 1;
 
   /// Add the declaration to the current scope.
-  Symbol *sym = scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
-  if (!sym) {
-    /// If the symbol already exists, then this is an error; the exception
-    /// to this is if the symbol is a forward-declared function and this is
-    /// a declaration of a variable of function type.
-    Type *actual_type = type;
-    while (actual_type->kind == TYPE_NAMED && actual_type->named->type) actual_type = actual_type->named->type;
-    if (actual_type->kind == TYPE_FUNCTION) {
-      sym = scope_find_symbol(curr_scope(p), ident.text, true);
-      if (sym->kind == SYM_FUNCTION && !sym->node) {
-        sym->kind = SYM_VARIABLE;
-        sym->node = decl;
-        goto ok;
-      }
-    }
-
-    /// Otherwise, this is an error.
-    ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
-  }
-ok:
+  if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl))
+    ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'",
+      (int) ident.text.size, ident.text.data);
 
   /// A non-external declaration may have an initialiser.
-  /// TODO: Should we just allow this instead?
   if (p->tok.type == TK_EQ) {
     if (is_ext) ERR("An \"ext\" declaration may not have an initialiser");
     next_token(p);
@@ -841,30 +873,13 @@ ok:
     decl->declaration.init->parent = decl;
   }
 
-  /// Strip array types and resolve named types.
-  Type *const saved_type = type;
-  while (type) {
-    if (type->kind == TYPE_NAMED) type = type->named->type;
-    else if (type->kind == TYPE_ARRAY) type = type->array.of;
-    else break;
-  }
-
-  /// Make sure we’re not trying to declare a variable of incomplete type.
-  if (!type) {
-    string name = ast_typename(saved_type, false);
-    ERR_DO(free(name.data), decl->source_location, "Cannot declare a variable of incomplete type \"%.*s\"",
-      (int) name.size, name.data);
-  }
-
   /// Done.
   return decl;
 }
 
-/// This function is a bit complicated because there are many rules in the
-/// grammar that (may), directly or indirectly, start with an identifier.
+/// Declaration, call, or cast.
 ///
 /// <decl-start>   ::= IDENTIFIER ":"
-/// <type>         ::= IDENTIFIER | ...
 /// <expr-primary> ::= NUMBER | IDENTIFIER
 static Node *parse_ident_expr(Parser *p) {
   /// We know that we’re looking at an identifier; save it for later.
@@ -880,11 +895,11 @@ static Node *parse_ident_expr(Parser *p) {
 
   /// Otherwise, check if the identifier is a declared symbol; if it isn’t,
   /// it can only be a function name, so add it as a symbol.
-  Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, false);
+  Symbol *sym = scope_find_symbol(curr_scope(p), ident.text, false);
 
   /// If the symbol is a variable or function, then we’re done here.
+  if (!sym || sym->kind == SYM_FUNCTION) return ast_make_function_reference(p->ast, ident.source_location, ident.text);
   if (sym->kind == SYM_VARIABLE) return ast_make_variable_reference(p->ast, ident.source_location, sym);
-  if (sym->kind == SYM_FUNCTION) return ast_make_function_reference(p->ast, ident.source_location, sym);
 
   /// If the symbol is a type, then parse the rest of the type and delegate.
   if (sym->kind == SYM_TYPE) {
@@ -1047,10 +1062,21 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
     u32 start = p->tok.source_location.start;
     enum TokenType tt = p->tok.type;
     next_token(p);
-    Node *rhs = parse_expr_with_precedence(p, prec);
 
-    /// Combine the LHS and RHS into a binary expression.
-    lhs = ast_make_binary(p->ast, (loc){.start = start, .end = rhs->source_location.end}, tt, lhs, rhs);
+    /// The `as` operator is special because its RHS is a type.
+    if (tt == TK_AS) {
+      Type *type = parse_type(p);
+      lhs = ast_make_cast(p->ast, (loc){.start = start, .end = type->source_location.end}, type, lhs);
+      continue;
+    }
+
+    /// Otherwise, the RHS is a regular expression.
+    else {
+      Node *rhs = parse_expr_with_precedence(p, prec);
+
+      /// Combine the LHS and RHS into a binary expression.
+      lhs = ast_make_binary(p->ast, (loc){.start = start, .end = rhs->source_location.end}, tt, lhs, rhs);
+    }
   }
 }
 
@@ -1082,7 +1108,7 @@ AST *parse(span source, const char *filename) {
   /// <file> ::= { <expression> }
   while (p.tok.type != TK_EOF) {
     Node *expr = parse_expr(&p);
-    VECTOR_PUSH(p.ast->root->root.children, expr);
+    vector_push(p.ast->root->root.children, expr);
     expr->parent = p.ast->root;
   }
   return p.ast;
@@ -1099,6 +1125,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_ELSE: return "else";
     case TK_WHILE: return "while";
     case TK_EXT: return "ext";
+    case TK_AS: return "as";
     case TK_LPAREN: return "\"(\"";
     case TK_RPAREN: return "\")\"";
     case TK_LBRACK: return "\"[\"";
@@ -1108,6 +1135,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_COMMA: return "\",\"";
     case TK_COLON: return "\":\"";
     case TK_SEMICOLON: return "\";\"";
+    case TK_DOT: return "\".\"";
     case TK_PLUS: return "\"+\"";
     case TK_MINUS: return "\"-\"";
     case TK_STAR: return "\"*\"";
@@ -1119,6 +1147,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_TILDE: return "\"~\"";
     case TK_EXCLAM: return "\"!\"";
     case TK_AT: return "\"@\"";
+    case TK_HASH: return "\"#\"";
     case TK_SHL: return "\"<<\"";
     case TK_SHR: return "\">>\"";
     case TK_EQ: return "\"=\"";

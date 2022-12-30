@@ -1,0 +1,11 @@
+; SKIP
+; 42
+
+bar : integer () {
+    foo : integer (x : byte) x + 69
+    foo(20)
+}
+
+foo : integer (x : integer) x + 22
+
+bar()

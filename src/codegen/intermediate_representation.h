@@ -9,16 +9,16 @@
 
 #define INSTRUCTION(name, given_type)                       \
   IRInstruction *(name) = calloc(1, sizeof(IRInstruction)); \
-  (name)->type = (given_type)
+  (name)->kind = (given_type)
 
-#define FOREACH_INSTRUCTION_N(context, function, block, instruction)  \
-  VECTOR_FOREACH_PTR (IRFunction *, function, context->functions)    \
-    DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
-      DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
+#define FOREACH_INSTRUCTION_N(context, function, block, instruction) \
+  foreach_ptr (IRFunction *, function, context->functions)           \
+  list_foreach (IRBlock *, block, function->blocks)                   \
+      list_foreach (IRInstruction *, instruction, block->instructions)
 
 #define FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block, instruction) \
-  DLIST_FOREACH(IRBlock *, block, function->blocks)                 \
-    DLIST_FOREACH(IRInstruction *, instruction, block->instructions)
+  list_foreach (IRBlock *, block, function->blocks)                      \
+      list_foreach (IRInstruction *, instruction, block->instructions)
 
 #define FOREACH_INSTRUCTION(context) FOREACH_INSTRUCTION_N(context, function, block, instruction)
 #define FOREACH_INSTRUCTION_IN_FUNCTION(function) FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block, instruction)
@@ -102,7 +102,7 @@ typedef struct IRPhiArgument {
 } IRPhiArgument;
 
 typedef struct IRCall {
-  VECTOR(IRInstruction *) arguments;
+  Vector(IRInstruction *) arguments;
   union {
     IRInstruction *callee_instruction;
     IRFunction *callee_function;
@@ -125,7 +125,7 @@ typedef struct IRStackAllocation {
 void mark_used(IRInstruction *usee, IRInstruction *user);
 
 typedef struct IRInstruction {
-  enum IRType type;
+  enum IRType kind;
   Register result;
 
   /// TODO: do we really need both of these?
@@ -133,9 +133,9 @@ typedef struct IRInstruction {
   u32 index;
 
   /// List of instructions using this instruction.
-  VECTOR(IRInstruction*) users;
+  Vector(IRInstruction*) users;
 
-  DLIST_NODE(struct IRInstruction);
+  list_node(struct IRInstruction);
 
   IRBlock *parent_block;
 
@@ -144,7 +144,7 @@ typedef struct IRInstruction {
     IRInstruction *operand;
     u64 imm;
     IRCall call;
-    VECTOR(IRPhiArgument*) phi_args; /// For unfortunate reasons, these *have* to be on the heap.
+    Vector(IRPhiArgument*) phi_args; /// For unfortunate reasons, these *have* to be on the heap.
     IRBranchConditional cond_br;
     struct {
       IRInstruction *addr;
@@ -165,13 +165,13 @@ typedef struct IRInstruction {
 typedef struct IRBlock {
   string name;
 
-  DLIST(IRInstruction) instructions;
+  List(IRInstruction) instructions;
 
   /// A pointer to the function the block is attached to, or NULL if
   /// detached.
   IRFunction *function;
 
-  DLIST_NODE(struct IRBlock);
+  list_node(struct IRBlock);
 
   // Unique ID (among blocks)
   size_t id;
@@ -182,12 +182,15 @@ typedef struct IRBlock {
 typedef struct IRFunction {
   string name;
 
-  DLIST(IRBlock) blocks;
+  List(IRBlock) blocks;
 
-  VECTOR(IRInstruction*) parameters;
+  Vector(IRInstruction*) parameters;
 
   /// Pointer to the context that owns this function.
   CodegenContext *context;
+
+  /// The type of the function.
+  Type *type;
 
   // Unique ID (among functions)
   size_t id;
@@ -207,7 +210,7 @@ typedef struct IRFunction {
 } IRFunction;
 
 struct IR {
-  VECTOR (IRFunction*) functions;
+  Vector(IRFunction*) functions;
 };
 
 void ir_set_func_ids(IRFunction *f);
@@ -233,7 +236,7 @@ IRBlock *ir_block_create();
 void ir_block_attach_to_function(IRFunction *function, IRBlock *new_block);
 void ir_block_attach(CodegenContext *context, IRBlock *new_block);
 
-IRFunction *ir_function(CodegenContext *context, span name, size_t params);
+IRFunction *ir_function(CodegenContext *context, span name, Type *function_type);
 IRInstruction *ir_funcref(CodegenContext *context, IRFunction *function);
 
 void ir_force_insert_into_block(IRBlock *block, IRInstruction *new_instruction);

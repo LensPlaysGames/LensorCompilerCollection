@@ -24,21 +24,21 @@ void codegen_emit_ir_backend(CodegenContext *context) {
   disable_colours();
 
   ir_set_ids(context);
-  VECTOR_FOREACH_PTR (IRFunction*, f, context->functions) {
+  foreach_ptr (IRFunction*, f, context->functions) {
     ir_print_defun(context->code, f);
 
     /// Function body.
     fprintf(context->code, " {\n");
-    DLIST_FOREACH (IRBlock *, b, f->blocks) {
+    list_foreach (IRBlock *, b, f->blocks) {
       fprintf(context->code, "bb%zu:\n", b->id);
-      DLIST_FOREACH (IRInstruction *, instruction, b->instructions) {
-        if (instruction->type == IR_PARAMETER) continue;
+      list_foreach (IRInstruction *, instruction, b->instructions) {
+        if (instruction->kind == IR_PARAMETER) continue;
 
         fprintf(context->code, "    ");
         STATIC_ASSERT(IR_COUNT == 32, "Handle all IR instructions");
 
         if (instruction->id) fprintf(context->code, "%%%u = ", instruction->id);
-        switch (instruction->type) {
+        switch (instruction->kind) {
           case IR_IMMEDIATE:
             fprintf(context->code, "imm %"PRId64,instruction->imm);
             break;
@@ -50,7 +50,7 @@ void codegen_emit_ir_backend(CodegenContext *context) {
 
             fputc('(', context->code);
             bool first = true;
-            VECTOR_FOREACH_PTR (IRInstruction*, arg, instruction->call.arguments) {
+            foreach_ptr (IRInstruction*, arg, instruction->call.arguments) {
               if (!first) fprintf(context->code, ", ");
               else first = false;
               fprintf(context->code, "%%%u", arg->id);
@@ -59,7 +59,8 @@ void codegen_emit_ir_backend(CodegenContext *context) {
           } break;
 
           case IR_RETURN:
-            fprintf(context->code, "ret %%%u", instruction->operand->id);
+            if (instruction->operand) fprintf(context->code, "ret %%%u", instruction->operand->id);
+            else fprintf(context->code, "ret");
             break;
 #define PRINT_BINARY_INSTRUCTION(enumerator, name) \
   case IR_##enumerator: fprintf(context->code, #name " %%%u, %%%u", instruction->lhs->id, instruction->rhs->id); break;
@@ -85,7 +86,7 @@ void codegen_emit_ir_backend(CodegenContext *context) {
           case IR_PHI: {
             fprintf(context->code, "phi ");
             bool first = true;
-            VECTOR_FOREACH_PTR (IRPhiArgument*, arg, instruction->phi_args) {
+            foreach_ptr (IRPhiArgument*, arg, instruction->phi_args) {
               if (first) { first = false; }
               else { fprintf(context->code, ", "); }
               fprintf(context->code, "[bb%zu : %%%u]",
@@ -111,7 +112,7 @@ void codegen_emit_ir_backend(CodegenContext *context) {
             fprintf(context->code, "unreachable");
             break;
           default:
-            TODO("Handle IRType %d\n", instruction->type);
+            TODO("Handle IRType %d\n", instruction->kind);
         }
         fprintf(context->code, "\n");
       }

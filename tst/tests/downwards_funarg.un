@@ -1,0 +1,7 @@
+; 69
+
+sixty_nine : integer() 69
+
+foo : integer(int : integer()) int()
+
+foo(sixty_nine)

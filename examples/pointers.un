@@ -24,10 +24,7 @@ foo()
 ;; Using a pointer to mutate an integer variable that may be created at
 ;; any time!
 
-bar : integer (ptr : @integer) = integer (ptr : @integer) {
-  @ptr := 69
-  0
-}
+bar : void (ptr : @integer) @ptr := 69
 
 number : integer = 0
 numptr : @integer

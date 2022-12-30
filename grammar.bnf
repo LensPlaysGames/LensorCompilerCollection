@@ -18,17 +18,17 @@
 /// Declarations.
 <expr-decl>      ::= <decl-start> <decl-rest>
 <decl-start>     ::= IDENTIFIER ":"
-<decl-rest>      ::= <type-function> <expr-block>
+<decl-rest>      ::= <type-function> <expression>
                    | <type> [ "=" <expression> ]
                    | <decl-start> EXT <type-function>
 
 /// Other expressions.
-<expr-if>        ::= IF <expression> <expr-block> [ ELSE <expr-block> ]
-<expr-while>     ::= WHILE <expression> <expr-block>
+<expr-if>        ::= IF <expression> <expression> [ ELSE <expression> ]
+<expr-while>     ::= WHILE <expression> <expression>
 <expr-block>     ::= "{" { <expression> } "}"
-<expr-lambda>    ::= <type-function> <expr-block>
+<expr-lambda>    ::= <type-function> <expression>
 <expr-call>      ::= <expression> "(" { <expression> [ "," ] } ")"
-<expr-cast>      ::= <type> <expression>
+<expr-cast>      ::= <expression> AS <type>
 <expr-subs>      ::= <expression> "[" <expression> "]"
 <expr-paren>     ::= "(" <expression> ")"
 <expr-prefix>    ::= <prefix> <expression>
