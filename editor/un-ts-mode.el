@@ -242,7 +242,7 @@ in the unnamed language source code will be indented."
   (setq-local treesit-simple-indent-rules nil)
 
   ;; Syntax table indent
-  (setq indent-line-function #'un--indent-line)
+  (setq indent-line-function #'un-ts--indent-line)
 
   ;; Font-lock.
   (setq-local treesit-font-lock-settings
