@@ -222,8 +222,8 @@ NODISCARD static bool is_lvalue(Node *expr) {
 ///        conversion—for the result type of the cast expression. If the type of the
 ///        cast expression is not of function pointer type, this is a type error.
 ///
-///    3e. If the parent expression is the root of the AST, then this is a compiler
-///        error: the function reference is ambiguous and quite frankly pointless.
+///    3e. If the parent expression is any other expression, then this is a compiler
+///        error: the function reference is ambiguous.
 ///
 /// 4. If O is empty, then this is a compiler error: there is no matching
 ///    overload for the function being resolved.
