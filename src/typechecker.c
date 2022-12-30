@@ -360,8 +360,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// Callee must be a function or a function pointer.
       if (callee->type->kind == TYPE_FUNCTION) {
         /// Set the resolved function as the new callee.
-        expr->call.callee = callee = callee->funcref->node;
-        if (!typecheck_expression(ast, callee)) return false;
+        if (callee->kind != NODE_FUNCTION) {
+          expr->call.callee = callee = callee->funcref->node;
+          if (!typecheck_expression(ast, callee)) return false;
+        }
       } else {
         /// Implicitly load the function pointer.
         if (callee->type->kind == TYPE_POINTER && callee->type->pointer.to->kind == TYPE_FUNCTION) {
