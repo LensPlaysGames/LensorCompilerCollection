@@ -151,6 +151,70 @@ NODISCARD static bool is_lvalue(Node *expr) {
 }
 
 /// Resolve a function reference.
+///
+/// To resolve an unresolved function reference, execute the following steps:
+///
+/// 1. Collect all functions with the same name as the function being
+///    resolved into an *overload set* O. We cannot filter out any
+///    functions just yet.
+///
+/// 2. If the parent expression is a call expression, and the function to
+///    be resolved is the callee of the call, then:
+///
+///    2a  Typecheck all arguments of the call that are not unresolved
+///        function references themselves. Note: This takes care of
+///        resolving nested calls.
+///
+///    2b. Remove from O all functions that have a different number of
+///        parameters than the call expression has arguments.
+///
+///    2c. For candidate C in O, iterate over all arguments of the call.
+///        For each argument of the call, iff it is not an unresolved
+///        function, check if its type is identical with or implicitly
+///        convertible to that of the parameter in that slot of C. Remove
+///        C from O if it is not. Note down the number of implicit conversions
+///        performed (excepting implicit conversions from a function type
+///        to its corresponding function pointer type).
+///
+///    2d. If any of the arguments of the call are unresolved functions, then
+///        for each of those arguments:
+///
+///        2dα. Let F be that argument. Let S be the slot number that F is
+///             in (e.g. 3 if F is the third argument).
+///
+///        2dβ. Collect all functions with the same name as F into a set O(F).
+///
+///        2dβ. Remove from O all functions whose parameter in slot S does not
+///             not match any of the functions in O(F), and from O(F) all
+///             functions whose signature does not match any of the parameters
+///             in slot S of any of the functions in O.
+///
+///        2dγ. If O(F) is empty, then this is a compiler error: there is no
+///             matching overload for F.
+///
+///        2dδ. If O(F) contains more than one element, then this is a compiler
+///             error: F is ambiguous.
+///
+///        2dε. Otherwise, resolve F to the last remaining element of O(F).
+///
+///    2e. Go to step 4.
+///
+/// 3. If the parent expression is an assignment expression *or declaration*,
+///    remove from O all functions whose signatures are not an *exact* match
+///    for the signature of the lvalue being assigned to. If the lvalue is not
+///    of function or function pointer type, this is a type error.
+///
+/// 4. If O is empty, then this is a compiler error: there is no matching
+///    overload for the function being resolved.
+///
+/// 6. If we got here via step 2e, then remove from O all functions except
+///    those with the least number of implicit conversions as per step 2c.
+///
+/// 7. If O contains more than one element, then this is a compiler error:
+///    the function being resolved is ambiguous.
+///
+/// 8. Otherwise, resolve the function reference to the last remaining element
+///    of O.
 NODISCARD static bool resolve_function(AST *ast, Node *func) {
   if (func->kind == NODE_FUNCTION_REFERENCE && !func->funcref->node) {
     Symbol *sym = scope_find_symbol(func->funcref->scope, as_span(func->funcref->name), false);
