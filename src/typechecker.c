@@ -152,14 +152,36 @@ NODISCARD static bool is_lvalue(Node *expr) {
 
 /// Resolve a function reference.
 ///
-/// To resolve an unresolved function reference, execute the following steps:
+/// Terminology:
+///
+///   - A (formal) parameter is a parameter (type) of a function type or signature.
+///
+///   - An (actual) argument is a subexpression of a function call that is not
+///     the callee.
+///
+///   - Two types, A and B, are *equivalent* iff
+///       - 1. A and B are the same type, or
+///       - 2. one is a function type and the other its corresponding function
+///            pointer type, or
+///       - 3. one is a named type whose underlying type is equivalent to the
+///            other.
+///
+///   - A type A is *convertible* to a type B if there is a series of implicit
+///     conversions that transforms A to B or if A and B are equivalent.
+///
+///   - An argument A is convertible/equivalent to a parameter P iff the type
+///     of A is convertible/equivalent to the type of P.
+///
+/// To resolve an unresolved function reference, execute the following steps in
+/// order. The unresolved function reference in question is hereinafter referred
+/// to as ‘the function being resolved’.
 ///
 /// 1. Collect all functions with the same name as the function being
 ///    resolved into an *overload set* O. We cannot filter out any
 ///    functions just yet.
 ///
-/// 2. If the parent expression is a call expression, and the function to
-///    be resolved is the callee of the call, then:
+/// 2. If the parent expression is a call expression, and the function being
+///    resolved is the callee of the call, then:
 ///
 ///    2a  Typecheck all arguments of the call that are not unresolved
 ///        function references themselves. Note: This takes care of
@@ -168,37 +190,35 @@ NODISCARD static bool is_lvalue(Node *expr) {
 ///    2b. Remove from O all functions that have a different number of
 ///        parameters than the call expression has arguments.
 ///
-///    2c. For candidate C in O, iterate over all arguments of the call.
-///        For each argument of the call, iff it is not an unresolved
-///        function, check if its type is identical with or implicitly
-///        convertible to that of the parameter in that slot of C. Remove
-///        C from O if it is not. Note down the number of implicit conversions
-///        performed (excepting implicit conversions from a function type
-///        to its corresponding function pointer type).
+///    2c. Let A_1, ... A_n be the arguments of the call expression.
 ///
-///    2d. If any of the arguments of the call are unresolved functions, then
-///        for each of those arguments:
+///    2d. For candidate C in O, let P_1, ... P_n be the parameters of C.
+///        For each argument A_i of the call, iff it is not an unresolved
+///        function, check if it is convertible to P_i. Remove C from O if
+///        it is not. Note down the number of A_i’s that required a (series
+///        of) implicit conversions to their corresponding P_i’s.
 ///
-///        2dα. Let F be that argument. Let S be the slot number that F is
-///             in (e.g. 3 if F is the third argument).
+///    2e. If any of the A_i are unresolved functions, then each of those arguments:
 ///
-///        2dβ. Collect all functions with the same name as F into a set O(F).
+///        2eα. Let F be that argument.
 ///
-///        2dβ. Remove from O all functions whose parameter in slot S does not
-///             not match any of the functions in O(F), and from O(F) all
-///             functions whose signature does not match any of the parameters
-///             in slot S of any of the functions in O.
+///        2eβ. Collect all functions with the same name as F into a set O(F).
 ///
-///        2dγ. If O(F) is empty, then this is a compiler error: there is no
+///        2eγ. Remove from O all functions whose parameter P_F that corresponds
+///             to F does not not match any of the functions in O(F), and from
+///             O(F) all functions whose signature does not match any of the P_F
+///             of any of the functions in O.
+///
+///        2eδ. If O(F) is empty, then this is a compiler error: there is no
 ///             matching overload for F.
 ///
-///        2dδ. If O(F) contains more than one element, then this is a compiler
+///        2dε. If O(F) contains more than one element, then this is a compiler
 ///             error: F is ambiguous.
 ///
-///        2dε. Otherwise, resolve F to the last remaining element of O(F).
+///        2dζ. Otherwise, resolve F to the last remaining element of O(F).
 ///
-///    2e. Remove from O all functions except those with the least number of
-///        implicit conversions as per step 2c.
+///    2f. Remove from O all functions except those with the least number of
+///        implicit conversions as per step 2d.
 ///
 /// 3. Otherwise, depending on the type of the parent expression,
 ///
@@ -207,23 +227,25 @@ NODISCARD static bool is_lvalue(Node *expr) {
 ///        to step 2/3 depending on the type of the new parent.
 ///
 ///    3b. If the parent expression is an assignment expression *or declaration*,
-///        remove from O all functions whose signatures are not an *exact* match—
-///        save function pointer conversion—for the signature of the lvalue being
-///        assigned to. If the lvalue is not of function or function pointer type,
-///        this is a type error.
+///        and the lvalue is not of function or function pointer type, this is a
+///        type error. Otherwise, remove from O all functions that are not equivalent
+///        to the lvalue being assigned to.
 ///
-///    3c. If the parent expression is a return expression, then remove from O all
-///        functions whose signatures are not an *exact* match—save function pointer
-///        conversion—for the return type of the function. If the return type of the
-///        function is not of function pointer type, this is a type error.
+///    3c. If the parent expression is a return expression, and the return type of the
+///        function F containing that return expression is not of function pointer type,
+///        this is a type error. Otherwise, remove from O all functions that are not
+///        equivalent to the return type of F.
 ///
-///    3d. If the parent expression is a cast expression, then remove from O all
-///        functions whose signatures are not an *exact* match—save function pointer
-///        conversion—for the result type of the cast expression. If the type of the
-///        cast expression is not of function pointer type, this is a type error.
+///    3d. If the parent expression is a cast expression, then
 ///
-///    3e. If the parent expression is any other expression, then this is a compiler
-///        error: the function reference is ambiguous.
+///        3dα. If the result type of the cast is a function or function pointer type,
+///             then remove from O all functions that are not equivalent to that type.
+///
+///        3dβ. Otherwise, if the O contains more than one element, then this is a
+///             compiler error: the cast is ambiguous; we can’t infer the type of the
+///             function here if we’re not casting to a function or function pointer type.
+///
+///    3e. Otherwise, do nothing and move on to step 4.
 ///
 /// 4. If O is empty, then this is a compiler error: there is no matching
 ///    overload for the function being resolved.
