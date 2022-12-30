@@ -12,20 +12,41 @@ INT tests failed := 0;
 INT tests errored := 0;
 INT tests skipped := 0;
 
+CO Handle command line args CO
+BOOL enable colours := get env ("ENABLE_TEST_COLOURS") EQ "1";
+
+PROC red    = (REF FILE f) VOID: (enable colours | put(f, (REPR 27, "[31m")));
+PROC green  = (REF FILE f) VOID: (enable colours | put(f, (REPR 27, "[32m")));
+PROC yellow = (REF FILE f) VOID: (enable colours | put(f, (REPR 27, "[33m")));
+PROC resetc = (REF FILE f) VOID: (enable colours | put(f, (REPR 27, "[m")));
+
 CO Get the exit code of a program. CO
 PROC wexitstatus = (INT status) INT: (platform is windows | status | ABS ((BIN status SHR 8) AND BIN 255));
 
 CO Helper because system() returns the exit status, not the exit code CO
 PROC sh = (STRING cmd) INT: (platform is windows | system(cmd) | wexitstatus (system (cmd)));
 
+CO Helper function to abort the program CO
+PROC die = ([] UNION (PROC (REF FILE) VOID, CHAR, [] CHAR, INT) message) VOID:
+BEGIN
+    print (message);
+    print ((new line, resetc));
+    abend ("")
+END;
+
+CO Open a file and ensure that there was no error CO 
+PROC secure open = (STRING file name, CHANNEL channel) FILE:
+BEGIN
+  FILE f;
+  IF open (f, file name, channel) /= 0 THEN die(("ERROR: Could not open 'out.txt'")) FI;
+  f
+END;
+
 PROC string to number = (STRING s) INT: BEGIN
   INT out := 0;
   FOR index FROM LWB s TO UPB s DO
     CHAR c = s[index];
-    IF NOT is digit (c) THEN
-      print(("ERROR!  Expected digit but got ", c, new line));
-      stop
-    FI;
+    IF NOT is digit (c) THEN die((red, "ERROR!  Expected digit but got ", c)) FI;
     INT tmp := ABS c;
     tmp -:= 48;
     out *:= 10;
@@ -42,13 +63,9 @@ PROC compare expected =
 ) BOOL:
 BEGIN
   BOOL retval := TRUE;
-  CO open out.txt, compare contents with `output` CO
-  FILE out;
-  IF open (out, "out.txt", stand in channel) /= 0 THEN
-    print(("ERROR: Could not open 'out.txt'", new line));
-    stop
-  FI;
 
+  CO open out.txt, compare contents with `output` CO
+  FILE out := secure open ("out.txt", stand in channel);
   on logical file end (out, (REF FILE f) BOOL: past);
   STRING str;
   DO
@@ -93,9 +110,9 @@ BEGIN
              + "-cc " + calling convention + " "
              + file name) /= 0 THEN
     IF expect error THEN
-      print(((optimise | "SUCCESS! (optimised)     --  " | "SUCCESS!                 --  "), file name, new line))
+      print((green, (optimise | "SUCCESS! (optimised)     --  " | "SUCCESS!                 --  "), file name, new line))
     ELSE
-      print(((optimise | "ERRORED! (optimised)     --  " | "ERRORED!                 --  "), file name, new line));
+      print((red, (optimise | "ERRORED! (optimised)     --  " | "ERRORED!                 --  "), file name, new line));
       tests errored +:= 1
     FI;
     GO TO return
@@ -103,14 +120,14 @@ BEGIN
 
   CO Assemble it CO
   IF sh("gcc test.S -o test" + executable suffix) /= 0 THEN
-    print(((optimise | "ERRORED! (optimised)     --  " | "ERRORED!                 --  "), file name, new line));
+    print((red, (optimise | "ERRORED! (optimised)     --  " | "ERRORED!                 --  "), file name, new line));
     tests errored +:= 1;
     GO TO return
   FI;
 
   CO If the test should error, then we shouldn’t even get here CO
   IF expect error THEN
-    print(((optimise | "FAILED!  (optimised)     --  " | "FAILED!                  --  "), file name, new line));    
+    print((red, (optimise | "FAILED!  (optimised)     --  " | "FAILED!                  --  "), file name, new line));    
     print(("    Expected error, but test compiled successfully", new line));
     tests failed +:= 1;
     GO TO return
@@ -121,9 +138,9 @@ BEGIN
 
   IF compare expected (return value, output, actual return value, actual output)
   THEN
-    print(((optimise | "SUCCESS! (optimised)     --  " | "SUCCESS!                 --  "), file name, new line))
+    print((green, (optimise | "SUCCESS! (optimised)     --  " | "SUCCESS!                 --  "), file name, new line))
   ELSE
-    print(((optimise | "FAILED! (optimised)      --  " | "FAILED!                  --  "), file name, new line));
+    print((red, (optimise | "FAILED! (optimised)      --  " | "FAILED!                  --  "), file name, new line, resetc));
     printf(($"Expected exit code " g(0) ", but got " g(0)l$, return value, actual return value));
     print(("=== EXPECTED OUTPUT ===", new line, output,        "===", new line));
     print(("=== GOT OUTPUT ===",      new line, actual output, "===", new line));
@@ -135,41 +152,28 @@ END;
 
 PROC run test = (STRING file name) VOID:
 BEGIN
-  FILE f;
-  IF open(f, file name, stand in channel) /= 0 THEN
-    print(("ERROR!  Could not open test file ", file name, new line));
-    stop
-  FI;
-
+  FILE f := secure open(file name, stand in channel);
   on logical file end (f, (REF FILE unused) BOOL: 
   BEGIN
-    print(("ERROR! Test file ", file name, " does not contain a valid test!", new line));
-    stop
+    die(("ERROR! Test file ", file name, " does not contain a valid test!"));
+    SKIP
   END);
 
   CO Save initial file contents as expected output. CO
-
   STRING str;
 
   CO Read first line as status return value CO
   get(f, (str, new line));
 
-  IF UPB str < 3 THEN
-    print(("ERROR!  First line not even long enough to contain return status.", new line));
-    stop
-  FI;
-
-  IF str[1] /= REPR 59 THEN
-    print(("ERROR!  First line does not start with comment!.", new line));
-    stop
-  FI;  
+  IF UPB str < 3 THEN die(("ERROR!  First line not even long enough to contain return status.")) FI;
+  IF str[1] /= REPR 59 THEN die(("ERROR!  First line does not start with comment!.")) FI;  
 
   CO Cut off comment delimiters CO
   str := str[3..];
 
   CO Check for special strings CO
   IF str EQ "SKIP" THEN
-    print(("SKIPPED!                 --  ", file name, new line));
+    print((yellow, "SKIPPED!                 --  ", file name, new line));
     print(("SKIPPED! (optimised)     --  ", file name, new line));
     tests skipped +:= 1;
     GO TO return
@@ -203,6 +207,7 @@ BEGIN
   return: SKIP
 END;
 
+CO Collect the tests CO
 [] STRING tests = get directory ("tests");
 
 CO Run tests CO
@@ -213,6 +218,7 @@ FOR index FROM LWB tests TO UPB tests DO
 OD;
 
 CO Print summary CO 
+print (resetc);
 printf (($"SUMMARY:" l
           "    Tests run:     " g(0) l
           "    Tests failed:  " g(0) l
