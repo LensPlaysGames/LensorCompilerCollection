@@ -1132,10 +1132,10 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     break;
 
   case IR_STATIC_REF:
-    femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->static_ref->name.data, inst->result);
+    if (inst->result) femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->static_ref->name.data, inst->result);
     break;
   case IR_FUNC_REF:
-    femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->function_ref->name.data, inst->result);
+    if (inst->result) femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->function_ref->name.data, inst->result);
     break;
   case IR_ALLOCA:
     femit(context, I_LEA, MEMORY_TO_REGISTER,
