@@ -834,7 +834,9 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   decl->declaration.static_ = p->ast->scope_stack.size == 1;
 
   /// Add the declaration to the current scope.
-  scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl);
+  if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl))
+    ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'",
+      (int) ident.text.size, ident.text.data);
 
   /// A non-external declaration may have an initialiser.
   if (p->tok.type == TK_EQ) {
