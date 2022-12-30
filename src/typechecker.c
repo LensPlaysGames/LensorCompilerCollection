@@ -34,7 +34,8 @@
 
 NODISCARD static bool types_equal(AST *ast, Type *a, Type *b);
 
-/// Check if two types are equal. You probably want to use `convertible` instead.
+/// Check if two types are equal. You probably want to use
+/// `convertible()` or `equivalent()` instead.
 ///
 /// \param a A type that is not NULL and not of kind NAMED.
 /// \param b A type that is not NULL and not of kind NAMED.
@@ -51,7 +52,10 @@ NODISCARD static bool types_equal_impl(AST *ast, Type *a, Type *b) {
   switch (a->kind) {
     default: ICE("Invalid type kind %d", a->kind);
     case TYPE_NAMED: UNREACHABLE();
-    case TYPE_PRIMITIVE: return a->primitive.id == b->primitive.id;
+    case TYPE_PRIMITIVE:
+      if (a == ast->t_integer_literal) return b == ast->t_integer_literal || b == ast->t_integer;
+      if (b == ast->t_integer_literal) return a == ast->t_integer_literal || a == ast->t_integer;
+      return a->primitive.id == b->primitive.id;
     case TYPE_POINTER: return types_equal(ast, a->pointer.to, b->pointer.to);
     case TYPE_ARRAY: return a->array.size == b->array.size && types_equal(ast, a->array.of, b->array.of);
     case TYPE_FUNCTION: {
@@ -83,6 +87,19 @@ NODISCARD static bool types_equal(AST *ast, Type *a, Type *b) {
   return types_equal_impl(ast, ta.type, tb.type);
 }
 
+/// Check if a type is an integer type.
+NODISCARD static bool is_integer_impl(AST *ast, Typeinfo t) {
+  /// Currently, all primitive types are integers.
+  return t.type == ast->t_integer || t.type == ast->t_integer_literal  || t.type == ast->t_byte;
+}
+
+/// Check if a type is an integer type.
+NODISCARD static bool is_integer(AST *ast, Type *type) {
+  /// Currently, all primitive types are integers.
+  Typeinfo t = ast_typeinfo(ast, type);
+  return is_integer_impl(ast, t);
+}
+
 /// Check if from is convertible to to.
 NODISCARD static bool convertible(AST *ast, Type * to_type, Type * from_type) {
   /// Expand types.
@@ -111,6 +128,22 @@ NODISCARD static bool convertible(AST *ast, Type * to_type, Type * from_type) {
     return !base.is_incomplete && types_equal_impl(ast, base.type, from.type);
   }
 
+  /// Smaller integer types are implicitly convertible to larger
+  /// integer types if the type being converted to is signed, or
+  /// if the smaller type is unsigned.
+  bool to_is_int = is_integer_impl(ast, to);
+  bool from_is_int = is_integer_impl(ast, from);
+  if (to_is_int && from_is_int) {
+    if (
+      to.type->primitive.size > from.type->primitive.size
+      && (to.type->primitive.is_signed
+         || !from.type->primitive.is_signed)
+    ) return true;
+  }
+
+  /// Integer literals are convertible to any integer type.
+  if (from.type == ast->t_integer_literal && to_is_int) return true;
+
   /// Otherwise, the types are not convertible.
   return false;
 }
@@ -127,13 +160,6 @@ NODISCARD static bool is_pointer(Type *type) { return type->kind == TYPE_POINTER
 
 /// Check if a type is an array type.
 NODISCARD static bool is_array(Type *type) { return type->kind == TYPE_ARRAY; }
-
-/// Check if a type is an integer type.
-NODISCARD static bool is_integer(AST *ast, Type *type) {
-  /// Currently, all primitive types are integers.
-  Typeinfo t = ast_typeinfo(ast, type);
-  return !t.is_incomplete && t.type->kind == TYPE_PRIMITIVE;
-}
 
 /// Check if an expression is an lvalue.
 NODISCARD static bool is_lvalue(Node *expr) {
@@ -570,7 +596,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Just set the type.
     case NODE_LITERAL:
-      if (expr->literal.type == TK_NUMBER) expr->type = ast->t_integer;
+      if (expr->literal.type == TK_NUMBER) expr->type = ast->t_integer_literal;
       else TODO("Literal type \"%s\".", token_type_to_string(expr->literal.type));
       break;
 
