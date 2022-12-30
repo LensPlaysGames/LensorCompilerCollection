@@ -576,6 +576,34 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
   return call;
 }
 
+/// Check if a type is valid as a declaration type.
+static void validate_decltype(Parser *p, Type *type) {
+  /// Strip typedefs.
+  Typeinfo actual_type = ast_typeinfo(p->ast, type);
+
+  /// Strip arrays and recursive typedefs.
+  Type *base_type = actual_type.type;
+  while (base_type) {
+    if (base_type->kind == TYPE_NAMED) base_type = base_type->named ? base_type->named->type : NULL;
+    else if (base_type->kind == TYPE_ARRAY) base_type = base_type->array.of;
+    else break;
+  }
+
+  /// Make sure this isn’t an array of incomplete type.
+  if (actual_type.is_incomplete || !base_type) {
+    string name = ast_typename(type, false);
+    ERR_DO(free(name.data), type->source_location, "Cannot declare %s of incomplete type '%.*s'",
+           actual_type.is_incomplete ? "variable" : "array", (int) name.size, name.data);
+  }
+
+  /// This is also not allowed.
+  if (actual_type.type->kind == TYPE_FUNCTION || base_type->kind == TYPE_FUNCTION) {
+    string name = ast_typename(type, false);
+    ERR_DO(free(name.data), type->source_location, "Cannot declare %s of function type '%.*s'",
+           actual_type.is_incomplete ? "variable" : "array", (int) name.size, name.data);
+  }
+}
+
 /// Parse the body of a function.
 ///
 /// This is basically just a wrapper around `parse_block()` that
@@ -590,6 +618,7 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
 
   /// Create a declaration for each parameter.
   VECTOR_FOREACH (Parameter , param, function_type->function.parameters) {
+    validate_decltype(p, param->type);
     Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
     if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var))
       ERR_AT(var->source_location, "Redefinition of parameter '%.*s'", (int) var->declaration.name.size, var->declaration.name.data);
@@ -802,30 +831,8 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     }
   }
 
-  /// Strip typedefs.
-  Typeinfo actual_type = ast_typeinfo(p->ast, type);
-
-  /// Strip arrays and recursive typedefs.
-  Type *base_type = actual_type.type;
-  while (base_type) {
-    if (base_type->kind == TYPE_NAMED) base_type = base_type->named ? base_type->named->type : NULL;
-    else if (base_type->kind == TYPE_ARRAY) base_type = base_type->array.of;
-    else break;
-  }
-
-  /// Make sure this isn’t an array of incomplete type.
-  if (actual_type.is_incomplete || !base_type) {
-    string name = ast_typename(type, false);
-    ERR_DO(free(name.data), type->source_location, "Cannot declare %s of incomplete type '%.*s'",
-      actual_type.is_incomplete ? "variable" : "array", (int) name.size, name.data);
-  }
-
-  /// This is also not allowed.
-  if (actual_type.type->kind == TYPE_FUNCTION || base_type->kind == TYPE_FUNCTION) {
-    string name = ast_typename(type, false);
-    ERR_DO(free(name.data), type->source_location, "Cannot declare %s of function type '%.*s'",
-     actual_type.is_incomplete ? "variable" : "array", (int) name.size, name.data);
-  }
+  /// Make sure we can perform this declaration.
+  validate_decltype(p, type);
 
   /// Create the declaration.
   Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
