@@ -832,7 +832,9 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
       Node *body = parse_function_body(p, type, &params);
       Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
       sym->node = func;
-      return ast_make_function_reference(p->ast, ident.source_location, ident.text);
+      Node *funcref = ast_make_function_reference(p->ast, ident.source_location, ident.text);
+      funcref->funcref.resolved = sym;
+      return funcref;
     }
 
     /// External.
@@ -845,7 +847,9 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
       /// Create the function.
       Node *func = ast_make_function(p->ast, ident.source_location, type, (Nodes){0}, NULL, ident.text);
       sym->node = func;
-      return ast_make_function_reference(p->ast, ident.source_location, ident.text);
+      Node *funcref = ast_make_function_reference(p->ast, ident.source_location, ident.text);
+      funcref->funcref.resolved = sym;
+      return funcref;
     }
   }
 

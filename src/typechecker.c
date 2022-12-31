@@ -314,9 +314,8 @@ static OverloadedFunctionSymbols collect_overload_set(Node *func) {
 NODISCARD static bool resolve_function(AST *ast, Node *func) {
   // Skip anything that is not a function reference, or any function
   // references previously resolved.
-  if (func->kind != NODE_FUNCTION_REFERENCE || func->funcref.resolved) {
+  if (func->kind != NODE_FUNCTION_REFERENCE || func->funcref.resolved)
     return true;
-  }
 
   /// 1. Collect all functions with the same name as the function being
   ///    resolved into an *overload set* O. We cannot filter out any
@@ -583,7 +582,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     ///    3d. If the parent expression is a cast expression, then
     ///
 
-    case NODE_CAST:{
+    case NODE_CAST: {
       Type *cast_type = parent->type;
       if ((cast_type->kind == TYPE_POINTER && cast_type->pointer.to->kind == TYPE_FUNCTION)
           || (cast_type->kind == TYPE_FUNCTION)
