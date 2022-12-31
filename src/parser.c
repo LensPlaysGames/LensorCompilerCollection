@@ -823,6 +823,7 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     if (!is_ext) {
       /// Create a symbol table entry before parsing the body.
       Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+
       if (sym->kind != SYM_FUNCTION || sym->node)
         ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
 
