@@ -179,7 +179,6 @@ NODISCARD static bool is_lvalue(Node *expr) {
   }
 }
 
-/**
 /// Resolve a function reference.
 ///
 /// Terminology:
@@ -284,8 +283,6 @@ NODISCARD static bool is_lvalue(Node *expr) {
 ///    the function being resolved is ambiguous.
 ///
 /// 6. Otherwise, resolve the function reference to the last remaining element of O.
-*/
-
 typedef struct OverloadedFunctionSymbol {
   Symbol *symbol;
   size_t score;
@@ -311,6 +308,16 @@ static OverloadedFunctionSymbols collect_overload_set(Node *func) {
   return overload_set;
 }
 
+void print_overload_set(OverloadedFunctionSymbols syms) {
+  printf("[ ");
+  foreach(OverloadedFunctionSymbol, sym, syms) {
+    string type = ast_typename(sym->symbol->node->type, false);
+    printf("%.*s", (int)type.size, type.data);
+    printf(", ");
+  }
+  printf(" ]\n");
+}
+
 NODISCARD static bool resolve_function(AST *ast, Node *func) {
   // Skip anything that is not a function reference, or any function
   // references previously resolved.
@@ -322,7 +329,14 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   ///    functions just yet.
   ///
   OverloadedFunctionSymbols overload_set = collect_overload_set(func);
+
   Vector(OverloadedFunctionSymbol) to_remove = {0};
+# define do_removal() do {                                  \
+      foreach(OverloadedFunctionSymbol, sym, to_remove) {   \
+        vector_remove_element_unordered(overload_set, *sym); \
+      }                                                     \
+      vector_clear(to_remove);                              \
+    } while (0)
 
  step2:
   vector_clear(to_remove);
@@ -349,10 +363,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         vector_push(to_remove, *sym);
       }
     }
-    foreach(OverloadedFunctionSymbol, sym, to_remove) {
-      vector_remove_element_unordered(overload_set, sym);
-    }
-    vector_clear(to_remove);
+    do_removal();
 
     /// 2c. Let A_1, ... A_n be the arguments of the call expression.
     ///
@@ -364,15 +375,9 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     ///
     // TODO: Could optimise this by merging with above loop.
     foreach(OverloadedFunctionSymbol, candidate, overload_set) {
-      printf("candidate\n");
       foreach_index(i, call->call.arguments) {
-        printf("arg %zu\n", i);
         Node *arg = call->call.arguments.data[i];
         if (arg->kind == NODE_FUNCTION_REFERENCE) continue;
-        string param_type = ast_typename(ast, candidate->symbol->node->type->function.parameters.data[i].type);
-        printf("param_type: %.*s\n", (int) param_type.size, param_type.data);
-        string arg_type = ast_typename(ast, arg->type);
-        printf("arg_type:   %.*s\n", (int) arg_type.size, arg_type.data);
         if (!convertible(ast, candidate->symbol->node->type->function.parameters.data[i].type, arg->type)) {
           vector_push(to_remove, *candidate);
           break;
@@ -380,10 +385,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         ++candidate->score;
       }
     }
-    foreach(OverloadedFunctionSymbol, sym, to_remove) {
-      vector_remove_element_unordered(overload_set, sym);
-    }
-    vector_clear(to_remove);
+    do_removal();
 
     /// 2e. If any of the A_i are unresolved functions, then each of those arguments:
     ///
@@ -411,6 +413,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       ///       x
       ///      / \
       /// foo_2   bar_2
+      ///
       foreach(OverloadedFunctionSymbol, overload, overload_set) {
         bool valid = false;
         foreach(OverloadedFunctionSymbol, arg_overload, arg_overload_set) {
@@ -421,10 +424,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         }
         if (!valid) vector_push(to_remove, *overload);
       }
-      foreach(OverloadedFunctionSymbol, sym, to_remove) {
-        vector_remove_element_unordered(overload_set, sym);
-      }
-      vector_clear(to_remove);
+      do_removal();
 
       /// ... and from O(F) all functions whose signature does not
       /// match any of the P_F of any of the functions in O.
@@ -440,10 +440,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         }
         if (!valid) vector_push(to_remove, *arg_overload);
       }
-      foreach(OverloadedFunctionSymbol, sym, to_remove) {
-        vector_remove_element_unordered(arg_overload_set, sym);
-      }
-      vector_clear(to_remove);
+      do_removal();
 
       ///  2eδ. If O(F) is empty, then this is a compiler error: there is no
       ///       matching overload for F.
@@ -480,10 +477,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
           vector_push(to_remove, *sym);
         }
       }
-      foreach(OverloadedFunctionSymbol, sym, to_remove) {
-        vector_remove_element_unordered(overload_set, sym);
-      }
-      vector_clear(to_remove);
+      do_removal();
     }
   } else {
     /// 3. Otherwise, depending on the type of the parent expression,
@@ -515,10 +509,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
             vector_push(to_remove, *sym);
           }
         }
-        foreach(OverloadedFunctionSymbol, sym, to_remove) {
-          vector_remove_element_unordered(overload_set, *sym);
-        }
-        vector_clear(to_remove);
+        do_removal();
         break;
       }
       string decl_typename = ast_typename(decl_type, false);
@@ -538,10 +529,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
               vector_push(to_remove, *sym);
             }
           }
-          foreach(OverloadedFunctionSymbol, sym, to_remove) {
-            vector_remove_element_unordered(overload_set, *sym);
-          }
-          vector_clear(to_remove);
+          do_removal();
           break;
         }
         string lvalue_typename = ast_typename(lvalue_type, false);
@@ -595,10 +583,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
             vector_push(to_remove, *sym);
           }
         }
-        foreach(OverloadedFunctionSymbol, sym, to_remove) {
-          vector_remove_element_unordered(overload_set, *sym);
-        }
-        vector_clear(to_remove);
+        do_removal();
       } else {
         ///  3dβ. Otherwise, if the O contains more than one element, then this is a
         ///       compiler error: the cast is ambiguous; we can’t infer the type of the
@@ -613,6 +598,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     default: break;
     }
   }
+
+  print_overload_set(overload_set);
 
   /// 4. If O is empty, then this is a compiler error: there is no matching
   ///    overload for the function being resolved.
