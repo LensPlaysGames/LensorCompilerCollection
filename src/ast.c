@@ -364,8 +364,10 @@ void write_typename(string *s, const Type *type, bool colour) {
 
     case TYPE_NAMED:
       if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[36m");
-      s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "%.*s",
-        (int) type->named->name.size, type->named->name.data);
+      if (type->named)
+        s->size += (usz)snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "%.*s",
+                                 (int)type->named->name.size, type->named->name.data);
+      else s->size += (usz)snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "(\?\?\?)");
       break;
 
     case TYPE_POINTER: {

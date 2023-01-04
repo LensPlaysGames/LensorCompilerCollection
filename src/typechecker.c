@@ -373,7 +373,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     ///     it is not. Note down the number of A_i’s that required a (series
     ///     of) implicit conversions to their corresponding P_i’s.
     ///
-    // TODO: Could optimise this by merging with above loop.
+    // TODO: Could optimise this by merging with above loop?
     foreach(OverloadedFunctionSymbol, candidate, overload_set) {
       foreach_index(i, call->call.arguments) {
         Node *arg = call->call.arguments.data[i];
