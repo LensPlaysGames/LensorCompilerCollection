@@ -616,7 +616,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   /// 6. Otherwise, resolve the function reference to the last remaining element of O.
   ///
   func->funcref.resolved = overload_set.data[0].symbol;
-
+  // TODO: Is this correct?
   func->type = func->funcref.resolved->type;
   return true;
 }
@@ -750,6 +750,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           callee->parent = expr;
           if (!typecheck_expression(ast, callee)) return false;
         } else {
+          ast_print(stdout, ast);
           string name = ast_typename(callee->type, false);
           ERR_DO(free(name.data), expr->source_location, "Cannot call non-function type \"%.*s\".",
             (int) name.size, name.data);

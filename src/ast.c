@@ -484,7 +484,6 @@ AST *ast_create() {
   ast->t_integer_literal->primitive.size = 8;
   ast->t_integer_literal->primitive.alignment = 8;
   ast->t_integer_literal->primitive.is_signed = true;
-  // FIXME: Everywhere you see this horrible cast and macro, it's because Siraide couldn't just use a function when it is plainly and obviously the right thing to do. His view is jaded by macros to the point where the code he writes isn't maintainable and it sucks.
   ast->t_integer_literal->primitive.name = (span)literal_span("<integer literal>");
   ast->t_integer_literal->primitive.id = primitive_type_id++;
 
