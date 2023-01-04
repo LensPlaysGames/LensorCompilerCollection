@@ -72,7 +72,7 @@ NODISCARD static bool is_caller_saved(Register r) {
 
 NODISCARD static bool is_callee_saved(Register r) { return !is_caller_saved(r); }
 
-span unreferenced_block_name = literal_span("");
+span unreferenced_block_name = literal_span_raw("");
 
 /// Types of conditional jump instructions (Jcc).
 /// Do NOT reorder these.

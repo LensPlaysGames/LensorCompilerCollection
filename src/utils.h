@@ -101,7 +101,8 @@ string format(const char *fmt, ...);
 #define as_span(str) ((span){(str).data, (str).size})
 
 /// Convert a string literal to a span.
-#define literal_span(lit) {(lit), sizeof(lit) - 1}
+#define literal_span_raw(lit) {(lit), sizeof(lit) - 1}
+#define literal_span(lit) ((span)literal_span_raw((lit)))
 
 /// ===========================================================================
 ///  Other.

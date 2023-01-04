@@ -607,7 +607,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   if (overload_set.size == 0)
     ERR(func->source_location, "Could not resolve overloaded function.");
 
-  /// 5. If O contains more than one element, then this is a compiler error:
+  /// 5. If O contains more than one element, then that is an error:
   ///    the function being resolved is ambiguous.
   ///
   if (overload_set.size != 1)
@@ -729,8 +729,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// First, resolve the function. Then, typecheck all parameters
     /// and set the type to the return type of the callee.
     case NODE_CALL: {
-      /// Resolve the function if applicable.
       Node *callee = expr->call.callee;
+
+      /// Resolve the function if applicable.
+
       if (!resolve_function(ast, callee)) return false;
 
       /// Typecheck the callee.
