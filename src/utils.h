@@ -86,6 +86,16 @@ NODISCARD
 string string_dup_impl(const char *src, usz size);
 #define string_dup(src) string_dup_impl((src).data, (src).size)
 
+
+void string_append_impl(string *lhs, string rhs);
+/// Alter string A by adding contents of string B to the end.
+#define string_append(a, b) string_append_impl((a), (b))
+
+void string_append_raw_impl(string *lhs, const char *rhs);
+/// Alter string A by adding contents of C style null-terminated string B to the end.
+#define string_append_raw(a, b) string_append_raw_impl((a), (b))
+
+
 /// Format a string.
 NODISCARD
 FORMAT(printf, 1, 2)
