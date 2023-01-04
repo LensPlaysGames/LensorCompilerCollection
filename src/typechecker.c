@@ -599,7 +599,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     }
   }
 
-  print_overload_set(overload_set);
+  // print_overload_set(overload_set);
 
   /// 4. If O is empty, then this is a compiler error: there is no matching
   ///    overload for the function being resolved.

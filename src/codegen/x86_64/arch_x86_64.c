@@ -1360,6 +1360,29 @@ static size_t interfering_regs(IRInstruction *instruction) {
   return mask >> 1;
 }
 
+#define MAX_FUNCTION_NAME_LENGTH 120
+static char mangled_function_name[MAX_FUNCTION_NAME_LENGTH] = {0};
+void mangle_function_name(IRFunction *function) {
+  size_t name_length = 0;
+  name_length += snprintf(mangled_function_name, MAX_FUNCTION_NAME_LENGTH, "_X%zu%.*s", function->name.size, (int)function->name.size, function->name.data);
+  if (name_length >= MAX_FUNCTION_NAME_LENGTH) {
+    ICE("Function name is too long to mangle...");
+  }
+
+  for (u64 i = 0; i < function->parameters.size; i++) {
+    string typename = ast_typename(function->type->function.parameters.data[i].type, false);
+    name_length += snprintf(mangled_function_name + name_length, MAX_FUNCTION_NAME_LENGTH - name_length,
+                            "%zu%.*s", typename.size, (int)typename.size, typename.data);
+    if (name_length >= MAX_FUNCTION_NAME_LENGTH) {
+      ICE("Function name is too long to mangle...");
+    }
+    free(typename.data);
+  }
+
+  // TODO: Free old function name?
+  function->name = string_create(mangled_function_name);
+}
+
 void codegen_lower_x86_64(CodegenContext *context) {
   // Setup register allocation structures.
   switch (context->call_convention) {
@@ -1471,6 +1494,15 @@ void codegen_emit_x86_64(CodegenContext *context) {
   ir_femit(stdout, context);*/
 
   calculate_stack_offsets(context);
+
+  // FUNCTION NAME MANGLING
+  foreach_ptr (IRFunction*, function, context->functions) {
+    // Don't mangle external function(s).
+    if (!function->is_extern)
+      // Don't mangle `main` function.
+      if (memcmp(function->name.data, "main", sizeof("main")) != 0)
+        mangle_function_name(function);
+  }
 
   emit_entry(context);
   foreach_ptr (IRFunction*, function, context->functions) {
