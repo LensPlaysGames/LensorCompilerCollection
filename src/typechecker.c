@@ -616,8 +616,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   /// 6. Otherwise, resolve the function reference to the last remaining element of O.
   ///
   func->funcref.resolved = overload_set.data[0].symbol;
-  // TODO: Is this correct?
-  func->type = func->funcref.resolved->type;
+  func->type = func->funcref.resolved->node->type;
   return true;
 }
 
