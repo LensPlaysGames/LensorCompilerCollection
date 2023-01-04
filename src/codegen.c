@@ -537,7 +537,7 @@ bool codegen
       vector_push(main_params, argv);
 
       Type *main_type = ast_make_type_function(context->ast, (loc){0}, context->ast->t_integer, main_params);
-      context->entry = ir_function(context, literal_span("main"), main_type);
+      context->entry = ir_function(context, (span)literal_span("main"), main_type);
       context->entry->attr_global = true;
 
       /// Create the remaining functions and set the address of each function.

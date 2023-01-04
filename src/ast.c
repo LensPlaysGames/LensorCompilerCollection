@@ -484,7 +484,8 @@ AST *ast_create() {
   ast->t_integer_literal->primitive.size = 8;
   ast->t_integer_literal->primitive.alignment = 8;
   ast->t_integer_literal->primitive.is_signed = true;
-  ast->t_integer_literal->primitive.name = literal_span("<integer literal>");
+  // FIXME: Everywhere you see this horrible cast and macro, it's because Siraide couldn't just use a function when it is plainly and obviously the right thing to do. His view is jaded by macros to the point where the code he writes isn't maintainable and it sucks.
+  ast->t_integer_literal->primitive.name = (span)literal_span("<integer literal>");
   ast->t_integer_literal->primitive.id = primitive_type_id++;
 
   /// Integer.
@@ -492,7 +493,7 @@ AST *ast_create() {
   ast->t_integer->primitive.size = 8;
   ast->t_integer->primitive.alignment = 8;
   ast->t_integer->primitive.is_signed = true;
-  ast->t_integer->primitive.name = literal_span("integer");
+  ast->t_integer->primitive.name = (span)literal_span("integer");
   ast->t_integer->primitive.id = primitive_type_id++;
 
   /// Byte.
@@ -500,7 +501,7 @@ AST *ast_create() {
   ast->t_byte->primitive.size = 1;
   ast->t_byte->primitive.alignment = 1;
   ast->t_byte->primitive.is_signed = true;
-  ast->t_byte->primitive.name = literal_span("byte");
+  ast->t_byte->primitive.name = (span)literal_span("byte");
   ast->t_byte->primitive.id = primitive_type_id++;
 
   /// Declare void as a named type with no node associated with it.
@@ -508,9 +509,9 @@ AST *ast_create() {
   ast->t_void = mktype(ast, TYPE_NAMED, (loc){0, 0});
 
   /// Add the builtin types to the global scope.
-  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("integer"), ast->t_integer);
-  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("byte"), ast->t_byte);
-  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("void"), ast->t_void);
+  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, (span)literal_span("integer"), ast->t_integer);
+  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, (span)literal_span("byte"), ast->t_byte);
+  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, (span)literal_span("void"), ast->t_void);
 
   /// Done.
   return ast;
@@ -585,7 +586,7 @@ static void ast_print_children(
     const Node *logical_grandparent,
     const Node *logical_parent,
     const Nodes *nodes,
-    char leading_text[static AST_PRINT_BUFFER_SIZE]
+    char leading_text[AST_PRINT_BUFFER_SIZE]
 );
 
 /// Print a node.
@@ -593,7 +594,7 @@ static void ast_print_node(
   FILE *file,
   const Node *logical_parent,
   const Node *node,
-  char leading_text[static AST_PRINT_BUFFER_SIZE]
+  char leading_text[AST_PRINT_BUFFER_SIZE]
 ) {
   switch (node->kind) {
     default: TODO("Print node of type %d", node->kind);
@@ -776,7 +777,7 @@ typedef struct scope_tree_node {
 } scope_tree_node;
 
 /// Print a scope and the symbols it contains.
-static void print_scope(FILE *file, scope_tree_node *node, char buffer[static AST_PRINT_BUFFER_SIZE]) {
+static void print_scope(FILE *file, scope_tree_node *node, char buffer[AST_PRINT_BUFFER_SIZE]) {
     fprintf(file, "\033[31mScope\n");
     const Scope *s = node->scope;
 
@@ -888,7 +889,7 @@ static void ast_print_children(
     const Node *logical_grandparent,
     const Node *logical_parent,
     const Nodes *nodes,
-    char leading_text[static AST_PRINT_BUFFER_SIZE]
+    char leading_text[AST_PRINT_BUFFER_SIZE]
 ) {
   /// If the logical parent is merely used here, and not defined,
   /// then don’t do anything just yet.
@@ -921,7 +922,7 @@ size_t ast_intern_string(AST *ast, span str) {
     if (string_eq(ast->strings.data[i], str)) return i;
 
   /// Intern the string.
-    vector_push(ast->strings, string_dup(str));
+  vector_push(ast->strings, string_dup(str));
   return ast->strings.size - 1;
 }
 

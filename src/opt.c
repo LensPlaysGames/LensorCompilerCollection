@@ -355,7 +355,7 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
   /// are possible, we only check if the first store occurs
   /// before any loads and in main() for now.
   IRFunction **main = NULL;
-  vector_find_if(ctx->functions, main, i, string_eq(ctx->functions.data[i]->name, literal_span("main")));
+  vector_find_if(ctx->functions, main, i, string_eq(ctx->functions.data[i]->name, (span)literal_span("main")));
   ASSERT(main, "No main() function!");
 
   FOREACH_INSTRUCTION (ctx) {
