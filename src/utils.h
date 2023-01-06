@@ -81,6 +81,9 @@ typedef struct string {
   usz size;
 } string;
 
+/// %.*s formatting
+#define strf(string) (int)(string).size, (string).data
+
 /// Copy a string.
 NODISCARD
 string string_dup_impl(const char *src, usz size);

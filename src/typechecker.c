@@ -290,6 +290,12 @@ typedef struct OverloadedFunctionSymbol {
 
 typedef Vector(OverloadedFunctionSymbol) OverloadedFunctionSymbols;
 
+void print_overloaded_function_symbol(OverloadedFunctionSymbol sym) {
+  string type = ast_typename(sym.symbol->node->type, false);
+  printf("%.*s", (int)type.size, type.data);
+  printf(", ");
+}
+
 static OverloadedFunctionSymbols collect_overload_set(Node *func) {
   OverloadedFunctionSymbols overload_set = {0};
   for (Scope *scope = func->funcref.scope; scope; scope = scope->parent) {
@@ -311,9 +317,7 @@ static OverloadedFunctionSymbols collect_overload_set(Node *func) {
 void print_overload_set(OverloadedFunctionSymbols syms) {
   printf("[ ");
   foreach(OverloadedFunctionSymbol, sym, syms) {
-    string type = ast_typename(sym->symbol->node->type, false);
-    printf("%.*s", (int)type.size, type.data);
-    printf(", ");
+    print_overloaded_function_symbol(*sym);
   }
   printf(" ]\n");
 }
@@ -352,7 +356,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     ///
     foreach_ptr(Node*, arg, call->call.arguments) {
       if (arg->kind != NODE_FUNCTION_REFERENCE)
-        typecheck_expression(ast, arg);
+        if (!typecheck_expression(ast, arg)) return false;
     }
 
     /// 2b. Remove from O all functions that have a different number of
@@ -417,12 +421,18 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       foreach(OverloadedFunctionSymbol, overload, overload_set) {
         bool valid = false;
         foreach(OverloadedFunctionSymbol, arg_overload, arg_overload_set) {
-          if (types_equal(ast, overload->symbol->node->type, arg_overload->symbol->node->type)) {
-            valid = true;
-            break;
+          // FOREACH OF THE PARAMETERS
+          foreach(Parameter, param, overload->symbol->node->type->function.parameters) {
+            if (convertible(ast, param->type, arg_overload->symbol->node->type)) {
+              valid = true;
+              break;
+            }
           }
+          if (valid) break;
+
         }
         if (!valid) vector_push(to_remove, *overload);
+
       }
       do_removal();
 
@@ -433,12 +443,14 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         bool valid = false;
         foreach(OverloadedFunctionSymbol, overload, overload_set) {
           Type *param_type = overload->symbol->node->type->function.parameters.data[i].type;
-          if (types_equal(ast, param_type, arg_overload->symbol->node->type)) {
+          if (convertible(ast, param_type, arg_overload->symbol->node->type)) {
             valid = true;
             break;
           }
         }
-        if (!valid) vector_push(to_remove, *arg_overload);
+        if (!valid) {
+          vector_push(to_remove, *arg_overload);
+        }
       }
       do_removal();
 
