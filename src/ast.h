@@ -535,6 +535,9 @@ typedef struct Typeinfo {
 ///         as if with `malloc` and must be freed by the caller.
 string ast_typename(const Type *type, bool colour);
 
+/// Print the string representation of a type to stdout.
+void print_type(const Type *type, bool colour);
+
 /// Check if a type is incomplete.
 bool ast_type_is_incomplete(const Type *type);
 

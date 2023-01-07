@@ -416,7 +416,6 @@ void write_typename(string *s, const Type *type, bool colour) {
   if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[m");
 }
 
-/// Get a string representation of a type.
 string ast_typename(const Type *type, bool colour) {
   string s = {
     .data = calloc(1, TYPENAME_MAX_SIZE),
@@ -427,13 +426,17 @@ string ast_typename(const Type *type, bool colour) {
   return s;
 }
 
-/// Check if a type is incomplete.
+void print_type(const Type *type, bool colour) {
+  string s = ast_typename(type, colour);
+  printf("%.*s\n", strf(s));
+  free(s.data);
+}
+
 bool ast_type_is_incomplete(const Type *type) {
   while (type && type->kind == TYPE_NAMED) type = type->named->type;
   return !type;
 }
 
-/// Get the size of a type.
 usz ast_sizeof(const Type *type) {
   switch (type->kind) {
     default: ICE("Invalid type kind: %d", type->kind);
