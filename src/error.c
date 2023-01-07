@@ -140,51 +140,41 @@ void raise_fatal_error_impl (
     const char *fmt,
     ...
 ) {
-  /// Print the file and line.
-  bool use_colour = thread_use_colours;
-
   /// Removing everything up to and including the `src` prefix.
   const char *filename = file, *src_prefix;
   while (src_prefix = strstr(filename, "src" PLATFORM_PATH_SEPARATOR), src_prefix) filename = src_prefix + 4;
-
-  /// To make this less atrocious,
-  const char *const reset = use_colour ? "\033[m" : "";
-  const char *const w = use_colour ? "\033[m\033[1;38m" : "";
-  const char *const colour = use_colour && colours_blink
+  const char *const colour = colours_blink
     ? "\033[31;5m\a\a\a\a\a"
-    : use_colour
-        ? diagnostic_level_colours[is_sorry ? DIAG_SORRY : DIAG_ICE]
-        : "";
+    : diagnostic_level_colours[is_sorry ? DIAG_SORRY : DIAG_ICE];
 
   /// Print a shorter message if this is a TODO() w/ no message.
   if (is_sorry && strcmp(fmt, "") == 0) {
-    fprintf(stderr, "%s%s:%d:%s %s", w, filename, line, reset, colour);
-    fprintf(stderr, "Sorry, unimplemented:%s Function ‘%s%s%s’\n", reset, w, func, reset);
+    eprint("%B38%s:%d: %C", filename, line, colour);
+    eprint("Sorry, unimplemented:%m Function ‘%B38%s%m’\n", func);
   }
 
   /// Print a longer message.
   else {
     /// File, line, message header; if they make sense, that is.
     if (!is_signal_or_exception) {
-      fprintf(stderr, "%s%s:%s In function ‘%s%s%s’\n", w, filename, reset, w, func, reset);
-      fprintf(stderr, "%s%s:%d:%s %s", w, filename, line, reset, colour);
+      eprint("%B38%s:%m In function ‘%B38%s%m’\n", filename, func);
+      eprint("%B38%s:%d: %C", filename, line, colour);
     } else {
-      fprintf(stderr, "%s", colour);
+      eprint("%C", colour);
     }
 
     /// Assert condition (if any) and message.
     if (assert_condition) {
-      fprintf(stderr, "Assertion failed:%s ‘%s%s%s’: ", reset, w, assert_condition, reset);
+      eprint("Assertion failed:%m ‘%B38%s%m’: ", assert_condition);
     } else {
-      fprintf(stderr, "%s:%s ", diagnostic_level_names[is_sorry ? DIAG_SORRY : DIAG_ICE], reset);
+      eprint("%s:%m ", diagnostic_level_names[is_sorry ? DIAG_SORRY : DIAG_ICE]);
     }
 
     /// Message.
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    eprint("%F\n", fmt, ap);
     va_end(ap);
-    fprintf(stderr, "\n");
   }
 
   /// Print the stack trace.
