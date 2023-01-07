@@ -181,29 +181,88 @@ NODISCARD static bool is_lvalue(Node *expr) {
   }
 }
 
-typedef struct OverloadedFunctionSymbol {
+/// An overload candidate.
+typedef struct Candidate {
   Symbol *symbol;
   size_t score;
-} OverloadedFunctionSymbol;
 
-typedef Vector(OverloadedFunctionSymbol) OverloadedFunctionSymbols;
+  /// Whether the overload is valid or why it is invalid.
+  enum {
+    candidate_valid,
+    invalid_parameter_count,        /// Candidate has too many/few parameters.
+    invalid_argument_type,          /// Argument type is not convertible to parameter type.
+    invalid_too_many_conversions,   /// Candidate is valid but not ideal.
+    invalid_expected_type_mismatch, /// Candidate is not equivalent to the expected type of the parent expression.
+    invalid_no_dependent_callee,    /// Candidate is an argument of a call with no matching callee.
+    invalid_no_dependent_arg,       /// No matching overload for argument of function type.
+  } validity;
 
-static OverloadedFunctionSymbols collect_overload_set(Node *func) {
-  OverloadedFunctionSymbols overload_set = {0};
+  /// Index of the incompatible argument.
+  usz invalid_arg_index;
+} Candidate;
+
+/// A set of overload candidates.
+typedef Vector(Candidate) OverloadSet;
+
+/// Collect all possible overload candidates for a function reference.
+static OverloadSet collect_overload_set(Node *func) {
+  OverloadSet overload_set = {0};
   for (Scope *scope = func->funcref.scope; scope; scope = scope->parent) {
     foreach_ptr(Symbol*, sym, scope->symbols) {
       if (sym->kind != SYM_FUNCTION) {
         continue;
       }
       if (string_eq(sym->name, func->funcref.name)) {
-        OverloadedFunctionSymbol s;
+        Candidate s;
         s.symbol = sym;
         s.score = 0;
+        s.validity = candidate_valid;
         vector_push(overload_set, s);
       }
     }
   }
   return overload_set;
+}
+
+/// Actually resolve a function.
+///
+/// The overloads sets passed to this function must be minimal, i.e.
+/// all overloads that are not viable must already be marked as such.
+///
+/// \param ast The AST of the program.
+/// \param overload_set The overload set of the symbol being resolved.
+/// \param funcref The symbol being resolved.
+/// \param dependent_overload_set (optional) The overload set of the callee if this is a function argument.
+/// \param dependent_funcref (optional) The callee if this is a function argument.
+/// \return Whether overload resolution was successful.
+NODISCARD static bool resolve_overload(
+  AST *ast,
+  OverloadSet *overload_set,
+  Node *funcref,
+  OverloadSet *dependent_overload_set,
+  Node *dependent_funcref
+) {
+  /// Determine the overloads that are still valid.
+  Symbol *valid_overload = NULL;
+  foreach_if (Candidate, sym, *overload_set, sym->validity == candidate_valid) {
+    /// If O(F) contains more than one element, then the program is
+    /// ill-formed: F is ambiguous.
+    if (valid_overload)
+      ERR(funcref->source_location, "Use of overloaded function is ambiguous.");
+
+    /// Otherwise, save this overload for later.
+    valid_overload = sym->symbol;
+  }
+
+
+  /// If O(F) is empty, then the program is ill-formed: there is no
+  /// matching overload for F.
+  if (!valid_overload) ERR(funcref->source_location, "Could not resolve overloaded function.");
+
+  /// Otherwise, resolve F to the last remaining element of O(F).
+  funcref->funcref.resolved = valid_overload;
+  funcref->type = funcref->funcref.resolved->node->type;
+  return true;
 }
 
 /// Resolve a function reference.
@@ -240,8 +299,10 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   /// 1. Collect all functions with the same name as the function being
   ///    resolved into an *overload set* O. We cannot filter out any
   ///    functions just yet.
-  OverloadedFunctionSymbols overload_set = collect_overload_set(func), arg_overload_set = {0};
-  Vector(OverloadedFunctionSymbol) to_remove = {0};
+  OverloadSet overload_set = collect_overload_set(func), arg_overload_set = {0};
+
+  /// Whether there was an error.
+  bool ok = true;
 
  step2:
   /// 2. If the parent expression is a call expression, and the function being
@@ -255,14 +316,13 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     foreach_ptr (Node*, arg, call->call.arguments)
       if (arg->kind != NODE_FUNCTION_REFERENCE)
         if (!typecheck_expression(ast, arg))
-          return false; /// TODO: Free vector etc.
+          goto err;
 
     /// 2b. Remove from O all functions that have a different number of
     ///     parameters than the call expression has arguments.
-    foreach (OverloadedFunctionSymbol, sym, overload_set)
+    foreach (Candidate, sym, overload_set)
       if (sym->symbol->node->type->function.parameters.size != call->call.arguments.size)
-        vector_push(to_remove, *sym);
-    vector_remove_elements_unordered(overload_set, to_remove);
+        sym->validity = invalid_parameter_count;
 
     /// 2c. Let A_1, ... A_n be the arguments of the call expression.
     ///
@@ -273,7 +333,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     ///     of) implicit conversions to their corresponding P_i’s.
     ///
     /// TODO: Could optimise this by merging with above loop.
-    foreach (OverloadedFunctionSymbol, candidate, overload_set) {
+    foreach_if (Candidate, candidate, overload_set, candidate->validity == candidate_valid) {
       foreach_index (i, call->call.arguments) {
         /// Skip function references.
         Node *arg = call->call.arguments.data[i];
@@ -282,7 +342,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         /// Check if the argument is convertible to the parameter.
         Type *param_type = candidate->symbol->node->type->function.parameters.data[i].type;
         if (!convertible(ast, param_type, arg->type)) {
-          vector_push(to_remove, *candidate);
+          candidate->validity = invalid_argument_type;
+          candidate->invalid_arg_index = i;
           break;
         }
 
@@ -290,7 +351,6 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         if (!types_equal(ast, param_type, arg->type)) candidate->score++;
       }
     }
-    vector_remove_elements_unordered(overload_set, to_remove);
 
     /// 2e. If any of the A_i are unresolved functions, then each of those arguments:
     foreach_index (i, call->call.arguments) {
@@ -335,46 +395,39 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// The first foo() is removed since there is no bar() that matches its
       /// first parameter. The second bar() is removed since there is no foo()
       /// that would accept it as its first parameter.
-      foreach (OverloadedFunctionSymbol, overload, overload_set) {
-        bool valid = false;
+      foreach_if (Candidate, overload, overload_set, overload->validity == candidate_valid) {
         /// TODO: Is this right?
-        foreach (OverloadedFunctionSymbol, arg_overload, arg_overload_set) {
-          if (types_equal(ast, overload->symbol->node->type, arg_overload->symbol->node->type)) {
+        bool valid = false;
+        foreach_if (Candidate, arg_overload, arg_overload_set, arg_overload->validity == candidate_valid) {
+          Type *overload_type = overload->symbol->node->type;
+          Type *arg_overload_type = arg_overload->symbol->node->type;
+          if (types_equal(ast, overload_type, arg_overload_type)) {
             valid = true;
             break;
           }
         }
-        if (!valid) vector_push(to_remove, *overload);
+        if (!valid) {
+          overload->validity = invalid_no_dependent_arg;
+          overload->invalid_arg_index = i;
+        }
       }
-      vector_remove_elements_unordered(overload_set, to_remove);
 
       /// ... and from O(F) all functions that are not equivalent to
       /// any of the P_F of any of the functions in O.
-      foreach(OverloadedFunctionSymbol, arg_overload, arg_overload_set) {
+      foreach_if (Candidate, arg_overload, arg_overload_set, arg_overload->validity == candidate_valid) {
         bool valid = false;
-        foreach(OverloadedFunctionSymbol, overload, overload_set) {
+        foreach_if (Candidate, overload, overload_set, overload->validity == candidate_valid) {
           Type *param_type = overload->symbol->node->type->function.parameters.data[i].type;
           if (types_equal(ast, param_type, arg_overload->symbol->node->type)) {
             valid = true;
             break;
           }
         }
-        if (!valid) vector_push(to_remove, *arg_overload);
+        if (!valid) arg_overload->validity = invalid_no_dependent_callee;
       }
-      vector_remove_elements_unordered(arg_overload_set, to_remove);
 
-      /// 2eδ. If O(F) is empty, then the program is ill-formed: there is no
-      ///      matching overload for F.
-      if (arg_overload_set.size == 0)
-        ERR(arg->source_location, "Could not resolve overloaded function.");
-
-      /// 2eε. If O(F) contains more than one element, then the program is
-      ///      ill-formed: F is ambiguous.
-      if (arg_overload_set.size != 1)
-        ERR(arg->source_location, "Use of overloaded function is ambiguous.");
-
-      /// 2eζ. Otherwise, resolve F to the last remaining element of O(F).
-      arg->funcref.resolved = arg_overload_set.data[0].symbol;
+      /// 2eδ. Resolve F.
+      if (!resolve_overload(ast, &arg_overload_set, arg, &overload_set, func)) goto err;
     }
 
     /// 2f. Remove from O all functions except those with the least number of
@@ -382,15 +435,14 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     if (overload_set.size) {
       /// Determine the candidate with the least number of implicit conversions.
       usz min_score = overload_set.data[0].score;
-      foreach (OverloadedFunctionSymbol, sym, overload_set)
+      foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
         if (sym->score < min_score)
           min_score = sym->score;
 
       /// Remove all candidates with a more implicit conversions.
-      foreach (OverloadedFunctionSymbol, sym, overload_set)
+      foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
         if (sym->score > min_score)
-          vector_push(to_remove, *sym);
-      vector_remove_elements_unordered(overload_set, to_remove);
+          sym->validity = invalid_too_many_conversions;
     }
   }
 
@@ -406,7 +458,6 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         Node *grandparent = parent->parent;
         ast_replace_node(ast, parent, func);
         func->parent = grandparent;
-        vector_clear(to_remove);
         goto step2;
       }
     } break;
@@ -417,18 +468,19 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// ... and the lvalue is not of function pointer type, this is a type error.
       if (decl_type->kind != TYPE_POINTER || decl_type->pointer.to->kind != TYPE_FUNCTION) {
         string decl_typename = ast_typename(decl_type, false);
-        ERR_DO(free(decl_typename.data), func->source_location,
-               "Overloaded function %.*s is not convertible to %.*s\n",
-               (int) func->funcref.name.size, func->funcref.name.data,
-               (int) decl_typename.size,      decl_typename.data);
+        ERR_DONT_RETURN(func->source_location,
+          "Overloaded function %.*s is not convertible to %.*s\n",
+          (int) func->funcref.name.size, func->funcref.name.data,
+          (int) decl_typename.size,      decl_typename.data);
+        free(decl_typename.data);
+        goto err;
       }
 
       /// Otherwise, remove from O all functions that are not equivalent to the
       /// lvalue being assigned to.
-      foreach (OverloadedFunctionSymbol, sym, overload_set)
+      foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
         if (!types_equal(ast, decl_type, sym->symbol->node->type))
-          vector_push(to_remove, *sym);
-      vector_remove_elements_unordered(overload_set, to_remove);
+          sym->validity = invalid_expected_type_mismatch;
     } break;
 
     /// 3c. If the parent expression is an assignment expression, then
@@ -445,20 +497,22 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       Type *lvalue_type = parent->binary.lhs->type;
       if (lvalue_type->kind != TYPE_POINTER || lvalue_type->pointer.to->kind != TYPE_FUNCTION) {
         string lvalue_typename = ast_typename(lvalue_type, false);
-        ERR_DO(free(lvalue_typename.data), func->source_location,
-               "Overloaded function %.*s is not convertible to %.*s\n",
-               (int) func->funcref.name.size, func->funcref.name.data,
-               (int) lvalue_typename.size,      lvalue_typename.data);
+        ERR_DONT_RETURN(func->source_location,
+          "Overloaded function %.*s is not convertible to %.*s\n",
+          (int) func->funcref.name.size, func->funcref.name.data,
+          (int) lvalue_typename.size,      lvalue_typename.data);
+        free(lvalue_typename.data);
+        goto err;
       }
 
       /// Otherwise, remove from O all functions that are not equivalent to
       /// the lvalue being assigned to.
-      foreach(OverloadedFunctionSymbol, sym, overload_set)
+      foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
         if (!types_equal(ast, lvalue_type, sym->symbol->node->type))
-          vector_push(to_remove, *sym);
-      vector_remove_elements_unordered(overload_set, to_remove);
+          sym->validity = invalid_expected_type_mismatch;
     } break;
 
+    /// TODO: Infer return value of block expressions.
     /// 3d. If the parent expression is a return expression, and the return type of the
     ///     function F containing that return expression is not of function pointer type,
     ///     this is a type error. Otherwise, remove from O all functions that are not
@@ -469,21 +523,19 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       // FIXME: Should refer to return type of function that `parent` is within.
       Type *return_type = parent->type;
       if (return_type->kind == TYPE_POINTER && return_type->pointer.to->kind == TYPE_FUNCTION) {
-        foreach(OverloadedFunctionSymbol, sym, overload_set) {
-          if (!types_equal(ast, return_type, sym->symbol->node->type)) {
-            vector_push(to_remove, *sym);
-          }
-        }
-        foreach(OverloadedFunctionSymbol, sym, to_remove) {
-          vector_remove_element_unordered(overload_set, *sym);
-        }
+        foreach_if (OverloadedFunctionSymbol, sym, overload_set, sym->validity == candidate_valid)
+          if (!types_equal(ast, return_type, sym->symbol->node->type))
+            sym->validity = invalid_expected_type_mismatch;
         break;
       }
+
       string return_typename = ast_typename(return_type, false);
-      ERR_DO(free(return_typename.data), func->source_location,
-             "Overloaded function %.*s is not convertible to %.*s\n",
-             (int) func->funcref.name.size, func->funcref.name.data,
-             (int) return_typename.size,      return_typename.data);
+      ERR_DONT_RETURN(func->source_location,
+        "Overloaded function %.*s is not convertible to %.*s\n",
+        (int) func->funcref.name.size, func->funcref.name.data,
+        (int) return_typename.size,      return_typename.data);
+      free(return_typename.data);
+      goto err;
     } break;
     */
 
@@ -495,39 +547,40 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       ///      then remove from O all functions that are not equivalent to that type.
       if ((cast_type->kind == TYPE_POINTER && cast_type->pointer.to->kind == TYPE_FUNCTION) ||
           (cast_type->kind == TYPE_FUNCTION)) {
-        foreach(OverloadedFunctionSymbol, sym, overload_set)
+        foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
           if (!types_equal(ast, cast_type, sym->symbol->node->type))
-            vector_push(to_remove, *sym);
-        vector_remove_elements_unordered(overload_set, to_remove);
+            sym->validity = invalid_expected_type_mismatch;
       }
 
       /// 3eβ. Otherwise, if the O contains more than one element, then this is a
       ///      compiler error: the cast is ambiguous; we can’t infer the type of the
       ///      function here if we’re not casting to a function or function pointer type.
       else if (overload_set.size > 1) {
-        ERR(func->source_location, "Cast of overloaded function is ambiguous.");
+        ERR_DONT_RETURN(func->source_location, "Cast of overloaded function is ambiguous.");
+        goto err;
       }
     } break;
 
-    /// 3f. Otherwise, do nothing and move on to step 4.
+    /// 3f. Otherwise, do nothing.
     default: break;
     }
   }
 
-  /// 4. If O is empty, then the program is ill-formed: there is no matching
-  ///    overload for the function being resolved.
-  if (overload_set.size == 0)
-    ERR(func->source_location, "Could not resolve overloaded function.");
+  /// 4. Resolve the function reference.
+  ok = resolve_overload(ast, &overload_set, func, NULL, NULL);
 
-  /// 5. If O contains more than one element, then the program is ill-formed:
-  ///    the function being resolved is ambiguous.
-  if (overload_set.size != 1)
-    ERR(func->source_location, "Use of overloaded function is ambiguous (size == %zu).", overload_set.size);
+  /// Clean up the vectors.
+ done:
+  vector_delete(overload_set);
+  vector_delete(arg_overload_set);
 
-  /// 6. Otherwise, resolve the function reference to the last remaining element of O.
-  func->funcref.resolved = overload_set.data[0].symbol;
-  func->type = func->funcref.resolved->node->type;
-  return true;
+  /// Done.
+  return ok;
+
+  /// There was an error. Free everything and return false.
+ err:
+  ok = false;
+  goto done;
 }
 
 NODISCARD bool typecheck_expression(AST *ast, Node *expr) {

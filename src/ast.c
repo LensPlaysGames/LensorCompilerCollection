@@ -344,7 +344,6 @@ Type *ast_make_type_function(
 /// ===========================================================================
 /// Used by `ast_typename`.
 void write_typename(string *s, const Type *type, bool colour) {
-  // TODO: If null is a special output, does it make debugging easier?
   if (!type) {
     if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[m");
     s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "(\?\?\?)");

@@ -1364,7 +1364,7 @@ static size_t interfering_regs(IRInstruction *instruction) {
 static char mangled_function_name[MAX_FUNCTION_NAME_LENGTH] = {0};
 void mangle_function_name(IRFunction *function) {
   size_t name_length = 0;
-  name_length += snprintf(mangled_function_name, MAX_FUNCTION_NAME_LENGTH, "_X%zu%.*s", function->name.size, strf(function->name));
+  name_length += (usz) snprintf(mangled_function_name, MAX_FUNCTION_NAME_LENGTH, "_X%zu%.*s", function->name.size, strf(function->name));
   if (name_length >= MAX_FUNCTION_NAME_LENGTH) {
     ICE("Function name is too long to mangle...");
   }
@@ -1390,7 +1390,7 @@ void mangle_function_name(IRFunction *function) {
       default: break;
       }
     }
-    name_length += snprintf(mangled_function_name + name_length, MAX_FUNCTION_NAME_LENGTH - name_length,
+    name_length += (usz) snprintf(mangled_function_name + name_length, MAX_FUNCTION_NAME_LENGTH - name_length,
                             "%zu%.*s", typename.size, (int)typename.size, typename.data);
     if (name_length >= MAX_FUNCTION_NAME_LENGTH) {
       ICE("Function name is too long to mangle...");

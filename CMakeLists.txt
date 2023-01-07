@@ -69,7 +69,7 @@ if (NOT MSVC)
     -Werror=return-type -Werror=implicit-function-declaration
     -Werror=implicit-int -Werror=pointer-arith
     -Wno-unused-parameter -Wno-unused-function
-    -Wno-format-zero-length
+    -Wno-format-zero-length -Wno-comment
   )
 else()
   target_compile_options(
