@@ -344,6 +344,7 @@ Type *ast_make_type_function(
 /// ===========================================================================
 /// Used by `ast_typename`.
 void write_typename(string *s, const Type *type, bool colour) {
+  // TODO: If null is a special output, does it make debugging easier?
   if (!type) {
     if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[m");
     s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "(\?\?\?)");
@@ -364,8 +365,10 @@ void write_typename(string *s, const Type *type, bool colour) {
 
     case TYPE_NAMED:
       if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[36m");
-      s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "%.*s",
-        (int) type->named->name.size, type->named->name.data);
+      if (type->named)
+        s->size += (usz)snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "%.*s",
+                                 (int)type->named->name.size, type->named->name.data);
+      else s->size += (usz)snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "(\?\?\?)");
       break;
 
     case TYPE_POINTER: {
@@ -377,6 +380,7 @@ void write_typename(string *s, const Type *type, bool colour) {
       }
       write_typename(s, type->pointer.to, colour);
       if (type->pointer.to->kind == TYPE_FUNCTION) {
+        if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[31m");
         s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, ")");
       }
     } break;
@@ -409,9 +413,9 @@ void write_typename(string *s, const Type *type, bool colour) {
       s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, ")");
       break;
   }
+  if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[m");
 }
 
-/// Get a string representation of a type.
 string ast_typename(const Type *type, bool colour) {
   string s = {
     .data = calloc(1, TYPENAME_MAX_SIZE),
@@ -422,13 +426,17 @@ string ast_typename(const Type *type, bool colour) {
   return s;
 }
 
-/// Check if a type is incomplete.
+void print_type(const Type *type, bool colour) {
+  string s = ast_typename(type, colour);
+  printf("%.*s\n", strf(s));
+  free(s.data);
+}
+
 bool ast_type_is_incomplete(const Type *type) {
   while (type && type->kind == TYPE_NAMED) type = type->named->type;
   return !type;
 }
 
-/// Get the size of a type.
 usz ast_sizeof(const Type *type) {
   switch (type->kind) {
     default: ICE("Invalid type kind: %d", type->kind);
@@ -585,7 +593,7 @@ static void ast_print_children(
     const Node *logical_grandparent,
     const Node *logical_parent,
     const Nodes *nodes,
-    char leading_text[static AST_PRINT_BUFFER_SIZE]
+    char leading_text[AST_PRINT_BUFFER_SIZE]
 );
 
 /// Print a node.
@@ -593,7 +601,7 @@ static void ast_print_node(
   FILE *file,
   const Node *logical_parent,
   const Node *node,
-  char leading_text[static AST_PRINT_BUFFER_SIZE]
+  char leading_text[AST_PRINT_BUFFER_SIZE]
 ) {
   switch (node->kind) {
     default: TODO("Print node of type %d", node->kind);
@@ -776,7 +784,7 @@ typedef struct scope_tree_node {
 } scope_tree_node;
 
 /// Print a scope and the symbols it contains.
-static void print_scope(FILE *file, scope_tree_node *node, char buffer[static AST_PRINT_BUFFER_SIZE]) {
+static void print_scope(FILE *file, scope_tree_node *node, char buffer[AST_PRINT_BUFFER_SIZE]) {
     fprintf(file, "\033[31mScope\n");
     const Scope *s = node->scope;
 
@@ -888,7 +896,7 @@ static void ast_print_children(
     const Node *logical_grandparent,
     const Node *logical_parent,
     const Nodes *nodes,
-    char leading_text[static AST_PRINT_BUFFER_SIZE]
+    char leading_text[AST_PRINT_BUFFER_SIZE]
 ) {
   /// If the logical parent is merely used here, and not defined,
   /// then don’t do anything just yet.
@@ -921,7 +929,7 @@ size_t ast_intern_string(AST *ast, span str) {
     if (string_eq(ast->strings.data[i], str)) return i;
 
   /// Intern the string.
-    vector_push(ast->strings, string_dup(str));
+  vector_push(ast->strings, string_dup(str));
   return ast->strings.size - 1;
 }
 

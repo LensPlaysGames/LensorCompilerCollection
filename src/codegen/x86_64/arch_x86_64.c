@@ -72,7 +72,7 @@ NODISCARD static bool is_caller_saved(Register r) {
 
 NODISCARD static bool is_callee_saved(Register r) { return !is_caller_saved(r); }
 
-span unreferenced_block_name = literal_span("");
+span unreferenced_block_name = literal_span_raw("");
 
 /// Types of conditional jump instructions (Jcc).
 /// Do NOT reorder these.
@@ -1360,6 +1360,48 @@ static size_t interfering_regs(IRInstruction *instruction) {
   return mask >> 1;
 }
 
+#define MAX_FUNCTION_NAME_LENGTH 120
+static char mangled_function_name[MAX_FUNCTION_NAME_LENGTH] = {0};
+void mangle_function_name(IRFunction *function) {
+  size_t name_length = 0;
+  name_length += snprintf(mangled_function_name, MAX_FUNCTION_NAME_LENGTH, "_X%zu%.*s", function->name.size, strf(function->name));
+  if (name_length >= MAX_FUNCTION_NAME_LENGTH) {
+    ICE("Function name is too long to mangle...");
+  }
+
+  for (u64 i = 0; i < function->parameters.size; i++) {
+    string typename = ast_typename(function->type->function.parameters.data[i].type, false);
+    for (char *c = typename.data; *c; ++c) {
+      // Disallowed characters that show up in type names must be simplified.
+      // TODO: We have to figure out good replacements for these.
+      switch (*c) {
+      case '(':
+        *c = '_';
+        break;
+      case ')':
+        *c = '_';
+        break;
+      case '@':
+        *c = '$';
+        break;
+      case ' ':
+        *c = '_';
+        break;
+      default: break;
+      }
+    }
+    name_length += snprintf(mangled_function_name + name_length, MAX_FUNCTION_NAME_LENGTH - name_length,
+                            "%zu%.*s", typename.size, (int)typename.size, typename.data);
+    if (name_length >= MAX_FUNCTION_NAME_LENGTH) {
+      ICE("Function name is too long to mangle...");
+    }
+    free(typename.data);
+  }
+
+  // TODO: Free old function name?
+  function->name = string_create(mangled_function_name);
+}
+
 void codegen_lower_x86_64(CodegenContext *context) {
   // Setup register allocation structures.
   switch (context->call_convention) {
@@ -1471,6 +1513,15 @@ void codegen_emit_x86_64(CodegenContext *context) {
   ir_femit(stdout, context);*/
 
   calculate_stack_offsets(context);
+
+  // FUNCTION NAME MANGLING
+  foreach_ptr (IRFunction*, function, context->functions) {
+    // Don't mangle external function(s).
+    if (!function->is_extern)
+      // Don't mangle `main` function.
+      if (memcmp(function->name.data, "main", sizeof("main")) != 0)
+        mangle_function_name(function);
+  }
 
   emit_entry(context);
   foreach_ptr (IRFunction*, function, context->functions) {

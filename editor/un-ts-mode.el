@@ -108,15 +108,14 @@
 
 
 (defvar un-ts-mode--keywords
-  '("if" "else" "ext" "while")
+  '("if" "else" "ext" "while" "struct" "type")
   "un keywords for tree-sitter font-locking.")
 
 (defvar un-ts-mode--operators
   '("+" "-" "*" "/" "%"
-    "<<" ">>" "&" "|" "~"
-    "=" "<" ">"
-    ":" ":="
-    "@"
+    "<<" ">>" "&" "|" "^" "~"
+    "<=" ">=" "!=" "=" "<" ">" "!"
+    ":" ":=" "@"
     )
   "un operators for tree-sitter font-locking.")
 
@@ -127,46 +126,52 @@
     )
   "un delimiters for tree-sitter font-locking.")
 
-(defun un-ts-mode--font-lock-settings()
+(defun un-ts-mode--font-lock-settings ()
   "Tree-sitter font-lock settings."
   (treesit-font-lock-rules
    :language 'un
-   :feature 'type
-   `((type_primitive) @font-lock-type-face
-     (type_array)     @font-lock-type-face
-     (type_pointer)   @font-lock-type-face
-     )
+   :override t
+   :feature 'comment
+   `((comment) @font-lock-comment-face)
+
    :language 'un
+   :feature 'variable
+   `((identifier) @font-lock-variable-name-face)
+
+   :language 'un
+   :override t
+   :feature 'function
+   `((expr_decl name: (identifier) @font-lock-function-name-face
+                type: (type_function))
+     (expr_decl name: (identifier) @font-lock-function-name-face
+                type: (type_pointer (type_function)))
+     (expr_call callee: (identifier) @font-lock-function-name-face))
+
+   :language 'un
+   :override t
+   :feature 'type
+   `((type_base)      @font-lock-type-face
+     (type_pointer)   @font-lock-type-face
+     (type_function)  @font-lock-type-face
+     (type_array)     @font-lock-type-face)
+
+   :language 'un
+   :override t
+   :feature 'number
+   `((number) @font-lock-number-face)
+
+   :language 'un
+   :override t
    :feature 'keyword
    `([,@un-ts-mode--keywords] @font-lock-keyword-face)
+
    :language 'un
    :feature 'operator
    `([,@un-ts-mode--operators] @font-lock-operator-face)
+
    :language 'un
-   :feature 'punctuation
+   :feature 'delimiter
    `([,@un-ts-mode--delimiters] @font-lock-delimiter-face)
-   ;; TODO: Figure out why variable query breaks things...
-   ;;:language 'un
-   ;;:feature 'variable
-   ;;`((variable) @font-lock-variable-face)
-   :language 'un
-   :feature 'function
-   `((expr_call
-      callee: (variable) @font-lock-function-name-face)
-     (stmt_function
-      name: (identifier) @font-lock-function-name-face)
-     (stmt_external
-      name: (identifier) @font-lock-function-name-face
-      (type_function))
-     (stmt_decl
-      name: (identifier) @font-lock-function-name-face
-      (type_function)))
-   :language 'un
-   :feature 'number
-   `((number) @font-lock-number-face)
-   :language 'un
-   :feature 'comment
-   `((comment) @font-lock-comment-face)
    ))
 
 (defcustom un-ts-mode-indent-amount 2
@@ -219,8 +224,8 @@ in the unnamed language source code will be indented."
 
   (setq-local treesit-font-lock-feature-list
               '(( function variable comment )
-                ( keyword type)
-                ( number operator punctuation )
+                ( keyword type )
+                ( number operator delimiter )
                 ( ))))
 
 ;;;###autoload
@@ -247,6 +252,8 @@ in the unnamed language source code will be indented."
   ;; Font-lock.
   (setq-local treesit-font-lock-settings
               (un-ts-mode--font-lock-settings))
+
+  (add-to-list 'auto-mode-alist '("\\.un\\'" . un-ts-mode))
 
   (treesit-major-mode-setup))
 

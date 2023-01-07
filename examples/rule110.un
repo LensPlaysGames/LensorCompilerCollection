@@ -1,66 +1,21 @@
 putchar : ext integer(c : integer)
 
-print_number_impl : integer(n : integer) {
-  if n = 0 {
-    0
-  } else {
-    print_number_impl(n / 10)
-    putchar(n % 10 + 48)
-  }
-}
-
-print_number : integer(n : integer) {
-  if n = 0 {
-    putchar(48)
-  }
-  print_number_impl(n)
-  n
-}
-
-print_binary_number_impl : integer(n : integer) {
-  if n = 0 {
-    0
-  } else {
-    print_binary_number_impl(n >> 1)
-    putchar((n & 1) + 48)
-  }
-}
-
-print_binary_number : integer(n : integer) {
-  if n = 0 {
-    putchar(48)
-  }
-  print_binary_number_impl(n)
-  n
-}
-
 rowcount : integer = 42
-;; NOTE: Must be less than 64 (bit width of size_t)
+;; NOTE: Must be less than bit width of one integer
 colcount : integer = 32
 
-state : integer = 1 | (1 << 8)
+state : integer = 1
 
 while rowcount {
   newstate : integer = state
 
-  ;;print_number(rowcount)
-
-  ;;putchar(58)
-
-  ;; bitcount == column count
-  bitcount : integer = colcount
-  ;; left
-  lbit : integer = 0
-  ;; middle
-  mbit : integer = 0
-  ;; right
-  rbit : integer = 0
-  ;; iterator (TODO: should start at 1/2, right?)
+  ;; iterator
   idx : integer = 1
-  while idx < bitcount - 1 {
-    lbit := state & (1 << (idx + 1))
-    mbit := state & (1 << idx)
-    rbit := state & (1 << (idx - 1))
+  while idx < colcount - 1 {
+
+    lbit : integer = state & (1 << (idx + 1))
+    mbit : integer = state & (1 << idx)
+    rbit : integer = state & (1 << (idx - 1))
 
     if lbit = 0 {
       ;; 0b0xx
@@ -104,12 +59,17 @@ while rowcount {
     idx := idx + 1
   }
 
-  ;;print_binary_number(state)
   state := newstate
-  ;;print_binary_number(state)
 
   idx := 0
-  while idx < bitcount {
+  while idx < colcount {
+    ;;putchar(
+    ;;  if state & (1 << idx) {
+    ;;    42
+    ;;  } else {
+    ;;    32
+    ;;  }
+    ;;)
     if state & (1 << idx) {
       putchar(42)
     } else {

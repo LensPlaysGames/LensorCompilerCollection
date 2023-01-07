@@ -103,6 +103,7 @@ typedef struct IRPhiArgument {
 
 typedef struct IRCall {
   Vector(IRInstruction *) arguments;
+  // TODO: Make this a named union!
   union {
     IRInstruction *callee_instruction;
     IRFunction *callee_function;

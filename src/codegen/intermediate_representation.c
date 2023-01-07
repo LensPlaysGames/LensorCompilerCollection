@@ -272,7 +272,7 @@ void ir_femit_instruction
   }
 #endif
 
-  fputc('\n', file);
+  fprintf(file, "\033[m\n");
 }
 
 void ir_femit_block
@@ -284,6 +284,7 @@ void ir_femit_block
   list_foreach (IRInstruction*, instruction, block->instructions) {
     ir_femit_instruction(file, instruction);
   }
+  fprintf(file, "\033[m");
 }
 
 void ir_femit_function
@@ -297,7 +298,7 @@ void ir_femit_function
     list_foreach (IRBlock*, block, function->blocks) ir_femit_block(file, block);
     fprintf(file, "%s}", KW);
   }
-  fprintf(file, "\n");
+  fprintf(file, "\033[m\n");
 }
 
 void ir_femit
@@ -310,6 +311,7 @@ void ir_femit
     if (function_ptr != context->functions.data) fprintf(file, "\n");
     ir_femit_function(file, function);
   }
+  fprintf(file, "\033[m");
 }
 
 void ir_set_func_ids(IRFunction *f) {

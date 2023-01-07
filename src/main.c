@@ -264,7 +264,7 @@ int main(int argc, char **argv) {
   size_t len = strlen(infile);
   bool ok = false;
   string s = platform_read_file(infile, &ok);
-  if (!ok) ICE("%.*s", (int) s.size, s.data);
+  if (!ok) ICE("%.*s", strf(s));
 
   /// The input is an IR file.
   if (len >= 3 && memcmp(infile + len - 3, ".ir", 3) == 0) {
@@ -307,7 +307,6 @@ int main(int argc, char **argv) {
     if (print_ast || print_scopes) {
       if (print_ast) ast_print(stdout, ast);
       if (print_scopes) ast_print_scope_tree(stdout, ast);
-      goto done;
     }
 
     /// Generate code.
@@ -331,4 +330,6 @@ int main(int argc, char **argv) {
 
   /// Done!
   if (verbosity) printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
+
+  return 0;
 }

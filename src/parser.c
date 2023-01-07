@@ -76,11 +76,11 @@ const struct {
   span kw;
   enum TokenType type;
 } keywords[5] = {
-    {literal_span("if"), TK_IF},
-    {literal_span("else"), TK_ELSE},
-    {literal_span("while"), TK_WHILE},
-    {literal_span("ext"), TK_EXT},
-    {literal_span("as"), TK_AS},
+    {literal_span_raw("if"), TK_IF},
+    {literal_span_raw("else"), TK_ELSE},
+    {literal_span_raw("while"), TK_WHILE},
+    {literal_span_raw("ext"), TK_EXT},
+    {literal_span_raw("as"), TK_AS},
 };
 
 /// Check if a character may start an identifier.
@@ -609,7 +609,6 @@ static void validate_decltype(Parser *p, Type *type) {
            actual_type.is_incomplete ? "variable" : "array", (int) name.size, name.data);
   }
 
-  /// This is also not allowed.
   if (actual_type.type->kind == TYPE_FUNCTION || base_type->kind == TYPE_FUNCTION) {
     string name = ast_typename(type, false);
     ERR_DO(free(name.data), type->source_location, "Cannot declare %s of function type '%.*s'",

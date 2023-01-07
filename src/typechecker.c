@@ -304,11 +304,21 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       arg_overload_set = collect_overload_set(arg);
 
       /// 2eγ. Remove from O all functions whose parameter P_F that corresponds
-      ///      to F does not not match any of the functions in O(F), and from
-      ///      O(F) all functions whose signature does not match any of the P_F
+      ///      to F is not equivalent to any of the functions in O(F), and from
+      ///      O(F) all functions that are not equivalent to any of the P_F
       ///      of any of the functions in O...
       ///
-      /// Example (`foo` is the function being resolved, and `bar` is F):
+      /// In other words, given a call `foo(..., bar, ...)`, whose n-th argument
+      /// `bar` is an overloaded function name, and overload sets O(foo) and O(bar):
+      ///
+      ///    - Remove from O(foo) any candidate C(foo) whose n-th parameter is
+      ///      not equivalent to any of the candidates C(bar) in O(bar).
+      ///
+      ///    - Remove from O(bar) any candidate C(bar) for which there is *no*
+      ///      candidate C(foo) in O(foo) whose n-th parameter is equivalent to
+      ///      C(bar).
+      ///
+      /// Example:
       ///
       /// foo : integer(func : integer(ptr : @integer))
       /// foo : integer(func : integer())
@@ -327,6 +337,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// that would accept it as its first parameter.
       foreach (OverloadedFunctionSymbol, overload, overload_set) {
         bool valid = false;
+        /// TODO: Is this right?
         foreach (OverloadedFunctionSymbol, arg_overload, arg_overload_set) {
           if (types_equal(ast, overload->symbol->node->type, arg_overload->symbol->node->type)) {
             valid = true;
@@ -337,8 +348,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       }
       vector_remove_elements_unordered(overload_set, to_remove);
 
-      /// 2eγ. ... and from O(F) all functions whose signature does not
-      ///      match any of the P_F of any of the functions in O.
+      /// ... and from O(F) all functions that are not equivalent to
+      /// any of the P_F of any of the functions in O.
       foreach(OverloadedFunctionSymbol, arg_overload, arg_overload_set) {
         bool valid = false;
         foreach(OverloadedFunctionSymbol, overload, overload_set) {
@@ -352,13 +363,13 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       }
       vector_remove_elements_unordered(arg_overload_set, to_remove);
 
-      /// 2eδ. If O(F) is empty, then this is a compiler error: there is no
+      /// 2eδ. If O(F) is empty, then the program is ill-formed: there is no
       ///      matching overload for F.
       if (arg_overload_set.size == 0)
         ERR(arg->source_location, "Could not resolve overloaded function.");
 
-      /// 2eε. If O(F) contains more than one element, then this is a compiler
-      ///      error: F is ambiguous.
+      /// 2eε. If O(F) contains more than one element, then the program is
+      ///      ill-formed: F is ambiguous.
       if (arg_overload_set.size != 1)
         ERR(arg->source_location, "Use of overloaded function is ambiguous.");
 
@@ -503,19 +514,19 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     }
   }
 
-  /// 4. If O is empty, then this is a compiler error: there is no matching
+  /// 4. If O is empty, then the program is ill-formed: there is no matching
   ///    overload for the function being resolved.
   if (overload_set.size == 0)
     ERR(func->source_location, "Could not resolve overloaded function.");
 
-  /// 5. If O contains more than one element, then this is a compiler error:
+  /// 5. If O contains more than one element, then the program is ill-formed:
   ///    the function being resolved is ambiguous.
   if (overload_set.size != 1)
     ERR(func->source_location, "Use of overloaded function is ambiguous (size == %zu).", overload_set.size);
 
   /// 6. Otherwise, resolve the function reference to the last remaining element of O.
   func->funcref.resolved = overload_set.data[0].symbol;
-  func->type = func->funcref.resolved->type;
+  func->type = func->funcref.resolved->node->type;
   return true;
 }
 
@@ -627,8 +638,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// First, resolve the function. Then, typecheck all parameters
     /// and set the type to the return type of the callee.
     case NODE_CALL: {
-      /// Resolve the function if applicable.
       Node *callee = expr->call.callee;
+
+      /// Resolve the function if applicable.
       if (!resolve_function(ast, callee)) return false;
 
       /// Typecheck the callee.

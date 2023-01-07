@@ -46,12 +46,12 @@ GNU Binutils:
 
 GNU Compiler Collection
 #+begin_src shell
-  gcc code.S -o code.exe
+  gcc code.S -o code
 #+end_src
 
 LLVM/Clang
 #+begin_src shell
-  clang code.S -o code.exe --target=x86_64
+  clang code.S -o code --target=x86_64
 #+end_src
 
 To use external calls, link with appropriate libraries!
