@@ -1,0 +1,12 @@
+; LABELS overloading
+; SKIP
+; 42
+
+bar : integer () 42
+bar : integer (x : integer) 69
+
+foo : @(integer ()) () {
+    { { bar } }
+}
+
+foo()()
