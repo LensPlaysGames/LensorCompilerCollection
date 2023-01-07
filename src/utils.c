@@ -43,6 +43,7 @@ typedef Vector(char) string_buffer;
 ///   - %c: char
 ///   - %s: const char *, char *
 ///   - %S: span, string
+///   - %C: A colour string. Only printed if colours are enabled.
 ///   - %d: int
 ///   - %i: int
 ///   - %u: unsigned
@@ -54,11 +55,13 @@ typedef Vector(char) string_buffer;
 ///   - %p: void *
 ///   - %b: bool
 ///   - %T: Type *
+///   - %F: Another format string + va_list. This format spec therefore takes *two* arguments.
 ///   - %%: A '%' character.
+///   - %m: Reset colours if colours are enabled.
 ///   - %X, where X is ESCAPE: A literal escape character if you need that for some ungodly reason.
 ///   - %XX, where X is in [0-9]: "\033[XXm" if colours are enabled, and "" otherwise.
 ///   - %BXX, where X is in [0-9]: "\033[1;XXm" if colours are enabled, and "" otherwise.
-FORCEINLINE static void vformat_to(
+static inline void vformat_to(
   const char* fmt,
   va_list args,
   void write_string(const char* str, usz size, void *to),
@@ -122,6 +125,11 @@ FORCEINLINE static void vformat_to(
         write_string(str.data, str.size, to);
       } break;
 
+      case 'C': {
+        const char *str = va_arg(args, const char *);
+        if (thread_use_colours) write_string(str, strlen(str), to);
+      } break;
+
       case 'd':
       case 'i': {
         int n = va_arg(args, int);
@@ -183,12 +191,21 @@ FORCEINLINE static void vformat_to(
         free(s.data);
       } break;
 
+      case 'F': {
+        const char *fmt2 = va_arg(args, const char *);
+        vformat_to(fmt2, va_arg(args, va_list), write_string, to);
+      } break;
+
       case '%': {
         write_string("%", 1, to);
       } break;
 
       case '\033': {
         write_string("\033", 1, to);
+      } break;
+
+      case 'm': {
+        if (thread_use_colours) write_string("\033[m", 3, to);
       } break;
 
       case 'B': {
