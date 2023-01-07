@@ -86,7 +86,7 @@ void vissue_diagnostic
     eprint("%C%s: %B38%F%m", diagnostic_level_colours[level], diagnostic_level_names[level], fmt, ap);
 
     /// Print the line.
-    eprint("\n %d | ", line);
+    eprint("\n %u | ", line);
     for (u32 i = line_start; i < location.start; ++i) {
       if (source.data[i] == '\t') eprint("    ");
       else fputc(source.data[i], stderr);
