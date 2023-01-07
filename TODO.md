@@ -1,0 +1,55 @@
+- [ ] Miscellany.
+  - [x] Operator `as`.
+  - [x] Vector macros should be snake_case.
+  - [ ] `integer`/`byte`/`void` should be keywords (and terminals in the grammar).
+  - [ ] Early `return`
+    - [ ] Parsing
+    - [ ] Return block in the IR
+  - [ ] Types as values using the `&` operator. (requires `Structs`)
+- [ ] Overloading.
+  - [x] Overloading terminology
+  - [x] Overload tests
+  - [ ] Custom printf w/ `%T` for types etc.
+  - [ ] Proper error reporting for overloading.
+  - [ ] Fix the `sym->type`, `sym->node->type` nonsense
+  - [ ] Name mangling.
+  - [ ] No mangling for `ext` declarations.
+- [ ] Types in the IR
+  - [ ] Byte type 
+  - [ ] Type info in codegen/IR.
+  - [ ] Backend: Handle size/alignment requirements
+  - [ ] Use eax, ax, al, etc.
+  - [ ] Actually implementing casts.
+- [ ] Arrays
+  - [ ] Semantic analysis for static arrays.
+  - [ ] How do we implement reassigning arrays? Libc `memcpy()` or some builtin variant?
+    - [ ] Use compiler explorer to see how GCC does it for ‘inspiration’.
+  - [ ] Arrays as function parameters.
+  - [ ] Returning arrays from functions.
+- [ ] Slices / dynamic arrays.
+  - [ ] Parsing/AST.
+  - [ ] Semantic analysis.
+  - [ ] Codegen.
+- [ ] Strings
+  - [ ] Parsing string literals.
+  - [ ] Codegen.
+  - [ ] Backend.
+- [ ] Structs
+  - [ ] Order-independent types.
+  - [ ] Structs in the AST.
+  - [ ] Struct declarations.
+  - [ ] Semantic analysis for structs.
+  - [ ] Codegen for structs.
+  - [ ] `type` keyword in the parser/grammar.
+  - [ ] Make sure nested structs work.
+  - [ ] Arbitrary compile-time struct literals.
+  - [ ] Structs as parameters.
+  - [ ] Structs as return values.
+- [ ] Modules.
+  - [ ] `module` declaration.
+  - [ ] Emitting module metadata.
+  - [ ] Loading module metadata.
+  - [ ] `export` (Pragma or sth. to export everything?)
+  - [ ] `import`
+  - [ ] Module initialisation.
+  - [ ] Putting it all together.

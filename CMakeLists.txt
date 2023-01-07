@@ -10,7 +10,22 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
 set(CMAKE_C_STANDARD 11)
 
-project(FUNCompiler C)
+project(FUNCompiler C CXX)
+
+## Clang plugin to typecheck format strings.
+if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
+  set (CMAKE_CXX_STANDARD 20)
+  add_library(fmt-check-plugin SHARED fmt-check-plugin/fmt-check-plugin.cc)
+  target_include_directories(fmt-check-plugin PRIVATE
+    /usr/local/llvm-15-clang/include
+  )
+  file (GLOB LIBS /usr/local/llvm-15-clang/lib/*.a /usr/local/llvm-15-clang/lib/*.so)
+  target_link_libraries(fmt-check-plugin PRIVATE
+    ${LIBS}
+  )
+  target_link_libraries(fmt-check-plugin PRIVATE clang)
+  add_compile_options(-Wno-unused-command-line-argument)
+endif()
 
 add_executable(
   func
@@ -36,6 +51,11 @@ target_include_directories(
 )
 if (NOT WIN32)
   target_link_libraries(func PRIVATE m)
+endif()
+
+if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
+  add_dependencies(func fmt-check-plugin)
+  target_compile_options(func PRIVATE "-fplugin=./libfmt-check-plugin.so")
 endif()
 
 ## Debug/Release flags.
