@@ -20,7 +20,7 @@ void codegen_lower_ir_backend(CodegenContext *context) {
 }
 
 void codegen_emit_ir_backend(CodegenContext *context) {
-  bool use_colour = _thread_use_diagnostics_colours_;
+  bool use_colour = thread_use_colours;
   disable_colours();
 
   ir_set_ids(context);

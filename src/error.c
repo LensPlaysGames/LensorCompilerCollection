@@ -59,7 +59,7 @@ void vissue_diagnostic
   ASSERT(level >= 0 && level < DIAG_COUNT);
 
   /// Check if stderr is a terminal.
-  bool use_colour = _thread_use_diagnostics_colours_;
+  bool use_colour = thread_use_colours;
 
   /// Print a detailed error message if we have access to the source code.
   if (source.data && source.size) {
@@ -155,7 +155,7 @@ void raise_fatal_error_impl (
     ...
 ) {
   /// Print the file and line.
-  bool use_colour = _thread_use_diagnostics_colours_;
+  bool use_colour = thread_use_colours;
 
   /// Removing everything up to and including the `src` prefix.
   const char *filename = file, *src_prefix;

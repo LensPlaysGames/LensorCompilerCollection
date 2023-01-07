@@ -257,7 +257,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  _thread_use_diagnostics_colours_ = prefer_using_diagnostics_colours;
+  thread_use_colours = prefer_using_diagnostics_colours;
 
   const char *infile = argv[input_filepath_index];
   const char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];

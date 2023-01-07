@@ -6,14 +6,14 @@
 
 //#define DEBUG_USES
 
-#define Y ((_thread_use_diagnostics_colours_) ? "\033[33m" : "")
-#define B ((_thread_use_diagnostics_colours_) ? "\033[34m" : "")
-#define M ((_thread_use_diagnostics_colours_) ? "\033[35m" : "")
-#define C ((_thread_use_diagnostics_colours_) ? "\033[36m" : "")
-#define Z ((_thread_use_diagnostics_colours_) ? "\033[m" : "")
-#define KW ((_thread_use_diagnostics_colours_) ? "\033[31m" : "")
-#define FUNC ((_thread_use_diagnostics_colours_) ? "\033[32m" : "")
-#define BLK ((_thread_use_diagnostics_colours_) ? "\033[33m" : "")
+#define Y ((thread_use_colours) ? "\033[33m" : "")
+#define B ((thread_use_colours) ? "\033[34m" : "")
+#define M ((thread_use_colours) ? "\033[35m" : "")
+#define C ((thread_use_colours) ? "\033[36m" : "")
+#define Z ((thread_use_colours) ? "\033[m" : "")
+#define KW ((thread_use_colours) ? "\033[31m" : "")
+#define FUNC ((thread_use_colours) ? "\033[32m" : "")
+#define BLK ((thread_use_colours) ? "\033[33m" : "")
 #define TMP B
 
 void mark_used(IRInstruction *usee, IRInstruction *user) {
