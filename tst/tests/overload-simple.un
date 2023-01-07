@@ -1,4 +1,3 @@
-; SKIP
 ; 42
 
 foo : integer (x : integer) 42

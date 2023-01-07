@@ -432,7 +432,7 @@ static bool is_postfix_operator(enum TokenType tt) {
 static isz binary_operator_precedence(Parser *p, Token t) {
   (void) p;
   switch (t.type) {
-    case TK_DOT: return 10000;
+    case TK_DOT: return 1000000000;
     case TK_AS: return 1000;
 
     case TK_STAR:

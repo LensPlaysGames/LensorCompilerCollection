@@ -20,7 +20,7 @@
 <decl-start>     ::= IDENTIFIER ":"
 <decl-rest>      ::= <type-function> <expression>
                    | <type> [ "=" <expression> ]
-                   | <decl-start> EXT <type-function>
+                   | EXT <type-function>
 
 /// Other expressions.
 <expr-if>        ::= IF <expression> <expression> [ ELSE <expression> ]
