@@ -344,6 +344,7 @@ Type *ast_make_type_function(
 /// ===========================================================================
 /// Used by `ast_typename`.
 void write_typename(string *s, const Type *type, bool colour) {
+  // TODO: If null is a special output, does it make debugging easier?
   if (!type) {
     if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[m");
     s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "(\?\?\?)");
@@ -379,6 +380,7 @@ void write_typename(string *s, const Type *type, bool colour) {
       }
       write_typename(s, type->pointer.to, colour);
       if (type->pointer.to->kind == TYPE_FUNCTION) {
+        if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[31m");
         s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, ")");
       }
     } break;
@@ -411,6 +413,7 @@ void write_typename(string *s, const Type *type, bool colour) {
       s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, ")");
       break;
   }
+  if (colour) s->size += (usz) snprintf(s->data + s->size, TYPENAME_MAX_SIZE - s->size, "\033[m");
 }
 
 /// Get a string representation of a type.
