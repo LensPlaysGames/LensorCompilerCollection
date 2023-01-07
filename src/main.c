@@ -330,6 +330,4 @@ int main(int argc, char **argv) {
 
   /// Done!
   if (verbosity) printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
-
-  return 0;
 }
