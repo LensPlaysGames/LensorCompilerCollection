@@ -12,8 +12,11 @@ INT tests failed := 0;
 INT tests errored := 0;
 INT tests skipped := 0;
 
-CO Handle command line args CO
+CO Handle ‘command line args’ CO
 BOOL enable colours := get env ("ENABLE_TEST_COLOURS") EQ "1";
+
+CO We might only want to run some of the tests CO
+STRING labels := get env ("RUN_TESTS");
 
 PROC red    = (REF FILE f) VOID: (enable colours | put(f, (REPR 27, "[31m")));
 PROC green  = (REF FILE f) VOID: (enable colours | put(f, (REPR 27, "[32m")));
@@ -201,7 +204,33 @@ BEGIN
   str := str[3..];
 
   CO Check for special strings CO
+  BOOL skip := FALSE;
   IF str EQ "SKIP" THEN
+    CO Read the next line CO
+    get (f, (str, new line));
+    str := str[3..];
+    skip := TRUE
+  FI;
+
+  CO Check for labels CO
+  IF string in string ("LABELS", LOC INT, str) THEN
+    CO Skip ‘LABELS ’ CO
+    str := str[8..];
+
+    CO Skip this test if we have labels and this test isn’t in them CO
+    IF labels NE "" AND labels NE str THEN GO TO return FI;
+
+    CO Otherwise, move on to the next line CO
+    get (f, (str, new line));
+    str := str[3..]
+  CO If we have labels, and this test doesn’t, skip it CO
+  ELIF labels NE "" THEN 
+    GO TO return
+  FI;
+
+
+  CO Also skip it if we’re supposed to skip it anyway CO
+  IF skip THEN
     print((yellow, "SKIPPED!                 --  ", file name, new line));
     print(("SKIPPED! (optimised)     --  ", file name, new line));
     tests skipped +:= 1;

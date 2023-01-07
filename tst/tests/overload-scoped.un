@@ -1,4 +1,4 @@
-; SKIP
+; LABELS overloading
 ; 42
 
 bar : integer () {
