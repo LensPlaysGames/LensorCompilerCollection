@@ -88,6 +88,13 @@ typedef struct string {
   usz size;
 } string;
 
+/// Resizeable string buffer
+typedef struct string_buffer {
+  char *data;
+  usz size;
+  usz capacity;
+} string_buffer;
+
 /// %.*s formatting
 #define strf(string) (int)(string).size, (string).data
 
@@ -100,15 +107,25 @@ string string_dup_impl(const char *src, usz size);
 NODISCARD string vformat(const char *fmt, va_list args);
 
 /// Format a string.
+EXT_FORMAT(1, 2)
 NODISCARD string format(const char *fmt, ...);
+
+/// Format a string to a buffer.
+void vformat_to(string_buffer *buf, const char *fmt, va_list args);
+
+/// Format a string to a buffer.
+EXT_FORMAT(2, 3)
+void format_to(string_buffer *buf, const char *fmt, ...);
 
 /// Print a string to a file.
 void vfprint(FILE *file, const char *fmt, va_list args);
 
 /// Print a string to a file.
+EXT_FORMAT(2, 3)
 void fprint(FILE *f, const char *fmt, ...);
 
 /// Print a string to stdout.
+EXT_FORMAT(1, 2)
 void print(const char *fmt, ...);
 
 /// Print a string to stderr.

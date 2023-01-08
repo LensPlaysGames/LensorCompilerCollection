@@ -19,23 +19,9 @@
 #define ERR(loc, ...)   DIAG(DIAG_ERR, loc, __VA_ARGS__)
 #define SORRY(loc, ...) DIAG(DIAG_SORRY, loc, __VA_ARGS__)
 
-#define ERR_DO(code, loc, ...)                                                                    \
-  do {                                                                                            \
-    issue_diagnostic(DIAG_ERR, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__); \
-    code;                                                                                         \
-    return false;                                                                                 \
-  } while (0)
-
 #define ERR_DONT_RETURN(loc, ...) issue_diagnostic(DIAG_ERR, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__)
 
-#define ERR_NOT_CONVERTIBLE(to, from)                                        \
-  do {                                                                       \
-    string to_str = ast_typename(to, false);                                 \
-    string from_str = ast_typename(from, false);                             \
-    ERR_DO(free(to_str.data); free(from_str.data), from->source_location,    \
-      "Type \"%.*s\" is not convertible to \"%.*s\"",                        \
-        (int) from_str.size, from_str.data, (int) to_str.size, to_str.data); \
-  } while (0)
+#define ERR_NOT_CONVERTIBLE(to, from) ERR(from->source_location, "Type '%T' is not convertible to '%T'", from, to)
 
 NODISCARD static bool types_equal(AST *ast, Type *a, Type *b);
 
@@ -467,12 +453,9 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       Type *decl_type = parent->type;
       /// ... and the lvalue is not of function pointer type, this is a type error.
       if (decl_type->kind != TYPE_POINTER || decl_type->pointer.to->kind != TYPE_FUNCTION) {
-        string decl_typename = ast_typename(decl_type, false);
         ERR_DONT_RETURN(func->source_location,
-          "Overloaded function %.*s is not convertible to %.*s\n",
-          (int) func->funcref.name.size, func->funcref.name.data,
-          (int) decl_typename.size,      decl_typename.data);
-        free(decl_typename.data);
+          "Overloaded function %S is not convertible to %T\n",
+            func->funcref.name, decl_type);
         goto err;
       }
 
@@ -496,12 +479,9 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// If the lvalue is not of function pointer type, this is a type error.
       Type *lvalue_type = parent->binary.lhs->type;
       if (lvalue_type->kind != TYPE_POINTER || lvalue_type->pointer.to->kind != TYPE_FUNCTION) {
-        string lvalue_typename = ast_typename(lvalue_type, false);
         ERR_DONT_RETURN(func->source_location,
-          "Overloaded function %.*s is not convertible to %.*s\n",
-          (int) func->funcref.name.size, func->funcref.name.data,
-          (int) lvalue_typename.size,      lvalue_typename.data);
-        free(lvalue_typename.data);
+          "Overloaded function %S is not convertible to %T\n",
+            func->funcref.name, lvalue_type);
         goto err;
       }
 
@@ -529,12 +509,9 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         break;
       }
 
-      string return_typename = ast_typename(return_type, false);
       ERR_DONT_RETURN(func->source_location,
-        "Overloaded function %.*s is not convertible to %.*s\n",
-        (int) func->funcref.name.size, func->funcref.name.data,
-        (int) return_typename.size,      return_typename.data);
-      free(return_typename.data);
+        "Overloaded function %S is not convertible to %T\n",
+          func->funcref.name return_type);
       goto err;
     } break;
     */
@@ -629,20 +606,18 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       break;
 
     /// Typecheck the function body if there is one.
-    case NODE_FUNCTION:
+    case NODE_FUNCTION: {
       if (!expr->function.body) break;
       if (!typecheck_expression(ast, expr->function.body)) return false;
 
       /// Make sure the return type of the body is convertible to that of the function.
-      if (!convertible(ast, expr->type->function.return_type, expr->function.body->type)) {
-        string ret = ast_typename(expr->type->function.return_type, false);
-        string body = ast_typename(expr->function.body->type, false);
-        ERR_DO(free(ret.data); free(body.data), expr->source_location,
-          "Type \"%.*s\" of function body is not convertible to return type \"%.*s\".",
-            (int) body.size, body.data, (int) ret.size, ret.data);
-      }
-
-      break;
+      Type *ret = expr->type->function.return_type;
+      Type *body = expr->function.body->type;
+      if (!convertible(ast, ret, body))
+        ERR(expr->source_location,
+          "Type '%T' of function body is not convertible to return type '%T'.",
+            ret, body);
+    } break;
 
     /// Typecheck declarations.
     case NODE_DECLARATION:
@@ -713,9 +688,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           callee->parent = expr;
           if (!typecheck_expression(ast, callee)) return false;
         } else {
-          string name = ast_typename(callee->type, false);
-          ERR_DO(free(name.data), expr->source_location, "Cannot call non-function type \"%.*s\".",
-            (int) name.size, name.data);
+          ERR(expr->source_location, "Cannot call non-function type '%T'.", callee->type);
         }
       }
 
@@ -726,7 +699,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       /// Make sure we have the right number of arguments.
       if (expr->call.arguments.size != callee->type->function.parameters.size)
-        ERR(callee->source_location, "Expected %zu arguments, got %zu.",
+        ERR(callee->source_location, "Expected %Z arguments, got %Z.",
             callee->type->function.parameters.size, expr->call.arguments.size);
 
       /// Make sure all arguments are convertible to the parameter types.
@@ -752,25 +725,21 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       /// Typecheck the operator.
       switch (expr->binary.op) {
-        default: ICE("Invalid binary operator \"%s\".", token_type_to_string(expr->binary.op));
+        default: ICE("Invalid binary operator '%s'.", token_type_to_string(expr->binary.op));
 
         /// The subscript operator is basically pointer arithmetic.
         case TK_LBRACK:
           /// We can only subscript pointers and arrays.
-          if (!is_pointer(lhs->type) && !is_array(lhs->type)) {
-            string name = ast_typename(lhs->type, false);
-            ERR_DO(free(name.data), lhs->source_location,
-              "Cannot subscript non-pointer, non-array type \"%.*s\".",
-                (int) name.size, name.data);
-          }
+          if (!is_pointer(lhs->type) && !is_array(lhs->type))
+            ERR(lhs->source_location,
+              "Cannot subscript non-pointer, non-array type '%T'.",
+                lhs->type);
 
           /// The RHS has to be an integer.
-          if (!is_integer(ast, rhs->type)) {
-            string name = ast_typename(rhs->type, false);
-            ERR_DO(free(name.data), rhs->source_location,
-              "Cannot subscript with non-integer type \"%.*s\".",
-                (int) name.size, name.data);
-          }
+          if (!is_integer(ast, rhs->type))
+            ERR(rhs->source_location,
+              "Cannot subscript with non-integer type '%T'.",
+                rhs->type);
 
           /// The result of a subscript expression is a pointer to the
           /// start of the array, offset by the RHS.
@@ -784,19 +753,15 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_LE:
         case TK_EQ:
         case TK_NE:
-          if (!is_integer(ast, lhs->type)) {
-            string name = ast_typename(lhs->type, false);
-            ERR_DO(free(name.data), lhs->source_location,
-              "Cannot compare non-integer type \"%.*s\".",
-                (int) name.size, name.data);
-          }
+          if (!is_integer(ast, lhs->type))
+            ERR(lhs->source_location,
+              "Cannot compare non-integer type '%T'.",
+                lhs->type);
 
-          if (!is_integer(ast, rhs->type)) {
-            string name = ast_typename(rhs->type, false);
-            ERR_DO(free(name.data), rhs->source_location,
-              "Cannot compare non-integer type \"%.*s\".",
-                (int) name.size, name.data);
-          }
+          if (!is_integer(ast, rhs->type))
+            ERR(rhs->source_location,
+              "Cannot compare non-integer type '%T'.",
+                rhs->type);
 
           /// TODO: Change this to bool if we ever add a bool type.
           expr->type = ast->t_integer;
@@ -815,19 +780,15 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_AMPERSAND:
         case TK_PIPE:
         case TK_CARET:
-          if (!is_integer(ast, lhs->type)) {
-            string name = ast_typename(lhs->type, false);
-            ERR_DO(free(name.data), lhs->source_location,
-              "Cannot perform arithmetic on non-integer type \"%.*s\".",
-                (int) name.size, name.data);
-          }
+          if (!is_integer(ast, lhs->type))
+            ERR(lhs->source_location,
+              "Cannot perform arithmetic on non-integer type '%T'.",
+                lhs->type);
 
-          if (!is_integer(ast, rhs->type)) {
-            string name = ast_typename(rhs->type, false);
-            ERR_DO(free(name.data), rhs->source_location,
-              "Cannot perform arithmetic on non-integer type \"%.*s\".",
-                (int) name.size, name.data);
-          }
+          if (!is_integer(ast, rhs->type))
+            ERR(rhs->source_location,
+              "Cannot perform arithmetic on non-integer type '%T'.",
+                rhs->type);
 
           expr->type = lhs->type;
           break;
@@ -835,12 +796,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         /// This is the complicated one.
         case TK_COLON_EQ:
           /// Make sure the lhs is an lvalue.
-          if (!is_lvalue(lhs)) {
-            string name = ast_typename(lhs->type, false);
-            ERR_DO(free(name.data), lhs->source_location,
-              "Cannot assign to non-lvalue type \"%.*s\".",
-                (int) name.size, name.data);
-          }
+          if (!is_lvalue(lhs))
+            ERR(lhs->source_location,
+              "Cannot assign to non-lvalue type '%T'.",
+                lhs->type);
 
           /// Make sure the rhs is convertible to the lhs.
           if (!convertible(ast, lhs->type, rhs->type)) ERR_NOT_CONVERTIBLE(lhs->type, rhs->type);
@@ -855,13 +814,13 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     case NODE_UNARY:
       if (!typecheck_expression(ast, expr->unary.value)) return false;
       switch (expr->unary.op) {
-        default: ICE("Invalid unary operator \"%s\".", token_type_to_string(expr->unary.op));
+        default: ICE("Invalid unary operator '%s'.", token_type_to_string(expr->unary.op));
 
         /// We can only deference pointers.
         case TK_AT:
           if (!is_pointer(expr->unary.value->type))
             ERR(expr->unary.value->source_location,
-                "Argument of \"@\" must be a pointer.");
+              "Argument of '@' must be a pointer.");
 
           /// The result type of a dereference is the pointee.
           expr->type = expr->unary.value->type->pointer.to;
@@ -871,7 +830,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_AMPERSAND:
           if (!is_lvalue(expr->unary.value))
             ERR(expr->unary.value->source_location,
-                "Argument of \"&\" must be an lvalue.");
+              "Argument of '&' must be an lvalue.");
 
           expr->type = ast_make_type_pointer(ast, expr->source_location, expr->unary.value->type);
           break;
@@ -880,7 +839,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_TILDE:
           if (!is_integer(ast, expr->unary.value->type))
             ERR(expr->unary.value->source_location,
-                "Argument of \"~\" must be an integer.");
+              "Argument of '~' must be an integer.");
 
           expr->type = expr->unary.value->type;
           break;
@@ -890,7 +849,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Just set the type.
     case NODE_LITERAL:
       if (expr->literal.type == TK_NUMBER) expr->type = ast->t_integer_literal;
-      else TODO("Literal type \"%s\".", token_type_to_string(expr->literal.type));
+      else TODO("Literal type '%s'.", token_type_to_string(expr->literal.type));
       break;
 
     /// The type of a variable reference is the type of the variable.
@@ -910,12 +869,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
   /// If this is a pointer type, make sure it doesn’t point to an incomplete type.
   Type *base = expr->type;
   while (base && is_pointer(base)) base = base->pointer.to;
-  if (base && is_pointer(expr->type /** (!) **/) && ast_type_is_incomplete(base)) {
-    string name = ast_typename(expr->type->pointer.to, false);
-    ERR_DO(free(name.data), expr->source_location,
-      "Cannot use pointer to incomplete type \"%.*s\".",
-        (int) name.size, name.data);
-  }
+  if (base && is_pointer(expr->type /** (!) **/) && ast_type_is_incomplete(base))
+    ERR(expr->source_location,
+      "Cannot use pointer to incomplete type '%T'.",
+        expr->type->pointer.to);
 
   /// Done.
   return true;

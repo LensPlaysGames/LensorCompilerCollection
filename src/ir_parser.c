@@ -398,7 +398,7 @@ span funcname(IRParser *p, span name) {
     name.data++;
     name.size--;
   }
-  if (!name.size) ERR("Not a valid function name: '%.*s'", (int) name2.size, name2.data);
+  if (!name.size) ERR("Not a valid function name: '%S'", name2);
   return name;
 }
 
@@ -412,7 +412,7 @@ span funcname(IRParser *p, span name) {
     CAT(type, _sym) * index;                                                                            \
     vector_find_if(p->CAT(type, _syms), index, i, spans_equal(p->CAT(type, _syms).data[i].name, name)); \
     if (index) {                                                                                        \
-      if (index->type) ERR("Redefinition of " thing_name " '%.*s'", (int) name.size, name.data);        \
+      if (index->type) ERR("Redefinition of " thing_name " '%S'", name);        \
       index->type = param;                                                                              \
       return;                                                                                           \
     }                                                                                                   \
@@ -442,7 +442,7 @@ static IRInstruction *try_resolve_temp(IRParser *p, span name) {
 /// is not found, an error is raised.
 static IRInstruction *resolve_temp(IRParser *p, loc location, span name) {
   IRInstruction *inst = try_resolve_temp(p, name);
-  if (!inst) ERR_AT(location, "Unknown temporary '%.*s'", (int) name.size, name.data);
+  if (!inst) ERR_AT(location, "Unknown temporary '%S'", name);
   return inst;
 }
 
@@ -521,22 +521,22 @@ static void resolve_or_declare_temp(IRParser *p, loc location, span name, IRInst
   }
 }
 
-#define RESOLVE_ALL(p, err_name, type, param_type, on_err)                                                                                          \
-  do {                                                                                                                                              \
-    bool success = true;                                                                                                                            \
-    foreach (CAT(type, _sym), sym, (p)->CAT(type, _syms)) {                                                                                  \
-      /** An unresolved function is a parse error. **/                                                                                              \
-      if (!sym->type) {                                                                                                                             \
-        issue_diagnostic(DIAG_ERR, (p)->filename, (p)->source, sym->location, "Unknown " err_name " '%.*s'", (int) sym->name.size, sym->name.data); \
-        success = false;                                                                                                                            \
-      } /** Otherwise, resolve the function. **/                                                                                                    \
-      else {                                                                                                                                        \
-        foreach (param_type *, user, sym->unresolved) {                                                                                      \
-          **user = sym->type;                                                                                                                       \
-        }                                                                                                                                           \
-      }                                                                                                                                             \
-    }                                                                                                                                               \
-    if (!success) { on_err; }                                                                                                                       \
+#define RESOLVE_ALL(p, err_name, type, param_type, on_err)                                                             \
+  do {                                                                                                                 \
+    bool success = true;                                                                                               \
+    foreach (CAT(type, _sym), sym, (p)->CAT(type, _syms)) {                                                            \
+      /** An unresolved function is a parse error. **/                                                                 \
+      if (!sym->type) {                                                                                                \
+        issue_diagnostic(DIAG_ERR, (p)->filename, (p)->source, sym->location, "Unknown " err_name " '%S'", sym->name); \
+        success = false;                                                                                               \
+      } /** Otherwise, resolve the function. **/                                                                       \
+      else {                                                                                                           \
+        foreach (param_type *, user, sym->unresolved) {                                                                \
+          **user = sym->type;                                                                                          \
+        }                                                                                                              \
+      }                                                                                                                \
+    }                                                                                                                  \
+    if (!success) { on_err; }                                                                                          \
   } while (0)
 
 /// This function handles the bulk of the parsing.
@@ -592,7 +592,7 @@ static bool parse_instruction_or_branch(IRParser *p) {
     default: ASSERT(false, "Unhandled instruction type %d", type);
 
     /// Invalid instruction name.
-    case IR_INSTRUCTIONS_COUNT: ERR("Unknown instruction name '%.*s'", (int) p->tok.size, p->tok.data);
+    case IR_INSTRUCTIONS_COUNT: ERR("Unknown instruction name '%S'", p->tok);
 
     /// [ TAIL ] CALL ( <name> | <temp> ) "(" <parameters> ")"
     case TAIL:
@@ -978,7 +978,7 @@ static void parse_attributes(IRParser *p) {
       ATTR(noreturn)
       ATTR(pure)
       ATTR(leaf)
-      ERR("Unknown attribute '%.*s'", (int) p->tok.size, p->tok.data);
+      ERR("Unknown attribute '%S'", p->tok);
   }
 
 #undef ATTR
@@ -1082,7 +1082,7 @@ static bool parse_ir(IRParser *p) {
         foreach (temp_sym, sym, p->temp_syms) {
           if (!sym->temp) {
             issue_diagnostic(DIAG_ERR, (p)->filename, (p)->source, sym->location,
-              "Unknown temporary '%.*s'", (int) sym->name.size, sym->name.data);
+              "Unknown temporary '%S'", sym->name);
             success = false;
           } else {
             foreach (temp_sym_entry, entry, sym->unresolved) {

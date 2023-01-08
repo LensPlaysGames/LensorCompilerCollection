@@ -29,9 +29,6 @@ string string_dup_impl(const char *src, usz size) {
   return dest;
 }
 
-/// Resizeable string buffer
-typedef Vector(char) string_buffer;
-
 /// ===========================================================================
 ///  String formatting.
 /// ===========================================================================
@@ -61,7 +58,7 @@ typedef Vector(char) string_buffer;
 ///   - %X, where X is ESCAPE: A literal escape character if you need that for some ungodly reason.
 ///   - %XX, where X is in [0-9]: "\033[XXm" if colours are enabled, and "" otherwise.
 ///   - %BXX, where X is in [0-9]: "\033[1;XXm" if colours are enabled, and "" otherwise.
-static inline void vformat_to(
+static inline void vformat_to_impl(
   const char* fmt,
   va_list args,
   void write_string(const char* str, usz size, void *to),
@@ -193,7 +190,7 @@ static inline void vformat_to(
 
       case 'F': {
         const char *fmt2 = va_arg(args, const char *);
-        vformat_to(fmt2, va_arg(args, va_list), write_string, to);
+        vformat_to_impl(fmt2, va_arg(args, va_list), write_string, to);
       } break;
 
       case '%': {
@@ -244,9 +241,7 @@ static inline void vformat_to(
         write_string("m", 1, to);
       } break;
 
-      default: {
-        ICE("Invalid format specifier: '%%%c'", fmt[-1]);
-      } break;
+      default: ICE("Invalid format specifier: '%%%c'", fmt[-1]);
     }
   }
 }
@@ -272,10 +267,23 @@ FORCEINLINE static void write_string_to_file(const char *str, usz size, void *to
   fwrite(str, 1, size, file);
 }
 
+/// Format a string to a buffer.
+void vformat_to(string_buffer *buf, const char *fmt, va_list args) {
+  vformat_to_impl(fmt, args, write_string_to_string, buf);
+}
+
+/// Format a string to a buffer.
+void format_to(string_buffer *buf, const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vformat_to(buf, fmt, ap);
+  va_end(ap);
+}
+
 /// Format a string.
 string vformat(const char *fmt, va_list args) {
   string_buffer buf = {};
-  vformat_to(fmt, args, write_string_to_string, &buf);
+  vformat_to(&buf, fmt, args);
   return (string) { .data = buf.data, .size = buf.size };
 }
 
@@ -290,7 +298,7 @@ string format(const char *fmt, ...) {
 
 /// Print a string to a file.
 void vfprint(FILE *file, const char *fmt, va_list args) {
-  return vformat_to(fmt, args, write_string_to_file, file);
+  return vformat_to_impl(fmt, args, write_string_to_file, file);
 }
 
 /// Print a string to a file.

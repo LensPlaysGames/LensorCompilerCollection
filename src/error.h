@@ -55,6 +55,7 @@ typedef struct {
 /// ===========================================================================
 ///  Error handling functions.
 /// ===========================================================================
+EXT_FORMAT(5, 6)
 void issue_diagnostic
 (/// Error level and source location.
  enum diagnostic_level level,
