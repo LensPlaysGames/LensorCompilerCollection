@@ -95,9 +95,6 @@ typedef struct string_buffer {
   usz capacity;
 } string_buffer;
 
-/// %.*s formatting
-#define strf(string) (int)(string).size, (string).data
-
 /// Copy a string.
 NODISCARD
 string string_dup_impl(const char *src, usz size);
@@ -150,6 +147,5 @@ void eprint(const char *fmt, ...);
 /// ===========================================================================
 /// Determine the width of a number.
 NODISCARD usz number_width(u64 n);
-
 
 #endif // FUNCOMPILER_UTILS_H

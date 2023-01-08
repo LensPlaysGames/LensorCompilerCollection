@@ -289,7 +289,8 @@ static bool opt_mem2reg(IRFunction *f) {
               /// Load before store.
               if (!a->store) {
                 a->unoptimisable = true;
-                fprintf(stderr, "Warning: Load of uninitialised variable in function %.*s\n", (int) f->name.size, f->name.data);
+                /// TODO: Proper warning once we have types in the IR.
+                eprint("Warning: Load of uninitialised variable in function %S\n", f->name);
               } else {
                 vector_push(a->loads, i);
               }

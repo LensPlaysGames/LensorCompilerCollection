@@ -2,20 +2,8 @@
 #include <codegen/intermediate_representation.h>
 
 #include <stdlib.h>
-#include <inttypes.h>
 
 //#define DEBUG_USES
-
-#define Y ((thread_use_colours) ? "\033[33m" : "")
-#define B ((thread_use_colours) ? "\033[34m" : "")
-#define M ((thread_use_colours) ? "\033[35m" : "")
-#define C ((thread_use_colours) ? "\033[36m" : "")
-#define Z ((thread_use_colours) ? "\033[m" : "")
-#define KW ((thread_use_colours) ? "\033[31m" : "")
-#define FUNC ((thread_use_colours) ? "\033[32m" : "")
-#define BLK ((thread_use_colours) ? "\033[33m" : "")
-#define TMP B
-
 void mark_used(IRInstruction *usee, IRInstruction *user) {
   foreach_ptr (IRInstruction *, i_user, usee->users) {
     ASSERT(i_user != user, "Instruction already marked as user.");
@@ -25,7 +13,7 @@ void mark_used(IRInstruction *usee, IRInstruction *user) {
 
 void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
 #ifdef DEBUG_USES
-  fprintf(stderr, "[Use] Removing use of %%%u in %%%u\n", usee->id, user->id);
+  eprint("[Use] Removing use of %%%u in %%%u\n", usee->id, user->id);
 #endif
 
   vector_remove_element_unordered(usee->users, user);
@@ -102,11 +90,11 @@ void insert_instruction_after(IRInstruction *i, IRInstruction *after) {
 
 void ir_remove(IRInstruction* instruction) {
   if (instruction->users.size) {
-    fprintf(stderr, "Cannot remove used instruction."
+    eprint("Cannot remove used instruction."
                     "Instruction:\n");
     ir_set_func_ids(instruction->parent_block->function);
     ir_femit_instruction(stderr, instruction);
-    fprintf(stderr, "In function:\n");
+    eprint("In function:\n");
     ir_femit_function(stderr, instruction->parent_block->function);
     ICE("Cannot remove used instruction.");
   }
@@ -164,101 +152,95 @@ void ir_femit_instruction
 {
   ASSERT(inst, "Can not emit NULL inst to file.");
 
-  const size_t id_width = 10;
-  size_t id_length = (size_t) snprintf(NULL, 0, "%%%u | ", inst->id);
-  size_t difference = id_width - id_length;
-  while (difference--) {
-    fputc(' ', file);
-  }
-  if (inst->id) fprintf(file, "%s%%%u %s│ ", TMP, inst->id, KW);
-  else fprintf(file, "   %s│ ", KW);
+  const usz id_max_width = 7;
+  const usz width = number_width(inst->id);
+  for (usz i = width; i < id_max_width; i++) fprint(file, " ");
+  if (inst->id) fprint(file, "%34%%%u %31│ ", inst->id);
+  else fprint(file, "   %31│ ");
 
   if (inst->result) {
-    const size_t result_width = 6;
-    size_t result_length = (size_t) snprintf(NULL, 0, "r%d | ", inst->result);
-    size_t result_difference = result_width - result_length;
-    while (result_difference--) {
-      fputc(' ', file);
-    }
-    fprintf(file, "%sr%d %s│ ", B, inst->result, KW);
+    const usz result_max_width = 6;
+    const usz result_length = number_width(inst->result);
+    for (usz i = result_length; i < result_max_width; i++) fprint(file, " ");
+    fprint(file, "%34r%u %31│ ", inst->result);
   } else {
-    fprintf(file, "    %s│ ", KW);
+    fprint(file, "    %31│ ");
   }
 
   STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
   switch (inst->kind) {
   case IR_IMMEDIATE:
-    fprintf(file, "%simm %s%"PRId64, Y, M, inst->imm);
+    fprint(file, "%33imm %35%U", inst->imm);
     break;
 
   case IR_CALL: {
-    if (inst->call.tail_call) { fprintf(file, "%stail ", Y); }
+    if (inst->call.tail_call) { fprint(file, "%33tail "); }
     if (!inst->call.is_indirect) {
       string name = inst->call.callee_function->name;
-      fprintf(file, "%scall %s%.*s", Y, FUNC, (int) name.size, name.data);
+      fprint(file, "%33call %32%S", name);
     } else {
-      fprintf(file, "%scall %s%%%u", Y, TMP, inst->call.callee_instruction->id);
+      fprint(file, "%33call %34%%%u", inst->call.callee_instruction->id);
     }
-    fprintf(file, "%s(", KW);
+    fprint(file, "%31(");
     bool first = true;
     foreach_ptr (IRInstruction*, i, inst->call.arguments) {
-      if (!first) { fprintf(file, "%s, ", KW); }
+      if (!first) { fprint(file, "%31, "); }
       else first = false;
-      fprintf(file, "%s%%%u", TMP, i->id);
+      fprint(file, "%34%%%u", i->id);
     }
-    fprintf(file, "%s)", KW);
+    fprint(file, "%31)");
   } break;
   case IR_STATIC_REF:
-    fprintf(file, "%s.ref %s%.*s", KW, Z, (int) inst->static_ref->name.size, inst->static_ref->name.data);
+    fprint(file, "%33.ref %m%S", inst->static_ref->name);
     break;
   case IR_FUNC_REF:
-    fprintf(file, "%s.ref %s%.*s", KW, FUNC, (int) inst->function_ref->name.size, inst->function_ref->name.data);
+    fprint(file, "%31ref %32%S", inst->function_ref->name);
     break;
 
   case IR_RETURN:
-    if (inst->operand) fprintf(file, "%sret %s%%%u", Y, TMP, inst->operand->id);
-    else fprintf(file, "%sret", Y);
+    if (inst->operand) fprint(file, "%33ret %34%%%u", inst->operand->id);
+    else fprint(file, "%33ret");
     break;
 
 #define PRINT_BINARY_INSTRUCTION(enumerator, name) case IR_##enumerator: \
-    fprintf(file, "%s" #name " %s%%%u%s, %s%%%u", Y, TMP, inst->lhs->id, KW, TMP, inst->rhs->id); break;
+    fprint(file, "%33" #name " %34%%%u%31, %34%%%u", inst->lhs->id, inst->rhs->id); break;
     ALL_BINARY_INSTRUCTION_TYPES(PRINT_BINARY_INSTRUCTION)
 #undef PRINT_BINARY_INSTRUCTION
 
-  case IR_COPY: fprintf(file, "%scopy %s%%%u", Y, TMP, inst->operand->id); break;
-  case IR_PARAMETER: fprintf(file, "%s.param %s%%%u", KW, TMP, inst->id); break;
+  case IR_COPY: fprint(file, "%33copy %34%%%u", inst->operand->id); break;
+  case IR_PARAMETER: fprint(file, "%31.param %34%%%u", inst->id); break;
 
   case IR_BRANCH:
-    fprintf(file, "%sbr %sbb%zu", Y, BLK, inst->destination_block->id);
+    fprint(file, "%33br bb%Z", inst->destination_block->id);
     break;
   case IR_BRANCH_CONDITIONAL:
-    fprintf(file, "%sbr.cond %s%%%u%s, %sbb%zu%s, %sbb%zu",
-            Y, TMP, inst->cond_br.condition->id, KW, BLK, inst->cond_br.then->id, KW, BLK, inst->cond_br.else_->id);
+    fprint(file, "%33br.cond %34%%%u%31, %33bb%Z%31, %33bb%Z",
+            inst->cond_br.condition->id, inst->cond_br.then->id, inst->cond_br.else_->id);
     break;
   case IR_PHI: {
-    fprintf(file, "%sphi ", Y);
+    fprint(file, "%33phi ");
     bool first = true;
     foreach_ptr (IRPhiArgument*, arg, inst->phi_args) {
       if (first) { first = false; }
-      else { fprintf(file, "%s, ", KW); }
-      fprintf(file, "%s[%sbb%zu%s : %s%%%u%s]", KW, BLK, arg->block->id, KW, TMP, arg->value->id, KW);
+      else { fprint(file, "%31, "); }
+      fprint(file, "%31[%33bb%Z%31 : %34%%%u%31]", arg->block->id, arg->value->id);
     }
   } break;
   case IR_LOAD:
-    fprintf(file, "%sload %s%%%u", Y, TMP, inst->operand->id);
+    fprint(file, "%33load %34%%%u", inst->operand->id);
     break;
   case IR_STORE:
-    fprintf(file, "%sstore into %s%%%u%s, %s%%%u", Y, TMP, inst->store.addr->id, KW, TMP, inst->store.value->id);
+    fprint(file, "%33store into %34%%%u%31, %34%%%u", inst->store.addr->id, inst->store.value->id);
     break;
   case IR_REGISTER:
-    fprintf(file, "%s.reg %sr%d", KW, B, inst->result);
+    fprint(file, "%31.reg %34%%%u", inst->result);
     break;
   case IR_ALLOCA:
-    fprintf(file, "%salloca %s%"PRId64, Y, M, inst->imm);
+    fprint(file, "%33alloca %34%U", inst->imm);
     break;
   /// No-op
   case IR_UNREACHABLE:
-    fprintf(file, "%sunreachable", Y);
+    fprint(file, "%33unreachable");
     break;
   default:
     ICE("Invalid IRType %d\n", inst->kind);
@@ -266,13 +248,13 @@ void ir_femit_instruction
 
 #ifdef DEBUG_USES
   /// Print users
-  fprintf(file, "%s\033[60GUsers: ", Z);
+  fprint(file, "%m\033[60GUsers: ");
   VECTOR_FOREACH_PTR (IRInstruction*, user, inst->users) {
-    fprintf(file, "%%%u, ", user->id);
+    fprint(file, "%%%u, ", user->id);
   }
 #endif
 
-  fprintf(file, "\033[m\n");
+  fprint(file, "%m\n");
 }
 
 void ir_femit_block
@@ -280,11 +262,11 @@ void ir_femit_block
  IRBlock *block
  )
 {
-  fprintf(file, "%sbb%zu%s:\n", BLK, block->id, KW);
+  fprint(file, "%33bb%Z%31:\n", block->id);
   list_foreach (IRInstruction*, instruction, block->instructions) {
     ir_femit_instruction(file, instruction);
   }
-  fprintf(file, "\033[m");
+  fprint(file, "%m");
 }
 
 void ir_femit_function
@@ -294,11 +276,11 @@ void ir_femit_function
 {
   ir_print_defun(file, function);
   if (!function->is_extern) {
-    fprintf(file, " %s{\n", KW);
+    fprint(file, " %31{\n");
     list_foreach (IRBlock*, block, function->blocks) ir_femit_block(file, block);
-    fprintf(file, "%s}", KW);
+    fprint(file, "%31}");
   }
-  fprintf(file, "\033[m\n");
+  fprint(file, "%m\n");
 }
 
 void ir_femit
@@ -308,15 +290,15 @@ void ir_femit
 {
   ir_set_ids(context);
   foreach_ptr (IRFunction*, function, context->functions) {
-    if (function_ptr != context->functions.data) fprintf(file, "\n");
+    if (function_ptr != context->functions.data) fprint(file, "\n");
     ir_femit_function(file, function);
   }
-  fprintf(file, "\033[m");
+  fprint(file, "%m");
 }
 
 void ir_set_func_ids(IRFunction *f) {
   /// We start counting at 1 so that 0 can indicate an invalid/removed element.
-  size_t block_id = 1;
+  usz block_id = 1;
   u32 instruction_id = (u32) f->parameters.size + 1;
 
   list_foreach (IRBlock *, block, f->blocks) {
@@ -329,7 +311,7 @@ void ir_set_func_ids(IRFunction *f) {
 }
 
 void ir_set_ids(CodegenContext *context) {
-  size_t function_id = 0;
+  usz function_id = 0;
 
   foreach_ptr (IRFunction*, function, context->functions) {
     function->id = function_id++;
@@ -352,7 +334,7 @@ IRBlock *ir_block_create() { return calloc(1, sizeof(IRBlock)); }
 
 IRInstruction *ir_parameter
 (CodegenContext *context,
- size_t index) {
+ usz index) {
   ASSERT(context->function, "No function!");
   ASSERT(index < context->function->parameters.size, "Parameter index out of bounds.");
   return context->function->parameters.data[index];
@@ -656,7 +638,7 @@ static void ir_internal_replace_use(IRInstruction *user, IRInstruction **child, 
   ir_internal_replace_use_t *replace = data;
 
 #ifdef DEBUG_USES
-  fprintf(stderr, "  Replacing uses of %%%u in %%%u with %%%u\n",
+  eprint("  Replacing uses of %%%u in %%%u with %%%u\n",
     replace->usee->id, user->id, replace->replacement->id);
 #endif
 
@@ -750,32 +732,32 @@ bool ir_is_value(IRInstruction *instruction) {
 
 void ir_print_defun(FILE *file, IRFunction *f) {
   /// Function signature.
-  fprintf(file, "%s%s %s%.*s %s(", KW, f->is_extern ? "declare" : "defun", FUNC, (int) f->name.size, f->name.data, KW);
+  fprint(file, "%31%s %32%S %31(", f->is_extern ? "declare" : "defun", f->name);
 
   /// Parameters.
   bool first_param = true;
-  for (size_t i = 1; i <= f->parameters.size; ++i) {
+  for (usz i = 1; i <= f->parameters.size; ++i) {
     if (first_param) first_param = false;
-    else fprintf(file, "%s, ", KW);
-    fprintf(file, "%s%%%u", TMP, f->parameters.data[i - 1]->id);
+    else fprint(file, "%31, ");
+    fprint(file, "%34%%%u", f->parameters.data[i - 1]->id);
   }
 
   /// End of param list.
-  fprintf(file, "%s)", KW);
+  fprint(file, "%31)");
 
   /// Attributes, if any.
-  if (f->attr_consteval) fprintf(file, " consteval");
-  if (f->attr_forceinline) fprintf(file, " forceinline");
-  if (f->attr_global) fprintf(file, " global");
-  if (f->attr_leaf) fprintf(file, " leaf");
-  if (f->attr_noreturn) fprintf(file, " noreturn");
-  if (f->attr_pure) fprintf(file, " pure");
+  if (f->attr_consteval) fprint(file, " consteval");
+  if (f->attr_forceinline) fprint(file, " forceinline");
+  if (f->attr_global) fprint(file, " global");
+  if (f->attr_leaf) fprint(file, " leaf");
+  if (f->attr_noreturn) fprint(file, " noreturn");
+  if (f->attr_pure) fprint(file, " pure");
 }
 
 void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
   if (instruction == replacement) { return; }
 #ifdef DEBUG_USES
-  fprintf(stderr, "[Use] Replacing uses of %%%u with %%%u\n", instruction->id, replacement->id);
+  eprint("[Use] Replacing uses of %%%u with %%%u\n", instruction->id, replacement->id);
 #endif
   foreach_ptr (IRInstruction *, user, instruction->users) {
     ir_internal_replace_use_t replace = { instruction, replacement };
