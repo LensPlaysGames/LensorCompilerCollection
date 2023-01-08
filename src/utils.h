@@ -37,6 +37,12 @@ typedef ptrdiff_t isz;
 #  define THREAD_LOCAL __declspec(thread)
 #endif
 
+#ifdef __EXT_FORMAT__
+#  define EXT_FORMAT(fmt, arg) __attribute__((ext_format(fmt, arg)))
+#else
+#  define EXT_FORMAT(fmt, arg)
+#endif
+
 /// ===========================================================================
 ///  Miscellaneous macros.
 /// ===========================================================================
@@ -106,6 +112,7 @@ void fprint(FILE *f, const char *fmt, ...);
 void print(const char *fmt, ...);
 
 /// Print a string to stderr.
+EXT_FORMAT(1, 2)
 void eprint(const char *fmt, ...);
 
 /// Create a string from a const char*

@@ -1,15 +1,24 @@
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendPluginRegistry.h>
+#include <clang/Sema/Sema.h>
 #include <iostream>
+#include <mutex>
+#include <ranges>
+
+#define EXT_FORMAT "ext_format"
 
 namespace match = clang::ast_matchers;
-/// TODO: Pragma handler?
-static std::vector<llvm::StringRef> format_funcs = {
-  "format",
-  "print",
-  "eprint",
+
+/// All functions to be typechecked.
+struct FormatInfo {
+  size_t format_str_index;
+  size_t format_args_index;
 };
+
+/// All format functions.
+std::mutex format_funcs_mutex;
+std::map<const clang::FunctionDecl*, FormatInfo> format_functions;
 
 /// Match callbacks.
 struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
@@ -17,15 +26,28 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
   explicit FormatCheckCallback(clang::CompilerInstance &ci_) : ci(ci_) {}
 
   void run(const match::MatchFinder::MatchResult &result) override {
+    auto func = result.Nodes.getNodeAs<clang::FunctionDecl>("func");
     auto call = result.Nodes.getNodeAs<clang::CallExpr>("call");
     auto& diags = ci.getDiagnostics();
 
-    /// The first argument is the format string.
-    auto format = call->getArg(0)->IgnoreImpCasts();
+    /// Ignore calls to functions not annotated with the EXT_FORMAT attribute.
+    size_t format_string_index;
+    size_t argument_index;
+    {
+      std::unique_lock lock{format_funcs_mutex};
+      if (not format_functions.contains(func)) return;
+      auto& format_info = format_functions.at(func);
+      format_string_index = format_info.format_str_index;
+      argument_index = format_info.format_args_index;
+    }
+
+    /// Get the format string.
+    auto format = call->getArg(format_string_index)->IgnoreParenCasts();
 
     /// If the argument is a [const] char* rather than a string literal,
     /// issue a warning.
-    if (format->getType()->isPointerType() && format->getType()->getPointeeType()->isCharType()) {
+    auto lit = clang::dyn_cast<clang::StringLiteral>(format);
+    if (not lit and format->getType()->isPointerType() and format->getType()->getPointeeType()->isCharType()) {
       diags.Report(format->getExprLoc(),
         diags.getCustomDiagID(clang::DiagnosticsEngine::Warning,
           "Format string is not a constant expression"));
@@ -33,18 +55,11 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
     }
 
     /// Ignore arguments that are not string literals.
-    if (!format->getType()->isArrayType() ||
-        !format->getType()->getArrayElementTypeNoTypeQual()->isCharType()) {
-      return;
-    }
-
-    /// If this is somehow not a string literal, ignore it.
-    auto lit = clang::dyn_cast<clang::StringLiteral>(format);
-    if (!lit) return;
+    if (not lit) return;
 
     /// Get the value of the format string.
     auto fmt = lit->getString();
-    typecheck_format_string(fmt, call);
+    typecheck_format_string(fmt, call, argument_index);
   };
 
   /// Report an invalid format arg.
@@ -90,12 +105,9 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
   ///   - %X, where X is ESCAPE: A literal escape character if you need that for some ungodly reason.
   ///   - %XX, where X is in [0-9]: "\033[XXm" if colours are enabled, and "" otherwise.
   ///   - %BXX, where X is in [0-9]: "\033[1;XXm" if colours are enabled, and "" otherwise.
-  void typecheck_format_string(std::string_view fmt, const clang::CallExpr* call) {
+  void typecheck_format_string(std::string_view fmt, const clang::CallExpr* call, size_t arg_index) {
     auto& diags = ci.getDiagnostics();
     auto& ctx = ci.getASTContext();
-
-    /// The current argument we're looking at.
-    size_t arg_index = 1;
 
     /// Main formatting loop.
     for (;;) {
@@ -359,17 +371,86 @@ struct FmtCheckConsumer : public clang::ASTConsumer {
     FormatCheckCallback callback(CI);
 
     /// Add the callback to the matcher.
-    for (auto &func : format_funcs)
-      finder.addMatcher(
-        match::callExpr(
-          match::callee(
-            match::functionDecl(
-              match::hasName(func)))
-        ).bind("call"),
-      &callback);
+    finder.addMatcher(
+      match::callExpr(
+        match::callee(
+          match::functionDecl().bind("func"))
+      ).bind("call"),
+    &callback);
 
     /// Run the matcher.
     finder.matchAST(Context);
+  }
+};
+
+/// Register a custom attribute for our format functions.
+struct ExtFormatAttrInfo : public clang::ParsedAttrInfo {
+  ExtFormatAttrInfo() {
+    static constexpr Spelling spellings[]{
+      {clang::ParsedAttr::AS_GNU, EXT_FORMAT},   /// __attribute__((ext_format))
+      {clang::ParsedAttr::AS_CXX11, EXT_FORMAT}, /// [[ext_format]]
+    };
+    Spellings = spellings;
+    NumArgs = 2;
+  }
+
+  bool diagAppertainsToDecl(clang::Sema &S, const clang::ParsedAttr &Attr, const clang::Decl *D) const override {
+    if (!clang::isa<clang::FunctionDecl>(D)) {
+      S.Diag(Attr.getLoc(), S.Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+        EXT_FORMAT " attribute can only be applied to functions"));
+      return false;
+    }
+    return true;
+  }
+
+  AttrHandling handleDeclAttribute(clang::Sema& S, clang::Decl *D, const clang::ParsedAttr &Attr) const override {
+    /// Both arguments must be numbers.
+    auto format_index = Attr.getArgAsExpr(0);
+    auto args_index = Attr.getArgAsExpr(1);
+    clang::Expr::EvalResult format_index_val, args_index_val;
+    if (!format_index->EvaluateAsInt(format_index_val, S.Context)) {
+      S.Diag(Attr.getLoc(), S.Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+        "The first argument of '" EXT_FORMAT "' must be an integral constant expression"));
+      return AttributeNotApplied;
+    }
+    if (!args_index->EvaluateAsInt(args_index_val, S.Context)) {
+      S.Diag(Attr.getLoc(), S.Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+        "The second argument of '" EXT_FORMAT "' must be an integral constant expression"));
+      return AttributeNotApplied;
+    }
+
+    /// Get the declaration and the format and args index. The index is still 1-based here.
+    auto func = clang::cast<clang::FunctionDecl>(D);
+    auto format_index_int = format_index_val.Val.getInt().getZExtValue();
+    auto args_index_int = args_index_val.Val.getInt().getZExtValue();
+
+    /// The arg index must be in range if the function isn’t variadic.
+    if (!func->isVariadic() && args_index_int > func->getNumParams()) {
+      S.Diag(Attr.getLoc(), S.Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+        EXT_FORMAT " attribute args index %0 is out of bounds"))
+          << args_index_int;
+      return AttributeNotApplied;
+    }
+
+    /// The format index must be a string.
+    if (format_index_int > func->getNumParams()) {
+      S.Diag(Attr.getLoc(), S.Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+        EXT_FORMAT " attribute format index %0 is out of bounds"))
+          << format_index_int;
+      return AttributeNotApplied;
+    }
+    auto format_index_param = func->getParamDecl(format_index_int - 1)->getType();
+    if (!format_index_param->isPointerType() || !format_index_param->getPointeeType()->isCharType()) {
+      S.Diag(Attr.getLoc(), S.Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+        EXT_FORMAT " attribute format index %0 must be a `[const] char *`"))
+          << format_index_int;
+      return AttributeNotApplied;
+    }
+
+    /// Add the function to the list of format functions.
+    std::unique_lock lock {format_funcs_mutex};
+    format_functions[cast<clang::FunctionDecl>(D)] = {format_index_int - 1, args_index_int - 1};
+    return AttributeApplied;
   }
 };
 
@@ -382,6 +463,26 @@ struct FmtCheckPlugin : public clang::PluginASTAction {
 
   /// Create a new plugin instance.
   std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance &CI, llvm::StringRef) override {
+    /// Define the __EXT_FORMAT__ macro to expand to 1.
+    /// First, allocate an identifier info for '__EXT_FORMAT__'.
+    auto& id_info = CI.getASTContext().Idents.get("__EXT_FORMAT__");
+
+    /// Allocate a macro info.
+    auto* macro_info = CI.getPreprocessor().AllocateMacroInfo(clang::SourceLocation{});
+    macro_info->setIsUsed(true);
+
+    /// Set the macro info to expand to 1.
+    auto toks = macro_info->allocateTokens(1, CI.getPreprocessor().getPreprocessorAllocator());
+    toks[0].startToken();
+    toks[0].setKind(clang::tok::numeric_constant);
+    toks[0].setLength(1);
+    toks[0].setLocation(clang::SourceLocation{});
+    toks[0].setLiteralData("1");
+
+    /// Define the macro.
+    CI.getPreprocessor().appendDefMacroDirective(&id_info, macro_info);
+
+    /// Create the AST consumer for our plugin.
     return std::make_unique<FmtCheckConsumer>(CI, CI.getASTContext());
   }
 
@@ -392,4 +493,5 @@ struct FmtCheckPlugin : public clang::PluginASTAction {
 };
 
 
-static clang::FrontendPluginRegistry::Add<FmtCheckPlugin> X{"fmt-check-plugin", "Format checker"};
+static clang::FrontendPluginRegistry::Add<FmtCheckPlugin> X1{"fmt-check-plugin", "Format checker"};
+static clang::ParsedAttrInfoRegistry::Add<ExtFormatAttrInfo> X2{EXT_FORMAT, ""};
