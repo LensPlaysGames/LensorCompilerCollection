@@ -149,7 +149,7 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
       }
 
       /// Check if we still have enough arguments and extract the next argument.
-#define GET_ARG()                                              \
+#define GET_ARG(type)                                          \
   if (arg_index >= call->getNumArgs()) {                       \
     diags.Report(call->getBeginLoc(),                          \
       diags.getCustomDiagID(clang::DiagnosticsEngine::Error,   \
@@ -166,12 +166,12 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
       bool bold = false;
       switch (auto spec = fmt[0]; fmt.remove_prefix(1), spec) {
         case 'c': {
-          GET_ARG();
+          GET_ARG(type);
           if (!type->isCharType()) report(arg, "%c");
         } break;
 
         case 's': {
-          GET_ARG();
+          GET_ARG(type);
           if (!type->isPointerType() || !type->getPointeeType()->isCharType()) report(arg, "%s");
         } break;
 
@@ -179,7 +179,8 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
           /// Using GCC extensions is not a problem since this code is only ever
           /// going to be compiled w/ clang.
           __label__ after, report_err;
-          GET_ARG();
+          GET_ARG(qtype);
+          auto type = qtype.IgnoreParens()->getUnqualifiedDesugaredType();
 
           /// This is a rather horrible construct, but it’s preferable to a bunch of
           /// nested if statements or writing `report(); break` 27 times.
@@ -191,11 +192,10 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
 
           /// Argument must be a struct containing a pointer to a char and a size_t.
           /// Make sure it’s a record.
-          if (!type->isStructuralType()) goto report_err;
+          if (!type->isRecordType()) goto report_err;
 
           /// Make sure it’s a struct.
-          auto struct_type = type->getAsStructureType();
-          auto struct_decl = struct_type->getDecl();
+          auto struct_decl = type->getAsRecordDecl();
           if (!struct_decl->isStruct()) goto report_err;
 
           /// Make sure it has two fields.
@@ -214,38 +214,38 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
         } break;
 
         case 'C': {
-          GET_ARG();
+          GET_ARG(type);
           if (!type->isPointerType() || !type->getPointeeType()->isCharType()) report(arg, "%C");
         } break;
 
         case 'd':
         case 'i': {
-          GET_ARG();
+          GET_ARG(type);
           if (!type->isSignedIntegerType() || ci.getASTContext().getTypeSize(type) != 32)
             report(arg, std::string{"%"} + spec);
         } break;
 
         case 'u': {
-          GET_ARG();
+          GET_ARG(type);
           if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) != 32)
             report(arg, std::string{"%"} + spec);
         } break;
 
         case 'D':
         case 'I': {
-          GET_ARG();
+          GET_ARG(type);
           if (!type->isSignedIntegerType() || ci.getASTContext().getTypeSize(type) != 64)
             report(arg, std::string{"%"} + spec);
         } break;
 
         case 'U': {
-          GET_ARG();
+          GET_ARG(type);
           if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) != 64)
             report(arg, std::string{"%"} + spec);
         } break;
 
         case 'z': {
-          GET_ARG();
+          GET_ARG(type);
 
           /// Backwards compatibility with '%zu' because we were using that all over the place.
           if (fmt[0] != 'u') {
@@ -261,25 +261,25 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
         } break;
 
         case 'Z': {
-          GET_ARG();
+          GET_ARG(type);
           if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) != sizeof(size_t) * 8)
             report(arg, "%Z");
         } break;
 
         case 'p': {
-          GET_ARG();
+          GET_ARG(type);
 
           /// Make sure the argument is a pointer.
           if (!type->isPointerType()) report(arg, "%p");
         } break;
 
         case 'b': {
-          GET_ARG();
+          GET_ARG(type);
           if (!type->isBooleanType()) report(arg, "%b");
         } break;
 
         case 'T': {
-          GET_ARG();
+          GET_ARG(type);
 
           /// Argument must be a pointer to a type whose name is `Type`.
           if (!type->isPointerType() || type->getPointeeType().getUnqualifiedType().getAsString() != "Type")
@@ -287,7 +287,7 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
         } break;
 
         case 'F': {
-          GET_ARG();
+          GET_ARG(type);
 
           /// The first argument must be a `[const] char *`.
           if (!type->isPointerType() || !type->getPointeeType()->isCharType())
@@ -441,9 +441,10 @@ struct ExtFormatAttrInfo : public clang::ParsedAttrInfo {
     }
     auto format_index_param = func->getParamDecl(format_index_int - 1)->getType();
     if (!format_index_param->isPointerType() || !format_index_param->getPointeeType()->isCharType()) {
-      S.Diag(Attr.getLoc(), S.Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+      auto range = func->getParamDecl(format_index_int - 1)->getSourceRange();
+      S.Diag(range.getBegin(), S.Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
         EXT_FORMAT " attribute format index %0 must be a `[const] char *`"))
-          << format_index_int;
+          << range << format_index_int;
       return AttributeNotApplied;
     }
 
