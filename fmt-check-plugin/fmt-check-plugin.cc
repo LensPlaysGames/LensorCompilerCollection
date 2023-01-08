@@ -63,25 +63,28 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
   };
 
   /// Report an invalid format arg.
-  void report(const clang::Expr* arg, std::string_view specifier) {
+  void report(const clang::Expr* arg, std::string_view specifier, std::string_view note = "") {
     auto& diags = ci.getDiagnostics();
 
     /// Pretty print the argument name.
-    std::string name = "`" + arg->getType().getAsString() + "`";
+    std::string name = "'" + arg->getType().getAsString() + "'";
     if (arg->getType()->isTypedefNameType()) {
-      name += " [aka `";
+      name += " [aka '";
       name += arg->getType().getCanonicalType().getAsString();
-      name += "`]";
+      name += "']";
     }
 
     /// Report the error.
     diags.Report(arg->getExprLoc(),
       diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
-        "Invalid argument type %0 for format specifier '%1'"))
-          << std::vector{arg->getSourceRange()} << name << specifier;
+        "Invalid argument type %0 for format specifier '%1'%2"))
+          << std::vector{arg->getSourceRange()} << name << specifier << note;
   }
 
   /// Typecheck the format string.
+  ///
+  /// This only reports at most one error per format string, because once
+  /// there is one error, we end up running into a lot of bogus errors.
   ///
   /// Supported format specifiers:
   ///   - %c: char
@@ -96,6 +99,8 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
   ///   - %U: uint64_t
   ///   - %Z: size_t
   ///   - %zu: size_t
+  ///   - %x: hexadecimal (32-bit)
+  ///   - %X: hexadecimal (64-bit)
   ///   - %p: void *
   ///   - %b: bool
   ///   - %T: Type *
@@ -140,6 +145,7 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
           diags.Report(call->getBeginLoc(),
             diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
               "Unterminated ANSI escape code in format string"));
+          return;
         }
 
         /// Move on to the next format specifier or just skip the \033
@@ -167,81 +173,70 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
       switch (auto spec = fmt[0]; fmt.remove_prefix(1), spec) {
         case 'c': {
           GET_ARG(type);
-          if (!type->isCharType()) report(arg, "%c");
+          if (!type->isCharType()) return report(arg, "%c");
         } break;
 
         case 's': {
           GET_ARG(type);
-          if (!type->isPointerType() || !type->getPointeeType()->isCharType()) report(arg, "%s");
+          if (!type->isPointerType() || !type->getPointeeType()->isCharType()) return report(arg, "%s");
         } break;
 
         case 'S': {
-          /// Using GCC extensions is not a problem since this code is only ever
-          /// going to be compiled w/ clang.
-          __label__ after, report_err;
           GET_ARG(qtype);
           auto type = qtype.IgnoreParens()->getUnqualifiedDesugaredType();
 
-          /// This is a rather horrible construct, but it’s preferable to a bunch of
-          /// nested if statements or writing `report(); break` 27 times.
-          goto after;
-        report_err:
-          report(arg, "%S");
-          break;
-        after:
-
           /// Argument must be a struct containing a pointer to a char and a size_t.
           /// Make sure it’s a record.
-          if (!type->isRecordType()) goto report_err;
+          if (!type->isRecordType()) return report(arg, "%S");
 
           /// Make sure it’s a struct.
           auto struct_decl = type->getAsRecordDecl();
-          if (!struct_decl->isStruct()) goto report_err;
+          if (!struct_decl->isStruct()) return report(arg, "%S");
 
           /// Make sure it has two fields.
           auto fields = struct_decl->fields();
           auto count = std::distance(fields.begin(), fields.end());
-          if (count != 2) goto report_err;
+          if (count != 2) return report(arg, "%S");
 
           /// Typecheck the fields.
           auto data_field = fields.begin()->getType();
           if (!data_field->isPointerType() || !data_field->getPointeeType()->isCharType())
-            goto report_err;
+            return report(arg, "%S");
 
           auto size_field = std::next(fields.begin())->getType();
           if (!size_field->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(size_field) != sizeof(size_t) * 8)
-            goto report_err;
+            return report(arg, "%S");
         } break;
 
         case 'C': {
           GET_ARG(type);
-          if (!type->isPointerType() || !type->getPointeeType()->isCharType()) report(arg, "%C");
+          if (!type->isPointerType() || !type->getPointeeType()->isCharType()) return report(arg, "%C");
         } break;
 
         case 'd':
         case 'i': {
           GET_ARG(type);
-          if (!type->isSignedIntegerType() || ci.getASTContext().getTypeSize(type) != 32)
-            report(arg, std::string{"%"} + spec);
+          if (!type->isSignedIntegerType() || ci.getASTContext().getTypeSize(type) > 32)
+            return report(arg, std::string{"%"} + spec);
         } break;
 
         case 'u': {
           GET_ARG(type);
-          if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) != 32)
-            report(arg, std::string{"%"} + spec);
+          if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) > 32)
+            return report(arg, std::string{"%"} + spec);
         } break;
 
         case 'D':
         case 'I': {
           GET_ARG(type);
           if (!type->isSignedIntegerType() || ci.getASTContext().getTypeSize(type) != 64)
-            report(arg, std::string{"%"} + spec);
+            return report(arg, std::string{"%"} + spec);
         } break;
 
         case 'U': {
           GET_ARG(type);
           if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) != 64)
-            report(arg, std::string{"%"} + spec);
+            return report(arg, std::string{"%"} + spec);
         } break;
 
         case 'z': {
@@ -253,57 +248,74 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
               diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
                 "Invalid format specifier '%0' in format string"))
                   << std::string{"%z"} + (spec == 0 ? std::string{""} : std::string{spec});
+            return;
           }
 
           fmt.remove_prefix(1);
-          if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) != sizeof(size_t) * 8)
-            report(arg, "%zu");
+          if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) != sizeof(size_t) * CHAR_BIT)
+            return report(arg, "%zu");
         } break;
 
         case 'Z': {
           GET_ARG(type);
-          if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) != sizeof(size_t) * 8)
-            report(arg, "%Z");
+          if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) != sizeof(size_t) * CHAR_BIT)
+            return report(arg, "%Z");
+        } break;
+
+        case 'x': {
+          GET_ARG(type);
+          if (!type->isIntegerType() || ci.getASTContext().getTypeSize(type) > sizeof(int32_t) * 8)
+            return report(arg, "%x");
+        } break;
+
+        case 'X': {
+          GET_ARG(type);
+          if (!type->isIntegerType() || ci.getASTContext().getTypeSize(type) != sizeof(int64_t) * 8)
+            return report(arg, "%X", " (Hint: %X is for 64-bit integers)");
         } break;
 
         case 'p': {
           GET_ARG(type);
 
           /// Make sure the argument is a pointer.
-          if (!type->isPointerType()) report(arg, "%p");
+          if (!type->isPointerType()) return report(arg, "%p");
         } break;
 
         case 'b': {
           GET_ARG(type);
-          if (!type->isBooleanType()) report(arg, "%b");
+          /// Booleans are implicitly promoted to 'int' if they happen
+          /// to be variadic arguments, so we need to remove any such
+          /// conversions.
+          auto base = arg->IgnoreParenImpCasts();
+          if (!base->getType()->isBooleanType()) { return report(arg, "%b"); }
         } break;
 
         case 'T': {
           GET_ARG(type);
 
-          /// Argument must be a pointer to a type whose name is `Type`.
+          /// Argument must be a pointer to a type whose name is 'Type'.
           if (!type->isPointerType() || type->getPointeeType().getUnqualifiedType().getAsString() != "Type")
-            report(arg, "%T");
+            return report(arg, "%T");
         } break;
 
         case 'F': {
           GET_ARG(type);
 
-          /// The first argument must be a `[const] char *`.
+          /// The first argument must be a '[const] char *'.
           if (!type->isPointerType() || !type->getPointeeType()->isCharType())
-            report(arg, "%F");
+            return report(arg, "%F");
 
-          /// After that, we need a `va_list` argument.
+          /// After that, we need a 'va_list' argument.
           if (arg_index >= call->getNumArgs()) {
             diags.Report(call->getBeginLoc(),
               diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
                 "Not enough arguments to format string. Hint: %F requires two arguments "
-                "(a `[const] char*` and a `va_list`)"));
+                "(a '[const] char*' and a 'va_list')"));
             return;
           }
 
-          /// The second argument must be a `va_list`. The absurd amount of conversions below
-          /// are due to the fact that a `va_list` is typically something like `__va_list_tag[1]`,
+          /// The second argument must be a 'va_list'. The absurd amount of conversions below
+          /// are due to the fact that a 'va_list' is typically something like '__va_list_tag[1]',
           /// but as an argument, this has already been decayed to a pointer, so we need to take
           /// that into account.
           auto va_arg = call->getArg(arg_index++);
@@ -311,7 +323,7 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
           if (va_type->isPointerType() || va_type->isArrayType()) va_type = va_type->getPointeeOrArrayElementType();
           auto va_list_t = ci.getASTContext().getBuiltinVaListType()->getUnqualifiedDesugaredType();
           if (va_list_t->isPointerType() || va_list_t->isArrayType()) va_list_t = va_list_t->getPointeeOrArrayElementType();
-          if (va_type != va_list_t) report(va_arg, "%F");
+          if (va_type != va_list_t) return report(va_arg, "%F");
         } break;
 
         case '%':
@@ -327,7 +339,7 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
               diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
                 "Invalid format specifier '%0' in format string"))
                   << std::string{"%"} + (spec == 0 ? std::string{""} : std::string{spec});
-            break;
+            return;
           }
           fmt.remove_prefix(1);
           [[fallthrough]];
@@ -339,7 +351,7 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
               diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
                 "Invalid format specifier '%0%1%2%3' in format string"))
                   << "%" << (bold ? "B" : "") << fmt[-1] << fmt[0];
-            break;
+            return;
           }
 
           /// Ignore this if colours are disabled.
@@ -351,7 +363,7 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
             diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
               "Invalid format specifier '%0' in format string"))
                 << std::string{"%"} + (spec == 0 ? std::string{""} : std::string{spec});
-          break;
+          return;
       }
     }
   }
@@ -443,7 +455,7 @@ struct ExtFormatAttrInfo : public clang::ParsedAttrInfo {
     if (!format_index_param->isPointerType() || !format_index_param->getPointeeType()->isCharType()) {
       auto range = func->getParamDecl(format_index_int - 1)->getSourceRange();
       S.Diag(range.getBegin(), S.Diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
-        EXT_FORMAT " attribute format index %0 must be a `[const] char *`"))
+        EXT_FORMAT " attribute format index %0 must be a '[const] char *'"))
           << range << format_index_int;
       return AttributeNotApplied;
     }

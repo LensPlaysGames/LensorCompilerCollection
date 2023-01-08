@@ -49,6 +49,8 @@ string string_dup_impl(const char *src, usz size) {
 ///   - %U: uint64_t
 ///   - %Z: size_t
 ///   - %zu: size_t
+///   - %x: hexadecimal (32-bit)
+///   - %X: hexadecimal (64-bit)
 ///   - %p: void *
 ///   - %b: bool
 ///   - %T: Type *
@@ -170,6 +172,20 @@ static inline void vformat_to_impl(
         write_string(buf, strlen(buf), to);
       } break;
 
+      case 'x': {
+        unsigned n = va_arg(args, unsigned);
+        char buf[32];
+        sprintf(buf, "%x", n);
+        write_string(buf, strlen(buf), to);
+      } break;
+
+      case 'X': {
+        uint64_t n = va_arg(args, uint64_t);
+        char buf[32];
+        sprintf(buf, "%" PRIx64, n);
+        write_string(buf, strlen(buf), to);
+      } break;
+
       case 'p': {
         void *ptr = va_arg(args, void *);
         char buf[32];
@@ -183,7 +199,7 @@ static inline void vformat_to_impl(
       } break;
 
       case 'T': {
-        string s = ast_typename(va_arg(args, Type *), false);
+        string s = ast_typename(va_arg(args, Type *), thread_use_colours);
         write_string(s.data, s.size, to);
         free(s.data);
       } break;
