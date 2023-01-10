@@ -481,6 +481,24 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       ///  2eζ. Otherwise, resolve F to the last remaining element of O(F).
       ///
       arg->funcref.resolved = arg_overload_set.data[0].symbol;
+
+      // 2eη. Remove from O all candidates whose i-th parameter does not match the resolved overload.
+      foreach(OverloadedFunctionSymbol, overload, overload_set) {
+
+        Type *param_type = overload->symbol->node->type->function.parameters.data[i].type;
+
+        Type *arg_type = arg_overload_set.data[0].symbol->node->type;
+
+        if (!convertible(ast, param_type, arg_type)) {
+          printf("%.*s isn't convertible to %.*s\n", strf(ptype), strf(atype));
+          vector_push(to_remove, *overload);
+        }
+
+        free(atype.data);
+        free(ptype.data);
+
+      }
+      do_removal(overload_set);
     }
 
     /// 2f. Remove from O all functions except those with the least number of
