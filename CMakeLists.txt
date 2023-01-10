@@ -12,6 +12,14 @@ set(CMAKE_C_STANDARD 11)
 
 project(FUNCompiler C)
 
+# User Option(s)
+set(
+  NATIVE_OPT TRUE
+  CACHE BOOL
+  "Whether or not to optimise for the system being compiled on. This should be true *unless* you are making distributed binaries."
+)
+
+
 add_executable(
   func
   src/ast.c
@@ -34,6 +42,8 @@ target_include_directories(
   func
   PUBLIC src/
 )
+
+# Do not link with libm (math) when target is windows executable.
 if (NOT WIN32)
   target_link_libraries(func PRIVATE m)
 endif()
@@ -41,13 +51,21 @@ endif()
 ## Debug/Release flags.
 if (NOT MSVC)
   target_compile_options(func PRIVATE
-    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
-    $<$<CONFIG:RELEASE>:-O3 -march=native>
+    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
+    $<$<CONFIG:RELEASE>:-O3>
   )
   target_link_options(func PRIVATE
-    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
-    $<$<CONFIG:RELEASE>:-O3 -march=native>
+    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
+    $<$<CONFIG:RELEASE>:-O3>
   )
+
+  # -march=native only makes sense when compiling for the compiled system.
+  if (NATIVE_OPT)
+    target_compile_options(func PRIVATE
+      $<$<CONFIG:RELEASE>:-march=native>
+    )
+  endif()
+
 else()
   target_compile_options(func PRIVATE
     $<$<CONFIG:DEBUG>:/Od>
@@ -68,9 +86,21 @@ if (NOT MSVC)
     -Wshadow -Wconversion
     -Werror=return-type -Werror=implicit-function-declaration
     -Werror=implicit-int -Werror=pointer-arith
+
     -Wno-unused-parameter -Wno-unused-function
-    -Wno-format-zero-length
+    -Wno-format-zero-length -Wno-comment
+
+    -fdiagnostics-color
   )
+  # clang-cl
+  if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(
+      func
+      PRIVATE
+      -Wno-unused-function -Wno-unused-parameter
+      -Wno-format-zero-length
+    )
+  endif()
 else()
   target_compile_options(
     func
@@ -86,22 +116,19 @@ else()
 
     # Don't warn about unused functions.
     /wd4505
-
-    # Don't suggest the _s nonsense functions.
-    /D_CRT_SECURE_NO_WARNINGS
-    /D_CRT_SECURE_NO_WARNINGS_GLOBALS
-    /D_CRT_NONSTDC_NO_WARNINGS
   )
+endif()
 
-  # clang-cl
-  if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(
-      func
-      PRIVATE
-      -Wno-unused-function -Wno-unused-parameter
-      -Wno-format-zero-length
-    )
-  endif()
+# If user is targeting Windows.
+if (WIN32)
+  target_compile_definitions(
+    func
+    PRIVATE
+    # Don't suggest the _s nonsense functions.
+    _CRT_SECURE_NO_WARNINGS
+    _CRT_SECURE_NO_WARNINGS_GLOBALS
+    _CRT_NONSTDC_NO_WARNINGS
+  )
 endif()
 
 find_program(A68G_PROGRAM a68g NO_CACHE)
