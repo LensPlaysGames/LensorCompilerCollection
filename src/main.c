@@ -1,5 +1,3 @@
-#include "platform.h"
-
 #include <codegen.h>
 #include <error.h>
 #include <locale.h>
@@ -8,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <typechecker.h>
+#include <platform.h>
 
 void print_usage(char **argv) {
   printf("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", argv[0]);
@@ -176,7 +175,7 @@ int handle_command_line_arguments(int argc, char **argv) {
         print_acceptable_calling_conventions();
         return 1;
       }
-    }else if (strcmp(argument, "-cc") == 0
+    } else if (strcmp(argument, "-cc") == 0
                || strcmp(argument, "--calling") == 0) {
       i++;
       if (i >= argc) {

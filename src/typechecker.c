@@ -1,10 +1,10 @@
-#include "ast.h"
-#include "utils.h"
-#include "vector.h"
 #include <typechecker.h>
 
+#include <ast.h>
 #include <error.h>
 #include <parser.h>
+#include <utils.h>
+#include <vector.h>
 
 #include <stddef.h>
 #include <stdio.h>
