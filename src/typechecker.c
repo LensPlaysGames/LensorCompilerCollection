@@ -335,12 +335,12 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   OverloadedFunctionSymbols overload_set = collect_overload_set(func);
 
   Vector(OverloadedFunctionSymbol) to_remove = {0};
-# define do_removal() do {                                  \
-      foreach(OverloadedFunctionSymbol, sym, to_remove) {   \
-        vector_remove_element_unordered(overload_set, *sym); \
-      }                                                     \
-      vector_clear(to_remove);                              \
-    } while (0)
+# define do_removal(o) do {                             \
+    foreach(OverloadedFunctionSymbol, sym, to_remove) { \
+      vector_remove_element_unordered((o), *sym);       \
+    }                                                   \
+    vector_clear(to_remove);                            \
+  } while (0)
 
  step2:
   vector_clear(to_remove);
@@ -367,7 +367,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         vector_push(to_remove, *sym);
       }
     }
-    do_removal();
+    do_removal(overload_set);
 
     /// 2c. Let A_1, ... A_n be the arguments of the call expression.
     ///
@@ -389,7 +389,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         ++candidate->score;
       }
     }
-    do_removal();
+    do_removal(overload_set);
 
     /// 2e. If any of the A_i are unresolved functions, then each of those arguments:
     ///
@@ -420,51 +420,63 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       ///
       foreach(OverloadedFunctionSymbol, overload, overload_set) {
         bool valid = false;
+
+        Type *param_type = overload->symbol->node->type->function.parameters.data[i].type;
+
         foreach(OverloadedFunctionSymbol, arg_overload, arg_overload_set) {
-          // FOREACH OF THE PARAMETERS
-          foreach(Parameter, param, overload->symbol->node->type->function.parameters) {
-            if (convertible(ast, param->type, arg_overload->symbol->node->type)) {
-              valid = true;
-              break;
-            }
+          Type *arg_type = arg_overload->symbol->node->type;
+
+          if (convertible(ast, param_type, arg_type)) {
+            valid = true;
+            break;
           }
-          if (valid) break;
 
         }
+
         if (!valid) vector_push(to_remove, *overload);
 
       }
-      do_removal();
+      do_removal(overload_set);
 
       /// ... and from O(F) all functions whose signature does not
       /// match any of the P_F of any of the functions in O.
 
       foreach(OverloadedFunctionSymbol, arg_overload, arg_overload_set) {
         bool valid = false;
+
+        Type *arg_type = arg_overload->symbol->node->type;
+        string atype = ast_typename(arg_type, false);
+
         foreach(OverloadedFunctionSymbol, overload, overload_set) {
           Type *param_type = overload->symbol->node->type->function.parameters.data[i].type;
+          string ptype = ast_typename(param_type, false);
+
           if (convertible(ast, param_type, arg_overload->symbol->node->type)) {
+            printf("%.*s is convertible to %.*s\n", strf(ptype), strf(atype));
             valid = true;
             break;
           }
         }
         if (!valid) {
+          print_type(arg_overload->symbol->node->type, true);
           vector_push(to_remove, *arg_overload);
         }
       }
-      do_removal();
+      do_removal(arg_overload_set);
 
       ///  2eδ. If O(F) is empty, then this is a compiler error: there is no
       ///       matching overload for F.
       ///
       if (arg_overload_set.size == 0)
-        ERR(arg->source_location, "Could not resolve overloaded function.");
+        ERR(arg->source_location, "Could not resolve overloaded function argument.");
 
       ///  2eε. If O(F) contains more than one element, then this is a compiler
       ///       error: F is ambiguous.
       ///
-      if (arg_overload_set.size != 1)
-        ERR(arg->source_location, "Use of overloaded function is ambiguous.");
+      if (arg_overload_set.size != 1) {
+        print_overload_set(arg_overload_set);
+        ERR(arg->source_location, "Use of overloaded function as argument is ambiguous. (size == %zu)", arg_overload_set.size);
+      }
 
       ///  2eζ. Otherwise, resolve F to the last remaining element of O(F).
       ///
@@ -489,7 +501,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
           vector_push(to_remove, *sym);
         }
       }
-      do_removal();
+      do_removal(overload_set);
     }
   } else {
     /// 3. Otherwise, depending on the type of the parent expression,
@@ -521,7 +533,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
             vector_push(to_remove, *sym);
           }
         }
-        do_removal();
+        do_removal(overload_set);
         break;
       }
       string decl_typename = ast_typename(decl_type, false);
@@ -541,7 +553,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
               vector_push(to_remove, *sym);
             }
           }
-          do_removal();
+          do_removal(overload_set);
           break;
         }
         string lvalue_typename = ast_typename(lvalue_type, false);
@@ -595,7 +607,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
             vector_push(to_remove, *sym);
           }
         }
-        do_removal();
+        do_removal(overload_set);
       } else {
         ///  3dβ. Otherwise, if the O contains more than one element, then this is a
         ///       compiler error: the cast is ambiguous; we can’t infer the type of the
