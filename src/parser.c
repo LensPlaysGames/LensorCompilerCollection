@@ -612,7 +612,7 @@ static void validate_decltype(Parser *p, Type *type) {
   if (actual_type.type->kind == TYPE_FUNCTION || base_type->kind == TYPE_FUNCTION) {
     string name = ast_typename(type, false);
     ERR_DO(free(name.data), type->source_location, "Cannot declare %s of function type '%.*s'",
-           actual_type.is_incomplete ? "variable" : "array", (int) name.size, name.data);
+           actual_type.is_incomplete ? "variable" : "array", strf(name));
   }
 }
 
@@ -821,7 +821,7 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     /// Not external.
     if (!is_ext) {
       /// Create a symbol table entry before parsing the body.
-      Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+      Symbol *sym = scope_add_symbol_unconditional(curr_scope(p), SYM_FUNCTION, ident.text, NULL);
 
       if (sym->kind != SYM_FUNCTION || sym->node)
         ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);

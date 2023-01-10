@@ -35,19 +35,22 @@ void scope_pop(AST *ast) {
   (void) vector_pop(ast->scope_stack);
 }
 
-Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, void *value) {
-  /// DON'T check if the symbol already exists.
-  //if (scope_find_symbol(scope, name, true)) return NULL;
-
+Symbol *scope_add_symbol_unconditional(Scope *scope, enum SymbolKind kind, span name, void *value) {
   Symbol *symbol = calloc(1, sizeof(Symbol));
   symbol->kind = kind;
   symbol->name = string_dup(name);
   symbol->scope = scope;
-
   if (kind == SYM_TYPE) symbol->type = value;
   else symbol->node = value;
   vector_push(scope->symbols, symbol);
   return symbol;
+}
+
+
+Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, void *value) {
+  // Check if the symbol already exists.
+  if (scope_find_symbol(scope, name, true)) return NULL;
+  return scope_add_symbol_unconditional(scope, kind, name, value);
 }
 
 Symbol *scope_find_symbol(Scope *scope, span name, bool this_scope_only) {
@@ -69,8 +72,8 @@ Symbol *scope_find_symbol(Scope *scope, span name, bool this_scope_only) {
 }
 
 Symbol *scope_find_or_add_symbol(Scope *scope, enum SymbolKind kind, span name, bool this_scope_only) {
-  //Symbol *symbol = scope_find_symbol(scope, name, this_scope_only);
-  //if (symbol) return symbol;
+  Symbol *symbol = scope_find_symbol(scope, name, this_scope_only);
+  if (symbol) return symbol;
   return scope_add_symbol(scope, kind, name, NULL);
 }
 

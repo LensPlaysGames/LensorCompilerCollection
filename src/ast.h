@@ -363,6 +363,10 @@ void scope_push(AST *ast);
 /// Pop the current scope. This does *not* delete the scope.
 void scope_pop(AST *ast);
 
+/// Add an empty symbol to a scope, no matter what.
+/// \return The symbol that was added.
+Symbol *scope_add_symbol_unconditional(Scope *scope, enum SymbolKind kind, span name, void *value);
+
 /// Add an empty symbol to a scope.
 /// \return The symbol that was added, or NULL if the symbol already exists.
 Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, void *value);
