@@ -728,8 +728,13 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// If there is an initialiser, then its type must match the type of the variable.
       if (expr->declaration.init) {
         if (!typecheck_expression(ast, expr->declaration.init)) return false;
-        if (!convertible(ast, expr->type, expr->declaration.init->type))
-          ERR_NOT_CONVERTIBLE(expr->type, expr->declaration.init->type);
+        if (!convertible(ast, expr->type, expr->declaration.init->type)) {
+          string to_str = ast_typename(expr->type, false);
+          string from_str = ast_typename(expr->declaration.init->type, false);
+          ERR_DO(free(to_str.data); free(from_str.data), expr->declaration.init->source_location,
+                 "Type \"%.*s\" is not convertible to \"%.*s\"",
+                 strf(from_str), strf(to_str));
+        }
       }
       break;
 
