@@ -21,7 +21,7 @@
 
 #define ERR_DONT_RETURN(loc, ...) issue_diagnostic(DIAG_ERR, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__)
 
-#define ERR_NOT_CONVERTIBLE(to, from) ERR(from->source_location, "Type '%T' is not convertible to '%T'", from, to)
+#define ERR_NOT_CONVERTIBLE(where, to, from) ERR(where, "Type '%T' is not convertible to '%T'", from, to)
 
 NODISCARD static bool types_equal(AST *ast, Type *a, Type *b);
 
@@ -653,9 +653,8 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// If there is an initialiser, then its type must match the type of the variable.
       if (expr->declaration.init) {
         if (!typecheck_expression(ast, expr->declaration.init)) return false;
-        /// TODO: Report source location of expr->declaration.init.
         if (!convertible(ast, expr->type, expr->declaration.init->type))
-          ERR_NOT_CONVERTIBLE(expr->type, expr->declaration.init->type);
+          ERR_NOT_CONVERTIBLE(expr->declaration.init->source_location, expr->type, expr->declaration.init->type);
       }
       break;
 
@@ -736,7 +735,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       foreach_index(i, expr->call.arguments) {
         Parameter *param = &callee->type->function.parameters.data[i];
         Node *arg = expr->call.arguments.data[i];
-        if (!convertible(ast, param->type, arg->type)) ERR_NOT_CONVERTIBLE(param->type, arg->type);
+        if (!convertible(ast, param->type, arg->type)) ERR_NOT_CONVERTIBLE(arg->source_location, param->type, arg->type);
       }
 
       /// Set the type of the call to the return type of the callee.
@@ -832,7 +831,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                 lhs->type);
 
           /// Make sure the rhs is convertible to the lhs.
-          if (!convertible(ast, lhs->type, rhs->type)) ERR_NOT_CONVERTIBLE(lhs->type, rhs->type);
+          if (!convertible(ast, lhs->type, rhs->type)) ERR_NOT_CONVERTIBLE(rhs->source_location, lhs->type, rhs->type);
 
           /// Set the type of the expression to the type of the lhs.
           expr->type = lhs->type;
