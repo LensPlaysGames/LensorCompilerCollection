@@ -13,7 +13,7 @@
 
 #ifdef DEBUG_RA
 #  define IR_FEMIT(file, f) ir_femit_function(file, f)
-#  define DEBUG(...)              fprintf(stdout, __VA_ARGS__)
+#  define DEBUG(...)              print(__VA_ARGS__)
 CodegenContext *debug_context = NULL;
 #else
 #  define IR_FEMIT(file, context)

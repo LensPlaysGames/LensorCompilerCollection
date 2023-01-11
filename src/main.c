@@ -84,7 +84,7 @@ int handle_command_line_arguments(int argc, char **argv) {
   for (int i = 1; i < argc; ++i) {
     char *argument = argv[i];
 
-    //printf("argument %d: \"%s\"\n", i, argument);
+    //print("argument %d: \"%s\"\n", i, argument);
 
     if (strcmp(argument, "-h") == 0
         || strcmp(argument, "--help") == 0) {

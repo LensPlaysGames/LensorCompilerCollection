@@ -9,7 +9,7 @@
 - [ ] Overloading.
   - [x] Overloading terminology
   - [x] Overload tests
-  - [ ] Custom printf w/ `%T` for types etc.
+  - [x] Custom printf w/ `%T` for types etc.
   - [ ] Proper error reporting for overloading.
   - [ ] Fix the `sym->type`, `sym->node->type` nonsense
   - [ ] Name mangling.
