@@ -1272,7 +1272,7 @@ static void lower(CodegenContext *context) {
     switch (instruction->kind) {
       case IR_PARAMETER:
         if ((size_t)instruction->imm >= argument_register_count) {
-          TODO("arch_x86_64 doesn't yet support passing arguments on the stack, sorry.");
+          TODO("x86_64 backend doesn't yet support passing arguments on the stack, sorry.");
         }
         instruction->kind = IR_REGISTER;
         instruction->result = argument_registers[instruction->imm];
@@ -1377,9 +1377,15 @@ void mangle_function_name(IRFunction *function) {
         *c = '_';
         break;
       case '@':
-        *c = '$';
+        *c = '_';
         break;
       case ' ':
+        *c = '_';
+        break;
+      case ',':
+        *c = '_';
+        break;
+      case '$':
         *c = '_';
         break;
       default: break;

@@ -724,6 +724,7 @@ static Type *parse_type_derived(Parser *p, Type *base) {
           if (p->tok.type == TK_COMMA) next_token(p);
         }
 
+
         /// Yeet ")".
         loc l = {.start = base->source_location.start, .end = p->tok.source_location.end};
         consume(p, TK_RPAREN);
@@ -807,7 +808,7 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     /// Not external.
     if (!is_ext) {
       /// Create a symbol table entry before parsing the body.
-      Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+      Symbol *sym = scope_add_symbol_unconditional(curr_scope(p), SYM_FUNCTION, ident.text, NULL);
 
       if (sym->kind != SYM_FUNCTION || sym->node)
         ERR_AT(ident.source_location, "Redefinition of symbol '%S'", ident.text);

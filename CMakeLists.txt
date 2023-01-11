@@ -36,6 +36,13 @@ if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
   endif()
 endif()
 
+# User Option(s)
+set(
+  NATIVE_OPT TRUE
+  CACHE BOOL
+  "Whether or not to optimise for the system being compiled on. This should be true *unless* you are making distributed binaries."
+)
+
 add_executable(
   func
   src/ast.c
@@ -58,10 +65,13 @@ target_include_directories(
   func
   PUBLIC src/
 )
+
+# Do not link with libm (math) when target is windows executable.
 if (NOT WIN32)
   target_link_libraries(func PRIVATE m)
 endif()
 
+# Run the format checking plugin if possible.
 if (CMAKE_C_COMPILER_ID STREQUAL "Clang" AND DEFINED LLVM_PACKAGE_VERSION)
   add_dependencies(func fmt-check-plugin)
   if (EXISTS "./libfmt-check-plugin.so")
@@ -72,13 +82,26 @@ endif()
 ## Debug/Release flags.
 if (NOT MSVC)
   target_compile_options(func PRIVATE
-    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
-    $<$<CONFIG:RELEASE>:-O3 -march=native>
+    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
+    $<$<CONFIG:RELEASE>:-O3>
   )
   target_link_options(func PRIVATE
-    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
-    $<$<CONFIG:RELEASE>:-O3 -march=native>
+    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
+    $<$<CONFIG:RELEASE>:-O3>
   )
+
+  # Keep internal symbol names in debug mode if possible. See below for clang.
+  if (CMAKE_C_COMPILER_ID STREQUAL "GCC")
+    target_compile_options(func PRIVATE $<$<CONFIG:DEBUG>:-rdynamic>)
+  endif()
+
+  # -march=native only makes sense when compiling for the compiled system.
+  if (NATIVE_OPT)
+    target_compile_options(func PRIVATE
+      $<$<CONFIG:RELEASE>:-march=native>
+    )
+  endif()
+
 else()
   target_compile_options(func PRIVATE
     $<$<CONFIG:DEBUG>:/Od>
@@ -86,11 +109,18 @@ else()
   )
 endif()
 
+# When compiling with clang-cl, MSVC is also defined, so we put this here instead.
+if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
+  target_compile_options(func PRIVATE $<$<CONFIG:DEBUG>:-Wl,-export-dynamic>)
+endif()
+
+# Enable asan if requested and possible.
 if (DEFINED ENABLE_ASAN AND NOT WIN32)
   target_compile_options(func PRIVATE -fsanitize=address)
   target_link_options(func PRIVATE -fsanitize=address)
 endif()
 
+# Compile options.
 if (NOT MSVC)
   target_compile_options(
     func
@@ -99,8 +129,11 @@ if (NOT MSVC)
     -Wshadow -Wconversion
     -Werror=return-type -Werror=implicit-function-declaration
     -Werror=implicit-int -Werror=pointer-arith
+
     -Wno-unused-parameter -Wno-unused-function
     -Wno-format-zero-length -Wno-comment
+
+    -fdiagnostics-color=always
   )
 else()
   target_compile_options(

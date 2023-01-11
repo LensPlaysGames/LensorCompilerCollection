@@ -443,7 +443,8 @@ void build_adjacency_lists(IRInstructions *instructions, AdjacencyGraph *G) {
   foreach_ptr (IRInstruction *, i, *instructions) {
     if (G->lists.data[i->index]) vector_delete(G->lists.data[i->index]->adjacencies);
     free(G->lists.data[i->index]);
-    AdjacencyList *list = G->lists.data[i->index] = calloc(1, sizeof(AdjacencyList));
+    AdjacencyList *list = calloc(1, sizeof(AdjacencyList));
+    G->lists.data[i->index] = list;
     list->index = i->index;
     list->color = i->result;
     list->instruction = i;

@@ -1,10 +1,10 @@
-#include "ast.h"
-#include "utils.h"
-#include "vector.h"
 #include <typechecker.h>
 
+#include <ast.h>
 #include <error.h>
 #include <parser.h>
+#include <utils.h>
+#include <vector.h>
 
 #include <stddef.h>
 #include <stdio.h>
@@ -382,16 +382,20 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// first parameter. The second bar() is removed since there is no foo()
       /// that would accept it as its first parameter.
       foreach_if (Candidate, overload, overload_set, overload->validity == candidate_valid) {
-        /// TODO: Is this right?
         bool valid = false;
+
+        /// For each candidate for bar(), check if there is an overload of foo()
+        /// that accepts bar() as an argument in the corresponding parameter slot.
+        Type *param_type = overload->symbol->node->type->function.parameters.data[i].type;
         foreach_if (Candidate, arg_overload, arg_overload_set, arg_overload->validity == candidate_valid) {
-          Type *overload_type = overload->symbol->node->type;
-          Type *arg_overload_type = arg_overload->symbol->node->type;
-          if (types_equal(ast, overload_type, arg_overload_type)) {
+          Type *arg_type = arg_overload->symbol->node->type;
+          if (types_equal(ast, param_type, arg_type)) {
             valid = true;
             break;
           }
         }
+
+        /// A bar() is invalid if there is no such overload of foo().
         if (!valid) {
           overload->validity = invalid_no_dependent_arg;
           overload->invalid_arg_index = i;
@@ -402,6 +406,9 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// any of the P_F of any of the functions in O.
       foreach_if (Candidate, arg_overload, arg_overload_set, arg_overload->validity == candidate_valid) {
         bool valid = false;
+
+        /// For each candidate of foo(), check if there is at least one overload of
+        /// bar() that matches the type of the parameter that bar() corresponds to.
         foreach_if (Candidate, overload, overload_set, overload->validity == candidate_valid) {
           Type *param_type = overload->symbol->node->type->function.parameters.data[i].type;
           if (types_equal(ast, param_type, arg_overload->symbol->node->type)) {
@@ -409,11 +416,33 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
             break;
           }
         }
-        if (!valid) arg_overload->validity = invalid_no_dependent_callee;
+
+        /// A foo() is invalid if there is no bar() that matches the parameter.
+        if (!valid) {
+          arg_overload->validity = invalid_no_dependent_callee;
+          arg_overload->invalid_arg_index = i;
+        }
       }
 
       /// 2eδ. Resolve F.
       if (!resolve_overload(ast, &arg_overload_set, arg, &overload_set, func)) goto err;
+
+      /// 2eε. Remove from O all candidates whose i-th parameter does not match the resolved overload.
+      /// FIXME: I don’t think this is possible? Function types are not convertible to one
+      /// another; hence there can be one and only one possible overload of bar()
+      /// with a given signature. If ‘an’ overload of bar() matches for any number
+      /// functions foo(), then that overload must be the same for all of them.
+      /// Proof: Trivial proof by contradiction.
+      foreach_if (Candidate, overload, overload_set, overload->validity == candidate_valid) {
+        Type *param_type = overload->symbol->node->type->function.parameters.data[i].type;
+        Type *arg_type = arg_overload_set.data[0].symbol->node->type;
+
+        if (!types_equal(ast, param_type, arg_type)) {
+          arg_overload->validity = invalid_no_dependent_callee;
+          arg_overload->invalid_arg_index = i;
+          continue;
+        }
+      }
     }
 
     /// 2f. Remove from O all functions except those with the least number of
@@ -624,6 +653,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// If there is an initialiser, then its type must match the type of the variable.
       if (expr->declaration.init) {
         if (!typecheck_expression(ast, expr->declaration.init)) return false;
+        /// TODO: Report source location of expr->declaration.init.
         if (!convertible(ast, expr->type, expr->declaration.init->type))
           ERR_NOT_CONVERTIBLE(expr->type, expr->declaration.init->type);
       }

@@ -139,7 +139,10 @@ void platform_print_backtrace(int ignore) {
             if (buffer[0] != '?') {
               /// Skip the filename.
               char *ptr = buffer;
-              while (ptr = strchr(ptr, ':'), ptr) line_start = ptr = ptr + 1;
+              while (ptr = strchr(ptr, ':'), ptr) {
+                ptr += 1;
+                line_start = ptr;
+              }
 
               /// Ignore discriminators.
               if (line_start) {

@@ -1,15 +1,39 @@
-putchar : ext integer(c : integer)
+;;; Main
 
 rowcount : integer = 42
-;; NOTE: Must be less than bit width of one integer
+;; NOTE: Must be less than bit width of one integer (usually 64)
 colcount : integer = 32
 
 state : integer = 1
-
 while rowcount {
+  display_state(state)
+  state := calculate_state(state)
+  rowcount := rowcount - 1
+}
+
+
+;;; Functions
+
+display_state : integer(state : integer) {
+  idx : integer = 0
+  while idx < colcount {
+    ;;putchar(
+    ;;  if state & (1 << idx) 42 else 32
+    ;;)
+    if state & (1 << idx) {
+      putchar(42)
+    } else {
+      putchar(32)
+    }
+    idx := idx + 1
+  }
+  putchar(10)
+  0
+}
+
+calculate_state : integer(state : integer) {
   newstate : integer = state
 
-  ;; iterator
   idx : integer = 1
   while idx < colcount - 1 {
 
@@ -59,27 +83,12 @@ while rowcount {
     idx := idx + 1
   }
 
-  state := newstate
-
-  idx := 0
-  while idx < colcount {
-    ;;putchar(
-    ;;  if state & (1 << idx) {
-    ;;    42
-    ;;  } else {
-    ;;    32
-    ;;  }
-    ;;)
-    if state & (1 << idx) {
-      putchar(42)
-    } else {
-      putchar(32)
-    }
-    idx := idx + 1
-  }
-
-  putchar(10)
-  rowcount := rowcount - 1
+  newstate
 }
+
+;;; Externals
+
+;; Print a character represented by `c` to stdout. Requires linking with `libc`.
+putchar : ext integer(c : integer)
 
 0
