@@ -18,9 +18,9 @@
 ;
 ; Here, overload f3 must be selected.
 
-a: void()
-a: void(x : integer)
-a: integer(x : @integer)
+a: void() {}
+a: void(x : integer) {}
+a: integer(x : @integer) 0
 
 f: integer(a : void(),                b : @integer(),            c : @integer()) 1
 f: integer(a : void(x : integer),     b : void(),                c : @integer()) 2

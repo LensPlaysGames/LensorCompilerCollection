@@ -251,6 +251,22 @@ NODISCARD static bool resolve_overload(
   return true;
 }
 
+/// Remove overloads except those with the least implicit conversions.
+void reduce_overload_set(OverloadSet *overload_set) {
+  if (overload_set->size) {
+    /// Determine the candidate with the least number of implicit conversions.
+    usz min_score = overload_set->data[0].score;
+    foreach_if (Candidate, sym, *overload_set, sym->validity == candidate_valid)
+      if (sym->score < min_score)
+        min_score = sym->score;
+
+    /// Remove all candidates with a more implicit conversions.
+    foreach_if (Candidate, sym, *overload_set, sym->validity == candidate_valid)
+      if (sym->score > min_score)
+        sym->validity = invalid_too_many_conversions;
+  }
+}
+
 /// Resolve a function reference.
 ///
 /// Terminology:
@@ -310,6 +326,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       if (sym->symbol->node->type->function.parameters.size != call->call.arguments.size)
         sym->validity = invalid_parameter_count;
 
+
     /// 2c. Let A_1, ... A_n be the arguments of the call expression.
     ///
     /// 2d. For candidate C in O, let P_1, ... P_n be the parameters of C.
@@ -318,12 +335,20 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     ///     it is not. Note down the number of A_i’s that required a (series
     ///     of) implicit conversions to their corresponding P_i’s.
     ///
+    ///     Also collect unresolved function references.
     /// TODO: Could optimise this by merging with above loop.
+    typedef struct { usz index; OverloadSet overloads; } unresolved_func;
+    Vector(unresolved_func) unresolved_functions = {0};
     foreach_if (Candidate, candidate, overload_set, candidate->validity == candidate_valid) {
       foreach_index (i, call->call.arguments) {
-        /// Skip function references.
+        /// Note down the number of function references.
         Node *arg = call->call.arguments.data[i];
-        if (arg->kind == NODE_FUNCTION_REFERENCE) continue;
+        if (arg->kind == NODE_FUNCTION_REFERENCE && ! arg->funcref.resolved) {
+          unresolved_func uf = {0};
+          uf.index = i;
+          vector_push(unresolved_functions, uf);
+          continue;
+        }
 
         /// Check if the argument is convertible to the parameter.
         Type *param_type = candidate->symbol->node->type->function.parameters.data[i].type;
@@ -338,137 +363,73 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       }
     }
 
-    /// 2e. If any of the A_i are unresolved functions, then each of those arguments:
-    foreach_index (n, call->call.arguments) {
-      Node *arg = call->call.arguments.data[n];
-      if (arg->kind != NODE_FUNCTION_REFERENCE) continue;
+    /// 2e. If there are unresolved function references.
+    if (unresolved_functions.size) {
+      /// 2eα. Collect their overload sets.
+      foreach (unresolved_func, uf, unresolved_functions) {
+        uf->overloads = collect_overload_set(call->call.arguments.data[uf->index]);
 
-      /// 2eα. Let F be that argument.
-      ///
-      /// 2eβ. Collect all functions with the same name as F into a set O(F).
-      vector_delete(arg_overload_set);
-      arg_overload_set = collect_overload_set(arg);
+        /// 2eβ. Remove from O all candidates C that do no accept any overload
+        ///      of this argument as a parameter.
+        foreach_if (Candidate, candidate, overload_set, candidate->validity == candidate_valid) {
+          Type *param_type = candidate->symbol->node->type->function.parameters.data[uf->index].type;
 
-      /// 2eγ. Remove from O all functions whose parameter P_F that corresponds
-      ///      to F is not equivalent to any of the functions in O(F), and from
-      ///      O(F) all functions that are not equivalent to any of the P_F of
-      ///      any of the functions in O and from O(F) all functions that are not
-      ///      equivalent to any of the P_F of any of the functions in O.
-      ///
-      /// For simplicity’s sake, we shall henceforth refer to O as O(foo) and
-      /// O(F) as O(bar). The function being resolved is `foo` and the argument
-      /// being resolved (the unresolved function reference) is `bar`.
-      ///
-      /// In other words, given a call `foo(..., bar, ...)`, whose n-th argument
-      /// `bar` is an overloaded function name, and overload sets O(foo) and O(bar):
-      ///
-      ///    - Remove from O(foo) any candidate C(foo) whose n-th parameter is
-      ///      not equivalent to any of the candidates C(bar) in O(bar).
-      ///
-      ///    - Remove from O(bar) any candidate C(bar) for which there is *no*
-      ///      candidate C(foo) in O(foo) whose n-th parameter is equivalent to
-      ///      C(bar).
-      ///
-      /// Example:
-      ///
-      /// foo : integer(func : integer(ptr : @integer))
-      /// foo : integer(func : integer())
-      /// foo(bar)
-      /// bar : integer(n : integer)
-      /// bar : integer()
-      ///
-      /// foo_1   bar_1
-      ///      \ /
-      ///       x
-      ///      / \
-      /// foo_2   bar_2
-      ///
-      /// The first foo() is removed since there is no bar() that matches its
-      /// first parameter. The second bar() is removed since there is no foo()
-      /// that would accept it as its first parameter.
-      ///
-      /// First, remove from O(foo) any candidate C(foo) whose n-th parameter is
-      /// not equivalent to any of the candidates C(bar) in O(bar).
-      foreach_if (Candidate, overload, overload_set, overload->validity == candidate_valid) {
-        bool valid = false;
-
-        /// For each candidate for bar(), check if there is an overload of foo()
-        /// that accepts bar() as an argument in the corresponding parameter slot.
-        Type *param_type = overload->symbol->node->type->function.parameters.data[n].type;
-        foreach_if (Candidate, arg_overload, arg_overload_set, arg_overload->validity == candidate_valid) {
-          Type *arg_type = arg_overload->symbol->node->type;
-          if (types_equal(ast, param_type, arg_type)) {
-            valid = true;
-            break;
+          bool found = false;
+          foreach (Candidate, arg_candidate, uf->overloads) {
+            if (types_equal(ast, param_type, arg_candidate->symbol->node->type)) {
+              found = true;
+              break;
+            }
           }
-        }
 
-        /// A bar() is invalid if there is no such overload of foo().
-        if (!valid) {
-          overload->validity = invalid_no_dependent_arg;
-          overload->invalid_arg_index = n;
+          if (!found) {
+            candidate->validity = invalid_no_dependent_arg;
+            candidate->invalid_arg_index = uf->index;
+          }
         }
       }
 
-      /// Secondly, remove from O(bar) any candidate C(bar) for which
-      /// there is *no* candidate C(foo) in O(foo) whose n-th parameter
-      /// is equivalent to C(bar).
-      foreach_if (Candidate, arg_overload, arg_overload_set, arg_overload->validity == candidate_valid) {
-        bool valid = false;
+      /// 2eγ. Remove from O all functions except those with the least number of
+      ///     implicit conversions as per step 2d.
+      reduce_overload_set(&overload_set);
 
-        /// For each candidate of foo(), check if there is at least one overload of
-        /// bar() that matches the type of the parameter that bar() corresponds to.
-        foreach_if (Candidate, overload, overload_set, overload->validity == candidate_valid) {
-          Type *param_type = overload->symbol->node->type->function.parameters.data[n].type;
-          if (types_equal(ast, param_type, arg_overload->symbol->node->type)) {
-            valid = true;
-            break;
+      /// 2eδ. Resolve the function being resolved.
+      if (!resolve_overload(ast, &overload_set, func, NULL, NULL)) goto cleanup_arg_overloads;
+
+      /// 2eε. For each argument, remove from its overload set all candidates
+      /// that are not equivalent to the type of the corresponding parameter
+      /// of the resolved function.
+      foreach (unresolved_func, uf, unresolved_functions) {
+        foreach_if (Candidate, candidate, uf->overloads, candidate->validity == candidate_valid) {
+          Type *param_type = func->type->function.parameters.data[uf->index].type;
+          if (!types_equal(ast, param_type, candidate->symbol->node->type)) {
+            candidate->validity = invalid_no_dependent_callee;
+            candidate->invalid_arg_index = uf->index;
           }
         }
 
-        /// A foo() is invalid if there is no bar() that matches the parameter.
-        if (!valid) {
-          arg_overload->validity = invalid_no_dependent_callee;
-          arg_overload->invalid_arg_index = n;
-        }
+        /// 2eζ. Resolve the argument.
+        if (!resolve_overload(ast, &uf->overloads, call->call.arguments.data[uf->index], &overload_set, func))
+          goto cleanup_arg_overloads;
       }
 
-      /// 2eδ. Resolve F.
-      if (!resolve_overload(ast, &arg_overload_set, arg, &overload_set, func)) goto err;
+      /// Success, yay!
+      goto done;
 
-      /// One would think that it would now make sense to remove from O(foo) all candidates
-      /// C(foo) whose n-th parameter does not match the resolved overload C(bar), seeing as
-      /// we have thus far kept all candidates C(foo) that match *at least one* candidate C(bar).
-      ///
-      /// However, this is predicated on the assumption that more than one candidate C(bar)
-      /// could match the n-th parameter of a candidate C(foo). This is not the case, as
-      /// there can be no two functions that are different but have the same signature and
-      /// name (because overloading on the return type is not permitted). If there somehow
-      /// are two functions whose signatures conflict in this way, then `resolve_overload`
-      /// above (or perhaps even some earlier check, where we make sure that the overload
-      /// set itself is well-formed) would have already reported that as an error, and we
-      /// wouldn’t be here in the first place.
-      ///
-      /// In other words, any candidates C(foo) that are still valid are valid because they
-      /// match ‘a’ candidate C(bar) with the correct signature. Since there can be only one
-      /// such candidate (since no two different functions may have equivalent signatures),
-      /// ‘a’ candidate C(bar) is actually ‘the’ (resolved) candidate C(bar).
+      /// Cleanup so we don’t leak memory.
+    cleanup_arg_overloads:
+      foreach (unresolved_func, uf, unresolved_functions)
+        vector_delete(uf->overloads);
+      vector_delete(unresolved_functions);
+      goto err;
     }
 
     /// 2f. Remove from O all functions except those with the least number of
     ///     implicit conversions as per step 2d.
-    if (overload_set.size) {
-      /// Determine the candidate with the least number of implicit conversions.
-      usz min_score = overload_set.data[0].score;
-      foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
-        if (sym->score < min_score)
-          min_score = sym->score;
-
-      /// Remove all candidates with a more implicit conversions.
-      foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
-        if (sym->score > min_score)
-          sym->validity = invalid_too_many_conversions;
-    }
+    ///
+    /// Note: If we get here, then unresolved_functions is empty, so no cleanup
+    /// required.
+    reduce_overload_set(&overload_set);
   }
 
   /// 3. Otherwise, depending on the type of the parent expression,
