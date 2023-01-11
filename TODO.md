@@ -22,6 +22,7 @@
   - [ ] Actually implementing casts.
 - [ ] Arrays
   - [ ] Semantic analysis for static arrays.
+  - [ ] Codegen 
   - [ ] How do we implement reassigning arrays? Libc `memcpy()` or some builtin variant?
     - [ ] Use compiler explorer to see how GCC does it for ‘inspiration’.
   - [ ] Arrays as function parameters.
@@ -29,7 +30,10 @@
 - [ ] Slices / dynamic arrays.
   - [ ] Parsing/AST.
   - [ ] Semantic analysis.
-  - [ ] Codegen.
+    - [ ] Implicit creation from static arrays  
+  - [ ] Codegen. 
+  - [ ] Length operator: `#`
+  - [ ] Subscripting 
 - [ ] Strings
   - [ ] Parsing string literals.
   - [ ] Codegen.
