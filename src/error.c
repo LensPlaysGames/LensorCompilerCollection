@@ -57,6 +57,13 @@ void vissue_diagnostic
  const char *fmt,
  va_list ap) {
   ASSERT(level >= 0 && level < DIAG_COUNT);
+  bool save_thread_disable_type_colours = thread_disable_type_colours;
+  thread_disable_type_colours = true;
+
+  /// Print an empty line before every diagnostic except the very first.
+  static bool first_diagnostic = true;
+  if (first_diagnostic) first_diagnostic = false;
+  else eprint("\n");
 
   /// Print a detailed error message if we have access to the source code.
   if (source.data && source.size) {
@@ -83,10 +90,11 @@ void vissue_diagnostic
     /// Print the filename, line and column, severity and message.
     eprint("%B38%s:%u:%u: ", filename, line, location.start - line_start);
     if (colours_blink) eprint("\033[5m\a\a\a\a");
-    eprint("%C%s: %B38%F%m", diagnostic_level_colours[level], diagnostic_level_names[level], fmt, ap);
+    eprint("%C%s: %B38", diagnostic_level_colours[level], diagnostic_level_names[level]);
+    vfprint(stderr, fmt, ap);
 
     /// Print the line.
-    eprint("\n %u | ", line);
+    eprint("%m\n %u | ", line);
     for (u32 i = line_start; i < location.start; ++i) {
       if (source.data[i] == '\t') eprint("    ");
       else fputc(source.data[i], stderr);
@@ -122,12 +130,15 @@ void vissue_diagnostic
 
   /// Otherwise, just print a simple error message.
   else {
-    eprint("%B38%s: %C%C%s: %B38%F%m\n",
+    eprint("%B38%s: %C%C%s: %B38",
       filename,
-      colours_blink ? "\033[5m" : "", diagnostic_level_colours[level], diagnostic_level_names[level],
-      fmt, ap
+      colours_blink ? "\033[5m" : "", diagnostic_level_colours[level], diagnostic_level_names[level]
     );
+    vfprint(stderr, fmt, ap);
+    eprint("%m\n");
   }
+
+  thread_disable_type_colours = save_thread_disable_type_colours;
  }
 
 void raise_fatal_error_impl (
@@ -173,7 +184,8 @@ void raise_fatal_error_impl (
     /// Message.
     va_list ap;
     va_start(ap, fmt);
-    eprint("%F\n", fmt, ap);
+    vfprint(stderr, fmt, ap);
+    eprint("\n");
     va_end(ap);
   }
 

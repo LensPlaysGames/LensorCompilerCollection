@@ -20,6 +20,7 @@ static char *strndup(const char *str, usz sz) {
 #endif
 
 THREAD_LOCAL bool thread_use_colours = false;
+THREAD_LOCAL bool thread_disable_type_colours = false;
 
 /// Copy a string to the heap.
 string string_dup_impl(const char *src, usz size) {
@@ -199,15 +200,15 @@ static inline void vformat_to_impl(
       } break;
 
       case 'T': {
-        string s = ast_typename(va_arg(args, Type *), thread_use_colours);
+        string s = ast_typename(va_arg(args, Type *), !thread_disable_type_colours && thread_use_colours);
         write_string(s.data, s.size, to);
         free(s.data);
       } break;
-
+/*
       case 'F': {
         const char *fmt2 = va_arg(args, const char *);
-        vformat_to_impl(fmt2, va_arg(args, va_list), write_string, to);
-      } break;
+        vformat_to_impl(fmt2, *va_arg(args, va_list*), write_string, to);
+      } break;*/
 
       case '%': {
         write_string("%", 1, to);

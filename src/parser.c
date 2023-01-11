@@ -616,6 +616,9 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
   bool save_in_function = p->in_function;
   p->in_function = true;
 
+  /// Yeet "=" if found.
+  if (p->tok.type == TK_EQ) next_token(p);
+
   /// Push a new scope for the body and parameters.
   scope_push(p->ast);
 

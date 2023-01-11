@@ -298,7 +298,7 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
             return report(arg, "%T");
         } break;
 
-        case 'F': {
+/*        case 'F': {
           GET_ARG(type);
 
           /// The first argument must be a '[const] char *'.
@@ -314,17 +314,43 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
             return;
           }
 
-          /// The second argument must be a 'va_list'. The absurd amount of conversions below
-          /// are due to the fact that a 'va_list' is typically something like '__va_list_tag[1]',
-          /// but as an argument, this has already been decayed to a pointer, so we need to take
-          /// that into account.
+          /// The second argument must be a 'va_list*'.
+#ifdef __x86_64__
           auto va_arg = call->getArg(arg_index++);
-          auto va_type = va_arg->getType()->getUnqualifiedDesugaredType();
-          if (va_type->isPointerType() || va_type->isArrayType()) va_type = va_type->getPointeeOrArrayElementType();
-          auto va_list_t = ci.getASTContext().getBuiltinVaListType()->getUnqualifiedDesugaredType();
-          if (va_list_t->isPointerType() || va_list_t->isArrayType()) va_list_t = va_list_t->getPointeeOrArrayElementType();
-          if (va_type != va_list_t) return report(va_arg, "%F");
-        } break;
+          auto va_type = va_arg->getType().getCanonicalType().IgnoreParens();
+          auto va_list_tag = cast<clang::RecordDecl>(ci.getASTContext().getVaListTagDecl())->getTypeForDecl();
+
+          /// A 'va_list *' is either a '__va_list_tag **' or a '__va_list_tag (*)[1]'.
+          if (
+            /// First level of indirection must be a pointer.
+            not va_type->isPointerType() or
+
+            /// Either '__va_list_tag *' or a '__va_list_tag [1]'.
+            (not va_type->getPointeeType()->isPointerType() and not va_type->getPointeeType()->isArrayType()) or
+
+            /// Pointee or element type must be '__va_list_tag'.
+            va_type->getPointeeType()->getPointeeOrArrayElementType()->getUnqualifiedDesugaredType() != va_list_tag
+          ) {
+            /// Pretty print the argument name.
+            std::string name = "'" + va_arg->getType().getAsString() + "'";
+            if (va_arg->getType()->isTypedefNameType()) {
+              name += " [aka '";
+              name += va_arg->getType().getCanonicalType().getAsString();
+              name += "']";
+            }
+
+            /// Report the error.
+            diags.Report(va_arg->getExprLoc(),
+              diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+                "Second argument of '%0' must be a 'va_list*', but was %1"))
+                  << std::vector{va_arg->getSourceRange()} << "%F" << name;
+          }
+#else
+          diags.Report(call->getArg(arg_index++)->getBeginLoc(),
+             diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+               "Typechecking of %F is not implemented on this platform. Make sure you’re passing a 'va_list*' (!)"));
+#endif
+        } break;*/
 
         case '%':
         case '\033':

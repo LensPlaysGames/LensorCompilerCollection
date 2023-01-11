@@ -11,12 +11,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DIAG(diag, loc, ...)                                                                  \
+#define DIAG(diag, loc, ...) issue_diagnostic(diag, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__)
+
+#define ERR(loc, ...)                                                                  \
   do {                                                                                        \
-    issue_diagnostic(diag, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__); \
+    issue_diagnostic(DIAG_ERR, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__); \
     return false;                                                                             \
   } while (0)
-#define ERR(loc, ...)   DIAG(DIAG_ERR, loc, __VA_ARGS__)
 #define SORRY(loc, ...) DIAG(DIAG_SORRY, loc, __VA_ARGS__)
 
 #define ERR_DONT_RETURN(loc, ...) issue_diagnostic(DIAG_ERR, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__)
@@ -91,14 +92,21 @@ NODISCARD static bool is_integer(AST *ast, Type *type) {
   return is_integer_impl(ast, t);
 }
 
-/// Check if from is convertible to to.
-NODISCARD static bool convertible(AST *ast, Type * to_type, Type * from_type) {
+/// Check how well from is convertible to to.
+///
+/// \param ast The AST that the types are in.
+/// \param to_type The type to convert to.
+/// \param from_type The type to convert from.
+/// \return -1 if the types are not convertible to one another.
+/// \return 0 if the types are equivalent.
+/// \return 1 if the types are convertible, but implicit conversions are required.
+NODISCARD static isz convertible_score(AST *ast, Type * to_type, Type * from_type) {
   /// Expand types.
   Typeinfo to = ast_typeinfo(ast, to_type);
   Typeinfo from = ast_typeinfo(ast, from_type);
 
   /// Any type is implicitly convertible to void.
-  if (to.is_void) return true;
+  if (to.is_void) return 0;
 
   /// If the types are both incomplete, compare their names.
   if (to.is_incomplete && from.is_incomplete) {
@@ -107,16 +115,17 @@ NODISCARD static bool convertible(AST *ast, Type * to_type, Type * from_type) {
   }
 
   /// If either type is incomplete, they are not convertible.
-  if (to.is_incomplete || from.is_incomplete) return false;
+  if (to.is_incomplete || from.is_incomplete) return -1;
 
   /// If the types are the same, they are convertible.
-  if (types_equal(ast, to.type, from.type)) return true;
+  if (types_equal(ast, to.type, from.type)) return 0;
 
   /// A function type is implicitly convertible to its
   /// corresponding pointer type.
   if (to.type->kind == TYPE_POINTER && from.type->kind == TYPE_FUNCTION) {
     Typeinfo base = ast_typeinfo(ast, to.type->pointer.to);
-    return !base.is_incomplete && types_equal_impl(ast, base.type, from.type);
+    if (!base.is_incomplete && types_equal_impl(ast, base.type, from.type)) return 0;
+    return -1;
   }
 
   /// Smaller integer types are implicitly convertible to larger
@@ -129,14 +138,19 @@ NODISCARD static bool convertible(AST *ast, Type * to_type, Type * from_type) {
       to.type->primitive.size > from.type->primitive.size
       && (to.type->primitive.is_signed
          || !from.type->primitive.is_signed)
-    ) return true;
+    ) return 1;
   }
 
   /// Integer literals are convertible to any integer type.
-  if (from.type == ast->t_integer_literal && to_is_int) return true;
+  if (from.type == ast->t_integer_literal && to_is_int) return 1;
 
   /// Otherwise, the types are not convertible.
-  return false;
+  return -1;
+}
+
+/// Check if from is convertible to to.
+NODISCARD static bool convertible(AST *ast, Type * to_type, Type * from_type) {
+  return convertible_score(ast, to_type, from_type) != -1;
 }
 
 /// Get the common type of two types.
@@ -210,6 +224,12 @@ static OverloadSet collect_overload_set(Node *func) {
   return overload_set;
 }
 
+/// Print all valid overloads in an overload set.
+void print_valid_overloads(AST *ast, OverloadSet *o) {
+  foreach_if (Candidate, c, *o, c->validity == candidate_valid)
+    DIAG(DIAG_NOTE, c->symbol->node->source_location, "Candidate");
+}
+
 /// Actually resolve a function.
 ///
 /// The overloads sets passed to this function must be minimal, i.e.
@@ -233,8 +253,13 @@ NODISCARD static bool resolve_overload(
   foreach_if (Candidate, sym, *overload_set, sym->validity == candidate_valid) {
     /// If O(F) contains more than one element, then the program is
     /// ill-formed: F is ambiguous.
-    if (valid_overload)
-      ERR(funcref->source_location, "Use of overloaded function is ambiguous.");
+    if (valid_overload) {
+      ERR_DONT_RETURN(funcref->source_location, "Use of overloaded function is ambiguous.");
+
+      /// Print the valid overloads.
+      print_valid_overloads(ast, overload_set);
+      return false;
+    }
 
     /// Otherwise, save this overload for later.
     valid_overload = sym->symbol;
@@ -243,7 +268,67 @@ NODISCARD static bool resolve_overload(
 
   /// If O(F) is empty, then the program is ill-formed: there is no
   /// matching overload for F.
-  if (!valid_overload) ERR(funcref->source_location, "Could not resolve overloaded function.");
+  if (!valid_overload) {
+    ERR_DONT_RETURN(funcref->source_location, "Could not resolve overloaded function.");
+
+    /// Print ALL overloads, explaining why each one didn’t work.
+    foreach (Candidate, c, *overload_set) {
+      switch (c->validity) {
+        default: UNREACHABLE();
+
+        /// We only get here if there are *no* valid candidates.
+        case candidate_valid: UNREACHABLE();
+
+        /// Candidates are only invalidated with this error if there
+        /// is at least one candidate that is otherwise valid, which,
+        /// as we’ve just established, is impossible.
+        case invalid_too_many_conversions: UNREACHABLE();
+
+        /// Not enough / too many parameters.
+        case invalid_parameter_count:
+          DIAG(DIAG_ERR, c->symbol->node->source_location, "Candidate takes %zu parameters, but %zu were provided.",
+            c->symbol->node->type->function.parameters.size, funcref->parent->call.arguments.size);
+          break;
+
+        /// Argument type is not convertible to parameter type.
+        case invalid_argument_type:
+          DIAG(DIAG_ERR, c->symbol->node->source_location, "Invalid overload declared here");
+          DIAG(DIAG_NOTE, funcref->parent->call.arguments.data[c->invalid_arg_index]->source_location,
+            "Argument of type '%T' is not convertible to parameter type '%T'.",
+            funcref->parent->call.arguments.data[c->invalid_arg_index]->type,
+            c->symbol->node->type->function.parameters.data[c->invalid_arg_index].type);
+          break;
+
+        /// TODO: Print a better error depending on the parent expression.
+        case invalid_expected_type_mismatch:
+          DIAG(DIAG_ERR, c->symbol->node->source_location, "Candidate type '%T' is not convertible to '%T'",
+            c->symbol->node->type,
+            funcref->parent->type);
+          break;
+
+        /// No matching overload for argument of function type. Only
+        /// arguments can be set to this validity.
+        case invalid_no_dependent_callee:
+          ASSERT(dependent_funcref);
+          ASSERT(dependent_overload_set);
+          DIAG(DIAG_ERR, c->symbol->node->source_location, "Candidate type '%T' is not convertible to parameter type '%T'",
+            c->symbol->node->type,
+            dependent_funcref->parent->call.arguments.data[c->invalid_arg_index]->type);
+          break;
+
+        /// No matching overload for callee. Only callees can be set to this
+        /// validity.
+        case invalid_no_dependent_arg: {
+          Node * arg = funcref->parent->call.arguments.data[c->invalid_arg_index];
+          Node * param = c->symbol->node->function.param_decls.data[c->invalid_arg_index];
+          DIAG(DIAG_ERR, c->symbol->node->source_location, "Invalid overload declared here");
+          DIAG(DIAG_NOTE, param->source_location, "No overload of '%S' with type '%T'", arg->funcref.name, param->type);
+        } break;
+      }
+    }
+
+    return false;
+  }
 
   /// Otherwise, resolve F to the last remaining element of O(F).
   funcref->funcref.resolved = valid_overload;
@@ -352,14 +437,15 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
 
         /// Check if the argument is convertible to the parameter.
         Type *param_type = candidate->symbol->node->type->function.parameters.data[i].type;
-        if (!convertible(ast, param_type, arg->type)) {
+        isz score = convertible_score(ast, param_type, arg->type);
+        if (score == -1) {
           candidate->validity = invalid_argument_type;
           candidate->invalid_arg_index = i;
           break;
         }
 
         /// If it is, check if a conversion was required.
-        if (!types_equal(ast, param_type, arg->type)) candidate->score++;
+        candidate->score += (usz) score;
       }
     }
 
@@ -376,7 +462,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
 
           bool found = false;
           foreach (Candidate, arg_candidate, uf->overloads) {
-            if (types_equal(ast, param_type, arg_candidate->symbol->node->type)) {
+            if (convertible_score(ast, param_type, arg_candidate->symbol->node->type) != 0) {
               found = true;
               break;
             }
@@ -402,7 +488,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       foreach (unresolved_func, uf, unresolved_functions) {
         foreach_if (Candidate, candidate, uf->overloads, candidate->validity == candidate_valid) {
           Type *param_type = func->type->function.parameters.data[uf->index].type;
-          if (!types_equal(ast, param_type, candidate->symbol->node->type)) {
+          if (convertible_score(ast, param_type, candidate->symbol->node->type) != 0) {
             candidate->validity = invalid_no_dependent_callee;
             candidate->invalid_arg_index = uf->index;
           }
@@ -462,7 +548,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// Otherwise, remove from O all functions that are not equivalent to the
       /// lvalue being assigned to.
       foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
-        if (!types_equal(ast, decl_type, sym->symbol->node->type))
+        if (convertible_score(ast, decl_type, sym->symbol->node->type) != 0)
           sym->validity = invalid_expected_type_mismatch;
     } break;
 
@@ -488,7 +574,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// Otherwise, remove from O all functions that are not equivalent to
       /// the lvalue being assigned to.
       foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
-        if (!types_equal(ast, lvalue_type, sym->symbol->node->type))
+        if (convertible_score(ast, lvalue_type, sym->symbol->node->type) != 0)
           sym->validity = invalid_expected_type_mismatch;
     } break;
 
@@ -504,7 +590,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       Type *return_type = parent->type;
       if (return_type->kind == TYPE_POINTER && return_type->pointer.to->kind == TYPE_FUNCTION) {
         foreach_if (OverloadedFunctionSymbol, sym, overload_set, sym->validity == candidate_valid)
-          if (!types_equal(ast, return_type, sym->symbol->node->type))
+          if (convertible_score(ast, return_type, sym->symbol->node->type) != 0)
             sym->validity = invalid_expected_type_mismatch;
         break;
       }
@@ -525,7 +611,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       if ((cast_type->kind == TYPE_POINTER && cast_type->pointer.to->kind == TYPE_FUNCTION) ||
           (cast_type->kind == TYPE_FUNCTION)) {
         foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
-          if (!types_equal(ast, cast_type, sym->symbol->node->type))
+          if (convertible_score(ast, cast_type, sym->symbol->node->type) != 0)
             sym->validity = invalid_expected_type_mismatch;
       }
 

@@ -65,6 +65,7 @@ extern bool colours_blink;
 
 /// Whether to keep colours when formatting.
 extern THREAD_LOCAL bool thread_use_colours;
+extern THREAD_LOCAL bool thread_disable_type_colours;
 
 /// Enable colours in diagnostics.
 static inline void enable_colours() { thread_use_colours = true; }
