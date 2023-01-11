@@ -339,8 +339,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     }
 
     /// 2e. If any of the A_i are unresolved functions, then each of those arguments:
-    foreach_index (i, call->call.arguments) {
-      Node *arg = call->call.arguments.data[i];
+    foreach_index (n, call->call.arguments) {
+      Node *arg = call->call.arguments.data[n];
       if (arg->kind != NODE_FUNCTION_REFERENCE) continue;
 
       /// 2eα. Let F be that argument.
@@ -351,8 +351,13 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
 
       /// 2eγ. Remove from O all functions whose parameter P_F that corresponds
       ///      to F is not equivalent to any of the functions in O(F), and from
-      ///      O(F) all functions that are not equivalent to any of the P_F
-      ///      of any of the functions in O...
+      ///      O(F) all functions that are not equivalent to any of the P_F of
+      ///      any of the functions in O and from O(F) all functions that are not
+      ///      equivalent to any of the P_F of any of the functions in O.
+      ///
+      /// For simplicity’s sake, we shall henceforth refer to O as O(foo) and
+      /// O(F) as O(bar). The function being resolved is `foo` and the argument
+      /// being resolved (the unresolved function reference) is `bar`.
       ///
       /// In other words, given a call `foo(..., bar, ...)`, whose n-th argument
       /// `bar` is an overloaded function name, and overload sets O(foo) and O(bar):
@@ -381,12 +386,15 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// The first foo() is removed since there is no bar() that matches its
       /// first parameter. The second bar() is removed since there is no foo()
       /// that would accept it as its first parameter.
+      ///
+      /// First, remove from O(foo) any candidate C(foo) whose n-th parameter is
+      /// not equivalent to any of the candidates C(bar) in O(bar).
       foreach_if (Candidate, overload, overload_set, overload->validity == candidate_valid) {
         bool valid = false;
 
         /// For each candidate for bar(), check if there is an overload of foo()
         /// that accepts bar() as an argument in the corresponding parameter slot.
-        Type *param_type = overload->symbol->node->type->function.parameters.data[i].type;
+        Type *param_type = overload->symbol->node->type->function.parameters.data[n].type;
         foreach_if (Candidate, arg_overload, arg_overload_set, arg_overload->validity == candidate_valid) {
           Type *arg_type = arg_overload->symbol->node->type;
           if (types_equal(ast, param_type, arg_type)) {
@@ -398,19 +406,20 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         /// A bar() is invalid if there is no such overload of foo().
         if (!valid) {
           overload->validity = invalid_no_dependent_arg;
-          overload->invalid_arg_index = i;
+          overload->invalid_arg_index = n;
         }
       }
 
-      /// ... and from O(F) all functions that are not equivalent to
-      /// any of the P_F of any of the functions in O.
+      /// Secondly, remove from O(bar) any candidate C(bar) for which
+      /// there is *no* candidate C(foo) in O(foo) whose n-th parameter
+      /// is equivalent to C(bar).
       foreach_if (Candidate, arg_overload, arg_overload_set, arg_overload->validity == candidate_valid) {
         bool valid = false;
 
         /// For each candidate of foo(), check if there is at least one overload of
         /// bar() that matches the type of the parameter that bar() corresponds to.
         foreach_if (Candidate, overload, overload_set, overload->validity == candidate_valid) {
-          Type *param_type = overload->symbol->node->type->function.parameters.data[i].type;
+          Type *param_type = overload->symbol->node->type->function.parameters.data[n].type;
           if (types_equal(ast, param_type, arg_overload->symbol->node->type)) {
             valid = true;
             break;
@@ -420,29 +429,30 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         /// A foo() is invalid if there is no bar() that matches the parameter.
         if (!valid) {
           arg_overload->validity = invalid_no_dependent_callee;
-          arg_overload->invalid_arg_index = i;
+          arg_overload->invalid_arg_index = n;
         }
       }
 
       /// 2eδ. Resolve F.
       if (!resolve_overload(ast, &arg_overload_set, arg, &overload_set, func)) goto err;
 
-      /// 2eε. Remove from O all candidates whose i-th parameter does not match the resolved overload.
-      /// FIXME: I don’t think this is possible? Function types are not convertible to one
-      /// another; hence there can be one and only one possible overload of bar()
-      /// with a given signature. If ‘an’ overload of bar() matches for any number
-      /// functions foo(), then that overload must be the same for all of them.
-      /// Proof: Trivial proof by contradiction.
-      foreach_if (Candidate, overload, overload_set, overload->validity == candidate_valid) {
-        Type *param_type = overload->symbol->node->type->function.parameters.data[i].type;
-        Type *arg_type = arg_overload_set.data[0].symbol->node->type;
-
-        if (!types_equal(ast, param_type, arg_type)) {
-          overload->validity = invalid_no_dependent_callee;
-          overload->invalid_arg_index = i;
-          continue;
-        }
-      }
+      /// One would think that it would now make sense to remove from O(foo) all candidates
+      /// C(foo) whose n-th parameter does not match the resolved overload C(bar), seeing as
+      /// we have thus far kept all candidates C(foo) that match *at least one* candidate C(bar).
+      ///
+      /// However, this is predicated on the assumption that more than one candidate C(bar)
+      /// could match the n-th parameter of a candidate C(foo). This is not the case, as
+      /// there can be no two functions that are different but have the same signature and
+      /// name (because overloading on the return type is not permitted). If there somehow
+      /// are two functions whose signatures conflict in this way, then `resolve_overload`
+      /// above (or perhaps even some earlier check, where we make sure that the overload
+      /// set itself is well-formed) would have already reported that as an error, and we
+      /// wouldn’t be here in the first place.
+      ///
+      /// In other words, any candidates C(foo) that are still valid are valid because they
+      /// match ‘a’ candidate C(bar) with the correct signature. Since there can be only one
+      /// such candidate (since no two different functions may have equivalent signatures),
+      /// ‘a’ candidate C(bar) is actually ‘the’ (resolved) candidate C(bar).
     }
 
     /// 2f. Remove from O all functions except those with the least number of
