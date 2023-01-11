@@ -1,6 +1,7 @@
 - [ ] Miscellany.
   - [x] Operator `as`.
   - [x] Vector macros should be snake_case.
+  - [ ] LLVM_PATH env var or something in CMakeLists.txt rather than `find_package()`? 
   - [ ] `integer`/`byte`/`void` should be keywords (and terminals in the grammar).
   - [ ] Early `return`
     - [ ] Parsing
