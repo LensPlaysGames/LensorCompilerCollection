@@ -438,8 +438,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         Type *arg_type = arg_overload_set.data[0].symbol->node->type;
 
         if (!types_equal(ast, param_type, arg_type)) {
-          arg_overload->validity = invalid_no_dependent_callee;
-          arg_overload->invalid_arg_index = i;
+          overload->validity = invalid_no_dependent_callee;
+          overload->invalid_arg_index = i;
           continue;
         }
       }
