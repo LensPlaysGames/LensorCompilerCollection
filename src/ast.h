@@ -123,7 +123,7 @@ typedef struct Symbol {
   union {
     Node *node;
     Type *type;
-  };
+  } val;
 } Symbol;
 
 /// A scope in the AST.
@@ -336,12 +336,6 @@ typedef struct AST {
   /// Counter used for generating unique names.
   usz counter;
 
-  /// Builtin types.
-  Type *t_void;
-  Type *t_integer_literal;
-  Type *t_integer;
-  Type *t_byte;
-
   /// Scopes that are currently being parsed.
   Vector(Scope *) scope_stack;
 
@@ -518,33 +512,26 @@ Type *ast_make_type_function(
 /// ===========================================================================
 ///  AST query functions.
 /// ===========================================================================
-/// Info about a type.
-typedef struct Typeinfo {
-  /// The type stripped of aliases etc. May be NULL
-  /// if the type is incomplete.
-  Type *type;
-
-  /// The last alias in the chain.
-  Type *last_alias;
-
-  /// Flags.
-  bool is_void : 1;
-  bool is_incomplete : 1;
-} Typeinfo;
 
 /// Get a string representation of a type.
 /// \return The string representation of the type. The string is allocated
 ///         as if with `malloc` and must be freed by the caller.
 string ast_typename(const Type *type, bool colour);
 
+/// Get the canonical type of a type.
+/// \return NULL if the type is incomplete.
+Type *ast_canonical_type(Type *type);
+
+/// Get the last alias of a type.
+///
+/// This function strips nested named types until there is only one left.
+Type *ast_last_alias(Type *type);
+
 /// Check if a type is incomplete.
 bool ast_type_is_incomplete(const Type *type);
 
 /// Get the size of a type.
 usz ast_sizeof(const Type *type);
-
-/// Get information about a type.
-Typeinfo ast_typeinfo(AST *ast, Type *type);
 
 /// Check if a type is void.
 bool ast_is_void(AST *ast, Type *type);
@@ -569,5 +556,13 @@ size_t ast_intern_string(AST *ast, span string);
 
 /// Replace a node with another node.
 void ast_replace_node(AST *ast, Node *old, Node *new);
+
+/// ===========================================================================
+///  Builtin types.
+/// ===========================================================================
+extern Type * const t_void;
+extern Type * const t_integer_literal;
+extern Type * const t_integer;
+extern Type * const t_byte;
 
 #endif // FUNCOMPILER_AST_H

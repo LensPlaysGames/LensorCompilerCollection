@@ -2,6 +2,67 @@
 #include <parser.h>
 
 /// ===========================================================================
+///  Builtin types.
+/// ===========================================================================
+/*typedef struct TypePrimitive {
+  usz size;
+  usz alignment;
+  span name;
+  bool is_signed;
+  uint8_t id;
+} TypePrimitive;*/
+static Type t_void_def = {
+    .kind = TYPE_PRIMITIVE,
+    .source_location = {0},
+    .primitive = {
+        .size = 0,
+        .alignment = 0,
+        .name = literal_span_raw("void"),
+        .id = 0,
+    },
+};
+
+static Type t_integer_literal_def = {
+  .kind = TYPE_PRIMITIVE,
+  .source_location = {0},
+  .primitive = {
+    .size = 8,
+    .alignment = 8,
+    .name = literal_span_raw("<integer_literal>"),
+    .is_signed = true,
+    .id = 1,
+  },
+};
+
+static Type t_integer_def = {
+    .kind = TYPE_PRIMITIVE,
+    .source_location = {0},
+    .primitive = {
+        .size = 8,
+        .alignment = 8,
+        .name = literal_span_raw("integer"),
+        .is_signed = true,
+        .id = 1,
+    },
+};
+
+static Type t_byte_def = {
+    .kind = TYPE_PRIMITIVE,
+    .source_location = {0},
+    .primitive = {
+        .size = 1,
+        .alignment = 1,
+        .name = literal_span_raw("byte"),
+        .id = 3,
+    },
+};
+
+Type * const t_void = &t_void_def;
+Type * const t_integer_literal = &t_integer_literal_def;
+Type * const t_integer = &t_integer_def;
+Type * const t_byte = &t_byte_def;
+
+/// ===========================================================================
 ///  Scope/symbol functions.
 /// ===========================================================================
 static Scope *scope_create(Scope *parent) {
@@ -38,8 +99,8 @@ Symbol *scope_add_symbol_unconditional(Scope *scope, enum SymbolKind kind, span 
   symbol->kind = kind;
   symbol->name = string_dup(name);
   symbol->scope = scope;
-  if (kind == SYM_TYPE) symbol->type = value;
-  else symbol->node = value;
+  if (kind == SYM_TYPE) symbol->val.type = value;
+  else symbol->val.node = value;
   vector_push(scope->symbols, symbol);
   return symbol;
 }
@@ -361,8 +422,7 @@ static void write_typename(string_buffer *s, const Type *type) {
       return;
 
     case TYPE_NAMED:
-      if (type->named) format_to(s, "%36%S", type->named->name);
-      else format_to(s, "<incomplete>");
+      format_to(s, "%36%S", type->named->name);
       break;
 
     case TYPE_POINTER: {
@@ -407,41 +467,35 @@ string ast_typename(const Type *type, bool colour) {
   return (string){buf.data, buf.size};
 }
 
+Type *ast_canonical_type(Type *type) {
+    while (type && type->kind == TYPE_NAMED) type = type->named->val.type;
+    return type;
+}
+
+Type *ast_last_alias(Type *type) {
+    while (type && type->kind == TYPE_NAMED && type->named->val.type)
+      type = type->named->val.type;
+    return type;
+}
+
 bool ast_type_is_incomplete(const Type *type) {
-  while (type && type->kind == TYPE_NAMED) type = type->named->type;
-  return !type;
+  Type *t = ast_canonical_type((Type*) type);
+  return !t || t == t_void;
 }
 
 usz ast_sizeof(const Type *type) {
   switch (type->kind) {
     default: ICE("Invalid type kind: %d", type->kind);
     case TYPE_PRIMITIVE: return type->primitive.size;
-    case TYPE_NAMED: return type->named ? ast_sizeof(type->named->type) : 0;
+    case TYPE_NAMED: return type->named->val.type ? ast_sizeof(type->named->val.type) : 0;
     case TYPE_POINTER: return sizeof(void *);
     case TYPE_ARRAY: return type->array.size * ast_sizeof(type->array.of);
     case TYPE_FUNCTION: return sizeof(void *);
   }
 }
 
-Typeinfo ast_typeinfo(AST *ast, Type * const type) {
-  /// Resolve aliases.
-  Type *base = type;
-  Type *alias = type;
-  while (base && base->kind == TYPE_NAMED) {
-    alias = base;
-    base = base->named ? base->named->type : NULL;
-  }
-
-  return (Typeinfo){
-    .type = base,
-    .last_alias = alias,
-    .is_incomplete = !base,
-    .is_void = alias == ast->t_void,
-  };
-}
-
 bool ast_is_void(AST *ast, Type *type) {
-  return ast_typeinfo(ast, type).is_void;
+  return ast_canonical_type(type) == t_void;
 }
 
 /// ===========================================================================
@@ -458,42 +512,10 @@ AST *ast_create() {
   vector_push(ast->scope_stack, scope_create(NULL));
   vector_push(ast->_scopes_, vector_back(ast->scope_stack));
 
-  /// Initialise the builtin types.
-  uint8_t primitive_type_id = 0;
-
-  /// Integer literal; this is a special type that is implicitly
-  /// to any integer type, and equivalent to integer.
-  ast->t_integer_literal = mktype(ast, TYPE_PRIMITIVE, (loc){0, 0});
-  ast->t_integer_literal->primitive.size = 8;
-  ast->t_integer_literal->primitive.alignment = 8;
-  ast->t_integer_literal->primitive.is_signed = true;
-  ast->t_integer_literal->primitive.name = literal_span("<integer literal>");
-  ast->t_integer_literal->primitive.id = primitive_type_id++;
-
-  /// Integer.
-  ast->t_integer = mktype(ast, TYPE_PRIMITIVE, (loc){0, 0});
-  ast->t_integer->primitive.size = 8;
-  ast->t_integer->primitive.alignment = 8;
-  ast->t_integer->primitive.is_signed = true;
-  ast->t_integer->primitive.name = literal_span("integer");
-  ast->t_integer->primitive.id = primitive_type_id++;
-
-  /// Byte.
-  ast->t_byte = mktype(ast, TYPE_PRIMITIVE, (loc){0, 0});
-  ast->t_byte->primitive.size = 1;
-  ast->t_byte->primitive.alignment = 1;
-  ast->t_byte->primitive.is_signed = true;
-  ast->t_byte->primitive.name = literal_span("byte");
-  ast->t_byte->primitive.id = primitive_type_id++;
-
-  /// Declare void as a named type with no node associated with it.
-  /// This implicitly means that void is an incomplete type.
-  ast->t_void = mktype(ast, TYPE_NAMED, (loc){0, 0});
-
   /// Add the builtin types to the global scope.
-  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("integer"), ast->t_integer);
-  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("byte"), ast->t_byte);
-  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("void"), ast->t_void);
+  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("integer"), t_integer);
+  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("byte"), t_byte);
+  scope_add_symbol(ast->_scopes_.data[0], SYM_TYPE, literal_span("void"), t_void);
 
   /// Done.
   return ast;
@@ -740,9 +762,9 @@ static void print_scope(FILE *file, scope_tree_node *node, string_buffer *buf) {
         /// Print symbol.
         switch (sym->kind) {
             default: UNREACHABLE();
-            case SYM_TYPE: fprint(file, "Type: %36%S%31 -> %T", sym->name, sym->type); break;
-            case SYM_VARIABLE: fprint(file, "Variable: %m%S%31 : %T", sym->name, sym->node->type); break;
-            case SYM_FUNCTION: fprint(file, "Function %32%S%31 : %T", sym->name, sym->node->type); break;
+            case SYM_TYPE: fprint(file, "Type: %36%S%31 -> %T", sym->name, sym->val.type); break;
+            case SYM_VARIABLE: fprint(file, "Variable: %m%S%31 : %T", sym->name, sym->val.node->type); break;
+            case SYM_FUNCTION: fprint(file, "Function %32%S%31 : %T", sym->name, sym->val.node->type); break;
         }
 
         /// Line break.

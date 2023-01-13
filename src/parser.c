@@ -584,26 +584,27 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
 
 /// Check if a type is valid as a declaration type.
 static void validate_decltype(Parser *p, Type *type) {
-  /// Strip typedefs.
-  Typeinfo actual_type = ast_typeinfo(p->ast, type);
-
   /// Strip arrays and recursive typedefs.
-  Type *base_type = actual_type.type;
+  Type *base_type = ast_canonical_type(type);
+  Type *array = NULL;
   while (base_type) {
-    if (base_type->kind == TYPE_NAMED) base_type = base_type->named ? base_type->named->type : NULL;
-    else if (base_type->kind == TYPE_ARRAY) base_type = base_type->array.of;
-    else break;
+    if (base_type->kind == TYPE_NAMED) base_type = ast_canonical_type(base_type->named->val.type);
+    else if (base_type->kind == TYPE_ARRAY) {
+      array = base_type;
+      base_type = ast_canonical_type(base_type->array.of);
+      break;
+    } else break;
   }
 
   /// Make sure this isn’t an array of incomplete type.
-  if (actual_type.is_incomplete || !base_type) {
+  if (!base_type) {
     ERR_AT(type->source_location, "Cannot declare %s of incomplete type '%T'",
-           actual_type.is_incomplete ? "variable" : "array", type);
+           array ? "array" : "variable", type);
   }
 
-  if (actual_type.type->kind == TYPE_FUNCTION || base_type->kind == TYPE_FUNCTION) {
+  if (base_type->kind == TYPE_FUNCTION) {
     ERR_AT(type->source_location, "Cannot declare %s of function type '%T'",
-           actual_type.is_incomplete ? "variable" : "array", type);
+           array ? "array" : "variable", type);
   }
 }
 
@@ -813,14 +814,14 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
       /// Create a symbol table entry before parsing the body.
       Symbol *sym = scope_add_symbol_unconditional(curr_scope(p), SYM_FUNCTION, ident.text, NULL);
 
-      if (sym->kind != SYM_FUNCTION || sym->node)
+      if (sym->kind != SYM_FUNCTION || sym->val.node)
         ERR_AT(ident.source_location, "Redefinition of symbol '%S'", ident.text);
 
       /// Parse the body, create the function, and update the symbol table.
       Nodes params = {0};
       Node *body = parse_function_body(p, type, &params);
       Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
-      sym->node = func;
+      sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, ident.source_location, ident.text);
       funcref->funcref.resolved = sym;
       return funcref;
@@ -830,12 +831,12 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     else {
       /// Create a symbol table entry.
       Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
-      if (sym->kind != SYM_FUNCTION || sym->node)
+      if (sym->kind != SYM_FUNCTION || sym->val.node)
         ERR_AT(ident.source_location, "Redefinition of symbol '%S'", ident.text);
 
       /// Create the function.
       Node *func = ast_make_function(p->ast, ident.source_location, type, (Nodes){0}, NULL, ident.text);
-      sym->node = func;
+      sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, ident.source_location, ident.text);
       funcref->funcref.resolved = sym;
       return funcref;

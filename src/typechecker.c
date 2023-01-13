@@ -26,13 +26,10 @@
 
 NODISCARD static bool types_equal(AST *ast, Type *a, Type *b);
 
-/// Check if two types are equal. You probably want to use
-/// `convertible()` or `equivalent()` instead.
-///
-/// \param a A type that is not NULL and not of kind NAMED.
-/// \param b A type that is not NULL and not of kind NAMED.
+/// Check if two canonical types are equal. You probably want to use
+/// `convertible()`
 /// \return Whether the types are equal.
-NODISCARD static bool types_equal_impl(AST *ast, Type *a, Type *b) {
+NODISCARD static bool types_equal_canon(AST *ast, Type *a, Type *b) {
   ASSERT(a && b);
   ASSERT(a->kind != TYPE_NAMED);
   ASSERT(b->kind != TYPE_NAMED);
@@ -102,27 +99,29 @@ NODISCARD static bool is_integer(AST *ast, Type *type) {
 /// \return 1 if the types are convertible, but implicit conversions are required.
 NODISCARD static isz convertible_score(AST *ast, Type * to_type, Type * from_type) {
   /// Expand types.
-  Typeinfo to = ast_typeinfo(ast, to_type);
-  Typeinfo from = ast_typeinfo(ast, from_type);
+  Type *to = ast_canonical_type(to_type);
+  Type *from = ast_canonical_type(from_type);
 
   /// Any type is implicitly convertible to void.
-  if (to.is_void) return 0;
+  if (to == t_void) return 0;
 
   /// If the types are both incomplete, compare their names.
-  if (to.is_incomplete && from.is_incomplete) {
-    ASSERT(to.last_alias && from.last_alias);
-    return string_eq(to.last_alias->named->name, from.last_alias->named->name);
+  if (!to && !from) {
+    to = ast_last_alias(to_type);
+    from = ast_last_alias(from_type);
+    ASSERT(to && from);
+    return string_eq(to->named->name, from->named->name) ? 0 : -1;
   }
 
   /// If either type is incomplete, they are not convertible.
-  if (to.is_incomplete || from.is_incomplete) return -1;
+  if (!to || !from) return -1;
 
   /// If the types are the same, they are convertible.
-  if (types_equal(ast, to.type, from.type)) return 0;
+  if (types_equal_canon(ast, to, from)) return 0;
 
   /// A function type is implicitly convertible to its
   /// corresponding pointer type.
-  if (to.type->kind == TYPE_POINTER && from.type->kind == TYPE_FUNCTION) {
+  if (to->kind == TYPE_POINTER && from->kind == TYPE_FUNCTION) {
     Typeinfo base = ast_typeinfo(ast, to.type->pointer.to);
     if (!base.is_incomplete && types_equal_impl(ast, base.type, from.type)) return 0;
     return -1;
