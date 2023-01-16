@@ -1365,8 +1365,8 @@ void mangle_function_name(IRFunction *function) {
   format_to(&buf, "_X%Z%S", function->name.size, function->name);
   for (u64 i = 0; i < function->parameters.size; i++) {
     /// TODO: Stringify the typename manually to get around disallowed characters.
-    string typename = ast_typename(function->type->function.parameters.data[i].type, false);
-    for (char *c = typename.data; *c; ++c) {
+    string name = typename(function->type->function.parameters.data[i].type, false);
+    for (char *c = name.data; *c; ++c) {
       // Disallowed characters that show up in type names must be simplified.
       // TODO: We have to figure out good replacements for these.
       switch (*c) {
@@ -1391,8 +1391,8 @@ void mangle_function_name(IRFunction *function) {
       default: break;
       }
     }
-    format_to(&buf, "%Z%S", typename.size, typename);
-    free(typename.data);
+    format_to(&buf, "%Z%S", name.size, name);
+    free(name.data);
   }
 
   free(function->name.data);

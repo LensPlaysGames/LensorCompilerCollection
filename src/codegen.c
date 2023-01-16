@@ -214,7 +214,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     ir_block_attach(ctx, join_block);
 
     /// Insert a phi node for the result of the if in the join block.
-    if (!ast_is_void(ctx->ast, expr->type)) {
+    if (!type_is_void(expr->type)) {
       IRInstruction *phi = ir_phi(ctx);
       ir_phi_argument(phi, last_then_block, expr->if_.then->ir);
       ir_phi_argument(phi, last_else_block, expr->if_.else_->ir);
@@ -284,7 +284,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       /// The yield of a block is that of its last expression;
       /// If a block doesn’t yield `void`, then it is guaranteed
       /// to not be empty, which is why we don’t check its size here.
-      if (!ast_is_void(ctx->ast, expr->type)) {
+      if (!type_is_void(expr->type)) {
         ASSERT(last && last->ir);
         expr->ir = last->ir;
       }
@@ -332,7 +332,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       /// If the LHS is a variable, just emit a direct store to the memory address,
       /// which we can get from the declaration which has to have been emitted already.
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
-        expr->ir = ir_store(ctx, rhs->ir, lhs->var->node->ir);
+        expr->ir = ir_store(ctx, rhs->ir, lhs->var->val.node->ir);
         return;
       }
 
@@ -382,7 +382,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     if (expr->unary.op == TK_AMPERSAND && !expr->unary.postfix) {
       switch (expr->unary.value->kind) {
         case NODE_DECLARATION: expr->ir = expr->unary.value->ir; return;
-        case NODE_VARIABLE_REFERENCE: expr->ir = expr->unary.value->var->node->ir; return;
+        case NODE_VARIABLE_REFERENCE: expr->ir = expr->unary.value->var->val.node->ir; return;
         default: ICE("Cannot take address of expression of type %d", expr->unary.value->kind);
       }
     }
@@ -428,7 +428,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Variable reference.
   case NODE_VARIABLE_REFERENCE:
-    expr->ir = ir_load(ctx, expr->var->node->ir);
+    expr->ir = ir_load(ctx, expr->var->val.node->ir);
     return;
 
   /// Function reference. These should have all been removed by the semantic analyser.
@@ -458,7 +458,7 @@ void codegen_function(CodegenContext *ctx, Node *node) {
 
   /// If the we can return from here, and this function doesn’t return void,
   /// then return the return value; otherwise, just return nothing.
-  if (!ir_is_closed(ctx->block) && !ast_is_void(ctx->ast, node->type->function.return_type)) {
+  if (!ir_is_closed(ctx->block) && !type_is_void(node->type->function.return_type)) {
     ir_return(ctx, node->function.body->ir);
   } else {
     ir_return(ctx, NULL);
@@ -525,18 +525,18 @@ bool codegen
       /// Create the main function.
       Parameter argc =  {
         .name = string_create("__argc__"),
-        .type = ast->t_integer,
+        .type = t_integer,
       };
       Parameter argv =  {
         .name = string_create("__argv__"),
-        .type = ast_make_type_pointer(ast, (loc){0}, ast_make_type_pointer(ast, (loc){0}, ast->t_integer)),
+        .type = ast_make_type_pointer(ast, (loc){0}, ast_make_type_pointer(ast, (loc){0}, t_integer)),
       };
 
       Parameters main_params = {0};
       vector_push(main_params, argc);
       vector_push(main_params, argv);
 
-      Type *main_type = ast_make_type_function(context->ast, (loc){0}, context->ast->t_integer, main_params);
+      Type *main_type = ast_make_type_function(context->ast, (loc){0}, t_integer, main_params);
       context->entry = ir_function(context, literal_span("main"), main_type);
       context->entry->attr_global = true;
 

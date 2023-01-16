@@ -200,7 +200,7 @@ static inline void vformat_to_impl(
       } break;
 
       case 'T': {
-        string s = ast_typename(va_arg(args, Type *), !thread_disable_type_colours && thread_use_colours);
+        string s = typename(va_arg(args, Type *), !thread_disable_type_colours && thread_use_colours);
         write_string(s.data, s.size, to);
         free(s.data);
       } break;
