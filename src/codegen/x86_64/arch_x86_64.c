@@ -1437,7 +1437,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     }
 
     /// Allocate space for the variable.
-    usz sz = ast_sizeof(var->type);
+    usz sz = type_sizeof(var->type);
     fprint(context->code, "%S: .space %zu\n", var->name, sz);
   }
 

@@ -24,12 +24,12 @@
 
 #define ERR_NOT_CONVERTIBLE(where, to, from) ERR(where, "Type '%T' is not convertible to '%T'", from, to)
 
-NODISCARD static bool types_equal(AST *ast, Type *a, Type *b);
+NODISCARD static bool types_equal(Type *a, Type *b);
 
 /// Check if two canonical types are equal. You probably want to use
 /// `convertible()`
 /// \return Whether the types are equal.
-NODISCARD static bool types_equal_canon(AST *ast, Type *a, Type *b) {
+NODISCARD static bool types_equal_canon(Type *a, Type *b) {
   ASSERT(a && b);
   ASSERT(a->kind != TYPE_NAMED);
   ASSERT(b->kind != TYPE_NAMED);
@@ -42,16 +42,16 @@ NODISCARD static bool types_equal_canon(AST *ast, Type *a, Type *b) {
     default: ICE("Invalid type kind %d", a->kind);
     case TYPE_NAMED: UNREACHABLE();
     case TYPE_PRIMITIVE:
-      if (a == ast->t_integer_literal) return b == ast->t_integer_literal || b == ast->t_integer;
-      if (b == ast->t_integer_literal) return a == ast->t_integer_literal || a == ast->t_integer;
+      if (a == t_integer_literal) return b == t_integer_literal || b == t_integer;
+      if (b == t_integer_literal) return a == t_integer_literal || a == t_integer;
       return a->primitive.id == b->primitive.id;
-    case TYPE_POINTER: return types_equal(ast, a->pointer.to, b->pointer.to);
-    case TYPE_ARRAY: return a->array.size == b->array.size && types_equal(ast, a->array.of, b->array.of);
+    case TYPE_POINTER: return types_equal(a->pointer.to, b->pointer.to);
+    case TYPE_ARRAY: return a->array.size == b->array.size && types_equal(a->array.of, b->array.of);
     case TYPE_FUNCTION: {
       if (a->function.parameters.size != b->function.parameters.size) return false;
-      if (!types_equal(ast, a->function.return_type, b->function.return_type)) return false;
+      if (!types_equal(a->function.return_type, b->function.return_type)) return false;
       foreach_index(i, a->function.parameters)
-        if (!types_equal(ast, a->function.parameters.data[i].type, b->function.parameters.data[i].type))
+        if (!types_equal(a->function.parameters.data[i].type, b->function.parameters.data[i].type))
           return false;
       return true;
     }
@@ -59,103 +59,114 @@ NODISCARD static bool types_equal_canon(AST *ast, Type *a, Type *b) {
 }
 
 /// Check if two types are equal. You probably want to use `convertible` instead.
-NODISCARD static bool types_equal(AST *ast, Type *a, Type *b) {
-  Typeinfo ta = ast_typeinfo(ast, a);
-  Typeinfo tb = ast_typeinfo(ast, b);
+NODISCARD static bool types_equal(Type *a, Type *b) {
+  Type *ta = type_last_alias(a);
+  Type *tb = type_last_alias(b);
 
   /// If both are incomplete, compare the names.
-  if (ta.is_incomplete && tb.is_incomplete) {
-    ASSERT(ta.last_alias && tb.last_alias);
-    return string_eq(ta.last_alias->named->name, tb.last_alias->named->name);
-  }
+  if (type_is_incomplete_canon(ta->named->val.type) && type_is_incomplete_canon(tb->named->val.type))
+    return string_eq(ta->named->name, tb->named->name);
 
   /// If one is incomplete, the types are not equal.
-  if (ta.is_incomplete || tb.is_incomplete) return false;
+  if (type_is_incomplete_canon(ta->named->val.type) || type_is_incomplete_canon(tb->named->val.type))
+    return false;
 
   /// Compare the types.
-  return types_equal_impl(ast, ta.type, tb.type);
+  return types_equal_canon(ta->named->val.type, tb->named->val.type);
+}
+
+/// Check if a canonical type is an integer type.
+NODISCARD static bool is_integer_canon(Type *t) {
+  /// Currently, all primitive types are integers.
+  return t == t_integer || t == t_integer_literal  || t == t_byte;
 }
 
 /// Check if a type is an integer type.
-NODISCARD static bool is_integer_impl(AST *ast, Typeinfo t) {
+NODISCARD static bool is_integer(Type *type) {
   /// Currently, all primitive types are integers.
-  return t.type == ast->t_integer || t.type == ast->t_integer_literal  || t.type == ast->t_byte;
-}
-
-/// Check if a type is an integer type.
-NODISCARD static bool is_integer(AST *ast, Type *type) {
-  /// Currently, all primitive types are integers.
-  Typeinfo t = ast_typeinfo(ast, type);
-  return is_integer_impl(ast, t);
+  return is_integer_canon(type_canonical(type));
 }
 
 /// Check how well from is convertible to to.
 ///
-/// \param ast The AST that the types are in.
 /// \param to_type The type to convert to.
 /// \param from_type The type to convert from.
 /// \return -1 if the types are not convertible to one another.
 /// \return 0 if the types are equivalent.
 /// \return 1 if the types are convertible, but implicit conversions are required.
-NODISCARD static isz convertible_score(AST *ast, Type * to_type, Type * from_type) {
+NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
   /// Expand types.
-  Type *to = ast_canonical_type(to_type);
-  Type *from = ast_canonical_type(from_type);
+  Type *to_alias = type_last_alias(to_type);
+  Type *from_alias = type_last_alias(from_type);
 
   /// Any type is implicitly convertible to void.
-  if (to == t_void) return 0;
+  if (type_is_void(to_alias)) return 0;
 
   /// If the types are both incomplete, compare their names.
-  if (!to && !from) {
-    to = ast_last_alias(to_type);
-    from = ast_last_alias(from_type);
-    ASSERT(to && from);
-    return string_eq(to->named->name, from->named->name) ? 0 : -1;
-  }
+  if (type_is_incomplete(to_alias->named->val.type) && type_is_incomplete(from_alias->named->val.type))
+    return string_eq(to_alias->named->name, from_alias->named->name) ? 0 : -1;
 
   /// If either type is incomplete, they are not convertible.
-  if (!to || !from) return -1;
+  if (type_is_incomplete(to_alias->named->val.type) || type_is_incomplete(from_alias->named->val.type))
+    return -1;
 
   /// If the types are the same, they are convertible.
-  if (types_equal_canon(ast, to, from)) return 0;
+  Type *to = type_canonical(to_alias);
+  Type *from = type_canonical(from_alias);
+  if (types_equal_canon(to, from)) return 0;
 
   /// A function type is implicitly convertible to its
   /// corresponding pointer type.
   if (to->kind == TYPE_POINTER && from->kind == TYPE_FUNCTION) {
-    Typeinfo base = ast_typeinfo(ast, to.type->pointer.to);
-    if (!base.is_incomplete && types_equal_impl(ast, base.type, from.type)) return 0;
+    Type *base = type_canonical(to->pointer.to);
+    if (!type_is_incomplete_canon(base) && types_equal_canon(base, from)) return 0;
     return -1;
   }
 
   /// Smaller integer types are implicitly convertible to larger
   /// integer types if the type being converted to is signed, or
   /// if the smaller type is unsigned.
-  bool to_is_int = is_integer_impl(ast, to);
-  bool from_is_int = is_integer_impl(ast, from);
+  bool to_is_int = is_integer_canon(to);
+  bool from_is_int = is_integer_canon(from);
   if (to_is_int && from_is_int) {
     if (
-      to.type->primitive.size > from.type->primitive.size
-      && (to.type->primitive.is_signed
-         || !from.type->primitive.is_signed)
+      to->primitive.size > from->primitive.size
+      && (to->primitive.is_signed || !from->primitive.is_signed)
     ) return 1;
   }
 
   /// Integer literals are convertible to any integer type.
-  if (from.type == ast->t_integer_literal && to_is_int) return 1;
+  if (from == t_integer_literal && to_is_int) return 1;
 
   /// Otherwise, the types are not convertible.
   return -1;
 }
 
 /// Check if from is convertible to to.
-NODISCARD static bool convertible(AST *ast, Type * to_type, Type * from_type) {
-  return convertible_score(ast, to_type, from_type) != -1;
+NODISCARD static bool convertible(Type *to_type, Type *from_type) {
+  return convertible_score(to_type, from_type) != -1;
 }
 
 /// Get the common type of two types.
-NODISCARD static Type *common_type(AST *ast, Type *a, Type *b) {
-  /// TODO: integer stuff.
-  if (types_equal(ast, a, b)) return a;
+NODISCARD static Type *common_type(Type *a, Type *b) {
+  Type *ta = type_canonical(a);
+  Type *tb = type_canonical(b);
+  if (types_equal(a, b)) return a;
+
+  /// Some integer types are implicitly convertible to other integer types.
+  /// See also `convertible_score`.
+  if (is_integer(ta) && is_integer(tb)) {
+    if (
+        ta->primitive.size > tb->primitive.size
+        && (ta->primitive.is_signed || !tb->primitive.is_signed)
+    ) return ta;
+    if (
+        tb->primitive.size > ta->primitive.size
+        && (tb->primitive.is_signed || !ta->primitive.is_signed)
+    ) return tb;
+  }
+
+  /// No common type.
   return NULL;
 }
 
@@ -226,7 +237,7 @@ static OverloadSet collect_overload_set(Node *func) {
 /// Print all valid overloads in an overload set.
 void print_valid_overloads(AST *ast, OverloadSet *o) {
   foreach_if (Candidate, c, *o, c->validity == candidate_valid)
-    DIAG(DIAG_NOTE, c->symbol->node->source_location, "Candidate");
+    DIAG(DIAG_NOTE, c->symbol->val.node->source_location, "Candidate");
 }
 
 /// Actually resolve a function.
@@ -285,23 +296,23 @@ NODISCARD static bool resolve_overload(
 
         /// Not enough / too many parameters.
         case invalid_parameter_count:
-          DIAG(DIAG_ERR, c->symbol->node->source_location, "Candidate takes %zu parameters, but %zu were provided.",
-            c->symbol->node->type->function.parameters.size, funcref->parent->call.arguments.size);
+          DIAG(DIAG_ERR, c->symbol->val.node->source_location, "Candidate takes %zu parameters, but %zu were provided.",
+            c->symbol->val.node->type->function.parameters.size, funcref->parent->call.arguments.size);
           break;
 
         /// Argument type is not convertible to parameter type.
         case invalid_argument_type:
-          DIAG(DIAG_ERR, c->symbol->node->source_location, "Invalid overload declared here");
+          DIAG(DIAG_ERR, c->symbol->val.node->source_location, "Invalid overload declared here");
           DIAG(DIAG_NOTE, funcref->parent->call.arguments.data[c->invalid_arg_index]->source_location,
             "Argument of type '%T' is not convertible to parameter type '%T'.",
             funcref->parent->call.arguments.data[c->invalid_arg_index]->type,
-            c->symbol->node->type->function.parameters.data[c->invalid_arg_index].type);
+            c->symbol->val.node->type->function.parameters.data[c->invalid_arg_index].type);
           break;
 
         /// TODO: Print a better error depending on the parent expression.
         case invalid_expected_type_mismatch:
-          DIAG(DIAG_ERR, c->symbol->node->source_location, "Candidate type '%T' is not convertible to '%T'",
-            c->symbol->node->type,
+          DIAG(DIAG_ERR, c->symbol->val.node->source_location, "Candidate type '%T' is not convertible to '%T'",
+            c->symbol->val.node->type,
             funcref->parent->type);
           break;
 
@@ -310,8 +321,8 @@ NODISCARD static bool resolve_overload(
         case invalid_no_dependent_callee:
           ASSERT(dependent_funcref);
           ASSERT(dependent_overload_set);
-          DIAG(DIAG_ERR, c->symbol->node->source_location, "Candidate type '%T' is not convertible to parameter type '%T'",
-            c->symbol->node->type,
+          DIAG(DIAG_ERR, c->symbol->val.node->source_location, "Candidate type '%T' is not convertible to parameter type '%T'",
+            c->symbol->val.node->type,
             dependent_funcref->parent->call.arguments.data[c->invalid_arg_index]->type);
           break;
 
@@ -319,8 +330,8 @@ NODISCARD static bool resolve_overload(
         /// validity.
         case invalid_no_dependent_arg: {
           Node * arg = funcref->parent->call.arguments.data[c->invalid_arg_index];
-          Node * param = c->symbol->node->function.param_decls.data[c->invalid_arg_index];
-          DIAG(DIAG_ERR, c->symbol->node->source_location, "Invalid overload declared here");
+          Node * param = c->symbol->val.node->function.param_decls.data[c->invalid_arg_index];
+          DIAG(DIAG_ERR, c->symbol->val.node->source_location, "Invalid overload declared here");
           DIAG(DIAG_NOTE, param->source_location, "No overload of '%S' with type '%T'", arg->funcref.name, param->type);
         } break;
       }
@@ -331,7 +342,7 @@ NODISCARD static bool resolve_overload(
 
   /// Otherwise, resolve F to the last remaining element of O(F).
   funcref->funcref.resolved = valid_overload;
-  funcref->type = funcref->funcref.resolved->node->type;
+  funcref->type = funcref->funcref.resolved->val.node->type;
   return true;
 }
 
@@ -407,7 +418,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     /// 2b. Remove from O all functions that have a different number of
     ///     parameters than the call expression has arguments.
     foreach (Candidate, sym, overload_set)
-      if (sym->symbol->node->type->function.parameters.size != call->call.arguments.size)
+      if (sym->symbol->val.node->type->function.parameters.size != call->call.arguments.size)
         sym->validity = invalid_parameter_count;
 
 
@@ -435,8 +446,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         }
 
         /// Check if the argument is convertible to the parameter.
-        Type *param_type = candidate->symbol->node->type->function.parameters.data[i].type;
-        isz score = convertible_score(ast, param_type, arg->type);
+        Type *param_type = candidate->symbol->val.node->type->function.parameters.data[i].type;
+        isz score = convertible_score(param_type, arg->type);
         if (score == -1) {
           candidate->validity = invalid_argument_type;
           candidate->invalid_arg_index = i;
@@ -457,11 +468,11 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
         /// 2eβ. Remove from O all candidates C that do no accept any overload
         ///      of this argument as a parameter.
         foreach_if (Candidate, candidate, overload_set, candidate->validity == candidate_valid) {
-          Type *param_type = candidate->symbol->node->type->function.parameters.data[uf->index].type;
+          Type *param_type = candidate->symbol->val.node->type->function.parameters.data[uf->index].type;
 
           bool found = false;
           foreach (Candidate, arg_candidate, uf->overloads) {
-            if (convertible_score(ast, param_type, arg_candidate->symbol->node->type) != 0) {
+            if (convertible_score(param_type, arg_candidate->symbol->val.node->type) != 0) {
               found = true;
               break;
             }
@@ -487,7 +498,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       foreach (unresolved_func, uf, unresolved_functions) {
         foreach_if (Candidate, candidate, uf->overloads, candidate->validity == candidate_valid) {
           Type *param_type = func->type->function.parameters.data[uf->index].type;
-          if (convertible_score(ast, param_type, candidate->symbol->node->type) != 0) {
+          if (convertible_score(param_type, candidate->symbol->val.node->type) != 0) {
             candidate->validity = invalid_no_dependent_callee;
             candidate->invalid_arg_index = uf->index;
           }
@@ -547,7 +558,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// Otherwise, remove from O all functions that are not equivalent to the
       /// lvalue being assigned to.
       foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
-        if (convertible_score(ast, decl_type, sym->symbol->node->type) != 0)
+        if (convertible_score(decl_type, sym->symbol->val.node->type) != 0)
           sym->validity = invalid_expected_type_mismatch;
     } break;
 
@@ -573,7 +584,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// Otherwise, remove from O all functions that are not equivalent to
       /// the lvalue being assigned to.
       foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
-        if (convertible_score(ast, lvalue_type, sym->symbol->node->type) != 0)
+        if (convertible_score(lvalue_type, sym->symbol->val.node->type) != 0)
           sym->validity = invalid_expected_type_mismatch;
     } break;
 
@@ -610,7 +621,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       if ((cast_type->kind == TYPE_POINTER && cast_type->pointer.to->kind == TYPE_FUNCTION) ||
           (cast_type->kind == TYPE_FUNCTION)) {
         foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
-          if (convertible_score(ast, cast_type, sym->symbol->node->type) != 0)
+          if (convertible_score(cast_type, sym->symbol->val.node->type) != 0)
             sym->validity = invalid_expected_type_mismatch;
       }
 
@@ -670,7 +681,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       foreach_index(i, expr->root.children) {
         Node *node = expr->root.children.data[i];
         if (node->kind == NODE_FUNCTION_REFERENCE) {
-          Node *func = node->funcref.resolved->node;
+          Node *func = node->funcref.resolved->val.node;
           if (
             func &&
             func->source_location.start == node->source_location.start &&
@@ -681,7 +692,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       /// If the last expression in the root is not of type integer,
       /// add a literal 0 so that `main()` returns 0.
-      if (!expr->root.children.size || !convertible(ast, ast->t_integer, vector_back(expr->root.children)->type)) {
+      if (!expr->root.children.size || !convertible(t_integer, vector_back(expr->root.children)->type)) {
         Node *lit = ast_make_integer_literal(ast, (loc){0}, 0);
         vector_push(expr->root.children, lit);
         lit->parent = expr;
@@ -698,7 +709,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// Make sure the return type of the body is convertible to that of the function.
       Type *ret = expr->type->function.return_type;
       Type *body = expr->function.body->type;
-      if (!convertible(ast, ret, body))
+      if (!convertible(ret, body))
         ERR(expr->source_location,
           "Type '%T' of function body is not convertible to return type '%T'.",
             ret, body);
@@ -709,7 +720,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// If there is an initialiser, then its type must match the type of the variable.
       if (expr->declaration.init) {
         if (!typecheck_expression(ast, expr->declaration.init)) return false;
-        if (!convertible(ast, expr->type, expr->declaration.init->type))
+        if (!convertible(expr->type, expr->declaration.init->type))
           ERR_NOT_CONVERTIBLE(expr->declaration.init->source_location, expr->type, expr->declaration.init->type);
       }
       break;
@@ -723,20 +734,20 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// the a common type, then the type of the if expression is that type.
       if (expr->if_.else_) {
         if (!typecheck_expression(ast, expr->if_.else_)) return false;
-        Type *common = common_type(ast, expr->if_.then->type, expr->if_.else_->type);
+        Type *common = common_type(expr->if_.then->type, expr->if_.else_->type);
         if (common) expr->type = common;
-        else expr->type = ast->t_void;
+        else expr->type = t_void;
       }
 
       /// Otherwise, the type of the if expression is void.
-      else { expr->type = ast->t_void; }
+      else { expr->type = t_void; }
       break;
 
     /// A while expression has type void.
     case NODE_WHILE:
       if (!typecheck_expression(ast, expr->while_.condition)) return false;
       if (!typecheck_expression(ast, expr->while_.body)) return false;
-      expr->type = ast->t_void;
+      expr->type = t_void;
       break;
 
     /// Typecheck all children and set the type of the block
@@ -745,7 +756,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       foreach_ptr (Node *, node, expr->block.children)
         if (!typecheck_expression(ast, node))
           return false;
-      expr->type = expr->block.children.size ? vector_back(expr->block.children)->type : ast->t_void;
+      expr->type = expr->block.children.size ? vector_back(expr->block.children)->type : t_void;
     } break;
 
     /// First, resolve the function. Then, typecheck all parameters
@@ -763,7 +774,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       if (callee->type->kind == TYPE_FUNCTION) {
         /// Set the resolved function as the new callee.
         if (callee->kind != NODE_FUNCTION) {
-          expr->call.callee = callee = callee->funcref.resolved->node;
+          expr->call.callee = callee = callee->funcref.resolved->val.node;
           if (!typecheck_expression(ast, callee)) return false;
         }
       } else {
@@ -791,7 +802,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       foreach_index(i, expr->call.arguments) {
         Parameter *param = &callee->type->function.parameters.data[i];
         Node *arg = expr->call.arguments.data[i];
-        if (!convertible(ast, param->type, arg->type)) ERR_NOT_CONVERTIBLE(arg->source_location, param->type, arg->type);
+        if (!convertible(param->type, arg->type)) ERR_NOT_CONVERTIBLE(arg->source_location, param->type, arg->type);
       }
 
       /// Set the type of the call to the return type of the callee.
@@ -821,7 +832,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                 lhs->type);
 
           /// The RHS has to be an integer.
-          if (!is_integer(ast, rhs->type))
+          if (!is_integer(rhs->type))
             ERR(rhs->source_location,
               "Cannot subscript with non-integer type '%T'.",
                 rhs->type);
@@ -838,18 +849,18 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_LE:
         case TK_EQ:
         case TK_NE:
-          if (!is_integer(ast, lhs->type))
+          if (!is_integer(lhs->type))
             ERR(lhs->source_location,
               "Cannot compare non-integer type '%T'.",
                 lhs->type);
 
-          if (!is_integer(ast, rhs->type))
+          if (!is_integer(rhs->type))
             ERR(rhs->source_location,
               "Cannot compare non-integer type '%T'.",
                 rhs->type);
 
           /// TODO: Change this to bool if we ever add a bool type.
-          expr->type = ast->t_integer;
+          expr->type = t_integer;
           break;
 
         /// Since pointer arithmetic is handled by the subscript operator,
@@ -865,12 +876,12 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_AMPERSAND:
         case TK_PIPE:
         case TK_CARET:
-          if (!is_integer(ast, lhs->type))
+          if (!is_integer(lhs->type))
             ERR(lhs->source_location,
               "Cannot perform arithmetic on non-integer type '%T'.",
                 lhs->type);
 
-          if (!is_integer(ast, rhs->type))
+          if (!is_integer(rhs->type))
             ERR(rhs->source_location,
               "Cannot perform arithmetic on non-integer type '%T'.",
                 rhs->type);
@@ -887,7 +898,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                 lhs->type);
 
           /// Make sure the rhs is convertible to the lhs.
-          if (!convertible(ast, lhs->type, rhs->type)) ERR_NOT_CONVERTIBLE(rhs->source_location, lhs->type, rhs->type);
+          if (!convertible(lhs->type, rhs->type)) ERR_NOT_CONVERTIBLE(rhs->source_location, lhs->type, rhs->type);
 
           /// Set the type of the expression to the type of the lhs.
           expr->type = lhs->type;
@@ -922,7 +933,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
         /// One’s complement negation.
         case TK_TILDE:
-          if (!is_integer(ast, expr->unary.value->type))
+          if (!is_integer(expr->unary.value->type))
             ERR(expr->unary.value->source_location,
               "Argument of '~' must be an integer.");
 
@@ -933,28 +944,28 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Just set the type.
     case NODE_LITERAL:
-      if (expr->literal.type == TK_NUMBER) expr->type = ast->t_integer_literal;
+      if (expr->literal.type == TK_NUMBER) expr->type = t_integer_literal;
       else TODO("Literal type '%s'.", token_type_to_string(expr->literal.type));
       break;
 
     /// The type of a variable reference is the type of the variable.
     case NODE_VARIABLE_REFERENCE:
-      if (!typecheck_expression(ast, expr->var->node)) return false;
-      expr->type = expr->var->node->type;
+      if (!typecheck_expression(ast, expr->var->val.node)) return false;
+      expr->type = expr->var->val.node->type;
       break;
 
     /// Resolve the function reference and typecheck the function.
     case NODE_FUNCTION_REFERENCE:
       if (!resolve_function(ast, expr)) return false;
-      if (!typecheck_expression(ast, expr->funcref.resolved->node)) return false;
-      ast_replace_node(ast, expr, expr->funcref.resolved->node);
+      if (!typecheck_expression(ast, expr->funcref.resolved->val.node)) return false;
+      ast_replace_node(ast, expr, expr->funcref.resolved->val.node);
       break;
   }
 
   /// If this is a pointer type, make sure it doesn’t point to an incomplete type.
   Type *base = expr->type;
   while (base && is_pointer(base)) base = base->pointer.to;
-  if (base && is_pointer(expr->type /** (!) **/) && ast_type_is_incomplete(base))
+  if (base && is_pointer(expr->type /** (!) **/) && type_is_incomplete(base))
     ERR(expr->source_location,
       "Cannot use pointer to incomplete type '%T'.",
         expr->type->pointer.to);

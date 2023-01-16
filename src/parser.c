@@ -585,13 +585,13 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
 /// Check if a type is valid as a declaration type.
 static void validate_decltype(Parser *p, Type *type) {
   /// Strip arrays and recursive typedefs.
-  Type *base_type = ast_canonical_type(type);
+  Type *base_type = type_canonical(type);
   Type *array = NULL;
   while (base_type) {
-    if (base_type->kind == TYPE_NAMED) base_type = ast_canonical_type(base_type->named->val.type);
+    if (base_type->kind == TYPE_NAMED) base_type = type_canonical(base_type->named->val.type);
     else if (base_type->kind == TYPE_ARRAY) {
       array = base_type;
-      base_type = ast_canonical_type(base_type->array.of);
+      base_type = type_canonical(base_type->array.of);
       break;
     } else break;
   }
@@ -710,7 +710,7 @@ static Type *parse_type_derived(Parser *p, Type *base) {
         consume(p, TK_RBRACK);
 
         /// Base type must not be incomplete.
-        if (ast_type_is_incomplete(base)) ERR_AT(l, "Cannot create array of incomplete type: %T", base);
+        if (type_is_incomplete(base)) ERR_AT(l, "Cannot create array of incomplete type: %T", base);
 
         /// Create the array type.
         base = ast_make_type_array(p->ast, l, base, dim);

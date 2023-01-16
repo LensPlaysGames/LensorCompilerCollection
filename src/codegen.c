@@ -153,7 +153,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_DECLARATION:
       expr->ir = expr->declaration.static_
         ? ir_create_static(ctx, expr->type, as_span(expr->declaration.name))
-        : ir_stack_allocate(ctx, ast_sizeof(expr->type));
+        : ir_stack_allocate(ctx, type_sizeof(expr->type));
 
       /// Emit the initialiser if there is one.
       if (expr->declaration.init) {

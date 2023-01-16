@@ -510,31 +510,33 @@ Type *ast_make_type_function(
 );
 
 /// ===========================================================================
-///  AST query functions.
+///  Type query functions.
 /// ===========================================================================
-
 /// Get a string representation of a type.
 /// \return The string representation of the type. The string is allocated
 ///         as if with `malloc` and must be freed by the caller.
-string ast_typename(const Type *type, bool colour);
+string typename(Type *type, bool colour);
 
 /// Get the canonical type of a type.
 /// \return NULL if the type is incomplete.
-Type *ast_canonical_type(Type *type);
+Type *type_canonical(Type *type);
 
 /// Get the last alias of a type.
 ///
 /// This function strips nested named types until there is only one left.
-Type *ast_last_alias(Type *type);
+Type *type_last_alias(Type *type);
 
 /// Check if a type is incomplete.
-bool ast_type_is_incomplete(const Type *type);
+bool type_is_incomplete(Type *type);
+
+/// Check if a canonical type is incomplete.
+bool type_is_incomplete_canon(Type *type);
 
 /// Get the size of a type.
-usz ast_sizeof(const Type *type);
+usz type_sizeof(Type *type);
 
 /// Check if a type is void.
-bool ast_is_void(AST *ast, Type *type);
+bool type_is_void(Type *type);
 
 /// ===========================================================================
 ///  Miscellaneous AST functions.

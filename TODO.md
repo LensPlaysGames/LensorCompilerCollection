@@ -7,6 +7,15 @@
     - [ ] Parsing
     - [ ] Return block in the IR
   - [ ] Types as values using the `&` operator. (requires `Structs`)
+  - Attributes
+    - [ ] Parsing
+    - [ ] `[[noreturn]]`
+    - [ ] `[[nodiscard]]`
+        - [ ] `[[nodiscard]]` on functions that return `void` should be an error.
+    - [ ] `[[maybe_unused]]`
+    - [ ] `[[deprecated]]`
+    - [ ] `[[deprecated("reason")]]` 
+    - [ ] `[[call_once]]`
 - [ ] Overloading.
   - [x] Overloading terminology
   - [x] Overload tests

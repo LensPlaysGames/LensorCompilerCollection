@@ -454,7 +454,7 @@ static void write_typename(string_buffer *s, const Type *type) {
   }
 }
 
-string ast_typename(const Type *type, bool colour) {
+string typename(Type *type, bool colour) {
   bool save_thread_use_colours = thread_use_colours;
   thread_use_colours = colour;
 
@@ -467,35 +467,39 @@ string ast_typename(const Type *type, bool colour) {
   return (string){buf.data, buf.size};
 }
 
-Type *ast_canonical_type(Type *type) {
+Type *type_canonical(Type *type) {
     while (type && type->kind == TYPE_NAMED) type = type->named->val.type;
     return type;
 }
 
-Type *ast_last_alias(Type *type) {
+Type *type_last_alias(Type *type) {
     while (type && type->kind == TYPE_NAMED && type->named->val.type)
       type = type->named->val.type;
     return type;
 }
 
-bool ast_type_is_incomplete(const Type *type) {
-  Type *t = ast_canonical_type((Type*) type);
-  return !t || t == t_void;
+bool type_is_incomplete(Type *type) {
+  Type *t = type_canonical((Type *) type);
+  return type_is_incomplete_canon(type);
 }
 
-usz ast_sizeof(const Type *type) {
+bool type_is_incomplete_canon(Type *type) {
+  return !type || type == t_void;
+}
+
+usz type_sizeof(Type *type) {
   switch (type->kind) {
     default: ICE("Invalid type kind: %d", type->kind);
     case TYPE_PRIMITIVE: return type->primitive.size;
-    case TYPE_NAMED: return type->named->val.type ? ast_sizeof(type->named->val.type) : 0;
+    case TYPE_NAMED: return type->named->val.type ? type_sizeof(type->named->val.type) : 0;
     case TYPE_POINTER: return sizeof(void *);
-    case TYPE_ARRAY: return type->array.size * ast_sizeof(type->array.of);
+    case TYPE_ARRAY: return type->array.size * type_sizeof(type->array.of);
     case TYPE_FUNCTION: return sizeof(void *);
   }
 }
 
-bool ast_is_void(AST *ast, Type *type) {
-  return ast_canonical_type(type) == t_void;
+bool type_is_void(Type *type) {
+  return type_canonical(type) == t_void;
 }
 
 /// ===========================================================================

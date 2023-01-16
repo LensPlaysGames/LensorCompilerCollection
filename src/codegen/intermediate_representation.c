@@ -607,7 +607,7 @@ IRInstruction *ir_create_static
   IRStaticVariable *v = calloc(1, sizeof *v);
   v->name = string_dup(name);
   v->type = ty;
-  v->cached_size = ast_sizeof(ty);
+  v->cached_size = type_sizeof(ty);
   v->cached_alignment = 8; /// TODO.
   vector_push(context->static_vars, v);
 
