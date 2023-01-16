@@ -64,15 +64,15 @@ NODISCARD static bool types_equal(Type *a, Type *b) {
   Type *tb = type_last_alias(b);
 
   /// If both are incomplete, compare the names.
-  if (type_is_incomplete_canon(ta->named->val.type) && type_is_incomplete_canon(tb->named->val.type))
-    return string_eq(ta->named->name, tb->named->name);
+  if (type_is_incomplete(ta) && type_is_incomplete(tb))
+    return ta->kind == TYPE_NAMED && tb->kind == TYPE_NAMED && string_eq(ta->named->name, tb->named->name);
 
   /// If one is incomplete, the types are not equal.
-  if (type_is_incomplete_canon(ta->named->val.type) || type_is_incomplete_canon(tb->named->val.type))
+  if (type_is_incomplete(ta) || type_is_incomplete(tb))
     return false;
 
   /// Compare the types.
-  return types_equal_canon(ta->named->val.type, tb->named->val.type);
+  return types_equal_canon(type_canonical(ta), type_canonical(tb));
 }
 
 /// Check if a canonical type is an integer type.
@@ -102,12 +102,17 @@ NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
   /// Any type is implicitly convertible to void.
   if (type_is_void(to_alias)) return 0;
 
+  /// If either type is NULL for some reason, we give up.
+  if (!to_alias || !from_alias) return -1;
+
   /// If the types are both incomplete, compare their names.
-  if (type_is_incomplete(to_alias->named->val.type) && type_is_incomplete(from_alias->named->val.type))
-    return string_eq(to_alias->named->name, from_alias->named->name) ? 0 : -1;
+  if (type_is_incomplete(to_alias) && type_is_incomplete(from_alias)) {
+    bool aliases = to_alias->kind == TYPE_NAMED && from_alias->kind == TYPE_NAMED;
+    return aliases && string_eq(to_alias->named->name, from_alias->named->name) ? 0 : -1;
+  }
 
   /// If either type is incomplete, they are not convertible.
-  if (type_is_incomplete(to_alias->named->val.type) || type_is_incomplete(from_alias->named->val.type))
+  if (type_is_incomplete(to_alias) || type_is_incomplete(from_alias))
     return -1;
 
   /// If the types are the same, they are convertible.

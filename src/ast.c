@@ -479,8 +479,7 @@ Type *type_last_alias(Type *type) {
 }
 
 bool type_is_incomplete(Type *type) {
-  Type *t = type_canonical((Type *) type);
-  return type_is_incomplete_canon(type);
+  return type_is_incomplete_canon(type_canonical(type));
 }
 
 bool type_is_incomplete_canon(Type *type) {
