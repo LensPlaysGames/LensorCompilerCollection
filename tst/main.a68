@@ -1,4 +1,4 @@
-#!/usr/bin/a68g --script
+#!/usr/bin/a68g --script 
 
 PROC platform is windows = BOOL: get env ("WINDIR") NE "";
 STRING platform dir sep   = (platform is windows | "\"     | "/"        );

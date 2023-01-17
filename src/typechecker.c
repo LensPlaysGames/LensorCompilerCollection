@@ -263,13 +263,6 @@ static OverloadSet collect_overload_set(Node *func) {
   return overload_set;
 }
 
-/// Print all valid overloads in an overload set.
-void print_valid_overloads(AST *ast, OverloadSet *o) {
-  foreach (Candidate, c, *o)
-    if (c->validity == candidate_valid)
-      DIAG(DIAG_NOTE, c->symbol->val.node->source_location, "Candidate");
-}
-
 /// Actually resolve a function.
 ///
 /// The overloads sets passed to this function must be minimal, i.e.
@@ -290,6 +283,7 @@ NODISCARD static bool resolve_overload(
 ) {
   /// Determine the overloads that are still valid.
   Symbol *valid_overload = NULL;
+  bool ambiguous = false;
   foreach (Candidate, sym, *overload_set) {
     if (sym->validity != candidate_valid) continue;
 
@@ -299,8 +293,8 @@ NODISCARD static bool resolve_overload(
       ERR_DONT_RETURN(funcref->source_location, "Use of overloaded function is ambiguous.");
 
       /// Print the valid overloads.
-      print_valid_overloads(ast, overload_set);
-      return false;
+      ambiguous = true;
+      break;
     }
 
     /// Otherwise, save this overload for later.
@@ -309,8 +303,8 @@ NODISCARD static bool resolve_overload(
 
   /// If O(F) is empty, then the program is ill-formed: there is no
   /// matching overload for F.
-  if (!valid_overload) {
-    ERR_DONT_RETURN(funcref->source_location, "Could not resolve overloaded function.");
+  if (!valid_overload || ambiguous) {
+    if (!ambiguous) ERR_DONT_RETURN(funcref->source_location, "Could not resolve overloaded function.");
 
     /// Print parameter types if this is a call.
     if (funcref->parent->kind == NODE_CALL) {
@@ -322,13 +316,18 @@ NODISCARD static bool resolve_overload(
 
     /// Print all overloads.
     size_t index = 1;
-    eprint("\n    %B38Overload Set%m\n");
+    if (!ambiguous) eprint("\n    %B38Overload Set%m\n");
+    else eprint("\n    %B38Candidates%m\n");
     foreach (Candidate, c, *overload_set) {
+      if (ambiguous && c->validity != candidate_valid) continue;
       u32 line;
       seek_location(as_span(ast->source), c->symbol->val.node->source_location, &line, NULL, NULL);
       eprint("    %B38(%Z) %32%S %31: %T %m(%S:%u)\n",
         index++, c->symbol->name, c->symbol->val.node->type, ast->filename, line);
     }
+
+    /// If the call is ambiguous, then we’re done.
+    if (ambiguous) return false;
 
     /// We might want to print dependent overload sets.
     Vector(Node*) dependent_functions = {0};
