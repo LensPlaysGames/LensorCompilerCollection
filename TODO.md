@@ -18,7 +18,7 @@
   - [ ] `[[deprecated]]`
   - [ ] `[[deprecated("reason")]]` 
   - [ ] `[[call_once]]`
-- [x] Overloading.
+- [ ] Overloading.
   - [x] Overloading terminology
   - [x] Overload tests
   - [x] Custom printf w/ `%T` for types etc.
@@ -26,6 +26,11 @@
   - [x] Fix the `sym->type`, `sym->node->type` nonsense
   - [x] Name mangling.
   - [x] No mangling for `ext` declarations.
+  - [ ] Reenable checking for duplicate declarations.
+    - [ ] Check for duplicate vars
+    - [ ] Check for function redeclarations
+    - [ ] Disallow overloading on the return value. 
+  - [ ] Proper checking for incomplete types in the parser.   
 - [ ] Types in the IR
   - [ ] Byte type 
   - [ ] Type info in codegen/IR.
