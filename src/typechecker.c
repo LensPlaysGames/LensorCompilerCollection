@@ -241,8 +241,9 @@ static OverloadSet collect_overload_set(Node *func) {
 
 /// Print all valid overloads in an overload set.
 void print_valid_overloads(AST *ast, OverloadSet *o) {
-  foreach_if (Candidate, c, *o, c->validity == candidate_valid)
-    DIAG(DIAG_NOTE, c->symbol->val.node->source_location, "Candidate");
+  foreach (Candidate, c, *o)
+    if (c->validity == candidate_valid)
+      DIAG(DIAG_NOTE, c->symbol->val.node->source_location, "Candidate");
 }
 
 /// Actually resolve a function.
@@ -265,7 +266,9 @@ NODISCARD static bool resolve_overload(
 ) {
   /// Determine the overloads that are still valid.
   Symbol *valid_overload = NULL;
-  foreach_if (Candidate, sym, *overload_set, sym->validity == candidate_valid) {
+  foreach (Candidate, sym, *overload_set) {
+    if (sym->validity != candidate_valid) continue;
+
     /// If O(F) contains more than one element, then the program is
     /// ill-formed: F is ambiguous.
     if (valid_overload) {
@@ -356,13 +359,13 @@ void reduce_overload_set(OverloadSet *overload_set) {
   if (overload_set->size) {
     /// Determine the candidate with the least number of implicit conversions.
     usz min_score = overload_set->data[0].score;
-    foreach_if (Candidate, sym, *overload_set, sym->validity == candidate_valid)
-      if (sym->score < min_score)
+    foreach (Candidate, sym, *overload_set)
+      if (sym->validity == candidate_valid && sym->score < min_score)
         min_score = sym->score;
 
     /// Remove all candidates with a more implicit conversions.
-    foreach_if (Candidate, sym, *overload_set, sym->validity == candidate_valid)
-      if (sym->score > min_score)
+    foreach (Candidate, sym, *overload_set)
+      if (sym->validity == candidate_valid && sym->score > min_score)
         sym->validity = invalid_too_many_conversions;
   }
 }
@@ -439,7 +442,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     /// TODO: Could optimise this by merging with above loop.
     typedef struct { usz index; OverloadSet overloads; } unresolved_func;
     Vector(unresolved_func) unresolved_functions = {0};
-    foreach_if (Candidate, candidate, overload_set, candidate->validity == candidate_valid) {
+    foreach (Candidate, candidate, overload_set) {
+      if (candidate->validity != candidate_valid) continue;
       foreach_index (i, call->call.arguments) {
         /// Note down the number of function references.
         Node *arg = call->call.arguments.data[i];
@@ -470,14 +474,21 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       foreach (unresolved_func, uf, unresolved_functions) {
         uf->overloads = collect_overload_set(call->call.arguments.data[uf->index]);
 
+        /// Sanity check.
+        if (!uf->overloads.size) {
+          ERR_DONT_RETURN(call->call.arguments.data[uf->index]->source_location, "Unknown symbol");
+          goto cleanup_arg_overloads;
+        }
+
         /// 2eβ. Remove from O all candidates C that do no accept any overload
         ///      of this argument as a parameter.
-        foreach_if (Candidate, candidate, overload_set, candidate->validity == candidate_valid) {
+        foreach (Candidate, candidate, overload_set) {
+          if (candidate->validity != candidate_valid) continue;
           Type *param_type = candidate->symbol->val.node->type->function.parameters.data[uf->index].type;
 
           bool found = false;
           foreach (Candidate, arg_candidate, uf->overloads) {
-            if (convertible_score(param_type, arg_candidate->symbol->val.node->type) != 0) {
+            if (convertible_score(param_type, arg_candidate->symbol->val.node->type) == 0) {
               found = true;
               break;
             }
@@ -501,7 +512,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// that are not equivalent to the type of the corresponding parameter
       /// of the resolved function.
       foreach (unresolved_func, uf, unresolved_functions) {
-        foreach_if (Candidate, candidate, uf->overloads, candidate->validity == candidate_valid) {
+        foreach (Candidate, candidate, uf->overloads) {
+          if (candidate->validity != candidate_valid) continue;
           Type *param_type = func->type->function.parameters.data[uf->index].type;
           if (convertible_score(param_type, candidate->symbol->val.node->type) != 0) {
             candidate->validity = invalid_no_dependent_callee;
@@ -562,8 +574,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
 
       /// Otherwise, remove from O all functions that are not equivalent to the
       /// lvalue being assigned to.
-      foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
-        if (convertible_score(decl_type, sym->symbol->val.node->type) != 0)
+      foreach (Candidate, sym, overload_set)
+        if (sym->validity == candidate_valid && convertible_score(decl_type, sym->symbol->val.node->type) != 0)
           sym->validity = invalid_expected_type_mismatch;
     } break;
 
@@ -588,8 +600,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
 
       /// Otherwise, remove from O all functions that are not equivalent to
       /// the lvalue being assigned to.
-      foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
-        if (convertible_score(lvalue_type, sym->symbol->val.node->type) != 0)
+      foreach (Candidate, sym, overload_set)
+        if (sym->validity == candidate_valid && convertible_score(lvalue_type, sym->symbol->val.node->type) != 0)
           sym->validity = invalid_expected_type_mismatch;
     } break;
 
@@ -625,8 +637,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       ///      then remove from O all functions that are not equivalent to that type.
       if ((cast_type->kind == TYPE_POINTER && cast_type->pointer.to->kind == TYPE_FUNCTION) ||
           (cast_type->kind == TYPE_FUNCTION)) {
-        foreach_if (Candidate, sym, overload_set, sym->validity == candidate_valid)
-          if (convertible_score(cast_type, sym->symbol->val.node->type) != 0)
+        foreach (Candidate, sym, overload_set)
+          if (sym->validity == candidate_valid && convertible_score(cast_type, sym->symbol->val.node->type) != 0)
             sym->validity = invalid_expected_type_mismatch;
       }
 

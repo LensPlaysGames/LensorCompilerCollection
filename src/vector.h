@@ -32,14 +32,6 @@
        element##_ptr < (vector).data + (vector).size && (element = *element##_ptr, 1); /* "=", not "=="! */ \
        element##_ptr++)
 
-#define foreach_if(type, element, vector, condition) \
-  for (type *element = (vector).data; (condition) && element < (vector).data + (vector).size; element++)
-#define foreach_ptr_if(type, element, vector, condition)                                                    \
-  for (type *element##_ptr = (vector).data, *element = NULL;                                                \
-       (condition) &&                                                                                       \
-       element##_ptr < (vector).data + (vector).size && (element = *element##_ptr, 1); /* "=", not "=="! */ \
-       element##_ptr++)
-
 /// Iterate over each index and element of a vector.
 #define foreach_index(index, vector) \
   for (size_t index = 0; index < (vector).size; index++)
