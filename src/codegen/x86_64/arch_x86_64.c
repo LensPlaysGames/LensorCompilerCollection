@@ -1360,41 +1360,45 @@ static size_t interfering_regs(IRInstruction *instruction) {
   return mask >> 1;
 }
 
-void mangle_function_name(IRFunction *function) {
-  string_buffer buf = {0};
-  format_to(&buf, "_X%Z%S", function->name.size, function->name);
-  for (u64 i = 0; i < function->parameters.size; i++) {
-    /// TODO: Stringify the typename manually to get around disallowed characters.
-    string name = typename(function->type->function.parameters.data[i].type, false);
-    for (char *c = name.data; *c; ++c) {
-      // Disallowed characters that show up in type names must be simplified.
-      // TODO: We have to figure out good replacements for these.
-      switch (*c) {
-      case '(':
-        *c = '_';
-        break;
-      case ')':
-        *c = '_';
-        break;
-      case '@':
-        *c = '_';
-        break;
-      case ' ':
-        *c = '_';
-        break;
-      case ',':
-        *c = '_';
-        break;
-      case '$':
-        *c = '_';
-        break;
-      default: break;
-      }
-    }
-    format_to(&buf, "%Z%S", name.size, name);
-    free(name.data);
-  }
+static void mangle_type_to(string_buffer *buf, Type *t) {
+  ASSERT(t);
+  switch (t->kind) {
+    default: UNREACHABLE();
 
+    case TYPE_PRIMITIVE:
+      format_to(buf, "%Z%S", t->primitive.name.size, t->primitive.name);
+      break;
+
+    case TYPE_NAMED:
+      if (!t->named->val.type) format_to(buf, "%Z%S", t->named->name.size, t->named->name);
+      else mangle_type_to(buf, t->named->val.type);
+      break;
+
+    case TYPE_POINTER:
+      format_to(buf, "P");
+      mangle_type_to(buf, t->pointer.to);
+      break;
+
+    case TYPE_ARRAY:
+      format_to(buf, "A%ZE", t->array.size);
+      mangle_type_to(buf, t->array.of);
+      break;
+
+    case TYPE_FUNCTION:
+      format_to(buf, "F");
+      mangle_type_to(buf, t->function.return_type);
+      foreach (Parameter, param, t->function.parameters) mangle_type_to(buf, param->type);
+      format_to(buf, "E");
+      break;
+  }
+}
+
+void mangle_function_name(IRFunction *function) {
+  if (function->is_extern) return;
+
+  string_buffer buf = {0};
+  format_to(&buf, "_XF%Z%S", function->name.size, function->name);
+  mangle_type_to(&buf, function->type);
   free(function->name.data);
   function->name = (string){buf.data, buf.size};
 }

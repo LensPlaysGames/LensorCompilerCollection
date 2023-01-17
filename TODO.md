@@ -17,14 +17,14 @@
     - [ ] `[[deprecated]]`
     - [ ] `[[deprecated("reason")]]` 
     - [ ] `[[call_once]]`
-- [ ] Overloading.
+- [x] Overloading.
   - [x] Overloading terminology
   - [x] Overload tests
   - [x] Custom printf w/ `%T` for types etc.
   - [x] Proper error reporting for overloading.
   - [x] Fix the `sym->type`, `sym->node->type` nonsense
-  - [ ] Name mangling.
-  - [ ] No mangling for `ext` declarations.
+  - [x] Name mangling.
+  - [x] No mangling for `ext` declarations.
 - [ ] Types in the IR
   - [ ] Byte type 
   - [ ] Type info in codegen/IR.
