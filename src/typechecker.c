@@ -58,18 +58,43 @@ NODISCARD static bool types_equal_canon(Type *a, Type *b) {
   }
 }
 
+/// Result type for the function below.
+typedef struct IncompleteResult {
+  bool incomplete;
+  bool equal;
+} IncompleteResult;
+
+/// Compare two possibly incomplete types.
+/// `a` and `b` must be the last alias of their corresponding types.
+IncompleteResult compare_incomplete(Type *a, Type *b) {
+  if (type_is_incomplete(a) && type_is_incomplete(a)) {
+    /// Void is always equal to itself.
+    if (type_is_void(a) && type_is_void(b)) return (IncompleteResult){.incomplete = true, .equal = true};
+
+    /// If both are named and have the same name, then they’re equal.
+    if (a->kind == TYPE_NAMED && b->kind == TYPE_NAMED && string_eq(a->named->name, b->named->name))
+      return (IncompleteResult){.incomplete = true, .equal = true};
+
+    /// Otherwise, they’re not equal.
+    return (IncompleteResult){.incomplete = true, .equal = false};
+  }
+
+  /// If one is incomplete, the types are not equal.
+  if (type_is_incomplete(a) || type_is_incomplete(b))
+    return (IncompleteResult){.incomplete = true, .equal = false};
+
+  /// Not incomplete.
+  return (IncompleteResult){.incomplete = false, .equal = false};
+}
+
 /// Check if two types are equal. You probably want to use `convertible` instead.
 NODISCARD static bool types_equal(Type *a, Type *b) {
   Type *ta = type_last_alias(a);
   Type *tb = type_last_alias(b);
 
   /// If both are incomplete, compare the names.
-  if (type_is_incomplete(ta) && type_is_incomplete(tb))
-    return ta->kind == TYPE_NAMED && tb->kind == TYPE_NAMED && string_eq(ta->named->name, tb->named->name);
-
-  /// If one is incomplete, the types are not equal.
-  if (type_is_incomplete(ta) || type_is_incomplete(tb))
-    return false;
+  IncompleteResult res = compare_incomplete(ta, tb);
+  if (res.incomplete) return res.equal;
 
   /// Compare the types.
   return types_equal_canon(type_canonical(ta), type_canonical(tb));
@@ -105,15 +130,9 @@ NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
   /// If either type is NULL for some reason, we give up.
   if (!to_alias || !from_alias) return -1;
 
-  /// If the types are both incomplete, compare their names.
-  if (type_is_incomplete(to_alias) && type_is_incomplete(from_alias)) {
-    bool aliases = to_alias->kind == TYPE_NAMED && from_alias->kind == TYPE_NAMED;
-    return aliases && string_eq(to_alias->named->name, from_alias->named->name) ? 0 : -1;
-  }
-
-  /// If either type is incomplete, they are not convertible.
-  if (type_is_incomplete(to_alias) || type_is_incomplete(from_alias))
-    return -1;
+  /// If both are incomplete, compare the names.
+  IncompleteResult res = compare_incomplete(to_alias, from_alias);
+  if (res.incomplete) return res.equal ? 0 : -1;
 
   /// If the types are the same, they are convertible.
   Type *to = type_canonical(to_alias);
@@ -125,6 +144,11 @@ NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
   if (to->kind == TYPE_POINTER && from->kind == TYPE_FUNCTION) {
     Type *base = type_canonical(to->pointer.to);
     if (!type_is_incomplete_canon(base) && types_equal_canon(base, from)) return 0;
+    return -1;
+  }
+  if (from->kind == TYPE_POINTER && to->kind == TYPE_FUNCTION) {
+    Type *base = type_canonical(from->pointer.to);
+    if (!type_is_incomplete_canon(base) && types_equal_canon(base, to)) return 0;
     return -1;
   }
 
@@ -283,45 +307,68 @@ NODISCARD static bool resolve_overload(
     valid_overload = sym->symbol;
   }
 
-
   /// If O(F) is empty, then the program is ill-formed: there is no
   /// matching overload for F.
   if (!valid_overload) {
     ERR_DONT_RETURN(funcref->source_location, "Could not resolve overloaded function.");
 
-    /// Print ALL overloads, explaining why each one didn’t work.
+    /// Print parameter types if this is a call.
+    if (funcref->parent->kind == NODE_CALL) {
+      eprint("\n    %B38Where%m\n");
+      size_t index = 1;
+      foreach_ptr (Node*, arg, funcref->parent->call.arguments)
+        eprint("    %Z = %T\n", index++, arg->type);
+    }
+
+    /// Print all overloads.
+    size_t index = 1;
+    eprint("\n    %B38Overload Set%m\n");
     foreach (Candidate, c, *overload_set) {
+      u32 line;
+      seek_location(as_span(ast->source), c->symbol->val.node->source_location, &line, NULL, NULL);
+      eprint("    %B38(%Z) %32%S %31: %T %m(%S:%u)\n",
+        index++, c->symbol->name, c->symbol->val.node->type, ast->filename, line);
+    }
+
+    /// We might want to print dependent overload sets.
+    Vector(Node*) dependent_functions = {0};
+    Vector(span) dependent_function_names = {0};
+
+    /// Explain why each one is invalid.
+    eprint("\n    %B38Invalid Overloads%m\n");
+    index = 1;
+    foreach (Candidate, c, *overload_set) {
+      eprint("    %B38(%Z) %m", index++);
       switch (c->validity) {
-        default: UNREACHABLE();
+        default: ICE("Unknown overload invalidation reason: %d", c->validity);
 
         /// We only get here if there are *no* valid candidates.
-        case candidate_valid: UNREACHABLE();
+        case candidate_valid: ICE("candidate_valid not allowed here");
 
         /// Candidates are only invalidated with this error if there
         /// is at least one candidate that is otherwise valid, which,
         /// as we’ve just established, is impossible.
-        case invalid_too_many_conversions: UNREACHABLE();
+        case invalid_too_many_conversions: ICE("too_many_conversions not allowed here");
 
         /// Not enough / too many parameters.
         case invalid_parameter_count:
-          DIAG(DIAG_ERR, c->symbol->val.node->source_location, "Candidate takes %zu parameters, but %zu were provided.",
-            c->symbol->val.node->type->function.parameters.size, funcref->parent->call.arguments.size);
+          eprint("Candidate takes %Z parameters, but %Z were provided",
+                 c->symbol->val.node->type->function.parameters.size,
+                 funcref->parent->call.arguments.size);
           break;
 
         /// Argument type is not convertible to parameter type.
         case invalid_argument_type:
-          DIAG(DIAG_ERR, c->symbol->val.node->source_location, "Invalid overload declared here");
-          DIAG(DIAG_NOTE, funcref->parent->call.arguments.data[c->invalid_arg_index]->source_location,
-            "Argument of type '%T' is not convertible to parameter type '%T'.",
-            funcref->parent->call.arguments.data[c->invalid_arg_index]->type,
-            c->symbol->val.node->type->function.parameters.data[c->invalid_arg_index].type);
+          eprint("Argument of type '%T' is not convertible to parameter type '%T'.",
+                 funcref->parent->call.arguments.data[c->invalid_arg_index]->type,
+                 c->symbol->val.node->type->function.parameters.data[c->invalid_arg_index].type);
           break;
 
         /// TODO: Print a better error depending on the parent expression.
         case invalid_expected_type_mismatch:
-          DIAG(DIAG_ERR, c->symbol->val.node->source_location, "Candidate type '%T' is not convertible to '%T'",
-            c->symbol->val.node->type,
-            funcref->parent->type);
+          eprint("Candidate type '%T' is not convertible to '%T'",
+                 c->symbol->val.node->type,
+                 funcref->parent->type);
           break;
 
         /// No matching overload for argument of function type. Only
@@ -329,9 +376,9 @@ NODISCARD static bool resolve_overload(
         case invalid_no_dependent_callee:
           ASSERT(dependent_funcref);
           ASSERT(dependent_overload_set);
-          DIAG(DIAG_ERR, c->symbol->val.node->source_location, "Candidate type '%T' is not convertible to parameter type '%T'",
-            c->symbol->val.node->type,
-            dependent_funcref->parent->call.arguments.data[c->invalid_arg_index]->type);
+          eprint("Candidate type '%T' is not convertible to parameter type '%T'",
+                 c->symbol->val.node->type,
+                 dependent_funcref->parent->call.arguments.data[c->invalid_arg_index]->type);
           break;
 
         /// No matching overload for callee. Only callees can be set to this
@@ -339,9 +386,34 @@ NODISCARD static bool resolve_overload(
         case invalid_no_dependent_arg: {
           Node * arg = funcref->parent->call.arguments.data[c->invalid_arg_index];
           Node * param = c->symbol->val.node->function.param_decls.data[c->invalid_arg_index];
-          DIAG(DIAG_ERR, c->symbol->val.node->source_location, "Invalid overload declared here");
-          DIAG(DIAG_NOTE, param->source_location, "No overload of '%S' with type '%T'", arg->funcref.name, param->type);
+          eprint("No overload of %32%S%m with type %T", arg->funcref.name, param->type);
+
+          /// Mark that we need to print the overload set of this function too.
+          span *ptr;
+          vector_find_if(dependent_function_names, ptr, i, string_eq(dependent_function_names.data[i], arg->funcref.name));
+          if (!ptr) {
+            vector_push(dependent_functions, arg);
+            vector_push(dependent_function_names, as_span(arg->funcref.name));
+          }
         } break;
+      }
+      eprint("\n");
+    }
+
+    /// Print the overload sets of all dependent functions.
+    if (dependent_functions.size) {
+      eprint("\n    %B38Dependent Overload Sets%m\n");
+      foreach_ptr (Node*, n, dependent_functions) {
+        eprint("        %B38Overloads of %B32%S%B38%m\n", n->funcref.name);
+
+        OverloadSet o = collect_overload_set(n);
+        foreach (Candidate, c, o) {
+          u32 line;
+          seek_location(as_span(ast->source), c->symbol->val.node->source_location, &line, NULL, NULL);
+          eprint("        %32%S %31: %T %m(%S:%u)\n",
+            c->symbol->name, c->symbol->val.node->type, ast->filename, line);
+        }
+        vector_delete(o);
       }
     }
 

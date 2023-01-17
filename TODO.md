@@ -7,6 +7,7 @@
     - [ ] Parsing
     - [ ] Return block in the IR
   - [ ] Types as values using the `&` operator. (requires `Structs`)
+  - [ ] Function bodies must be blocks or preceded by `=`. 
   - Attributes
     - [ ] Parsing
     - [ ] `[[noreturn]]`
@@ -20,8 +21,8 @@
   - [x] Overloading terminology
   - [x] Overload tests
   - [x] Custom printf w/ `%T` for types etc.
-  - [ ] Proper error reporting for overloading.
-  - [ ] Fix the `sym->type`, `sym->node->type` nonsense
+  - [x] Proper error reporting for overloading.
+  - [x] Fix the `sym->type`, `sym->node->type` nonsense
   - [ ] Name mangling.
   - [ ] No mangling for `ext` declarations.
 - [ ] Types in the IR

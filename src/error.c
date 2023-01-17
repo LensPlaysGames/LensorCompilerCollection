@@ -1,12 +1,14 @@
+#include "parser.h"
+
 #include <error.h>
+#include <math.h>
+#include <platform.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
-#include <math.h>
-#include <platform.h>
 
 static const char *diagnostic_level_names[DIAG_COUNT] = {
     "Note",
@@ -70,22 +72,9 @@ void vissue_diagnostic
     if (location.start > source.size) location.start = (u32) (source.size);
     if (location.end > source.size) location.end = (u32) (source.size);
 
-    /// Seek to the start of the line. Keep track of the line number.
-    u32 line = 1;
-    u32 line_start = 0;
-    for (u32 i = location.start; i > 0; --i) {
-      if (source.data[i] == '\n') {
-        if (!line_start) line_start = i + 1;
-        ++line;
-      }
-    }
-
-    /// Don’t include the newline in the line.
-    if (source.data[line_start] == '\n') ++line_start;
-
-    /// Seek to the end of the line.
-    u32 line_end = location.end;
-    while (line_end < source.size && source.data[line_end] != '\n') line_end++;
+    /// Get the line.
+    u32 line, line_start, line_end;
+    seek_location(source, location, &line, &line_start, &line_end);
 
     /// Print the filename, line and column, severity and message.
     eprint("%B38%s:%u:%u: ", filename, line, location.start - line_start);
