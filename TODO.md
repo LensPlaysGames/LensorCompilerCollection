@@ -7,16 +7,17 @@
     - [ ] Parsing
     - [ ] Return block in the IR
   - [ ] Types as values using the `&` operator. (requires `Structs`)
-  - [ ] Function bodies must be blocks or preceded by `=`. 
-  - Attributes
-    - [ ] Parsing
-    - [ ] `[[noreturn]]`
-    - [ ] `[[nodiscard]]`
-        - [ ] `[[nodiscard]]` on functions that return `void` should be an error.
-    - [ ] `[[maybe_unused]]`
-    - [ ] `[[deprecated]]`
-    - [ ] `[[deprecated("reason")]]` 
-    - [ ] `[[call_once]]`
+  - [ ] Function bodies must be blocks or preceded by `=`.
+  - [ ] `ext` functions may have a body.  
+- [ ] Attributes
+  - [ ] Parsing
+  - [ ] `[[noreturn]]`
+  - [ ] `[[nodiscard]]`
+      - [ ] `[[nodiscard]]` on functions that return `void` should be an error.
+  - [ ] `[[maybe_unused]]`
+  - [ ] `[[deprecated]]`
+  - [ ] `[[deprecated("reason")]]` 
+  - [ ] `[[call_once]]`
 - [x] Overloading.
   - [x] Overloading terminology
   - [x] Overload tests
