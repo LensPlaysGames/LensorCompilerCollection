@@ -700,25 +700,17 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     } break;
     */
 
-    /// 3e. If the parent expression is a cast expression, then
+    /// 3e. If the parent expression is a cast expression, then, ...
     case NODE_CAST: {
       Type *cast_type = parent->type;
 
-      /// 3eα. If the result type of the cast is a function or function pointer type,
-      ///      then remove from O all functions that are not equivalent to that type.
+      /// ... if the result type of the cast is a function or function pointer type,
+      /// remove from O all functions that are not equivalent to that type.
       if ((cast_type->kind == TYPE_POINTER && cast_type->pointer.to->kind == TYPE_FUNCTION) ||
           (cast_type->kind == TYPE_FUNCTION)) {
         foreach (Candidate, sym, overload_set)
           if (sym->validity == candidate_valid && convertible_score(cast_type, sym->symbol->val.node->type) != 0)
             sym->validity = invalid_expected_type_mismatch;
-      }
-
-      /// 3eβ. Otherwise, if the O contains more than one element, then this is a
-      ///      compiler error: the cast is ambiguous; we can’t infer the type of the
-      ///      function here if we’re not casting to a function or function pointer type.
-      else if (overload_set.size > 1) {
-        ERR_DONT_RETURN(func->source_location, "Cast of overloaded function is ambiguous.");
-        goto err;
       }
     } break;
 
