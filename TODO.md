@@ -9,6 +9,7 @@
   - [ ] Types as values using the `&` operator. (requires `Structs`)
   - [ ] Function bodies must be blocks or preceded by `=`.
   - [ ] `ext` functions may have a body.
+  - [ ] Implicit cast sema pass: `a + b` where `a` is a `byte` and `b` an `integer` -> `(a as integer) + b`
 - [ ] Attributes
   - [ ] Parsing
   - [ ] `[[noreturn]]`
@@ -40,6 +41,7 @@
   - [ ] Backend: Handle size/alignment requirements
   - [ ] Use eax, ax, al, etc.
   - [ ] Actually implementing casts.
+  - [ ] Update IR parser
 - [ ] Arrays
   - [ ] Semantic analysis for static arrays.
   - [ ] Codegen
