@@ -1,5 +1,6 @@
 #include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
+#include <utils.h>
 
 #include <stdlib.h>
 
@@ -153,18 +154,24 @@ void ir_femit_instruction
   ASSERT(inst, "Can not emit NULL inst to file.");
 
   const usz id_max_width = 7;
-  const usz width = number_width(inst->id);
-  for (usz i = width; i < id_max_width; i++) fprint(file, " ");
-  if (inst->id) fprint(file, "%34%%%u %31│ ", inst->id);
-  else fprint(file, "   %31│ ");
+  if (inst->id) {
+    const usz width = number_width(inst->id);
+    for (usz i = width; i < id_max_width; ++i) putc(' ', file);
+    fprint(file, "%34%%%u %31│ ", inst->id);
+  }
+  else {
+    for (usz i = 0; i < id_max_width; ++i) putc(' ', file);
+    fprint(file, "  %31│ ");
+  }
 
+  const usz result_max_width = 6;
   if (inst->result) {
-    const usz result_max_width = 6;
     const usz result_length = number_width(inst->result);
-    for (usz i = result_length; i < result_max_width; i++) fprint(file, " ");
+    for (usz i = result_length; i < result_max_width; ++i) putc(' ', file);
     fprint(file, "%34r%u %31│ ", inst->result);
   } else {
-    fprint(file, "    %31│ ");
+    for (usz i = 0; i < result_max_width; ++i) putc(' ', file);
+    fprint(file, "  %31│ ");
   }
 
   STATIC_ASSERT(IR_COUNT == 32, "Handle all instruction types.");
