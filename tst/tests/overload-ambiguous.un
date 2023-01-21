@@ -1,3 +1,4 @@
+; LABELS overloading
 ; ERROR
 
 foo : integer (x : byte, y : integer) 42

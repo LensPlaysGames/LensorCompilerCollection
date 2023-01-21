@@ -34,7 +34,7 @@
 static void ice_signal_handler(int signal, siginfo_t *info, void* unused) {
   (void) unused;
   switch (signal) {
-    case SIGSEGV: ICE_EXCEPTION("Segmentation fault at 0x%lx", (uintptr_t)info->si_addr);
+    case SIGSEGV: ICE_EXCEPTION("Segmentation fault at 0x%X", (u64)info->si_addr);
     case SIGILL: ICE_EXCEPTION("Illegal instruction");
     case SIGABRT: ICE_EXCEPTION("Aborted");
     default: ICE_EXCEPTION("UNREACHABLE");
@@ -44,11 +44,11 @@ static void ice_signal_handler(int signal, siginfo_t *info, void* unused) {
 /// Unhandled SEH exception handler.
 static LONG WINAPI unhandled_exception_handler(EXCEPTION_POINTERS* info) {
   switch (info->ExceptionRecord->ExceptionCode) {
-    case EXCEPTION_ACCESS_VIOLATION: ICE_EXCEPTION("Segmentation Fault at 0x%lx", (uintptr_t)info->ExceptionRecord->ExceptionInformation[1]);
+    case EXCEPTION_ACCESS_VIOLATION: ICE_EXCEPTION("Segmentation Fault at 0x%X", (u64)info->ExceptionRecord->ExceptionInformation[1]);
     case EXCEPTION_ILLEGAL_INSTRUCTION: ICE_EXCEPTION("Illegal instruction");
     case EXCEPTION_STACK_OVERFLOW: ICE_EXCEPTION("Stack Overflow");
     case EXCEPTION_INT_DIVIDE_BY_ZERO: ICE_EXCEPTION("Division by Zero");
-    default: ICE_EXCEPTION("Unhandled exception 0x%lx", (uintptr_t)info->ExceptionRecord->ExceptionCode);
+    default: ICE_EXCEPTION("Unhandled exception 0x%X", (u64)info->ExceptionRecord->ExceptionCode);
   }
 }
 #endif
@@ -163,13 +163,13 @@ void platform_print_backtrace(int ignore) {
       *address_end = 0;
 
       if (line_start) {
-        fprintf(stderr, "  in function %s%s():%s%s\n",
+        eprint("  in function %s%s():%s%s\n",
                 term ? "\033[m\033[1;38m" : "",
                 name_buffer,
                 line_start,
                 term ? "\033[m" : "");
       } else {
-        fprintf(stderr, "  in function %s%s%s%s at offset %s%s%s\n",
+        eprint("  in function %s%s%s%s at offset %s%s%s\n",
                 term ? "\033[m\033[1;38m" : "",
                 name_begin + 1 == name_end ? "\?\?\?" : name_begin + 1,
                 name_begin + 1 == name_end ? "" : "()",
@@ -215,9 +215,9 @@ void platform_print_backtrace(int ignore) {
   if (!dbghelp) {
   /// Loading failed. Print just the addresses.
   print_raw:
-    fprintf(stderr, "  Cannot obtain symbols from backtrace: Could not load DbgHelp.dll\n");
+    eprint("  Cannot obtain symbols from backtrace: Could not load DbgHelp.dll\n");
     for (WORD i = 0; i < frames; i++)
-      fprintf(stderr, "  at address %p", stack[i]);
+      eprint("  at address %p", stack[i]);
     return;
   }
 
@@ -251,12 +251,12 @@ void platform_print_backtrace(int ignore) {
     }
 
     if (have_line) {
-      fprintf(stderr, "  in function %s%s():%li%s\n",
+      eprint("  in function %s%s():%D%s\n",
               term ? "\033[m\033[1;38m" : "", symbol->Name, line.LineNumber, term ? "\033[m" : "");
     } else {
-      fprintf(stderr, "  in function %s%s()%s at offset %s%llx%s\n",
+      eprint("  in function %s%s()%s at offset %s%X%s\n",
               term ? "\033[m\033[1;38m" : "", symbol->Name, term ? "\033[m" : "",
-              term ? "\033[m\033[1;38m" : "", symbol->Address, term ? "\033[m" : "");
+              term ? "\033[m\033[1;38m" : "", (u64)symbol->Address, term ? "\033[m" : "");
     }
 
     if (strcmp(symbol->Name, "main") == 0) break;

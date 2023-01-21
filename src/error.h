@@ -55,7 +55,7 @@ typedef struct {
 /// ===========================================================================
 ///  Error handling functions.
 /// ===========================================================================
-FORMAT(printf, 5, 6)
+EXT_FORMAT(5, 6)
 void issue_diagnostic
 (/// Error level and source location.
  enum diagnostic_level level,
@@ -82,7 +82,6 @@ void vissue_diagnostic
 /// Used by ASSERT()/ICE()/TODO().
 /// You probably don't want to use this directly.
 NORETURN
-FORMAT(printf, 7, 8)
 void raise_fatal_error_impl (
     const char *file,
     const char *func,

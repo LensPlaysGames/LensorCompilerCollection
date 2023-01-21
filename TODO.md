@@ -1,0 +1,76 @@
+- [ ] Miscellany.
+  - [x] Operator `as`.
+  - [x] Vector macros should be snake_case.
+  - [ ] LLVM_PATH env var or something in CMakeLists.txt rather than `find_package()`? 
+  - [ ] `integer`/`byte`/`void` should be keywords (and terminals in the grammar).
+  - [ ] Early `return`
+    - [ ] Parsing
+    - [ ] Return block in the IR
+  - [ ] Types as values using the `&` operator. (requires `Structs`)
+  - [ ] Function bodies must be blocks or preceded by `=`.
+  - [ ] `ext` functions may have a body.  
+- [ ] Attributes
+  - [ ] Parsing
+  - [ ] `[[noreturn]]`
+  - [ ] `[[nodiscard]]`
+      - [ ] `[[nodiscard]]` on functions that return `void` should be an error.
+  - [ ] `[[maybe_unused]]`
+  - [ ] `[[deprecated]]`
+  - [ ] `[[deprecated("reason")]]` 
+  - [ ] `[[call_once]]`
+- [ ] Overloading.
+  - [x] Overloading terminology
+  - [x] Overload tests
+  - [x] Custom printf w/ `%T` for types etc.
+  - [x] Proper error reporting for overloading.
+  - [x] Fix the `sym->type`, `sym->node->type` nonsense
+  - [x] Name mangling.
+  - [x] No mangling for `ext` declarations.
+  - [ ] Reenable checking for duplicate declarations.
+    - [ ] Check for duplicate vars
+    - [ ] Check for function redeclarations
+    - [ ] Disallow overloading on the return value. 
+  - [ ] Proper checking for incomplete types in the parser.   
+- [ ] Types in the IR
+  - [ ] Byte type 
+  - [ ] Type info in codegen/IR.
+  - [ ] Backend: Handle size/alignment requirements
+  - [ ] Use eax, ax, al, etc.
+  - [ ] Actually implementing casts.
+- [ ] Arrays
+  - [ ] Semantic analysis for static arrays.
+  - [ ] Codegen 
+  - [ ] How do we implement reassigning arrays? Libc `memcpy()` or some builtin variant?
+    - [ ] Use compiler explorer to see how GCC does it for ‘inspiration’.
+  - [ ] Arrays as function parameters.
+  - [ ] Returning arrays from functions.
+- [ ] Slices / dynamic arrays.
+  - [ ] Parsing/AST.
+  - [ ] Semantic analysis.
+    - [ ] Implicit creation from static arrays  
+  - [ ] Codegen. 
+  - [ ] Length operator: `#`
+  - [ ] Subscripting 
+- [ ] Strings
+  - [ ] Parsing string literals.
+  - [ ] Codegen.
+  - [ ] Backend.
+- [ ] Structs
+  - [ ] Order-independent types.
+  - [ ] Structs in the AST.
+  - [ ] Struct declarations.
+  - [ ] Semantic analysis for structs.
+  - [ ] Codegen for structs.
+  - [ ] `type` keyword in the parser/grammar.
+  - [ ] Make sure nested structs work.
+  - [ ] Arbitrary compile-time struct literals.
+  - [ ] Structs as parameters.
+  - [ ] Structs as return values.
+- [ ] Modules.
+  - [ ] `module` declaration.
+  - [ ] Emitting module metadata.
+  - [ ] Loading module metadata.
+  - [ ] `export` (Pragma or sth. to export everything?)
+  - [ ] `import`
+  - [ ] Module initialisation.
+  - [ ] Putting it all together.

@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -36,6 +37,12 @@ typedef ptrdiff_t isz;
 #  define THREAD_LOCAL __declspec(thread)
 #endif
 
+#ifdef __EXT_FORMAT__
+#  define EXT_FORMAT(fmt, arg) __attribute__((ext_format(fmt, arg)))
+#else
+#  define EXT_FORMAT(fmt, arg)
+#endif
+
 /// ===========================================================================
 ///  Miscellaneous macros.
 /// ===========================================================================
@@ -56,14 +63,15 @@ extern bool prefer_using_diagnostics_colours;
 /// Don’t question this.
 extern bool colours_blink;
 
-/// Don’t use this directly.
-extern THREAD_LOCAL bool _thread_use_diagnostics_colours_;
+/// Whether to keep colours when formatting.
+extern THREAD_LOCAL bool thread_use_colours;
+extern THREAD_LOCAL bool thread_disable_type_colours;
 
 /// Enable colours in diagnostics.
-static inline void enable_colours() { _thread_use_diagnostics_colours_ = true; }
+static inline void enable_colours() { thread_use_colours = true; }
 
 /// Disable colours in diagnostics.
-static inline void disable_colours() { _thread_use_diagnostics_colours_ = false; }
+static inline void disable_colours() { thread_use_colours = false; }
 
 /// ===========================================================================
 ///  Strings.
@@ -81,8 +89,12 @@ typedef struct string {
   usz size;
 } string;
 
-/// %.*s formatting
-#define strf(string) (int)(string).size, (string).data
+/// Resizeable string buffer
+typedef struct string_buffer {
+  char *data;
+  usz size;
+  usz capacity;
+} string_buffer;
 
 /// Copy a string.
 NODISCARD
@@ -90,9 +102,33 @@ string string_dup_impl(const char *src, usz size);
 #define string_dup(src) string_dup_impl((src).data, (src).size)
 
 /// Format a string.
-NODISCARD
-FORMAT(printf, 1, 2)
-string format(const char *fmt, ...);
+NODISCARD string vformat(const char *fmt, va_list args);
+
+/// Format a string.
+EXT_FORMAT(1, 2)
+NODISCARD string format(const char *fmt, ...);
+
+/// Format a string to a buffer.
+void vformat_to(string_buffer *buf, const char *fmt, va_list args);
+
+/// Format a string to a buffer.
+EXT_FORMAT(2, 3)
+void format_to(string_buffer *buf, const char *fmt, ...);
+
+/// Print a string to a file.
+void vfprint(FILE *file, const char *fmt, va_list args);
+
+/// Print a string to a file.
+EXT_FORMAT(2, 3)
+void fprint(FILE *f, const char *fmt, ...);
+
+/// Print a string to stdout.
+EXT_FORMAT(1, 2)
+void print(const char *fmt, ...);
+
+/// Print a string to stderr.
+EXT_FORMAT(1, 2)
+void eprint(const char *fmt, ...);
 
 /// Create a string from a const char*
 #define string_create(src) string_dup_impl(src, strlen(src))
@@ -112,6 +148,5 @@ string format(const char *fmt, ...);
 /// ===========================================================================
 /// Determine the width of a number.
 NODISCARD usz number_width(u64 n);
-
 
 #endif // FUNCOMPILER_UTILS_H

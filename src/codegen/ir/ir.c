@@ -20,7 +20,7 @@ void codegen_lower_ir_backend(CodegenContext *context) {
 }
 
 void codegen_emit_ir_backend(CodegenContext *context) {
-  bool use_colour = _thread_use_diagnostics_colours_;
+  bool use_colour = thread_use_colours;
   disable_colours();
 
   ir_set_ids(context);
@@ -28,98 +28,98 @@ void codegen_emit_ir_backend(CodegenContext *context) {
     ir_print_defun(context->code, f);
 
     /// Function body.
-    fprintf(context->code, " {\n");
+    fprint(context->code, " {\n");
     list_foreach (IRBlock *, b, f->blocks) {
-      fprintf(context->code, "bb%zu:\n", b->id);
+      fprint(context->code, "bb%Z:\n", b->id);
       list_foreach (IRInstruction *, instruction, b->instructions) {
         if (instruction->kind == IR_PARAMETER) continue;
 
-        fprintf(context->code, "    ");
+        fprint(context->code, "    ");
         STATIC_ASSERT(IR_COUNT == 32, "Handle all IR instructions");
 
-        if (instruction->id) fprintf(context->code, "%%%u = ", instruction->id);
+        if (instruction->id) fprint(context->code, "%%%u = ", instruction->id);
         switch (instruction->kind) {
           case IR_IMMEDIATE:
-            fprintf(context->code, "imm %"PRId64,instruction->imm);
+            fprint(context->code, "imm %U", instruction->imm);
             break;
 
           case IR_CALL: {
-            if (instruction->call.tail_call) { fprintf(context->code, "tail "); }
-            if (instruction->call.is_indirect) fprintf(context->code, "call %%%u", instruction->call.callee_instruction->id);
-            else fprintf(context->code, "call %s", instruction->call.callee_function->name.data);
+            if (instruction->call.tail_call) { fprint(context->code, "tail "); }
+            if (instruction->call.is_indirect) fprint(context->code, "call %%%u", instruction->call.callee_instruction->id);
+            else fprint(context->code, "call %s", instruction->call.callee_function->name.data);
 
             fputc('(', context->code);
             bool first = true;
             foreach_ptr (IRInstruction*, arg, instruction->call.arguments) {
-              if (!first) fprintf(context->code, ", ");
+              if (!first) fprint(context->code, ", ");
               else first = false;
-              fprintf(context->code, "%%%u", arg->id);
+              fprint(context->code, "%%%u", arg->id);
             }
             fputc(')', context->code);
           } break;
 
           case IR_RETURN:
-            if (instruction->operand) fprintf(context->code, "ret %%%u", instruction->operand->id);
-            else fprintf(context->code, "ret");
+            if (instruction->operand) fprint(context->code, "ret %%%u", instruction->operand->id);
+            else fprint(context->code, "ret");
             break;
 #define PRINT_BINARY_INSTRUCTION(enumerator, name) \
-  case IR_##enumerator: fprintf(context->code, #name " %%%u, %%%u", instruction->lhs->id, instruction->rhs->id); break;
+  case IR_##enumerator: fprint(context->code, #name " %%%u, %%%u", instruction->lhs->id, instruction->rhs->id); break;
           ALL_BINARY_INSTRUCTION_TYPES(PRINT_BINARY_INSTRUCTION)
 #undef PRINT_BINARY_INSTRUCTION
 
           case IR_COPY:
-            fprintf(context->code, "copy %%%u", instruction->operand->id);
+            fprint(context->code, "copy %%%u", instruction->operand->id);
             break;
           case IR_NOT:
-            fprintf(context->code, "not %%%u", instruction->operand->id);
+            fprint(context->code, "not %%%u", instruction->operand->id);
             break;
           case IR_PARAMETER: UNREACHABLE();
           case IR_BRANCH:
-            fprintf(context->code, "br bb%zu", instruction->destination_block->id);
+            fprint(context->code, "br bb%zu", instruction->destination_block->id);
             break;
           case IR_BRANCH_CONDITIONAL:
-            fprintf(context->code, "br.cond %%%u, bb%zu, bb%zu",
+            fprint(context->code, "br.cond %%%u, bb%zu, bb%zu",
                 instruction->cond_br.condition->id,
                 instruction->cond_br.then->id,
                 instruction->cond_br.else_->id);
             break;
           case IR_PHI: {
-            fprintf(context->code, "phi ");
+            fprint(context->code, "phi ");
             bool first = true;
             foreach_ptr (IRPhiArgument*, arg, instruction->phi_args) {
               if (first) { first = false; }
-              else { fprintf(context->code, ", "); }
-              fprintf(context->code, "[bb%zu : %%%u]",
+              else { fprint(context->code, ", "); }
+              fprint(context->code, "[bb%zu : %%%u]",
                   arg->block->id,
                   arg->value->id);
             }
           } break;
           case IR_LOAD:
-            fprintf(context->code, "load %%%u", instruction->operand->id);
+            fprint(context->code, "load %%%u", instruction->operand->id);
             break;
           case IR_STORE:
-            fprintf(context->code, "store %%%u, %%%u",
+            fprint(context->code, "store %%%u, %%%u",
                 instruction->lhs->id,
                 instruction->rhs->id);
             break;
           case IR_REGISTER:
-            fprintf(context->code, "register r%d", instruction->result);
+            fprint(context->code, "register r%u", instruction->result);
             break;
           case IR_ALLOCA:
-            fprintf(context->code, "alloca %"PRId64, instruction->imm);
+            fprint(context->code, "alloca %U", instruction->imm);
             break;
           case IR_UNREACHABLE:
-            fprintf(context->code, "unreachable");
+            fprint(context->code, "unreachable");
             break;
           default:
             TODO("Handle IRType %d\n", instruction->kind);
         }
-        fprintf(context->code, "\n");
+        fprint(context->code, "\n");
       }
     }
 
     /// End of function.
-    fprintf(context->code, "}\n\n");
+    fprint(context->code, "}\n\n");
   }
 
   if (use_colour) enable_colours();

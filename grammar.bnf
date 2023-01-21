@@ -18,15 +18,15 @@
 /// Declarations.
 <expr-decl>      ::= <decl-start> <decl-rest>
 <decl-start>     ::= IDENTIFIER ":"
-<decl-rest>      ::= <type-function> <expression>
+<decl-rest>      ::= <type-function> <function-body>
                    | <type> [ "=" <expression> ]
-                   | <decl-start> EXT <type-function>
+                   | EXT <type-function>
 
 /// Other expressions.
 <expr-if>        ::= IF <expression> <expression> [ ELSE <expression> ]
 <expr-while>     ::= WHILE <expression> <expression>
 <expr-block>     ::= "{" { <expression> } "}"
-<expr-lambda>    ::= <type-function> <expression>
+<expr-lambda>    ::= <type-function> <function-body>
 <expr-call>      ::= <expression> "(" { <expression> [ "," ] } ")"
 <expr-cast>      ::= <expression> AS <type>
 <expr-subs>      ::= <expression> "[" <expression> "]"
@@ -45,5 +45,6 @@
 <param-decl>     ::= <decl-start> <type>
 
 /// Miscellaneous.
+<function-body>  ::= [ "=" ] <expression>
 <binary>         ::= /// All binary operators
 <prefix>         ::= /// All unary prefix operators

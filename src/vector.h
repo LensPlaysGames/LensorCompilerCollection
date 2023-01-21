@@ -77,6 +77,15 @@
     if (_index < (vector).size) vector_remove_unordered(vector, _index);               \
   } while (0)
 
+/// Remove all elements from a vector that are in another vector.
+#define vector_remove_elements_unordered(vector, elements)            \
+  do {                                                                \
+    for (size_t _i = 0; _i < (elements).size; _i++) {                 \
+      vector_remove_element_unordered((vector), (elements).data[_i]); \
+    }                                                                 \
+    vector_clear(elements);                                           \
+  } while (0)
+
 /// Append a vector to another vector
 #define vector_append(to, from)                                                         \
   do {                                                                                  \

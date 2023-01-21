@@ -10,7 +10,31 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
 set(CMAKE_C_STANDARD 11)
 
-project(FUNCompiler C)
+project(FUNCompiler C CXX)
+
+## Clang plugin to typecheck format strings.
+if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
+  find_package(LLVM CONFIG)
+  if (DEFINED LLVM_PACKAGE_VERSION)
+    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+
+    ## Add the plugin as a target.
+    set (CMAKE_CXX_STANDARD 20)
+    add_library(fmt-check-plugin SHARED fmt-check-plugin/fmt-check-plugin.cc)
+
+    ## LLVM include dirs and definitions.
+    target_include_directories(fmt-check-plugin PRIVATE ${LLVM_INCLUDE_DIRS})
+    separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
+    target_compile_definitions(fmt-check-plugin PRIVATE ${LLVM_DEFINITIONS_LIST})
+
+    ## LLVM libs.
+    llvm_map_components_to_libnames(llvm_libs all)
+    target_link_libraries(fmt-check-plugin PRIVATE ${llvm_libs})
+
+    ## Disable this since is a bit annoying.
+    add_compile_options(-Wno-unused-command-line-argument)
+  endif()
+endif()
 
 # User Option(s)
 set(
@@ -18,7 +42,6 @@ set(
   CACHE BOOL
   "Whether or not to optimise for the system being compiled on. This should be true *unless* you are making distributed binaries."
 )
-
 
 add_executable(
   func
@@ -48,6 +71,14 @@ if (NOT WIN32)
   target_link_libraries(func PRIVATE m)
 endif()
 
+# Run the format checking plugin if possible.
+if (CMAKE_C_COMPILER_ID STREQUAL "Clang" AND DEFINED LLVM_PACKAGE_VERSION)
+  add_dependencies(func fmt-check-plugin)
+  if (EXISTS "./libfmt-check-plugin.so")
+    target_compile_options(func PRIVATE "-fplugin=./libfmt-check-plugin.so")
+  endif()
+endif()
+
 ## Debug/Release flags.
 if (NOT MSVC)
   target_compile_options(func PRIVATE
@@ -58,6 +89,11 @@ if (NOT MSVC)
     $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
     $<$<CONFIG:RELEASE>:-O3>
   )
+
+  # Keep internal symbol names in debug mode if possible. See below for clang.
+  if (CMAKE_C_COMPILER_ID STREQUAL "GCC")
+    target_compile_options(func PRIVATE $<$<CONFIG:DEBUG>:-rdynamic>)
+  endif()
 
   # -march=native only makes sense when compiling for the compiled system.
   if (NATIVE_OPT)
@@ -73,11 +109,18 @@ else()
   )
 endif()
 
+# When compiling with clang-cl, MSVC is also defined, so we put this here instead.
+if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
+  target_compile_options(func PRIVATE $<$<CONFIG:DEBUG>:-Wl,-export-dynamic>)
+endif()
+
+# Enable asan if requested and possible.
 if (DEFINED ENABLE_ASAN AND NOT WIN32)
   target_compile_options(func PRIVATE -fsanitize=address)
   target_link_options(func PRIVATE -fsanitize=address)
 endif()
 
+# Compile options.
 if (NOT MSVC)
   target_compile_options(
     func
@@ -90,17 +133,8 @@ if (NOT MSVC)
     -Wno-unused-parameter -Wno-unused-function
     -Wno-format-zero-length -Wno-comment
 
-    -fdiagnostics-color
+    -fdiagnostics-color=always
   )
-  # clang-cl
-  if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(
-      func
-      PRIVATE
-      -Wno-unused-function -Wno-unused-parameter
-      -Wno-format-zero-length
-    )
-  endif()
 else()
   target_compile_options(
     func
@@ -117,14 +151,21 @@ else()
     # Don't warn about unused functions.
     /wd4505
   )
+
+  # clang-cl
+  if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(
+      func
+      PRIVATE
+      -Wno-unused-function -Wno-unused-parameter
+      -Wno-format-zero-length
+    )
+  endif()
 endif()
 
-# If user is targeting Windows.
+# On Windows, don't suggest the _s nonsense functions.
 if (WIN32)
-  target_compile_definitions(
-    func
-    PRIVATE
-    # Don't suggest the _s nonsense functions.
+  target_compile_definitions(func PRIVATE
     _CRT_SECURE_NO_WARNINGS
     _CRT_SECURE_NO_WARNINGS_GLOBALS
     _CRT_NONSTDC_NO_WARNINGS

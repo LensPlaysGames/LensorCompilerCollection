@@ -9,8 +9,8 @@
 #include <platform.h>
 
 void print_usage(char **argv) {
-  printf("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", argv[0]);
-  printf("Flags:\n"
+  print("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", argv[0]);
+  print("Flags:\n"
          "   `-h`, `--help`    :: Show this help and usage information.\n"
          "   `--formats`       :: List acceptable output formats.\n"
          "   `--callings`      :: List acceptable calling conventions.\n"
@@ -22,7 +22,7 @@ void print_usage(char **argv) {
          "   `--print-scopes   :: Print the scope tree and exit.\n"
          "   `-O`, `--optimize`:: Optimize the generated code.\n"
          "   `-v`, `--verbose` :: Print out more information.\n");
-  printf("Options:\n"
+  print("Options:\n"
          "    `-o`, `--output`   :: Set the output filepath to the one given.\n"
          "    `-f`, `--format`   :: Set the output format to the one given.\n"
          "    `-cc`, `--calling` :: Set the calling convention to the one given.\n"
@@ -48,28 +48,28 @@ bool colours_blink = false;
 bool codegen_only = false;
 
 void print_acceptable_formats() {
-  printf("Acceptable formats include:\n"
+  print("Acceptable formats include:\n"
          " -> default\n"
          " -> x86_64_gas\n"
          " -> ir\n");
 }
 
 void print_acceptable_calling_conventions() {
-  printf("Acceptable calling conventions include:\n"
+  print("Acceptable calling conventions include:\n"
          " -> default\n"
          " -> LINUX\n"
          " -> MSWIN\n");
 }
 
 void print_acceptable_asm_dialects() {
-  printf("Acceptable dialects include:\n"
+  print("Acceptable dialects include:\n"
          " -> default\n"
          " -> att\n"
          " -> intel\n");
 }
 
 void print_acceptable_colour_settings() {
-  printf("Acceptable values for `--colours` include:\n"
+  print("Acceptable values for `--colours` include:\n"
          " -> auto\n"
          " -> always\n"
          " -> blink\n"
@@ -84,7 +84,7 @@ int handle_command_line_arguments(int argc, char **argv) {
   for (int i = 1; i < argc; ++i) {
     char *argument = argv[i];
 
-    //printf("argument %d: \"%s\"\n", i, argument);
+    //print("argument %d: \"%s\"\n", i, argument);
 
     if (strcmp(argument, "-h") == 0
         || strcmp(argument, "--help") == 0) {
@@ -148,7 +148,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       } else if (strcmp(argv[i], "ir") == 0) {
         output_format = CG_FMT_IR;
       } else {
-        printf("Expected format after format command line argument\n"
+        print("Expected format after format command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
         print_acceptable_formats();
         return 1;
@@ -156,7 +156,7 @@ int handle_command_line_arguments(int argc, char **argv) {
     } else if (strcmp(argument, "--colours") == 0) {
       i++;
       if (i >= argc) {
-        fprintf(stderr, "Error: Expected option value after `--colours`\n");
+        fprint(stderr, "Error: Expected option value after `--colours`\n");
         print_acceptable_colour_settings();
         exit(1);
       }
@@ -170,7 +170,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       } else if (strcmp(argv[i], "always") == 0) {
         prefer_using_diagnostics_colours = true;
       } else {
-        printf("Expected calling convention after calling convention command line argument\n"
+        print("Expected calling convention after calling convention command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
         print_acceptable_calling_conventions();
         return 1;
@@ -193,7 +193,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       } else if (strcmp(argv[i], "LINUX") == 0) {
         output_calling_convention = CG_CALL_CONV_LINUX;
       } else {
-        printf("Expected calling convention after calling convention command line argument\n"
+        print("Expected calling convention after calling convention command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
         print_acceptable_calling_conventions();
         return 1;
@@ -216,7 +216,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       } else if (strcmp(argv[i], "intel") == 0) {
         output_assembly_dialect = CG_ASM_DIALECT_INTEL;
       } else {
-        printf("Expected assembly dialect after calling convention command line argument\n"
+        print("Expected assembly dialect after calling convention command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
         print_acceptable_asm_dialects();
         return 1;
@@ -251,19 +251,19 @@ int main(int argc, char **argv) {
   int status = handle_command_line_arguments(argc, argv);
   if (status) { return status; }
   if (input_filepath_index == -1) {
-    printf("Input file path was not provided.");
+    print("Input file path was not provided.");
     print_usage(argv);
     return 1;
   }
 
-  _thread_use_diagnostics_colours_ = prefer_using_diagnostics_colours;
+  thread_use_colours = prefer_using_diagnostics_colours;
 
   const char *infile = argv[input_filepath_index];
   const char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
   size_t len = strlen(infile);
   bool ok = false;
   string s = platform_read_file(infile, &ok);
-  if (!ok) ICE("%.*s", strf(s));
+  if (!ok) ICE("%S", s);
 
   /// The input is an IR file.
   if (len >= 3 && memcmp(infile + len - 3, ".ir", 3) == 0) {
@@ -328,7 +328,5 @@ int main(int argc, char **argv) {
   free(s.data);
 
   /// Done!
-  if (verbosity) printf("\nGenerated code at output filepath \"%s\"\n", output_filepath);
-
-  return 0;
+  if (verbosity) print("\nGenerated code at output filepath \"%s\"\n", output_filepath);
 }

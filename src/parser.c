@@ -20,13 +20,6 @@
 #define ERR_AT(loc, ...) ISSUE_DIAGNOSTIC(DIAG_ERR, loc, p, __VA_ARGS__)
 #define ERR(...)         ERR_AT(p->tok.source_location, __VA_ARGS__)
 
-#define ERR_DO(code, loc, ...)                                                  \
-  do {                                                                          \
-    issue_diagnostic(DIAG_ERR, (p)->filename, (p)->source, (loc), __VA_ARGS__); \
-    code;                                                                       \
-    longjmp(p->error_buffer, 1);                                                \
-  } while (0)
-
 /// ===========================================================================
 ///  Types and enums.
 /// ===========================================================================
@@ -432,7 +425,7 @@ static bool is_postfix_operator(enum TokenType tt) {
 static isz binary_operator_precedence(Parser *p, Token t) {
   (void) p;
   switch (t.type) {
-    case TK_DOT: return 10000;
+    case TK_DOT: return 1000000000;
     case TK_AS: return 1000;
 
     case TK_STAR:
@@ -591,28 +584,27 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
 
 /// Check if a type is valid as a declaration type.
 static void validate_decltype(Parser *p, Type *type) {
-  /// Strip typedefs.
-  Typeinfo actual_type = ast_typeinfo(p->ast, type);
-
   /// Strip arrays and recursive typedefs.
-  Type *base_type = actual_type.type;
+  Type *base_type = type_canonical(type);
+  Type *array = NULL;
   while (base_type) {
-    if (base_type->kind == TYPE_NAMED) base_type = base_type->named ? base_type->named->type : NULL;
-    else if (base_type->kind == TYPE_ARRAY) base_type = base_type->array.of;
-    else break;
+    if (base_type->kind == TYPE_NAMED) base_type = type_canonical(base_type->named->val.type);
+    else if (base_type->kind == TYPE_ARRAY) {
+      array = base_type;
+      base_type = type_canonical(base_type->array.of);
+      break;
+    } else break;
   }
 
   /// Make sure this isn’t an array of incomplete type.
-  if (actual_type.is_incomplete || !base_type) {
-    string name = ast_typename(type, false);
-    ERR_DO(free(name.data), type->source_location, "Cannot declare %s of incomplete type '%.*s'",
-           actual_type.is_incomplete ? "variable" : "array", (int) name.size, name.data);
+  if (!base_type) {
+    ERR_AT(type->source_location, "Cannot declare %s of incomplete type '%T'",
+           array ? "array" : "variable", type);
   }
 
-  if (actual_type.type->kind == TYPE_FUNCTION || base_type->kind == TYPE_FUNCTION) {
-    string name = ast_typename(type, false);
-    ERR_DO(free(name.data), type->source_location, "Cannot declare %s of function type '%.*s'",
-           actual_type.is_incomplete ? "variable" : "array", strf(name));
+  if (base_type->kind == TYPE_FUNCTION) {
+    ERR_AT(type->source_location, "Cannot declare %s of function type '%T'",
+           array ? "array" : "variable", type);
   }
 }
 
@@ -625,6 +617,9 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
   bool save_in_function = p->in_function;
   p->in_function = true;
 
+  /// Yeet "=" if found.
+  if (p->tok.type == TK_EQ) next_token(p);
+
   /// Push a new scope for the body and parameters.
   scope_push(p->ast);
 
@@ -633,7 +628,7 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
     validate_decltype(p, param->type);
     Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
     if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var))
-      ERR_AT(var->source_location, "Redefinition of parameter '%.*s'", (int) var->declaration.name.size, var->declaration.name.data);
+      ERR_AT(var->source_location, "Redefinition of parameter '%S'", var->declaration.name);
     vector_push(*param_decls, var);
   }
 
@@ -660,9 +655,9 @@ static Node *parse_type_expr(Parser *p, Type *type) {
     Node *body = parse_function_body(p, type, &params);
 
     /// Create a function for the lambda.
-    char num[64] = {0};
-    usz sz = (usz) snprintf(num, sizeof num, "_XLambda_%zu", p->ast->counter++);
-    Node *func = ast_make_function(p->ast, type->source_location, type, params, body, (span){.data = num, .size = sz});
+    string name = format("_XLambda_%Z", p->ast->counter++);
+    Node *func = ast_make_function(p->ast, type->source_location, type, params, body, as_span(name));
+    free(name.data);
     func->function.global = false;
     return func;
   }
@@ -715,11 +710,7 @@ static Type *parse_type_derived(Parser *p, Type *base) {
         consume(p, TK_RBRACK);
 
         /// Base type must not be incomplete.
-        if (ast_type_is_incomplete(base)) {
-          string name = ast_typename(base, false);
-          ERR_DO(free(name.data), l, "Cannot create array of incomplete type: %.*s",
-            (int) name.size, name.data);
-        }
+        if (type_is_incomplete(base)) ERR_AT(l, "Cannot create array of incomplete type: %T", base);
 
         /// Create the array type.
         base = ast_make_type_array(p->ast, l, base, dim);
@@ -769,7 +760,7 @@ static Type *parse_type(Parser *p) {
   if (p->tok.type == TK_IDENT) {
     /// Make sure the identifier is a type.
     Symbol *sym = scope_find_symbol(curr_scope(p), p->tok.text, false);
-    if (!sym || sym->kind != SYM_TYPE) ERR("Unknown type '%.*s'", (int) p->tok.text.size, p->tok.text.data);
+    if (!sym || sym->kind != SYM_TYPE) ERR("Unknown type '%S'", p->tok.text);
 
     /// Create a named type from it.
     Type *base = ast_make_type_named(p->ast, p->tok.source_location, sym);
@@ -798,7 +789,7 @@ static Type *parse_type(Parser *p) {
   }
 
   /// Invalid base type.
-  ERR("Expected base type, got %d", p->tok.type);
+  ERR("Expected base type, got %d", (int) p->tok.type);
 }
 
 /// <expr-decl>      ::= <decl-start> <decl-rest>
@@ -823,14 +814,14 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
       /// Create a symbol table entry before parsing the body.
       Symbol *sym = scope_add_symbol_unconditional(curr_scope(p), SYM_FUNCTION, ident.text, NULL);
 
-      if (sym->kind != SYM_FUNCTION || sym->node)
-        ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+      if (sym->kind != SYM_FUNCTION || sym->val.node)
+        ERR_AT(ident.source_location, "Redefinition of symbol '%S'", ident.text);
 
       /// Parse the body, create the function, and update the symbol table.
       Nodes params = {0};
       Node *body = parse_function_body(p, type, &params);
       Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
-      sym->node = func;
+      sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, ident.source_location, ident.text);
       funcref->funcref.resolved = sym;
       return funcref;
@@ -840,12 +831,12 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     else {
       /// Create a symbol table entry.
       Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
-      if (sym->kind != SYM_FUNCTION || sym->node)
-        ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'", (int) ident.text.size, ident.text.data);
+      if (sym->kind != SYM_FUNCTION || sym->val.node)
+        ERR_AT(ident.source_location, "Redefinition of symbol '%S'", ident.text);
 
       /// Create the function.
       Node *func = ast_make_function(p->ast, ident.source_location, type, (Nodes){0}, NULL, ident.text);
-      sym->node = func;
+      sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, ident.source_location, ident.text);
       funcref->funcref.resolved = sym;
       return funcref;
@@ -863,8 +854,7 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
 
   /// Add the declaration to the current scope.
   if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl))
-    ERR_AT(ident.source_location, "Redefinition of symbol '%.*s'",
-      (int) ident.text.size, ident.text.data);
+    ERR_AT(ident.source_location, "Redefinition of symbol '%S'", ident.text);
 
   /// A non-external declaration may have an initialiser.
   if (p->tok.type == TK_EQ) {
@@ -1028,6 +1018,7 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
   ///       the highest precedence anyway.
   ///     - otherwise, return the current LHS as its own expression.
   for (;;) {
+    /// TODO: Postfix operators also need to respect precedence.
     /// Handle unary postfix operators.
     if (is_postfix_operator(p->tok.type)) {
       lhs = ast_make_unary(p->ast, (loc){.start = lhs->source_location.start, p->tok.source_location.end}, p->tok.type, true, lhs);
@@ -1164,4 +1155,28 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
   }
 
   return "\?\?\?";
+}
+
+void seek_location(span source, loc location, u32 *o_line, u32 *o_line_start, u32 *o_line_end) {
+  /// Seek to the start of the line. Keep track of the line number.
+  u32 line = 1;
+  u32 line_start = 0;
+  for (u32 i = location.start; i > 0; --i) {
+    if (source.data[i] == '\n') {
+      if (!line_start) line_start = i + 1;
+      ++line;
+    }
+  }
+
+  /// Don’t include the newline in the line.
+  if (source.data[line_start] == '\n') ++line_start;
+
+  /// Seek to the end of the line.
+  u32 line_end = location.end;
+  while (line_end < source.size && source.data[line_end] != '\n') line_end++;
+
+  /// Return the results.
+  if (o_line) *o_line = line;
+  if (o_line_start) *o_line_start = line_start;
+  if (o_line_end) *o_line_end = line_end;
 }

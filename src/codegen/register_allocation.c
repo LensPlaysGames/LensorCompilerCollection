@@ -13,7 +13,7 @@
 
 #ifdef DEBUG_RA
 #  define IR_FEMIT(file, f) ir_femit_function(file, f)
-#  define DEBUG(...)              fprintf(stdout, __VA_ARGS__)
+#  define DEBUG(...)              print(__VA_ARGS__)
 CodegenContext *debug_context = NULL;
 #else
 #  define IR_FEMIT(file, context)
@@ -115,8 +115,7 @@ void function_call_arguments(IRFunction *f, const MachineDescription *desc) {
 }
 
 void function_return_values(IRFunction *f, const MachineDescription *desc) {
-  Typeinfo info = ast_typeinfo(f->context->ast, f->type->function.return_type);
-  if (info.is_void) return;
+  if (type_is_void(f->type->function.return_type)) return;
   FOREACH_INSTRUCTION_IN_FUNCTION(f) {
     if (instruction->kind == IR_RETURN) {
       IRInstruction *value = instruction->operand;
@@ -218,10 +217,10 @@ typedef struct IRBlockList {
 
 typedef struct AdjacencyMatrix {
   usz size;
-  char *data;
+  bool *data;
 } AdjacencyMatrix;
 
-char *adjm_entry(AdjacencyMatrix m, usz x, usz y) {
+bool *adjm_entry(AdjacencyMatrix m, usz x, usz y) {
   if (x > m.size) {
     ICE("Can not access adjacency matrix because X is out of bounds.");
   }
@@ -245,7 +244,7 @@ void adjm_clear(AdjacencyMatrix m, usz x, usz y) {
   *adjm_entry(m, x, y) = 0;
 }
 
-char adjm(AdjacencyMatrix m, usz x, usz y) {
+bool adjm(AdjacencyMatrix m, usz x, usz y) {
   return *adjm_entry(m, x, y);
 }
 
@@ -379,18 +378,18 @@ static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc,
 
 void print_adjacency_matrix(AdjacencyMatrix m) {
   for (usz y = 0; y < m.size; ++y) {
-    printf("%4zu |%3hhu", y, adjm(m, 0, y));
+    print("%Z |%b", y, adjm(m, 0, y));
     for (usz x = 1; x < y; ++x) {
-      char adj = adjm(m, x, y);
-      adj ? printf("%3hhu", adj) : printf("   ");
+      bool adj = adjm(m, x, y);
+      adj ? print("%b", adj) : print("   ");
     }
-    printf("\n");
+    print("\n");
   }
-  printf("     |  %d", 0);
+  print("     |  %d", 0);
   for (usz x = 1; x < m.size; ++x) {
-    printf("%3zu", x);
+    print("%Z", x);
   }
-  printf("\n\n");
+  print("\n\n");
 }
 
 #ifdef DEBUG_RA
@@ -466,17 +465,17 @@ void build_adjacency_lists(IRInstructions *instructions, AdjacencyGraph *G) {
 
 void print_adjacency_lists(AdjacencyLists *array) {
   foreach_ptr (AdjacencyList*, list, *array) {
-    printf("%%%u::%u: ", list->instruction->id, list->instruction->index);
-    if (list->color) printf("(r%u) ", list->color);
+    print("%%%u::%u: ", list->instruction->id, list->instruction->index);
+    if (list->color) print("(r%u) ", list->color);
 
     /// Print the adjacent nodes.
     foreach_index(i, list->adjacencies) {
-      if (i) { printf(", "); }
-      printf("%zu", list->adjacencies.data[i]);
+      if (i) { print(", "); }
+      print("%Z", list->adjacencies.data[i]);
     }
-    printf("\n");
+    print("\n");
   }
-  printf("\n");
+  print("\n");
 }
 
 #ifdef DEBUG_RA
@@ -604,10 +603,10 @@ typedef Vector(usz) NumberStack;
 
 void print_number_stack(NumberStack *stack) {
   foreach_index(i, *stack) {
-    if (i) { printf(", "); }
-    printf("%zu", stack->data[i]);
+    if (i) { print(", "); }
+    print("%Z", stack->data[i]);
   }
-  printf("\n");
+  print("\n");
 }
 
 #ifdef DEBUG_RA

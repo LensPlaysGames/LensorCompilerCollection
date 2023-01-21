@@ -1,3 +1,4 @@
+; LABELS overloading
 ; ERROR
 
 foo : void (x : integer) {}

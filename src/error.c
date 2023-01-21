@@ -1,12 +1,14 @@
+#include "parser.h"
+
 #include <error.h>
+#include <math.h>
+#include <platform.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
-#include <math.h>
-#include <platform.h>
 
 static const char *diagnostic_level_names[DIAG_COUNT] = {
     "Note",
@@ -57,91 +59,75 @@ void vissue_diagnostic
  const char *fmt,
  va_list ap) {
   ASSERT(level >= 0 && level < DIAG_COUNT);
+  bool save_thread_disable_type_colours = thread_disable_type_colours;
+  thread_disable_type_colours = true;
 
-  /// Check if stderr is a terminal.
-  bool use_colour = _thread_use_diagnostics_colours_;
+  /// Print an empty line before every diagnostic except the very first.
+  static bool first_diagnostic = true;
+  if (first_diagnostic) first_diagnostic = false;
+  else eprint("\n");
 
   /// Print a detailed error message if we have access to the source code.
   if (source.data && source.size) {
     if (location.start > source.size) location.start = (u32) (source.size);
     if (location.end > source.size) location.end = (u32) (source.size);
 
-    /// Seek to the start of the line. Keep track of the line number.
-    u32 line = 1;
-    u32 line_start = 0;
-    for (u32 i = location.start; i > 0; --i) {
-      if (source.data[i] == '\n') {
-        if (!line_start) line_start = i + 1;
-        ++line;
-      }
-    }
-
-    /// Don’t include the newline in the line.
-    if (source.data[line_start] == '\n') ++line_start;
-
-    /// Seek to the end of the line.
-    u32 line_end = location.end;
-    while (line_end < source.size && source.data[line_end] != '\n') line_end++;
+    /// Get the line.
+    u32 line, line_start, line_end;
+    seek_location(source, location, &line, &line_start, &line_end);
 
     /// Print the filename, line and column, severity and message.
-    if (use_colour) fprintf(stderr, "\033[m\033[1;38m");
-    fprintf(stderr, "%s:%u:%u: ", filename, line, location.start - line_start);
-    if (use_colour && colours_blink) fprintf(stderr, "\033[5m\a\a\a\a");
-    if (use_colour) fprintf(stderr, "%s", diagnostic_level_colours[level]);
-    fprintf(stderr, "%s: ", diagnostic_level_names[level]);
-    if (use_colour) fprintf(stderr, "\033[m\033[1;38m");
-    vfprintf(stderr, fmt, ap);
-    if (use_colour) fprintf(stderr, "\033[m");
+    eprint("%B38%s:%u:%u: ", filename, line, location.start - line_start);
+    if (colours_blink) eprint("\033[5m\a\a\a\a");
+    eprint("%C%s: %B38", diagnostic_level_colours[level], diagnostic_level_names[level]);
+    vfprint(stderr, fmt, ap);
 
     /// Print the line.
-    fprintf(stderr, "\n %d | ", line);
+    eprint("%m\n %u | ", line);
     for (u32 i = line_start; i < location.start; ++i) {
-      if (source.data[i] == '\t') fprintf(stderr, "    ");
+      if (source.data[i] == '\t') eprint("    ");
       else fputc(source.data[i], stderr);
     }
-    if (use_colour) fprintf(stderr, "%s", diagnostic_level_colours[level]);
+    eprint("%C", diagnostic_level_colours[level]);
     for (u32 i = location.start; i < location.end; ++i) {
-      if (source.data[i] == '\t') fprintf(stderr, "    ");
+      if (source.data[i] == '\t') eprint("    ");
       else fputc(source.data[i], stderr);
     }
-    if (use_colour) fprintf(stderr, "\033[m");
+    eprint("%m");
     for (u32 i = location.end; i < line_end; ++i) {
-      if (source.data[i] == '\t') fprintf(stderr, "    ");
+      if (source.data[i] == '\t') eprint("    ");
       else fputc(source.data[i], stderr);
     }
-    fprintf(stderr, "\n");
+    eprint("\n");
 
     /// Underline the region with tildes.
     size_t spaces = !line ? 1 : (u32) (log10(line) + 1);
-    for (size_t i = 0; i < spaces; i++)
-      fprintf(stderr, " ");
-    fprintf(stderr, "  | ");
-    if (use_colour && colours_blink) fprintf(stderr, "\033[5m");
-    if (use_colour) fprintf(stderr, "%s", diagnostic_level_colours[level]);
+    for (size_t i = 0; i < spaces; i++) eprint(" ");
+    eprint("  | ");
+    if (colours_blink) eprint("\033[5m");
+    eprint("%C", diagnostic_level_colours[level]);
     for (u32 i = line_start; i < location.start; ++i) {
-      if (source.data[i] == '\t') fprintf(stderr, "    ");
+      if (source.data[i] == '\t') eprint("    ");
       else fputc(' ', stderr);
     }
     for (u32 i = location.start; i < location.end; ++i) {
-      if (source.data[i] == '\t') fprintf(stderr, "~~~~");
+      if (source.data[i] == '\t') eprint("~~~~");
       else fputc('~', stderr);
     }
-    if (use_colour) fprintf(stderr, "\033[m");
-    fprintf(stderr, "\n");
+    eprint("%m\n");
   }
 
   /// Otherwise, just print a simple error message.
   else {
-    if (use_colour) fprintf(stderr, "\033[m\033[1;38m");
-    fprintf(stderr, "%s: ", filename);
-    if (use_colour && colours_blink) fprintf(stderr, "\033[5m");
-    if (use_colour) fprintf(stderr, "%s", diagnostic_level_colours[level]);
-    fprintf(stderr, "%s: ", diagnostic_level_names[level]);
-    if (use_colour) fprintf(stderr, "\033[m\033[1;38m");
-    vfprintf(stderr, fmt, ap);
-    if (use_colour) fprintf(stderr, "\033[m");
-    fprintf(stderr, "\n");
+    eprint("%B38%s: %C%C%s: %B38",
+      filename,
+      colours_blink ? "\033[5m" : "", diagnostic_level_colours[level], diagnostic_level_names[level]
+    );
+    vfprint(stderr, fmt, ap);
+    eprint("%m\n");
   }
+
+  thread_disable_type_colours = save_thread_disable_type_colours;
  }
 
 void raise_fatal_error_impl (
@@ -154,51 +140,42 @@ void raise_fatal_error_impl (
     const char *fmt,
     ...
 ) {
-  /// Print the file and line.
-  bool use_colour = _thread_use_diagnostics_colours_;
-
   /// Removing everything up to and including the `src` prefix.
   const char *filename = file, *src_prefix;
   while (src_prefix = strstr(filename, "src" PLATFORM_PATH_SEPARATOR), src_prefix) filename = src_prefix + 4;
-
-  /// To make this less atrocious,
-  const char *const reset = use_colour ? "\033[m" : "";
-  const char *const w = use_colour ? "\033[m\033[1;38m" : "";
-  const char *const colour = use_colour && colours_blink
+  const char *const colour = colours_blink
     ? "\033[31;5m\a\a\a\a\a"
-    : use_colour
-        ? diagnostic_level_colours[is_sorry ? DIAG_SORRY : DIAG_ICE]
-        : "";
+    : diagnostic_level_colours[is_sorry ? DIAG_SORRY : DIAG_ICE];
 
   /// Print a shorter message if this is a TODO() w/ no message.
   if (is_sorry && strcmp(fmt, "") == 0) {
-    fprintf(stderr, "%s%s:%d:%s %s", w, filename, line, reset, colour);
-    fprintf(stderr, "Sorry, unimplemented:%s Function ‘%s%s%s’\n", reset, w, func, reset);
+    eprint("%B38%s:%d: %C", filename, line, colour);
+    eprint("Sorry, unimplemented:%m Function ‘%B38%s%m’\n", func);
   }
 
   /// Print a longer message.
   else {
     /// File, line, message header; if they make sense, that is.
     if (!is_signal_or_exception) {
-      fprintf(stderr, "%s%s:%s In function ‘%s%s%s’\n", w, filename, reset, w, func, reset);
-      fprintf(stderr, "%s%s:%d:%s %s", w, filename, line, reset, colour);
+      eprint("%B38%s:%m In function ‘%B38%s%m’\n", filename, func);
+      eprint("%B38%s:%d: %C", filename, line, colour);
     } else {
-      fprintf(stderr, "%s", colour);
+      eprint("%C", colour);
     }
 
     /// Assert condition (if any) and message.
     if (assert_condition) {
-      fprintf(stderr, "Assertion failed:%s ‘%s%s%s’: ", reset, w, assert_condition, reset);
+      eprint("Assertion failed:%m ‘%B38%s%m’: ", assert_condition);
     } else {
-      fprintf(stderr, "%s:%s ", diagnostic_level_names[is_sorry ? DIAG_SORRY : DIAG_ICE], reset);
+      eprint("%s:%m ", diagnostic_level_names[is_sorry ? DIAG_SORRY : DIAG_ICE]);
     }
 
     /// Message.
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    vfprint(stderr, fmt, ap);
+    eprint("\n");
     va_end(ap);
-    fprintf(stderr, "\n");
   }
 
   /// Print the stack trace.
