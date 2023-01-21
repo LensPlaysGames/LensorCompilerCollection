@@ -404,7 +404,7 @@ Type *ast_make_type_function(
 /// ===========================================================================
 ///  AST query functions.
 /// ===========================================================================
-/// Used by `ast_typename`.
+/// Used by `typename`.
 static void write_typename(string_buffer *s, const Type *type) {
   if (!type) {
     format_to(s, "<null>");
