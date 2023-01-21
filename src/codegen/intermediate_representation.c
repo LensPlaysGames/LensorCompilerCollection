@@ -204,19 +204,27 @@ void ir_femit_instruction
     fprint(file, "%31ref %32%S", inst->function_ref->name);
     break;
 
-  case IR_RETURN:
-    if (inst->operand) fprint(file, "%33ret %34%%%u", inst->operand->id);
-    else fprint(file, "%33ret");
-    break;
-
 #define PRINT_BINARY_INSTRUCTION(enumerator, name) case IR_##enumerator: \
     fprint(file, "%33" #name " %34%%%u%31, %34%%%u", inst->lhs->id, inst->rhs->id); break;
     ALL_BINARY_INSTRUCTION_TYPES(PRINT_BINARY_INSTRUCTION)
 #undef PRINT_BINARY_INSTRUCTION
 
-  case IR_COPY: fprint(file, "%33copy %34%%%u", inst->operand->id); break;
-  case IR_PARAMETER: fprint(file, "%31.param %34%%%u", inst->id); break;
+  case IR_NOT:
+    fprint(file, "%33not %34%%%u", inst->operand->id);
+    break;
 
+  case IR_COPY:
+    fprint(file, "%33copy %34%%%u", inst->operand->id);
+    break;
+
+  case IR_PARAMETER:
+    fprint(file, "%31.param %34%%%u", inst->id);
+    break;
+
+  case IR_RETURN:
+    if (inst->operand) fprint(file, "%33ret %34%%%u", inst->operand->id);
+    else fprint(file, "%33ret");
+    break;
   case IR_BRANCH:
     fprint(file, "%33br bb%Z", inst->destination_block->id);
     break;
@@ -233,6 +241,7 @@ void ir_femit_instruction
       fprint(file, "%31[%33bb%Z%31 : %34%%%u%31]", arg->block->id, arg->value->id);
     }
   } break;
+
   case IR_LOAD:
     fprint(file, "%33load %34%%%u", inst->operand->id);
     break;
@@ -245,6 +254,7 @@ void ir_femit_instruction
   case IR_ALLOCA:
     fprint(file, "%33alloca %34%U", inst->imm);
     break;
+
   /// No-op
   case IR_UNREACHABLE:
     fprint(file, "%33unreachable");
