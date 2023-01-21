@@ -18,7 +18,10 @@
   - [ ] `[[deprecated]]`
   - [ ] `[[deprecated("reason")]]`
   - [ ] `[[call_once]]`
-- [ ] Overloading.
+- [ ] Pragmas
+  - [ ] Parsing
+  - [ ] `pragma mangling [on|off]`
+- [ ] Function Overloading
   - [x] Overloading terminology
   - [x] Overload tests
   - [x] Custom printf w/ `%T` for types etc.
