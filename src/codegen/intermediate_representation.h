@@ -9,7 +9,8 @@
 
 #define INSTRUCTION(name, given_type)                       \
   IRInstruction *(name) = calloc(1, sizeof(IRInstruction)); \
-  (name)->kind = (given_type)
+  (name)->kind = (given_type);                              \
+  (name)->type = t_void
 
 #define FOREACH_INSTRUCTION_N(context, function, block, instruction) \
   foreach_ptr (IRFunction *, function, context->functions)           \
@@ -128,6 +129,8 @@ void mark_used(IRInstruction *usee, IRInstruction *user);
 typedef struct IRInstruction {
   enum IRType kind;
   Register result;
+
+  Type *type;
 
   /// TODO: do we really need both of these?
   u32 id;
@@ -249,9 +252,9 @@ void insert_instruction_before(IRInstruction *i, IRInstruction *before);
 void insert_instruction_after(IRInstruction *i, IRInstruction *after);
 
 IRInstruction *ir_parameter(CodegenContext *context, size_t index);
-void ir_add_parameter_to_function(IRFunction *);
+void ir_add_parameter_to_function(IRFunction *, Type *);
 
-IRInstruction *ir_phi(CodegenContext *context);
+IRInstruction *ir_phi(CodegenContext *context, Type *type);
 void ir_phi_add_argument(IRInstruction *phi, IRPhiArgument *argument);
 void ir_phi_remove_argument(IRInstruction *phi, IRBlock *block);
 void ir_phi_argument
@@ -271,6 +274,7 @@ IRInstruction *ir_indirect_call
 
 IRInstruction *ir_immediate
 (CodegenContext *context,
+ Type *type,
  u64 immediate);
 
 IRInstruction *ir_load
@@ -320,12 +324,12 @@ ALL_BINARY_INSTRUCTION_TYPES(DECLARE_BINARY_INSTRUCTION)
 /// Create a variable with static storage duration.
 IRInstruction *ir_create_static
 (CodegenContext *context,
- Type *ty,
+ Type *type,
  span name);
 
 IRInstruction *ir_stack_allocate
 (CodegenContext *context,
- usz size);
+ Type *type);
 
 /// Check if an instruction returns a value.
 bool ir_is_value(IRInstruction *instruction);

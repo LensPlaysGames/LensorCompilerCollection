@@ -1,0 +1,4 @@
+a : byte = 34
+b : byte = 35
+c : byte = a + b
+c

@@ -104,11 +104,9 @@ void ir_remove(IRInstruction* instruction) {
   vector_delete(instruction->users);
   ir_unmark_usees(instruction);
   /// Parameters / static refs should not be freed here.
-  if (instruction->kind != IR_PARAMETER && instruction->kind != IR_STATIC_REF) {
+  if (instruction->kind != IR_PARAMETER && instruction->kind != IR_STATIC_REF)
     free(instruction);
-  } else {
-    vector_push(instruction->parent_block->function->context->removed_instructions, instruction);
-  }
+  else vector_push(instruction->parent_block->function->context->removed_instructions, instruction);
 }
 
 void ir_remove_and_free_block(IRBlock *block) {
@@ -263,6 +261,9 @@ void ir_femit_instruction
     ICE("Invalid IRType %d\n", inst->kind);
   }
 
+  // Print type that the value this instruction returns is of.
+  if (inst->type) fprint(file, " %31| %T", inst->type);
+
 #ifdef DEBUG_USES
   /// Print users
   fprint(file, "%m\033[60GUsers: ");
@@ -359,10 +360,11 @@ IRInstruction *ir_parameter
 
 /// Add a parameter to a function. This alters the number of
 /// parameters the function takes, so use it with caution.
-void ir_add_parameter_to_function(IRFunction *f) {
+void ir_add_parameter_to_function(IRFunction *f, Type *type) {
   INSTRUCTION(parameter, IR_PARAMETER);
   parameter->imm = f->parameters.size;
   parameter->id = (u32) f->parameters.size;
+  parameter->type = type;
   ir_insert(f->context, parameter);
   vector_push(f->parameters, parameter);
 }
@@ -384,9 +386,7 @@ void ir_phi_argument
   IRPhiArgument *arg = calloc(1, sizeof *arg);
   arg->block = phi_predecessor;
   arg->value = argument;
-
-  vector_push(phi->phi_args, arg);
-  mark_used(argument, phi);
+  ir_phi_add_argument(phi, arg);
 }
 
 void ir_phi_remove_argument(IRInstruction *phi, IRBlock *block) {
@@ -399,8 +399,9 @@ void ir_phi_remove_argument(IRInstruction *phi, IRBlock *block) {
   }
 }
 
-IRInstruction *ir_phi(CodegenContext *context) {
+IRInstruction *ir_phi(CodegenContext *context, Type *type) {
   INSTRUCTION(phi, IR_PHI);
+  phi->type = type;
   INSERT(phi);
   return phi;
 }
@@ -442,10 +443,11 @@ IRFunction *ir_function(CodegenContext *context, span name, Type *function_type)
   vector_push(context->functions, function);
 
   /// Generate param refs.
-  for (u64 i = 1; i <= function_type->function.parameters.size; i++) {
+  for (u64 i = 1; i <= function_type->function.parameters.size; ++i) {
     INSTRUCTION(param, IR_PARAMETER);
     param->imm = i - 1;
     param->id = (u32) i;
+    param->type = function_type->function.parameters.data[i - 1].type;
     vector_push(function->parameters, param);
     INSERT(param);
   }
@@ -455,17 +457,20 @@ IRFunction *ir_function(CodegenContext *context, span name, Type *function_type)
 IRInstruction *ir_funcref(CodegenContext *context, IRFunction *function) {
   INSTRUCTION(funcref, IR_FUNC_REF);
   funcref->function_ref = function;
+  funcref->type = function->type;
   INSERT(funcref);
   return funcref;
 }
 
 IRInstruction *ir_immediate
 (CodegenContext *context,
+ Type *type,
  u64 immediate
  )
 {
   INSTRUCTION(imm, IR_IMMEDIATE);
   imm->imm = immediate;
+  imm->type = type;
   INSERT(imm);
   return imm;
 }
@@ -478,6 +483,9 @@ IRInstruction *ir_load
   INSTRUCTION(load, IR_LOAD);
 
   load->operand = address;
+  // TODO: Is this right?
+  load->type = address->type;
+
   mark_used(address, load);
 
   INSERT(load);
@@ -490,9 +498,9 @@ IRInstruction *ir_direct_call
  )
 {
   ASSERT(callee, "Cannot create direct call to NULL function");
-  (void) context;
   INSTRUCTION(call, IR_CALL);
   call->call.callee_function = callee;
+  call->type = callee->type->function.return_type;
   return call;
 }
 
@@ -501,10 +509,10 @@ IRInstruction *ir_indirect_call
  IRInstruction *function
  )
 {
-  (void) context;
   INSTRUCTION(call, IR_CALL);
   call->call.callee_instruction = function;
   call->call.is_indirect = true;
+  call->type = function->type->function.return_type;
   mark_used(function, call);
   return call;
 }
@@ -518,6 +526,7 @@ IRInstruction *ir_store
   INSTRUCTION(store, IR_STORE);
   store->store.addr = address;
   store->store.value = data;
+  store->type = t_void; //> A store instruction does not return anything.
   mark_used(address, store);
   mark_used(data, store);
   INSERT(store);
@@ -538,6 +547,8 @@ IRInstruction *ir_branch_conditional
 
   branch->cond_br.then = then_block;
   branch->cond_br.else_ = otherwise_block;
+
+  branch->type = t_void;
   INSERT(branch);
   return branch;
 }
@@ -552,6 +563,7 @@ IRInstruction *ir_branch_into_block
   branch->destination_block = destination;
   branch->parent_block = block;
   list_push_back(block->instructions, branch);
+  branch->type = t_void;
   return branch;
 }
 
@@ -566,6 +578,7 @@ IRInstruction *ir_branch
 IRInstruction *ir_return(CodegenContext *context, IRInstruction* return_value) {
   INSTRUCTION(branch, IR_RETURN);
   branch->operand = return_value;
+  branch->type = t_void;
   INSERT(branch);
   if (return_value) mark_used(return_value, branch);
   return branch;
@@ -580,6 +593,7 @@ IRInstruction *ir_copy_unused
   (void) context;
   INSTRUCTION(copy, IR_COPY);
   copy->operand = source;
+  copy->type = source->type;
   return copy;
 }
 
@@ -601,6 +615,8 @@ IRInstruction *ir_not
 {
   INSTRUCTION(x, IR_NOT);
   x->operand = source;
+  // TODO: Is this right? Should we use source->type?
+  x->type = t_integer;
   mark_used(source, x);
   INSERT(x);
   return x;
@@ -608,7 +624,8 @@ IRInstruction *ir_not
 
 #define CREATE_BINARY_INSTRUCTION(enumerator, name)                                           \
   IRInstruction *ir_##name(CodegenContext *context, IRInstruction *lhs, IRInstruction *rhs) { \
-    INSTRUCTION(x, IR_##enumerator);                                                               \
+    INSTRUCTION(x, IR_##enumerator);                                                          \
+    x->type = t_integer;                                                                      \
     set_pair_and_mark(x, lhs, rhs);                                                           \
     INSERT(x);                                                                                \
     return x;                                                                                 \
@@ -618,19 +635,20 @@ ALL_BINARY_INSTRUCTION_TYPES(CREATE_BINARY_INSTRUCTION)
 
 IRInstruction *ir_create_static
 (CodegenContext *context,
- Type *ty,
+ Type *type,
  span name) {
   /// Create the variable.
   IRStaticVariable *v = calloc(1, sizeof *v);
   v->name = string_dup(name);
-  v->type = ty;
-  v->cached_size = type_sizeof(ty);
+  v->type = type;
+  v->cached_size = type_sizeof(type);
   v->cached_alignment = 8; /// TODO.
   vector_push(context->static_vars, v);
 
   /// Create an instruction to reference it and return it.
   INSTRUCTION(ref, IR_STATIC_REF);
   ref->static_ref = v;
+  ref->type = v->type;
   v->reference = ref;
   INSERT(ref);
   return ref;
@@ -638,11 +656,12 @@ IRInstruction *ir_create_static
 
 IRInstruction *ir_stack_allocate
 (CodegenContext *context,
- usz size
+ Type *type
  )
 {
   INSTRUCTION(alloca, IR_ALLOCA);
-  alloca->alloca.size = size;
+  alloca->alloca.size = type_sizeof(type);
+  alloca->type = type;
   INSERT(alloca);
   return alloca;
 }

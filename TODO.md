@@ -38,6 +38,7 @@
 - [ ] Types in the IR
   - [ ] Byte type
   - [ ] Type info in codegen/IR.
+  - [ ] Sema needs to "lower" integer_literal to "integer" if no other makes sense
   - [ ] Backend: Handle size/alignment requirements
   - [ ] Use eax, ax, al, etc.
   - [ ] Actually implementing casts.

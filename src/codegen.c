@@ -153,7 +153,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_DECLARATION:
       expr->ir = expr->declaration.static_
         ? ir_create_static(ctx, expr->type, as_span(expr->declaration.name))
-        : ir_stack_allocate(ctx, type_sizeof(expr->type));
+        : ir_stack_allocate(ctx, expr->type);
 
       /// Emit the initialiser if there is one.
       if (expr->declaration.init) {
@@ -215,7 +215,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
     /// Insert a phi node for the result of the if in the join block.
     if (!type_is_void(expr->type)) {
-      IRInstruction *phi = ir_phi(ctx);
+      IRInstruction *phi = ir_phi(ctx, expr->type);
       ir_phi_argument(phi, last_then_block, expr->if_.then->ir);
       ir_phi_argument(phi, last_else_block, expr->if_.else_->ir);
       expr->ir = phi;
@@ -423,7 +423,8 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// Literal expression. Only integer literals are supported for now.
   case NODE_LITERAL:
     if (expr->literal.type != TK_NUMBER) DIAG(DIAG_SORRY, expr->source_location, "Emitting non-integer literals not supported");
-    expr->ir = ir_immediate(ctx, expr->literal.integer);
+    // TODO: SEMA should probably have already lowered integer_literal type, so we *should* have a type already available on the literal node...
+    expr->ir = ir_immediate(ctx, expr->type, expr->literal.integer);
     return;
 
   /// Variable reference.
@@ -456,13 +457,11 @@ void codegen_function(CodegenContext *ctx, Node *node) {
   /// Emit the function body.
   codegen_expr(ctx, node->function.body);
 
-  /// If the we can return from here, and this function doesn’t return void,
+  /// If we can return from here, and this function doesn’t return void,
   /// then return the return value; otherwise, just return nothing.
-  if (!ir_is_closed(ctx->block) && !type_is_void(node->type->function.return_type)) {
+  if (!ir_is_closed(ctx->block) && !type_is_void(node->type->function.return_type))
     ir_return(ctx, node->function.body->ir);
-  } else {
-    ir_return(ctx, NULL);
-  }
+  else ir_return(ctx, NULL);
 }
 
 /// ===========================================================================

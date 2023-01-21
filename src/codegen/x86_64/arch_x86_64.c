@@ -186,13 +186,36 @@ enum Instruction {
   I_COUNT
 };
 
+enum RegSize {
+  r128,
+  r64,
+  r32,
+  r16,
+  r8,
+};
+
+/// Return the corresponding RegSize enum value to the given amount of
+/// bytes (smallest fit). ICE if can not contain.
+static enum RegSize regsize_from_bytes(u64 bytes) {
+  switch (bytes) {
+  case 1: return r8;
+  case 2: return r16;
+  case 4: return r32;
+  case 8: return r64;
+  case 16: return r128;
+  default:
+    ICE("Byte size can not be converted into register size on x86_64: %"PRIu64, bytes);
+    break;
+  }
+}
+
 enum InstructionOperands_x86_64 {
   IMMEDIATE, ///< int64_t imm
   MEMORY,    ///< Reg reg, int64_t offset
   REGISTER,  ///< Reg reg
   NAME,      ///< const char* name
 
-  IMMEDIATE_TO_REGISTER, ///< int64_t imm, Reg dest
+  IMMEDIATE_TO_REGISTER, ///< int64_t imm, Reg dest, RegSize size
   IMMEDIATE_TO_MEMORY,   ///< int64_t imm, Reg address, int64_t offset
   MEMORY_TO_REGISTER,    ///< Reg address, int64_t offset, Reg dest
   NAME_TO_REGISTER,      ///< Reg address, const char* name, Reg dest
@@ -286,9 +309,22 @@ static enum IndirectJumpType negate_jump(enum IndirectJumpType j) {
 static void femit_imm_to_reg(CodegenContext *context, enum Instruction inst, va_list args) {
   int64_t immediate                        = va_arg(args, int64_t);
   RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
+  enum RegSize size                        = va_arg(args, enum RegSize);
 
   const char *mnemonic    = instruction_mnemonic(context, inst);
-  const char *destination = register_name(destination_register);
+  const char *destination = NULL;
+  switch (size) {
+  case r128:
+    TODO("Support 128 bit registers on x86_64...");
+    break;
+  case r64: destination = register_name(destination_register);    break;
+  case r32: destination = register_name_32(destination_register); break;
+  case r16: destination = register_name_16(destination_register); break;
+  case r8:  destination = register_name_8(destination_register);  break;
+  default:
+    UNREACHABLE();
+    break;
+  }
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
@@ -328,10 +364,23 @@ static void femit_mem_to_reg(CodegenContext *context, enum Instruction inst, va_
   RegisterDescriptor address_register      = va_arg(args, RegisterDescriptor);
   int64_t offset                           = va_arg(args, int64_t);
   RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
+  enum RegSize size                        = va_arg(args, enum RegSize);
 
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
-  const char *destination = register_name(destination_register);
+  const char *destination = NULL;
+  switch (size) {
+  case r128:
+    TODO("Support 128 bit registers on x86_64...");
+    break;
+  case r64: destination = register_name(destination_register);    break;
+  case r32: destination = register_name_32(destination_register); break;
+  case r16: destination = register_name_16(destination_register); break;
+  case r8:  destination = register_name_8(destination_register);  break;
+  default:
+    UNREACHABLE();
+    break;
+  }
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
@@ -350,10 +399,23 @@ static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, va
   RegisterDescriptor address_register      = va_arg(args, RegisterDescriptor);
   char *name                               = va_arg(args, char *);
   RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
+  enum RegSize size                        = va_arg(args, enum RegSize);
 
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
-  const char *destination = register_name(destination_register);
+  const char *destination = NULL;
+  switch (size) {
+  case r128:
+    TODO("Support 128 bit registers on x86_64...");
+    break;
+  case r64: destination = register_name(destination_register);    break;
+  case r32: destination = register_name_32(destination_register); break;
+  case r16: destination = register_name_16(destination_register); break;
+  case r8:  destination = register_name_8(destination_register);  break;
+  default:
+    UNREACHABLE();
+    break;
+  }
 
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
@@ -370,11 +432,24 @@ static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, va
 
 static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, va_list args) {
   RegisterDescriptor source_register   = va_arg(args, RegisterDescriptor);
+  enum RegSize size                    = va_arg(args, enum RegSize);
   RegisterDescriptor address_register  = va_arg(args, RegisterDescriptor);
   int64_t offset                       = va_arg(args, int64_t);
 
   const char *mnemonic = instruction_mnemonic(context, inst);
-  const char *source = register_name(source_register);
+  const char *source = NULL;
+  switch (size) {
+  case r128:
+    TODO("Support 128 bit registers on x86_64...");
+    break;
+  case r64: source = register_name(source_register);    break;
+  case r32: source = register_name_32(source_register); break;
+  case r16: source = register_name_16(source_register); break;
+  case r8:  source = register_name_8(source_register);  break;
+  default:
+    UNREACHABLE();
+    break;
+  }
   const char *address = register_name(address_register);
 
   switch (context->dialect) {
@@ -425,12 +500,25 @@ static void femit_reg_to_reg(CodegenContext *context, enum Instruction inst, va_
 }
 
 static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, va_list args) {
-  RegisterDescriptor source_register  = va_arg(args, RegisterDescriptor);
+  RegisterDescriptor source_register       = va_arg(args, RegisterDescriptor);
+  enum RegSize size                        = va_arg(args, enum RegSize);
   RegisterDescriptor address_register      = va_arg(args, RegisterDescriptor);
   char *name                               = va_arg(args, char *);
 
   const char *mnemonic = instruction_mnemonic(context, inst);
-  const char *source = register_name(source_register);
+  const char *source = NULL;
+  switch (size) {
+  case r128:
+    TODO("Support 128 bit registers on x86_64...");
+    break;
+  case r64: source = register_name(source_register);    break;
+  case r32: source = register_name_32(source_register); break;
+  case r16: source = register_name_16(source_register); break;
+  case r8:  source = register_name_8(source_register);  break;
+  default:
+    UNREACHABLE();
+    break;
+  }
   const char *address = register_name(address_register);
 
   switch (context->dialect) {
@@ -808,7 +896,7 @@ static RegisterDescriptor codegen_comparison
 
   // Perform the comparison.
   femit(cg_context, I_CMP, REGISTER_TO_REGISTER, rhs, lhs);
-  femit(cg_context, I_MOV, IMMEDIATE_TO_REGISTER, (int64_t)0, result);
+  femit(cg_context, I_MOV, IMMEDIATE_TO_REGISTER, (int64_t)0, result, r64);
   femit(cg_context, I_SETCC, type, result);
 
   return result;
@@ -860,14 +948,14 @@ static void codegen_prologue(CodegenContext *cg_context, IRFunction *f) {
         case CG_CALL_CONV_LINUX: break;
         default: ICE("Unknown calling convention");
       }
-      femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, locals_offset, REG_RSP);
+      femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, locals_offset, REG_RSP, r64);
     } break;
 
     case FRAME_MINIMAL: {
       switch (cg_context->call_convention) {
         /// See comment above.
         case CG_CALL_CONV_MSWIN:
-          femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, (int64_t)(4 * 8 + 8), REG_RSP);
+          femit(cg_context, I_SUB, IMMEDIATE_TO_REGISTER, (int64_t)(4 * 8 + 8), REG_RSP, r64);
           break;
         case CG_CALL_CONV_LINUX:
           femit(cg_context, I_PUSH, REGISTER, REG_RBP);
@@ -893,7 +981,7 @@ static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
       switch (cg_context->call_convention) {
         /// See comment above.
         case CG_CALL_CONV_MSWIN:
-          femit(cg_context, I_ADD, IMMEDIATE_TO_REGISTER, (int64_t)(4 * 8 + 8), REG_RSP);
+          femit(cg_context, I_ADD, IMMEDIATE_TO_REGISTER, (int64_t)(4 * 8 + 8), REG_RSP, r64);
           break;
         case CG_CALL_CONV_LINUX:
           femit(cg_context, I_POP, REGISTER, REG_RBP);
@@ -912,7 +1000,34 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   case IR_UNREACHABLE:
     break;
   case IR_IMMEDIATE:
-    femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result);
+    // TODO: This probably shouldn't be done here. Do this in a pass before-hand or something.
+    if (inst->type == t_integer_literal) {
+      // TODO: I don't think this is the best way of doing things.
+      //femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r64);
+      if (inst->imm <= UINT8_MAX) {
+        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r8);
+      } else if (inst->imm <= UINT16_MAX) {
+        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r16);
+      } else if (inst->imm <= UINT32_MAX) {
+        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r32);
+      } else if (inst->imm <= UINT64_MAX) {
+        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r64);
+      } else {
+        ICE("Unsupported integer literal immediate on x86_64 (out of range)");
+      }
+    } else {
+      if (type_sizeof(inst->type) == 1) {
+        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r8);
+      } else if (type_sizeof(inst->type) == 2) {
+        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r16);
+      } else if (type_sizeof(inst->type) <= 4) {
+        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r32);
+      } else if (type_sizeof(inst->type) <= 8) {
+        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r64);
+      } else {
+        ICE("Unsupported immediate size on x86_64: %d", type_sizeof(inst->type));
+      }
+    }
     break;
   case IR_NOT:
     femit(context, I_NOT, REGISTER, inst->operand->result);
@@ -1091,56 +1206,65 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     break;
 
   case IR_LOAD:
+    // TODO: Handle size of type and stuff
     /// Load from a static variable.
     if (inst->operand->kind == IR_STATIC_REF) {
+      enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
       femit(context, I_MOV, NAME_TO_REGISTER, REG_RIP, inst->operand->static_ref->name.data,
-            inst->result);
+            inst->result, size);
     }
 
     /// Load from a local.
     else if (inst->operand->kind == IR_ALLOCA) {
+      //enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
+      enum RegSize size = regsize_from_bytes(inst->operand->alloca.size);
       femit(context, I_MOV, MEMORY_TO_REGISTER,
-            REG_RBP, (int64_t)-inst->operand->alloca.offset, inst->result);
+            REG_RBP, (int64_t)-inst->operand->alloca.offset, inst->result, size);
     }
 
     /// Load from a pointer
     else {
+      // TODO: Is this right? Do we need to get size of pointed to type?
+      enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
       femit(context, I_MOV, MEMORY_TO_REGISTER, inst->operand->result, (int64_t)0,
-            inst->result);
+            inst->result, size);
     }
     break;
 
   case IR_STORE:
     /// Store to a static variable.
     if (inst->store.addr->kind == IR_STATIC_REF) {
-      femit(context, I_MOV, REGISTER_TO_NAME, inst->store.value->result,
+      enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
+      femit(context, I_MOV, REGISTER_TO_NAME, inst->store.value->result, size,
             REG_RIP, inst->store.addr->static_ref->name.data);
     }
 
     /// Store to a local.
     else if (inst->store.addr->kind == IR_ALLOCA) {
-      femit(context, I_MOV, REGISTER_TO_MEMORY, inst->store.value->result,
+      enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
+      femit(context, I_MOV, REGISTER_TO_MEMORY,
+            inst->store.value->result, size,
             REG_RBP, (int64_t)-inst->store.addr->alloca.offset);
       break;
     }
 
     /// Store to a pointer.
     else {
-      femit(context, I_MOV, REGISTER_TO_MEMORY, inst->store.value->result,
+      enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
+      femit(context, I_MOV, REGISTER_TO_MEMORY,
+            inst->store.value->result, size,
             inst->store.addr->result, (int64_t)0);
     }
     break;
 
   case IR_STATIC_REF:
-    if (inst->result) femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->static_ref->name.data, inst->result);
+    if (inst->result) femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->static_ref->name.data, inst->result, r64);
     break;
   case IR_FUNC_REF:
-    if (inst->result) femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->function_ref->name.data, inst->result);
+    if (inst->result) femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->function_ref->name.data, inst->result, r64);
     break;
   case IR_ALLOCA:
-    femit(context, I_LEA, MEMORY_TO_REGISTER,
-          REG_RBP,
-          (int64_t)-inst->alloca.offset, inst->result);
+    femit(context, I_LEA, MEMORY_TO_REGISTER, REG_RBP, (int64_t)-inst->alloca.offset, inst->result, r64);
     break;
 
   default:
