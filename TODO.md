@@ -43,6 +43,7 @@
   - [ ] Actually implementing casts.
     - [ ] During codegen, we should actually output `zext`/`sext` if needed. Otherwise truncation is automatic.
   - [ ] Update IR parser
+  - [ ] Binary operators need to pick return type instead of strictly returning `integer`
 - [ ] Arrays
   - [ ] Semantic analysis for static arrays.
   - [ ] Codegen
