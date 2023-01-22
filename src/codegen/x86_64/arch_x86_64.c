@@ -1210,14 +1210,15 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     /// Load from a static variable.
     if (inst->operand->kind == IR_STATIC_REF) {
       enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
+      if (size == r8 || size == r16) femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
       femit(context, I_MOV, NAME_TO_REGISTER, REG_RIP, inst->operand->static_ref->name.data,
             inst->result, size);
     }
 
     /// Load from a local.
     else if (inst->operand->kind == IR_ALLOCA) {
-      //enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
       enum RegSize size = regsize_from_bytes(inst->operand->alloca.size);
+      if (size == r8 || size == r16) femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
       femit(context, I_MOV, MEMORY_TO_REGISTER,
             REG_RBP, (int64_t)-inst->operand->alloca.offset, inst->result, size);
     }
@@ -1234,7 +1235,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   case IR_STORE:
     /// Store to a static variable.
     if (inst->store.addr->kind == IR_STATIC_REF) {
-      enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
+      enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.addr->static_ref->type));
       femit(context, I_MOV, REGISTER_TO_NAME, inst->store.value->result, size,
             REG_RIP, inst->store.addr->static_ref->name.data);
     }

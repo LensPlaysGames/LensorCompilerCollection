@@ -36,12 +36,12 @@
     - [ ] Disallow overloading on the return value.
   - [ ] Proper checking for incomplete types in the parser.
 - [ ] Types in the IR
-  - [ ] Byte type
-  - [ ] Type info in codegen/IR.
-  - [ ] Sema needs to "lower" integer_literal to "integer" if no other makes sense
+  - [x] Byte type
+  - [x] Type info in codegen/IR.
   - [ ] Backend: Handle size/alignment requirements
-  - [ ] Use eax, ax, al, etc.
+  - [x] Use eax, ax, al, etc.
   - [ ] Actually implementing casts.
+    - [ ] During codegen, we should actually output `zext`/`sext` if needed. Otherwise truncation is automatic.
   - [ ] Update IR parser
 - [ ] Arrays
   - [ ] Semantic analysis for static arrays.
