@@ -1005,8 +1005,10 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       // TODO: I don't think this is the best way of doing things.
       //femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r64);
       if (inst->imm <= UINT8_MAX) {
+        femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
         femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r8);
       } else if (inst->imm <= UINT16_MAX) {
+        femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
         femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r16);
       } else if (inst->imm <= UINT32_MAX) {
         femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r32);
@@ -1017,15 +1019,17 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       }
     } else {
       if (type_sizeof(inst->type) == 1) {
+        femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
         femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r8);
       } else if (type_sizeof(inst->type) == 2) {
+        femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
         femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r16);
       } else if (type_sizeof(inst->type) <= 4) {
         femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r32);
       } else if (type_sizeof(inst->type) <= 8) {
         femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r64);
       } else {
-        ICE("Unsupported immediate size on x86_64: %d", type_sizeof(inst->type));
+        ICE("Unsupported immediate size on x86_64: %Z", type_sizeof(inst->type));
       }
     }
     break;
@@ -1159,40 +1163,33 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   case IR_DIV:
     ASSERT(inst->rhs->result != REG_RAX,
            "Register allocation must not allocate RAX to divisor.");
-    femit(context, I_MOV, REGISTER_TO_REGISTER, inst->lhs->result,
-                 REG_RAX);
+    femit(context, I_MOV, REGISTER_TO_REGISTER, inst->lhs->result, REG_RAX);
     femit(context, I_CQO);
     femit(context, I_IDIV, REGISTER, inst->rhs->result);
-    femit(context, I_MOV, REGISTER_TO_REGISTER,
-                 REG_RAX, inst->result);
+    femit(context, I_MOV, REGISTER_TO_REGISTER, REG_RAX, inst->result);
     break;
   case IR_MOD:
     ASSERT(inst->rhs->result != REG_RAX,
            "Register allocation must not allocate RAX to divisor.");
-    femit(context, I_MOV, REGISTER_TO_REGISTER, inst->lhs->result,
-                 REG_RAX);
+    femit(context, I_MOV, REGISTER_TO_REGISTER, inst->lhs->result, REG_RAX);
     femit(context, I_CQO);
     femit(context, I_IDIV, REGISTER, inst->rhs->result);
-    femit(context, I_MOV, REGISTER_TO_REGISTER,
-                 REG_RDX, inst->result);
+    femit(context, I_MOV, REGISTER_TO_REGISTER, REG_RDX, inst->result);
     break;
   case IR_SHL:
     ASSERT(inst->lhs->result != REG_RCX,
            "Register allocation must not allocate RCX to result of lhs of shift.");
-    femit(context, I_MOV, REGISTER_TO_REGISTER, inst->rhs->result,
-                 REG_RCX);
+    femit(context, I_MOV, REGISTER_TO_REGISTER, inst->rhs->result, REG_RCX);
     femit(context, I_SHL, REGISTER, inst->lhs->result);
     femit(context, I_MOV, REGISTER_TO_REGISTER, inst->lhs->result, inst->result);
     break;
   case IR_SHR:
-    femit(context, I_MOV, REGISTER_TO_REGISTER, inst->rhs->result,
-                 REG_RCX);
+    femit(context, I_MOV, REGISTER_TO_REGISTER, inst->rhs->result, REG_RCX);
     femit(context, I_SHR, REGISTER, inst->lhs->result);
     femit(context, I_MOV, REGISTER_TO_REGISTER, inst->lhs->result, inst->result);
     break;
   case IR_SAR:
-    femit(context, I_MOV, REGISTER_TO_REGISTER, inst->rhs->result,
-                 REG_RCX);
+    femit(context, I_MOV, REGISTER_TO_REGISTER, inst->rhs->result, REG_RCX);
     femit(context, I_SAR, REGISTER, inst->lhs->result);
     femit(context, I_MOV, REGISTER_TO_REGISTER, inst->lhs->result, inst->result);
     break;
