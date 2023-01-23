@@ -322,7 +322,8 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Binary expression.
   case NODE_BINARY: {
-    Node * const lhs = expr->binary.lhs, * const rhs = expr->binary.rhs;
+    Node *const lhs = expr->binary.lhs;
+    Node *const rhs = expr->binary.rhs;
 
     /// Assignment needs to be handled separately.
     if (expr->binary.op == TK_COLON_EQ) {

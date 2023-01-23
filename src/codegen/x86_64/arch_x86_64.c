@@ -204,7 +204,7 @@ static enum RegSize regsize_from_bytes(u64 bytes) {
   case 8: return r64;
   case 16: return r128;
   default:
-    ICE("Byte size can not be converted into register size on x86_64: %"PRIu64, bytes);
+    ICE("Byte size can not be converted into register size on x86_64: %U", bytes);
     break;
   }
 }
