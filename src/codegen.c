@@ -351,9 +351,24 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       return;
     }
 
+    // TODO: Just use lhs operand of subscript operator when right hand
+    // side is a compile-time-known zero value.
+
     /// Emit the operands.
     codegen_expr(ctx, lhs);
     codegen_expr(ctx, rhs);
+    if (expr->binary.op == TK_LBRACK) {
+      // An array subscript needs multiplied by the sizeof the array's base type.
+      if (lhs->type->kind == TYPE_ARRAY) {
+        IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->array.of));
+        rhs->ir = ir_mul(ctx, rhs->ir, immediate);
+      }
+      // A pointer subscript needs multiplied by the sizeof the pointer's base type.
+      else if (lhs->type->kind == TYPE_ARRAY) {
+        IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->pointer.to));
+        rhs->ir = ir_mul(ctx, rhs->ir, immediate);
+      }
+    }
 
     /// Emit the binary instruction.
     switch (expr->binary.op) {
@@ -401,9 +416,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         case TK_AT:
           /// TODO: This check for a function pointer is a bit sus. We shouldn’t
           ///       even get here if this is actually a function pointer...
-          if (expr->unary.value->type->pointer.to->kind == TYPE_FUNCTION) {
+          if (expr->unary.value->type->pointer.to->kind == TYPE_FUNCTION)
             expr->ir = expr->unary.value->ir;
-          } else {
+          else {
             expr->ir = ir_load(ctx, expr->unary.value->ir);
           }
           return;
