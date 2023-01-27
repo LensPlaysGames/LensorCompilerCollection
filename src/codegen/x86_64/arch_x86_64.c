@@ -1206,26 +1206,53 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     // TODO: Handle size of type and stuff
     /// Load from a static variable.
     if (inst->operand->kind == IR_STATIC_REF) {
-      enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
+      enum RegSize size = -1;
+      // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
+      // TODO: type_sizeof(t_pointer) or something to load a pointer sized thing.
+      //       WE SHOULD NOT USE t_integer here!!
+      if (inst->operand->type->kind == TYPE_ARRAY) size = regsize_from_bytes(type_sizeof(t_integer));
+      else size = regsize_from_bytes(type_sizeof(inst->operand->type));
       if (size == r8 || size == r16) femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
-      femit(context, I_MOV, NAME_TO_REGISTER, REG_RIP, inst->operand->static_ref->name.data,
-            inst->result, size);
+      if (inst->operand->type->kind == TYPE_ARRAY)
+        femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->operand->static_ref->name.data,
+              inst->result, size);
+      else
+        femit(context, I_MOV, NAME_TO_REGISTER, REG_RIP, inst->operand->static_ref->name.data,
+              inst->result, size);
     }
 
     /// Load from a local.
     else if (inst->operand->kind == IR_ALLOCA) {
-      enum RegSize size = regsize_from_bytes(inst->operand->alloca.size);
+      enum RegSize size = -1;
+      // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
+      // TODO: type_sizeof(t_pointer) or something to load a pointer sized thing.
+      //       WE SHOULD NOT USE t_integer here!!
+      if (inst->operand->type->kind == TYPE_ARRAY) size = regsize_from_bytes(type_sizeof(t_integer));
+      else size = regsize_from_bytes(inst->operand->alloca.size);
       if (size == r8 || size == r16) femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
-      femit(context, I_MOV, MEMORY_TO_REGISTER,
-            REG_RBP, (int64_t)-inst->operand->alloca.offset, inst->result, size);
+      if (inst->operand->type->kind == TYPE_ARRAY)
+        femit(context, I_LEA, MEMORY_TO_REGISTER,
+              REG_RBP, (int64_t)-inst->operand->alloca.offset, inst->result, size);
+      else
+        femit(context, I_MOV, MEMORY_TO_REGISTER,
+              REG_RBP, (int64_t)-inst->operand->alloca.offset, inst->result, size);
     }
 
     /// Load from a pointer
     else {
+      enum RegSize size = -1;
+      // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
+      // TODO: type_sizeof(t_pointer) or something to load a pointer sized thing.
+      //       WE SHOULD NOT USE t_integer here!!
+      if (inst->operand->type->kind == TYPE_ARRAY) size = regsize_from_bytes(type_sizeof(t_integer));
       // TODO: Is this right? Do we need to get size of pointed to type?
-      enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
-      femit(context, I_MOV, MEMORY_TO_REGISTER, inst->operand->result, (int64_t)0,
-            inst->result, size);
+      else size = regsize_from_bytes(type_sizeof(inst->operand->type));
+      if (inst->operand->type->kind == TYPE_ARRAY)
+        femit(context, I_LEA, MEMORY_TO_REGISTER, inst->operand->result, (int64_t)0,
+              inst->result, size);
+      else
+        femit(context, I_MOV, MEMORY_TO_REGISTER, inst->operand->result, (int64_t)0,
+              inst->result, size);
     }
     break;
 

@@ -514,9 +514,11 @@ Type *ast_make_type_function(
 /// ===========================================================================
 /// Get a string representation of a type.
 /// \return The string representation of the type. The string is allocated
-///         as if with `malloc` and must be freed by the caller.
+///         with malloc() and must be freed by the caller.
 string typename(Type *type, bool colour);
 
+// FIXME: I don't know what canonical means, and this docstring doesn't
+// help me :P
 /// Get the canonical type of a type.
 /// \return NULL if the type is incomplete.
 Type *type_canonical(Type *type);
@@ -526,13 +528,15 @@ Type *type_canonical(Type *type);
 /// This function strips nested named types until there is only one left.
 Type *type_last_alias(Type *type);
 
+// FIXME: What makes a type complete vs incomplete, in the eyes of this
+// function?
 /// Check if a type is incomplete.
 bool type_is_incomplete(Type *type);
 
 /// Check if a canonical type is incomplete.
 bool type_is_incomplete_canon(Type *type);
 
-/// Get the size of a type.
+/// Get the size of a type, in bytes.
 usz type_sizeof(Type *type);
 
 /// Check if a type is void.

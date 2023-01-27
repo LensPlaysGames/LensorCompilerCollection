@@ -1,5 +1,7 @@
-#include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
+
+#include <ast.h>
+#include <codegen/codegen_forward.h>
 #include <utils.h>
 
 #include <stdlib.h>
@@ -483,7 +485,6 @@ IRInstruction *ir_load
   INSTRUCTION(load, IR_LOAD);
 
   load->operand = address;
-  // TODO: Is this right?
   load->type = address->type;
 
   mark_used(address, load);
