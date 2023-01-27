@@ -1065,7 +1065,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     }
     // Align stack pointer before call, if necessary.
     if (regs_pushed_count & 0b1) {
-      femit(context, I_SUB, IMMEDIATE_TO_REGISTER, (int64_t)8, REG_RSP);
+      femit(context, I_SUB, IMMEDIATE_TO_REGISTER, (int64_t)8, REG_RSP, r64);
     }
     for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i) {
       if (func_regs & (1 << i) && is_caller_saved(i)) {
