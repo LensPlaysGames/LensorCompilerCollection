@@ -102,7 +102,6 @@ NODISCARD static bool types_equal(Type *a, Type *b) {
 
 /// Check if a canonical type is an integer type.
 NODISCARD static bool is_integer_canon(Type *t) {
-  /// Currently, all primitive types are integers.
   return t == t_integer || t == t_integer_literal  || t == t_byte;
 }
 
@@ -890,7 +889,35 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     } break;
 
     /// Make sure a cast is even possible.
-    case NODE_CAST: TODO();
+    case NODE_CAST: {
+      Type *t_to = expr->type;
+      if (type_is_incomplete(t_to))
+        ERR(t_to->source_location, "Can not cast to incomplete type %T", t_to);
+
+      if (!typecheck_expression(ast, expr->cast.value))
+        return false;
+
+      Type *t_from = expr->cast.value->type;
+
+      // TODO: What do we do when from and to types are equal?
+
+      if (type_is_incomplete(t_from))
+        ERR(expr->cast.value->source_location, "Can not cast from an incomplete type %T", t_from);
+
+      // FROM any integer type TO any integer type is ALLOWED
+      if (is_integer(t_from) && is_integer(t_to)) break;
+
+      // FROM any pointer type TO any integer type is ALLOWED
+      if (is_pointer(t_from) && is_integer(t_to)) break;
+
+      // FROM any integer type TO any pointer type is DISALLOWED
+      if (is_integer(t_from) && is_pointer(t_to))
+        ERR(expr->source_location, "Can not cast from integer type %T to pointer type %T", t_from, t_to);
+
+      // TODO: arrays, functions, function pointers...
+
+      TODO();
+    }
 
     /// Binary expression. This is a complicated one.
     case NODE_BINARY: {

@@ -1,5 +1,6 @@
 #include <codegen.h>
 
+#include <ast.h>
 #include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/x86_64/arch_x86_64.h>
@@ -318,7 +319,15 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   }
 
   /// Typecast.
-  case NODE_CAST: { TODO(); }
+  case NODE_CAST: {
+    Type *t_to = expr->type;
+    Type *t_from = expr->cast.value->type;
+
+    usz to_sz = type_sizeof(t_to);
+    usz from_sz = type_sizeof(t_from);
+
+    TODO("Codegen cast from %T to %T", t_from, t_to);
+  }
 
   /// Binary expression.
   case NODE_BINARY: {

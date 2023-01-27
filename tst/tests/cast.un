@@ -1,5 +1,2 @@
-; SKIP
-; 1
-
-a : integer
-1 < &a as integer
+; 144
+400 as byte
