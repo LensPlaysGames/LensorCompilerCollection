@@ -19,6 +19,7 @@
 #include <platform.h>
 
 #include <math.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -187,37 +188,45 @@ void platform_print_backtrace(int ignore) {
 
 #else
   typedef BOOL SymInitializeFunc(
-      _In_ HANDLE hProcess,
-      _In_ PCSTR  UserSearchPath,
-      _In_ BOOL   fInvadeProcess
+    _In_ HANDLE hProcess,
+    _In_ PCSTR  UserSearchPath,
+    _In_ BOOL   fInvadeProcess
   );
 
   typedef BOOL SymFromAddrFunc(
-      _In_    HANDLE       hProcess,
-      _In_    DWORD64      Address,
-      _Out_   PDWORD64     Displacement,
-      _Inout_ PSYMBOL_INFO Symbol
+    _In_    HANDLE       hProcess,
+    _In_    DWORD64      Address,
+    _Out_   PDWORD64     Displacement,
+    _Inout_ PSYMBOL_INFO Symbol
   );
 
   typedef BOOL SymGetLineFromAddr64Func(
-      _In_  HANDLE hProcess,
-      _In_  DWORD64 qwAddr,
-      _Out_ PDWORD pdwDisplacement,
-      _Out_ PIMAGEHLP_LINE64 Line64
+    _In_  HANDLE hProcess,
+    _In_  DWORD64 qwAddr,
+    _Out_ PDWORD pdwDisplacement,
+    _Out_ PIMAGEHLP_LINE64 Line64
+  );
+
+  typedef DWORD SymSetOptionsFunc(
+    _In_ DWORD SymOptions
   );
 
   /// Get the stacktrace.
-  void* stack[100];
+  void *stack[100] = { 0 };
   WORD frames = CaptureStackBackTrace(ignore, 100, stack, NULL);
+  if (!frames) {
+    eprint("  Could not capture backtrace\n");
+    return;
+  }
 
   /// Load DbgHelp.dll.
   HMODULE dbghelp = LoadLibrary(TEXT("DbgHelp.dll"));
   if (!dbghelp) {
-  /// Loading failed. Print just the addresses.
   print_raw:
+    /// Loading failed. Print just the addresses.
     eprint("  Cannot obtain symbols from backtrace: Could not load DbgHelp.dll\n");
     for (WORD i = 0; i < frames; i++)
-      eprint("  at address %p", stack[i]);
+      eprint("  at address %p\n", stack[i]);
     return;
   }
 
@@ -227,19 +236,30 @@ void platform_print_backtrace(int ignore) {
   SymFromAddrFunc *SymFromAddr = (SymFromAddrFunc*)GetProcAddress(dbghelp, "SymFromAddr");
   if (!SymFromAddr) goto print_raw;
 
+  SymSetOptionsFunc *SymSetOptions = (SymSetOptionsFunc*)GetProcAddress(dbghelp, "SymSetOptions");
+  if (!SymSetOptions) goto print_raw;
+
   SymGetLineFromAddr64Func *SymGetLineFromAddr64 = (SymGetLineFromAddr64Func*)GetProcAddress(dbghelp, "SymGetLineFromAddr64");
 
   HANDLE process = GetCurrentProcess();
-  SymInitialize(process, NULL, TRUE);
+  if (!process) goto print_raw;
+  SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
+  if (!SymInitialize(process, NULL, TRUE)) goto print_raw;
 
-
-  char* symbol_info_data[sizeof(SYMBOL_INFO) + 256 * sizeof(char)];
-  SYMBOL_INFO* symbol = (SYMBOL_INFO*)symbol_info_data;
-  symbol->MaxNameLen = 255;
+  char symbol_info_data[sizeof(SYMBOL_INFO) + 256 * sizeof(char)];
+  memset(symbol_info_data, 0, sizeof symbol_info_data);
+  PSYMBOL_INFO symbol  = (PSYMBOL_INFO)symbol_info_data;
   symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+  symbol->MaxNameLen   = 255;
 
-  for (int i = 0; i < frames; i++) {
-    SymFromAddr(process, (DWORD64)(stack[i]), 0, symbol);
+  DWORD64 displacement64 = 0;
+  for (WORD i = 0; i < frames; ++i) {
+    DWORD64 frame_addr = (DWORD64)stack[i];
+    if (!SymFromAddr(process, frame_addr, &displacement64, symbol)) {
+      fprintf(stderr, "Could not print stackframe: SymFromAddr returned false (err code %lu)!\n", GetLastError());
+      //break;
+      continue;
+    }
 
     /// Attempt to get the line from the address.
     IMAGEHLP_LINE64 line = { 0 };
@@ -247,16 +267,15 @@ void platform_print_backtrace(int ignore) {
     DWORD displacement = 0;
     bool have_line = false;
     if (SymGetLineFromAddr64) {
-      have_line = SymGetLineFromAddr64(process, (DWORD64)(stack[i]), &displacement, &line);
+      have_line = SymGetLineFromAddr64(process, frame_addr, &displacement, &line);
     }
-
     if (have_line) {
-      eprint("  in function %s%s():%D%s\n",
+      fprintf(stderr, "  in function %s%s():%ld%s\n",
               term ? "\033[m\033[1;38m" : "", symbol->Name, line.LineNumber, term ? "\033[m" : "");
     } else {
-      eprint("  in function %s%s()%s at offset %s%X%s\n",
+      fprintf(stderr, "  in function %s%s()%s at offset %s%"PRIx64"%s\n",
               term ? "\033[m\033[1;38m" : "", symbol->Name, term ? "\033[m" : "",
-              term ? "\033[m\033[1;38m" : "", (u64)symbol->Address, term ? "\033[m" : "");
+              term ? "\033[m\033[1;38m" : "", symbol->Address, term ? "\033[m" : "");
     }
 
     if (strcmp(symbol->Name, "main") == 0) break;
