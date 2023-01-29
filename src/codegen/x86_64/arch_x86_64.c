@@ -879,7 +879,7 @@ static RegisterDescriptor codegen_comparison
 
   // Perform the comparison.
   femit(cg_context, I_CMP, REGISTER_TO_REGISTER, rhs, lhs);
-  femit(cg_context, I_MOV, IMMEDIATE_TO_REGISTER, (int64_t)0, result, r64);
+  femit(cg_context, I_MOV, IMMEDIATE_TO_REGISTER, (int64_t)0, result, r32);
   femit(cg_context, I_SETCC, type, result);
 
   return result;
@@ -983,17 +983,10 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   case IR_UNREACHABLE:
     break;
   case IR_IMMEDIATE:
-    // TODO: This probably shouldn't be done here. Do this in a pass before-hand or something.
     if (inst->type == t_integer_literal) {
-      // TODO: I don't think this is the best way of doing things.
-      //femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r64);
-      if (inst->imm <= UINT8_MAX) {
-        femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
-        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r8);
-      } else if (inst->imm <= UINT16_MAX) {
-        femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
-        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r16);
-      } else if (inst->imm <= UINT32_MAX) {
+      // TODO: integer_literal probably shouldn't be handled here.
+      // Do this in a pass before-hand or something.
+      if (inst->imm <= UINT32_MAX) {
         femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r32);
       } else if (inst->imm <= UINT64_MAX) {
         femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r64);
@@ -1001,13 +994,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
         ICE("Unsupported integer literal immediate on x86_64 (out of range)");
       }
     } else {
-      if (type_sizeof(inst->type) == 1) {
-        femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
-        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r8);
-      } else if (type_sizeof(inst->type) == 2) {
-        femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
-        femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r16);
-      } else if (type_sizeof(inst->type) <= 4) {
+      if (type_sizeof(inst->type) <= 4) {
         femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r32);
       } else if (type_sizeof(inst->type) <= 8) {
         femit(context, I_MOV, IMMEDIATE_TO_REGISTER, inst->imm, inst->result, r64);
