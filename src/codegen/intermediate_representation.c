@@ -638,13 +638,15 @@ IRInstruction *ir_create_static
   v->name = string_dup(name);
   v->type = type;
   v->cached_size = type_sizeof(type);
-  v->cached_alignment = 8; /// TODO.
+  // TODO: Don't just use 8 byte alignment for every static.
+  // Should we just use the nearest larger (or equal) power of two, in the generic case?
+  v->cached_alignment = 8;
   vector_push(context->static_vars, v);
 
   /// Create an instruction to reference it and return it.
   INSTRUCTION(ref, IR_STATIC_REF);
   ref->static_ref = v;
-  ref->type = v->type;
+  ref->type = ast_make_type_pointer(context->ast, v->type->source_location, v->type);
   v->reference = ref;
   INSERT(ref);
   return ref;
@@ -657,7 +659,7 @@ IRInstruction *ir_stack_allocate
 {
   INSTRUCTION(alloca, IR_ALLOCA);
   alloca->alloca.size = type_sizeof(type);
-  alloca->type = type;
+  alloca->type = ast_make_type_pointer(context->ast, type->source_location, type);
   INSERT(alloca);
   return alloca;
 }

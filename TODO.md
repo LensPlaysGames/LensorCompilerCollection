@@ -10,6 +10,7 @@
   - [ ] Function bodies must be blocks or preceded by `=`.
   - [ ] `ext` functions may have a body.
   - [ ] Implicit cast sema pass: `a + b` where `a` is a `byte` and `b` an `integer` -> `(a as integer) + b`
+  - [ ] Testing Framework: Add ability to only show failing tests
 - [ ] Optimisation
   - [ ] Zero subscript still does add/multiply when it doesn't need to
   - [ ] Eliminate unused parameters (they are currently allocated registers)
@@ -74,6 +75,7 @@
   - [ ] `type` keyword in the parser/grammar.
   - [ ] Make sure nested structs work.
   - [ ] Arbitrary compile-time struct literals.
+    - [ ] Syntax?
   - [ ] Structs as parameters.
   - [ ] Structs as return values.
 - [ ] Modules.
