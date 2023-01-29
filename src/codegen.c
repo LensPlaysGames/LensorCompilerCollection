@@ -326,6 +326,8 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     usz to_sz = type_sizeof(t_to);
     usz from_sz = type_sizeof(t_from);
 
+    // TODO: Take signedness into account (zext/sext).
+
     TODO("Codegen cast from %T to %T", t_from, t_to);
   }
 
