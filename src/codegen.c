@@ -375,7 +375,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         rhs->ir = ir_mul(ctx, rhs->ir, immediate);
       }
       // A pointer subscript needs multiplied by the sizeof the pointer's base type.
-      else if (lhs->type->kind == TYPE_ARRAY) {
+      else if (lhs->type->kind == TYPE_POINTER) {
         IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->pointer.to));
         rhs->ir = ir_mul(ctx, rhs->ir, immediate);
       }
