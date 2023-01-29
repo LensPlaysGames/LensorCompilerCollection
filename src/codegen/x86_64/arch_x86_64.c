@@ -187,7 +187,6 @@ enum Instruction {
 };
 
 enum RegSize {
-  r128,
   r64,
   r32,
   r16,
@@ -202,7 +201,6 @@ static enum RegSize regsize_from_bytes(u64 bytes) {
   case 2: return r16;
   case 4: return r32;
   case 8: return r64;
-  case 16: return r128;
   default:
     ICE("Byte size can not be converted into register size on x86_64: %U", bytes);
     break;
@@ -314,9 +312,6 @@ static void femit_imm_to_reg(CodegenContext *context, enum Instruction inst, va_
   const char *mnemonic    = instruction_mnemonic(context, inst);
   const char *destination = NULL;
   switch (size) {
-  case r128:
-    TODO("Support 128 bit registers on x86_64...");
-    break;
   case r64: destination = register_name(destination_register);    break;
   case r32: destination = register_name_32(destination_register); break;
   case r16: destination = register_name_16(destination_register); break;
@@ -370,9 +365,6 @@ static void femit_mem_to_reg(CodegenContext *context, enum Instruction inst, va_
   const char *address = register_name(address_register);
   const char *destination = NULL;
   switch (size) {
-  case r128:
-    TODO("Support 128 bit registers on x86_64...");
-    break;
   case r64: destination = register_name(destination_register);    break;
   case r32: destination = register_name_32(destination_register); break;
   case r16: destination = register_name_16(destination_register); break;
@@ -405,9 +397,6 @@ static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, va
   const char *address = register_name(address_register);
   const char *destination = NULL;
   switch (size) {
-  case r128:
-    TODO("Support 128 bit registers on x86_64...");
-    break;
   case r64: destination = register_name(destination_register);    break;
   case r32: destination = register_name_32(destination_register); break;
   case r16: destination = register_name_16(destination_register); break;
@@ -439,9 +428,6 @@ static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, va_
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = NULL;
   switch (size) {
-  case r128:
-    TODO("Support 128 bit registers on x86_64...");
-    break;
   case r64: source = register_name(source_register);    break;
   case r32: source = register_name_32(source_register); break;
   case r16: source = register_name_16(source_register); break;
@@ -508,9 +494,6 @@ static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, va
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = NULL;
   switch (size) {
-  case r128:
-    TODO("Support 128 bit registers on x86_64...");
-    break;
   case r64: source = register_name(source_register);    break;
   case r32: source = register_name_32(source_register); break;
   case r16: source = register_name_16(source_register); break;
