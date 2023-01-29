@@ -461,6 +461,8 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     expr->ir = ir_load(ctx, expr->var->val.node->ir);
     // TODO: Be smarter about when an array should decay to a pointer or not.
     //       Maybe it never should, and this should be implemented per backend?
+    // "I’d just emit a load of the array and have the backend
+    // deal w/ copying 1000 ints." ~ Sirraide
     if (expr->ir->type->kind == TYPE_ARRAY)
       expr->ir->type = ast_make_type_pointer(ctx->ast, expr->type->source_location, expr->type->array.of);
     return;
