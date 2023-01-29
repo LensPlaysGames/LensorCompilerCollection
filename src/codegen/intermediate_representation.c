@@ -263,7 +263,7 @@ void ir_femit_instruction
     ICE("Invalid IRType %d\n", inst->kind);
   }
 
-  // Print type that the value this instruction returns is of.
+  // Print type of instruction.
   if (inst->type) fprint(file, " %31| %T", inst->type);
 
 #ifdef DEBUG_USES
