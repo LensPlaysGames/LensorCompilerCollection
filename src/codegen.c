@@ -379,12 +379,14 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->pointer.to));
         rhs->ir = ir_mul(ctx, rhs->ir, immediate);
       }
+      expr->ir = ir_add(ctx, lhs->ir, rhs->ir);
+      return;
     }
 
     /// Emit the binary instruction.
     switch (expr->binary.op) {
       default: ICE("Cannot emit binary expression of type %d", expr->binary.op);
-      case TK_LBRACK: expr->ir = ir_add(ctx, lhs->ir, rhs->ir); return;
+      case TK_LBRACK: UNREACHABLE();
       case TK_LT: expr->ir = ir_lt(ctx, lhs->ir, rhs->ir); return;
       case TK_LE: expr->ir = ir_le(ctx, lhs->ir, rhs->ir); return;
       case TK_GT: expr->ir = ir_gt(ctx, lhs->ir, rhs->ir); return;
