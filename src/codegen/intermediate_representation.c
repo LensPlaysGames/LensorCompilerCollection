@@ -612,8 +612,7 @@ IRInstruction *ir_not
 {
   INSTRUCTION(x, IR_NOT);
   x->operand = source;
-  // TODO: Is this right? Should we use source->type?
-  x->type = t_integer;
+  x->type = source->type;
   mark_used(source, x);
   INSERT(x);
   return x;
