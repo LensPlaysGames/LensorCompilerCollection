@@ -899,24 +899,34 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       Type *t_from = expr->cast.value->type;
 
-      // TODO: What do we do when from and to types are equal?
+      // TODO: Is complete to incomplete allowed?
 
-      if (type_is_incomplete(t_from))
-        ERR(expr->cast.value->source_location, "Can not cast from an incomplete type %T", t_from);
-
-      // FROM any integer type TO any integer type is ALLOWED
+      // ALLOWED
+      // FROM any type T TO type T
+      if (types_equal(t_to, t_from)) break;
+      // FROM any pointer type TO any pointer type
+      if (is_pointer(t_from) && is_pointer(t_to)) break;
+      // FROM any pointer type TO any integer type
+      if (is_pointer(t_from) && is_integer(t_to)) break;
+      // FROM any integer type TO any integer type
       if (is_integer(t_from) && is_integer(t_to)) break;
 
-      // FROM any pointer type TO any integer type is ALLOWED
-      if (is_pointer(t_from) && is_integer(t_to)) break;
-
-      // FROM any integer type TO any pointer type is DISALLOWED
+      // DISALLOWED
+      // FROM any integer type TO any pointer type is currently DISALLOWED, but very well may change
       if (is_integer(t_from) && is_pointer(t_to))
-        ERR(expr->source_location, "Can not cast from integer type %T to pointer type %T", t_from, t_to);
+        ERR(expr->cast.value->source_location,
+            "Can not cast from an integer type %T to pointer type %T",
+            t_from, t_to);
+
+      // FROM any incomplete type TO any complete type is DISALLOWED
+      if (type_is_incomplete(t_from) && !type_is_incomplete(t_to))
+        ERR(expr->cast.value->source_location,
+            "Can not cast from an incomplete type %T to a complete type %T",
+            t_from, t_to);
 
       // TODO: arrays, functions, function pointers...
 
-      TODO();
+      TODO("Casting from %T to %T is currently not supported by the typechecker, sorry", t_from, t_to);
     }
 
     /// Binary expression. This is a complicated one.
