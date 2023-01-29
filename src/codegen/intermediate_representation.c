@@ -527,7 +527,6 @@ IRInstruction *ir_store
   INSTRUCTION(store, IR_STORE);
   store->store.addr = address;
   store->store.value = data;
-  store->type = t_void; //> A store instruction does not return anything.
   mark_used(address, store);
   mark_used(data, store);
   INSERT(store);
@@ -549,7 +548,6 @@ IRInstruction *ir_branch_conditional
   branch->cond_br.then = then_block;
   branch->cond_br.else_ = otherwise_block;
 
-  branch->type = t_void;
   INSERT(branch);
   return branch;
 }
@@ -564,7 +562,6 @@ IRInstruction *ir_branch_into_block
   branch->destination_block = destination;
   branch->parent_block = block;
   list_push_back(block->instructions, branch);
-  branch->type = t_void;
   return branch;
 }
 
@@ -579,7 +576,6 @@ IRInstruction *ir_branch
 IRInstruction *ir_return(CodegenContext *context, IRInstruction* return_value) {
   INSTRUCTION(branch, IR_RETURN);
   branch->operand = return_value;
-  branch->type = t_void;
   INSERT(branch);
   if (return_value) mark_used(return_value, branch);
   return branch;
