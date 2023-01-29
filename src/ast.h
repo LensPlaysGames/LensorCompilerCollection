@@ -517,10 +517,19 @@ Type *ast_make_type_function(
 ///         with malloc() and must be freed by the caller.
 string typename(Type *type, bool colour);
 
-// FIXME: I don't know what canonical means, and this docstring doesn't
-// help me :P
-/// Get the canonical type of a type.
-/// \return NULL if the type is incomplete.
+/**
+ * Get the canonical type of a type.
+ *
+ * The ‘canonical’ type of a type T is T stripped of any aliases. E.g. in C
+ * typedef int foo;
+ * typedef foo bar
+ * The canonical type of bar would be int. We need this because,
+ * currently, builtin types are just named types (i.e. typedefs) that
+ * refer to the actual primitive types, and if we ever introduce
+ * something like typedef, it will just work out of the box.
+ *
+ * \return NULL if the type is incomplete.
+ */
 Type *type_canonical(Type *type);
 
 /// Get the last alias of a type.
@@ -528,9 +537,21 @@ Type *type_canonical(Type *type);
 /// This function strips nested named types until there is only one left.
 Type *type_last_alias(Type *type);
 
-// FIXME: What makes a type complete vs incomplete, in the eyes of this
-// function?
-/// Check if a type is incomplete.
+/** Check if a type is incomplete.
+ *
+ * A type T is incomplete, iff
+ * - the canonical type of T is void, or
+ * - T has no canonical type. (e.g. if we have @foo, but foo is never
+ *   defined, then foo (which is parsed as a named type) is incomplete
+ *   because it has no canonical type.
+ *
+ * Basically, ‘incomplete’ means that we don’t know its size/alignment
+ * and therefore, we can’t allocate a variable of that type.
+ *
+ * void is a special case because it is purposefully incomplete.
+ *
+ * \return true iff the type is incomplete.
+ */
 bool type_is_incomplete(Type *type);
 
 /// Check if a canonical type is incomplete.
