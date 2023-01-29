@@ -11,6 +11,7 @@
   - [ ] `ext` functions may have a body.
   - [ ] Implicit cast sema pass: `a + b` where `a` is a `byte` and `b` an `integer` -> `(a as integer) + b`
   - [ ] Testing Framework: Add ability to only show failing tests
+  - [ ] `x as void` used to discard `x`
 - [ ] Optimisation
   - [ ] Zero subscript still does add/multiply when it doesn't need to
   - [ ] Eliminate unused parameters (they are currently allocated registers)
