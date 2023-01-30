@@ -208,6 +208,7 @@ static enum RegSize regsize_from_bytes(u64 bytes) {
   }
 }
 
+// TODO: Pass necessary RegSize in more of these cases
 enum InstructionOperands_x86_64 {
   IMMEDIATE, ///< int64_t imm
   MEMORY,    ///< Reg reg, int64_t offset
@@ -216,11 +217,11 @@ enum InstructionOperands_x86_64 {
 
   IMMEDIATE_TO_REGISTER, ///< int64_t imm, Reg dest, RegSize size
   IMMEDIATE_TO_MEMORY,   ///< int64_t imm, Reg address, int64_t offset
-  MEMORY_TO_REGISTER,    ///< Reg address, int64_t offset, Reg dest
-  NAME_TO_REGISTER,      ///< Reg address, const char* name, Reg dest
-  REGISTER_TO_MEMORY,    ///< Reg src, Reg address, int64_t offset
+  MEMORY_TO_REGISTER,    ///< Reg address, int64_t offset, Reg dest, RegSize size
+  NAME_TO_REGISTER,      ///< Reg address, const char* name, Reg dest, RegSize size
+  REGISTER_TO_MEMORY,    ///< Reg src, RegSize size, Reg address, int64_t offset
   REGISTER_TO_REGISTER,  ///< Reg src, Reg dest
-  REGISTER_TO_NAME,      ///< Reg src, Reg address, const char* name
+  REGISTER_TO_NAME,      ///< Reg src, RegSize size, Reg address, const char* name
 };
 
 const char *setcc_suffixes_x86_64[COMPARE_COUNT] = {
