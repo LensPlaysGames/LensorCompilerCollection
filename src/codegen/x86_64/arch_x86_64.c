@@ -1185,7 +1185,8 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         size = regsize_from_bytes(type_sizeof(t_integer));
       else size = regsize_from_bytes(type_sizeof(inst->operand->type));
-      if (size == r8 || size == r16) size = r32;
+      // TODO: Use `movzx`/`movzbl`
+      if (size == r8 || size == r16) femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->operand->static_ref->name.data,
               inst->result, size);
@@ -1203,7 +1204,8 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         size = regsize_from_bytes(type_sizeof(t_integer));
       else size = regsize_from_bytes(inst->operand->alloca.size);
-      if (size == r8 || size == r16) size = r32;
+      // TODO: Use `movzx`/`movzbl`
+      if (size == r8 || size == r16) femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         femit(context, I_LEA, MEMORY_TO_REGISTER,
               REG_RBP, (int64_t)-inst->operand->alloca.offset, inst->result, size);
@@ -1221,6 +1223,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       if (inst->operand->type->kind == TYPE_ARRAY) size = regsize_from_bytes(type_sizeof(t_integer));
       // TODO: Is this right? Do we need to get size of pointed to type?
       else size = regsize_from_bytes(type_sizeof(inst->operand->type));
+      if (size == r8 || size == r16) femit(context, I_XOR, REGISTER_TO_REGISTER, inst->result, inst->result);
       if (inst->operand->type->kind == TYPE_ARRAY)
         femit(context, I_LEA, MEMORY_TO_REGISTER, inst->operand->result, (int64_t)0,
               inst->result, size);
@@ -1483,6 +1486,8 @@ static size_t interfering_regs(IRInstruction *instruction) {
   return mask >> 1;
 }
 
+// TODO: This should probably be used by every backend, so it should
+// move "up" somewhere.
 static void mangle_type_to(string_buffer *buf, Type *t) {
   ASSERT(t);
   switch (t->kind) {
