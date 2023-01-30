@@ -25,12 +25,7 @@ static Type t_void_def = {
 static Type t_pointer_def = {
   .kind = TYPE_POINTER,
   .source_location = {0},
-  .primitive = {
-    .size = sizeof(void*),
-    .alignment = sizeof(void*), //> FIXME
-    .name = literal_span_raw("<pointer>"),
-    .id = 2, // FIXME: I have no idea what ID should be set to.
-  },
+  .pointer = { .to = &t_void_def },
 };
 
 static Type t_integer_literal_def = {
