@@ -12,14 +12,25 @@
   uint8_t id;
 } TypePrimitive;*/
 static Type t_void_def = {
-    .kind = TYPE_PRIMITIVE,
-    .source_location = {0},
-    .primitive = {
-        .size = 0,
-        .alignment = 0,
-        .name = literal_span_raw("void"),
-        .id = 0,
-    },
+  .kind = TYPE_PRIMITIVE,
+  .source_location = {0},
+  .primitive = {
+    .size = 0,
+    .alignment = 0,
+    .name = literal_span_raw("void"),
+    .id = 0,
+  },
+};
+
+static Type t_pointer_def = {
+  .kind = TYPE_POINTER,
+  .source_location = {0},
+  .primitive = {
+    .size = sizeof(void*),
+    .alignment = sizeof(void*), //> FIXME
+    .name = literal_span_raw("<pointer>"),
+    .id = 2, // FIXME: I have no idea what ID should be set to.
+  },
 };
 
 static Type t_integer_literal_def = {
@@ -35,29 +46,30 @@ static Type t_integer_literal_def = {
 };
 
 static Type t_integer_def = {
-    .kind = TYPE_PRIMITIVE,
-    .source_location = {0},
-    .primitive = {
-        .size = 8,
-        .alignment = 8,
-        .name = literal_span_raw("integer"),
-        .is_signed = true,
-        .id = 1,
-    },
+  .kind = TYPE_PRIMITIVE,
+  .source_location = {0},
+  .primitive = {
+    .size = 8,
+    .alignment = 8,
+    .name = literal_span_raw("integer"),
+    .is_signed = true,
+    .id = 1,
+  },
 };
 
 static Type t_byte_def = {
-    .kind = TYPE_PRIMITIVE,
-    .source_location = {0},
-    .primitive = {
-        .size = 1,
-        .alignment = 1,
-        .name = literal_span_raw("byte"),
-        .id = 3,
-    },
+  .kind = TYPE_PRIMITIVE,
+  .source_location = {0},
+  .primitive = {
+    .size = 1,
+    .alignment = 1,
+    .name = literal_span_raw("byte"),
+    .id = 3,
+  },
 };
 
 Type * const t_void = &t_void_def;
+Type * const t_pointer = &t_pointer_def;
 Type * const t_integer_literal = &t_integer_literal_def;
 Type * const t_integer = &t_integer_def;
 Type * const t_byte = &t_byte_def;

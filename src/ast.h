@@ -587,9 +587,10 @@ void ast_replace_node(AST *ast, Node *old, Node *new);
 /// ===========================================================================
 ///  Builtin types.
 /// ===========================================================================
-extern Type * const t_void;
-extern Type * const t_integer_literal;
-extern Type * const t_integer;
-extern Type * const t_byte;
+extern Type *const t_void;
+extern Type *const t_pointer;
+extern Type *const t_integer_literal;
+extern Type *const t_integer;
+extern Type *const t_byte;
 
 #endif // FUNCOMPILER_AST_H
