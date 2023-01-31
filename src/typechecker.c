@@ -918,13 +918,19 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
             "Can not cast from an integer type %T to pointer type %T",
             t_from, t_to);
 
-      // FROM any incomplete type TO any complete type is DISALLOWED
+      // FROM any incomplete type TO any complete type
       if (type_is_incomplete(t_from) && !type_is_incomplete(t_to))
         ERR(expr->cast.value->source_location,
             "Can not cast from an incomplete type %T to a complete type %T",
             t_from, t_to);
 
-      // TODO: arrays, functions, function pointers...
+      // FROM any array type TO any array type
+      if (is_array(t_from) && is_array(t_to)) {
+        ERR(expr->cast.value->source_location,
+            "Can not cast between arrays.");
+      }
+
+      // TODO: functions?
 
       TODO("Casting from %T to %T is currently not supported by the typechecker, sorry", t_from, t_to);
     }

@@ -59,6 +59,7 @@ static Type t_byte_def = {
     .size = 1,
     .alignment = 1,
     .name = literal_span_raw("byte"),
+    .is_signed = false,
     .id = 3,
   },
 };
