@@ -905,6 +905,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       // FROM any type T TO type T
       if (types_equal(t_to, t_from)) break;
       // FROM any pointer type TO any pointer type
+      // TODO: Check base type size + alignment...
       if (is_pointer(t_from) && is_pointer(t_to)) break;
       // FROM any pointer type TO any integer type
       if (is_pointer(t_from) && is_integer(t_to)) break;
