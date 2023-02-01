@@ -12,6 +12,7 @@
   - [ ] Implicit cast sema pass: `a + b` where `a` is a `byte` and `b` an `integer` -> `(a as integer) + b`
   - [ ] Testing Framework: Add ability to only show failing tests
   - [ ] `x as void` used to discard `x`
+  - [ ] Resolve the two different kinds of array-type loading: entire copy vs pointer decay. Basically, `foo[2]` needs `foo` to be loaded as a pointer. `a : foo[2] = b` requires loading entire copy of `b` into `a`.
 - [ ] Optimisation
   - [ ] Zero subscript still does add/multiply when it doesn't need to
   - [ ] Eliminate unused parameters (they are currently allocated registers)
