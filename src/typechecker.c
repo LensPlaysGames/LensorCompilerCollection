@@ -1069,6 +1069,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Just set the type.
     case NODE_LITERAL:
       if (expr->literal.type == TK_NUMBER) expr->type = t_integer_literal;
+      else if (expr->literal.type == TK_STRING) {
+        string s = ast->strings.data[expr->literal.string_index];
+        expr->type = ast_make_type_array(ast, expr->source_location, t_byte, s.size + 1);
+      }
       else TODO("Literal type '%s'.", token_type_to_string(expr->literal.type));
       break;
 

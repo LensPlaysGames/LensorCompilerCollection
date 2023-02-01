@@ -392,6 +392,25 @@ static void next_token(Parser *p) {
         break;
       }
 
+      // String.
+      // TODO: Decide on delimiters. Should single/double quote be equal? Raw vs escaped? etc.
+      if (p->lastc == '"') {
+        p->tok.type = TK_STRING;
+        p->tok.text.data = p->curr;
+        p->tok.text.size = 0;
+
+        next_char(p);
+        while (p->lastc != '"' && p->lastc != 0) {
+          // TODO: Handle escapes
+          p->tok.text.size += 1;
+          next_char(p);
+        }
+        if (p->lastc == 0) ERR("Got EOF before end of string literal...");
+        next_char(p);
+
+        break;
+      }
+
       /// Anything else is invalid.
       ERR("Invalid token");
   }
