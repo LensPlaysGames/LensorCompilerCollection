@@ -96,6 +96,7 @@ static void next_char(Parser *p) {
 
   /// Read the next character.
   p->lastc = *p->curr++;
+  if (p->lastc == 0) ERR("Lexer can not handle null bytes");
   if (p->lastc == '\r') p->lastc = '\n';
 }
 
@@ -1083,7 +1084,7 @@ AST *parse(span source, const char *filename) {
   p.source = source;
   p.filename = filename;
   p.curr = source.data;
-  p.end = source.data + source.size;
+  p.end = source.data + source.size - 1;
   p.lastc = ' ';
   p.ast = ast_create();
   p.ast->filename = string_create(filename);
