@@ -8,6 +8,8 @@
 #include <error.h>
 #include <ir_parser.h>
 #include <opt.h>
+#include <utils.h>
+
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -451,9 +453,21 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Literal expression. Only integer literals are supported for now.
   case NODE_LITERAL:
-    if (expr->literal.type != TK_NUMBER) DIAG(DIAG_SORRY, expr->source_location, "Emitting non-integer literals not supported");
+    if (expr->literal.type == TK_NUMBER) expr->ir = ir_immediate(ctx, expr->type, expr->literal.integer);
+    else if (expr->literal.type == TK_STRING) {
+      char buf[48] = {0};
+      static size_t string_literal_count = 0;
+      int len = snprintf(buf, 48, "__str_lit%zu", string_literal_count++);
+      // TODO: Two options. Since we can't currently assign to static
+      // variables with compile-time known constants, it means that
+      // strings go uninitialised... So what would really be ideal
+      // is if we could just, ya know, do that. (i.e. `.string` as
+      // directive or asciz or whathaveyou). Our other option is to
+      // emit (imm+store) pairs for every byte...
+      expr->ir = ir_create_static(ctx, expr->type, as_span(string_create(buf)));
+    }
+    else DIAG(DIAG_SORRY, expr->source_location, "Emitting non-integer literals not supported");
     // TODO: SEMA should probably have already lowered integer_literal type, so we *should* have a type already available on the literal node...
-    expr->ir = ir_immediate(ctx, expr->type, expr->literal.integer);
     return;
 
   /// Variable reference.

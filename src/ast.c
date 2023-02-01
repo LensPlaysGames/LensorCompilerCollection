@@ -9,6 +9,7 @@
   usz alignment;
   span name;
   bool is_signed;
+  /// A unique ID that is used to compare primitives.
   uint8_t id;
 } TypePrimitive;*/
 static Type t_void_def = {

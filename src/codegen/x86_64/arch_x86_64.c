@@ -1040,6 +1040,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       femit(context, I_SUB, IMMEDIATE_TO_REGISTER, (int64_t)8, REG_RSP, r64);
     }
     for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i) {
+      // TODO: Don't push registers that are used for arguments.
       if (func_regs & (1 << i) && is_caller_saved(i)) {
         femit(context, I_PUSH, REGISTER, i);
       }
@@ -1566,6 +1567,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
       have_data_section = true;
       fprint(context->code, ".section .data\n");
     }
+
+    // TODO: Do compile-time known static assignment (i.e. of string
+    // literals) using assembler directives.
 
     /// Allocate space for the variable.
     usz sz = type_sizeof(var->type);
