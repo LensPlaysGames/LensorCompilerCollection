@@ -1,0 +1,5 @@
+puts : ext void(s : @byte)
+
+str : @byte = "Hello, LISP!"[0]
+
+puts(str)
