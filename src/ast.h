@@ -517,16 +517,17 @@ Type *ast_make_type_function(
 ///         with malloc() and must be freed by the caller.
 string typename(Type *type, bool colour);
 
-/**
- * Get the canonical type of a type.
+/** Get the canonical type of any given type.
  *
- * The ‘canonical’ type of a type T is T stripped of any aliases. E.g. in C
- * typedef int foo;
- * typedef foo bar
- * The canonical type of bar would be int. We need this because,
- * currently, builtin types are just named types (i.e. typedefs) that
- * refer to the actual primitive types, and if we ever introduce
- * something like typedef, it will just work out of the box.
+ * The ‘canonical’ type of a type T is T stripped of any aliases. E.g. in C, given
+ *     typedef int foo;
+ *     typedef foo bar
+ * the canonical type of `bar` would be `int`.
+ *
+ * Currently, builtin types are just named types (i.e. typedefs in C
+ * terminology) that refer to the actual primitive types, and if we
+ * ever introduce something like typedef, it will just work out of the
+ * box.
  *
  * \return NULL if the type is incomplete.
  */
