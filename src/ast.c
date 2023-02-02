@@ -22,7 +22,7 @@ static Type t_void_def = {
   },
 };
 
-static Type t_pointer_def = {
+static Type t_void_pointer_def = {
   .kind = TYPE_POINTER,
   .source_location = {0},
   .pointer = { .to = &t_void_def },
@@ -62,7 +62,7 @@ static Type t_byte_def = {
 };
 
 Type * const t_void = &t_void_def;
-Type * const t_pointer = &t_pointer_def;
+Type * const t_pointer = &t_void_pointer_def;
 Type * const t_integer_literal = &t_integer_literal_def;
 Type * const t_integer = &t_integer_def;
 Type * const t_byte = &t_byte_def;
