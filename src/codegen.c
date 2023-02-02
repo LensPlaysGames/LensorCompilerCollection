@@ -467,8 +467,8 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       // emit (imm+store) pairs for every byte...
       expr->ir = ir_create_static(ctx, expr->type, as_span(string_create(buf)));
     }
-    else DIAG(DIAG_SORRY, expr->source_location, "Emitting non-integer literals not supported");
-    // TODO: SEMA should probably have already lowered integer_literal type, so we *should* have a type already available on the literal node...
+    // TODO: This diagnostic could be better.
+    else DIAG(DIAG_SORRY, expr->source_location, "Emitting literals of type %u not supported", expr->literal.type);
     return;
 
   /// Variable reference.
