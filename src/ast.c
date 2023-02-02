@@ -19,7 +19,6 @@ static Type t_void_def = {
     .size = 0,
     .alignment = 0,
     .name = literal_span_raw("void"),
-    .id = 0,
   },
 };
 
@@ -37,7 +36,6 @@ static Type t_integer_literal_def = {
     .alignment = 8,
     .name = literal_span_raw("<integer_literal>"),
     .is_signed = true,
-    .id = 1,
   },
 };
 
@@ -49,7 +47,6 @@ static Type t_integer_def = {
     .alignment = 8,
     .name = literal_span_raw("integer"),
     .is_signed = true,
-    .id = 1,
   },
 };
 
@@ -61,7 +58,6 @@ static Type t_byte_def = {
     .alignment = 1,
     .name = literal_span_raw("byte"),
     .is_signed = false,
-    .id = 3,
   },
 };
 

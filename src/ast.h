@@ -233,7 +233,6 @@ typedef struct TypePrimitive {
   usz alignment;
   span name;
   bool is_signed;
-  uint8_t id;
 } TypePrimitive;
 
 /// Pointer type.

@@ -42,9 +42,10 @@ NODISCARD static bool types_equal_canon(Type *a, Type *b) {
     default: ICE("Invalid type kind %d", a->kind);
     case TYPE_NAMED: UNREACHABLE();
     case TYPE_PRIMITIVE:
+      // t_integer_literal is implicitly equal to t_integer
       if (a == t_integer_literal) return b == t_integer_literal || b == t_integer;
       if (b == t_integer_literal) return a == t_integer_literal || a == t_integer;
-      return a->primitive.id == b->primitive.id;
+      return a == b;
     case TYPE_POINTER: return types_equal(a->pointer.to, b->pointer.to);
     case TYPE_ARRAY: return a->array.size == b->array.size && types_equal(a->array.of, b->array.of);
     case TYPE_FUNCTION: {
