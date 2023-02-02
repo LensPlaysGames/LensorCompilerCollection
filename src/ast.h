@@ -152,7 +152,7 @@ typedef struct NodeFunction {
   Node *body;
   string name;
   IRFunction *ir;
-  bool global : 1;
+  bool global;
 } NodeFunction;
 
 /// Variable declaration.
@@ -577,6 +577,12 @@ void ast_print(FILE *file, const AST *ast);
 
 /// Print the scope tree of an AST.
 void ast_print_scope_tree(FILE *file, const AST *ast);
+
+/// Print a node and all of it's children.
+/// Use like so:
+///   string_buffer buf = {0};
+///   ast_print_node(file, NULL, node, &buf);
+void ast_print_node(FILE *file, const Node *logical_parent, const Node *node, string_buffer *leading_text);
 
 /// Intern a string.
 size_t ast_intern_string(AST *ast, span string);

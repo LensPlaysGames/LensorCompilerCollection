@@ -606,7 +606,7 @@ static void ast_print_children(
 );
 
 /// Print a node.
-static void ast_print_node(
+void ast_print_node(
   FILE *file,
   const Node *logical_parent,
   const Node *node,
