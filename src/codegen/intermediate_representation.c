@@ -634,10 +634,6 @@ IRInstruction *ir_create_static(CodegenContext *context, Type *type, span name) 
   IRStaticVariable *v = calloc(1, sizeof *v);
   v->name = string_dup(name);
   v->type = type;
-  v->cached_size = type_sizeof(type);
-  // TODO: Don't just use 8 byte alignment for every static.
-  // Should we just use the nearest larger (or equal) power of two, in the generic case?
-  v->cached_alignment = 8;
   vector_push(context->static_vars, v);
 
   /// Create an instruction to reference it and return it.
