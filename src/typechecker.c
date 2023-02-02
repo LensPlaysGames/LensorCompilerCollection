@@ -933,7 +933,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       // TODO: functions?
 
-      TODO("Casting from %T to %T is currently not supported by the typechecker, sorry", t_from, t_to);
+      ERR(expr->cast.value->source_location,
+          "Casting from %T to %T is not supported by the typechecker\n"
+          "  Open an issue with the current maintainers if you feel like this is not the proper behaviour.", t_from, t_to);
     }
 
     /// Binary expression. This is a complicated one.
