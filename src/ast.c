@@ -502,6 +502,11 @@ usz type_sizeof(Type *type) {
   }
 }
 
+usz type_alignof(Type *type) {
+  TODO("Unimplemented, sorry");
+  return 69;
+}
+
 bool type_is_void(Type *type) {
   return type_canonical(type) == t_void;
 }

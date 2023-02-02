@@ -566,6 +566,9 @@ bool type_is_incomplete_canon(Type *type);
 /// Get the size of a type, in bytes.
 usz type_sizeof(Type *type);
 
+/// Get the aligmnent of a type, in bytes.
+usz type_alignof(Type *type);
+
 /// Check if a type is void.
 bool type_is_void(Type *type);
 
