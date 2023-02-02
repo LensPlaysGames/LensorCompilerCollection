@@ -548,13 +548,19 @@ Type *type_last_alias(Type *type);
  * Basically, ‘incomplete’ means that we don’t know its size/alignment
  * and therefore, we can’t allocate a variable of that type.
  *
- * void is a special case because it is purposefully incomplete.
+ * `void` is a special case because it is purposefully incomplete.
  *
  * \return true iff the type is incomplete.
  */
 bool type_is_incomplete(Type *type);
 
-/// Check if a canonical type is incomplete.
+/** Same as type_is_incomplete() but must be given a canonical type.
+ *
+ * \see type_canonical()
+ * \see type_is_incomplete()
+ *
+ * \return true iff the given canonical type is incomplete.
+ */
 bool type_is_incomplete_canon(Type *type);
 
 /// Get the size of a type, in bytes.
