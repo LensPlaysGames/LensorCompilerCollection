@@ -901,31 +901,31 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       // TODO: Is complete to incomplete allowed?
 
-      // ALLOWED
-      // FROM any type T TO type T
+      // FROM any type T TO type T is ALLOWED
       if (types_equal(t_to, t_from)) break;
-      // FROM any pointer type TO any pointer type
+
+      // FROM any incomplete type is DISALLOWED
+      if (type_is_incomplete(t_from) || type_is_incomplete(t_to))
+        ERR(expr->cast.value->source_location, "Can not cast from an incomplete type %T", t_from);
+      // TO any complete type is DISALLOWED
+      if (type_is_incomplete(t_from) || type_is_incomplete(t_to))
+        ERR(expr->cast.value->source_location, "Can not cast to an incomplete type %T", t_to);
+
+      // FROM any pointer type TO any pointer type is ALLOWED
       // TODO: Check base type size + alignment...
       if (is_pointer(t_from) && is_pointer(t_to)) break;
-      // FROM any pointer type TO any integer type
+      // FROM any pointer type TO any integer type is ALLOWED
       if (is_pointer(t_from) && is_integer(t_to)) break;
-      // FROM any integer type TO any integer type
+      // FROM any integer type TO any integer type is ALLOWED
       if (is_integer(t_from) && is_integer(t_to)) break;
 
-      // DISALLOWED
       // FROM any integer type TO any pointer type is currently DISALLOWED, but very well may change
       if (is_integer(t_from) && is_pointer(t_to))
         ERR(expr->cast.value->source_location,
             "Can not cast from an integer type %T to pointer type %T",
             t_from, t_to);
 
-      // FROM any incomplete type TO any complete type
-      if (type_is_incomplete(t_from) && !type_is_incomplete(t_to))
-        ERR(expr->cast.value->source_location,
-            "Can not cast from an incomplete type %T to a complete type %T",
-            t_from, t_to);
-
-      // FROM any array type TO any array type
+      // FROM any array type TO any array type is DISALLOWED
       if (is_array(t_from) && is_array(t_to)) {
         ERR(expr->cast.value->source_location,
             "Can not cast between arrays.");
