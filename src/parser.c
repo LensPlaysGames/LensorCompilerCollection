@@ -367,6 +367,25 @@ static void next_token(Parser *p) {
       }
       break;
 
+    // String.
+    case '"':
+      // TODO: Decide on delimiters. Should single/double quote be equal? Raw vs escaped? etc.
+      if (p->lastc == '"') {
+        p->tok.type = TK_STRING;
+        p->tok.text.data = p->curr;
+        p->tok.text.size = 0;
+        next_char(p); //> Eat beginning delimiter
+        while (p->lastc != '"' && p->lastc != 0) {
+          // TODO: Handle escapes
+          p->tok.text.size += 1;
+          next_char(p);
+        }
+        if (p->lastc == 0) ERR("Got EOF before end of string literal...");
+        next_char(p); //> Eat ending delimiter
+        break;
+      }
+      break;
+
     /// Number or identifier.
     default:
       /// Identifier.
@@ -389,25 +408,6 @@ static void next_token(Parser *p) {
 
         /// The character after a number must be a whitespace or delimiter.
         if (isalpha(p->lastc)) ERR("Invalid integer literal");
-        break;
-      }
-
-      // String.
-      // TODO: Decide on delimiters. Should single/double quote be equal? Raw vs escaped? etc.
-      if (p->lastc == '"') {
-        p->tok.type = TK_STRING;
-        p->tok.text.data = p->curr;
-        p->tok.text.size = 0;
-
-        next_char(p);
-        while (p->lastc != '"' && p->lastc != 0) {
-          // TODO: Handle escapes
-          p->tok.text.size += 1;
-          next_char(p);
-        }
-        if (p->lastc == 0) ERR("Got EOF before end of string literal...");
-        next_char(p);
-
         break;
       }
 

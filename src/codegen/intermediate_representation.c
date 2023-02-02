@@ -629,10 +629,7 @@ IRInstruction *ir_not
 ALL_BINARY_INSTRUCTION_TYPES(CREATE_BINARY_INSTRUCTION)
 #undef CREATE_BINARY_INSTRUCTION
 
-IRInstruction *ir_create_static
-(CodegenContext *context,
- Type *type,
- span name) {
+IRInstruction *ir_create_static(CodegenContext *context, Type *type, span name) {
   /// Create the variable.
   IRStaticVariable *v = calloc(1, sizeof *v);
   v->name = string_dup(name);
@@ -652,11 +649,7 @@ IRInstruction *ir_create_static
   return ref;
 }
 
-IRInstruction *ir_stack_allocate
-(CodegenContext *context,
- Type *type
- )
-{
+IRInstruction *ir_stack_allocate(CodegenContext *context, Type *type) {
   INSTRUCTION(alloca, IR_ALLOCA);
   alloca->alloca.size = type_sizeof(type);
   alloca->type = ast_make_type_pointer(context->ast, type->source_location, type);
