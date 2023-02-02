@@ -372,16 +372,17 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     codegen_expr(ctx, rhs);
     if (expr->binary.op == TK_LBRACK) {
       // An array subscript needs multiplied by the sizeof the array's base type.
+      IRInstruction *scaled_rhs = NULL;
       if (lhs->type->kind == TYPE_ARRAY) {
         IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->array.of));
-        rhs->ir = ir_mul(ctx, rhs->ir, immediate);
+        scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
       }
       // A pointer subscript needs multiplied by the sizeof the pointer's base type.
       else if (lhs->type->kind == TYPE_POINTER) {
         IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->pointer.to));
-        rhs->ir = ir_mul(ctx, rhs->ir, immediate);
+        scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
       }
-      expr->ir = ir_add(ctx, lhs->ir, rhs->ir);
+      expr->ir = ir_add(ctx, lhs->ir, scaled_rhs);
       return;
     }
 
