@@ -467,8 +467,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       // emit (imm+store) pairs for every byte...
       expr->ir = ir_create_static(ctx, expr->type, as_span(string_create(buf)));
     }
-    // TODO: This diagnostic could be better.
-    else DIAG(DIAG_SORRY, expr->source_location, "Emitting literals of type %u not supported", expr->literal.type);
+    else DIAG(DIAG_SORRY, expr->source_location, "Emitting literals of type %T not supported", expr->type);
     return;
 
   /// Variable reference.
