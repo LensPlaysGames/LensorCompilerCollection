@@ -231,7 +231,6 @@ enum InstructionOperands_x86_64 {
   REGISTER,  ///< Reg reg
   NAME,      ///< const char* name
 
-  NAME_TO_REGISTER,      ///< Reg address, const char* name, Reg dest, RegSize size
   REGISTER_TO_MEMORY,    ///< Reg src, RegSize size, Reg address, int64_t offset
   REGISTER_TO_REGISTER,  ///< Reg src, Reg dest
   REGISTER_TO_NAME,      ///< Reg src, RegSize size, Reg address, const char* name
@@ -368,25 +367,10 @@ static void femit_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
   }
 }
 
-static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, va_list args) {
-  RegisterDescriptor address_register      = va_arg(args, RegisterDescriptor);
-  char *name                               = va_arg(args, char *);
-  RegisterDescriptor destination_register  = va_arg(args, RegisterDescriptor);
-  enum RegSize size                        = va_arg(args, enum RegSize);
-
+static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, const char *name, RegisterDescriptor destination_register, enum RegSize size) {
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
-  const char *destination = NULL;
-  switch (size) {
-  case r64: destination = register_name(destination_register);    break;
-  case r32: destination = register_name_32(destination_register); break;
-  case r16: destination = register_name_16(destination_register); break;
-  case r8:  destination = register_name_8(destination_register);  break;
-  default:
-    UNREACHABLE();
-    break;
-  }
-
+  const char *destination = regname(destination_register, size);
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
       fprint(context->code, "    %s %s(%%%s), %%%s\n",
@@ -590,15 +574,6 @@ static void femit
         default: ICE("Unhandled operand type %d in x86_64 code generation for %d.", operands, instruction);
         case REGISTER_TO_MEMORY: femit_reg_to_mem(context, instruction, args); break;
         case REGISTER_TO_NAME: femit_reg_to_name(context, instruction, args); break;
-        case NAME_TO_REGISTER: femit_name_to_reg(context, instruction, args); break;
-      }
-    } break;
-
-    case I_LEA: {
-      enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
-      switch (operands) {
-        default: ICE("femit() only accepts NAME_TO_REGISTER operand type with LEA instruction.");
-        case NAME_TO_REGISTER: femit_name_to_reg(context, instruction, args); break;
       }
     } break;
 
@@ -1077,13 +1052,9 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, inst->result);
       // femit_reg_to_reg(context, I_XOR, inst->result, inst->result);
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
-        femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->operand->static_ref->name.data,
-              inst->result, size);
-        // femit_name_to_reg(context, I_LEA, REG_RIP, inst->operand->static_ref->name.data, inst->result, size);
+        femit_name_to_reg(context, I_LEA, REG_RIP, inst->operand->static_ref->name.data, inst->result, size);
       else
-        femit(context, I_MOV, NAME_TO_REGISTER, REG_RIP, inst->operand->static_ref->name.data,
-              inst->result, size);
-      // femit_name_to_reg(context, I_MOV, REG_RIP, inst->operand->static_ref->name.data, inst->result, size);
+        femit_name_to_reg(context, I_MOV, REG_RIP, inst->operand->static_ref->name.data, inst->result, size);
     }
 
     /// Load from a local.
@@ -1147,12 +1118,10 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     break;
 
   case IR_STATIC_REF:
-    if (inst->result) femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->static_ref->name.data, inst->result, r64);
-    // femit_name_to_reg(context, I_LEA, REG_RIP, inst->static_ref->name.data, inst->result, r64);
+    if (inst->result) femit_name_to_reg(context, I_LEA, REG_RIP, inst->static_ref->name.data, inst->result, r64);
     break;
   case IR_FUNC_REF:
-    if (inst->result) femit(context, I_LEA, NAME_TO_REGISTER, REG_RIP, inst->function_ref->name.data, inst->result, r64);
-    // femit_name_to_reg(context, I_LEA, REG_RIP, inst->function_ref->name.data, inst->result, r64);
+    if (inst->result) femit_name_to_reg(context, I_LEA, REG_RIP, inst->function_ref->name.data, inst->result, r64);
     break;
   case IR_ALLOCA:
     femit_mem_to_reg(context, I_LEA, REG_RBP, -inst->alloca.offset, inst->result, r64);
