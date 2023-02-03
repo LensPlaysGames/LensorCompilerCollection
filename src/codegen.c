@@ -357,34 +357,38 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         return;
       }
 
-      /// Anything else is an error (I think?).
-      /// Otherwise, actually emit the LHS and load from that.
-      /*codegen_expr(ctx, lhs);
-      expr->ir = ir_store(ctx, lhs->ir, rhs->ir);*/
-      return;
+      ICE("Invalid type of lhs of assignment (should have been caught by sema): %T", lhs->type);
     }
 
-    // TODO: Just use lhs operand of subscript operator when right hand
-    // side is a compile-time-known zero value.
-
-    /// Emit the operands.
-    codegen_expr(ctx, lhs);
-    codegen_expr(ctx, rhs);
     if (expr->binary.op == TK_LBRACK) {
-      // An array subscript needs multiplied by the sizeof the array's base type.
+      codegen_expr(ctx, rhs);
+
+      IRInstruction *subs_lhs = NULL;
+      if (lhs->kind == NODE_VARIABLE_REFERENCE) {
+        subs_lhs = ir_static_reference(ctx, as_span(lhs->var->name));
+      } else ERR("LHS of subscript operator has invalid kind %d", lhs->kind);
+
+      // TODO: Just use lhs operand of subscript operator when right hand
+      // side is a compile-time-known zero value.
+
       IRInstruction *scaled_rhs = NULL;
+      // An array subscript needs multiplied by the sizeof the array's base type.
       if (lhs->type->kind == TYPE_ARRAY) {
         IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->array.of));
         scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
       }
-      // A pointer subscript needs multiplied by the sizeof the pointer's base type.
+        // A pointer subscript needs multiplied by the sizeof the pointer's base type.
       else if (lhs->type->kind == TYPE_POINTER) {
         IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->pointer.to));
         scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
       }
-      expr->ir = ir_add(ctx, lhs->ir, scaled_rhs);
+      expr->ir = ir_add(ctx, subs_lhs, scaled_rhs);
       return;
     }
+
+    /// Emit the operands.
+    codegen_expr(ctx, lhs);
+    codegen_expr(ctx, rhs);
 
     /// Emit the binary instruction.
     switch (expr->binary.op) {
