@@ -231,7 +231,6 @@ enum InstructionOperands_x86_64 {
   REGISTER,  ///< Reg reg
   NAME,      ///< const char* name
 
-  REGISTER_TO_MEMORY,    ///< Reg src, RegSize size, Reg address, int64_t offset
   REGISTER_TO_REGISTER,  ///< Reg src, Reg dest
   REGISTER_TO_NAME,      ///< Reg src, RegSize size, Reg address, const char* name
 };
@@ -384,16 +383,10 @@ static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, Re
   }
 }
 
-static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, va_list args) {
-  RegisterDescriptor source_register   = va_arg(args, RegisterDescriptor);
-  enum RegSize size                    = va_arg(args, enum RegSize);
-  RegisterDescriptor address_register  = va_arg(args, RegisterDescriptor);
-  int64_t offset                       = va_arg(args, int64_t);
-
+static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, int64_t offset) {
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
-
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
       if (offset) {
@@ -572,7 +565,6 @@ static void femit
       enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
       switch (operands) {
         default: ICE("Unhandled operand type %d in x86_64 code generation for %d.", operands, instruction);
-        case REGISTER_TO_MEMORY: femit_reg_to_mem(context, instruction, args); break;
         case REGISTER_TO_NAME: femit_reg_to_name(context, instruction, args); break;
       }
     } break;
@@ -1100,20 +1092,14 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     /// Store to a local.
     else if (inst->store.addr->kind == IR_ALLOCA) {
       enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
-      femit(context, I_MOV, REGISTER_TO_MEMORY,
-            inst->store.value->result, size,
-            REG_RBP, (int64_t)-inst->store.addr->alloca.offset);
-      // femit_reg_to_mem(context, I_MOV, inst->store.value->result, size, REG_RBP, -inst->store.addr->alloca.offset);
+      femit_reg_to_mem(context, I_MOV, inst->store.value->result, size, REG_RBP, -inst->store.addr->alloca.offset);
       break;
     }
 
     /// Store to a pointer.
     else {
       enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
-      femit(context, I_MOV, REGISTER_TO_MEMORY,
-            inst->store.value->result, size,
-            inst->store.addr->result, (int64_t)0);
-      // femit_reg_to_mem(context, I_MOV, inst->store.value->result, size, inst->store.addr->result, 0);
+      femit_reg_to_mem(context, I_MOV, inst->store.value->result, size, inst->store.addr->result, 0);
     }
     break;
 
