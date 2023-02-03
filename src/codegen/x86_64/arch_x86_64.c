@@ -1057,7 +1057,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     }
     // Restore stack pointer from stack alignment, if necessary.
     if (regs_pushed_count & 0b1) {
-      femit(context, I_ADD, IMMEDIATE_TO_REGISTER, (int64_t)8, REG_RSP);
+      femit(context, I_ADD, IMMEDIATE_TO_REGISTER, (int64_t)8, REG_RSP, r64);
     }
     femit(context, I_MOV, REGISTER_TO_REGISTER,
           REG_RAX, inst->result);
