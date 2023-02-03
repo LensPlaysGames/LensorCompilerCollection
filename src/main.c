@@ -170,9 +170,9 @@ int handle_command_line_arguments(int argc, char **argv) {
       } else if (strcmp(argv[i], "always") == 0) {
         prefer_using_diagnostics_colours = true;
       } else {
-        print("Expected calling convention after calling convention command line argument\n"
+        print("Expected colour option after colour option command line argument\n"
                "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
-        print_acceptable_calling_conventions();
+        print_acceptable_colour_settings();
         return 1;
       }
     } else if (strcmp(argument, "-cc") == 0
