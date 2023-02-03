@@ -365,6 +365,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
       IRInstruction *subs_lhs = NULL;
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
+        // TODO: Handle local variable references, somehow. How can we tell if it's local/static?
         subs_lhs = ir_static_reference(ctx, as_span(lhs->var->name));
       } else ERR("LHS of subscript operator has invalid kind %d", lhs->kind);
 
