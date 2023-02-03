@@ -645,6 +645,22 @@ IRInstruction *ir_create_static(CodegenContext *context, Type *type, span name) 
   return ref;
 }
 
+IRInstruction *ir_static_reference(CodegenContext *context, span name) {
+  foreach_ptr(IRStaticVariable *, v, context->static_vars) {
+    if (string_eq(v->name, name)) {
+      INSTRUCTION(ref, IR_STATIC_REF);
+      ref->static_ref = v;
+      ref->type = ast_make_type_pointer(context->ast, v->type->source_location, v->type);
+      // TODO: `v->reference` may need to become list of references? I think this is why
+      // optimisation is broken.
+      INSERT(ref);
+      return ref;
+    }
+  }
+
+  ICE("Can not create static reference to %S as it does not exist in the codegen context.", name);
+}
+
 IRInstruction *ir_stack_allocate(CodegenContext *context, Type *type) {
   INSTRUCTION(alloca, IR_ALLOCA);
   alloca->alloca.size = type_sizeof(type);

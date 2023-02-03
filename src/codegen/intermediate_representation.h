@@ -327,6 +327,9 @@ IRInstruction *ir_create_static
  Type *type,
  span name);
 
+/// Create a reference to a variable with static storage duration.
+IRInstruction *ir_static_reference(CodegenContext *context, span name);
+
 IRInstruction *ir_stack_allocate
 (CodegenContext *context,
  Type *type);
