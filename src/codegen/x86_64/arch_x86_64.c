@@ -596,7 +596,9 @@ static void femit
       fprint(context->code, "    %s\n", mnemonic);
     } break;
 
-    default: ICE("Unhandled instruction in x86_64 code generation: %d.", instruction);
+    default: ICE("Unhandled instruction in femit(): %d (%s)\n"
+                 "  Consider using femit_x() or femit_x_to_x()",
+                 instruction, instruction_mnemonic(context, instruction));
   }
 
   va_end(args);
