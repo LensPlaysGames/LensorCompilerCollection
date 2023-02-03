@@ -549,6 +549,7 @@ static void femit
   ASSERT(context);
   STATIC_ASSERT(I_COUNT == 24, "femit() must exhaustively handle all x86_64 instructions.");
 
+  // TODO: Extract setcc and jcc to their own functions, get rid of varargs
   switch (instruction) {
     case I_SETCC: {
       enum ComparisonType comparison_type = va_arg(args, enum ComparisonType);
@@ -576,7 +577,7 @@ static void femit
       enum IndirectJumpType type = va_arg(args, enum IndirectJumpType);
       ASSERT(type < JUMP_TYPE_COUNT, "femit_direct_branch(): Invalid jump type %d", type);
       char *label = va_arg(args, char *);
-      //ASSERT(label, "JCC label must not be NULL.");
+      ASSERT(label, "JCC label must not be NULL.");
 
       const char *mnemonic = instruction_mnemonic(context, I_JCC);
 
@@ -596,9 +597,10 @@ static void femit
       fprint(context->code, "    %s\n", mnemonic);
     } break;
 
-    default: ICE("Unhandled instruction in femit(): %d (%s)\n"
-                 "  Consider using femit_x() or femit_x_to_x()",
-                 instruction, instruction_mnemonic(context, instruction));
+  default:
+    ICE("Unhandled instruction in femit(): %d (%s)\n"
+        "  Consider using femit_x() or femit_x_to_x()",
+        instruction, instruction_mnemonic(context, instruction));
   }
 
   va_end(args);
@@ -1267,7 +1269,7 @@ static size_t interfering_regs(IRInstruction *instruction) {
     mask |= (1 << REG_RAX);
     mask |= (1 << REG_RDX);
     break;
-  case IR_CALL:
+  case IR_CALL: // FIXME: This seems specific to calling convention...
     mask |= (1 << REG_RAX);
   default:
     break;
