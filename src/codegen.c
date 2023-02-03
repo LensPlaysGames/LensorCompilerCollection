@@ -364,10 +364,16 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       codegen_expr(ctx, rhs);
 
       IRInstruction *subs_lhs = NULL;
+      if (lhs->type->kind != TYPE_ARRAY && lhs->type->kind == TYPE_POINTER) {
+        ERR("Subscript operator may only operate on arrays and pointers, which type %T is not", lhs->type);
+      }
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
         // TODO: Handle local variable references, somehow. How can we tell if it's local/static?
         subs_lhs = ir_static_reference(ctx, as_span(lhs->var->name));
-      } else ERR("LHS of subscript operator has invalid kind %d", lhs->kind);
+      } else if (lhs->kind == NODE_LITERAL && lhs->literal.type == TK_STRING) {
+        TODO("IR generation for subscript of string literal");
+      }
+      else ERR("LHS of subscript operator has invalid kind %d", lhs->kind);
 
       // TODO: Just use lhs operand of subscript operator when right hand
       // side is a compile-time-known zero value.
@@ -420,6 +426,11 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       switch (expr->unary.value->kind) {
         case NODE_DECLARATION: expr->ir = expr->unary.value->ir; return;
         case NODE_VARIABLE_REFERENCE: expr->ir = expr->unary.value->var->val.node->ir; return;
+        case NODE_LITERAL: {
+          if (expr->literal.type == TK_STRING) {
+            TODO("IR code generation of addressof string literal");
+          }
+        } return;
         default: ICE("Cannot take address of expression of type %d", expr->unary.value->kind);
       }
     }
