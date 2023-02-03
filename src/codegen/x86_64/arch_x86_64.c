@@ -224,17 +224,6 @@ static const char * regname_from_bytes(RegisterDescriptor reg, u64 bytes) {
   return regname(reg, regsize_from_bytes(bytes));
 }
 
-// TODO: Pass necessary RegSize in more of these cases
-enum InstructionOperands_x86_64 {
-  IMMEDIATE, ///< int64_t imm
-  MEMORY,    ///< Reg reg, int64_t offset
-  REGISTER,  ///< Reg reg
-  NAME,      ///< const char* name
-
-  REGISTER_TO_REGISTER,  ///< Reg src, Reg dest
-  REGISTER_TO_NAME,      ///< Reg src, RegSize size, Reg address, const char* name
-};
-
 const char *setcc_suffixes_x86_64[COMPARE_COUNT] = {
     "e",
     "ne",
@@ -431,16 +420,10 @@ static void femit_reg_to_reg(CodegenContext *context, enum Instruction inst, Reg
   }
 }
 
-static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, va_list args) {
-  RegisterDescriptor source_register       = va_arg(args, RegisterDescriptor);
-  enum RegSize size                        = va_arg(args, enum RegSize);
-  RegisterDescriptor address_register      = va_arg(args, RegisterDescriptor);
-  char *name                               = va_arg(args, char *);
-
+static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name) {
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
-
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
       fprint(context->code, "    %s %%%s, %s(%%%s)\n",
@@ -542,6 +525,19 @@ static void femit_imm(CodegenContext *context, enum Instruction inst, int64_t im
   }
 }
 
+static void femit_name(CodegenContext *context, enum Instruction inst, const char *name) {
+  ASSERT(name, "NAME must not be NULL.");
+  const char *mnemonic = instruction_mnemonic(context, inst);
+  switch (context->dialect) {
+  case CG_ASM_DIALECT_ATT:
+  case CG_ASM_DIALECT_INTEL:
+    fprint(context->code, "    %s %s\n",
+           mnemonic, name);
+    break;
+  default: ICE("ERROR: femit(): Unsupported dialect %d for CALL/JMP instruction", context->dialect);
+  }
+}
+
 static void femit
 (CodegenContext *context,
  enum Instruction instruction,
@@ -554,56 +550,6 @@ static void femit
   STATIC_ASSERT(I_COUNT == 24, "femit() must exhaustively handle all x86_64 instructions.");
 
   switch (instruction) {
-    case I_ADD:
-    case I_SUB:
-    case I_AND:
-    case I_OR:
-    case I_TEST:
-    case I_XOR:
-    case I_CMP:
-    case I_MOV: {
-      enum InstructionOperands_x86_64 operands = va_arg(args, enum InstructionOperands_x86_64);
-      switch (operands) {
-        default: ICE("Unhandled operand type %d in x86_64 code generation for %d.", operands, instruction);
-        case REGISTER_TO_NAME: femit_reg_to_name(context, instruction, args); break;
-      }
-    } break;
-
-    case I_JMP:
-    case I_CALL: {
-      enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
-      switch (operand) {
-        default: ICE("femit() only accepts REGISTER or NAME operand type with CALL/JMP instruction.");
-        case NAME: {
-          char *label = va_arg(args, char *);
-          const char *mnemonic = instruction_mnemonic(context, instruction);
-
-          ASSERT(label, "JMP/CALL label must not be NULL.");
-
-          switch (context->dialect) {
-            case CG_ASM_DIALECT_ATT:
-            case CG_ASM_DIALECT_INTEL:
-              fprint(context->code, "    %s %s\n",
-                  mnemonic, label);
-              break;
-            default: ICE("ERROR: femit(): Unsupported dialect %d for CALL/JMP instruction", context->dialect);
-          }
-        } break;
-      }
-    } break;
-
-    case I_PUSH: {
-      enum InstructionOperands_x86_64 operand = va_arg(args, enum InstructionOperands_x86_64);
-      switch (operand) {
-        default: ICE("femit() only accepts REGISTER, MEMORY, or IMMEDIATE operand type with PUSH instruction.");
-        case MEMORY: {
-          int64_t offset = va_arg(args, int64_t);
-          RegisterDescriptor r = va_arg(args, RegisterDescriptor);
-          femit_mem(context, instruction, offset, r);
-        } break;
-      }
-    } break;
-
     case I_SETCC: {
       enum ComparisonType comparison_type = va_arg(args, enum ComparisonType);
       RegisterDescriptor value_register = va_arg(args, RegisterDescriptor);
@@ -892,7 +838,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       // Restore the frame pointer if we have one.
       codegen_epilogue(context, inst->parent_block->function);
       if (inst->call.is_indirect) femit_reg(context, I_JMP, inst->call.callee_instruction->result);
-      else femit(context, I_JMP, NAME, inst->call.callee_function->name.data);
+      else femit_name(context, I_JMP, inst->call.callee_function->name.data);
       if (inst->parent_block) inst->parent_block->done = true;
       break;
     }
@@ -917,7 +863,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     }
 
     if (inst->call.is_indirect) femit_reg(context, I_CALL, inst->call.callee_instruction->result);
-    else femit(context, I_CALL, NAME, inst->call.callee_function->name.data);
+    else femit_name(context, I_CALL, inst->call.callee_function->name.data);
     // femit_name(context, I_CALL, inst->call.callee_function->name.data);
 
     // Restore caller saved registers used in called function.
@@ -949,7 +895,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     /// Only emit a jump if the target isn’t the next block.
     if (!optimise || (inst->parent_block
           && inst->destination_block != inst->parent_block->next && !inst->parent_block->done)) {
-      femit(context, I_JMP, NAME, inst->destination_block->name.data);
+      femit_name(context, I_JMP, inst->destination_block->name.data);
     }
     if (optimise && inst->parent_block) inst->parent_block->done = true;
     break;
@@ -966,7 +912,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       femit(context, I_JCC, JUMP_TYPE_NZ, branch->then->name.data);
     } else {
       femit(context, I_JCC, JUMP_TYPE_Z, branch->else_->name.data);
-      femit(context, I_JMP, NAME, branch->then->name.data);
+      femit_name(context, I_JMP, branch->then->name.data);
     }
 
     if (optimise && inst->parent_block) inst->parent_block->done = true;
@@ -1084,9 +1030,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     /// Store to a static variable.
     if (inst->store.addr->kind == IR_STATIC_REF) {
       enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.addr->static_ref->type));
-      femit(context, I_MOV, REGISTER_TO_NAME, inst->store.value->result, size,
-            REG_RIP, inst->store.addr->static_ref->name.data);
-      // femit_reg_to_name(context, I_MOV, inst->store.value->result, size, REG_RIP, inst->store.addr->static_ref->name.data);
+      femit_reg_to_name(context, I_MOV, inst->store.value->result, size, REG_RIP, inst->store.addr->static_ref->name.data);
     }
 
     /// Store to a local.
