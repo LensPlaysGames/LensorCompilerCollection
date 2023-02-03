@@ -431,7 +431,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
             TODO("IR code generation of addressof string literal");
           }
         } return;
-        default: ICE("Cannot take address of expression of type %d", expr->unary.value->kind);
+        default: ICE("Cannot take address of expression of kind %d", expr->unary.value->kind);
       }
     }
 
@@ -441,7 +441,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     /// Prefix expressions.
     if (!expr->unary.postfix) {
       switch (expr->unary.op) {
-        default: ICE("Cannot emit unary prefix expression of type %d", expr->unary.op);
+        default: ICE("Cannot emit unary prefix expression of token type %d", expr->unary.op);
 
         /// Load a value from an lvalue.
         /// Emitting an lvalue loads it, so we don’t need to do anything here.
@@ -472,6 +472,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_LITERAL:
     if (expr->literal.type == TK_NUMBER) expr->ir = ir_immediate(ctx, expr->type, expr->literal.integer);
     else if (expr->literal.type == TK_STRING) {
+      // TODO: We should probably set this name earlier, or have some
+      // way of getting this name from jujst a string index. Static
+      // variable is big bad. Valve, pls fix. Literally unplayable.
       char buf[48] = {0};
       static size_t string_literal_count = 0;
       int len = snprintf(buf, 48, "__str_lit%zu", string_literal_count++);
