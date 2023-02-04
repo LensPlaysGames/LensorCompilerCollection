@@ -120,7 +120,7 @@ endif()
 # that the code doesn't misbehave.
 # Please be aware: sanitizers only report on errors that `happen`, meaning that
 # you will get no feedback for code that isn't being run.
-if (DEFINED ENABLE_SANS AND NOT WIN32 AND NOT ARM)
+if (DEFINED ENABLE_SANS AND NOT WIN32)
   target_compile_options(func PRIVATE -fsanitize=address,leak,undefined)
   target_link_options(func PRIVATE -fsanitize=address,leak,undefined)
 endif()
