@@ -114,10 +114,15 @@ if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
   target_compile_options(func PRIVATE $<$<CONFIG:DEBUG>:-Wl,-export-dynamic>)
 endif()
 
-# Enable asan if requested and possible.
-if (DEFINED ENABLE_ASAN AND NOT WIN32)
-  target_compile_options(func PRIVATE -fsanitize=address)
-  target_link_options(func PRIVATE -fsanitize=address)
+# Enable SANs if requested and possible.
+# Sanitizers are a `dynamic analysis` tool, i.e. they check for errors
+# during program execution. Their output can be really helpful when verifying
+# that the code doesn't misbehave.
+# Please be aware: sanitizers only report on errors that `happen`, meaning that
+# you will get no feedback for code that isn't being run.
+if (DEFINED ENABLE_SANS AND NOT WIN32 AND NOT ARM)
+  target_compile_options(func PRIVATE -fsanitize=address,leak,undefined)
+  target_link_options(func PRIVATE -fsanitize=address,leak,undefined)
 endif()
 
 # Compile options.
