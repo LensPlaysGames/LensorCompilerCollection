@@ -906,10 +906,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       if (types_equal(t_to, t_from)) break;
 
       // FROM any incomplete type is DISALLOWED
-      if (type_is_incomplete(t_from) || type_is_incomplete(t_to))
+      if (type_is_incomplete(t_from))
         ERR(expr->cast.value->source_location, "Can not cast from an incomplete type %T", t_from);
       // TO any complete type is DISALLOWED
-      if (type_is_incomplete(t_from) || type_is_incomplete(t_to))
+      if (type_is_incomplete(t_to))
         ERR(expr->cast.value->source_location, "Can not cast to an incomplete type %T", t_to);
 
       // FROM any pointer type TO any pointer type is ALLOWED
