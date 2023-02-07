@@ -617,7 +617,7 @@ static void ast_print_children(
 );
 
 /// Print a node.
-void ast_print_node(
+void ast_print_node_internal(
   FILE *file,
   const Node *logical_parent,
   const Node *node,
@@ -765,6 +765,12 @@ void ast_print_node(
   }
 }
 
+void ast_print_node(const Node *node) {
+  string_buffer buf = {0};
+  ast_print_node_internal(stdout, NULL, node, &buf);
+  vector_delete(buf);
+}
+
 /// Scope tree for printing scopes.
 typedef struct scope_tree_node {
   const Scope *scope;
@@ -846,7 +852,7 @@ void ast_print(FILE *file, const AST *ast) {
   string_buffer buf = {0};
 
   /// Print the root node.
-  ast_print_node(file, NULL, ast->root, &buf);
+  ast_print_node_internal(file, NULL, ast->root, &buf);
 }
 
 /// Print the children of a node.
@@ -871,7 +877,7 @@ static void ast_print_children(
     format_to(buf, "%s", node == vector_back(*nodes) ? "  " : "│ ");
 
     /// Print the node.
-    ast_print_node(file, logical_parent, node, buf);
+    ast_print_node_internal(file, logical_parent, node, buf);
 
     /// Restore the leading text.
     buf->size = sz;

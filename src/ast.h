@@ -595,10 +595,7 @@ void ast_print(FILE *file, const AST *ast);
 void ast_print_scope_tree(FILE *file, const AST *ast);
 
 /// Print a node and all of it's children.
-/// Use like so:
-///   string_buffer buf = {0};
-///   ast_print_node(file, NULL, node, &buf);
-void ast_print_node(FILE *file, const Node *logical_parent, const Node *node, string_buffer *leading_text);
+void ast_print_node(const Node *node);
 
 /// Intern a string.
 size_t ast_intern_string(AST *ast, span string);

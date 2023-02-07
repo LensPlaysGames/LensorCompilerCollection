@@ -375,7 +375,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
           subs_lhs = ir_static_reference(ctx, as_span(lhs->var->name));
         else if (var->kind == IR_ALLOCA)
           //subs_lhs = ir_(ctx, as_span(lhs->var->name));
-          TODO("Codegen local variable reference");
+          TODO("IR generation for subscript of local variable reference");
       } else if (lhs->kind == NODE_LITERAL && lhs->literal.type == TK_STRING) {
         TODO("IR generation for subscript of string literal");
       }
