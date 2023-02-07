@@ -646,8 +646,7 @@ IRInstruction *ir_create_static(CodegenContext *context, Type *type, span name) 
 }
 
 /// NOTE: Currently unused, but can be used to load a static reference
-/// a second time in a basic block, if need be, without generating
-/// duplicate static variables.
+/// more than once without generating duplicate static variables.
 IRInstruction *ir_static_reference(CodegenContext *context, span name) {
   foreach_ptr(IRStaticVariable *, v, context->static_vars) {
     if (string_eq(v->name, name)) {
