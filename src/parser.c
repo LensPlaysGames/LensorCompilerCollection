@@ -392,7 +392,6 @@ static void next_token(Parser *p) {
       if (isstart(p->lastc)) {
         next_identifier(p);
 
-        /// Check if the identifier is a keyword.
         for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
           if (string_eq(keywords[i].kw, p->tok.text)) {
             p->tok.type = keywords[i].type;
@@ -1074,14 +1073,13 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
     if (prec == current_precedence && !is_right_associative(p, p->tok)) return lhs;
 
     /// Otherwise, we need to parse the RHS.
-    u32 start = p->tok.source_location.start;
     enum TokenType tt = p->tok.type;
     next_token(p);
 
     /// The `as` operator is special because its RHS is a type.
     if (tt == TK_AS) {
       Type *type = parse_type(p);
-      lhs = ast_make_cast(p->ast, (loc){.start = start, .end = type->source_location.end}, type, lhs);
+      lhs = ast_make_cast(p->ast, (loc){.start = lhs->source_location.start, .end = type->source_location.end}, type, lhs);
       continue;
     }
 
@@ -1090,7 +1088,7 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
       Node *rhs = parse_expr_with_precedence(p, prec);
 
       /// Combine the LHS and RHS into a binary expression.
-      lhs = ast_make_binary(p->ast, (loc){.start = start, .end = rhs->source_location.end}, tt, lhs, rhs);
+      lhs = ast_make_binary(p->ast, (loc){.start = lhs->source_location.start, .end = rhs->source_location.end}, tt, lhs, rhs);
     }
   }
 }
