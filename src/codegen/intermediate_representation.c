@@ -653,8 +653,7 @@ IRInstruction *ir_static_reference(CodegenContext *context, span name) {
       INSTRUCTION(ref, IR_STATIC_REF);
       ref->static_ref = v;
       ref->type = ast_make_type_pointer(context->ast, v->type->source_location, v->type);
-      // TODO: `v->reference` may need to become list of references? I think this is why
-      // optimisation is broken.
+      // TODO: `v->reference` may need to become list of references?
       INSERT(ref);
       return ref;
     }

@@ -364,8 +364,6 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       // TODO: Just use lhs operand of subscript operator when right hand
       // side is a compile-time-known zero value.
 
-      codegen_expr(ctx, rhs);
-
       IRInstruction *subs_lhs = NULL;
       if (!type_is_array(lhs->type) && !type_is_pointer(lhs->type))
         ERR("Subscript operator may only operate on arrays and pointers, which type %T is not", lhs->type);
@@ -378,9 +376,12 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         else if (var->kind == IR_ALLOCA)
           subs_lhs = var;
       } else if (lhs->kind == NODE_LITERAL && lhs->literal.type == TK_STRING) {
+        // ctx->ast->strings.data[lhs->literal.string_index];
         TODO("IR generation for subscript of string literal");
       }
       else ERR("LHS of subscript operator has invalid kind %d", lhs->kind);
+
+      codegen_expr(ctx, rhs);
 
       IRInstruction *scaled_rhs = NULL;
       // An array subscript needs multiplied by the sizeof the array's base type.
@@ -477,7 +478,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     if (expr->literal.type == TK_NUMBER) expr->ir = ir_immediate(ctx, expr->type, expr->literal.integer);
     else if (expr->literal.type == TK_STRING) {
       // TODO: We should probably set this name earlier, or have some
-      // way of getting this name from jujst a string index. Static
+      // way of getting this name from just a string index. Static
       // variable is big bad. Valve, pls fix. Literally unplayable.
       char buf[48] = {0};
       static size_t string_literal_count = 0;
