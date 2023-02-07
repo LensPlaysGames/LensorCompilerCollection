@@ -199,12 +199,6 @@ NODISCARD static Type *common_type(Type *a, Type *b) {
   return NULL;
 }
 
-/// Check if a type is a pointer type.
-NODISCARD static bool is_pointer(Type *type) { return type_is_pointer(type); }
-
-/// Check if a type is an array type.
-NODISCARD static bool is_array(Type *type) { return type_is_array(type); }
-
 /// Check if an expression is an lvalue.
 NODISCARD static bool is_lvalue(Node *expr) {
   switch (expr->kind) {
@@ -919,20 +913,20 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       // FROM any pointer type TO any pointer type is ALLOWED
       // TODO: Check base type size + alignment...
-      if (is_pointer(t_from) && is_pointer(t_to)) break;
+      if (type_is_pointer(t_from) && type_is_pointer(t_to)) break;
       // FROM any pointer type TO any integer type is ALLOWED
-      if (is_pointer(t_from) && is_integer(t_to)) break;
+      if (type_is_pointer(t_from) && is_integer(t_to)) break;
       // FROM any integer type TO any integer type is ALLOWED
       if (is_integer(t_from) && is_integer(t_to)) break;
 
       // FROM any integer type TO any pointer type is currently DISALLOWED, but very well may change
-      if (is_integer(t_from) && is_pointer(t_to))
+      if (is_integer(t_from) && type_is_pointer(t_to))
         ERR(expr->cast.value->source_location,
             "Can not cast from an integer type %T to pointer type %T",
             t_from, t_to);
 
       // FROM any array type TO any array type is DISALLOWED
-      if (is_array(t_from) && is_array(t_to)) {
+      if (type_is_array(t_from) && type_is_array(t_to)) {
         ERR(expr->cast.value->source_location,
             "Can not cast between arrays.");
       }
@@ -958,7 +952,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         /// The subscript operator is basically pointer arithmetic.
         case TK_LBRACK:
           /// We can only subscript pointers and arrays.
-          if (!is_pointer(lhs->type) && !is_array(lhs->type))
+          if (!type_is_pointer(lhs->type) && !type_is_array(lhs->type))
             ERR(lhs->source_location,
               "Cannot subscript non-pointer, non-array type '%T'.",
                 lhs->type);
@@ -1046,7 +1040,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
         /// We can only deference pointers.
         case TK_AT:
-          if (!is_pointer(expr->unary.value->type))
+          if (!type_is_pointer(expr->unary.value->type))
             ERR(expr->unary.value->source_location,
               "Argument of '@' must be a pointer.");
 
@@ -1100,8 +1094,8 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
   /// If this is a pointer type, make sure it doesn’t point to an incomplete type.
   Type *base = expr->type;
-  while (base && is_pointer(base)) base = base->pointer.to;
-  if (base && is_pointer(expr->type /** (!) **/) && type_is_incomplete(base))
+  while (base && type_is_pointer(base)) base = base->pointer.to;
+  if (base && type_is_pointer(expr->type /** (!) **/) && type_is_incomplete(base))
     ERR(expr->source_location,
       "Cannot use pointer to incomplete type '%T'.",
         expr->type->pointer.to);

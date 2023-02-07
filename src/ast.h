@@ -514,7 +514,7 @@ Type *ast_make_type_function(
 /// Get a string representation of a type.
 /// \return The string representation of the type. The string is allocated
 ///         with malloc() and must be freed by the caller.
-string typename(Type *type, bool colour);
+NODISCARD string typename(Type *type, bool colour);
 
 /** Get the canonical type of any given type.
  *
@@ -530,12 +530,12 @@ string typename(Type *type, bool colour);
  *
  * \return NULL if the type is incomplete.
  */
-Type *type_canonical(Type *type);
+NODISCARD Type *type_canonical(Type *type);
 
 /// Get the last alias of a type.
 ///
 /// This function strips nested named types until there is only one left.
-Type *type_last_alias(Type *type);
+NODISCARD Type *type_last_alias(Type *type);
 
 /** Check if a type is incomplete.
  *
@@ -552,7 +552,7 @@ Type *type_last_alias(Type *type);
  *
  * \return true iff the type is incomplete.
  */
-bool type_is_incomplete(Type *type);
+NODISCARD bool type_is_incomplete(Type *type);
 
 /** Same as type_is_incomplete() but must be given a canonical type.
  *
@@ -561,29 +561,29 @@ bool type_is_incomplete(Type *type);
  *
  * \return true iff the given canonical type is incomplete.
  */
-bool type_is_incomplete_canon(Type *type);
+NODISCARD bool type_is_incomplete_canon(Type *type);
 
 /// Get the size of a type, in bytes.
-usz type_sizeof(Type *type);
+NODISCARD usz type_sizeof(Type *type);
 
 /// Get the aligmnent of a type, in bytes.
-usz type_alignof(Type *type);
+NODISCARD usz type_alignof(Type *type);
 
 /// Check if a type is void.
-bool type_is_void(Type *type);
+NODISCARD bool type_is_void(Type *type);
 
 /// Check if a type is of pointer type.
-bool type_is_pointer(Type *type);
+NODISCARD bool type_is_pointer(Type *type);
 
 /// Check if a type is of array type.
-bool type_is_array(Type *type);
+NODISCARD bool type_is_array(Type *type);
 
 
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================
 /// Create a new AST.
-AST *ast_create();
+NODISCARD AST *ast_create();
 
 /// Free an AST.
 void ast_free(AST *ast);
