@@ -791,11 +791,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       Type *body = expr->function.body->type;
       if (!convertible(ret, body)) {
         loc l = {0};
-        if (expr->function.body->kind == NODE_BLOCK) {
+        if (expr->function.body->kind == NODE_BLOCK)
           l = vector_back_or(expr->function.body->block.children, expr)->source_location;
-        } else {
-          l = expr->function.body->source_location;
-        }
+        else l = expr->function.body->source_location;
         ERR(l,
             "Type '%T' of function body is not convertible to return type '%T'.",
             body, ret);
