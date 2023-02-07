@@ -269,6 +269,8 @@ int main(int argc, char **argv) {
   if (len >= 3 && memcmp(infile + len - 3, ".ir", 3) == 0) {
     ASSERT(s.data);
 
+    TODO("Development of IR parser and codegen is severely behind right now.");
+
     if (!codegen(
       LANG_IR,
       output_format,
