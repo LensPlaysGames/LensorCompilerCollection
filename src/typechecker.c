@@ -200,10 +200,10 @@ NODISCARD static Type *common_type(Type *a, Type *b) {
 }
 
 /// Check if a type is a pointer type.
-NODISCARD static bool is_pointer(Type *type) { return type->kind == TYPE_POINTER; }
+NODISCARD static bool is_pointer(Type *type) { return type_is_pointer(type); }
 
 /// Check if a type is an array type.
-NODISCARD static bool is_array(Type *type) { return type->kind == TYPE_ARRAY; }
+NODISCARD static bool is_array(Type *type) { return type_is_array(type); }
 
 /// Check if an expression is an lvalue.
 NODISCARD static bool is_lvalue(Node *expr) {

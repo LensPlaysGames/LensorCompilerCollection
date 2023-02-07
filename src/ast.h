@@ -572,6 +572,13 @@ usz type_alignof(Type *type);
 /// Check if a type is void.
 bool type_is_void(Type *type);
 
+/// Check if a type is of pointer type.
+bool type_is_pointer(Type *type);
+
+/// Check if a type is of array type.
+bool type_is_array(Type *type);
+
+
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================

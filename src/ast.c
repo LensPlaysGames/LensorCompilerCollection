@@ -511,6 +511,16 @@ bool type_is_void(Type *type) {
   return type_canonical(type) == t_void;
 }
 
+bool type_is_pointer(Type *type) {
+  Type * t = type_canonical(type);
+  return t && t->kind == TYPE_POINTER;
+}
+
+bool type_is_array(Type *type) {
+  Type * t = type_canonical(type);
+  return t && t->kind == TYPE_ARRAY;
+}
+
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================
