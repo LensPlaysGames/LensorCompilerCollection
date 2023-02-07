@@ -364,9 +364,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       codegen_expr(ctx, rhs);
 
       IRInstruction *subs_lhs = NULL;
-      if (lhs->type->kind != TYPE_ARRAY && lhs->type->kind == TYPE_POINTER) {
+      if (!type_is_array(lhs->type) && !type_is_pointer(lhs->type))
         ERR("Subscript operator may only operate on arrays and pointers, which type %T is not", lhs->type);
-      }
+
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
         // TODO: Handle local variable references, somehow. How can we tell if it's local/static?
         subs_lhs = ir_static_reference(ctx, as_span(lhs->var->name));
@@ -380,12 +380,12 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
       IRInstruction *scaled_rhs = NULL;
       // An array subscript needs multiplied by the sizeof the array's base type.
-      if (lhs->type->kind == TYPE_ARRAY) {
+      if (type_is_array(lhs->type)) {
         IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->array.of));
         scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
       }
-        // A pointer subscript needs multiplied by the sizeof the pointer's base type.
-      else if (lhs->type->kind == TYPE_POINTER) {
+      // A pointer subscript needs multiplied by the sizeof the pointer's base type.
+      else if (type_is_pointer(lhs->type)) {
         IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->pointer.to));
         scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
       }
