@@ -369,7 +369,13 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
         // TODO: Handle local variable references, somehow. How can we tell if it's local/static?
-        subs_lhs = ir_static_reference(ctx, as_span(lhs->var->name));
+        IRInstruction *var = lhs->var->val.node->ir;
+        // ASSERT(var);
+        if (var->kind == IR_STATIC_REF)
+          subs_lhs = ir_static_reference(ctx, as_span(lhs->var->name));
+        else if (var->kind == IR_ALLOCA)
+          //subs_lhs = ir_(ctx, as_span(lhs->var->name));
+          TODO("Codegen local variable reference");
       } else if (lhs->kind == NODE_LITERAL && lhs->literal.type == TK_STRING) {
         TODO("IR generation for subscript of string literal");
       }
