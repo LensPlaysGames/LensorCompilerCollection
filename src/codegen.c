@@ -374,7 +374,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         IRInstruction *var = lhs->var->val.node->ir;
         // ASSERT(var);
         if (var->kind == IR_STATIC_REF)
-          subs_lhs = ir_static_reference(ctx, as_span(lhs->var->name));
+          subs_lhs = var;
         else if (var->kind == IR_ALLOCA)
           subs_lhs = var;
       } else if (lhs->kind == NODE_LITERAL && lhs->literal.type == TK_STRING) {
