@@ -371,14 +371,12 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         ERR("Subscript operator may only operate on arrays and pointers, which type %T is not", lhs->type);
 
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
-        // TODO: Handle local variable references, somehow. How can we tell if it's local/static?
         IRInstruction *var = lhs->var->val.node->ir;
         // ASSERT(var);
         if (var->kind == IR_STATIC_REF)
           subs_lhs = ir_static_reference(ctx, as_span(lhs->var->name));
         else if (var->kind == IR_ALLOCA)
-          //subs_lhs = ir_(ctx, as_span(lhs->var->name));
-          TODO("IR generation for subscript of local variable reference");
+          subs_lhs = var;
       } else if (lhs->kind == NODE_LITERAL && lhs->literal.type == TK_STRING) {
         TODO("IR generation for subscript of string literal");
       }
@@ -395,7 +393,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->pointer.to));
         scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
       }
-      expr->ir = ir_add(ctx, subs_lhs, scaled_rhs);
+      expr->ir = ir_add(ctx, scaled_rhs, subs_lhs);
       return;
     }
 
