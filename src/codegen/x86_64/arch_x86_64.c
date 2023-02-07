@@ -928,8 +928,8 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   case IR_EQ: codegen_comparison(context, COMPARE_EQ, inst->lhs->result, inst->rhs->result, inst->result); break;
   case IR_NE: codegen_comparison(context, COMPARE_NE, inst->lhs->result, inst->rhs->result, inst->result); break;
   case IR_ADD:
-    femit_reg_to_reg(context, I_ADD, inst->rhs->result, inst->lhs->result);
-    femit_reg_to_reg(context, I_MOV, inst->lhs->result, inst->result);
+    femit_reg_to_reg(context, I_ADD, inst->lhs->result, inst->rhs->result);
+    femit_reg_to_reg(context, I_MOV, inst->rhs->result, inst->result);
     break;
   case IR_SUB:
     femit_reg_to_reg(context, I_SUB, inst->rhs->result, inst->lhs->result);

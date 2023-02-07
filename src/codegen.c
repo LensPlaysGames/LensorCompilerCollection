@@ -393,7 +393,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->pointer.to));
         scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
       }
-      expr->ir = ir_add(ctx, scaled_rhs, subs_lhs);
+      expr->ir = ir_add(ctx, subs_lhs, scaled_rhs);
       return;
     }
 
