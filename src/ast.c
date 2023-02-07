@@ -9,17 +9,23 @@
   usz alignment;
   span name;
   bool is_signed;
+  /// A unique ID that is used to compare primitives.
   uint8_t id;
 } TypePrimitive;*/
 static Type t_void_def = {
-    .kind = TYPE_PRIMITIVE,
-    .source_location = {0},
-    .primitive = {
-        .size = 0,
-        .alignment = 0,
-        .name = literal_span_raw("void"),
-        .id = 0,
-    },
+  .kind = TYPE_PRIMITIVE,
+  .source_location = {0},
+  .primitive = {
+    .size = 0,
+    .alignment = 0,
+    .name = literal_span_raw("void"),
+  },
+};
+
+static Type t_void_pointer_def = {
+  .kind = TYPE_POINTER,
+  .source_location = {0},
+  .pointer = { .to = &t_void_def },
 };
 
 static Type t_integer_literal_def = {
@@ -30,34 +36,33 @@ static Type t_integer_literal_def = {
     .alignment = 8,
     .name = literal_span_raw("<integer_literal>"),
     .is_signed = true,
-    .id = 1,
   },
 };
 
 static Type t_integer_def = {
-    .kind = TYPE_PRIMITIVE,
-    .source_location = {0},
-    .primitive = {
-        .size = 8,
-        .alignment = 8,
-        .name = literal_span_raw("integer"),
-        .is_signed = true,
-        .id = 1,
-    },
+  .kind = TYPE_PRIMITIVE,
+  .source_location = {0},
+  .primitive = {
+    .size = 8,
+    .alignment = 8,
+    .name = literal_span_raw("integer"),
+    .is_signed = true,
+  },
 };
 
 static Type t_byte_def = {
-    .kind = TYPE_PRIMITIVE,
-    .source_location = {0},
-    .primitive = {
-        .size = 1,
-        .alignment = 1,
-        .name = literal_span_raw("byte"),
-        .id = 3,
-    },
+  .kind = TYPE_PRIMITIVE,
+  .source_location = {0},
+  .primitive = {
+    .size = 1,
+    .alignment = 1,
+    .name = literal_span_raw("byte"),
+    .is_signed = false,
+  },
 };
 
 Type * const t_void = &t_void_def;
+Type * const t_void_ptr = &t_void_pointer_def;
 Type * const t_integer_literal = &t_integer_literal_def;
 Type * const t_integer = &t_integer_def;
 Type * const t_byte = &t_byte_def;
@@ -497,8 +502,23 @@ usz type_sizeof(Type *type) {
   }
 }
 
+usz type_alignof(Type *type) {
+  TODO("Unimplemented, sorry");
+  return 69;
+}
+
 bool type_is_void(Type *type) {
   return type_canonical(type) == t_void;
+}
+
+bool type_is_pointer(Type *type) {
+  Type * t = type_canonical(type);
+  return t && t->kind == TYPE_POINTER;
+}
+
+bool type_is_array(Type *type) {
+  Type * t = type_canonical(type);
+  return t && t->kind == TYPE_ARRAY;
 }
 
 /// ===========================================================================
@@ -597,7 +617,7 @@ static void ast_print_children(
 );
 
 /// Print a node.
-static void ast_print_node(
+void ast_print_node_internal(
   FILE *file,
   const Node *logical_parent,
   const Node *node,
@@ -745,6 +765,12 @@ static void ast_print_node(
   }
 }
 
+void ast_print_node(const Node *node) {
+  string_buffer buf = {0};
+  ast_print_node_internal(stdout, NULL, node, &buf);
+  vector_delete(buf);
+}
+
 /// Scope tree for printing scopes.
 typedef struct scope_tree_node {
   const Scope *scope;
@@ -826,7 +852,7 @@ void ast_print(FILE *file, const AST *ast) {
   string_buffer buf = {0};
 
   /// Print the root node.
-  ast_print_node(file, NULL, ast->root, &buf);
+  ast_print_node_internal(file, NULL, ast->root, &buf);
 }
 
 /// Print the children of a node.
@@ -851,7 +877,7 @@ static void ast_print_children(
     format_to(buf, "%s", node == vector_back(*nodes) ? "  " : "│ ");
 
     /// Print the node.
-    ast_print_node(file, logical_parent, node, buf);
+    ast_print_node_internal(file, logical_parent, node, buf);
 
     /// Restore the leading text.
     buf->size = sz;

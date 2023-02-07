@@ -96,6 +96,7 @@ static void next_char(Parser *p) {
 
   /// Read the next character.
   p->lastc = *p->curr++;
+  if (p->lastc == 0) ERR("Lexer can not handle null bytes");
   if (p->lastc == '\r') p->lastc = '\n';
 }
 
@@ -366,13 +367,31 @@ static void next_token(Parser *p) {
       }
       break;
 
+    // String.
+    case '"':
+      // TODO: Decide on delimiters. Should single/double quote be equal? Raw vs escaped? etc.
+      if (p->lastc == '"') {
+        p->tok.type = TK_STRING;
+        p->tok.text.data = p->curr;
+        p->tok.text.size = 0;
+        next_char(p); //> Eat beginning delimiter
+        while (p->lastc != '"' && p->lastc != 0) {
+          // TODO: Handle escapes
+          p->tok.text.size += 1;
+          next_char(p);
+        }
+        if (p->lastc == 0) ERR("Got EOF before end of string literal...");
+        next_char(p); //> Eat ending delimiter
+        break;
+      }
+      break;
+
     /// Number or identifier.
     default:
       /// Identifier.
       if (isstart(p->lastc)) {
         next_identifier(p);
 
-        /// Check if the identifier is a keyword.
         for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
           if (string_eq(keywords[i].kw, p->tok.text)) {
             p->tok.type = keywords[i].type;
@@ -1054,14 +1073,13 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
     if (prec == current_precedence && !is_right_associative(p, p->tok)) return lhs;
 
     /// Otherwise, we need to parse the RHS.
-    u32 start = p->tok.source_location.start;
     enum TokenType tt = p->tok.type;
     next_token(p);
 
     /// The `as` operator is special because its RHS is a type.
     if (tt == TK_AS) {
       Type *type = parse_type(p);
-      lhs = ast_make_cast(p->ast, (loc){.start = start, .end = type->source_location.end}, type, lhs);
+      lhs = ast_make_cast(p->ast, (loc){.start = lhs->source_location.start, .end = type->source_location.end}, type, lhs);
       continue;
     }
 
@@ -1070,7 +1088,7 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
       Node *rhs = parse_expr_with_precedence(p, prec);
 
       /// Combine the LHS and RHS into a binary expression.
-      lhs = ast_make_binary(p->ast, (loc){.start = start, .end = rhs->source_location.end}, tt, lhs, rhs);
+      lhs = ast_make_binary(p->ast, (loc){.start = lhs->source_location.start, .end = rhs->source_location.end}, tt, lhs, rhs);
     }
   }
 }
@@ -1083,7 +1101,7 @@ AST *parse(span source, const char *filename) {
   p.source = source;
   p.filename = filename;
   p.curr = source.data;
-  p.end = source.data + source.size;
+  p.end = source.data + source.size - 1;
   p.lastc = ' ';
   p.ast = ast_create();
   p.ast->filename = string_create(filename);

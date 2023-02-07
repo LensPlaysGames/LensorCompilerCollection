@@ -1,4 +1,4 @@
-#!/usr/bin/a68g --script 
+#!/usr/bin/a68g --script
 
 PROC platform is windows = BOOL: get env ("WINDIR") NE "";
 STRING platform dir sep   = (platform is windows | "\"     | "/"        );
@@ -246,7 +246,7 @@ BEGIN
     get (f, (str, new line));
     str := str[3..]
   CO If we have labels, and this test doesn’t, skip it CO
-  ELIF labels NE "" THEN 
+  ELIF labels NE "" THEN
     GO TO return
   FI;
 

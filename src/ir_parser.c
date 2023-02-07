@@ -572,7 +572,8 @@ static bool parse_instruction_or_branch(IRParser *p) {
   /// An instruction may be a number.
   /// <value-instruction> ::= NUMBER
   if (p->tok_type == tk_number) {
-    i = ir_immediate(p->context, p->integer);
+    // TODO: Better type recognition here.
+    i = ir_immediate(p->context, t_integer, p->integer);
     next_token(p);
   }
 
@@ -655,7 +656,8 @@ static bool parse_instruction_or_branch(IRParser *p) {
       /// PHI { "[" <name> ":" <temp> "]" }
     case PHI: {
       next_token(p);
-      i = ir_phi(p->context);
+      // TODO: Set ir_phi type...
+      i = ir_phi(p->context, t_void);
 
       /// Parse the phi arguments.
       while (p->tok_type == tk_lbrack) {
@@ -695,7 +697,8 @@ static bool parse_instruction_or_branch(IRParser *p) {
     case IMMEDIATE: {
       next_token(p);
       if (p->tok_type != tk_number) ERR("Expected number after 'imm'");
-      i = ir_immediate(p->context, p->integer);
+      // TODO: Better type recognition
+      i = ir_immediate(p->context, t_integer, p->integer);
       next_token(p);
     } break;
 
@@ -780,6 +783,8 @@ static bool parse_instruction_or_branch(IRParser *p) {
       if (p->tok_type != tk_number) ERR_AT(i_loc, "Expected physical register after REGISTER");
       INSTRUCTION(reg, IR_REGISTER);
       ir_insert(p->context, reg);
+      // TODO: Type of IR_REGISTER?
+      reg->type = t_void;
       reg->result = (Register) p->integer;
       i = reg;
       next_token(p);
@@ -788,7 +793,8 @@ static bool parse_instruction_or_branch(IRParser *p) {
     /// ALLOCA
     case ALLOCA: {
       next_token(p);
-      i = ir_stack_allocate(p->context, 8);
+      // TODO: Not everything is an 8 byte signed integer
+      i = ir_stack_allocate(p->context, t_integer);
     } break;
 
     /// <branch> ::= UNREACHABLE "\n" | ...
@@ -996,7 +1002,8 @@ static void parse_parameters(IRParser *p) {
     /// Create a parameter reference.
     if (p->tok_type != tk_temp) ERR("Expected temporary after '(' or ','");
     if (p->tok.data[0] == '#') ERR("Function parameter must be a temporary register");
-    ir_add_parameter_to_function(vector_back(p->context->functions));
+    // TODO: Parse param type...
+    ir_add_parameter_to_function(vector_back(p->context->functions), t_void);
     IRInstruction *param = ir_parameter(p->context, param_count++);
     make_temp(p, here(p), p->tok, param);
     next_token(p);

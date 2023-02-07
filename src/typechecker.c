@@ -42,9 +42,10 @@ NODISCARD static bool types_equal_canon(Type *a, Type *b) {
     default: ICE("Invalid type kind %d", a->kind);
     case TYPE_NAMED: UNREACHABLE();
     case TYPE_PRIMITIVE:
+      // t_integer_literal is implicitly equal to t_integer
       if (a == t_integer_literal) return b == t_integer_literal || b == t_integer;
       if (b == t_integer_literal) return a == t_integer_literal || a == t_integer;
-      return a->primitive.id == b->primitive.id;
+      return a == b;
     case TYPE_POINTER: return types_equal(a->pointer.to, b->pointer.to);
     case TYPE_ARRAY: return a->array.size == b->array.size && types_equal(a->array.of, b->array.of);
     case TYPE_FUNCTION: {
@@ -102,7 +103,6 @@ NODISCARD static bool types_equal(Type *a, Type *b) {
 
 /// Check if a canonical type is an integer type.
 NODISCARD static bool is_integer_canon(Type *t) {
-  /// Currently, all primitive types are integers.
   return t == t_integer || t == t_integer_literal  || t == t_byte;
 }
 
@@ -198,12 +198,6 @@ NODISCARD static Type *common_type(Type *a, Type *b) {
   /// No common type.
   return NULL;
 }
-
-/// Check if a type is a pointer type.
-NODISCARD static bool is_pointer(Type *type) { return type->kind == TYPE_POINTER; }
-
-/// Check if a type is an array type.
-NODISCARD static bool is_array(Type *type) { return type->kind == TYPE_ARRAY; }
 
 /// Check if an expression is an lvalue.
 NODISCARD static bool is_lvalue(Node *expr) {
@@ -789,10 +783,15 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// Make sure the return type of the body is convertible to that of the function.
       Type *ret = expr->type->function.return_type;
       Type *body = expr->function.body->type;
-      if (!convertible(ret, body))
-        ERR(expr->source_location,
-          "Type '%T' of function body is not convertible to return type '%T'.",
-            ret, body);
+      if (!convertible(ret, body)) {
+        loc l = {0};
+        if (expr->function.body->kind == NODE_BLOCK)
+          l = vector_back_or(expr->function.body->block.children, expr)->source_location;
+        else l = expr->function.body->source_location;
+        ERR(l,
+            "Type '%T' of function body is not convertible to return type '%T'.",
+            body, ret);
+      }
     } break;
 
     /// Typecheck declarations.
@@ -890,7 +889,54 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     } break;
 
     /// Make sure a cast is even possible.
-    case NODE_CAST: TODO();
+    case NODE_CAST: {
+      Type *t_to = expr->type;
+      if (type_is_incomplete(t_to))
+        ERR(t_to->source_location, "Can not cast to incomplete type %T", t_to);
+
+      if (!typecheck_expression(ast, expr->cast.value))
+        return false;
+
+      Type *t_from = expr->cast.value->type;
+
+      // TODO: Is complete to incomplete allowed?
+
+      // FROM any type T TO type T is ALLOWED
+      if (types_equal(t_to, t_from)) break;
+
+      // FROM any incomplete type is DISALLOWED
+      if (type_is_incomplete(t_from))
+        ERR(expr->cast.value->source_location, "Can not cast from an incomplete type %T", t_from);
+      // TO any complete type is DISALLOWED
+      if (type_is_incomplete(t_to))
+        ERR(expr->cast.value->source_location, "Can not cast to an incomplete type %T", t_to);
+
+      // FROM any pointer type TO any pointer type is ALLOWED
+      // TODO: Check base type size + alignment...
+      if (type_is_pointer(t_from) && type_is_pointer(t_to)) break;
+      // FROM any pointer type TO any integer type is ALLOWED
+      if (type_is_pointer(t_from) && is_integer(t_to)) break;
+      // FROM any integer type TO any integer type is ALLOWED
+      if (is_integer(t_from) && is_integer(t_to)) break;
+
+      // FROM any integer type TO any pointer type is currently DISALLOWED, but very well may change
+      if (is_integer(t_from) && type_is_pointer(t_to))
+        ERR(expr->cast.value->source_location,
+            "Can not cast from an integer type %T to pointer type %T",
+            t_from, t_to);
+
+      // FROM any array type TO any array type is DISALLOWED
+      if (type_is_array(t_from) && type_is_array(t_to)) {
+        ERR(expr->cast.value->source_location,
+            "Can not cast between arrays.");
+      }
+
+      // TODO: functions?
+
+      ERR(expr->cast.value->source_location,
+          "Casting from %T to %T is not supported by the typechecker\n"
+          "  Open an issue with the current maintainers if you feel like this is not the proper behaviour.", t_from, t_to);
+    }
 
     /// Binary expression. This is a complicated one.
     case NODE_BINARY: {
@@ -906,7 +952,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         /// The subscript operator is basically pointer arithmetic.
         case TK_LBRACK:
           /// We can only subscript pointers and arrays.
-          if (!is_pointer(lhs->type) && !is_array(lhs->type))
+          if (!type_is_pointer(lhs->type) && !type_is_array(lhs->type))
             ERR(lhs->source_location,
               "Cannot subscript non-pointer, non-array type '%T'.",
                 lhs->type);
@@ -994,7 +1040,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
         /// We can only deference pointers.
         case TK_AT:
-          if (!is_pointer(expr->unary.value->type))
+          if (!type_is_pointer(expr->unary.value->type))
             ERR(expr->unary.value->source_location,
               "Argument of '@' must be a pointer.");
 
@@ -1025,6 +1071,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Just set the type.
     case NODE_LITERAL:
       if (expr->literal.type == TK_NUMBER) expr->type = t_integer_literal;
+      else if (expr->literal.type == TK_STRING) {
+        string s = ast->strings.data[expr->literal.string_index];
+        expr->type = ast_make_type_array(ast, expr->source_location, t_byte, s.size + 1);
+      }
       else TODO("Literal type '%s'.", token_type_to_string(expr->literal.type));
       break;
 
@@ -1044,8 +1094,8 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
   /// If this is a pointer type, make sure it doesn’t point to an incomplete type.
   Type *base = expr->type;
-  while (base && is_pointer(base)) base = base->pointer.to;
-  if (base && is_pointer(expr->type /** (!) **/) && type_is_incomplete(base))
+  while (base && type_is_pointer(base)) base = base->pointer.to;
+  if (base && type_is_pointer(expr->type /** (!) **/) && type_is_incomplete(base))
     ERR(expr->source_location,
       "Cannot use pointer to incomplete type '%T'.",
         expr->type->pointer.to);

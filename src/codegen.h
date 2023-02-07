@@ -40,8 +40,6 @@ struct RegisterPool {
 typedef struct IRStaticVariable {
   string name;
   Type *type;
-  usz cached_size;
-  usz cached_alignment;
   IRInstruction *reference;
 } IRStaticVariable;
 

@@ -1,5 +1,6 @@
 #include <codegen.h>
 
+#include <ast.h>
 #include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/x86_64/arch_x86_64.h>
@@ -7,6 +8,8 @@
 #include <error.h>
 #include <ir_parser.h>
 #include <opt.h>
+#include <utils.h>
+
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -153,7 +156,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_DECLARATION:
       expr->ir = expr->declaration.static_
         ? ir_create_static(ctx, expr->type, as_span(expr->declaration.name))
-        : ir_stack_allocate(ctx, type_sizeof(expr->type));
+        : ir_stack_allocate(ctx, expr->type);
 
       /// Emit the initialiser if there is one.
       if (expr->declaration.init) {
@@ -215,7 +218,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
     /// Insert a phi node for the result of the if in the join block.
     if (!type_is_void(expr->type)) {
-      IRInstruction *phi = ir_phi(ctx);
+      IRInstruction *phi = ir_phi(ctx, expr->type);
       ir_phi_argument(phi, last_then_block, expr->if_.then->ir);
       ir_phi_argument(phi, last_else_block, expr->if_.else_->ir);
       expr->ir = phi;
@@ -318,11 +321,22 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   }
 
   /// Typecast.
-  case NODE_CAST: { TODO(); }
+  case NODE_CAST: {
+    Type *t_to = expr->type;
+    Type *t_from = expr->cast.value->type;
+
+    usz to_sz = type_sizeof(t_to);
+    usz from_sz = type_sizeof(t_from);
+
+    // TODO: Take signedness into account (zext/sext).
+
+    TODO("Codegen cast from %T to %T", t_from, t_to);
+  }
 
   /// Binary expression.
   case NODE_BINARY: {
-    Node * const lhs = expr->binary.lhs, * const rhs = expr->binary.rhs;
+    Node *const lhs = expr->binary.lhs;
+    Node *const rhs = expr->binary.rhs;
 
     /// Assignment needs to be handled separately.
     if (expr->binary.op == TK_COLON_EQ) {
@@ -343,10 +357,47 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         return;
       }
 
-      /// Anything else is an error (I think?).
-      /// Otherwise, actually emit the LHS and load from that.
-      /*codegen_expr(ctx, lhs);
-      expr->ir = ir_store(ctx, lhs->ir, rhs->ir);*/
+      ICE("Invalid type of lhs of assignment (should have been caught by sema): %T", lhs->type);
+    }
+
+    if (expr->binary.op == TK_LBRACK) {
+      // TODO: Just use lhs operand of subscript operator when right hand
+      // side is a compile-time-known zero value.
+
+      IRInstruction *subs_lhs = NULL;
+      if (!type_is_array(lhs->type) && !type_is_pointer(lhs->type))
+        ERR("Subscript operator may only operate on arrays and pointers, which type %T is not", lhs->type);
+
+      if (lhs->kind == NODE_VARIABLE_REFERENCE) {
+        IRInstruction *var_decl = lhs->var->val.node->ir;
+        // ASSERT(var);
+        if (var_decl->kind == IR_STATIC_REF || var_decl->kind == IR_ALLOCA)
+          subs_lhs = var_decl;
+        else {
+          ir_femit_instruction(stdout, var_decl);
+          ERR("Unhandled variable reference IR instruction kind %i", var_decl->kind);
+        }
+
+      } else if (lhs->kind == NODE_LITERAL && lhs->literal.type == TK_STRING) {
+        // ctx->ast->strings.data[lhs->literal.string_index];
+        TODO("IR generation for subscript of string literal");
+      }
+      else ERR("LHS of subscript operator has invalid kind %d", lhs->kind);
+
+      codegen_expr(ctx, rhs);
+
+      IRInstruction *scaled_rhs = NULL;
+      // An array subscript needs multiplied by the sizeof the array's base type.
+      if (type_is_array(lhs->type)) {
+        IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->array.of));
+        scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
+      }
+      // A pointer subscript needs multiplied by the sizeof the pointer's base type.
+      else if (type_is_pointer(lhs->type)) {
+        IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->pointer.to));
+        scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
+      }
+      expr->ir = ir_add(ctx, subs_lhs, scaled_rhs);
       return;
     }
 
@@ -357,7 +408,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     /// Emit the binary instruction.
     switch (expr->binary.op) {
       default: ICE("Cannot emit binary expression of type %d", expr->binary.op);
-      case TK_LBRACK: expr->ir = ir_add(ctx, lhs->ir, rhs->ir); return;
+      case TK_LBRACK: UNREACHABLE();
       case TK_LT: expr->ir = ir_lt(ctx, lhs->ir, rhs->ir); return;
       case TK_LE: expr->ir = ir_le(ctx, lhs->ir, rhs->ir); return;
       case TK_GT: expr->ir = ir_gt(ctx, lhs->ir, rhs->ir); return;
@@ -383,7 +434,12 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       switch (expr->unary.value->kind) {
         case NODE_DECLARATION: expr->ir = expr->unary.value->ir; return;
         case NODE_VARIABLE_REFERENCE: expr->ir = expr->unary.value->var->val.node->ir; return;
-        default: ICE("Cannot take address of expression of type %d", expr->unary.value->kind);
+        case NODE_LITERAL: {
+          if (expr->literal.type == TK_STRING) {
+            TODO("IR code generation of addressof string literal");
+          }
+        } return;
+        default: ICE("Cannot take address of expression of kind %d", expr->unary.value->kind);
       }
     }
 
@@ -393,16 +449,16 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     /// Prefix expressions.
     if (!expr->unary.postfix) {
       switch (expr->unary.op) {
-        default: ICE("Cannot emit unary prefix expression of type %d", expr->unary.op);
+        default: ICE("Cannot emit unary prefix expression of token type %d", expr->unary.op);
 
         /// Load a value from an lvalue.
         /// Emitting an lvalue loads it, so we don’t need to do anything here.
         case TK_AT:
           /// TODO: This check for a function pointer is a bit sus. We shouldn’t
           ///       even get here if this is actually a function pointer...
-          if (expr->unary.value->type->pointer.to->kind == TYPE_FUNCTION) {
+          if (expr->unary.value->type->pointer.to->kind == TYPE_FUNCTION)
             expr->ir = expr->unary.value->ir;
-          } else {
+          else {
             expr->ir = ir_load(ctx, expr->unary.value->ir);
           }
           return;
@@ -422,8 +478,23 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Literal expression. Only integer literals are supported for now.
   case NODE_LITERAL:
-    if (expr->literal.type != TK_NUMBER) DIAG(DIAG_SORRY, expr->source_location, "Emitting non-integer literals not supported");
-    expr->ir = ir_immediate(ctx, expr->literal.integer);
+    if (expr->literal.type == TK_NUMBER) expr->ir = ir_immediate(ctx, expr->type, expr->literal.integer);
+    else if (expr->literal.type == TK_STRING) {
+      // TODO: We should probably set this name earlier, or have some
+      // way of getting this name from just a string index. Static
+      // variable is big bad. Valve, pls fix. Literally unplayable.
+      char buf[48] = {0};
+      static size_t string_literal_count = 0;
+      int len = snprintf(buf, 48, "__str_lit%zu", string_literal_count++);
+      // TODO: Two options. Since we can't currently assign to static
+      // variables with compile-time known constants, it means that
+      // strings go uninitialised... So what would really be ideal
+      // is if we could just, ya know, do that. (i.e. `.string` as
+      // directive or asciz or whathaveyou). Our other option is to
+      // emit (imm+store) pairs for every byte...
+      expr->ir = ir_create_static(ctx, expr->type, as_span(string_create(buf)));
+    }
+    else DIAG(DIAG_SORRY, expr->source_location, "Emitting literals of type %T not supported", expr->type);
     return;
 
   /// Variable reference.
@@ -456,13 +527,11 @@ void codegen_function(CodegenContext *ctx, Node *node) {
   /// Emit the function body.
   codegen_expr(ctx, node->function.body);
 
-  /// If the we can return from here, and this function doesn’t return void,
+  /// If we can return from here, and this function doesn’t return void,
   /// then return the return value; otherwise, just return nothing.
-  if (!ir_is_closed(ctx->block) && !type_is_void(node->type->function.return_type)) {
+  if (!ir_is_closed(ctx->block) && !type_is_void(node->type->function.return_type))
     ir_return(ctx, node->function.body->ir);
-  } else {
-    ir_return(ctx, NULL);
-  }
+  else ir_return(ctx, NULL);
 }
 
 /// ===========================================================================

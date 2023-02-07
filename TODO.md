@@ -10,11 +10,16 @@
   - [ ] Function bodies must be blocks or preceded by `=`.
   - [ ] `ext` functions may have a body.
   - [ ] Implicit cast sema pass: `a + b` where `a` is a `byte` and `b` an `integer` -> `(a as integer) + b`
+  - [ ] Testing Framework: Add ability to only show failing tests
+  - [ ] `x as void` used to discard `x`
+  - [ ] Resolve the two different kinds of array-type loading: entire copy vs pointer decay. Basically, `foo[2]` needs `foo` to be loaded as a pointer. `a : foo[2] = b` requires loading entire copy of `b` into `a`.
+- [ ] Optimisation
+  - [ ] Zero subscript still does add/multiply when it doesn't need to
 - [ ] Attributes
   - [ ] Parsing
   - [ ] `[[noreturn]]`
-  - [ ] `[[nodiscard]]`
-      - [ ] `[[nodiscard]]` on functions that return `void` should be an error.
+  - [ ] `[[discardable]]`
+    - [ ] Make "no discard" the default for all non-void returning functions.
   - [ ] `[[maybe_unused]]`
   - [ ] `[[deprecated]]`
   - [ ] `[[deprecated("reason")]]`
@@ -36,12 +41,14 @@
     - [ ] Disallow overloading on the return value.
   - [ ] Proper checking for incomplete types in the parser.
 - [ ] Types in the IR
-  - [ ] Byte type
-  - [ ] Type info in codegen/IR.
+  - [x] Byte type
+  - [x] Type info in codegen/IR.
   - [ ] Backend: Handle size/alignment requirements
-  - [ ] Use eax, ax, al, etc.
+  - [x] Use eax, ax, al, etc.
   - [ ] Actually implementing casts.
+    - [ ] During codegen, we should actually output `zext`/`sext` if needed. Otherwise truncation is automatic.
   - [ ] Update IR parser
+  - [ ] Operators (unary and binary) need to pick return type instead of strictly returning `integer`
 - [ ] Arrays
   - [ ] Semantic analysis for static arrays.
   - [ ] Codegen
@@ -57,7 +64,7 @@
   - [ ] Length operator: `#`
   - [ ] Subscripting
 - [ ] Strings
-  - [ ] Parsing string literals.
+  - [x] Parsing string literals.
   - [ ] Codegen.
   - [ ] Backend.
 - [ ] Structs
@@ -69,6 +76,7 @@
   - [ ] `type` keyword in the parser/grammar.
   - [ ] Make sure nested structs work.
   - [ ] Arbitrary compile-time struct literals.
+    - [ ] Syntax?
   - [ ] Structs as parameters.
   - [ ] Structs as return values.
 - [ ] Modules.

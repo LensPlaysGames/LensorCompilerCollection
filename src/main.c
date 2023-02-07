@@ -153,7 +153,7 @@ int handle_command_line_arguments(int argc, char **argv) {
         print_acceptable_formats();
         return 1;
       }
-    } else if (strcmp(argument, "--colours") == 0) {
+    } else if (strcmp(argument, "--colours") == 0 || strcmp(argument, "--colors") == 0) {
       i++;
       if (i >= argc) {
         fprint(stderr, "Error: Expected option value after `--colours`\n");
@@ -268,6 +268,8 @@ int main(int argc, char **argv) {
   /// The input is an IR file.
   if (len >= 3 && memcmp(infile + len - 3, ".ir", 3) == 0) {
     ASSERT(s.data);
+
+    TODO("Development of IR parser and codegen is severely behind right now.");
 
     if (!codegen(
       LANG_IR,

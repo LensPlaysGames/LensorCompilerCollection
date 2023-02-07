@@ -299,7 +299,7 @@ void format_to(string_buffer *buf, const char *fmt, ...) {
 
 /// Format a string.
 string vformat(const char *fmt, va_list args) {
-  string_buffer buf = {};
+  string_buffer buf = {0};
   vformat_to(&buf, fmt, args);
   return (string) { .data = buf.data, .size = buf.size };
 }

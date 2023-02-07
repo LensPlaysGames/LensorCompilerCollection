@@ -152,7 +152,7 @@ typedef struct NodeFunction {
   Node *body;
   string name;
   IRFunction *ir;
-  bool global : 1;
+  bool global;
 } NodeFunction;
 
 /// Variable declaration.
@@ -233,7 +233,6 @@ typedef struct TypePrimitive {
   usz alignment;
   span name;
   bool is_signed;
-  uint8_t id;
 } TypePrimitive;
 
 /// Pointer type.
@@ -514,35 +513,77 @@ Type *ast_make_type_function(
 /// ===========================================================================
 /// Get a string representation of a type.
 /// \return The string representation of the type. The string is allocated
-///         as if with `malloc` and must be freed by the caller.
-string typename(Type *type, bool colour);
+///         with malloc() and must be freed by the caller.
+NODISCARD string typename(Type *type, bool colour);
 
-/// Get the canonical type of a type.
-/// \return NULL if the type is incomplete.
-Type *type_canonical(Type *type);
+/** Get the canonical type of any given type.
+ *
+ * The ‘canonical’ type of a type T is T stripped of any aliases. E.g. in C, given
+ *     typedef int foo;
+ *     typedef foo bar
+ * the canonical type of `bar` would be `int`.
+ *
+ * Currently, builtin types are just named types (i.e. typedefs in C
+ * terminology) that refer to the actual primitive types, and if we
+ * ever introduce something like typedef, it will just work out of the
+ * box.
+ *
+ * \return NULL if the type is incomplete.
+ */
+NODISCARD Type *type_canonical(Type *type);
 
 /// Get the last alias of a type.
 ///
 /// This function strips nested named types until there is only one left.
-Type *type_last_alias(Type *type);
+NODISCARD Type *type_last_alias(Type *type);
 
-/// Check if a type is incomplete.
-bool type_is_incomplete(Type *type);
+/** Check if a type is incomplete.
+ *
+ * A type T is incomplete, iff
+ * - the canonical type of T is void, or
+ * - T has no canonical type. (e.g. if we have @foo, but foo is never
+ *   defined, then foo (which is parsed as a named type) is incomplete
+ *   because it has no canonical type.
+ *
+ * Basically, ‘incomplete’ means that we don’t know its size/alignment
+ * and therefore, we can’t allocate a variable of that type.
+ *
+ * `void` is a special case because it is purposefully incomplete.
+ *
+ * \return true iff the type is incomplete.
+ */
+NODISCARD bool type_is_incomplete(Type *type);
 
-/// Check if a canonical type is incomplete.
-bool type_is_incomplete_canon(Type *type);
+/** Same as type_is_incomplete() but must be given a canonical type.
+ *
+ * \see type_canonical()
+ * \see type_is_incomplete()
+ *
+ * \return true iff the given canonical type is incomplete.
+ */
+NODISCARD bool type_is_incomplete_canon(Type *type);
 
-/// Get the size of a type.
-usz type_sizeof(Type *type);
+/// Get the size of a type, in bytes.
+NODISCARD usz type_sizeof(Type *type);
+
+/// Get the aligmnent of a type, in bytes.
+NODISCARD usz type_alignof(Type *type);
 
 /// Check if a type is void.
-bool type_is_void(Type *type);
+NODISCARD bool type_is_void(Type *type);
+
+/// Check if a type is of pointer type.
+NODISCARD bool type_is_pointer(Type *type);
+
+/// Check if a type is of array type.
+NODISCARD bool type_is_array(Type *type);
+
 
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================
 /// Create a new AST.
-AST *ast_create();
+NODISCARD AST *ast_create();
 
 /// Free an AST.
 void ast_free(AST *ast);
@@ -553,6 +594,9 @@ void ast_print(FILE *file, const AST *ast);
 /// Print the scope tree of an AST.
 void ast_print_scope_tree(FILE *file, const AST *ast);
 
+/// Print a node and all of it's children.
+void ast_print_node(const Node *node);
+
 /// Intern a string.
 size_t ast_intern_string(AST *ast, span string);
 
@@ -562,9 +606,10 @@ void ast_replace_node(AST *ast, Node *old, Node *new);
 /// ===========================================================================
 ///  Builtin types.
 /// ===========================================================================
-extern Type * const t_void;
-extern Type * const t_integer_literal;
-extern Type * const t_integer;
-extern Type * const t_byte;
+extern Type *const t_void;
+extern Type *const t_void_ptr;
+extern Type *const t_integer_literal;
+extern Type *const t_integer;
+extern Type *const t_byte;
 
 #endif // FUNCOMPILER_AST_H

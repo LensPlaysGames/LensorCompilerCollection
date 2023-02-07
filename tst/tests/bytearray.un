@@ -1,0 +1,15 @@
+; 0
+; Eyyy
+
+puts : ext integer(str : @byte)
+
+foo : byte[69]
+@foo[0] := 69
+@foo[1] := 121
+@foo[2] := 121
+@foo[3] := 121
+@foo[4] := 0
+
+puts(foo[0])
+
+0
