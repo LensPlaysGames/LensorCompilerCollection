@@ -485,7 +485,18 @@ IRInstruction *ir_load
   INSTRUCTION(load, IR_LOAD);
 
   load->operand = address;
-  load->type = address->type;
+
+  Type *t = type_canonical(address->type);
+  // TODO: Use !(t && type_is_pointer(t)), once binary operators can
+  // properly select their return types (not just integer).
+  if (!t) {
+    //print("address type: %T\n", address->type);
+    ir_femit_instruction(stdout, address);
+    if (t) ICE("Can not emit IR_LOAD from type %T as it is not a pointer", t);
+    else ICE("Can not emit IR_LOAD to NULL canonical type!");
+  }
+  if (type_is_pointer(t)) load->type = t->pointer.to;
+  else load->type = t;
 
   mark_used(address, load);
 
