@@ -153,7 +153,7 @@ int handle_command_line_arguments(int argc, char **argv) {
         print_acceptable_formats();
         return 1;
       }
-    } else if (strcmp(argument, "--colours") == 0) {
+    } else if (strcmp(argument, "--colours") == 0 || strcmp(argument, "--colors") == 0) {
       i++;
       if (i >= argc) {
         fprint(stderr, "Error: Expected option value after `--colours`\n");
