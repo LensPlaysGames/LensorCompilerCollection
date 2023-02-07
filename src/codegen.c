@@ -369,12 +369,15 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         ERR("Subscript operator may only operate on arrays and pointers, which type %T is not", lhs->type);
 
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
-        IRInstruction *var = lhs->var->val.node->ir;
+        IRInstruction *var_decl = lhs->var->val.node->ir;
         // ASSERT(var);
-        if (var->kind == IR_STATIC_REF)
-          subs_lhs = var;
-        else if (var->kind == IR_ALLOCA)
-          subs_lhs = var;
+        if (var_decl->kind == IR_STATIC_REF || var_decl->kind == IR_ALLOCA)
+          subs_lhs = var_decl;
+        else {
+          ir_femit_instruction(stdout, var_decl);
+          ERR("Unhandled variable reference IR instruction kind %i", var_decl->kind);
+        }
+
       } else if (lhs->kind == NODE_LITERAL && lhs->literal.type == TK_STRING) {
         // ctx->ast->strings.data[lhs->literal.string_index];
         TODO("IR generation for subscript of string literal");
