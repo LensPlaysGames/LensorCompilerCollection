@@ -15,12 +15,11 @@
   - [ ] Resolve the two different kinds of array-type loading: entire copy vs pointer decay. Basically, `foo[2]` needs `foo` to be loaded as a pointer. `a : foo[2] = b` requires loading entire copy of `b` into `a`.
 - [ ] Optimisation
   - [ ] Zero subscript still does add/multiply when it doesn't need to
-  - [ ] Eliminate unused parameters (they are currently allocated registers)
 - [ ] Attributes
   - [ ] Parsing
   - [ ] `[[noreturn]]`
-  - [ ] `[[nodiscard]]`
-      - [ ] `[[nodiscard]]` on functions that return `void` should be an error.
+  - [ ] `[[discardable]]`
+    - [ ] Make "no discard" the default for all non-void returning functions.
   - [ ] `[[maybe_unused]]`
   - [ ] `[[deprecated]]`
   - [ ] `[[deprecated("reason")]]`
