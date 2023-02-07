@@ -1165,14 +1165,14 @@ Clobbers does_clobber(IRInstruction *instruction) {
   case IR_DIV:
   case IR_MUL:
   case IR_MOD:
-  case IR_SHL:
-  case IR_SHR:
-  case IR_SAR:
   case IR_AND:
   case IR_OR:
     return CLOBBERS_RIGHT;
 
   case IR_SUB:
+  case IR_SHL:
+  case IR_SHR:
+  case IR_SAR:
     return CLOBBERS_LEFT;
 
   case IR_NOT:
