@@ -65,7 +65,7 @@
   - [ ] Length operator: `#`
   - [ ] Subscripting
 - [ ] Strings
-  - [ ] Parsing string literals.
+  - [x] Parsing string literals.
   - [ ] Codegen.
   - [ ] Backend.
 - [ ] Structs
