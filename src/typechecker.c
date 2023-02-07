@@ -790,9 +790,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       Type *ret = expr->type->function.return_type;
       Type *body = expr->function.body->type;
       if (!convertible(ret, body))
-        ERR(expr->source_location,
-          "Type '%T' of function body is not convertible to return type '%T'.",
-            ret, body);
+        ERR(expr->function.body->block.children.data[expr->function.body->block.children.size - 1]->source_location,
+            "Type '%T' of function body is not convertible to return type '%T'.",
+            body, ret);
     } break;
 
     /// Typecheck declarations.
