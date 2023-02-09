@@ -1,0 +1,11 @@
+; ERROR
+; 0
+; Lorem ipsum dolor sit amet consectetuer
+
+puts : ext void(s : @byte)
+
+str : @byte = "Lorem ipsum dolor sit amet consectetuer"[-1]
+
+puts(str)
+0
+

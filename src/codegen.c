@@ -370,7 +370,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
         IRInstruction *var_decl = lhs->var->val.node->ir;
-        // ASSERT(var);
+        // ASSERT(var_decl);
         if (var_decl->kind == IR_STATIC_REF || var_decl->kind == IR_ALLOCA)
           subs_lhs = var_decl;
         else {
@@ -379,8 +379,16 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         }
 
       } else if (lhs->kind == NODE_LITERAL && lhs->literal.type == TK_STRING) {
-        // ctx->ast->strings.data[lhs->literal.string_index];
-        TODO("IR generation for subscript of string literal");
+        codegen_expr(ctx, lhs);
+        if (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER) {
+          string str = ctx->ast->strings.data[lhs->literal.string_index];
+          if (rhs->literal.integer >= str.size) {
+            ERR("Out of bounds: subscript %U too large for string literal.", rhs->literal.integer);
+          }
+          expr->ir = ir_add(ctx, lhs->ir, ir_immediate(ctx, t_integer, rhs->literal.integer));
+          return;
+        }
+        subs_lhs = lhs->ir;
       }
       else ERR("LHS of subscript operator has invalid kind %d", lhs->kind);
 

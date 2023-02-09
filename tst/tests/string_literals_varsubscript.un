@@ -1,0 +1,11 @@
+; 0
+; Lorem ipsum dolor sit amet consectetuer
+
+puts : ext void(s : @byte)
+
+x : integer = 21
+
+str : @byte = "Lorem ipsum dolor sit amet consectetuer"[x]
+
+puts(str)
+0
