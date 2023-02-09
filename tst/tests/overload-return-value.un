@@ -2,6 +2,6 @@
 ; 42
 
 foo : integer (x : byte) 42
-foo : void (x : integer) {}
+foo : integer (x : integer) 69
 
 foo (1 as byte)
