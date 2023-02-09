@@ -1,6 +1,4 @@
 ; ERROR
-; 0
-; Lorem ipsum dolor sit amet consectetuer
 
 puts : ext void(s : @byte)
 

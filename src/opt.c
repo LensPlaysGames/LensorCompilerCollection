@@ -55,7 +55,7 @@ static bool power_of_two(u64 value) {
 }
 
 static bool has_side_effects(IRInstruction *i) {
-  STATIC_ASSERT(IR_COUNT == 32, "Handle all instructions");
+  STATIC_ASSERT(IR_COUNT == 34, "Handle all instructions");
   switch (i->kind) {
     /// These do NOT have side effects.
     case IR_IMMEDIATE:
@@ -64,6 +64,8 @@ static bool has_side_effects(IRInstruction *i) {
     case IR_NOT:
     case IR_STATIC_REF:
     case IR_FUNC_REF:
+    case IR_LIT_INTEGER:
+    case IR_LIT_STRING:
     ALL_BINARY_INSTRUCTION_CASES()
       return false;
 
@@ -628,7 +630,7 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
       list_foreach (IRBlock*, b2, f->blocks) {
         if (b == b2) continue;
 
-        STATIC_ASSERT(IR_COUNT == 32, "Handle all branch instructions");
+        STATIC_ASSERT(IR_COUNT == 34, "Handle all branch instructions");
         IRInstruction *branch = b2->instructions.last;
         if (branch->kind == IR_BRANCH && branch->destination_block == b) {
           branch->destination_block = last->destination_block;

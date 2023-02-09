@@ -41,6 +41,11 @@ typedef struct IRStaticVariable {
   string name;
   Type *type;
   IRInstruction *reference;
+  /// When non-null, points to the IRInstruction of the initialised value.
+  /// This *must* be one of:
+  /// - IR_LIT_INTEGER
+  /// - IR_LIT_STRING
+  IRInstruction *init;
 } IRStaticVariable;
 
 struct CodegenContext {

@@ -798,11 +798,13 @@ static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
 }
 
 static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
-  STATIC_ASSERT(IR_COUNT == 32, "Handle all IR instructions");
+  STATIC_ASSERT(IR_COUNT == 34, "Handle all IR instructions");
   switch (inst->kind) {
   case IR_PHI:
   case IR_REGISTER:
   case IR_UNREACHABLE:
+  case IR_LIT_INTEGER:
+  case IR_LIT_STRING:
     break;
   case IR_IMMEDIATE:
     if (inst->type == t_integer_literal) {
@@ -1159,7 +1161,7 @@ typedef enum Clobbers {
 } Clobbers;
 
 Clobbers does_clobber(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 32, "Exhaustive handling of IR types.");
+  STATIC_ASSERT(IR_COUNT == 34, "Exhaustive handling of IR types.");
   switch (instruction->kind) {
   case IR_ADD:
   case IR_DIV:
@@ -1363,9 +1365,32 @@ void codegen_emit_x86_64(CodegenContext *context) {
     // TODO: Do compile-time known static assignment (i.e. of string
     // literals) using assembler directives.
 
-    /// Allocate space for the variable.
-    usz sz = type_sizeof(var->type);
-    fprint(context->code, "%S: .space %zu\n", var->name, sz);
+    if (var->init) {
+      if (var->init->kind == IR_LIT_INTEGER) {
+        TODO("Handle static initialisation from IR integer literal");
+        // TODO: This isn't ideal, I don't think? Because our idea of
+        // `int` doesn't line up with binutils' idea of `int`.
+        fprint(context->code, ".int %U\n", var->init->imm);
+      } else if (var->init->kind == IR_LIT_STRING) {
+        fprint(context->code, "%S: .asciz \"%S\"\n", var->name, var->init->str);
+        /*{// MANUAL
+          fprint(context->code, "%S: .byte ", var->name);
+          if (var->init->str.size)
+            fprint(context->code, "%U", var->init->str.data[0]);
+          for (usz i = 1; i < var->init->str.size; ++i)
+            fprint(context->code, ", %U", var->init->str.data[i]);
+          fprint(context->code, ", 0\n");
+        }*/
+      }
+      else {
+        ir_femit_instruction(stdout, var->init);
+        ICE("Unhandled literal IR type for static variable in x86_64 backend, sorry.");
+      }
+    } else {
+      /// Allocate space for the variable.
+      usz sz = type_sizeof(var->type);
+      fprint(context->code, "%S: .space %zu\n", var->name, sz);
+    }
   }
 
   /// Allocate registers to each temporary within the program.

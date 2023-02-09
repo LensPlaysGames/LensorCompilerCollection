@@ -46,7 +46,7 @@ static void phi2copy(IRFunction *f) {
       /// Where we insert it depends on some complicated factors
       /// that have to do with control flow.
       foreach_ptr (IRPhiArgument *, arg, phi->phi_args) {
-        STATIC_ASSERT(IR_COUNT == 32, "Handle all branch types");
+        STATIC_ASSERT(IR_COUNT == 34, "Handle all branch types");
         IRInstruction *branch = arg->block->instructions.last;
         switch (branch->kind) {
           /// If the predecessor returns or is unreachable, then the PHI
@@ -144,7 +144,7 @@ void fixup_precoloured(IRFunction *f) {
 
 /// Return non-zero iff given instruction needs a register.
 bool needs_register(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 32, "Exhaustively handle all instruction types");
+  STATIC_ASSERT(IR_COUNT == 34, "Exhaustively handle all instruction types");
   ASSERT(instruction);
   switch (instruction->kind) {
     case IR_LOAD:

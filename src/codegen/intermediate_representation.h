@@ -75,9 +75,15 @@
   /**                                                            \
    * A lot of backends have these instructions, but the IR isn't \
    * generated with them in it.                                  \
-   **/                                                           \
+   */                                                            \
   F(REGISTER)                                                    \
-  F(ALLOCA)
+  F(ALLOCA)                                                      \
+  /**                                                            \
+   * Literal types (not generated, but used for data transfer    \
+   * between frontend and backend)                               \
+   */                                                            \
+  F(LIT_INTEGER)                                                 \
+  F(LIT_STRING)
 
 #define BINARY_INSTRUCTION_CASE_HELPER(enumerator, name) case IR_##enumerator:
 #define ALL_BINARY_INSTRUCTION_CASES() ALL_BINARY_INSTRUCTION_TYPES(BINARY_INSTRUCTION_CASE_HELPER)
@@ -161,6 +167,7 @@ typedef struct IRInstruction {
     IRStaticVariable* static_ref;
     IRFunction *function_ref;
     IRStackAllocation alloca;
+    string str;
   };
 } IRInstruction;
 

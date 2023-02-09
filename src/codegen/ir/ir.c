@@ -35,7 +35,8 @@ void codegen_emit_ir_backend(CodegenContext *context) {
         if (instruction->kind == IR_PARAMETER) continue;
 
         fprint(context->code, "    ");
-        STATIC_ASSERT(IR_COUNT == 32, "Handle all IR instructions");
+        STATIC_ASSERT(IR_COUNT == 34, "Handle all IR instructions");
+        TODO("IR codegen is severely behind in development. All instructions are not handled.");
 
         if (instruction->id) fprint(context->code, "%%%u = ", instruction->id);
         switch (instruction->kind) {

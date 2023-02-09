@@ -957,11 +957,17 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
               "Cannot subscript non-pointer, non-array type '%T'.",
                 lhs->type);
 
-          /// The RHS has to be an integer.
+          /// The RHS has to be some sort of integer.
           if (!is_integer(rhs->type))
             ERR(rhs->source_location,
               "Cannot subscript with non-integer type '%T'.",
                 rhs->type);
+
+          if (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER) {
+            if (type_is_array(lhs->type) && lhs->type->array.size <= rhs->literal.integer)
+              ERR(rhs->source_location,
+                  "Subscript %U out of bounds for array %T", rhs->literal.integer, lhs->type);
+          }
 
           /// The result of a subscript expression is a pointer to the
           /// start of the array, offset by the RHS.

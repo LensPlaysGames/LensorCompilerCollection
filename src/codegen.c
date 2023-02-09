@@ -159,6 +159,11 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         : ir_stack_allocate(ctx, expr->type);
 
       /// Emit the initialiser if there is one.
+      // FIXME: Initialising static variables at runtime is generally
+      // not ideal. We should probably emit static init (within
+      // IR_STATIC_REF) if possible, in order to remove the complexity of
+      // runtime code. We should still emit like this if the value is
+      // not compile-time known.
       if (expr->declaration.init) {
         codegen_expr(ctx, expr->declaration.init);
         ir_store(ctx, expr->declaration.init->ir, expr->ir);
@@ -488,19 +493,21 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_LITERAL:
     if (expr->literal.type == TK_NUMBER) expr->ir = ir_immediate(ctx, expr->type, expr->literal.integer);
     else if (expr->literal.type == TK_STRING) {
-      // TODO: We should probably set this name earlier, or have some
-      // way of getting this name from just a string index. Static
-      // variable is big bad. Valve, pls fix. Literally unplayable.
+
+      // FIXME: This name shouldn't be needed here, but static
+      // variables are required to have names as of right now. We
+      // should really have it so that the backend can gracefully
+      // handle empty string for static names, and it will
+      // automatically generate one (i.e. exactly what we do here).
       char buf[48] = {0};
       static size_t string_literal_count = 0;
       int len = snprintf(buf, 48, "__str_lit%zu", string_literal_count++);
-      // TODO: Two options. Since we can't currently assign to static
-      // variables with compile-time known constants, it means that
-      // strings go uninitialised... So what would really be ideal
-      // is if we could just, ya know, do that. (i.e. `.string` as
-      // directive or asciz or whathaveyou). Our other option is to
-      // emit (imm+store) pairs for every byte...
+
       expr->ir = ir_create_static(ctx, expr->type, as_span(string_create(buf)));
+      // Set static initialiser so backend will properly fill in data from string literal.
+      INSTRUCTION(s, IR_LIT_STRING);
+      s->str = ctx->ast->strings.data[expr->literal.string_index];
+      expr->ir->static_ref->init = s;
     }
     else DIAG(DIAG_SORRY, expr->source_location, "Emitting literals of type %T not supported", expr->type);
     return;
