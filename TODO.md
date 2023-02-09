@@ -38,7 +38,8 @@
   - [ ] Reenable checking for duplicate declarations.
     - [ ] Check for duplicate vars
     - [ ] Check for function redeclarations
-    - [ ] Disallow overloading on the return value.
+    - [x] Disallow overloading on the return value.
+      - [ ] This is done, however it is only done **when a function is resolved**. This means unused functions go unchecked.
   - [ ] Proper checking for incomplete types in the parser.
 - [ ] Types in the IR
   - [x] Byte type
