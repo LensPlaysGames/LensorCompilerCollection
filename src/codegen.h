@@ -40,7 +40,7 @@ struct RegisterPool {
 typedef struct IRStaticVariable {
   string name;
   Type *type;
-  IRInstruction *reference;
+  Vector(IRInstruction *) references;
   /// When non-null, points to the IRInstruction of the initialised value.
   /// This *must* be one of:
   /// - IR_LIT_INTEGER

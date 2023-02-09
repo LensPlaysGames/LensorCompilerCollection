@@ -17,5 +17,6 @@
 # Language Server
 **/compile_commands.json
 .Random.seed
+.clang-format
 
 # Backup Files

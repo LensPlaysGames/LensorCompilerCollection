@@ -416,7 +416,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
           subs_lhs = var_decl;
         else {
           ir_femit_instruction(stdout, var_decl);
-          ERR("Unhandled variable reference IR instruction kind %i", var_decl->kind);
+          ERR("Unhandled variable reference IR instruction kind %i", (int) var_decl->kind);
         }
 
       } else if (lhs->kind == NODE_LITERAL && lhs->literal.type == TK_STRING) {
@@ -431,7 +431,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         }
         subs_lhs = lhs->ir;
       }
-      else ERR("LHS of subscript operator has invalid kind %d", lhs->kind);
+      else ERR("LHS of subscript operator has invalid kind %i", (int) lhs->kind);
 
       codegen_expr(ctx, rhs);
 
