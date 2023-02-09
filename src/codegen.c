@@ -333,7 +333,30 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     usz to_sz = type_sizeof(t_to);
     usz from_sz = type_sizeof(t_from);
 
-    // TODO: Take signedness into account (zext/sext).
+    bool to_signed = false;
+    bool from_signed = false;
+    if (t_to->kind == TYPE_PRIMITIVE) to_signed = t_to->primitive.is_signed;
+    if (t_from->kind == TYPE_PRIMITIVE) from_signed = t_from->primitive.is_signed;
+
+    codegen_expr(ctx, expr->cast.value);
+
+    // TODO: Casting codegen is WIP, and preliminary. It may be incorrect.
+
+    if (from_sz == to_sz) {
+      ASSERT(expr->cast.value->ir, "May need to codegen cast value.");
+      expr->ir = expr->cast.value->ir;
+      return;
+    } else if (from_sz < to_sz) {
+      // smaller to larger: sign extend if needed, otherwise zero extend.
+      if (from_signed) {
+        TODO("Codegen sign extended cast from %T to %T", t_from, t_to);
+      } else {
+        TODO("Codegen zero extended cast from %T to %T", t_from, t_to);
+      }
+    } else if (from_sz > to_sz) {
+      // larger to smaller: truncate.
+      TODO("Codegen truncated cast from %T to %T", t_from, t_to);
+    }
 
     TODO("Codegen cast from %T to %T", t_from, t_to);
   }
