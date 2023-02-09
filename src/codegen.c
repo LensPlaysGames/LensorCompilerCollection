@@ -165,8 +165,21 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       // runtime code. We should still emit like this if the value is
       // not compile-time known.
       if (expr->declaration.init) {
-        codegen_expr(ctx, expr->declaration.init);
-        ir_store(ctx, expr->declaration.init->ir, expr->ir);
+        if (expr->declaration.static_ &&
+            (expr->declaration.init->kind == NODE_LITERAL)) {
+          if (expr->declaration.init->literal.type == TK_NUMBER) {
+            INSTRUCTION(i, IR_LIT_INTEGER);
+            i->imm = expr->declaration.init->literal.integer;
+            expr->ir->static_ref->init = i;
+          } else if (expr->declaration.init->literal.type == TK_STRING) {
+            INSTRUCTION(s, IR_LIT_STRING);
+            s->str = ctx->ast->strings.data[expr->declaration.init->literal.string_index];
+            expr->ir->static_ref->init = s;
+          } else ERR("Unhandled literal type for static variable initialisation.");
+        } else {
+          codegen_expr(ctx, expr->declaration.init);
+          ir_store(ctx, expr->declaration.init->ir, expr->ir);
+        }
       }
       return;
 
