@@ -1,0 +1,9 @@
+; SKIP
+; 69
+
+a : integer[2]
+@a[0] := 69
+
+b : integer[2]
+b := a ;; copy entire array a into array b
+@b[0]

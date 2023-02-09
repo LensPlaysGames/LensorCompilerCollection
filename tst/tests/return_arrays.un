@@ -1,0 +1,11 @@
+; SKIP
+; 69
+
+foo : integer[2]() {
+  out : integer[2]
+  @out[0] = 42
+  @out[1] = 69
+  out
+}
+
+@(foo()[1])

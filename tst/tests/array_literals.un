@@ -1,0 +1,6 @@
+; SKIP
+; 69
+
+foo : integer[2] = [34  35]
+bar : integer[2] = [34, 35]
+@foo[0] + @bar[1]
