@@ -155,7 +155,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// Variable declaration.
   case NODE_DECLARATION:
       expr->ir = expr->declaration.static_
-        ? ir_create_static(ctx, expr->type, as_span(expr->declaration.name))
+        ? ir_create_static(ctx, expr, expr->type, as_span(expr->declaration.name))
         : ir_stack_allocate(ctx, expr->type);
 
       /// Emit the initialiser if there is one.
@@ -539,7 +539,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       static size_t string_literal_count = 0;
       int len = snprintf(buf, 48, "__str_lit%zu", string_literal_count++);
 
-      expr->ir = ir_create_static(ctx, expr->type, as_span(string_create(buf)));
+      expr->ir = ir_create_static(ctx, expr, expr->type, as_span(string_create(buf)));
       // Set static initialiser so backend will properly fill in data from string literal.
       INSTRUCTION(s, IR_LIT_STRING);
       s->str = ctx->ast->strings.data[expr->literal.string_index];
@@ -563,7 +563,13 @@ void codegen_function(CodegenContext *ctx, Node *node) {
   ctx->block = node->function.ir->blocks.first;
   ctx->function = node->function.ir;
 
-  /// First, emit all parameter declarations and store
+  /// Create new references to all already emitted
+  /// static variables.
+  foreach_ptr (IRStaticVariable *, s, ctx->static_vars)
+    if (s->decl)
+      s->decl->ir = ir_static_reference(ctx, s);
+
+  /// Next, emit all parameter declarations and store
   /// the initial parameter values in them.
   foreach_index(i, node->function.param_decls) {
     /// Allocate a variable for the parameter.
