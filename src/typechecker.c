@@ -471,6 +471,20 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   ///    functions just yet.
   OverloadSet overload_set = collect_overload_set(func), arg_overload_set = {0};
 
+  // Extra validation step: ensure all functions within overload set
+  // have matching return type.
+  Type *return_type = NULL;
+  foreach (Candidate, candidate, overload_set) {
+    if (!return_type) {
+      return_type = candidate->symbol->val.node->type->function.return_type;
+      continue;
+    }
+    if (!types_equal(candidate->symbol->val.node->type->function.return_type, return_type))
+      ERR(candidate->symbol->val.node->source_location,
+          "Function in overload set has mismatched return type %T (expecting %T)",
+          candidate->symbol->val.node->type->function.return_type, return_type);
+  }
+
   /// Whether there was an error.
   bool ok = true;
 

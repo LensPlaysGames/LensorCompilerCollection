@@ -3,3 +3,5 @@
 
 foo : void (x : integer) {}
 foo : integer (x: integer) 42
+
+foo(420)
