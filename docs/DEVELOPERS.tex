@@ -12,11 +12,11 @@ oneside,
 % Uncomment for dark-mode PDF (don't try to print this).
 \definecolor{darkBG}{RGB}{19,20,21} \pagecolor{darkBG} \color{white}
 
-\newcommand{\lang}{Glint
+\newcommand{\lang}{Intercept
 }
 
 \title{\lang Compiler Developer Reference}
-\author{Rylan Lens Kellogg}
+\author{Contributors}
 
 % cross references, links, etc
 \usepackage[colorlinks]{hyperref}
@@ -77,9 +77,14 @@ The lexer works by following these steps:
 
 NOTE: Lots of error checking steps were left out, for the sake of brevity.
 
-\paragraph{Whitespace} \verb| \t\r\n|
+\filbreak
 
-\paragraph{Delimiters} \verb| \t\r\n,{}()[]<>:&@|
+\vspace{1em}
+\begin{minipage}{\hsize}
+  \paragraph{Whitespace} \verb| \t\r\n|
+  \paragraph{Delimiters} \verb| \t\r\n,{}()[]<>:&@.|
+\end{minipage}
+\vspace{1em}
 
 \filbreak
 
