@@ -57,6 +57,7 @@
   - [ ] How do we implement reassigning arrays? Libc `memcpy()` or some builtin variant?
     - [ ] Use compiler explorer to see how GCC does it for ‘inspiration’.
   - [ ] Arrays as function parameters.
+    - [ ] Currently, only register-based parameters are really supported; we need to implement stack parameters for non-integer types.
   - [ ] Returning arrays from functions.
 - [ ] Slices / dynamic arrays.
   - [ ] Parsing/AST.
@@ -67,8 +68,8 @@
   - [ ] Subscripting
 - [ ] Strings
   - [x] Parsing string literals.
-  - [ ] Codegen.
-  - [ ] Backend.
+  - [x] Codegen.
+  - [x] Backend.
 - [ ] Structs
   - [ ] Order-independent types.
   - [ ] Structs in the AST.
