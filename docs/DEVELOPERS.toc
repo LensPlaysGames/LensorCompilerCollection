@@ -1,0 +1,17 @@
+\contentsline {chapter}{Contents}{2}{section*.1}%
+\contentsline {chapter}{\chapternumberline {1}Overview}{3}{chapter.1}%
+\contentsline {chapter}{\chapternumberline {2}Lexing}{4}{chapter.2}%
+\contentsline {paragraph}{Lexing}{4}{chapter.2}%
+\contentsline {paragraph}{Whitespace}{4}{Item.5}%
+\contentsline {paragraph}{Delimiters}{4}{Item.5}%
+\contentsline {chapter}{\chapternumberline {3}Parsing}{6}{chapter.3}%
+\contentsline {chapter}{\chapternumberline {4}Type Checking}{9}{chapter.4}%
+\contentsline {chapter}{\chapternumberline {5}Code Generation}{10}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Terminology}{10}{section.5.1}%
+\contentsline {paragraph}{IR}{10}{section.5.1}%
+\contentsline {paragraph}{IR Function}{10}{section.5.1}%
+\contentsline {paragraph}{IR Basic Block}{10}{section.5.1}%
+\contentsline {paragraph}{IR Instruction}{10}{section.5.1}%
+\contentsline {paragraph}{Backend}{10}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Source Code $\rightarrow $ IR}{10}{section.5.2}%
+\contentsline {section}{\numberline {5.3}It's About $\Phi $}{17}{section.5.3}%
