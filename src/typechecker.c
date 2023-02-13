@@ -298,7 +298,7 @@ NODISCARD static bool resolve_overload(
   /// If O(F) is empty, then the program is ill-formed: there is no
   /// matching overload for F.
   if (!valid_overload || ambiguous) {
-    if (!ambiguous) ERR_DONT_RETURN(funcref->source_location, "Could not resolve overloaded function.");
+    if (!ambiguous) ERR(funcref->source_location, "Unknown Symbol");
 
     /// Print parameter types if this is a call.
     if (funcref->parent->kind == NODE_CALL) {
