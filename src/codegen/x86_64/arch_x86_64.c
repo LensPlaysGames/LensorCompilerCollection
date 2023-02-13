@@ -361,7 +361,7 @@ static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, Re
   const char *destination = regname(destination_register, size);
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprint(context->code, "    %s %s(%%%s), %%%s\n",
+      fprint(context->code, "    %s (%s)(%%%s), %%%s\n",
           mnemonic, name, address, destination);
       break;
     case CG_ASM_DIALECT_INTEL:
@@ -740,7 +740,6 @@ static void codegen_prologue(CodegenContext *cg_context, IRFunction *f) {
 
       femit_reg(cg_context, I_PUSH, REG_RBP);
       femit_reg_to_reg(cg_context, I_MOV, REG_RSP, REG_RBP);
-      // femit_reg_to_reg(context, I_MOV, REG_RSP, REG_RBP);
       switch (cg_context->call_convention) {
         ///> Even if the called function has fewer than 4 parameters, these 4
         ///> stack locations are effectively owned by the called function, and
