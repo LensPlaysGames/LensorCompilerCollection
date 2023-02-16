@@ -1031,12 +1031,12 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_CARET:
           if (!is_integer(lhs->type))
             ERR(lhs->source_location,
-              "Cannot perform arithmetic on non-integer type '%T'.",
+                "Cannot perform arithmetic on non-integer type '%T'.",
                 lhs->type);
 
           if (!is_integer(rhs->type))
             ERR(rhs->source_location,
-              "Cannot perform arithmetic on non-integer type '%T'.",
+                "Cannot perform arithmetic on non-integer type '%T'.",
                 rhs->type);
 
           expr->type = lhs->type;
@@ -1048,11 +1048,12 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           /// Make sure the lhs is an lvalue.
           if (!is_lvalue(lhs))
             ERR(lhs->source_location,
-              "Cannot assign to non-lvalue type '%T'.",
+                "Cannot assign to non-lvalue type '%T'.",
                 lhs->type);
 
           /// Make sure the rhs is convertible to the lhs.
-          if (!convertible(lhs->type, rhs->type)) ERR_NOT_CONVERTIBLE(rhs->source_location, lhs->type, rhs->type);
+          if (!convertible(lhs->type, rhs->type))
+            ERR_NOT_CONVERTIBLE(rhs->source_location, lhs->type, rhs->type);
 
           /// Set the type of the expression to the type of the lhs.
           expr->type = lhs->type;
@@ -1125,7 +1126,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
   while (base && type_is_pointer(base)) base = base->pointer.to;
   if (base && type_is_pointer(expr->type /** (!) **/) && type_is_incomplete(base))
     ERR(expr->source_location,
-      "Cannot use pointer to incomplete type '%T'.",
+        "Cannot use pointer to incomplete type '%T'.",
         expr->type->pointer.to);
 
   /// Done.
