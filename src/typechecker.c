@@ -816,9 +816,6 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         // Type inference :^)
         if (!expr->type) {
           expr->type = expr->declaration.init->type;
-          // TODO: Maybe this shouldn't happen here? A pass after the
-          // bulk of sema that reduces all leftover integer_literals to
-          // integers may be a better choice.
           if (expr->type == t_integer_literal) expr->type = t_integer;
         } else if (!convertible(expr->type, expr->declaration.init->type))
           ERR_NOT_CONVERTIBLE(expr->declaration.init->source_location, expr->type, expr->declaration.init->type);
@@ -912,6 +909,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Make sure a cast is even possible.
     case NODE_CAST: {
       Type *t_to = expr->type;
+      // TO any complete type is DISALLOWED
       if (type_is_incomplete(t_to))
         ERR(t_to->source_location, "Can not cast to incomplete type %T", t_to);
 
@@ -920,17 +918,12 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       Type *t_from = expr->cast.value->type;
 
-      // TODO: Is complete to incomplete allowed?
-
       // FROM any type T TO type T is ALLOWED
       if (types_equal(t_to, t_from)) break;
 
       // FROM any incomplete type is DISALLOWED
       if (type_is_incomplete(t_from))
         ERR(expr->cast.value->source_location, "Can not cast from an incomplete type %T", t_from);
-      // TO any complete type is DISALLOWED
-      if (type_is_incomplete(t_to))
-        ERR(expr->cast.value->source_location, "Can not cast to an incomplete type %T", t_to);
 
       // FROM any pointer type TO any pointer type is ALLOWED
       // TODO: Check base type size + alignment...
@@ -951,8 +944,6 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         ERR(expr->cast.value->source_location,
             "Can not cast between arrays.");
       }
-
-      // TODO: functions?
 
       ERR(expr->cast.value->source_location,
           "Casting from %T to %T is not supported by the typechecker\n"
