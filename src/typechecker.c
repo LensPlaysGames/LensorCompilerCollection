@@ -813,7 +813,11 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// If there is an initialiser, then its type must match the type of the variable.
       if (expr->declaration.init) {
         if (!typecheck_expression(ast, expr->declaration.init)) return false;
-        if (!convertible(expr->type, expr->declaration.init->type))
+        // Type inference :^)
+        if (!expr->type) {
+          expr->type = expr->declaration.init->type;
+          if (expr->type == t_integer_literal) expr->type = t_integer;
+        } else if (!convertible(expr->type, expr->declaration.init->type))
           ERR_NOT_CONVERTIBLE(expr->declaration.init->source_location, expr->type, expr->declaration.init->type);
       }
       break;
@@ -905,6 +909,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Make sure a cast is even possible.
     case NODE_CAST: {
       Type *t_to = expr->type;
+      // TO any incomplete type is DISALLOWED
       if (type_is_incomplete(t_to))
         ERR(t_to->source_location, "Can not cast to incomplete type %T", t_to);
 
@@ -913,17 +918,12 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       Type *t_from = expr->cast.value->type;
 
-      // TODO: Is complete to incomplete allowed?
-
       // FROM any type T TO type T is ALLOWED
       if (types_equal(t_to, t_from)) break;
 
       // FROM any incomplete type is DISALLOWED
       if (type_is_incomplete(t_from))
         ERR(expr->cast.value->source_location, "Can not cast from an incomplete type %T", t_from);
-      // TO any complete type is DISALLOWED
-      if (type_is_incomplete(t_to))
-        ERR(expr->cast.value->source_location, "Can not cast to an incomplete type %T", t_to);
 
       // FROM any pointer type TO any pointer type is ALLOWED
       // TODO: Check base type size + alignment...
@@ -944,8 +944,6 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         ERR(expr->cast.value->source_location,
             "Can not cast between arrays.");
       }
-
-      // TODO: functions?
 
       ERR(expr->cast.value->source_location,
           "Casting from %T to %T is not supported by the typechecker\n"
@@ -1024,12 +1022,12 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_CARET:
           if (!is_integer(lhs->type))
             ERR(lhs->source_location,
-              "Cannot perform arithmetic on non-integer type '%T'.",
+                "Cannot perform arithmetic on non-integer type '%T'.",
                 lhs->type);
 
           if (!is_integer(rhs->type))
             ERR(rhs->source_location,
-              "Cannot perform arithmetic on non-integer type '%T'.",
+                "Cannot perform arithmetic on non-integer type '%T'.",
                 rhs->type);
 
           expr->type = lhs->type;
@@ -1037,14 +1035,16 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
         /// This is the complicated one.
         case TK_COLON_EQ:
+        case TK_COLON_COLON:
           /// Make sure the lhs is an lvalue.
           if (!is_lvalue(lhs))
             ERR(lhs->source_location,
-              "Cannot assign to non-lvalue type '%T'.",
+                "Cannot assign to non-lvalue type '%T'.",
                 lhs->type);
 
           /// Make sure the rhs is convertible to the lhs.
-          if (!convertible(lhs->type, rhs->type)) ERR_NOT_CONVERTIBLE(rhs->source_location, lhs->type, rhs->type);
+          if (!convertible(lhs->type, rhs->type))
+            ERR_NOT_CONVERTIBLE(rhs->source_location, lhs->type, rhs->type);
 
           /// Set the type of the expression to the type of the lhs.
           expr->type = lhs->type;
@@ -1117,7 +1117,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
   while (base && type_is_pointer(base)) base = base->pointer.to;
   if (base && type_is_pointer(expr->type /** (!) **/) && type_is_incomplete(base))
     ERR(expr->source_location,
-      "Cannot use pointer to incomplete type '%T'.",
+        "Cannot use pointer to incomplete type '%T'.",
         expr->type->pointer.to);
 
   /// Done.

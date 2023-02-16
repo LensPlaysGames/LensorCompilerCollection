@@ -253,6 +253,9 @@ static void next_token(Parser *p) {
       if (p->lastc == '=') {
         p->tok.type = TK_COLON_EQ;
         next_char(p);
+      } else if (p->lastc == ':') {
+        p->tok.type = TK_COLON_COLON;
+        next_char(p);
       } else {
         p->tok.type = TK_COLON;
       }
@@ -474,6 +477,7 @@ static isz binary_operator_precedence(Parser *p, Token t) {
       return 200;
 
     case TK_COLON_EQ:
+    case TK_COLON_COLON:
       return 100;
 
     /// Not an operator.
@@ -505,6 +509,7 @@ static bool is_right_associative(Parser *p, Token t) {
       return false;
 
     case TK_COLON_EQ:
+    case TK_COLON_COLON:
       return true;
 
     /// Not an operator.
@@ -904,6 +909,26 @@ static Node *parse_ident_expr(Parser *p) {
     /// Parse the rest of the declaration.
     next_token(p);
     return parse_decl_rest(p, ident);
+  } else if (p->tok.type == TK_COLON_COLON) {
+    /// Create the declaration.
+    Node *decl = ast_make_declaration(p->ast, ident.source_location, NULL, ident.text, NULL);
+
+    /// Make the variable static if we’re at global scope.
+    decl->declaration.static_ = p->ast->scope_stack.size == 1;
+
+    /// Add the declaration to the current scope.
+    if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl))
+      ERR_AT(ident.source_location, "Redefinition of symbol '%S'", ident.text);
+
+    /// A type-inferred declaration MUST have an initialiser.
+    next_token(p);
+
+    /// Need to do this manually because the symbol that is the variable
+    /// may appear in its initialiser, albeit only in unevaluated contexts.
+    decl->declaration.init = parse_expr(p);
+    decl->declaration.init->parent = decl;
+
+    return decl;
   }
 
   /// Otherwise, check if the identifier is a declared symbol; if it isn’t,
@@ -1170,6 +1195,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_LE: return "\"<=\"";
     case TK_GE: return "\">=\"";
     case TK_COLON_EQ: return "\":=\"";
+    case TK_COLON_COLON: return "\"::\"";
   }
 
   return "\?\?\?";

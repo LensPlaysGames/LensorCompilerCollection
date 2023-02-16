@@ -87,6 +87,7 @@ enum TokenType {
   TK_GE,
 
   TK_COLON_EQ,
+  TK_COLON_COLON,
 };
 
 /// The type of a symbol in the symbol table.
