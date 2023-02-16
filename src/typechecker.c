@@ -909,7 +909,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Make sure a cast is even possible.
     case NODE_CAST: {
       Type *t_to = expr->type;
-      // TO any complete type is DISALLOWED
+      // TO any incomplete type is DISALLOWED
       if (type_is_incomplete(t_to))
         ERR(t_to->source_location, "Can not cast to incomplete type %T", t_to);
 
