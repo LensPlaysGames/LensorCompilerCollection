@@ -813,8 +813,14 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// If there is an initialiser, then its type must match the type of the variable.
       if (expr->declaration.init) {
         if (!typecheck_expression(ast, expr->declaration.init)) return false;
-        if (!expr->type) expr->type = expr->declaration.init->type; //> Type inference :^)
-        if (!convertible(expr->type, expr->declaration.init->type))
+        // Type inference :^)
+        if (!expr->type) {
+          expr->type = expr->declaration.init->type;
+          // TODO: Maybe this shouldn't happen here? A pass after the
+          // bulk of sema that reduces all leftover integer_literals to
+          // integers may be a better choice.
+          if (expr->type == t_integer_literal) expr->type = t_integer;
+        } else if (!convertible(expr->type, expr->declaration.init->type))
           ERR_NOT_CONVERTIBLE(expr->declaration.init->source_location, expr->type, expr->declaration.init->type);
       }
       break;
@@ -1121,9 +1127,6 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     ERR(expr->source_location,
       "Cannot use pointer to incomplete type '%T'.",
         expr->type->pointer.to);
-
-  // If this is an integer literal type, convert it into an integer type
-  if (expr->type == t_integer_literal) expr->type = t_integer;
 
   /// Done.
   return true;
