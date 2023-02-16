@@ -12,6 +12,8 @@
 extern bool debug_ir;
 extern bool codegen_only;
 
+typedef Vector(IRInstruction *) InstructionVector;
+
 CodegenContext *codegen_context_create
 (AST *ast,
  enum CodegenOutputFormat format,
@@ -40,7 +42,8 @@ struct RegisterPool {
 typedef struct IRStaticVariable {
   string name;
   Type *type;
-  IRInstruction *reference;
+  Node *decl;
+  InstructionVector references;
   /// When non-null, points to the IRInstruction of the initialised value.
   /// This *must* be one of:
   /// - IR_LIT_INTEGER

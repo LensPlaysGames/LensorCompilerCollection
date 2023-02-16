@@ -143,7 +143,7 @@ typedef struct IRInstruction {
   u32 index;
 
   /// List of instructions using this instruction.
-  Vector(IRInstruction*) users;
+  InstructionVector users;
 
   list_node(struct IRInstruction);
 
@@ -329,13 +329,20 @@ ALL_BINARY_INSTRUCTION_TYPES(DECLARE_BINARY_INSTRUCTION)
 #undef DECLARE_BINARY_INSTRUCTION
 
 /// Create a variable with static storage duration.
+///
+/// \param context The codegen context.
+/// \param decl The expression that declares the variable (may be NULL).
+/// \param type The type of the variable.
+/// \param name The name of the variable.
+/// \return An IR_STATIC_REF to the variable.
 IRInstruction *ir_create_static
 (CodegenContext *context,
+ Node *decl,
  Type *type,
  span name);
 
 /// Create a reference to a variable with static storage duration.
-IRInstruction *ir_static_reference(CodegenContext *context, span name);
+IRInstruction *ir_static_reference(CodegenContext *context, IRStaticVariable* var);
 
 IRInstruction *ir_stack_allocate
 (CodegenContext *context,

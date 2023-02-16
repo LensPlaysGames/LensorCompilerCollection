@@ -1353,7 +1353,16 @@ void codegen_emit_x86_64(CodegenContext *context) {
   bool have_data_section = false;
   foreach_ptr (IRStaticVariable*, var, context->static_vars) {
     /// Do not emit unused variables.
-    if (optimise && var->reference->users.size == 0) continue;
+    if (optimise) {
+        bool used = false;
+        foreach_ptr (IRInstruction*, ref, var->references) {
+            if (ref->users.size) {
+                used = true;
+                break;
+            }
+        }
+        if (!used) continue;
+    }
 
     /// Emit a data section directive if we haven't already.
     if (!have_data_section) {
@@ -1371,9 +1380,12 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
         // TODO: Endianness selection
 
-        fprint(context->code, "%U", byte_repr[0]);
+        // `%u` and the `(unsigned)` cast is because variadic arguments
+        // of integral types are always promoted to at least `int` or
+        // `unsigned` in C.
+        fprint(context->code, "%u", (unsigned) byte_repr[0]);
         for (usz i = 1; i < sizeof(var->init->imm); ++i)
-          fprint(context->code, ",%U", byte_repr[i]);
+          fprint(context->code, ",%u", (unsigned) byte_repr[i]);
 
         //fprint(context->code, "%U", byte_repr[sizeof(var->init->imm) - 1]);
         //for (usz i = sizeof(var->init->imm) - 2; i < sizeof(var->init->imm) - 1; --i)

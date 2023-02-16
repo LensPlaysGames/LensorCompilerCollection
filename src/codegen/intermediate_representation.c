@@ -648,37 +648,32 @@ IRInstruction *ir_not
 ALL_BINARY_INSTRUCTION_TYPES(CREATE_BINARY_INSTRUCTION)
 #undef CREATE_BINARY_INSTRUCTION
 
-IRInstruction *ir_create_static(CodegenContext *context, Type *type, span name) {
+IRInstruction *ir_create_static(CodegenContext *context, Node* decl, Type *type, span name) {
   /// Create the variable.
   IRStaticVariable *v = calloc(1, sizeof *v);
   v->name = string_dup(name);
   v->type = type;
+  v->decl = decl;
   vector_push(context->static_vars, v);
 
   /// Create an instruction to reference it and return it.
   INSTRUCTION(ref, IR_STATIC_REF);
   ref->static_ref = v;
   ref->type = ast_make_type_pointer(context->ast, v->type->source_location, v->type);
-  v->reference = ref;
+  vector_push(v->references, ref);
   INSERT(ref);
   return ref;
 }
 
 /// NOTE: Currently unused, but can be used to load a static reference
 /// more than once without generating duplicate static variables.
-IRInstruction *ir_static_reference(CodegenContext *context, span name) {
-  foreach_ptr(IRStaticVariable *, v, context->static_vars) {
-    if (string_eq(v->name, name)) {
-      INSTRUCTION(ref, IR_STATIC_REF);
-      ref->static_ref = v;
-      ref->type = ast_make_type_pointer(context->ast, v->type->source_location, v->type);
-      // TODO: `v->reference` may need to become list of references?
-      INSERT(ref);
-      return ref;
-    }
-  }
-
-  ICE("Can not create static reference to %S as it does not exist in the codegen context.", name);
+IRInstruction *ir_static_reference(CodegenContext *context, IRStaticVariable *v) {
+  INSTRUCTION(ref, IR_STATIC_REF);
+  ref->static_ref = v;
+  ref->type = ast_make_type_pointer(context->ast, v->type->source_location, v->type);
+  vector_push(v->references, ref);
+  INSERT(ref);
+  return ref;
 }
 
 IRInstruction *ir_stack_allocate(CodegenContext *context, Type *type) {
