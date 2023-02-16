@@ -1387,21 +1387,16 @@ void codegen_emit_x86_64(CodegenContext *context) {
         for (usz i = 1; i < sizeof(var->init->imm); ++i)
           fprint(context->code, ",%u", (unsigned) byte_repr[i]);
 
-        //fprint(context->code, "%U", byte_repr[sizeof(var->init->imm) - 1]);
-        //for (usz i = sizeof(var->init->imm) - 2; i < sizeof(var->init->imm) - 1; --i)
-        //  fprint(context->code, ", %U", byte_repr[i]);
-
         fprint(context->code, "\n");
       } else if (var->init->kind == IR_LIT_STRING) {
-        fprint(context->code, "%S: .asciz \"%S\"\n", var->name, var->init->str);
-        /*{// MANUAL
+        {// MANUAL (required because multiline strings)
           fprint(context->code, "%S: .byte ", var->name);
           if (var->init->str.size)
-            fprint(context->code, "%U", var->init->str.data[0]);
+            fprint(context->code, "%u", (unsigned) var->init->str.data[0]);
           for (usz i = 1; i < var->init->str.size; ++i)
-            fprint(context->code, ",%U", var->init->str.data[i]);
-          fprint(context->code, ", 0\n");
-        }*/
+            fprint(context->code, ",%u", (unsigned) var->init->str.data[i]);
+          fprint(context->code, ",0\n");
+        }
       }
       else {
         ir_femit_instruction(stdout, var->init);
