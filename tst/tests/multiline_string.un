@@ -1,0 +1,9 @@
+; 0
+; asdf
+; asdf
+
+a : @byte = "asdf
+asdf"[0]
+puts : ext integer(s : @byte)
+puts(a)
+0
