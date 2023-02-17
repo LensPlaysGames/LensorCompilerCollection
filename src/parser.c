@@ -97,7 +97,25 @@ static void next_char(Parser *p) {
   /// Read the next character.
   p->lastc = *p->curr++;
   if (p->lastc == 0) ERR("Lexer can not handle null bytes");
-  if (p->lastc == '\r') p->lastc = '\n';
+
+  /// Collapse CRLF and LFCR to a single newline,
+  /// but keep CRCR and LFLF as two newlines.
+  if (p->lastc == '\r' || p->lastc == '\n') {
+      /// Two newlines in a row.
+      if (p->curr != p->end && (*p->curr == '\r' || *p->curr == '\n')) {
+          bool same = p->lastc == *p->curr;
+          p->lastc = '\n';
+
+          /// CRCR or LFLF
+          if (same) return;
+
+          /// CRLF or LFCR
+          p->curr++;
+      }
+
+      /// Either CR or LF followed by something else.
+      p->lastc = '\n';
+  }
 }
 
 /// Lex an identifier.
