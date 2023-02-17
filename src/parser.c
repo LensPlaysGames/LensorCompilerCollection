@@ -30,7 +30,7 @@ enum {
 typedef struct Token {
   enum TokenType type;
   loc source_location;
-  span text;
+  string_buffer text;
   u64 integer;
 } Token;
 
@@ -103,20 +103,77 @@ static void next_char(Parser *p) {
 /// Lex an identifier.
 static void next_identifier(Parser *p) {
   /// The start of the identifier.
-  p->tok.text.data = p->curr - 1;
-  p->tok.text.size = 1;
   p->tok.type = TK_IDENT;
   next_char(p);
 
   /// Read the rest of the identifier.
   while (iscontinue(p->lastc)) {
-    p->tok.text.size++;
+    vector_push(p->tok.text, p->lastc);
     next_char(p);
   }
 }
 
+/// Lex a string.
+static void next_string(Parser *p) {
+  /// Yeet the delimiter and clear the string.
+  char delim = p->lastc;
+  vector_clear(p->tok.text);
+  next_char(p);
+
+  /// Single-quoted strings are not escaped.
+  if (delim == '\'') {
+    while (p->lastc != delim) {
+      if (p->lastc == 0) ERR("Unterminated string literal");
+      vector_push(p->tok.text, p->lastc);
+      next_char(p);
+    }
+  }
+
+  /// Double-quoted strings are escaped.
+  else {
+    ASSERT(delim == '"');
+    while (p->lastc != delim) {
+      if (p->lastc == 0) ERR("Unterminated string literal");
+
+      /// Handle escape sequences.
+      if (p->lastc == '\\') {
+        next_char(p);
+        switch (p->lastc) {
+          case 'n': vector_push(p->tok.text, '\n'); break;
+          case 'r': vector_push(p->tok.text, '\r'); break;
+          case 't': vector_push(p->tok.text, '\t'); break;
+          case 'f': vector_push(p->tok.text, '\f'); break;
+          case 'v': vector_push(p->tok.text, '\v'); break;
+          case 'a': vector_push(p->tok.text, '\a'); break;
+          case 'b': vector_push(p->tok.text, '\b'); break;
+          case 'e': vector_push(p->tok.text, '\033'); break;
+          case '0': vector_push(p->tok.text, '\0'); break;
+          case '\'': vector_push(p->tok.text, '\''); break;
+          case '\"': vector_push(p->tok.text, '\"'); break;
+          case '\\': vector_push(p->tok.text, '\\'); break;
+          default: ERR("Invalid escape sequence");
+        }
+      }
+
+      /// Just append the character if it’s not an escape sequence.
+      else { vector_push(p->tok.text, p->lastc); }
+      next_char(p);
+    }
+  }
+
+  /// Make sure the string is terminated by the delimiter.
+  if (p->lastc != delim) ERR("Unterminated string literal");
+  p->tok.type = TK_STRING;
+  next_char(p);
+}
+
 /// Parse a number.
 static void parse_number(Parser *p, int base) {
+  /// Zero-terminate the string or else `strtoull()` might try
+  /// to convert data left over from the previous token.
+  string_buf_zterm(&p->tok.text);
+
+  /// Convert the number.
   char *end;
   errno = 0;
   p->tok.integer = (u64) strtoull(p->tok.text.data, &end, base);
@@ -127,7 +184,7 @@ static void parse_number(Parser *p, int base) {
 /// Lex a number.
 static void next_number(Parser *p) {
   /// Record the start of the number.
-  p->tok.text.size = 0;
+  vector_clear(p->tok.text);
   p->tok.integer = 0;
   p->tok.type = TK_NUMBER;
 
@@ -142,10 +199,12 @@ static void next_number(Parser *p) {
 #define DO_PARSE_NUMBER(name, chars, condition, base)                       \
   /** Read all chars that are part of the literal. **/                      \
   if (p->lastc == chars[0] || p->lastc == chars[1]) {                       \
+    /** Yeet the prefix. **/                                                \
     next_char(p);                                                           \
-    p->tok.text.data = p->curr - 1;                                         \
+                                                                            \
+    /** Lex the digits. **/                                                 \
     while (condition) {                                                     \
-      p->tok.text.size++;                                                   \
+      vector_push(p->tok.text, p->lastc);                                   \
       next_char(p);                                                         \
     }                                                                       \
                                                                             \
@@ -172,9 +231,8 @@ static void next_number(Parser *p) {
 
   /// Any other digit means we have a decimal number.
   if (isdigit(p->lastc)) {
-    p->tok.text.data = p->curr - 1;
     do {
-      p->tok.text.size++;
+      vector_push(p->tok.text, p->lastc);
       next_char(p);
     } while (isdigit(p->lastc));
     return parse_number(p, 10);
@@ -283,7 +341,6 @@ static void next_token(Parser *p) {
     case '-':
       next_char(p);
       if (isdigit(p->lastc)) {
-        p->tok.type = TK_NUMBER;
         next_number(p);
         p->tok.integer = -p->tok.integer;
 
@@ -372,27 +429,16 @@ static void next_token(Parser *p) {
 
     // String.
     case '"':
-      // TODO: Decide on delimiters. Should single/double quote be equal? Raw vs escaped? etc.
-      if (p->lastc == '"') {
-        p->tok.type = TK_STRING;
-        p->tok.text.data = p->curr;
-        p->tok.text.size = 0;
-        next_char(p); //> Eat beginning delimiter
-        while (p->lastc != '"' && p->lastc != 0) {
-          // TODO: Handle escapes
-          p->tok.text.size += 1;
-          next_char(p);
-        }
-        if (p->lastc == 0) ERR("Got EOF before end of string literal...");
-        next_char(p); //> Eat ending delimiter
-        break;
-      }
+    case '\'':
+      next_string(p);
       break;
 
     /// Number or identifier.
     default:
       /// Identifier.
       if (isstart(p->lastc)) {
+        vector_clear(p->tok.text);
+        vector_push(p->tok.text, p->lastc);
         next_identifier(p);
 
         for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
@@ -696,7 +742,7 @@ static Parameter parse_param_decl(Parser *p) {
   loc start = p->tok.source_location;
 
   /// Parse the name, colon, and type.
-  span name = p->tok.text;
+  string name = string_dup(p->tok.text);
   consume(p, TK_IDENT);
   consume(p, TK_COLON);
   Type *type = parse_type(p);
@@ -706,7 +752,7 @@ static Parameter parse_param_decl(Parser *p) {
   if (type->kind == TYPE_FUNCTION) type = ast_make_type_pointer(p->ast, type->source_location, type);
 
   /// Done.
-  return (Parameter){.source_location = start, .type = type, .name = string_dup(name)};
+  return (Parameter){.source_location = start, .type = type, .name = name};
 }
 
 /// <type-derived>  ::= <type-array> | <type-function>
@@ -783,8 +829,8 @@ static Type *parse_type(Parser *p) {
   /// Parse the base type.
   if (p->tok.type == TK_IDENT) {
     /// Make sure the identifier is a type.
-    Symbol *sym = scope_find_symbol(curr_scope(p), p->tok.text, false);
-    if (!sym || sym->kind != SYM_TYPE) ERR("Unknown type '%S'", p->tok.text);
+    Symbol *sym = scope_find_symbol(curr_scope(p), as_span(p->tok.text), false);
+    if (!sym || sym->kind != SYM_TYPE) ERR("Unknown type '%S'", as_span(p->tok.text));
 
     /// Create a named type from it.
     Type *base = ast_make_type_named(p->ast, p->tok.source_location, sym);
@@ -820,7 +866,7 @@ static Type *parse_type(Parser *p) {
 /// <decl-rest>      ::= <type-function> <expression>
 ///                    | <type> [ "=" <expression> ]
 ///                    | <decl-start> EXT <type-function>
-static Node *parse_decl_rest(Parser *p, Token ident) {
+static Node *parse_decl_rest(Parser *p, string ident, loc location) {
   /// If the next token is "ext", then this is an external declaration.
   bool is_ext = false;
   if (p->tok.type == TK_EXT) {
@@ -836,17 +882,17 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     /// Not external.
     if (!is_ext) {
       /// Create a symbol table entry before parsing the body.
-      Symbol *sym = scope_add_symbol_unconditional(curr_scope(p), SYM_FUNCTION, ident.text, NULL);
+      Symbol *sym = scope_add_symbol_unconditional(curr_scope(p), SYM_FUNCTION, as_span(ident), NULL);
 
       if (sym->kind != SYM_FUNCTION || sym->val.node)
-        ERR_AT(ident.source_location, "Redefinition of symbol '%S'", ident.text);
+        ERR_AT(location, "Redefinition of symbol '%S'", as_span(ident));
 
       /// Parse the body, create the function, and update the symbol table.
       Nodes params = {0};
       Node *body = parse_function_body(p, type, &params);
-      Node *func = ast_make_function(p->ast, ident.source_location, type, params, body, ident.text);
+      Node *func = ast_make_function(p->ast, location, type, params, body, as_span(ident));
       sym->val.node = func;
-      Node *funcref = ast_make_function_reference(p->ast, ident.source_location, ident.text);
+      Node *funcref = ast_make_function_reference(p->ast, location, as_span(ident));
       funcref->funcref.resolved = sym;
       return funcref;
     }
@@ -854,14 +900,14 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
     /// External.
     else {
       /// Create a symbol table entry.
-      Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, ident.text, true);
+      Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_FUNCTION, as_span(ident), true);
       if (sym->kind != SYM_FUNCTION || sym->val.node)
-        ERR_AT(ident.source_location, "Redefinition of symbol '%S'", ident.text);
+        ERR_AT(location, "Redefinition of symbol '%S'", as_span(ident));
 
       /// Create the function.
-      Node *func = ast_make_function(p->ast, ident.source_location, type, (Nodes){0}, NULL, ident.text);
+      Node *func = ast_make_function(p->ast, location, type, (Nodes){0}, NULL, as_span(ident));
       sym->val.node = func;
-      Node *funcref = ast_make_function_reference(p->ast, ident.source_location, ident.text);
+      Node *funcref = ast_make_function_reference(p->ast, location, as_span(ident));
       funcref->funcref.resolved = sym;
       return funcref;
     }
@@ -871,14 +917,14 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
   validate_decltype(p, type);
 
   /// Create the declaration.
-  Node *decl = ast_make_declaration(p->ast, ident.source_location, type, ident.text, NULL);
+  Node *decl = ast_make_declaration(p->ast, location, type, as_span(ident), NULL);
 
   /// Make the variable static if we’re at global scope.
   decl->declaration.static_ = p->ast->scope_stack.size == 1;
 
   /// Add the declaration to the current scope.
-  if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl))
-    ERR_AT(ident.source_location, "Redefinition of symbol '%S'", ident.text);
+  if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(ident), decl))
+    ERR_AT(location, "Redefinition of symbol '%S'", ident);
 
   /// A non-external declaration may have an initialiser.
   if (p->tok.type == TK_EQ) {
@@ -901,24 +947,27 @@ static Node *parse_decl_rest(Parser *p, Token ident) {
 /// <expr-primary> ::= NUMBER | IDENTIFIER
 static Node *parse_ident_expr(Parser *p) {
   /// We know that we’re looking at an identifier; save it for later.
-  Token ident = p->tok;
+  string ident = string_dup(p->tok.text);
+  loc location = p->tok.source_location;
   next_token(p);
 
   /// If the next token is a colon, then this is some sort of declaration.
   if (p->tok.type == TK_COLON) {
     /// Parse the rest of the declaration.
     next_token(p);
-    return parse_decl_rest(p, ident);
+    Node *decl = parse_decl_rest(p, ident, location);
+    free(ident.data);
+    return decl;
   } else if (p->tok.type == TK_COLON_COLON) {
     /// Create the declaration.
-    Node *decl = ast_make_declaration(p->ast, ident.source_location, NULL, ident.text, NULL);
+    Node *decl = ast_make_declaration(p->ast, location, NULL, as_span(ident), NULL);
 
     /// Make the variable static if we’re at global scope.
     decl->declaration.static_ = p->ast->scope_stack.size == 1;
 
     /// Add the declaration to the current scope.
-    if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, ident.text, decl))
-      ERR_AT(ident.source_location, "Redefinition of symbol '%S'", ident.text);
+    if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(ident), decl))
+      ERR_AT(location, "Redefinition of symbol '%S'", ident);
 
     /// A type-inferred declaration MUST have an initialiser.
     next_token(p);
@@ -928,20 +977,30 @@ static Node *parse_ident_expr(Parser *p) {
     decl->declaration.init = parse_expr(p);
     decl->declaration.init->parent = decl;
 
+    /// Done.
+    free(ident.data);
     return decl;
   }
 
   /// Otherwise, check if the identifier is a declared symbol; if it isn’t,
   /// it can only be a function name, so add it as a symbol.
-  Symbol *sym = scope_find_symbol(curr_scope(p), ident.text, false);
+  Symbol *sym = scope_find_symbol(curr_scope(p), as_span(ident), false);
 
-  /// If the symbol is a variable or function, then we’re done here.
-  if (!sym || sym->kind == SYM_FUNCTION) return ast_make_function_reference(p->ast, ident.source_location, ident.text);
-  if (sym->kind == SYM_VARIABLE) return ast_make_variable_reference(p->ast, ident.source_location, sym);
+  /// If the symbol is a variable or function, then create a variable or
+  /// function reference, and we’re done here.
+  if (!sym || sym->kind == SYM_FUNCTION) {
+    Node *ref = ast_make_function_reference(p->ast, location, as_span(ident));
+    free(ident.data);
+    return ref;
+  }
+
+  /// Identifier is no longer needed at this point.
+  free(ident.data);
+  if (sym->kind == SYM_VARIABLE) return ast_make_variable_reference(p->ast, location, sym);
 
   /// If the symbol is a type, then parse the rest of the type and delegate.
   if (sym->kind == SYM_TYPE) {
-    Type *type = parse_type_derived(p, ast_make_type_named(p->ast, ident.source_location, sym));
+    Type *type = parse_type_derived(p, ast_make_type_named(p->ast, location, sym));
     return parse_type_expr(p, type);
   }
 
@@ -988,7 +1047,7 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
       next_token(p);
       break;
     case TK_STRING:
-      lhs = ast_make_string_literal(p->ast, p->tok.source_location, p->tok.text);
+      lhs = ast_make_string_literal(p->ast, p->tok.source_location, as_span(p->tok.text));
       next_token(p);
       break;
     case TK_LPAREN:
@@ -1012,7 +1071,7 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
       /// If the next token can be the start of a <type-base>, then this is
       /// a type; parse the type and wrap it in a pointer type.
       if (p->tok.type == TK_IDENT) {
-        Symbol *sym = scope_find_symbol(curr_scope(p), p->tok.text, false);
+        Symbol *sym = scope_find_symbol(curr_scope(p), as_span(p->tok.text), false);
         if (sym && sym->kind == SYM_TYPE) {
           Type *type = ast_make_type_named(p->ast, p->tok.source_location, sym);
           next_token(p);
