@@ -30,6 +30,14 @@ string string_dup_impl(const char *src, usz size) {
   return dest;
 }
 
+/// Zero-terminate a string buffer. This is harder than it sounds.
+void string_buf_zterm(string_buffer *buf) {
+  /// Push a zero to null-terminate the string. At the same time, the zero
+  /// must not be part of the string data, so decrement the size manually.
+  vector_push(*buf, '\0');
+  buf->size--;
+}
+
 /// ===========================================================================
 ///  String formatting.
 /// ===========================================================================

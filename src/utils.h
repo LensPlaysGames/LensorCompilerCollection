@@ -101,6 +101,9 @@ NODISCARD
 string string_dup_impl(const char *src, usz size);
 #define string_dup(src) string_dup_impl((src).data, (src).size)
 
+/// Zero-terminate a string buffer. This is harder than it sounds.
+void string_buf_zterm(string_buffer *buf);
+
 /// Format a string.
 NODISCARD string vformat(const char *fmt, va_list args);
 
