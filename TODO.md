@@ -8,7 +8,10 @@
     - [ ] Return block in the IR
   - [ ] Types as values using the `&` operator. (requires `Structs`)
   - [ ] Function bodies must be blocks or preceded by `=`.
-  - [ ] `ext` functions may have a body.
+  - [ ] `ext` functions may have a body?
+  - [ ] Add `export` and make top-level variables local and top-level functions internal by default.
+  - [ ] Add a `[[nomangle]]` attribute (requires attributes).
+  - [ ] Rename `ext` to `extern` and make it syntactic sugar for `export [[nomangle]]`  
   - [ ] Implicit cast sema pass: `a + b` where `a` is a `byte` and `b` an `integer` -> `(a as integer) + b`
   - [ ] Testing Framework: Add ability to only show failing tests
   - [ ] `x as void` used to discard `x`
