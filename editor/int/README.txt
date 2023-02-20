@@ -1,18 +1,18 @@
 ==== INSTALLATION ====
 
-There are a multitude of ways to install this plugin. Common across all of them is this directory, un, *must* be within vim's `rtp`.
+There are a multitude of ways to install this plugin. Common across all of them is this directory, int, *must* be within vim's `rtp`.
 
-Once installed, restart VIM and, upon loading a file with `.un` extension, syntax highlighting should work. To load the proper syntax highlighting manually when the automatic `ftdetect` isn't working, use `:set filetype=un`.
+Once installed, restart VIM and, upon loading a file with `.int` extension, syntax highlighting should work. To load the proper syntax highlighting manually when the automatic `ftdetect` isn't working, use `:set filetype=int`.
 
 1. Manual External Install (preferred)
 
-Let's say this directory is located at `/path/to/FUNCompiler/editor/un`.
+Let's say this directory is located at `/path/to/Intercept/editor/int`.
 
 Add the following to your vimrc (see `:help vimrc-intro` if confused).
 
 ```vim
 filetype off
-set rtp+=/path/to/FUNCompiler/editor/un
+set rtp+=/path/to/Intercept/editor/int
 filetype plugin indent on
 syntax on
 ```

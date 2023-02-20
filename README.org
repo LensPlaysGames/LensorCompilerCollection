@@ -1,22 +1,14 @@
 #+created: <2022-08-01 Mon>
 
-* FUNCompiler
+* Intercept
 
-I didn't really have a plan, but I went ahead and started making this
-compiler from scratch in C anyways. Now we have a functioning compiler
-with a brand new language that has still not even been named.
+I didn't really have a plan, but I went ahead and started making this compiler from scratch in C anyways. Now we have a functioning compiler with a brand new language named ~Intercept~.
 
 ** Usage
 
-Running the compiler executable with no arguments will display a usage
-message that contains compiler flags and options as well as command layout.
+Running the compiler executable with no arguments will display a usage message that contains compiler flags and options as well as command layout.
 
-For writing in the language FUNCompiler compiles in Emacs or Vim, there
-are helpful plugins in the =editor= subdirectory. For syntax
-highlighting in any editor that supports ~tree-sitter~, there is a
-tree-sitter parser that can be found [[https://github.com/LensPlaysGames/tree-sitter-un][here]]. It is /highly/ recommended
-to use tree-sitter if you can, as it provides much better syntax
-highlighting.
+For writing in Intercept in Emacs or Vim, there are helpful plugins in the =editor= subdirectory. For syntax highlighting in any editor that supports ~tree-sitter~, there is a tree-sitter parser that can be found [[https://github.com/LensPlaysGames/tree-sitter-un][here]]. It is /highly/ recommended to use tree-sitter if you can, as it provides much better syntax highlighting.
 
 ** Building
 
@@ -58,7 +50,7 @@ To use external calls, link with appropriate libraries!
 
 ** Language Reference
 
-The language is statically typed.
+Intercept is statically typed.
 Variables must be declared and type annotated before use.
 
 Whitespace is ignored and there are no required expression delimiters.
@@ -66,7 +58,7 @@ That's right: no semi-colons and no forced indent!
 
 Functions are first-class citizens.
 
-A program in this language comes in the form of a file. The file may
+A program in Intercept comes in the form of a file. The file may
 contain a series of expressions that will be executed in order, from
 top to bottom. There is no =main= function or other entry point;
 control flow starts at the very top of the file and makes it's way to

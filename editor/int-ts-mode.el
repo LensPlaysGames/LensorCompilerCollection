@@ -1,9 +1,9 @@
-;;; un-ts-mode.el --- Syntax highlighting like un-mode but better because tree-sitter -*- lexical-binding: t -*-
+;;; int-ts-mode.el --- Syntax highlighting like int-mode but better because tree-sitter -*- lexical-binding: t -*-
 
 ;; Author: Rylan Lens Kellogg
 ;; Maintainer: Rylan Lens Kellogg
 ;; Version: 0.0.1
-;; Keywords   : FUNCompiler languages tree-sitter
+;; Keywords   : Intercept languages tree-sitter
 
 
 ;; This file is not part of GNU Emacs
@@ -40,107 +40,107 @@
 ;(declare-function treesit-node-type "treesit.c")
 
 
-(defvar un-ts-mode--syntax-table
+(defvar int-ts-mode--syntax-table
   (make-syntax-table)
-  "Syntax table for un-ts-mode")
+  "Syntax table for int-ts-mode")
 
 ;; Set semi-colon as comment starting character.
 (modify-syntax-entry
  ?\; "<"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 ;; Set hash/pound as comment starting character.
 (modify-syntax-entry
  ?# "<"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 ;; Set newline as comment ending character.
 (modify-syntax-entry
  ?\n ">"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 
 ;; Delimiters include comma
 (modify-syntax-entry
  ?, "."
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 
 ;; Allowed within symbols: _-#$
 (modify-syntax-entry
  ?_ "_"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 (modify-syntax-entry
  ?- "_"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 (modify-syntax-entry
  ?# "_"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 (modify-syntax-entry
  ?$ "_"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 
 ;; Parenthesis
 (modify-syntax-entry
  ?\( "()"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 (modify-syntax-entry
  ?\) ")("
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 (modify-syntax-entry
  ?\[ "(]"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 (modify-syntax-entry
  ?\] ")["
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 (modify-syntax-entry
  ?{ "(}"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 (modify-syntax-entry
  ?} "){"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 
 ;; Unary prefix operators
 ;; Addressof
 (modify-syntax-entry
  ?& "'"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 ;; Dereference
 (modify-syntax-entry
  ?@ "'"
- un-ts-mode--syntax-table)
+ int-ts-mode--syntax-table)
 
 
-(defvar un-ts-mode--keywords
+(defvar int-ts-mode--keywords
   '("if" "else" "ext" "while"
     ;;"struct" "type"
     )
-  "un keywords for tree-sitter font-locking.")
+  "Intercept keywords for tree-sitter font-locking.")
 
-(defvar un-ts-mode--operators
+(defvar int-ts-mode--operators
   '("+" "-" "*" "/" "%"
     "<<" ">>" "&" "|" "^" "~"
     "<=" ">=" "!=" "=" "<" ">" "!"
     ":" ":=" "@" "as"
     )
-  "un operators for tree-sitter font-locking.")
+  "Intercept operators for tree-sitter font-locking.")
 
-(defvar un-ts-mode--delimiters
+(defvar int-ts-mode--delimiters
   '("(" ")"
     "[" "]"
     "{" "}"
     )
-  "un delimiters for tree-sitter font-locking.")
+  "Intercept delimiters for tree-sitter font-locking.")
 
-(defun un-ts-mode--font-lock-settings ()
+(defun int-ts-mode--font-lock-settings ()
   "Tree-sitter font-lock settings."
   (treesit-font-lock-rules
-   :language 'un
+   :language 'int
    :override t
    :feature 'comment
    `((comment) @font-lock-comment-face)
 
-   :language 'un
+   :language 'int
    :feature 'variable
    `((identifier) @font-lock-variable-name-face)
 
-   :language 'un
+   :language 'int
    :override t
    :feature 'function
    `((expr_decl name: (identifier) @font-lock-function-name-face
@@ -149,7 +149,7 @@
                 type: (type_pointer (type_function)))
      (expr_call callee: (identifier) @font-lock-function-name-face))
 
-   :language 'un
+   :language 'int
    :override t
    :feature 'type
    `((type_base)      @font-lock-type-face
@@ -157,32 +157,32 @@
      (type_function)  @font-lock-type-face
      (type_array)     @font-lock-type-face)
 
-   :language 'un
+   :language 'int
    :override t
    :feature 'number
    `((number) @font-lock-number-face)
 
-   :language 'un
+   :language 'int
    :override t
    :feature 'keyword
-   `([,@un-ts-mode--keywords] @font-lock-keyword-face)
+   `([,@int-ts-mode--keywords] @font-lock-keyword-face)
 
-   :language 'un
+   :language 'int
    :feature 'operator
-   `([,@un-ts-mode--operators] @font-lock-operator-face)
+   `([,@int-ts-mode--operators] @font-lock-operator-face)
 
-   :language 'un
+   :language 'int
    :feature 'delimiter
-   `([,@un-ts-mode--delimiters] @font-lock-delimiter-face)
+   `([,@int-ts-mode--delimiters] @font-lock-delimiter-face)
    ))
 
-(defcustom un-ts-mode-indent-amount 2
+(defcustom int-ts-mode-indent-amount 2
   "The amount of space characters that each level of parenthesis nesting
-in the unnamed language source code will be indented."
-  :group 'un-ts-mode)
+in Intercept source code will be indented."
+  :group 'int-ts-mode)
 
-(defun un-ts--indent-line ()
-  "Indent a line in the unnamed programming language Lens made for fun."
+(defun int-ts--indent-line ()
+  "Indent a line in Intercept."
   (let ((indent)
         (boi-predicate)
         (should-move-eol)
@@ -211,14 +211,14 @@ in the unnamed language source code will be indented."
       ;; Get rid of existing indentation, if any.
       (delete-region (line-beginning-position) (point))
       ;; Indent to proper amount based on customizable value.
-      (indent-to (* indent un-ts-mode-indent-amount)))
+      (indent-to (* indent int-ts-mode-indent-amount)))
     (when should-move-eol
       (move-end-of-line nil))))
 
 ;;;###autoload
-(define-derived-mode un-ts-mode--base-mode prog-mode "un"
-  "Major mode for editing un, powered by tree-sitter. "
-  :syntax-table un-ts-mode--syntax-table
+(define-derived-mode int-ts-mode--base-mode prog-mode "int"
+  "Major mode for editing Intercept, powered by tree-sitter. "
+  :syntax-table int-ts-mode--syntax-table
 
   ;; Electric
   (setq-local electric-indent-chars
@@ -231,14 +231,14 @@ in the unnamed language source code will be indented."
                 ( ))))
 
 ;;;###autoload
-(define-derived-mode un-ts-mode un-ts-mode--base-mode "un"
-  "Major mode for editing un, powered by tree-sitter."
-  :group 'un
+(define-derived-mode int-ts-mode int-ts-mode--base-mode "int"
+  "Major mode for editing Intercept, powered by tree-sitter."
+  :group 'int
 
-  (unless (treesit-ready-p 'un)
+  (unless (treesit-ready-p 'int)
     (error "Tree-sitter for C isn't available"))
 
-  (treesit-parser-create 'un)
+  (treesit-parser-create 'int)
 
   ;; Comments.
   (setq-local comment-start ";;")
@@ -249,17 +249,17 @@ in the unnamed language source code will be indented."
   (setq-local treesit-simple-indent-rules nil)
 
   ;; Syntax table indent
-  (setq indent-line-function #'un-ts--indent-line)
+  (setq indent-line-function #'int-ts--indent-line)
 
   ;; Font-lock.
   (setq-local treesit-font-lock-settings
-              (un-ts-mode--font-lock-settings))
+              (int-ts-mode--font-lock-settings))
 
-  (add-to-list 'auto-mode-alist '("\\.un\\'" . un-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.int\\'" . int-ts-mode))
 
   (treesit-major-mode-setup))
 
 
-(provide 'un-ts-mode)
+(provide 'int-ts-mode)
 
-;;; un-ts-mode.el ends here
+;;; int-ts-mode.el ends here

@@ -1,106 +1,106 @@
-;;; un-mode.el --- A major mode for editing the unnamed language that the unnamed compiler compiles... -*- lexical-binding: t -*-
+;;; int-mode.el --- A major mode for editing Intercept source code -*- lexical-binding: t -*-
 
 ;;; Code:
 
-(defvar un-mode-syntax-table
+(defvar int-mode-syntax-table
   (make-syntax-table)
-  "Syntax table for un-mode")
+  "Syntax table for int-mode")
 
 ;; Set semi-colon as comment starting character.
 (modify-syntax-entry
  ?\; "<"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 ;; Set hash/pound as comment starting character.
 (modify-syntax-entry
  ?# "<"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 ;; Set newline as comment ending character.
 (modify-syntax-entry
  ?\n ">"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 
 ;; Delimiters include comma
 (modify-syntax-entry
  ?, "."
- un-mode-syntax-table)
+ int-mode-syntax-table)
 
 ;; Allowed within symbols: _-#$
 (modify-syntax-entry
  ?_ "_"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 (modify-syntax-entry
  ?- "_"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 (modify-syntax-entry
  ?# "_"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 (modify-syntax-entry
  ?$ "_"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 
 ;; Parenthesis
 (modify-syntax-entry
  ?\( "()"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 (modify-syntax-entry
  ?\) ")("
- un-mode-syntax-table)
+ int-mode-syntax-table)
 (modify-syntax-entry
  ?\[ "(]"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 (modify-syntax-entry
  ?\] ")["
- un-mode-syntax-table)
+ int-mode-syntax-table)
 (modify-syntax-entry
  ?{ "(}"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 (modify-syntax-entry
  ?} "){"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 
 ;; Unary prefix operators
 ;; Addressof
 (modify-syntax-entry
  ?& "'"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 ;; Dereference
 (modify-syntax-entry
  ?@ "'"
- un-mode-syntax-table)
+ int-mode-syntax-table)
 
-(defcustom un-mode-face-keywords 'font-lock-keyword-face
-  "Symbol name of face to highlight un-mode keywords with."
-  :group 'un-mode
+(defcustom int-mode-face-keywords 'font-lock-keyword-face
+  "Symbol name of face to highlight int-mode keywords with."
+  :group 'int-mode
   :tag "Syntax Highlight Keywords")
 
-(defcustom un-mode-face-types 'font-lock-type-face
-  "Symbol name of face to highlight un-mode builtin types with."
-  :group 'un-mode
+(defcustom int-mode-face-types 'font-lock-type-face
+  "Symbol name of face to highlight int-mode builtin types with."
+  :group 'int-mode
   :tag "Syntax Highlight Types")
 
-(defcustom un-mode-face-numbers nil
-  "Symbol name of face to highlight un-mode immediate numbers with."
-  :group 'un-mode
+(defcustom int-mode-face-numbers nil
+  "Symbol name of face to highlight int-mode immediate numbers with."
+  :group 'int-mode
   :tag "Syntax Highlight Numbers")
 
-(defcustom un-mode-face-operators nil
-  "Symbol name of face to highlight un-mode builtin binary operators with.
+(defcustom int-mode-face-operators nil
+  "Symbol name of face to highlight int-mode builtin binary operators with.
 Examples include addition (+) and subtraction (-)."
-  :group 'un-mode
+  :group 'int-mode
   :tag "Syntax Highlight Binary Operators")
 
-(defcustom un-mode-face-negation-char 'font-lock-negation-char-face
-  "Symbol name of face to highlight un-mode negation character (!) with."
-  :group 'un-mode
+(defcustom int-mode-face-negation-char 'font-lock-negation-char-face
+  "Symbol name of face to highlight int-mode negation character (!) with."
+  :group 'int-mode
   :tag "Syntax Highlight Negation Character")
 
-(defcustom un-mode-face-function-name 'font-lock-function-name-face
-  "Symbol name of face to highlight un-mode function names in definitions."
-  :group 'un-mode
+(defcustom int-mode-face-function-name 'font-lock-function-name-face
+  "Symbol name of face to highlight int-mode function names in definitions."
+  :group 'int-mode
   :tag "Syntax Highlight Function Names")
 
 ;; Gather all keyword font locks together into big daddy keyword font-lock
-(setq un--font-lock-defaults
+(setq int--font-lock-defaults
       (let* ((keywords '("if" "else" "ext" "while"))
              (binary-operators '("+" "*" "-" "/" "%"
                                  "<" ">"
@@ -137,21 +137,21 @@ Examples include addition (+) and subtraction (-)."
                    )))
              )
         `(
-          (,keywords-regex          . ,un-mode-face-keywords)
-          (,builtin-types-regex     . ,un-mode-face-types)
-          (,number-regex            . ,un-mode-face-numbers)
-          (,binary-operators-regex  . ,un-mode-face-operators)
-          (,negation-char-regex     . ,un-mode-face-negation-char)
-          (,function-name-regex     . (1 ,un-mode-face-function-name))
+          (,keywords-regex          . ,int-mode-face-keywords)
+          (,builtin-types-regex     . ,int-mode-face-types)
+          (,number-regex            . ,int-mode-face-numbers)
+          (,binary-operators-regex  . ,int-mode-face-operators)
+          (,negation-char-regex     . ,int-mode-face-negation-char)
+          (,function-name-regex     . (1 ,int-mode-face-function-name))
           )))
 
-(defcustom un-mode-indent-amount 2
+(defcustom int-mode-indent-amount 2
   "The amount of space characters that each level of parenthesis nesting
-in the unnamed language source code will be indented."
-  :group 'un-mode)
+in Intercept source code will be indented."
+  :group 'int-mode)
 
-(defun un--indent-line ()
-  "Indent a line in the unnamed programming language Lens made for fun."
+(defun int--indent-line ()
+  "Indent a line in Intercept."
   (let ((indent)
         (boi-predicate)
         (should-move-eol)
@@ -180,15 +180,15 @@ in the unnamed language source code will be indented."
       ;; Get rid of existing indentation, if any.
       (delete-region (line-beginning-position) (point))
       ;; Indent to proper amount based on customizable value.
-      (indent-to (* indent un-mode-indent-amount)))
+      (indent-to (* indent int-mode-indent-amount)))
     (when should-move-eol
       (move-end-of-line nil))))
 
-(define-derived-mode un-mode prog-mode
-  "unnamed"
-  (setq font-lock-defaults '(un--font-lock-defaults))
-  (setq indent-line-function #'un--indent-line))
+(define-derived-mode int-mode prog-mode
+  "Intercept"
+  (setq font-lock-defaults '(int--font-lock-defaults))
+  (setq indent-line-function #'int--indent-line))
 
-(provide 'un-mode)
+(provide 'int-mode)
 
-;;; un-mode.el ends here
+;;; int-mode.el ends here
