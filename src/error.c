@@ -114,7 +114,6 @@ void vissue_diagnostic
       if (source.data[i] == '\t') eprint("~~~~");
       else fputc('~', stderr);
     }
-    eprint("%m\n");
   }
 
   /// Otherwise, just print a simple error message.
@@ -124,9 +123,9 @@ void vissue_diagnostic
       colours_blink ? "\033[5m" : "", diagnostic_level_colours[level], diagnostic_level_names[level]
     );
     vfprint(stderr, fmt, ap);
-    eprint("%m\n");
   }
 
+  eprint("%m\n");
   thread_disable_type_colours = save_thread_disable_type_colours;
  }
 

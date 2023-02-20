@@ -763,6 +763,8 @@ void ast_print_node_internal(
         node->type);
     } break;
   }
+
+  fprint(file, "%m");
 }
 
 void ast_print_node(const Node *node) {
@@ -816,6 +818,8 @@ static void print_scope(FILE *file, scope_tree_node *node, string_buffer *buf) {
         /// Remove the leading text for the next scope.
         buf->size = sz;
     }
+
+    fprint(file, "%m");
 }
 
 /// Print the scope tree of an AST.
