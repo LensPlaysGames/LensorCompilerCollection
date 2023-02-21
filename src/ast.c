@@ -354,6 +354,18 @@ Node *ast_make_structure_declaration(
   return node;
 }
 
+Node *ast_make_member_access(
+    AST *ast,
+    loc source_location,
+    span ident,
+    Node *struct_
+) {
+  Node *node = mknode(ast, NODE_MEMBER_ACCESS, source_location);
+  node->member_access.ident = string_dup(ident);
+  node->member_access.struct_ = struct_;
+  return node;
+}
+
 /// Create a new function reference.
 Node *ast_make_function_reference(
     AST *ast,
@@ -594,6 +606,7 @@ void ast_free(AST *ast) {
       case NODE_BLOCK: vector_delete(node->block.children); continue;
       case NODE_CALL: vector_delete(node->call.arguments); continue;
       case NODE_DECLARATION: free(node->declaration.name.data); continue;
+      case NODE_MEMBER_ACCESS: free(node->member_access.ident.data); continue;
 
       case NODE_IF:
       case NODE_WHILE:
@@ -834,6 +847,19 @@ void ast_print_node_internal(
              node->struct_decl->val.type->structure.byte_size,
              node->struct_decl->val.type->structure.alignment);
       print_struct_members(file, &node->struct_decl->val.type->structure.members, leading_text);
+    } break;
+
+    case NODE_MEMBER_ACCESS: {
+      fprint(file, "%31Member Access %35<%u> %36%T%31.%35%S %31: %T\n",
+             node->source_location.start,
+             node->member_access.struct_->type,
+             node->member_access.ident,
+             node->type);
+
+      ast_print_children(file, logical_parent, node, &(Nodes) {
+        .data = (Node *[]) {node->member_access.struct_},
+        .size = 1
+      }, leading_text);
     } break;
   }
 

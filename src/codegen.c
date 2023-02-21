@@ -186,6 +186,24 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_STRUCTURE_DECLARATION:
     return;
 
+  case NODE_MEMBER_ACCESS:
+    // TODO: Produces lvalue
+    TODO("Sorry, unimplemented");
+
+    // Get address of structure
+    //IRInstruction *struct_address = codegen_lvalue(ctx, expr->member_access.struct_->ir);
+
+    // Get byte offset of member within structure
+    //IRInstruction *byte_offset = ir_immediate(ctx, );
+
+    // ir_add() address and byte offset
+    //IRInstruction *member_address = ir_add(ctx, struct_address, byte_offset);
+
+    // IF NOT LVALUE: ir_load() result of ir_add()
+    //expr->ir = ir_load(ctx, member_address);
+
+    return;
+
   /// If expression.
   ///
   /// Each box is a basic block within intermediate representation,

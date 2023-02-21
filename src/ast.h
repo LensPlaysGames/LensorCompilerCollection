@@ -25,6 +25,7 @@ enum NodeKind {
   NODE_VARIABLE_REFERENCE,
   NODE_FUNCTION_REFERENCE,
   NODE_STRUCTURE_DECLARATION,
+  NODE_MEMBER_ACCESS,
 };
 
 /// The kind of a type.
@@ -91,6 +92,7 @@ enum TokenType {
 
   TK_COLON_EQ,
   TK_COLON_COLON,
+  TK_COLON_GT,
 };
 
 /// The type of a symbol in the symbol table.
@@ -106,11 +108,27 @@ enum SymbolKind {
 /// Forward declarations.
 typedef struct Node Node;
 typedef struct Type Type;
-typedef struct Parameter Parameter;
 typedef struct Scope Scope;
 typedef Vector(Node *) Nodes;
 typedef Vector(Type *) Types;
+
+
+/// A function parameter.
+typedef struct Parameter {
+  Type *type;
+  string name;
+  loc source_location;
+} Parameter;
+
+typedef struct Member {
+  Type *type;
+  string name;
+  loc source_location;
+  size_t byte_offset;
+} Member;
+
 typedef Vector(Parameter) Parameters;
+typedef Vector(Member) Members;
 
 /// A symbol in the symbol table.
 typedef struct Symbol {
@@ -228,6 +246,12 @@ typedef struct NodeFunctionReference {
 /// Structure declaration.
 typedef Symbol *NodeStructDecl;
 
+typedef struct NodeMemberAccess {
+  string ident;
+  Member *member;
+  Node *struct_;
+} NodeMemberAccess;
+
 /// Variable reference.
 typedef Symbol *NodeVariableReference;
 
@@ -252,22 +276,6 @@ typedef struct TypeArray {
   Type *of;
   size_t size;
 } TypeArray;
-
-/// A function parameter.
-struct Parameter {
-  Type *type;
-  string name;
-  loc source_location;
-};
-
-typedef struct Member {
-  Type *type;
-  string name;
-  loc source_location;
-  size_t byte_offset;
-} Member;
-
-typedef Vector(Member) Members;
 
 /// Function type.
 typedef struct TypeFunction {
@@ -342,6 +350,7 @@ struct Node {
     NodeVariableReference var;
     NodeFunctionReference funcref;
     NodeStructDecl struct_decl;
+    NodeMemberAccess member_access;
   };
 };
 
@@ -511,6 +520,13 @@ Node *ast_make_structure_declaration(
     AST *ast,
     loc source_location,
     Symbol *symbol
+);
+
+Node *ast_make_member_access(
+    AST *ast,
+    loc source_location,
+    span ident,
+    Node *struct_
 );
 
 /// Create a new named type.

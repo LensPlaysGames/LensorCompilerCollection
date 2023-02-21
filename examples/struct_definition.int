@@ -1,5 +1,5 @@
 ;; new struct type definition
-node : type {
+node :> type {
   kind : integer
   val_int : integer
   val_string : @byte
@@ -10,7 +10,15 @@ node : type {
   foo : type {
     asdf : integer
     hjkl : integer
+
+    bar : type {
+      qwer : integer
+      tyui : byte
+      opas : byte
+    }
   }
 }
 
 some_node : node
+
+some_node.kind

@@ -795,6 +795,8 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
   if (expr->type_checked) return true;
   expr->type_checked = true;
 
+  if (expr->type && !typecheck_type(expr->type)) return false;
+
   /// Typecheck the expression.
   switch (expr->kind) {
     default: ICE("Invalid node type");
@@ -1153,6 +1155,30 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// The type of a structure declaration is the type of the struct.
     case NODE_STRUCTURE_DECLARATION:
       return typecheck_type(expr->struct_decl->val.type);
+
+    /// The type of a structure declaration is the type of the struct.
+    case NODE_MEMBER_ACCESS: {
+      // TODO: Auto dereference left hand side of pointers.
+      // Ensure struct_ is of struct type.
+      if (!typecheck_expression(ast, expr->member_access.struct_)) return false;
+      Type *struct_type = type_canonical(expr->member_access.struct_->type);
+      if (!struct_type || struct_type->kind != TYPE_STRUCT)
+        ERR(expr->member_access.struct_->source_location,
+            "Cannot access member of type %T", struct_type);
+
+      Member *member;
+      vector_find_if(struct_type->structure.members, member, i,
+        string_eq(
+          struct_type->structure.members.data[i].name,
+          expr->member_access.ident
+        )
+      );
+      if (!member) return false;
+      expr->member_access.member = member;
+      expr->type = member->type;
+
+      return true;
+    }
 
     /// Resolve the function reference and typecheck the function.
     case NODE_FUNCTION_REFERENCE:

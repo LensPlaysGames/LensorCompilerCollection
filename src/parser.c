@@ -79,12 +79,12 @@ const struct {
 
 /// Check if a character may start an identifier.
 static bool isstart(char c) {
-  return isalpha(c) || c == '_' || c == '$' || c == '.' || c == '@';
+  return isalpha(c) || c == '_' || c == '$';
 }
 
 /// Check if a character may be part of an identifier.
 static bool iscontinue(char c) {
-  return isstart(c) || isdigit(c) || c == '%';
+  return isstart(c) || isdigit(c);
 }
 
 /// Lex the next character.
@@ -332,6 +332,9 @@ static void next_token(Parser *p) {
         next_char(p);
       } else if (p->lastc == ':') {
         p->tok.type = TK_COLON_COLON;
+        next_char(p);
+      } else if (p->lastc == '>') {
+        p->tok.type = TK_COLON_GT;
         next_char(p);
       } else {
         p->tok.type = TK_COLON;
@@ -930,15 +933,6 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
   /// Parse the type.
   Type *type = parse_type(p);
 
-  if (type->kind == TYPE_STRUCT) {
-    Symbol *struct_decl_sym = scope_find_or_add_symbol(curr_scope(p), SYM_TYPE, as_span(ident), true);
-    struct_decl_sym->val.type = type;
-    Node *struct_decl = ast_make_structure_declaration(p->ast, location, struct_decl_sym);
-    type->structure.decl = struct_decl;
-    struct_decl->type = type;
-    return struct_decl;
-  }
-
   /// If the type is a function type, parse the body if it isn’t extern.
   if (type->kind == TYPE_FUNCTION) {
     /// Not external.
@@ -1020,6 +1014,23 @@ static Node *parse_ident_expr(Parser *p) {
     Node *decl = parse_decl_rest(p, ident, location);
     free(ident.data);
     return decl;
+  } else if (p->tok.type == TK_COLON_GT) {
+    next_token(p);
+
+    /// Parse the type.
+    Type *type = parse_type(p);
+
+    if (type->kind == TYPE_STRUCT) {
+      Symbol *struct_decl_sym = scope_find_or_add_symbol(curr_scope(p), SYM_TYPE, as_span(ident), true);
+      struct_decl_sym->val.type = type;
+      Node *struct_decl = ast_make_structure_declaration(p->ast, location, struct_decl_sym);
+      type->structure.decl = struct_decl;
+      struct_decl->type = type;
+      free(ident.data);
+      return struct_decl;
+    }
+    free(ident.data);
+    TODO("Named type alias not implemented");
   } else if (p->tok.type == TK_COLON_COLON) {
     /// Create the declaration.
     Node *decl = ast_make_declaration(p->ast, location, NULL, as_span(ident), NULL);
@@ -1226,6 +1237,15 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
     if (tt == TK_AS) {
       Type *type = parse_type(p);
       lhs = ast_make_cast(p->ast, (loc){.start = lhs->source_location.start, .end = type->source_location.end}, type, lhs);
+      continue;
+    }
+
+    /// The `as` operator is special because its RHS is a type.
+    if (tt == TK_DOT) {
+      if (p->tok.type != TK_IDENT) ERR("RHS of operator '.' must be an identifier.");
+      lhs = ast_make_member_access(p->ast, (loc){.start = lhs->source_location.start, .end = p->tok.source_location.end}, as_span(p->tok.text), lhs);
+      // Yeet identifier token
+      next_token(p);
       continue;
     }
 
