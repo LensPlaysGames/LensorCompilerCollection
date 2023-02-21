@@ -8,6 +8,7 @@
 #include <error.h>
 #include <ir_parser.h>
 #include <opt.h>
+#include <parser.h>
 #include <utils.h>
 
 #include <stddef.h>
@@ -126,6 +127,78 @@ void codegen_context_free(CodegenContext *context) {
 /// ===========================================================================
 ///  Code generation.
 /// ===========================================================================
+
+static void codegen_expr(CodegenContext *ctx, Node *expr);
+
+// Emit an lvalue.
+static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
+  if (lval->address) return;
+  switch (lval->kind) {
+  default: ICE("Unhandled node kind %d", lval->kind);
+
+  /// Variable declaration.
+  case NODE_DECLARATION:
+    lval->address = lval->declaration.static_
+    ? ir_create_static(ctx, lval, lval->type, as_span(lval->declaration.name))
+    : ir_stack_allocate(ctx, lval->type);
+
+    /// Emit the initialiser if there is one.
+    // FIXME: Initialising static variables at runtime is generally
+    // not ideal. We should probably emit static init (within
+    // IR_STATIC_REF) if possible, in order to remove the complexity of
+    // runtime code. We should still emit like this if the value is
+    // not compile-time known.
+    if (lval->declaration.init) {
+      if (lval->declaration.static_ &&
+          (lval->declaration.init->kind == NODE_LITERAL)) {
+            if (lval->declaration.init->literal.type == TK_NUMBER) {
+              INSTRUCTION(i, IR_LIT_INTEGER);
+              i->imm = lval->declaration.init->literal.integer;
+              lval->address->static_ref->init = i;
+            } else if (lval->declaration.init->literal.type == TK_STRING) {
+              INSTRUCTION(s, IR_LIT_STRING);
+              s->str = ctx->ast->strings.data[lval->declaration.init->literal.string_index];
+              lval->address->static_ref->init = s;
+            } else ICE("Unhandled literal type for static variable initialisation.");
+          } else {
+            codegen_expr(ctx, lval->declaration.init);
+            ir_store(ctx, lval->declaration.init->ir, lval->address);
+          }
+    }
+    return;
+
+  case NODE_MEMBER_ACCESS:
+    codegen_lvalue(ctx, lval->member_access.struct_);
+    lval->address = ir_add(ctx, lval->member_access.struct_->address, ir_immediate(ctx, t_integer, lval->member_access.member->byte_offset));
+    break;
+
+  case NODE_IF:
+    TODO("`if` as an lvalue is not yet supported, but it's in the plans bb");
+    break;
+
+  case NODE_UNARY: {
+    if (!lval->unary.postfix && lval->unary.op == TK_AT) {
+      // mutual recursion go brrr
+      codegen_expr(ctx, lval->unary.value);
+      lval->address = lval->unary.value->ir;
+      return;
+    } else ICE("Unary operator %s is not an lvalue", token_type_to_string(TK_AT));
+  } break;
+
+  case NODE_VARIABLE_REFERENCE:
+    ASSERT(lval->var->val.node->address,
+           "Cannot reference variable that has not yet been emitted.");
+    lval->address = lval->var->val.node->address;
+    break;
+
+  /* TODO: references
+  case NODE_BLOCK:
+  case NODE_CALL:
+  case NODE_CAST:
+  */
+  }
+}
+
 /// Emit an expression.
 static void codegen_expr(CodegenContext *ctx, Node *expr) {
   if (expr->emitted) return;
@@ -152,36 +225,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     return;
   }
 
-  /// Variable declaration.
   case NODE_DECLARATION:
-      expr->ir = expr->declaration.static_
-        ? ir_create_static(ctx, expr, expr->type, as_span(expr->declaration.name))
-        : ir_stack_allocate(ctx, expr->type);
-
-      /// Emit the initialiser if there is one.
-      // FIXME: Initialising static variables at runtime is generally
-      // not ideal. We should probably emit static init (within
-      // IR_STATIC_REF) if possible, in order to remove the complexity of
-      // runtime code. We should still emit like this if the value is
-      // not compile-time known.
-      if (expr->declaration.init) {
-        if (expr->declaration.static_ &&
-            (expr->declaration.init->kind == NODE_LITERAL)) {
-          if (expr->declaration.init->literal.type == TK_NUMBER) {
-            INSTRUCTION(i, IR_LIT_INTEGER);
-            i->imm = expr->declaration.init->literal.integer;
-            expr->ir->static_ref->init = i;
-          } else if (expr->declaration.init->literal.type == TK_STRING) {
-            INSTRUCTION(s, IR_LIT_STRING);
-            s->str = ctx->ast->strings.data[expr->declaration.init->literal.string_index];
-            expr->ir->static_ref->init = s;
-          } else ERR("Unhandled literal type for static variable initialisation.");
-        } else {
-          codegen_expr(ctx, expr->declaration.init);
-          ir_store(ctx, expr->declaration.init->ir, expr->ir);
-        }
-      }
-      return;
+    expr->ir = ir_load(ctx, expr->address);
+    return;
 
   case NODE_STRUCTURE_DECLARATION:
     return;
@@ -404,22 +450,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     if (expr->binary.op == TK_COLON_EQ) {
       /// Emit the RHS because we need that in any case.
       codegen_expr(ctx, rhs);
-
-      /// If the LHS is a variable, just emit a direct store to the memory address,
-      /// which we can get from the declaration which has to have been emitted already.
-      if (lhs->kind == NODE_VARIABLE_REFERENCE) {
-        expr->ir = ir_store(ctx, rhs->ir, lhs->var->val.node->ir);
-        return;
-      }
-
-      /// If the LHS is a pointer dereference, emit an indirect store to the argument.
-      if (lhs->kind == NODE_UNARY && lhs->unary.op == TK_AT) {
-        codegen_expr(ctx, lhs->unary.value);
-        expr->ir = ir_store(ctx, rhs->ir, lhs->unary.value->ir);
-        return;
-      }
-
-      ICE("Invalid type of lhs of assignment (should have been caught by sema): %T", lhs->type);
+      codegen_lvalue(ctx, lhs);
+      expr->ir = ir_store(ctx, rhs->ir, lhs->address);
+      return;
     }
 
     if (expr->binary.op == TK_LBRACK) {
@@ -501,15 +534,11 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_UNARY: {
     /// Addressof expressions are special because we don’t emit their operand.
     if (expr->unary.op == TK_AMPERSAND && !expr->unary.postfix) {
-      switch (expr->unary.value->kind) {
-        case NODE_DECLARATION: expr->ir = expr->unary.value->ir; return;
-        case NODE_VARIABLE_REFERENCE: expr->ir = expr->unary.value->var->val.node->ir; return;
-        case NODE_LITERAL: {
-          if (expr->literal.type == TK_STRING) {
-            TODO("IR code generation of addressof string literal");
-          }
-        } return;
-        default: ICE("Cannot take address of expression of kind %d", expr->unary.value->kind);
+      if (expr->literal.type == TK_STRING) {
+        TODO("IR code generation of addressof string literal");
+      } else {
+        codegen_lvalue(ctx, expr->unary.value);
+        expr->ir = expr->unary.value->address;
       }
     }
 
@@ -521,16 +550,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       switch (expr->unary.op) {
         default: ICE("Cannot emit unary prefix expression of token type %d", expr->unary.op);
 
-        /// Load a value from an lvalue.
-        /// Emitting an lvalue loads it, so we don’t need to do anything here.
+        /// Load a value from a pointer.
         case TK_AT:
-          /// TODO: This check for a function pointer is a bit sus. We shouldn’t
-          ///       even get here if this is actually a function pointer...
-          if (expr->unary.value->type->pointer.to->kind == TYPE_FUNCTION)
-            expr->ir = expr->unary.value->ir;
-          else {
-            expr->ir = ir_load(ctx, expr->unary.value->ir);
-          }
+          expr->ir = ir_load(ctx, expr->unary.value->ir);
           return;
 
         /// One’s complement negation.

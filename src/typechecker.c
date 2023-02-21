@@ -1107,14 +1107,27 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         default: ICE("Invalid unary operator '%s'.", token_type_to_string(expr->unary.op));
 
         /// We can only deference pointers.
-        case TK_AT:
-          if (!type_is_pointer(expr->unary.value->type))
+        case TK_AT: {
+          if (!type_is_pointer(expr->unary.value->type)) {
             ERR(expr->unary.value->source_location,
-              "Argument of '@' must be a pointer.");
+                "Argument of '@' must be a pointer.");
+          }
+
+          Type *pointee_type = type_canonical(expr->unary.value->type->pointer.to);
+          if (!pointee_type) {
+            ERR(expr->unary.value->source_location,
+                "Cannot dereference incomplete pointer type %T",
+                expr->unary.value->type->pointer.to);
+          }
+          if (pointee_type->kind == TYPE_FUNCTION) {
+            ERR(expr->unary.value->source_location,
+                "Cannot dereference function pointer type %T",
+                pointee_type);
+          }
 
           /// The result type of a dereference is the pointee.
           expr->type = expr->unary.value->type->pointer.to;
-          break;
+          } break;
 
         /// Address of lvalue.
         case TK_AMPERSAND:
