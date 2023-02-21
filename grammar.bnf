@@ -36,13 +36,15 @@
 <expr-primary>   ::= NUMBER | IDENTIFIER
 
 /// Types.
-<type>           ::= <type-base> | <type-pointer> | <type-derived>
+<type>           ::= <type-base> | <type-pointer> | <type-derived> | <type-struct>
 <type-pointer>   ::= "@" { "@" } ( IDENTIFIER | "(" <type> ")" )
 <type-base>      ::= IDENTIFIER
+<type-struct>    ::= TYPE <struct-body>
 <type-derived>   ::= <type-array> | <type-function>
 <type-array>     ::= <type> "[" <expression> "]"
 <type-function>  ::= <type> "(" { <param-decl> [ "," ]  } ")"
 <param-decl>     ::= <decl-start> <type>
+<struct-body>    ::= "{" { <param-decl> } "}"
 
 /// Miscellaneous.
 <function-body>  ::= [ "=" ] <expression>

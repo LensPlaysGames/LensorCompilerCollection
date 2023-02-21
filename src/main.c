@@ -300,7 +300,7 @@ int main(int argc, char **argv) {
       goto done;
     }
 
-    /// Perform semantic analysis.
+    /// Perform semantic analysis program expressions.
     ok = typecheck_expression(ast, ast->root);
     if (!ok) exit(2);
 

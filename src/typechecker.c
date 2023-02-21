@@ -744,6 +744,52 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   goto done;
 }
 
+NODISCARD static bool typecheck_type(Type *t) {
+  if (t->type_checked) return true;
+  t->type_checked = true;
+  switch (t->kind) {
+  default: ICE("Invalid type kind of type %T", t);
+  case TYPE_PRIMITIVE: return true;
+  case TYPE_POINTER: return typecheck_type(t->pointer.to);
+  case TYPE_NAMED: {
+    if (t->named->val.type)
+      return typecheck_type(t->named->val.type);
+    return true;
+  }
+  case TYPE_FUNCTION:
+    if (!typecheck_type(t->function.return_type)) return false;
+    foreach(Parameter, param, t->function.parameters) {
+      if (!typecheck_type(param->type)) return false;
+    }
+    return true;
+  case TYPE_ARRAY:
+    if (!typecheck_type(t->array.of)) return false;
+    if (!t->array.size) return false;
+    return true;
+  case TYPE_STRUCT:
+    foreach(Member, member, t->structure.members) {
+      if (!typecheck_type(member->type)) return false;
+    }
+
+    foreach(Member, member, t->structure.members) {
+      size_t alignment = type_alignof(member->type);
+      if (alignment > t->structure.alignment)
+        t->structure.alignment = alignment;
+
+      t->structure.byte_size += (alignment - (t->structure.byte_size % alignment)) % alignment;
+
+      member->byte_offset = t->structure.byte_size;
+      t->structure.byte_size += type_sizeof(member->type);
+    }
+
+    t->structure.byte_size += (t->structure.alignment - (t->structure.byte_size % t->structure.alignment)) % t->structure.alignment;
+
+    return true;
+  }
+
+  return false;
+}
+
 NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
   /// Don’t typecheck the same expression twice.
   if (expr->type_checked) return true;
@@ -1103,6 +1149,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       if (!typecheck_expression(ast, expr->var->val.node)) return false;
       expr->type = expr->var->val.node->type;
       break;
+
+    /// The type of a structure declaration is the type of the struct.
+    case NODE_STRUCTURE_DECLARATION:
+      return typecheck_type(expr->struct_decl->val.type);
 
     /// Resolve the function reference and typecheck the function.
     case NODE_FUNCTION_REFERENCE:

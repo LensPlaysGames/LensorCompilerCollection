@@ -1,0 +1,16 @@
+;; new struct type definition
+node : type {
+  kind : integer
+  val_int : integer
+  val_string : @byte
+  a : byte
+  next : @node
+  b : byte
+
+  foo : type {
+    asdf : integer
+    hjkl : integer
+  }
+}
+
+some_node : node

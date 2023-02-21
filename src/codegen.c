@@ -183,6 +183,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       }
       return;
 
+  case NODE_STRUCTURE_DECLARATION:
+    return;
+
   /// If expression.
   ///
   /// Each box is a basic block within intermediate representation,

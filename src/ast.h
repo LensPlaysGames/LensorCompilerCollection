@@ -24,6 +24,7 @@ enum NodeKind {
   NODE_LITERAL,
   NODE_VARIABLE_REFERENCE,
   NODE_FUNCTION_REFERENCE,
+  NODE_STRUCTURE_DECLARATION,
 };
 
 /// The kind of a type.
@@ -33,6 +34,7 @@ enum TypeKind {
   TYPE_POINTER,
   TYPE_ARRAY,
   TYPE_FUNCTION,
+  TYPE_STRUCT,
 };
 
 /// The type of a token. These are only in this header
@@ -50,6 +52,7 @@ enum TokenType {
   TK_WHILE,
   TK_EXT,
   TK_AS,
+  TK_TYPE,
 
   TK_LPAREN,
   TK_RPAREN,
@@ -222,6 +225,9 @@ typedef struct NodeFunctionReference {
   Scope *scope;
 } NodeFunctionReference;
 
+/// Structure declaration.
+typedef Symbol *NodeStructDecl;
+
 /// Variable reference.
 typedef Symbol *NodeVariableReference;
 
@@ -254,11 +260,29 @@ struct Parameter {
   loc source_location;
 };
 
+typedef struct Member {
+  Type *type;
+  string name;
+  loc source_location;
+  size_t byte_offset;
+} Member;
+
+typedef Vector(Member) Members;
+
 /// Function type.
 typedef struct TypeFunction {
   Parameters parameters;
   Type *return_type;
 } TypeFunction;
+
+/// Struct type.
+typedef struct TypeStruct {
+  Node *decl; //> NODE_STRUCTURE_DECLARATION
+  Members members;
+
+  size_t byte_size;
+  size_t alignment;
+} TypeStruct;
 
 /// A type.
 struct Type {
@@ -275,7 +299,10 @@ struct Type {
     TypePointer pointer;
     TypeArray array;
     TypeFunction function;
+    TypeStruct structure;
   };
+
+  bool type_checked;
 };
 
 /// A node in the AST.
@@ -314,6 +341,7 @@ struct Node {
     NodeLiteral literal;
     NodeVariableReference var;
     NodeFunctionReference funcref;
+    NodeStructDecl struct_decl;
   };
 };
 
@@ -479,6 +507,12 @@ Node *ast_make_function_reference(
     span symbol
 );
 
+Node *ast_make_structure_declaration(
+    AST *ast,
+    loc source_location,
+    Symbol *symbol
+);
+
 /// Create a new named type.
 Type *ast_make_type_named(
     AST *ast,
@@ -507,6 +541,13 @@ Type *ast_make_type_function(
     loc source_location,
     Type *return_type,
     Parameters parameters
+);
+
+/// Create a new struct type.
+Type *ast_make_type_struct(
+    AST *ast,
+    loc source_location,
+    Members members
 );
 
 /// ===========================================================================

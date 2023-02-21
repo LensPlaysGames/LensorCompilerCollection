@@ -344,6 +344,16 @@ Node *ast_make_variable_reference(
   return node;
 }
 
+Node *ast_make_structure_declaration(
+    AST *ast,
+    loc source_location,
+    Symbol *symbol
+) {
+  Node *node = mknode(ast, NODE_STRUCTURE_DECLARATION, source_location);
+  node->struct_decl = symbol;
+  return node;
+}
+
 /// Create a new function reference.
 Node *ast_make_function_reference(
     AST *ast,
@@ -406,6 +416,17 @@ Type *ast_make_type_function(
 }
 
 
+/// Create a new struct type.
+Type *ast_make_type_struct(
+    AST *ast,
+    loc source_location,
+    Members members
+) {
+  Type *type = mktype(ast, TYPE_STRUCT, source_location);
+  type->structure.members = members;
+  return type;
+}
+
 /// ===========================================================================
 ///  AST query functions.
 /// ===========================================================================
@@ -453,8 +474,14 @@ static void write_typename(string_buffer *s, const Type *type) {
         if (param != type->function.parameters.data + type->function.parameters.size - 1)
           format_to(s, "%31, ");
       }
-
       format_to(s, "%31)");
+      break;
+
+    case TYPE_STRUCT:
+      format_to(s, "struct");
+      if (type->structure.decl) {
+        format_to(s, " %S", type->structure.decl->struct_decl->name);
+      }
       break;
   }
 }
@@ -499,12 +526,20 @@ usz type_sizeof(Type *type) {
     case TYPE_POINTER: return sizeof(void *);
     case TYPE_ARRAY: return type->array.size * type_sizeof(type->array.of);
     case TYPE_FUNCTION: return sizeof(void *);
+    case TYPE_STRUCT: return type->structure.byte_size;
   }
 }
 
 usz type_alignof(Type *type) {
-  TODO("Unimplemented, sorry");
-  return 69;
+switch (type->kind) {
+    default: ICE("Invalid type kind: %d", type->kind);
+    case TYPE_PRIMITIVE: return type->primitive.alignment;
+    case TYPE_NAMED: return type->named->val.type ? type_alignof(type->named->val.type) : 0;
+    case TYPE_POINTER: return _Alignof(void *);
+    case TYPE_ARRAY: return type->array.size * type_alignof(type->array.of);
+    case TYPE_FUNCTION: return _Alignof(void *);
+    case TYPE_STRUCT: return type->structure.alignment;
+  }
 }
 
 bool type_is_void(Type *type) {
@@ -567,6 +602,7 @@ void ast_free(AST *ast) {
       case NODE_UNARY:
       case NODE_LITERAL:
       case NODE_VARIABLE_REFERENCE:
+      case NODE_STRUCTURE_DECLARATION:
         continue;
       case NODE_FUNCTION_REFERENCE:
         free(node->funcref.name.data);
@@ -585,12 +621,15 @@ void ast_free(AST *ast) {
     if (type->kind == TYPE_FUNCTION) {
       foreach (Parameter, param, type->function.parameters) free(param->name.data);
       vector_delete(type->function.parameters);
+    } else if (type->kind == TYPE_STRUCT) {
+      foreach (Member, member, type->structure.members) free(member->name.data);
+      vector_delete(type->structure.members);
     }
     free(type);
   }
   vector_delete(ast->_types_);
 
-  /// Free all scopes.
+  /// Free all scopes. This also deletes all symbols.
   foreach_ptr (Scope *, scope, ast->_scopes_) scope_delete(scope);
   vector_delete(ast->_scopes_);
   vector_delete(ast->scope_stack);
@@ -615,6 +654,29 @@ static void ast_print_children(
     const Nodes *nodes,
     string_buffer *buf
 );
+
+static void print_struct_members(FILE *file, Members *members, string_buffer *leading_text) {
+  foreach(Member, member, *members) {
+    fprint(file, "%31%S%s", as_span(*leading_text), member == &vector_back(*members) ? "└─" : "├─");
+    if (member->type->kind == TYPE_STRUCT && !member->type->structure.decl) {
+      fprint(file, "%31Struct %35%S%31@%35%u%31 %31#%35%u%31/%35%u\n",
+             member->name,
+             member->byte_offset,
+             member->type->structure.byte_size,
+             member->type->structure.alignment);
+
+      /// Update the leading text.
+      usz sz = leading_text->size;
+      format_to(leading_text, "%s", member == &vector_back(*members) ? "  " : "│ ");
+
+      /// Print the node.
+      print_struct_members(file, &member->type->structure.members, leading_text);
+
+      /// Restore the leading text.
+      leading_text->size = sz;
+    } else fprint(file, "%31Member %35%S%31@%35%u%31: %T\n", member->name, member->byte_offset, member->type);
+  }
+}
 
 /// Print a node.
 void ast_print_node_internal(
@@ -761,6 +823,17 @@ void ast_print_node_internal(
         node->source_location.start,
         node->funcref.name,
         node->type);
+    } break;
+
+    case NODE_STRUCTURE_DECLARATION: {
+      /// Print the struct declaration.
+      // here
+      fprint(file, "%31Structure Declaration %35<%u> %36%S%m %31#%35%u%31/%35%u %31\n",
+             node->source_location.start,
+             node->struct_decl->name,
+             node->struct_decl->val.type->structure.byte_size,
+             node->struct_decl->val.type->structure.alignment);
+      print_struct_members(file, &node->struct_decl->val.type->structure.members, leading_text);
     } break;
   }
 

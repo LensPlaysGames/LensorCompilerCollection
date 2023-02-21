@@ -68,12 +68,13 @@ typedef struct Parser {
 const struct {
   span kw;
   enum TokenType type;
-} keywords[5] = {
+} keywords[6] = {
     {literal_span_raw("if"), TK_IF},
     {literal_span_raw("else"), TK_ELSE},
     {literal_span_raw("while"), TK_WHILE},
     {literal_span_raw("ext"), TK_EXT},
     {literal_span_raw("as"), TK_AS},
+    {literal_span_raw("type"), TK_TYPE},
 };
 
 /// Check if a character may start an identifier.
@@ -773,6 +774,23 @@ static Parameter parse_param_decl(Parser *p) {
   return (Parameter){.source_location = start, .type = type, .name = name};
 }
 
+static Member parse_struct_member(Parser *p) {
+  loc start = p->tok.source_location;
+
+  /// Parse the name, colon, and type.
+  string name = string_dup(p->tok.text);
+  consume(p, TK_IDENT);
+  consume(p, TK_COLON);
+  Type *type = parse_type(p);
+
+  /// Function types are converted to their corresponding pointer type
+  /// when used as a parameter type.
+  if (type->kind == TYPE_FUNCTION) type = ast_make_type_pointer(p->ast, type->source_location, type);
+
+  /// Done.
+  return (Member){.source_location = start, .type = type, .name = name, .byte_offset = 0};
+}
+
 /// <type-derived>  ::= <type-array> | <type-function>
 /// <type-array>    ::= <type> "[" <expression> "]"
 /// <type-function> ::= <type> "(" { <param-decl> [ "," ]  } ")"
@@ -831,9 +849,10 @@ static Type *parse_type_derived(Parser *p, Type *base) {
   }
 }
 
-/// <type>         ::= <type-base> | <type-pointer> | <type-derived>
-/// <type-pointer> ::= "@" { "@" } ( IDENTIFIER | "(" <type> ")" )
-/// <type-base>    ::= IDENTIFIER
+/// <type>           ::= <type-base> | <type-pointer> | <type-derived> | <type-struct>
+/// <type-pointer>   ::= "@" { "@" } ( IDENTIFIER | "(" <type> ")" )
+/// <type-struct>    ::= TYPE <struct-body>
+/// <type-base>      ::= IDENTIFIER
 static Type *parse_type(Parser *p) {
   loc start = p->tok.source_location;
 
@@ -847,8 +866,8 @@ static Type *parse_type(Parser *p) {
   /// Parse the base type.
   if (p->tok.type == TK_IDENT) {
     /// Make sure the identifier is a type.
-    Symbol *sym = scope_find_symbol(curr_scope(p), as_span(p->tok.text), false);
-    if (!sym || sym->kind != SYM_TYPE) ERR("Unknown type '%S'", as_span(p->tok.text));
+    Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_TYPE, as_span(p->tok.text), true);
+    if (sym->kind != SYM_TYPE) ERR("'%S' is not a type!", as_span(p->tok.text));
 
     /// Create a named type from it.
     Type *base = ast_make_type_named(p->ast, p->tok.source_location, sym);
@@ -876,6 +895,22 @@ static Type *parse_type(Parser *p) {
     return parse_type_derived(p, base);
   }
 
+  // Structure type definition
+  if (p->tok.type == TK_TYPE) {
+    loc type_kw_loc = p->tok.source_location;
+    // Yeet TK_TYPE
+    next_token(p);
+    consume(p, TK_LBRACE);
+    Members members = {0};
+    while (p->tok.type != TK_RBRACE) {
+      Member member_decl = parse_struct_member(p);
+      vector_push(members, member_decl);
+      if (p->tok.type == TK_COMMA) next_token(p);
+    }
+    consume(p, TK_RBRACE);
+    return ast_make_type_struct(p->ast, type_kw_loc, members);
+  }
+
   /// Invalid base type.
   ERR("Expected base type, got %d", (int) p->tok.type);
 }
@@ -894,6 +929,15 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
 
   /// Parse the type.
   Type *type = parse_type(p);
+
+  if (type->kind == TYPE_STRUCT) {
+    Symbol *struct_decl_sym = scope_find_or_add_symbol(curr_scope(p), SYM_TYPE, as_span(ident), true);
+    struct_decl_sym->val.type = type;
+    Node *struct_decl = ast_make_structure_declaration(p->ast, location, struct_decl_sym);
+    type->structure.decl = struct_decl;
+    struct_decl->type = type;
+    return struct_decl;
+  }
 
   /// If the type is a function type, parse the body if it isn’t extern.
   if (type->kind == TYPE_FUNCTION) {
@@ -1241,6 +1285,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_WHILE: return "while";
     case TK_EXT: return "ext";
     case TK_AS: return "as";
+    case TK_TYPE: return "type";
     case TK_LPAREN: return "\"(\"";
     case TK_RPAREN: return "\")\"";
     case TK_LBRACK: return "\"[\"";
@@ -1275,7 +1320,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_COLON_COLON: return "\"::\"";
   }
 
-  return "\?\?\?";
+  UNREACHABLE();
 }
 
 void seek_location(span source, loc location, u32 *o_line, u32 *o_line_start, u32 *o_line_end) {
