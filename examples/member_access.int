@@ -5,6 +5,8 @@ vec2 :> type {
   y : integer
 }
 
-vec2.x := 34
-vec2.y := 35
-vec2.x + vec2.y
+my_vec2 : vec2
+
+my_vec2.x := 34
+my_vec2.y := 35
+my_vec2.x + my_vec2.y

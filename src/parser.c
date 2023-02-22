@@ -915,7 +915,7 @@ static Type *parse_type(Parser *p) {
   }
 
   /// Invalid base type.
-  ERR("Expected base type, got %d", (int) p->tok.type);
+  ERR("Expected base type, got %s", token_type_to_string(p->tok.type));
 }
 
 /// <expr-decl>      ::= <decl-start> <decl-rest>

@@ -202,11 +202,14 @@ NODISCARD static Type *common_type(Type *a, Type *b) {
 /// Check if an expression is an lvalue.
 NODISCARD static bool is_lvalue(Node *expr) {
   switch (expr->kind) {
-    default: return false;
+  default: return false;
+
+    // FIXME: Add `if`
 
     /// Declarations and variables are obviously lvalues.
     case NODE_DECLARATION:
     case NODE_VARIABLE_REFERENCE:
+    case NODE_MEMBER_ACCESS:
       return true;
 
     /// A dereference is an lvalue.
@@ -1001,7 +1004,8 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Binary expression. This is a complicated one.
     case NODE_BINARY: {
       /// Get this out of the way early.
-      Node *const lhs = expr->binary.lhs, *const rhs = expr->binary.rhs;
+      Node *const lhs = expr->binary.lhs;
+      Node *const rhs = expr->binary.rhs;
       if (!typecheck_expression(ast, lhs)) return false;
       if (!typecheck_expression(ast, rhs)) return false;
 
