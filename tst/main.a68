@@ -112,7 +112,7 @@ BEGIN
 
   STRING commands := "";
 
-  STRING funcompiler_command := ".." + platform dir sep + "bld" + platform dir sep + "func"
+  STRING intercept command := ".." + platform dir sep + "bld" + platform dir sep + "intc"
                               + " -o test.S "
                               + (optimise | " -O " | "")
                               + (expect error | " > out.txt 2>&1 " | "")
@@ -120,10 +120,10 @@ BEGIN
                               + "-cc " + calling convention + " "
                               + file name;
 
-  commands +:= new line char + funcompiler_command;
+  commands +:= new line char + intercept command;
 
   CO Compile the program to ASM CO
-  IF sh(".." + platform dir sep + "bld" + platform dir sep + "func"
+  IF sh(".." + platform dir sep + "bld" + platform dir sep + "intc"
              + " -o test.S "
              + (optimise | " -O " | "")
              + (expect error | " > out.txt 2>&1 " | "")

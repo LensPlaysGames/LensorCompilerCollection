@@ -226,29 +226,12 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   }
 
   case NODE_DECLARATION:
+  case NODE_MEMBER_ACCESS:
     codegen_lvalue(ctx, expr);
     expr->ir = ir_load(ctx, expr->address);
     return;
 
   case NODE_STRUCTURE_DECLARATION:
-    return;
-
-  case NODE_MEMBER_ACCESS:
-    // TODO: Produces lvalue
-    TODO("Sorry, unimplemented");
-
-    // Get address of structure
-    //IRInstruction *struct_address = codegen_lvalue(ctx, expr->member_access.struct_->ir);
-
-    // Get byte offset of member within structure
-    //IRInstruction *byte_offset = ir_immediate(ctx, );
-
-    // ir_add() address and byte offset
-    //IRInstruction *member_address = ir_add(ctx, struct_address, byte_offset);
-
-    // IF NOT LVALUE: ir_load() result of ir_add()
-    //expr->ir = ir_load(ctx, member_address);
-
     return;
 
   /// If expression.
@@ -541,6 +524,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         codegen_lvalue(ctx, expr->unary.value);
         expr->ir = expr->unary.value->address;
       }
+      return;
     }
 
     /// Emit the operand.
@@ -549,7 +533,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     /// Prefix expressions.
     if (!expr->unary.postfix) {
       switch (expr->unary.op) {
-        default: ICE("Cannot emit unary prefix expression of token type %d", expr->unary.op);
+      default: ICE("Cannot emit unary prefix expression of token type %s", token_type_to_string(expr->unary.op));
 
         /// Load a value from a pointer.
         case TK_AT:
@@ -594,7 +578,8 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Variable reference.
   case NODE_VARIABLE_REFERENCE:
-    expr->ir = ir_load(ctx, expr->var->val.node->ir);
+    codegen_lvalue(ctx, expr);
+    expr->ir = ir_load(ctx, expr->address);
     return;
 
   /// Function reference. These should have all been removed by the semantic analyser.
@@ -611,18 +596,18 @@ void codegen_function(CodegenContext *ctx, Node *node) {
   /// static variables.
   foreach_ptr (IRStaticVariable *, s, ctx->static_vars)
     if (s->decl)
-      s->decl->ir = ir_static_reference(ctx, s);
+      s->decl->address = ir_static_reference(ctx, s);
 
   /// Next, emit all parameter declarations and store
   /// the initial parameter values in them.
   foreach_index(i, node->function.param_decls) {
     /// Allocate a variable for the parameter.
     Node *decl = node->function.param_decls.data[i];
-    codegen_expr(ctx, decl);
+    codegen_lvalue(ctx, decl);
 
     /// Store the parameter value in the variable.
     IRInstruction *p = ir_parameter(ctx, i);
-    ir_store(ctx, p, decl->ir);
+    ir_store(ctx, p, decl->address);
   }
 
   /// Emit the function body.
