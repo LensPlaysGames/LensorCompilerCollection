@@ -752,7 +752,7 @@ static void codegen_prologue(CodegenContext *cg_context, IRFunction *f) {
         case CG_CALL_CONV_LINUX: break;
         default: ICE("Unknown calling convention");
       }
-      femit_imm_to_reg(cg_context, I_SUB, locals_offset, REG_RSP, r64);
+      femit_imm_to_reg(cg_context, I_SUB, (i64) locals_offset, REG_RSP, r64);
     } break;
 
     case FRAME_MINIMAL: {
@@ -810,17 +810,17 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       // TODO: integer_literal probably shouldn't be handled here.
       // Do this in a pass before-hand or something.
       if (inst->imm <= UINT32_MAX) {
-        femit_imm_to_reg(context, I_MOV, inst->imm, inst->result, r32);
+        femit_imm_to_reg(context, I_MOV, (i64) inst->imm, inst->result, r32);
       } else if (inst->imm <= UINT64_MAX) {
-        femit_imm_to_reg(context, I_MOV, inst->imm, inst->result, r64);
+        femit_imm_to_reg(context, I_MOV, (i64) inst->imm, inst->result, r64);
       } else {
         ICE("Unsupported integer literal immediate on x86_64 (out of range)");
       }
     } else {
       if (type_sizeof(inst->type) <= 4) {
-        femit_imm_to_reg(context, I_MOV, inst->imm, inst->result, r32);
+        femit_imm_to_reg(context, I_MOV, (i64) inst->imm, inst->result, r32);
       } else if (type_sizeof(inst->type) <= 8) {
-        femit_imm_to_reg(context, I_MOV, inst->imm, inst->result, r64);
+        femit_imm_to_reg(context, I_MOV, (i64) inst->imm, inst->result, r64);
       } else {
         ICE("Unsupported immediate size on x86_64: %Z", type_sizeof(inst->type));
       }
@@ -1010,9 +1010,9 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       // TODO: Use `movzx`/`movzbl`
       if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, inst->result);
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
-        femit_mem_to_reg(context, I_LEA, REG_RBP, -inst->operand->alloca.offset, inst->result, size);
+        femit_mem_to_reg(context, I_LEA, REG_RBP, - (i64)inst->operand->alloca.offset, inst->result, size);
       else
-        femit_mem_to_reg(context, I_MOV, REG_RBP, -inst->operand->alloca.offset, inst->result, size);
+        femit_mem_to_reg(context, I_MOV, REG_RBP, - (i64)inst->operand->alloca.offset, inst->result, size);
     }
 
     /// Load from a pointer
@@ -1041,7 +1041,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     /// Store to a local.
     else if (inst->store.addr->kind == IR_ALLOCA) {
       enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
-      femit_reg_to_mem(context, I_MOV, inst->store.value->result, size, REG_RBP, -inst->store.addr->alloca.offset);
+      femit_reg_to_mem(context, I_MOV, inst->store.value->result, size, REG_RBP, - (i64)inst->store.addr->alloca.offset);
       break;
     }
 
@@ -1059,7 +1059,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     if (inst->result) femit_name_to_reg(context, I_LEA, REG_RIP, inst->function_ref->name.data, inst->result, r64);
     break;
   case IR_ALLOCA:
-    femit_mem_to_reg(context, I_LEA, REG_RBP, -inst->alloca.offset, inst->result, r64);
+    femit_mem_to_reg(context, I_LEA, REG_RBP, - (i64)inst->alloca.offset, inst->result, r64);
     break;
 
   default:
