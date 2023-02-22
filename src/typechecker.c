@@ -763,6 +763,7 @@ NODISCARD static bool typecheck_type(Type *t) {
     if (!typecheck_type(t->function.return_type)) return false;
     foreach(Parameter, param, t->function.parameters) {
       if (!typecheck_type(param->type)) return false;
+      if (type_is_incomplete(param->type)) return false;
     }
     return true;
   case TYPE_ARRAY:
@@ -887,7 +888,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       }
 
       /// Make sure this isn’t an array of incomplete type.
-      if (!base_type) {
+      if (type_is_incomplete(base_type)) {
         ERR(expr->source_location, "Cannot declare %s of incomplete type '%T'",
             array ? "array" : "variable", expr->type);
       }
