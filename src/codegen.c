@@ -723,13 +723,13 @@ bool codegen
     default: ICE("Language %d not supported.", lang);
   }
 
-  if (debug_ir && codegen_only) {
+  if (debug_ir) {
     ir_femit(stdout, context);
   }
 
   if (optimise) codegen_optimise(context);
 
-  if (debug_ir && codegen_only) {
+  if (debug_ir) {
     ir_femit(stdout, context);
   }
 
