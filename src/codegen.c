@@ -42,7 +42,7 @@ CodegenContext *codegen_context_create
   STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_create_top_level() must exhaustively handle all calling conventions.");
   switch (format) {
     case CG_FMT_x86_64_GAS:
-      // TODO: Handle call_convention for creating codegen context!
+      // Handle call_convention for creating codegen context!
       if (call_convention == CG_CALL_CONV_MSWIN) {
         context = codegen_context_x86_64_mswin_create();
       } else if (call_convention == CG_CALL_CONV_LINUX) {
@@ -226,6 +226,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   }
 
   case NODE_DECLARATION:
+    codegen_lvalue(ctx, expr);
     expr->ir = ir_load(ctx, expr->address);
     return;
 
