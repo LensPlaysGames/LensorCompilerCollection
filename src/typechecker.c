@@ -1148,11 +1148,6 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                 "Cannot dereference incomplete pointer type %T",
                 expr->unary.value->type->pointer.to);
           }
-          if (pointee_type->kind == TYPE_FUNCTION) {
-            ERR(expr->unary.value->source_location,
-                "Cannot dereference function pointer type %T",
-                pointee_type);
-          }
 
           /// The result type of a dereference is the pointee.
           expr->type = expr->unary.value->type->pointer.to;

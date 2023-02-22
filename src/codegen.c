@@ -537,7 +537,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
         /// Load a value from a pointer.
         case TK_AT:
-          expr->ir = ir_load(ctx, expr->unary.value->ir);
+          if (expr->unary.value->type->kind == TYPE_POINTER && expr->unary.value->type->pointer.to->kind == TYPE_FUNCTION)
+            expr->ir = expr->unary.value->ir;
+          else expr->ir = ir_load(ctx, expr->unary.value->ir);
           return;
 
         /// One’s complement negation.
@@ -721,10 +723,10 @@ bool codegen
     ir_femit(stdout, context);
   }
 
-  if (optimise) codegen_optimise(context);
-
-  if (debug_ir) {
-    ir_femit(stdout, context);
+  if (optimise) {
+    codegen_optimise(context);
+    if (debug_ir)
+      ir_femit(stdout, context);
   }
 
   codegen_lower(context);
