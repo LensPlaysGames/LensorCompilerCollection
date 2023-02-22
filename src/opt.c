@@ -66,6 +66,7 @@ static bool has_side_effects(IRInstruction *i) {
     case IR_FUNC_REF:
     case IR_LIT_INTEGER:
     case IR_LIT_STRING:
+    case IR_ALLOCA:
     ALL_BINARY_INSTRUCTION_CASES()
       return false;
 
