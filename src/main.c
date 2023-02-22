@@ -9,7 +9,7 @@
 #include <platform.h>
 
 void print_usage(char **argv) {
-  print("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", argv[0]);
+  print("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", 0[argv]);
   print("Flags:\n"
          "   `-h`, `--help`    :: Show this help and usage information.\n"
          "   `--formats`       :: List acceptable output formats.\n"
@@ -80,7 +80,7 @@ int handle_command_line_arguments(int argc, char **argv) {
   prefer_using_diagnostics_colours = platform_isatty(fileno(stdout));
 
   for (int i = 1; i < argc; ++i) {
-    char *argument = argv[i];
+    char *argument = i[argv];
 
     //print("argument %d: \"%s\"\n", i, argument);
 
@@ -120,7 +120,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       /// Anything that starts w/ `-` is treated as a command line argument.
       /// If the user has a filepath that starts w/ `-...`, then they should use
       /// `./-...` instead.
-      if (*argv[i] == '-') {
+      if (0[i[argv]] == '-') {
         ICE("Expected filepath after output command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);
