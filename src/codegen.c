@@ -227,6 +227,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   case NODE_DECLARATION:
   case NODE_MEMBER_ACCESS:
+  case NODE_VARIABLE_REFERENCE:
     codegen_lvalue(ctx, expr);
     expr->ir = ir_load(ctx, expr->address);
     return;
@@ -448,8 +449,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         ERR("Subscript operator may only operate on arrays and pointers, which type %T is not", lhs->type);
 
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
-        IRInstruction *var_decl = lhs->var->val.node->ir;
-        // ASSERT(var_decl);
+        IRInstruction *var_decl = lhs->var->val.node->address;
         if (var_decl->kind == IR_STATIC_REF || var_decl->kind == IR_ALLOCA)
           subs_lhs = var_decl;
         else {
@@ -574,12 +574,6 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       expr->ir->static_ref->init = s;
     }
     else DIAG(DIAG_SORRY, expr->source_location, "Emitting literals of type %T not supported", expr->type);
-    return;
-
-  /// Variable reference.
-  case NODE_VARIABLE_REFERENCE:
-    codegen_lvalue(ctx, expr);
-    expr->ir = ir_load(ctx, expr->address);
     return;
 
   /// Function reference. These should have all been removed by the semantic analyser.
