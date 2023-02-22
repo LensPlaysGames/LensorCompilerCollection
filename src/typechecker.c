@@ -55,6 +55,18 @@ NODISCARD static bool types_equal_canon(Type *a, Type *b) {
         if (!types_equal(a->function.parameters.data[i].type, b->function.parameters.data[i].type))
           return false;
       return true;
+
+    case TYPE_STRUCT:
+      if (a->structure.alignment != b->structure.alignment) return false;
+      if (a->structure.byte_size != b->structure.byte_size) return false;
+      if (a->structure.members.size != b->structure.members.size) return false;
+      foreach_index(i, a->structure.members) {
+        Member a_member = a->structure.members.data[i];
+        Member b_member = a->structure.members.data[i];
+        if (a_member.byte_offset != b_member.byte_offset) return false;
+        if (!types_equal(a_member.type, b_member.type)) return false;
+      }
+      return true;
     }
   }
 }
