@@ -860,7 +860,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     } break;
 
     /// Typecheck declarations.
-    case NODE_DECLARATION:
+    case NODE_DECLARATION: {
       /// If there is an initialiser, then its type must match the type of the variable.
       if (expr->declaration.init) {
         if (!typecheck_expression(ast, expr->declaration.init)) return false;
@@ -870,8 +870,33 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           if (expr->type == t_integer_literal) expr->type = t_integer;
         } else if (!convertible(expr->type, expr->declaration.init->type))
           ERR_NOT_CONVERTIBLE(expr->declaration.init->source_location, expr->type, expr->declaration.init->type);
+      } else if (!expr->type) ERR(expr->source_location, "Cannot infer type of declaration without initialiser");
+
+      if (!typecheck_type(expr->type)) return false;
+
+      /// Strip arrays and recursive typedefs.
+      Type *base_type = type_canonical(expr->type);
+      Type *array = NULL;
+      while (base_type) {
+        if (base_type->kind == TYPE_NAMED) base_type = type_canonical(base_type->named->val.type);
+        else if (base_type->kind == TYPE_ARRAY) {
+          array = base_type;
+          base_type = type_canonical(base_type->array.of);
+          break;
+        } else break;
       }
-      break;
+
+      /// Make sure this isn’t an array of incomplete type.
+      if (!base_type) {
+        ERR(expr->source_location, "Cannot declare %s of incomplete type '%T'",
+            array ? "array" : "variable", expr->type);
+      }
+
+      if (base_type->kind == TYPE_FUNCTION) {
+        ERR(expr->source_location, "Cannot declare %s of function type '%T'",
+            array ? "array" : "variable", expr->type);
+      }
+      } break;
 
     /// If expression.
     case NODE_IF:
