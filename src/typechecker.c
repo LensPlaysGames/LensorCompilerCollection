@@ -55,6 +55,18 @@ NODISCARD static bool types_equal_canon(Type *a, Type *b) {
         if (!types_equal(a->function.parameters.data[i].type, b->function.parameters.data[i].type))
           return false;
       return true;
+
+    case TYPE_STRUCT:
+      if (a->structure.alignment != b->structure.alignment) return false;
+      if (a->structure.byte_size != b->structure.byte_size) return false;
+      if (a->structure.members.size != b->structure.members.size) return false;
+      foreach_index(i, a->structure.members) {
+        Member a_member = a->structure.members.data[i];
+        Member b_member = a->structure.members.data[i];
+        if (a_member.byte_offset != b_member.byte_offset) return false;
+        if (!types_equal(a_member.type, b_member.type)) return false;
+      }
+      return true;
     }
   }
 }
@@ -202,11 +214,14 @@ NODISCARD static Type *common_type(Type *a, Type *b) {
 /// Check if an expression is an lvalue.
 NODISCARD static bool is_lvalue(Node *expr) {
   switch (expr->kind) {
-    default: return false;
+  default: return false;
+
+    // FIXME: Add `if`
 
     /// Declarations and variables are obviously lvalues.
     case NODE_DECLARATION:
     case NODE_VARIABLE_REFERENCE:
+    case NODE_MEMBER_ACCESS:
       return true;
 
     /// A dereference is an lvalue.
@@ -760,6 +775,7 @@ NODISCARD static bool typecheck_type(Type *t) {
     if (!typecheck_type(t->function.return_type)) return false;
     foreach(Parameter, param, t->function.parameters) {
       if (!typecheck_type(param->type)) return false;
+      if (type_is_incomplete(param->type)) return false;
     }
     return true;
   case TYPE_ARRAY:
@@ -857,7 +873,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     } break;
 
     /// Typecheck declarations.
-    case NODE_DECLARATION:
+    case NODE_DECLARATION: {
       /// If there is an initialiser, then its type must match the type of the variable.
       if (expr->declaration.init) {
         if (!typecheck_expression(ast, expr->declaration.init)) return false;
@@ -867,8 +883,33 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           if (expr->type == t_integer_literal) expr->type = t_integer;
         } else if (!convertible(expr->type, expr->declaration.init->type))
           ERR_NOT_CONVERTIBLE(expr->declaration.init->source_location, expr->type, expr->declaration.init->type);
+      } else if (!expr->type) ERR(expr->source_location, "Cannot infer type of declaration without initialiser");
+
+      if (!typecheck_type(expr->type)) return false;
+
+      /// Strip arrays and recursive typedefs.
+      Type *base_type = type_canonical(expr->type);
+      Type *array = NULL;
+      while (base_type) {
+        if (base_type->kind == TYPE_NAMED) base_type = type_canonical(base_type->named->val.type);
+        else if (base_type->kind == TYPE_ARRAY) {
+          array = base_type;
+          base_type = type_canonical(base_type->array.of);
+          break;
+        } else break;
       }
-      break;
+
+      /// Make sure this isn’t an array of incomplete type.
+      if (type_is_incomplete(base_type)) {
+        ERR(expr->source_location, "Cannot declare %s of incomplete type '%T'",
+            array ? "array" : "variable", expr->type);
+      }
+
+      if (base_type->kind == TYPE_FUNCTION) {
+        ERR(expr->source_location, "Cannot declare %s of function type '%T'",
+            array ? "array" : "variable", expr->type);
+      }
+      } break;
 
     /// If expression.
     case NODE_IF:
@@ -1001,7 +1042,8 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Binary expression. This is a complicated one.
     case NODE_BINARY: {
       /// Get this out of the way early.
-      Node *const lhs = expr->binary.lhs, *const rhs = expr->binary.rhs;
+      Node *const lhs = expr->binary.lhs;
+      Node *const rhs = expr->binary.rhs;
       if (!typecheck_expression(ast, lhs)) return false;
       if (!typecheck_expression(ast, rhs)) return false;
 
@@ -1107,14 +1149,22 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         default: ICE("Invalid unary operator '%s'.", token_type_to_string(expr->unary.op));
 
         /// We can only deference pointers.
-        case TK_AT:
-          if (!type_is_pointer(expr->unary.value->type))
+        case TK_AT: {
+          if (!type_is_pointer(expr->unary.value->type)) {
             ERR(expr->unary.value->source_location,
-              "Argument of '@' must be a pointer.");
+                "Argument of '@' must be a pointer.");
+          }
+
+          Type *pointee_type = type_canonical(expr->unary.value->type->pointer.to);
+          if (!pointee_type) {
+            ERR(expr->unary.value->source_location,
+                "Cannot dereference incomplete pointer type %T",
+                expr->unary.value->type->pointer.to);
+          }
 
           /// The result type of a dereference is the pointee.
           expr->type = expr->unary.value->type->pointer.to;
-          break;
+          } break;
 
         /// Address of lvalue.
         case TK_AMPERSAND:

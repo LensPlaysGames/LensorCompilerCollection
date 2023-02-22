@@ -1064,7 +1064,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
   default:
     ir_femit_instruction(stderr, inst);
-    TODO("Handle IRType %d\n", inst->kind);
+    TODO("Handle IRtype %d\n", inst->kind);
     break;
   }
 }

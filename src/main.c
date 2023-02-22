@@ -9,14 +9,13 @@
 #include <platform.h>
 
 void print_usage(char **argv) {
-  print("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", argv[0]);
+  print("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", 0[argv]);
   print("Flags:\n"
          "   `-h`, `--help`    :: Show this help and usage information.\n"
          "   `--formats`       :: List acceptable output formats.\n"
          "   `--callings`      :: List acceptable calling conventions.\n"
          "   `--dialects`      :: List acceptable assembly dialects.\n"
          "   `--debug-ir`      :: Dump IR to stdout (in debug format).\n"
-         "   `--codegen-only`  :: When --debug-ir is enabled: Dump IR after codegen.\n"
          "   `--print-ast      :: Print the AST and exit.\n"
          "   `--syntax-only    :: Perform no semantic analysis.\n"
          "   `--print-scopes   :: Print the scope tree and exit.\n"
@@ -45,7 +44,6 @@ bool syntax_only = false;
 bool print_scopes = false;
 bool prefer_using_diagnostics_colours = true;
 bool colours_blink = false;
-bool codegen_only = false;
 
 void print_acceptable_formats() {
   print("Acceptable formats include:\n"
@@ -82,7 +80,7 @@ int handle_command_line_arguments(int argc, char **argv) {
   prefer_using_diagnostics_colours = platform_isatty(fileno(stdout));
 
   for (int i = 1; i < argc; ++i) {
-    char *argument = argv[i];
+    char *argument = i[argv];
 
     //print("argument %d: \"%s\"\n", i, argument);
 
@@ -99,8 +97,6 @@ int handle_command_line_arguments(int argc, char **argv) {
     } else if (strcmp(argument, "--dialects") == 0) {
       print_acceptable_asm_dialects();
       exit(0);
-    } else if (strcmp(argument, "--codegen-only") == 0) {
-      codegen_only = true;
     } else if (strcmp(argument, "--debug-ir") == 0) {
       debug_ir = true;
     } else if (strcmp(argument, "--print-ast") == 0) {
@@ -124,7 +120,7 @@ int handle_command_line_arguments(int argc, char **argv) {
       /// Anything that starts w/ `-` is treated as a command line argument.
       /// If the user has a filepath that starts w/ `-...`, then they should use
       /// `./-...` instead.
-      if (*argv[i] == '-') {
+      if (0[i[argv]] == '-') {
         ICE("Expected filepath after output command line argument\n"
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argv[i]);

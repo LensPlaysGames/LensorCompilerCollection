@@ -132,6 +132,7 @@ if (NOT MSVC)
 
     -Wno-unused-parameter -Wno-unused-function
     -Wno-format-zero-length -Wno-comment
+    -Wno-cast-function-type
 
     -fdiagnostics-color=always
   )

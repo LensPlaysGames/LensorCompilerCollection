@@ -674,32 +674,6 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
   return call;
 }
 
-/// Check if a type is valid as a declaration type.
-static void validate_decltype(Parser *p, Type *type) {
-  /// Strip arrays and recursive typedefs.
-  Type *base_type = type_canonical(type);
-  Type *array = NULL;
-  while (base_type) {
-    if (base_type->kind == TYPE_NAMED) base_type = type_canonical(base_type->named->val.type);
-    else if (base_type->kind == TYPE_ARRAY) {
-      array = base_type;
-      base_type = type_canonical(base_type->array.of);
-      break;
-    } else break;
-  }
-
-  /// Make sure this isn’t an array of incomplete type.
-  if (!base_type) {
-    ERR_AT(type->source_location, "Cannot declare %s of incomplete type '%T'",
-           array ? "array" : "variable", type);
-  }
-
-  if (base_type->kind == TYPE_FUNCTION) {
-    ERR_AT(type->source_location, "Cannot declare %s of function type '%T'",
-           array ? "array" : "variable", type);
-  }
-}
-
 /// Parse the body of a function.
 ///
 /// This is basically just a wrapper around `parse_block()` that
@@ -717,7 +691,6 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
 
   /// Create a declaration for each parameter.
   foreach (Parameter , param, function_type->function.parameters) {
-    validate_decltype(p, param->type);
     Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
     if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var))
       ERR_AT(var->source_location, "Redefinition of parameter '%S'", var->declaration.name);
@@ -869,7 +842,7 @@ static Type *parse_type(Parser *p) {
   /// Parse the base type.
   if (p->tok.type == TK_IDENT) {
     /// Make sure the identifier is a type.
-    Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_TYPE, as_span(p->tok.text), true);
+    Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_TYPE, as_span(p->tok.text), false);
     if (sym->kind != SYM_TYPE) ERR("'%S' is not a type!", as_span(p->tok.text));
 
     /// Create a named type from it.
@@ -915,7 +888,7 @@ static Type *parse_type(Parser *p) {
   }
 
   /// Invalid base type.
-  ERR("Expected base type, got %d", (int) p->tok.type);
+  ERR("Expected base type, got %s", token_type_to_string(p->tok.type));
 }
 
 /// <expr-decl>      ::= <decl-start> <decl-rest>
@@ -968,9 +941,6 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
       return funcref;
     }
   }
-
-  /// Make sure we can perform this declaration.
-  validate_decltype(p, type);
 
   /// Create the declaration.
   Node *decl = ast_make_declaration(p->ast, location, type, as_span(ident), NULL);

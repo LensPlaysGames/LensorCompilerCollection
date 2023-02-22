@@ -329,6 +329,8 @@ struct Node {
 
   /// The IR instruction that this node is compiled to.
   IRInstruction *ir;
+  /// Things that are lvalues store their address here.
+  IRInstruction *address;
 
   /// Various flags.
   bool type_checked : 1; /// Whether this node has been type checked.

@@ -277,7 +277,7 @@ void ir_femit_instruction
 #ifdef DEBUG_USES
   /// Print users
   fprint(file, "%m\033[60GUsers: ");
-  VECTOR_FOREACH_PTR (IRInstruction*, user, inst->users) {
+  foreach_ptr (IRInstruction*, user, inst->users) {
     fprint(file, "%%%u, ", user->id);
   }
 #endif
