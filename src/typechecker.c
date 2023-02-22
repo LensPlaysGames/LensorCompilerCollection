@@ -1223,7 +1223,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           expr->member_access.ident
         )
       );
-      if (!member) return false;
+      if (!member)
+        ERR(expr->source_location, "The type %T has no member named '%S'.",
+            struct_type, expr->member_access.ident);
       expr->member_access.member = member;
       expr->type = member->type;
 
