@@ -1234,7 +1234,11 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           expr->member_access.ident
         )
       );
-      if (!member) return false;
+      if (!member)
+        ERR(expr->source_location,
+            "Cannot access member \"%S\" that does not exist in \"%S\", an instance of %T",
+            expr->member_access.ident, expr->member_access.struct_->struct_decl->name, struct_type);
+
       expr->member_access.member = member;
       expr->type = member->type;
 
