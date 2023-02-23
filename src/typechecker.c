@@ -662,7 +662,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       if (decl_type->kind != TYPE_POINTER || decl_type->pointer.to->kind != TYPE_FUNCTION) {
         ERR_DONT_RETURN(func->source_location,
           "Overloaded function %S is not convertible to %T\n",
-            func->funcref.name, decl_type);
+          func->funcref.name, decl_type);
         goto err;
       }
 
@@ -694,7 +694,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       if (lvalue_type->kind != TYPE_POINTER || lvalue_type->pointer.to->kind != TYPE_FUNCTION) {
         ERR_DONT_RETURN(func->source_location,
           "Overloaded function %S is not convertible to %T\n",
-            func->funcref.name, lvalue_type);
+          func->funcref.name, lvalue_type);
         goto err;
       }
 
