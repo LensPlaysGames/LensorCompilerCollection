@@ -21,7 +21,9 @@ typedef ptrdiff_t isz;
 #  define NORETURN __attribute__((noreturn))
 #  define FALLTHROUGH __attribute__((fallthrough))
 #  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
-#  define FORCEINLINE __attribute__((always_inline)) inline
+#  ifndef FORCEINLINE
+#    define FORCEINLINE __attribute__((always_inline)) inline
+#  endif
 #  define PRETTY_FUNCTION __PRETTY_FUNCTION__
 #  define NODISCARD __attribute__((warn_unused_result))
 #  define BUILTIN_UNREACHABLE() __builtin_unreachable()

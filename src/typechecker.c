@@ -568,7 +568,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       foreach (unresolved_func, uf, unresolved_functions) {
         uf->overloads = collect_overload_set(call->call.arguments.data[uf->index]);
 
-        /// Sanity check.
+        /// Confidence check.
         if (!uf->overloads.size) {
           ERR_DONT_RETURN(call->call.arguments.data[uf->index]->source_location, "Unknown symbol");
           goto cleanup_arg_overloads;
@@ -662,7 +662,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       if (decl_type->kind != TYPE_POINTER || decl_type->pointer.to->kind != TYPE_FUNCTION) {
         ERR_DONT_RETURN(func->source_location,
           "Overloaded function %S is not convertible to %T\n",
-            func->funcref.name, decl_type);
+          func->funcref.name, decl_type);
         goto err;
       }
 
@@ -677,10 +677,16 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     case NODE_BINARY: {
       if (parent->binary.op != TK_COLON_EQ) break;
 
-      /// ... if we are the LHS, and this is a type error, as we cannot assign to a
-      /// function reference. The code that typechecks binary expressions will take
-      /// care of reporting this error.
-      if (func == parent->binary.lhs) return false;
+      /// ... if we are the LHS then this is a type error, as we cannot assign to a
+      /// function reference.
+      if (func == parent->binary.lhs) {
+        if (type_is_incomplete(func->type))
+          ERR(func->source_location,
+              "Cannot assign to a function or a variable of incomplete type");
+        else
+          ERR(func->source_location,
+              "Cannot assign to function type %T", func->type);
+      }
       ASSERT(func == parent->binary.rhs);
 
       /// If the lvalue is not of function pointer type, this is a type error.
@@ -688,7 +694,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       if (lvalue_type->kind != TYPE_POINTER || lvalue_type->pointer.to->kind != TYPE_FUNCTION) {
         ERR_DONT_RETURN(func->source_location,
           "Overloaded function %S is not convertible to %T\n",
-            func->funcref.name, lvalue_type);
+          func->funcref.name, lvalue_type);
         goto err;
       }
 
@@ -759,32 +765,38 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   goto done;
 }
 
-NODISCARD static bool typecheck_type(Type *t) {
+NODISCARD static bool typecheck_type(AST *ast, Type *t) {
   if (t->type_checked) return true;
   t->type_checked = true;
   switch (t->kind) {
   default: ICE("Invalid type kind of type %T", t);
   case TYPE_PRIMITIVE: return true;
-  case TYPE_POINTER: return typecheck_type(t->pointer.to);
+  case TYPE_POINTER: return typecheck_type(ast, t->pointer.to);
   case TYPE_NAMED: {
     if (t->named->val.type)
-      return typecheck_type(t->named->val.type);
+      return typecheck_type(ast, t->named->val.type);
     return true;
   }
   case TYPE_FUNCTION:
-    if (!typecheck_type(t->function.return_type)) return false;
+    if (!typecheck_type(ast, t->function.return_type)) return false;
     foreach(Parameter, param, t->function.parameters) {
-      if (!typecheck_type(param->type)) return false;
-      if (type_is_incomplete(param->type)) return false;
+      if (!typecheck_type(ast, param->type)) return false;
+      if (type_is_incomplete(param->type)) {
+        ERR(param->source_location,
+            "Function parameter must not be of incomplete type");
+        return false;
+      }
     }
     return true;
   case TYPE_ARRAY:
-    if (!typecheck_type(t->array.of)) return false;
-    if (!t->array.size) return false;
+    if (!typecheck_type(ast, t->array.of)) return false;
+    if (!t->array.size)
+      ERR(t->source_location,
+          "Cannot create array of zero size: %T", t);
     return true;
   case TYPE_STRUCT:
     foreach(Member, member, t->structure.members) {
-      if (!typecheck_type(member->type)) return false;
+      if (!typecheck_type(ast, member->type)) return false;
     }
 
     foreach(Member, member, t->structure.members) {
@@ -802,8 +814,7 @@ NODISCARD static bool typecheck_type(Type *t) {
 
     return true;
   }
-
-  return false;
+  UNREACHABLE();
 }
 
 NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
@@ -811,7 +822,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
   if (expr->type_checked) return true;
   expr->type_checked = true;
 
-  if (expr->type && !typecheck_type(expr->type)) return false;
+  if (expr->type && !typecheck_type(ast, expr->type)) return false;
 
   /// Typecheck the expression.
   switch (expr->kind) {
@@ -885,7 +896,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           ERR_NOT_CONVERTIBLE(expr->declaration.init->source_location, expr->type, expr->declaration.init->type);
       } else if (!expr->type) ERR(expr->source_location, "Cannot infer type of declaration without initialiser");
 
-      if (!typecheck_type(expr->type)) return false;
+      if (!typecheck_type(ast, expr->type)) return false;
 
       /// Strip arrays and recursive typedefs.
       Type *base_type = type_canonical(expr->type);
@@ -1204,7 +1215,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// The type of a structure declaration is the type of the struct.
     case NODE_STRUCTURE_DECLARATION:
-      return typecheck_type(expr->struct_decl->val.type);
+      return typecheck_type(ast, expr->struct_decl->val.type);
 
     /// The type of a structure declaration is the type of the struct.
     case NODE_MEMBER_ACCESS: {
@@ -1224,8 +1235,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         )
       );
       if (!member)
-        ERR(expr->source_location, "The type %T has no member named '%S'.",
-            struct_type, expr->member_access.ident);
+        ERR(expr->source_location,
+            "Cannot access member \"%S\" that does not exist in \"%S\", an instance of %T",
+            expr->member_access.ident, expr->member_access.struct_->struct_decl->name, struct_type);
+
       expr->member_access.member = member;
       expr->type = member->type;
 
