@@ -1308,6 +1308,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_GE: return "\">=\"";
     case TK_COLON_EQ: return "\":=\"";
     case TK_COLON_COLON: return "\"::\"";
+    case TK_COLON_GT: return "\":>\"";
   }
 
   UNREACHABLE();

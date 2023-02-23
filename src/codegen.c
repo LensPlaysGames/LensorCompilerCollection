@@ -567,7 +567,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       // automatically generate one (i.e. exactly what we do here).
       char buf[48] = {0};
       static size_t string_literal_count = 0;
-      int len = snprintf(buf, 48, "__str_lit%zu", string_literal_count++);
+      snprintf(buf, 48, "__str_lit%zu", string_literal_count++);
 
       expr->ir = ir_create_static(ctx, expr, expr->type, as_span(string_create(buf)));
       // Set static initialiser so backend will properly fill in data from string literal.

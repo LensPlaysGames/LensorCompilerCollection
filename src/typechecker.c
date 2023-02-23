@@ -677,15 +677,11 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     case NODE_BINARY: {
       if (parent->binary.op != TK_COLON_EQ) break;
 
-      /// ... if we are the LHS then this is a type error, as we cannot assign to a
+      /// ... if we are the LHS, then this is a type error, as we cannot assign to a
       /// function reference.
       if (func == parent->binary.lhs) {
-        if (type_is_incomplete(func->type))
-          ERR(func->source_location,
-              "Cannot assign to a function or a variable of incomplete type");
-        else
-          ERR(func->source_location,
-              "Cannot assign to function type %T", func->type);
+        if (overload_set.size) ERR(func->source_location, "Cannot assign to function '%S'", func->funcref.name);
+        else ERR(func->source_location, "Unknown symbol '%S'", func->funcref.name);
       }
       ASSERT(func == parent->binary.rhs);
 

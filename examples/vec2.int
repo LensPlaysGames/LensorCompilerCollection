@@ -13,7 +13,7 @@ vec2_add : vec2(a : vec2, b : vec2) {
 a : vec2
 a.x := 34
 b : vec2
-b.a := 420
+b.y := 420
 b.x := 35
 
 vec2_add(a, b).y

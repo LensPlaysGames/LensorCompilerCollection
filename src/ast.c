@@ -1058,9 +1058,14 @@ void ast_replace_node(AST *ast, Node *old, Node *new) {
       if (old->parent->unary.value == old) old->parent->unary.value = new;
       break;
 
+    case NODE_MEMBER_ACCESS:
+      if (old->parent->member_access.struct_ == old) old->parent->member_access.struct_ = new;
+      break;
+
     case NODE_LITERAL:
     case NODE_VARIABLE_REFERENCE:
     case NODE_FUNCTION_REFERENCE:
+    case NODE_STRUCTURE_DECLARATION:
       break;
   }
 

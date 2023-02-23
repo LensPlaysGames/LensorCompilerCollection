@@ -105,9 +105,13 @@ void ir_remove(IRInstruction* instruction) {
   list_remove(instruction->parent_block->instructions, instruction);
   vector_delete(instruction->users);
   ir_unmark_usees(instruction);
-  /// Parameters / static refs should not be freed here.
-  if (instruction->kind != IR_PARAMETER && instruction->kind != IR_STATIC_REF)
-    free(instruction);
+
+  /// Unlink static refs.
+  if (instruction->kind == IR_STATIC_REF)
+    vector_remove_element_unordered(instruction->static_ref->references, instruction);
+
+  /// Parameters should not be freed here.
+  if (instruction->kind != IR_PARAMETER) free(instruction);
   else vector_push(instruction->parent_block->function->context->removed_instructions, instruction);
 }
 
