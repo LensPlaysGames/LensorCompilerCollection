@@ -766,7 +766,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
 
   ir_set_func_ids(f);
   build_adjacency_lists(&instructions, &G);
-  PRINT_ADJACENCY_LISTS(G.list);
+  PRINT_ADJACENCY_LISTS(&G.lists);
 
   DEBUG("Before Coalescing\n");
   ir_set_func_ids(f);
@@ -787,7 +787,7 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
   ir_set_func_ids(f);
   IR_FEMIT(stdout, f);
   PRINT_ADJACENCY_MATRIX(G.matrix);
-  PRINT_ADJACENCY_LISTS(G.list);
+  PRINT_ADJACENCY_LISTS(&G.lists);
 
   NumberStack stack = build_coloring_stack(desc, &instructions, &G);
 
@@ -795,8 +795,8 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
   ir_set_func_ids(f);
   IR_FEMIT(stdout, f);
   PRINT_ADJACENCY_MATRIX(G.matrix);
-  PRINT_ADJACENCY_LISTS(G.list);
-  PRINT_NUMBER_STACK(stack);
+  PRINT_ADJACENCY_LISTS(&G.lists);
+  PRINT_NUMBER_STACK(&stack);
 
   color(desc, &stack, &instructions, &G);
 
@@ -804,9 +804,9 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
   ir_set_func_ids(f);
   IR_FEMIT(stdout, f);
   PRINT_ADJACENCY_MATRIX(G.matrix);
-  PRINT_ADJACENCY_LISTS(G.list);
+  PRINT_ADJACENCY_LISTS(&G.lists);
   PRINT_INSTRUCTION_LIST(&instructions);
-  PRINT_NUMBER_STACK(stack);
+  PRINT_NUMBER_STACK(&stack);
 
   track_registers(f);
 
