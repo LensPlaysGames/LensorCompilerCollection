@@ -1,0 +1,6 @@
+putc : ext integer(c : integer)
+
+count : integer = 10
+for i : integer = 0, i < count, i := i + 1 {
+  putc(i)
+}
