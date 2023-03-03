@@ -376,18 +376,19 @@ static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc,
   }
 }
 
+// FIXME: This function doesn't do the right thing AT ALL!!
 void print_adjacency_matrix(AdjacencyMatrix m) {
   for (usz y = 0; y < m.size; ++y) {
-    print("%Z |%b", y, adjm(m, 0, y));
+    print("%Z |%u", y, adjm(m, 0, y));
     for (usz x = 1; x < y; ++x) {
       bool adj = adjm(m, x, y);
-      adj ? print("%b", adj) : print("   ");
+      adj ? print(" %u", adj) : print("   ");
     }
     print("\n");
   }
   print("     |  %d", 0);
   for (usz x = 1; x < m.size; ++x) {
-    print("%Z", x);
+    print(" %Z", x);
   }
   print("\n\n");
 }
