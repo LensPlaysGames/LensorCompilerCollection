@@ -644,7 +644,7 @@ IRInstruction *ir_not
 #define CREATE_BINARY_INSTRUCTION(enumerator, name)                                           \
   IRInstruction *ir_##name(CodegenContext *context, IRInstruction *lhs, IRInstruction *rhs) { \
     INSTRUCTION(x, IR_##enumerator);                                                          \
-    x->type = t_integer;                                                                      \
+    x->type = lhs->type;                                                                      \
     set_pair_and_mark(x, lhs, rhs);                                                           \
     INSERT(x);                                                                                \
     return x;                                                                                 \

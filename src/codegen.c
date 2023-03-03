@@ -169,7 +169,9 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
 
   case NODE_MEMBER_ACCESS:
     codegen_lvalue(ctx, lval->member_access.struct_);
-    lval->address = ir_add(ctx, lval->member_access.struct_->address, ir_immediate(ctx, t_integer, lval->member_access.member->byte_offset));
+    lval->address = ir_add(ctx, lval->member_access.struct_->address,
+                           ir_immediate(ctx, t_integer, lval->member_access.member->byte_offset));
+    lval->address->type = ast_make_type_pointer(ctx->ast, lval->source_location, lval->member_access.member->type);
     break;
 
   case NODE_IF:
