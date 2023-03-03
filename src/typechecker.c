@@ -1090,12 +1090,12 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_LE:
         case TK_EQ:
         case TK_NE:
-          if (!is_integer(lhs->type))
+          if (!is_integer(lhs->type) && !type_is_pointer(lhs->type))
             ERR(lhs->source_location,
               "Cannot compare non-integer type '%T'.",
                 lhs->type);
 
-          if (!is_integer(rhs->type))
+          if (!is_integer(rhs->type) && !type_is_pointer(rhs->type))
             ERR(rhs->source_location,
               "Cannot compare non-integer type '%T'.",
                 rhs->type);
