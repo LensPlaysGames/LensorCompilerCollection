@@ -54,6 +54,9 @@ enum TokenType {
   TK_EXT,
   TK_AS,
   TK_TYPE,
+  TK_VOID,
+  TK_BYTE,
+  TK_INTEGER_KW,
 
   TK_LPAREN,
   TK_RPAREN,

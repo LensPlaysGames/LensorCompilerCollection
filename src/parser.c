@@ -68,13 +68,16 @@ typedef struct Parser {
 const struct {
   span kw;
   enum TokenType type;
-} keywords[6] = {
+} keywords[9] = {
     {literal_span_raw("if"), TK_IF},
     {literal_span_raw("else"), TK_ELSE},
     {literal_span_raw("while"), TK_WHILE},
     {literal_span_raw("ext"), TK_EXT},
     {literal_span_raw("as"), TK_AS},
     {literal_span_raw("type"), TK_TYPE},
+    {literal_span_raw("void"), TK_VOID},
+    {literal_span_raw("byte"), TK_BYTE},
+    {literal_span_raw("integer"), TK_INTEGER_KW},
 };
 
 /// Check if a character may start an identifier.
@@ -710,7 +713,6 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
 
 /// Parse an expression that starts with a type.
 ///
-/// <expr-cast>      ::= <type> <expression>
 /// <expr-lambda>    ::= <type-function> <expr-block>
 static Node *parse_type_expr(Parser *p, Type *type) {
   /// If this is a function type, then this is a lambda expression.
@@ -839,40 +841,51 @@ static Type *parse_type(Parser *p) {
     next_token(p);
   }
 
+  Type *out = NULL;
+
   /// Parse the base type.
-  if (p->tok.type == TK_IDENT) {
+  switch (p->tok.type) {
+
+  case TK_IDENT: {
     /// Make sure the identifier is a type.
     Symbol *sym = scope_find_or_add_symbol(curr_scope(p), SYM_TYPE, as_span(p->tok.text), false);
     if (sym->kind != SYM_TYPE) ERR("'%S' is not a type!", as_span(p->tok.text));
 
     /// Create a named type from it.
-    Type *base = ast_make_type_named(p->ast, p->tok.source_location, sym);
-
-    /// If we have pointer indirection levels, wrap the type in a pointer.
-    while (level--) base = ast_make_type_pointer(p->ast, (loc){start.start--, p->tok.source_location.end}, base);
+    out = ast_make_type_named(p->ast, p->tok.source_location, sym);
 
     /// Yeet the identifier and parse the rest of the type.
-    base->source_location.start = start.start;
+    out->source_location.start = start.start;
     next_token(p);
-    return parse_type_derived(p, base);
-  }
+  } break;
 
   /// Alternatively, we allow any type, enclosed in parens.
-  if (p->tok.type == TK_LPAREN) {
+  case TK_LPAREN: {
+    // Yeet "(" and pase the type.
     next_token(p);
-    Type *base = parse_type(p);
-
-    /// If we have pointer indirection levels, wrap the type in a pointer.
-    while (level--) base = ast_make_type_pointer(p->ast, (loc){start.start--, p->tok.source_location.end}, base);
+    out = parse_type(p);
 
     /// Yeet ")" and parse the rest of the type.
-    base->source_location.start = start.start;
+    out->source_location.start = start.start;
     consume(p, TK_RPAREN);
-    return parse_type_derived(p, base);
-  }
+  } break;
+
+  // Builtin types
+  case TK_VOID: {
+    out = t_void;
+    next_token(p);
+  } break;
+  case TK_BYTE: {
+    out = t_byte;
+    next_token(p);
+  } break;
+  case TK_INTEGER_KW: {
+    out = t_integer;
+    next_token(p);
+  } break;
 
   // Structure type definition
-  if (p->tok.type == TK_TYPE) {
+  case TK_TYPE: {
     loc type_kw_loc = p->tok.source_location;
     // Yeet TK_TYPE
     next_token(p);
@@ -884,11 +897,18 @@ static Type *parse_type(Parser *p) {
       if (p->tok.type == TK_COMMA) next_token(p);
     }
     consume(p, TK_RBRACE);
-    return ast_make_type_struct(p->ast, type_kw_loc, members);
+    out = ast_make_type_struct(p->ast, type_kw_loc, members);
+  } break;
+
+  default:
+    /// Invalid base type.
+    ERR("Expected base type, got %s", token_type_to_string(p->tok.type));
   }
 
-  /// Invalid base type.
-  ERR("Expected base type, got %s", token_type_to_string(p->tok.type));
+  /// If we have pointer indirection levels, wrap the type in a pointer.
+  while (level--) out = ast_make_type_pointer(p->ast, (loc){start.start--, p->tok.source_location.end}, out);
+
+  return parse_type_derived(p, out);
 }
 
 /// <expr-decl>      ::= <decl-start> <decl-rest>
@@ -1081,6 +1101,11 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
 
     /// An identifier can either be a declaration, function call, or cast.
     case TK_IDENT: lhs = parse_ident_expr(p); break;
+    case TK_VOID:
+    case TK_BYTE:
+    case TK_INTEGER_KW: {
+      lhs = parse_type_expr(p, parse_type(p));
+    } break;
     case TK_IF: lhs = parse_if_expr(p); break;
     case TK_ELSE: ERR("'else' without 'if'");
     case TK_WHILE: lhs = parse_while_expr(p); break;
@@ -1094,7 +1119,7 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
       next_token(p);
       break;
     case TK_LPAREN:
-      next_token(p);
+      next_token(p); //> Yeet "("
       lhs = parse_expr(p);
       consume(p, TK_RPAREN);
       break;
@@ -1276,6 +1301,9 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_EXT: return "ext";
     case TK_AS: return "as";
     case TK_TYPE: return "type";
+    case TK_VOID: return "void";
+    case TK_BYTE: return "byte";
+    case TK_INTEGER_KW: return "integer";
     case TK_LPAREN: return "\"(\"";
     case TK_RPAREN: return "\")\"";
     case TK_LBRACK: return "\"[\"";
@@ -1310,7 +1338,6 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_COLON_COLON: return "\"::\"";
     case TK_COLON_GT: return "\":>\"";
   }
-
   UNREACHABLE();
 }
 
