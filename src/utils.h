@@ -21,6 +21,11 @@ typedef ptrdiff_t isz;
 #  define NORETURN __attribute__((noreturn))
 #  define FALLTHROUGH __attribute__((fallthrough))
 #  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
+#  define PRAGMA_STR(_Str) _Pragma(#_Str)
+#  define PUSH_IGNORE_WARNING(W)      \
+    _Pragma("GCC diagnostic push")    \
+    PRAGMA_STR(GCC diagnostic ignored W)
+#  define POP_WARNINGS() _Pragma("GCC diagnostic pop")
 #  ifndef FORCEINLINE
 #    define FORCEINLINE __attribute__((always_inline)) inline
 #  endif
@@ -32,6 +37,9 @@ typedef ptrdiff_t isz;
 #  define NORETURN __declspec(noreturn)
 #  define FALLTHROUGH
 #  define FORMAT(...)
+#  define PRAGMA_STR(...)
+#  define PUSH_IGNORE_WARNING(...)
+#  define POP_WARNINGS()
 #  define FORCEINLINE __forceinline inline
 #  define PRETTY_FUNCTION __FUNCSIG__
 #  define NODISCARD

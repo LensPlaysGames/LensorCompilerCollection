@@ -1019,7 +1019,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     // TODO: Handle size of type and stuff
     /// Load from a static variable.
     if (inst->operand->kind == IR_STATIC_REF) {
-      enum RegSize size = -1;
+      enum RegSize size = -1u;
       // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         size = regsize_from_bytes(type_sizeof(t_void_ptr));
@@ -1035,7 +1035,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
     /// Load from a local.
     else if (inst->operand->kind == IR_ALLOCA) {
-      enum RegSize size = -1;
+      enum RegSize size = -1u;
       // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         size = regsize_from_bytes(type_sizeof(t_void_ptr));
@@ -1050,7 +1050,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
     /// Load from a pointer
     else {
-      enum RegSize size = -1;
+      enum RegSize size = -1u;
       // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
       if (inst->operand->type->kind == TYPE_ARRAY) size = regsize_from_bytes(type_sizeof(t_void_ptr));
       // TODO: We are "supposed" to be loading sizeof pointed to type

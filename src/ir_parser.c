@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <string.h>
 
+PUSH_IGNORE_WARNING("-Wshadow")
 #ifdef _WIN32
 /// Basically strndup(), but for Windows.
 static char *strndup(const char *str, size_t sz) {
@@ -17,6 +18,7 @@ static char *strndup(const char *str, size_t sz) {
   return dup;
 }
 #endif
+POP_WARNINGS()
 
 /// ===========================================================================
 ///  Lexer

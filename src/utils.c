@@ -9,6 +9,7 @@
 #include <ast.h>
 #include <vector.h>
 
+PUSH_IGNORE_WARNING("-Wshadow")
 #ifdef _WIN32
 /// Basically strndup(), but for Windows.
 static char *strndup(const char *str, usz sz) {
@@ -18,6 +19,7 @@ static char *strndup(const char *str, usz sz) {
   return dup;
 }
 #endif
+POP_WARNINGS()
 
 THREAD_LOCAL bool thread_use_colours = false;
 THREAD_LOCAL bool thread_disable_type_colours = false;

@@ -672,7 +672,7 @@ static void print_struct_members(FILE *file, Members *members, string_buffer *le
   foreach(Member, member, *members) {
     fprint(file, "%31%S%s", as_span(*leading_text), member == &vector_back(*members) ? "└─" : "├─");
     if (member->type->kind == TYPE_STRUCT && !member->type->structure.decl) {
-      fprint(file, "%31Struct %35%S%31@%35%u%31 %31#%35%u%31/%35%u\n",
+      fprint(file, "%31Struct %35%S%31@%35%Z%31 %31#%35%Z%31/%35%Z\n",
              member->name,
              member->byte_offset,
              member->type->structure.byte_size,
@@ -687,7 +687,7 @@ static void print_struct_members(FILE *file, Members *members, string_buffer *le
 
       /// Restore the leading text.
       leading_text->size = sz;
-    } else fprint(file, "%31Member %35%S%31@%35%u%31: %T\n", member->name, member->byte_offset, member->type);
+    } else fprint(file, "%31Member %35%S%31@%35%Z%31: %T\n", member->name, member->byte_offset, member->type);
   }
 }
 
@@ -841,7 +841,7 @@ void ast_print_node_internal(
     case NODE_STRUCTURE_DECLARATION: {
       /// Print the struct declaration.
       // here
-      fprint(file, "%31Structure Declaration %35<%u> %36%S%m %31#%35%u%31/%35%u %31\n",
+      fprint(file, "%31Structure Declaration %35<%u> %36%S%m %31#%35%Z%31/%35%Z %31\n",
              node->source_location.start,
              node->struct_decl->name,
              node->struct_decl->val.type->structure.byte_size,
