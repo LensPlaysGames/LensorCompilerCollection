@@ -1325,6 +1325,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_VOID: return "void";
     case TK_BYTE: return "byte";
     case TK_INTEGER_KW: return "integer";
+    case TK_FOR: return "for";
     case TK_LPAREN: return "\"(\"";
     case TK_RPAREN: return "\")\"";
     case TK_LBRACK: return "\"[\"";
