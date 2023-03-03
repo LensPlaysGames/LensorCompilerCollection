@@ -213,7 +213,7 @@ void platform_print_backtrace(int ignore) {
 
   /// Get the stacktrace.
   void *stack[100] = { 0 };
-  WORD frames = CaptureStackBackTrace(ignore, 100, stack, NULL);
+  WORD frames = CaptureStackBackTrace((DWORD) ignore, 100, stack, NULL);
   if (!frames) {
     eprint("  Could not capture backtrace\n");
     return;

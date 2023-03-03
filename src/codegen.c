@@ -400,9 +400,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     usz to_sz = type_sizeof(t_to);
     usz from_sz = type_sizeof(t_from);
 
-    bool to_signed = false;
+    //bool to_signed = false;
     bool from_signed = false;
-    if (t_to->kind == TYPE_PRIMITIVE) to_signed = t_to->primitive.is_signed;
+    //if (t_to->kind == TYPE_PRIMITIVE) to_signed = t_to->primitive.is_signed;
     if (t_from->kind == TYPE_PRIMITIVE) from_signed = t_from->primitive.is_signed;
 
     codegen_expr(ctx, expr->cast.value);
@@ -679,10 +679,12 @@ bool codegen
       Parameter argc =  {
         .name = string_create("__argc__"),
         .type = t_integer,
+        .source_location = {0},
       };
       Parameter argv =  {
         .name = string_create("__argv__"),
         .type = ast_make_type_pointer(ast, (loc){0}, ast_make_type_pointer(ast, (loc){0}, t_integer)),
+        .source_location = {0},
       };
 
       Parameters main_params = {0};

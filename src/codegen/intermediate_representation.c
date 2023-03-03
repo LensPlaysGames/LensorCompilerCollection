@@ -525,6 +525,7 @@ IRInstruction *ir_direct_call
   INSTRUCTION(call, IR_CALL);
   call->call.callee_function = callee;
   call->type = callee->type->function.return_type;
+  ASSERT(call->type);
   return call;
 }
 
@@ -536,7 +537,8 @@ IRInstruction *ir_indirect_call
   INSTRUCTION(call, IR_CALL);
   call->call.callee_instruction = function;
   call->call.is_indirect = true;
-  call->type = function->type->function.return_type;
+  call->type = function->type->pointer.to->function.return_type;
+  ASSERT(call->type);
   mark_used(function, call);
   return call;
 }
