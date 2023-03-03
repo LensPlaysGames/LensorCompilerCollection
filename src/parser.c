@@ -68,16 +68,17 @@ typedef struct Parser {
 const struct {
   span kw;
   enum TokenType type;
-} keywords[9] = {
-    {literal_span_raw("if"), TK_IF},
-    {literal_span_raw("else"), TK_ELSE},
-    {literal_span_raw("while"), TK_WHILE},
-    {literal_span_raw("ext"), TK_EXT},
-    {literal_span_raw("as"), TK_AS},
-    {literal_span_raw("type"), TK_TYPE},
-    {literal_span_raw("void"), TK_VOID},
-    {literal_span_raw("byte"), TK_BYTE},
-    {literal_span_raw("integer"), TK_INTEGER_KW},
+} keywords[10] = {
+  {literal_span_raw("if"), TK_IF},
+  {literal_span_raw("else"), TK_ELSE},
+  {literal_span_raw("while"), TK_WHILE},
+  {literal_span_raw("ext"), TK_EXT},
+  {literal_span_raw("as"), TK_AS},
+  {literal_span_raw("type"), TK_TYPE},
+  {literal_span_raw("void"), TK_VOID},
+  {literal_span_raw("byte"), TK_BYTE},
+  {literal_span_raw("integer"), TK_INTEGER_KW},
+  {literal_span_raw("for"), TK_FOR},
 };
 
 /// Check if a character may start an identifier.
@@ -1105,6 +1106,26 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
     case TK_BYTE:
     case TK_INTEGER_KW: {
       lhs = parse_type_expr(p, parse_type(p));
+    } break;
+    case TK_FOR: {
+      // Yeet "for"
+      next_token(p);
+
+      loc source_location = p->tok.source_location;
+
+      Node *init = parse_expr(p);
+      if (p->tok.type == TK_COMMA)
+        next_token(p);
+      Node *condition = parse_expr(p);
+      if (p->tok.type == TK_COMMA)
+        next_token(p);
+      Node *iterator = parse_expr(p);
+      Node *body = parse_expr(p);
+
+      source_location.end = body->source_location.end;
+
+      lhs = ast_make_for(p->ast, source_location, init, condition, iterator, body);
+
     } break;
     case TK_IF: lhs = parse_if_expr(p); break;
     case TK_ELSE: ERR("'else' without 'if'");

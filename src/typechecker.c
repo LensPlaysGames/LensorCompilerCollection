@@ -1241,6 +1241,20 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       return true;
     }
 
+    case NODE_FOR: {
+      if (!typecheck_expression(ast, expr->for_.init) ||
+          !typecheck_expression(ast, expr->for_.condition) ||
+          !typecheck_expression(ast, expr->for_.iterator) ||
+          !typecheck_expression(ast, expr->for_.body))
+        return false;
+      // FIXME: Should be t_bool
+      if (!convertible(t_integer, expr->for_.condition->type))
+        return false;
+
+      expr->type = t_void;
+      return true;
+    }
+
     /// Resolve the function reference and typecheck the function.
     case NODE_FUNCTION_REFERENCE:
       if (!resolve_function(ast, expr)) return false;

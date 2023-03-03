@@ -580,6 +580,54 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     else DIAG(DIAG_SORRY, expr->source_location, "Emitting literals of type %T not supported", expr->type);
     return;
 
+  case NODE_FOR: {
+    /* FOR INIT COND ITER BODY
+     *
+     * +------------------+
+     * | current          |
+     * | emit initialiser |
+     * +------------------+
+     *      |
+     *      |             ,-------------+
+     *      |             |             |
+     * +--------------------+           |
+     * | conditional branch |           |
+     * +--------------------+           |
+     *      |             |             |
+     *      |      +----------------+   |
+     *      |      | body           |   |
+     *      |      | emit iterator  |   |
+     *      |      +----------------+   |
+     *      |             |             |
+     *      |            ...            |
+     *      |             |             |
+     *  +----------+      `-------------+
+     *  | join     |
+     *  +----------+
+     *
+     */
+
+    IRBlock *cond_block = ir_block_create();
+    IRBlock *body_block = ir_block_create();
+    IRBlock *join_block = ir_block_create();
+
+    codegen_expr(ctx, expr->for_.init);
+    ir_branch(ctx, cond_block);
+
+    ir_block_attach(ctx, cond_block);
+    codegen_expr(ctx, expr->for_.condition);
+    ir_branch_conditional(ctx, expr->for_.condition->ir, body_block, join_block);
+
+    ir_block_attach(ctx, body_block);
+    codegen_expr(ctx, expr->for_.body);
+    codegen_expr(ctx, expr->for_.iterator);
+    ir_branch(ctx, cond_block);
+
+    ir_block_attach(ctx, join_block);
+
+    return;
+  } break;
+
   /// Function reference. These should have all been removed by the semantic analyser.
   case NODE_FUNCTION_REFERENCE: UNREACHABLE();
   }

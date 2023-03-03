@@ -235,6 +235,27 @@ Node *ast_make_while(
   return node;
 }
 
+/// Create a new for expression.
+Node *ast_make_for(
+    AST *ast,
+    loc source_location,
+    Node *init,
+    Node *condition,
+    Node *iterator,
+    Node *body
+) {
+  Node *node = mknode(ast, NODE_FOR, source_location);
+  node->for_.init = init;
+  node->for_.condition = condition;
+  node->for_.iterator = iterator;
+  node->for_.body = body;
+  body->parent = node;
+  iterator->parent = node;
+  condition->parent = node;
+  init->parent = node;
+  return node;
+}
+
 /// Create a new block expression.
 Node *ast_make_block(
     AST *ast,
@@ -610,6 +631,7 @@ void ast_free(AST *ast) {
 
       case NODE_IF:
       case NODE_WHILE:
+      case NODE_FOR:
       case NODE_CAST:
       case NODE_BINARY:
       case NODE_UNARY:
@@ -754,6 +776,19 @@ void ast_print_node_internal(
       ast_print_children(file, logical_parent, node, &(Nodes) {
         .data = (Node *[]) {node->while_.condition, node->while_.body},
         .size = 2
+      }, leading_text);
+    } break;
+
+    case NODE_FOR: {
+      fprint(file, "%31For %35<%u>\n", node->source_location.start);
+      ast_print_children(file, logical_parent, node, &(Nodes) {
+        .data = (Node *[]) {
+          node->for_.init,
+          node->for_.condition,
+          node->for_.iterator,
+          node->for_.body
+        },
+        .size = 4
       }, leading_text);
     } break;
 

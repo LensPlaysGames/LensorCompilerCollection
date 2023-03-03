@@ -26,6 +26,7 @@ enum NodeKind {
   NODE_FUNCTION_REFERENCE,
   NODE_STRUCTURE_DECLARATION,
   NODE_MEMBER_ACCESS,
+  NODE_FOR,
 };
 
 /// The kind of a type.
@@ -57,6 +58,7 @@ enum TokenType {
   TK_VOID,
   TK_BYTE,
   TK_INTEGER_KW,
+  TK_FOR,
 
   TK_LPAREN,
   TK_RPAREN,
@@ -258,6 +260,13 @@ typedef struct NodeMemberAccess {
 /// Variable reference.
 typedef Symbol *NodeVariableReference;
 
+typedef struct NodeFor {
+  Node *init;
+  Node *condition;
+  Node *iterator;
+  Node *body;
+} NodeFor;
+
 /// Named type.
 typedef Symbol *TypeNamed;
 
@@ -356,6 +365,7 @@ struct Node {
     NodeFunctionReference funcref;
     NodeStructDecl struct_decl;
     NodeMemberAccess member_access;
+    NodeFor for_;
   };
 };
 
@@ -449,6 +459,16 @@ Node *ast_make_while(
     AST *ast,
     loc source_location,
     Node *condition,
+    Node *body
+);
+
+/// Create a new for expression.
+Node *ast_make_for(
+    AST *ast,
+    loc source_location,
+    Node *init,
+    Node *condition,
+    Node *iterator,
     Node *body
 );
 

@@ -4,6 +4,7 @@
 /// Expression.
 <expression>     ::= <expr-decl>
                    | <expr-if>
+                   | <expr-for>
                    | <expr-while>
                    | <expr-block>
                    | <expr-lambda>
@@ -25,6 +26,7 @@
 /// Other expressions.
 <expr-if>        ::= IF <expression> <expression> [ ELSE <expression> ]
 <expr-while>     ::= WHILE <expression> <expression>
+<expr-for>       ::= FOR <expression> [ "," ] <expression> [ "," ] <expression> <expression>
 <expr-block>     ::= "{" { <expression> } "}"
 <expr-lambda>    ::= <type-function> <function-body>
 <expr-call>      ::= <expression> "(" { <expression> [ "," ] } ")"
