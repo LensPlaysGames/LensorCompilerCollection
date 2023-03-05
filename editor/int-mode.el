@@ -113,36 +113,13 @@ Examples include addition (+) and subtraction (-)."
              (negation-char-regex    (regexp-opt '("!")))
              (number-regex           (rx (one-or-more digit)))
              (builtin-types-regex    (rx (zero-or-more "@")
-                                         (or "integer" "void")))
-             (function-name-regex
-              (rx (seq
-                   ;; Function name
-                   (group (+? anything))
-                   ;; Whitespace between function name and type operator
-                   (*? whitespace)
-                   ;; The type operator, a colon (:)
-                   (minimal-match ?:)
-                   ;; Whitespace between : and type
-                   (*? whitespace)
-                   ;; Type name
-                   (+? anything)
-                   ;; Whitespace between type and parameters
-                   (*? whitespace)
-                   ;; Parameter list start, open parenthesis: (
-                   (minimal-match ?\()
-                   ;; Parameters
-                   (+? anything)
-                   ;; Parameter list end, close parenthesis: )
-                   (minimal-match ?\))
-                   )))
-             )
+                                         (or "integer" "byte" "void"))))
         `(
           (,keywords-regex          . ,int-mode-face-keywords)
           (,builtin-types-regex     . ,int-mode-face-types)
           (,number-regex            . ,int-mode-face-numbers)
           (,binary-operators-regex  . ,int-mode-face-operators)
           (,negation-char-regex     . ,int-mode-face-negation-char)
-          (,function-name-regex     . (1 ,int-mode-face-function-name))
           )))
 
 (defcustom int-mode-indent-amount 2
@@ -186,7 +163,7 @@ in Intercept source code will be indented."
 
 (define-derived-mode int-mode prog-mode
   "Intercept"
-  (setq font-lock-defaults '(int--font-lock-defaults))
+  (setq font-lock-defaults '((int--font-lock-defaults)))
   (setq indent-line-function #'int--indent-line))
 
 (provide 'int-mode)
