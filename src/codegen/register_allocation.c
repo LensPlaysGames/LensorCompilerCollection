@@ -379,18 +379,18 @@ static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc,
 // FIXME: This function doesn't do the right thing AT ALL!!
 void print_adjacency_matrix(AdjacencyMatrix m) {
   for (usz y = 0; y < m.size; ++y) {
-    print("%Z |%u", y, adjm(m, 0, y));
-    for (usz x = 1; x < y; ++x) {
+    printf("%6zu|", y);
+    for (usz x = 0; x < y; ++x) {
       bool adj = adjm(m, x, y);
-      adj ? print(" %u", adj) : print("   ");
+      adj ? printf("%4u", adj) : printf("    ");
     }
-    print("\n");
+    printf("\n");
   }
-  print("     |  %d", 0);
-  for (usz x = 1; x < m.size; ++x) {
-    print(" %Z", x);
+  printf("      |");
+  for (usz x = 0; x < m.size; ++x) {
+    printf("%4zu", x);
   }
-  print("\n\n");
+  printf("\n\n");
 }
 
 #ifdef DEBUG_RA
@@ -603,8 +603,15 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
 typedef Vector(usz) NumberStack;
 
 void print_number_stack(NumberStack *stack) {
+  const usz per_line = 16;
+  print("Number stack (coloring order):\n"
+        "  ");
   foreach_index(i, *stack) {
-    if (i) { print(", "); }
+    if (i) {
+      print(", ");
+      if (i % per_line == 0)
+        print("\n  ");
+    }
     print("%Z", stack->data[i]);
   }
   print("\n");
