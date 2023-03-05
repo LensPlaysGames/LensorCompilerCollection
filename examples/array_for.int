@@ -7,6 +7,8 @@ arr : integer[4]; = [ 69 42 10 420 ]
 @arr[1] := 48
 @arr[2] := 10
 @arr[3] := 121
-for ptr : @integer = arr[0], ptr <= arr[1], ptr := ptr[1] {
+for ptr : @integer = arr[0], ptr < arr[2], ptr := ptr[1] {
   putchar(@ptr)
 }
+
+putchar : ext integer(n : integer)
