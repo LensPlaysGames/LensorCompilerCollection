@@ -13,7 +13,7 @@
 
 #ifdef DEBUG_RA
 #  define IR_FEMIT(file, f) ir_femit_function(file, f)
-#  define DEBUG(...)              print(__VA_ARGS__)
+#  define DEBUG(...) print(__VA_ARGS__)
 CodegenContext *debug_context = NULL;
 #else
 #  define IR_FEMIT(file, context)
@@ -465,8 +465,10 @@ void build_adjacency_lists(IRInstructions *instructions, AdjacencyGraph *G) {
 }
 
 void print_adjacency_lists(AdjacencyLists *array) {
+  print("[RA]: Adjacency lists\n"
+        "   id    idx\n");
   foreach_ptr (AdjacencyList*, list, *array) {
-    print("%%%u::%u: ", list->instruction->id, list->instruction->index);
+    printf("%6u::%4u: ", list->instruction->id, list->instruction->index);
     if (list->color) print("(r%u) ", list->color);
 
     /// Print the adjacent nodes.

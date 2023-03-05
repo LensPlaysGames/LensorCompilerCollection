@@ -1453,7 +1453,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   };
 
   foreach_ptr (IRFunction*, f, context->functions)
-    allocate_registers(f, &desc);
+    if (!f->is_extern) allocate_registers(f, &desc);
 
   if (debug_ir) ir_femit(stdout, context);
 
