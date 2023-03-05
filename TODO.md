@@ -1,3 +1,6 @@
+- Urgent
+  - [ ] Fix Register Allocation Instruction Interference algorithm. It is currently based on traversing dominator trees, which makes no sense for RA. We should instead iterate backwards over blocks, starting at exit, until we reach the entrance...
+    "Iff A is reachable from B, then all live values at the beginning of A must continue to stay live all the way through B" <- currently not upheld due to dominator tree traversal.
 - [ ] Miscellany.
   - [x] Operator `as`.
   - [x] Vector macros should be snake_case.
@@ -11,7 +14,7 @@
   - [ ] `ext` functions may have a body?
   - [ ] Add `export` and make top-level variables local and top-level functions internal by default.
   - [ ] Add a `[[nomangle]]` attribute (requires attributes).
-  - [ ] Rename `ext` to `extern` and make it syntactic sugar for `export [[nomangle]]`  
+  - [ ] Rename `ext` to `extern` and make it syntactic sugar for `export [[nomangle]]`
   - [ ] Implicit cast sema pass: `a + b` where `a` is a `byte` and `b` an `integer` -> `(a as integer) + b`
   - [ ] Testing Framework: Add ability to only show failing tests
   - [ ] `x as void` used to discard `x`
