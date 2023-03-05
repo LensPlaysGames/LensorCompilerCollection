@@ -9,7 +9,7 @@
 #include <string.h>
 #include <vector.h>
 
-//#define DEBUG_RA
+#define DEBUG_RA
 
 #ifdef DEBUG_RA
 #  define IR_FEMIT(file, f) ir_femit_function(file, f)
@@ -290,8 +290,7 @@ static void collect_interferences_for_node(
   if (vector_contains(*visited, b)) return;
   vector_push(*visited, b);
 
-  /// Collect interferences for instructions in this block.
-  for (IRInstruction *inst = b->instructions.last; inst; inst = inst->prev) {
+  list_foreach_rev (IRInstruction*, inst, b->instructions) {
     /// Make this value interfere with all values that are live at this point.
     usz mask = desc->instruction_register_interference(inst);
     foreach_ptr (IRInstruction *, live_val, *live_vals) {
@@ -313,6 +312,121 @@ static void collect_interferences_for_node(
   /// Do the same for all dominators of this block.
   foreach_ptr (DomTreeNode *, dominator, leaf->dominators)
     collect_interferences_for_node(desc, dominator, live_vals, visited, G);
+}
+
+static void collect_interferences_from_block
+(const MachineDescription *desc,
+ IRBlock *b,
+ IRInstructions *live_vals,
+ BlockVector *visited,
+ AdjacencyGraph *G
+ )
+{
+  print("  from block...\n");
+
+  /// Collect interferences for instructions in this block.
+  list_foreach_rev (IRInstruction*, inst, b->instructions) {
+    /// Make this value interfere with all values that are live at this point.
+    usz mask = desc->instruction_register_interference(inst);
+    foreach_ptr (IRInstruction *, live_val, *live_vals) {
+      if (needs_register(inst))
+        adjm_set(G->matrix, inst->index, live_val->index);
+
+      /// Also take special interferences into account.
+      G->regmasks[live_val->index] |= mask;
+    }
+
+    /// Remove its result from the set of live variables;
+    if (needs_register(inst)) vector_remove_element_unordered(*live_vals, inst);
+
+    /// Add its operands to the set of live variables.
+    ir_for_each_child(inst, collect_interferences, live_vals);
+  }
+
+  /// Don't visit the same block twice.
+  if (vector_contains(*visited, b)) {
+    // If we end up in a loop, we need to make sure that all live
+    // values at the beginning of the block we reached twice are live all
+    // the way through the loop.
+    return;
+  }
+  vector_push(*visited, b);
+
+  // Collect all blocks in function that branch to this block (parent blocks).
+
+  // The entry block has no parents.
+  if (b == b->function->blocks.first)
+    return;
+
+  BlockVector parent_blocks = {0};
+  list_foreach (IRBlock*, parent_candidate, b->function->blocks) {
+    if (parent_candidate == b) continue; // Yourself is not a candidate.
+    if (parent_candidate->instructions.last) {
+      STATIC_ASSERT(IR_COUNT == 34,
+                    "Exhaustively handle all branch-type instructions when following control flow.");
+      switch (parent_candidate->instructions.last->kind) {
+
+      // If a branch's destination is this block, the parent candidate is valid.
+      case IR_BRANCH: {
+        if (parent_candidate->instructions.last->destination_block == b)
+          vector_push(parent_blocks, parent_candidate);
+      } break;
+
+
+      case IR_BRANCH_CONDITIONAL: {
+        if (parent_candidate->instructions.last->cond_br.then == b)
+          vector_push(parent_blocks, parent_candidate);
+        else if (parent_candidate->instructions.last->cond_br.else_ == b)
+          vector_push(parent_blocks, parent_candidate);
+      } break;
+
+      // Ignore all branch types that can't possibly branch to this block.
+      case IR_UNREACHABLE:
+      case IR_RETURN:
+        continue;
+
+      default:
+        UNREACHABLE();
+      }
+    }
+  }
+
+  foreach_ptr (IRBlock*, parent, parent_blocks) {
+    print("  Parent block:\n");
+    ir_femit_block(stdout, parent);
+  }
+
+
+  /// Do the same for all dominators of this block.
+  foreach_ptr (IRBlock*, parent, parent_blocks)
+    collect_interferences_from_block(desc, parent, live_vals, visited, G);
+}
+
+static void collect_interferences_for_function
+(const MachineDescription *desc,
+ IRFunction *function,
+ IRInstructions *live_vals,
+ BlockVector *visited,
+ AdjacencyGraph *G
+ )
+{
+  // Collect all blocks that end with `ret` or `unreachable`.
+  BlockVector exits = {0};
+  list_foreach (IRBlock*, b, function->blocks)
+    if (b->instructions.last && (b->instructions.last->kind == IR_RETURN || b->instructions.last->kind == IR_UNREACHABLE))
+      vector_push(exits, b);
+
+
+  foreach_ptr (IRBlock*, b, exits) {
+    print("Exit block:\n");
+    ir_femit_block(stdout, b);
+  }
+
+
+  // From each exit block (collected above), follow control flow to the
+  // root of the function (entry block), or to a block already visited.
+  foreach_ptr (IRBlock*, b, exits)
+    collect_interferences_from_block(desc, b, live_vals, visited, G);
 }
 
 /// Build the adjacency graph for the given function.
@@ -338,12 +452,17 @@ static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc,
   /// Blocks that have been visited.
   BlockVector visited = {0};
 
+  /*
   /// Collect the interferences for each leaf.
   foreach_ptr (DomTreeNode*, node, leaves) {
     vector_clear(live_vals);
     vector_clear(visited);
     collect_interferences_for_node(desc, node, &live_vals, &visited, G);
   }
+  */
+
+  /// WIP: Collect the interferences from CFG
+  collect_interferences_for_function(desc, f, &live_vals, &visited, G);
 
   /// Free dominator and liveness info.
   free_dominator_info(&dom_info);

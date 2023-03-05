@@ -287,4 +287,7 @@ NODISCARD static inline bool vector_contains_impl(void *data, size_t size, size_
 #define list_foreach(type, it, list) \
   for (type it = (list).first; it; it = it->next)
 
+#define list_foreach_rev(type, it, list) \
+  for (type it = (list).last; it; it = it->prev)
+
 #endif // VECTOR_H
