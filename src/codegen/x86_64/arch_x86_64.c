@@ -885,12 +885,10 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     if (regs_pushed_count & 0b1)
       femit_imm_to_reg(context, I_SUB, 8, REG_RSP, r64);
 
-    for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i) {
-      if (func_regs & (1 << i) && is_caller_saved(i)) {
+    for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i)
+      if (func_regs & (1 << i) && is_caller_saved(i))
         // TODO: Don't push registers that are used for arguments.
         femit_reg(context, I_PUSH, i);
-      }
-    }
 
     // Shadow stack
     if (context->call_convention == CG_CALL_CONV_MSWIN)
@@ -1249,13 +1247,21 @@ static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
     switch (instruction->kind) {
-      case IR_PARAMETER:
-        if ((size_t)instruction->imm >= argument_register_count) {
+      case IR_PARAMETER: {
+        // Maximum size of parameter that can go in a register vs on the stack.
+        // TODO: Has to do with calling convention?
+        static const usz max_register_size = 8;
+        if (instruction->type->kind == TYPE_STRUCT || instruction->type->kind == TYPE_ARRAY) {
+          TODO("x86_64 backend doesn't yet support passing structs/arrays as arguments, sorry.");
+          // TODO: At each call of this function, insert alloca + copy from alloca to
+          // argument register (or on stack, once we support that).
+        }
+        if (type_sizeof(instruction->type) > max_register_size || (size_t)instruction->imm >= argument_register_count) {
           TODO("x86_64 backend doesn't yet support passing arguments on the stack, sorry.");
         }
         instruction->kind = IR_REGISTER;
         instruction->result = argument_registers[instruction->imm];
-        break;
+      } break;
       default:
         break;
     }
