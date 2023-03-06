@@ -27,6 +27,35 @@ CodegenContext *debug_context = NULL;
 /// Used all over the place.
 typedef Vector(IRBlock *) BlockVector;
 
+/// Return non-zero iff given instruction needs a register.
+bool needs_register(IRInstruction *instruction) {
+  STATIC_ASSERT(IR_COUNT == 34, "Exhaustively handle all instruction types");
+  ASSERT(instruction);
+  switch (instruction->kind) {
+    case IR_LOAD:
+    case IR_PHI:
+    case IR_COPY:
+    case IR_IMMEDIATE:
+    case IR_CALL:
+    case IR_REGISTER:
+    case IR_NOT:
+    ALL_BINARY_INSTRUCTION_CASES()
+      return true;
+
+    case IR_PARAMETER:
+      ICE("Unlowered parameter instruction in register allocator");
+
+    /// Allocas and static refs need a register iff they are actually used.
+    case IR_ALLOCA:
+    case IR_STATIC_REF:
+    case IR_FUNC_REF:
+      return instruction->users.size;
+
+    default:
+      return false;
+  }
+}
+
 //==== BEG REGISTER ALLOCATION PASSES ====
 
 static void phi2copy(IRFunction *f) {
@@ -61,11 +90,17 @@ static void phi2copy(IRFunction *f) {
 
           /// Direct branches are easy, we just insert the copy before the branch.
           case IR_BRANCH: {
-            IRInstruction *copy = ir_copy(f->context, arg->value);
-            ir_remove_use(arg->value, phi);
-            mark_used(copy, phi);
-            insert_instruction_before(copy, branch);
-            arg->value = copy;
+            if (needs_register(arg->value)) {
+              IRInstruction *copy = ir_copy(f->context, arg->value);
+              ir_remove_use(arg->value, phi);
+              mark_used(copy, phi);
+              insert_instruction_before(copy, branch);
+              arg->value = copy;
+            } else {
+              print("\n\n%31Offending block%m:\n");
+              ir_femit_block(stdout, arg->value->parent_block);
+              ICE("Block ends with instruction that does not return value.");
+            }
           } break;
 
           /// Indirect branches are a bit more complicated. We need to insert an
@@ -145,35 +180,6 @@ void fixup_precoloured(IRFunction *f) {
   }
 }
 //==== END REGISTER ALLOCATION PASSES ====
-
-/// Return non-zero iff given instruction needs a register.
-bool needs_register(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 34, "Exhaustively handle all instruction types");
-  ASSERT(instruction);
-  switch (instruction->kind) {
-    case IR_LOAD:
-    case IR_PHI:
-    case IR_COPY:
-    case IR_IMMEDIATE:
-    case IR_CALL:
-    case IR_REGISTER:
-    case IR_NOT:
-    ALL_BINARY_INSTRUCTION_CASES()
-      return true;
-
-    case IR_PARAMETER:
-      ICE("Unlowered parameter instruction in register allocator");
-
-    /// Allocas and static refs need a register iff they are actually used.
-    case IR_ALLOCA:
-    case IR_STATIC_REF:
-    case IR_FUNC_REF:
-      return instruction->users.size;
-
-    default:
-      return false;
-  }
-}
 
 //==== BEG INSTRUCTION LIST ====
 
@@ -279,45 +285,9 @@ static void collect_interferences(IRInstruction *inst, IRInstruction **child, vo
   }
 }
 
-/// Walk over all possible paths in the dominator tree, starting at a leaf and up to the root.
-/// For each path, compute instruction interferences based on the values that are currently live.
-static void collect_interferences_for_node(
-  const MachineDescription *desc,
-  DomTreeNode *leaf,
-  IRInstructions *live_vals,
-  BlockVector *visited,
-  AdjacencyGraph *G
-) {
-  IRBlock *b = leaf->block;
-
-  /// Don't visit the same block twice.
-  if (vector_contains(*visited, b)) return;
-  vector_push(*visited, b);
-
-  list_foreach_rev (IRInstruction*, inst, b->instructions) {
-    /// Make this value interfere with all values that are live at this point.
-    usz mask = desc->instruction_register_interference(inst);
-    foreach_ptr (IRInstruction *, live_val, *live_vals) {
-      if (needs_register(inst))
-        adjm_set(G->matrix, inst->index, live_val->index);
-
-      /// Also take special interferences into account.
-      G->regmasks[live_val->index] |= mask;
-    }
-
-
-    /// Remove its result from the set of live variables;
-    if (needs_register(inst)) vector_remove_element_unordered(*live_vals, inst);
-
-    /// Add its operands to the set of live variables.
-    ir_for_each_child(inst, collect_interferences, live_vals);
-  }
-
-  /// Do the same for all dominators of this block.
-  foreach_ptr (DomTreeNode *, dominator, leaf->dominators)
-    collect_interferences_for_node(desc, dominator, live_vals, visited, G);
-}
-
+/// Walk over all possible paths in the control flow graph upwards from
+/// given block, computing instruction interferences based on the values
+/// that are currently live.
 static void collect_interferences_from_block
 (const MachineDescription *desc,
  IRBlock *b,
@@ -414,6 +384,12 @@ static void collect_interferences_from_block
   }
 }
 
+/// For each exit block `b` in given function, collect interferences
+/// from exit to entrance. While doing so, the AdjacencyGraph G (the
+/// matrix and regmasks, specifically) is updated to reflect interferences.
+///
+/// "exit block": a block that ends with an instruction that exits the
+/// function (i.e. return or unreachable).
 static void collect_interferences_for_function
 (const MachineDescription *desc,
  IRFunction *function,
