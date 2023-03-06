@@ -480,6 +480,11 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         subs_lhs->type = ast_make_type_pointer(ctx->ast, subs_lhs->type->source_location,
                                                subs_lhs->type->pointer.to->array.of);
 
+      if (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer == 0) {
+        expr->ir = subs_lhs;
+        return;
+      }
+
       codegen_expr(ctx, rhs);
 
       IRInstruction *scaled_rhs = NULL;
