@@ -11,6 +11,7 @@
 
 extern bool debug_ir;
 extern bool codegen_only;
+extern bool annotate_code;
 
 typedef Vector(IRInstruction *) InstructionVector;
 

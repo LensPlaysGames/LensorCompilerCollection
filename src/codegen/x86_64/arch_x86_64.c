@@ -17,6 +17,7 @@
 #include <string.h>
 #include <typechecker.h>
 #include <vector.h>
+#include <utils.h>
 
 #define DEFINE_REGISTER_ENUM(name, ...) REG_##name,
 #define REGISTER_NAME_64(ident, name, ...) name,
@@ -801,6 +802,15 @@ static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
 
 static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   STATIC_ASSERT(IR_COUNT == 34, "Handle all IR instructions");
+
+  if (annotate_code) {
+    thread_use_colours = false;
+    // TODO: Base comment syntax on dialect or smth.
+    fprint(context->code, ";;#;");
+    ir_femit_instruction(context->code, inst);
+    thread_use_colours = true;
+  }
+
   switch (inst->kind) {
   case IR_PHI:
   case IR_REGISTER:
@@ -1016,10 +1026,10 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   } break;
 
   case IR_LOAD: {
+      enum RegSize size = -1u;
     // TODO: Handle size of type and stuff
     /// Load from a static variable.
     if (inst->operand->kind == IR_STATIC_REF) {
-      enum RegSize size = -1u;
       // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         size = regsize_from_bytes(type_sizeof(t_void_ptr));
@@ -1035,7 +1045,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
     /// Load from a local.
     else if (inst->operand->kind == IR_ALLOCA) {
-      enum RegSize size = -1u;
       // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         size = regsize_from_bytes(type_sizeof(t_void_ptr));
@@ -1050,7 +1059,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
     /// Load from a pointer
     else {
-      enum RegSize size = -1u;
       // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
       if (inst->operand->type->kind == TYPE_ARRAY) size = regsize_from_bytes(type_sizeof(t_void_ptr));
       // TODO: We are "supposed" to be loading sizeof pointed to type
@@ -1065,21 +1073,19 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   } break;
 
   case IR_STORE: {
+    enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
     /// Store to a static variable.
     if (inst->store.addr->kind == IR_STATIC_REF) {
-      enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
       femit_reg_to_name(context, I_MOV, inst->store.value->result, size, REG_RIP, inst->store.addr->static_ref->name.data);
     }
 
     /// Store to a local.
     else if (inst->store.addr->kind == IR_ALLOCA) {
-      enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
       femit_reg_to_mem(context, I_MOV, inst->store.value->result, size, REG_RBP, - (i64)inst->store.addr->alloca.offset);
     }
 
     /// Store to a pointer.
     else {
-      enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
       femit_reg_to_mem(context, I_MOV, inst->store.value->result, size, inst->store.addr->result, 0);
     }
   } break;
