@@ -646,7 +646,10 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
 
       /// From and to are precoloured: eliminate the copy if they
       /// are the same, replacing all uses of to w/ from.
-      if (from->result && from->result == to->result) { goto eliminate; }
+      if (from->result && from->result == to->result) {
+        DEBUG("From AND to are coloured the same.\n");
+        goto eliminate;
+      }
 
       /// To is precoloured, from is not, and from does not interfere
       /// with the precoloured register: assign the precoloured register to
@@ -737,6 +740,17 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
       build_adjacency_graph(f, desc, instructions, G);
     } else {
       break;
+    }
+  }
+
+  // Find precoloured phis and attempt to apply the color to each of it's arguments.
+  foreach_ptr (IRInstruction *, precoloured_phi, *instructions) {
+    // Skip non-PHI instructions, PHIs with no arguments (no-op), or PHIs that have yet-to-be coloured.
+    if (precoloured_phi->kind != IR_PHI || !precoloured_phi->phi_args.size || !precoloured_phi->result) continue;
+    foreach_ptr (IRPhiArgument*, phi_arg, precoloured_phi->phi_args) {
+      if (phi_arg->value->result)
+        ICE("[RA]: It seems that a phi has had a copy removed that was necessary. TODO: warn but add it back.");
+      phi_arg->value->result = precoloured_phi->result;
     }
   }
 
