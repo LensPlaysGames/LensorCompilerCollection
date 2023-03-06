@@ -32,6 +32,11 @@
        element##_ptr < (vector).data + (vector).size && (element = *element##_ptr, 1); /* "=", not "=="! */ \
        element##_ptr++)
 
+#define foreach_ptr_rev(type, element, vector)                                                                  \
+  for (type *element##_ptr = (vector).data + ((vector).size - 1), *element = NULL;                              \
+       element##_ptr >= (vector).data && (element = *element##_ptr, 1); /* "=", not "=="! */                    \
+       element##_ptr--)
+
 /// Iterate over each index and element of a vector.
 #define foreach_index(index, vector) \
   for (size_t index = 0; index < (vector).size; index++)
