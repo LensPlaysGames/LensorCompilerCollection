@@ -1,0 +1,4 @@
+; ERROR
+
+a : integer = 1
+a << 80
