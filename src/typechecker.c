@@ -1007,7 +1007,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       Type *t_to = expr->type;
       // TO any incomplete type is DISALLOWED
       if (type_is_incomplete(t_to))
-        ERR(t_to->source_location, "Can not cast to incomplete type %T", t_to);
+        ERR(t_to->source_location, "Cannot cast to incomplete type %T", t_to);
 
       if (!typecheck_expression(ast, expr->cast.value))
         return false;
@@ -1019,7 +1019,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       // FROM any incomplete type is DISALLOWED
       if (type_is_incomplete(t_from))
-        ERR(expr->cast.value->source_location, "Can not cast from an incomplete type %T", t_from);
+        ERR(expr->cast.value->source_location, "Cannot cast from an incomplete type %T", t_from);
 
       // FROM any pointer type TO any pointer type is ALLOWED
       // TODO: Check base type size + alignment...
@@ -1032,13 +1032,13 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       // FROM any integer type TO any pointer type is currently DISALLOWED, but very well may change
       if (is_integer(t_from) && type_is_pointer(t_to))
         ERR(expr->cast.value->source_location,
-            "Can not cast from an integer type %T to pointer type %T",
+            "Cannot cast from an integer type %T to pointer type %T",
             t_from, t_to);
 
       // FROM any array type TO any array type is DISALLOWED
       if (type_is_array(t_from) && type_is_array(t_to)) {
         ERR(expr->cast.value->source_location,
-            "Can not cast between arrays.");
+            "Cannot cast between arrays.");
       }
 
       ERR(expr->cast.value->source_location,
@@ -1106,7 +1106,6 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
         /// Since pointer arithmetic is handled by the subscript operator,
         /// type checking for these is basically all the same.
-        /// TODO: Implicit conversions when we add the `byte` type.
         case TK_PLUS:
         case TK_MINUS:
         case TK_STAR:
