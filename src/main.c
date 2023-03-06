@@ -19,6 +19,7 @@ void print_usage(char **argv) {
          "   `--print-ast      :: Print the AST and exit.\n"
          "   `--syntax-only    :: Perform no semantic analysis.\n"
          "   `--print-scopes   :: Print the scope tree and exit.\n"
+         "   `--annotate-code  :: Print comments in generated code.\n"
          "   `-O`, `--optimize`:: Optimize the generated code.\n"
          "   `-v`, `--verbose` :: Print out more information.\n");
   print("Options:\n"
@@ -44,6 +45,7 @@ bool syntax_only = false;
 bool print_scopes = false;
 bool prefer_using_diagnostics_colours = true;
 bool colours_blink = false;
+bool annotate_code = false;
 
 void print_acceptable_formats() {
   print("Acceptable formats include:\n"
@@ -105,6 +107,8 @@ int handle_command_line_arguments(int argc, char **argv) {
       print_scopes = true;
     } else if (strcmp(argument, "--syntax-only") == 0) {
       syntax_only = true;
+    } else if (strcmp(argument, "--annotate-code") == 0) {
+      annotate_code = true;
     } else if (strcmp(argument, "-O") == 0
                || strcmp(argument, "--optimise") == 0) {
       optimise = 1;
