@@ -82,37 +82,39 @@ void vissue_diagnostic
     eprint("%C%s: %B38", diagnostic_level_colours[level], diagnostic_level_names[level]);
     vfprint(stderr, fmt, ap);
 
-    /// Print the line.
-    eprint("%m\n %u | ", line);
-    for (u32 i = line_start; i < location.start; ++i) {
-      if (source.data[i] == '\t') eprint("    ");
-      else fputc(source.data[i], stderr);
-    }
-    eprint("%C", diagnostic_level_colours[level]);
-    for (u32 i = location.start; i < location.end; ++i) {
-      if (source.data[i] == '\t') eprint("    ");
-      else fputc(source.data[i], stderr);
-    }
-    eprint("%m");
-    for (u32 i = location.end; i < line_end; ++i) {
-      if (source.data[i] == '\t') eprint("    ");
-      else fputc(source.data[i], stderr);
-    }
-    eprint("\n");
+    /// Print the line, if source location is valid.
+    if (location.start != location.end) {
+      eprint("%m\n %u | ", line);
+      for (u32 i = line_start; i < location.start; ++i) {
+        if (source.data[i] == '\t') eprint("    ");
+        else fputc(source.data[i], stderr);
+      }
+      eprint("%C", diagnostic_level_colours[level]);
+      for (u32 i = location.start; i < location.end; ++i) {
+        if (source.data[i] == '\t') eprint("    ");
+        else fputc(source.data[i], stderr);
+      }
+      eprint("%m");
+      for (u32 i = location.end; i < line_end; ++i) {
+        if (source.data[i] == '\t') eprint("    ");
+        else fputc(source.data[i], stderr);
+      }
+      eprint("\n");
 
-    /// Underline the region with tildes.
-    size_t spaces = !line ? 1 : (u32) (log10(line) + 1);
-    for (size_t i = 0; i < spaces; i++) eprint(" ");
-    eprint("  | ");
-    if (colours_blink) eprint("\033[5m");
-    eprint("%C", diagnostic_level_colours[level]);
-    for (u32 i = line_start; i < location.start; ++i) {
-      if (source.data[i] == '\t') eprint("    ");
-      else fputc(' ', stderr);
-    }
-    for (u32 i = location.start; i < location.end; ++i) {
-      if (source.data[i] == '\t') eprint("~~~~");
-      else fputc('~', stderr);
+      /// Underline the region with tildes.
+      size_t spaces = !line ? 1 : (u32) (log10(line) + 1);
+      for (size_t i = 0; i < spaces; i++) eprint(" ");
+      eprint("  | ");
+      if (colours_blink) eprint("\033[5m");
+      eprint("%C", diagnostic_level_colours[level]);
+      for (u32 i = line_start; i < location.start; ++i) {
+        if (source.data[i] == '\t') eprint("    ");
+        else fputc(' ', stderr);
+      }
+      for (u32 i = location.start; i < location.end; ++i) {
+        if (source.data[i] == '\t') eprint("~~~~");
+        else fputc('~', stderr);
+      }
     }
   }
 
