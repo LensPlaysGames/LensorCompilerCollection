@@ -866,15 +866,25 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     size_t func_regs = inst->parent_block->function->registers_in_use;
     size_t regs_pushed_count = 0;
 
+    // Save return register.
+    // FIXME: Use calling convention for return register.
+    if (func_regs & REG_RAX) {
+      femit_reg(context, I_PUSH, REG_RAX);
+      // NOTE: regs_pushed_count for this push is updated below, as the
+      // mask isn't unset.
+    }
+
+    // Count registers used in function.
     size_t x = func_regs;
     while (x) {
       regs_pushed_count++;
       x &= x - 1;
     }
+
     // Align stack pointer before call, if necessary.
-    if (regs_pushed_count & 0b1) {
+    if (regs_pushed_count & 0b1)
       femit_imm_to_reg(context, I_SUB, 8, REG_RSP, r64);
-    }
+
     for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i) {
       if (func_regs & (1 << i) && is_caller_saved(i)) {
         // TODO: Don't push registers that are used for arguments.
@@ -894,16 +904,21 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       femit_imm_to_reg(context, I_ADD, 32, REG_RSP, r64);
 
     // Restore caller saved registers used in called function.
-    for (Register i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i) {
-      if (func_regs & (1 << i) && is_caller_saved(i)) {
+    for (Register i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i)
+      if (func_regs & (1 << i) && is_caller_saved(i))
         femit_reg(context, I_POP, i);
-      }
-    }
+
     // Restore stack pointer from stack alignment, if necessary.
-    if (regs_pushed_count & 0b1) {
+    if (regs_pushed_count & 0b1)
       femit_imm_to_reg(context, I_ADD, 8, REG_RSP, r64);
-    }
+
     femit_reg_to_reg(context, I_MOV, REG_RAX, inst->result, r64);
+
+    // Restore return register.
+    // FIXME: Use calling convention for return register.
+    if (func_regs & REG_RAX)
+      femit_reg(context, I_POP, REG_RAX);
+
   } break;
 
   case IR_RETURN:
