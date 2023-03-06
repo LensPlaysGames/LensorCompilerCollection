@@ -1126,6 +1126,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                 "Cannot perform arithmetic on non-integer type '%T'.",
                 rhs->type);
 
+          // Disallow divide by zero...
+          if (expr->binary.op == TK_SLASH && (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer == 0))
+            ERR(expr->source_location, "Cannot perform division by zero.");
+
           expr->type = lhs->type;
           break;
 
