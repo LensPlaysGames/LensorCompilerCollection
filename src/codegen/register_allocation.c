@@ -12,10 +12,14 @@
 #define DEBUG_RA
 
 #ifdef DEBUG_RA
+#  define IR_FEMIT_INST(file, inst) ir_femit_instruction(file, inst)
+#  define IR_FEMIT_BLOCK(file, bb) ir_femit_block(file, bb)
 #  define IR_FEMIT(file, f) ir_femit_function(file, f)
 #  define DEBUG(...) print(__VA_ARGS__)
 CodegenContext *debug_context = NULL;
 #else
+#  define IR_FEMIT_INST(file, inst)
+#  define IR_FEMIT_BLOCK(file, bb)
 #  define IR_FEMIT(file, context)
 #  define DEBUG(...)
 #endif
@@ -331,9 +335,7 @@ static void collect_interferences_from_block
   } else vector_push(*visited, b);
 
 
-#ifdef DEBUG_RA
-  print("  from block...\n");
-#endif
+  DEBUG("  from block...\n");
 
   /// Collect interferences for instructions in this block.
   list_foreach_rev (IRInstruction*, inst, b->instructions) {
@@ -651,6 +653,7 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
       /// from, replace all uses of to with from, and eliminate the copy.
       if (to->result && !from->result && !adjm(G->matrix, to->index, from->index) && !check_register_interference(G->regmasks[from->index], to)) {
         from->result = to->result;
+        DEBUG("To is coloured, from is not, and from doesn't interfere.\n");
         goto eliminate;
       }
 
@@ -658,7 +661,7 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
       /// interfere with the precoloured register: assign the
       /// precoloured register to any PHI nodes that use to if those
       /// PHI nodes are uncoloured or precoloured with the same
-      /// register; if the are any PHI nodes that are precoloured with
+      /// register; if there are any PHI nodes that are precoloured with
       /// a different register, then the copy cannot be eliminated.
       /// Otherwise, replace all uses of to with from and eliminate the
       /// copy.
@@ -690,15 +693,19 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
 
         /// If we get here, then we know that all PHI node that use to
         /// can be precoloured with the same register as from.
-        foreach_ptr (IRInstruction *, phi, phis) { phi->result = from->result; }
+        foreach_ptr (IRInstruction *, phi, phis) phi->result = from->result;
+        DEBUG("All PHI nodes that use `to` can be precouloured with the same register as from\n");
         goto eliminate;
       }
 
+      /*
       /// Neither from nor to are precoloured, and they do not interfere.
       /// Replace all uses of to with from, and eliminate the copy.
       if (!to->result && !from->result && !adjm(G->matrix, to->index, from->index)) {
+        DEBUG("Neither from nor to are coloured, and no interference\n");
         goto eliminate;
       }
+      */
 
     /// Otherwise, keep the copy.
     keep_copy:
@@ -706,6 +713,9 @@ void coalesce(IRFunction *f, const MachineDescription *desc, IRInstructions *ins
 
     /// Eliminate the copy.
     eliminate:
+
+      DEBUG("Eliminating copy\n");
+      IR_FEMIT_INST(stdout, to);
 
       /// First, replace all uses of to with from.
       ir_replace_uses(to, from);
