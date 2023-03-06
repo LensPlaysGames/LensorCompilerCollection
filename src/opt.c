@@ -86,9 +86,45 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
   list_foreach (IRBlock*, b, f->blocks) {
     list_foreach (IRInstruction*, i, b->instructions) {
       switch (i->kind) {
-        case IR_ADD: IR_REDUCE_BINARY(+) break;
-        case IR_SUB: IR_REDUCE_BINARY(-) break;
-        case IR_MUL: IR_REDUCE_BINARY(*) break;
+      case IR_ADD:
+        IR_REDUCE_BINARY(+)
+        else {
+          // Adding zero to something == no-op
+          if (i->lhs->kind == IR_IMMEDIATE && imm_lhs(i) == 0) {
+            ir_remove_use(i->lhs, i);
+            ir_remove_use(i->rhs, i);
+            ir_replace_uses(i, i->rhs);
+          } else if (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 0) {
+            ir_remove_use(i->lhs, i);
+            ir_remove_use(i->rhs, i);
+            ir_replace_uses(i, i->lhs);
+          }
+        }
+        break;
+      case IR_SUB:
+        IR_REDUCE_BINARY(-)
+        else {
+          // Subtracting zero from something == no-op
+          if (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 0) {
+            ir_remove_use(i->lhs, i);
+            ir_remove_use(i->rhs, i);
+            ir_replace_uses(i, i->lhs);
+          }
+        }
+        break;
+      case IR_MUL:
+        IR_REDUCE_BINARY(*)
+        else  {
+          // Multiplying by zero == zero
+          if ((i->lhs->kind == IR_IMMEDIATE && imm_lhs(i) == 0) ||
+              (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 0)) {
+            ir_remove_use(i->lhs, i);
+            ir_remove_use(i->rhs, i);
+            i->kind = IR_IMMEDIATE;
+            i->imm = 0;
+          }
+        }
+        break;
 
         case IR_DIV:
           IR_REDUCE_BINARY(/)
