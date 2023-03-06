@@ -427,7 +427,7 @@ static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, Re
   const char *address = register_name(address_register);
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
-      fprint(context->code, "    %s %%%s, %s(%%%s)\n",
+      fprint(context->code, "    %s %%%s, (%s)(%%%s)\n",
           mnemonic, source, name, address);
       break;
     case CG_ASM_DIALECT_INTEL:
@@ -531,6 +531,9 @@ static void femit_name(CodegenContext *context, enum Instruction inst, const cha
   const char *mnemonic = instruction_mnemonic(context, inst);
   switch (context->dialect) {
   case CG_ASM_DIALECT_ATT:
+    fprint(context->code, "    %s (%s)\n",
+           mnemonic, name);
+    break;
   case CG_ASM_DIALECT_INTEL:
     fprint(context->code, "    %s %s\n",
            mnemonic, name);
