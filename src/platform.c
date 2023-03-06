@@ -91,6 +91,11 @@ void platform_init(void) {
 bool platform_isatty(int fd) { return isatty(fd); }
 
 void platform_print_backtrace(int ignore) {
+#ifdef __MINGW32__
+  eprint("  Backtrace not supported on MinGW (WinAPI requires PDB debug info and the compiler cannot generate it)\n");
+  return;
+#endif
+
   bool term = platform_isatty(fileno(stderr));
 
 #ifndef _WIN32
@@ -185,9 +190,6 @@ void platform_print_backtrace(int ignore) {
       if (strcmp(name_begin + 1, "main") == 0) break;
     }
   }
-
-#elif defined(__MINGW32__)
-  eprint("  Backtrace not supported on MinGW (WinAPI requires PDB debug info and the compiler cannot generate it)\n");
 #else
   typedef BOOL SymInitializeFunc(
     _In_ HANDLE hProcess,

@@ -1097,6 +1097,10 @@ void ast_replace_node(AST *ast, Node *old, Node *new) {
       if (old->parent->member_access.struct_ == old) old->parent->member_access.struct_ = new;
       break;
 
+    case NODE_FOR:
+      TODO("Handle NODE_FOR in ast_replace_node()...");
+      break;
+
     case NODE_LITERAL:
     case NODE_VARIABLE_REFERENCE:
     case NODE_FUNCTION_REFERENCE:

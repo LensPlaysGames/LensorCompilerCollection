@@ -1115,7 +1115,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_SHR:
         case TK_AMPERSAND:
         case TK_PIPE:
-        case TK_CARET:
+        case TK_CARET: {
           if (!is_integer(lhs->type))
             ERR(lhs->source_location,
                 "Cannot perform arithmetic on non-integer type '%T'.",
@@ -1131,7 +1131,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
             ERR(expr->source_location, "Cannot perform division by zero.");
 
           expr->type = lhs->type;
-          break;
+        } break;
 
         /// This is the complicated one.
         case TK_COLON_EQ:
