@@ -123,6 +123,18 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
             i->kind = IR_IMMEDIATE;
             i->imm = 0;
           }
+          // Multiplying 1 * rhs == rhs
+          else if (i->lhs->kind == IR_IMMEDIATE && imm_lhs(i) == 1) {
+            ir_remove_use(i->lhs, i);
+            ir_remove_use(i->rhs, i);
+            ir_replace_uses(i, i->rhs);
+          }
+          // Multiplying lhs * 1 == lhs
+          else if (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 1) {
+            ir_remove_use(i->lhs, i);
+            ir_remove_use(i->rhs, i);
+            ir_replace_uses(i, i->lhs);
+          }
         }
         break;
 
