@@ -882,9 +882,16 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       }
     }
 
+    // Shadow stack
+    if (context->call_convention == CG_CALL_CONV_MSWIN)
+      femit_imm_to_reg(context, I_SUB, 32, REG_RSP, r64);
+
     if (inst->call.is_indirect) femit_reg(context, I_CALL, inst->call.callee_instruction->result);
     else femit_name(context, I_CALL, inst->call.callee_function->name.data);
-    // femit_name(context, I_CALL, inst->call.callee_function->name.data);
+
+    // Restore shadow stack
+    if (context->call_convention == CG_CALL_CONV_MSWIN)
+      femit_imm_to_reg(context, I_ADD, 32, REG_RSP, r64);
 
     // Restore caller saved registers used in called function.
     for (Register i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i) {
@@ -963,25 +970,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   } break;
   case IR_ADD: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    if (inst->lhs->kind == IR_STATIC_REF) {
-      emit_instruction(context, inst->lhs);
-
-      INSTRUCTION(load, IR_LOAD);
-      load->operand = inst->lhs;
-      load->result = inst->lhs->result;
-      emit_instruction(context, load);
-      inst->lhs = load;
-    }
-    if (inst->rhs->kind == IR_STATIC_REF) {
-      emit_instruction(context, inst->rhs);
-
-      INSTRUCTION(load, IR_LOAD);
-      load->operand = inst->rhs;
-      load->result = inst->rhs->result;
-      emit_instruction(context, load);
-      inst->rhs = load;
-    }
-
     femit_reg_to_reg(context, I_ADD, inst->lhs->result, inst->rhs->result, size);
     femit_reg_to_reg(context, I_MOV, inst->rhs->result, inst->result, size);
   } break;
