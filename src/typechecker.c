@@ -1126,6 +1126,13 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                 "Cannot perform arithmetic on non-integer type '%T'.",
                 rhs->type);
 
+          // Disallow (maybe warn?) when shifting more than/equal to size of type.
+          if ((expr->binary.op == TK_SHL || expr->binary.op == TK_SHR) &&
+              (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer >= (8 * type_sizeof(expr->binary.lhs->type))))
+            ERR(expr->source_location,
+                "Cannot perform shift larger than size of underlying type %T (%Z is max).",
+                expr->binary.lhs->type, (8 * type_sizeof(expr->binary.lhs->type)) - 1);
+
           // Disallow divide by zero...
           if (expr->binary.op == TK_SLASH && (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer == 0))
             ERR(expr->source_location, "Cannot perform division by zero.");
