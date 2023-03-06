@@ -1,5 +1,5 @@
 - Urgent
-  - [ ] Fix Register Allocation Instruction Interference algorithm. It is currently based on traversing dominator trees, which makes no sense for RA. We should instead iterate backwards over blocks, starting at exit, until we reach the entrance...
+  - [x] Fix Register Allocation Instruction Interference algorithm. It is currently based on traversing dominator trees, which makes no sense for RA. We should instead iterate backwards over blocks, starting at exit, until we reach the entrance...
     "Iff A is reachable from B, then all live values at the beginning of A must continue to stay live all the way through B" <- currently not upheld due to dominator tree traversal.
 - [ ] Miscellany.
   - [x] Operator `as`.
