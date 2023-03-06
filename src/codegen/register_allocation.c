@@ -331,7 +331,9 @@ static void collect_interferences_from_block
   } else vector_push(*visited, b);
 
 
+#ifdef DEBUG_RA
   print("  from block...\n");
+#endif
 
   /// Collect interferences for instructions in this block.
   list_foreach_rev (IRInstruction*, inst, b->instructions) {
@@ -391,10 +393,12 @@ static void collect_interferences_from_block
     }
   }
 
+#ifdef DEBUG_RA
   foreach_ptr (IRBlock*, parent, parent_blocks) {
     print("  Parent block:\n");
     ir_femit_block(stdout, parent);
   }
+#endif
 
   foreach_ptr (IRBlock*, parent, parent_blocks) {
     // Copy live vals
@@ -421,10 +425,12 @@ static void collect_interferences_for_function
       vector_push(exits, b);
 
 
+#ifdef DEBUG_RA
   foreach_ptr (IRBlock*, b, exits) {
     print("Exit block:\n");
     ir_femit_block(stdout, b);
   }
+#endif
 
   IRInstructions live_vals = {0};
   BlockVector visited = {0};
