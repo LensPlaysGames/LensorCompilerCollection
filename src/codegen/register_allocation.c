@@ -319,14 +319,17 @@ static void collect_interferences_from_block
  IRBlock *b,
  IRInstructions *live_vals,
  BlockVector *visited,
+ BlockVector *doubly_visited,
  AdjacencyGraph *G
  )
 {
   /// Don't visit the same block twice.
-  if (vector_contains(*visited, b))
-    return;
+  if (vector_contains(*visited, b)) {
+    if (vector_contains(*doubly_visited, b))
+      return;
+    else vector_push(*doubly_visited, b);
+  } else vector_push(*visited, b);
 
-  vector_push(*visited, b);
 
   print("  from block...\n");
 
@@ -393,10 +396,16 @@ static void collect_interferences_from_block
     ir_femit_block(stdout, parent);
   }
 
+  foreach_ptr (IRBlock*, parent, parent_blocks) {
+    // Copy live vals
+    IRInstructions live_vals_copy = {0};
+    foreach_ptr (IRInstruction*, lv, *live_vals)
+      vector_push(live_vals_copy, lv);
 
-  /// Do the same for all dominators of this block.
-  foreach_ptr (IRBlock*, parent, parent_blocks)
-    collect_interferences_from_block(desc, parent, live_vals, visited, G);
+    collect_interferences_from_block(desc, parent, &live_vals_copy, visited, doubly_visited, G);
+
+    vector_delete(live_vals_copy);
+  }
 }
 
 static void collect_interferences_for_function
@@ -419,12 +428,18 @@ static void collect_interferences_for_function
 
   IRInstructions live_vals = {0};
   BlockVector visited = {0};
+  BlockVector doubly_visited = {0};
 
   // From each exit block (collected above), follow control flow to the
   // root of the function (entry block), or to a block already visited.
-  foreach_ptr (IRBlock*, b, exits)
-    collect_interferences_from_block(desc, b, &live_vals, &visited, G);
+  foreach_ptr (IRBlock*, b, exits) {
+    vector_clear(live_vals);
+    vector_clear(visited);
+    vector_clear(doubly_visited);
+    collect_interferences_from_block(desc, b, &live_vals, &visited, &doubly_visited, G);
+  }
 
+  vector_delete(doubly_visited);
   vector_delete(visited);
   vector_delete(live_vals);
   vector_delete(exits);
