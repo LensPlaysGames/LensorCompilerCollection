@@ -1067,7 +1067,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   case IR_STORE: {
     /// Store to a static variable.
     if (inst->store.addr->kind == IR_STATIC_REF) {
-      enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.addr->static_ref->type));
+      enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
       femit_reg_to_name(context, I_MOV, inst->store.value->result, size, REG_RIP, inst->store.addr->static_ref->name.data);
     }
 
@@ -1075,7 +1075,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     else if (inst->store.addr->kind == IR_ALLOCA) {
       enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
       femit_reg_to_mem(context, I_MOV, inst->store.value->result, size, REG_RBP, - (i64)inst->store.addr->alloca.offset);
-      break;
     }
 
     /// Store to a pointer.
