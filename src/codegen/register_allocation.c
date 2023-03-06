@@ -9,7 +9,7 @@
 #include <string.h>
 #include <vector.h>
 
-#define DEBUG_RA
+//#define DEBUG_RA
 
 #ifdef DEBUG_RA
 #  define IR_FEMIT_INST(file, inst) ir_femit_instruction(file, inst)
