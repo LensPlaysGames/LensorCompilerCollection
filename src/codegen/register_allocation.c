@@ -322,6 +322,12 @@ static void collect_interferences_from_block
  AdjacencyGraph *G
  )
 {
+  /// Don't visit the same block twice.
+  if (vector_contains(*visited, b))
+    return;
+
+  vector_push(*visited, b);
+
   print("  from block...\n");
 
   /// Collect interferences for instructions in this block.
@@ -342,15 +348,6 @@ static void collect_interferences_from_block
     /// Add its operands to the set of live variables.
     ir_for_each_child(inst, collect_interferences, live_vals);
   }
-
-  /// Don't visit the same block twice.
-  if (vector_contains(*visited, b)) {
-    // If we end up in a loop, we need to make sure that all live
-    // values at the beginning of the block we reached twice are live all
-    // the way through the loop.
-    return;
-  }
-  vector_push(*visited, b);
 
   // Collect all blocks in function that branch to this block (parent blocks).
 
@@ -405,8 +402,6 @@ static void collect_interferences_from_block
 static void collect_interferences_for_function
 (const MachineDescription *desc,
  IRFunction *function,
- IRInstructions *live_vals,
- BlockVector *visited,
  AdjacencyGraph *G
  )
 {
@@ -422,11 +417,17 @@ static void collect_interferences_for_function
     ir_femit_block(stdout, b);
   }
 
+  IRInstructions live_vals = {0};
+  BlockVector visited = {0};
 
   // From each exit block (collected above), follow control flow to the
   // root of the function (entry block), or to a block already visited.
   foreach_ptr (IRBlock*, b, exits)
-    collect_interferences_from_block(desc, b, live_vals, visited, G);
+    collect_interferences_from_block(desc, b, &live_vals, &visited, G);
+
+  vector_delete(visited);
+  vector_delete(live_vals);
+  vector_delete(exits);
 }
 
 /// Build the adjacency graph for the given function.
@@ -446,12 +447,6 @@ static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc,
     }
   }
 
-  /// Values that are currently live.
-  IRInstructions live_vals = {0};
-
-  /// Blocks that have been visited.
-  BlockVector visited = {0};
-
   /*
   /// Collect the interferences for each leaf.
   foreach_ptr (DomTreeNode*, node, leaves) {
@@ -462,13 +457,11 @@ static void build_adjacency_graph(IRFunction *f, const MachineDescription *desc,
   */
 
   /// WIP: Collect the interferences from CFG
-  collect_interferences_for_function(desc, f, &live_vals, &visited, G);
+  collect_interferences_for_function(desc, f, G);
 
   /// Free dominator and liveness info.
   free_dominator_info(&dom_info);
   vector_delete(leaves);
-  vector_delete(live_vals);
-  vector_delete(visited);
 
   /// While were at it, also check for interferences with physical registers.
   /// For that, we need to iterate over all values that interfere with A and
