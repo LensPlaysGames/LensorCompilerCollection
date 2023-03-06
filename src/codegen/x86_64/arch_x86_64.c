@@ -804,9 +804,9 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   STATIC_ASSERT(IR_COUNT == 34, "Handle all IR instructions");
 
   if (annotate_code) {
-    thread_use_colours = false;
     // TODO: Base comment syntax on dialect or smth.
     fprint(context->code, ";;#;");
+    thread_use_colours = false;
     ir_femit_instruction(context->code, inst);
     thread_use_colours = true;
   }
@@ -963,6 +963,25 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   } break;
   case IR_ADD: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
+    if (inst->lhs->kind == IR_STATIC_REF) {
+      emit_instruction(context, inst->lhs);
+
+      INSTRUCTION(load, IR_LOAD);
+      load->operand = inst->lhs;
+      load->result = inst->lhs->result;
+      emit_instruction(context, load);
+      inst->lhs = load;
+    }
+    if (inst->rhs->kind == IR_STATIC_REF) {
+      emit_instruction(context, inst->rhs);
+
+      INSTRUCTION(load, IR_LOAD);
+      load->operand = inst->rhs;
+      load->result = inst->rhs->result;
+      emit_instruction(context, load);
+      inst->rhs = load;
+    }
+
     femit_reg_to_reg(context, I_ADD, inst->lhs->result, inst->rhs->result, size);
     femit_reg_to_reg(context, I_MOV, inst->rhs->result, inst->result, size);
   } break;

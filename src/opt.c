@@ -90,7 +90,6 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
         case IR_SUB: IR_REDUCE_BINARY(-) break;
         case IR_MUL: IR_REDUCE_BINARY(*) break;
 
-        /// TODO: Division by 0 should be a compile error.
         case IR_DIV:
           IR_REDUCE_BINARY(/)
           else {

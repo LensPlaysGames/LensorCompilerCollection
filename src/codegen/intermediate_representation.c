@@ -499,9 +499,7 @@ IRInstruction *ir_load
   load->operand = address;
 
   Type *t = type_canonical(address->type);
-  // TODO: Use !(t && type_is_pointer(t)), once binary operators can
-  // properly select their return types (not just integer).
-  if (!t) {
+  if (!(t && type_is_pointer(t))) {
     //print("address type: %T\n", address->type);
     ir_femit_instruction(stdout, address);
     if (t) ICE("Can not emit IR_LOAD from type %T as it is not a pointer", t);
