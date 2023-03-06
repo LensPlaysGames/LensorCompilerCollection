@@ -453,7 +453,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
         IRInstruction *var_decl = lhs->var->val.node->address;
         if (var_decl->kind == IR_STATIC_REF || var_decl->kind == IR_ALLOCA)
-          subs_lhs = var_decl;
+          if (type_is_pointer(var_decl->type) && type_is_pointer(var_decl->type->pointer.to))
+            subs_lhs = ir_load(ctx, var_decl);
+          else subs_lhs = var_decl;
         else {
           ir_femit_instruction(stdout, var_decl);
           ERR("Unhandled variable reference IR instruction kind %i", (int) var_decl->kind);
@@ -472,6 +474,11 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         subs_lhs = lhs->ir;
       }
       else ERR("LHS of subscript operator has invalid kind %i", (int) lhs->kind);
+
+      // Subscript of array should result in pointer to base type, not pointer to array type.
+      if (type_is_pointer(subs_lhs->type) && type_is_array(subs_lhs->type->pointer.to))
+        subs_lhs->type = ast_make_type_pointer(ctx->ast, subs_lhs->type->source_location,
+                                               subs_lhs->type->pointer.to->array.of);
 
       codegen_expr(ctx, rhs);
 
