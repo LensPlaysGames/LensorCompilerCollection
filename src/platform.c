@@ -186,6 +186,8 @@ void platform_print_backtrace(int ignore) {
     }
   }
 
+#elif defined(__MINGW32__)
+  eprint("  Backtrace not supported on MinGW (WinAPI requires PDB debug info and the compiler cannot generate it)\n");
 #else
   typedef BOOL SymInitializeFunc(
     _In_ HANDLE hProcess,
