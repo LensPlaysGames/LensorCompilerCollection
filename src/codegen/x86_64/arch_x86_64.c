@@ -181,6 +181,9 @@ enum Instruction {
   I_MOV,
   I_LEA,
 
+  I_MOVSX,
+  I_MOVZX,
+
   /// Using this for anything other than Reg <-> Reg is a VERY bad
   /// idea unless you know what you're doing.
   I_XCHG,
@@ -253,7 +256,7 @@ const char *setcc_suffixes_x86_64[COMPARE_COUNT] = {
 };
 
 static const char *instruction_mnemonic(CodegenContext *context, enum Instruction instruction) {
-  STATIC_ASSERT(I_COUNT == 24, "ERROR: instruction_mnemonic() must exhaustively handle all instructions.");
+  STATIC_ASSERT(I_COUNT == 26, "ERROR: instruction_mnemonic() must exhaustively handle all instructions.");
   // x86_64 instructions that aren't different across syntaxes can go here!
   switch (instruction) {
   default: break;
@@ -285,20 +288,25 @@ static const char *instruction_mnemonic(CodegenContext *context, enum Instructio
   }
 
   switch (context->dialect) {
-  default: ICE("instruction_mnemonic(): Unknown output format.");
 
   case CG_ASM_DIALECT_ATT:
     switch (instruction) {
-    default: ICE("instruction_mnemonic(): Unknown instruction.");
+    case I_MOVSX: return "movsx";
+    case I_MOVZX: return "movzx";
     case I_CQO: return "cqto";
+    default: break;
     }
 
   case CG_ASM_DIALECT_INTEL:
     switch (instruction) {
-    default: ICE("instruction_mnemonic(): Unknown instruction.");
+    case I_MOVSX: return "movsx";
+    case I_MOVZX: return "movzx";
     case I_CQO: return "cqo";
+    default: break;
     }
+  default: break;
   }
+  ICE("instruction_mnemonic(): Unknown instruction.");
 }
 
 static enum IndirectJumpType comparison_to_jump_type(enum ComparisonType comparison) {
@@ -418,24 +426,36 @@ static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, Reg
   }
 }
 
-static void femit_reg_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, RegisterDescriptor destination_register, enum RegSize size) {
-  const char *mnemonic = instruction_mnemonic(context, inst);
-  const char *source = regname(source_register, size);
-  const char *destination = regname(destination_register, size);
-
+static void femit_reg_to_reg
+(CodegenContext *context,
+ enum Instruction inst,
+ RegisterDescriptor source_register, enum RegSize source_size,
+ RegisterDescriptor destination_register, enum RegSize destination_size
+ )
+{
   // Always optimise away moves from a register to itself
-  if (inst == I_MOV && source_register == destination_register) return;
+  if (inst == I_MOV
+      && source_register == destination_register
+      && source_size == destination_size)
+    {
+      fprint(context->code, ";;#; skipping move from self to self\n");
+      return;
+    }
+
+  const char *mnemonic = instruction_mnemonic(context, inst);
+  const char *source = regname(source_register, source_size);
+  const char *destination = regname(destination_register, destination_size);
 
   switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
-      fprint(context->code, "    %s %%%s, %%%s\n",
-          mnemonic, source, destination);
-      break;
-    case CG_ASM_DIALECT_INTEL:
-      fprint(context->code, "    %s %s, %s\n",
-          mnemonic, destination, source);
-      break;
-    default: ICE("ERROR: femit_reg_to_reg(): Unsupported dialect %d", context->dialect);
+  case CG_ASM_DIALECT_ATT:
+    fprint(context->code, "    %s %%%s, %%%s\n",
+           mnemonic, source, destination);
+    break;
+  case CG_ASM_DIALECT_INTEL:
+    fprint(context->code, "    %s %s, %s\n",
+           mnemonic, destination, source);
+    break;
+  default: ICE("ERROR: femit_reg_to_reg(): Unsupported dialect %d", context->dialect);
   }
 }
 
@@ -586,7 +606,7 @@ static void femit
   va_start(args, instruction);
 
   ASSERT(context);
-  STATIC_ASSERT(I_COUNT == 24, "femit() must exhaustively handle all x86_64 instructions.");
+  STATIC_ASSERT(I_COUNT == 26, "femit() must exhaustively handle all x86_64 instructions.");
 
   // TODO: Extract setcc and jcc to their own functions, get rid of varargs
   switch (instruction) {
@@ -732,14 +752,14 @@ static RegisterDescriptor codegen_comparison
  RegisterDescriptor lhs,
  RegisterDescriptor rhs,
  RegisterDescriptor result,
- enum RegSize size
- ) {
+ enum RegSize size)
+{
   ASSERT(type < COMPARE_COUNT, "Invalid comparison type");
 
   // Zero out result register.
 
   // Perform the comparison.
-  femit_reg_to_reg(cg_context, I_CMP, rhs, lhs, size);
+  femit_reg_to_reg(cg_context, I_CMP, rhs, size, lhs, size);
   // IF YOU REPLACE THIS WITH A XOR IT WILL BREAK HORRIBLY
   // We use MOV because it doesn't set flags.
   femit_imm_to_reg(cg_context, I_MOV, 0, result, r32);
@@ -781,7 +801,7 @@ static void codegen_prologue(CodegenContext *cg_context, IRFunction *f) {
       size_t locals_offset = f->locals_total_size;
 
       femit_reg(cg_context, I_PUSH, REG_RBP);
-      femit_reg_to_reg(cg_context, I_MOV, REG_RSP, REG_RBP, r64);
+      femit_reg_to_reg(cg_context, I_MOV, REG_RSP, r64, REG_RBP, r64);
       switch (cg_context->call_convention) {
         ///> Even if the called function has fewer than 4 parameters, these 4
         ///> stack locations are effectively owned by the called function, and
@@ -819,7 +839,7 @@ static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
     case FRAME_NONE: break;
 
     case FRAME_FULL: {
-      femit_reg_to_reg(cg_context, I_MOV, REG_RBP, REG_RSP, r64);
+      femit_reg_to_reg(cg_context, I_MOV, REG_RBP, r64, REG_RSP, r64);
       femit_reg(cg_context, I_POP, REG_RBP);
     } break;
 
@@ -880,17 +900,70 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   case IR_NOT: {
     femit_reg(context, I_NOT, inst->operand->result);
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
-    femit_reg_to_reg(context, I_MOV, inst->operand->result, inst->result, size);
+    femit_reg_to_reg(context, I_MOV, inst->operand->result, size, inst->result, size);
   } break;
   case IR_ZERO_EXTEND: {
+    usz operand_byte_size = type_sizeof(inst->operand->type);
+    usz result_byte_size = type_sizeof(inst->type);
+    ASSERT (result_byte_size > operand_byte_size, "Zero extension result must be larger than operand");
+
+    // TODO: Handle things larger than a register, somehow... may need
+    // to push/pop registers...
+    enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
+    enum RegSize result_size = regsize_from_bytes(result_byte_size);
+
+    femit_reg_to_reg(context, I_MOVZX, inst->operand->result, operand_size, inst->result, result_size);
   } break;
   case IR_SIGN_EXTEND: {
+    usz operand_byte_size = type_sizeof(inst->operand->type);
+    usz result_byte_size = type_sizeof(inst->type);
+    ASSERT (result_byte_size > operand_byte_size, "Sign extension result must be larger than operand");
+
+    // TODO: Handle things larger than a register, somehow... may need
+    // to push/pop registers...
+    enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
+    enum RegSize result_size = regsize_from_bytes(result_byte_size);
+
+    femit_reg_to_reg(context, I_MOVSX, inst->operand->result, operand_size, inst->result, result_size);
   } break;
   case IR_TRUNCATE: {
+    usz operand_byte_size = type_sizeof(inst->operand->type);
+    usz result_byte_size = type_sizeof(inst->type);
+    ASSERT (result_byte_size < operand_byte_size, "Truncation result must be smaller than operand");
+
+    // TODO: Handle things larger than a register, somehow... may need
+    // to push/pop registers...
+    enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
+    enum RegSize result_size = regsize_from_bytes(result_byte_size);
+
+    femit_reg_to_reg(context, I_MOV, inst->operand->result, r64, inst->result, r64);
+    switch (result_size) {
+    case r32:
+      femit_imm_to_reg(context, I_AND, 0xffffffff, inst->result, r32);
+      break;
+    case r16:
+      femit_imm_to_reg(context, I_AND, 0xffff, inst->result, r32);
+      break;
+    case r8:
+      femit_imm_to_reg(context, I_AND, 0xff, inst->result, r32);
+      break;
+
+    case r64:
+    default:
+      UNREACHABLE();
+    }
+
   } break;
   case IR_COPY: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
-    femit_reg_to_reg(context, I_MOV, inst->operand->result, inst->result, size);
+    usz operand_byte_size = type_sizeof(inst->operand->type);
+    usz result_byte_size = type_sizeof(inst->type);
+
+    // TODO: Handle things larger than a register, somehow... may need
+    // to push/pop registers...
+    enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
+    enum RegSize result_size = regsize_from_bytes(result_byte_size);
+
+    femit_reg_to_reg(context, I_MOV, inst->operand->result, operand_size, inst->result, result_size);
   } break;
   case IR_CALL: {
     // Save caller saved registers used in caller function.
@@ -954,7 +1027,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     if (regs_pushed_count & 0b1)
       femit_imm_to_reg(context, I_ADD, 8, REG_RSP, r64);
 
-    femit_reg_to_reg(context, I_MOV, REG_RAX, inst->result, r64);
+    femit_reg_to_reg(context, I_MOV, REG_RAX, r64, inst->result, r64);
 
     // Restore return register.
     // FIXME: Use calling convention for return register.
@@ -986,7 +1059,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   case IR_BRANCH_CONDITIONAL: {
     IRBranchConditional *branch = &inst->cond_br;
 
-    femit_reg_to_reg(context, I_TEST, branch->condition->result, branch->condition->result, r64);
+    femit_reg_to_reg(context, I_TEST, branch->condition->result, r64, branch->condition->result, r64);
 
     /// If either target is the next block, arrange the jumps in such a way
     /// that we can save one and simply fallthrough to the next block.
@@ -1027,66 +1100,78 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   } break;
   case IR_ADD: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_ADD, inst->lhs->result, inst->rhs->result, size);
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, inst->result, size);
+    femit_reg_to_reg(context, I_ADD, inst->lhs->result, size, inst->rhs->result, size);
+    femit_reg_to_reg(context, I_MOV, inst->rhs->result, size, inst->result, size);
   } break;
   case IR_SUB: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_SUB, inst->rhs->result, inst->lhs->result, size);
-    femit_reg_to_reg(context, I_MOV, inst->lhs->result, inst->result, size);
+    femit_reg_to_reg(context, I_SUB, inst->rhs->result, size, inst->lhs->result, size);
+    femit_reg_to_reg(context, I_MOV, inst->lhs->result, size, inst->result, size);
   } break;
   case IR_MUL: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_IMUL, inst->lhs->result, inst->rhs->result, size);
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, inst->result, size);
+    femit_reg_to_reg(context, I_IMUL, inst->lhs->result, size, inst->rhs->result, size);
+    femit_reg_to_reg(context, I_MOV, inst->rhs->result, size, inst->result, size);
   } break;
   case IR_DIV: {
     ASSERT(inst->rhs->result != REG_RAX,
            "Register allocation must not allocate RAX to divisor.");
-    femit_reg_to_reg(context, I_MOV, inst->lhs->result, REG_RAX, r64);
+    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
+    femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, REG_RAX, r64);
     femit(context, I_CQO);
     femit_reg(context, I_IDIV, inst->rhs->result);
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_MOV, REG_RAX, inst->result, size);
+    femit_reg_to_reg(context, I_MOV, REG_RAX, size, inst->result, size);
   } break;
   case IR_MOD: {
     ASSERT(inst->rhs->result != REG_RAX,
            "Register allocation must not allocate RAX to divisor.");
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, REG_RAX, r64);
+    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
+    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RAX, r64);
     femit(context, I_CQO);
     femit_reg(context, I_IDIV, inst->rhs->result);
-    femit_reg_to_reg(context, I_MOV, REG_RDX, inst->result, size);
+    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
+    femit_reg_to_reg(context, I_MOV, REG_RDX, size, inst->result, size);
   } break;
   case IR_SHL: {
     ASSERT(inst->lhs->result != REG_RCX,
            "Register allocation must not allocate RCX to result of lhs of shift.");
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, REG_RCX, r64);
+    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
+    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RCX, r64);
     femit_reg(context, I_SHL, inst->lhs->result);
+    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_MOV, inst->lhs->result, inst->result, size);
+    femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, inst->result, size);
   } break;
   case IR_SHR: {
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, REG_RCX, r64);
+    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
+    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RCX, r64);
     femit_reg(context, I_SHR, inst->lhs->result);
+    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_MOV, inst->lhs->result, inst->result, size);
+    femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, inst->result, size);
   } break;
   case IR_SAR: {
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, REG_RCX, r64);
+    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
+    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RCX, r64);
     femit_reg(context, I_SAR, inst->lhs->result);
+    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_MOV, inst->lhs->result, inst->result, size);
+    femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, inst->result, size);
   } break;
   case IR_AND: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_AND, inst->lhs->result, inst->rhs->result, size);
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, inst->result, size);
+    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
+    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
+    femit_reg_to_reg(context, I_AND, inst->lhs->result, lhs_size, inst->rhs->result, size);
+    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, inst->result, size);
   } break;
   case IR_OR: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_OR, inst->lhs->result, inst->rhs->result, size);
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, inst->result, size);
+    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
+    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
+    femit_reg_to_reg(context, I_OR, inst->lhs->result, lhs_size, inst->rhs->result, size);
+    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, inst->result, size);
   } break;
 
   case IR_LOAD: {
@@ -1098,9 +1183,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         size = regsize_from_bytes(type_sizeof(t_void_ptr));
       else size = regsize_from_bytes(type_sizeof(inst->operand->type));
-      // TODO: Use `movzx`/`movzbl`
-      if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, inst->result, r32);
-      // femit_reg_to_reg(context, I_XOR, inst->result, inst->result);
+      if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, r32, inst->result, r32);
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         femit_name_to_reg(context, I_LEA, REG_RIP, inst->operand->static_ref->name.data, inst->result, size);
       else
@@ -1113,8 +1196,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         size = regsize_from_bytes(type_sizeof(t_void_ptr));
       else size = regsize_from_bytes(inst->operand->alloca.size);
-      // TODO: Use `movzx`/`movzbl`
-      if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, inst->result, r32);
+      if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, r32, inst->result, r32);
       if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
         femit_mem_to_reg(context, I_LEA, REG_RBP, - (i64)inst->operand->alloca.offset, inst->result, size);
       else
@@ -1128,7 +1210,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       // TODO: We are "supposed" to be loading sizeof pointed to type
       // here, but that causes segfaults when handling arrays.
       else size = regsize_from_bytes(type_sizeof(inst->operand->type));
-      if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, inst->result, r32);
+      if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, r32, inst->result, r32);
       if (inst->operand->type->kind == TYPE_ARRAY)
         femit_mem_to_reg(context, I_LEA, inst->operand->result, 0, inst->result, size);
       else
@@ -1262,7 +1344,7 @@ typedef enum Clobbers {
 } Clobbers;
 
 Clobbers does_clobber(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 34, "Exhaustive handling of IR types.");
+  STATIC_ASSERT(IR_COUNT == 37, "Exhaustive handling of IR instruction types that correspond to two-address instructions in x86_64.");
   switch (instruction->kind) {
   case IR_ADD:
   case IR_DIV:
