@@ -65,6 +65,10 @@
   F(STATIC_REF)                                                  \
   F(FUNC_REF)                                                    \
                                                                  \
+  F(ZERO_EXTEND)                                                 \
+  F(SIGN_EXTEND)                                                 \
+  F(TRUNCATE)                                                    \
+                                                                 \
   /** Store data at an address. **/                              \
   F(STORE)                                                       \
                                                                  \
@@ -322,6 +326,21 @@ IRInstruction *ir_copy
 IRInstruction *ir_not
 (CodegenContext *context,
  IRInstruction *source);
+
+IRInstruction *ir_zero_extend
+(CodegenContext *context,
+ Type *result_type,
+ IRInstruction *value);
+
+IRInstruction *ir_sign_extend
+(CodegenContext *context,
+ Type *result_type,
+ IRInstruction *value);
+
+IRInstruction *ir_truncate
+(CodegenContext *context,
+ Type *result_type,
+ IRInstruction *value);
 
 #define DECLARE_BINARY_INSTRUCTION(_, name) \
   IRInstruction *ir_##name(CodegenContext *context, IRInstruction *lhs, IRInstruction *rhs);
