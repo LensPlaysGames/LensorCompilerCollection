@@ -230,7 +230,7 @@ void ir_femit_instruction
     break;
 
   case IR_SIGN_EXTEND:
-    fprint(file, "%s.ext %34%%%u", inst->operand->id);
+    fprint(file, "%33s.ext %34%%%u", inst->operand->id);
     break;
 
   case IR_TRUNCATE:
