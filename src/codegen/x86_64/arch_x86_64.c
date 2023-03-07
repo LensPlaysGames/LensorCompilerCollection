@@ -188,6 +188,10 @@ enum Instruction {
   I_COUNT
 };
 
+// Maximum size of parameter that can go in a register vs on the stack.
+// TODO: Has to do with calling convention?
+static const usz max_register_size = 8;
+
 enum RegSize {
   r64,
   r32,
@@ -205,6 +209,20 @@ static enum RegSize regsize_from_bytes(u64 bytes) {
   case 8: return r64;
   default:
     ICE("Byte size can not be converted into register size on x86_64: %U", bytes);
+    break;
+  }
+}
+
+/// Return the corresponding byte size of a valid RegSize enum value.
+/// ICE if enum value invalid.
+static usz regbytes_from_size(enum RegSize r) {
+  switch (r) {
+  case r8: return 1;
+  case r16: return 2;
+  case r32: return 4;
+  case r64: return 8;
+  default:
+    ICE("Register size can not be converted into byte count on x86_64: %U", r);
     break;
   }
 }
@@ -433,6 +451,23 @@ static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, Re
     case CG_ASM_DIALECT_INTEL:
       fprint(context->code, "    %s [%s + %s], %s\n",
           mnemonic, address, name, source);
+      break;
+    default: ICE("ERROR: femit_reg_to_name(): Unsupported dialect %d", context->dialect);
+  }
+}
+
+static void femit_reg_to_offset_name(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name, usz offset) {
+  const char *mnemonic = instruction_mnemonic(context, inst);
+  const char *source = regname(source_register, size);
+  const char *address = register_name(address_register);
+  switch (context->dialect) {
+    case CG_ASM_DIALECT_ATT:
+      fprint(context->code, "    %s %%%s, (%s+%Z)(%%%s)\n",
+          mnemonic, source, name, offset, address);
+      break;
+    case CG_ASM_DIALECT_INTEL:
+      fprint(context->code, "    %s %Z[%s + %s], %s\n",
+          mnemonic, offset, name, address, source);
       break;
     default: ICE("ERROR: femit_reg_to_name(): Unsupported dialect %d", context->dialect);
   }
