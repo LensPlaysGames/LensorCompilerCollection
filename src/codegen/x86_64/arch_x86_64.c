@@ -280,6 +280,8 @@ static const char *instruction_mnemonic(CodegenContext *context, enum Instructio
   case I_JMP: return "jmp";
   case I_RET: return "ret";
   case I_MOV: return "mov";
+  case I_MOVSX: return "movsx";
+  case I_MOVZX: return "movzx";
   case I_XCHG: return "xchg";
   case I_LEA: return "lea";
   case I_SETCC: return "set";
@@ -291,16 +293,12 @@ static const char *instruction_mnemonic(CodegenContext *context, enum Instructio
 
   case CG_ASM_DIALECT_ATT:
     switch (instruction) {
-    case I_MOVSX: return "movsx";
-    case I_MOVZX: return "movzx";
     case I_CQO: return "cqto";
     default: break;
     }
 
   case CG_ASM_DIALECT_INTEL:
     switch (instruction) {
-    case I_MOVSX: return "movsx";
-    case I_MOVZX: return "movzx";
     case I_CQO: return "cqo";
     default: break;
     }
