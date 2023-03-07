@@ -476,9 +476,12 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       else ERR("LHS of subscript operator has invalid kind %i", (int) lhs->kind);
 
       // Subscript of array should result in pointer to base type, not pointer to array type.
-      if (type_is_pointer(subs_lhs->type) && type_is_array(subs_lhs->type->pointer.to))
+      if (type_is_pointer(subs_lhs->type) && type_is_array(subs_lhs->type->pointer.to)) {
+        subs_lhs = ir_copy(ctx, subs_lhs);
         subs_lhs->type = ast_make_type_pointer(ctx->ast, subs_lhs->type->source_location,
                                                subs_lhs->type->pointer.to->array.of);
+        ir_insert(ctx, subs_lhs);
+      }
 
       if (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer == 0) {
         expr->ir = subs_lhs;
