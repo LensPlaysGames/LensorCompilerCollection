@@ -1293,8 +1293,6 @@ static void lower(CodegenContext *context) {
     switch (instruction->kind) {
       case IR_PARAMETER: {
         // Maximum size of parameter that can go in a register vs on the stack.
-        // TODO: Has to do with calling convention?
-        static const usz max_register_size = 8;
         if (instruction->type->kind == TYPE_STRUCT || instruction->type->kind == TYPE_ARRAY) {
           TODO("x86_64 backend doesn't yet support passing structs/arrays as arguments, sorry.");
           // TODO: At each call of this function, insert alloca + copy from alloca to
