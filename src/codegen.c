@@ -411,22 +411,26 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
     if (from_sz == to_sz) {
       ASSERT(expr->cast.value->ir, "May need to codegen cast value.");
-      expr->ir = expr->cast.value->ir;
+      expr->ir = ir_copy(ctx, expr->cast.value->ir);
+      expr->type = t_to;
+      ir_insert(ctx, expr->ir);
       return;
-    } else if (from_sz < to_sz) {
-      // smaller to larger: sign extend if needed, otherwise zero extend.
-      if (from_signed) {
-        TODO("Codegen sign extended cast from %T to %T", t_from, t_to);
-      } else {
-        TODO("Codegen zero extended cast from %T to %T", t_from, t_to);
-      }
-    } else if (from_sz > to_sz) {
-      // larger to smaller: truncate.
-      TODO("Codegen truncated cast from %T to %T", t_from, t_to);
     }
-
-    TODO("Codegen cast from %T to %T", t_from, t_to);
-  }
+    else if (from_sz < to_sz) {
+      // smaller to larger: sign extend if needed, otherwise zero extend.
+      if (from_signed)
+        expr->ir = ir_sign_extend(ctx, t_to, expr->cast.value->ir);
+      else
+        expr->ir = ir_zero_extend(ctx, t_to, expr->cast.value->ir);
+      return;
+    }
+    else if (from_sz > to_sz) {
+      // larger to smaller: truncate.
+      expr->ir = ir_truncate(ctx, t_to, expr->cast.value->ir);
+      return;
+    }
+    UNREACHABLE();
+  } break;
 
   /// Binary expression.
   case NODE_BINARY: {
