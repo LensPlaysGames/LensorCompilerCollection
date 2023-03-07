@@ -291,17 +291,20 @@ static const char *instruction_mnemonic(CodegenContext *context, enum Instructio
 
   switch (context->dialect) {
 
-  case CG_ASM_DIALECT_ATT:
+  case CG_ASM_DIALECT_ATT: {
     switch (instruction) {
     case I_CQO: return "cqto";
     default: break;
     }
+  } break;
 
-  case CG_ASM_DIALECT_INTEL:
+  case CG_ASM_DIALECT_INTEL: {
     switch (instruction) {
     case I_CQO: return "cqo";
     default: break;
-    }
+    } break;
+  } break;
+
   default: break;
   }
   ICE("instruction_mnemonic(): Unknown instruction.");
@@ -931,7 +934,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
     // TODO: Handle things larger than a register, somehow... may need
     // to push/pop registers...
-    enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
     enum RegSize result_size = regsize_from_bytes(result_byte_size);
 
     femit_reg_to_reg(context, I_MOV, inst->operand->result, r64, inst->result, r64);
