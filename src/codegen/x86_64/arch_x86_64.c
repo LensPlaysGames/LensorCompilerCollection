@@ -839,7 +839,7 @@ static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
 }
 
 static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
-  STATIC_ASSERT(IR_COUNT == 34, "Handle all IR instructions");
+  STATIC_ASSERT(IR_COUNT == 37, "Handle all IR instructions");
 
   if (annotate_code) {
     // TODO: Base comment syntax on dialect or smth.
@@ -881,6 +881,12 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     femit_reg(context, I_NOT, inst->operand->result);
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
     femit_reg_to_reg(context, I_MOV, inst->operand->result, inst->result, size);
+  } break;
+  case IR_ZERO_EXTEND: {
+  } break;
+  case IR_SIGN_EXTEND: {
+  } break;
+  case IR_TRUNCATE: {
   } break;
   case IR_COPY: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));

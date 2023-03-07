@@ -23,7 +23,7 @@ void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
 }
 
 bool ir_is_branch(IRInstruction* i) {
-  STATIC_ASSERT(IR_COUNT == 34, "Handle all branch types.");
+  STATIC_ASSERT(IR_COUNT == 37, "Handle all branch types.");
   switch (i->kind) {
     case IR_BRANCH:
     case IR_BRANCH_CONDITIONAL:
@@ -134,7 +134,7 @@ void ir_remove_and_free_block(IRBlock *block) {
 
 void ir_free_instruction_data(IRInstruction *i) {
   if (!i) return;
-  STATIC_ASSERT(IR_COUNT == 34, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 37, "Handle all instruction types.");
   switch (i->kind) {
     case IR_CALL: vector_delete(i->call.arguments); break;
     case IR_PHI:
@@ -178,7 +178,7 @@ void ir_femit_instruction
     fprint(file, "  %31│ ");
   }
 
-  STATIC_ASSERT(IR_COUNT == 34, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 37, "Handle all instruction types.");
   switch (inst->kind) {
   case IR_IMMEDIATE:
     fprint(file, "%33imm %35%U", inst->imm);
@@ -223,6 +223,18 @@ void ir_femit_instruction
 
   case IR_NOT:
     fprint(file, "%33not %34%%%u", inst->operand->id);
+    break;
+
+  case IR_ZERO_EXTEND:
+    fprint(file, "%33z.ext %34%%%u", inst->operand->id);
+    break;
+
+  case IR_SIGN_EXTEND:
+    fprint(file, "%s.ext %34%%%u", inst->operand->id);
+    break;
+
+  case IR_TRUNCATE:
+    fprint(file, "%33truncate %34%%%u", inst->operand->id);
     break;
 
   case IR_COPY:
@@ -641,6 +653,45 @@ IRInstruction *ir_not
   return x;
 }
 
+IRInstruction *ir_zero_extend
+(CodegenContext *context,
+ Type *result_type,
+ IRInstruction *value)
+{
+  INSTRUCTION(zext, IR_ZERO_EXTEND);
+  zext->operand = value;
+  zext->type = result_type;
+  mark_used(value, zext);
+  INSERT(zext);
+  return zext;
+}
+
+IRInstruction *ir_sign_extend
+(CodegenContext *context,
+ Type *result_type,
+ IRInstruction *value)
+{
+  INSTRUCTION(sext, IR_SIGN_EXTEND);
+  sext->operand = value;
+  sext->type = result_type;
+  mark_used(value, sext);
+  INSERT(sext);
+  return sext;
+}
+
+IRInstruction *ir_truncate
+(CodegenContext *context,
+ Type *result_type,
+ IRInstruction *value)
+{
+  INSTRUCTION(trunc, IR_TRUNCATE);
+  trunc->operand = value;
+  trunc->type = result_type;
+  mark_used(value, trunc);
+  INSERT(trunc);
+  return trunc;
+}
+
 #define CREATE_BINARY_INSTRUCTION(enumerator, name)                                           \
   IRInstruction *ir_##name(CodegenContext *context, IRInstruction *lhs, IRInstruction *rhs) { \
     INSTRUCTION(x, IR_##enumerator);                                                          \
@@ -709,7 +760,7 @@ void ir_for_each_child(
   void callback(IRInstruction *user, IRInstruction **child, void *data),
   void *data
 ) {
-  STATIC_ASSERT(IR_COUNT == 34, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 37, "Handle all instruction types.");
   switch (user->kind) {
   case IR_PHI:
       foreach_ptr (IRPhiArgument*, arg, user->phi_args) {
@@ -719,6 +770,9 @@ void ir_for_each_child(
   case IR_LOAD:
   case IR_COPY:
   case IR_NOT:
+  case IR_ZERO_EXTEND:
+  case IR_SIGN_EXTEND:
+  case IR_TRUNCATE:
     callback(user, &user->operand, data);
     break;
 
@@ -760,7 +814,7 @@ void ir_for_each_child(
 }
 
 bool ir_is_value(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 34, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 37, "Handle all instruction types.");
   // NOTE: If you are changing this switch, you also need to change
   // `needs_register()` in register_allocation.c
   switch (instruction->kind) {
@@ -776,6 +830,9 @@ bool ir_is_value(IRInstruction *instruction) {
     case IR_STATIC_REF:
     case IR_FUNC_REF:
     case IR_NOT:
+    case IR_ZERO_EXTEND:
+    case IR_SIGN_EXTEND:
+    case IR_TRUNCATE:
     ALL_BINARY_INSTRUCTION_CASES()
       return true;
 
@@ -843,7 +900,7 @@ void ir_unmark_usees(IRInstruction *instruction) {
 }
 
 void ir_mark_unreachable(IRBlock *block) {
-  STATIC_ASSERT(IR_COUNT == 34, "Handle all branch types");
+  STATIC_ASSERT(IR_COUNT == 37, "Handle all branch types");
   IRInstruction *i = block->instructions.last;
   switch (i->kind) {
     default: break;
