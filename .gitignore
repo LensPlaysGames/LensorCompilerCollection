@@ -6,9 +6,22 @@
 .cache
 # CMake
 **/bld
-**/win*
+**/win
+**/win-*
+**/winbld
+**/winbuild
+**/mswin*
 **/lnx
-**/lin*
+**/lin
+**/lin-*
+**/linbld
+**/linbuild
+**/lnx
+**/lnxbld
+**/lnxbuild
+**/linux
+**/linuxbld
+**/linuxbuild
 **/dbg
 **/debug
 **/rls
