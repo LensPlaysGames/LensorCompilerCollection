@@ -1032,6 +1032,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       // FROM any integer type TO any integer type is ALLOWED
       if (is_integer(t_from) && is_integer(t_to)) break;
 
+      // FROM an integer_literal type with value of zero TO any pointer type is ALLOWED
+      if (t_from == t_integer_literal && expr->cast.value->literal.integer == 0 && type_is_pointer(t_to)) break;
+
       // FROM any integer type TO any pointer type is currently DISALLOWED, but very well may change
       if (is_integer(t_from) && type_is_pointer(t_to))
         ERR(expr->cast.value->source_location,
