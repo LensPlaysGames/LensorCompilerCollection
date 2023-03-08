@@ -1302,6 +1302,7 @@ AST *parse(span source, const char *filename) {
   /// Parse the file.
   /// <file> ::= { <expression> }
   while (p.tok.type != TK_EOF) {
+    while (p.tok.type == TK_COMMA) next_token(&p);
     Node *expr = parse_expr(&p);
     vector_push(p.ast->root->root.children, expr);
     expr->parent = p.ast->root;
