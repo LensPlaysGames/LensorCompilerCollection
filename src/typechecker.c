@@ -34,6 +34,8 @@ NODISCARD static bool types_equal_canon(Type *a, Type *b) {
   ASSERT(a->kind != TYPE_NAMED);
   ASSERT(b->kind != TYPE_NAMED);
 
+  if (a == b) return true;
+
   /// If the type kinds are not the same, the the types are obviously not equal.
   if (a->kind != b->kind) return false;
 
@@ -102,6 +104,7 @@ IncompleteResult compare_incomplete(Type *a, Type *b) {
 
 /// Check if two types are equal. You probably want to use `convertible` instead.
 NODISCARD static bool types_equal(Type *a, Type *b) {
+  if (a == b) return true;
   Type *ta = type_last_alias(a);
   Type *tb = type_last_alias(b);
 
