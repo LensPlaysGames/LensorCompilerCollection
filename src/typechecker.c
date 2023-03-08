@@ -1262,8 +1262,11 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           !typecheck_expression(ast, expr->for_.body))
         return false;
       // FIXME: Should be t_bool
-      if (!convertible(t_integer, expr->for_.condition->type))
+      if (!convertible(t_integer, expr->for_.condition->type)) {
+        ERR(expr->for_.condition->source_location, "Type of condition expression of for loop %T is not convertible to %T", expr->for_.condition->type, t_integer);
         return false;
+      }
+
 
       expr->type = t_void;
       return true;
