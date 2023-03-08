@@ -23,7 +23,7 @@ void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
 }
 
 bool ir_is_branch(IRInstruction* i) {
-  STATIC_ASSERT(IR_COUNT == 37, "Handle all branch types.");
+  STATIC_ASSERT(IR_COUNT == 38, "Handle all branch types.");
   switch (i->kind) {
     case IR_BRANCH:
     case IR_BRANCH_CONDITIONAL:
@@ -134,7 +134,7 @@ void ir_remove_and_free_block(IRBlock *block) {
 
 void ir_free_instruction_data(IRInstruction *i) {
   if (!i) return;
-  STATIC_ASSERT(IR_COUNT == 37, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 38, "Handle all instruction types.");
   switch (i->kind) {
     case IR_CALL: vector_delete(i->call.arguments); break;
     case IR_PHI:
@@ -178,7 +178,7 @@ void ir_femit_instruction
     fprint(file, "  %31│ ");
   }
 
-  STATIC_ASSERT(IR_COUNT == 37, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 38, "Handle all instruction types.");
   switch (inst->kind) {
   case IR_IMMEDIATE:
     fprint(file, "%33imm %35%U", inst->imm);
@@ -235,6 +235,10 @@ void ir_femit_instruction
 
   case IR_TRUNCATE:
     fprint(file, "%33truncate %34%%%u", inst->operand->id);
+    break;
+
+  case IR_BITCAST:
+    fprint(file, "%33bitcast %34%%%u", inst->operand->id);
     break;
 
   case IR_COPY:
@@ -692,6 +696,19 @@ IRInstruction *ir_truncate
   return trunc;
 }
 
+IRInstruction *ir_bitcast
+(CodegenContext *context,
+ Type *to_type,
+ IRInstruction *value)
+{
+  INSTRUCTION(bitcast, IR_BITCAST);
+  bitcast->operand = value;
+  bitcast->type = to_type;
+  mark_used(value, bitcast);
+  INSERT(bitcast);
+  return bitcast;
+}
+
 #define CREATE_BINARY_INSTRUCTION(enumerator, name)                                           \
   IRInstruction *ir_##name(CodegenContext *context, IRInstruction *lhs, IRInstruction *rhs) { \
     INSTRUCTION(x, IR_##enumerator);                                                          \
@@ -760,7 +777,7 @@ void ir_for_each_child(
   void callback(IRInstruction *user, IRInstruction **child, void *data),
   void *data
 ) {
-  STATIC_ASSERT(IR_COUNT == 37, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 38, "Handle all instruction types.");
   switch (user->kind) {
   case IR_PHI:
       foreach_ptr (IRPhiArgument*, arg, user->phi_args) {
@@ -773,6 +790,7 @@ void ir_for_each_child(
   case IR_ZERO_EXTEND:
   case IR_SIGN_EXTEND:
   case IR_TRUNCATE:
+  case IR_BITCAST:
     callback(user, &user->operand, data);
     break;
 
@@ -814,7 +832,7 @@ void ir_for_each_child(
 }
 
 bool ir_is_value(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 37, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 38, "Handle all instruction types.");
   // NOTE: If you are changing this switch, you also need to change
   // `needs_register()` in register_allocation.c
   switch (instruction->kind) {
@@ -833,6 +851,7 @@ bool ir_is_value(IRInstruction *instruction) {
     case IR_ZERO_EXTEND:
     case IR_SIGN_EXTEND:
     case IR_TRUNCATE:
+    case IR_BITCAST:
     ALL_BINARY_INSTRUCTION_CASES()
       return true;
 
@@ -900,7 +919,7 @@ void ir_unmark_usees(IRInstruction *instruction) {
 }
 
 void ir_mark_unreachable(IRBlock *block) {
-  STATIC_ASSERT(IR_COUNT == 37, "Handle all branch types");
+  STATIC_ASSERT(IR_COUNT == 38, "Handle all branch types");
   IRInstruction *i = block->instructions.last;
   switch (i->kind) {
     default: break;

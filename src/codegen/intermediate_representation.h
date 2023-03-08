@@ -69,6 +69,9 @@
   F(SIGN_EXTEND)                                                 \
   F(TRUNCATE)                                                    \
                                                                  \
+  /** Reinterpret bits as new type **/                           \
+  F(BITCAST)                                                     \
+                                                                 \
   /** Store data at an address. **/                              \
   F(STORE)                                                       \
                                                                  \
@@ -340,6 +343,11 @@ IRInstruction *ir_sign_extend
 IRInstruction *ir_truncate
 (CodegenContext *context,
  Type *result_type,
+ IRInstruction *value);
+
+IRInstruction *ir_bitcast
+(CodegenContext *context,
+ Type *to_type,
  IRInstruction *value);
 
 #define DECLARE_BINARY_INSTRUCTION(_, name) \

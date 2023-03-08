@@ -400,28 +400,21 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     usz to_sz = type_sizeof(t_to);
     usz from_sz = type_sizeof(t_from);
 
-    //bool to_signed = false;
     bool from_signed = false;
-    //if (t_to->kind == TYPE_PRIMITIVE) to_signed = t_to->primitive.is_signed;
-    if (t_from->kind == TYPE_PRIMITIVE) from_signed = t_from->primitive.is_signed;
+    if (t_from->kind == TYPE_PRIMITIVE)
+      from_signed = t_from->primitive.is_signed;
 
     codegen_expr(ctx, expr->cast.value);
 
-    // TODO: Casting codegen is WIP, and preliminary. It may be incorrect.
-
     if (from_sz == to_sz) {
-      ASSERT(expr->cast.value->ir, "May need to codegen cast value.");
-      expr->ir = ir_copy(ctx, expr->cast.value->ir);
-      expr->type = t_to;
-      ir_insert(ctx, expr->ir);
+      expr->ir = ir_bitcast(ctx, t_to, expr->cast.value->ir);
       return;
     }
     else if (from_sz < to_sz) {
       // smaller to larger: sign extend if needed, otherwise zero extend.
       if (from_signed)
         expr->ir = ir_sign_extend(ctx, t_to, expr->cast.value->ir);
-      else
-        expr->ir = ir_zero_extend(ctx, t_to, expr->cast.value->ir);
+      else expr->ir = ir_zero_extend(ctx, t_to, expr->cast.value->ir);
       return;
     }
     else if (from_sz > to_sz) {

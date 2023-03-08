@@ -860,7 +860,7 @@ static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
 }
 
 static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
-  STATIC_ASSERT(IR_COUNT == 37, "Handle all IR instructions");
+  STATIC_ASSERT(IR_COUNT == 38, "Handle all IR instructions");
 
   if (annotate_code) {
     // TODO: Base comment syntax on dialect or smth.
@@ -948,6 +948,9 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     }
 
   } break;
+
+  case IR_BITCAST: break;
+
   case IR_COPY: {
     usz operand_byte_size = type_sizeof(inst->operand->type);
     usz result_byte_size = type_sizeof(inst->type);
@@ -1338,7 +1341,7 @@ typedef enum Clobbers {
 } Clobbers;
 
 Clobbers does_clobber(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 37, "Exhaustive handling of IR instruction types that correspond to two-address instructions in x86_64.");
+  STATIC_ASSERT(IR_COUNT == 38, "Exhaustive handling of IR instruction types that correspond to two-address instructions in x86_64.");
   switch (instruction->kind) {
   case IR_ADD:
   case IR_DIV:
@@ -1380,6 +1383,11 @@ static void lower(CodegenContext *context) {
         instruction->kind = IR_REGISTER;
         instruction->result = argument_registers[instruction->imm];
       } break;
+
+      case IR_BITCAST: {
+        instruction->kind = IR_COPY;
+      } break;
+
       default:
         break;
     }

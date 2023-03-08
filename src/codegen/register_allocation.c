@@ -29,7 +29,7 @@ typedef Vector(IRBlock *) BlockVector;
 
 /// Return non-zero iff given instruction needs a register.
 bool needs_register(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 37, "Exhaustively handle all instruction types");
+  STATIC_ASSERT(IR_COUNT == 38, "Exhaustively handle all instruction types");
   ASSERT(instruction);
   switch (instruction->kind) {
     case IR_LOAD:
@@ -42,6 +42,7 @@ bool needs_register(IRInstruction *instruction) {
     case IR_ZERO_EXTEND:
     case IR_SIGN_EXTEND:
     case IR_TRUNCATE:
+    case IR_BITCAST:
     ALL_BINARY_INSTRUCTION_CASES()
       return true;
 
@@ -82,7 +83,7 @@ static void phi2copy(IRFunction *f) {
       /// Where we insert it depends on some complicated factors
       /// that have to do with control flow.
       foreach_ptr (IRPhiArgument *, arg, phi->phi_args) {
-        STATIC_ASSERT(IR_COUNT == 37, "Handle all branch types");
+        STATIC_ASSERT(IR_COUNT == 38, "Handle all branch types");
         IRInstruction *branch = arg->block->instructions.last;
         switch (branch->kind) {
           /// If the predecessor returns or is unreachable, then the PHI
@@ -339,7 +340,7 @@ static void collect_interferences_from_block
   list_foreach (IRBlock*, parent_candidate, b->function->blocks) {
     if (parent_candidate == b) continue; // Yourself is not a candidate.
     if (parent_candidate->instructions.last) {
-      STATIC_ASSERT(IR_COUNT == 37,
+      STATIC_ASSERT(IR_COUNT == 38,
                     "Exhaustively handle all branch-type instructions when following control flow.");
       switch (parent_candidate->instructions.last->kind) {
 
