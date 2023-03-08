@@ -908,8 +908,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     usz result_byte_size = type_sizeof(inst->type);
     ASSERT (result_byte_size > operand_byte_size, "Zero extension result must be larger than operand");
 
-    // TODO: Handle things larger than a register, somehow... may need
-    // to push/pop registers...
     enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
     enum RegSize result_size = regsize_from_bytes(result_byte_size);
 
@@ -920,8 +918,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     usz result_byte_size = type_sizeof(inst->type);
     ASSERT (result_byte_size > operand_byte_size, "Sign extension result must be larger than operand");
 
-    // TODO: Handle things larger than a register, somehow... may need
-    // to push/pop registers...
     enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
     enum RegSize result_size = regsize_from_bytes(result_byte_size);
 
@@ -932,8 +928,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     usz result_byte_size = type_sizeof(inst->type);
     ASSERT (result_byte_size < operand_byte_size, "Truncation result must be smaller than operand");
 
-    // TODO: Handle things larger than a register, somehow... may need
-    // to push/pop registers...
     enum RegSize result_size = regsize_from_bytes(result_byte_size);
 
     femit_reg_to_reg(context, I_MOV, inst->operand->result, r64, inst->result, r64);
