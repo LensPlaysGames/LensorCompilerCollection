@@ -6,6 +6,8 @@
 .cache
 # CMake
 **/bld
+**/bld-*
+**/build
 **/win
 **/win-*
 **/winbld
@@ -27,9 +29,11 @@
 **/rls
 **/release
 */*out*
+
 # Language Server
 **/compile_commands.json
 .Random.seed
 .clang-format
 
-# Backup Files
+# Disallow files starting with some symbols
+**/_*
