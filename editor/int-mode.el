@@ -83,6 +83,11 @@
   :group 'int-mode
   :tag "Syntax Highlight Numbers")
 
+(defcustom int-mode-face-strings 'font-lock-string-face
+  "Symbol name of face to highlight int-mode immediate numbers with."
+  :group 'int-mode
+  :tag "Syntax Highlight Strings")
+
 (defcustom int-mode-face-operators nil
   "Symbol name of face to highlight int-mode builtin binary operators with.
 Examples include addition (+) and subtraction (-)."
@@ -94,7 +99,7 @@ Examples include addition (+) and subtraction (-)."
   :group 'int-mode
   :tag "Syntax Highlight Negation Character")
 
-(defcustom int-mode-face-function-name 'font-lock-function-name-face
+(defcustom int-mode-face-function-names 'font-lock-function-name-face
   "Symbol name of face to highlight int-mode function names in definitions."
   :group 'int-mode
   :tag "Syntax Highlight Function Names")
@@ -104,7 +109,7 @@ Examples include addition (+) and subtraction (-)."
       (let* ((keywords '("if" "else" "ext" "while"))
              (binary-operators '("+" "*" "-" "/" "%"
                                  "<" ">"
-                                 ":" "=" ":="
+                                 ":" "=" ":=" "::"
                                  "&" "@"
                                  ">>" "<<" "&" "|" "~"))
 
@@ -112,6 +117,7 @@ Examples include addition (+) and subtraction (-)."
              (binary-operators-regex (regexp-opt binary-operators))
              (negation-char-regex    (regexp-opt '("!")))
              (number-regex           (rx (one-or-more digit)))
+             (string-regex           (rx "\"" (*? (not "\"")) "\""))
              (builtin-types-regex    (rx (zero-or-more "@")
                                          (or "integer" "byte" "void"))))
         `(
@@ -120,6 +126,7 @@ Examples include addition (+) and subtraction (-)."
           (,number-regex            . ,int-mode-face-numbers)
           (,binary-operators-regex  . ,int-mode-face-operators)
           (,negation-char-regex     . ,int-mode-face-negation-char)
+          (,string-regex            . ,int-mode-face-strings)
           )))
 
 (defcustom int-mode-indent-amount 2

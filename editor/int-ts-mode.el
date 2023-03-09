@@ -117,7 +117,7 @@
   '("+" "-" "*" "/" "%"
     "<<" ">>" "&" "|" "^" "~"
     "<=" ">=" "!=" "=" "<" ">" "!"
-    ":" ":=" "@" "as"
+    ":" ":=" "::" "@" "as"
     )
   "Intercept operators for tree-sitter font-locking.")
 
@@ -161,6 +161,11 @@
    :override t
    :feature 'number
    `((number) @font-lock-number-face)
+
+   :language 'int
+   :override t
+   :feature 'string
+   `((string) @font-lock-string-face)
 
    :language 'int
    :override t
@@ -225,7 +230,7 @@ in Intercept source code will be indented."
               (append "{}():," electric-indent-chars))
 
   (setq-local treesit-font-lock-feature-list
-              '(( function variable comment )
+              '(( function variable comment string )
                 ( keyword type )
                 ( number operator delimiter )
                 ( ))))
