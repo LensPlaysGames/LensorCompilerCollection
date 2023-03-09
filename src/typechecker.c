@@ -809,7 +809,9 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
       t->structure.byte_size += type_sizeof(member->type);
     }
 
-    t->structure.byte_size += (t->structure.alignment - (t->structure.byte_size % t->structure.alignment)) % t->structure.alignment;
+    if (t->structure.alignment)
+      t->structure.byte_size += (t->structure.alignment - (t->structure.byte_size % t->structure.alignment)) % t->structure.alignment;
+
 
     return true;
   }
