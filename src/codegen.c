@@ -465,7 +465,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
           if (rhs->literal.integer >= str.size) {
             ERR("Out of bounds: subscript %U too large for string literal.", rhs->literal.integer);
           }
-          expr->ir = ir_add(ctx, lhs->ir, ir_immediate(ctx, t_integer, rhs->literal.integer));
+          if (rhs->literal.integer)
+            expr->ir = ir_add(ctx, lhs->ir, ir_immediate(ctx, t_integer, rhs->literal.integer));
+          else expr->ir = lhs->ir;
           return;
         }
         subs_lhs = lhs->ir;
