@@ -1,0 +1,36 @@
+f: @FILE = fopen("it_worked.txt"[0], "w"[0])
+buffer::"Eyyy, what's up?"
+fwrite(buffer[0], 1, strlen(buffer[0]), f)
+fclose(f)
+
+
+;; string.h
+strlen: ext integer(string: @byte) ;; TODO: unsigned arch-sized integer
+;; stdio.h
+FILE :> type {}
+fclose: ext integer(stream: @FILE) ;; TODO: 4-byte integer
+feof: ext integer(stream: @FILE) ;; TODO: 4-byte integer
+ferror: ext integer(stream: @FILE) ;; TODO: 4-byte integer
+fflush: ext integer(stream: @FILE) ;; TODO: 4-byte integer
+fgetc: ext integer(stream: @FILE) ;; TODO: 4-byte integer
+fgets: ext @byte(string: @byte, n: integer, stream: @FILE) ;; TODO: 4-byte integer
+fileno: ext integer(stream: @FILE) ;; TODO: 4-byte integer
+fopen: ext @FILE(filename: @byte, mode: @byte) ;; TODO: 4-byte integer
+fputc: ext integer(c: integer, stream: @FILE) ;; TODO: 4-byte integer
+fputs: ext integer(string: @byte, stream: @FILE) ;; TODO: 4-byte integer
+fread: ext integer(buffer: @byte, size: integer, count: integer, stream: @FILE) ;; TODO: unsigned arch-sized integer
+fseek: ext integer(stream: @FILE, offset: integer, origin: integer) ;; TODO: 4-byte integer
+ftell: ext integer(stream: @FILE) ;; 4-byte integer
+fwrite: ext integer(buffer: @byte, size: integer, count: integer, stream: @FILE) ;; unsigned arch-sized integer
+getc: ext integer(stream: @FILE) ;; TODO: 4-byte integer
+getchar: ext integer() ;; TODO: 4-byte integer
+perror: ext void(string: @byte)
+putc: ext integer(c: integer, stream: @FILE) ;; TODO: 4-byte integer
+putchar: ext integer(c: integer) ;; TODO: 4-byte integer
+puts: ext integer(string: @byte) ;; TODO: 4-byte integer
+remove: ext integer(filename: @byte) ;; TODO: 4-byte integer
+rename: ext integer(oldname: @byte, newname: @byte) ;; TODO: 4-byte integer
+rewind: ext void(stream: @FILE)
+tmpfile: ext @FILE()
+tmpnam: ext @byte(string: @byte)
+ungetc: ext @byte(c: integer, stream: @FILE) ;; TODO: 4-byte integer
