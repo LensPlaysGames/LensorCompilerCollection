@@ -228,6 +228,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   }
 
   case NODE_DECLARATION:
+    codegen_lvalue(ctx, expr);
+    return;
+
   case NODE_MEMBER_ACCESS:
   case NODE_VARIABLE_REFERENCE:
     codegen_lvalue(ctx, expr);
