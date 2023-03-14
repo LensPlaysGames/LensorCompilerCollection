@@ -1,0 +1,14 @@
+; 69
+
+foo:> type {
+  x: integer
+  y: integer
+}
+
+a : foo
+a.y := 69
+
+b : foo
+b := a
+
+b.y
