@@ -1,4 +1,3 @@
-; SKIP
 ; 69
 
 foo : integer[2]() {
