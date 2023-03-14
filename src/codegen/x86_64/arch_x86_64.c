@@ -1370,26 +1370,51 @@ static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
     switch (instruction->kind) {
-      case IR_PARAMETER: {
-        // Maximum size of parameter that can go in a register vs on the stack.
-        if (instruction->type->kind == TYPE_STRUCT || instruction->type->kind == TYPE_ARRAY) {
-          TODO("x86_64 backend doesn't yet support passing structs/arrays as arguments, sorry.");
-          // TODO: At each call of this function, insert alloca + copy from alloca to
-          // argument register (or on stack, once we support that).
+    case IR_LOAD: {
+      usz byte_size = type_sizeof(instruction->type);
+      if (byte_size > max_register_size) {
+        if (instruction->type->kind == TYPE_ARRAY) {
+          for (usz i = 0; i < instruction->type->array.size; ++i) {
+            // load_recursive(instruction, instruction->type->array.of);
+          }
+        } else if (instruction->type->kind == TYPE_STRUCT) {
+          foreach (Member, member, instruction->type->structure.members) {
+            // load_recursive(instruction, member->type);
+          }
         }
-        if (type_sizeof(instruction->type) > max_register_size || (size_t)instruction->imm >= argument_register_count) {
-          TODO("x86_64 backend doesn't yet support passing arguments on the stack, sorry.");
-        }
-        instruction->kind = IR_REGISTER;
-        instruction->result = argument_registers[instruction->imm];
-      } break;
 
-      case IR_BITCAST: {
-        instruction->kind = IR_COPY;
-      } break;
+        TODO("x86_64 backend doesn't yet support loading type %T because it is larger than a register, sorry.",
+             instruction->type);
+      }
+    } break;
+    case IR_STORE: {
+      usz value_byte_size = type_sizeof(instruction->store.value->type);
+      if (value_byte_size > max_register_size) {
+        TODO("x86_64 backend doesn't yet support storing type %T because it is larger than a register, sorry.",
+             instruction->store.value->type);
+      }
+    } break;
 
-      default:
-        break;
+    case IR_PARAMETER: {
+      // Maximum size of parameter that can go in a register vs on the stack.
+      if (instruction->type->kind == TYPE_STRUCT || instruction->type->kind == TYPE_ARRAY) {
+        TODO("x86_64 backend doesn't yet support passing structs/arrays as arguments, sorry.");
+        // TODO: At each call of this function, insert alloca + copy from alloca to
+        // argument register (or on stack, once we support that).
+      }
+      if (type_sizeof(instruction->type) > max_register_size || (size_t)instruction->imm >= argument_register_count) {
+        TODO("x86_64 backend doesn't yet support passing arguments on the stack, sorry.");
+      }
+      instruction->kind = IR_REGISTER;
+      instruction->result = argument_registers[instruction->imm];
+    } break;
+
+    case IR_BITCAST: {
+      instruction->kind = IR_COPY;
+    } break;
+
+    default:
+      break;
     }
   }
 
