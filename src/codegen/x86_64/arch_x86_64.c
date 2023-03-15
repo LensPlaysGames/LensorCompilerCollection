@@ -1476,7 +1476,6 @@ static bool lower_store(CodegenContext *context, IRInstruction *instruction) {
   if (instruction->store.value->kind == IR_ALLOCA) {
     // `inst->store.value->result` register contains an address we should store from.
     // `inst->store.addr->result` register contains an address we should store to.
-    // NOTE: We are basically bitcasting the array pointers to pointers to a single element type.
 
     ASSERT(instruction->store.value->type->kind == TYPE_POINTER,
            "ALLOCA must be of pointer type to store it properly... What did you do?");
