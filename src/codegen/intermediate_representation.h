@@ -350,6 +350,12 @@ IRInstruction *ir_bitcast
  Type *to_type,
  IRInstruction *value);
 
+void set_pair_and_mark
+(IRInstruction *parent,
+ IRInstruction *lhs,
+ IRInstruction *rhs
+ );
+
 #define DECLARE_BINARY_INSTRUCTION(_, name) \
   IRInstruction *ir_##name(CodegenContext *context, IRInstruction *lhs, IRInstruction *rhs);
 ALL_BINARY_INSTRUCTION_TYPES(DECLARE_BINARY_INSTRUCTION)

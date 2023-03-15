@@ -1216,6 +1216,13 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   } break;
 
   case IR_STORE: {
+    // If the value is an `alloca`, we are copying from a local
+    // variable to somewhere. This means we need to emit the equivalent
+    // of `memcpy(address, value, sizeof(*value));`
+    if (inst->store.value->kind == IR_ALLOCA) {
+      TODO("x86_64 backend does not yet support storing from local variable, sorry.");
+    }
+
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
     /// Store to a static variable.
     if (inst->store.addr->kind == IR_STATIC_REF) {
@@ -1366,27 +1373,207 @@ Clobbers does_clobber(IRInstruction *instruction) {
   return CLOBBERS_NEITHER;
 }
 
+/// Given an `IR_LOAD` instruction, return true iff the load has been altered.
+/// Otherwise, return false.
+static bool lower_load(CodegenContext *context, IRInstruction *instruction) {
+  ASSERT(context, "x86_64: lower_load(): Context must not be NULL");
+  ASSERT(instruction, "x86_64: lower_load(): IRInstruction must not be NULL");
+  Type *type = type_canonical(instruction->type);
+  usz byte_size = type_sizeof(type);
+  if (byte_size > max_register_size) {
+    switch (type->kind) {
+    case TYPE_ARRAY: {
+      // TODO: Just copy the whole array in one register if it is <= the max_register_size
+
+      // Create space for a copy on the stack.
+      INSTRUCTION(alloca, IR_ALLOCA);
+      alloca->alloca.size = byte_size;
+      alloca->type = ast_make_type_pointer(context->ast, type->source_location, type);
+
+      // Replace `load` with `alloca`.
+      ir_replace_uses(instruction, alloca);
+      insert_instruction_before(alloca, instruction);
+
+      // Generate a load and store for each element within array.
+      // NOTE: At this point it's just memcpy(alloca, instruction->operand, byte_size);
+
+      // NOTE: We are basically bitcasting the array pointers to pointers to a single element type.
+
+      // Cache address we are loading from.
+      IRInstruction *address = ir_copy(context, instruction->operand);
+      insert_instruction_before(address, instruction);
+      // Switch type to reflect loading a single element.
+      address->type = ast_make_type_pointer(context->ast, type->source_location, type->array.of);
+      // Cache address we are storing to.
+      IRInstruction *destination_address = ir_copy(context, alloca);
+      insert_instruction_before(destination_address, instruction);
+      // Switch type to reflect storing a single element.
+      destination_address->type = ast_make_type_pointer(context->ast, type->source_location, type->array.of);
+
+      for (usz i = 0; i < type->array.size; ++i) {
+        INSTRUCTION(load, IR_LOAD);
+        { // Generate load of element...
+          load->operand = address;
+
+          Type *t = type_canonical(address->type);
+          if (!(t && type_is_pointer(t))) {
+            //print("address type: %T\n", address->type);
+            ir_femit_instruction(stdout, address);
+            if (t) ICE("Can not emit IR_LOAD from type %T as it is not a pointer", t);
+            else ICE("Can not emit IR_LOAD to NULL canonical type!");
+          }
+          if (type_is_pointer(t)) load->type = t->pointer.to;
+          else load->type = t;
+
+          mark_used(address, load);
+        }
+        insert_instruction_before(load, instruction);
+        // Lower generated load further, if need be.
+        lower_load(context, load);
+
+        INSTRUCTION(store, IR_STORE);
+        { // Store loaded element into local stack array...
+          store->store.addr = destination_address;
+          store->store.value = load;
+          mark_used(destination_address, store);
+          mark_used(load, store);
+        }
+        insert_instruction_before(store, instruction);
+
+        if (i == type->array.size - 1) break;
+
+        { // Add sizeof element to source and destination address...
+
+          // Generate an immediate corresponding to the byte size of one element
+          // TODO: We can get away with only emitting this every four
+          // elements or something, depending on RA stress.
+          INSTRUCTION(element_size, IR_IMMEDIATE);
+          element_size->type = t_integer_literal;
+          element_size->imm = type_sizeof(type->array.of);
+          insert_instruction_before(element_size, instruction);
+
+          INSTRUCTION(add, IR_ADD);
+          add->type = address->type;
+          set_pair_and_mark(add, address, element_size);
+          insert_instruction_before(add, instruction);
+          address = add;
+
+          INSTRUCTION(dest_add, IR_ADD);
+          dest_add->type = destination_address->type;
+          set_pair_and_mark(dest_add, destination_address, element_size);
+          insert_instruction_before(dest_add, instruction);
+          destination_address = dest_add;
+        }
+
+      }
+      ir_remove(instruction);
+      return true;
+    }
+    case TYPE_STRUCT: {
+      // TODO: Just copy the whole struct in one register if it is <= the max_register_size
+
+      // Create space for a copy on the stack.
+      INSTRUCTION(alloca, IR_ALLOCA);
+      alloca->alloca.size = byte_size;
+      alloca->type = ast_make_type_pointer(context->ast, type->source_location, type);
+
+      // Replace `load` with `alloca`.
+      ir_replace_uses(instruction, alloca);
+      insert_instruction_before(alloca, instruction);
+
+      // Generate loads for each member within array.
+      // NOTE: At this point it's just memcpy(alloca, instruction->operand, byte_size);
+
+      // NOTE: We are basically bitcasting the array pointers to pointers to a single element type.
+
+      // Cache address we are loading from.
+      IRInstruction *address = ir_copy(context, instruction->operand);
+      insert_instruction_before(address, instruction);
+      // Switch type to reflect loading the first member.
+      Type *first_member_type = vector_front(type->structure.members).type;
+      address->type = ast_make_type_pointer(context->ast, type->source_location, first_member_type);
+      // Cache address we are storing to.
+      IRInstruction *destination_address = ir_copy(context, alloca);
+      insert_instruction_before(destination_address, instruction);
+      // Switch type to reflect storing the first member.
+      destination_address->type = ast_make_type_pointer(context->ast, type->source_location, first_member_type);
+
+      usz i = 0;
+      foreach (Member, member, type->structure.members) {
+        INSTRUCTION(load, IR_LOAD);
+        { // Generate load of member...
+          load->operand = address;
+
+          Type *t = type_canonical(address->type);
+          if (!(t && type_is_pointer(t))) {
+            //print("address type: %T\n", address->type);
+            ir_femit_instruction(stdout, address);
+            if (t) ICE("Can not emit IR_LOAD from type %T as it is not a pointer", t);
+            else ICE("Can not emit IR_LOAD to NULL canonical type!");
+          }
+          if (type_is_pointer(t)) load->type = t->pointer.to;
+          else load->type = t;
+
+          mark_used(address, load);
+        }
+        insert_instruction_before(load, instruction);
+        // Lower generated load further, if need be.
+        lower_load(context, load);
+
+        INSTRUCTION(store, IR_STORE);
+        { // Store loaded member into local stack struct...
+          store->store.addr = destination_address;
+          store->store.value = load;
+          mark_used(destination_address, store);
+          mark_used(load, store);
+        }
+        insert_instruction_before(store, instruction);
+
+        if (i == type->structure.members.size - 1) break;
+
+        { // Add sizeof member to source and destination address...
+
+          // Generate an immediate corresponding to the byte size of this member
+          INSTRUCTION(member_size, IR_IMMEDIATE);
+          member_size->type = t_integer_literal;
+          member_size->imm = type_sizeof(member->type);
+          insert_instruction_before(member_size, instruction);
+
+          INSTRUCTION(add, IR_ADD);
+          add->type = address->type;
+          set_pair_and_mark(add, address, member_size);
+          insert_instruction_before(add, instruction);
+          address = add;
+
+          INSTRUCTION(dest_add, IR_ADD);
+          dest_add->type = destination_address->type;
+          set_pair_and_mark(dest_add, destination_address, member_size);
+          insert_instruction_before(dest_add, instruction);
+          destination_address = dest_add;
+        }
+
+        ++i;
+      }
+
+      ir_remove(instruction);
+      return true;
+    }
+
+    default:
+      TODO("x86_64 backend doesn't yet support loading type %T because it is larger than a register, sorry.",
+           type);
+    }
+  }
+  return false;
+}
+
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
     switch (instruction->kind) {
-    case IR_LOAD: {
-      usz byte_size = type_sizeof(instruction->type);
-      if (byte_size > max_register_size) {
-        if (instruction->type->kind == TYPE_ARRAY) {
-          for (usz i = 0; i < instruction->type->array.size; ++i) {
-            // load_recursive(instruction, instruction->type->array.of);
-          }
-        } else if (instruction->type->kind == TYPE_STRUCT) {
-          foreach (Member, member, instruction->type->structure.members) {
-            // load_recursive(instruction, member->type);
-          }
-        }
-
-        TODO("x86_64 backend doesn't yet support loading type %T because it is larger than a register, sorry.",
-             instruction->type);
-      }
-    } break;
+    case IR_LOAD:
+      lower_load(context, instruction);
+      break;
     case IR_STORE: {
       usz value_byte_size = type_sizeof(instruction->store.value->type);
       if (value_byte_size > max_register_size) {
