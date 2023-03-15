@@ -1216,13 +1216,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   } break;
 
   case IR_STORE: {
-    // If the value is an `alloca`, we are copying from a local
-    // variable to somewhere. This means we need to emit the equivalent
-    // of `memcpy(address, value, sizeof(*value));`
-    if (inst->store.value->kind == IR_ALLOCA) {
-      TODO("x86_64 backend does not yet support storing from local variable, sorry.");
-    }
-
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
     /// Store to a static variable.
     if (inst->store.addr->kind == IR_STATIC_REF) {
@@ -1567,6 +1560,100 @@ static bool lower_load(CodegenContext *context, IRInstruction *instruction) {
   return false;
 }
 
+/// Return true iff the given store instruction has been altered.
+/// Otherwise, return false.
+static bool lower_store(CodegenContext *context, IRInstruction *instruction) {
+  // If the value is an `alloca`, we are copying from a local
+  // variable to somewhere. This means we need to emit the equivalent
+  // of `memcpy(address, value, sizeof(*value));`
+  if (instruction->store.value->kind == IR_ALLOCA) {
+    // `inst->store.value->result` register contains an address we should store from.
+    // `inst->store.addr->result` register contains an address we should store to.
+    // NOTE: We are basically bitcasting the array pointers to pointers to a single element type.
+
+    // Create two copies, one of each address: "from" and "to".
+    // Cache address we are loading from.
+    IRInstruction *from = ir_copy(context, instruction->store.value);
+    insert_instruction_before(from, instruction);
+    // Switch type to reflect loading 8 bytes.
+    from->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
+    // Cache address we are storing to.
+    IRInstruction *to = ir_copy(context, instruction->store.addr);
+    insert_instruction_before(to, instruction);
+    // Switch type to reflect storing 8 bytes.
+    to->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
+
+    ASSERT(instruction->store.value->type->kind == TYPE_POINTER,
+           "ALLOCA must be of pointer type to store it properly... What did you do?");
+    usz byte_size = type_sizeof(instruction->store.value->type->pointer.to);
+    for (; byte_size >= 8; byte_size -= 8) {
+      // Load 8 bytes from "from" address, and store 8 bytes into "to" address.
+      INSTRUCTION(load, IR_LOAD);
+      { // Generate load of element...
+        load->operand = from;
+
+        Type *t = type_canonical(from->type);
+        if (!(t && type_is_pointer(t))) {
+          //print("from type: %T\n", from->type);
+          ir_femit_instruction(stdout, from);
+          if (t) ICE("Can not emit IR_LOAD from type %T as it is not a pointer", t);
+          else ICE("Can not emit IR_LOAD to NULL canonical type!");
+        }
+        if (type_is_pointer(t)) load->type = t->pointer.to;
+        else load->type = t;
+
+        mark_used(from, load);
+      }
+      insert_instruction_before(load, instruction);
+      // Lower generated load further, if need be.
+      lower_load(context, load);
+
+      INSTRUCTION(store, IR_STORE);
+      { // Store loaded element into local stack array...
+        store->store.addr = to;
+        store->store.value = load;
+        mark_used(to, store);
+        mark_used(load, store);
+      }
+      insert_instruction_before(store, instruction);
+
+      if (byte_size - 8 < 8 || byte_size - 8 > byte_size) {
+        // Do this iteration, then break.
+        byte_size -= 8;
+        break;
+      }
+
+      { // Iterate "from" and "to" addresses by 8 bytes.
+
+        // Generate an immediate corresponding to the byte size of this member
+        INSTRUCTION(byte_size_immediate, IR_IMMEDIATE);
+        byte_size_immediate->type = t_integer_literal;
+        byte_size_immediate->imm = 8;
+        insert_instruction_before(byte_size_immediate, instruction);
+
+        INSTRUCTION(add, IR_ADD);
+        add->type = from->type;
+        set_pair_and_mark(add, from, byte_size_immediate);
+        insert_instruction_before(add, instruction);
+        from = add;
+
+        INSTRUCTION(dest_add, IR_ADD);
+        dest_add->type = to->type;
+        set_pair_and_mark(dest_add, to, byte_size_immediate);
+        insert_instruction_before(dest_add, instruction);
+        to = dest_add;
+      }
+    }
+
+    if (byte_size)
+      TODO("x86_64 backend does not yet support storing types that are not multiples of 8, sorry");
+
+    ir_remove(instruction);
+    return true;
+  }
+  return false;
+}
+
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
@@ -1575,11 +1662,7 @@ static void lower(CodegenContext *context) {
       lower_load(context, instruction);
       break;
     case IR_STORE: {
-      usz value_byte_size = type_sizeof(instruction->store.value->type);
-      if (value_byte_size > max_register_size) {
-        TODO("x86_64 backend doesn't yet support storing type %T because it is larger than a register, sorry.",
-             instruction->store.value->type);
-      }
+      lower_store(context, instruction);
     } break;
 
     case IR_PARAMETER: {
