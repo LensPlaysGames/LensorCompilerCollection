@@ -1,0 +1,8 @@
+; 69
+
+foo: integer() {
+  a : integer = 69
+  a
+}
+
+foo()
