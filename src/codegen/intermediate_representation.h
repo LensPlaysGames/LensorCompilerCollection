@@ -149,6 +149,8 @@ typedef struct IRInstruction {
   u32 id;
   u32 index;
 
+  u32 backend_flags;
+
   /// List of instructions using this instruction.
   InstructionVector users;
 
@@ -418,5 +420,15 @@ void ir_for_each_child(
     void callback(IRInstruction *user, IRInstruction **child, void *data),
     void *data
 );
+
+/// Given a bit index, set the bit within backend_flags at that index.
+/// NOTE: Undefined behaviour if bit_index is negative, or greater than
+/// or equal to the bitwidth of backend_flags.
+void ir_set_backend_flag(IRInstruction *const, const int bit_index);
+/// Return true iff the bit at the given bit index is set in backend_flags member.
+/// Otherwise, return false.
+/// NOTE: Undefined behaviour if bit_index is negative, or greater than
+/// or equal to the bitwidth of backend_flags.
+bool ir_get_backend_flag(const IRInstruction *const, const int bit_index);
 
 #endif /* INTERMEDIATE_REPRESENTATION_H */

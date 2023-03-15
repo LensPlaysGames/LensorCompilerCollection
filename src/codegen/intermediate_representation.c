@@ -946,5 +946,13 @@ void ir_mark_unreachable(IRBlock *block) {
   i->kind = IR_UNREACHABLE;
 }
 
+void ir_set_backend_flag(IRInstruction *const instruction, const int bit_index) {
+  instruction->backend_flags |= (1 << bit_index);
+}
+bool ir_get_backend_flag(const IRInstruction *const instruction, const int bit_index) {
+  return instruction->backend_flags & (1 << bit_index);
+}
+
+
 #undef INSERT
 

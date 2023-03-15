@@ -190,11 +190,7 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
   case NODE_VARIABLE_REFERENCE:
     ASSERT(lval->var->val.node->address,
            "Cannot reference variable that has not yet been emitted.");
-    // TODO: This is only a copy to accommodate the x86_64 backend
-    // treating all stores of IR_ALLOCA as a store of the allocated thing,
-    // not the pointer.
-    lval->address = ir_copy(ctx, lval->var->val.node->address);
-    ir_insert(ctx, lval->address);
+    lval->address = lval->var->val.node->address;
     break;
 
   /* TODO: references

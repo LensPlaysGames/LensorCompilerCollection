@@ -1454,6 +1454,7 @@ static bool lower_load(CodegenContext *context, IRInstruction *instruction) {
     INSTRUCTION(alloca, IR_ALLOCA);
     alloca->alloca.size = byte_size;
     alloca->type = ast_make_type_pointer(context->ast, type->source_location, type);
+    ir_set_backend_flag(alloca, STORE_UNDERLYING);
 
     // Replace `load` with `alloca`.
     ir_replace_uses(instruction, alloca);
@@ -1473,7 +1474,7 @@ static bool lower_store(CodegenContext *context, IRInstruction *instruction) {
   // If the value is an `alloca`, we are copying from a local
   // variable to somewhere. This means we need to emit the equivalent
   // of `memcpy(address, value, sizeof(*value));`
-  if (instruction->store.value->kind == IR_ALLOCA) {
+  if (ir_get_backend_flag(instruction->store.value, STORE_UNDERLYING)) {
     // `inst->store.value->result` register contains an address we should store from.
     // `inst->store.addr->result` register contains an address we should store to.
 
