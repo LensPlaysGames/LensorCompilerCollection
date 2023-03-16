@@ -1139,6 +1139,17 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
       lhs = ast_make_string_literal(p->ast, p->tok.source_location, as_span(p->tok.text));
       next_token(p);
       break;
+    case TK_LBRACK: {
+      lhs = ast_make_compound_literal(p->ast, p->tok.source_location);
+      next_token(p); //> Yeet "["
+      while (p->tok.type != TK_RBRACK) {
+        Node *expr = parse_expr(p);
+        vector_push(lhs->literal.compound, expr);
+        if (p->tok.type == TK_COMMA) next_token(p);
+      }
+      lhs->source_location.end = p->tok.source_location.end - 1;
+      consume(p, TK_RBRACK);
+    } break;
     case TK_LPAREN:
       next_token(p); //> Yeet "("
       lhs = parse_expr(p);
