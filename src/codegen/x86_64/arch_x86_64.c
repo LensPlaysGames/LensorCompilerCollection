@@ -1366,21 +1366,9 @@ Clobbers does_clobber(IRInstruction *instruction) {
   return CLOBBERS_NEITHER;
 }
 
-static void emit_memcpy(CodegenContext *context, IRInstruction *to_, IRInstruction *from_, usz byte_size, IRInstruction *insert_before_this) {
-  // Create two copies, one of each address: "from" and "to".
-  // Cache address we are loading from.
-  IRInstruction *from = ir_copy(context, from_);
-  insert_instruction_before(from, insert_before_this);
-  // Switch type to reflect loading 8 bytes.
-  from->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
-  // Cache address we are storing to.
-  IRInstruction *to = ir_copy(context, to_);
-  insert_instruction_before(to, insert_before_this);
-  // Switch type to reflect storing 8 bytes.
-  to->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
-
-  for (; byte_size >= 8; byte_size -= 8) {
-    // Load 8 bytes from "from" address, and store 8 bytes into "to" address.
+static usz emit_memcpy_impl(CodegenContext *context, IRInstruction *to, IRInstruction *from, usz byte_size, usz iter_amount, IRInstruction *insert_before_this) {
+  for (; byte_size >= iter_amount; byte_size -= iter_amount) {
+    // Load iter_amount bytes from "from" address, and store iter_amount bytes into "to" address.
     INSTRUCTION(load, IR_LOAD);
     { // Generate load of element...
       load->operand = from;
@@ -1408,18 +1396,18 @@ static void emit_memcpy(CodegenContext *context, IRInstruction *to_, IRInstructi
     }
     insert_instruction_before(store, insert_before_this);
 
-    if (byte_size - 8 < 8 || byte_size - 8 > byte_size) {
+    if (byte_size - iter_amount < iter_amount || byte_size - iter_amount > byte_size) {
       // Do this iteration, then break.
-      byte_size -= 8;
+      byte_size -= iter_amount;
       break;
     }
 
-    { // Iterate "from" and "to" addresses by 8 bytes.
+    { // Iterate "from" and "to" addresses by iter_amount bytes.
 
       // Generate an immediate corresponding to the byte size of this member
       INSTRUCTION(byte_size_immediate, IR_IMMEDIATE);
       byte_size_immediate->type = t_integer_literal;
-      byte_size_immediate->imm = 8;
+      byte_size_immediate->imm = iter_amount;
       insert_instruction_before(byte_size_immediate, insert_before_this);
 
       INSTRUCTION(add, IR_ADD);
@@ -1435,9 +1423,29 @@ static void emit_memcpy(CodegenContext *context, IRInstruction *to_, IRInstructi
       to = dest_add;
     }
   }
+  return byte_size;
+}
 
-  if (byte_size)
-    TODO("x86_64 backend does not yet support storing types that are not multiples of 8, sorry");
+static void emit_memcpy(CodegenContext *context, IRInstruction *to_, IRInstruction *from_, usz byte_size, IRInstruction *insert_before_this) {
+  // Create two copies, one of each address: "from" and "to".
+  // Cache address we are loading from.
+  IRInstruction *from = ir_copy(context, from_);
+  insert_instruction_before(from, insert_before_this);
+  // Switch type to reflect loading 8 bytes.
+  from->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
+  // Cache address we are storing to.
+  IRInstruction *to = ir_copy(context, to_);
+  insert_instruction_before(to, insert_before_this);
+  // Switch type to reflect storing 8 bytes.
+  to->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
+
+  if ((byte_size = emit_memcpy_impl(context, to, from, byte_size, 8, insert_before_this))) {
+    // Switch type to reflect storing 1 byte.
+    from->type = ast_make_type_pointer(context->ast, t_byte->source_location, t_byte);
+    to->type = ast_make_type_pointer(context->ast, t_byte->source_location, t_byte);
+
+    emit_memcpy_impl(context, to, from, byte_size, 1, insert_before_this);
+  }
 }
 
 /// Given an `IR_LOAD` instruction, return true iff the load has been altered.
@@ -1493,11 +1501,17 @@ static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
     switch (instruction->kind) {
-    case IR_LOAD:
+    case IR_LOAD: {
       lower_load(context, instruction);
-      break;
+    } break;
     case IR_STORE: {
       lower_store(context, instruction);
+    } break;
+
+    case IR_ALLOCA: {
+      // Worry about stack alignment
+      if (instruction->alloca.size < 8)
+        instruction->alloca.size = 8;
     } break;
 
     case IR_PARAMETER: {
