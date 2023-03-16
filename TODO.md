@@ -55,15 +55,15 @@
   - [x] Type info in codegen/IR.
   - [ ] Backend: Handle size/alignment requirements
   - [x] Use eax, ax, al, etc.
-  - [ ] Actually implementing casts.
-    - [ ] During codegen, we should actually output `zext`/`sext` if needed. Otherwise truncation is automatic.
+  - [x] Actually implementing casts.
+    - [x] During codegen, we should actually output `zext`/`sext` if needed. Otherwise truncation is automatic.
   - [ ] Update IR parser
-  - [ ] Operators (unary and binary) need to pick return type instead of strictly returning `integer`
+  - [x] Operators (unary and binary) need to pick return type instead of strictly returning `integer`
 - [ ] Arrays
-  - [ ] Semantic analysis for static arrays.
-  - [ ] Codegen
-  - [ ] How do we implement reassigning arrays? Libc `memcpy()` or some builtin variant?
-    - [ ] Use compiler explorer to see how GCC does it for ‘inspiration’.
+  - [x] Semantic analysis for static arrays.
+  - [x] Codegen
+  - [x] How do we implement reassigning arrays? Libc `memcpy()` or some builtin variant?
+    - [x] Use compiler explorer to see how GCC does it for ‘inspiration’.
   - [ ] Arrays as function parameters.
     - [ ] Currently, only register-based parameters are really supported; we need to implement stack parameters for non-integer types.
   - [ ] Returning arrays from functions.
@@ -80,11 +80,11 @@
   - [x] Backend.
 - [ ] Structs
   - [ ] Order-independent types.
-  - [ ] Structs in the AST.
-  - [ ] Struct declarations.
-  - [ ] Semantic analysis for structs.
-  - [ ] Codegen for structs.
-  - [ ] `type` keyword in the parser/grammar.
+  - [x] Structs in the AST.
+  - [x] Struct declarations.
+  - [x] Semantic analysis for structs.
+  - [x] Codegen for structs.
+  - [x] `type` keyword in the parser/grammar.
   - [ ] Make sure nested structs work.
   - [ ] Arbitrary compile-time struct literals.
     - [ ] Syntax?
