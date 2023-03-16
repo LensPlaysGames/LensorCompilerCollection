@@ -354,6 +354,24 @@ Node *ast_make_string_literal(
   return node;
 }
 
+/// Create a new compound literal.
+Node *ast_make_compound_literal(
+    AST *ast,
+    loc source_location
+) {
+  Node *node = mknode(ast, NODE_LITERAL, source_location);
+  node->literal.type = TK_LBRACK;
+  vector_clear(node->literal.compound);
+  return node;
+}
+/// Add a node to an existing compound literal.
+void ast_add_to_compound_literal(
+    Node *compound,
+    Node *node
+) {
+  vector_push(compound->literal.compound, node);
+}
+
 /// Create a new variable reference.
 Node *ast_make_variable_reference(
     AST *ast,
@@ -852,6 +870,20 @@ void ast_print_node_internal(
           fprint(file, "%31Literal %35<%u> %33%Z %36string\n",
             node->source_location.start,
             (usz) node->literal.string_index);
+        } break;
+
+        case TK_LBRACK: {
+          if (node->type)
+            fprint(file, "%31Literal %35<%u> %31: %T\n",
+                   node->source_location.start,
+                   node->type);
+          else
+            fprint(file, "%31Literal %35<%u> %35%Z %36array\n",
+                   node->source_location.start,
+                   (usz) node->literal.compound.size);
+
+          ast_print_children(file, logical_parent, node, &node->literal.compound, leading_text);
+
         } break;
 
         default: TODO("Print literal of type %d", node->literal.type);

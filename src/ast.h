@@ -238,6 +238,7 @@ typedef struct NodeLiteral {
   union {
     u64 integer;
     usz string_index;
+    Nodes compound;
   };
 } NodeLiteral;
 
@@ -525,6 +526,17 @@ Node *ast_make_string_literal(
     AST *ast,
     loc source_location,
     span string
+);
+
+/// Create a new compound literal.
+Node *ast_make_compound_literal(
+    AST *ast,
+    loc source_location
+);
+/// Add a node to an existing compound literal.
+void ast_add_to_compound_literal(
+    Node *compound,
+    Node *node
 );
 
 /// Create a new variable reference.
