@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
     // TODO: Error on ICE no matter what. Check output for "Internal Compiler Error".
     if (expected_error) {
         if (!status) {
-            // Delete generated output file (presumably created since compiler returned success)
+            // Delete generated output file (presumably created since compiler returned success code)
             std::filesystem::remove(intc_outpath);
 
             fprintf(stderr,
@@ -141,6 +141,9 @@ int main(int argc, char **argv) {
         // If status is non-zero (unsucessful) and error was expected, we good.
         return 0;
     } else if (status) {
+        // Delete generated output file (possibly created even though the compiler returned failure code)
+        std::filesystem::remove(intc_outpath);
+
         fprintf(stderr,
                 "\nFAILURE: intc returned non-zero exit code\n"
                 "  intc_invocation: \"%s\"\n"
@@ -175,6 +178,9 @@ int main(int argc, char **argv) {
     std::filesystem::remove(cc_outpath);
 
     if (status != expected_status) {
+        // The test's status didn't match; it's output isn't ever needed.
+        std::filesystem::remove(outpath);
+
         fprintf(stderr,
                 "\nFAILURE: Test returned unexpected exit code\n"
                 "  intc_invocation: \"%s\"\n"
