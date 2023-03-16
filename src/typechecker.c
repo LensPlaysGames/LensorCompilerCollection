@@ -1235,15 +1235,36 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       }
       break;
 
-    /// Just set the type.
-    case NODE_LITERAL:
-      if (expr->literal.type == TK_NUMBER) expr->type = t_integer_literal;
-      else if (expr->literal.type == TK_STRING) {
+    case NODE_LITERAL: {
+      switch (expr->literal.type) {
+      case TK_NUMBER: expr->type = t_integer_literal; break;
+      case TK_STRING: {
         string s = ast->strings.data[expr->literal.string_index];
         expr->type = ast_make_type_array(ast, expr->source_location, t_byte, s.size + 1);
+      } break;
+      case TK_LBRACK:
+        if (!expr->literal.compound.size) {
+          ERR(expr->source_location,
+              "An array literal must have elements within it, as a zero-sized array makes no sense!");
+          return false;
+        }
+        Type *type = NULL;
+        foreach_ptr (Node *, node, expr->literal.compound) {
+          if (!typecheck_expression(ast, node)) return false;
+          if (type && !convertible(type, node->type)) {
+            ERR(node->source_location,
+                "Every expression within an array literal must be convertible to the same type: %T.",
+                type);
+            return false;
+          }
+          if (!type) type = node->type;
+        }
+        expr->type = ast_make_type_array(ast, expr->source_location, type, expr->literal.compound.size);
+        break;
+      default:
+        TODO("Literal type %s.", token_type_to_string(expr->literal.type));
       }
-      else TODO("Literal type '%s'.", token_type_to_string(expr->literal.type));
-      break;
+    } break;
 
     /// The type of a variable reference is the type of the variable.
     case NODE_VARIABLE_REFERENCE:
