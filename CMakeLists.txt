@@ -187,10 +187,29 @@ if (A68G_PROGRAM STREQUAL "A68G_PROGRAM-NOTFOUND")
 ")
 else()
   add_custom_target(
-    test
+    algol-suite
     COMMAND a68g main.a68
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tst
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/tst
     COMMENT "Running tests"
-    VERBATIM USES_TERMINAL
+    VERBATIM
+    USES_TERMINAL
   )
+endif()
+
+include(CTest)
+if (BUILD_TESTING)
+  add_executable(test_instantiator tst/main.cpp)
+  set_property(TARGET test_instantiator PROPERTY CXX_STANDARD 20)
+
+  file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
+  foreach (test ${tests})
+    add_test(
+      NAME ${test}
+      COMMAND $<TARGET_FILE:test_instantiator>
+      --test ${test}
+      --intc $<TARGET_FILE:intc>
+      --cc ${CMAKE_C_COMPILER}
+      COMMAND_EXPAND_LISTS
+    )
+  endforeach()
 endif()
