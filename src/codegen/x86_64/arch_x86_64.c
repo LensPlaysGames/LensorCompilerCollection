@@ -1443,7 +1443,6 @@ static void emit_memcpy(CodegenContext *context, IRInstruction *to_, IRInstructi
     // Switch type to reflect storing 1 byte.
     from->type = ast_make_type_pointer(context->ast, t_byte->source_location, t_byte);
     to->type = ast_make_type_pointer(context->ast, t_byte->source_location, t_byte);
-
     emit_memcpy_impl(context, to, from, byte_size, 1, insert_before_this);
   }
 }
