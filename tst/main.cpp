@@ -123,6 +123,7 @@ int main(int argc, char **argv) {
 
     status = system(intc_invocation.c_str());
     // TODO: Error on ICE no matter what. Check output for "Internal Compiler Error".
+    // This means we'd have to redirect and capture intc_invocation output as well.
     if (expected_error) {
         if (!status) {
             // Delete generated output file (presumably created since compiler returned success code)
@@ -170,7 +171,6 @@ int main(int argc, char **argv) {
                 status);
         return status;
     }
-
 
     status = system(test_invocation.c_str());
 
