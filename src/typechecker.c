@@ -188,10 +188,7 @@ NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
   if (from->kind == TYPE_ARRAY && to->kind == TYPE_ARRAY) {
     if (from->array.size > to->array.size)
       return -1;
-    if (convertible_score(to->array.of, from->array.of) == -1)
-      return -1;
-
-    return 1;
+    return convertible_score(to->array.of, from->array.of);
   }
 
   /// Otherwise, the types are not convertible.
