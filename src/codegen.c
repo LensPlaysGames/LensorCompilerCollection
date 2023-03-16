@@ -10,6 +10,7 @@
 #include <opt.h>
 #include <parser.h>
 #include <utils.h>
+#include <vector.h>
 
 #include <stddef.h>
 #include <stdio.h>
@@ -143,14 +144,12 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
     : ir_stack_allocate(ctx, lval->type);
 
     /// Emit the initialiser if there is one.
-    // FIXME: Initialising static variables at runtime is generally
-    // not ideal. We should probably emit static init (within
-    // IR_STATIC_REF) if possible, in order to remove the complexity of
-    // runtime code. We should still emit like this if the value is
-    // not compile-time known.
+    // TODO: TK_LBRACK aka array literals *may* be known at compile
+    // time, if all of the elements are.
     if (lval->declaration.init) {
       if (lval->declaration.static_ &&
-          (lval->declaration.init->kind == NODE_LITERAL)) {
+          (lval->declaration.init->kind == NODE_LITERAL) &&
+          (lval->declaration.init->literal.type != TK_LBRACK)) {
             if (lval->declaration.init->literal.type == TK_NUMBER) {
               INSTRUCTION(i, IR_LIT_INTEGER);
               i->imm = lval->declaration.init->literal.integer;
@@ -575,9 +574,14 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   }
 
   /// Literal expression. Only integer literals are supported for now.
-  case NODE_LITERAL:
-    if (expr->literal.type == TK_NUMBER) expr->ir = ir_immediate(ctx, expr->type, expr->literal.integer);
-    else if (expr->literal.type == TK_STRING) {
+  case NODE_LITERAL: {
+    switch (expr->literal.type) {
+
+    case TK_NUMBER: {
+      expr->ir = ir_immediate(ctx, expr->type, expr->literal.integer);
+    } break;
+
+    case TK_STRING: {
 
       // FIXME: This name shouldn't be needed here, but static
       // variables are required to have names as of right now. We
@@ -593,9 +597,34 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       INSTRUCTION(s, IR_LIT_STRING);
       s->str = ctx->ast->strings.data[expr->literal.string_index];
       expr->ir->static_ref->init = s;
+
+    } break;
+
+    // Array
+    case TK_LBRACK: {
+      expr->ir = ir_stack_allocate(ctx, expr->type);
+
+      // Emit a store from each expression in the initialiser as an element in the array.
+      IRInstruction *address = ir_copy(ctx, expr->ir);
+      address->type = ast_make_type_pointer(ctx->ast, expr->source_location, expr->type->array.of);
+      ir_insert(ctx, address);
+      usz index = 0;
+      foreach_ptr (Node *, node, expr->literal.compound) {
+        codegen_expr(ctx, node);
+        ir_store(ctx, node->ir, address);
+        if (index == expr->literal.compound.size - 1) break;
+        // Iterate address
+        IRInstruction *element_byte_size = ir_immediate(ctx, t_integer, type_sizeof(expr->type->array.of));
+        address = ir_add(ctx, address, element_byte_size);
+        ++index;
+      }
+      expr->ir = ir_load(ctx, expr->ir);
+    } break;
+
+    default:
+      DIAG(DIAG_SORRY, expr->source_location, "Emitting literals of type %T not supported", expr->type);
     }
-    else DIAG(DIAG_SORRY, expr->source_location, "Emitting literals of type %T not supported", expr->type);
-    return;
+  } return;
 
   case NODE_FOR: {
     /* FOR INIT COND ITER BODY
