@@ -37,3 +37,6 @@
 
 # Disallow files starting with some symbols
 **/_*
+
+# Testing
+Testing/
