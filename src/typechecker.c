@@ -907,6 +907,17 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           if (expr->type == t_integer_literal) expr->type = t_integer;
         } else if (!convertible(expr->type, expr->declaration.init->type))
           ERR_NOT_CONVERTIBLE(expr->declaration.init->source_location, expr->type, expr->declaration.init->type);
+
+        if (expr->declaration.init->type == t_integer_literal)
+          expr->declaration.init->type = expr->type;
+        else if (expr->declaration.init->type->kind == TYPE_ARRAY &&
+                 expr->declaration.init->type->array.of == t_integer_literal) {
+          expr->declaration.init->type->array.of = expr->type->array.of;
+          foreach_ptr (Node *, node, expr->declaration.init->literal.compound) {
+            node->type = expr->type->array.of;
+          }
+        }
+
       } else if (!expr->type) ERR(expr->source_location, "Cannot infer type of declaration without initialiser");
 
       if (!typecheck_type(ast, expr->type)) return false;
