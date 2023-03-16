@@ -182,6 +182,18 @@ NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
   /// Integer literals are convertible to any integer type.
   if (from == t_integer_literal && to_is_int) return 1;
 
+  // An array type is convertible to another array type if `from` size
+  // is less than or equal to `to` size, as well as the element type
+  // being convertible.
+  if (from->kind == TYPE_ARRAY && to->kind == TYPE_ARRAY) {
+    if (from->array.size > to->array.size)
+      return -1;
+    if (convertible_score(to->array.of, from->array.of) == -1)
+      return -1;
+
+    return 1;
+  }
+
   /// Otherwise, the types are not convertible.
   return -1;
 }
