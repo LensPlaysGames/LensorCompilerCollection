@@ -698,6 +698,10 @@ size_t ast_intern_string(AST *ast, span string);
 /// Replace a node with another node.
 void ast_replace_node(AST *ast, Node *old, Node *new);
 
+/// Check if the expression contained in the given AST Node can be an
+/// lvalue.
+NODISCARD bool is_lvalue(Node *expr);
+
 /// ===========================================================================
 ///  Builtin types.
 /// ===========================================================================

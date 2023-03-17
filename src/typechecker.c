@@ -223,24 +223,6 @@ NODISCARD static Type *common_type(Type *a, Type *b) {
   return NULL;
 }
 
-/// Check if an expression is an lvalue.
-NODISCARD static bool is_lvalue(Node *expr) {
-  switch (expr->kind) {
-  default: return false;
-
-    // FIXME: Add `if`
-
-    /// Declarations and variables are obviously lvalues.
-    case NODE_DECLARATION:
-    case NODE_VARIABLE_REFERENCE:
-    case NODE_MEMBER_ACCESS:
-      return true;
-
-    /// A dereference is an lvalue.
-    case NODE_UNARY: return expr->unary.op == TK_AT;
-  }
-}
-
 /// An overload candidate.
 typedef struct Candidate {
   Symbol *symbol;

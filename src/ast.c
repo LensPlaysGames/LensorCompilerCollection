@@ -1139,6 +1139,23 @@ void ast_replace_node(AST *ast, Node *old, Node *new) {
     case NODE_STRUCTURE_DECLARATION:
       break;
   }
-
 #undef REPLACE_IN_CHILDREN
+}
+
+NODISCARD bool is_lvalue(Node *expr) {
+  switch (expr->kind) {
+  default: return false;
+
+  // FIXME: Add `if`
+  // FIXME: String literals are lvalues...
+
+  /// Declarations and variables are obviously lvalues.
+  case NODE_DECLARATION:
+  case NODE_VARIABLE_REFERENCE:
+  case NODE_MEMBER_ACCESS:
+    return true;
+
+    /// A dereference is an lvalue.
+  case NODE_UNARY: return expr->unary.op == TK_AT;
+  }
 }
