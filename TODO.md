@@ -22,7 +22,7 @@
   - [ ] Resolve the two different kinds of array-type loading: entire copy vs pointer decay. Basically, `foo[2]` needs `foo` to be loaded as a pointer. `a : foo[2] = b` requires loading entire copy of `b` into `a`.
   - [x] Add multiline comment syntax
   - [ ] Some syntax to repeat a string literal X amount of times, and another to ensure minimum size of string literal
-  - [ ]
+  - [ ] It prints "unknown symbol" even for mismatched overload that should have pretty error
 - [ ] Optimisation
   - [x] Zero subscript still does add/multiply when it doesn't need to
 - [ ] Attributes
