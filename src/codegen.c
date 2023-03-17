@@ -166,12 +166,12 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
     }
     return;
 
-  case NODE_MEMBER_ACCESS:
+  case NODE_MEMBER_ACCESS: {
     codegen_lvalue(ctx, lval->member_access.struct_);
     lval->address = ir_add(ctx, lval->member_access.struct_->address,
                            ir_immediate(ctx, t_integer, lval->member_access.member->byte_offset));
     lval->address->type = ast_make_type_pointer(ctx->ast, lval->source_location, lval->member_access.member->type);
-    break;
+  } break;
 
   case NODE_IF:
     TODO("`if` as an lvalue is not yet supported, but it's in the plans bb");
@@ -191,6 +191,8 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
            "Cannot reference variable that has not yet been emitted.");
     lval->address = lval->var->val.node->address;
     break;
+
+  // TODO: String literals are lvalues...
 
   /* TODO: references
   case NODE_BLOCK:
@@ -459,7 +461,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
           ir_femit_instruction(stdout, var_decl);
           ERR("Unhandled variable reference IR instruction kind %i", (int) var_decl->kind);
         }
-
+      } else if (is_lvalue(lhs)) {
+        codegen_lvalue(ctx, lhs);
+        subs_lhs = lhs->address;
       } else if (lhs->kind == NODE_LITERAL && lhs->literal.type == TK_STRING) {
         codegen_expr(ctx, lhs);
         if (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER) {
