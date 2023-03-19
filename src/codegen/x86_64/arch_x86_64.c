@@ -1487,6 +1487,25 @@ static bool lower_store(CodegenContext *context, IRInstruction *instruction) {
   return false;
 }
 
+static IRInstruction *alloca_copy_of(CodegenContext *context, IRInstruction *copy, IRInstruction *insert_before_this) {
+  INSTRUCTION(alloca, IR_ALLOCA);
+  alloca->alloca.size = type_sizeof(copy->type);
+  alloca->type = ast_make_type_pointer(context->ast, copy->type->source_location, copy->type);
+  insert_instruction_before(alloca, insert_before_this);
+
+  INSTRUCTION(store, IR_STORE);
+
+  store->store.addr = alloca;
+  mark_used(alloca, store);
+
+  store->store.value = copy;
+  mark_used(copy, store);
+
+  insert_instruction_before(store, insert_before_this);
+
+  return alloca;
+}
+
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
@@ -1522,20 +1541,7 @@ static void lower(CodegenContext *context) {
           if (idx >= argument_register_count) break;
           Type *type = type_canonical(argument->type);
           if ((type->kind == TYPE_STRUCT || type->kind == TYPE_ARRAY) && type_sizeof(type) > 8) {
-            INSTRUCTION(alloca, IR_ALLOCA);
-            alloca->alloca.size = type_sizeof(type);
-            alloca->type = ast_make_type_pointer(context->ast, argument->type->source_location, argument->type);
-            insert_instruction_before(alloca, instruction);
-
-            INSTRUCTION(store, IR_STORE);
-
-            store->store.addr = alloca;
-            mark_used(alloca, store);
-
-            store->store.value = argument;
-            mark_used(argument, store);
-
-            insert_instruction_before(store, instruction);
+            alloca_copy_of(context, argument, instruction);
           }
           ++idx;
         }
@@ -1544,24 +1550,7 @@ static void lower(CodegenContext *context) {
           usz i = instruction->call.arguments.size - 1;
           foreach_ptr_rev (IRInstruction *, argument, instruction->call.arguments) {
             if (i < argument_register_count) break;
-
-            INSTRUCTION(alloca, IR_ALLOCA);
-            alloca->alloca.size = type_sizeof(argument->type);
-            alloca->type = ast_make_type_pointer(context->ast, argument->type->source_location, argument->type);
-            insert_instruction_before(alloca, instruction);
-
-            INSTRUCTION(store, IR_STORE);
-
-            store->store.addr = alloca;
-            mark_used(alloca, store);
-
-            store->store.value = argument;
-            mark_used(argument, store);
-
-            insert_instruction_before(store, instruction);
-
-            *argument_ptr = alloca;
-
+            *argument_ptr = alloca_copy_of(context, argument, instruction);
             --i;
           }
         }
