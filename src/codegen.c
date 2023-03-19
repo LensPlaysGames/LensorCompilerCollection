@@ -469,7 +469,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
           else subs_lhs = var_decl;
         else {
           ir_femit_instruction(stdout, var_decl);
-          ERR("Unhandled variable reference IR instruction kind %i", (int) var_decl->kind);
+          ERR("Unhandled variable reference IR instruction kind %i aka %s", (int) var_decl->kind, ir_irtype_string(var_decl->kind));
         }
       } else if (is_lvalue(lhs)) {
         codegen_lvalue(ctx, lhs);

@@ -241,6 +241,7 @@ bool ir_is_branch(IRInstruction*);
 /// Check whether a block is closed.
 bool ir_is_closed(IRBlock *block);
 
+const char *ir_irtype_string(IRType t);
 void ir_femit_instruction(FILE *file, IRInstruction *instruction);
 void ir_femit_block(FILE *file, IRBlock *block);
 void ir_femit_function(FILE *file, IRFunction *function);
