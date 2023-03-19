@@ -141,9 +141,7 @@ void function_call_arguments(IRFunction *f, const MachineDescription *desc) {
   FOREACH_INSTRUCTION_IN_FUNCTION(f) {
     if (instruction->kind == IR_CALL) {
       foreach_index(i, instruction->call.arguments) {
-        if (i >= desc->argument_register_count) {
-          TODO("Handle stack allocated function parameters, somehow :p");
-        }
+        if (i >= desc->argument_register_count) break;
         IRInstruction *argument = instruction->call.arguments.data[i];
         Register result = desc->argument_registers[i];
         IRInstruction *arg_copy = ir_copy(f->context, argument);

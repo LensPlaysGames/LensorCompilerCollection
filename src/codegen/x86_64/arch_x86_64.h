@@ -1,6 +1,8 @@
 #ifndef ARCH_X86_64_H
 #define ARCH_X86_64_H
 
+#include <stdbool.h>
+#include <stddef.h>
 #include <codegen/codegen_forward.h>
 
 /// This is used for defining lookup tables etc. and
@@ -30,6 +32,8 @@ CodegenContext *codegen_context_x86_64_mswin_create();
 CodegenContext *codegen_context_x86_64_linux_create();
 void codegen_context_x86_64_mswin_free(CodegenContext *ctx);
 void codegen_context_x86_64_linux_free(CodegenContext *ctx);
+
+bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *function, size_t parameter_index);
 
 void codegen_lower_x86_64(CodegenContext *context);
 void codegen_emit_x86_64(CodegenContext *context);
