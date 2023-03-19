@@ -125,6 +125,14 @@ void codegen_context_free(CodegenContext *context) {
   free(context);
 }
 
+bool parameter_is_in_register(CodegenContext *context, IRFunction *function, usz parameter_index) {
+  switch (context->format) {
+  case CG_FMT_x86_64_GAS: return parameter_is_in_register_x86_64(context, function, parameter_index);
+  default: ICE("Unrecognized format!");
+  }
+  UNREACHABLE();
+}
+
 /// ===========================================================================
 ///  Code generation.
 /// ===========================================================================
@@ -168,6 +176,8 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
 
   case NODE_MEMBER_ACCESS: {
     codegen_lvalue(ctx, lval->member_access.struct_);
+    // TODO: When member has zero byte offset, we can just use the
+    // address of the struct with a modified type.
     lval->address = ir_add(ctx, lval->member_access.struct_->address,
                            ir_immediate(ctx, t_integer, lval->member_access.member->byte_offset));
     lval->address->type = ast_make_type_pointer(ctx->ast, lval->source_location, lval->member_access.member->type);
@@ -697,13 +707,20 @@ void codegen_function(CodegenContext *ctx, Node *node) {
   /// Next, emit all parameter declarations and store
   /// the initial parameter values in them.
   foreach_index(i, node->function.param_decls) {
-    /// Allocate a variable for the parameter.
-    Node *decl = node->function.param_decls.data[i];
-    codegen_lvalue(ctx, decl);
+    if (parameter_is_in_register(ctx, ctx->function, i)) {
+      /// Allocate a variable for the parameter.
+      Node *decl = node->function.param_decls.data[i];
+      codegen_lvalue(ctx, decl);
 
-    /// Store the parameter value in the variable.
-    IRInstruction *p = ir_parameter(ctx, i);
-    ir_store(ctx, p, decl->address);
+      /// Store the parameter value in the variable.
+      IRInstruction *p = ir_parameter(ctx, i);
+      ir_store(ctx, p, decl->address);
+    } else {
+      // If it's not in a register, it's in memory. That means it's a pointer!
+      IRInstruction *p = ir_parameter(ctx, i);
+      p->type = ast_make_type_pointer(ctx->ast, p->type->source_location, p->type);
+      node->function.param_decls.data[i]->address = p;
+    }
   }
 
   /// Emit the function body.

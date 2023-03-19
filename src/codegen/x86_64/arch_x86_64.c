@@ -63,6 +63,46 @@ DEFINE_REGISTER_NAME_LOOKUP_FUNCTION(register_name_8, 8)
 static Register *caller_saved_registers = NULL;
 static size_t caller_saved_register_count = 0;
 
+static Register *argument_registers = NULL;
+static size_t argument_register_count = 0;
+static Register general[GENERAL_REGISTER_COUNT] = {
+  REG_RAX,
+  REG_RCX,
+  REG_RDX,
+  REG_RSI,
+  REG_RDI,
+  REG_R8,
+  REG_R9,
+  REG_R10,
+  REG_R11,
+  REG_R12,
+  REG_RBX,
+  REG_R13,
+  REG_R14,
+  REG_R15,
+};
+
+#define LINUX_ARGUMENT_REGISTER_COUNT 6
+static Register linux_argument_registers[LINUX_ARGUMENT_REGISTER_COUNT] = {
+  REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9
+};
+
+#define MSWIN_ARGUMENT_REGISTER_COUNT 4
+static Register mswin_argument_registers[MSWIN_ARGUMENT_REGISTER_COUNT] = {
+  REG_RCX, REG_RDX, REG_R8, REG_R9
+};
+
+#define MSWIN_CALLER_SAVED_REGISTER_COUNT 7
+static Register mswin_caller_saved_registers[MSWIN_CALLER_SAVED_REGISTER_COUNT] = {
+  REG_RAX, REG_RCX, REG_RDX, REG_R8, REG_R9, REG_R10, REG_R11
+};
+
+#define LINUX_CALLER_SAVED_REGISTER_COUNT 9
+static Register linux_caller_saved_registers[LINUX_CALLER_SAVED_REGISTER_COUNT] = {
+  REG_RAX, REG_RCX, REG_RDX, REG_R8, REG_R9, REG_R10, REG_R11, REG_RSI, REG_RDI
+};
+
+
 NODISCARD static bool is_caller_saved(Register r) {
   for (size_t i = 0; i < caller_saved_register_count; ++i) {
     if (caller_saved_registers[i] == r) {
@@ -693,6 +733,11 @@ CodegenContext *codegen_context_x86_64_mswin_create() {
   pool.num_scratch_registers = number_of_scratch_registers;
   pool.num_registers = REG_COUNT;
 
+  caller_saved_register_count = MSWIN_CALLER_SAVED_REGISTER_COUNT;
+  caller_saved_registers = mswin_caller_saved_registers;
+  argument_register_count = MSWIN_ARGUMENT_REGISTER_COUNT;
+  argument_registers = mswin_argument_registers;
+
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
   cg_ctx->format = CG_FMT_x86_64_GAS;
   cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
@@ -724,6 +769,11 @@ CodegenContext *codegen_context_x86_64_linux_create() {
   pool.scratch_registers = scratch_registers;
   pool.num_scratch_registers = number_of_scratch_registers;
   pool.num_registers = REG_COUNT;
+
+  caller_saved_register_count = LINUX_CALLER_SAVED_REGISTER_COUNT;
+  caller_saved_registers = linux_caller_saved_registers;
+  argument_register_count = LINUX_ARGUMENT_REGISTER_COUNT;
+  argument_registers = linux_argument_registers;
 
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
 
@@ -1292,45 +1342,6 @@ void emit_entry(CodegenContext *context) {
   }
 }
 
-static Register *argument_registers = NULL;
-static size_t argument_register_count = 0;
-static Register general[GENERAL_REGISTER_COUNT] = {
-  REG_RAX,
-  REG_RCX,
-  REG_RDX,
-  REG_RSI,
-  REG_RDI,
-  REG_R8,
-  REG_R9,
-  REG_R10,
-  REG_R11,
-  REG_R12,
-  REG_RBX,
-  REG_R13,
-  REG_R14,
-  REG_R15,
-};
-
-#define LINUX_ARGUMENT_REGISTER_COUNT 6
-static Register linux_argument_registers[LINUX_ARGUMENT_REGISTER_COUNT] = {
-  REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9
-};
-
-#define MSWIN_ARGUMENT_REGISTER_COUNT 4
-static Register mswin_argument_registers[MSWIN_ARGUMENT_REGISTER_COUNT] = {
-  REG_RCX, REG_RDX, REG_R8, REG_R9
-};
-
-#define MSWIN_CALLER_SAVED_REGISTER_COUNT 7
-static Register mswin_caller_saved_registers[MSWIN_CALLER_SAVED_REGISTER_COUNT] = {
-  REG_RAX, REG_RCX, REG_RDX, REG_R8, REG_R9, REG_R10, REG_R11
-};
-
-#define LINUX_CALLER_SAVED_REGISTER_COUNT 9
-static Register linux_caller_saved_registers[LINUX_CALLER_SAVED_REGISTER_COUNT] = {
-  REG_RAX, REG_RCX, REG_RDX, REG_R8, REG_R9, REG_R10, REG_R11, REG_RSI, REG_RDI
-};
-
 typedef enum Clobbers {
   CLOBBERS_NEITHER,
   CLOBBERS_REFERENCE,
@@ -1513,18 +1524,124 @@ static void lower(CodegenContext *context) {
         instruction->alloca.size = 8;
     } break;
 
+    case IR_CALL: {
+      usz idx = 0;
+      foreach_ptr (IRInstruction *, argument, instruction->call.arguments) {
+        if (idx >= argument_register_count) break;
+        switch (context->call_convention) {
+        case CG_CALL_CONV_LINUX: {
+          TODO("x86_64 backend doesn't yet support SYSV recursive algorithm stuff, sorry.");
+        } break;
+        case CG_CALL_CONV_MSWIN: {
+          Type *type = type_canonical(argument->type);
+          if ((type->kind == TYPE_STRUCT || type->kind == TYPE_ARRAY) && type_sizeof(type) > 8) {
+            INSTRUCTION(alloca, IR_ALLOCA);
+            alloca->alloca.size = type_sizeof(type);
+            alloca->type = ast_make_type_pointer(context->ast, argument->type->source_location, argument->type);
+            insert_instruction_before(alloca, instruction);
+
+            INSTRUCTION(store, IR_STORE);
+
+            store->store.addr = alloca;
+            mark_used(alloca, store);
+
+            store->store.value = argument;
+            mark_used(argument, store);
+
+            insert_instruction_before(store, instruction);
+          }
+        } break;
+        }
+        ++idx;
+      }
+
+      size_t argcount = instruction->call.arguments.size;
+      if (argcount >= argument_register_count) {
+        switch (context->call_convention) {
+        case CG_CALL_CONV_LINUX: {
+          TODO("x86_64 backend doesn't yet support SYSV stack arguments, sorry.");
+        } break;
+        case CG_CALL_CONV_MSWIN: {
+          usz i = instruction->call.arguments.size - 1;
+          foreach_ptr_rev (IRInstruction *, argument, instruction->call.arguments) {
+            if (i < argument_register_count) break;
+
+            INSTRUCTION(alloca, IR_ALLOCA);
+            alloca->alloca.size = type_sizeof(argument->type);
+            alloca->type = ast_make_type_pointer(context->ast, argument->type->source_location, argument->type);
+            insert_instruction_before(alloca, instruction);
+
+            INSTRUCTION(store, IR_STORE);
+
+            store->store.addr = alloca;
+            mark_used(alloca, store);
+
+            store->store.value = argument;
+            mark_used(argument, store);
+
+            insert_instruction_before(store, instruction);
+
+            *argument_ptr = alloca;
+
+            --i;
+          }
+        } break;
+        }
+      }
+    } break;
+
     case IR_PARAMETER: {
-      // Maximum size of parameter that can go in a register vs on the stack.
-      if (instruction->type->kind == TYPE_STRUCT || instruction->type->kind == TYPE_ARRAY) {
-        TODO("x86_64 backend doesn't yet support passing structs/arrays as arguments, sorry.");
-        // TODO: At each call of this function, insert alloca + copy from alloca to
-        // argument register (or on stack, once we support that).
+      switch (context->call_convention) {
+
+      case CG_CALL_CONV_LINUX: {
+        if (instruction->type->kind == TYPE_ARRAY || instruction->type->kind == TYPE_STRUCT
+            || type_sizeof(instruction->type) > 8 || instruction->imm >= argument_register_count) {
+          TODO("x86_64 backend does not yet support passing complex parameters with sysv ABI, sorry.");
+        }
+        instruction->kind = IR_REGISTER;
+        instruction->result = argument_registers[instruction->imm];
+      } break;
+
+      case CG_CALL_CONV_MSWIN: {
+        Type *type = type_canonical(instruction->type);
+        // NOTE: Arrays and strings in Intercept are passed like
+        // structs in C, so this doesn't apply to *Intercept*
+        // arrays/strings.
+        // __m128 types, arrays, and strings are never passed by immediate value.
+        // Structs and unions of size 8, 16, 32, or 64 bits, and __m64
+        // types, are passed as if they were integers of the same size.
+        if (instruction->imm >= argument_register_count || type_sizeof(type) > 8) {
+          // Lower type to a pointer, because that's how the calls have
+          // been altered as well.
+          INSTRUCTION(rbp, IR_REGISTER);
+          rbp->result = REG_RBP;
+          rbp->type = t_integer;
+          insert_instruction_before(rbp, instruction);
+
+          usz parameter_index = instruction->imm;
+
+          INSTRUCTION(offset, IR_IMMEDIATE);
+          offset->type = t_integer;
+          usz i = instruction->parent_block->function->type->function.parameters.size - 1;
+          foreach_rev (Parameter, param, instruction->parent_block->function->type->function.parameters) {
+            if (i == parameter_index) break;
+            offset->imm += type_sizeof(param->type);
+            --i;
+          }
+          insert_instruction_before(offset, instruction);
+
+          instruction->kind = IR_ADD;
+          instruction->lhs = rbp;
+          instruction->rhs = offset;
+          instruction->type = ast_make_type_pointer(context->ast, instruction->type->source_location, instruction->type);
+        } else {
+          instruction->kind = IR_REGISTER;
+          instruction->result = argument_registers[instruction->imm];
+        }
+      } break;
+
+      default: ICE("Unhandled call convention for parameter lowering.");
       }
-      if (type_sizeof(instruction->type) > max_register_size || (size_t)instruction->imm >= argument_register_count) {
-        TODO("x86_64 backend doesn't yet support passing arguments on the stack, sorry.");
-      }
-      instruction->kind = IR_REGISTER;
-      instruction->result = argument_registers[instruction->imm];
     } break;
 
     case IR_BITCAST: {
@@ -1621,6 +1738,16 @@ static void mangle_type_to(string_buffer *buf, Type *t) {
   switch (t->kind) {
     default: UNREACHABLE();
 
+    case TYPE_STRUCT:
+      if (t->structure.decl->struct_decl->name.size)
+        format_to(buf, "%Z%S", t->structure.decl->struct_decl->name.size, t->structure.decl->struct_decl->name);
+      else {
+        static usz struct_count = 0;
+        format_to(buf, "%Z%Z", number_width(struct_count), struct_count);
+        ++struct_count;
+      }
+      break;
+
     case TYPE_PRIMITIVE:
       format_to(buf, "%Z%S", t->primitive.name.size, t->primitive.name);
       break;
@@ -1660,26 +1787,31 @@ void mangle_function_name(IRFunction *function) {
 }
 
 void codegen_lower_x86_64(CodegenContext *context) {
-  // Setup register allocation structures.
-  switch (context->call_convention) {
-    case CG_CALL_CONV_LINUX:
-      caller_saved_register_count = LINUX_CALLER_SAVED_REGISTER_COUNT;
-      caller_saved_registers = linux_caller_saved_registers;
-      argument_register_count = LINUX_ARGUMENT_REGISTER_COUNT;
-      argument_registers = linux_argument_registers;
-      break;
-    case CG_CALL_CONV_MSWIN:
-      caller_saved_register_count = MSWIN_CALLER_SAVED_REGISTER_COUNT;
-      caller_saved_registers = mswin_caller_saved_registers;
-      argument_register_count = MSWIN_ARGUMENT_REGISTER_COUNT;
-      argument_registers = mswin_argument_registers;
-      break;
-    default:
-      ICE("Invalid call convention.");
-  }
-
   // IR fixup for this specific backend.
   lower(context);
+}
+
+bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *function, usz parameter_index) {
+  if (parameter_index >= function->type->function.parameters.size)
+    ICE("Parameter index out of bounds");
+
+  IRInstruction *parameter = function->parameters.data[parameter_index];
+
+  switch (context->call_convention) {
+
+  case CG_CALL_CONV_MSWIN: {
+    if (parameter_index >= 4) return false;
+    if (type_sizeof(parameter->type) > 8) return false;
+  } return true;
+
+  case CG_CALL_CONV_LINUX: {
+    TODO("x86_64 backend does not yet support determining sysv ABI specifics for parameters, sorry");
+  } return true;
+
+  default:
+    ICE("Unhandled calling convention: %d\n", context->call_convention);
+  }
+
 }
 
 void codegen_emit_x86_64(CodegenContext *context) {
