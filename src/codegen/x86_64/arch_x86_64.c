@@ -1097,8 +1097,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
   case IR_BRANCH:
     /// Only emit a jump if the target isn’t the next block.
-    if (!optimise || (inst->parent_block
-          && inst->destination_block != inst->parent_block->next && !inst->parent_block->done)) {
+    if (!optimise || (inst->parent_block && inst->destination_block != inst->parent_block->next && !inst->parent_block->done)) {
       femit_name(context, I_JMP, inst->destination_block->name.data);
     }
     if (optimise && inst->parent_block) inst->parent_block->done = true;
@@ -1222,7 +1221,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   } break;
 
   case IR_LOAD: {
-      enum RegSize size = -1u;
+    enum RegSize size = -1u;
     // TODO: Handle size of type and stuff
     /// Load from a static variable.
     if (inst->operand->kind == IR_STATIC_REF) {
@@ -1304,8 +1303,8 @@ void emit_block(CodegenContext *context, IRBlock *block) {
   /// Emit block label if it is used.
   if (block->name.size) {
     fprint(context->code,
-            "%s:\n",
-            block->name.data);
+           "%s:\n",
+           block->name.data);
   }
 
   list_foreach (IRInstruction*, instruction, block->instructions) {
@@ -1316,8 +1315,8 @@ void emit_block(CodegenContext *context, IRBlock *block) {
 void emit_function(CodegenContext *context, IRFunction *function) {
   // Generate function entry.
   fprint(context->code,
-          "\n%s:\n",
-          function->name.data);
+         "\n%s:\n",
+         function->name.data);
   codegen_prologue(context, function);
   // Save all callee-saved registers in use in the function.
   for (Register i = 1; i < sizeof(function->registers_in_use) * 8; ++i) {
@@ -1331,9 +1330,9 @@ void emit_function(CodegenContext *context, IRFunction *function) {
 
 void emit_entry(CodegenContext *context) {
   fprint(context->code,
-          "%s"
-          ".section .text\n",
-          context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
+         "%s"
+         ".section .text\n",
+         context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
 
   fprint(context->code, "\n");
   foreach_ptr (IRFunction*, function, context->functions) {
@@ -1525,14 +1524,21 @@ static void lower(CodegenContext *context) {
     } break;
 
     case IR_CALL: {
-      usz idx = 0;
-      foreach_ptr (IRInstruction *, argument, instruction->call.arguments) {
-        if (idx >= argument_register_count) break;
-        switch (context->call_convention) {
-        case CG_CALL_CONV_LINUX: {
-          TODO("x86_64 backend doesn't yet support SYSV recursive algorithm stuff, sorry.");
-        } break;
-        case CG_CALL_CONV_MSWIN: {
+      // TODO: We have to save registers here, ya know, the ones that
+      // haven't been allocated yet...
+
+      size_t argcount = instruction->call.arguments.size;
+
+      switch (context->call_convention) {
+      case CG_CALL_CONV_LINUX: {
+        if (argcount >= argument_register_count)
+          TODO("x86_64 backend doesn't yet support SYSV stack arguments, sorry.");
+        // TODO: sysv recursive algorithm stuff, or whatever.
+      } break;
+      case CG_CALL_CONV_MSWIN: {
+        usz idx = 0;
+        foreach_ptr (IRInstruction *, argument, instruction->call.arguments) {
+          if (idx >= argument_register_count) break;
           Type *type = type_canonical(argument->type);
           if ((type->kind == TYPE_STRUCT || type->kind == TYPE_ARRAY) && type_sizeof(type) > 8) {
             INSTRUCTION(alloca, IR_ALLOCA);
@@ -1550,18 +1556,10 @@ static void lower(CodegenContext *context) {
 
             insert_instruction_before(store, instruction);
           }
-        } break;
+          ++idx;
         }
-        ++idx;
-      }
 
-      size_t argcount = instruction->call.arguments.size;
-      if (argcount >= argument_register_count) {
-        switch (context->call_convention) {
-        case CG_CALL_CONV_LINUX: {
-          TODO("x86_64 backend doesn't yet support SYSV stack arguments, sorry.");
-        } break;
-        case CG_CALL_CONV_MSWIN: {
+        if (argcount >= argument_register_count) {
           usz i = instruction->call.arguments.size - 1;
           foreach_ptr_rev (IRInstruction *, argument, instruction->call.arguments) {
             if (i < argument_register_count) break;
@@ -1585,8 +1583,8 @@ static void lower(CodegenContext *context) {
 
             --i;
           }
-        } break;
         }
+      } break;
       }
     } break;
 
