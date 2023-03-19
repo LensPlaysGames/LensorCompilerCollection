@@ -32,6 +32,8 @@
        element##_ptr < (vector).data + (vector).size && (element = *element##_ptr, 1); /* "=", not "=="! */ \
        element##_ptr++)
 
+#define foreach_rev(type, element, vector) \
+  for (type *element = (vector).data + (vector).size - 1; element >= (vector).data; --element)
 #define foreach_ptr_rev(type, element, vector)                                                                  \
   for (type *element##_ptr = (vector).data + ((vector).size - 1), *element = NULL;                              \
        element##_ptr >= (vector).data && (element = *element##_ptr, 1); /* "=", not "=="! */                    \
