@@ -1602,14 +1602,14 @@ static void lower(CodegenContext *context) {
           INSTRUCTION(offset, IR_IMMEDIATE);
           offset->type = t_integer;
 
-          // FIXME: functions with different stack frames need different things done here, ig.
-          // RBP of the frame pointer.
-          offset->imm += 8;
+          // FIXME: Tail calls, leaf functions, etc. may alter the size of the stack frame here.
+          // Skip pushed RBP and return addess.
+          offset->imm += 16;
 
           usz i = instruction->parent_block->function->type->function.parameters.size - 1;
           foreach_rev (Parameter, param, instruction->parent_block->function->type->function.parameters) {
-            offset->imm += type_sizeof(param->type);
             if (i <= parameter_index) break;
+            offset->imm += type_sizeof(param->type);
             --i;
           }
           insert_instruction_before(offset, instruction);
