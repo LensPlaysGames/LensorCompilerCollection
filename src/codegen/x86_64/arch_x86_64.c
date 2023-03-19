@@ -849,37 +849,14 @@ static void codegen_prologue(CodegenContext *cg_context, IRFunction *f) {
     case FRAME_NONE: break;
 
     case FRAME_FULL: {
-      size_t locals_offset = f->locals_total_size;
-
       femit_reg(cg_context, I_PUSH, REG_RBP);
       femit_reg_to_reg(cg_context, I_MOV, REG_RSP, r64, REG_RBP, r64);
-      switch (cg_context->call_convention) {
-        ///> Even if the called function has fewer than 4 parameters, these 4
-        ///> stack locations are effectively owned by the called function, and
-        ///> may be used by the called function for other purposes besides
-        ///> saving parameter register values.
-        ///  – https://learn.microsoft.com/en-us/cpp/build/stack-usage?view=msvc-170
-        case CG_CALL_CONV_MSWIN:
-          locals_offset += 4 * 8 + 8;
-          break;
-        case CG_CALL_CONV_LINUX: break;
-        default: ICE("Unknown calling convention");
-      }
-      femit_imm_to_reg(cg_context, I_SUB, (i64) locals_offset, REG_RSP, r64);
+      femit_imm_to_reg(cg_context, I_SUB, (i64) f->locals_total_size, REG_RSP, r64);
     } break;
 
     case FRAME_MINIMAL: {
-      switch (cg_context->call_convention) {
-        /// See comment above.
-        case CG_CALL_CONV_MSWIN:
-          femit_imm_to_reg(cg_context, I_SUB, 4 * 8 + 8, REG_RSP, r64);
-          break;
-        case CG_CALL_CONV_LINUX:
-          femit_reg(cg_context, I_PUSH, REG_RBP);
-          break;
-        default: ICE("Unknown calling convention");
-      }
-    }
+      femit_reg(cg_context, I_PUSH, REG_RBP);
+    } break;
   }
 }
 
@@ -895,17 +872,8 @@ static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
     } break;
 
     case FRAME_MINIMAL: {
-      switch (cg_context->call_convention) {
-        /// See comment above.
-        case CG_CALL_CONV_MSWIN:
-          femit_imm_to_reg(cg_context, I_ADD, 4 * 8 + 8, REG_RSP, r64);
-          break;
-        case CG_CALL_CONV_LINUX:
-          femit_reg(cg_context, I_POP, REG_RBP);
-          break;
-        default: ICE("Unknown calling convention");
-      }
-    }
+      femit_reg(cg_context, I_POP, REG_RBP);
+    } break;
   }
 }
 
@@ -1054,16 +1022,29 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
         // TODO: Don't push registers that are used for arguments.
         femit_reg(context, I_PUSH, i);
 
+    usz bytes_pushed = 0;
     // Shadow stack
-    if (context->call_convention == CG_CALL_CONV_MSWIN)
+    if (context->call_convention == CG_CALL_CONV_MSWIN) {
       femit_imm_to_reg(context, I_SUB, 32, REG_RSP, r64);
+      bytes_pushed += 32;
+    }
+
+    // Push argument addresses, if need be.
+    foreach_ptr (IRInstruction *, arg, inst->call.arguments) {
+      // If argument is passed on stack due to ABI.
+      if (arg->kind == IR_ALLOCA) {
+        femit_reg(context, I_PUSH, REG_RBP);
+        bytes_pushed += 8;
+        femit_imm_to_mem(context, I_SUB, (i64)arg->alloca.offset, REG_RSP, 0);
+      }
+    }
 
     if (inst->call.is_indirect) femit_reg(context, I_CALL, inst->call.callee_instruction->result);
     else femit_name(context, I_CALL, inst->call.callee_function->name.data);
 
-    // Restore shadow stack
-    if (context->call_convention == CG_CALL_CONV_MSWIN)
-      femit_imm_to_reg(context, I_ADD, 32, REG_RSP, r64);
+    // Restore stack
+    if (bytes_pushed)
+      femit_imm_to_reg(context, I_ADD, bytes_pushed, REG_RSP, r64);
 
     // Restore caller saved registers used in called function.
     for (Register i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i)
@@ -1620,18 +1601,30 @@ static void lower(CodegenContext *context) {
 
           INSTRUCTION(offset, IR_IMMEDIATE);
           offset->type = t_integer;
+
+          // FIXME: functions with different stack frames need different things done here, ig.
+          // RBP of the frame pointer.
+          offset->imm += 8;
+
           usz i = instruction->parent_block->function->type->function.parameters.size - 1;
           foreach_rev (Parameter, param, instruction->parent_block->function->type->function.parameters) {
-            if (i == parameter_index) break;
             offset->imm += type_sizeof(param->type);
+            if (i <= parameter_index) break;
             --i;
           }
           insert_instruction_before(offset, instruction);
 
-          instruction->kind = IR_ADD;
-          instruction->lhs = rbp;
-          instruction->rhs = offset;
-          instruction->type = ast_make_type_pointer(context->ast, instruction->type->source_location, instruction->type);
+          INSTRUCTION(address, IR_ADD);
+          address->lhs = rbp;
+          mark_used(rbp, address);
+          address->rhs = offset;
+          mark_used(offset, address);
+          address->type = ast_make_type_pointer(context->ast, instruction->type->source_location, instruction->type);
+          insert_instruction_before(address, instruction);
+
+          instruction->kind = IR_LOAD;
+          instruction->operand = address;
+          mark_used(address, instruction);
         } else {
           instruction->kind = IR_REGISTER;
           instruction->result = argument_registers[instruction->imm];
