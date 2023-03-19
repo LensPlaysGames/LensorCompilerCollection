@@ -1,0 +1,72 @@
+;; libc Declarations
+puts: ext integer(str: @byte)
+
+;; SDL2 Declarations
+SDL_Window :> type {}
+SDL_Surface :> type {}
+SDL_Event :> type {
+  data: byte[128]
+}
+sdl_event_type: integer(event: SDL_Event) {
+  out :: @(event.data[0]) as integer
+  out := out | (@(event.data[1]) as integer << 8)
+  out := out | (@(event.data[2]) as integer << 16)
+  out := out | (@(event.data[3]) as integer << 24)
+  out
+}
+SDL_EVENT_QUIT :: 0x100
+SDL_PollEvent: ext integer(event: @SDL_Event)
+SDL_INIT_VIDEO :: 0x20
+SDL_WINDOWPOS_UNDEFINED :: 0x1FFF0000
+;; TODO:
+;;   return-value: 4-byte signed int
+;;   paramter: 4-byte unsigned int
+SDL_Init: ext integer(flags: integer)
+SDL_Quit: ext void()
+SDL_GetError: ext @byte()
+;; TODO: integer type fixup
+SDL_CreateWindow: ext @SDL_Window(
+  name: @byte
+  x: integer
+  y: integer
+  w: integer
+  h: integer
+  flags: integer
+)
+SDL_DestroyWindow: ext void(w: @SDL_Window)
+
+window: @SDL_Window
+
+if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+  puts("Failed to initialise SDL"[0])
+  ;; TODO: Early return
+} else {
+  ;; SDL2 initalised; create window
+  window := SDL_CreateWindow(
+    "SDL Tutorial"[0],
+    SDL_WINDOWPOS_UNDEFINED,
+    SDL_WINDOWPOS_UNDEFINED,
+    640, 480,
+    0
+  )
+  if window = 0 as @SDL_Window {
+    puts("Window could not be created!\n"[0])
+    puts(SDL_GetError())
+  } else {
+    ;; SDL2 initialised, window created; enter event loop
+
+    event: SDL_Event
+    quit: integer = 0
+    while quit = 0 {
+      while SDL_PollEvent(&event) {
+        if sdl_event_type(event) = SDL_EVENT_QUIT {
+          quit := 1
+        }
+      }
+    }
+
+    SDL_DestroyWindow(window)
+  }
+  SDL_Quit()
+}
+0
