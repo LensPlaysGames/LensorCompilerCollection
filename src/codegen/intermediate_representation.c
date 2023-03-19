@@ -148,6 +148,41 @@ void ir_free_instruction_data(IRInstruction *i) {
   vector_delete(i->users);
 }
 
+const char *ir_irtype_string(IRType t) {
+  STATIC_ASSERT(IR_COUNT == 38, "Handle all instruction types.");
+  switch (t) {
+  case IR_IMMEDIATE: return "imm";
+  case IR_LIT_INTEGER: return "lit.int";
+  case IR_LIT_STRING: return "lit.str";
+  case IR_CALL: return "call";
+  case IR_STATIC_REF: return ".ref";
+  case IR_FUNC_REF: return "ref";
+
+#define PRINT_BINARY_INSTRUCTION(enumerator, name)  \
+    case IR_##enumerator: return #name;
+    ALL_BINARY_INSTRUCTION_TYPES(PRINT_BINARY_INSTRUCTION)
+#undef PRINT_BINARY_INSTRUCTION
+
+  case IR_NOT: return "not";
+  case IR_ZERO_EXTEND: return "z.ext";
+  case IR_SIGN_EXTEND: return "s.ext";
+  case IR_TRUNCATE: return "truncate";
+  case IR_BITCAST: return "bitcast";
+  case IR_COPY: return "copy";
+  case IR_PARAMETER: return ".param";
+  case IR_RETURN: return "ret";
+  case IR_BRANCH: return "br";
+  case IR_BRANCH_CONDITIONAL: return "br.cond";
+  case IR_PHI: return "phi";
+  case IR_LOAD: return "load";
+  case IR_STORE: return "store";
+  case IR_REGISTER: return ".reg";
+  case IR_ALLOCA: return "alloca";
+  case IR_UNREACHABLE: return "unreachable";
+  default: ICE("Invalid IRType %d\n", t);
+  }
+}
+
 #define INSERT(instruction) ir_insert(context, (instruction))
 
 void ir_femit_instruction
