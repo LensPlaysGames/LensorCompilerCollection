@@ -822,9 +822,15 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Typecheck each child of the root.
     case NODE_ROOT:
-      foreach_ptr (Node *, node, expr->root.children)
+      foreach_ptr (Node *, node, expr->root.children) {
         if (!typecheck_expression(ast, node))
           return false;
+
+        if (node != vector_back(expr->root.children) && node->kind == NODE_BINARY && node->binary.op == TK_EQ)
+          ERR(node->source_location,
+              "Comparison at top level; result unused. Did you mean to assign using %s?",
+              token_type_to_string(TK_COLON_EQ));
+      }
 
       /// Replace function references in the root with the function nodes
       /// iff the source location of the function is the same as that of
@@ -953,9 +959,16 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Typecheck all children and set the type of the block
     /// to the type of the last child. TODO: noreturn?
     case NODE_BLOCK: {
-      foreach_ptr (Node *, node, expr->block.children)
+      foreach_ptr (Node *, node, expr->block.children) {
         if (!typecheck_expression(ast, node))
           return false;
+
+        if (node != vector_back(expr->block.children) && node->kind == NODE_BINARY && node->binary.op == TK_EQ)
+          ERR(node->source_location,
+              "Comparison result unused. Did you mean to assign using %s?",
+              token_type_to_string(TK_COLON_EQ));
+
+      }
       expr->type = expr->block.children.size ? vector_back(expr->block.children)->type : t_void;
     } break;
 
