@@ -851,7 +851,8 @@ static void codegen_prologue(CodegenContext *cg_context, IRFunction *f) {
     case FRAME_FULL: {
       femit_reg(cg_context, I_PUSH, REG_RBP);
       femit_reg_to_reg(cg_context, I_MOV, REG_RSP, r64, REG_RBP, r64);
-      femit_imm_to_reg(cg_context, I_SUB, (i64) f->locals_total_size, REG_RSP, r64);
+      if (!optimise || f->locals_total_size)
+        femit_imm_to_reg(cg_context, I_SUB, (i64) f->locals_total_size, REG_RSP, r64);
     } break;
 
     case FRAME_MINIMAL: {
