@@ -5,6 +5,6 @@ foo : integer(xy : integer[2]) {
 }
 
 arr : integer[2]
-@arr[0] = 69
-@arr[1] = 420
+@arr[0] := 69
+@arr[1] := 420
 foo(arr)
