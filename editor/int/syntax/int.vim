@@ -6,9 +6,9 @@ syntax keyword intTodo contained TODO FIXME XXX NOTE
 
 syntax region intCommentLine start=";" end="$" display contains=intTodo
 
-" syntax match intSpecial contained "\\%[nr\\\"\'t]" display
+syntax match intSpecial contained "\\[nr\\\"\'t]" display
 
-syntax region intString start="\"" end="\"" contains=intSpecial
+syntax region intString start="\"" skip="\\\"" end="\"" contains=intSpecial
 
 syntax keyword intPrimitiveTypes
   \ integer
@@ -28,7 +28,7 @@ highlight default link intKeywords       Keyword
 highlight default link intNumber         Number
 highlight default link intCommentLine    Comment
 highlight default link intOperators      Operator
-" highlight default link intSpecial        Special
+highlight default link intSpecial        Special
 highlight default link intString         String
 
 let b:current_syntax = 'int'
