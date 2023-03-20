@@ -463,7 +463,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
         IRInstruction *var_decl = lhs->var->val.node->address;
-        if (var_decl->kind == IR_STATIC_REF || var_decl->kind == IR_ALLOCA)
+        if (var_decl->kind == IR_PARAMETER || var_decl->kind == IR_STATIC_REF || var_decl->kind == IR_ALLOCA)
           if (type_is_pointer(var_decl->type) && type_is_pointer(var_decl->type->pointer.to))
             subs_lhs = ir_load(ctx, var_decl);
           else subs_lhs = var_decl;
