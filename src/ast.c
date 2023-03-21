@@ -607,6 +607,11 @@ bool type_is_array(Type *type) {
   return t && t->kind == TYPE_ARRAY;
 }
 
+bool type_is_struct(Type *type) {
+  Type *t = type_canonical(type);
+  return t && t->kind == TYPE_STRUCT;
+}
+
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================

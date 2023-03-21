@@ -673,6 +673,9 @@ NODISCARD bool type_is_pointer(Type *type);
 /// Check if a type is of array type.
 NODISCARD bool type_is_array(Type *type);
 
+/// Check if a type is of struct type.
+NODISCARD bool type_is_struct(Type *type);
+
 
 /// ===========================================================================
 ///  Miscellaneous AST functions.
