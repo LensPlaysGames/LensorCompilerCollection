@@ -1455,12 +1455,12 @@ static bool lower_load(CodegenContext *context, IRInstruction *instruction) {
     alloca->type = ast_make_type_pointer(context->ast, type->source_location, type);
     ir_set_backend_flag(alloca, STORE_UNDERLYING);
 
-    // Replace `load` with `alloca`.
-    ir_replace_uses(instruction, alloca);
     insert_instruction_before(alloca, instruction);
 
     emit_memcpy(context, alloca, instruction->operand, type_sizeof(instruction->type), instruction);
 
+    // Replace `load` with `alloca`.
+    ir_replace_uses(instruction, alloca);
     ir_remove(instruction);
     return true;
   }
@@ -1507,6 +1507,96 @@ static IRInstruction *alloca_copy_of(CodegenContext *context, IRInstruction *cop
   return alloca;
 }
 
+typedef enum SysVArgumentClass {
+  SYSV_REGCLASS_INVALID,
+  SYSV_REGCLASS_INTEGER,
+  SYSV_REGCLASS_SSE,
+  SYSV_REGCLASS_SSEUP,
+  SYSV_REGCLASS_x87,
+  SYSV_REGCLASS_x87UP,
+  SYSV_REGCLASS_COMPLEX_x87,
+  SYSV_REGCLASS_NO_CLASS,
+  SYSV_REGCLASS_MEMORY,
+} SysVArgumentClass;
+
+SysVArgumentClass sysv_classify_argument(Type *given_type) {
+  Type *type = type_canonical(given_type);
+  // TODO: Use type_is_integer instead of t_integer comparisons, etc.
+  if (type_is_pointer(type) ||
+      type == t_integer ||
+      type == t_byte) {
+    return SYSV_REGCLASS_INTEGER;
+  }
+  if (type_is_array(type) || type_is_struct(type)) {
+    usz size = type_sizeof(type);
+    // If the size of an object is larger than four eightbytes, or it
+    // contains unaligned fields, it has class MEMORY.
+    // TODO: Check for unaligned fields.
+    if (size > 32) {
+      return SYSV_REGCLASS_MEMORY;
+    }
+    // If the size of the aggregate exceeds a single eightbyte,
+    // each is classified separately. Each eightbyte gets
+    // initialized to class NO_CLASS.
+    else if (size > 8) {
+      // TODO: If type_is_array(type) ... classify basetype ...
+      if (type_is_array(type)) {
+        // Classify base type of array.
+        SysVArgumentClass base_class = sysv_classify_argument(type->array.of);
+        if (type->array.size == 1) return base_class;
+        usz base_size = type_sizeof(type->array.of);
+        // If an aggregate exceeds two eightbytes, the whole argument is passed in memory.
+        if (type->array.size * base_size > 16) return SYSV_REGCLASS_MEMORY;
+        // Otherwise, the aggregate is less than or equal to two
+        // eightbytes, and can be passed in one or two registers.
+        return SYSV_REGCLASS_INTEGER;
+      }
+      // TODO: If type_is_struct(type) ... classify each member ...
+      TODO("Classify SysV struct type arguments.");
+    }
+    // Anything 1, 2, 4, or 8 bytes can go in a register.
+    else {
+      return SYSV_REGCLASS_INTEGER;
+    }
+  }
+  return SYSV_REGCLASS_INVALID;
+}
+
+/// @return How many registers an argument takes up.
+usz sysv_argument_register_count_x86_64(CodegenContext *context, Type *function, usz parameter_index) {
+  ASSERT(context->call_convention == CG_CALL_CONV_LINUX, "Don't call sysv_* things unless you are using the SYSV ABI!!");
+  ASSERT(function->kind == TYPE_FUNCTION);
+
+  if (parameter_index >= function->function.parameters.size)
+    ICE("Parameter index out of bounds");
+
+  Parameter *parameter = function->function.parameters.data + parameter_index;
+
+  SysVArgumentClass class = SYSV_REGCLASS_INVALID;
+  class = sysv_classify_argument(parameter->type);
+  ASSERT(class != SYSV_REGCLASS_INVALID, "Could not classify argument according to SYSV ABI, sorry");
+
+  if (class == SYSV_REGCLASS_INTEGER) {
+    if (type_sizeof(parameter->type) > 8) return 2;
+    return 1;
+  }
+  return 0;
+}
+
+usz sysv_argument_register_index_x86_64(CodegenContext *context, Type *function, usz parameter_index) {
+  ASSERT(context->call_convention == CG_CALL_CONV_LINUX, "Don't call sysv_* things unless you are using the SYSV ABI!!");
+  ASSERT(function->kind == TYPE_FUNCTION);
+
+  if (parameter_index >= function->function.parameters.size)
+    ICE("Parameter index out of bounds");
+
+  usz argument_register_offset = 0;
+  for (usz i = 0; i < parameter_index; ++i) {
+    argument_register_offset += sysv_argument_register_count_x86_64(context, function, i);
+  }
+  return argument_register_offset;
+}
+
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
   FOREACH_INSTRUCTION (context) {
@@ -1532,8 +1622,64 @@ static void lower(CodegenContext *context) {
 
       switch (context->call_convention) {
       case CG_CALL_CONV_LINUX: {
-        if (argcount >= argument_register_count)
-          TODO("x86_64 backend doesn't yet support SYSV stack arguments, sorry.");
+        Type *function_type = NULL;
+        function_type = instruction->call.callee_function->type;
+        ASSERT(function_type->kind == TYPE_FUNCTION);
+
+        Vector(usz) sixteen_bytes_that_need_split = {0};
+        foreach_index (i, function_type->function.parameters) {
+          Parameter *parameter = function_type->function.parameters.data + i;
+          SysVArgumentClass class = sysv_classify_argument(parameter->type);
+          if (class == SYSV_REGCLASS_INTEGER && type_sizeof(parameter->type) > 8)
+            vector_push(sixteen_bytes_that_need_split, i);
+        }
+
+        foreach_rev (usz, i, sixteen_bytes_that_need_split) {
+          IRInstruction *argument = instruction->call.arguments.data[*i];
+
+          // Load first eightbyte of the parameter.
+          INSTRUCTION(first_eightbyte_addr, IR_COPY);
+          first_eightbyte_addr->operand = argument;
+          first_eightbyte_addr->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
+          insert_instruction_before(first_eightbyte_addr, instruction);
+
+          INSTRUCTION(load1, IR_LOAD);
+          load1->operand = first_eightbyte_addr;
+          load1->type = t_integer;
+          insert_instruction_before(load1, instruction);
+
+          // Load second eightbyte of the parameter.
+          // FIXME: Second eightbyte may not be fully eight bytes.
+          ASSERT(type_sizeof(argument->type->pointer.to) == 16,
+                 "SysV ABI requires alignment of a multiple of 16 for aggregate types from (8 to 16]: %T",
+                 argument->type->pointer.to);
+          INSTRUCTION(offset, IR_IMMEDIATE);
+          offset->type = t_integer;
+          offset->imm = 8;
+          insert_instruction_before(offset, instruction);
+
+          INSTRUCTION(second_eightbyte_addr, IR_ADD);
+          second_eightbyte_addr->type = first_eightbyte_addr->type;
+          second_eightbyte_addr->lhs = first_eightbyte_addr;
+          mark_used(first_eightbyte_addr, second_eightbyte_addr);
+          second_eightbyte_addr->rhs = offset;
+          mark_used(offset, second_eightbyte_addr);
+          insert_instruction_before(second_eightbyte_addr, instruction);
+
+          INSTRUCTION(load2, IR_LOAD);
+          load2->operand = second_eightbyte_addr;
+          load2->type = t_integer;
+          insert_instruction_before(load2, instruction);
+
+          // Remove argument from call, and replace with two new arguments.
+          ir_remove_use(argument, instruction);
+          vector_remove_index(instruction->call.arguments, *i);
+          vector_insert_after(instruction->call.arguments, load1, *i);
+          mark_used(load1, instruction);
+          vector_insert_after(instruction->call.arguments, load2, *i);
+          mark_used(load2, instruction);
+
+        }
         // TODO: sysv recursive algorithm stuff, or whatever.
       } break;
       case CG_CALL_CONV_MSWIN: {
@@ -1563,12 +1709,121 @@ static void lower(CodegenContext *context) {
       switch (context->call_convention) {
 
       case CG_CALL_CONV_LINUX: {
-        if (instruction->type->kind == TYPE_ARRAY || instruction->type->kind == TYPE_STRUCT
-            || type_sizeof(instruction->type) > 8 || instruction->imm >= argument_register_count) {
-          TODO("x86_64 backend does not yet support passing complex parameters with sysv ABI, sorry.");
+        Type *type = type_canonical(instruction->type);
+        if (parameter_is_in_register_x86_64(context, instruction->parent_block->function, instruction->imm)) {
+          // Classify argument into register class.
+          // NOTE: This has probably already been done, and we could
+          // cache it and use that computed value, if we have somewhere
+          // to store it.
+          SysVArgumentClass class = SYSV_REGCLASS_INVALID;
+          class = sysv_classify_argument(instruction->type);
+          ASSERT(class != SYSV_REGCLASS_INVALID, "Could not classify argument according to SYSV ABI, sorry");
+          switch(class) {
+          case SYSV_REGCLASS_INTEGER: {
+            usz size = type_sizeof(instruction->type);
+            if (size > 8) {
+              ASSERT(size <= 16, "Can only pass things that are two-eightbytes or less in general purpose registers.");
+
+              INSTRUCTION(eightbyte1, IR_REGISTER);
+              usz argument_register_index = sysv_argument_register_index_x86_64(context, instruction->parent_block->function->type, instruction->imm);
+              ASSERT(argument_register_index + 1 < argument_register_count);
+              eightbyte1->result = argument_registers[argument_register_index];
+              eightbyte1->type = t_integer;
+              insert_instruction_before(eightbyte1, instruction);
+
+              INSTRUCTION(eightbyte2, IR_REGISTER);
+              eightbyte2->result = argument_registers[argument_register_index + 1];
+              eightbyte2->type = t_integer;
+              insert_instruction_before(eightbyte2, instruction);
+
+              INSTRUCTION(alloca, IR_ALLOCA);
+              alloca->alloca.size = 16;
+              alloca->type = ast_make_type_pointer(context->ast, instruction->type->source_location, instruction->type);
+              insert_instruction_before(alloca, instruction);
+
+              // Store first eight bytes from parameter register into
+              // newly allocated local variable.
+              INSTRUCTION(store1, IR_STORE);
+              store1->store.addr = alloca;
+              mark_used(alloca, store1);
+              store1->store.value = eightbyte1;
+              mark_used(eightbyte1, store1);
+              insert_instruction_before(store1, instruction);
+
+              // Increment address
+              INSTRUCTION(offset, IR_IMMEDIATE);
+              offset->type = t_integer;
+              offset->imm = 8;
+              insert_instruction_before(offset, instruction);
+
+              INSTRUCTION(address, IR_ADD);
+              address->lhs = alloca;
+              mark_used(alloca, address);
+              address->rhs = offset;
+              mark_used(offset, address);
+              address->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
+              insert_instruction_before(address, instruction);
+
+              // Store second eightbyte.
+              INSTRUCTION(store2, IR_STORE);
+              store2->kind = IR_STORE;
+              store2->store.addr = address;
+              mark_used(address, store2);
+              store2->store.value = eightbyte2;
+              mark_used(eightbyte2, store2);
+              insert_instruction_before(store2, instruction);
+
+              instruction->kind = IR_LOAD;
+              instruction->operand = alloca;
+
+              lower_load(context, instruction);
+            } else {
+              instruction->kind = IR_REGISTER;
+              instruction->result = argument_registers[instruction->imm];
+            }
+          } break;
+          case SYSV_REGCLASS_MEMORY: {
+            INSTRUCTION(rbp, IR_REGISTER);
+            rbp->result = REG_RBP;
+            rbp->type = t_integer;
+            insert_instruction_before(rbp, instruction);
+
+            usz parameter_index = instruction->imm;
+
+            INSTRUCTION(offset, IR_IMMEDIATE);
+            offset->type = t_integer;
+
+            // FIXME: Tail calls, leaf functions, etc. may alter the size of the stack frame here.
+            // Skip pushed RBP and return addess.
+            offset->imm += 16;
+
+            usz i = instruction->parent_block->function->type->function.parameters.size - 1;
+            foreach_rev (Parameter, param, instruction->parent_block->function->type->function.parameters) {
+              if (i <= parameter_index) break;
+              offset->imm += type_sizeof(param->type);
+              --i;
+            }
+            insert_instruction_before(offset, instruction);
+
+            INSTRUCTION(address, IR_ADD);
+            address->lhs = rbp;
+            mark_used(rbp, address);
+            address->rhs = offset;
+            mark_used(offset, address);
+            address->type = ast_make_type_pointer(context->ast, instruction->type->source_location, instruction->type);
+            insert_instruction_before(address, instruction);
+
+            instruction->kind = IR_LOAD;
+            instruction->operand = address;
+            mark_used(address, instruction);
+
+            lower_load(context, instruction);
+
+          } break;
+          default:
+            TODO("Handle lowering of SYSV Register Classification: %d\n", class);
+          }
         }
-        instruction->kind = IR_REGISTER;
-        instruction->result = argument_registers[instruction->imm];
       } break;
 
       case CG_CALL_CONV_MSWIN: {
@@ -1767,10 +2022,7 @@ void mangle_function_name(IRFunction *function) {
   function->name = (string){buf.data, buf.size};
 }
 
-void codegen_lower_x86_64(CodegenContext *context) {
-  // IR fixup for this specific backend.
-  lower(context);
-}
+void codegen_lower_x86_64(CodegenContext *context) { lower(context); }
 
 bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *function, usz parameter_index) {
   if (parameter_index >= function->type->function.parameters.size)
@@ -1786,8 +2038,13 @@ bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *functi
   } return true;
 
   case CG_CALL_CONV_LINUX: {
-    TODO("x86_64 backend does not yet support determining sysv ABI specifics for parameters, sorry");
-  } return true;
+    SysVArgumentClass class = SYSV_REGCLASS_INVALID;
+    class = sysv_classify_argument(parameter->type);
+    ASSERT(class != SYSV_REGCLASS_INVALID, "Could not classify argument according to SYSV ABI, sorry");
+    if (class == SYSV_REGCLASS_INTEGER) return true;
+    if (class == SYSV_REGCLASS_MEMORY) return false;
+    TODO("Handle SYSV Register Classification: %d\n", class);
+  }
 
   default:
     ICE("Unhandled calling convention: %d\n", context->call_convention);
