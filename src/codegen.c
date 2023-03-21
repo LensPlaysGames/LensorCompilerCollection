@@ -706,6 +706,7 @@ void codegen_function(CodegenContext *ctx, Node *node) {
 
   /// Next, emit all parameter declarations and store
   /// the initial parameter values in them.
+  // TODO: Make this backend dependent.
   foreach_index(i, node->function.param_decls) {
     if (parameter_is_in_register(ctx, ctx->function, i)) {
       /// Allocate a variable for the parameter.
@@ -849,6 +850,11 @@ bool codegen
   }
 
   codegen_lower(context);
+
+  if (debug_ir) {
+    print("After lowering:\n");
+    ir_femit(stdout, context);
+  }
 
   codegen_emit(context);
 
