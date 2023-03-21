@@ -1,0 +1,9 @@
+; 101
+
+bytes::"some bytes"
+
+foo: byte(a: byte[11]) {
+  @a[3]
+}
+
+foo(bytes)
