@@ -924,6 +924,11 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         Parameter *param = &callee->type->function.parameters.data[i];
         Node *arg = expr->call.arguments.data[i];
         if (!convertible(param->type, arg->type)) ERR_NOT_CONVERTIBLE(arg->source_location, param->type, arg->type);
+        if (!type_equals(param->type, arg->type)) {
+          // Insert cast from argument type to parameter type, as they are convertible.
+          Node *cast = ast_make_cast(ast, arg->source_location, param->type, arg);
+          expr->call.arguments.data[i] = cast;
+        }
       }
 
       /// Set the type of the call to the return type of the callee.
