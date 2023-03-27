@@ -202,6 +202,11 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
     lval->address = lval->var->val.node->address;
     break;
 
+  case NODE_CAST: {
+    codegen_lvalue(ctx, lval->cast.value);
+    lval->address = lval->cast.value->address;
+  } break;
+
   // TODO: String literals are lvalues...
 
   /* TODO: references
