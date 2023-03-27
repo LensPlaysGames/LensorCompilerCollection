@@ -5,7 +5,7 @@
   - [x] Operator `as`.
   - [x] Vector macros should be snake_case.
   - [ ] LLVM_PATH env var or something in CMakeLists.txt rather than `find_package()`?
-  - [ ] `integer`/`byte`/`void` should be keywords (and terminals in the grammar).
+  - [x] `integer`/`byte`/`void` should be keywords (and terminals in the grammar).
   - [ ] `i8/u8/i16/u16/i32/u32/i64/u64`
   - [ ] Early `return`
     - [ ] Parsing
