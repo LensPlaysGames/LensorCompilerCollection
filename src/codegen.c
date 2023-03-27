@@ -397,8 +397,14 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
     /// Emit the arguments.
     foreach_ptr (Node*, arg, expr->call.arguments) {
-      codegen_expr(ctx, arg);
-      ir_add_function_call_argument(ctx, call, arg->ir);
+      if (type_is_reference(arg->type)) {
+        codegen_lvalue(ctx, arg);
+        ir_add_function_call_argument(ctx, call, arg->address);
+      }
+      else {
+        codegen_expr(ctx, arg);
+        ir_add_function_call_argument(ctx, call, arg->ir);
+      }
     }
 
     ir_insert(ctx, call);
@@ -708,9 +714,13 @@ void codegen_function(CodegenContext *ctx, Node *node) {
   /// the initial parameter values in them.
   // TODO: Make this backend dependent.
   foreach_index(i, node->function.param_decls) {
-    if (parameter_is_in_register(ctx, ctx->function, i)) {
+    Node *decl = node->function.param_decls.data[i];
+    // TODO: We may want to create a pointer parameter here? I don't
+    // even know at this point.
+    if (type_is_reference(decl->type)) {
+      node->function.param_decls.data[i]->address = ir_parameter(ctx, i);
+    } else if (parameter_is_in_register(ctx, ctx->function, i)) {
       /// Allocate a variable for the parameter.
-      Node *decl = node->function.param_decls.data[i];
       codegen_lvalue(ctx, decl);
 
       /// Store the parameter value in the variable.
