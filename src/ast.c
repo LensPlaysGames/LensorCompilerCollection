@@ -440,6 +440,17 @@ Type *ast_make_type_pointer(
   return type;
 }
 
+/// Create a new reference type.
+Type *ast_make_type_reference(
+    AST *ast,
+    loc source_location,
+    Type *to
+) {
+  Type *type = mktype(ast, TYPE_REFERENCE, source_location);
+  type->reference.to = to;
+  return type;
+}
+
 /// Create a new array type.
 Type *ast_make_type_array(
     AST *ast,
@@ -488,6 +499,8 @@ static void write_typename(string_buffer *s, const Type *type) {
     return;
   }
 
+  STATIC_ASSERT(TYPE_COUNT == 7, "Exhaustive handling of all type kinds!");
+
   /// Print the type.
   switch (type->kind) {
     default:
@@ -503,11 +516,21 @@ static void write_typename(string_buffer *s, const Type *type) {
       break;
 
     case TYPE_POINTER: {
-      bool func = type->pointer.to->kind == TYPE_FUNCTION;
+      bool needs_wrapped = type->pointer.to->kind == TYPE_FUNCTION ||
+                           type->pointer.to->kind == TYPE_ARRAY;
       format_to(s, "%36@");
-      if (func) format_to(s, "%31(");
+      if (needs_wrapped) format_to(s, "%31(");
       write_typename(s, type->pointer.to);
-      if (func) format_to(s, "%31)");
+      if (needs_wrapped) format_to(s, "%31)");
+    } break;
+
+    case TYPE_REFERENCE: {
+      bool needs_wrapped = type->reference.to->kind == TYPE_FUNCTION ||
+                           type->reference.to->kind == TYPE_ARRAY;
+      format_to(s, "%36&");
+      if (needs_wrapped) format_to(s, "%31(");
+      write_typename(s, type->reference.to);
+      if (needs_wrapped) format_to(s, "%31)");
     } break;
 
     case TYPE_ARRAY:

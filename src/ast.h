@@ -34,9 +34,11 @@ enum TypeKind {
   TYPE_PRIMITIVE,
   TYPE_NAMED,
   TYPE_POINTER,
+  TYPE_REFERENCE,
   TYPE_ARRAY,
   TYPE_FUNCTION,
   TYPE_STRUCT,
+  TYPE_COUNT
 };
 
 /// The type of a token. These are only in this header
@@ -98,6 +100,8 @@ enum TokenType {
   TK_COLON_EQ,
   TK_COLON_COLON,
   TK_COLON_GT,
+
+  TK_COUNT
 };
 
 /// The type of a symbol in the symbol table.
@@ -105,6 +109,7 @@ enum SymbolKind {
   SYM_VARIABLE,
   SYM_FUNCTION,
   SYM_TYPE,
+  SYM_COUNT
 };
 
 /// ===========================================================================
@@ -280,9 +285,11 @@ typedef struct TypePrimitive {
 } TypePrimitive;
 
 /// Pointer type.
+/// Reference type.
 typedef struct TypePointer {
   Type *to;
 } TypePointer;
+typedef TypePointer TypeReference;
 
 /// Array type.
 typedef struct TypeArray {
@@ -318,6 +325,7 @@ struct Type {
     TypePrimitive primitive;
     TypeNamed named;
     TypePointer pointer;
+    TypeReference reference;
     TypeArray array;
     TypeFunction function;
     TypeStruct structure;
@@ -575,6 +583,13 @@ Type *ast_make_type_named(
 
 /// Create a new pointer type.
 Type *ast_make_type_pointer(
+    AST *ast,
+    loc source_location,
+    Type *to
+);
+
+/// Create a new reference type.
+Type *ast_make_type_reference(
     AST *ast,
     loc source_location,
     Type *to
