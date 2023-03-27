@@ -862,7 +862,7 @@ static Type *parse_type(Parser *p) {
 
   /// Alternatively, we allow any type, enclosed in parens.
   case TK_LPAREN: {
-    // Yeet "(" and pase the type.
+    // Yeet "(" and parse the type.
     next_token(p);
     out = parse_type(p);
 
