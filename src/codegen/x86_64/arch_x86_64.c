@@ -1971,7 +1971,7 @@ static size_t interfering_regs(IRInstruction *instruction) {
 static void mangle_type_to(string_buffer *buf, Type *t) {
   ASSERT(t);
   switch (t->kind) {
-    default: UNREACHABLE();
+    default: TODO("Handle type kind %d in type mangling!", (int)t->kind);
 
     case TYPE_STRUCT:
       if (t->structure.decl->struct_decl->name.size)
@@ -1995,6 +1995,11 @@ static void mangle_type_to(string_buffer *buf, Type *t) {
     case TYPE_POINTER:
       format_to(buf, "P");
       mangle_type_to(buf, t->pointer.to);
+      break;
+
+    case TYPE_REFERENCE:
+      format_to(buf, "R");
+      mangle_type_to(buf, t->reference.to);
       break;
 
     case TYPE_ARRAY:
