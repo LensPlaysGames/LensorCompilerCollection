@@ -871,6 +871,18 @@ static Type *parse_type(Parser *p) {
     consume(p, TK_RPAREN);
   } break;
 
+  // Reference
+  case TK_AMPERSAND: {
+    // Save start location of type and yeet "&"
+    loc ref_type_loc = p->tok.source_location;
+    next_token(p);
+    out = parse_type(p);
+    // Set end location of type
+    ref_type_loc.end = out->source_location.end;
+
+    out = ast_make_type_reference(p->ast, ref_type_loc, out);
+  } break;
+
   // Builtin types
   case TK_VOID: {
     out = t_void;
