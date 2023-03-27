@@ -649,6 +649,16 @@ NODISCARD Type *type_last_alias(Type *type);
  */
 NODISCARD bool type_is_incomplete(Type *type);
 
+/// Result type for the function below.
+typedef struct IncompleteResult {
+  bool incomplete;
+  bool equal;
+} IncompleteResult;
+/// Compare two possibly incomplete types.
+/// `a` and `b` must be the last alias of their corresponding types.
+NODISCARD IncompleteResult compare_incomplete(Type *a, Type *b);
+
+
 /** Same as type_is_incomplete() but must be given a canonical type.
  *
  * \see type_canonical()
@@ -676,6 +686,20 @@ NODISCARD bool type_is_array(Type *type);
 /// Check if a type is of struct type.
 NODISCARD bool type_is_struct(Type *type);
 
+/// Check if two canonical types are equal. You probably want to use
+/// `convertible()`
+/// \return Whether the types are equal.
+NODISCARD bool type_equals_canon(Type *a, Type *b);
+
+/// Check if two types are equal.
+/// \return Whether the types are equal.
+NODISCARD bool type_equals(Type *a, Type *b);
+
+/// Check if a canonical type is of any integer type.
+NODISCARD bool type_is_integer_canon(Type *t);
+
+/// Check if a type is of any integer type.
+NODISCARD bool type_is_integer(Type *type);
 
 /// ===========================================================================
 ///  Miscellaneous AST functions.

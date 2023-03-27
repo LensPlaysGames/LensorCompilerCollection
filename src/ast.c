@@ -1164,3 +1164,88 @@ NODISCARD bool is_lvalue(Node *expr) {
   case NODE_UNARY: return expr->unary.op == TK_AT;
   }
 }
+
+bool type_equals_canon(Type *a, Type *b) {
+  ASSERT(a && b);
+  ASSERT(a->kind != TYPE_NAMED);
+  ASSERT(b->kind != TYPE_NAMED);
+
+  if (a == b) return true;
+
+  /// If the type kinds are not the same, the the types are obviously not equal.
+  if (a->kind != b->kind) return false;
+
+  /// Compare the types.
+  switch (a->kind) {
+    default: ICE("Invalid type kind %d", a->kind);
+    case TYPE_NAMED: UNREACHABLE();
+    case TYPE_PRIMITIVE:
+      // t_integer_literal is implicitly equal to t_integer
+      if (a == t_integer_literal) return b == t_integer_literal || b == t_integer;
+      if (b == t_integer_literal) return a == t_integer_literal || a == t_integer;
+      return a == b;
+    case TYPE_POINTER: return type_equals(a->pointer.to, b->pointer.to);
+    case TYPE_ARRAY: return a->array.size == b->array.size && type_equals(a->array.of, b->array.of);
+    case TYPE_FUNCTION: {
+      if (a->function.parameters.size != b->function.parameters.size) return false;
+      if (!type_equals(a->function.return_type, b->function.return_type)) return false;
+      foreach_index(i, a->function.parameters)
+        if (!type_equals(a->function.parameters.data[i].type, b->function.parameters.data[i].type))
+          return false;
+      return true;
+
+    case TYPE_STRUCT:
+      if (a->structure.alignment != b->structure.alignment) return false;
+      if (a->structure.byte_size != b->structure.byte_size) return false;
+      if (a->structure.members.size != b->structure.members.size) return false;
+      foreach_index(i, a->structure.members) {
+        Member a_member = a->structure.members.data[i];
+        Member b_member = a->structure.members.data[i];
+        if (a_member.byte_offset != b_member.byte_offset) return false;
+        if (!type_equals(a_member.type, b_member.type)) return false;
+      }
+      return true;
+    }
+  }
+}
+
+IncompleteResult compare_incomplete(Type *a, Type *b) {
+  if (type_is_incomplete(a) && type_is_incomplete(a)) {
+    /// Void is always equal to itself.
+    if (type_is_void(a) && type_is_void(b)) return (IncompleteResult){.incomplete = true, .equal = true};
+
+    /// If both are named and have the same name, then they’re equal.
+    if (a->kind == TYPE_NAMED && b->kind == TYPE_NAMED && string_eq(a->named->name, b->named->name))
+      return (IncompleteResult){.incomplete = true, .equal = true};
+
+    /// Otherwise, they’re not equal.
+    return (IncompleteResult){.incomplete = true, .equal = false};
+  }
+
+  /// If one is incomplete, the types are not equal.
+  if (type_is_incomplete(a) || type_is_incomplete(b))
+    return (IncompleteResult){.incomplete = true, .equal = false};
+
+  /// Not incomplete.
+  return (IncompleteResult){.incomplete = false, .equal = false};
+}
+
+bool type_equals(Type *a, Type *b) {
+  if (a == b) return true;
+  Type *ta = type_last_alias(a);
+  Type *tb = type_last_alias(b);
+
+  /// If both are incomplete, compare the names.
+  IncompleteResult res = compare_incomplete(ta, tb);
+  if (res.incomplete) return res.equal;
+
+  /// Compare the types.
+  return type_equals_canon(type_canonical(ta), type_canonical(tb));
+}
+
+bool type_is_integer_canon(Type *t) {
+  return t == t_integer || t == t_integer_literal  || t == t_byte;
+}
+bool type_is_integer(Type *type) {
+  return type_is_integer_canon(type_canonical(type));
+}

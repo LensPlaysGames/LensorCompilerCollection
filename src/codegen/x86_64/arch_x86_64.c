@@ -1539,7 +1539,6 @@ SysVArgumentClass sysv_classify_argument(Type *given_type) {
     // each is classified separately. Each eightbyte gets
     // initialized to class NO_CLASS.
     else if (size > 8) {
-      // TODO: If type_is_array(type) ... classify basetype ...
       if (type_is_array(type)) {
         // Classify base type of array.
         SysVArgumentClass base_class = sysv_classify_argument(type->array.of);
