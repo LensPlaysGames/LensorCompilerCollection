@@ -659,6 +659,7 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
   default: ICE("Invalid type kind of type %T", t);
   case TYPE_PRIMITIVE: return true;
   case TYPE_POINTER: return typecheck_type(ast, t->pointer.to);
+  case TYPE_REFERENCE: return typecheck_type(ast, t->reference.to);
   case TYPE_NAMED: {
     if (t->named->val.type)
       return typecheck_type(ast, t->named->val.type);
