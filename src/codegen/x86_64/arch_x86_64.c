@@ -375,6 +375,8 @@ static enum IndirectJumpType negate_jump(enum IndirectJumpType j) {
 }
 
 static void femit_imm_to_reg(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor destination_register, enum RegSize size) {
+  if (inst == I_SUB && immediate == 0) return;
+
   const char *mnemonic    = instruction_mnemonic(context, inst);
   const char *destination = regname(destination_register, size);
   switch (context->dialect) {
