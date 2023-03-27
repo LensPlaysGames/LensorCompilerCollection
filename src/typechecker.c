@@ -1075,8 +1075,6 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           if (!convertible(lhs->type, rhs->type))
             ERR_NOT_CONVERTIBLE(rhs->source_location, lhs->type, rhs->type);
 
-          /// Set the type of the expression to the type of the lhs.
-          //expr->type = lhs->type;
           expr->type = t_void;
           break;
       }
