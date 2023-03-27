@@ -64,6 +64,14 @@ NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
     return -1;
   }
 
+  // A reference type is convertible to it's base type, and vis versa.
+  if (from->kind == TYPE_REFERENCE && to->kind == TYPE_REFERENCE)
+    return convertible_score(from->reference.to, to->reference.to);
+  if (from->kind == TYPE_REFERENCE)
+    return convertible_score(from->reference.to, to);
+  if (to->kind == TYPE_REFERENCE)
+    return convertible_score(from, to->reference.to);
+
   /// Smaller integer types are implicitly convertible to larger
   /// integer types if the type being converted to is signed, or
   /// if the smaller type is unsigned.
