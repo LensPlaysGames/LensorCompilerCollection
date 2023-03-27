@@ -24,109 +24,6 @@
 
 #define ERR_NOT_CONVERTIBLE(where, to, from) ERR(where, "Type '%T' is not convertible to '%T'", from, to)
 
-NODISCARD static bool types_equal(Type *a, Type *b);
-
-/// Check if two canonical types are equal. You probably want to use
-/// `convertible()`
-/// \return Whether the types are equal.
-NODISCARD static bool types_equal_canon(Type *a, Type *b) {
-  ASSERT(a && b);
-  ASSERT(a->kind != TYPE_NAMED);
-  ASSERT(b->kind != TYPE_NAMED);
-
-  if (a == b) return true;
-
-  /// If the type kinds are not the same, the the types are obviously not equal.
-  if (a->kind != b->kind) return false;
-
-  /// Compare the types.
-  switch (a->kind) {
-    default: ICE("Invalid type kind %d", a->kind);
-    case TYPE_NAMED: UNREACHABLE();
-    case TYPE_PRIMITIVE:
-      // t_integer_literal is implicitly equal to t_integer
-      if (a == t_integer_literal) return b == t_integer_literal || b == t_integer;
-      if (b == t_integer_literal) return a == t_integer_literal || a == t_integer;
-      return a == b;
-    case TYPE_POINTER: return types_equal(a->pointer.to, b->pointer.to);
-    case TYPE_ARRAY: return a->array.size == b->array.size && types_equal(a->array.of, b->array.of);
-    case TYPE_FUNCTION: {
-      if (a->function.parameters.size != b->function.parameters.size) return false;
-      if (!types_equal(a->function.return_type, b->function.return_type)) return false;
-      foreach_index(i, a->function.parameters)
-        if (!types_equal(a->function.parameters.data[i].type, b->function.parameters.data[i].type))
-          return false;
-      return true;
-
-    case TYPE_STRUCT:
-      if (a->structure.alignment != b->structure.alignment) return false;
-      if (a->structure.byte_size != b->structure.byte_size) return false;
-      if (a->structure.members.size != b->structure.members.size) return false;
-      foreach_index(i, a->structure.members) {
-        Member a_member = a->structure.members.data[i];
-        Member b_member = a->structure.members.data[i];
-        if (a_member.byte_offset != b_member.byte_offset) return false;
-        if (!types_equal(a_member.type, b_member.type)) return false;
-      }
-      return true;
-    }
-  }
-}
-
-/// Result type for the function below.
-typedef struct IncompleteResult {
-  bool incomplete;
-  bool equal;
-} IncompleteResult;
-
-/// Compare two possibly incomplete types.
-/// `a` and `b` must be the last alias of their corresponding types.
-IncompleteResult compare_incomplete(Type *a, Type *b) {
-  if (type_is_incomplete(a) && type_is_incomplete(a)) {
-    /// Void is always equal to itself.
-    if (type_is_void(a) && type_is_void(b)) return (IncompleteResult){.incomplete = true, .equal = true};
-
-    /// If both are named and have the same name, then they’re equal.
-    if (a->kind == TYPE_NAMED && b->kind == TYPE_NAMED && string_eq(a->named->name, b->named->name))
-      return (IncompleteResult){.incomplete = true, .equal = true};
-
-    /// Otherwise, they’re not equal.
-    return (IncompleteResult){.incomplete = true, .equal = false};
-  }
-
-  /// If one is incomplete, the types are not equal.
-  if (type_is_incomplete(a) || type_is_incomplete(b))
-    return (IncompleteResult){.incomplete = true, .equal = false};
-
-  /// Not incomplete.
-  return (IncompleteResult){.incomplete = false, .equal = false};
-}
-
-/// Check if two types are equal. You probably want to use `convertible` instead.
-NODISCARD static bool types_equal(Type *a, Type *b) {
-  if (a == b) return true;
-  Type *ta = type_last_alias(a);
-  Type *tb = type_last_alias(b);
-
-  /// If both are incomplete, compare the names.
-  IncompleteResult res = compare_incomplete(ta, tb);
-  if (res.incomplete) return res.equal;
-
-  /// Compare the types.
-  return types_equal_canon(type_canonical(ta), type_canonical(tb));
-}
-
-/// Check if a canonical type is an integer type.
-NODISCARD static bool is_integer_canon(Type *t) {
-  return t == t_integer || t == t_integer_literal  || t == t_byte;
-}
-
-/// Check if a type is an integer type.
-NODISCARD static bool is_integer(Type *type) {
-  /// Currently, all primitive types are integers.
-  return is_integer_canon(type_canonical(type));
-}
-
 /// Check how well from is convertible to to.
 ///
 /// \param to_type The type to convert to.
@@ -152,26 +49,26 @@ NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
   /// If the types are the same, they are convertible.
   Type *to = type_canonical(to_alias);
   Type *from = type_canonical(from_alias);
-  if (types_equal_canon(to, from)) return 0;
+  if (type_equals_canon(to, from)) return 0;
 
   /// A function type is implicitly convertible to its
   /// corresponding pointer type.
   if (to->kind == TYPE_POINTER && from->kind == TYPE_FUNCTION) {
     Type *base = type_canonical(to->pointer.to);
-    if (!type_is_incomplete_canon(base) && types_equal_canon(base, from)) return 0;
+    if (!type_is_incomplete_canon(base) && type_equals_canon(base, from)) return 0;
     return -1;
   }
   if (from->kind == TYPE_POINTER && to->kind == TYPE_FUNCTION) {
     Type *base = type_canonical(from->pointer.to);
-    if (!type_is_incomplete_canon(base) && types_equal_canon(base, to)) return 0;
+    if (!type_is_incomplete_canon(base) && type_equals_canon(base, to)) return 0;
     return -1;
   }
 
   /// Smaller integer types are implicitly convertible to larger
   /// integer types if the type being converted to is signed, or
   /// if the smaller type is unsigned.
-  bool to_is_int = is_integer_canon(to);
-  bool from_is_int = is_integer_canon(from);
+  bool to_is_int = type_is_integer_canon(to);
+  bool from_is_int = type_is_integer_canon(from);
   if (to_is_int && from_is_int) {
     if (
       to->primitive.size > from->primitive.size
@@ -204,11 +101,11 @@ NODISCARD static bool convertible(Type *to_type, Type *from_type) {
 NODISCARD static Type *common_type(Type *a, Type *b) {
   Type *ta = type_canonical(a);
   Type *tb = type_canonical(b);
-  if (types_equal(a, b)) return a;
+  if (type_equals(a, b)) return a;
 
   /// Some integer types are implicitly convertible to other integer types.
   /// See also `convertible_score`.
-  if (is_integer(ta) && is_integer(tb)) {
+  if (type_is_integer(ta) && type_is_integer(tb)) {
     if (
         ta->primitive.size > tb->primitive.size
         && (ta->primitive.is_signed || !tb->primitive.is_signed)
@@ -488,7 +385,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       return_type = candidate->symbol->val.node->type->function.return_type;
       continue;
     }
-    if (!types_equal(candidate->symbol->val.node->type->function.return_type, return_type))
+    if (!type_equals(candidate->symbol->val.node->type->function.return_type, return_type))
       ERR(candidate->symbol->val.node->source_location,
           "Function in overload set has mismatched return type %T (expecting %T)",
           candidate->symbol->val.node->type->function.return_type, return_type);
@@ -1035,7 +932,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       Type *t_from = expr->cast.value->type;
 
       // FROM any type T TO type T is ALLOWED
-      if (types_equal(t_to, t_from)) break;
+      if (type_equals(t_to, t_from)) break;
 
       // FROM any incomplete type is DISALLOWED
       if (type_is_incomplete(t_from))
@@ -1045,15 +942,15 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       // TODO: Check base type size + alignment...
       if (type_is_pointer(t_from) && type_is_pointer(t_to)) break;
       // FROM any pointer type TO any integer type is ALLOWED
-      if (type_is_pointer(t_from) && is_integer(t_to)) break;
+      if (type_is_pointer(t_from) && type_is_integer(t_to)) break;
       // FROM any integer type TO any integer type is ALLOWED
-      if (is_integer(t_from) && is_integer(t_to)) break;
+      if (type_is_integer(t_from) && type_is_integer(t_to)) break;
 
       // FROM an integer_literal type with value of zero TO any pointer type is ALLOWED
       if (t_from == t_integer_literal && expr->cast.value->literal.integer == 0 && type_is_pointer(t_to)) break;
 
       // FROM any integer type TO any pointer type is currently DISALLOWED, but very well may change
-      if (is_integer(t_from) && type_is_pointer(t_to))
+      if (type_is_integer(t_from) && type_is_pointer(t_to))
         ERR(expr->cast.value->source_location,
             "Cannot cast from an integer type %T to pointer type %T",
             t_from, t_to);
@@ -1090,7 +987,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                 lhs->type);
 
           /// The RHS has to be some sort of integer.
-          if (!is_integer(rhs->type))
+          if (!type_is_integer(rhs->type))
             ERR(rhs->source_location,
               "Cannot subscript with non-integer type '%T'.",
                 rhs->type);
@@ -1113,12 +1010,12 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_LE:
         case TK_EQ:
         case TK_NE:
-          if (!is_integer(lhs->type) && !type_is_pointer(lhs->type))
+          if (!type_is_integer(lhs->type) && !type_is_pointer(lhs->type))
             ERR(lhs->source_location,
               "Cannot compare non-integer type '%T'.",
                 lhs->type);
 
-          if (!is_integer(rhs->type) && !type_is_pointer(rhs->type))
+          if (!type_is_integer(rhs->type) && !type_is_pointer(rhs->type))
             ERR(rhs->source_location,
               "Cannot compare non-integer type '%T'.",
                 rhs->type);
@@ -1139,27 +1036,21 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_AMPERSAND:
         case TK_PIPE:
         case TK_CARET: {
-          if (!is_integer(lhs->type))
-            ERR(lhs->source_location,
-                "Cannot perform arithmetic on non-integer type '%T'.",
-                lhs->type);
+          if (type_is_integer(lhs->type) && type_is_integer(rhs->type)) {
+            // Disallow (maybe warn?) when shifting more than/equal to size of type.
+            if ((expr->binary.op == TK_SHL || expr->binary.op == TK_SHR) &&
+                (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer >= (8 * type_sizeof(expr->binary.lhs->type))))
+              ERR(expr->source_location,
+                  "Cannot perform shift larger than size of underlying type %T (%Z is max).",
+                  expr->binary.lhs->type, (8 * type_sizeof(expr->binary.lhs->type)) - 1);
 
-          if (!is_integer(rhs->type))
-            ERR(rhs->source_location,
-                "Cannot perform arithmetic on non-integer type '%T'.",
-                rhs->type);
-
-          // Disallow (maybe warn?) when shifting more than/equal to size of type.
-          if ((expr->binary.op == TK_SHL || expr->binary.op == TK_SHR) &&
-              (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer >= (8 * type_sizeof(expr->binary.lhs->type))))
-            ERR(expr->source_location,
-                "Cannot perform shift larger than size of underlying type %T (%Z is max).",
-                expr->binary.lhs->type, (8 * type_sizeof(expr->binary.lhs->type)) - 1);
-
-          // Disallow divide by zero...
-          if (expr->binary.op == TK_SLASH && (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer == 0))
-            ERR(expr->source_location, "Cannot perform division by zero.");
-
+            // Disallow divide by zero...
+            if ((expr->binary.op == TK_SLASH || expr->binary.op == TK_PERCENT) && (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer == 0))
+              ERR(expr->source_location, "Cannot perform division by zero.");
+          } else {
+            // Check for operator overloads, or replace binary operator with a call, or something...
+            TODO("Handle binary operator %s with lhs type of %T and rhs type of %T\n", token_type_to_string(expr->binary.op), lhs->type, rhs->type);
+          }
           expr->type = lhs->type;
         } break;
 
@@ -1218,7 +1109,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
         /// One’s complement negation.
         case TK_TILDE:
-          if (!is_integer(expr->unary.value->type))
+          if (!type_is_integer(expr->unary.value->type))
             ERR(expr->unary.value->source_location,
               "Argument of '~' must be an integer.");
 
