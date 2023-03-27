@@ -593,11 +593,13 @@ bool type_is_incomplete_canon(Type *type) {
 }
 
 usz type_sizeof(Type *type) {
+  STATIC_ASSERT(TYPE_COUNT == 7, "Exhaustive handling of types!");
   switch (type->kind) {
     default: ICE("Invalid type kind: %d", type->kind);
     case TYPE_PRIMITIVE: return type->primitive.size;
     case TYPE_NAMED: return type->named->val.type ? type_sizeof(type->named->val.type) : 0;
     case TYPE_POINTER: return sizeof(void *);
+    case TYPE_REFERENCE: return type_sizeof(type->reference.to);
     case TYPE_ARRAY: return type->array.size * type_sizeof(type->array.of);
     case TYPE_FUNCTION: return sizeof(void *);
     case TYPE_STRUCT: return type->structure.byte_size;
@@ -605,11 +607,13 @@ usz type_sizeof(Type *type) {
 }
 
 usz type_alignof(Type *type) {
-switch (type->kind) {
+  STATIC_ASSERT(TYPE_COUNT == 7, "Exhaustive handling of types!");
+  switch (type->kind) {
     default: ICE("Invalid type kind: %d", type->kind);
     case TYPE_PRIMITIVE: return type->primitive.alignment;
     case TYPE_NAMED: return type->named->val.type ? type_alignof(type->named->val.type) : 0;
     case TYPE_POINTER: return _Alignof(void *);
+    case TYPE_REFERENCE: return type_alignof(type->reference.to);
     case TYPE_ARRAY: return type->array.size * type_alignof(type->array.of);
     case TYPE_FUNCTION: return _Alignof(void *);
     case TYPE_STRUCT: return type->structure.alignment;
