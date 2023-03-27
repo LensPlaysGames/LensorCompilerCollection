@@ -1523,6 +1523,7 @@ SysVArgumentClass sysv_classify_argument(Type *given_type) {
   Type *type = type_canonical(given_type);
   // TODO: Use type_is_integer instead of t_integer comparisons, etc.
   if (type_is_pointer(type) ||
+      type_is_reference(type) ||
       type == t_integer ||
       type == t_byte) {
     return SYSV_REGCLASS_INTEGER;
