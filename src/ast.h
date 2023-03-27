@@ -695,6 +695,9 @@ NODISCARD bool type_is_void(Type *type);
 /// Check if a type is of pointer type.
 NODISCARD bool type_is_pointer(Type *type);
 
+/// Check if a type is of reference type.
+NODISCARD bool type_is_reference(Type *type);
+
 /// Check if a type is of array type.
 NODISCARD bool type_is_array(Type *type);
 

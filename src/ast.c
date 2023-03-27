@@ -629,6 +629,11 @@ bool type_is_pointer(Type *type) {
   return t && t->kind == TYPE_POINTER;
 }
 
+bool type_is_reference(Type *type) {
+  Type *t = type_canonical(type);
+  return t && t->kind == TYPE_REFERENCE;
+}
+
 bool type_is_array(Type *type) {
   Type * t = type_canonical(type);
   return t && t->kind == TYPE_ARRAY;
@@ -1187,7 +1192,7 @@ NODISCARD bool is_lvalue(Node *expr) {
   case NODE_MEMBER_ACCESS:
     return true;
 
-    /// A dereference is an lvalue.
+  /// A dereference is an lvalue.
   case NODE_UNARY: return expr->unary.op == TK_AT;
   }
 }
