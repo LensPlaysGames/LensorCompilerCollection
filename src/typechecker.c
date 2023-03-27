@@ -1009,20 +1009,17 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         case TK_GE:
         case TK_LE:
         case TK_EQ:
-        case TK_NE:
-          if (!type_is_integer(lhs->type) && !type_is_pointer(lhs->type))
-            ERR(lhs->source_location,
-              "Cannot compare non-integer type '%T'.",
-                lhs->type);
-
-          if (!type_is_integer(rhs->type) && !type_is_pointer(rhs->type))
-            ERR(rhs->source_location,
-              "Cannot compare non-integer type '%T'.",
-                rhs->type);
-
-          /// TODO: Change this to bool if we ever add a bool type.
-          expr->type = t_integer;
-          break;
+        case TK_NE: {
+          if ((type_is_integer(lhs->type) || type_is_pointer(lhs->type)) &&
+              (type_is_integer(rhs->type) || type_is_pointer(rhs->type))) {
+            /// TODO: Change this to bool if we ever add a bool type.
+            expr->type = t_integer;
+          } else {
+            // Check for operator overloads, or replace binary operator with a call, or something...
+            TODO("Handle binary operator %s with lhs type of %T and rhs type of %T\n",
+                 token_type_to_string(expr->binary.op), lhs->type, rhs->type);
+          }
+        } break;
 
         /// Since pointer arithmetic is handled by the subscript operator,
         /// type checking for these is basically all the same.
