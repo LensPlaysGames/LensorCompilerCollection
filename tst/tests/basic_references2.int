@@ -1,0 +1,10 @@
+; 42
+
+a : byte = 69
+
+foo : void(x : &byte) {
+  x := 42
+}
+
+foo(a)
+a ;; should return 42
