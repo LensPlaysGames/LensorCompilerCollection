@@ -1,0 +1,13 @@
+;; ERROR
+
+barbaz :> type {
+  x: integer
+}
+
+foo: integer() {
+  bar: barbaz
+  bar.x := 42
+  bar
+}
+
+foo()
