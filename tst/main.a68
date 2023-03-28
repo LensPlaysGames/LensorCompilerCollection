@@ -266,14 +266,14 @@ BEGIN
   IF str EQ "ERROR" THEN
     expect error := TRUE;
     get (f, (str, new line));
-    str := str[3..]
+    str := str[4..]
   ELSE
     CO Convert string into a number CO
     return value := string to number(str);
 
     CO Collect expected stdout CO
     WHILE get(f, (str, new line)); str /= "" DO
-      str := str[3..];
+      str := str[4..];
       output +:= str;
       output +:= new line char
     OD

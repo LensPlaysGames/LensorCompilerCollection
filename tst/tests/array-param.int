@@ -1,4 +1,4 @@
-; 69
+;; 69
 
 foo : integer(xy : integer[2]) {
   @xy[0] + @xy[1]

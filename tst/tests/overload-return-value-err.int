@@ -1,5 +1,5 @@
-; LABELS overloading
-; ERROR
+;; LABELS overloading
+;; ERROR
 
 foo : void (x : integer) {}
 foo : integer (x: integer) 42

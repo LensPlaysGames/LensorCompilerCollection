@@ -1,5 +1,5 @@
-; LABELS overloading
-; ERROR
+;; LABELS overloading
+;; ERROR
 
 foo : integer (x : byte, y : integer) 42
 foo : integer (y : integer, x: byte) 69

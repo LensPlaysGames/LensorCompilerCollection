@@ -1,4 +1,4 @@
-; ERROR
+;; ERROR
 
 foo : void () {
     bar()

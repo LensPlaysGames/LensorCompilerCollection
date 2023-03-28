@@ -1,4 +1,4 @@
-; 69
+;; 69
 
 a : byte = 69
 b : integer = 0xffffffff

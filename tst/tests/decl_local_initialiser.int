@@ -1,4 +1,4 @@
-; 69
+;; 69
 
 foo: integer() {
   a : integer = 69

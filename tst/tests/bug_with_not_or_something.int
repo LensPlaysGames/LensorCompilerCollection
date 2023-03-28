@@ -1,5 +1,5 @@
-; 0
-; 1
+;; 0
+;; 1
 
 putchar : ext integer(c : integer)
 putchar(48 + if ~0 1 else 0)

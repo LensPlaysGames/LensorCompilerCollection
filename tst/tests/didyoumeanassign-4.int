@@ -1,4 +1,4 @@
-; ERROR
+;; ERROR
 
 ;; This represents a comparison in a block that should be an assignment.
 ;; It SHOULD trigger an error for a top-level comparison, and present a

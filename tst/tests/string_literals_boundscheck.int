@@ -1,4 +1,4 @@
-; ERROR
+;; ERROR
 
 puts : ext void(s : @byte)
 
