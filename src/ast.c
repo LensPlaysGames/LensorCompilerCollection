@@ -61,11 +61,11 @@ static Type t_byte_def = {
   },
 };
 
-Type * const t_void = &t_void_def;
-Type * const t_void_ptr = &t_void_pointer_def;
-Type * const t_integer_literal = &t_integer_literal_def;
-Type * const t_integer = &t_integer_def;
-Type * const t_byte = &t_byte_def;
+Type *const t_void = &t_void_def;
+Type *const t_void_ptr = &t_void_pointer_def;
+Type *const t_integer_literal = &t_integer_literal_def;
+Type *const t_integer = &t_integer_def;
+Type *const t_byte = &t_byte_def;
 
 /// ===========================================================================
 ///  Scope/symbol functions.
@@ -625,7 +625,7 @@ bool type_is_void(Type *type) {
 }
 
 bool type_is_pointer(Type *type) {
-  Type * t = type_canonical(type);
+  Type *t = type_canonical(type);
   return t && t->kind == TYPE_POINTER;
 }
 
@@ -635,7 +635,7 @@ bool type_is_reference(Type *type) {
 }
 
 bool type_is_array(Type *type) {
-  Type * t = type_canonical(type);
+  Type *t = type_canonical(type);
   return t && t->kind == TYPE_ARRAY;
 }
 
@@ -1276,7 +1276,7 @@ bool type_equals(Type *a, Type *b) {
 }
 
 bool type_is_integer_canon(Type *t) {
-  return t == t_integer || t == t_integer_literal  || t == t_byte;
+  return t == t_integer_literal || t == t_integer  || t == t_byte;
 }
 bool type_is_integer(Type *type) {
   return type_is_integer_canon(type_canonical(type));
