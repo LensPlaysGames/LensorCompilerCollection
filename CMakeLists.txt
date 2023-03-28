@@ -43,6 +43,12 @@ set(
   "Whether or not to optimise for the system being compiled on. This should be true *unless* you are making distributed binaries."
 )
 
+set(
+  BUILD_OPT_TESTING FALSE
+  CACHE BOOL
+  "Whether or not to include optimisation tests in ctest"
+)
+
 add_executable(
   intc
   src/ast.c
@@ -211,5 +217,16 @@ if (BUILD_TESTING)
       --cc ${CMAKE_C_COMPILER}
       COMMAND_EXPAND_LISTS
     )
+    if (BUILD_OPT_TESTING)
+      add_test(
+        NAME OPT_${test}
+        COMMAND $<TARGET_FILE:test_instantiator>
+        --test ${test}
+        --intc $<TARGET_FILE:intc>
+        --cc ${CMAKE_C_COMPILER}
+        -O
+        COMMAND_EXPAND_LISTS
+      )
+    endif()
   endforeach()
 endif()
