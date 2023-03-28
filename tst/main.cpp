@@ -18,10 +18,14 @@
 int main(int argc, char **argv) {
     // Expecting signature:
     // <invocation> `--test` <test-path> `--intc` <intc-path> `--cc` <c-compiler-path>
-    if (argc != 7) return 127;
+    if (argc < 7 || argc > 8) return 127;
     if (strcmp(argv[1], "--test") != 0) return 127;
     if (strcmp(argv[3], "--intc") != 0) return 127;
     if (strcmp(argv[5], "--cc") != 0) return 127;
+    if (argc == 8 && strcmp(argv[7], "-O") != 0) return 127;
+
+    bool optimise = false;
+    if (argc == 8) optimise = true;
 
     std::filesystem::path testpath{argv[2]};
     std::filesystem::path intcpath{argv[4]};
@@ -99,6 +103,7 @@ int main(int argc, char **argv) {
     intc_invocation += " -o ";
     intc_invocation += intc_outpath.string();
     intc_invocation += " ";
+    if (optimise) intc_invocation += " -O ";
     // Path to file to compile
     intc_invocation += testpath.string();
 
