@@ -1342,6 +1342,7 @@ AST *parse(span source, const char *filename) {
 }
 
 NODISCARD const char *token_type_to_string(enum TokenType type) {
+  STATIC_ASSERT(TK_COUNT == 48, "Exhaustive handling of token types in token type to string conversion");
   switch (type) {
     case TK_INVALID: return "invalid";
     case TK_EOF: return "EOF";
