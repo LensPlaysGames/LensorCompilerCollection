@@ -63,9 +63,9 @@ int main(int argc, char **argv) {
     }
     bool expected_error{false};
     int expected_status{0};
-    if (line.substr(3, 5) == "SKIP") {
+    if (line.substr(3, 4) == "SKIP") {
         return 0;
-    } else if (line.substr(3, 6) == "ERROR") {
+    } else if (line.substr(3, 5) == "ERROR") {
         expected_error = true;
     } else {
         // I fucking hate exceptions.
