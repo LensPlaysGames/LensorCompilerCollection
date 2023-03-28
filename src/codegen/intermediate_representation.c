@@ -550,13 +550,14 @@ IRInstruction *ir_load
   load->operand = address;
 
   Type *t = type_canonical(address->type);
-  if (!(t && type_is_pointer(t))) {
+  if (!(t && (type_is_pointer(t) || type_is_reference(t)))) {
     //print("address type: %T\n", address->type);
     ir_femit_instruction(stdout, address);
     if (t) ICE("Can not emit IR_LOAD from type %T as it is not a pointer", t);
     else ICE("Can not emit IR_LOAD to NULL canonical type!");
   }
   if (type_is_pointer(t)) load->type = t->pointer.to;
+  else if (type_is_reference(t)) load->type = t->reference.to;
   else load->type = t;
 
   mark_used(address, load);
@@ -766,7 +767,9 @@ IRInstruction *ir_create_static(CodegenContext *context, Node* decl, Type *type,
   /// Create an instruction to reference it and return it.
   INSTRUCTION(ref, IR_STATIC_REF);
   ref->static_ref = v;
-  ref->type = ast_make_type_pointer(context->ast, v->type->source_location, v->type);
+  if (type_is_reference(v->type))
+    ref->type = v->type;
+  else ref->type = ast_make_type_pointer(context->ast, v->type->source_location, v->type);
   vector_push(v->references, ref);
   INSERT(ref);
   return ref;
