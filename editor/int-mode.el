@@ -6,13 +6,9 @@
   (make-syntax-table)
   "Syntax table for int-mode")
 
-;; Set semi-colon as comment starting character.
+;; Set two semi-colons as comment starting characters.
 (modify-syntax-entry
- ?\; "<"
- int-mode-syntax-table)
-;; Set hash/pound as comment starting character.
-(modify-syntax-entry
- ?# "<"
+ ?\; ". 12"
  int-mode-syntax-table)
 ;; Set newline as comment ending character.
 (modify-syntax-entry
@@ -107,24 +103,25 @@ Examples include addition (+) and subtraction (-)."
 ;; Gather all keyword font locks together into big daddy keyword font-lock
 (setq int--font-lock-defaults
       (let* ((keywords '("if" "else" "ext" "while"))
-             (binary-operators '("+" "*" "-" "/" "%"
-                                 "<" ">"
-                                 ":" "=" ":=" "::"
-                                 "&" "@"
-                                 ">>" "<<" "&" "|" "~"))
+             (operators '("+" "*" "-" "/" "%"
+                          "<" ">"
+                          ":" ";" "=" ":=" "::"
+                          "&" "@"
+                          ">>" "<<" "&" "|" "~"))
 
              (keywords-regex         (regexp-opt keywords 'words))
-             (binary-operators-regex (regexp-opt binary-operators))
-             (negation-char-regex    (regexp-opt '("!")))
+             (operators-regex (regexp-opt operators))
+             (negation-char-regex    (regexp-opt '("!" "~")))
              (number-regex           (rx (one-or-more digit)))
              (string-regex           (rx "\"" (*? (not "\"")) "\""))
-             (builtin-types-regex    (rx (zero-or-more "@")
+             (builtin-types-regex    (rx (zero-or-more "&")
+                                         (zero-or-more "@")
                                          (or "integer" "byte" "void"))))
         `(
           (,keywords-regex          . ,int-mode-face-keywords)
           (,builtin-types-regex     . ,int-mode-face-types)
           (,number-regex            . ,int-mode-face-numbers)
-          (,binary-operators-regex  . ,int-mode-face-operators)
+          (,operators-regex  . ,int-mode-face-operators)
           (,negation-char-regex     . ,int-mode-face-negation-char)
           (,string-regex            . ,int-mode-face-strings)
           )))
@@ -170,6 +167,8 @@ in Intercept source code will be indented."
 
 (define-derived-mode int-mode prog-mode
   "Intercept"
+  (setq-local comment-start ";;")
+  (setq-local comment-end   "")
   (setq font-lock-defaults '((int--font-lock-defaults)))
   (setq indent-line-function #'int--indent-line))
 
