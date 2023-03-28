@@ -44,13 +44,9 @@
   (make-syntax-table)
   "Syntax table for int-ts-mode")
 
-;; Set semi-colon as comment starting character.
+;; Set two semi-colons as comment starting characters.
 (modify-syntax-entry
- ?\; "<"
- int-ts-mode--syntax-table)
-;; Set hash/pound as comment starting character.
-(modify-syntax-entry
- ?# "<"
+ ?\; ". 12"
  int-ts-mode--syntax-table)
 ;; Set newline as comment ending character.
 (modify-syntax-entry
@@ -106,11 +102,8 @@
  ?@ "'"
  int-ts-mode--syntax-table)
 
-
 (defvar int-ts-mode--keywords
-  '("if" "else" "ext" "while"
-    ;;"struct" "type"
-    )
+  '("if" "else" "ext" "while" "for" "type")
   "Intercept keywords for tree-sitter font-locking.")
 
 (defvar int-ts-mode--operators
@@ -125,7 +118,7 @@
   '("(" ")"
     "[" "]"
     "{" "}"
-    )
+    ";")
   "Intercept delimiters for tree-sitter font-locking.")
 
 (defun int-ts-mode--font-lock-settings ()
@@ -152,10 +145,11 @@
    :language 'int
    :override t
    :feature 'type
-   `((type_base)      @font-lock-type-face
-     (type_pointer)   @font-lock-type-face
-     (type_function)  @font-lock-type-face
-     (type_array)     @font-lock-type-face)
+   `((type_base)       @font-lock-type-face
+     (type_pointer)    @font-lock-type-face
+     (type_reference)  @font-lock-type-face
+     (type_function)   @font-lock-type-face
+     (type_array)      @font-lock-type-face)
 
    :language 'int
    :override t
