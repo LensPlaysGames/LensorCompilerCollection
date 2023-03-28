@@ -1617,16 +1617,17 @@ static void lower(CodegenContext *context) {
     } break;
 
     case IR_CALL: {
-      // TODO: We have to save registers here, ya know, the ones that
-      // haven't been allocated yet...
-
       size_t argcount = instruction->call.arguments.size;
 
       switch (context->call_convention) {
       case CG_CALL_CONV_LINUX: {
         Type *function_type = NULL;
-        function_type = instruction->call.callee_function->type;
-        ASSERT(function_type->kind == TYPE_FUNCTION);
+        if (instruction->call.is_indirect) {
+          if (type_is_pointer(instruction->call.callee_instruction->type))
+            function_type = instruction->call.callee_instruction->type->pointer.to;
+          else function_type = instruction->call.callee_instruction->type;
+        } else function_type = instruction->call.callee_function->type;
+        ASSERT(function_type->kind == TYPE_FUNCTION, "Expected callee of IR_CALL to be a function, but got %T\n", function_type);
 
         Vector(usz) sixteen_bytes_that_need_split = {0};
         foreach_index (i, function_type->function.parameters) {
