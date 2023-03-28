@@ -20,20 +20,20 @@
   - [ ] Testing Framework: Add ability to only show failing tests
   - [ ] `x as void` used to discard `x`
   - [ ] Resolve the two different kinds of array-type loading: entire copy vs pointer decay. Basically, `foo[2]` needs `foo` to be loaded as a pointer. `a : foo[2] = b` requires loading entire copy of `b` into `a`.
-  - [x] Add multiline comment syntax
+  - [ ] Add multiline comment syntax
   - [ ] Some syntax to repeat a string literal X amount of times, and another to ensure minimum size of string literal
   - [ ] It prints "unknown symbol" even for mismatched overload that should have pretty error
 - [ ] Optimisation
   - [x] Zero subscript still does add/multiply when it doesn't need to
 - [ ] Attributes
-  - [ ] Parsing
-  - [ ] `[[noreturn]]`
-  - [ ] `[[discardable]]`
+  - [ ] Parsing  "[[noreturn]]" or "=[noreturn]" or "attr noreturn"
+  - [ ] noreturn
+  - [ ] discardable (kind of opposite of nodiscard, the default)
     - [ ] Make "no discard" the default for all non-void returning functions.
-  - [ ] `[[maybe_unused]]`
-  - [ ] `[[deprecated]]`
-  - [ ] `[[deprecated("reason")]]`
-  - [ ] `[[call_once]]`
+  - [ ] maybe_unused
+  - [ ] deprecated
+  - [ ] deprecated("reason")
+  - [ ] call_once
 - [ ] Pragmas
   - [ ] Parsing
   - [ ] `pragma mangling [on|off]`
@@ -65,8 +65,8 @@
   - [x] Codegen
   - [x] How do we implement reassigning arrays? Libc `memcpy()` or some builtin variant?
     - [x] Use compiler explorer to see how GCC does it for ‘inspiration’.
-  - [ ] Arrays as function parameters.
-    - [ ] Currently, only register-based parameters are really supported; we need to implement stack parameters for non-integer types.
+  - [x] Arrays as function parameters.
+    - [x] Currently, only register-based parameters are really supported; we need to implement stack parameters for non-integer types.
   - [ ] Returning arrays from functions.
 - [ ] Slices / dynamic arrays.
   - [ ] Parsing/AST.
@@ -88,11 +88,11 @@
   - [x] `type` keyword in the parser/grammar.
   - [ ] Make sure nested structs work.
   - [ ] Arbitrary compile-time struct literals.
-    - [ ] Syntax?
+    - [ ] Syntax? Maybe "[]" just like arrays.
   - [ ] Structs as parameters.
   - [ ] Structs as return values.
 - [ ] Modules.
-  - [ ] `module` declaration.
+  - [ ] `module <identifier>` declaration.
   - [ ] Emitting module metadata.
   - [ ] Loading module metadata.
   - [ ] `export` (Pragma or sth. to export everything?)
