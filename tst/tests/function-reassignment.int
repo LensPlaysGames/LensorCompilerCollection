@@ -1,4 +1,4 @@
-; ERROR
+;; ERROR
 
 bar : integer(n : integer) { 42 }
 foo : integer(b : integer) { 69 }

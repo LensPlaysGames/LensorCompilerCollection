@@ -1,5 +1,5 @@
-; LABELS overloading
-; 42
+;; LABELS overloading
+;; 42
 
 bar : integer () {
     foo : integer (x : byte) x + 69

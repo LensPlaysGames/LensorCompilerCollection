@@ -43,36 +43,36 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Sorry, but the test file at \"%s\" appears to be empty\n", testpath.string().c_str());
         return 127;
     }
-    while (line.starts_with("; LABELS")) {
+    while (line.starts_with(";; LABELS")) {
         if (!std::getline(testfile, line)) {
             fprintf(stderr, "Sorry, but the test file at \"%s\" appears to be malformed (LABELS nonsense)\n", testpath.string().c_str());
             return 127;
         }
     }
-    if (!line.starts_with("; ")) {
+    if (!line.starts_with(";; ")) {
         fprintf(stderr,
                 "Sorry, but the test file at \"%s\" appears to be a malformed test.\n"
-                "There must be a \"; \" at the beginning of the first line followed by either\n"
+                "There must be a \";; \" at the beginning of the first line followed by either\n"
                 "\"ERROR\", \"SKIP\", or an integer status code that is the expected return value.\n",
                 testpath.string().c_str());
         return 127;
     }
     bool expected_error{false};
     int expected_status{0};
-    if (line.substr(2, 4) == "SKIP") {
+    if (line.substr(3, 5) == "SKIP") {
         return 0;
-    } else if (line.substr(2, 5) == "ERROR") {
+    } else if (line.substr(3, 6) == "ERROR") {
         expected_error = true;
     } else {
         // I fucking hate exceptions.
         try {
-            expected_status = std::stoi(line.substr(2));
+            expected_status = std::stoi(line.substr(3));
         }
         catch (std::exception e) {
             fprintf(stderr,
                     "Sorry, an exception occured while parsing expected return status from first line\n"
-                "  first line: \"%s\"\n"
-                "  exception: \"%s\"\n",
+                    "  first line: \"%s\"\n"
+                    "  exception: \"%s\"\n",
                     line.c_str(),
                     e.what());
             return 127;
@@ -80,8 +80,8 @@ int main(int argc, char **argv) {
     }
     std::string expected_output{};
     for (; std::getline(testfile, line);) {
-        if (!line.starts_with("; ")) break;
-        expected_output += line.substr(2) + "\n";
+        if (!line.starts_with(";; ")) break;
+        expected_output += line.substr(3) + "\n";
     }
 
     testfile.close();

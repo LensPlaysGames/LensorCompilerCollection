@@ -1,4 +1,4 @@
-; 69
+;; 69
 
 foo : integer[2]() {
   out : integer[2]

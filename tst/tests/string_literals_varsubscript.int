@@ -1,5 +1,5 @@
-; 0
-;  amet consectetuer
+;; 0
+;;  amet consectetuer
 
 puts : ext void(s : @byte)
 

@@ -1,4 +1,4 @@
-; 5
+;; 5
 
 ;; Calculate nth term of fibonacci sequence using recursion.
 fib : integer(n : integer) {

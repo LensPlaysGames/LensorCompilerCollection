@@ -1,4 +1,4 @@
-; ERROR
+;; ERROR
 
 bar(42)
 

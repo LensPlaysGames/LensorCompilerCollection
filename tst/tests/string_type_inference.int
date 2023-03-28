@@ -1,5 +1,5 @@
-; 0
-; Infer this!
+;; 0
+;; Infer this!
 
 puts : ext integer(s : @byte)
 

@@ -4,6 +4,8 @@
 
 ** Running Tests
 
+*** Algol
+
 The ALGOL 68 Genie interpreter is required. Get it [[https://jmvdveer.home.xs4all.nl/en.download.algol-68-genie-current.html][here]].
 
 Then, it's just a one-line shell command to run the test driver. Be sure to run it from the ~tst~ directory of the repository.
@@ -15,12 +17,37 @@ Then, it's just a one-line shell command to run the test driver. Be sure to run 
 Any and all files within the ~tests~ subdirectory will automatically be treated as, you guessed it, tests.
 
 
+*** CTest
+
+There is also a way to run tests using CMake's ~CTest~ program and a C++ test runner. This one supports concurrency, so if you have a slow system (like I do) it can truly help speed up development time since tests go from taking 30 seconds to 5-10 seconds.
+
+NOTE: If new tests are added or tests are removed, you will need to reconfigure your CMake build tree for the file glob to catch those changes.
+
+If you have CMake, it comes with CTest. Invoke it like so:
+#+begin_src shell-script
+  ctest --test-dir bld -j7 --output-on-failure --progress
+#+end_src
+
+Explanation:
+
+- ~--test-dir bld~ :: This points CTest to the directory with =CTestTestFile.cmake=. This file tells CTest what tests to run and how to run them.
+- ~-j7~ :: This tells CTest to run up to seven jobs at once. I like to use my amount of CPU threads subtract one, that way you still have one to do house-keeping.
+- ~--output-on-failure~ :: When a test fails, display it's stdout. This makes it much easier to see /why/ tests fail.
+- ~--progress~ :: This causes CTest to overwrite the same line over and over while running tests, instead of printing new ones. While you do lose the ability to see the amount of time that each test takes to run, it /will/ print a newline when a test fails, so it's very hard to miss failed tests and their output.
+
+
+You can also run ctest with default configuration through a cmake target, like so.
+#+begin_src shell-script
+  cmake --build bld --target test
+#+end_src
+
+
 ** Writing New Tests
 
-A test MUST have a declared expected return status of the program as the first line, following two bytes (comment starter). Like so.
+A test MUST have a declared expected return status of the program as the first line, following three bytes (line comment starter). Like so.
 
-#+begin_src un
-  ; 16
+#+begin_src int
+  ;; 16
 
   4 + 4 + 4 + 4
 #+end_src
@@ -29,9 +56,9 @@ There MUST be an empty line between the beginning test expectation declaration a
 
 One can also set an expected stdout with following test expectation declaration lines.
 
-#+begin_src
-  ; 16
-  ; E
+#+begin_src int
+  ;; 16
+  ;; E
 
   putchar : ext integer(c : integer)
   putchar(69)

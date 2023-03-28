@@ -1,5 +1,5 @@
-; LABELS overloading
-; 42
+;; LABELS overloading
+;; 42
 
 bar : integer () 42
 bar : integer (x : integer) 69

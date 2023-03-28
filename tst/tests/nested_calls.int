@@ -1,4 +1,4 @@
-; 2
+;; 2
 
 a : integer(n : integer) n + 1
 

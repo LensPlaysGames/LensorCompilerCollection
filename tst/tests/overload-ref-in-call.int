@@ -1,5 +1,5 @@
-; LABELS overloading
-; 42
+;; LABELS overloading
+;; 42
 
 bar : integer (x : byte, y: integer) 20
 bar : integer (x : integer, y : @integer) 69

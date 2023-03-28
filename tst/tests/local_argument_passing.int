@@ -1,4 +1,4 @@
-; 69
+;; 69
 
 foo: integer(n : integer) = n
 bar: integer() {
