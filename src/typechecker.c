@@ -995,11 +995,12 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         default: ICE("Invalid binary operator '%s'.", token_type_to_string(expr->binary.op));
 
         /// The subscript operator is basically pointer arithmetic.
-        case TK_LBRACK:
-          /// We can only subscript pointers and arrays.
-          if (!type_is_pointer(lhs->type) && !type_is_array(lhs->type))
+        case TK_LBRACK: {
+          /// We can only subscript pointers and arrays, or references to either of those.
+          Type *reference_stripped_lhs_type = type_strip_references(lhs->type);
+          if (!type_is_pointer(reference_stripped_lhs_type) && !type_is_array(reference_stripped_lhs_type))
             ERR(lhs->source_location,
-              "Cannot subscript non-pointer, non-array type '%T'.",
+                "Cannot subscript non-pointer, non-array type '%T'.",
                 lhs->type);
 
           /// The RHS has to be some sort of integer.
@@ -1009,15 +1010,15 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                 rhs->type);
 
           if (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER) {
-            if (type_is_array(lhs->type) && lhs->type->array.size <= rhs->literal.integer)
+            if (type_is_array(reference_stripped_lhs_type) && reference_stripped_lhs_type->array.size <= rhs->literal.integer)
               ERR(rhs->source_location,
-                  "Subscript %U out of bounds for array %T", rhs->literal.integer, lhs->type);
+                  "Subscript %U out of bounds for array %T", rhs->literal.integer, reference_stripped_lhs_type);
           }
 
           /// The result of a subscript expression is a pointer to the
           /// start of the array, offset by the RHS.
-          expr->type = ast_make_type_pointer(ast, lhs->source_location, lhs->type->array.of);
-          break;
+          expr->type = ast_make_type_pointer(ast, lhs->source_location, reference_stripped_lhs_type->array.of);
+        } break;
 
         /// All of these are basically the same when it comes to types.
         case TK_GT:
