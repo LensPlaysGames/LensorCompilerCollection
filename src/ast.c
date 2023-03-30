@@ -644,6 +644,12 @@ bool type_is_struct(Type *type) {
   return t && t->kind == TYPE_STRUCT;
 }
 
+NODISCARD Type *type_strip_references(Type *type) {
+  if (!type) return NULL;
+  while (type->kind == TYPE_REFERENCE) type = type->reference.to;
+  return type;
+}
+
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================

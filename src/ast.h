@@ -719,6 +719,8 @@ NODISCARD bool type_is_integer_canon(Type *t);
 /// Check if a type is of any integer type.
 NODISCARD bool type_is_integer(Type *type);
 
+NODISCARD Type *type_strip_references(Type *type);
+
 /// ===========================================================================
 ///  Miscellaneous AST functions.
 /// ===========================================================================
