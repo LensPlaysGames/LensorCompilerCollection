@@ -465,11 +465,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     }
 
     if (expr->binary.op == TK_LBRACK) {
-      // TODO: Just use lhs operand of subscript operator when right hand
-      // side is a compile-time-known zero value.
-
       IRInstruction *subs_lhs = NULL;
-      if (!type_is_array(lhs->type) && !type_is_pointer(lhs->type))
+      Type *reference_stripped_lhs_type = type_strip_references(lhs->type);
+      if (!type_is_array(reference_stripped_lhs_type) && !type_is_pointer(reference_stripped_lhs_type))
         ERR("Subscript operator may only operate on arrays and pointers, which type %T is not", lhs->type);
 
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
@@ -518,13 +516,13 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
       IRInstruction *scaled_rhs = NULL;
       // An array subscript needs multiplied by the sizeof the array's base type.
-      if (type_is_array(lhs->type)) {
-        IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->array.of));
+      if (type_is_array(reference_stripped_lhs_type)) {
+        IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(reference_stripped_lhs_type->array.of));
         scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
       }
       // A pointer subscript needs multiplied by the sizeof the pointer's base type.
-      else if (type_is_pointer(lhs->type)) {
-        IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(lhs->type->pointer.to));
+      else if (type_is_pointer(reference_stripped_lhs_type)) {
+        IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(reference_stripped_lhs_type->pointer.to));
         scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
       }
       expr->ir = ir_add(ctx, subs_lhs, scaled_rhs);
