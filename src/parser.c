@@ -975,7 +975,6 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
 
       /// Create the function.
       Node *func = ast_make_function(p->ast, location, type, (Nodes){0}, NULL, as_span(ident));
-      func->function.external = true;
       sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, location, as_span(ident));
       funcref->funcref.resolved = sym;
