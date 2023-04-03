@@ -23,8 +23,12 @@
   - [ ] Add multiline comment syntax
   - [ ] Some syntax to repeat a string literal X amount of times, and another to ensure minimum size of string literal
   - [ ] It prints "unknown symbol" even for mismatched overload that should have pretty error
+  - [ ] Change name of LINUX calling convention; it's actually just SystemV
 - [ ] Optimisation
   - [x] Zero subscript still does add/multiply when it doesn't need to
+  - [ ] Zero member access stil does add when it doesn't need to, afaik
+- x86_64
+  - [ ] Pad string literals to ensure alignment of statics
 - [ ] Attributes
   - [ ] Parsing  "[[noreturn]]" or "=[noreturn]" or "attr noreturn"
   - [ ] noreturn
