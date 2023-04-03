@@ -826,14 +826,13 @@ bool codegen
 
       /// Create the remaining functions and set the address of each function.
       foreach_ptr (Node*, func, ast->functions) {
-          func->function.ir = ir_function(context, as_span(func->function.name),
-            func->type);
+        func->function.ir = ir_function(context, as_span(func->function.name), func->type);
 
-          /// Mark the function as extern if it is.
-          if (func->function.external || !func->function.body) func->function.ir->is_extern = true;
+        /// Mark the function as extern if it is.
+        if (!func->function.body) func->function.ir->is_extern = true;
 
-          /// Mark the function as global if it is global.
-          if (func->function.global) func->function.ir->attr_global = true;
+        /// Mark the function as global if it is global.
+        if (func->function.global) func->function.ir->attr_global = true;
       }
 
       /// Emit the main function.
