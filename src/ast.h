@@ -185,6 +185,7 @@ typedef struct NodeFunction {
   string name;
   IRFunction *ir;
   bool global;
+  bool external;
 } NodeFunction;
 
 /// Variable declaration.
