@@ -407,6 +407,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
  step2:
   /// 2. If the parent expression is a call expression, and the function being
   ///    resolved is the callee of the call, then:
+  if (!func->parent) goto err;
+
   if (func->parent->kind == NODE_CALL && func == func->parent->call.callee) {
     Node *call = func->parent;
 
