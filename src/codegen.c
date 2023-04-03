@@ -830,7 +830,7 @@ bool codegen
             func->type);
 
           /// Mark the function as extern if it is.
-          if (!func->function.body) func->function.ir->is_extern = true;
+          if (func->function.external || !func->function.body) func->function.ir->is_extern = true;
 
           /// Mark the function as global if it is global.
           if (func->function.global) func->function.ir->attr_global = true;
