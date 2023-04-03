@@ -1530,18 +1530,24 @@ SysVArgumentClass sysv_classify_argument(Type *given_type) {
       type == t_byte) {
     return SYSV_REGCLASS_INTEGER;
   }
+  // FIXME: Probably more efficient to have the size check be the
+  // outermost check, and then divy it up based on more type specifics.
   if (type_is_array(type) || type_is_struct(type)) {
     usz size = type_sizeof(type);
     // If the size of an object is larger than four eightbytes, or it
     // contains unaligned fields, it has class MEMORY.
     // TODO: Check for unaligned fields.
-    if (size > 32) {
-      return SYSV_REGCLASS_MEMORY;
-    }
+    // Technically, the only things that get lowered into multiple
+    // registers are two eightbytes or smaller; so while the "rule"
+    // above *does* say four eightbytes, it actually is only two.
+    if (size > 16) return SYSV_REGCLASS_MEMORY;
     // If the size of the aggregate exceeds a single eightbyte,
     // each is classified separately. Each eightbyte gets
     // initialized to class NO_CLASS.
     else if (size > 8) {
+
+      // At this point we have a 9-16 byte aggregate type.
+
       if (type_is_array(type)) {
         // Classify base type of array.
         SysVArgumentClass base_class = sysv_classify_argument(type->array.of);
@@ -1553,6 +1559,10 @@ SysVArgumentClass sysv_classify_argument(Type *given_type) {
         // eightbytes, and can be passed in one or two registers.
         return SYSV_REGCLASS_INTEGER;
       }
+
+      if (type_is_struct(type))
+        return SYSV_REGCLASS_INTEGER;
+
       // TODO: If type_is_struct(type) ... classify each member ...
       TODO("Classify SysV struct type arguments.");
     }
@@ -1683,7 +1693,6 @@ static void lower(CodegenContext *context) {
           mark_used(load2, instruction);
 
         }
-        // TODO: sysv recursive algorithm stuff, or whatever.
       } break;
       case CG_CALL_CONV_MSWIN: {
         usz idx = 0;
