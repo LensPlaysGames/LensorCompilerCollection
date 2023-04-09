@@ -626,6 +626,7 @@ bool type_is_void(Type *type) {
 
 bool type_is_pointer(Type *type) {
   Type *t = type_canonical(type);
+  t = type_strip_references(t);
   return t && t->kind == TYPE_POINTER;
 }
 
@@ -636,11 +637,13 @@ bool type_is_reference(Type *type) {
 
 bool type_is_array(Type *type) {
   Type *t = type_canonical(type);
+  t = type_strip_references(t);
   return t && t->kind == TYPE_ARRAY;
 }
 
 bool type_is_struct(Type *type) {
   Type *t = type_canonical(type);
+  t = type_strip_references(t);
   return t && t->kind == TYPE_STRUCT;
 }
 
@@ -1282,6 +1285,7 @@ bool type_equals(Type *a, Type *b) {
 }
 
 bool type_is_integer_canon(Type *t) {
+  t = type_strip_references(t);
   return t == t_integer_literal || t == t_integer  || t == t_byte;
 }
 bool type_is_integer(Type *type) {
