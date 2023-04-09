@@ -935,6 +935,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           // Insert cast from argument type to parameter type, as they are convertible.
           Node *cast = ast_make_cast(ast, arg->source_location, param->type, arg);
           expr->call.arguments.data[i] = cast;
+          if (!typecheck_expression(ast, cast)) return false;
         }
       }
 
@@ -961,6 +962,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       if (type_is_incomplete(t_from))
         ERR(expr->cast.value->source_location, "Cannot cast from an incomplete type %T", t_from);
 
+      // FROM a non-lvalue expression TO a reference type is DISALLOWED
+      if (type_is_reference(t_to) && !is_lvalue(expr->cast.value))
+        ERR(expr->cast.value->source_location, "Cannot cast from a non-lvalue expression to reference type %T", t_to);
+
       // FROM any pointer type TO any pointer type is ALLOWED
       // TODO: Check base type size + alignment...
       if (type_is_pointer(t_from) && type_is_pointer(t_to)) break;
@@ -979,10 +984,13 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
             t_from, t_to);
 
       // FROM any array type TO any array type is DISALLOWED
+      // FIXME: Add casts for equal byte-sized arrays. i.e. u8[2] := u16[1] and vis versa...
       if (type_is_array(t_from) && type_is_array(t_to)) {
         ERR(expr->cast.value->source_location,
             "Cannot cast between arrays.");
       }
+
+      // TODO: Structs?
 
       ERR(expr->cast.value->source_location,
           "Casting from %T to %T is not supported by the typechecker\n"
