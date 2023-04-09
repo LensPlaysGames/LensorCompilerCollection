@@ -19,8 +19,11 @@ syntax region intString start="\"" skip="\\\"" end="\"" contains=intSpecial,intF
 syntax keyword intPrimitiveTypes
   \ integer
   \ void
+  \ byte
 
 syntax keyword intKeywords
+  \ ext
+  \ type
   \ if
   \ else
   \ ext
