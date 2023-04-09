@@ -24,9 +24,14 @@ syntax keyword intPrimitiveTypes
 syntax keyword intKeywords
   \ ext
   \ type
+
+syntax keyword intRepeat
+  \ for
+  \ while
+
+syntax keyword intConditional
   \ if
   \ else
-  \ ext
 
 syntax match intOperators "?\|+\|-\|\*\|:\|,\|<\|>\|&\||\|!\|\~\|%\|=\|\.\|/\(/\|*\)\@!"
 
@@ -34,6 +39,8 @@ syntax match intNumber "\v<\d+>"
 
 highlight default link intPrimitiveTypes Type
 highlight default link intKeywords       Keyword
+highlight default link intRepeat         Repeat
+highlight default link intConditional    Conditional
 highlight default link intNumber         Number
 highlight default link intCommentLine    Comment
 highlight default link intOperators      Operator
