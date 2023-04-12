@@ -64,6 +64,7 @@
     - [x] During codegen, we should actually output `zext`/`sext` if needed. Otherwise truncation is automatic.
   - [ ] Update IR parser
   - [x] Operators (unary and binary) need to pick return type instead of strictly returning `integer`
+  - [ ] Add a semantic analysis/type-checking pass over the IR, after lowering (ensure backend doesn't mess up)
 - [ ] Arrays
   - [x] Semantic analysis for static arrays.
   - [x] Codegen
