@@ -1209,42 +1209,23 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     // TODO: Handle size of type and stuff
     /// Load from a static variable.
     if (inst->operand->kind == IR_STATIC_REF) {
-      // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
-      if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
-        size = regsize_from_bytes(type_sizeof(t_void_ptr));
-      else size = regsize_from_bytes(type_sizeof(inst->operand->type));
+      size = regsize_from_bytes(type_sizeof(inst->operand->type));
       if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, r32, inst->result, r32);
-      if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
-        femit_name_to_reg(context, I_LEA, REG_RIP, inst->operand->static_ref->name.data, inst->result, size);
-      else
-        femit_name_to_reg(context, I_MOV, REG_RIP, inst->operand->static_ref->name.data, inst->result, size);
+      femit_name_to_reg(context, I_MOV, REG_RIP, inst->operand->static_ref->name.data, inst->result, size);
     }
 
     /// Load from a local.
     else if (inst->operand->kind == IR_ALLOCA) {
-      // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
-      if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
-        size = regsize_from_bytes(type_sizeof(t_void_ptr));
-      else size = regsize_from_bytes(inst->operand->alloca.size);
+      size = regsize_from_bytes(inst->operand->alloca.size);
       if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, r32, inst->result, r32);
-      if (inst->operand->type->kind == TYPE_ARRAY || inst->operand->type->pointer.to->kind == TYPE_ARRAY)
-        femit_mem_to_reg(context, I_LEA, REG_RBP, - (i64)inst->operand->alloca.offset, inst->result, size);
-      else
-        femit_mem_to_reg(context, I_MOV, REG_RBP, - (i64)inst->operand->alloca.offset, inst->result, size);
+      femit_mem_to_reg(context, I_MOV, REG_RBP, - (i64)inst->operand->alloca.offset, inst->result, size);
     }
 
     /// Load from a pointer
     else {
-      // TODO: Should this array to pointer decay happen here? Or higher up in codegen?
-      if (inst->operand->type->kind == TYPE_ARRAY) size = regsize_from_bytes(type_sizeof(t_void_ptr));
-      // TODO: We are "supposed" to be loading sizeof pointed to type
-      // here, but that causes segfaults when handling arrays.
-      else size = regsize_from_bytes(type_sizeof(inst->operand->type));
+      size = regsize_from_bytes(type_sizeof(inst->operand->type));
       if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, r32, inst->result, r32);
-      if (inst->operand->type->kind == TYPE_ARRAY)
-        femit_mem_to_reg(context, I_LEA, inst->operand->result, 0, inst->result, size);
-      else
-        femit_mem_to_reg(context, I_MOV, inst->operand->result, 0, inst->result, size);
+      femit_mem_to_reg(context, I_MOV, inst->operand->result, 0, inst->result, size);
     }
   } break;
 
