@@ -983,14 +983,24 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
             "Cannot cast from an integer type %T to pointer type %T",
             t_from, t_to);
 
-      // FROM any array type TO any array type is DISALLOWED
-      // FIXME: Add casts for equal byte-sized arrays. i.e. u8[2] := u16[1] and vis versa...
-      if (type_is_array(t_from) && type_is_array(t_to)) {
-        ERR(expr->cast.value->source_location,
-            "Cannot cast between arrays.");
+      // If a type has compatible alignment with and a size equal to the type
+      // it is being cast to, there will be no memory errors, so why not allow
+      // it? i.e. `u16[2] as u8[4]` or `u8[4] as s32`, etc.
+      Type *t_from_base = type_strip_references(type_canonical(t_from));
+      Type *t_to_base = type_strip_references(type_canonical(t_to));
+      usz large_align = type_alignof(t_from_base);
+      usz small_align = type_alignof(t_to_base);
+      if (large_align < small_align) {
+        usz tmp_align = large_align;
+        large_align = small_align;
+        small_align = tmp_align;
       }
-
-      // TODO: Structs?
+      bool compatible_alignment = large_align % small_align == 0;
+      if (!compatible_alignment) {
+        print("Incompatible alignment\n");
+      }
+      if (type_sizeof(t_from_base) == type_sizeof(t_to_base) && compatible_alignment)
+        break;
 
       ERR(expr->cast.value->source_location,
           "Casting from %T to %T is not supported by the typechecker\n"
