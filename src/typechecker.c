@@ -955,8 +955,8 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       Type *t_from = expr->cast.value->type;
 
-      // FROM any type T TO type T is ALLOWED
-      if (type_equals(t_to, t_from)) break;
+      // FROM any type T that is convertible TO type T' is ALLOWED
+      if (convertible(t_to, t_from)) break;
 
       // FROM any incomplete type is DISALLOWED
       if (type_is_incomplete(t_from))
