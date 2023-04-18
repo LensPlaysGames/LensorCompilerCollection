@@ -704,9 +704,13 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
       if (!typecheck_type(ast, member->type)) return false;
     }
 
+    // If a struct already has it's alignment set, then we will keep the
+    // alignment of the struct to what it was set to, assuming that whoever
+    // did it knows what they are doing.
+    bool has_alignment = t->structure.alignment;
     foreach(Member, member, t->structure.members) {
       size_t alignment = type_alignof(member->type);
-      if (alignment > t->structure.alignment)
+      if (!has_alignment && alignment > t->structure.alignment)
         t->structure.alignment = alignment;
 
       t->structure.byte_size += (alignment - (t->structure.byte_size % alignment)) % alignment;
@@ -717,7 +721,6 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
 
     if (t->structure.alignment)
       t->structure.byte_size += (t->structure.alignment - (t->structure.byte_size % t->structure.alignment)) % t->structure.alignment;
-
 
     return true;
   }

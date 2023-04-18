@@ -104,6 +104,13 @@ enum TokenType {
   TK_COUNT
 };
 
+/// Types of attributes
+typedef enum AttributeKind {
+  ATTR_NOMANGLE,
+  ATTR_ALIGNAS,
+  ATTR_COUNT
+} AttributeKind;
+
 /// The type of a symbol in the symbol table.
 enum SymbolKind {
   SYM_VARIABLE,
@@ -171,6 +178,17 @@ struct Scope {
 };
 
 /// ===========================================================================
+///  Attributes.
+/// ===========================================================================
+typedef struct Attribute {
+  AttributeKind kind;
+  union {
+    usz integer;
+  } value;
+} Attribute;
+typedef Vector(Attribute) Attributes;
+
+/// ===========================================================================
 ///  AST Nodes.
 /// ===========================================================================
 /// Root node.
@@ -184,7 +202,8 @@ typedef struct NodeFunction {
   Node *body;
   string name;
   IRFunction *ir;
-  bool global;
+  bool global : 1;
+  bool nomangle : 1;
 } NodeFunction;
 
 /// Variable declaration.

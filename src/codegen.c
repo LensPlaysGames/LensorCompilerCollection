@@ -828,6 +828,7 @@ bool codegen
       Type *main_type = ast_make_type_function(context->ast, (loc){0}, t_integer, main_params);
       context->entry = ir_function(context, literal_span("main"), main_type);
       context->entry->attr_global = true;
+      context->entry->attr_nomangle = true;
 
       /// Create the remaining functions and set the address of each function.
       foreach_ptr (Node*, func, ast->functions) {
@@ -838,6 +839,8 @@ bool codegen
 
         /// Mark the function as global if it is global.
         if (func->function.global) func->function.ir->attr_global = true;
+
+        if (func->function.nomangle) func->function.ir->attr_nomangle = true;
       }
 
       /// Emit the main function.

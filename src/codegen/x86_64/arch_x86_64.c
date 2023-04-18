@@ -1206,7 +1206,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
   case IR_LOAD: {
     enum RegSize size = -1u;
-    // TODO: Handle size of type and stuff
     /// Load from a static variable.
     if (inst->operand->kind == IR_STATIC_REF) {
       size = regsize_from_bytes(type_sizeof(inst->operand->type));
@@ -1543,14 +1542,9 @@ SysVArgumentClass sysv_classify_argument(Type *given_type) {
 
       if (type_is_struct(type))
         return SYSV_REGCLASS_INTEGER;
-
-      // TODO: If type_is_struct(type) ... classify each member ...
-      TODO("Classify SysV struct type arguments.");
     }
     // Anything 1, 2, 4, or 8 bytes can go in a register.
-    else {
-      return SYSV_REGCLASS_INTEGER;
-    }
+    else return SYSV_REGCLASS_INTEGER;
   }
   return SYSV_REGCLASS_INVALID;
 }
@@ -1702,7 +1696,6 @@ static void lower(CodegenContext *context) {
       switch (context->call_convention) {
 
       case CG_CALL_CONV_LINUX: {
-        Type *type = type_canonical(instruction->type);
         if (parameter_is_in_register_x86_64(context, instruction->parent_block->function, instruction->imm)) {
           // Classify argument into register class.
           // NOTE: This has probably already been done, and we could
@@ -2183,9 +2176,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   // FUNCTION NAME MANGLING
   foreach_ptr (IRFunction*, function, context->functions) {
     // Don't mangle external function(s).
-    if (!function->is_extern)
-      // Don't mangle `main` function.
-      if (!string_eq(function->name, literal_span("main"))) mangle_function_name(function);
+    if (!function->attr_nomangle) mangle_function_name(function);
   }
 
   emit_entry(context);

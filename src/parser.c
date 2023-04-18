@@ -9,6 +9,10 @@
 #include <string.h>
 #include <vector.h>
 
+static usz is_power_of_two(usz i) {
+  return (i & (i - 1)) == 0;
+}
+
 /// ===========================================================================
 ///  Error handling.
 /// ===========================================================================
@@ -597,6 +601,58 @@ static bool is_right_associative(Parser *p, Token t) {
 }
 
 /// ===========================================================================
+///  Attributes
+/// ===========================================================================
+
+STATIC_ASSERT(ATTR_COUNT == 2, "Exhaustive handling of attributes");
+
+static struct {
+  span name;
+  AttributeKind kind;
+} function_attributes[] = {
+  {literal_span_raw("nomangle"), ATTR_NOMANGLE},
+};
+
+static struct {
+  span name;
+  AttributeKind kind;
+} struct_type_attributes[] = {
+  {literal_span_raw("alignas"), ATTR_ALIGNAS},
+};
+
+/// Helper to apply each attribute within attribs to function. Calls ERR
+/// if a non-function attribute is present in the given attribute list.
+static void apply_function_attributes(Parser *p, Node *func, Attributes attribs) {
+  STATIC_ASSERT(ATTR_COUNT == 2, "Exhaustive handling of function attribute types");
+  foreach(Attribute, attr, attribs) {
+    switch (attr->kind) {
+    case ATTR_NOMANGLE: {
+      func->function.nomangle = true;
+    } break;
+    default: {
+      // TODO: Actually print out the attribute string or something like that.
+      ERR_AT(func->source_location, "Attribute cannot be applied to function: %d\n", attr->kind);
+    }
+    }
+  }
+}
+
+static void apply_struct_type_attributes(Parser *p, Type *type, Attributes attribs) {
+  STATIC_ASSERT(ATTR_COUNT == 2, "Exhaustive handling of type attributes");
+  foreach(Attribute, attr, attribs) {
+    switch (attr->kind) {
+    case ATTR_ALIGNAS: {
+      type->structure.alignment = attr->value.integer;
+    } break;
+    default: {
+      // TODO: Actually print out the attribute string or something like that.
+      ERR_AT(type->source_location, "Attribute cannot be applied to type: %d\n", attr->kind);
+    }
+    }
+  }
+}
+
+/// ===========================================================================
 ///  Parser
 /// ===========================================================================
 static Node *parse_expr_with_precedence(Parser *p, isz current_precedence);
@@ -689,10 +745,39 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
 ///
 /// This is basically just a wrapper around `parse_block()` that
 /// also injects declarations for all the function parameters.
-static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_decls) {
+static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_decls, Attributes *attribs) {
   /// Save state.
   bool save_in_function = p->in_function;
   p->in_function = true;
+
+  // Collect attributes and return them through an out parameter.
+  while (p->tok.type == TK_IDENT) {
+    AttributeKind attr_kind = ATTR_COUNT;
+    for (size_t i = 0; i < sizeof function_attributes / sizeof *function_attributes; i++) {
+      if (string_eq(function_attributes[i].name, p->tok.text)) {
+        // We found an attribute!
+        attr_kind = function_attributes[i].kind;
+        break;
+      }
+    }
+    // FIXME: If there is an identifier preceding a function body that is
+    // *not* an attribute applicable to functions, that should probably be
+    // an error if we go through with the "function bodies must be blocks
+    // or preceded by '='" thing.
+    if (attr_kind == ATTR_COUNT) break;
+      //ERR("Unexpected identifier when parsing function body: \"%S\"", p->tok.text);
+
+    // Yeet the attribute identifier that gave us the attribute kind.
+    next_token(p);
+
+    // If the attribute requires an argument/data to go along with it,
+    // parse that HERE!
+
+    Attribute new_attribute = { attr_kind, {0} };
+
+    // We found an attribute, add it to the list!
+    vector_push(*attribs, new_attribute);
+  }
 
   /// Yeet "=" if found.
   if (p->tok.type == TK_EQ) next_token(p);
@@ -727,11 +812,13 @@ static Node *parse_type_expr(Parser *p, Type *type) {
   if (type->kind == TYPE_FUNCTION) {
     /// Parse the function body.
     Nodes params = {0};
-    Node *body = parse_function_body(p, type, &params);
+    Attributes attribs = {0};
+    Node *body = parse_function_body(p, type, &params, &attribs);
 
     /// Create a function for the lambda.
     string name = format("_XLambda_%Z", p->ast->counter++);
     Node *func = ast_make_function(p->ast, type->source_location, type, params, body, as_span(name));
+    apply_function_attributes(p, func, attribs);
     free(name.data);
     func->function.global = false;
     return func;
@@ -909,6 +996,48 @@ static Type *parse_type(Parser *p) {
     loc type_kw_loc = p->tok.source_location;
     // Yeet TK_TYPE
     next_token(p);
+
+    // Collect attributes for this type!
+    Attributes attribs = {0};
+    while (p->tok.type == TK_IDENT) {
+      AttributeKind attr_kind = ATTR_COUNT;
+      for (size_t i = 0; i < sizeof struct_type_attributes / sizeof *struct_type_attributes; i++) {
+        if (string_eq(struct_type_attributes[i].name, p->tok.text)) {
+          // We found an attribute!
+          attr_kind = struct_type_attributes[i].kind;
+          break;
+        }
+      }
+      if (attr_kind == ATTR_COUNT)
+        ERR("Unexpected identifier when parsing type attributes: \"%S\"", p->tok.text);
+
+      // Yeet the attribute identifier that gave us the attribute kind.
+      next_token(p);
+
+      Attribute new_attribute = { attr_kind, {0} };
+
+      // If the attribute requires an argument/data to go along with it,
+      // parse that HERE!
+      STATIC_ASSERT(ATTR_COUNT == 2, "Exhaustive handling of type attributes");
+      switch (new_attribute.kind) {
+      case ATTR_ALIGNAS: {
+        if (p->tok.type != TK_NUMBER)
+          ERR("The alignas type attribute requires an integer number");
+        if (!is_power_of_two(p->tok.integer))
+          ERR("The alignas type attribute requires a power of two, which %u is not", p->tok.integer);
+
+        new_attribute.value.integer = p->tok.integer;
+        // Yeet the number!
+        next_token(p);
+      } break;
+      default:
+        ERR("Invalid type attribute: %d\n", new_attribute.kind);
+      }
+
+      // We found an attribute, add it to the list!
+      vector_push(attribs, new_attribute);
+    }
+
     consume(p, TK_LBRACE);
     Members members = {0};
     while (p->tok.type != TK_RBRACE) {
@@ -918,6 +1047,9 @@ static Type *parse_type(Parser *p) {
     }
     consume(p, TK_RBRACE);
     out = ast_make_type_struct(p->ast, type_kw_loc, members);
+
+    apply_struct_type_attributes(p, out, attribs);
+
   } break;
 
   default:
@@ -958,8 +1090,10 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
 
       /// Parse the body, create the function, and update the symbol table.
       Nodes params = {0};
-      Node *body = parse_function_body(p, type, &params);
+      Attributes attribs = {0};
+      Node *body = parse_function_body(p, type, &params, &attribs);
       Node *func = ast_make_function(p->ast, location, type, params, body, as_span(ident));
+      apply_function_attributes(p, func, attribs);
       sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, location, as_span(ident));
       funcref->funcref.resolved = sym;
@@ -975,6 +1109,8 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
 
       /// Create the function.
       Node *func = ast_make_function(p->ast, location, type, (Nodes){0}, NULL, as_span(ident));
+      // External functions should *not* be mangled
+      func->function.nomangle = true;
       sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, location, as_span(ident));
       funcref->funcref.resolved = sym;
@@ -1344,6 +1480,7 @@ AST *parse(span source, const char *filename) {
 NODISCARD const char *token_type_to_string(enum TokenType type) {
   STATIC_ASSERT(TK_COUNT == 48, "Exhaustive handling of token types in token type to string conversion");
   switch (type) {
+    case TK_COUNT:
     case TK_INVALID: return "invalid";
     case TK_EOF: return "EOF";
     case TK_IDENT: return "identifier";

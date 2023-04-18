@@ -226,6 +226,7 @@ typedef struct IRFunction {
   bool attr_leaf : 1;
   bool attr_noreturn : 1;
   bool attr_pure : 1;
+  bool attr_nomangle : 1;
   bool is_extern : 1;
 } IRFunction;
 
