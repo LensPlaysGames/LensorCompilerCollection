@@ -176,10 +176,15 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
 
   case NODE_MEMBER_ACCESS: {
     codegen_lvalue(ctx, lval->member_access.struct_);
-    // TODO: When member has zero byte offset, we can just use the
-    // address of the struct with a modified type.
-    lval->address = ir_add(ctx, lval->member_access.struct_->address,
-                           ir_immediate(ctx, t_integer, lval->member_access.member->byte_offset));
+    // When member has zero byte offset, we can just use the address of the
+    // struct with a modified type.
+    if (lval->member_access.member->byte_offset)
+      lval->address = ir_add(ctx, lval->member_access.struct_->address,
+                             ir_immediate(ctx, t_integer, lval->member_access.member->byte_offset));
+    else {
+      lval->address = ir_copy(ctx, lval->member_access.struct_->address);
+      ir_insert(ctx, lval->address);
+    }
     lval->address->type = ast_make_type_pointer(ctx->ast, lval->source_location, lval->member_access.member->type);
   } break;
 

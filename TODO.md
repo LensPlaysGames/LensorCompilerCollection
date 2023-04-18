@@ -26,7 +26,7 @@
   - [ ] Change name of LINUX calling convention; it's actually just SystemV
 - [ ] Optimisation
   - [x] Zero subscript still does add/multiply when it doesn't need to
-  - [ ] Zero member access stil does add when it doesn't need to, afaik
+  - [x] Zero member access still does add when it doesn't need to, afaik
 - x86_64
   - [ ] Pad string literals to ensure alignment of statics
 - [ ] Attributes
