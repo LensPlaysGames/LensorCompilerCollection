@@ -14,7 +14,7 @@
   - [ ] Function bodies must be blocks or preceded by `=`.
   - [ ] `ext` functions may have a body?
   - [ ] Add `export` and make top-level variables local and top-level functions internal by default.
-  - [ ] Add a `[[nomangle]]` attribute (requires attributes).
+  - [x] Add a `[[nomangle]]` attribute (requires attributes).
   - [ ] Rename `ext` to `extern` and make it syntactic sugar for `export [[nomangle]]`
   - [ ] Implicit cast sema pass: `a + b` where `a` is a `byte` and `b` an `integer` -> `(a as integer) + b`
   - [ ] Testing Framework: Add ability to only show failing tests
@@ -30,7 +30,7 @@
 - x86_64
   - [ ] Pad string literals to ensure alignment of statics
 - [ ] Attributes
-  - [ ] Parsing  "[[noreturn]]" or "=[noreturn]" or "attr noreturn"
+  - [x] Parsing  "[[noreturn]]" or "=[noreturn]" or "attr noreturn"
   - [ ] noreturn
   - [ ] discardable (kind of opposite of nodiscard, the default)
     - [ ] Make "no discard" the default for all non-void returning functions.
@@ -94,7 +94,7 @@
   - [ ] Make sure nested structs work.
   - [ ] Arbitrary compile-time struct literals.
     - [ ] Syntax? Maybe "[]" just like arrays.
-  - [ ] Structs as parameters.
+  - [x] Structs as parameters.
   - [ ] Structs as return values.
 - [ ] Modules.
   - [ ] `module <identifier>` declaration.
