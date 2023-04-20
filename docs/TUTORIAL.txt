@@ -1,0 +1,87 @@
+Intercept Programming Language Reference
+
+2023-04-19
+
+Authors:
+- Lens_r
+
+Key:
+  Wrapped in forward slash like /this/ == emphasized/italisized text.
+  Wrapped in earmuffs like *this* == bold text.
+  Wrapped in backtick like `this` == verbatim text.
+  Triple backtick begins code excerpt; ends at next triple backtick.
+  Wrapped in bang-arrow like !<this>! means a hyperlink target.
+  Wrapped in bang-reverse-arrow like !>this<! means a hyperlink reference.
+  Line(s) wrapped with a line of 64 equal symbols (=) are chapter headings.
+  Line(s) wrapped with a line of 64 dash symbols (-) are section headings.
+  Line(s) wrapped with a line of 32 dash symbols (=) are subsection headings.
+
+
+================================================================
+  WHY I MADE IT
+================================================================
+
+    Intercept is a programming language, but it didn't start out as that. In fact, it wasn't called Intercept, and there was no programming language. That is, until August 1st, 2022. This is when I began a stream, and just one more arduous, long programming journey. At this point, LensorOS is 8 months old and LITE is 4 months old; I've been busy, and that wasn't going to change any time soon.
+
+    In the first 15 minutes, I had /some/ sort of syntax in a text file; although it doesn't really resemble what the language is now, you can see some things peeking through (namely `:=` and the variable declaration syntax). I was really just having fun; that's what the whole series ended up being about: "I'm just making a compiler for fun". That through-line helped me stay motivated on the project, and understand how to act when it came time to make tough decisions.
+
+================================================================
+  INTRODUCTION
+================================================================
+
+    Intercept is statically typed. This has nothing to do with the types themselves, really, and everything to do with how an Intercept programmer interacts with the types. For example, an integer is still an integer and acts as such, no matter whether the language uses dynamic or static typing. However, the difference manifests itself in declarations. With static typing, whenever an Intercept programmer declares a variable, function, or new type even, nearly every time type information will also be declared. Let's take a look at a declaration.
+
+!<simple-declaration>!
+```
+a: integer
+```
+
+    `a` is the name of the newly-declared variable. `integer` is the type. This is what is meant when we say "type information must be declared": the type of `a` must be known at the time of declaration. With no initialiser, this means that an Intercept programmer must declare the type of the variable in the source code, as shown. When an initialiser is present, however, the type of the variable may be /inferred/ (or /deduced/) from the result type of the initialiser expression. Let's take a look at that in practice.
+
+!<init-declaration>!
+```
+a :: 42
+```
+
+    As above (in !>simple-declaration<!), `a` is the name of the newly declared variable. Unlike above, instead of a type declaration, we have an initialiser expression: `42`. This is still a statically typed program, but only because the Intercept compiler knows how to determine the result type of any given expression. With `42`, it's quite simple: it's an `integer` number. Using this inferred (or deduced) type, we can apply it to the declared variable. This process is called /type inference/, or /type deduction/, and it is key in reducing the verbosity of Intercept source code.
+
+
+    Okay, well we've learned about a declaration. But what's a program? A program is any valid sequence of expressions; in Intercept, this most often takes the form of an Intercept source code file. An Intercept programmer writes expressions, much like the declaration above !>simple-declaration<!, in the order of execution from top-to-bottom. That is, expressions later in the source code will be executed after expressions earlier in the source code. Expressions at the "top level" like we've discussed so far are all part of the "global scope", and will all get run in order at the time of program execution. If you are familiar with C-like languages, everything at the top level in Intercept is equivalent to writing statements or expressions within `main`. At this point you might be wondering: "well, what are all the expressions available?"; keep reading to find out.
+
+================================================================
+  EXPRESSIONS
+================================================================
+
+    An expression is something that produces a value. In Intercept, every expression has an associated type, otherwise the program is ill-formed. An expression may be made up of multiple other expressions, or it may be an atomic expression. An example of an atomic expression is `42`: it produces an `integer` type value, `42`. An example of an expression made up of other expressions is `42 + 27`: here we have two expressions being joined together by a binary operator `+`, which adds the expression on either side together if their types are equal or compatible. So, this binary expression to add two integer numbers together is actually made up of two integer number expressions.
+
+    Expressions generally match up very well to the AST, or /abstract syntax tree/. The AST is what the parser produces; a tree of data that represents the Intercept program in it's entirety. I highly recommend that, right now (yes, right now), *you* go copy `42` into a file, and use the intercept compiler to compile it, passing `--print-ast` as a flag on the command line. This will dump a printout of the AST to the compiler's output, and you can see what it looks like for a simple program. Then, modify the file to read `42 + 27`, save it, and do the same thing again. You should see the AST gain a binary operation expression with two expressions as it's operands. It isn't imperative that you understand every little thing in the AST printout right now; just get the general idea of how an expression may be a composition of other expression(s). As you read through the different possible expressions in Intercept, try writing them in your test file and compiling to look at the AST. This will help you gain an intuitive understanding of how the language syntax comes together to form meaningful programs.
+
+----------------------------------------------------------------
+  Literals
+----------------------------------------------------------------
+
+================================
+  Integers
+================================
+
+    1. Any amount of digits `0` through `9` in a row with no whitespace between them forms a decimal (base 10) number.
+    2. Any amount of digits `0` through `f` in a row with no whitespace between them following `0x` forms a hexadecimal (base 16) number.
+    3. Any amount of digits `0` through `1` in a row with no whitespace between them following `0b` forms a binary number.
+
+    An integer literal expression produces a value of type `integer_literal`; an `integer_literal` is convertible to any `integer` type, and is treated as an `integer` if it is never converted.
+
+================================
+  Strings
+================================
+
+    Any run of bytes inbetween two unescaped double-quotes `"` forms a string literal expression. To escape a double-quote, use the escape token (a backslash `\`).
+
+    A string literal expression produces a value of type `byte[N]` where N is the number of bytes within the string plus one to account for an extra zero byte at the end. That is, a string literal containing four bytes will produce a value with a type of `byte[5]`; an array of five `byte` values.
+
+================================
+  Arrays
+================================
+
+    Any amount of expressions that *all* produce a value of the same type within square brackets (`[` and `]`) is an array literal.
+
+    An array literal expression produces a value of type `T[N]` where `T` is the result type of each expression between the brackets and `N` is the amount of expressions between the brackets.
