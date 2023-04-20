@@ -73,7 +73,7 @@
 \end{titlepage}
 
 \chapter{Introduction}
-\label{sec:intro}
+\label{chpt:intro}
 
 With a language as extensive as \verb|Intercept|, it can be hard to know where to start.
 
@@ -84,7 +84,7 @@ The last expression of the program is the return status code from the \verb|main
 Let's begin.
 
 \chapter{Variables}
-\label{chpt:vars}
+\label{chpt:variables}
 
 In mathematics, a \emph{variable} is defined as a symbol and placeholder for any mathematical object. An \verb|Intercept| variable is a symbol (or name) and placeholder for a unique chunk of memory. Using this symbol and placeholder (the variable name), this chunk of memory can be (at least) accessed to return a value, (possibly) modified, and even more that we will get to later.
 
@@ -93,7 +93,7 @@ On top of this, \verb|Intercept| variables have a type associated with them. A t
 % A trailing asterisk (i.e. "subsection*") prevents numbering of header,
 % and inclusion in TOC.
 \section*{Declaration}
-\label{subsec:variables-declaration}
+\label{sec:variables-declaration}
 
 A variable declaration is the act of declaring a new variable within an \verb|Intercept| program. This variable will have a unique chunk of memory associated with it. How this chunk of memory can be accessed and altered is determined by the variable's declared type. The type is declared by the programmer along with the variable symbol.
 
@@ -112,7 +112,7 @@ z : integer = x + y
 The \verb|:| is the \emph{type annotation} symbol. It associates the symbol (or name) on the left hand side with a chunk of memory (at least) large enough to store the type on the right hand side. Optionally, an expression can be given that will be the initial value of the variable. The expression must result in the same type as has been declared, or a \emph{type error} will occur. A type error indicates that a program is invalid, and the \verb|Intercept| tooling will not move on any further with it. The above example program contains no errors of any kind.
 
 \section*{Assignment}
-\label{subsec:variables-assignment}
+\label{sec:variables-assignment}
 
 Most variables can be assigned to at any time after they have been declared using the assignment operator: \verb|:=|.
 \begin{Verbatim}[samepage=true]
@@ -127,7 +127,7 @@ x := 420
 % The higher the number, the more blank vertical space is allowed when breaking into pages.
 %\pagebreak[1]
 \chapter{Types}
-\label{sec:types}
+\label{chpt:types}
 
 There are a few different types built-in to \verb|Intercept|. Here they are split into two categories (\emph{base} and \emph{complex}), and listed with their symbol (or name) and a brief description.
 
@@ -136,7 +136,7 @@ The difference between a \emph{base} type and a \emph{complex} type is that base
 Pointers and complex types are special in that they are not declared by writing the type symbol itself, but rather with special syntaxes for each. This is necessary due to the extra information that is needed from the programmer with these sorts of types.
 
 \section{Base Types}
-\label{subsec:types-base-types}
+\label{sec:types-base_types}
 
 \begin{itemize}
 \item[integer]  An 8 byte signed integer number.
@@ -145,12 +145,13 @@ Pointers and complex types are special in that they are not declared by writing 
 \end{itemize}
 
 \subsection*{Pointers}
+\label{subsec:types-base_types-pointers}
 
 A pointer is a memory address; a value specifying where to find a chunk of memory at least as big as the underlying type.
 
-To create a pointer from a variable of a valid base type, use an \hyperref[subsec:expressions-address-of]{address-of expression}.
+To create a pointer from a variable of a valid base type, use an \hyperref[sec:expressions-address_of]{address-of expression}.
 
-To read the base type value from a pointer, use a \hyperref[subsec:expressions-dereference]{dereference expression}.
+To read the base type value from a pointer, use a \hyperref[sec:expressions-dereference]{dereference expression}.
 
 When declaring a type, the programmer must declare how many levels of pointer indirection are wanted. This is done using the amount of pointer declaration operators, \verb|@|, preceding the type symbol.
 
@@ -171,7 +172,7 @@ d : integer = @b
 See \verb|examples/pointers| in the repository for more.
 
 \section{Complex Types}
-\label{subsec:types-complex-types}
+\label{sec:types-complex_types}
 
 \begin{itemize}
 \item[array]    A contiguous chunk of memory big enough to store it's capacity amount of it's base type.
@@ -179,7 +180,7 @@ See \verb|examples/pointers| in the repository for more.
 \end{itemize}
 
 \subsection*{Arrays}
-\label{subsec:types-complex-types-arrays}
+\label{subsec:types-complex_types-arrays}
 For an array, the programmer must declare it's base type, as well as it's capacity.
 \begin{Verbatim}[samepage=true]
 ;; Intercept Array Type Declaration
@@ -189,7 +190,7 @@ eight_ints : integer[8]
 An array of eight integers is a chunk of memory large enough to hold, you guessed it (Frank Stallone), eight integers. The memory address of any item in an array can be accessed, and further dereferenced to produce a value of the base type.
 
 \subsection*{Functions}
-\label{subsec:types-complex-types-functions}
+\label{subsec:types-complex_types-functions}
 
 A function type has a return type, and a list of parameter types.
 
@@ -217,13 +218,14 @@ sub : integer(a : integer, b : integer)
 \end{Verbatim}
 
 \section*{Attributes}
-\label{subsec:types-attributes}
+\label{sec:types-attributes}
 
 Currently, there is only one attribute: \emph{external}. It is currently only allowed on function types, and is needed to call functions that are defined outside of \verb|Intercept|. In the future, we hope to allow any type to be external. An external type is prefixed with the \verb|ext| keyword.
 
 In the future, we hope to provide a \emph{public} attribute that will allow symbols in our language to be used by other languages and such during linking.
 
 \section*{Casting Between Types}
+\label{sec:types-casting_between_types}
 
 It is not yet supported, but very soon we will work on being able to convert base types to other base types, as well as reinterpret pointers to some base types to other base types.
 
@@ -249,12 +251,12 @@ As you can see, it is valid to cast an integer pointer to a byte pointer. This i
 In the future, it would be cool to allow for casting an integer to an array of bytes. This would effectively be unpacking. It would be really, ultra cool if we could also do it the other way around, and pack an array of 8 bytes into an integer. I don't know if it would ever be useful though :p.
 
 \chapter{Expressions}
-\label{sec:expressions}
+\label{chpt:expressions}
 
 An \verb|Intercept| expression is anything that returns a value.
 
 \section{Numbers}
-\label{subsec:expressions-numbers}
+\label{sec:expressions-numbers}
 
 The simplest expression is just a number.
 \begin{Verbatim}[samepage=true]
@@ -268,7 +270,7 @@ The simplest expression is just a number.
 Number expressions return an \verb|integer| type. This is what allows an integer variable to be assigned to a number.
 
 \section{Binary Infix Operators}
-\label{subsec:expressions-binops}
+\label{subsec:expressions-binary_infix_operators}
 
 A binary operator is a symbol that acts on two values. Usually these are referred to as the left hand side and the right hand side.
 
@@ -320,7 +322,7 @@ In the future, we hope to allow for users to define their own binary operators i
 % return value, in typechecking and codegen and stuff.
 
 \section{Variable Access}
-\label{subsec:expressions-variable-access}
+\label{sec:expressions-variable_access}
 
 A variable that has been declared may be accessed using the symbol (or name) the variable was declared with.
 
@@ -377,7 +379,7 @@ double : integer(n : integer) = integer(n : integer) {
 In the future, we hope to provide a function variable declaration syntax that does not include repeating the function signature for both the variable's declared type as well as the lambda expression.
 
 \section{Function Calls}
-\label{subsec:expressions-calls}
+\label{sec:expressions-function_calls}
 
 A function variable access may be transformed into a function call using parentheses following the variable symbol. Within the parentheses, arguments are passed in order. A type error occurs when the given argument expression's result type does not match the function type declarations parameter type. The return type of a function call expression is the same as the return type of the function being called.
 
@@ -397,7 +399,7 @@ sum(34, 35)
 \end{Verbatim}
 
 \section{Dereference}
-\label{subsec:expressions-dereference}
+\label{sec:expressions-dereference}
 
 The dereference operator, \verb|@|, is unary, in that it operates on a single value. This value \emph{must} be of a pointer type, otherwise a type error occurs.
 
@@ -436,7 +438,7 @@ a
 \end{Verbatim}
 
 \section{Address Of}
-\label{subsec:expressions-address-of}
+\label{sec:expressions-address_of}
 
 The address-of operator, \verb|&|, is used to create a pointer to a variable that has already been declared.
 
@@ -456,9 +458,9 @@ ptr_to_ptr := &ptr
 \end{Verbatim}
 
 \section{Array Index}
-\label{subsec:expressions-array-index}
+\label{sec:expressions-array_index}
 
-An array index expression is used to access a memory address (hopefully) within an array. It returns a pointer to an item within the array. This is unlike most other languages, where the array index expression returns the value of the item itself. To get the value of the item, use a \hyperref[subsec:expressions-dereference]{dereference expression}.
+An array index expression is used to access a memory address (hopefully) within an array. It returns a pointer to an item within the array. This is unlike most other languages, where the array index expression returns the value of the item itself. To get the value of the item, use a \hyperref[sec:expressions-dereference]{dereference expression}.
 
 \begin{Verbatim}[samepage=true]
 ;; Intercept Array Index Expression Example
@@ -477,7 +479,7 @@ y : integer = @int_array[1]
 \end{Verbatim}
 
 \section{If/Else}
-\label{subsec:expressions-if-else}
+\label{sec:expressions-if_else}
 
 Unlike most languages, \verb|Intercept|'s if/else control flow construct is an expression. This means that it returns a value.
 
