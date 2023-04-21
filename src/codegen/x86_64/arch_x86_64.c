@@ -1144,8 +1144,11 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     femit_reg_to_reg(context, I_MOV, inst->rhs->result, size, inst->result, size);
   } break;
   case IR_DIV: {
+    // Dividend of div/mod goes in rdx:rax; divisor must not be in those registers.
     ASSERT(inst->rhs->result != REG_RAX,
            "Register allocation must not allocate RAX to divisor.");
+    ASSERT(inst->rhs->result != REG_RDX,
+           "Register allocation must not allocate RDX to divisor.");
     enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
     femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, REG_RAX, r64);
     femit(context, I_CQO);
@@ -1154,8 +1157,11 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     femit_reg_to_reg(context, I_MOV, REG_RAX, size, inst->result, size);
   } break;
   case IR_MOD: {
+    // Dividend of div/mod goes in rdx:rax; divisor must not be in those registers.
     ASSERT(inst->rhs->result != REG_RAX,
            "Register allocation must not allocate RAX to divisor.");
+    ASSERT(inst->rhs->result != REG_RDX,
+           "Register allocation must not allocate RDX to divisor.");
     enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
     femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RAX, r64);
     femit(context, I_CQO);
@@ -1933,6 +1939,19 @@ void calculate_stack_offsets(CodegenContext *context) {
 static size_t interfering_regs(IRInstruction *instruction) {
   ASSERT(instruction, "Can not get register interference of NULL instruction.");
   size_t mask = 0;
+
+  // FIXME: It'd be really great if we /didn't/ have to loop over every
+  // single user of every single instruction here, but I don't see another
+  // way of doing this, really.
+  // Divisor of div/mod are not allowed to go in RAX/RDX; that's where
+  // the dividend must go.
+  foreach_ptr (IRInstruction*, inst, instruction->users) {
+    if ((inst->kind == IR_DIV || inst->kind == IR_MOD) && inst->rhs == instruction) {
+      mask |= (1 << REG_RAX);
+      mask |= (1 << REG_RDX);
+    }
+  }
+
   switch(instruction->kind) {
   case IR_SHL:
   case IR_SHR:
