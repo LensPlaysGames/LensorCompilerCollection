@@ -168,7 +168,7 @@ my_struct :> type {
 
     A function in Intercept is a sequence of expressions that may be executed by /calling/ the function. To call a function simply means to use a call expression on an expression with a function result type.
 
-    Functions are declared just like other variables, however there are some differences both in syntax and semantics. While a function is it's own type, it's actually made up of other types; this collection of types is called a function's /signature/. A function signature fully describes the type of a function, but not it's implementation. Function signatures in Intercept have the following things: a return type, and a list of parameter types. The return type is the type that calling this function will result in. The list of parameter types is the required type of each argument passed to the function when it is called.
+    Named functions are declared just like other variables, however there are some differences both in syntax and semantics. While a function is it's own type, it's actually made up of other types; this collection of types is called a function's /signature/. A function signature fully describes the type of a function, but not it's implementation. Function signatures in Intercept have the following things: a return type, and a list of parameter types. The return type is the type that calling this function will result in. The list of parameter types is the required type of each argument passed to the function when it is called.
 
     A named function that returns `69`.
 ```
@@ -198,6 +198,19 @@ one_more()
     There is also an alternate syntax that allows for more concise "one liners", as it doesn't require a block expression directly after the function declaration.
 ```
 forty_two: integer() = 42
+```
+
+    Intercept also has the capability of function overloads. A single named function may be declared with multiple signatures, as long as the parameters differ. This is doable because the type of the arguments when calling this named function are used to determine a matching function overload from the overload set of that function. An overload set is a list of all declared signatures.
+```
+foo: integer() = 69
+foo: integer(n: integer) = n
+foo: integer(x: integer  y: integer) {
+  x + y
+}
+
+foo()       ;; 69
+foo(42)     ;; 42
+foo(42, 27) ;; 69
 ```
 
 !==== BEG  This should go in "Types:Functions" or something, not in "Expressions:Named Functions".
@@ -240,5 +253,7 @@ foo :: half_less_one(z)
 ```
 
     This is by no means required, but I think we can all agree that modern programs benefit greatly from functions.
+
+TODO: Attributes?
 
 !==== END  This should go in "Types:Functions" or something, not in "Expressions:Named Functions".
