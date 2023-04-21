@@ -213,6 +213,19 @@ foo(42)     ;; 42
 foo(42, 27) ;; 69
 ```
 
+--------------------------------
+  MANGLING
+--------------------------------
+
+    (sometimes called Name Decoration)
+
+    Named functions get their names mangled in the output of the compiler for several reasons. Most importantly, it provides a way to combat namespace pollution once modules get introduced. That is, if module A defines `foo` and module B defines `foo`, they will be mangled differently and as such may still be used in the same program. As you can imagine, function names like `round` or `get_value` may be very common, and not being able to use them in any program just because a library you depend on defines it isn't ideal (i.e. most C libraries having a prefix on each function to prevent this).
+
+    Next, it allows for the generated code to have unique names for each function, that way if a particular backend needs to reference functions by name, it can. This is taken advantage of in the x86_64 GNU Assembly backend, for example, as assembly does not allow duplicate labels.
+
+    Another reason is that it allows a basic function signature to be reconstructed, just from the function's mangled name. In the future, Intercept will likely encode even more information in the mangled name, like function purity, calling convention, and more. It is called "mangling" because the resulting name is /not/ human readable at all (but it is readable by machines, and that's what's important in the output of a compiler). If you've ever used `c++filt`, you know what I'm talking about.
+
+
 !==== BEG  This should go in "Types:Functions" or something, not in "Expressions:Named Functions".
 
     A function, in a mathematical sense, is a mapping from a set `X` to a set `Y` where each `X` corresponds to exactly one element of `Y`. Basically, a function will take some input element and produce some output element, with each unique input producing a unique output. However! Keep in mind that in Intercept, functions are not defined in the strictly mathematical sense; it is possible to write a function that returns the same value no matter what inputs it is given, and it is possible to write a function that returns different values when the same input is given.
@@ -252,8 +265,11 @@ z :: y * 2
 foo :: half_less_one(z)
 ```
 
-    This is by no means required, but I think we can all agree that modern programs benefit greatly from functions.
+    In this example, it is by no means required to do this abstraction, but I think we can all agree that modern programs benefit greatly from functions, especially as program size and complexity increases.
 
-TODO: Attributes?
+TODO: It's own chapter? subsection? subsubsection? Just a few paragraphs?
+ATTRIBUTES
+
+    Programs these days are tricky things, especially to get them working together. While the defaults will work perfectly as long as you work entirely within Intercept, sometimes attributes are needed to specify or change the low level implementation details for certain things. For example, `nomangle` is a named function attribute. It specifies for a particular named function declaration that the name shall not be changed even in the output code.
 
 !==== END  This should go in "Types:Functions" or something, not in "Expressions:Named Functions".
