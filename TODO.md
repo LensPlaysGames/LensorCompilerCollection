@@ -27,6 +27,7 @@
 - [ ] Optimisation
   - [x] Zero subscript still does add/multiply when it doesn't need to
   - [x] Zero member access still does add when it doesn't need to, afaik
+  - [ ] Inline small functions?
 - x86_64
   - [ ] Pad string literals to ensure alignment of statics
 - [ ] Attributes
