@@ -5,6 +5,8 @@ Intercept Programming Language Reference
 Authors:
 - Lens_r
 
+Some things are introduced before they are explained, and other things are explained before they are introduced. If you read something twice and it doesn't make sense, skip it for now, and make a mental note to come back later.
+
 Key:
   Wrapped in forward slash like /this/ == emphasized/italisized text.
   Wrapped in earmuffs like *this* == bold text.
@@ -13,8 +15,9 @@ Key:
   Wrapped in bang-arrow like !<this>! means a hyperlink target.
   Wrapped in bang-reverse-arrow like !>this<! means a hyperlink reference.
   Line(s) wrapped with a line of 64 equal symbols (=) are chapter headings.
-  Line(s) wrapped with a line of 64 dash symbols (-) are section headings.
-  Line(s) wrapped with a line of 32 dash symbols (=) are subsection headings.
+  Line(s) wrapped with a line of 32 equal symbols (=) are subsection headings.
+  Line(s) wrapped with a line of 64 dash symbols (-) are subsection headings.
+  Line(s) wrapped with a line of 32 dash symbols (-) are subsubsection headings.
 
 
 ================================================================
@@ -56,13 +59,13 @@ a :: 42
 
     Expressions generally match up very well to the AST, or /abstract syntax tree/. The AST is what the parser produces; a tree of data that represents the Intercept program in it's entirety. I highly recommend that, right now (yes, right now), *you* go copy `42` into a file, and use the intercept compiler to compile it, passing `--print-ast` as a flag on the command line. This will dump a printout of the AST to the compiler's output, and you can see what it looks like for a simple program. Then, modify the file to read `42 + 27`, save it, and do the same thing again. You should see the AST gain a binary operation expression with two expressions as it's operands. It isn't imperative that you understand every little thing in the AST printout right now; just get the general idea of how an expression may be a composition of other expression(s). As you read through the different possible expressions in Intercept, try writing them in your test file and compiling to look at the AST. This will help you gain an intuitive understanding of how the language syntax comes together to form meaningful programs.
 
-----------------------------------------------------------------
+================================
   Literals
-----------------------------------------------------------------
+================================
 
-================================
+----------------------------------------------------------------
   Integers
-================================
+----------------------------------------------------------------
 
     1. Any amount of digits `0` through `9` in a row with no whitespace between them forms a decimal (base 10) number.
     2. Any amount of digits `0` through `f` in a row with no whitespace between them following `0x` forms a hexadecimal (base 16) number.
@@ -70,18 +73,172 @@ a :: 42
 
     An integer literal expression produces a value of type `integer_literal`; an `integer_literal` is convertible to any `integer` type, and is treated as an `integer` if it is never converted.
 
-================================
+----------------------------------------------------------------
   Strings
-================================
+----------------------------------------------------------------
 
-    Any run of bytes inbetween two unescaped double-quotes `"` forms a string literal expression. To escape a double-quote, use the escape token (a backslash `\`).
+    Any run of bytes inbetween two single-quotes forms an inescapable string literal expression. Single-quoted strings contain the bytes inbetween the two single-quotes, unchanged (verbatim).
+
+    Any run of bytes inbetween two unescaped double-quotes `"` forms an escapable string literal expression. To escape an escapable character, ensure the escape token (a backslash `\`) comes right before it in the string; the backslash is not included in the resulting string.
+
+Escapable Characters:
+- `\n` -> 0xa  (line feed)
+- `\r` -> 0xd  (carriage return)
+- `\t` -> 0x9  (horizontal tab)
+- `\f` -> 0xc  (form feed)
+- `\v` -> 0xb  (vertical tab)
+- `\a` -> 0x7  (alert/bell)
+- `\b` -> 0x8  (backspace)
+- `\e` -> 0x1b (escape)
+- `\0` -> 0x0  (NUL)
+- `\'` -> 0x27 (`'`, single quote)
+- `\"` -> 0x22 (`"`, double quote)
+- `\\` -> 0x5c (`\`, backslash)
 
     A string literal expression produces a value of type `byte[N]` where N is the number of bytes within the string plus one to account for an extra zero byte at the end. That is, a string literal containing four bytes will produce a value with a type of `byte[5]`; an array of five `byte` values.
 
-================================
+----------------------------------------------------------------
   Arrays
-================================
+----------------------------------------------------------------
 
     Any amount of expressions that *all* produce a value of the same type within square brackets (`[` and `]`) is an array literal.
 
     An array literal expression produces a value of type `T[N]` where `T` is the result type of each expression between the brackets and `N` is the amount of expressions between the brackets.
+
+```
+;; An array of four integers, initialised from an array literal.
+int_array :: [ 42 69 420 1337 ]
+```
+
+================================
+  Declarations
+================================
+
+    A declaration is exactly what it sounds like. An Intercept programmer /declares/ things that *must* exist for the given program. That is, a declaration simply makes something known about the program. For example, the `a: integer` declaration we looked at in the introduction makes it known that the identifier `a` exists in this program, and it has a type of `integer`, which lets the compiler know what is allowed to happen to this variable, how big it is, etc. Declarations almost always define new variables in a program.
+
+    Declarations come in many forms; here we outline the different kinds, how to use them, and what they are for.
+
+----------------------------------------------------------------
+  Common
+----------------------------------------------------------------
+
+    The simplest is the declaration from the introduction !>simple-declaration<!. An identifer followed by a `:` followed by a type. This is the minimum amount of information the compiler needs for any declaration (identifer + type).
+
+```
+a: integer
+```
+
+    By appending an equal sign and an expression of compatible type, a variable may be initialised with the given expression. That is, the declared variable will be assigned to the initialised value.
+
+```
+a: integer = 69
+```
+
+----------------------------------------------------------------
+  Type Inference/Deduction
+----------------------------------------------------------------
+
+    In the common style of declaring things, the type is declared by an Intercept programmer. However, the compiler is already able to determine what type a given expression will return (that's needed to do typechecking), so we can use this ability with an initialised declaration to omit an Intercept programmer having to type the type.
+
+    Because `69` is an integer literal expression, it will return a type of integer by default. The following declarations are equivalent.
+
+```
+a :: 69
+a: integer = 69
+```
+
+----------------------------------------------------------------
+  Type
+----------------------------------------------------------------
+
+    There are also type declarations, where an Intercept programmer may define a new type to be used in other declarations.
+
+    In the future, Intercept will support more powerful type declarations; for now, an Intercept programmer may only define arbitrary structures made out of other types.
+
+```
+my_struct :> type {
+    x: integer
+    y: integer
+}
+```
+
+----------------------------------------------------------------
+  Named Function
+----------------------------------------------------------------
+
+    A function in Intercept is a sequence of expressions that may be executed by /calling/ the function. To call a function simply means to use a call expression on an expression with a function result type.
+
+    Functions are declared just like other variables, however there are some differences both in syntax and semantics. While a function is it's own type, it's actually made up of other types; this collection of types is called a function's /signature/. A function signature fully describes the type of a function, but not it's implementation. Function signatures in Intercept have the following things: a return type, and a list of parameter types. The return type is the type that calling this function will result in. The list of parameter types is the required type of each argument passed to the function when it is called.
+
+    A named function that returns `69`.
+```
+sixty_nine: integer() { 69 }
+```
+
+    A named function that returns twice the given value. To declare a parameter, a declaration is added inbetween the parentheses of the function type. This declared variable may then be used within the body of the function. The value of a parameter may be different each time the function is called.
+```
+doubled: integer(n: integer) { n * 2 }
+;; To call a function with parameters, put expressions in the
+;; parentheses of a call expression; these are called arguments.
+doubled(21)
+```
+
+    Some functions don't actually need to return a value, or anything for that matter. For this we use `void`. `void` is exactly what it sounds like; there's nothing there.
+```
+counter :: 0
+one_more: void() {
+  counter := counter + 1
+}
+one_more()
+one_more()
+one_more()
+;; counter = 3 now
+```
+
+    There is also an alternate syntax that allows for more concise "one liners", as it doesn't require a block expression directly after the function declaration.
+```
+forty_two: integer() = 42
+```
+
+!==== BEG  This should go in "Types:Functions" or something, not in "Expressions:Named Functions".
+
+    A function, in a mathematical sense, is a mapping from a set `X` to a set `Y` where each `X` corresponds to exactly one element of `Y`. Basically, a function will take some input element and produce some output element, with each unique input producing a unique output. However! Keep in mind that in Intercept, functions are not defined in the strictly mathematical sense; it is possible to write a function that returns the same value no matter what inputs it is given, and it is possible to write a function that returns different values when the same input is given.
+
+```
+INPUT x -> FUNCTION f -> OUTPUT y
+```
+
+    A function in Intercept is a sequence of expressions that may be executed by /calling/ the function. To call a function simply means to use a call expression on an expression with a function result type. This is very handy to abstract related or repeated parts of a program into a function, that way the final code becomes more readable, has less code duplication, and more.
+
+    For example, let's say a program requires calculating one minus the half of a given number /a lot/. We could do it like this.
+
+```
+x :: 42
+y :: x / 2 - 1
+z :: y * 2
+
+;; ...
+
+foo :: z / 2 - 1
+```
+
+    While there's nothing wrong with that program, it's not really clear (at a glance) that the intialisers of `y` and `foo` are actually performing the same computations, just with different inputs. This is made more clear by the use of a simple named function.
+
+```
+;; Given an integer `n`, return half of it's value minus one.
+half_less_one: integer(n: integer) {
+  n / 2 - 1
+}
+
+x :: 42
+y :: half_less_one(x)
+z :: y * 2
+
+;; ...
+
+foo :: half_less_one(z)
+```
+
+    This is by no means required, but I think we can all agree that modern programs benefit greatly from functions.
+
+!==== END  This should go in "Types:Functions" or something, not in "Expressions:Named Functions".
