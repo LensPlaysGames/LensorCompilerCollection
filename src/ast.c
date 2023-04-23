@@ -1209,6 +1209,15 @@ void ast_replace_node(AST *ast, Node *old, Node *new) {
 #undef REPLACE_IN_CHILDREN
 }
 
+bool type_is_signed_canon(Type *type) {
+    if (type->kind == TYPE_INTEGER) return type->integer.is_signed;
+    if (type->kind == TYPE_PRIMITIVE) return type->primitive.is_signed;
+    return false;
+}
+bool type_is_signed(Type *type) {
+  return type_is_signed_canon(type_canonical(type));
+}
+
 NODISCARD bool is_lvalue(Node *expr) {
   switch (expr->kind) {
   default: return false;

@@ -738,6 +738,12 @@ NODISCARD bool type_is_array(Type *type);
 /// Check if a type is of struct type.
 NODISCARD bool type_is_struct(Type *type);
 
+/// Return true iff the given type is an integer type *and* has the
+/// possiblity of being negative (aka it is signed).
+/// In all other cases, return false.
+NODISCARD bool type_is_signed(Type *type);
+NODISCARD bool type_is_signed_canon(Type *type);
+
 /// Check if two canonical types are equal. You probably want to use
 /// `convertible()`
 /// \return Whether the types are equal.

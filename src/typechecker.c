@@ -82,10 +82,9 @@ NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
   bool to_is_int = type_is_integer_canon(to);
   bool from_is_int = type_is_integer_canon(from);
   if (to_is_int && from_is_int) {
-    if (
-      to->primitive.size > from->primitive.size
-      && (to->primitive.is_signed || !from->primitive.is_signed)
-    ) return 1;
+    if (type_sizeof(to) > type_sizeof(from) &&
+        (type_is_signed_canon(to) || !type_is_signed_canon(from)))
+      return 1;
   }
 
   /// Integer literals are convertible to any integer type.
