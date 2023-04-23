@@ -1247,6 +1247,7 @@ bool type_equals_canon(Type *a, Type *b) {
   if (a->kind != b->kind) return false;
 
   /// Compare the types.
+  STATIC_ASSERT(TYPE_COUNT == 8, "Exhaustive handling of types in type comparison!");
   switch (a->kind) {
     default: ICE("Invalid type kind %d", a->kind);
     case TYPE_NAMED: UNREACHABLE();
@@ -1276,6 +1277,10 @@ bool type_equals_canon(Type *a, Type *b) {
         if (!type_equals(a_member.type, b_member.type)) return false;
       }
       return true;
+
+      case TYPE_INTEGER:
+        return a->integer.is_signed == b->integer.is_signed
+          && a->integer.bit_width == b->integer.bit_width;
     }
   }
 }
