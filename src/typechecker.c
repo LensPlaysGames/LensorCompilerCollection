@@ -1104,9 +1104,19 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                   "Cannot perform shift larger than size of underlying type %T (%Z is max).",
                   expr->binary.lhs->type, (8 * type_sizeof(expr->binary.lhs->type)) - 1);
 
-            // Disallow divide by zero...
-            if ((expr->binary.op == TK_SLASH || expr->binary.op == TK_PERCENT) && (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer == 0))
-              ERR(expr->source_location, "Cannot perform division by zero.");
+            // Division/Modulus
+            if (expr->binary.op == TK_SLASH || expr->binary.op == TK_PERCENT) {
+              // Disallow divide by zero...
+              if (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer == 0)
+                ERR(expr->source_location, "Cannot perform division by zero.");
+
+              if (!type_equals(lhs->type, rhs->type)) {
+                // Insert cast from rhs type to lhs type, as they are convertible but not equal.
+                Node *cast = ast_make_cast(ast, rhs->source_location, lhs->type, rhs);
+                expr->binary.rhs = cast;
+                if (!typecheck_expression(ast, cast)) return false;
+              }
+            }
           } else {
             // Check for operator overloads, or replace binary operator with a call, or something...
             TODO("Handle binary operator %s with lhs type of %T and rhs type of %T\n", token_type_to_string(expr->binary.op), lhs->type, rhs->type);

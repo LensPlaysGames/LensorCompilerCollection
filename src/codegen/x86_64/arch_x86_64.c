@@ -192,11 +192,13 @@ enum Instruction {
   I_SUB,
   // I_MUL,
   I_IMUL,
-  // I_DIV,
+  I_DIV,
   I_IDIV,
   I_XOR,
   I_CMP,
   I_TEST,
+  I_CWD,
+  I_CDQ,
   I_CQO,
   I_SETCC,
   I_SAL, ///< Reg reg | Immediate imm, Reg reg
@@ -296,7 +298,7 @@ const char *setcc_suffixes_x86_64[COMPARE_COUNT] = {
 };
 
 static const char *instruction_mnemonic(CodegenContext *context, enum Instruction instruction) {
-  STATIC_ASSERT(I_COUNT == 26, "ERROR: instruction_mnemonic() must exhaustively handle all instructions.");
+  STATIC_ASSERT(I_COUNT == 29, "ERROR: instruction_mnemonic() must exhaustively handle all instructions.");
   // x86_64 instructions that aren't different across syntaxes can go here!
   switch (instruction) {
   default: break;
@@ -304,7 +306,7 @@ static const char *instruction_mnemonic(CodegenContext *context, enum Instructio
   case I_SUB: return "sub";
     // case I_MUL: return "mul";
   case I_IMUL: return "imul";
-    // case I_DIV: return "div";
+  case I_DIV: return "div";
   case I_IDIV: return "idiv";
   case I_SAL: return "sal";
   case I_SAR: return "sar";
@@ -333,6 +335,8 @@ static const char *instruction_mnemonic(CodegenContext *context, enum Instructio
 
   case CG_ASM_DIALECT_ATT: {
     switch (instruction) {
+    case I_CWD: return "cwtd";
+    case I_CDQ: return "cltd";
     case I_CQO: return "cqto";
     default: break;
     }
@@ -340,6 +344,8 @@ static const char *instruction_mnemonic(CodegenContext *context, enum Instructio
 
   case CG_ASM_DIALECT_INTEL: {
     switch (instruction) {
+    case I_CWD: return "cwd";
+    case I_CDQ: return "cdq";
     case I_CQO: return "cqo";
     default: break;
     } break;
@@ -585,7 +591,7 @@ static void femit_indirect_branch(CodegenContext *context, enum Instruction inst
   }
 }
 
-static void femit_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor reg) {
+static void femit_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor reg, enum RegSize size) {
   if (inst == I_JMP || inst == I_CALL) {
     femit_indirect_branch(context, inst, reg);
     return;
@@ -595,7 +601,7 @@ static void femit_reg(CodegenContext *context, enum Instruction inst, RegisterDe
     return;
   }
   const char *mnemonic = instruction_mnemonic(context, inst);
-  const char *source = register_name(reg);
+  const char *source = regname(reg, size);
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
       fprint(context->code, "    %s %%%s\n",
@@ -649,7 +655,7 @@ static void femit
   va_start(args, instruction);
 
   ASSERT(context);
-  STATIC_ASSERT(I_COUNT == 26, "femit() must exhaustively handle all x86_64 instructions.");
+  STATIC_ASSERT(I_COUNT == 29, "femit() must exhaustively handle all x86_64 instructions.");
 
   // TODO: Extract setcc and jcc to their own functions, get rid of varargs
   switch (instruction) {
@@ -694,6 +700,8 @@ static void femit
     } break;
 
     case I_RET:
+    case I_CWD:
+    case I_CDQ:
     case I_CQO: {
       const char *mnemonic = instruction_mnemonic(context, instruction);
       fprint(context->code, "    %s\n", mnemonic);
@@ -851,14 +859,14 @@ static void codegen_prologue(CodegenContext *cg_context, IRFunction *f) {
     case FRAME_NONE: break;
 
     case FRAME_FULL: {
-      femit_reg(cg_context, I_PUSH, REG_RBP);
+      femit_reg(cg_context, I_PUSH, REG_RBP, r64);
       femit_reg_to_reg(cg_context, I_MOV, REG_RSP, r64, REG_RBP, r64);
       if (!optimise || f->locals_total_size)
         femit_imm_to_reg(cg_context, I_SUB, (i64) f->locals_total_size, REG_RSP, r64);
     } break;
 
     case FRAME_MINIMAL: {
-      femit_reg(cg_context, I_PUSH, REG_RBP);
+      femit_reg(cg_context, I_PUSH, REG_RBP, r64);
     } break;
   }
 }
@@ -871,12 +879,54 @@ static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
 
     case FRAME_FULL: {
       femit_reg_to_reg(cg_context, I_MOV, REG_RBP, r64, REG_RSP, r64);
-      femit_reg(cg_context, I_POP, REG_RBP);
+      femit_reg(cg_context, I_POP, REG_RBP, r64);
     } break;
 
     case FRAME_MINIMAL: {
-      femit_reg(cg_context, I_POP, REG_RBP);
+      femit_reg(cg_context, I_POP, REG_RBP, r64);
     } break;
+  }
+}
+
+static void divmod(CodegenContext *context, IRInstruction *inst) {
+  ASSERT(inst->kind == IR_DIV || inst->kind == IR_MOD, "divmod must be passed a div or mod instruction!");
+  // Dividend of div/mod goes in rdx:rax; divisor must not be in those registers.
+  ASSERT(inst->rhs->result != REG_RAX,
+         "Register allocation must not allocate RAX to divisor.");
+  ASSERT(inst->rhs->result != REG_RDX,
+         "Register allocation must not allocate RDX to divisor.");
+  enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
+  enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
+
+  ASSERT(lhs_size == rhs_size, "x86_64 backend requires divisor and dividend to be of same sized type!");
+
+  // Move dividend into RDX:RAX (for now, just RAX)
+  if (lhs_size == r8 || lhs_size == r16) femit_reg_to_reg(context, I_XOR, REG_RAX, r64, REG_RAX, r64);
+  femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, REG_RAX, lhs_size);
+
+  if (type_is_signed(inst->type)) {
+    // For 8-byte signed types, we need to extend RAX into the 16-byte
+    // RDX:RAX. For this, we use CQO (convert quad-word to octal-word).
+    if (lhs_size == r64)
+      femit(context, I_CQO);
+      // For 4-byte signed types, we need to extend EAX into the 8-byte
+      // EDX:EAX. For this, we use CDQ (convert double-word to quad-word).
+    else if (lhs_size == r32)
+      femit(context, I_CDQ);
+      // For 2-byte signed types, we need to extend AX into the 4-byte
+      // DX:AX. For this, we use CWD (convert word to double-word).
+    else if (lhs_size == r16)
+      femit(context, I_CWD);
+    else ICE("Unhandled register size for signed division");
+
+    femit_reg(context, I_IDIV, inst->rhs->result, lhs_size);
+  }
+  else {
+    // For unsigned types, we need to make sure RDX is zero; if it
+    // was set, it would cause a signed division, and we don't want
+    // that.
+    femit_reg_to_reg(context, I_XOR, REG_RDX, r64, REG_RDX, r64);
+    femit_reg(context, I_DIV, inst->rhs->result, lhs_size);
   }
 }
 
@@ -920,7 +970,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     }
     break;
   case IR_NOT: {
-    femit_reg(context, I_NOT, inst->operand->result);
+    femit_reg(context, I_NOT, inst->operand->result, r64);
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
     femit_reg_to_reg(context, I_MOV, inst->operand->result, size, inst->result, size);
   } break;
@@ -992,7 +1042,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     if (inst->call.tail_call) {
       // Restore the frame pointer if we have one.
       codegen_epilogue(context, inst->parent_block->function);
-      if (inst->call.is_indirect) femit_reg(context, I_JMP, inst->call.callee_instruction->result);
+      if (inst->call.is_indirect) femit_reg(context, I_JMP, inst->call.callee_instruction->result, r64);
       else femit_name(context, I_JMP, inst->call.callee_function->name.data);
       if (inst->parent_block) inst->parent_block->done = true;
       break;
@@ -1004,7 +1054,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     // Save return register.
     // FIXME: Use calling convention for return register.
     if (func_regs & REG_RAX) {
-      femit_reg(context, I_PUSH, REG_RAX);
+      femit_reg(context, I_PUSH, REG_RAX, r64);
       // NOTE: regs_pushed_count for this push is updated below, as the
       // mask isn't unset.
     }
@@ -1023,7 +1073,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i)
       if (func_regs & (1 << i) && is_caller_saved(i))
         // TODO: Don't push registers that are used for arguments.
-        femit_reg(context, I_PUSH, i);
+        femit_reg(context, I_PUSH, i, r64);
 
     usz bytes_pushed = 0;
     // Shadow stack
@@ -1036,13 +1086,13 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     foreach_ptr (IRInstruction *, arg, inst->call.arguments) {
       // If argument is passed on stack due to ABI.
       if (arg->kind == IR_ALLOCA) {
-        femit_reg(context, I_PUSH, REG_RBP);
+        femit_reg(context, I_PUSH, REG_RBP, r64);
         bytes_pushed += 8;
         femit_imm_to_mem(context, I_SUB, (i64)arg->alloca.offset, REG_RSP, 0);
       }
     }
 
-    if (inst->call.is_indirect) femit_reg(context, I_CALL, inst->call.callee_instruction->result);
+    if (inst->call.is_indirect) femit_reg(context, I_CALL, inst->call.callee_instruction->result, r64);
     else femit_name(context, I_CALL, inst->call.callee_function->name.data);
 
     // Restore stack
@@ -1052,7 +1102,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     // Restore caller saved registers used in called function.
     for (Register i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i)
       if (func_regs & (1 << i) && is_caller_saved(i))
-        femit_reg(context, I_POP, i);
+        femit_reg(context, I_POP, i, r64);
 
     // Restore stack pointer from stack alignment, if necessary.
     if (regs_pushed_count & 0b1)
@@ -1063,7 +1113,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     // Restore return register.
     // FIXME: Use calling convention for return register.
     if (func_regs & REG_RAX)
-      femit_reg(context, I_POP, REG_RAX);
+      femit_reg(context, I_POP, REG_RAX, r64);
 
   } break;
 
@@ -1071,7 +1121,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     // Restore callee-saved registers used in the function.
     for (Register i = sizeof(inst->parent_block->function->registers_in_use) * 8 - 1; i > 0; --i) {
       if (inst->parent_block->function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i)) {
-        femit_reg(context, I_POP, i);
+        femit_reg(context, I_POP, i, r64);
       }
     }
     codegen_epilogue(context, inst->parent_block->function);
@@ -1144,28 +1194,12 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     femit_reg_to_reg(context, I_MOV, inst->rhs->result, size, inst->result, size);
   } break;
   case IR_DIV: {
-    // Dividend of div/mod goes in rdx:rax; divisor must not be in those registers.
-    ASSERT(inst->rhs->result != REG_RAX,
-           "Register allocation must not allocate RAX to divisor.");
-    ASSERT(inst->rhs->result != REG_RDX,
-           "Register allocation must not allocate RDX to divisor.");
-    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
-    femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, REG_RAX, r64);
-    femit(context, I_CQO);
-    femit_reg(context, I_IDIV, inst->rhs->result);
+    divmod(context, inst);
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
     femit_reg_to_reg(context, I_MOV, REG_RAX, size, inst->result, size);
   } break;
   case IR_MOD: {
-    // Dividend of div/mod goes in rdx:rax; divisor must not be in those registers.
-    ASSERT(inst->rhs->result != REG_RAX,
-           "Register allocation must not allocate RAX to divisor.");
-    ASSERT(inst->rhs->result != REG_RDX,
-           "Register allocation must not allocate RDX to divisor.");
-    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RAX, r64);
-    femit(context, I_CQO);
-    femit_reg(context, I_IDIV, inst->rhs->result);
+    divmod(context, inst);
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
     femit_reg_to_reg(context, I_MOV, REG_RDX, size, inst->result, size);
   } break;
@@ -1174,7 +1208,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
            "Register allocation must not allocate RCX to result of lhs of shift.");
     enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
     femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RCX, r64);
-    femit_reg(context, I_SHL, inst->lhs->result);
+    femit_reg(context, I_SHL, inst->lhs->result, r64);
     enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
     femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, inst->result, size);
@@ -1182,7 +1216,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   case IR_SHR: {
     enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
     femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RCX, r64);
-    femit_reg(context, I_SHR, inst->lhs->result);
+    femit_reg(context, I_SHR, inst->lhs->result, r64);
     enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
     femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, inst->result, size);
@@ -1190,7 +1224,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   case IR_SAR: {
     enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
     femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RCX, r64);
-    femit_reg(context, I_SAR, inst->lhs->result);
+    femit_reg(context, I_SAR, inst->lhs->result, r64);
     enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
     femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, inst->result, size);
@@ -1291,7 +1325,7 @@ void emit_function(CodegenContext *context, IRFunction *function) {
   // Save all callee-saved registers in use in the function.
   for (Register i = 1; i < sizeof(function->registers_in_use) * 8; ++i) {
     if ((size_t)function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i)) {
-      femit_reg(context, I_PUSH, i);
+      femit_reg(context, I_PUSH, i, r64);
     }
   }
   list_foreach (IRBlock*, block, function->blocks) { emit_block(context, block); }
