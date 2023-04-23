@@ -24,6 +24,7 @@
   - [ ] Some syntax to repeat a string literal X amount of times, and another to ensure minimum size of string literal
   - [ ] It prints "unknown symbol" even for mismatched overload that should have pretty error
   - [ ] Change name of LINUX calling convention; it's actually just SystemV
+  - [ ] MSWIN x64 calling convention for non-aggregate arguments on the stack isn't properly handled
 - [ ] Optimisation
   - [x] Zero subscript still does add/multiply when it doesn't need to
   - [x] Zero member access still does add when it doesn't need to, afaik

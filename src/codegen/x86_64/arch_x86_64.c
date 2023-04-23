@@ -1720,11 +1720,13 @@ static void lower(CodegenContext *context) {
           ++idx;
         }
 
+        // FIXME: We don't need to allocate a stack copy *here* of the
+        // passed argument if it itself fits in a register.
         if (argcount >= argument_register_count) {
           usz i = instruction->call.arguments.size - 1;
           foreach_ptr_rev (IRInstruction *, argument, instruction->call.arguments) {
             if (i < argument_register_count) break;
-            *argument_ptr = alloca_copy_of(context, argument, instruction);
+            instruction->call.arguments.data[i] = alloca_copy_of(context, argument, instruction);
             --i;
           }
         }
@@ -1861,6 +1863,11 @@ static void lower(CodegenContext *context) {
         // Structs and unions of size 8, 16, 32, or 64 bits, and __m64
         // types, are passed as if they were integers of the same size.
         if (instruction->imm >= argument_register_count || type_sizeof(type) > 8) {
+          if (instruction->imm >= argument_register_count && !(type_sizeof(type) > 8))
+            TODO("Handle argument on stack that is not lowered to a pointer...");
+
+          // FIXME: Not all arguments passed on stack are lowered to pointers! Only aggregates.
+
           // Lower type to a pointer, because that's how the calls have
           // been altered as well.
           INSTRUCTION(rbp, IR_REGISTER);
