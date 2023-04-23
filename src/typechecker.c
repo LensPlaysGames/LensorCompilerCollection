@@ -731,6 +731,17 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
       t->structure.byte_size = ALIGN_TO(t->structure.byte_size, t->structure.alignment);
 
     return true;
+
+  case TYPE_INTEGER: {
+    if (!t->integer.bit_width)
+      ERR(t->source_location, "Rejecting arbitrary integer of zero width: %T", t);
+
+    // TODO: This should probably be backend-dependant.
+    if (t->integer.bit_width > 64)
+      SORRY(t->source_location, "Rejecting arbitrary integer of width greater than 64: %T. This is a WIP, sorry!", t);
+
+    return true;
+  }
   }
   UNREACHABLE();
 }

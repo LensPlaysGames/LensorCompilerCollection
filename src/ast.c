@@ -489,6 +489,19 @@ Type *ast_make_type_struct(
   return type;
 }
 
+/// Create a new integer type.
+Type *ast_make_type_integer(
+    AST *ast,
+    loc source_location,
+    bool is_signed,
+    usz bit_width
+) {
+  Type *type = mktype(ast, TYPE_INTEGER, source_location);
+  type->integer.is_signed = is_signed;
+  type->integer.bit_width = bit_width;
+  return type;
+}
+
 /// ===========================================================================
 ///  AST query functions.
 /// ===========================================================================
@@ -499,7 +512,7 @@ static void write_typename(string_buffer *s, const Type *type) {
     return;
   }
 
-  STATIC_ASSERT(TYPE_COUNT == 7, "Exhaustive handling of all type kinds!");
+  STATIC_ASSERT(TYPE_COUNT == 8, "Exhaustive handling of all type kinds!");
 
   /// Print the type.
   switch (type->kind) {
@@ -557,6 +570,10 @@ static void write_typename(string_buffer *s, const Type *type) {
         format_to(s, " %S", type->structure.decl->struct_decl->name);
       }
       break;
+
+    case TYPE_INTEGER: {
+      format_to(s, "%s%Z", type->integer.is_signed ? "s" : "u" , type->integer.bit_width);
+    } break;
   }
 }
 
@@ -592,8 +609,9 @@ bool type_is_incomplete_canon(Type *type) {
   return !type || type == t_void;
 }
 
+// TODO: Consider this returning bits instead of bytes.
 usz type_sizeof(Type *type) {
-  STATIC_ASSERT(TYPE_COUNT == 7, "Exhaustive handling of types!");
+  STATIC_ASSERT(TYPE_COUNT == 8, "Exhaustive handling of types!");
   switch (type->kind) {
     default: ICE("Invalid type kind: %d", type->kind);
     case TYPE_PRIMITIVE: return type->primitive.size;
@@ -603,11 +621,13 @@ usz type_sizeof(Type *type) {
     case TYPE_ARRAY: return type->array.size * type_sizeof(type->array.of);
     case TYPE_FUNCTION: return sizeof(void *);
     case TYPE_STRUCT: return type->structure.byte_size;
+    case TYPE_INTEGER: return ALIGN_TO(type->integer.bit_width, 8) / 8;
   }
 }
 
+// TODO: Consider this returning bits instead of bytes.
 usz type_alignof(Type *type) {
-  STATIC_ASSERT(TYPE_COUNT == 7, "Exhaustive handling of types!");
+  STATIC_ASSERT(TYPE_COUNT == 8, "Exhaustive handling of types!");
   switch (type->kind) {
     default: ICE("Invalid type kind: %d", type->kind);
     case TYPE_PRIMITIVE: return type->primitive.alignment;
@@ -617,6 +637,7 @@ usz type_alignof(Type *type) {
     case TYPE_ARRAY: return type->array.size * type_alignof(type->array.of);
     case TYPE_FUNCTION: return _Alignof(void *);
     case TYPE_STRUCT: return type->structure.alignment;
+    case TYPE_INTEGER: return ALIGN_TO(type->integer.bit_width, 8) / 8;
   }
 }
 
@@ -1286,7 +1307,7 @@ bool type_equals(Type *a, Type *b) {
 
 bool type_is_integer_canon(Type *t) {
   t = type_strip_references(t);
-  return t == t_integer_literal || t == t_integer  || t == t_byte;
+  return t == t_integer_literal || t == t_integer  || t == t_byte || t->kind == TYPE_INTEGER;
 }
 bool type_is_integer(Type *type) {
   return type_is_integer_canon(type_canonical(type));

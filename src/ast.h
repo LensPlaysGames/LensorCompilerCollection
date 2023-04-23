@@ -38,6 +38,7 @@ enum TypeKind {
   TYPE_ARRAY,
   TYPE_FUNCTION,
   TYPE_STRUCT,
+  TYPE_INTEGER,
   TYPE_COUNT
 };
 
@@ -331,6 +332,11 @@ typedef struct TypeStruct {
   size_t alignment;
 } TypeStruct;
 
+typedef struct TypeInteger {
+  bool is_signed;
+  usz bit_width;
+} TypeInteger;
+
 /// A type.
 struct Type {
   /// The kind of the type.
@@ -348,6 +354,7 @@ struct Type {
     TypeArray array;
     TypeFunction function;
     TypeStruct structure;
+    TypeInteger integer;
   };
 
   bool type_checked;
@@ -635,6 +642,14 @@ Type *ast_make_type_struct(
     AST *ast,
     loc source_location,
     Members members
+);
+
+/// Create a new integer type.
+Type *ast_make_type_integer(
+    AST *ast,
+    loc source_location,
+    bool is_signed,
+    usz bit_width
 );
 
 /// ===========================================================================
