@@ -2085,8 +2085,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
       fprint(context->code, ".section .data\n");
     }
 
-    // TODO: Do compile-time known static assignment (i.e. of string
-    // literals) using assembler directives.
+    // Do compile-time known static assignment.
 
     if (var->init) {
       if (var->init->kind == IR_LIT_INTEGER) {
@@ -2099,7 +2098,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         // of integral types are always promoted to at least `int` or
         // `unsigned` in C.
         fprint(context->code, "%u", (unsigned) byte_repr[0]);
-        for (usz i = 1; i < sizeof(var->init->imm); ++i)
+        for (usz i = 1; i < type_sizeof(var->type); ++i)
           fprint(context->code, ",%u", (unsigned) byte_repr[i]);
 
         fprint(context->code, "\n");
