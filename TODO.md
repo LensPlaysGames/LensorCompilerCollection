@@ -7,6 +7,7 @@
   - [ ] LLVM_PATH env var or something in CMakeLists.txt rather than `find_package()`?
   - [x] `integer`/`byte`/`void` should be keywords (and terminals in the grammar).
   - [x] `s8/u8/s16/u16/s32/u32/s64/u64`
+    - [ ] Properly support arbitrarily-sized integer arithmetic; i.e. 18-bit addition overflow and such
   - [ ] Early `return`
     - [ ] Parsing
     - [ ] Return block in the IR
