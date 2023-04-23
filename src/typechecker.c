@@ -677,11 +677,13 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
   case TYPE_PRIMITIVE: return true;
   case TYPE_POINTER: return typecheck_type(ast, t->pointer.to);
   case TYPE_REFERENCE: return typecheck_type(ast, t->reference.to);
+
   case TYPE_NAMED: {
     if (t->named->val.type)
       return typecheck_type(ast, t->named->val.type);
     return true;
   }
+
   case TYPE_FUNCTION:
     if (!typecheck_type(ast, t->function.return_type)) return false;
     foreach(Parameter, param, t->function.parameters) {
@@ -693,12 +695,14 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
       }
     }
     return true;
+
   case TYPE_ARRAY:
     if (!typecheck_type(ast, t->array.of)) return false;
     if (!t->array.size)
       ERR(t->source_location,
           "Cannot create array of zero size: %T", t);
     return true;
+
   case TYPE_STRUCT:
     foreach(Member, member, t->structure.members) {
       if (!typecheck_type(ast, member->type)) return false;
@@ -713,14 +717,14 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
       if (!has_alignment && alignment > t->structure.alignment)
         t->structure.alignment = alignment;
 
-      t->structure.byte_size += (alignment - (t->structure.byte_size % alignment)) % alignment;
+      t->structure.byte_size = ALIGN_TO(t->structure.byte_size, alignment);
 
       member->byte_offset = t->structure.byte_size;
       t->structure.byte_size += type_sizeof(member->type);
     }
 
     if (t->structure.alignment)
-      t->structure.byte_size += (t->structure.alignment - (t->structure.byte_size % t->structure.alignment)) % t->structure.alignment;
+      t->structure.byte_size = ALIGN_TO(t->structure.byte_size, t->structure.alignment);
 
     return true;
   }

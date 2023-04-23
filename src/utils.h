@@ -162,4 +162,6 @@ void eprint(const char *fmt, ...);
 /// Determine the width of a number.
 NODISCARD usz number_width(u64 n);
 
+#define ALIGN_TO(value, alignment) (value + ((alignment - (value % alignment)) % alignment))
+
 #endif // FUNCOMPILER_UTILS_H
