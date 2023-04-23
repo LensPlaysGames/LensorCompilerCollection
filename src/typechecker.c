@@ -13,12 +13,16 @@
 
 #define DIAG(diag, loc, ...) issue_diagnostic(diag, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__)
 
-#define ERR(loc, ...)                                                                  \
-  do {                                                                                        \
+#define ERR(loc, ...)                                                   \
+  do {                                                                  \
     issue_diagnostic(DIAG_ERR, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__); \
-    return false;                                                                             \
+    return false;                                                       \
   } while (0)
-#define SORRY(loc, ...) DIAG(DIAG_SORRY, loc, __VA_ARGS__)
+#define SORRY(loc, ...)                         \
+  do {                                          \
+    DIAG(DIAG_SORRY, loc, __VA_ARGS__);         \
+    return false;                               \
+  } while (0)
 
 #define ERR_DONT_RETURN(loc, ...) issue_diagnostic(DIAG_ERR, (ast)->filename.data, as_span((ast)->source), (loc), __VA_ARGS__)
 
