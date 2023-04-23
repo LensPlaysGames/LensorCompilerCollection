@@ -1214,7 +1214,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     enum RegSize size = -1u;
     /// Load from a static variable.
     if (inst->operand->kind == IR_STATIC_REF) {
-      size = regsize_from_bytes(type_sizeof(inst->operand->type));
+      size = regsize_from_bytes(type_sizeof(inst->operand->type->pointer.to));
       if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, r32, inst->result, r32);
       femit_name_to_reg(context, I_MOV, REG_RIP, inst->operand->static_ref->name.data, inst->result, size);
     }
