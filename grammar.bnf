@@ -40,7 +40,7 @@
 /// Types.
 <type>           ::= <type-base> | <type-pointer> | <type-derived> | <type-struct>
 <type-pointer>   ::= "@" { "@" } ( IDENTIFIER | "(" <type> ")" )
-<type-base>      ::= IDENTIFIER | INTEGER | BYTE | VOID
+<type-base>      ::= IDENTIFIER | INTEGER | BYTE | VOID | ARBITRARY_INT
 <type-struct>    ::= TYPE <struct-body>
 <type-derived>   ::= <type-array> | <type-function>
 <type-array>     ::= <type> "[" <expression> "]"

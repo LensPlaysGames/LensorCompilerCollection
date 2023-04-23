@@ -4,6 +4,7 @@
 #include <error.h>
 #include <parser.h>
 #include <setjmp.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -484,6 +485,23 @@ static void next_token(Parser *p) {
             goto done;
           }
         }
+
+        // Try and parse a number just after encountering `s` or `u` at the
+        // beginning of an identifier.
+        if (p->tok.text.size > 1 && (p->tok.text.data[0] == 's' || p->tok.text.data[0] == 'u')) {
+          /// Zero-terminate the string or else `strtoull()` might try
+          /// to convert data left over from the previous token.
+          string_buf_zterm(&p->tok.text);
+
+          /// Convert the number.
+          char *end;
+          errno = 0;
+          p->tok.integer = (u64) strtoull(p->tok.text.data + 1, &end, 10);
+          if (errno == ERANGE) ERR("Bit width of integer is too large.");
+          if (end != p->tok.text.data + p->tok.text.size) break;
+
+          p->tok.type = TK_ARBITRARY_INT;
+        }
         break;
       }
 
@@ -925,7 +943,7 @@ static Type *parse_type_derived(Parser *p, Type *base) {
 /// <type>           ::= <type-base> | <type-pointer> | <type-derived> | <type-struct>
 /// <type-pointer>   ::= "@" { "@" } ( IDENTIFIER | "(" <type> ")" )
 /// <type-struct>    ::= TYPE <struct-body>
-/// <type-base>      ::= IDENTIFIER
+/// <type-base>      ::= IDENTIFIER | INTEGER | BYTE | VOID | ARBITRARY_INT
 static Type *parse_type(Parser *p) {
   loc start = p->tok.source_location;
 
@@ -988,6 +1006,11 @@ static Type *parse_type(Parser *p) {
   } break;
   case TK_INTEGER_KW: {
     out = t_integer;
+    next_token(p);
+  } break;
+  case TK_ARBITRARY_INT: {
+    bool is_signed = p->tok.text.data[0] == 's';
+    out = ast_make_type_integer(p->ast, p->tok.source_location, is_signed, p->tok.integer);
     next_token(p);
   } break;
 
@@ -1478,7 +1501,7 @@ AST *parse(span source, const char *filename) {
 }
 
 NODISCARD const char *token_type_to_string(enum TokenType type) {
-  STATIC_ASSERT(TK_COUNT == 48, "Exhaustive handling of token types in token type to string conversion");
+  STATIC_ASSERT(TK_COUNT == 49, "Exhaustive handling of token types in token type to string conversion");
   switch (type) {
     case TK_COUNT:
     case TK_INVALID: return "invalid";
@@ -1495,6 +1518,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_VOID: return "void";
     case TK_BYTE: return "byte";
     case TK_INTEGER_KW: return "integer";
+    case TK_ARBITRARY_INT: return "arbitrary_integer";
     case TK_FOR: return "for";
     case TK_LPAREN: return "\"(\"";
     case TK_RPAREN: return "\")\"";

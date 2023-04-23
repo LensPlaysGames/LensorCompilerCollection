@@ -61,6 +61,7 @@ enum TokenType {
   TK_VOID,
   TK_BYTE,
   TK_INTEGER_KW,
+  TK_ARBITRARY_INT,
   TK_FOR,
 
   TK_LPAREN,
