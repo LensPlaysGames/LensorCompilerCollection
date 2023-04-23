@@ -13,18 +13,12 @@ while rowcount {
 
 
 ;;; Functions
-
 display_state : integer(state : integer) {
   idx : integer = 0
   while idx < colcount {
-    ;;putchar(
-    ;;  if state & (1 << idx) 42 else 32
-    ;;)
-    if state & (1 << idx) {
-      putchar(42)
-    } else {
-      putchar(32)
-    }
+    putchar(
+      if state & (1 << idx) 42 else 32
+    )
     idx := idx + 1
   }
   putchar(10)
@@ -37,48 +31,23 @@ calculate_state : integer(state : integer) {
   idx : integer = 1
   while idx < colcount - 1 {
 
-    lbit : integer = state & (1 << (idx + 1))
-    mbit : integer = state & (1 << idx)
-    rbit : integer = state & (1 << (idx - 1))
-
-    if lbit = 0 {
-      ;; 0b0xx
-      if mbit = 0 {
-        ;; 0b00x
-        if rbit > 0 {
-          ;; 0b001
-          newstate := newstate | (1 << idx)
-        } else {
-          ;; 0b000
-          newstate := newstate & ~(1 << idx)
-        }
-      } else {
-        ;; 0b01x
-        ;; both 0b011 and 0b010 rules result in `1`
-        newstate := newstate | (1 << idx)
-      }
-    } else {
-      ;; 0b1xx
-      if mbit = 0 {
-        ;; 0b10x
-        if rbit > 0 {
-          ;; 0b101
-          newstate := newstate | (1 << idx)
-        } else {
-          ;; 0b100
-          newstate := newstate & ~(1 << idx)
-        }
-      } else {
-        ;; 0b11x
-        if rbit > 0 {
-          ;; 0b111
-          newstate := newstate & ~(1 << idx)
-        } else {
-          ;; 0b110
-          newstate := newstate | (1 << idx)
-        }
-      }
-    }
+    bits: integer = (state & (0b111 << (idx - 1))) >> (idx - 1)
+    if bits = 0b000
+      newstate := newstate & ~(1 << idx)
+    else if bits = 0b001
+      newstate := newstate | (1 << idx)
+    else if bits = 0b010
+      newstate := newstate | (1 << idx)
+    else if bits = 0b011
+      newstate := newstate | (1 << idx)
+    else if bits = 0b100
+      newstate := newstate & ~(1 << idx)
+    else if bits = 0b101
+      newstate := newstate | (1 << idx)
+    else if bits = 0b110
+      newstate := newstate | (1 << idx)
+    else if bits = 0b111
+      newstate := newstate & ~(1 << idx)
 
     idx := idx + 1
   }
