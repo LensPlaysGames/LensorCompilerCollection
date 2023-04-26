@@ -93,8 +93,8 @@ void insert_instruction_after(IRInstruction *i, IRInstruction *after) {
 
 void ir_remove(IRInstruction* instruction) {
   if (instruction->users.size) {
-    eprint("Cannot remove used instruction."
-                    "Instruction:\n");
+    eprint("Cannot remove used instruction.\n"
+           "Instruction:\n");
     ir_set_func_ids(instruction->parent_block->function);
     ir_femit_instruction(stderr, instruction);
     eprint("In function:\n");
@@ -117,16 +117,16 @@ void ir_remove(IRInstruction* instruction) {
 
 void ir_remove_and_free_block(IRBlock *block) {
   /// Remove all instructions from the block.
-  while (block->instructions.first) {
+  while (block->instructions.last) {
     /// Remove this instruction from PHIs.
-    if (block->instructions.first->kind == IR_PHI) {
+    if (block->instructions.last->kind == IR_PHI) {
       foreach_ptr (IRInstruction *, user, block->instructions.first->users) {
             if (user->kind == IR_PHI) ir_phi_remove_argument(user, block);
         }
     }
 
     /// Remove it from the blocks.
-    ir_remove(block->instructions.first);
+    ir_remove(block->instructions.last);
   }
   list_remove(block->function->blocks, block);
   free(block);
