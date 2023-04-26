@@ -1267,8 +1267,25 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         return false;
       }
 
-
       expr->type = t_void;
+      return true;
+    }
+
+    case NODE_RETURN: {
+      // Get function we are returning from.
+      // TODO: It would be more efficient to cache function type in return AST node while parsing.
+      Node *func = expr->parent;
+      while (func->kind != NODE_FUNCTION) func = func->parent;
+
+      // Ensure return nodes within void return-type functions have no value.
+      if (expr->return_.value && func->type->function.return_type == t_void)
+        ERR(expr->return_.value->source_location,
+            "An expression must not follow `return` in a function returning void.");
+
+      if (expr->return_.value && !typecheck_expression(ast, expr->return_.value))
+        return false;
+
+      expr->type = expr->return_.value ? expr->return_.value->type : t_void;
       return true;
     }
 
@@ -1278,6 +1295,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       if (!typecheck_expression(ast, expr->funcref.resolved->val.node)) return false;
       ast_replace_node(ast, expr, expr->funcref.resolved->val.node);
       break;
+
   }
 
   /// If this is a pointer type, make sure it doesn’t point to an incomplete type.
