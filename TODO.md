@@ -9,8 +9,8 @@
   - [x] `s8/u8/s16/u16/s32/u32/s64/u64`
     - [ ] Properly support arbitrarily-sized integer arithmetic; i.e. 18-bit addition overflow and such
   - [ ] Early `return`
-    - [ ] Parsing
-    - [ ] Return block in the IR
+    - [x] Parsing
+    - [ ] Return block in the IR (each return has it's own return instruction; we should alter this so that there is one return instruction and a phi node with arguments of each possible return expression).
   - [ ] Types as values using the `&` operator. (requires `Structs`)
   - [ ] Function bodies must be blocks or preceded by `=`.
   - [ ] `ext` functions may have a body?
