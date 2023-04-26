@@ -1,0 +1,103 @@
+;; 0
+;; *
+;; **
+;; ***
+;; * **
+;; *****
+;; *   **
+;; **  ***
+;; *** * **
+;; * *******
+;; ***     **
+;; * **    ***
+;; *   **  *****
+;; **  *** *   **
+;; *** * ****  ***
+;; * *****  ** * **
+;; ***   ** ********
+;; * **  ****      **
+;; ***** *  **     ***
+;; *   **** ***    * **
+;; **  *  *** **   *****
+;; *** ** * *****  *   **
+;; * ********   ** **  ***
+;; ***      **  ****** * **
+;; * **     *** *    *******
+;; *****    * ****   *     **
+;; *   **   ***  **  **    ***
+;; **  ***  * ** *** ***   * **
+;; *** * ** ****** *** **  *****
+;; * ********    *** ***** *   **
+;; ***      **   * ***   ****  ***
+;; * **     ***  *** **  *  ** * *
+;; *****    * ** * ***** ** ******
+;; *   **   ********   ******    *
+;; **  ***  *      **  *    **   *
+;; *** * ** **     *** **   ***  *
+;; * **********    * *****  * ** *
+;; ***        **   ***   ** ******
+;; * **       ***  * **  ****    *
+;; *****      * ** ***** *  **   *
+;; *   **     ******   **** ***  *
+;; **  ***    *    **  *  *** ** *
+
+rowcount : integer = 42
+;; NOTE: Must be less than bit width of one integer (usually 64)
+colcount : integer = 32
+
+state : integer = 1
+while rowcount {
+  display_state(state)
+  state := calculate_state(state)
+  rowcount := rowcount - 1
+}
+
+
+;;; Functions
+display_state : integer(state : integer) {
+  idx : integer = 0
+  while idx < colcount {
+    putchar(
+      if state & (1 << idx) 42 else 32
+    )
+    idx := idx + 1
+  }
+  putchar(10)
+  0
+}
+
+calculate_state : integer(state : integer) {
+  newstate : integer = state
+
+  idx : integer = 1
+  while idx < colcount - 1 {
+
+    bits: integer = (state & (0b111 << (idx - 1))) >> (idx - 1)
+    newstate := if bits = 0b000
+      newstate & ~(1 << idx)
+    else if bits = 0b001
+      newstate | (1 << idx)
+    else if bits = 0b010
+      newstate | (1 << idx)
+    else if bits = 0b011
+      newstate | (1 << idx)
+    else if bits = 0b100
+      newstate & ~(1 << idx)
+    else if bits = 0b101
+      newstate | (1 << idx)
+    else if bits = 0b110
+      newstate | (1 << idx)
+    else newstate & ~(1 << idx)
+
+    idx := idx + 1
+  }
+
+  newstate
+}
+
+;;; Externals
+
+;; Print a character represented by `c` to stdout. Requires linking with `libc`.
+putchar : ext integer(c : integer)
+
+0
