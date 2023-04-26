@@ -73,7 +73,7 @@ typedef struct Parser {
 const struct {
   span kw;
   enum TokenType type;
-} keywords[10] = {
+} keywords[11] = {
   {literal_span_raw("if"), TK_IF},
   {literal_span_raw("else"), TK_ELSE},
   {literal_span_raw("while"), TK_WHILE},
@@ -84,6 +84,7 @@ const struct {
   {literal_span_raw("byte"), TK_BYTE},
   {literal_span_raw("integer"), TK_INTEGER_KW},
   {literal_span_raw("for"), TK_FOR},
+  {literal_span_raw("return"), TK_RETURN},
 };
 
 /// Check if a character may start an identifier.
@@ -1501,7 +1502,7 @@ AST *parse(span source, const char *filename) {
 }
 
 NODISCARD const char *token_type_to_string(enum TokenType type) {
-  STATIC_ASSERT(TK_COUNT == 49, "Exhaustive handling of token types in token type to string conversion");
+  STATIC_ASSERT(TK_COUNT == 50, "Exhaustive handling of token types in token type to string conversion");
   switch (type) {
     case TK_COUNT:
     case TK_INVALID: return "invalid";
@@ -1520,6 +1521,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_INTEGER_KW: return "integer";
     case TK_ARBITRARY_INT: return "arbitrary_integer";
     case TK_FOR: return "for";
+    case TK_RETURN: return "return";
     case TK_LPAREN: return "\"(\"";
     case TK_RPAREN: return "\")\"";
     case TK_LBRACK: return "\"[\"";

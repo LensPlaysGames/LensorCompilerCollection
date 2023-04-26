@@ -63,6 +63,7 @@ enum TokenType {
   TK_INTEGER_KW,
   TK_ARBITRARY_INT,
   TK_FOR,
+  TK_RETURN,
 
   TK_LPAREN,
   TK_RPAREN,
