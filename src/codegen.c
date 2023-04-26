@@ -227,6 +227,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   if (expr->emitted) return;
   expr->emitted = true;
 
+  STATIC_ASSERT(NODE_COUNT == 17, "Exhaustive handling of node types during code generation (AST->IR).");
   switch (expr->kind) {
   default: ICE("Unrecognized expression kind: %d", expr->kind);
 
@@ -700,7 +701,17 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     ir_block_attach(ctx, join_block);
 
     return;
-  } break;
+  }
+
+  case NODE_RETURN: {
+    codegen_expr(ctx, expr->return_.value);
+    expr->ir = ir_return(ctx, expr->return_.value->ir);
+
+    IRBlock *new_block = ir_block_create();
+    ir_block_attach(ctx, new_block);
+
+    return;
+  }
 
   /// Function reference. These should have all been removed by the semantic analyser.
   case NODE_FUNCTION_REFERENCE: UNREACHABLE();
