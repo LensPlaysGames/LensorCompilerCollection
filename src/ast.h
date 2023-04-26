@@ -27,6 +27,8 @@ enum NodeKind {
   NODE_STRUCTURE_DECLARATION,
   NODE_MEMBER_ACCESS,
   NODE_FOR,
+  NODE_RETURN,
+  NODE_COUNT
 };
 
 /// The kind of a type.
@@ -295,6 +297,10 @@ typedef struct NodeFor {
   Node *body;
 } NodeFor;
 
+typedef struct NodeReturn {
+  Node *value;
+} NodeReturn;
+
 /// Named type.
 typedef Symbol *TypeNamed;
 
@@ -403,6 +409,7 @@ struct Node {
     NodeStructDecl struct_decl;
     NodeMemberAccess member_access;
     NodeFor for_;
+    NodeReturn return_;
   };
 };
 
@@ -507,6 +514,13 @@ Node *ast_make_for(
     Node *condition,
     Node *iterator,
     Node *body
+);
+
+/// Create a new return expression.
+Node *ast_make_return(
+    AST *ast,
+    loc source_location,
+    Node *value
 );
 
 /// Create a new block expression.

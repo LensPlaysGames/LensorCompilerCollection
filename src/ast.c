@@ -256,6 +256,17 @@ Node *ast_make_for(
   return node;
 }
 
+/// Create a new return expression.
+Node *ast_make_return(
+    AST *ast,
+    loc source_location,
+    Node *value
+) {
+  Node *node = mknode(ast, NODE_RETURN, source_location);
+  node->return_.value = value;
+  return node;
+}
+
 /// Create a new block expression.
 Node *ast_make_block(
     AST *ast,
@@ -702,6 +713,7 @@ void ast_free(AST *ast) {
   /// Some nodes may contain strings, vectors, etc.. Iterate over all
   /// nodes and free all resources they may have.
   foreach_ptr (Node *, node, ast->_nodes_) {
+    STATIC_ASSERT(NODE_COUNT == 17, "Exhaustive handling of node types when freeing AST.");
     switch (node->kind) {
       case NODE_FUNCTION:
         free(node->function.name.data);
@@ -717,6 +729,7 @@ void ast_free(AST *ast) {
       case NODE_IF:
       case NODE_WHILE:
       case NODE_FOR:
+      case NODE_RETURN:
       case NODE_CAST:
       case NODE_BINARY:
       case NODE_UNARY:
@@ -727,6 +740,8 @@ void ast_free(AST *ast) {
       case NODE_FUNCTION_REFERENCE:
         free(node->funcref.name.data);
         continue;
+
+      default: UNREACHABLE();
     }
     UNREACHABLE();
   }
@@ -805,6 +820,7 @@ void ast_print_node_internal(
   const Node *node,
   string_buffer *leading_text
 ) {
+  STATIC_ASSERT(NODE_COUNT == 17, "Exhaustive handling of AST node types while printing AST nodes.");
   switch (node->kind) {
     default: TODO("Print node of type %d", node->kind);
 
@@ -875,6 +891,15 @@ void ast_print_node_internal(
         },
         .size = 4
       }, leading_text);
+    } break;
+
+    case NODE_RETURN: {
+      fprint(file, "%31Return %35<%u> %T\n", node->source_location.start, node->type);
+      if (node->return_.value)
+        ast_print_children(file, logical_parent, node, &(Nodes) {
+          .data = (Node *[]) {node->return_.value},
+          .size = 1
+        }, leading_text);
     } break;
 
     case NODE_BLOCK: {
@@ -1144,8 +1169,11 @@ void ast_replace_node(AST *ast, Node *old, Node *new) {
   (void) ast;
 
   /// Find the node in the parent.
+  STATIC_ASSERT(NODE_COUNT == 17, "Exhaustive handling of AST node types while replacing AST nodes.");
   ASSERT(old->parent);
   switch (old->parent->kind) {
+    default: UNREACHABLE();
+
     case NODE_ROOT:
       REPLACE_IN_CHILDREN(old->parent->root.children);
       break;
@@ -1200,11 +1228,16 @@ void ast_replace_node(AST *ast, Node *old, Node *new) {
       TODO("Handle NODE_FOR in ast_replace_node()...");
       break;
 
+    case NODE_RETURN:
+      TODO("Handle NODE_RETURN in ast_replace_node()...");
+      break;
+
     case NODE_LITERAL:
     case NODE_VARIABLE_REFERENCE:
     case NODE_FUNCTION_REFERENCE:
     case NODE_STRUCTURE_DECLARATION:
       break;
+
   }
 #undef REPLACE_IN_CHILDREN
 }

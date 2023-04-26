@@ -1306,6 +1306,24 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
       lhs = ast_make_for(p->ast, source_location, init, condition, iterator, body);
 
     } break;
+    case TK_RETURN: {
+      loc source_location = p->tok.source_location;
+
+      // Yeet "return"
+      next_token(p);
+
+      source_location.end = p->tok.source_location.end;
+
+      Node *expr = NULL;
+      if (p->tok.type != TK_SEMICOLON)
+        expr = parse_expr(p);
+
+      if (p->tok.type != TK_SEMICOLON)
+        ERR_AT(source_location, "`;` is required after return expression.");
+
+      lhs = ast_make_return(p->ast, source_location, expr);
+      next_token(p);
+    } break;
     case TK_IF: lhs = parse_if_expr(p); break;
     case TK_ELSE: ERR("'else' without 'if'");
     case TK_WHILE: lhs = parse_while_expr(p); break;
