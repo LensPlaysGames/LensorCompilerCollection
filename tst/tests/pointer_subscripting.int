@@ -10,4 +10,4 @@ b : @integer = a[0]
 
 putchar(if (a = b) & (@a = @b) 49 else 48)
 
-putchar : ext integer(c : integer)
+putchar : ext void(c : integer)

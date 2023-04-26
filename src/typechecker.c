@@ -762,10 +762,21 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         if (!typecheck_expression(ast, node))
           return false;
 
-        if (node != vector_back(expr->root.children) && node->kind == NODE_BINARY && node->binary.op == TK_EQ)
-          ERR(node->source_location,
-              "Comparison at top level; result unused. Did you mean to assign using %s?",
-              token_type_to_string(TK_COLON_EQ));
+        if (node != vector_back(expr->root.children)) {
+          if (node->kind == NODE_BINARY && node->binary.op == TK_EQ)
+            ERR(node->source_location,
+                "Comparison at top level; result unused. Did you mean to assign using %s?",
+                token_type_to_string(TK_COLON_EQ));
+
+          // If the function being called doesn't return void, it is being discarded.
+          // TODO: We should ensure the function does *not* have a discardable
+          // attribute. We will need to find the actual function node and not
+          // just the function type; this means following funcrefs.
+          if (node->kind == NODE_CALL && node->call.callee->type->function.return_type != t_void) {
+            ERR(node->source_location,
+                "Discarding return value of function that does not return void.");
+          }
+        }
       }
 
       /// Replace function references in the root with the function nodes
@@ -899,11 +910,21 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         if (!typecheck_expression(ast, node))
           return false;
 
-        if (node != vector_back(expr->block.children) && node->kind == NODE_BINARY && node->binary.op == TK_EQ)
-          ERR(node->source_location,
-              "Comparison result unused. Did you mean to assign using %s?",
-              token_type_to_string(TK_COLON_EQ));
+        if (node != vector_back(expr->block.children)) {
+          if (node->kind == NODE_BINARY && node->binary.op == TK_EQ)
+            ERR(node->source_location,
+                "Comparison result unused. Did you mean to assign using %s?",
+                token_type_to_string(TK_COLON_EQ));
 
+          // If the function being called doesn't return void, it is being discarded.
+          // TODO: We should ensure the function does *not* have a discardable
+          // attribute. We will need to find the actual function node and not
+          // just the function type; this means following funcrefs.
+          if (node->kind == NODE_CALL && node->call.callee->type->function.return_type != t_void) {
+            ERR(node->source_location,
+                "Discarding return value of function that does not return void.");
+          }
+        }
       }
       expr->type = expr->block.children.size ? vector_back(expr->block.children)->type : t_void;
     } break;

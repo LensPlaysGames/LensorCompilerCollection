@@ -10,7 +10,7 @@
 ;; 1
 ;; 0
 
-putchar : ext integer(c : integer)
+putchar : ext void(c : integer)
 
 cond : integer = 10
 while cond {

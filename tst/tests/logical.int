@@ -1,7 +1,7 @@
 ;; 0
 ;; 110001
 
-putchar : ext integer(c : integer)
+putchar : ext void(c : integer)
 
 lhs : integer = 34
 rhs : integer = 35

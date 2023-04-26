@@ -4,6 +4,6 @@
 
 a : @byte = "asdf
 asdf"[0]
-puts : ext integer(s : @byte)
+puts : ext void(s : @byte)
 puts(a)
 0

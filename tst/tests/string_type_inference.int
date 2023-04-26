@@ -1,7 +1,7 @@
 ;; 0
 ;; Infer this!
 
-puts : ext integer(s : @byte)
+puts : ext void(s : @byte)
 
 str :: "Infer this!"[0]
 

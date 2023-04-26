@@ -1,7 +1,7 @@
 ;; 0
 ;; Eyyy
 
-puts : ext integer(str : @byte)
+puts : ext void(str : @byte)
 
 foo : byte[69]
 @foo[0] := 69
