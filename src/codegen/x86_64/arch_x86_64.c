@@ -1347,6 +1347,76 @@ static void mcode_reg_to_reg
 
   } break; // case I_ADD
 
+  case I_CMP: {
+
+    ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg cmps to be of equal size.");
+
+    switch (source_size) {
+    case r8: {
+      // 0x38 /r
+      uint8_t op = 0x38;
+
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b11  ->  Reg
+      // Reg == Source
+      // R/M == Destination
+      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+    } break;
+    case r16: {
+      // 0x66 + 0x39 /r
+      uint8_t sixteen_bit_prefix = 0x66;
+      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+    } // FALLTHROUGH to case r32
+    case r32: {
+      // 0x39 /r
+      uint8_t op = 0x39;
+
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b11  ->  Reg
+      // Reg == Source
+      // R/M == Destination
+      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+    } break;
+    case r64: {
+      // 0x39 /r
+      uint8_t op = 0x39;
+
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+      fwrite(&rex, 1, 1, context->machine_code);
+
+      // Mod == 0b11  ->  Reg
+      // Reg == Source
+      // R/M == Destination
+      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+    } break;
+
+    } // switch (size)
+
+  } break; // case I_CMP
+
   default: ICE("ERROR: mcode_reg_to_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
 
   }
@@ -1463,6 +1533,11 @@ static void mcode_imm(CodegenContext *context, enum Instruction inst, int64_t im
 static void mcode_name(CodegenContext *context, enum Instruction inst, const char *name) {
   // TODO: Generate a relocation entry that will end up in the object file...
   switch (inst) {
+
+  case I_CALL: {
+    print("TODO: Encode call of name \"%s\"\n", name);
+  } break; // case I_CALL
+
   default: ICE("ERROR: mcode_name(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
   }
 }
@@ -1489,6 +1564,9 @@ static void mcode_none(CodegenContext *context, enum Instruction inst) {
     fwrite(&rexw, 1, 1, context->machine_code);
     fwrite(&op, 1, 1, context->machine_code);
   } break;
+
+  // FIXME: This shouldn't be here once `setcc` gets it's own emission function.
+  case I_SETCC: break; // NOTE: Handled in `femit()`
 
   default:
     ICE("ERROR: mcode_none(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
@@ -1795,7 +1873,9 @@ static void femit_imm(CodegenContext *context, enum Instruction inst, int64_t im
 static void femit_name(CodegenContext *context, enum Instruction inst, const char *name) {
   ASSERT(name, "NAME must not be NULL.");
 
-  // TODO: Generate a relocation entry that will go in the object file.
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_name(context, inst, name);
+#endif // x86_64_GENERATE_MACHINE_CODE
 
   const char *mnemonic = instruction_mnemonic(context, inst);
   switch (context->dialect) {
@@ -1832,6 +1912,34 @@ static void femit
 
       const char *mnemonic = instruction_mnemonic(context, instruction);
       const char *value = register_name_8(value_register);
+
+#ifdef X86_64_GENERATE_MACHINE_CODE
+      uint8_t op = 0;
+      switch (comparison_type) {
+      case COMPARE_EQ: op = 0x94; break;
+      case COMPARE_NE: op = 0x95; break;
+      case COMPARE_GT: op = 0x9f; break;
+      case COMPARE_LT: op = 0x9c; break;
+      case COMPARE_GE: op = 0x9d; break;
+      case COMPARE_LE: op = 0x9e; break;
+      default: ICE("Invalid comparison type");
+      }
+
+      uint8_t destination_regbits = regbits(value_register);
+      if (REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b11  ->  register
+      // R/M == Destination
+      uint8_t modrm = modrm_byte(0b11, 0, destination_regbits);
+
+      uint8_t op_escape = 0x0f;
+      fwrite(&op_escape, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+#endif // x86_64_GENERATE_MACHINE_CODE
 
       switch (context->dialect) {
         case CG_ASM_DIALECT_ATT:
