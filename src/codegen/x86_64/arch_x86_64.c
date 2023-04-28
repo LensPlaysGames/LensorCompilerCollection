@@ -1987,15 +1987,22 @@ void codegen_context_x86_64_linux_free(CodegenContext *ctx) {
 /// Generate a comparison between two registers.
 static RegisterDescriptor codegen_comparison
 (CodegenContext *cg_context,
- enum ComparisonType type,
+ IRType ir_type,
  RegisterDescriptor lhs,
  RegisterDescriptor rhs,
  RegisterDescriptor result,
  enum RegSize size)
 {
-  ASSERT(type < COMPARE_COUNT, "Invalid comparison type");
-
-  // Zero out result register.
+  enum ComparisonType type = COMPARE_COUNT;
+  switch (ir_type) {
+    case IR_EQ: type = COMPARE_EQ; break;
+    case IR_NE: type = COMPARE_NE; break;
+    case IR_LT: type = COMPARE_LT; break;
+    case IR_GT: type = COMPARE_GT; break;
+    case IR_LE: type = COMPARE_LE; break;
+    case IR_GE: type = COMPARE_GE; break;
+    default: ICE("Unsupported IR instruction in codegen_comparison: %d", ir_type);
+  }
 
   // Perform the comparison.
   femit_reg_to_reg(cg_context, I_CMP, rhs, size, lhs, size);
@@ -2332,29 +2339,14 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
     if (optimise && inst->parent_block) inst->parent_block->done = true;
   } break;
-  case IR_LE: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    codegen_comparison(context, COMPARE_LE, inst->lhs->result, inst->rhs->result, inst->result, size);
-  } break;
-  case IR_LT: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    codegen_comparison(context, COMPARE_LT, inst->lhs->result, inst->rhs->result, inst->result, size);
-  } break;
+  case IR_EQ: // FALLTHROUGH to IR_GE
+  case IR_NE: // FALLTHROUGH to IR_GE
+  case IR_LT: // FALLTHROUGH to IR_GE
+  case IR_GT: // FALLTHROUGH to IR_GE
+  case IR_LE: // FALLTHROUGH to IR_GE
   case IR_GE: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    codegen_comparison(context, COMPARE_GE, inst->lhs->result, inst->rhs->result, inst->result, size);
-  } break;
-  case IR_GT: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    codegen_comparison(context, COMPARE_GT, inst->lhs->result, inst->rhs->result, inst->result, size);
-  } break;
-  case IR_EQ: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    codegen_comparison(context, COMPARE_EQ, inst->lhs->result, inst->rhs->result, inst->result, size);
-  } break;
-  case IR_NE: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    codegen_comparison(context, COMPARE_NE, inst->lhs->result, inst->rhs->result, inst->result, size);
+    codegen_comparison(context, inst->kind, inst->lhs->result, inst->rhs->result, inst->result, size);
   } break;
   case IR_ADD: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
