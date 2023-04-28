@@ -562,7 +562,7 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
     uint8_t sub_extension = 5;
     uint8_t modrm = 0;
     uint8_t destination_regbits = regbits(destination_register);
-    // Mod == 0b11  ->  Reg
+    // Mod == 0b11  ->  register
     // Reg == Opcode Extension (5 for sub, 0 for add)
     // R/M == Destination
     if (inst == I_ADD)
@@ -588,25 +588,10 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
       fwrite(&imm8, 1, 1, context->machine_code);
     } break;
     case r16: {
-      // 0x66 + 0x81 /5 iw
-      uint8_t op = 0x81;
-
+      // 0x81 /5 iw
       uint8_t sixteen_bit_prefix = 0x66;
       fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
-
-      // Encode a REX prefix if the ModRM register descriptor needs
-      // the bit extension.
-      if (REGBITS_TOP(destination_regbits)) {
-        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
-        fwrite(&rex, 1, 1, context->machine_code);
-      }
-
-      int16_t imm16 = (int16_t)immediate;
-
-      fwrite(&op, 1, 1, context->machine_code);
-      fwrite(&modrm, 1, 1, context->machine_code);
-      fwrite(&imm16, 2, 1, context->machine_code);
-    } break;
+    } // FALLTHROUGH to case r32
     case r32: {
       // 0x81 /5 id
       uint8_t op = 0x81;
@@ -618,11 +603,15 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
         fwrite(&rex, 1, 1, context->machine_code);
       }
 
-      int32_t imm32 = (int32_t)immediate;
-
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
-      fwrite(&imm32, 4, 1, context->machine_code);
+      if (size == r16) {
+        int16_t imm16 = (int16_t)immediate;
+        fwrite(&imm16, 2, 1, context->machine_code);
+      } else {
+        int32_t imm32 = (int32_t)immediate;
+        fwrite(&imm32, 4, 1, context->machine_code);
+      }
     } break;
     case r64: {
       // Subtract imm32 sign extended to 64-bits from r64
@@ -1130,7 +1119,7 @@ static void mcode_reg_to_mem(CodegenContext *context, enum Instruction inst, Reg
     case r16: {
       uint8_t sixteen_bit_prefix = 0x66;
       fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
-    } // FALLTHROUGH
+    } // FALLTHROUGH to case r32
     case r32: {
       // Move r32 into m32
       // 0x89 /r
@@ -2339,11 +2328,11 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
     if (optimise && inst->parent_block) inst->parent_block->done = true;
   } break;
-  case IR_EQ: // FALLTHROUGH to IR_GE
-  case IR_NE: // FALLTHROUGH to IR_GE
-  case IR_LT: // FALLTHROUGH to IR_GE
-  case IR_GT: // FALLTHROUGH to IR_GE
-  case IR_LE: // FALLTHROUGH to IR_GE
+  case IR_EQ: // FALLTHROUGH to case IR_GE
+  case IR_NE: // FALLTHROUGH to case IR_GE
+  case IR_LT: // FALLTHROUGH to case IR_GE
+  case IR_GT: // FALLTHROUGH to case IR_GE
+  case IR_LE: // FALLTHROUGH to case IR_GE
   case IR_GE: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
     codegen_comparison(context, inst->kind, inst->lhs->result, inst->rhs->result, inst->result, size);
