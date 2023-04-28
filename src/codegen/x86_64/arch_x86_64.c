@@ -1535,6 +1535,10 @@ static void mcode_name(CodegenContext *context, enum Instruction inst, const cha
     print("TODO: Encode call of name \"%s\"\n", name);
   } break; // case I_CALL
 
+  case I_JMP: {
+    print("TODO: Encode jump to name \"%s\"\n", name);
+  } break; // case I_JMP
+
   default: ICE("ERROR: mcode_name(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
   }
 }
@@ -1564,6 +1568,9 @@ static void mcode_none(CodegenContext *context, enum Instruction inst) {
 
   // FIXME: This shouldn't be here once `setcc` gets it's own emission function.
   case I_SETCC: break; // NOTE: Handled in `femit()`
+
+  // FIXME: This shouldn't be here once `jcc` gets it's own emission function.
+  case I_JCC: break; // NOTE: Handled in `femit()`
 
   default:
     ICE("ERROR: mcode_none(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
@@ -1958,6 +1965,26 @@ static void femit
       ASSERT(type < JUMP_TYPE_COUNT, "femit_direct_branch(): Invalid jump type %d", type);
       char *label = va_arg(args, char *);
       ASSERT(label, "JCC label must not be NULL.");
+
+#ifdef X86_64_GENERATE_MACHINE_CODE
+      uint8_t op = 0;
+      switch (type) {
+      case JUMP_TYPE_E:  op = 0x84; break;
+      case JUMP_TYPE_NE: op = 0x85; break;
+      case JUMP_TYPE_G:  op = 0x8f; break;
+      case JUMP_TYPE_L:  op = 0x8c; break;
+      case JUMP_TYPE_GE: op = 0x8d; break;
+      case JUMP_TYPE_LE: op = 0x8e; break;
+      default: ICE("Unhandled jump type: %d", (int)type);
+      }
+
+      uint8_t op_escape = 0x0f;
+      fwrite(&op_escape, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", label);
+      int32_t disp32 = 0;
+      fwrite(&disp32, 4, 1, context->machine_code);
+#endif // x86_64_GENERATE_MACHINE_CODE
 
       const char *mnemonic = instruction_mnemonic(context, I_JCC);
 
