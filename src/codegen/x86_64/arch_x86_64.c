@@ -797,7 +797,6 @@ static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
 
 /// Write x86_64 machine code for instruction `inst` with `name` offset from `address_register` and store the result in register `destination_register` with size `size`.
 static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, const char *name, RegisterDescriptor destination_register, enum RegSize size) {
-  // TODO: Generate a relocation entry that will end up in the object file...
   switch (inst) {
 
   case I_LEA: {
@@ -828,8 +827,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
 
         fwrite(&op, 1, 1, context->machine_code);
         fwrite(&modrm, 1, 1, context->machine_code);
-        // TODO: make rip-relative disp32 relocation for symbol with `name`
-        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for `%s` symbol.\n", name);
+        print("[x86_64]:TODO: Make RIP-relative disp32 relocation to lea from `%s` symbol.\n", name);
         int32_t disp32 = 0;
         fwrite(&disp32, 4, 1, context->machine_code);
 
@@ -852,8 +850,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
 
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
-      // TODO: make disp32 relocation for symbol with `name`
-      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", name);
+      print("[x86_64]:TODO: Make disp32 relocation to lea from `%s` symbol.\n", name);
       int32_t disp32 = 0;
       fwrite(&disp32, 4, 1, context->machine_code);
     } break;
@@ -873,8 +870,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
         fwrite(&rex, 1, 1, context->machine_code);
         fwrite(&op, 1, 1, context->machine_code);
         fwrite(&modrm, 1, 1, context->machine_code);
-        // TODO: make rip-relative disp32 relocation for symbol with `name`
-        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for `%s` symbol.\n", name);
+        print("[x86_64]:TODO: Make RIP-relative disp32 relocation to lea from `%s` symbol.\n", name);
         int32_t disp32 = 0;
         fwrite(&disp32, 4, 1, context->machine_code);
         break;
@@ -892,8 +888,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       fwrite(&rex, 1, 1, context->machine_code);
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
-      // TODO: make disp32 relocation for symbol with `name`
-      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", name);
+      print("[x86_64]:TODO: Make disp32 relocation to lea from `%s` symbol.\n", name);
       int32_t disp32 = 0;
       fwrite(&disp32, 4, 1, context->machine_code);
     } break;
@@ -947,8 +942,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
 
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
-      // TODO: make disp32 relocation for symbol with `name`
-      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", name);
+      print("[x86_64]:TODO: Make disp32 relocation for move to `%s` symbol.\n", name);
       int32_t disp32 = 0;
       fwrite(&disp32, 4, 1, context->machine_code);
     } break;
@@ -975,8 +969,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
 
         fwrite(&op, 1, 1, context->machine_code);
         fwrite(&modrm, 1, 1, context->machine_code);
-        // TODO: make rip-relative disp32 relocation for symbol with `name`
-        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for `%s` symbol.\n", name);
+        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for move to `%s` symbol.\n", name);
         int32_t disp32 = 0;
         fwrite(&disp32, 4, 1, context->machine_code);
         break;
@@ -998,8 +991,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
 
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
-      // TODO: make disp32 relocation for symbol with `name`
-      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", name);
+      print("[x86_64]:TODO: Make disp32 relocation for move to `%s` symbol.\n", name);
       int32_t disp32 = 0;
       fwrite(&disp32, 4, 1, context->machine_code);
     } break;
@@ -1019,8 +1011,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
         fwrite(&rex, 1, 1, context->machine_code);
         fwrite(&op, 1, 1, context->machine_code);
         fwrite(&modrm, 1, 1, context->machine_code);
-        // TODO: make rip-relative disp32 relocation for symbol with `name`
-        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for `%s` symbol.\n", name);
+        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for move to `%s` symbol.\n", name);
         int32_t disp32 = 0;
         fwrite(&disp32, 4, 1, context->machine_code);
         break;
@@ -1040,8 +1031,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       fwrite(&rex, 1, 1, context->machine_code);
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
-      // TODO: make disp32 relocation for symbol with `name`
-      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", name);
+      print("[x86_64]:TODO: Make disp32 relocation for move to `%s` symbol.\n", name);
       int32_t disp32 = 0;
       fwrite(&disp32, 4, 1, context->machine_code);
     } break;
@@ -2032,7 +2022,7 @@ static void femit
       uint8_t op_escape = 0x0f;
       fwrite(&op_escape, 1, 1, context->machine_code);
       fwrite(&op, 1, 1, context->machine_code);
-      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", label);
+      print("[x86_64]:TODO: Make disp32 relocation for jcc to `%s` symbol.\n", label);
       int32_t disp32 = 0;
       fwrite(&disp32, 4, 1, context->machine_code);
 #endif // x86_64_GENERATE_MACHINE_CODE
