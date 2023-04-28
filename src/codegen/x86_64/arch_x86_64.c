@@ -491,7 +491,7 @@ uint8_t regbits(RegisterDescriptor reg) {
   case REG_R13: return 0b1101;
   case REG_R14: return 0b1110;
   case REG_R15: return 0b1111;
-  default: UNREACHABLE();
+  default: ICE("Unhandled register in regbits: %s\n", register_name(reg));
   }
 }
 
@@ -646,16 +646,274 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
 }
 
 static void mcode_imm_to_mem(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor address_register, int64_t offset) {
-  //TODO("Implement");
+  switch (inst) {
+  default: ICE("ERROR: mcode_imm_to_mem(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
 }
 
 static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, int64_t offset, RegisterDescriptor destination_register, enum RegSize size) {
-  //TODO("Implement");
+  switch (inst) {
+  default: ICE("ERROR: mcode_mem_to_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
 }
 
+/// Write x86_64 machine code for instruction `inst` with `name` offset from `address_register` and store the result in register `destination_register` with size `size`.
 static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, const char *name, RegisterDescriptor destination_register, enum RegSize size) {
-  //TODO("Implement");
   // TODO: Generate a relocation entry that will end up in the object file...
+  switch (inst) {
+
+  case I_LEA: {
+
+    switch (size) {
+    case r8: ICE("x86_64 machine code backend: LEA does not have an 8-bit encoding.");
+    case r16: {
+      // 0x66 + 0x8d /r
+      uint8_t sixteen_bit_prefix = 0x66;
+      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+    } // FALLTHROUGH to case r32
+    case r32: {
+      // 0x8d /r
+      uint8_t op = 0x8d;
+
+      // RIP-Relative Addressing
+      if (address_register == REG_RIP) {
+
+        uint8_t destination_regbits = regbits(destination_register);
+        if (REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+
+        // Mod == 0b00
+        // R/M == 0b101 (none)
+        uint8_t modrm = modrm_byte(0b00, 0, 0b101);
+
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        // TODO: make rip-relative disp32 relocation for symbol with `name`
+        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for `%s` symbol.\n", name);
+        int32_t disp32 = 0;
+        fwrite(&disp32, 4, 1, context->machine_code);
+
+        break;
+      }
+
+      // Encode a REX prefix if either of the ModRM register descriptors need
+      // the bit extension.
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b10  ->  (R/M)+disp32
+      // Reg == Destination
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      // TODO: make disp32 relocation for symbol with `name`
+      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", name);
+      int32_t disp32 = 0;
+      fwrite(&disp32, 4, 1, context->machine_code);
+    } break;
+    case r64: {
+      // REX.W + 0x8d /r
+      uint8_t op = 0x8d;
+
+      // RIP-Relative Addressing
+      if (address_register == REG_RIP) {
+        uint8_t destination_regbits = regbits(destination_register);
+        uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(destination_regbits));
+
+        // Mod == 0b00
+        // R/M == 0b101 (none)
+        uint8_t modrm = modrm_byte(0b00, 0, 0b101);
+
+        fwrite(&rex, 1, 1, context->machine_code);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        // TODO: make rip-relative disp32 relocation for symbol with `name`
+        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for `%s` symbol.\n", name);
+        int32_t disp32 = 0;
+        fwrite(&disp32, 4, 1, context->machine_code);
+        break;
+      }
+
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+
+      // Mod == 0b10  ->  (R/M)+disp32
+      // Reg == Destination
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+
+      fwrite(&rex, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      // TODO: make disp32 relocation for symbol with `name`
+      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", name);
+      int32_t disp32 = 0;
+      fwrite(&disp32, 4, 1, context->machine_code);
+    } break;
+
+    } // switch (size)
+
+  } break; // case I_LEA
+
+  case I_MOV: {
+
+    switch (size) {
+
+    case r8: {
+      // 0x8a /r
+      uint8_t op = 0x8a;
+
+      // RIP-Relative Addressing
+      if (address_register == REG_RIP) {
+        uint8_t destination_regbits = regbits(destination_register);
+        if (REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+
+        // Mod == 0b00
+        // R/M == 0b101 (none)
+        uint8_t modrm = modrm_byte(0b00, 0, 0b101);
+
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        // TODO: make rip-relative disp32 relocation for symbol with `name`
+        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for `%s` symbol.\n", name);
+        int32_t disp32 = 0;
+        fwrite(&disp32, 4, 1, context->machine_code);
+        break;
+      }
+
+      // Encode a REX prefix if either of the ModRM register descriptors need
+      // the bit extension.
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b10  ->  (R/M)+disp32
+      // Reg == Destination
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      // TODO: make disp32 relocation for symbol with `name`
+      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", name);
+      int32_t disp32 = 0;
+      fwrite(&disp32, 4, 1, context->machine_code);
+    } break;
+    case r16: {
+      // 0x66 + 0x8b /r
+      uint8_t sixteen_bit_prefix = 0x66;
+      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+    } // FALLTHROUGH to case r32
+    case r32: {
+      // 0x8b /r
+      uint8_t op = 0x8b;
+
+      // RIP-Relative Addressing
+      if (address_register == REG_RIP) {
+        uint8_t destination_regbits = regbits(destination_register);
+        if (REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+
+        // Mod == 0b00
+        // R/M == 0b101 (none)
+        uint8_t modrm = modrm_byte(0b00, 0, 0b101);
+
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        // TODO: make rip-relative disp32 relocation for symbol with `name`
+        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for `%s` symbol.\n", name);
+        int32_t disp32 = 0;
+        fwrite(&disp32, 4, 1, context->machine_code);
+        break;
+      }
+
+      // Encode a REX prefix if either of the ModRM register descriptors need
+      // the bit extension.
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b10  ->  (R/M)+disp32
+      // Reg == Destination
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      // TODO: make disp32 relocation for symbol with `name`
+      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", name);
+      int32_t disp32 = 0;
+      fwrite(&disp32, 4, 1, context->machine_code);
+    } break;
+    case r64: {
+      // REX.W + 0x8b /r
+      uint8_t op = 0x8b;
+
+      // RIP-Relative Addressing
+      if (address_register == REG_RIP) {
+        uint8_t destination_regbits = regbits(destination_register);
+        uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(destination_regbits));
+
+        // Mod == 0b00
+        // R/M == 0b101 (none)
+        uint8_t modrm = modrm_byte(0b00, 0, 0b101);
+
+        fwrite(&rex, 1, 1, context->machine_code);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        // TODO: make rip-relative disp32 relocation for symbol with `name`
+        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for `%s` symbol.\n", name);
+        int32_t disp32 = 0;
+        fwrite(&disp32, 4, 1, context->machine_code);
+        break;
+      }
+
+      // Encode a REX prefix if either of the ModRM register descriptors need
+      // the bit extension.
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+
+      // Mod == 0b10  ->  (R/M)+disp32
+      // Reg == Destination
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+
+      fwrite(&rex, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      // TODO: make disp32 relocation for symbol with `name`
+      print("[x86_64]:TODO: Make disp32 relocation for `%s` symbol.\n", name);
+      int32_t disp32 = 0;
+      fwrite(&disp32, 4, 1, context->machine_code);
+    } break;
+
+    } // switch (size)
+
+  } break; // case I_MOV
+
+  default: ICE("ERROR: mcode_name_to_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
 }
 
 static void mcode_reg_to_mem(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, int64_t offset) {
@@ -945,11 +1203,15 @@ static void mcode_reg_to_reg
 }
 
 static void mcode_indirect_branch(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register) {
-  //TODO("Implement");
+  switch (inst) {
+  default: ICE("ERROR: mcode_indirect_branch(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
 }
 
 static void mcode_reg_shift(CodegenContext *context, enum Instruction inst, RegisterDescriptor register_to_shift) {
-  //TODO("Implement");
+  switch (inst) {
+  default: ICE("ERROR: mcode_reg_shift(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
 }
 
 static void mcode_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor reg, enum RegSize size) {
@@ -1010,17 +1272,23 @@ static void mcode_reg(CodegenContext *context, enum Instruction inst, RegisterDe
 }
 
 static void mcode_reg_to_name(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name) {
-  //TODO("Implement");
   // TODO: Generate a relocation entry that will end up in the object file...
+  switch (inst) {
+  default: ICE("ERROR: mcode_reg_to_name(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
 }
 
 static void mcode_reg_to_offset_name(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name, usz offset) {
-  //TODO("Implement");
   // TODO: Generate a relocation entry that will end up in the object file...
+  switch (inst) {
+  default: ICE("ERROR: mcode_reg_to_offset_name(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
 }
 
 static void mcode_mem(CodegenContext *context, enum Instruction inst, int64_t offset, RegisterDescriptor address_register) {
-  //TODO("Implement");
+  switch (inst) {
+  default: ICE("ERROR: mcode_mem(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
 }
 
 static void mcode_imm(CodegenContext *context, enum Instruction inst, int64_t immediate) {
@@ -1043,8 +1311,10 @@ static void mcode_imm(CodegenContext *context, enum Instruction inst, int64_t im
 }
 
 static void mcode_name(CodegenContext *context, enum Instruction inst, const char *name) {
-  //TODO("Implement");
   // TODO: Generate a relocation entry that will end up in the object file...
+  switch (inst) {
+  default: ICE("ERROR: mcode_name(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
 }
 
 static void mcode_none(CodegenContext *context, enum Instruction inst) {
