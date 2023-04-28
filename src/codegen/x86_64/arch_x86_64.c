@@ -1573,11 +1573,19 @@ static void mcode_name(CodegenContext *context, enum Instruction inst, const cha
   switch (inst) {
 
   case I_CALL: {
-    print("[x86_64]:TODO: Encode call of name \"%s\"\n", name);
+    uint8_t op = 0xe8;
+    int32_t disp32 = 0;
+    fwrite(&op, 1, 1, context->machine_code);
+    print("[x86_64]:TODO: Make disp32 relocation for call to `%s` symbol.\n", name);
+    fwrite(&disp32, 4, 1, context->machine_code);
   } break; // case I_CALL
 
   case I_JMP: {
-    print("[x86_64]:TODO: Encode jump to name \"%s\"\n", name);
+    uint8_t op = 0xe9;
+    int32_t disp32 = 0;
+    fwrite(&op, 1, 1, context->machine_code);
+    print("[x86_64]:TODO: Make disp32 relocation for jump to `%s` symbol.\n", name);
+    fwrite(&disp32, 4, 1, context->machine_code);
   } break; // case I_JMP
 
   default: ICE("ERROR: mcode_name(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
