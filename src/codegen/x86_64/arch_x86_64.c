@@ -661,7 +661,7 @@ static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
       uint8_t address_regbits = regbits(address_register);
       uint8_t destination_regbits = regbits(destination_register);
       if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
-        uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+        uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
       }
 
@@ -684,7 +684,7 @@ static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
       // the bit extension.
       uint8_t address_regbits = regbits(address_register);
       uint8_t destination_regbits = regbits(destination_register);
-      uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+      uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
 
       // Mod == 0b10  ->  (R/M)+disp32
       // Reg == Destination
@@ -818,7 +818,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
 
         uint8_t destination_regbits = regbits(destination_register);
         if (REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+          uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, false);
           fwrite(&rex, 1, 1, context->machine_code);
         }
 
@@ -841,7 +841,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       uint8_t address_regbits = regbits(address_register);
       uint8_t destination_regbits = regbits(destination_register);
       if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
-        uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+        uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
       }
 
@@ -864,7 +864,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       // RIP-Relative Addressing
       if (address_register == REG_RIP) {
         uint8_t destination_regbits = regbits(destination_register);
-        uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(destination_regbits));
+        uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, false);
 
         // Mod == 0b00
         // R/M == 0b101 (none)
@@ -882,7 +882,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
 
       uint8_t address_regbits = regbits(address_register);
       uint8_t destination_regbits = regbits(destination_register);
-      uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+      uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
 
       // Mod == 0b10  ->  (R/M)+disp32
       // Reg == Destination
