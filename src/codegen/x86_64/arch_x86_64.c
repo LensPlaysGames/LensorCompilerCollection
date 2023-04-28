@@ -19,6 +19,9 @@
 #include <vector.h>
 #include <utils.h>
 
+#define X86_64_GENERATE_MACHINE_CODE
+
+
 #define DEFINE_REGISTER_ENUM(name, ...) REG_##name,
 #define REGISTER_NAME_64(ident, name, ...) name,
 #define REGISTER_NAME_32(ident, name, name_32, ...) name_32,
@@ -380,8 +383,182 @@ static enum IndirectJumpType negate_jump(enum IndirectJumpType j) {
   }
 }
 
+#ifdef X86_64_GENERATE_MACHINE_CODE
+
+// NOTE: +rw indicates the lower three bits of the opcode byte are used
+// to indicate the 16-bit register operand.
+// For registers R8 through R15, the REX.b bit also needs set.
+static uint8_t rw_encoding(RegisterDescriptor reg) {
+  switch (reg) {
+  case REG_RAX:
+  case REG_R8:
+    return 0;
+  case REG_RCX:
+  case REG_R9:
+    return 1;
+  case REG_RDX:
+  case REG_R10:
+    return 2;
+  case REG_RBX:
+  case REG_R11:
+    return 3;
+  case REG_RSP:
+  case REG_R12:
+    return 4;
+  case REG_RBP:
+  case REG_R13:
+    return 5;
+  case REG_RSI:
+  case REG_R14:
+    return 6;
+  case REG_RDI:
+  case REG_R15:
+    return 7;
+  }
+  UNREACHABLE();
+}
+
+// NOTE: +rw indicates the lower three bits of the opcode byte are used
+// to indicate the 32 or 64-bit register operand.
+// For registers R8 through R15, the REX.b bit also needs set.
+// EAX: 0
+// ECX: 1
+// EDX: 2
+// EBX: 3
+// ESP: 4
+// EBP: 5
+// ESI: 6
+// EDI: 7
+// R8D: REX.B, 0
+// R9D: REX.B, 1
+// R10D: REX.B, 2
+// R11D: REX.B, 3
+// R12D: REX.B, 4
+// R13D: REX.B, 5
+// R14D: REX.B, 6
+// R15D: REX.B, 7
+static uint8_t rd_encoding(RegisterDescriptor reg) {
+  return rw_encoding(reg);
+}
+
+// NOTE: +rw indicates the lower three bits of the opcode byte are used
+// to indicate the 32 or 64-bit register operand.
+// For registers R8 through R15, the REX.b bit also needs set.
+// AL: 0
+// CL: 1
+// DL: 2
+// BL: 3
+// SPL: REX.b, 4
+// BPL: REX.b, 5
+// SIL: REX.b, 6
+// DIL: REX.b, 7
+// R8B: REX.b, 0
+// R9B: REX.b, 1
+// R10B: REX.b, 2
+// R11B: REX.b, 3
+// R12B: REX.b, 4
+// R13B: REX.b, 5
+// R14B: REX.b, 6
+// R15B: REX.b, 7
+static uint8_t rb_encoding(RegisterDescriptor reg) {
+  return rw_encoding(reg);
+}
+
+// Don't use me directly!
+static uint8_t rex_byte(bool w, bool r, bool x, bool b) {
+  return (uint8_t)(0b01000000 | ((int)w << 3) | ((int)r << 2) | ((int)x << 1) | (int)b);
+}
+/// REX.W prefix is commonly used to promote a 32-bit operation to 64-bit.
+static uint8_t rexw_byte() {
+  return rex_byte(true, false, false, false);
+}
+
+uint8_t regbits(RegisterDescriptor reg) {
+  switch (reg) {
+  case REG_RAX: return 0b0000;
+  case REG_RCX: return 0b0001;
+  case REG_RDX: return 0b0010;
+  case REG_RBX: return 0b0011;
+  case REG_RSP: return 0b0100;
+  case REG_RBP: return 0b0101;
+  case REG_RSI: return 0b0110;
+  case REG_RDI: return 0b0111;
+  case REG_R8:  return 0b0000;
+  case REG_R9:  return 0b1001;
+  case REG_R10: return 0b1010;
+  case REG_R11: return 0b1011;
+  case REG_R12: return 0b1100;
+  case REG_R13: return 0b1101;
+  case REG_R14: return 0b1110;
+  case REG_R15: return 0b1111;
+  default: UNREACHABLE();
+  }
+}
+
+/// Suitable for use in an if condition to test if the top bit is set
+/// in the Intel encoding of registers.
+#define REGBITS_TOP(regbits) (regbits & 0b1000)
+
+bool regbits_top(RegisterDescriptor reg) {
+  return REGBITS_TOP(regbits(reg));
+}
+
+static uint8_t modrm_byte(uint8_t mod, uint8_t reg, uint8_t rm) {
+  // Ensure no bits above the amount expected are set.
+  ASSERT((mod & (~0b11)) == 0);
+  // Top bit of register stored in REX bit(s), but may still be present here.
+  ASSERT((reg & (~0b1111)) == 0);
+  ASSERT((rm & (~0b1111)) == 0);
+  return (uint8_t)((mod << 6) | ((reg & 0b111) << 3) | rm);
+}
+
+#endif // X86_64_GENERATE_MACHINE_CODE
+
 static void femit_imm_to_reg(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor destination_register, enum RegSize size) {
-  if (inst == I_SUB && immediate == 0) return;
+  if ((inst == I_SUB || inst == I_ADD) && immediate == 0) return;
+
+#ifdef X86_64_GENERATE_MACHINE_CODE
+    switch (inst) {
+    case I_MOV: {
+
+      switch (size) {
+      case r8: {
+        // Move imm8 to r8
+        // 0xb0+ rb ib
+        uint8_t op = 0xb0 + rb_encoding(destination_register);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&immediate, 1, 1, context->machine_code);
+      } break;
+      case r16: {
+        // Move imm16 to r16
+        // 0xb8+ rw iw
+        uint8_t op = 0xb8 + rw_encoding(destination_register);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&immediate, 1, 2, context->machine_code);
+      } break;
+      case r32: {
+        // Move imm32 to r32
+        // 0xb8+ rd id
+        uint8_t op = 0xb8 + rd_encoding(destination_register);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&immediate, 1, 4, context->machine_code);
+      } break;
+      case r64: {
+        // Move imm64 to r64
+        // REX.W + B8+ rd io
+        uint8_t rex = rexw_byte();
+        uint8_t op = 0xb8 + rd_encoding(destination_register);
+        fwrite(&rex, 1, 1, context->machine_code);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&immediate, 1, 8, context->machine_code);
+      } break;
+      }
+
+    } break;
+    default: ICE("ERROR: femit_imm_to_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+    }
+
+#endif // X86_64_GENERATE_MACHINE_CODE
 
   const char *mnemonic    = instruction_mnemonic(context, inst);
   const char *destination = regname(destination_register, size);
@@ -449,6 +626,128 @@ static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, Re
 }
 
 static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, int64_t offset) {
+
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  switch (inst) {
+
+  case I_MOV: {
+
+    switch (size) {
+    case r8: {
+      // Move r8 into m8
+      // 0x88 /r
+      uint8_t op = 0x88;
+
+      // Encode a REX prefix if either of the ModRM register
+      // descriptors need the bit extension.
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t address_regbits = regbits(address_register);
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(address_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(address_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      if (offset >= -128 && offset <= 127) {
+
+        // To cut down on code size, we encode offsets that fit into
+        // one byte using a Mod value of 0b01, allowing for only one byte
+        // to be written for the displacement.
+
+        // Mod == 0b10  ->  register + disp8
+        // Reg == Source
+        // R/M == Address
+        uint8_t modrm = modrm_byte(0b01, source_regbits, address_regbits);
+        int8_t displacement = (int8_t)offset;
+
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        fwrite(&displacement, 1, 1, context->machine_code);
+
+      } else if (offset) {
+
+        // Mod == 0b10  ->  register + disp32
+        // Reg == Source
+        // R/M == Address
+        uint8_t modrm = modrm_byte(0b10, source_regbits, address_regbits);
+        int32_t displacement = (int32_t)offset;
+
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        fwrite(&displacement, 4, 1, context->machine_code);
+
+      } else {
+
+        // If offset is zero, we can omit the displacement byte(s).
+        // Mod == 0b00  ->  (R/M)
+        // Reg == Source
+        // R/M == Address
+        uint8_t modrm = modrm_byte(0b00, source_regbits, address_regbits);
+
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+
+      }
+
+    } break;
+    case r16: {
+      uint8_t sixteen_bit_prefix = 0x66;
+      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+    } // FALLTHROUGH
+    case r32: {
+      // Move r32 into m32
+      // 0x89 /r
+      uint8_t op = 0x89;
+
+      // Encode a REX prefix if either of the ModRM register descriptors need
+      // the bit extension.
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t address_regbits = regbits(address_register);
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(address_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(address_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b10  ->  register + disp32
+      // Reg == Source
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, source_regbits, address_regbits);
+      int32_t displacement = (int32_t)offset;
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      fwrite(&displacement, 4, 1, context->machine_code);
+
+    } break;
+    case r64: {
+      // Move r64 into m64
+      // REX.W + 0x89 /r
+      uint8_t op = 0x89;
+
+      // Encode a REX.W prefix to promote operation to 64-bits, also
+      // including ModRM register bit extension(s).
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(address_regbits));
+
+      // Mod == 0b10  ->  register + disp32
+      // Reg == Source
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, source_regbits, address_regbits);
+      int32_t displacement = (int32_t)offset;
+
+      fwrite(&rex, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      fwrite(&displacement, 4, 1, context->machine_code);
+    } break;
+    }
+
+  } break;
+
+  default: ICE("ERROR: femit_reg_to_mem(): Unsupported instruction %d", inst);
+  }
+#endif // X86_64_GENERATE_MACHINE_CODE
+
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
@@ -490,6 +789,88 @@ static void femit_reg_to_reg
       fprint(context->code, ";;#; skipping move from self to self\n");
       return;
     }
+
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  switch (inst) {
+  case I_MOV: {
+    ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg moves to be of equal size.");
+
+    switch (source_size) {
+
+    case r8: {
+      // Move r8 to r8
+      // 0x88 /r
+      uint8_t op = 0x88;
+
+      // Encode a REX prefix if either of the ModRM register
+      // descriptors need the bit extension.
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b11  ->  Reg
+      // Reg == Source
+      // R/M == Destination
+      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+
+    } break;
+
+    case r16: {
+      // 0x66 + 0x89 /r
+      uint8_t sixteen_bit_prefix = 0x66;
+      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+    } // FALLTHROUGH to case r32
+    case r32: {
+      // 0x89 /r
+      uint8_t op = 0x89;
+
+      // Encode a REX prefix if either of the ModRM register descriptors need
+      // the bit extension.
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b11  ->  Reg
+      // Reg == Source
+      // R/M == Destination
+      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+    } break;
+    case r64: {
+      // REX.W + 0x89 /r
+      uint8_t op = 0x89;
+
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+
+      // Mod == 0b11  ->  Reg
+      // Reg == Source
+      // R/M == Destination
+      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
+
+      fwrite(&rex, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+
+    } break;
+
+    }
+
+  } break;
+  }
+#endif
 
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, source_size);
@@ -600,6 +981,55 @@ static void femit_reg(CodegenContext *context, enum Instruction inst, RegisterDe
     femit_reg_shift(context, inst, reg);
     return;
   }
+
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  // NOTE: +rb/+rw/+rd/+ro indicate the lower three bits of the opcode byte are used to indicate the register operand.
+  // In 64-bit mode, indicates the four bit field of REX.b and opcode[2:0] field encodes the register operand.
+
+  switch (inst) {
+  case I_PUSH: {
+    switch (size) {
+    case r8:
+    case r32:
+      ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
+
+    case r16: {
+      // 0x50+rw
+      uint8_t op = 0x50 + rw_encoding(reg);
+      fwrite(&op, 1, 1, context->machine_code);
+    } break;
+    case r64: {
+      // 0x50+rd
+      uint8_t op = 0x50 + rd_encoding(reg);
+      fwrite(&op, 1, 1, context->machine_code);
+    } break;
+    }
+  } break;
+
+  case I_POP: {
+    switch (size) {
+    case r8:
+    case r32:
+      ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
+
+    case r16: {
+      // 0x58+rw
+      uint8_t c = 0x58 + rw_encoding(reg);
+      fwrite(&c, 1, 1, context->machine_code);
+    } break;
+    case r64: {
+      // 0x58+rd
+      uint8_t c = 0x58 + rd_encoding(reg);
+      fwrite(&c, 1, 1, context->machine_code);
+    } break;
+    }
+  } break;
+
+  default:
+    ICE("ERROR: femit_reg(): Unsupported instruction %d", inst);
+  }
+#endif // x86_64_GENERATE_MACHINE_CODE
+
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(reg, size);
   switch (context->dialect) {
@@ -617,6 +1047,26 @@ static void femit_reg(CodegenContext *context, enum Instruction inst, RegisterDe
 
 static void femit_imm(CodegenContext *context, enum Instruction inst, int64_t immediate) {
   const char *mnemonic = instruction_mnemonic(context, inst);
+
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  switch (inst) {
+  case I_PUSH: {
+    // TODO: What size immediate to push?
+    // PUSH imm8:  0x6a ib
+    // PUSH imm16: 0x68 iw
+    // PUSH imm32: 0x68 id
+    // PROBABLY FALSE LENS_R THOUGHT: I think imm16 uses 0x66 prefix
+    uint8_t op = 0x68;
+    fwrite(&op, 1, 1, context->machine_code);
+    int32_t immediate_value = (int32_t)immediate;
+    fwrite(&immediate_value, 1, 4, context->machine_code);
+  } break;
+
+  default:
+    ICE("ERROR: femit_imm(): Unsupported instruction %d", inst);
+  }
+#endif // x86_64_GENERATE_MACHINE_CODE
+
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
       fprint(context->code, "    %s $%D\n",
@@ -632,6 +1082,9 @@ static void femit_imm(CodegenContext *context, enum Instruction inst, int64_t im
 
 static void femit_name(CodegenContext *context, enum Instruction inst, const char *name) {
   ASSERT(name, "NAME must not be NULL.");
+
+  // TODO: Generate a relocation entry that will go in the object file.
+
   const char *mnemonic = instruction_mnemonic(context, inst);
   switch (context->dialect) {
   case CG_ASM_DIALECT_ATT:
@@ -699,6 +1152,28 @@ static void femit
       }
     } break;
 
+#ifdef X86_64_GENERATE_MACHINE_CODE
+    case I_RET: { // 0xc3
+      uint8_t op = 0xc3;
+      fwrite(&op, 1, 1, context->machine_code);
+    } break;
+    case I_CWD: { // 0x66 + 0x99
+      uint8_t sixteen_bit_prefix = 0x66;
+      uint8_t op = 0x99;
+      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+    } break;
+    case I_CDQ: { // 0x99
+      uint8_t op = 0x99;
+      fwrite(&op, 1, 1, context->machine_code);
+    } break;
+    case I_CQO: { // REX.W + 0x99
+      uint8_t op = 0x99;
+      uint8_t rexw = rexw_byte();
+      fwrite(&rexw, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+    } break;
+#else
     case I_RET:
     case I_CWD:
     case I_CDQ:
@@ -706,12 +1181,27 @@ static void femit
       const char *mnemonic = instruction_mnemonic(context, instruction);
       fprint(context->code, "    %s\n", mnemonic);
     } break;
+#endif // X86_64_GENERATE_MACHINE_CODE
 
   default:
     ICE("Unhandled instruction in femit(): %d (%s)\n"
         "  Consider using femit_x() or femit_x_to_x()",
         instruction, instruction_mnemonic(context, instruction));
   }
+
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  // FIXME: Just a hack to keep things working on machine code development...
+  switch (instruction) {
+  case I_RET:
+  case I_CWD:
+  case I_CDQ:
+  case I_CQO: {
+    const char *mnemonic = instruction_mnemonic(context, instruction);
+    fprint(context->code, "    %s\n", mnemonic);
+  } break;
+  default: break;
+  }
+#endif
 
   va_end(args);
 }
@@ -2131,7 +2621,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     if (var->init) {
       if (var->init->kind == IR_LIT_INTEGER) {
         fprint(context->code, "%S: .byte ", var->name);
-        unsigned char *byte_repr = (unsigned char*)(&var->init->imm);
+        uint8_t *byte_repr = (uint8_t*)(&var->init->imm);
 
         // TODO: Endianness selection
 
