@@ -1197,6 +1197,13 @@ static void mcode_reg_to_reg
   // Always optimise away moves from a register to itself
   if (inst == I_MOV && source_register == destination_register && source_size == destination_size) return;
 
+  uint8_t source_regbits = regbits(source_register);
+  uint8_t destination_regbits = regbits(destination_register);
+  // Mod == 0b11  ->  Reg
+  // Reg == Source
+  // R/M == Destination
+  uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
+
   switch (inst) {
 
   case I_MOV: {
@@ -1211,21 +1218,13 @@ static void mcode_reg_to_reg
 
       // Encode a REX prefix if either of the ModRM register
       // descriptors need the bit extension.
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
       }
 
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
-
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
-
     } break;
 
     case r16: {
@@ -1239,33 +1238,19 @@ static void mcode_reg_to_reg
 
       // Encode a REX prefix if either of the ModRM register descriptors need
       // the bit extension.
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
       }
 
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
-
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
     } break;
+
     case r64: {
       // REX.W + 0x89 /r
       uint8_t op = 0x89;
-
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
-
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
 
       fwrite(&rex, 1, 1, context->machine_code);
       fwrite(&op, 1, 1, context->machine_code);
@@ -1287,21 +1272,15 @@ static void mcode_reg_to_reg
       // 0x00 /r
       uint8_t op = 0x00;
 
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
       }
 
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
-
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
     } break;
+
     case r16: {
       // 0x66 + 0x01 /r
       uint8_t sixteen_bit_prefix = 0x66;
@@ -1311,38 +1290,25 @@ static void mcode_reg_to_reg
       // 0x01 /r
       uint8_t op = 0x01;
 
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
       }
 
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
-
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
     } break;
+
     case r64: {
       // REX.W + 0x01 /r
       uint8_t op = 0x01;
-
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
-
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
 
       fwrite(&rex, 1, 1, context->machine_code);
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
     } break;
+
     } // switch (size)
 
   } break; // case I_ADD
@@ -1356,21 +1322,15 @@ static void mcode_reg_to_reg
       // 0x38 /r
       uint8_t op = 0x38;
 
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
       }
 
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
-
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
     } break;
+
     case r16: {
       // 0x66 + 0x39 /r
       uint8_t sixteen_bit_prefix = 0x66;
@@ -1380,34 +1340,21 @@ static void mcode_reg_to_reg
       // 0x39 /r
       uint8_t op = 0x39;
 
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
       }
 
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
-
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
     } break;
+
     case r64: {
       // 0x39 /r
       uint8_t op = 0x39;
 
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
       fwrite(&rex, 1, 1, context->machine_code);
-
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
 
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
@@ -1425,17 +1372,10 @@ static void mcode_reg_to_reg
       // 0x84 /r
       uint8_t op = 0x84;
 
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
       }
-
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
 
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
@@ -1450,17 +1390,10 @@ static void mcode_reg_to_reg
       // 0x85 /r
       uint8_t op = 0x85;
 
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
       }
-
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
 
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
@@ -1470,15 +1403,8 @@ static void mcode_reg_to_reg
       // REX.W + 0x85 /r
       uint8_t op = 0x85;
 
-      uint8_t source_regbits = regbits(source_register);
-      uint8_t destination_regbits = regbits(destination_register);
       uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
       fwrite(&rex, 1, 1, context->machine_code);
-
-      // Mod == 0b11  ->  Reg
-      // Reg == Source
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
 
       fwrite(&op, 1, 1, context->machine_code);
       fwrite(&modrm, 1, 1, context->machine_code);
