@@ -884,7 +884,6 @@ void allocate_registers(IRFunction *f, const MachineDescription *desc) {
   ir_femit_function(stdout, f);
 #endif
 
-
   phi2copy(f);
 
   DEBUG("After PHI2COPY\n");

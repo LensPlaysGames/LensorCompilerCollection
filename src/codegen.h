@@ -54,6 +54,7 @@ typedef struct IRStaticVariable {
 
 struct CodegenContext {
   FILE *code;
+  FILE *machine_code;
   AST *ast;
 
   Vector(IRFunction *) functions;
