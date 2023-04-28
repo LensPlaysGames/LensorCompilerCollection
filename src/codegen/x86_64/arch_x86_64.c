@@ -653,6 +653,155 @@ static void mcode_imm_to_mem(CodegenContext *context, enum Instruction inst, int
 
 static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, int64_t offset, RegisterDescriptor destination_register, enum RegSize size) {
   switch (inst) {
+
+  case I_LEA: {
+
+    switch (size) {
+    case r8: ICE("x86_64 machine code backend: LEA does not have an 8-bit encoding.");
+    case r16: {
+      // 0x66 + 0x8d /r
+      uint8_t sixteen_bit_prefix = 0x66;
+      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+    } // FALLTHROUGH to case r32
+    case r32: {
+      // 0x8d /r
+      uint8_t op = 0x8d;
+
+      // Encode a REX prefix if either of the ModRM register descriptors need
+      // the bit extension.
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b10  ->  (R/M)+disp32
+      // Reg == Destination
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      int32_t disp32 = (int32_t)offset;
+      fwrite(&disp32, 4, 1, context->machine_code);
+
+    } break;
+    case r64: {
+      // REX.W + 0x8d /r
+      uint8_t op = 0x8d;
+
+      // Encode a REX prefix if either of the ModRM register descriptors need
+      // the bit extension.
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+
+      // Mod == 0b10  ->  (R/M)+disp32
+      // Reg == Destination
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+
+      fwrite(&rex, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      int32_t disp32 = (int32_t)offset;
+      fwrite(&disp32, 4, 1, context->machine_code);
+
+    } break;
+    } // switch (size)
+
+  } break; // case I_LEA
+
+  case I_MOV: {
+
+    switch (size) {
+    case r8: {
+      // 0x8a /r
+      uint8_t op = 0x8a;
+
+      // Encode a REX prefix if either of the ModRM register descriptors need
+      // the bit extension.
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+
+      // Mod == 0b10  ->  (R/M)+disp32
+      // Reg == Destination
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+
+      fwrite(&rex, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      int32_t disp32 = (int32_t)offset;
+      fwrite(&disp32, 4, 1, context->machine_code);
+    } break;
+    case r16: {
+      // 0x66 + 0x8b /r
+      uint8_t sixteen_bit_prefix = 0x66;
+      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+    } // FALLTHROUGH to case r32
+    case r32: {
+      // 0x8b /r
+      uint8_t op = 0x8d;
+
+      // Encode a REX prefix if either of the ModRM register descriptors need
+      // the bit extension.
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b10  ->  (R/M)+disp32
+      // Reg == Destination
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      int32_t disp32 = (int32_t)offset;
+      fwrite(&disp32, 4, 1, context->machine_code);
+    } break;
+    case r64: {
+      // REX.W + 0x8b /r
+      uint8_t op = 0x8d;
+
+      // Encode a REX prefix if either of the ModRM register descriptors need
+      // the bit extension.
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+
+      // Make output code smaller when possible by omitting zero displacements.
+      if (offset == 0) {
+        // Mod == 0b00  ->  (R/M)
+        // Reg == Destination
+        // R/M == Address
+        uint8_t modrm = modrm_byte(0b00, destination_regbits, address_regbits);
+
+        fwrite(&rex, 1, 1, context->machine_code);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+      } else {
+        // Mod == 0b10  ->  (R/M)+disp32
+        // Reg == Destination
+        // R/M == Address
+        uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+
+        fwrite(&rex, 1, 1, context->machine_code);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        int32_t disp32 = (int32_t)offset;
+        fwrite(&disp32, 4, 1, context->machine_code);
+      }
+    } break;
+    } // switch (size)
+
+  } break; // case I_MOV
+
   default: ICE("ERROR: mcode_mem_to_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
   }
 }
@@ -1018,16 +1167,28 @@ static void mcode_reg_to_mem(CodegenContext *context, enum Instruction inst, Reg
       uint8_t address_regbits = regbits(address_register);
       uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(address_regbits));
 
-      // Mod == 0b10  ->  register + disp32
-      // Reg == Source
-      // R/M == Address
-      uint8_t modrm = modrm_byte(0b10, source_regbits, address_regbits);
-      int32_t displacement = (int32_t)offset;
+      // Make output code smaller when possible by omitting zero displacements.
+      if (offset == 0) {
+        // Mod == 0b00  ->  R/M
+        // Reg == Source
+        // R/M == Address
+        uint8_t modrm = modrm_byte(0b00, source_regbits, address_regbits);
 
-      fwrite(&rex, 1, 1, context->machine_code);
-      fwrite(&op, 1, 1, context->machine_code);
-      fwrite(&modrm, 1, 1, context->machine_code);
-      fwrite(&displacement, 4, 1, context->machine_code);
+        fwrite(&rex, 1, 1, context->machine_code);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+      } else {
+        // Mod == 0b10  ->  R/M + disp32
+        // Reg == Source
+        // R/M == Address
+        uint8_t modrm = modrm_byte(0b10, source_regbits, address_regbits);
+        int32_t displacement = (int32_t)offset;
+
+        fwrite(&rex, 1, 1, context->machine_code);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        fwrite(&displacement, 4, 1, context->machine_code);
+      }
     } break;
     }
 
@@ -1729,20 +1890,6 @@ static void femit
           "  Consider using femit_x() or femit_x_to_x()",
           instruction, instruction_mnemonic(context, instruction));
   }
-
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  // FIXME: Just a hack to keep things working on machine code development...
-  switch (instruction) {
-  case I_RET:
-  case I_CWD:
-  case I_CDQ:
-  case I_CQO: {
-    const char *mnemonic = instruction_mnemonic(context, instruction);
-    fprint(context->code, "    %s\n", mnemonic);
-  } break;
-  default: break;
-  }
-#endif
 
   va_end(args);
 }
