@@ -733,7 +733,7 @@ static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
     } // FALLTHROUGH to case r32
     case r32: {
       // 0x8b /r
-      uint8_t op = 0x8d;
+      uint8_t op = 0x8b;
 
       // Encode a REX prefix if either of the ModRM register descriptors need
       // the bit extension.
@@ -756,7 +756,7 @@ static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
     } break;
     case r64: {
       // REX.W + 0x8b /r
-      uint8_t op = 0x8d;
+      uint8_t op = 0x8b;
 
       // Encode a REX prefix if either of the ModRM register descriptors need
       // the bit extension.
