@@ -1313,6 +1313,57 @@ static void mcode_reg_to_reg
 
   } break; // case I_ADD
 
+  case I_SUB: {
+
+    ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg subs to be of equal size.");
+
+    switch (source_size) {
+    case r8: {
+      // Subtract r8 from r8
+      // 0x28 /r
+      uint8_t op = 0x28;
+
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+    } break;
+
+    case r16: {
+      // 0x66 + 0x29 /r
+      uint8_t sixteen_bit_prefix = 0x66;
+      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+    } // FALLTHROUGH to case r32
+    case r32: {
+      // 0x29 /r
+      uint8_t op = 0x29;
+
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+    } break;
+
+    case r64: {
+      // REX.W + 0x29 /r
+      uint8_t op = 0x29;
+      uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+
+      fwrite(&rex, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+    } break;
+
+    } // switch (size)
+
+  } break; // case I_SUB
+
   case I_CMP: {
 
     ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg cmps to be of equal size.");
@@ -1532,11 +1583,11 @@ static void mcode_name(CodegenContext *context, enum Instruction inst, const cha
   switch (inst) {
 
   case I_CALL: {
-    print("TODO: Encode call of name \"%s\"\n", name);
+    print("[x86_64]:TODO: Encode call of name \"%s\"\n", name);
   } break; // case I_CALL
 
   case I_JMP: {
-    print("TODO: Encode jump to name \"%s\"\n", name);
+    print("[x86_64]:TODO: Encode jump to name \"%s\"\n", name);
   } break; // case I_JMP
 
   default: ICE("ERROR: mcode_name(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
