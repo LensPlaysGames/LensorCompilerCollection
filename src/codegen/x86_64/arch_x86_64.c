@@ -483,7 +483,7 @@ uint8_t regbits(RegisterDescriptor reg) {
   case REG_RBP: return 0b0101;
   case REG_RSI: return 0b0110;
   case REG_RDI: return 0b0111;
-  case REG_R8:  return 0b0000;
+  case REG_R8:  return 0b1000;
   case REG_R9:  return 0b1001;
   case REG_R10: return 0b1010;
   case REG_R11: return 0b1011;
