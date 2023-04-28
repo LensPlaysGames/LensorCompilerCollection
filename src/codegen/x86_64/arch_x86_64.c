@@ -552,9 +552,98 @@ static void femit_imm_to_reg(CodegenContext *context, enum Instruction inst, int
         fwrite(&op, 1, 1, context->machine_code);
         fwrite(&immediate, 1, 8, context->machine_code);
       } break;
-      }
 
-    } break;
+      } // switch (size)
+
+    } break; // case I_MOV
+
+    case I_ADD:
+    case I_SUB: {
+
+      // Immediate add/sub both share the same opcodes, just with a different opcode extension in ModRM:reg.
+      uint8_t add_extension = 0;
+      uint8_t sub_extension = 5;
+      uint8_t modrm = 0;
+      uint8_t destination_regbits = regbits(destination_register);
+      // Mod == 0b11  ->  Reg
+      // Reg == Opcode Extension (5 for sub, 0 for add)
+      // R/M == Destination
+      if (inst == I_ADD)
+        modrm = modrm_byte(0b11, add_extension, destination_regbits);
+      else modrm = modrm_byte(0b11, sub_extension, destination_regbits);
+
+      switch (size) {
+      case r8: {
+        // 0x80 /5 ib
+        uint8_t op = 0x80;
+
+        // Encode a REX prefix if the ModRM register descriptor needs
+        // the bit extension.
+        if (REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+
+        int8_t imm8 = (int8_t)immediate;
+
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        fwrite(&imm8, 1, 1, context->machine_code);
+      } break;
+      case r16: {
+        // 0x66 + 0x81 /5 iw
+        uint8_t op = 0x81;
+
+        uint8_t sixteen_bit_prefix = 0x66;
+        fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+
+        // Encode a REX prefix if the ModRM register descriptor needs
+        // the bit extension.
+        if (REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+
+        int16_t imm16 = (int16_t)immediate;
+
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        fwrite(&imm16, 2, 1, context->machine_code);
+      } break;
+      case r32: {
+        // 0x81 /5 id
+        uint8_t op = 0x81;
+
+        // Encode a REX prefix if the ModRM register descriptor needs
+        // the bit extension.
+        if (REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+
+        int32_t imm32 = (int32_t)immediate;
+
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        fwrite(&imm32, 4, 1, context->machine_code);
+      } break;
+      case r64: {
+        // Subtract imm32 sign extended to 64-bits from r64
+        // REX.W + 0x81 /5 id
+        uint8_t op = 0x81;
+        uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(destination_regbits));
+        int32_t imm32 = (int32_t)immediate;
+
+        fwrite(&rex, 1, 1, context->machine_code);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        fwrite(&imm32, 4, 1, context->machine_code);
+      } break;
+
+      } // switch (size)
+
+    } break; // case I_ADD/I_SUB
+
     default: ICE("ERROR: femit_imm_to_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
     }
 
@@ -792,6 +881,7 @@ static void femit_reg_to_reg
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
   switch (inst) {
+
   case I_MOV: {
     ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg moves to be of equal size.");
 
@@ -866,11 +956,84 @@ static void femit_reg_to_reg
 
     } break;
 
-    }
+    } // switch (size)
 
-  } break;
+  } break; // case I_MOV
+
+  case I_ADD: {
+
+    ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg adds to be of equal size.");
+
+    switch (source_size) {
+    case r8: {
+      // Add r8 to r8
+      // 0x00 /r
+      uint8_t op = 0x00;
+
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b11  ->  Reg
+      // Reg == Source
+      // R/M == Destination
+      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+    } break;
+    case r16: {
+      // 0x66 + 0x01 /r
+      uint8_t sixteen_bit_prefix = 0x66;
+      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+    } // FALLTHROUGH to case r32
+    case r32: {
+      // 0x01 /r
+      uint8_t op = 0x01;
+
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
+
+      // Mod == 0b11  ->  Reg
+      // Reg == Source
+      // R/M == Destination
+      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
+
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+    } break;
+    case r64: {
+      // REX.W + 0x01 /r
+      uint8_t op = 0x01;
+
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t destination_regbits = regbits(destination_register);
+      uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+
+      // Mod == 0b11  ->  Reg
+      // Reg == Source
+      // R/M == Destination
+      uint8_t modrm = modrm_byte(0b11, source_regbits, destination_regbits);
+
+      fwrite(&rex, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+    } break;
+    } // switch (size)
+
+  } break; // case I_ADD
+
+  default: ICE("ERROR: femit_reg_to_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+
   }
-#endif
+#endif // X86_64_GENERATE_MACHINE_CODE
 
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, source_size);
@@ -1026,7 +1189,7 @@ static void femit_reg(CodegenContext *context, enum Instruction inst, RegisterDe
   } break;
 
   default:
-    ICE("ERROR: femit_reg(): Unsupported instruction %d", inst);
+    ICE("ERROR: femit_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
   }
 #endif // x86_64_GENERATE_MACHINE_CODE
 
