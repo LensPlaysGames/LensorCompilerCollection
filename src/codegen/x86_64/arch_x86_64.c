@@ -512,211 +512,153 @@ static uint8_t modrm_byte(uint8_t mod, uint8_t reg, uint8_t rm) {
   return (uint8_t)((mod << 6) | ((reg & 0b111) << 3) | rm);
 }
 
-#endif // X86_64_GENERATE_MACHINE_CODE
-
-static void femit_imm_to_reg(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor destination_register, enum RegSize size) {
+static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor destination_register, enum RegSize size) {
   if ((inst == I_SUB || inst == I_ADD) && immediate == 0) return;
 
-#ifdef X86_64_GENERATE_MACHINE_CODE
-    switch (inst) {
-    case I_MOV: {
+  switch (inst) {
+  case I_MOV: {
 
-      switch (size) {
-      case r8: {
-        // Move imm8 to r8
-        // 0xb0+ rb ib
-        uint8_t op = 0xb0 + rb_encoding(destination_register);
-        fwrite(&op, 1, 1, context->machine_code);
-        fwrite(&immediate, 1, 1, context->machine_code);
-      } break;
-      case r16: {
-        // Move imm16 to r16
-        // 0xb8+ rw iw
-        uint8_t op = 0xb8 + rw_encoding(destination_register);
-        fwrite(&op, 1, 1, context->machine_code);
-        fwrite(&immediate, 1, 2, context->machine_code);
-      } break;
-      case r32: {
-        // Move imm32 to r32
-        // 0xb8+ rd id
-        uint8_t op = 0xb8 + rd_encoding(destination_register);
-        fwrite(&op, 1, 1, context->machine_code);
-        fwrite(&immediate, 1, 4, context->machine_code);
-      } break;
-      case r64: {
-        // Move imm64 to r64
-        // REX.W + B8+ rd io
-        uint8_t rex = rexw_byte();
-        uint8_t op = 0xb8 + rd_encoding(destination_register);
+    switch (size) {
+    case r8: {
+      // Move imm8 to r8
+      // 0xb0+ rb ib
+      uint8_t op = 0xb0 + rb_encoding(destination_register);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&immediate, 1, 1, context->machine_code);
+    } break;
+    case r16: {
+      // Move imm16 to r16
+      // 0xb8+ rw iw
+      uint8_t op = 0xb8 + rw_encoding(destination_register);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&immediate, 1, 2, context->machine_code);
+    } break;
+    case r32: {
+      // Move imm32 to r32
+      // 0xb8+ rd id
+      uint8_t op = 0xb8 + rd_encoding(destination_register);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&immediate, 1, 4, context->machine_code);
+    } break;
+    case r64: {
+      // Move imm64 to r64
+      // REX.W + B8+ rd io
+      uint8_t rex = rexw_byte();
+      uint8_t op = 0xb8 + rd_encoding(destination_register);
+      fwrite(&rex, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&immediate, 1, 8, context->machine_code);
+    } break;
+
+    } // switch (size)
+
+  } break; // case I_MOV
+
+  case I_ADD:
+  case I_SUB: {
+
+    // Immediate add/sub both share the same opcodes, just with a different opcode extension in ModRM:reg.
+    uint8_t add_extension = 0;
+    uint8_t sub_extension = 5;
+    uint8_t modrm = 0;
+    uint8_t destination_regbits = regbits(destination_register);
+    // Mod == 0b11  ->  Reg
+    // Reg == Opcode Extension (5 for sub, 0 for add)
+    // R/M == Destination
+    if (inst == I_ADD)
+      modrm = modrm_byte(0b11, add_extension, destination_regbits);
+    else modrm = modrm_byte(0b11, sub_extension, destination_regbits);
+
+    switch (size) {
+    case r8: {
+      // 0x80 /5 ib
+      uint8_t op = 0x80;
+
+      // Encode a REX prefix if the ModRM register descriptor needs
+      // the bit extension.
+      if (REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
-        fwrite(&op, 1, 1, context->machine_code);
-        fwrite(&immediate, 1, 8, context->machine_code);
-      } break;
+      }
 
-      } // switch (size)
+      int8_t imm8 = (int8_t)immediate;
 
-    } break; // case I_MOV
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      fwrite(&imm8, 1, 1, context->machine_code);
+    } break;
+    case r16: {
+      // 0x66 + 0x81 /5 iw
+      uint8_t op = 0x81;
 
-    case I_ADD:
-    case I_SUB: {
+      uint8_t sixteen_bit_prefix = 0x66;
+      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
 
-      // Immediate add/sub both share the same opcodes, just with a different opcode extension in ModRM:reg.
-      uint8_t add_extension = 0;
-      uint8_t sub_extension = 5;
-      uint8_t modrm = 0;
-      uint8_t destination_regbits = regbits(destination_register);
-      // Mod == 0b11  ->  Reg
-      // Reg == Opcode Extension (5 for sub, 0 for add)
-      // R/M == Destination
-      if (inst == I_ADD)
-        modrm = modrm_byte(0b11, add_extension, destination_regbits);
-      else modrm = modrm_byte(0b11, sub_extension, destination_regbits);
-
-      switch (size) {
-      case r8: {
-        // 0x80 /5 ib
-        uint8_t op = 0x80;
-
-        // Encode a REX prefix if the ModRM register descriptor needs
-        // the bit extension.
-        if (REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
-          fwrite(&rex, 1, 1, context->machine_code);
-        }
-
-        int8_t imm8 = (int8_t)immediate;
-
-        fwrite(&op, 1, 1, context->machine_code);
-        fwrite(&modrm, 1, 1, context->machine_code);
-        fwrite(&imm8, 1, 1, context->machine_code);
-      } break;
-      case r16: {
-        // 0x66 + 0x81 /5 iw
-        uint8_t op = 0x81;
-
-        uint8_t sixteen_bit_prefix = 0x66;
-        fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
-
-        // Encode a REX prefix if the ModRM register descriptor needs
-        // the bit extension.
-        if (REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
-          fwrite(&rex, 1, 1, context->machine_code);
-        }
-
-        int16_t imm16 = (int16_t)immediate;
-
-        fwrite(&op, 1, 1, context->machine_code);
-        fwrite(&modrm, 1, 1, context->machine_code);
-        fwrite(&imm16, 2, 1, context->machine_code);
-      } break;
-      case r32: {
-        // 0x81 /5 id
-        uint8_t op = 0x81;
-
-        // Encode a REX prefix if the ModRM register descriptor needs
-        // the bit extension.
-        if (REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
-          fwrite(&rex, 1, 1, context->machine_code);
-        }
-
-        int32_t imm32 = (int32_t)immediate;
-
-        fwrite(&op, 1, 1, context->machine_code);
-        fwrite(&modrm, 1, 1, context->machine_code);
-        fwrite(&imm32, 4, 1, context->machine_code);
-      } break;
-      case r64: {
-        // Subtract imm32 sign extended to 64-bits from r64
-        // REX.W + 0x81 /5 id
-        uint8_t op = 0x81;
-        uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(destination_regbits));
-        int32_t imm32 = (int32_t)immediate;
-
+      // Encode a REX prefix if the ModRM register descriptor needs
+      // the bit extension.
+      if (REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
-        fwrite(&op, 1, 1, context->machine_code);
-        fwrite(&modrm, 1, 1, context->machine_code);
-        fwrite(&imm32, 4, 1, context->machine_code);
-      } break;
+      }
 
-      } // switch (size)
+      int16_t imm16 = (int16_t)immediate;
 
-    } break; // case I_ADD/I_SUB
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      fwrite(&imm16, 2, 1, context->machine_code);
+    } break;
+    case r32: {
+      // 0x81 /5 id
+      uint8_t op = 0x81;
 
-    default: ICE("ERROR: femit_imm_to_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
-    }
+      // Encode a REX prefix if the ModRM register descriptor needs
+      // the bit extension.
+      if (REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+      }
 
-#endif // X86_64_GENERATE_MACHINE_CODE
+      int32_t imm32 = (int32_t)immediate;
 
-  const char *mnemonic    = instruction_mnemonic(context, inst);
-  const char *destination = regname(destination_register, size);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
-      fprint(context->code, "    %s $%D, %%%s\n",
-          mnemonic, immediate, destination);
-      break;
-    case CG_ASM_DIALECT_INTEL:
-      fprint(context->code, "    %s %s, %D\n",
-          mnemonic, destination, immediate);
-      break;
-    default: ICE("ERROR: femit_imm_to_reg(): Unsupported dialect %d", context->dialect);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      fwrite(&imm32, 4, 1, context->machine_code);
+    } break;
+    case r64: {
+      // Subtract imm32 sign extended to 64-bits from r64
+      // REX.W + 0x81 /5 id
+      uint8_t op = 0x81;
+      uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(destination_regbits));
+      int32_t imm32 = (int32_t)immediate;
+
+      fwrite(&rex, 1, 1, context->machine_code);
+      fwrite(&op, 1, 1, context->machine_code);
+      fwrite(&modrm, 1, 1, context->machine_code);
+      fwrite(&imm32, 4, 1, context->machine_code);
+    } break;
+
+    } // switch (size)
+
+  } break; // case I_ADD/I_SUB
+
+  default: ICE("ERROR: mcode_imm_to_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
   }
 }
 
-static void femit_imm_to_mem(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor address_register, int64_t offset) {
-  const char *mnemonic = instruction_mnemonic(context, inst);
-  const char *address = register_name(address_register);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
-      fprint(context->code, "    %s $%D, %D(%%%s)\n",
-          mnemonic, immediate, offset, address);
-      break;
-    case CG_ASM_DIALECT_INTEL:
-      fprint(context->code, "    %s [%s + %D], %D\n",
-          mnemonic, address, offset, immediate);
-      break;
-    default: ICE("ERROR: femit_imm_to_mem(): Unsupported dialect %d", context->dialect);
-  }
+static void mcode_imm_to_mem(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor address_register, int64_t offset) {
+  //TODO("Implement");
 }
 
-static void femit_mem_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, int64_t offset, RegisterDescriptor destination_register, enum RegSize size) {
-  const char *mnemonic = instruction_mnemonic(context, inst);
-  const char *address = register_name(address_register);
-  const char *destination = regname(destination_register, size);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
-      fprint(context->code, "    %s %D(%%%s), %%%s\n",
-          mnemonic, offset, address, destination);
-      break;
-    case CG_ASM_DIALECT_INTEL:
-      fprint(context->code, "    %s %s, [%s + %D]\n",
-          mnemonic, destination, address, offset);
-      break;
-    default: ICE("ERROR: femit_mem_to_reg(): Unsupported dialect %d", context->dialect);
-  }
+static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, int64_t offset, RegisterDescriptor destination_register, enum RegSize size) {
+  //TODO("Implement");
 }
 
-static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, const char *name, RegisterDescriptor destination_register, enum RegSize size) {
-  const char *mnemonic = instruction_mnemonic(context, inst);
-  const char *address = register_name(address_register);
-  const char *destination = regname(destination_register, size);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
-      fprint(context->code, "    %s (%s)(%%%s), %%%s\n",
-          mnemonic, name, address, destination);
-      break;
-    case CG_ASM_DIALECT_INTEL:
-      fprint(context->code, "    %s %s, [%s + %s]\n",
-          mnemonic, destination, address, name);
-      break;
-    default: ICE("ERROR: femit_name_to_reg(): Unsupported dialect %d", context->dialect);
-  }
+static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, const char *name, RegisterDescriptor destination_register, enum RegSize size) {
+  //TODO("Implement");
+  // TODO: Generate a relocation entry that will end up in the object file...
 }
 
-static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, int64_t offset) {
-
-#ifdef X86_64_GENERATE_MACHINE_CODE
+static void mcode_reg_to_mem(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, int64_t offset) {
   switch (inst) {
 
   case I_MOV: {
@@ -833,37 +775,11 @@ static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, Reg
 
   } break;
 
-  default: ICE("ERROR: femit_reg_to_mem(): Unsupported instruction %d", inst);
-  }
-#endif // X86_64_GENERATE_MACHINE_CODE
-
-  const char *mnemonic = instruction_mnemonic(context, inst);
-  const char *source = regname(source_register, size);
-  const char *address = register_name(address_register);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
-      if (offset) {
-        fprint(context->code, "    %s %%%s, %D(%%%s)\n",
-                mnemonic, source, offset, address);
-      } else {
-        fprint(context->code, "    %s %%%s, (%%%s)\n",
-                mnemonic, source, address);
-      }
-      break;
-    case CG_ASM_DIALECT_INTEL:
-      if (offset) {
-        fprint(context->code, "    %s [%s + %D], %s\n",
-                mnemonic, address, offset, source);
-      } else {
-        fprint(context->code, "    %s [%s], %s\n",
-                mnemonic, address, source);
-      }
-      break;
-    default: ICE("ERROR: femit_reg_to_mem(): Unsupported dialect %d", context->dialect);
+  default: ICE("ERROR: mcode_reg_to_mem(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
   }
 }
 
-static void femit_reg_to_reg
+static void mcode_reg_to_reg
 (CodegenContext *context,
  enum Instruction inst,
  RegisterDescriptor source_register, enum RegSize source_size,
@@ -871,15 +787,8 @@ static void femit_reg_to_reg
  )
 {
   // Always optimise away moves from a register to itself
-  if (inst == I_MOV
-      && source_register == destination_register
-      && source_size == destination_size)
-    {
-      fprint(context->code, ";;#; skipping move from self to self\n");
-      return;
-    }
+  if (inst == I_MOV && source_register == destination_register && source_size == destination_size) return;
 
-#ifdef X86_64_GENERATE_MACHINE_CODE
   switch (inst) {
 
   case I_MOV: {
@@ -1030,10 +939,278 @@ static void femit_reg_to_reg
 
   } break; // case I_ADD
 
-  default: ICE("ERROR: femit_reg_to_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  default: ICE("ERROR: mcode_reg_to_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
 
   }
+}
+
+static void mcode_indirect_branch(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register) {
+  //TODO("Implement");
+}
+
+static void mcode_reg_shift(CodegenContext *context, enum Instruction inst, RegisterDescriptor register_to_shift) {
+  //TODO("Implement");
+}
+
+static void mcode_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor reg, enum RegSize size) {
+  if (inst == I_JMP || inst == I_CALL) {
+    mcode_indirect_branch(context, inst, reg);
+    return;
+  }
+  if (inst == I_SAL || inst == I_SAR || inst == I_SHL || inst == I_SHR) {
+    mcode_reg_shift(context, inst, reg);
+    return;
+  }
+
+  // NOTE: +rb/+rw/+rd/+ro indicate the lower three bits of the opcode byte are used to indicate the register operand.
+  // In 64-bit mode, indicates the four bit field of REX.b and opcode[2:0] field encodes the register operand.
+
+  switch (inst) {
+  case I_PUSH: {
+    switch (size) {
+    case r8:
+    case r32:
+      ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
+
+    case r16: {
+      // 0x50+rw
+      uint8_t op = 0x50 + rw_encoding(reg);
+      fwrite(&op, 1, 1, context->machine_code);
+    } break;
+    case r64: {
+      // 0x50+rd
+      uint8_t op = 0x50 + rd_encoding(reg);
+      fwrite(&op, 1, 1, context->machine_code);
+    } break;
+    }
+  } break;
+
+  case I_POP: {
+    switch (size) {
+    case r8:
+    case r32:
+      ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
+
+    case r16: {
+      // 0x58+rw
+      uint8_t c = 0x58 + rw_encoding(reg);
+      fwrite(&c, 1, 1, context->machine_code);
+    } break;
+    case r64: {
+      // 0x58+rd
+      uint8_t c = 0x58 + rd_encoding(reg);
+      fwrite(&c, 1, 1, context->machine_code);
+    } break;
+    }
+  } break;
+
+  default:
+    ICE("ERROR: mcode_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
+}
+
+static void mcode_reg_to_name(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name) {
+  //TODO("Implement");
+  // TODO: Generate a relocation entry that will end up in the object file...
+}
+
+static void mcode_reg_to_offset_name(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name, usz offset) {
+  //TODO("Implement");
+  // TODO: Generate a relocation entry that will end up in the object file...
+}
+
+static void mcode_mem(CodegenContext *context, enum Instruction inst, int64_t offset, RegisterDescriptor address_register) {
+  //TODO("Implement");
+}
+
+static void mcode_imm(CodegenContext *context, enum Instruction inst, int64_t immediate) {
+  switch (inst) {
+  case I_PUSH: {
+    // TODO: What size immediate to push?
+    // PUSH imm8:  0x6a ib
+    // PUSH imm16: 0x68 iw
+    // PUSH imm32: 0x68 id
+    // PROBABLY FALSE LENS_R THOUGHT: I think imm16 uses 0x66 prefix
+    uint8_t op = 0x68;
+    fwrite(&op, 1, 1, context->machine_code);
+    int32_t immediate_value = (int32_t)immediate;
+    fwrite(&immediate_value, 1, 4, context->machine_code);
+  } break;
+
+  default:
+    ICE("ERROR: mcode_imm(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
+}
+
+static void mcode_name(CodegenContext *context, enum Instruction inst, const char *name) {
+  //TODO("Implement");
+  // TODO: Generate a relocation entry that will end up in the object file...
+}
+
+static void mcode_none(CodegenContext *context, enum Instruction inst) {
+  switch (inst) {
+  case I_RET: { // 0xc3
+    uint8_t op = 0xc3;
+    fwrite(&op, 1, 1, context->machine_code);
+  } break;
+  case I_CWD: { // 0x66 + 0x99
+    uint8_t sixteen_bit_prefix = 0x66;
+    uint8_t op = 0x99;
+    fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+    fwrite(&op, 1, 1, context->machine_code);
+  } break;
+  case I_CDQ: { // 0x99
+    uint8_t op = 0x99;
+    fwrite(&op, 1, 1, context->machine_code);
+  } break;
+  case I_CQO: { // REX.W + 0x99
+    uint8_t op = 0x99;
+    uint8_t rexw = rexw_byte();
+    fwrite(&rexw, 1, 1, context->machine_code);
+    fwrite(&op, 1, 1, context->machine_code);
+  } break;
+
+  default:
+    ICE("ERROR: mcode_none(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
+  }
+}
+
 #endif // X86_64_GENERATE_MACHINE_CODE
+
+static void femit_imm_to_reg(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor destination_register, enum RegSize size) {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_imm_to_reg(context, inst, immediate, destination_register, size);
+#endif // X86_64_GENERATE_MACHINE_CODE
+
+  if ((inst == I_SUB || inst == I_ADD) && immediate == 0) return;
+
+  const char *mnemonic    = instruction_mnemonic(context, inst);
+  const char *destination = regname(destination_register, size);
+  switch (context->dialect) {
+    case CG_ASM_DIALECT_ATT:
+      fprint(context->code, "    %s $%D, %%%s\n",
+          mnemonic, immediate, destination);
+      break;
+    case CG_ASM_DIALECT_INTEL:
+      fprint(context->code, "    %s %s, %D\n",
+          mnemonic, destination, immediate);
+      break;
+    default: ICE("ERROR: femit_imm_to_reg(): Unsupported dialect %d", context->dialect);
+  }
+}
+
+static void femit_imm_to_mem(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor address_register, int64_t offset) {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_imm_to_mem(context, inst, immediate, address_register, offset);
+#endif // X86_64_GENERATE_MACHINE_CODE
+
+  const char *mnemonic = instruction_mnemonic(context, inst);
+  const char *address = register_name(address_register);
+  switch (context->dialect) {
+    case CG_ASM_DIALECT_ATT:
+      fprint(context->code, "    %s $%D, %D(%%%s)\n",
+          mnemonic, immediate, offset, address);
+      break;
+    case CG_ASM_DIALECT_INTEL:
+      fprint(context->code, "    %s [%s + %D], %D\n",
+          mnemonic, address, offset, immediate);
+      break;
+    default: ICE("ERROR: femit_imm_to_mem(): Unsupported dialect %d", context->dialect);
+  }
+}
+
+static void femit_mem_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, int64_t offset, RegisterDescriptor destination_register, enum RegSize size) {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_mem_to_reg(context, inst, address_register, offset, destination_register, size);
+#endif // X86_64_GENERATE_MACHINE_CODE
+
+  const char *mnemonic = instruction_mnemonic(context, inst);
+  const char *address = register_name(address_register);
+  const char *destination = regname(destination_register, size);
+  switch (context->dialect) {
+    case CG_ASM_DIALECT_ATT:
+      fprint(context->code, "    %s %D(%%%s), %%%s\n",
+          mnemonic, offset, address, destination);
+      break;
+    case CG_ASM_DIALECT_INTEL:
+      fprint(context->code, "    %s %s, [%s + %D]\n",
+          mnemonic, destination, address, offset);
+      break;
+    default: ICE("ERROR: femit_mem_to_reg(): Unsupported dialect %d", context->dialect);
+  }
+}
+
+static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, const char *name, RegisterDescriptor destination_register, enum RegSize size) {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_name_to_reg(context, inst, address_register, name, destination_register, size);
+#endif // X86_64_GENERATE_MACHINE_CODE
+
+  const char *mnemonic = instruction_mnemonic(context, inst);
+  const char *address = register_name(address_register);
+  const char *destination = regname(destination_register, size);
+  switch (context->dialect) {
+    case CG_ASM_DIALECT_ATT:
+      fprint(context->code, "    %s (%s)(%%%s), %%%s\n",
+          mnemonic, name, address, destination);
+      break;
+    case CG_ASM_DIALECT_INTEL:
+      fprint(context->code, "    %s %s, [%s + %s]\n",
+          mnemonic, destination, address, name);
+      break;
+    default: ICE("ERROR: femit_name_to_reg(): Unsupported dialect %d", context->dialect);
+  }
+}
+
+static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, int64_t offset) {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_reg_to_mem(context, inst, source_register, size, address_register, offset);
+#endif // X86_64_GENERATE_MACHINE_CODE
+
+  const char *mnemonic = instruction_mnemonic(context, inst);
+  const char *source = regname(source_register, size);
+  const char *address = register_name(address_register);
+  switch (context->dialect) {
+    case CG_ASM_DIALECT_ATT:
+      if (offset) {
+        fprint(context->code, "    %s %%%s, %D(%%%s)\n",
+                mnemonic, source, offset, address);
+      } else {
+        fprint(context->code, "    %s %%%s, (%%%s)\n",
+                mnemonic, source, address);
+      }
+      break;
+    case CG_ASM_DIALECT_INTEL:
+      if (offset) {
+        fprint(context->code, "    %s [%s + %D], %s\n",
+                mnemonic, address, offset, source);
+      } else {
+        fprint(context->code, "    %s [%s], %s\n",
+                mnemonic, address, source);
+      }
+      break;
+    default: ICE("ERROR: femit_reg_to_mem(): Unsupported dialect %d", context->dialect);
+  }
+}
+
+static void femit_reg_to_reg
+(CodegenContext *context,
+ enum Instruction inst,
+ RegisterDescriptor source_register, enum RegSize source_size,
+ RegisterDescriptor destination_register, enum RegSize destination_size
+ )
+{
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_reg_to_reg(context, inst, source_register, source_size, destination_register, destination_size);
+#endif // X86_64_GENERATE_MACHINE_CODE
+
+  // Always optimise away moves from a register to itself
+  if (inst == I_MOV
+      && source_register == destination_register
+      && source_size == destination_size)
+    {
+      fprint(context->code, ";;#; skipping move from self to self\n");
+      return;
+    }
 
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, source_size);
@@ -1053,6 +1230,10 @@ static void femit_reg_to_reg
 }
 
 static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name) {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_reg_to_name(context, inst, source_register, size, address_register, name);
+#endif // X86_64_GENERATE_MACHINE_CODE
+
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
@@ -1070,6 +1251,10 @@ static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, Re
 }
 
 static void femit_reg_to_offset_name(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name, usz offset) {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_reg_to_offset_name(context, inst, source_register, size, address_register, name, offset);
+#endif // X86_64_GENERATE_MACHINE_CODE
+
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
@@ -1087,6 +1272,10 @@ static void femit_reg_to_offset_name(CodegenContext *context, enum Instruction i
 }
 
 static void femit_mem(CodegenContext *context, enum Instruction inst, int64_t offset, RegisterDescriptor address_register) {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_mem(context, inst, offset, address_register);
+#endif // X86_64_GENERATE_MACHINE_CODE
+
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
   switch (context->dialect) {
@@ -1136,6 +1325,10 @@ static void femit_indirect_branch(CodegenContext *context, enum Instruction inst
 }
 
 static void femit_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor reg, enum RegSize size) {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_reg(context, inst, reg, size);
+#endif // x86_64_GENERATE_MACHINE_CODE
+
   if (inst == I_JMP || inst == I_CALL) {
     femit_indirect_branch(context, inst, reg);
     return;
@@ -1144,54 +1337,6 @@ static void femit_reg(CodegenContext *context, enum Instruction inst, RegisterDe
     femit_reg_shift(context, inst, reg);
     return;
   }
-
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  // NOTE: +rb/+rw/+rd/+ro indicate the lower three bits of the opcode byte are used to indicate the register operand.
-  // In 64-bit mode, indicates the four bit field of REX.b and opcode[2:0] field encodes the register operand.
-
-  switch (inst) {
-  case I_PUSH: {
-    switch (size) {
-    case r8:
-    case r32:
-      ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
-
-    case r16: {
-      // 0x50+rw
-      uint8_t op = 0x50 + rw_encoding(reg);
-      fwrite(&op, 1, 1, context->machine_code);
-    } break;
-    case r64: {
-      // 0x50+rd
-      uint8_t op = 0x50 + rd_encoding(reg);
-      fwrite(&op, 1, 1, context->machine_code);
-    } break;
-    }
-  } break;
-
-  case I_POP: {
-    switch (size) {
-    case r8:
-    case r32:
-      ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
-
-    case r16: {
-      // 0x58+rw
-      uint8_t c = 0x58 + rw_encoding(reg);
-      fwrite(&c, 1, 1, context->machine_code);
-    } break;
-    case r64: {
-      // 0x58+rd
-      uint8_t c = 0x58 + rd_encoding(reg);
-      fwrite(&c, 1, 1, context->machine_code);
-    } break;
-    }
-  } break;
-
-  default:
-    ICE("ERROR: femit_reg(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
-  }
-#endif // x86_64_GENERATE_MACHINE_CODE
 
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(reg, size);
@@ -1209,27 +1354,11 @@ static void femit_reg(CodegenContext *context, enum Instruction inst, RegisterDe
 }
 
 static void femit_imm(CodegenContext *context, enum Instruction inst, int64_t immediate) {
-  const char *mnemonic = instruction_mnemonic(context, inst);
-
 #ifdef X86_64_GENERATE_MACHINE_CODE
-  switch (inst) {
-  case I_PUSH: {
-    // TODO: What size immediate to push?
-    // PUSH imm8:  0x6a ib
-    // PUSH imm16: 0x68 iw
-    // PUSH imm32: 0x68 id
-    // PROBABLY FALSE LENS_R THOUGHT: I think imm16 uses 0x66 prefix
-    uint8_t op = 0x68;
-    fwrite(&op, 1, 1, context->machine_code);
-    int32_t immediate_value = (int32_t)immediate;
-    fwrite(&immediate_value, 1, 4, context->machine_code);
-  } break;
-
-  default:
-    ICE("ERROR: femit_imm(): Unsupported instruction %d", inst);
-  }
+  mcode_imm(context, inst, immediate);
 #endif // x86_64_GENERATE_MACHINE_CODE
 
+  const char *mnemonic = instruction_mnemonic(context, inst);
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
       fprint(context->code, "    %s $%D\n",
@@ -1267,6 +1396,8 @@ static void femit
  enum Instruction instruction,
  ...)
 {
+  mcode_none(context, instruction);
+
   va_list args;
   va_start(args, instruction);
 
@@ -1315,28 +1446,6 @@ static void femit
       }
     } break;
 
-#ifdef X86_64_GENERATE_MACHINE_CODE
-    case I_RET: { // 0xc3
-      uint8_t op = 0xc3;
-      fwrite(&op, 1, 1, context->machine_code);
-    } break;
-    case I_CWD: { // 0x66 + 0x99
-      uint8_t sixteen_bit_prefix = 0x66;
-      uint8_t op = 0x99;
-      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
-      fwrite(&op, 1, 1, context->machine_code);
-    } break;
-    case I_CDQ: { // 0x99
-      uint8_t op = 0x99;
-      fwrite(&op, 1, 1, context->machine_code);
-    } break;
-    case I_CQO: { // REX.W + 0x99
-      uint8_t op = 0x99;
-      uint8_t rexw = rexw_byte();
-      fwrite(&rexw, 1, 1, context->machine_code);
-      fwrite(&op, 1, 1, context->machine_code);
-    } break;
-#else
     case I_RET:
     case I_CWD:
     case I_CDQ:
@@ -1344,12 +1453,11 @@ static void femit
       const char *mnemonic = instruction_mnemonic(context, instruction);
       fprint(context->code, "    %s\n", mnemonic);
     } break;
-#endif // X86_64_GENERATE_MACHINE_CODE
 
-  default:
-    ICE("Unhandled instruction in femit(): %d (%s)\n"
-        "  Consider using femit_x() or femit_x_to_x()",
-        instruction, instruction_mnemonic(context, instruction));
+    default:
+      ICE("Unhandled instruction in femit(): %d (%s)\n"
+          "  Consider using femit_x() or femit_x_to_x()",
+          instruction, instruction_mnemonic(context, instruction));
   }
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
