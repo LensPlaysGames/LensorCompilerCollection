@@ -588,7 +588,7 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
       fwrite(&imm8, 1, 1, context->machine_code);
     } break;
     case r16: {
-      // 0x81 /5 iw
+      // 0x66 + 0x81 /5 iw
       uint8_t sixteen_bit_prefix = 0x66;
       fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
     } // FALLTHROUGH to case r32
@@ -1107,6 +1107,7 @@ static void mcode_reg_to_mem(CodegenContext *context, enum Instruction inst, Reg
 
     } break;
     case r16: {
+      // 0x66 + 0x89 /r
       uint8_t sixteen_bit_prefix = 0x66;
       fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
     } // FALLTHROUGH to case r32
@@ -1493,6 +1494,7 @@ static void mcode_reg(CodegenContext *context, enum Instruction inst, RegisterDe
       ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
 
     case r16: {
+      // FIXME: Probably missing an 0x66 prefix here.
       // 0x50+rw
       uint8_t op = 0x50 + rw_encoding(reg);
       fwrite(&op, 1, 1, context->machine_code);
@@ -1512,6 +1514,7 @@ static void mcode_reg(CodegenContext *context, enum Instruction inst, RegisterDe
       ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
 
     case r16: {
+      // FIXME: Probably missing an 0x66 prefix here
       // 0x58+rw
       uint8_t c = 0x58 + rw_encoding(reg);
       fwrite(&c, 1, 1, context->machine_code);
