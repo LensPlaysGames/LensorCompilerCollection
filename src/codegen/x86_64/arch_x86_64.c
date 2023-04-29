@@ -523,22 +523,25 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
       // Move imm8 to r8
       // 0xb0+ rb ib
       uint8_t op = 0xb0 + rb_encoding(destination_register);
+      int8_t imm8 = (int8_t)immediate;
       fwrite(&op, 1, 1, context->machine_code);
-      fwrite(&immediate, 1, 1, context->machine_code);
+      fwrite(&imm8, 1, 1, context->machine_code);
     } break;
     case r16: {
       // Move imm16 to r16
       // 0xb8+ rw iw
       uint8_t op = 0xb8 + rw_encoding(destination_register);
+      int16_t imm16 = (int16_t)immediate;
       fwrite(&op, 1, 1, context->machine_code);
-      fwrite(&immediate, 1, 2, context->machine_code);
+      fwrite(&imm16, 1, 2, context->machine_code);
     } break;
     case r32: {
       // Move imm32 to r32
       // 0xb8+ rd id
       uint8_t op = 0xb8 + rd_encoding(destination_register);
+      int32_t imm32 = (int32_t)immediate;
       fwrite(&op, 1, 1, context->machine_code);
-      fwrite(&immediate, 1, 4, context->machine_code);
+      fwrite(&imm32, 1, 4, context->machine_code);
     } break;
     case r64: {
       // Move imm64 to r64
