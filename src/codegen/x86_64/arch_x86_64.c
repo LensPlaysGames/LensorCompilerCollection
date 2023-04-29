@@ -3614,7 +3614,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     strncpy(filename + sizeof(filename_prefix) - 1, sec->name, 32 - (sizeof(filename_prefix) - 1));
     FILE *f = fopen(filename, "wb");
     ASSERT(f, "Could not open %s for writing", filename);
-    if (sec->attributes & ((uint32_t)1 << 31)) {
+    if (sec->attributes & SEC_ATTR_SPAN_FILL) {
       uint8_t value = sec->data.fill.value;
       uint8_t values[8] = {value,value,value,value,value,value,value,value};
       size_t n = sec->data.fill.amount;
@@ -3633,4 +3633,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
     }
     fclose(f);
   }
+
+  generic_object_as_coff(&object, "out.obj");
 }
