@@ -702,90 +702,151 @@ static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
 
   case I_MOV: {
 
-    switch (size) {
-    case r8: {
-      // 0x8a /r
-      uint8_t op = 0x8a;
+    uint8_t address_regbits = regbits(address_register);
+    uint8_t destination_regbits = regbits(destination_register);
 
-      // Encode a REX prefix if either of the ModRM register descriptors need
-      // the bit extension.
-      uint8_t address_regbits = regbits(address_register);
-      uint8_t destination_regbits = regbits(destination_register);
-      uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
-
-      // Mod == 0b10  ->  (R/M)+disp32
+    // Each of these branches *must* assign modrm.
+    if (offset == 0) {
+      // Mod == 0b00  (register)
       // Reg == Destination
       // R/M == Address
-      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+      uint8_t modrm = modrm_byte(0b00, destination_regbits, address_regbits);
 
-      fwrite(&rex, 1, 1, context->machine_code);
-      fwrite(&op, 1, 1, context->machine_code);
-      fwrite(&modrm, 1, 1, context->machine_code);
-      int32_t disp32 = (int32_t)offset;
-      fwrite(&disp32, 4, 1, context->machine_code);
-    } break;
-    case r16: {
-      // 0x66 + 0x8b /r
-      uint8_t sixteen_bit_prefix = 0x66;
-      fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
-    } // FALLTHROUGH to case r32
-    case r32: {
-      // 0x8b /r
-      uint8_t op = 0x8b;
+      switch (size) {
+      case r8: {
+        // 0x8a /r
+        uint8_t op = 0x8a;
+        if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+      } break;
 
-      // Encode a REX prefix if either of the ModRM register descriptors need
-      // the bit extension.
-      uint8_t address_regbits = regbits(address_register);
-      uint8_t destination_regbits = regbits(destination_register);
-      if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
-        uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
-        fwrite(&rex, 1, 1, context->machine_code);
-      }
+      case r16: {
+        // 0x66 + 0x8b /r
+        uint8_t sixteen_bit_prefix = 0x66;
+        fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+      } // FALLTHROUGH to case r32
+      case r32: {
+        // 0x8b /r
+        uint8_t op = 0x8b;
+        if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+      } break;
 
-      // Mod == 0b10  ->  (R/M)+disp32
-      // Reg == Destination
-      // R/M == Address
-      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
-
-      fwrite(&op, 1, 1, context->machine_code);
-      fwrite(&modrm, 1, 1, context->machine_code);
-      int32_t disp32 = (int32_t)offset;
-      fwrite(&disp32, 4, 1, context->machine_code);
-    } break;
-    case r64: {
-      // REX.W + 0x8b /r
-      uint8_t op = 0x8b;
-
-      // Encode a REX prefix if either of the ModRM register descriptors need
-      // the bit extension.
-      uint8_t address_regbits = regbits(address_register);
-      uint8_t destination_regbits = regbits(destination_register);
-      uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
-
-      // Make output code smaller when possible by omitting zero displacements.
-      if (offset == 0) {
-        // Mod == 0b00  ->  (R/M)
-        // Reg == Destination
-        // R/M == Address
-        uint8_t modrm = modrm_byte(0b00, destination_regbits, address_regbits);
-
+      case r64: {
+        // REX.W + 0x8b /r
+        uint8_t op = 0x8b;
+        uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
         fwrite(&op, 1, 1, context->machine_code);
         fwrite(&modrm, 1, 1, context->machine_code);
-      } else {
-        // Mod == 0b10  ->  (R/M)+disp32
-        // Reg == Destination
-        // R/M == Address
-        uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+      } break;
 
+      } // switch (size)
+
+    } else if (offset >= -128 && offset <= 127) {
+      // Mod == 0b01  (register + disp8)
+      // Reg == Destination
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b01, destination_regbits, address_regbits);
+      int8_t disp8 = (int8_t)offset;
+
+      switch (size) {
+      case r8: {
+        // 0x8a /r
+        uint8_t op = 0x8a;
+        if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        fwrite(&disp8, 1, 1, context->machine_code);
+      } break;
+
+      case r16: {
+        // 0x66 + 0x8b /r
+        uint8_t sixteen_bit_prefix = 0x66;
+        fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+      } // FALLTHROUGH to case r32
+      case r32: {
+        // 0x8b /r
+        uint8_t op = 0x8b;
+        if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+        fwrite(&disp8, 1, 1, context->machine_code);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+      } break;
+
+      case r64: {
+        // REX.W + 0x8b /r
+        uint8_t op = 0x8b;
+        uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
         fwrite(&rex, 1, 1, context->machine_code);
         fwrite(&op, 1, 1, context->machine_code);
         fwrite(&modrm, 1, 1, context->machine_code);
-        int32_t disp32 = (int32_t)offset;
+        fwrite(&disp8, 1, 1, context->machine_code);
+      } break;
+
+      } // switch (size)
+
+    } else {
+      // Mod == 0b10  (register + disp32)
+      // Reg == Destination
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
+      int32_t disp32 = (int32_t)offset;
+
+      switch (size) {
+      case r8: {
+        // 0x8a /r
+        uint8_t op = 0x8a;
+        if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
         fwrite(&disp32, 4, 1, context->machine_code);
-      }
-    } break;
-    } // switch (size)
+      } break;
+      case r16: {
+        // 0x66 + 0x8b /r
+        uint8_t sixteen_bit_prefix = 0x66;
+        fwrite(&sixteen_bit_prefix, 1, 1, context->machine_code);
+      } // FALLTHROUGH to case r32
+      case r32: {
+        // 0x8b /r
+        uint8_t op = 0x8b;
+        if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          fwrite(&rex, 1, 1, context->machine_code);
+        }
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        fwrite(&disp32, 4, 1, context->machine_code);
+      } break;
+      case r64: {
+        // REX.W + 0x8b /r
+        uint8_t op = 0x8b;
+        uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+        fwrite(&rex, 1, 1, context->machine_code);
+        fwrite(&op, 1, 1, context->machine_code);
+        fwrite(&modrm, 1, 1, context->machine_code);
+        fwrite(&disp32, 4, 1, context->machine_code);
+      } break;
+
+      } // switch (size)
+    }
 
   } break; // case I_MOV
 
