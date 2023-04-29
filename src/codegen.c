@@ -808,12 +808,7 @@ bool codegen
   FILE *code = fopen(outfile, "w");
   if (!code) ICE("codegen(): failed to open file at path: \"%s\"\n", outfile);
 
-  // FIXME: JUST A HACK TO DEBUG MACHINE CODE OUTPUT DURING DEVELOPMENT. DO NOT PUSH TO REPO!!
-  FILE *machine_code = fopen("mcode.bin", "w");
-  if (!machine_code) ICE("codegen(): failed to open file for machine code at path: \"%s\"\n", "mcode.bin");
-
   CodegenContext *context = codegen_context_create(ast, format, call_convention, dialect, code);
-  context->machine_code = machine_code;
 
   switch (lang) {
     /// Parse an IR file.
