@@ -2,6 +2,7 @@
 #define CODEGEN_H
 
 #include <codegen/codegen_forward.h>
+#include <codegen/generic_object.h>
 
 #include <ast.h>
 #include <error.h>
@@ -54,7 +55,7 @@ typedef struct IRStaticVariable {
 
 struct CodegenContext {
   FILE *code;
-  FILE *machine_code;
+  GenericObjectFile *object;
   AST *ast;
 
   Vector(IRFunction *) functions;
@@ -82,4 +83,5 @@ NODISCARD bool codegen
  const char *outfile,
  AST *ast,
  string ir);
+
 #endif /* CODEGEN_H */
