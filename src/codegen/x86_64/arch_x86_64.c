@@ -1557,9 +1557,8 @@ static void mcode_imm(CodegenContext *context, enum Instruction inst, int64_t im
   case I_PUSH: {
     // TODO: What size immediate to push?
     // PUSH imm8:  0x6a ib
-    // PUSH imm16: 0x68 iw
+    // PUSH imm16: 0x66 + 0x68 iw
     // PUSH imm32: 0x68 id
-    // PROBABLY FALSE LENS_R THOUGHT: I think imm16 uses 0x66 prefix
     uint8_t op = 0x68;
     fwrite(&op, 1, 1, context->machine_code);
     int32_t immediate_value = (int32_t)immediate;
