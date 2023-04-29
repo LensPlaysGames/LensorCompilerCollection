@@ -79,10 +79,10 @@ Section *get_section_by_name(const Sections sections, const char *name);
 
 /// Write the given generic object file in ELF object file format into
 /// a file at the given path.
-void generic_object_as_elf(GenericObjectFile *object, const char *path);
+void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path);
 
 /// Write the given generic object file in COFF object file format into
 /// a file at the given path.
-void generic_object_as_coff(GenericObjectFile *object, const char *path);
+void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path);
 
 #endif /* GENERIC_OBJECT_H */
