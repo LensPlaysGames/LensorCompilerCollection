@@ -74,7 +74,7 @@ void mcode_n(GenericObjectFile *object, void* buffer, size_t n) {
 
 /// Write the given generic object file in ELF object file format into
 /// a file at the given path.
-void generic_object_as_elf(GenericObjectFile *object, const char *path) {
+void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
   ASSERT(object && path, "Invalid arguments");
   FILE *f = fopen(path, "wb");
   if (!f) {
@@ -82,14 +82,14 @@ void generic_object_as_elf(GenericObjectFile *object, const char *path) {
     return;
   }
 
-  // TODO: Write an ELF object file...
+  TODO("Write an ELF object file...");
 
   fclose(f);
 }
 
 /// Write the given generic object file in COFF object file format into
 /// a file at the given path.
-void generic_object_as_coff(GenericObjectFile *object, const char *path) {
+void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) {
   ASSERT(object && path, "Invalid arguments");
   FILE *f = fopen(path, "wb");
   if (!f) {
