@@ -62,6 +62,7 @@ add_executable(
   src/utils.c
   src/platform.c
   src/codegen/dom.c
+  src/codegen/generic_object.c
   src/codegen/intermediate_representation.c
   src/codegen/register_allocation.c
   src/codegen/ir/ir.c

@@ -77,4 +77,12 @@ void mcode_n(GenericObjectFile *object, void* buffer, size_t n);
 
 Section *get_section_by_name(const Sections sections, const char *name);
 
+/// Write the given generic object file in ELF object file format into
+/// a file at the given path.
+void generic_object_as_elf(GenericObjectFile *object, const char *path);
+
+/// Write the given generic object file in COFF object file format into
+/// a file at the given path.
+void generic_object_as_coff(GenericObjectFile *object, const char *path);
+
 #endif /* GENERIC_OBJECT_H */
