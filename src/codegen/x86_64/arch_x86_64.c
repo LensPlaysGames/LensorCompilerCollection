@@ -680,8 +680,6 @@ static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
       // REX.W + 0x8d /r
       uint8_t op = 0x8d;
 
-      // Encode a REX prefix if either of the ModRM register descriptors need
-      // the bit extension.
       uint8_t address_regbits = regbits(address_register);
       uint8_t destination_regbits = regbits(destination_register);
       uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
@@ -1070,7 +1068,7 @@ static void mcode_reg_to_mem(CodegenContext *context, enum Instruction inst, Reg
         // one byte using a Mod value of 0b01, allowing for only one byte
         // to be written for the displacement.
 
-        // Mod == 0b10  ->  register + disp8
+        // Mod == 0b01  ->  register + disp8
         // Reg == Source
         // R/M == Address
         uint8_t modrm = modrm_byte(0b01, source_regbits, address_regbits);
