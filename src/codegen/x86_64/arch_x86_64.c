@@ -1952,7 +1952,9 @@ static void femit
  enum Instruction instruction,
  ...)
 {
+#ifdef X86_64_GENERATE_MACHINE_CODE
   mcode_none(context, instruction);
+#endif // X86_64_GENERATE_MACHINE_CODE
 
   va_list args;
   va_start(args, instruction);
