@@ -919,7 +919,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
         uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, false);
         // Mod == 0b00
         // R/M == 0b101 (none)
-        uint8_t modrm = modrm_byte(0b00, 0, 0b101);
+        uint8_t modrm = modrm_byte(0b00, destination_regbits, 0b101);
         int32_t disp32 = 0;
 
         mcode_3(context->object, rex, op, modrm);
