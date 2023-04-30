@@ -3,7 +3,10 @@
 
 #include <stdint.h>
 
-#define OSABI_SYSV 0x00
+#define EI_CLASS_32BIT 1
+#define EI_CLASS_64BIT 2
+
+#define EI_OSABI_SYSV 0x00
 
 /// Use EI_* macros as an index into elf*_header.e_ident field.
 
@@ -141,7 +144,7 @@ typedef struct elf64_header {
   uint16_t e_shnum;
   /// Index of the section header tanble entry that contains the section names.
   uint16_t e_shstrndx;
-} elf_header;
+} elf64_header;
 
 typedef struct elf64_phdr {
   /// Type of segment. See PT_* macros for more info.
