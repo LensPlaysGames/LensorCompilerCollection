@@ -16,22 +16,18 @@ sdl_event_type: integer(event: SDL_Event) {
 }
 SDL_EVENT_QUIT :: 0x100
 SDL_PollEvent: ext integer(event: @SDL_Event)
-SDL_INIT_VIDEO :: 0x20
-SDL_WINDOWPOS_UNDEFINED :: 0x1FFF0000
-;; TODO:
-;;   return-value: 4-byte signed int
-;;   paramter: 4-byte unsigned int
-SDL_Init: ext integer(flags: integer)
+SDL_INIT_VIDEO: u32 = 0x20
+SDL_WINDOWPOS_UNDEFINED: s32 = 0x1FFF0000
+SDL_Init: ext s32(flags: u32)
 SDL_Quit: ext void()
 SDL_GetError: ext @byte()
-;; TODO: integer type fixup
 SDL_CreateWindow: ext @SDL_Window(
   name: @byte
-  x: integer
-  y: integer
-  w: integer
-  h: integer
-  flags: integer
+  x: s32
+  y: s32
+  w: s32
+  h: s32
+  flags: u32
 )
 SDL_DestroyWindow: ext void(w: @SDL_Window)
 

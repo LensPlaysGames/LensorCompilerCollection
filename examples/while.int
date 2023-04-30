@@ -1,4 +1,4 @@
-putchar : ext integer(c : integer)
+putchar : ext void(c : integer)
 
 cond : integer = 10
 while cond {
@@ -6,4 +6,3 @@ while cond {
   putchar(48 + cond)
   putchar(10)
 }
-
