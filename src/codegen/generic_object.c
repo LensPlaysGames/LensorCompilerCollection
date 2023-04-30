@@ -1,6 +1,7 @@
 #include <codegen/generic_object.h>
 
 #include <codegen/coff.h>
+#include <codegen/elf.h>
 
 Section *code_section(GenericObjectFile *object) {
   return object ? object->sections.data : NULL;
@@ -82,7 +83,39 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
     return;
   }
 
-  TODO("Write an ELF object file...");
+
+  elf64_header hdr = {0};
+  hdr.e_ident[EI_MAG0] = 0x7f;
+  hdr.e_ident[EI_MAG1] = 'E';
+  hdr.e_ident[EI_MAG2] = 'L';
+  hdr.e_ident[EI_MAG3] = 'F';
+  hdr.e_ident[EI_CLASS] = EI_CLASS_64BIT;
+  hdr.e_ident[EI_DATA] = 0;
+  hdr.e_ident[EI_VERSION] = 0;
+  hdr.e_ident[EI_OSABI] = 0;
+  hdr.e_ident[EI_ABIVERSION] = 0;
+  hdr.e_type = ET_REL;
+  hdr.e_machine = EM_X86_64;
+  hdr.e_version = 1;
+  hdr.e_entry = 0;
+  // TODO: Program header table offset
+  hdr.e_phoff = 0;
+  // TODO: Section header table offset
+  hdr.e_shoff = 0;
+  hdr.e_flags = 0;
+  hdr.e_ehsize = sizeof(elf64_header);
+  hdr.e_phentsize = sizeof(elf64_phdr);
+  // TODO: Program header table entry count
+  hdr.e_phnum = 0;
+  hdr.e_shentsize = sizeof(elf64_shdr);
+  // TODO: Section header table entry count
+  hdr.e_shnum = 0;
+  // TODO: Index of the section header tanble entry that contains the section names.
+  hdr.e_shstrndx = 0;
+
+  fwrite(&hdr, 1, sizeof(hdr), f);
+
+  // TODO: Program header table, section header table, etc.
 
   fclose(f);
 }
