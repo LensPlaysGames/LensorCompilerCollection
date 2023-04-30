@@ -3743,7 +3743,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   foreach_ptr (IRFunction*, function, context->functions) {
 #ifdef X86_64_GENERATE_MACHINE_CODE
     GObjSymbol sym = {0};
-    sym.type = GOBJ_SYMTYPE_FUNCTION;
+    sym.type = function->is_extern ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
     sym.name = strdup(function->name.data);
     sym.section_name = strdup(code_section(&object)->name);
     sym.byte_offset = code_section(&object)->data.bytes.size;

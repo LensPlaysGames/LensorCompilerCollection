@@ -144,7 +144,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
   size_t header_size = sizeof(coff_header);
   if (hdr.f_opthdr) header_size += sizeof(coff_opt_header);
   size_t section_table_size = hdr.f_nscns * sizeof(coff_section_header);
-  size_t section_table_offset = header_size;
+  //size_t section_table_offset = header_size;
   size_t section_table_end = header_size + section_table_size;
 
   // data_start is a byte offset within `out.o` that is past all COFF
@@ -292,6 +292,10 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
       entry.n_sclass = COFF_STORAGE_CLASS_EXT;
       // Byte offset within text section where entry point lies.
       entry.n_value = (int32_t)sym->byte_offset;
+    } break;
+    case GOBJ_SYMTYPE_EXTERNAL: {
+      entry.n_scnum = 0;
+      entry.n_sclass = COFF_STORAGE_CLASS_EXT;
     } break;
     }
 
