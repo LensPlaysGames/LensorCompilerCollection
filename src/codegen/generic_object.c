@@ -433,6 +433,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     relocations_offset += relocation_count * sizeof(coff_relocation_entry);
 
     fwrite(&shdr, 1, sizeof(shdr), f);
+    data_offset += size;
   }
 
   // SECTION DATA
@@ -515,8 +516,8 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     switch (sym->type) {
     case GOBJ_SYMTYPE_STATIC: {
       entry.n_sclass = COFF_STORAGE_CLASS_STAT;
-      // Byte offset within file of this symbol.
-      entry.n_value = (int32_t)(data_start + sec_data_offset + sym->byte_offset);
+      // Byte offset within .bss/.data section where static object lies.
+      entry.n_value = (int32_t)sym->byte_offset;
     } break;
     case GOBJ_SYMTYPE_FUNCTION: {
       entry.n_sclass = COFF_STORAGE_CLASS_EXT;
