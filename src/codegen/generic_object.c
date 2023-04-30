@@ -2,6 +2,7 @@
 
 #include <codegen/coff.h>
 #include <codegen/elf.h>
+#include <vector.h>
 
 Section *code_section(GenericObjectFile *object) {
   return object ? object->sections.data : NULL;
@@ -73,6 +74,16 @@ void mcode_n(GenericObjectFile *object, void* buffer, size_t n) {
   sec_write_n(code_section(object), buffer, n);
 }
 
+/// Append string to given byte buffer and return the index at the
+/// beginning of it.
+size_t elf_add_string(ByteBuffer* buffer, const char *new_string) {
+  ASSERT(buffer && new_string, "Invalid arguments");
+  size_t out = buffer->size;
+  while (*new_string) vector_push(*buffer, (uint8_t)*new_string++);
+  vector_push(*buffer, (uint8_t)*new_string);
+  return out;
+}
+
 /// Write the given generic object file in ELF object file format into
 /// a file at the given path.
 void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
@@ -82,7 +93,6 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
     print("ERROR: Could not open file at \"%s\"\n", path);
     return;
   }
-
 
   elf64_header hdr = {0};
   hdr.e_ident[EI_MAG0] = 0x7f;
@@ -98,26 +108,188 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
   hdr.e_machine = EM_X86_64;
   hdr.e_version = 1;
   hdr.e_entry = 0;
-  // TODO: Program header table offset
   hdr.e_phoff = 0;
-  // TODO: Section header table offset
-  hdr.e_shoff = 0;
+  hdr.e_shoff = sizeof(elf64_header);
   hdr.e_flags = 0;
   hdr.e_ehsize = sizeof(elf64_header);
-  hdr.e_phentsize = sizeof(elf64_phdr);
-  // TODO: Program header table entry count
+  hdr.e_phentsize = 0;
   hdr.e_phnum = 0;
   hdr.e_shentsize = sizeof(elf64_shdr);
-  // TODO: Section header table entry count
-  hdr.e_shnum = 0;
-  // TODO: Index of the section header tanble entry that contains the section names.
+  // Section header table entry count.
+  // NULL entry + GObj sections + ".strtab" + ".symtab"
+  // TODO:  + ".rela.text"
+  hdr.e_shnum = (uint16_t)(object->sections.size + 3);
+  // Index of the section header table entry that contains the section
+  // names is set down below.
   hdr.e_shstrndx = 0;
 
-  fwrite(&hdr, 1, sizeof(hdr), f);
+  // NOTE: In object files, there are no program headers. Just sections.
 
-  // TODO: Program header table, section header table, etc.
+  // Build String Table
+  ByteBuffer string_table = {0};
+  // NULL entry.
+  vector_push(string_table, 0);
+
+  // Collect section headers.
+  Vector(elf64_shdr) shdrs = {0};
+  // NULL entry
+  {
+    elf64_shdr shdr = {0};
+    vector_push(shdrs, shdr);
+  }
+
+  // Byte offset within file that section's data may be placed (must be after all sections).
+  // Skip until after the section header table
+  size_t data_offset = hdr.e_shoff + (sizeof(elf64_shdr) * hdr.e_shnum);
+
+  // Collect symbols.
+  Vector(elf64_sym) syms = {0};
+  // NULL entry.
+  {
+    elf64_sym sym = {0};
+    vector_push(syms, sym);
+  }
+
+  // Section headers from the given generic object file.
+  foreach (Section, s, object->sections) {
+    elf64_shdr shdr = {0};
+
+    if (s->attributes & SEC_ATTR_SPAN_FILL) {
+      shdr.sh_type = SHT_NOBITS;
+      shdr.sh_size = s->data.fill.amount;
+    } else {
+      shdr.sh_type = SHT_PROGBITS;
+      shdr.sh_size = s->data.bytes.size;
+      shdr.sh_offset = data_offset;
+      data_offset += shdr.sh_size;
+    }
+
+    // Assign flags
+    if (strcmp(s->name, ".text") == 0)
+      shdr.sh_flags |= SHF_ALLOC | SHF_EXECINSTR;
+    else if (strcmp(s->name, ".bss") == 0 || strcmp(s->name, ".data") == 0)
+      shdr.sh_flags = SHF_ALLOC | SHF_WRITE;
+    else ICE("[GObj]:ELF: Unrecognized section in GenericObjectFile: \"%s\"", s->name);
+
+    uint32_t section_name = (uint32_t)elf_add_string(&string_table, s->name);
+    shdr.sh_name = section_name;
+
+    // Create symbol for this section.
+    {
+      elf64_sym sh_sym = {0};
+      sh_sym.st_name = section_name;
+      sh_sym.st_shndx = (uint16_t)shdrs.size;
+      sh_sym.st_info = ELF64_ST_INFO(STB_LOCAL, STT_SECTION);
+      vector_push(syms, sh_sym);
+    }
+
+    vector_push(shdrs, shdr);
+  }
+
+  // Symbol Table Section Header
+  // Index needed by relocation section header(s)
+  size_t symbol_table_sh_index = shdrs.size;
+  // FIXME: Once we add ".rela.text" this will need to change to + 3
+  // Skip NULL entry and symbol table entry in section header table.
+  size_t string_table_sh_index = object->sections.size + 2;
+  {
+    elf64_shdr shdr = {0};
+    shdr.sh_type = SHT_SYMTAB;
+    shdr.sh_name = (uint32_t)elf_add_string(&string_table, ".symtab");
+    // FIXME: Ensure no more symbols are added to table after this.
+    shdr.sh_size = syms.size * sizeof(elf64_sym);
+    shdr.sh_offset = data_offset;
+
+    shdr.sh_link = (uint32_t)string_table_sh_index;
+    // One greater than the symbol table index of the last local symbol.
+    size_t last_local_index = 0;
+    foreach_index (i, syms) {
+      elf64_sym *sym = syms.data + i;
+      if (ELF64_ST_BIND(sym->st_info) == STB_LOCAL)
+        last_local_index = i;
+    }
+    shdr.sh_info = (uint32_t)last_local_index + 1;
+
+    shdr.sh_entsize = sizeof(elf64_sym);
+
+    vector_push(shdrs, shdr);
+    data_offset += shdr.sh_size;
+  }
+
+  // ".text" relocations section header: ".rela.text"
+  {
+    elf64_shdr shdr = {0};
+    shdr.sh_type = SHT_RELA;
+    shdr.sh_name = (uint32_t)elf_add_string(&string_table, ".rela.text");
+    // "If the file has a loadable segment that includes relocation,
+    // the sections’ attributes will include the SHF_ALLOC bit;
+    // otherwise, that bit will be off."
+    shdr.sh_flags |= SHF_ALLOC;
+
+    /// The section header index of the associated symbol table.
+    shdr.sh_link = (uint32_t)symbol_table_sh_index;
+    /// The section header index of the section to which the relocation
+    // applies. (.text in GenericObjectFile is always at index 0, so it's
+    // guaranteed that section 0 is ".text").
+    shdr.sh_info = 0;
+
+    // TODO: Actually get number of relocations.
+    size_t number_relocations = 0;
+    shdr.sh_size = number_relocations * sizeof(elf64_rela);
+    shdr.sh_offset = data_offset;
+    shdr.sh_entsize = sizeof(elf64_rela);
+
+    //vector_push(shdrs, shdr);
+    //data_offset += shdr.sh_size;
+  }
+
+  // String Table Section Header
+  {
+    elf64_shdr shdr = {0};
+    shdr.sh_type = SHT_STRTAB;
+    shdr.sh_name = (uint32_t)elf_add_string(&string_table, ".strtab");
+    // FIXME: Ensure no more strings are added to table after this.
+    shdr.sh_size = string_table.size;
+    shdr.sh_offset = data_offset;
+
+    hdr.e_shstrndx = (uint16_t)shdrs.size;
+    vector_push(shdrs, shdr);
+    data_offset += shdr.sh_size;
+  }
+
+  // TODO: Build elf64_rela relocations
+
+  fwrite(&hdr, 1, sizeof(hdr), f);
+  foreach (elf64_shdr, shdr, shdrs) {
+    fwrite(shdr, 1, sizeof(*shdr), f);
+  }
+  // Write data of GObj sections
+  foreach (Section, s, object->sections) {
+    if (s->attributes & SEC_ATTR_SPAN_FILL) {
+      if (strcmp(s->name, ".bss") == 0) continue;
+      for (size_t n = s->data.fill.amount; n; --n) {
+        fwrite(&s->data.fill.value, 1, 1, f);
+      }
+    } else {
+      fwrite(s->data.bytes.data, 1 ,s->data.bytes.size, f);
+    }
+  }
+  // Write symbol table (".symtab").
+  foreach (elf64_sym, sym, syms) {
+    fwrite(sym, 1, sizeof(*sym), f);
+  }
+  // TODO: Write text section relocations (".rela.text").
+  // Write string table (".strtab").
+  foreach (uint8_t, c, string_table) {
+    fwrite(c, 1, 1, f);
+  }
 
   fclose(f);
+
+  // Cleanup
+  vector_delete(string_table);
+  vector_delete(syms);
+  vector_delete(shdrs);
 }
 
 /// Write the given generic object file in COFF object file format into
