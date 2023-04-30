@@ -90,11 +90,11 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
   hdr.e_ident[EI_MAG2] = 'L';
   hdr.e_ident[EI_MAG3] = 'F';
   hdr.e_ident[EI_CLASS] = EI_CLASS_64BIT;
-  hdr.e_ident[EI_DATA] = 0;
-  hdr.e_ident[EI_VERSION] = 0;
-  hdr.e_ident[EI_OSABI] = 0;
+  hdr.e_ident[EI_DATA] = EI_DATA_LITTLE_ENDIAN;
+  hdr.e_ident[EI_VERSION] = 1;
+  hdr.e_ident[EI_OSABI] = EI_OSABI_SYSV;
   hdr.e_ident[EI_ABIVERSION] = 0;
-  hdr.e_type = ET_REL;
+  hdr.e_type = ET_EXEC;
   hdr.e_machine = EM_X86_64;
   hdr.e_version = 1;
   hdr.e_entry = 0;

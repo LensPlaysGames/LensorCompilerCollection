@@ -6,6 +6,9 @@
 #define EI_CLASS_32BIT 1
 #define EI_CLASS_64BIT 2
 
+#define EI_DATA_LITTLE_ENDIAN 1
+#define EI_DATA_BIG_ENDIAN 2
+
 #define EI_OSABI_SYSV 0x00
 
 /// Use EI_* macros as an index into elf*_header.e_ident field.
