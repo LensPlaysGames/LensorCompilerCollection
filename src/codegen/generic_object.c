@@ -277,7 +277,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
       i = (uint32_t)idx;
       GObjSymbol *sym = object->symbols.data + i;
       // FIXME: Use proper symbol comparison or something, like `gobj_symbol_equals(a, b)`.
-      if (strcmp(sym->name, reloc->sym.name) == 0 && strcmp(sym->section_name, reloc->sym.section_name) == 0) break;
+      if (strcmp(sym->name, reloc->sym.name) == 0) break;
     }
     if (i == object->symbols.size) ICE("[GObj]: Couldn't find symbol mentioned by relocation: \"%s\" (%Z symbols)", reloc->sym.name, object->symbols.size);
     entry.r_vaddr = (uint32_t)(reloc->sym.byte_offset);
