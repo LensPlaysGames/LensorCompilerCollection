@@ -266,9 +266,30 @@ typedef struct elf64_sym {
   uint64_t st_size;
 } elf64_sym;
 
-#define ELF64_R_SYM(r_info) ((r_info) >> 8)
-#define ELF64_R_TYPE(i) ((uint8_t)(i))
-#define ELF64_R_INFO(s,t) (((s) << 8) | (uint8_t)(t))
+
+
+#define ELF64_R_SYM(r_info) ((r_info) >> 32)
+#define ELF64_R_TYPE(r_info) ((uint32_t)(r_info))
+#define ELF64_R_INFO(sym, type) (((sym) << 32) | (uint32_t)(type))
+
+/// A: Addend of relocation entries that have them (*_rela).
+/// B: Image base where the shared object was loaded in process virtual address space.
+/// G: Offset to the GOT relative to the address of the correspondent relocation entry’s symbol.
+/// GOT: Address of the Global Offset Table
+/// L: Section offset or address of the procedure linkage table (PLT, .got.plt).
+/// P: The section offset or address of the storage unit being relocated (or PC).
+/// S: Relocation entry’s correspondent symbol value.
+/// Z: Size of Relocations entry’s symbol.
+
+#define R_X86_64_NONE 0
+// qword S + A
+#define R_X86_64_64 1
+// dword S + A – P
+#define R_X86_64_PC32 2
+// dword S + A
+#define R_X86_64_32	10
+// dword L + A – P
+#define R_X86_64_PLT32 4
 
 ///     A relocation section references two other sections: a symbol
 /// table and a section to modify. The section header’s sh_info and
