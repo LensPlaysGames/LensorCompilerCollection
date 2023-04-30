@@ -3637,7 +3637,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         sym.byte_offset = sec_initdata->data.bytes.size;
         vector_push(object.symbols, sym);
         // Write initialised bytes to .data section
-        sec_write_n(sec_initdata, &var->init->imm, type_sizeof(var->type));
+        sec_write_n(sec_initdata, byte_repr, type_sizeof(var->type));
 #endif // x86_64_GENERATE_MACHINE_CODE
 
       } else if (var->init->kind == IR_LIT_STRING) {
