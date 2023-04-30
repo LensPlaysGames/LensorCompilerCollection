@@ -149,10 +149,21 @@ typedef struct elf64_header {
   uint16_t e_shstrndx;
 } elf64_header;
 
+/// Executable
+#define PF_X 0b001
+/// Writable
+#define PF_W 0b010
+/// Readable
+#define PF_R 0b100
+/// OS Mask (these bits are reserved per-os)
+#define PF_MASKOS 0x0ff00000
+/// Processor mask (these bits are reserved per ISA)
+#define PF_MASKPROC 0xf0000000
+
 typedef struct elf64_phdr {
   /// Type of segment. See PT_* macros for more info.
   uint32_t p_type;
-  /// Segment-dependent flags.
+  /// Segment-dependent flags. See PF_* macros for more info.
   uint32_t p_flags;
   /// Byte offset of the segment in the file.
   uint64_t p_offset;
@@ -201,5 +212,82 @@ typedef struct elf64_shdr {
   /// contain fixed-size entries. Otherwise, this field contains zero.
   uint64_t sh_entsize;
 } elf64_shdr;
+
+#define STT_NOTYPE 0x0
+/// Symbol is associated with data object
+#define STT_OBJECT 0x1
+/// Associated with function/executable code
+#define STT_FUNC 0x2
+/// Associated with a section (normally have STB_LOCAL bindings)
+#define STT_SECTION 0x3
+/// Symbol's name gives the name of the source file associated with the
+/// object file. Must have STB_LOCAL bindings, its section index is
+/// SHN_ABS, and it preceds the other STB_LOCAL symbols of the file, if it
+/// is present.
+#define STT_FILE 0x4
+/// Processor specific reserved types (inclusive range)
+#define STT_LOPROC 0xe
+#define STT_HIPROC 0xf
+/// Local symbols are not visible outside the object file containing
+/// their definition. Local symbols of the same name may exist in multiple
+/// files without interfering with each other.
+#define STB_LOCAL 0x0
+/// Global symbols are visible to all object files being combined. One
+/// file's definition of a global symbol will satisfy another file's
+/// undefined reference to the same symbol.
+#define STB_GLOBAL 0x1
+// Weak symbols resemble global symbols, but their definitions have
+// lower precedence.
+#define STB_WEAK 0x2
+/// Processor specific reserved bindings (inclusive range)
+#define STB_LOPROC 0xe
+#define STB_HIPROC 0xf
+
+#define ELF64_ST_BIND(st_info) ((st_info) >> 4)
+#define ELF64_ST_TYPE(st_info) ((st_info) & 0b1111)
+#define ELF64_ST_INFO(binding, type) (((binding) << 4) | ((type) & 0b1111))
+
+// An object file’s symbol table holds information needed to locate and
+// relocate a program’s symbolic definitions and references. A symbol
+// table index is a subscript into this array. Index 0 both designates the
+// first entry in the table and serves as the undefined symbol index.
+typedef struct elf64_sym {
+  /// Index into symbol string table ".strtab", or zero for unnamed.
+  uint32_t st_name;
+  /// Contains both type and binding of symbol. See ELF64_ST_*, STT_*,
+  // and STB_* macros for more info.
+  uint8_t st_info;
+  /// Currently zero and has no meaning.
+  uint8_t st_other;
+  /// Index of section header within section header table that this
+  /// symbol is associated with.
+  uint16_t st_shndx;
+  uint64_t st_value;
+  uint64_t st_size;
+} elf64_sym;
+
+#define ELF64_R_SYM(r_info) ((r_info) >> 8)
+#define ELF64_R_TYPE(i) ((uint8_t)(i))
+#define ELF64_R_INFO(s,t) (((s) << 8) | (uint8_t)(t))
+
+///     A relocation section references two other sections: a symbol
+/// table and a section to modify. The section header’s sh_info and
+/// sh_link members specify these relationships. Relocation entries for
+/// different object files have slightly different interpretations for
+/// the r_offset member.
+///     In relocatable files, r_offset holds a section offset. That is,
+/// the relocation section itself describes how to modify another
+/// section in the file; relocation offsets designate a storage unit
+/// within the second section.
+///     In executable and shared object files, r_offset holds a virtual
+/// address. To make these files’ relocation entries more useful for
+/// the dynamic linker, the section offset (file interpretation) gives
+/// way to a virtual address (memory interpretation).
+typedef struct elf64_rela {
+  uint64_t r_offset;
+  /// See ELF64_R_* macros for more info.
+  uint64_t r_info;
+  int64_t r_addend;
+} elf64_rela;
 
 #endif /* ELF_H */
