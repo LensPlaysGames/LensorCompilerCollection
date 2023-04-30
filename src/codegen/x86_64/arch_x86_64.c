@@ -3754,4 +3754,5 @@ void codegen_emit_x86_64(CodegenContext *context) {
   }
 
   generic_object_as_coff_x86_64(&object, "out.obj");
+  generic_object_as_elf_x86_64(&object, "out.o");
 }
