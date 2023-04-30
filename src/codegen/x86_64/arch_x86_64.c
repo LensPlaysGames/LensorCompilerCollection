@@ -3762,6 +3762,50 @@ void codegen_emit_x86_64(CodegenContext *context) {
   }
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
+  // Resolve local label (".Lxxxx") relocations.
+  Vector(size_t) relocations_to_remove = {0};
+  foreach_index (idx, object.relocs) {
+    RelocationEntry *reloc = object.relocs.data + idx;
+    GObjSymbol *sym = &reloc->sym;
+    if (strlen(sym->name) > 2 && memcmp(sym->name, ".L", 2) == 0) {
+      // We have to go sym->byte_offset bytes into the ByteBuffer of
+      // the code section and then fill in the next bytes depending on the
+      // relocation type.
+      GObjSymbol *label_sym = NULL;
+      foreach (GObjSymbol, s, object.symbols) {
+        if (strcmp(s->name, sym->name) == 0) {
+          label_sym = s;
+          break;
+        }
+      }
+      if (!label_sym) ICE("Could not find local label referenced by relocation: \"%s\"", sym->name);
+
+      // TODO: Handle endianess
+      // NOTE: 4 == sizeof relocation displacement
+      int32_t disp32 = (int32_t)label_sym->byte_offset - (4 + (int32_t)sym->byte_offset);
+      uint8_t *src_it = (uint8_t*)&disp32;
+      uint8_t *dst_it = code_section(&object)->data.bytes.data + sym->byte_offset;
+      for (int i = 0; i < 4; ++i)
+        *dst_it++ = *src_it++;
+
+      vector_push(relocations_to_remove, idx);
+    }
+  }
+  foreach_rev (size_t, idx, relocations_to_remove) {
+    vector_remove_index(object.relocs, *idx);
+  }
+
+  // Remove all local label symbols (".Lxxxx")
+  Vector(size_t) symbols_to_remove = {0};
+  foreach_index (idx, object.symbols) {
+    GObjSymbol *sym = object.symbols.data + idx;
+    if (strlen(sym->name) > 2 && memcmp(sym->name, ".L", 2) == 0)
+      vector_push(symbols_to_remove, idx);
+  }
+  foreach_rev (size_t, idx, symbols_to_remove) {
+    vector_remove_index(object.symbols, *idx);
+  }
+
   generic_object_as_coff_x86_64(&object, "out.obj");
   generic_object_as_elf_x86_64(&object, "out.o");
 #endif // x86_64_GENERATE_MACHINE_CODE
