@@ -162,7 +162,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     // Calculate number of relocations for this section.
     uint16_t relocation_count = 0;
     foreach (RelocationEntry, reloc, object->relocs) {
-      if (strcmp(reloc->section_name, s->name) == 0)
+      if (strcmp(reloc->sym.section_name, s->name) == 0)
         ++relocation_count;
     }
     shdr.s_nreloc = relocation_count;
@@ -204,7 +204,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     // Calculate number of relocations for this section.
     uint16_t relocation_count = 0;
     foreach (RelocationEntry, reloc, object->relocs) {
-      if (strcmp(reloc->section_name, s->name) == 0)
+      if (strcmp(reloc->sym.section_name, s->name) == 0)
         ++relocation_count;
     }
     aux_section.number_relocations = relocation_count;
@@ -236,20 +236,32 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     }
     if (i == (int16_t)object->sections.size) ICE("[GObj]: Couldn't find section mentioned by symbol: \"%s\" (%Z sections)", sym->name, object->sections.size);
     entry.n_scnum = i + 1;
+
+    // MS sets this field to 0x20 for functions, or 0 in all other cases.
+    entry.n_type = 0;
+    // n_value is only used when n_scnum == N_ABS
+    entry.n_value = 0;
+    // Number of auxiliary symbol entries that follow this symbol entry.
+    entry.n_numaux = 0;
+
     // Storage class.
     // MS sets this field to four different values, and uses
     // proprietary Visual C++ debug format for most symbolic
     // information: EXTERNAL, STATIC, FUNCTION, and FILE.
     // FIXME: Actually assign based on type of symbol
-    entry.n_sclass = COFF_STORAGE_CLASS_STAT;
-    // MS sets this field to 0x20 for functions, or 0 in all other cases.
-    entry.n_type = 0;
-    // n_value is only used when n_scnum == N_ABS
-    // entry.n_value = 0;
-    // Number of auxiliary symbol entries that follow this symbol entry.
-    entry.n_numaux = 0;
-    // Byte offset within file of this symbol.
-    entry.n_value = (int32_t)(data_start + sec_data_offset + sym->byte_offset);
+    switch (sym->type) {
+    case GOBJ_SYMTYPE_STATIC: {
+      entry.n_sclass = COFF_STORAGE_CLASS_STAT;
+      // Byte offset within file of this symbol.
+      entry.n_value = (int32_t)(data_start + sec_data_offset + sym->byte_offset);
+    } break;
+    case GOBJ_SYMTYPE_FUNCTION: {
+      entry.n_sclass = COFF_STORAGE_CLASS_EXT;
+      // Byte offset within text section where entry point lies.
+      entry.n_value = (int32_t)sym->byte_offset;
+    } break;
+    }
+
     fwrite(&entry, 1, sizeof(entry), f);
     ++symbol_count;
   }
@@ -265,10 +277,10 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
       i = (uint32_t)idx;
       GObjSymbol *sym = object->symbols.data + i;
       // FIXME: Use proper symbol comparison or something, like `gobj_symbol_equals(a, b)`.
-      if (strcmp(sym->name, reloc->sym.name) == 0) break;
+      if (strcmp(sym->name, reloc->sym.name) == 0 && strcmp(sym->section_name, reloc->sym.section_name) == 0) break;
     }
     if (i == object->symbols.size) ICE("[GObj]: Couldn't find symbol mentioned by relocation: \"%s\" (%Z symbols)", reloc->sym.name, object->symbols.size);
-    entry.r_vaddr = (uint32_t)(reloc->byte_offset);
+    entry.r_vaddr = (uint32_t)(reloc->sym.byte_offset);
     entry.r_symndx = (uint32_t)((symbol_count_after_sections * 2) + i);
     switch (reloc->type) {
     case RELOC_DISP32: entry.r_type = COFF_REL_AMD64_ADDR32; break;
