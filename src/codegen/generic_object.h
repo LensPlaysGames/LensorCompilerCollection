@@ -8,7 +8,13 @@
 
 typedef Vector(uint8_t) ByteBuffer;
 
+typedef enum GObjSymbolType {
+  GOBJ_SYMTYPE_FUNCTION,
+  GOBJ_SYMTYPE_STATIC,
+} GObjSymbolType;
+
 typedef struct GObjSymbol {
+  GObjSymbolType type;
   // Name of symbol.
   char *name;
   // Name of section this symbol is associated with.
@@ -27,9 +33,6 @@ typedef enum RelocationType {
 typedef struct RelocationEntry {
   RelocationType type;
   GObjSymbol sym;
-  char *section_name;
-  /// Byte offset within section that relocation begins at.
-  size_t byte_offset;
   /// Addend -> added to relocated value
   int64_t addend;
 } RelocationEntry;
