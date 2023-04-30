@@ -21,7 +21,6 @@
 
 #define X86_64_GENERATE_MACHINE_CODE
 
-
 #define DEFINE_REGISTER_ENUM(name, ...) REG_##name,
 #define REGISTER_NAME_64(ident, name, ...) name,
 #define REGISTER_NAME_32(ident, name, name_32, ...) name_32,
@@ -3558,10 +3557,9 @@ bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *functi
 }
 
 void codegen_emit_x86_64(CodegenContext *context) {
-  // TODO: RODATA, BSS, etc.
+#ifdef X86_64_GENERATE_MACHINE_CODE
   GenericObjectFile object = {0};
   context->object = &object;
-
   {
     Section sec_code = {0};
     sec_code.name = ".text";
@@ -3578,6 +3576,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   }
   Section *sec_initdata = get_section_by_name(object.sections, ".data");
   Section *sec_uninitdata = get_section_by_name(object.sections, ".bss");
+#endif // x86_64_GENERATE_MACHINE_CODE
 
   /// Emit static variables.
   /// TODO: interning.
@@ -3753,6 +3752,8 @@ void codegen_emit_x86_64(CodegenContext *context) {
     if (!function->is_extern) emit_function(context, function);
   }
 
+#ifdef X86_64_GENERATE_MACHINE_CODE
   generic_object_as_coff_x86_64(&object, "out.obj");
   generic_object_as_elf_x86_64(&object, "out.o");
+#endif // x86_64_GENERATE_MACHINE_CODE
 }
