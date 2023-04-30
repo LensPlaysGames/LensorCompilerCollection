@@ -104,7 +104,7 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
   hdr.e_ident[EI_VERSION] = 1;
   hdr.e_ident[EI_OSABI] = EI_OSABI_SYSV;
   hdr.e_ident[EI_ABIVERSION] = 0;
-  hdr.e_type = ET_EXEC;
+  hdr.e_type = ET_REL;
   hdr.e_machine = EM_X86_64;
   hdr.e_version = 1;
   hdr.e_entry = 0;
@@ -116,9 +116,8 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
   hdr.e_phnum = 0;
   hdr.e_shentsize = sizeof(elf64_shdr);
   // Section header table entry count.
-  // NULL entry + GObj sections + ".strtab" + ".symtab"
-  // TODO:  + ".rela.text"
-  hdr.e_shnum = (uint16_t)(object->sections.size + 3);
+  // NULL entry + GObj sections + ".strtab" + ".symtab" + ".rela.text"
+  hdr.e_shnum = (uint16_t)(object->sections.size + 4);
   // Index of the section header table entry that contains the section
   // names is set down below.
   hdr.e_shstrndx = 0;
@@ -186,12 +185,41 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
     vector_push(shdrs, shdr);
   }
 
+  foreach (GObjSymbol, sym, object->symbols) {
+    elf64_sym elf_sym = {0};
+    elf_sym.st_name = (uint32_t)elf_add_string(&string_table, sym->name);
+    // Get index of section by name
+    size_t section_index = 0;
+    foreach_index (i, object->sections) {
+      if (strcmp(object->sections.data[i].name, sym->section_name) == 0) {
+        // Skip NULL entry
+        section_index = i + 1;
+        break;
+      }
+    }
+    if (!section_index) ICE("Could not find section mentioned by symbol: \"%s\"", sym->section_name);
+    elf_sym.st_shndx = (uint16_t)section_index;
+    switch (sym->type) {
+    case GOBJ_SYMTYPE_STATIC:
+      elf_sym.st_info = ELF64_ST_INFO(STB_LOCAL, STT_OBJECT);
+      break;
+    case GOBJ_SYMTYPE_EXTERNAL:
+      elf_sym.st_shndx = 0;
+      elf_sym.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
+      break;
+    case GOBJ_SYMTYPE_FUNCTION:
+      elf_sym.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
+      elf_sym.st_value = sym->byte_offset;
+      break;
+    }
+    vector_push(syms, elf_sym);
+  }
+
   // Symbol Table Section Header
   // Index needed by relocation section header(s)
   size_t symbol_table_sh_index = shdrs.size;
-  // FIXME: Once we add ".rela.text" this will need to change to + 3
   // Skip NULL entry and symbol table entry in section header table.
-  size_t string_table_sh_index = object->sections.size + 2;
+  size_t string_table_sh_index = object->sections.size + 3;
   {
     elf64_shdr shdr = {0};
     shdr.sh_type = SHT_SYMTAB;
@@ -230,17 +258,15 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
     shdr.sh_link = (uint32_t)symbol_table_sh_index;
     /// The section header index of the section to which the relocation
     // applies. (.text in GenericObjectFile is always at index 0, so it's
-    // guaranteed that section 0 is ".text").
-    shdr.sh_info = 0;
+    // guaranteed that section 1 (first section) is ".text").
+    shdr.sh_info = 1;
 
-    // TODO: Actually get number of relocations.
-    size_t number_relocations = 0;
-    shdr.sh_size = number_relocations * sizeof(elf64_rela);
+    shdr.sh_size = object->relocs.size * sizeof(elf64_rela);
     shdr.sh_offset = data_offset;
     shdr.sh_entsize = sizeof(elf64_rela);
 
-    //vector_push(shdrs, shdr);
-    //data_offset += shdr.sh_size;
+    vector_push(shdrs, shdr);
+    data_offset += shdr.sh_size;
   }
 
   // String Table Section Header
@@ -257,7 +283,36 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
     data_offset += shdr.sh_size;
   }
 
-  // TODO: Build elf64_rela relocations
+  // Build elf64_rela relocations
+  Vector(elf64_rela) relocations = {0};
+  foreach (RelocationEntry, reloc, object->relocs) {
+    // Find symbol with matching name.
+    size_t sym_index = 0;
+    foreach_index (i, syms) {
+      elf64_sym *sym = syms.data + i;
+      char *sym_name = (char*)string_table.data + sym->st_name;
+      if (strcmp(sym_name, reloc->sym.name) == 0) {
+        sym_index = i;
+        break;
+      }
+    }
+    if (sym_index == 0) ICE("Could not find symbol referenced by relocation: \"%s\"", reloc->sym.name);
+
+
+    elf64_rela elf_reloc = {0};
+    elf_reloc.r_offset = reloc->sym.byte_offset;
+    switch (reloc->type) {
+    case RELOC_DISP32_PCREL:
+      elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_PC32);
+      elf_reloc.r_addend = -4;
+      break;
+    case RELOC_DISP32:
+      elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_32);
+      break;
+    default: ICE("[GObj]:ELF: Unrecognised relocation type %d\n", (int)reloc->type);
+    }
+    vector_push(relocations, elf_reloc);
+  }
 
   fwrite(&hdr, 1, sizeof(hdr), f);
   foreach (elf64_shdr, shdr, shdrs) {
@@ -278,7 +333,10 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
   foreach (elf64_sym, sym, syms) {
     fwrite(sym, 1, sizeof(*sym), f);
   }
-  // TODO: Write text section relocations (".rela.text").
+  // Write text section relocations (".rela.text").
+  foreach (elf64_rela, reloc, relocations) {
+    fwrite(reloc, 1, sizeof(*reloc), f);
+  }
   // Write string table (".strtab").
   foreach (uint8_t, c, string_table) {
     fwrite(c, 1, 1, f);
