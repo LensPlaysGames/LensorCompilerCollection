@@ -99,12 +99,14 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
 
   coff_header hdr = {0};
   // x86_64 magic bytes
-  hdr.f_magic = 0x8664;
+  hdr.f_machine = COFF_MACHINE_AMD64;
   // Number of sections in section table
   hdr.f_nscns = (uint16_t)object->sections.size;
   // Number of symbols in symbol table
-  hdr.f_nsyms = (uint16_t)object->symbols.size;
-  hdr.f_flags |= HDR_RELOC_STRIPPED | HDR_LINE_NUMS_STRIPPED;
+  // 2 for each section, 1 for each symbol (TODO: Somehow prep symbol
+  // table before everything else so that we can know these things for
+  // certain, even with aux entries).
+  hdr.f_nsyms = (int32_t)((2 * object->sections.size) + object->symbols.size);
 
   size_t header_size = sizeof(coff_header);
   if (hdr.f_opthdr) header_size += sizeof(coff_opt_header);
@@ -116,12 +118,27 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
   // headers and entries and stuff. This is where actual section data
   // can be written, as well as relocations and line number info.
   size_t data_start = section_table_end;
+  size_t data_offset = data_start;
+  foreach (Section, s, object->sections) {
+    size_t size = 0;
+    if (s->attributes & SEC_ATTR_SPAN_FILL)
+      size = s->data.fill.amount;
+    else size = s->data.bytes.size;
+    // TODO: Would be smart to cache section offset somewhere, or something.
+    data_offset += size;
+  }
+  size_t data_end = data_offset;
+  // Put symbol table past all data
+  hdr.f_symptr = (int32_t)data_end;
+  // Skip symbol table; that's where relocations may begin.
+  size_t code_relocations_start = data_end + ((unsigned)hdr.f_nsyms * sizeof(coff_symbol_entry));
 
   // HEADER
   fwrite(&hdr, 1, sizeof(hdr), f);
 
   // SECTION HEADER TABLE
-  size_t data_offset = data_start;
+  data_offset = data_start;
+  size_t relocations_offset = code_relocations_start;
   foreach (Section, s, object->sections) {
     coff_section_header shdr = {0};
 
@@ -134,19 +151,26 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
 
     shdr.s_size = (int32_t)size;
     shdr.s_scnptr = (int32_t)data_offset;
-    shdr.s_flags = SCN_MEM_READ;
+    shdr.s_flags = 0;
     if (strcmp(s->name, ".text") == 0)
-      shdr.s_flags |= STYP_TEXT | SCN_MEM_EXECUTE;
+      shdr.s_flags |= STYP_TEXT | COFF_SCN_MEM_READ | COFF_SCN_MEM_EXECUTE | COFF_SCN_CNT_CODE;
     else if (strcmp(s->name, ".data") == 0)
-      shdr.s_flags |= STYP_DATA | SCN_MEM_WRITE;
+      shdr.s_flags |= STYP_DATA | COFF_SCN_MEM_READ | COFF_SCN_MEM_WRITE | COFF_SCN_CNT_INIT_DATA;
     else if (strcmp(s->name, ".bss") == 0)
-      shdr.s_flags |= STYP_BSS | SCN_MEM_WRITE;
+      shdr.s_flags |= STYP_BSS | COFF_SCN_MEM_READ | COFF_SCN_MEM_WRITE | COFF_SCN_CNT_UNINIT_DATA;
+
+    // Calculate number of relocations for this section.
+    uint16_t relocation_count = 0;
+    foreach (RelocationEntry, reloc, object->relocs) {
+      if (strcmp(reloc->section_name, s->name) == 0)
+        ++relocation_count;
+    }
+    shdr.s_nreloc = relocation_count;
+    shdr.s_relptr = (int32_t)relocations_offset;
+    relocations_offset += relocation_count * sizeof(coff_relocation_entry);
 
     fwrite(&shdr, 1, sizeof(shdr), f);
-
-    data_offset += size;
   }
-  size_t data_end = data_offset;
 
   // SECTION DATA
   foreach (Section, s, object->sections) {
@@ -160,16 +184,15 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
   }
 
   // SYMBOL TABLE
-  // Put symbol table past all data
-  hdr.f_symptr = (int32_t)data_end;
+  size_t symbol_count = 0;
   // Create a symbol entry for each section
   size_t section_header_index = 1; // 1-based
   foreach (Section, s, object->sections) {
     coff_symbol_entry symbol_entry = {0};
     coff_aux_section aux_section = {0};
     strncpy(symbol_entry.n_name, s->name, sizeof(symbol_entry.n_name));
-    symbol_entry.n_scnum = (int16_t)section_header_index;
-    symbol_entry.n_sclass = C_STAT;
+    symbol_entry.n_scnum = (int16_t)section_header_index++;
+    symbol_entry.n_sclass = COFF_STORAGE_CLASS_STAT;
     symbol_entry.n_numaux = 1;
 
     size_t size = 0;
@@ -178,13 +201,83 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     else size = s->data.bytes.size;
     aux_section.length = (uint32_t)size;
 
+    // Calculate number of relocations for this section.
+    uint16_t relocation_count = 0;
+    foreach (RelocationEntry, reloc, object->relocs) {
+      if (strcmp(reloc->section_name, s->name) == 0)
+        ++relocation_count;
+    }
+    aux_section.number_relocations = relocation_count;
+
     fwrite(&symbol_entry, 1, sizeof(symbol_entry), f);
     fwrite(&aux_section, 1, sizeof(aux_section), f);
+    ++symbol_count;
   }
 
-  // TODO: foreach (Symbol, sym, object->symbols) emit_coff_symbol(sym)
+  size_t symbol_count_after_sections = symbol_count;
+  foreach (GObjSymbol, sym, object->symbols) {
+    coff_symbol_entry entry = {0};
+    // If first four bytes are zero, it's an offset into the string table.
+    // Some implementations use a `/<decimal-digits>` format instead.
+    // Otherwise, it's the literal name.
+    // FIXME: FOR NOW, JUST TRUNCATE (bad bad)
+    strncpy(entry.n_name, sym->name, sizeof(entry.n_name));
+    // Section number.
+    int16_t i = 0;
+    size_t sec_data_offset = 0;
+    foreach_index (idx, object->sections) {
+      if (strcmp(object->sections.data[i].name, sym->section_name) == 0) break;
+      size_t size = 0;
+      if (object->sections.data[i].attributes & SEC_ATTR_SPAN_FILL)
+        size = object->sections.data[i].data.fill.amount;
+      else size = object->sections.data[i].data.bytes.size;
+      sec_data_offset += size;
+      i = (int16_t)idx;
+    }
+    if (i == (int16_t)object->sections.size) ICE("[GObj]: Couldn't find section mentioned by symbol: \"%s\" (%Z sections)", sym->name, object->sections.size);
+    entry.n_scnum = i + 1;
+    // Storage class.
+    // MS sets this field to four different values, and uses
+    // proprietary Visual C++ debug format for most symbolic
+    // information: EXTERNAL, STATIC, FUNCTION, and FILE.
+    // FIXME: Actually assign based on type of symbol
+    entry.n_sclass = COFF_STORAGE_CLASS_STAT;
+    // MS sets this field to 0x20 for functions, or 0 in all other cases.
+    entry.n_type = 0;
+    // n_value is only used when n_scnum == N_ABS
+    // entry.n_value = 0;
+    // Number of auxiliary symbol entries that follow this symbol entry.
+    entry.n_numaux = 0;
+    // Byte offset within file of this symbol.
+    entry.n_value = (int32_t)(data_start + sec_data_offset + sym->byte_offset);
+    fwrite(&entry, 1, sizeof(entry), f);
+    ++symbol_count;
+  }
 
-  // TODO: foreach (RelocationEntry, reloc, object->relocs) emit_coff_relocation(reloc)
+  // TODO: STRING TABLE
+
+  // RELOCATIONS
+  foreach (RelocationEntry, reloc, object->relocs) {
+    coff_relocation_entry entry = {0};
+    // Zero-based index within symbol table to which the reference refers.
+    uint32_t i = 0;
+    foreach_index (idx, object->symbols) {
+      i = (uint32_t)idx;
+      GObjSymbol *sym = object->symbols.data + i;
+      // FIXME: Use proper symbol comparison or something, like `gobj_symbol_equals(a, b)`.
+      if (strcmp(sym->name, reloc->sym.name) == 0) break;
+    }
+    if (i == object->symbols.size) ICE("[GObj]: Couldn't find symbol mentioned by relocation: \"%s\" (%Z symbols)", reloc->sym.name, object->symbols.size);
+    entry.r_vaddr = (uint32_t)(reloc->byte_offset);
+    entry.r_symndx = (uint32_t)((symbol_count_after_sections * 2) + i);
+    switch (reloc->type) {
+    case RELOC_DISP32: entry.r_type = COFF_REL_AMD64_ADDR32; break;
+    case RELOC_DISP32_PCREL: entry.r_type = COFF_REL_AMD64_REL32; break;
+    default: ICE("Unhandled relocation type: %d\n", (int)reloc->type);
+    }
+
+    fwrite(&entry, 1, sizeof(entry), f);
+  }
 
   fclose(f);
 }
