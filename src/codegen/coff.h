@@ -138,10 +138,23 @@ typedef struct coff_opt_header {
 // For .lib section (treated like STYP_INFO)
 #define STYP_LIB    (0b00000100 << 8)
 
-#define SCN_MEM_SHARED  (1 << 28)
-#define SCN_MEM_EXECUTE (1 << 29)
-#define SCN_MEM_READ    (1 << 30)
-#define SCN_MEM_WRITE   (1 << 31)
+// 0x00000020 IMAGE_SCN_CNT_CODE
+// The section contains executable code.
+#define COFF_SCN_CNT_CODE 0x00000020
+#define COFF_SCN_CNT_INIT_DATA 0x00000040
+#define COFF_SCN_CNT_UNINIT_DATA 0x00000080
+// 0x10000000 IMAGE_SCN_MEM_SHARED
+// The section can be shared in memory.
+#define COFF_SCN_MEM_SHARED 0x10000000
+// 0x20000000 IMAGE_SCN_MEM_EXECUTE
+// The section can be executed as code.
+#define COFF_SCN_MEM_EXECUTE 0x20000000
+// 0x40000000 IMAGE_SCN_MEM_READ
+// The section can be read.
+#define COFF_SCN_MEM_READ 0x40000000
+// 0x80000000 IMAGE_SCN_MEM_WRITE
+// The section can be written to.
+#define COFF_SCN_MEM_WRITE 0x80000000
 
 typedef struct coff_section_header {
   /// Section Name
@@ -238,37 +251,80 @@ typedef struct coff_line_number_entry {
   uint16_t l_lnno;
 } __attribute__((packed)) coff_line_number_entry;
 
-#define C_NULL    0
-#define C_AUTO    1
-#define C_EXT     2
-#define C_STAT    3
-#define C_REG     4
-#define C_EXTDEF  5
-#define C_LABEL   6
-#define C_ULABEL  7
-/// Member of structure.
-#define C_MOS     8
-#define C_ARG     9
-#define C_STRTAG  10
-#define C_MOU     11
-#define C_UNTAG   12
-#define C_TPDEF   13
-#define C_USTATIC 14
-#define C_ENTAG   15
-#define C_MOE     16
-#define C_REGPARM 17
-#define C_FIELD   18
-#define C_AUTOARG 19
-#define C_LASTENT 20
-#define C_BLOCK   100
-#define C_FCN     101
-#define C_EOS     102
-#define C_FILE    103
-#define C_LINE    104
-#define C_ALIAS   105
-#define C_HIDDEN  106
-#define C_EFCN    255
-
+// No assigned storage class.
+#define COFF_STORAGE_CLASS_NULL 0
+// The automatic (stack) variable. The Value field specifies the stack frame offset.
+#define COFF_STORAGE_CLASS_AUTO 1
+// A value that Microsoft tools use for external symbols. The Value
+// field indicates the size if the section number is IMAGE_SYM_UNDEFINED (0).
+// If the section number is not zero, then the Value field specifies
+// the offset within the section.
+#define COFF_STORAGE_CLASS_EXT 2
+// The offset of the symbol within the section. If the Value field is
+// zero, then the symbol represents a section name.
+#define COFF_STORAGE_CLASS_STAT 3
+// A register variable. The Value field specifies the register number.
+#define COFF_STORAGE_CLASS_REG 4
+// A symbol that is defined externally.
+#define COFF_STORAGE_CLASS_EXTDEF 5
+// A code label that is defined within the module. The Value field
+// specifies the offset of the symbol within the section.
+#define COFF_STORAGE_CLASS_LABEL 6
+// A reference to a code label that is not defined.
+#define COFF_STORAGE_CLASS_ULABEL 7
+// The structure member. The Value field specifies the n th member.
+#define COFF_STORAGE_CLASS_MOS 8
+// 9 IMAGE_SYM_CLASS_ARGUMENT
+// A formal argument (parameter) of a function. The Value field specifies the n th argument.
+#define COFF_STORAGE_CLASS_ARG 9
+// 10 IMAGE_SYM_CLASS_STRUCT_TAG
+// The structure tag-name entry.
+#define COFF_STORAGE_CLASS_STRUCT_TAG 10
+// 11 IMAGE_SYM_CLASS_MEMBER_OF_UNION
+// A union member. The Value field specifies the n th member.
+#define COFF_STORAGE_CLASS_MOU 11
+// 12 IMAGE_SYM_CLASS_UNION_TAG
+// The Union tag-name entry.
+#define COFF_STORAGE_CLASS_UNION_TAG 12
+// 13 IMAGE_SYM_CLASS_TYPE_DEFINITION
+// A Typedef entry.
+#define COFF_STORAGE_CLASS_TYPEDEF 13
+// 14 IMAGE_SYM_CLASS_UNDEFINED_STATIC
+// A static data declaration.
+#define COFF_STORAGE_CLASS_USTATIC 14
+// 15 IMAGE_SYM_CLASS_ENUM_TAG
+// An enumerated type tagname entry.
+#define COFF_STORAGE_CLASS_ENUM_TAG 15
+// 16 IMAGE_SYM_CLASS_MEMBER_OF_ENUM
+// A member of an enumeration. The Value field specifies the n th member.
+#define COFF_STORAGE_CLASS_MOE 16
+// 17 IMAGE_SYM_CLASS_REGISTER_PARAM
+// A register parameter.
+#define COFF_STORAGE_CLASS_REGPARAM 17
+// 18 IMAGE_SYM_CLASS_BIT_FIELD
+// A bit-field reference. The Value field specifies the n th bit in the bit field.
+#define COFF_STORAGE_CLASS_BITFIELD 18
+// 100 IMAGE_SYM_CLASS_BLOCK
+// A .bb (beginning of block) or .eb (end of block) record. The Value field is the relocatable address of the code location.
+#define COFF_STORAGE_CLASS_BLOCK 100
+// 101 IMAGE_SYM_CLASS_FUNCTION
+// A value that Microsoft tools use for symbol records that define the extent of a function: begin function (.bf ), end function ( .ef ), and lines in function ( .lf ). For .lf records, the Value field gives the number of source lines in the function. For .ef records, the Value field gives the size of the function code.
+#define COFF_STORAGE_CLASS_FUNCTION 101
+// 102 IMAGE_SYM_CLASS_END_OF_STRUCT
+// An end-of-structure entry.
+#define COFF_STORAGE_CLASS_EOS 102
+// 103 IMAGE_SYM_CLASS_FILE
+// A value that Microsoft tools, as well as traditional COFF format, use for the source-file symbol record. The symbol is followed by auxiliary records that name the file.
+#define COFF_STORAGE_CLASS_FILE 103
+// 104 IMAGE_SYM_CLASS_SECTION
+// A definition of a section (Microsoft tools use STATIC storage class instead).
+#define COFF_STORAGE_CLASS_SECTION 104
+// 105 IMAGE_SYM_CLASS_WEAK_EXTERNAL
+// A weak external. For more information, see Auxiliary Format 3: Weak Externals.
+#define COFF_STORAGE_CLASS_WEAKEXT 105
+// 107 IMAGE_SYM_CLASS_CLR_TOKEN
+// A CLR token symbol. The name is an ASCII string that consists of the hexadecimal value of the token. For more information, see CLR Token Definition (Object Only).
+#define COFF_STORAGE_CLASS_TOKEN 107
 
 #define T_NULL 0b0000
 #define T_VOID 0b0001
@@ -380,8 +436,9 @@ typedef struct coff_symbol_entry {
   /// 2 == N_DEBUG | A debugging symbol
   /// 1 == N_ABS   | An absolute symbol (n_value).
   /// 0 == N_UNDEF | An undefined external symbol.
-  short n_scnum;
+  int16_t n_scnum;
   /// Symbol Type
+  /// MS sets this field to 0x20 for functions, or 0 in all other cases.
   uint16_t n_type;
   /// Storage Class
   char n_sclass;
@@ -407,6 +464,10 @@ typedef struct coff_aux_function_definition {
   uint32_t pointer_to_next_function;
   char unused[2];
 } __attribute__((packed)) coff_aux_function_definition;
+
+typedef struct coff_aux_file {
+  char filename[18];
+} __attribute__((packed)) coff_aux_file;
 
 /// String Table Offset = File Header.f_symptr + File Header.f_nsyms * sizeof(coff_symbol_entry)
 typedef struct coff_string_entry {

@@ -8,16 +8,30 @@
 
 typedef Vector(uint8_t) ByteBuffer;
 
+typedef struct GObjSymbol {
+  // Name of symbol.
+  char *name;
+  // Name of section this symbol is associated with.
+  char *section_name;
+  // Offset within section where symbol is defined.
+  size_t byte_offset;
+} GObjSymbol;
+
 typedef enum RelocationType {
+  /// Relative to program counter
+  RELOC_DISP32_PCREL,
+  /// Absolute
   RELOC_DISP32,
 } RelocationType;
 
 typedef struct RelocationEntry {
   RelocationType type;
-  Symbol *sym;
+  GObjSymbol sym;
   char *section_name;
   /// Byte offset within section that relocation begins at.
   size_t byte_offset;
+  /// Addend -> added to relocated value
+  int64_t addend;
 } RelocationEntry;
 typedef Vector(RelocationEntry) Relocations;
 
@@ -40,7 +54,7 @@ typedef struct Section {
 } Section;
 typedef Vector(Section) Sections;
 
-typedef Vector(Symbol) Symbols;
+typedef Vector(GObjSymbol) Symbols;
 
 typedef struct GenericObjectFile {
   // By convention, the code/text section is always present at the 0th index.

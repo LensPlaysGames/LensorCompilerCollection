@@ -864,7 +864,18 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
         uint8_t modrm = modrm_byte(0b00, 0, 0b101);
 
         mcode_2(context->object, op, modrm);
-        print("[x86_64]:TODO: Make RIP-relative disp32 relocation to lea from `%s` symbol.\n", name);
+
+        // Make RIP-relative disp32 relocation
+        RelocationEntry reloc = {0};
+        Section *sec_code = code_section(context->object);
+        ASSERT(sec_code, "NO CODE SECTION, WHAT HAVE YOU DONE?");
+        reloc.section_name = strdup(sec_code->name);
+        // Current offset in machine code byte buffer
+        reloc.byte_offset = sec_code->data.bytes.size;
+        reloc.sym.name = strdup(name);
+        reloc.type = RELOC_DISP32_PCREL;
+        vector_push(context->object->relocs, reloc);
+
         int32_t disp32 = 0;
         mcode_n(context->object, &disp32, 4);
 
@@ -886,7 +897,17 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
 
       mcode_2(context->object, op, modrm);
-      print("[x86_64]:TODO: Make disp32 relocation to lea from `%s` symbol.\n", name);
+
+      // Make disp32 relocation to lea from symbol
+      RelocationEntry reloc = {0};
+      Section *sec_code = code_section(context->object);
+      reloc.section_name = strdup(sec_code->name);
+      // Current offset in machine code byte buffer
+      reloc.byte_offset = sec_code->data.bytes.size;
+      reloc.sym.name = strdup(name);
+      reloc.type = RELOC_DISP32;
+      vector_push(context->object->relocs, reloc);
+
       int32_t disp32 = 0;
       mcode_n(context->object, &disp32, 4);
     } break;
@@ -898,14 +919,23 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       if (address_register == REG_RIP) {
         uint8_t destination_regbits = regbits(destination_register);
         uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, false);
-
         // Mod == 0b00
         // R/M == 0b101 (none)
         uint8_t modrm = modrm_byte(0b00, 0, 0b101);
+        int32_t disp32 = 0;
 
         mcode_3(context->object, rex, op, modrm);
-        print("[x86_64]:TODO: Make RIP-relative disp32 relocation to lea from `%s` symbol.\n", name);
-        int32_t disp32 = 0;
+
+        // Make RIP-relative disp32 relocation
+        RelocationEntry reloc = {0};
+        Section *sec_code = code_section(context->object);
+        ASSERT(sec_code, "NO CODE SECTION, WHAT HAVE YOU DONE?");
+        reloc.section_name = strdup(sec_code->name);
+        reloc.byte_offset = sec_code->data.bytes.size;
+        reloc.sym.name = strdup(name);
+        reloc.type = RELOC_DISP32_PCREL;
+        vector_push(context->object->relocs, reloc);
+
         mcode_n(context->object, &disp32, 4);
         break;
       }
@@ -920,7 +950,17 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
 
       mcode_3(context->object, rex, op, modrm);
-      print("[x86_64]:TODO: Make disp32 relocation to lea from `%s` symbol.\n", name);
+
+      // Make disp32 relocation to lea from symbol
+      RelocationEntry reloc = {0};
+      Section *sec_code = code_section(context->object);
+      reloc.section_name = strdup(sec_code->name);
+      // Current offset in machine code byte buffer
+      reloc.byte_offset = sec_code->data.bytes.size;
+      reloc.sym.name = strdup(name);
+      reloc.type = RELOC_DISP32;
+      vector_push(context->object->relocs, reloc);
+
       int32_t disp32 = 0;
       mcode_n(context->object, &disp32, 4);
     } break;
@@ -950,8 +990,17 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
         uint8_t modrm = modrm_byte(0b00, 0, 0b101);
 
         mcode_2(context->object, op, modrm);
-        // TODO: make rip-relative disp32 relocation for symbol with `name`
-        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for `%s` symbol.\n", name);
+
+        // Make RIP-relative disp32 relocation
+        RelocationEntry reloc = {0};
+        Section *sec_code = code_section(context->object);
+        ASSERT(sec_code, "NO CODE SECTION, WHAT HAVE YOU DONE?");
+        reloc.section_name = strdup(sec_code->name);
+        reloc.byte_offset = sec_code->data.bytes.size;
+        reloc.sym.name = strdup(name);
+        reloc.type = RELOC_DISP32_PCREL;
+        vector_push(context->object->relocs, reloc);
+
         int32_t disp32 = 0;
         mcode_n(context->object, &disp32, 4);
         break;
@@ -972,7 +1021,17 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
 
       mcode_2(context->object, op, modrm);
-      print("[x86_64]:TODO: Make disp32 relocation for move to `%s` symbol.\n", name);
+
+      // Make disp32 relocation to lea from symbol
+      RelocationEntry reloc = {0};
+      Section *sec_code = code_section(context->object);
+      reloc.section_name = strdup(sec_code->name);
+      // Current offset in machine code byte buffer
+      reloc.byte_offset = sec_code->data.bytes.size;
+      reloc.sym.name = strdup(name);
+      reloc.type = RELOC_DISP32;
+      vector_push(context->object->relocs, reloc);
+
       int32_t disp32 = 0;
       mcode_n(context->object, &disp32, 4);
     } break;
@@ -998,7 +1057,17 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
         uint8_t modrm = modrm_byte(0b00, 0, 0b101);
 
         mcode_2(context->object, op, modrm) ;
-        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for move to `%s` symbol.\n", name);
+
+        // Make RIP-relative disp32 relocation
+        RelocationEntry reloc = {0};
+        Section *sec_code = code_section(context->object);
+        ASSERT(sec_code, "NO CODE SECTION, WHAT HAVE YOU DONE?");
+        reloc.section_name = strdup(sec_code->name);
+        reloc.byte_offset = sec_code->data.bytes.size;
+        reloc.sym.name = strdup(name);
+        reloc.type = RELOC_DISP32_PCREL;
+        vector_push(context->object->relocs, reloc);
+
         int32_t disp32 = 0;
         mcode_n(context->object, &disp32, 4);
         break;
@@ -1019,7 +1088,17 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
 
       mcode_2(context->object, op, modrm);
-      print("[x86_64]:TODO: Make disp32 relocation for move to `%s` symbol.\n", name);
+
+      // Make disp32 relocation to lea from symbol
+      RelocationEntry reloc = {0};
+      Section *sec_code = code_section(context->object);
+      reloc.section_name = strdup(sec_code->name);
+      // Current offset in machine code byte buffer
+      reloc.byte_offset = sec_code->data.bytes.size;
+      reloc.sym.name = strdup(name);
+      reloc.type = RELOC_DISP32;
+      vector_push(context->object->relocs, reloc);
+
       int32_t disp32 = 0;
       mcode_n(context->object, &disp32, 4);
     } break;
@@ -1037,7 +1116,17 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
         uint8_t modrm = modrm_byte(0b00, 0, 0b101);
 
         mcode_3(context->object, rex, op, modrm);
-        print("[x86_64]:TODO: Make RIP-relative disp32 relocation for move to `%s` symbol.\n", name);
+
+        // Make RIP-relative disp32 relocation
+        RelocationEntry reloc = {0};
+        Section *sec_code = code_section(context->object);
+        ASSERT(sec_code, "NO CODE SECTION, WHAT HAVE YOU DONE?");
+        reloc.section_name = strdup(sec_code->name);
+        reloc.byte_offset = sec_code->data.bytes.size;
+        reloc.sym.name = strdup(name);
+        reloc.type = RELOC_DISP32_PCREL;
+        vector_push(context->object->relocs, reloc);
+
         int32_t disp32 = 0;
         mcode_n(context->object, &disp32, 4);
         break;
@@ -1055,7 +1144,17 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
 
       mcode_3(context->object, rex, op, modrm);
-      print("[x86_64]:TODO: Make disp32 relocation for move to `%s` symbol.\n", name);
+
+      // Make disp32 relocation to lea from symbol
+      RelocationEntry reloc = {0};
+      Section *sec_code = code_section(context->object);
+      reloc.section_name = strdup(sec_code->name);
+      // Current offset in machine code byte buffer
+      reloc.byte_offset = sec_code->data.bytes.size;
+      reloc.sym.name = strdup(name);
+      reloc.type = RELOC_DISP32;
+      vector_push(context->object->relocs, reloc);
+
       int32_t disp32 = 0;
       mcode_n(context->object, &disp32, 4);
     } break;
@@ -1572,7 +1671,17 @@ static void mcode_name(CodegenContext *context, enum Instruction inst, const cha
     uint8_t op = 0xe8;
     int32_t disp32 = 0;
     mcode_1(context->object, op);
-    print("[x86_64]:TODO: Make disp32 relocation for call to `%s` symbol.\n", name);
+
+    // Make disp32 relocation to lea from symbol
+    RelocationEntry reloc = {0};
+    Section *sec_code = code_section(context->object);
+    reloc.section_name = strdup(sec_code->name);
+    // Current offset in machine code byte buffer
+    reloc.byte_offset = sec_code->data.bytes.size;
+    reloc.sym.name = strdup(name);
+    reloc.type = RELOC_DISP32_PCREL;
+    vector_push(context->object->relocs, reloc);
+
     mcode_n(context->object, &disp32, 4);
   } break; // case I_CALL
 
@@ -1580,7 +1689,17 @@ static void mcode_name(CodegenContext *context, enum Instruction inst, const cha
     uint8_t op = 0xe9;
     int32_t disp32 = 0;
     mcode_1(context->object, op);
-    print("[x86_64]:TODO: Make disp32 relocation for jump to `%s` symbol.\n", name);
+
+    // Make disp32 relocation to lea from symbol
+    RelocationEntry reloc = {0};
+    Section *sec_code = code_section(context->object);
+    reloc.section_name = strdup(sec_code->name);
+    // Current offset in machine code byte buffer
+    reloc.byte_offset = sec_code->data.bytes.size;
+    reloc.sym.name = strdup(name);
+    reloc.type = RELOC_DISP32_PCREL;
+    vector_push(context->object->relocs, reloc);
+
     mcode_n(context->object, &disp32, 4);
   } break; // case I_JMP
 
@@ -3500,7 +3619,13 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
-        print("[x86_64]:TODO: Create symbol for \"%S\" (size %Z) at offset %Z within the .data section.\n", var->name, type_sizeof(var->type), sec_initdata->data.bytes.size);
+        // Create symbol for var->name at current offset within the .data section
+        GObjSymbol sym = {0};
+        sym.name = strdup(var->name.data);
+        sym.section_name = strdup(".data");
+        sym.byte_offset = sec_initdata->data.bytes.size;
+        vector_push(object.symbols, sym);
+        // Write initialised bytes to .data section
         sec_write_n(sec_initdata, &var->init->imm, type_sizeof(var->type));
 #endif // x86_64_GENERATE_MACHINE_CODE
 
@@ -3523,8 +3648,16 @@ void codegen_emit_x86_64(CodegenContext *context) {
       usz sz = type_sizeof(var->type);
       fprint(context->code, "%S: .space %zu\n", var->name, sz);
 
-      print("[x86_64]:TODO: Create symbol for uninitialised \"%S\" (size %Z) at offset %Z within the .bss section.\n", var->name, type_sizeof(var->type), sec_uninitdata->data.fill.amount);
+#ifdef X86_64_GENERATE_MACHINE_CODE
+      // Create symbol for var->name at current offset within the .bss section
+      GObjSymbol sym = {0};
+      sym.name = strdup(var->name.data);
+      sym.section_name = strdup(".bss");
+      sym.byte_offset = sec_initdata->data.bytes.size;
+      vector_push(object.symbols, sym);
+      // Write uninitialised bytes to .data section
       sec_uninitdata->data.fill.amount += sz;
+#endif
     }
   }
 
@@ -3604,34 +3737,15 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   emit_entry(context);
   foreach_ptr (IRFunction*, function, context->functions) {
-    if (!function->is_extern) emit_function(context, function);
-  }
+#ifdef X86_64_GENERATE_MACHINE_CODE
+    GObjSymbol sym = {0};
+    sym.name = strdup(function->name.data);
+    sym.section_name = strdup(code_section(&object)->name);
+    sym.byte_offset = code_section(&object)->data.bytes.size;
+    vector_push(object.symbols, sym);
+#endif // x86_64_GENERATE_MACHINE_CODE
 
-  foreach (Section, sec, object.sections) {
-    char filename[32] = {0};
-    const char filename_prefix[] = "section_";
-    memcpy(filename, filename_prefix, sizeof(filename_prefix) - 1);
-    strncpy(filename + sizeof(filename_prefix) - 1, sec->name, 32 - (sizeof(filename_prefix) - 1));
-    FILE *f = fopen(filename, "wb");
-    ASSERT(f, "Could not open %s for writing", filename);
-    if (sec->attributes & SEC_ATTR_SPAN_FILL) {
-      uint8_t value = sec->data.fill.value;
-      uint8_t values[8] = {value,value,value,value,value,value,value,value};
-      size_t n = sec->data.fill.amount;
-      for (; n >= 8; n -= 8)
-        fwrite(&values, 1, 8, f);
-      for (; n; --n)
-        fwrite(&value, 1, 1, f);
-    } else {
-      size_t i = 0;
-      if (sec->data.bytes.size >= 8) {
-        for (; i < sec->data.bytes.size - 8; i += 8)
-          fwrite(sec->data.bytes.data + i, 1, 8, f);
-      }
-      for (; i < sec->data.bytes.size; ++i)
-        fwrite(sec->data.bytes.data + i, 1, 1, f);
-    }
-    fclose(f);
+    if (!function->is_extern) emit_function(context, function);
   }
 
   generic_object_as_coff_x86_64(&object, "out.obj");
