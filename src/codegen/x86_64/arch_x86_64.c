@@ -523,6 +523,15 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
     case r8: {
       // Move imm8 to r8
       // 0xb0+ rb ib
+
+      // Encode a REX prefix if the ModRM register descriptor needs
+      // the bit extension.
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+        mcode_1(context->object, rex);
+      }
+
       uint8_t op = 0xb0 + rb_encoding(destination_register);
       int8_t imm8 = (int8_t)immediate;
       mcode_2(context->object, op, (uint8_t)imm8);
