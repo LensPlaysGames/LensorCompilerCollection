@@ -2136,7 +2136,16 @@ static void femit
       int32_t disp32 = 0;
 
       mcode_2(context->object, op_escape, op);
-      print("[x86_64]:TODO: Make disp32 relocation for jcc to `%s` symbol.\n", label);
+
+      // Make disp32 relocation to lea from symbol
+      RelocationEntry reloc = {0};
+      Section *sec_code = code_section(context->object);
+      reloc.sym.byte_offset = sec_code->data.bytes.size;
+      reloc.sym.name = strdup(label);
+      reloc.sym.section_name = strdup(sec_code->name);
+      reloc.type = RELOC_DISP32_PCREL;
+      vector_push(context->object->relocs, reloc);
+
       mcode_n(context->object, &disp32, 4);
 #endif // x86_64_GENERATE_MACHINE_CODE
 
