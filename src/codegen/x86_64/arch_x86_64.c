@@ -869,7 +869,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
 
         // Mod == 0b00
         // R/M == 0b101 (none)
-        uint8_t modrm = modrm_byte(0b00, 0, 0b101);
+        uint8_t modrm = modrm_byte(0b00, destination_regbits, 0b101);
 
         mcode_2(context->object, op, modrm);
 
@@ -986,13 +986,13 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       if (address_register == REG_RIP) {
         uint8_t destination_regbits = regbits(destination_register);
         if (REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+          uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, false);
           mcode_1(context->object, rex);
         }
 
         // Mod == 0b00
         // R/M == 0b101 (none)
-        uint8_t modrm = modrm_byte(0b00, 0, 0b101);
+        uint8_t modrm = modrm_byte(0b00, destination_regbits, 0b101);
 
         mcode_2(context->object, op, modrm);
 
@@ -1052,13 +1052,13 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       if (address_register == REG_RIP) {
         uint8_t destination_regbits = regbits(destination_register);
         if (REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+          uint8_t rex = rex_byte(false,  REGBITS_TOP(destination_regbits), false, false);
           mcode_1(context->object, rex);
         }
 
         // Mod == 0b00
         // R/M == 0b101 (none)
-        uint8_t modrm = modrm_byte(0b00, 0, 0b101);
+        uint8_t modrm = modrm_byte(0b00, destination_regbits, 0b101);
 
         mcode_2(context->object, op, modrm) ;
 
@@ -1112,11 +1112,11 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       // RIP-Relative Addressing
       if (address_register == REG_RIP) {
         uint8_t destination_regbits = regbits(destination_register);
-        uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(destination_regbits));
+        uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, false);
 
         // Mod == 0b00
         // R/M == 0b101 (none)
-        uint8_t modrm = modrm_byte(0b00, 0, 0b101);
+        uint8_t modrm = modrm_byte(0b00, destination_regbits, 0b101);
 
         mcode_3(context->object, rex, op, modrm);
 
