@@ -42,4 +42,10 @@ typedef enum x86_64BackendFlags {
   STORE_UNDERLYING,
 } x86_64BackendFlags;
 
+/// Values only valid once codegen_context_x86_64_*_create() has been called and returned.
+extern Register *caller_saved_registers;
+extern size_t caller_saved_register_count;
+extern Register *argument_registers;
+extern size_t argument_register_count;
+
 #endif // ARCH_X86_64_H

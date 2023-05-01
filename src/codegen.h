@@ -3,6 +3,7 @@
 
 #include <codegen/codegen_forward.h>
 #include <codegen/generic_object.h>
+#include <codegen/machine_ir.h>
 
 #include <ast.h>
 #include <error.h>
@@ -56,6 +57,7 @@ typedef struct IRStaticVariable {
 struct CodegenContext {
   FILE *code;
   GenericObjectFile *object;
+  MIRVector *mir;
   AST *ast;
 
   Vector(IRFunction *) functions;

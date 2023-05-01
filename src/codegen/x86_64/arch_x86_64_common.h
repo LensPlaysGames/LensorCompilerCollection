@@ -120,6 +120,29 @@ typedef enum Instruction {
   I_COUNT
 } Instruction;
 
+typedef enum InstructionForm {
+  I_FORM_NONE,
+  I_FORM_IMM,
+  I_FORM_IMM_TO_MEM,
+  I_FORM_IMM_TO_REG,
+  I_FORM_INDIRECT_BRANCH,
+  I_FORM_MEM,
+  I_FORM_MEM_TO_REG,
+  I_FORM_NAME,
+  I_FORM_NAME_TO_REG,
+  I_FORM_REG,
+  I_FORM_REG_SHIFT,
+  I_FORM_REG_TO_MEM,
+  I_FORM_REG_TO_NAME,
+  I_FORM_REG_TO_OFFSET_NAME,
+  I_FORM_REG_TO_REG,
+  I_FORM_SETCC,
+  I_FORM_JCC,
+  I_FORM_IRBLOCK, // Marks beginning of basic block.
+  I_FORM_IRFUNCTION, // Marks beginning of function.
+  I_FORM_COUNT
+} InstructionForm;
+
 extern const char *jump_type_names_x86_64[JUMP_TYPE_COUNT];
 
 typedef enum RegSize {
@@ -135,9 +158,9 @@ RegSize regsize_from_bytes(size_t bytes);
 
 /// Return the corresponding byte size of a valid RegSize enum value.
 /// ICE if enum value invalid.
-size_t regbytes_from_size(enum RegSize r);
+size_t regbytes_from_size(RegSize r);
 
-const char *regname(RegisterDescriptor reg, enum RegSize size);
+const char *regname(RegisterDescriptor reg, RegSize size);
 const char *regname_from_bytes(RegisterDescriptor reg, size_t bytes);
 
 /// Lookup functions for register names.
