@@ -1296,10 +1296,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       // Get function we are returning from.
       // TODO: It would be more efficient to cache function type in return AST node while parsing.
       Node *func = expr->parent;
-      while (func->kind != NODE_FUNCTION) func = func->parent;
+      while (func && func->kind != NODE_FUNCTION) func = func->parent;
 
       // Ensure return nodes within void return-type functions have no value.
-      if (expr->return_.value && func->type->function.return_type == t_void)
+      if (expr->return_.value && func && func->type->function.return_type == t_void)
         ERR(expr->return_.value->source_location,
             "An expression must not follow `return` in a function returning void.");
 
