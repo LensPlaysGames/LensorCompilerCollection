@@ -2,6 +2,7 @@
 
 #include <ast.h>
 #include <codegen.h>
+#include <codegen/x86_64/arch_x86_64_common.h>
 #include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/register_allocation.h>
@@ -21,89 +22,11 @@
 
 #define X86_64_GENERATE_MACHINE_CODE
 
-#define DEFINE_REGISTER_ENUM(name, ...) REG_##name,
-#define REGISTER_NAME_64(ident, name, ...) name,
-#define REGISTER_NAME_32(ident, name, name_32, ...) name_32,
-#define REGISTER_NAME_16(ident, name, name_32, name_16, ...) name_16,
-#define REGISTER_NAME_8(ident, name, name_32, name_16, name_8, ...) name_8,
-
-/// Lookup tables for register names.
-#define DEFINE_REGISTER_NAME_LOOKUP_FUNCTION(name, bits)                \
-  static const char *name(RegisterDescriptor descriptor) {              \
-    static const char* register_names[] =                               \
-      { FOR_ALL_X86_64_REGISTERS(REGISTER_NAME_##bits) };               \
-    if (descriptor <= 0 || descriptor > REG_COUNT) {                    \
-      ICE("ERROR::" #name "(): Could not find register with descriptor of %d\n", descriptor); \
-    }                                                                   \
-    return register_names[descriptor - 1];                              \
-  }
-
-enum Registers_x86_64 {
-  REG_NONE,
-  FOR_ALL_X86_64_REGISTERS(DEFINE_REGISTER_ENUM)
-  REG_COUNT
-};
-
-/// Define register_name and friends.
-DEFINE_REGISTER_NAME_LOOKUP_FUNCTION(register_name, 64)
-DEFINE_REGISTER_NAME_LOOKUP_FUNCTION(register_name_32, 32)
-DEFINE_REGISTER_NAME_LOOKUP_FUNCTION(register_name_16, 16)
-DEFINE_REGISTER_NAME_LOOKUP_FUNCTION(register_name_8, 8)
-
-#undef REGISTER_NAME_64
-#undef REGISTER_NAME_32
-#undef REGISTER_NAME_16
-#undef REGISTER_NAME_8
-
-#undef DEFINE_REGISTER_ENUM
-#undef DEFINE_REGISTER_NAME_LOOKUP_FUNCTION
-
-// TODO: This should probably be 13?
-#define GENERAL_REGISTER_COUNT 14
-
-
 static Register *caller_saved_registers = NULL;
 static size_t caller_saved_register_count = 0;
 
 static Register *argument_registers = NULL;
 static size_t argument_register_count = 0;
-static Register general[GENERAL_REGISTER_COUNT] = {
-  REG_RAX,
-  REG_RCX,
-  REG_RDX,
-  REG_RSI,
-  REG_RDI,
-  REG_R8,
-  REG_R9,
-  REG_R10,
-  REG_R11,
-  REG_R12,
-  REG_RBX,
-  REG_R13,
-  REG_R14,
-  REG_R15,
-};
-
-#define LINUX_ARGUMENT_REGISTER_COUNT 6
-static Register linux_argument_registers[LINUX_ARGUMENT_REGISTER_COUNT] = {
-  REG_RDI, REG_RSI, REG_RDX, REG_RCX, REG_R8, REG_R9
-};
-
-#define MSWIN_ARGUMENT_REGISTER_COUNT 4
-static Register mswin_argument_registers[MSWIN_ARGUMENT_REGISTER_COUNT] = {
-  REG_RCX, REG_RDX, REG_R8, REG_R9
-};
-
-#define MSWIN_CALLER_SAVED_REGISTER_COUNT 7
-static Register mswin_caller_saved_registers[MSWIN_CALLER_SAVED_REGISTER_COUNT] = {
-  REG_RAX, REG_RCX, REG_RDX, REG_R8, REG_R9, REG_R10, REG_R11
-};
-
-#define LINUX_CALLER_SAVED_REGISTER_COUNT 9
-static Register linux_caller_saved_registers[LINUX_CALLER_SAVED_REGISTER_COUNT] = {
-  REG_RAX, REG_RCX, REG_RDX, REG_R8, REG_R9, REG_R10, REG_R11, REG_RSI, REG_RDI
-};
-
 
 NODISCARD static bool is_caller_saved(Register r) {
   for (size_t i = 0; i < caller_saved_register_count; ++i) {
@@ -118,179 +41,11 @@ NODISCARD static bool is_callee_saved(Register r) { return !is_caller_saved(r); 
 
 span unreferenced_block_name = literal_span_raw("");
 
-/// Types of conditional jump instructions (Jcc).
-/// Do NOT reorder these.
-enum IndirectJumpType {
-  JUMP_TYPE_A,
-  JUMP_TYPE_AE,
-  JUMP_TYPE_B,
-  JUMP_TYPE_BE,
-  JUMP_TYPE_C,
-  JUMP_TYPE_Z,
-  JUMP_TYPE_E = JUMP_TYPE_Z,
-  JUMP_TYPE_G,
-  JUMP_TYPE_GE,
-  JUMP_TYPE_L,
-  JUMP_TYPE_LE,
-  JUMP_TYPE_NA,
-  JUMP_TYPE_NAE,
-  JUMP_TYPE_NB,
-  JUMP_TYPE_NBE,
-  JUMP_TYPE_NC,
-  JUMP_TYPE_NE,
-  JUMP_TYPE_NZ = JUMP_TYPE_NE,
-  JUMP_TYPE_NG,
-  JUMP_TYPE_NGE,
-  JUMP_TYPE_NL,
-  JUMP_TYPE_NLE,
-  JUMP_TYPE_NO,
-  JUMP_TYPE_NP,
-  JUMP_TYPE_NS,
-  JUMP_TYPE_O,
-  JUMP_TYPE_P,
-  JUMP_TYPE_PE,
-  JUMP_TYPE_PO,
-  JUMP_TYPE_S,
-
-  JUMP_TYPE_COUNT,
-};
-
-/// Do NOT reorder these.
-static const char *jump_type_names_x86_64[JUMP_TYPE_COUNT] = {
-    "a",
-    "ae",
-    "b",
-    "be",
-    "c",
-    "z",
-    "g",
-    "ge",
-    "l",
-    "le",
-    "na",
-    "nae",
-    "nb",
-    "nbe",
-    "nc",
-    "nz",
-    "ng",
-    "nge",
-    "nl",
-    "nle",
-    "no",
-    "np",
-    "ns",
-    "o",
-    "p",
-    "pe",
-    "po",
-    "s",
-};
-
-// TODO: All instructions we use in x86_64 should be in this enum.
-enum Instruction {
-  /// Arithmetic instructions.
-  I_ADD,
-  I_SUB,
-  // I_MUL,
-  I_IMUL,
-  I_DIV,
-  I_IDIV,
-  I_XOR,
-  I_CMP,
-  I_TEST,
-  I_CWD,
-  I_CDQ,
-  I_CQO,
-  I_SETCC,
-  I_SAL, ///< Reg reg | Immediate imm, Reg reg
-  I_SHL = I_SAL,
-  I_SAR, ///< Reg reg | Immediate imm, Reg reg
-  I_SHR, ///< Reg reg | Immediate imm, Reg reg
-  I_AND, ///< Reg reg | Immediate imm, Reg reg
-  I_OR,  ///< Reg reg | Immediate imm, Reg reg
-  I_NOT,
-
-  /// Stack instructions.
-  I_PUSH,
-  I_POP,
-
-  /// Control flow.
-  I_CALL,
-  I_JMP, ///< const char* label | Reg reg
-  I_RET,
-  I_JCC, ///< enum IndirectJumpType type, const char* label
-
-  /// Memory stuff.
-  I_MOV,
-  I_LEA,
-
-  I_MOVSX,
-  I_MOVZX,
-
-  /// Using this for anything other than Reg <-> Reg is a VERY bad
-  /// idea unless you know what you're doing.
-  I_XCHG,
-
-  I_COUNT
-};
-
 // Maximum size of parameter that can go in a register vs on the stack.
 // TODO: Has to do with calling convention?
 static const usz max_register_size = 8;
 
-enum RegSize {
-  r64,
-  r32,
-  r16,
-  r8,
-};
-
-/// Return the corresponding RegSize enum value to the given amount of
-/// bytes (smallest fit). ICE if can not contain.
-static enum RegSize regsize_from_bytes(u64 bytes) {
-  switch (bytes) {
-  case 1: return r8;
-  case 2: return r16;
-  case 4: return r32;
-  case 8: return r64;
-  default:
-    ICE("Byte size can not be converted into register size on x86_64: %U", bytes);
-    break;
-  }
-}
-
-/// Return the corresponding byte size of a valid RegSize enum value.
-/// ICE if enum value invalid.
-static usz regbytes_from_size(enum RegSize r) {
-  switch (r) {
-  case r8: return 1;
-  case r16: return 2;
-  case r32: return 4;
-  case r64: return 8;
-  default:
-    ICE("Register size can not be converted into byte count on x86_64: %U", r);
-    break;
-  }
-}
-
-static const char * regname(RegisterDescriptor reg, enum RegSize size) {
-  switch (size) {
-  case r64: return register_name(reg);
-  case r32: return register_name_32(reg);
-  case r16: return register_name_16(reg);
-  case r8:  return register_name_8(reg);
-  default:
-    UNREACHABLE();
-    break;
-  }
-}
-
-static const char * regname_from_bytes(RegisterDescriptor reg, u64 bytes) {
-  return regname(reg, regsize_from_bytes(bytes));
-}
-
-const char *setcc_suffixes_x86_64[COMPARE_COUNT] = {
+static const char *setcc_suffixes_x86_64[COMPARE_COUNT] = {
     "e",
     "ne",
     "l",
@@ -356,30 +111,6 @@ static const char *instruction_mnemonic(CodegenContext *context, enum Instructio
   default: break;
   }
   ICE("instruction_mnemonic(): Unknown instruction.");
-}
-
-static enum IndirectJumpType comparison_to_jump_type(enum ComparisonType comparison) {
-  switch (comparison) {
-    case COMPARE_EQ: return JUMP_TYPE_E;
-    case COMPARE_NE: return JUMP_TYPE_NE;
-    case COMPARE_LT: return JUMP_TYPE_L;
-    case COMPARE_LE: return JUMP_TYPE_LE;
-    case COMPARE_GT: return JUMP_TYPE_G;
-    case COMPARE_GE: return JUMP_TYPE_GE;
-    default: ICE("comparison_to_jump_type_x86_64(): Unknown comparison type.");
-  }
-}
-
-static enum IndirectJumpType negate_jump(enum IndirectJumpType j) {
-  switch (j) {
-    case JUMP_TYPE_E: return JUMP_TYPE_NE;
-    case JUMP_TYPE_NE: return JUMP_TYPE_E;
-    case JUMP_TYPE_L: return JUMP_TYPE_GE;
-    case JUMP_TYPE_LE: return JUMP_TYPE_G;
-    case JUMP_TYPE_G: return JUMP_TYPE_LE;
-    case JUMP_TYPE_GE: return JUMP_TYPE_L;
-    default: ICE("negate_jump(): Unknown jump type.");
-  }
 }
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
