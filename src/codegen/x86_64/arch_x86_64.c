@@ -2124,31 +2124,6 @@ static void femit(CodegenContext *context, enum Instruction instruction) {
 
 /// Creates a context for the CG_FMT_x86_64_MSWIN architecture.
 CodegenContext *codegen_context_x86_64_mswin_create() {
-  RegisterPool pool;
-
-  /// Create the registers.
-  Register *registers = calloc(REG_COUNT, sizeof(Register));
-
-  /// Link to MSDN documentation (surely will fall away, but it's been Internet Archive'd).
-  /// https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170#callercallee-saved-registers
-  /// https://web.archive.org/web/20220916164241/https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170
-  /// "The x64 ABI considers the registers RAX, RCX, RDX, R8, R9, R10, R11, and XMM0-XMM5 volatile."
-  /// "The x64 ABI considers registers RBX, RBP, RDI, RSI, RSP, R12, R13, R14, R15, and XMM6-XMM15 nonvolatile."
-  size_t number_of_scratch_registers = 7;
-  Register **scratch_registers = calloc(number_of_scratch_registers, sizeof(Register *));
-  scratch_registers[0] = registers + REG_RAX;
-  scratch_registers[1] = registers + REG_RCX;
-  scratch_registers[2] = registers + REG_RDX;
-  scratch_registers[3] = registers + REG_R8;
-  scratch_registers[4] = registers + REG_R9;
-  scratch_registers[5] = registers + REG_R10;
-  scratch_registers[6] = registers + REG_R11;
-
-  pool.registers = registers;
-  pool.scratch_registers = scratch_registers;
-  pool.num_scratch_registers = number_of_scratch_registers;
-  pool.num_registers = REG_COUNT;
-
   caller_saved_register_count = MSWIN_CALLER_SAVED_REGISTER_COUNT;
   caller_saved_registers = mswin_caller_saved_registers;
   argument_register_count = MSWIN_ARGUMENT_REGISTER_COUNT;
@@ -2158,58 +2133,30 @@ CodegenContext *codegen_context_x86_64_mswin_create() {
   cg_ctx->format = CG_FMT_x86_64_GAS;
   cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
   cg_ctx->dialect = CG_ASM_DIALECT_ATT;
-  cg_ctx->register_pool = pool;
   return cg_ctx;
 }
 
 /// Creates a context for the x86_64/CG_CALL_CONV_LINUX.
 CodegenContext *codegen_context_x86_64_linux_create() {
-  RegisterPool pool;
-
-  /// Create the registers.
-  Register *registers = calloc(REG_COUNT, sizeof(Register));
-
-  /// Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling function
-  /// and the called function is required to preserve their values.
-  size_t number_of_scratch_registers = 7;
-  Register **scratch_registers = calloc(number_of_scratch_registers, sizeof(Register *));
-  scratch_registers[0] = registers + REG_RAX;
-  scratch_registers[1] = registers + REG_RCX;
-  scratch_registers[2] = registers + REG_RDX;
-  scratch_registers[3] = registers + REG_R8;
-  scratch_registers[4] = registers + REG_R9;
-  scratch_registers[5] = registers + REG_R10;
-  scratch_registers[6] = registers + REG_R11;
-
-  pool.registers = registers;
-  pool.scratch_registers = scratch_registers;
-  pool.num_scratch_registers = number_of_scratch_registers;
-  pool.num_registers = REG_COUNT;
-
   caller_saved_register_count = LINUX_CALLER_SAVED_REGISTER_COUNT;
   caller_saved_registers = linux_caller_saved_registers;
   argument_register_count = LINUX_ARGUMENT_REGISTER_COUNT;
   argument_registers = linux_argument_registers;
 
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
-
-  // Shallow-copy state from the parent.
   cg_ctx->format = CG_FMT_x86_64_GAS;
   cg_ctx->call_convention = CG_CALL_CONV_LINUX;
   cg_ctx->dialect = CG_ASM_DIALECT_ATT;
-  cg_ctx->register_pool = pool;
   return cg_ctx;
 }
 
 /// Free a context created by codegen_context_x86_64_mswin_create.
 void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
-  free(ctx->register_pool.registers);
-  free(ctx->register_pool.scratch_registers);
+  (void)ctx;
 }
 
 void codegen_context_x86_64_linux_free(CodegenContext *ctx) {
-  free(ctx->register_pool.registers);
-  free(ctx->register_pool.scratch_registers);
+  (void)ctx;
 }
 
 /// Generate a comparison between two registers.
