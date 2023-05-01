@@ -513,6 +513,21 @@ static uint8_t modrm_byte(uint8_t mod, uint8_t reg, uint8_t rm) {
   return (uint8_t)((mod << 6) | ((reg & 0b111) << 3) | rm);
 }
 
+/// A SIB byte is needed in the following cases:
+///   a. If a memory operand has two pointer or index registers,
+///   b. If a memory operand has a scaled index register,
+///   c. If a memory operand has the stack pointer (ESP or RSP) as base,
+///   d. If a memory operand in 64-bit mode uses a 32-bit sign-extended
+///      direct memory address rather than a RIP-relative address.
+/// A SIB byte cannot be used in 16-bit addressing mode.
+static uint8_t sib_byte(uint8_t scale_factor, uint8_t index, uint8_t base) {
+  // Ensure no bits above the amount expected are set.
+  ASSERT((scale_factor & (~0b11)) == 0);
+  ASSERT((index & (~0b1111)) == 0);
+  ASSERT((base & (~0b1111)) == 0);
+  return (uint8_t)((scale_factor << 6) | ((index & 0b111) << 3) | base);
+}
+
 static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor destination_register, enum RegSize size) {
   if ((inst == I_SUB || inst == I_ADD) && immediate == 0) return;
 
