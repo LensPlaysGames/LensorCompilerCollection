@@ -1685,12 +1685,6 @@ static void mcode_none(CodegenContext *context, enum Instruction inst) {
     mcode_2(context->object, rexw, op);
   } break;
 
-  // FIXME: This shouldn't be here once `setcc` gets it's own emission function.
-  case I_SETCC: break; // NOTE: Handled in `femit()`
-
-  // FIXME: This shouldn't be here once `jcc` gets it's own emission function.
-  case I_JCC: break; // NOTE: Handled in `femit()`
-
   default:
     ICE("ERROR: mcode_none(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
   }
@@ -1924,7 +1918,7 @@ static void femit_reg_shift(CodegenContext *context, enum Instruction inst, Regi
     fprint(context->code, "    %s %s, %s\n",
            mnemonic, register_name(register_to_shift), cl);
     break;
-  default: ICE("ERROR: femit(): Unsupported dialect %d for shift instruction", context->dialect);
+  default: ICE("ERROR: femit_reg_shift(): Unsupported dialect %d for shift instruction", context->dialect);
   }
 }
 
@@ -2010,7 +2004,7 @@ static void femit_name(CodegenContext *context, enum Instruction inst, const cha
     fprint(context->code, "    %s %s\n",
            mnemonic, name);
     break;
-  default: ICE("ERROR: femit(): Unsupported dialect %d for CALL/JMP instruction", context->dialect);
+  default: ICE("ERROR: femit_name(): Unsupported dialect %d for CALL/JMP instruction", context->dialect);
   }
 }
 
@@ -2054,7 +2048,7 @@ static void femit_setcc(CodegenContext *context, enum ComparisonType comparison_
            mnemonic,
            setcc_suffixes_x86_64[comparison_type], value);
     break;
-  default: ICE("ERROR: femit(): Unsupported dialect %d", context->dialect);
+  default: ICE("ERROR: femit_setcc(): Unsupported dialect %d", context->dialect);
   }
 
 }
@@ -2101,7 +2095,7 @@ static void femit_jcc(CodegenContext *context, IndirectJumpType type, char *labe
       }
 }
 
-static void femit(CodegenContext *context, enum Instruction instruction) {
+static void femit_none(CodegenContext *context, enum Instruction instruction) {
 #ifdef X86_64_GENERATE_MACHINE_CODE
   mcode_none(context, instruction);
 #endif // X86_64_GENERATE_MACHINE_CODE
@@ -2116,7 +2110,7 @@ static void femit(CodegenContext *context, enum Instruction instruction) {
     } break;
 
     default:
-      ICE("Unhandled instruction in femit(): %d (%s)\n"
+      ICE("Unhandled instruction in femit_none(): %d (%s)\n"
           "  Consider using femit_x() or femit_x_to_x()",
           instruction, instruction_mnemonic(context, instruction));
   }
@@ -2268,15 +2262,15 @@ static void divmod(CodegenContext *context, IRInstruction *inst) {
     // For 8-byte signed types, we need to extend RAX into the 16-byte
     // RDX:RAX. For this, we use CQO (convert quad-word to octal-word).
     if (lhs_size == r64)
-      femit(context, I_CQO);
+      femit_none(context, I_CQO);
       // For 4-byte signed types, we need to extend EAX into the 8-byte
       // EDX:EAX. For this, we use CDQ (convert double-word to quad-word).
     else if (lhs_size == r32)
-      femit(context, I_CDQ);
+      femit_none(context, I_CDQ);
       // For 2-byte signed types, we need to extend AX into the 4-byte
       // DX:AX. For this, we use CWD (convert word to double-word).
     else if (lhs_size == r16)
-      femit(context, I_CWD);
+      femit_none(context, I_CWD);
     else ICE("Unhandled register size for signed division");
 
     femit_reg(context, I_IDIV, inst->rhs->result, lhs_size);
@@ -2485,7 +2479,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       }
     }
     codegen_epilogue(context, inst->parent_block->function);
-    femit(context, I_RET);
+    femit_none(context, I_RET);
     if (optimise && inst->parent_block) inst->parent_block->done = true;
     break;
 
