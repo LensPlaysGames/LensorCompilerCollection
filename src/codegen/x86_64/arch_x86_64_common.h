@@ -27,6 +27,11 @@ extern Register mswin_argument_registers[MSWIN_ARGUMENT_REGISTER_COUNT];
 #define LINUX_CALLER_SAVED_REGISTER_COUNT 9
 extern Register linux_caller_saved_registers[LINUX_CALLER_SAVED_REGISTER_COUNT];
 
+/// Link to MSDN documentation (surely will fall away, but it's been Internet Archive'd).
+/// https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170#callercallee-saved-registers
+/// https://web.archive.org/web/20220916164241/https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170
+/// "The x64 ABI considers the registers RAX, RCX, RDX, R8, R9, R10, R11, and XMM0-XMM5 volatile."
+/// "The x64 ABI considers registers RBX, RBP, RDI, RSI, RSP, R12, R13, R14, R15, and XMM6-XMM15 nonvolatile."
 /// RAX, RCX, RDX, R8, R9, R10, R11
 #define MSWIN_CALLER_SAVED_REGISTER_COUNT 7
 extern Register mswin_caller_saved_registers[MSWIN_CALLER_SAVED_REGISTER_COUNT];
