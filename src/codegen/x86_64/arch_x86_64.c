@@ -656,6 +656,45 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
 
 static void mcode_imm_to_mem(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor address_register, int64_t offset) {
   switch (inst) {
+
+  case I_SUB: {
+    // REX.W 0x81 /5 id
+
+    if (offset == 0) {
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(address_regbits));
+      uint8_t modrm = modrm_byte(0b00, 5, address_regbits);
+      int32_t imm32 = (int32_t)immediate;
+
+      mcode_3(context->object, rex, 0x81, modrm);
+      if (address_register == REG_RSP) {
+        /// Scaling Factor == 0b00  ->  1
+        /// Index == 0b100  ->  None
+        /// Base == RSP bits (0b100)
+        mcode_1(context->object, sib_byte(0b00, 0b100, address_regbits));
+      }
+      mcode_n(context->object, &imm32, 4);
+      break;
+    }
+
+    uint8_t address_regbits = regbits(address_register);
+    uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(address_regbits));
+    uint8_t modrm = modrm_byte(0b10, 5, address_regbits);
+    int32_t imm32 = (int32_t)immediate;
+    int32_t disp32 = (int32_t)offset;
+
+    mcode_3(context->object, rex, 0x81, modrm);
+    if (address_register == REG_RSP) {
+      /// Scaling Factor == 0b00  ->  1
+      /// Index == 0b100  ->  None
+      /// Base == RSP bits (0b100)
+      mcode_1(context->object, sib_byte(0b00, 0b100, address_regbits));
+    }
+    mcode_n(context->object, &disp32, 4);
+    mcode_n(context->object, &imm32, 4);
+
+  } break; // case I_SUB
+
   default: ICE("ERROR: mcode_imm_to_mem(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
   }
 }
@@ -1649,8 +1688,174 @@ static void mcode_reg(CodegenContext *context, enum Instruction inst, RegisterDe
 }
 
 static void mcode_reg_to_name(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name) {
-  // TODO: Generate a relocation entry that will end up in the object file...
   switch (inst) {
+
+  case I_MOV: {
+
+    switch (size) {
+    case r8: {
+      // 0x88 /r
+      if (address_register == REG_RIP) {
+        uint8_t source_regbits = regbits(source_register);
+        // RIP-relative ModRM byte
+        // Mod == 0b00
+        // Reg == Source Register
+        // R/M == 0b101
+        uint8_t modrm = modrm_byte(0b00, source_regbits, 0b101);
+        if (REGBITS_TOP(source_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, false);
+          mcode_1(context->object, rex);
+        }
+        mcode_2(context->object, 0x88, modrm);
+
+        // Make RIP-relative disp32 relocation
+        RelocationEntry reloc = {0};
+        Section *sec_code = code_section(context->object);
+        ASSERT(sec_code, "NO CODE SECTION, WHAT HAVE YOU DONE?");
+        reloc.sym.byte_offset = sec_code->data.bytes.size;
+        reloc.sym.name = strdup(name);
+        reloc.sym.section_name = strdup(sec_code->name);
+        reloc.type = RELOC_DISP32_PCREL;
+        vector_push(context->object->relocs, reloc);
+
+        int32_t disp32 = 0;
+        mcode_n(context->object, &disp32, 4);
+        break;
+      }
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t address_regbits = regbits(address_register);
+      // Mod == 0b10  ->  (register + disp32)
+      // Reg == Source
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, source_regbits, address_regbits);
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(address_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(address_regbits));
+        mcode_1(context->object, rex);
+      }
+      mcode_2(context->object, 0x88, modrm);
+
+      // Generate disp32 relocation!
+      RelocationEntry reloc = {0};
+      Section *sec_code = code_section(context->object);
+      reloc.sym.byte_offset = sec_code->data.bytes.size;
+      reloc.sym.name = strdup(name);
+      reloc.sym.section_name = strdup(sec_code->name);
+      reloc.type = RELOC_DISP32;
+      vector_push(context->object->relocs, reloc);
+
+      int32_t disp32 = 0;
+      mcode_n(context->object, &disp32, 4);
+    } break;
+    case r16: {
+      // 0x66 + 0x89 /r
+      mcode_1(context->object, 0x66);
+    } // FALLTHROUGH to r32
+    case r32: {
+      // 0x89 /r
+      if (address_register == REG_RIP) {
+        uint8_t source_regbits = regbits(source_register);
+        // RIP-relative ModRM byte
+        // Mod == 0b00
+        // Reg == Source Register
+        // R/M == 0b101
+        uint8_t modrm = modrm_byte(0b00, source_regbits, 0b101);
+        if (REGBITS_TOP(source_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, false);
+          mcode_1(context->object, rex);
+        }
+
+        mcode_2(context->object, 0x89, modrm);
+
+        // Make RIP-relative disp32 relocation
+        RelocationEntry reloc = {0};
+        Section *sec_code = code_section(context->object);
+        ASSERT(sec_code, "NO CODE SECTION, WHAT HAVE YOU DONE?");
+        reloc.sym.byte_offset = sec_code->data.bytes.size;
+        reloc.sym.name = strdup(name);
+        reloc.sym.section_name = strdup(sec_code->name);
+        reloc.type = RELOC_DISP32_PCREL;
+        vector_push(context->object->relocs, reloc);
+
+        int32_t disp32 = 0;
+        mcode_n(context->object, &disp32, 4);
+        break;
+      }
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t address_regbits = regbits(address_register);
+      // Mod == 0b10  ->  (register + disp32)
+      // Reg == Source
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, source_regbits, address_regbits);
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(address_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(address_regbits));
+        mcode_1(context->object, rex);
+      }
+      mcode_2(context->object, 0x89, modrm);
+
+      // Generate disp32 relocation!
+      RelocationEntry reloc = {0};
+      Section *sec_code = code_section(context->object);
+      reloc.sym.byte_offset = sec_code->data.bytes.size;
+      reloc.sym.name = strdup(name);
+      reloc.sym.section_name = strdup(sec_code->name);
+      reloc.type = RELOC_DISP32;
+      vector_push(context->object->relocs, reloc);
+
+      int32_t disp32 = 0;
+      mcode_n(context->object, &disp32, 4);
+    } break;
+    case r64: {
+      // REX.W + 0x89 /r
+      if (address_register == REG_RIP) {
+        uint8_t source_regbits = regbits(source_register);
+        // RIP-relative ModRM byte
+        // Mod == 0b00
+        // Reg == Source Register
+        // R/M == 0b101
+        uint8_t modrm = modrm_byte(0b00, source_regbits, 0b101);
+        uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, false);
+        mcode_3(context->object, rex, 0x89, modrm);
+
+        // Make RIP-relative disp32 relocation
+        RelocationEntry reloc = {0};
+        Section *sec_code = code_section(context->object);
+        ASSERT(sec_code, "NO CODE SECTION, WHAT HAVE YOU DONE?");
+        reloc.sym.byte_offset = sec_code->data.bytes.size;
+        reloc.sym.name = strdup(name);
+        reloc.sym.section_name = strdup(sec_code->name);
+        reloc.type = RELOC_DISP32_PCREL;
+        vector_push(context->object->relocs, reloc);
+
+        int32_t disp32 = 0;
+        mcode_n(context->object, &disp32, 4);
+        break;
+      }
+      uint8_t source_regbits = regbits(source_register);
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(address_regbits));
+      // Mod == 0b10  ->  (register + disp32)
+      // Reg == Source
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, source_regbits, address_regbits);
+      mcode_3(context->object, rex, 0x89, modrm);
+
+      // Generate disp32 relocation!
+      RelocationEntry reloc = {0};
+      Section *sec_code = code_section(context->object);
+      reloc.sym.byte_offset = sec_code->data.bytes.size;
+      reloc.sym.name = strdup(name);
+      reloc.sym.section_name = strdup(sec_code->name);
+      reloc.type = RELOC_DISP32;
+      vector_push(context->object->relocs, reloc);
+
+      int32_t disp32 = 0;
+      mcode_n(context->object, &disp32, 4);
+    } break;
+
+    } // switch (size)
+
+  } break; // case I_MOV
+
   default: ICE("ERROR: mcode_reg_to_name(): Unsupported instruction %d (%s)", inst, instruction_mnemonic(context, inst));
   }
 }
