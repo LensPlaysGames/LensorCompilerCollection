@@ -2772,6 +2772,15 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 }
 
 void emit_block(CodegenContext *context, IRBlock *block) {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  GObjSymbol sym = {0};
+  sym.type = GOBJ_SYMTYPE_STATIC;
+  sym.name = strdup(block->name.data);
+  sym.section_name = strdup(code_section(context->object)->name);
+  sym.byte_offset = code_section(context->object)->data.bytes.size;
+  vector_push(context->object->symbols, sym);
+#endif // x86_64_GENERATE_MACHINE_CODE
+
   /// Emit block label if it is used.
   if (block->name.size) {
     fprint(context->code,
