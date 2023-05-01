@@ -68,7 +68,7 @@ typedef enum IndirectJumpType {
   JUMP_TYPE_COUNT,
 } IndirectJumpType;
 
-enum Instruction {
+typedef enum Instruction {
   /// Arithmetic instructions.
   I_ADD,
   I_SUB,
@@ -113,7 +113,7 @@ enum Instruction {
   I_XCHG,
 
   I_COUNT
-};
+} Instruction;
 
 extern const char *jump_type_names_x86_64[JUMP_TYPE_COUNT];
 
