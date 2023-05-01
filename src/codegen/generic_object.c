@@ -558,13 +558,9 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
   // Now that we know the string table won't grow anymore, we may
   // actually know the offset of the relocations that follow it.
   size_t string_table_offset = (size_t)hdr.f_symptr + ((size_t)symbol_table.size * sizeof(*symbol_table.data));
-  print("String table offset: %x\n", string_table_offset);
-  print("String table size: %x\n", string_table.size);
   size_t relocations_offset = string_table_offset + string_table.size;
-  print("Relocations offset: %x\n", relocations_offset);
   foreach (coff_section_header, shdr, shdrs) {
     if (shdr->s_nreloc) {
-      print("Setting relptr to %x\n", (int32_t)relocations_offset);
       shdr->s_relptr = (int32_t)relocations_offset;
       relocations_offset += shdr->s_nreloc + sizeof(coff_relocation_entry);
     }
