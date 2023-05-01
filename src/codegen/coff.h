@@ -158,7 +158,13 @@ typedef struct coff_opt_header {
 
 typedef struct coff_section_header {
   /// Section Name
-  char s_name[8];
+  union {
+    char s_name[8];
+    struct {
+      uint32_t s_name_zeroes;
+      uint32_t s_name_offset;
+    };
+  };
   /// Physical Address
   int32_t s_paddr;
   /// Virtual Address
@@ -429,7 +435,13 @@ typedef struct coff_line_number_entry {
  */
 typedef struct coff_symbol_entry {
   /// Symbol Name
-  char n_name[8];
+  union {
+    char n_name[8];
+    struct {
+      uint32_t n_name_zeroes;
+      uint32_t n_name_offset;
+    };
+  };
   /// Value of Symbol
   int32_t n_value;
   /// Section Number

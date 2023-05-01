@@ -360,16 +360,23 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     return;
   }
 
+  // PREPARE STRING TABLE
+  ByteBuffer string_table = {0};
+  // At the beginning of the COFF string table are 4 bytes that contain
+  // the total size (in bytes) of the rest of the string table. This size
+  // includes the size field itself, so that the value in this location
+  // would be 4 if no strings were present.
+  vector_push(string_table, 0);
+  vector_push(string_table, 0);
+  vector_push(string_table, 0);
+  vector_push(string_table, 0);
+
+  // PREPARE HEADER
   coff_header hdr = {0};
   // x86_64 magic bytes
   hdr.f_machine = COFF_MACHINE_AMD64;
   // Number of sections in section table
   hdr.f_nscns = (uint16_t)object->sections.size;
-  // Number of symbols in symbol table
-  // 2 for each section, 1 for each symbol (TODO: Somehow prep symbol
-  // table before everything else so that we can know these things for
-  // certain, even with aux entries).
-  hdr.f_nsyms = (int32_t)((2 * object->sections.size) + object->symbols.size);
 
   size_t header_size = sizeof(coff_header);
   if (hdr.f_opthdr) header_size += sizeof(coff_opt_header);
@@ -393,19 +400,26 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
   size_t data_end = data_offset;
   // Put symbol table past all data
   hdr.f_symptr = (int32_t)data_end;
-  // Skip symbol table; that's where relocations may begin.
-  size_t code_relocations_start = data_end + ((unsigned)hdr.f_nsyms * sizeof(coff_symbol_entry));
 
-  // HEADER
-  fwrite(&hdr, 1, sizeof(hdr), f);
-
-  // SECTION HEADER TABLE
+  // PREPARE SECTION HEADER TABLE
+  Vector(coff_section_header) shdrs = {0};
   data_offset = data_start;
-  size_t relocations_offset = code_relocations_start;
   foreach (Section, s, object->sections) {
     coff_section_header shdr = {0};
 
-    strncpy(shdr.s_name, s->name, sizeof(shdr.s_name));
+    // If first four bytes are zero, it's an offset into the string table.
+    // Some implementations use a `/<decimal-digits>` format instead.
+    // Otherwise, it's the literal name.
+    size_t sec_name_length = strlen(s->name);
+    if (sec_name_length <= sizeof(shdr.s_name))
+      strncpy(shdr.s_name, s->name, sizeof(shdr.s_name));
+    else {
+      shdr.s_name_offset = (uint32_t)string_table.size;
+      uint8_t *sym_name_it = (uint8_t*)s->name;
+      for (size_t i = 0; i < sec_name_length; ++i)
+        vector_push(string_table, *sym_name_it++);
+      vector_push(string_table, 0);
+    }
 
     size_t size = 0;
     if (s->attributes & SEC_ATTR_SPAN_FILL)
@@ -429,32 +443,34 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
         ++relocation_count;
     }
     shdr.s_nreloc = relocation_count;
-    shdr.s_relptr = (int32_t)relocations_offset;
-    relocations_offset += relocation_count * sizeof(coff_relocation_entry);
 
-    fwrite(&shdr, 1, sizeof(shdr), f);
+    vector_push(shdrs, shdr);
     data_offset += size;
   }
 
-  // SECTION DATA
-  foreach (Section, s, object->sections) {
-    if (s->attributes & SEC_ATTR_SPAN_FILL) {
-      for (size_t n = s->data.fill.amount; n; --n) {
-        fwrite(&s->data.fill.value, 1, 1, f);
-      }
-    } else {
-      fwrite(s->data.bytes.data, 1, s->data.bytes.size, f);
-    }
-  }
-
-  // SYMBOL TABLE
+  // PREPARE SYMBOL TABLE
+  Vector(coff_symbol_entry) symbol_table = {0};
+  // Some symbols have aux entries. This doesn't include those, unlike `symbol_table.size`.
   size_t symbol_count = 0;
   // Create a symbol entry for each section
   size_t section_header_index = 1; // 1-based
   foreach (Section, s, object->sections) {
     coff_symbol_entry symbol_entry = {0};
-    coff_aux_section aux_section = {0};
-    strncpy(symbol_entry.n_name, s->name, sizeof(symbol_entry.n_name));
+    coff_symbol_entry aux_section_data = {0};
+    coff_aux_section *aux_section = (coff_aux_section*)&aux_section_data;
+    // If first four bytes are zero, it's an offset into the string table.
+    // Some implementations use a `/<decimal-digits>` format instead.
+    // Otherwise, it's the literal name.
+    size_t sec_name_length = strlen(s->name);
+    if (sec_name_length <= sizeof(symbol_entry.n_name))
+      strncpy(symbol_entry.n_name, s->name, sizeof(symbol_entry.n_name));
+    else {
+      symbol_entry.n_name_offset = (uint32_t)string_table.size;
+      uint8_t *sym_name_it = (uint8_t*)s->name;
+      for (size_t i = 0; i < sec_name_length; ++i)
+        vector_push(string_table, *sym_name_it++);
+      vector_push(string_table, 0);
+    }
     symbol_entry.n_scnum = (int16_t)section_header_index++;
     symbol_entry.n_sclass = COFF_STORAGE_CLASS_STAT;
     symbol_entry.n_numaux = 1;
@@ -463,7 +479,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     if (s->attributes & SEC_ATTR_SPAN_FILL)
       size = s->data.fill.amount;
     else size = s->data.bytes.size;
-    aux_section.length = (uint32_t)size;
+    aux_section->length = (uint32_t)size;
 
     // Calculate number of relocations for this section.
     uint16_t relocation_count = 0;
@@ -471,31 +487,34 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
       if (strcmp(reloc->sym.section_name, s->name) == 0)
         ++relocation_count;
     }
-    aux_section.number_relocations = relocation_count;
+    aux_section->number_relocations = relocation_count;
 
-    fwrite(&symbol_entry, 1, sizeof(symbol_entry), f);
-    fwrite(&aux_section, 1, sizeof(aux_section), f);
+    vector_push(symbol_table, symbol_entry);
+    vector_push(symbol_table, aux_section_data);
+
     ++symbol_count;
   }
-
   size_t symbol_count_after_sections = symbol_count;
+
   foreach (GObjSymbol, sym, object->symbols) {
     coff_symbol_entry entry = {0};
     // If first four bytes are zero, it's an offset into the string table.
     // Some implementations use a `/<decimal-digits>` format instead.
     // Otherwise, it's the literal name.
-    // FIXME: FOR NOW, JUST TRUNCATE (bad bad)
-    strncpy(entry.n_name, sym->name, sizeof(entry.n_name));
+    size_t sym_name_length = strlen(sym->name);
+    if (sym_name_length <= sizeof(entry.n_name))
+      strncpy(entry.n_name, sym->name, sizeof(entry.n_name));
+    else {
+      entry.n_name_offset = (uint32_t)string_table.size;
+      uint8_t *sym_name_it = (uint8_t*)sym->name;
+      for (size_t i = 0; i < sym_name_length; ++i)
+        vector_push(string_table, *sym_name_it++);
+      vector_push(string_table, 0);
+    }
     // Section number.
     int16_t i = 0;
-    size_t sec_data_offset = 0;
     foreach_index (idx, object->sections) {
       if (strcmp(object->sections.data[i].name, sym->section_name) == 0) break;
-      size_t size = 0;
-      if (object->sections.data[i].attributes & SEC_ATTR_SPAN_FILL)
-        size = object->sections.data[i].data.fill.amount;
-      else size = object->sections.data[i].data.bytes.size;
-      sec_data_offset += size;
       i = (int16_t)idx;
     }
     if (i == (int16_t)object->sections.size) ICE("[GObj]: Couldn't find section mentioned by symbol: \"%s\" (%Z sections)", sym->name, object->sections.size);
@@ -530,13 +549,29 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     } break;
     }
 
-    fwrite(&entry, 1, sizeof(entry), f);
+    vector_push(symbol_table, entry);
     ++symbol_count;
   }
 
-  // TODO: STRING TABLE
+  hdr.f_nsyms = (int32_t)symbol_table.size;
 
-  // RELOCATIONS
+  // Now that we know the string table won't grow anymore, we may
+  // actually know the offset of the relocations that follow it.
+  size_t string_table_offset = (size_t)hdr.f_symptr + ((size_t)symbol_table.size * sizeof(*symbol_table.data));
+  print("String table offset: %x\n", string_table_offset);
+  print("String table size: %x\n", string_table.size);
+  size_t relocations_offset = string_table_offset + string_table.size;
+  print("Relocations offset: %x\n", relocations_offset);
+  foreach (coff_section_header, shdr, shdrs) {
+    if (shdr->s_nreloc) {
+      print("Setting relptr to %x\n", (int32_t)relocations_offset);
+      shdr->s_relptr = (int32_t)relocations_offset;
+      relocations_offset += shdr->s_nreloc + sizeof(coff_relocation_entry);
+    }
+  }
+
+  // PREPARE RELOCATIONS
+  Vector(coff_relocation_entry) relocations = {0};
   foreach (RelocationEntry, reloc, object->relocs) {
     coff_relocation_entry entry = {0};
     // Zero-based index within symbol table to which the reference refers.
@@ -556,9 +591,37 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     default: ICE("Unhandled relocation type: %d\n", (int)reloc->type);
     }
 
-    fwrite(&entry, 1, sizeof(entry), f);
+    vector_push(relocations, entry);
   }
 
+  // HEADER
+  fwrite(&hdr, 1, sizeof(hdr), f);
+  // SECTION HEADER TABLE
+  fwrite(shdrs.data, shdrs.size, sizeof(*shdrs.data), f);
+  // SECTION DATA
+  foreach (Section, s, object->sections) {
+    if (s->attributes & SEC_ATTR_SPAN_FILL) {
+      for (size_t n = s->data.fill.amount; n; --n) {
+        fwrite(&s->data.fill.value, 1, 1, f);
+      }
+    } else {
+      fwrite(s->data.bytes.data, 1, s->data.bytes.size, f);
+    }
+  }
+  // SYMBOL TABLE
+  fwrite(symbol_table.data, symbol_table.size, sizeof(*symbol_table.data), f);
+  // STRING TABLE
+  uint32_t string_table_size = (uint32_t)string_table.size;
+  fwrite(&string_table_size, 1, 4, f);
+  fwrite(string_table.data + 4, 1, string_table_size - 4, f);
+  // RELOCATIONS
+  fwrite(relocations.data, relocations.size, sizeof(*relocations.data), f);
+
   fclose(f);
+
+  vector_delete(relocations);
+  vector_delete(string_table);
+  vector_delete(symbol_table);
+  vector_delete(shdrs);
 }
 
