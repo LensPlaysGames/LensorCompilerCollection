@@ -3203,17 +3203,18 @@ static void lower(CodegenContext *context) {
       } break;
       case CG_CALL_CONV_MSWIN: {
         usz idx = 0;
+
+        // Lower aggregates in possible-register arguments by allocating a copy of them on the stack.
         foreach_ptr (IRInstruction *, argument, instruction->call.arguments) {
           if (idx >= argument_register_count) break;
           Type *type = type_canonical(argument->type);
           if ((type->kind == TYPE_STRUCT || type->kind == TYPE_ARRAY) && type_sizeof(type) > 8) {
-            alloca_copy_of(context, argument, instruction);
+            instruction->call.arguments.data[idx] = alloca_copy_of(context, argument, instruction);
           }
           ++idx;
         }
 
-        // FIXME: We don't need to allocate a stack copy *here* of the
-        // passed argument if it itself fits in a register.
+        // Lower all arguments not able to go in a register by allocating a copy of them on the stack.
         if (argcount >= argument_register_count) {
           usz i = instruction->call.arguments.size - 1;
           foreach_ptr_rev (IRInstruction *, argument, instruction->call.arguments) {
@@ -3354,11 +3355,9 @@ static void lower(CodegenContext *context) {
         // __m128 types, arrays, and strings are never passed by immediate value.
         // Structs and unions of size 8, 16, 32, or 64 bits, and __m64
         // types, are passed as if they were integers of the same size.
-        if (instruction->imm >= argument_register_count || type_sizeof(type) > 8) {
-          if (instruction->imm >= argument_register_count && !(type_sizeof(type) > 8))
-            TODO("Handle argument on stack that is not lowered to a pointer...");
+        if (instruction->imm >= argument_register_count) {
 
-          // FIXME: Not all arguments passed on stack are lowered to pointers! Only aggregates.
+          // Calculate offset to caller-allocated stack memory for large parameters.
 
           // Lower type to a pointer, because that's how the calls have
           // been altered as well.
@@ -3389,12 +3388,15 @@ static void lower(CodegenContext *context) {
           mark_used(rbp, address);
           address->rhs = offset;
           mark_used(offset, address);
-          address->type = ast_make_type_pointer(context->ast, instruction->type->source_location, instruction->type);
+          if (type_sizeof(type) > 8)
+            address->type = ast_make_type_pointer(context->ast, instruction->type->source_location, instruction->type);
+          else address->type = instruction->type;
           insert_instruction_before(address, instruction);
 
           instruction->kind = IR_LOAD;
           instruction->operand = address;
           mark_used(address, instruction);
+
         } else {
           instruction->kind = IR_REGISTER;
           instruction->result = argument_registers[instruction->imm];
