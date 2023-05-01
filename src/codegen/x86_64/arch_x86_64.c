@@ -1587,14 +1587,17 @@ static void mcode_reg(CodegenContext *context, enum Instruction inst, RegisterDe
       ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
 
     case r16: {
-      // FIXME: Probably missing an 0x66 prefix here.
       // 0x66 + 0x50+rw
-      uint8_t sixteen_bit_prefix = 0x66;
       uint8_t op = 0x50 + rw_encoding(reg);
-      mcode_2(context->object, sixteen_bit_prefix, op);
+      mcode_2(context->object, 0x66, op);
     } break;
     case r64: {
       // 0x50+rd
+      uint8_t source_regbits = regbits(reg);
+      if (REGBITS_TOP(source_regbits)) {
+        uint8_t rex = rex_byte(false, false,false, REGBITS_TOP(source_regbits));
+        mcode_1(context->object, rex);
+      }
       uint8_t op = 0x50 + rd_encoding(reg);
       mcode_1(context->object, op);
     } break;
@@ -1608,16 +1611,19 @@ static void mcode_reg(CodegenContext *context, enum Instruction inst, RegisterDe
       ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
 
     case r16: {
-      // FIXME: Probably missing an 0x66 prefix here
       // 0x66 + 0x58+rw
-      uint8_t sixteen_bit_prefix = 0x66;
       uint8_t op = 0x58 + rw_encoding(reg);
-      mcode_2(context->object, sixteen_bit_prefix, op);
+      mcode_2(context->object, 0x66, op);
     } break;
     case r64: {
       // 0x58+rd
-      uint8_t c = 0x58 + rd_encoding(reg);
-      mcode_1(context->object, c);
+      uint8_t source_regbits = regbits(reg);
+      if (REGBITS_TOP(source_regbits)) {
+        uint8_t rex = rex_byte(false, false,false, REGBITS_TOP(source_regbits));
+        mcode_1(context->object, rex);
+      }
+      uint8_t op = 0x58 + rd_encoding(reg);
+      mcode_1(context->object, op);
     } break;
     }
   } break;
