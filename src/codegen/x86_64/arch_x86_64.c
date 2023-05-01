@@ -3,8 +3,10 @@
 #include <ast.h>
 #include <codegen.h>
 #include <codegen/x86_64/arch_x86_64_common.h>
+#include <codegen/x86_64/arch_x86_64_isel.h>
 #include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
+#include <codegen/machine_ir.h>
 #include <codegen/register_allocation.h>
 #include <error.h>
 #include <inttypes.h>
@@ -22,22 +24,11 @@
 
 #define X86_64_GENERATE_MACHINE_CODE
 
-static Register *caller_saved_registers = NULL;
-static size_t caller_saved_register_count = 0;
+Register *caller_saved_registers = NULL;
+size_t caller_saved_register_count = 0;
 
-static Register *argument_registers = NULL;
-static size_t argument_register_count = 0;
-
-NODISCARD static bool is_caller_saved(Register r) {
-  for (size_t i = 0; i < caller_saved_register_count; ++i) {
-    if (caller_saved_registers[i] == r) {
-      return 1;
-    }
-  }
-  return 0;
-}
-
-NODISCARD static bool is_callee_saved(Register r) { return !is_caller_saved(r); }
+Register *argument_registers = NULL;
+size_t argument_register_count = 0;
 
 span unreferenced_block_name = literal_span_raw("");
 
@@ -1734,7 +1725,7 @@ static void femit_imm_to_mem(CodegenContext *context, enum Instruction inst, int
   }
 }
 
-static void femit_mem_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, int64_t offset, RegisterDescriptor destination_register, enum RegSize size) {
+static void femit_mem_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, int64_t offset, RegisterDescriptor destination_register, RegSize size) {
 #ifdef X86_64_GENERATE_MACHINE_CODE
   mcode_mem_to_reg(context, inst, address_register, offset, destination_register, size);
 #endif // X86_64_GENERATE_MACHINE_CODE
@@ -2053,7 +2044,7 @@ static void femit_setcc(CodegenContext *context, enum ComparisonType comparison_
 
 }
 
-static void femit_jcc(CodegenContext *context, IndirectJumpType type, char *label) {
+static void femit_jcc(CodegenContext *context, IndirectJumpType type, const char *label) {
 #ifdef X86_64_GENERATE_MACHINE_CODE
       uint8_t op = 0;
       switch (type) {
@@ -2151,546 +2142,6 @@ void codegen_context_x86_64_mswin_free(CodegenContext *ctx) {
 
 void codegen_context_x86_64_linux_free(CodegenContext *ctx) {
   (void)ctx;
-}
-
-/// Generate a comparison between two registers.
-static RegisterDescriptor codegen_comparison
-(CodegenContext *cg_context,
- IRType ir_type,
- RegisterDescriptor lhs,
- RegisterDescriptor rhs,
- RegisterDescriptor result,
- enum RegSize size)
-{
-  enum ComparisonType type = COMPARE_COUNT;
-  switch (ir_type) {
-    case IR_EQ: type = COMPARE_EQ; break;
-    case IR_NE: type = COMPARE_NE; break;
-    case IR_LT: type = COMPARE_LT; break;
-    case IR_GT: type = COMPARE_GT; break;
-    case IR_LE: type = COMPARE_LE; break;
-    case IR_GE: type = COMPARE_GE; break;
-    default: ICE("Unsupported IR instruction in codegen_comparison: %d", ir_type);
-  }
-
-  // Perform the comparison.
-  femit_reg_to_reg(cg_context, I_CMP, rhs, size, lhs, size);
-  // IF YOU REPLACE THIS WITH A XOR IT WILL BREAK HORRIBLY
-  // We use MOV because it doesn't set flags.
-  femit_imm_to_reg(cg_context, I_MOV, 0, result, r32);
-  femit_setcc(cg_context, type, result);
-
-  return result;
-}
-
-enum StackFrameKind {
-  FRAME_FULL,
-  FRAME_MINIMAL,
-  FRAME_NONE,
-};
-
-static enum StackFrameKind stack_frame_kind(CodegenContext *context, IRFunction *f) {
-  (void) context;
-
-  /// Always emit a frame if we’re not optimising.
-  if (!optimise) return FRAME_FULL;
-
-  /// Emit a frame if we have local variables.
-  if (f->locals_total_size) return FRAME_FULL;
-
-  /// We need *some* sort of prologue if we don’t use the stack but
-  /// still call other functions.
-  if (!f->attr_leaf) return FRAME_MINIMAL;
-
-  /// Otherwise, no frame is required.
-  return FRAME_NONE;
-}
-
-/// Emit the function prologue.
-static void codegen_prologue(CodegenContext *cg_context, IRFunction *f) {
-  enum StackFrameKind frame_kind = stack_frame_kind(cg_context, f);
-  switch (frame_kind) {
-    case FRAME_NONE: break;
-
-    case FRAME_FULL: {
-      femit_reg(cg_context, I_PUSH, REG_RBP, r64);
-      femit_reg_to_reg(cg_context, I_MOV, REG_RSP, r64, REG_RBP, r64);
-      if (!optimise || f->locals_total_size)
-        femit_imm_to_reg(cg_context, I_SUB, (i64) f->locals_total_size, REG_RSP, r64);
-    } break;
-
-    case FRAME_MINIMAL: {
-      femit_reg(cg_context, I_PUSH, REG_RBP, r64);
-    } break;
-  }
-}
-
-/// Emit the function epilogue.
-static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
-  enum StackFrameKind frame_kind = stack_frame_kind(cg_context, f);
-  switch (frame_kind) {
-    case FRAME_NONE: break;
-
-    case FRAME_FULL: {
-      femit_reg_to_reg(cg_context, I_MOV, REG_RBP, r64, REG_RSP, r64);
-      femit_reg(cg_context, I_POP, REG_RBP, r64);
-    } break;
-
-    case FRAME_MINIMAL: {
-      femit_reg(cg_context, I_POP, REG_RBP, r64);
-    } break;
-  }
-}
-
-static void divmod(CodegenContext *context, IRInstruction *inst) {
-  ASSERT(inst->kind == IR_DIV || inst->kind == IR_MOD, "divmod must be passed a div or mod instruction!");
-  // Dividend of div/mod goes in rdx:rax; divisor must not be in those registers.
-  ASSERT(inst->rhs->result != REG_RAX,
-         "Register allocation must not allocate RAX to divisor.");
-  ASSERT(inst->rhs->result != REG_RDX,
-         "Register allocation must not allocate RDX to divisor.");
-  enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
-  enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
-
-  ASSERT(lhs_size == rhs_size, "x86_64 backend requires divisor and dividend to be of same sized type!");
-
-  // Move dividend into RDX:RAX (for now, just RAX)
-  if (lhs_size == r8 || lhs_size == r16) femit_reg_to_reg(context, I_XOR, REG_RAX, r64, REG_RAX, r64);
-  femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, REG_RAX, lhs_size);
-
-  if (type_is_signed(inst->type)) {
-    // For 8-byte signed types, we need to extend RAX into the 16-byte
-    // RDX:RAX. For this, we use CQO (convert quad-word to octal-word).
-    if (lhs_size == r64)
-      femit_none(context, I_CQO);
-      // For 4-byte signed types, we need to extend EAX into the 8-byte
-      // EDX:EAX. For this, we use CDQ (convert double-word to quad-word).
-    else if (lhs_size == r32)
-      femit_none(context, I_CDQ);
-      // For 2-byte signed types, we need to extend AX into the 4-byte
-      // DX:AX. For this, we use CWD (convert word to double-word).
-    else if (lhs_size == r16)
-      femit_none(context, I_CWD);
-    else ICE("Unhandled register size for signed division");
-
-    femit_reg(context, I_IDIV, inst->rhs->result, lhs_size);
-  }
-  else {
-    // For unsigned types, we need to make sure RDX is zero; if it
-    // was set, it would cause a signed division, and we don't want
-    // that.
-    femit_reg_to_reg(context, I_XOR, REG_RDX, r64, REG_RDX, r64);
-    femit_reg(context, I_DIV, inst->rhs->result, lhs_size);
-  }
-}
-
-static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
-  STATIC_ASSERT(IR_COUNT == 38, "Handle all IR instructions");
-
-  if (annotate_code) {
-    // TODO: Base comment syntax on dialect or smth.
-    fprint(context->code, ";;#;");
-    thread_use_colours = false;
-    ir_femit_instruction(context->code, inst);
-    thread_use_colours = true;
-  }
-
-  switch (inst->kind) {
-  case IR_PHI:
-  case IR_REGISTER:
-  case IR_UNREACHABLE:
-  case IR_LIT_INTEGER:
-  case IR_LIT_STRING:
-    break;
-  case IR_IMMEDIATE:
-    if (inst->type == t_integer_literal) {
-      // TODO: integer_literal probably shouldn't be handled here.
-      // Do this in a pass before-hand or something.
-      if (inst->imm <= UINT32_MAX) {
-        femit_imm_to_reg(context, I_MOV, (i64) inst->imm, inst->result, r32);
-      } else if (inst->imm <= UINT64_MAX) {
-        femit_imm_to_reg(context, I_MOV, (i64) inst->imm, inst->result, r64);
-      } else {
-        ICE("Unsupported integer literal immediate on x86_64 (out of range)");
-      }
-    } else {
-      if (type_sizeof(inst->type) <= 4) {
-        femit_imm_to_reg(context, I_MOV, (i64) inst->imm, inst->result, r32);
-      } else if (type_sizeof(inst->type) <= 8) {
-        femit_imm_to_reg(context, I_MOV, (i64) inst->imm, inst->result, r64);
-      } else {
-        ICE("Unsupported immediate size on x86_64: %Z", type_sizeof(inst->type));
-      }
-    }
-    break;
-  case IR_NOT: {
-    femit_reg(context, I_NOT, inst->operand->result, r64);
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
-    femit_reg_to_reg(context, I_MOV, inst->operand->result, size, inst->result, size);
-  } break;
-  case IR_ZERO_EXTEND: {
-    usz operand_byte_size = type_sizeof(inst->operand->type);
-    usz result_byte_size = type_sizeof(inst->type);
-    ASSERT (result_byte_size > operand_byte_size, "Zero extension result must be larger than operand");
-
-    enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
-    enum RegSize result_size = regsize_from_bytes(result_byte_size);
-
-    femit_reg_to_reg(context, I_MOVZX, inst->operand->result, operand_size, inst->result, result_size);
-  } break;
-  case IR_SIGN_EXTEND: {
-    usz operand_byte_size = type_sizeof(inst->operand->type);
-    usz result_byte_size = type_sizeof(inst->type);
-    ASSERT (result_byte_size > operand_byte_size, "Sign extension result must be larger than operand");
-
-    enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
-    enum RegSize result_size = regsize_from_bytes(result_byte_size);
-
-    femit_reg_to_reg(context, I_MOVSX, inst->operand->result, operand_size, inst->result, result_size);
-  } break;
-  case IR_TRUNCATE: {
-    usz operand_byte_size = type_sizeof(inst->operand->type);
-    usz result_byte_size = type_sizeof(inst->type);
-    ASSERT (result_byte_size < operand_byte_size, "Truncation result must be smaller than operand");
-
-    enum RegSize result_size = regsize_from_bytes(result_byte_size);
-
-    femit_reg_to_reg(context, I_MOV, inst->operand->result, r64, inst->result, r64);
-    switch (result_size) {
-    case r32:
-      femit_imm_to_reg(context, I_AND, 0xffffffff, inst->result, r32);
-      break;
-    case r16:
-      femit_imm_to_reg(context, I_AND, 0xffff, inst->result, r32);
-      break;
-    case r8:
-      femit_imm_to_reg(context, I_AND, 0xff, inst->result, r32);
-      break;
-
-    case r64:
-    default:
-      UNREACHABLE();
-    }
-
-  } break;
-
-  case IR_BITCAST: break;
-
-  case IR_COPY: {
-    usz operand_byte_size = type_sizeof(inst->operand->type);
-    usz result_byte_size = type_sizeof(inst->type);
-
-    // TODO: Handle things larger than a register, somehow... may need
-    // to push/pop registers...
-    enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
-    enum RegSize result_size = regsize_from_bytes(result_byte_size);
-
-    femit_reg_to_reg(context, I_MOV, inst->operand->result, operand_size, inst->result, result_size);
-  } break;
-  case IR_CALL: {
-    // Save caller saved registers used in caller function.
-    ASSERT(inst->parent_block, "call instruction null block");
-    ASSERT(inst->parent_block->function, "block has null function");
-
-    // Tail call.
-    if (inst->call.tail_call) {
-      // Restore the frame pointer if we have one.
-      codegen_epilogue(context, inst->parent_block->function);
-      if (inst->call.is_indirect) femit_reg(context, I_JMP, inst->call.callee_instruction->result, r64);
-      else femit_name(context, I_JMP, inst->call.callee_function->name.data);
-      if (inst->parent_block) inst->parent_block->done = true;
-      break;
-    }
-
-    size_t func_regs = inst->parent_block->function->registers_in_use;
-    size_t regs_pushed_count = 0;
-
-    // Save return register.
-    // FIXME: Use calling convention for return register.
-    if (func_regs & REG_RAX) {
-      femit_reg(context, I_PUSH, REG_RAX, r64);
-      // NOTE: regs_pushed_count for this push is updated below, as the
-      // mask isn't unset.
-    }
-
-    // Count registers used in function.
-    size_t x = func_regs;
-    while (x) {
-      regs_pushed_count++;
-      x &= x - 1;
-    }
-
-    // Align stack pointer before call, if necessary.
-    if (regs_pushed_count & 0b1)
-      femit_imm_to_reg(context, I_SUB, 8, REG_RSP, r64);
-
-    for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i)
-      if (func_regs & (1 << i) && is_caller_saved(i))
-        // TODO: Don't push registers that are used for arguments.
-        femit_reg(context, I_PUSH, i, r64);
-
-    usz bytes_pushed = 0;
-    // Shadow stack
-    if (context->call_convention == CG_CALL_CONV_MSWIN) {
-      femit_imm_to_reg(context, I_SUB, 32, REG_RSP, r64);
-      bytes_pushed += 32;
-    }
-
-    // Push argument addresses, if need be.
-    foreach_ptr (IRInstruction *, arg, inst->call.arguments) {
-      // If argument is passed on stack due to ABI.
-      if (arg->kind == IR_ALLOCA) {
-        femit_reg(context, I_PUSH, REG_RBP, r64);
-        bytes_pushed += 8;
-        femit_imm_to_mem(context, I_SUB, (i64)arg->alloca.offset, REG_RSP, 0);
-      }
-    }
-
-    if (inst->call.is_indirect) femit_reg(context, I_CALL, inst->call.callee_instruction->result, r64);
-    else femit_name(context, I_CALL, inst->call.callee_function->name.data);
-
-    // Restore stack
-    if (bytes_pushed)
-      femit_imm_to_reg(context, I_ADD, bytes_pushed, REG_RSP, r64);
-
-    // Restore caller saved registers used in called function.
-    for (Register i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i)
-      if (func_regs & (1 << i) && is_caller_saved(i))
-        femit_reg(context, I_POP, i, r64);
-
-    // Restore stack pointer from stack alignment, if necessary.
-    if (regs_pushed_count & 0b1)
-      femit_imm_to_reg(context, I_ADD, 8, REG_RSP, r64);
-
-    femit_reg_to_reg(context, I_MOV, REG_RAX, r64, inst->result, r64);
-
-    // Restore return register.
-    // FIXME: Use calling convention for return register.
-    if (func_regs & REG_RAX)
-      femit_reg(context, I_POP, REG_RAX, r64);
-
-  } break;
-
-  case IR_RETURN:
-    // Restore callee-saved registers used in the function.
-    for (Register i = sizeof(inst->parent_block->function->registers_in_use) * 8 - 1; i > 0; --i) {
-      if (inst->parent_block->function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i)) {
-        femit_reg(context, I_POP, i, r64);
-      }
-    }
-    codegen_epilogue(context, inst->parent_block->function);
-    femit_none(context, I_RET);
-    if (optimise && inst->parent_block) inst->parent_block->done = true;
-    break;
-
-  case IR_BRANCH:
-    /// Only emit a jump if the target isn’t the next block.
-    if (!optimise || (inst->parent_block && inst->destination_block != inst->parent_block->next && !inst->parent_block->done)) {
-      femit_name(context, I_JMP, inst->destination_block->name.data);
-    }
-    if (optimise && inst->parent_block) inst->parent_block->done = true;
-    break;
-  case IR_BRANCH_CONDITIONAL: {
-    IRBranchConditional *branch = &inst->cond_br;
-
-    femit_reg_to_reg(context, I_TEST, branch->condition->result, r64, branch->condition->result, r64);
-
-    /// If either target is the next block, arrange the jumps in such a way
-    /// that we can save one and simply fallthrough to the next block.
-    if (optimise && branch->then == inst->parent_block->next) {
-      femit_jcc(context, JUMP_TYPE_Z, branch->else_->name.data);
-    } else if (optimise && branch->else_ == inst->parent_block->next) {
-      femit_jcc(context, JUMP_TYPE_NZ, branch->then->name.data);
-    } else {
-      femit_jcc(context, JUMP_TYPE_Z, branch->else_->name.data);
-      femit_name(context, I_JMP, branch->then->name.data);
-    }
-
-    if (optimise && inst->parent_block) inst->parent_block->done = true;
-  } break;
-  case IR_EQ: // FALLTHROUGH to case IR_GE
-  case IR_NE: // FALLTHROUGH to case IR_GE
-  case IR_LT: // FALLTHROUGH to case IR_GE
-  case IR_GT: // FALLTHROUGH to case IR_GE
-  case IR_LE: // FALLTHROUGH to case IR_GE
-  case IR_GE: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    codegen_comparison(context, inst->kind, inst->lhs->result, inst->rhs->result, inst->result, size);
-  } break;
-  case IR_ADD: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_ADD, inst->lhs->result, size, inst->rhs->result, size);
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, size, inst->result, size);
-  } break;
-  case IR_SUB: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_SUB, inst->rhs->result, size, inst->lhs->result, size);
-    femit_reg_to_reg(context, I_MOV, inst->lhs->result, size, inst->result, size);
-  } break;
-  case IR_MUL: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_IMUL, inst->lhs->result, size, inst->rhs->result, size);
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, size, inst->result, size);
-  } break;
-  case IR_DIV: {
-    divmod(context, inst);
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_MOV, REG_RAX, size, inst->result, size);
-  } break;
-  case IR_MOD: {
-    divmod(context, inst);
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_MOV, REG_RDX, size, inst->result, size);
-  } break;
-  case IR_SHL: {
-    ASSERT(inst->lhs->result != REG_RCX,
-           "Register allocation must not allocate RCX to result of lhs of shift.");
-    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RCX, r64);
-    femit_reg(context, I_SHL, inst->lhs->result, r64);
-    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, inst->result, size);
-  } break;
-  case IR_SHR: {
-    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RCX, r64);
-    femit_reg(context, I_SHR, inst->lhs->result, r64);
-    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, inst->result, size);
-  } break;
-  case IR_SAR: {
-    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, REG_RCX, r64);
-    femit_reg(context, I_SAR, inst->lhs->result, r64);
-    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    femit_reg_to_reg(context, I_MOV, inst->lhs->result, lhs_size, inst->result, size);
-  } break;
-  case IR_AND: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
-    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
-    femit_reg_to_reg(context, I_AND, inst->lhs->result, lhs_size, inst->rhs->result, size);
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, inst->result, size);
-  } break;
-  case IR_OR: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    enum RegSize lhs_size = regsize_from_bytes(type_sizeof(inst->lhs->type));
-    enum RegSize rhs_size = regsize_from_bytes(type_sizeof(inst->rhs->type));
-    femit_reg_to_reg(context, I_OR, inst->lhs->result, lhs_size, inst->rhs->result, size);
-    femit_reg_to_reg(context, I_MOV, inst->rhs->result, rhs_size, inst->result, size);
-  } break;
-
-  case IR_LOAD: {
-    enum RegSize size = -1u;
-    /// Load from a static variable.
-    if (inst->operand->kind == IR_STATIC_REF) {
-      size = regsize_from_bytes(type_sizeof(inst->operand->type->pointer.to));
-      if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, r32, inst->result, r32);
-      femit_name_to_reg(context, I_MOV, REG_RIP, inst->operand->static_ref->name.data, inst->result, size);
-    }
-
-    /// Load from a local.
-    else if (inst->operand->kind == IR_ALLOCA) {
-      size = regsize_from_bytes(inst->operand->alloca.size);
-      if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, r32, inst->result, r32);
-      femit_mem_to_reg(context, I_MOV, REG_RBP, - (i64)inst->operand->alloca.offset, inst->result, size);
-    }
-
-    /// Load from a pointer
-    else {
-      size = regsize_from_bytes(type_sizeof(inst->operand->type));
-      if (size == r8 || size == r16) femit_reg_to_reg(context, I_XOR, inst->result, r32, inst->result, r32);
-      femit_mem_to_reg(context, I_MOV, inst->operand->result, 0, inst->result, size);
-    }
-  } break;
-
-  case IR_STORE: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->store.value->type));
-    /// Store to a static variable.
-    if (inst->store.addr->kind == IR_STATIC_REF) {
-      femit_reg_to_name(context, I_MOV, inst->store.value->result, size, REG_RIP, inst->store.addr->static_ref->name.data);
-    }
-
-    /// Store to a local.
-    else if (inst->store.addr->kind == IR_ALLOCA) {
-      femit_reg_to_mem(context, I_MOV, inst->store.value->result, size, REG_RBP, - (i64)inst->store.addr->alloca.offset);
-    }
-
-    /// Store to a pointer.
-    else {
-      femit_reg_to_mem(context, I_MOV, inst->store.value->result, size, inst->store.addr->result, 0);
-    }
-  } break;
-
-  case IR_STATIC_REF: {
-    if (inst->result) femit_name_to_reg(context, I_LEA, REG_RIP, inst->static_ref->name.data, inst->result, r64);
-  } break;
-  case IR_FUNC_REF: {
-    if (inst->result) femit_name_to_reg(context, I_LEA, REG_RIP, inst->function_ref->name.data, inst->result, r64);
-  } break;
-  case IR_ALLOCA: {
-    femit_mem_to_reg(context, I_LEA, REG_RBP, - (i64)inst->alloca.offset, inst->result, r64);
-  } break;
-
-  default:
-    ir_femit_instruction(stderr, inst);
-    TODO("Handle IRtype %d\n", inst->kind);
-    break;
-  }
-}
-
-void emit_block(CodegenContext *context, IRBlock *block) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  GObjSymbol sym = {0};
-  sym.type = GOBJ_SYMTYPE_STATIC;
-  sym.name = strdup(block->name.data);
-  sym.section_name = strdup(code_section(context->object)->name);
-  sym.byte_offset = code_section(context->object)->data.bytes.size;
-  vector_push(context->object->symbols, sym);
-#endif // x86_64_GENERATE_MACHINE_CODE
-
-  /// Emit block label if it is used.
-  if (block->name.size) {
-    fprint(context->code,
-           "%s:\n",
-           block->name.data);
-  }
-
-  list_foreach (IRInstruction*, instruction, block->instructions) {
-    emit_instruction(context, instruction);
-  }
-}
-
-void emit_function(CodegenContext *context, IRFunction *function) {
-  // Generate function entry.
-  fprint(context->code,
-         "\n%s:\n",
-         function->name.data);
-  codegen_prologue(context, function);
-  // Save all callee-saved registers in use in the function.
-  for (Register i = 1; i < sizeof(function->registers_in_use) * 8; ++i) {
-    if ((size_t)function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i)) {
-      femit_reg(context, I_PUSH, i, r64);
-    }
-  }
-  list_foreach (IRBlock*, block, function->blocks) { emit_block(context, block); }
-  // NOTE: Epilogue is generated by `return` instruction.
-}
-
-void emit_entry(CodegenContext *context) {
-  fprint(context->code,
-         "%s"
-         ".section .text\n",
-         context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
-
-  fprint(context->code, "\n");
-  foreach_ptr (IRFunction*, function, context->functions) {
-    if (!function->attr_global) continue;
-    fprint(context->code, ".global %S\n", function->name);
-  }
 }
 
 typedef enum Clobbers {
@@ -3653,18 +3104,77 @@ void codegen_emit_x86_64(CodegenContext *context) {
     if (!function->attr_nomangle) mangle_function_name(function);
   }
 
-  emit_entry(context);
-  foreach_ptr (IRFunction*, function, context->functions) {
+  MIRVector machine_instructions = select_instructions(context);
+
+  { // Emit entry
+    fprint(context->code,
+           "%s"
+         ".section .text\n",
+           context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
+
+    fprint(context->code, "\n");
+    foreach_ptr (IRFunction*, function, context->functions) {
+      if (!function->attr_global) continue;
+      fprint(context->code, ".global %S\n", function->name);
+    }
+  }
+
+  STATIC_ASSERT(I_FORM_COUNT == 19, "Exhaustive handling of instruction forms for x86_64");
+  foreach (MIRInstruction, mir, machine_instructions) {
+    switch (mir->x64.instruction_form) {
+    case I_FORM_NONE: femit_none(context, mir->x64.instruction); break;
+    case I_FORM_IMM: femit_imm(context, mir->x64.instruction, mir->x64.immediate); break;
+    case I_FORM_IMM_TO_MEM: femit_imm_to_mem(context, mir->x64.instruction, mir->x64.immediate, mir->x64.reg_addr, mir->x64.offset); break;
+    case I_FORM_IMM_TO_REG: femit_imm_to_reg(context, mir->x64.instruction, mir->x64.immediate, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
+    case I_FORM_INDIRECT_BRANCH: femit_indirect_branch(context, mir->x64.instruction, mir->x64.reg_addr); break;
+    case I_FORM_MEM: femit_mem(context, mir->x64.instruction, mir->x64.offset, mir->x64.reg_addr); break;
+    case I_FORM_MEM_TO_REG: femit_mem_to_reg(context, mir->x64.instruction, mir->x64.reg_addr, mir->x64.offset, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
+    case I_FORM_NAME: femit_name(context, mir->x64.instruction, mir->x64.name); break;
+    case I_FORM_NAME_TO_REG: femit_name_to_reg(context, mir->x64.instruction, mir->x64.reg_addr, mir->x64.name, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
+    case I_FORM_REG: femit_reg(context, mir->x64.instruction, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
+    case I_FORM_REG_SHIFT: femit_reg_shift(context, mir->x64.instruction, mir->x64.reg_dst); break;
+    case I_FORM_REG_TO_MEM: femit_reg_to_mem(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.offset); break;
+    case I_FORM_REG_TO_NAME: femit_reg_to_name(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.name); break;
+    case I_FORM_REG_TO_OFFSET_NAME: femit_reg_to_offset_name(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.name, (usz)mir->x64.offset); break;
+    case I_FORM_REG_TO_REG: femit_reg_to_reg(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
+    case I_FORM_SETCC: femit_setcc(context, (enum ComparisonType)mir->x64.immediate, mir->x64.reg_dst); break;
+    case I_FORM_JCC: femit_jcc(context, (IndirectJumpType)mir->x64.immediate, mir->x64.name); break;
+    case I_FORM_IRBLOCK: {
 #ifdef X86_64_GENERATE_MACHINE_CODE
-    GObjSymbol sym = {0};
-    sym.type = function->is_extern ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
-    sym.name = strdup(function->name.data);
-    sym.section_name = strdup(code_section(&object)->name);
-    sym.byte_offset = code_section(&object)->data.bytes.size;
-    vector_push(object.symbols, sym);
+      GObjSymbol sym = {0};
+      sym.type = GOBJ_SYMTYPE_STATIC;
+      sym.name = strdup(mir->x64.ir_block->name.data);
+      sym.section_name = strdup(code_section(context->object)->name);
+      sym.byte_offset = code_section(context->object)->data.bytes.size;
+      vector_push(context->object->symbols, sym);
 #endif // x86_64_GENERATE_MACHINE_CODE
 
-    if (!function->is_extern) emit_function(context, function);
+      /// Emit block label if it is used.
+      if (mir->x64.ir_block->name.size) {
+        fprint(context->code,
+               "%s:\n",
+               mir->x64.ir_block->name.data);
+      }
+
+    } break;
+    case I_FORM_IRFUNCTION: {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+      GObjSymbol sym = {0};
+      sym.type = mir->x64.ir_function->is_extern ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
+      sym.name = strdup(mir->x64.ir_function->name.data);
+      sym.section_name = strdup(code_section(&object)->name);
+      sym.byte_offset = code_section(&object)->data.bytes.size;
+      vector_push(object.symbols, sym);
+#endif // x86_64_GENERATE_MACHINE_CODE
+
+      if (!mir->x64.ir_function->is_extern) {
+        // Generate function entry.
+        fprint(context->code,
+               "\n%s:\n",
+               mir->x64.ir_function->name.data);
+      }
+    } break;
+    }
   }
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
