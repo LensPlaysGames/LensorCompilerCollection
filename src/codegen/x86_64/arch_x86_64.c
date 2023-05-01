@@ -2014,77 +2014,52 @@ static void femit_name(CodegenContext *context, enum Instruction inst, const cha
   }
 }
 
-static void femit
-(CodegenContext *context,
- enum Instruction instruction,
- ...)
-{
+static void femit_setcc(CodegenContext *context, enum ComparisonType comparison_type, RegisterDescriptor value_register) {
 #ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_none(context, instruction);
-#endif // X86_64_GENERATE_MACHINE_CODE
+  uint8_t op = 0;
+  switch (comparison_type) {
+  case COMPARE_EQ: op = 0x94; break;
+  case COMPARE_NE: op = 0x95; break;
+  case COMPARE_GT: op = 0x9f; break;
+  case COMPARE_LT: op = 0x9c; break;
+  case COMPARE_GE: op = 0x9d; break;
+  case COMPARE_LE: op = 0x9e; break;
+  default: ICE("Invalid comparison type");
+  }
 
-  va_list args;
-  va_start(args, instruction);
+  uint8_t destination_regbits = regbits(value_register);
+  if (REGBITS_TOP(destination_regbits)) {
+    uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+    mcode_1(context->object, rex);
+  }
 
-  ASSERT(context);
-  STATIC_ASSERT(I_COUNT == 29, "femit() must exhaustively handle all x86_64 instructions.");
+  // Mod == 0b11  ->  register
+  // R/M == Destination
+  uint8_t modrm = modrm_byte(0b11, 0, destination_regbits);
 
-  // TODO: Extract setcc and jcc to their own functions, get rid of varargs
-  switch (instruction) {
-    case I_SETCC: {
-      enum ComparisonType comparison_type = va_arg(args, enum ComparisonType);
-      RegisterDescriptor value_register = va_arg(args, RegisterDescriptor);
-
-      const char *mnemonic = instruction_mnemonic(context, instruction);
-      const char *value = register_name_8(value_register);
-
-#ifdef X86_64_GENERATE_MACHINE_CODE
-      uint8_t op = 0;
-      switch (comparison_type) {
-      case COMPARE_EQ: op = 0x94; break;
-      case COMPARE_NE: op = 0x95; break;
-      case COMPARE_GT: op = 0x9f; break;
-      case COMPARE_LT: op = 0x9c; break;
-      case COMPARE_GE: op = 0x9d; break;
-      case COMPARE_LE: op = 0x9e; break;
-      default: ICE("Invalid comparison type");
-      }
-
-      uint8_t destination_regbits = regbits(value_register);
-      if (REGBITS_TOP(destination_regbits)) {
-        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
-        mcode_1(context->object, rex);
-      }
-
-      // Mod == 0b11  ->  register
-      // R/M == Destination
-      uint8_t modrm = modrm_byte(0b11, 0, destination_regbits);
-
-      uint8_t op_escape = 0x0f;
-      mcode_3(context->object, op_escape, op, modrm);
+  uint8_t op_escape = 0x0f;
+  mcode_3(context->object, op_escape, op, modrm);
 #endif // x86_64_GENERATE_MACHINE_CODE
 
-      switch (context->dialect) {
-        case CG_ASM_DIALECT_ATT:
-          fprint(context->code, "    %s%s %%%s\n",
-              mnemonic,
-              setcc_suffixes_x86_64[comparison_type], value);
-          break;
-        case CG_ASM_DIALECT_INTEL:
-          fprint(context->code, "    %s%s %s\n",
-              mnemonic,
-              setcc_suffixes_x86_64[comparison_type], value);
-          break;
-        default: ICE("ERROR: femit(): Unsupported dialect %d", context->dialect);
-      }
-    } break;
+  const char *mnemonic = instruction_mnemonic(context, I_SETCC);
+  const char *value = register_name_8(value_register);
+  switch (context->dialect) {
+  case CG_ASM_DIALECT_ATT:
+    fprint(context->code, "    %s%s %%%s\n",
+           mnemonic,
+           setcc_suffixes_x86_64[comparison_type], value);
+    break;
+  case CG_ASM_DIALECT_INTEL:
+    fprint(context->code, "    %s%s %s\n",
+           mnemonic,
+           setcc_suffixes_x86_64[comparison_type], value);
+    break;
+  default: ICE("ERROR: femit(): Unsupported dialect %d", context->dialect);
+  }
 
-    case I_JCC: {
-      enum IndirectJumpType type = va_arg(args, enum IndirectJumpType);
-      ASSERT(type < JUMP_TYPE_COUNT, "femit_direct_branch(): Invalid jump type %d", type);
-      char *label = va_arg(args, char *);
-      ASSERT(label, "JCC label must not be NULL.");
+}
 
+static void femit_jcc(CodegenContext *context, IndirectJumpType type, char *label) {
 #ifdef X86_64_GENERATE_MACHINE_CODE
       uint8_t op = 0;
       switch (type) {
@@ -2124,8 +2099,14 @@ static void femit
           break;
         default: ICE("ERROR: femit_direct_branch(): Unsupported dialect %d", context->dialect);
       }
-    } break;
+}
 
+static void femit(CodegenContext *context, enum Instruction instruction) {
+#ifdef X86_64_GENERATE_MACHINE_CODE
+  mcode_none(context, instruction);
+#endif // X86_64_GENERATE_MACHINE_CODE
+
+  switch (instruction) {
     case I_RET:
     case I_CWD:
     case I_CDQ:
@@ -2139,8 +2120,6 @@ static void femit
           "  Consider using femit_x() or femit_x_to_x()",
           instruction, instruction_mnemonic(context, instruction));
   }
-
-  va_end(args);
 }
 
 /// Creates a context for the CG_FMT_x86_64_MSWIN architecture.
@@ -2258,7 +2237,7 @@ static RegisterDescriptor codegen_comparison
   // IF YOU REPLACE THIS WITH A XOR IT WILL BREAK HORRIBLY
   // We use MOV because it doesn't set flags.
   femit_imm_to_reg(cg_context, I_MOV, 0, result, r32);
-  femit(cg_context, I_SETCC, type, result);
+  femit_setcc(cg_context, type, result);
 
   return result;
 }
@@ -2578,11 +2557,11 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     /// If either target is the next block, arrange the jumps in such a way
     /// that we can save one and simply fallthrough to the next block.
     if (optimise && branch->then == inst->parent_block->next) {
-      femit(context, I_JCC, JUMP_TYPE_Z, branch->else_->name.data);
+      femit_jcc(context, JUMP_TYPE_Z, branch->else_->name.data);
     } else if (optimise && branch->else_ == inst->parent_block->next) {
-      femit(context, I_JCC, JUMP_TYPE_NZ, branch->then->name.data);
+      femit_jcc(context, JUMP_TYPE_NZ, branch->then->name.data);
     } else {
-      femit(context, I_JCC, JUMP_TYPE_Z, branch->else_->name.data);
+      femit_jcc(context, JUMP_TYPE_Z, branch->else_->name.data);
       femit_name(context, I_JMP, branch->then->name.data);
     }
 
