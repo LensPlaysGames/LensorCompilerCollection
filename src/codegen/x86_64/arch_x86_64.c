@@ -3811,6 +3811,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
     sec_code.name = ".text";
     sec_code.attributes |= SEC_ATTR_EXECUTABLE;
     vector_push(object.sections, sec_code);
+    Section sec_rodata = {0};
+    sec_rodata.name = ".rodata";
+    vector_push(object.sections, sec_rodata);
     Section sec_data = {0};
     sec_data.name = ".data";
     sec_data.attributes |= SEC_ATTR_WRITABLE;
@@ -3822,6 +3825,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   }
   Section *sec_initdata = get_section_by_name(object.sections, ".data");
   Section *sec_uninitdata = get_section_by_name(object.sections, ".bss");
+  Section *sec_rodata = get_section_by_name(object.sections, ".rodata");
 #endif // x86_64_GENERATE_MACHINE_CODE
 
   /// Emit static variables.
@@ -3886,6 +3890,20 @@ void codegen_emit_x86_64(CodegenContext *context) {
             fprint(context->code, ",%u", (unsigned) var->init->str.data[i]);
           fprint(context->code, ",0\n");
         }
+
+#ifdef X86_64_GENERATE_MACHINE_CODE
+        // Create symbol for var->name at current offset within the .rodata section
+        GObjSymbol sym = {0};
+        sym.type = GOBJ_SYMTYPE_STATIC;
+        sym.name = strdup(var->name.data);
+        sym.section_name = strdup(".rodata");
+        sym.byte_offset = sec_initdata->data.bytes.size;
+        vector_push(object.symbols, sym);
+        // Write string bytes to .rodata section
+        sec_write_n(sec_rodata, var->init->str.data, var->init->str.size);
+        sec_write_1(sec_rodata, 0);
+#endif // x86_64_GENERATE_MACHINE_CODE
+
       }
       else {
         ir_femit_instruction(stdout, var->init);
