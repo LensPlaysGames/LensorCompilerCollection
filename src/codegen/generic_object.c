@@ -168,7 +168,9 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
       shdr.sh_flags |= SHF_ALLOC | SHF_EXECINSTR;
     else if (strcmp(s->name, ".bss") == 0 || strcmp(s->name, ".data") == 0)
       shdr.sh_flags = SHF_ALLOC | SHF_WRITE;
-    else ICE("[GObj]:ELF: Unrecognized section in GenericObjectFile: \"%s\"", s->name);
+    else if (strcmp(s->name, ".rodata") == 0)
+      shdr.sh_flags = SHF_ALLOC; // FIXME: Is SHF_STRINGS appropriate?
+    else ICE("[GObj]:ELF: Unrecognised section in GenericObjectFile: \"%s\"", s->name);
 
     uint32_t section_name = (uint32_t)elf_add_string(&string_table, s->name);
     shdr.sh_name = section_name;
@@ -431,6 +433,8 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     shdr.s_flags = 0;
     if (strcmp(s->name, ".text") == 0)
       shdr.s_flags |= STYP_TEXT | COFF_SCN_MEM_READ | COFF_SCN_MEM_EXECUTE | COFF_SCN_CNT_CODE;
+    else if (strcmp(s->name, ".rodata") == 0)
+      shdr.s_flags |= STYP_DATA | COFF_SCN_MEM_READ | COFF_SCN_CNT_INIT_DATA;
     else if (strcmp(s->name, ".data") == 0)
       shdr.s_flags |= STYP_DATA | COFF_SCN_MEM_READ | COFF_SCN_MEM_WRITE | COFF_SCN_CNT_INIT_DATA;
     else if (strcmp(s->name, ".bss") == 0)
