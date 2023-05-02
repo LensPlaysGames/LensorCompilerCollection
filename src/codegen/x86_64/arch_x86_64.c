@@ -1681,13 +1681,64 @@ static void mcode_none(CodegenContext *context, enum Instruction inst) {
   }
 }
 
+static void mcode_setcc(CodegenContext *context, enum ComparisonType comparison_type, RegisterDescriptor value_register) {
+  uint8_t op = 0;
+  switch (comparison_type) {
+  case COMPARE_EQ: op = 0x94; break;
+  case COMPARE_NE: op = 0x95; break;
+  case COMPARE_GT: op = 0x9f; break;
+  case COMPARE_LT: op = 0x9c; break;
+  case COMPARE_GE: op = 0x9d; break;
+  case COMPARE_LE: op = 0x9e; break;
+  default: ICE("Invalid comparison type");
+  }
+
+  uint8_t destination_regbits = regbits(value_register);
+  if (REGBITS_TOP(destination_regbits)) {
+    uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+    mcode_1(context->object, rex);
+  }
+
+  // Mod == 0b11  ->  register
+  // R/M == Destination
+  uint8_t modrm = modrm_byte(0b11, 0, destination_regbits);
+
+  uint8_t op_escape = 0x0f;
+  mcode_3(context->object, op_escape, op, modrm);
+}
+
+static void mcode_jcc(CodegenContext *context, IndirectJumpType type, const char *label) {
+  uint8_t op = 0;
+  switch (type) {
+  case JUMP_TYPE_E:  op = 0x84; break;
+  case JUMP_TYPE_NE: op = 0x85; break;
+  case JUMP_TYPE_G:  op = 0x8f; break;
+  case JUMP_TYPE_L:  op = 0x8c; break;
+  case JUMP_TYPE_GE: op = 0x8d; break;
+  case JUMP_TYPE_LE: op = 0x8e; break;
+  default: ICE("Unhandled jump type: %d", (int)type);
+  }
+
+  uint8_t op_escape = 0x0f;
+  int32_t disp32 = 0;
+
+  mcode_2(context->object, op_escape, op);
+
+  // Make disp32 relocation to lea from symbol
+  RelocationEntry reloc = {0};
+  Section *sec_code = code_section(context->object);
+  reloc.sym.byte_offset = sec_code->data.bytes.size;
+  reloc.sym.name = strdup(label);
+  reloc.sym.section_name = strdup(sec_code->name);
+  reloc.type = RELOC_DISP32_PCREL;
+  vector_push(context->object->relocs, reloc);
+
+  mcode_n(context->object, &disp32, 4);
+}
+
 #endif // X86_64_GENERATE_MACHINE_CODE
 
 static void femit_imm_to_reg(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor destination_register, enum RegSize size) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_imm_to_reg(context, inst, immediate, destination_register, size);
-#endif // X86_64_GENERATE_MACHINE_CODE
-
   if ((inst == I_SUB || inst == I_ADD) && immediate == 0) return;
 
   const char *mnemonic    = instruction_mnemonic(context, inst);
@@ -1706,10 +1757,6 @@ static void femit_imm_to_reg(CodegenContext *context, enum Instruction inst, int
 }
 
 static void femit_imm_to_mem(CodegenContext *context, enum Instruction inst, int64_t immediate, RegisterDescriptor address_register, int64_t offset) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_imm_to_mem(context, inst, immediate, address_register, offset);
-#endif // X86_64_GENERATE_MACHINE_CODE
-
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
   switch (context->dialect) {
@@ -1726,10 +1773,6 @@ static void femit_imm_to_mem(CodegenContext *context, enum Instruction inst, int
 }
 
 static void femit_mem_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, int64_t offset, RegisterDescriptor destination_register, RegSize size) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_mem_to_reg(context, inst, address_register, offset, destination_register, size);
-#endif // X86_64_GENERATE_MACHINE_CODE
-
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
   const char *destination = regname(destination_register, size);
@@ -1747,10 +1790,6 @@ static void femit_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
 }
 
 static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor address_register, const char *name, RegisterDescriptor destination_register, enum RegSize size) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_name_to_reg(context, inst, address_register, name, destination_register, size);
-#endif // X86_64_GENERATE_MACHINE_CODE
-
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
   const char *destination = regname(destination_register, size);
@@ -1768,10 +1807,6 @@ static void femit_name_to_reg(CodegenContext *context, enum Instruction inst, Re
 }
 
 static void femit_reg_to_mem(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, int64_t offset) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_reg_to_mem(context, inst, source_register, size, address_register, offset);
-#endif // X86_64_GENERATE_MACHINE_CODE
-
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
@@ -1805,10 +1840,6 @@ static void femit_reg_to_reg
  RegisterDescriptor destination_register, enum RegSize destination_size
  )
 {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_reg_to_reg(context, inst, source_register, source_size, destination_register, destination_size);
-#endif // X86_64_GENERATE_MACHINE_CODE
-
   // Always optimise away moves from a register to itself
   if (inst == I_MOV
       && source_register == destination_register
@@ -1836,10 +1867,6 @@ static void femit_reg_to_reg
 }
 
 static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_reg_to_name(context, inst, source_register, size, address_register, name);
-#endif // X86_64_GENERATE_MACHINE_CODE
-
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
@@ -1857,10 +1884,6 @@ static void femit_reg_to_name(CodegenContext *context, enum Instruction inst, Re
 }
 
 static void femit_reg_to_offset_name(CodegenContext *context, enum Instruction inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name, usz offset) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_reg_to_offset_name(context, inst, source_register, size, address_register, name, offset);
-#endif // X86_64_GENERATE_MACHINE_CODE
-
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
@@ -1878,10 +1901,6 @@ static void femit_reg_to_offset_name(CodegenContext *context, enum Instruction i
 }
 
 static void femit_mem(CodegenContext *context, enum Instruction inst, int64_t offset, RegisterDescriptor address_register) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_mem(context, inst, offset, address_register);
-#endif // X86_64_GENERATE_MACHINE_CODE
-
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
   switch (context->dialect) {
@@ -1931,10 +1950,6 @@ static void femit_indirect_branch(CodegenContext *context, enum Instruction inst
 }
 
 static void femit_reg(CodegenContext *context, enum Instruction inst, RegisterDescriptor reg, enum RegSize size) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_reg(context, inst, reg, size);
-#endif // x86_64_GENERATE_MACHINE_CODE
-
   if (inst == I_JMP || inst == I_CALL) {
     femit_indirect_branch(context, inst, reg);
     return;
@@ -1960,10 +1975,6 @@ static void femit_reg(CodegenContext *context, enum Instruction inst, RegisterDe
 }
 
 static void femit_imm(CodegenContext *context, enum Instruction inst, int64_t immediate) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_imm(context, inst, immediate);
-#endif // x86_64_GENERATE_MACHINE_CODE
-
   const char *mnemonic = instruction_mnemonic(context, inst);
   switch (context->dialect) {
     case CG_ASM_DIALECT_ATT:
@@ -1981,10 +1992,6 @@ static void femit_imm(CodegenContext *context, enum Instruction inst, int64_t im
 static void femit_name(CodegenContext *context, enum Instruction inst, const char *name) {
   ASSERT(name, "NAME must not be NULL.");
 
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_name(context, inst, name);
-#endif // x86_64_GENERATE_MACHINE_CODE
-
   const char *mnemonic = instruction_mnemonic(context, inst);
   switch (context->dialect) {
   case CG_ASM_DIALECT_ATT:
@@ -2000,32 +2007,6 @@ static void femit_name(CodegenContext *context, enum Instruction inst, const cha
 }
 
 static void femit_setcc(CodegenContext *context, enum ComparisonType comparison_type, RegisterDescriptor value_register) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  uint8_t op = 0;
-  switch (comparison_type) {
-  case COMPARE_EQ: op = 0x94; break;
-  case COMPARE_NE: op = 0x95; break;
-  case COMPARE_GT: op = 0x9f; break;
-  case COMPARE_LT: op = 0x9c; break;
-  case COMPARE_GE: op = 0x9d; break;
-  case COMPARE_LE: op = 0x9e; break;
-  default: ICE("Invalid comparison type");
-  }
-
-  uint8_t destination_regbits = regbits(value_register);
-  if (REGBITS_TOP(destination_regbits)) {
-    uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
-    mcode_1(context->object, rex);
-  }
-
-  // Mod == 0b11  ->  register
-  // R/M == Destination
-  uint8_t modrm = modrm_byte(0b11, 0, destination_regbits);
-
-  uint8_t op_escape = 0x0f;
-  mcode_3(context->object, op_escape, op, modrm);
-#endif // x86_64_GENERATE_MACHINE_CODE
-
   const char *mnemonic = instruction_mnemonic(context, I_SETCC);
   const char *value = register_name_8(value_register);
   switch (context->dialect) {
@@ -2044,36 +2025,9 @@ static void femit_setcc(CodegenContext *context, enum ComparisonType comparison_
 
 }
 
+
+
 static void femit_jcc(CodegenContext *context, IndirectJumpType type, const char *label) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-      uint8_t op = 0;
-      switch (type) {
-      case JUMP_TYPE_E:  op = 0x84; break;
-      case JUMP_TYPE_NE: op = 0x85; break;
-      case JUMP_TYPE_G:  op = 0x8f; break;
-      case JUMP_TYPE_L:  op = 0x8c; break;
-      case JUMP_TYPE_GE: op = 0x8d; break;
-      case JUMP_TYPE_LE: op = 0x8e; break;
-      default: ICE("Unhandled jump type: %d", (int)type);
-      }
-
-      uint8_t op_escape = 0x0f;
-      int32_t disp32 = 0;
-
-      mcode_2(context->object, op_escape, op);
-
-      // Make disp32 relocation to lea from symbol
-      RelocationEntry reloc = {0};
-      Section *sec_code = code_section(context->object);
-      reloc.sym.byte_offset = sec_code->data.bytes.size;
-      reloc.sym.name = strdup(label);
-      reloc.sym.section_name = strdup(sec_code->name);
-      reloc.type = RELOC_DISP32_PCREL;
-      vector_push(context->object->relocs, reloc);
-
-      mcode_n(context->object, &disp32, 4);
-#endif // x86_64_GENERATE_MACHINE_CODE
-
       const char *mnemonic = instruction_mnemonic(context, I_JCC);
 
       switch (context->dialect) {
@@ -2087,10 +2041,6 @@ static void femit_jcc(CodegenContext *context, IndirectJumpType type, const char
 }
 
 static void femit_none(CodegenContext *context, enum Instruction instruction) {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-  mcode_none(context, instruction);
-#endif // X86_64_GENERATE_MACHINE_CODE
-
   switch (instruction) {
     case I_RET:
     case I_CWD:
@@ -3104,6 +3054,12 @@ void codegen_emit_x86_64(CodegenContext *context) {
     if (!function->attr_nomangle) mangle_function_name(function);
   }
 
+  MIRVector machine_instructions_new = mir_from_ir(context);
+
+  foreach_ptr (MIRInstruction*, mir, machine_instructions_new) {
+    print_mir_instruction(mir);
+  }
+
   MIRVector machine_instructions = select_instructions(context);
 
   { // Emit entry
@@ -3120,7 +3076,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   }
 
   STATIC_ASSERT(I_FORM_COUNT == 19, "Exhaustive handling of instruction forms for x86_64");
-  foreach (MIRInstruction, mir, machine_instructions) {
+  foreach_ptr (MIRInstruction*, mir, machine_instructions) {
     switch (mir->x64.instruction_form) {
     case I_FORM_NONE: femit_none(context, mir->x64.instruction); break;
     case I_FORM_IMM: femit_imm(context, mir->x64.instruction, mir->x64.immediate); break;
@@ -3140,15 +3096,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
     case I_FORM_SETCC: femit_setcc(context, (enum ComparisonType)mir->x64.immediate, mir->x64.reg_dst); break;
     case I_FORM_JCC: femit_jcc(context, (IndirectJumpType)mir->x64.immediate, mir->x64.name); break;
     case I_FORM_IRBLOCK: {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-      GObjSymbol sym = {0};
-      sym.type = GOBJ_SYMTYPE_STATIC;
-      sym.name = strdup(mir->x64.ir_block->name.data);
-      sym.section_name = strdup(code_section(context->object)->name);
-      sym.byte_offset = code_section(context->object)->data.bytes.size;
-      vector_push(context->object->symbols, sym);
-#endif // x86_64_GENERATE_MACHINE_CODE
-
       /// Emit block label if it is used.
       if (mir->x64.ir_block->name.size) {
         fprint(context->code,
@@ -3158,15 +3105,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
     } break;
     case I_FORM_IRFUNCTION: {
-#ifdef X86_64_GENERATE_MACHINE_CODE
-      GObjSymbol sym = {0};
-      sym.type = mir->x64.ir_function->is_extern ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
-      sym.name = strdup(mir->x64.ir_function->name.data);
-      sym.section_name = strdup(code_section(&object)->name);
-      sym.byte_offset = code_section(&object)->data.bytes.size;
-      vector_push(object.symbols, sym);
-#endif // x86_64_GENERATE_MACHINE_CODE
-
       if (!mir->x64.ir_function->is_extern) {
         // Generate function entry.
         fprint(context->code,
@@ -3178,6 +3116,47 @@ void codegen_emit_x86_64(CodegenContext *context) {
   }
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
+
+  // Actually assemble into MIR into machine code.
+  STATIC_ASSERT(I_FORM_COUNT == 19, "Exhaustive handling of instruction forms for x86_64");
+  foreach_ptr (MIRInstruction*, mir, machine_instructions) {
+    switch (mir->x64.instruction_form) {
+    case I_FORM_NONE: mcode_none(context, mir->x64.instruction); break;
+    case I_FORM_IMM: mcode_imm(context, mir->x64.instruction, mir->x64.immediate); break;
+    case I_FORM_IMM_TO_MEM: mcode_imm_to_mem(context, mir->x64.instruction, mir->x64.immediate, mir->x64.reg_addr, mir->x64.offset); break;
+    case I_FORM_IMM_TO_REG: mcode_imm_to_reg(context, mir->x64.instruction, mir->x64.immediate, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
+    case I_FORM_INDIRECT_BRANCH: mcode_indirect_branch(context, mir->x64.instruction, mir->x64.reg_addr); break;
+    case I_FORM_MEM: mcode_mem(context, mir->x64.instruction, mir->x64.offset, mir->x64.reg_addr); break;
+    case I_FORM_MEM_TO_REG: mcode_mem_to_reg(context, mir->x64.instruction, mir->x64.reg_addr, mir->x64.offset, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
+    case I_FORM_NAME: mcode_name(context, mir->x64.instruction, mir->x64.name); break;
+    case I_FORM_NAME_TO_REG: mcode_name_to_reg(context, mir->x64.instruction, mir->x64.reg_addr, mir->x64.name, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
+    case I_FORM_REG: mcode_reg(context, mir->x64.instruction, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
+    case I_FORM_REG_SHIFT: mcode_reg_shift(context, mir->x64.instruction, mir->x64.reg_dst); break;
+    case I_FORM_REG_TO_MEM: mcode_reg_to_mem(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.offset); break;
+    case I_FORM_REG_TO_NAME: mcode_reg_to_name(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.name); break;
+    case I_FORM_REG_TO_OFFSET_NAME: mcode_reg_to_offset_name(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.name, (usz)mir->x64.offset); break;
+    case I_FORM_REG_TO_REG: mcode_reg_to_reg(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
+    case I_FORM_SETCC: mcode_setcc(context, (enum ComparisonType)mir->x64.immediate, mir->x64.reg_dst); break;
+    case I_FORM_JCC: mcode_jcc(context, (IndirectJumpType)mir->x64.immediate, mir->x64.name); break;
+    case I_FORM_IRBLOCK: {
+      GObjSymbol sym = {0};
+      sym.type = GOBJ_SYMTYPE_STATIC;
+      sym.name = strdup(mir->x64.ir_block->name.data);
+      sym.section_name = strdup(code_section(context->object)->name);
+      sym.byte_offset = code_section(context->object)->data.bytes.size;
+      vector_push(context->object->symbols, sym);
+    } break;
+    case I_FORM_IRFUNCTION: {
+      GObjSymbol sym = {0};
+      sym.type = mir->x64.ir_function->is_extern ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
+      sym.name = strdup(mir->x64.ir_function->name.data);
+      sym.section_name = strdup(code_section(&object)->name);
+      sym.byte_offset = code_section(&object)->data.bytes.size;
+      vector_push(object.symbols, sym);
+    } break;
+    }
+  }
+
   // Resolve local label (".Lxxxx") relocations.
   Vector(size_t) relocations_to_remove = {0};
   foreach_index (idx, object.relocs) {
@@ -3224,5 +3203,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   generic_object_as_coff_x86_64(&object, "out.obj");
   generic_object_as_elf_x86_64(&object, "out.o");
+
 #endif // x86_64_GENERATE_MACHINE_CODE
 }
