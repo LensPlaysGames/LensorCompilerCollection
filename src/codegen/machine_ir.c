@@ -39,6 +39,13 @@ MIROperand mir_op_immediate(int64_t imm) {
   return out;
 }
 
+MIROperand mir_op_name(const char *name) {
+  MIROperand out = {0};
+  out.kind = MIR_OP_NAME;
+  out.value.name = name;
+  return out;
+}
+
 MIROperand mir_op_register(RegisterDescriptor reg, uint16_t size) {
   MIROperand out = {0};
   out.kind = MIR_OP_REGISTER;
@@ -48,28 +55,34 @@ MIROperand mir_op_register(RegisterDescriptor reg, uint16_t size) {
 }
 
 static size_t mir_alloc_id = 0;
-MIRInstruction *mir_alloc(uint32_t opcode) {
+MIRInstruction *mir_makenew(uint32_t opcode) {
   MIRInstruction *mir = calloc(1, sizeof(*mir));
   ASSERT(mir, "Memory allocation failure");
   mir->id = ++mir_alloc_id;
   mir->opcode = opcode;
   return mir;
 }
+MIRInstruction *mir_makecopy(MIRInstruction *original, uint32_t opcode) {
+  MIRInstruction *mir = mir_makenew(opcode);
+  memcpy(mir->operands, original->operands, sizeof(mir->operands));
+  mir->origin = original->origin;
+  return mir;
+}
 
 MIRInstruction *mir_function(IRFunction *f) {
-  MIRInstruction* mir = mir_alloc(MIR_FUNCTION);
+  MIRInstruction* mir = mir_makenew(MIR_FUNCTION);
   mir->operands[0] = mir_op_function(f);
   return mir;
 }
 
 MIRInstruction *mir_block(IRBlock *bb) {
-  MIRInstruction* mir = mir_alloc(MIR_BLOCK);
+  MIRInstruction* mir = mir_makenew(MIR_BLOCK);
   mir->operands[0] = mir_op_block(bb);
   return mir;
 }
 
 MIRInstruction *mir_imm(int64_t imm) {
-  MIRInstruction* mir = mir_alloc(MIR_IMMEDIATE);
+  MIRInstruction* mir = mir_makenew(MIR_IMMEDIATE);
   mir->operands[0] = mir_op_immediate(imm);
   return mir;
 }
@@ -87,11 +100,13 @@ MIRVector mir_from_ir(CodegenContext *context) {
         switch (inst->kind) {
         case IR_IMMEDIATE: {
           MIRInstruction *mir = mir_imm((int64_t)inst->imm);
+          mir->origin = inst;
           inst->machine_inst = mir;
           vector_push(out, mir);
         } break;
         case IR_CALL: {
-          MIRInstruction *mir = mir_alloc(MIR_CALL);
+          MIRInstruction *mir = mir_makenew(MIR_CALL);
+          mir->origin = inst;
           if (inst->call.is_indirect)
             mir->operands[0] = mir_op_reference(mir, inst->call.callee_instruction);
           else mir->operands[0] = mir_op_function(inst->call.callee_function);
@@ -105,25 +120,29 @@ MIRVector mir_from_ir(CodegenContext *context) {
         case IR_BITCAST:
         case IR_COPY:
         case IR_LOAD: {
-          MIRInstruction *mir = mir_alloc((uint32_t)inst->kind);
+          MIRInstruction *mir = mir_makenew((uint32_t)inst->kind);
+          mir->origin = inst;
           mir->operands[0] = mir_op_reference(mir, inst->operand);
           inst->machine_inst = mir;
           vector_push(out, mir);
         } break;
         case IR_RETURN: {
-          MIRInstruction *mir = mir_alloc(MIR_RETURN);
+          MIRInstruction *mir = mir_makenew(MIR_RETURN);
+          mir->origin = inst;
           if (inst->operand) mir->operands[0] = mir_op_reference(mir, inst->operand);
           inst->machine_inst = mir;
           vector_push(out, mir);
         } break;
         case IR_BRANCH: {
-          MIRInstruction *mir = mir_alloc(MIR_BRANCH);
+          MIRInstruction *mir = mir_makenew(MIR_BRANCH);
+          mir->origin = inst;
           mir->operands[0] = mir_op_block(inst->destination_block);
           inst->machine_inst = mir;
           vector_push(out, mir);
         } break;
         case IR_BRANCH_CONDITIONAL: {
-          MIRInstruction *mir = mir_alloc(MIR_BRANCH_CONDITIONAL);
+          MIRInstruction *mir = mir_makenew(MIR_BRANCH_CONDITIONAL);
+          mir->origin = inst;
           mir->operands[0] = mir_op_reference(mir, inst->cond_br.condition);
           mir->operands[1] = mir_op_block(inst->cond_br.then);
           mir->operands[2] = mir_op_block(inst->cond_br.else_);
@@ -146,7 +165,8 @@ MIRVector mir_from_ir(CodegenContext *context) {
         case IR_GE:
         case IR_EQ:
         case IR_NE: {
-          MIRInstruction *mir = mir_alloc((uint32_t)inst->kind);
+          MIRInstruction *mir = mir_makenew((uint32_t)inst->kind);
+          mir->origin = inst;
           mir->operands[0] = mir_op_reference(mir, inst->lhs);
           mir->operands[1] = mir_op_reference(mir, inst->rhs);
           inst->machine_inst = mir;
@@ -154,20 +174,23 @@ MIRVector mir_from_ir(CodegenContext *context) {
         } break;
         case IR_STATIC_REF:
         case IR_FUNC_REF: {
-          MIRInstruction *mir = mir_alloc((uint32_t)inst->kind);
+          MIRInstruction *mir = mir_makenew((uint32_t)inst->kind);
           inst->machine_inst = mir;
+          mir->origin = inst;
           mir->operands[0] = mir_op_reference(mir, inst);
           vector_push(out, mir);
         } break;
         case IR_STORE: {
-          MIRInstruction *mir = mir_alloc(MIR_STORE);
+          MIRInstruction *mir = mir_makenew(MIR_STORE);
+          mir->origin = inst;
           mir->operands[0] = mir_op_reference(mir, inst->store.value);
           mir->operands[1] = mir_op_reference(mir, inst->store.addr);
           inst->machine_inst = mir;
           vector_push(out, mir);
         } break;
         case IR_ALLOCA: {
-          MIRInstruction *mir = mir_alloc(MIR_ALLOCA);
+          MIRInstruction *mir = mir_makenew(MIR_ALLOCA);
+          mir->origin = inst;
           mir->operands[0] = mir_op_immediate((int64_t)inst->alloca.size);
           inst->machine_inst = mir;
           vector_push(out, mir);
@@ -178,14 +201,16 @@ MIRVector mir_from_ir(CodegenContext *context) {
         } break;
 
         case IR_REGISTER: {
-          MIRInstruction *mir = mir_alloc(MIR_REGISTER);
+          MIRInstruction *mir = mir_makenew(MIR_REGISTER);
+          mir->origin = inst;
           mir->operands[0] = mir_op_register(inst->result, 0);
           inst->machine_inst = mir;
           vector_push(out, mir);
         } break;
 
         case IR_UNREACHABLE: {
-          MIRInstruction *mir = mir_alloc(MIR_UNREACHABLE);
+          MIRInstruction *mir = mir_makenew(MIR_UNREACHABLE);
+          mir->origin = inst;
           inst->machine_inst = mir;
           vector_push(out, mir);
         } break;
@@ -271,7 +296,7 @@ void print_mir_instruction(MIRInstruction *mir) {
   for (size_t j = 0; j < max_j; ++j) {
     MIROperand *op = mir->operands + j;
     if (op->kind == MIR_OP_NONE) break;
-    //print("  %34%s ", mir_operand_kind_string(op->kind));
+    STATIC_ASSERT(MIR_OP_COUNT == 7, "Exhaustive handling of MIR operand kinds");
     switch (op->kind) {
     case MIR_OP_REGISTER: {
       print(" %34r%u %37(%34%u%37)",
@@ -290,9 +315,12 @@ void print_mir_instruction(MIRInstruction *mir) {
     case MIR_OP_FUNCTION: {
       print(" %33%S", op->value.function->name);
     } break;
+    case MIR_OP_NAME: {
+      print(" %37\"%33%s%37\"", op->value.name);
+    } break;
     case MIR_OP_NONE: UNREACHABLE();
     }
-    if (j < max_j - 1 && mir->operands[j + 1].kind != MIR_OP_NONE) print(",");
+    if (j < max_j - 1 && mir->operands[j + 1].kind != MIR_OP_NONE) print("%37,");
   }
   print("\n%m");
 }
