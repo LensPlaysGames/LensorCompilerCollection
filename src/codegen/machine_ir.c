@@ -264,14 +264,17 @@ const char *mir_common_opcode_mnemonic(uint32_t opcode) {
 }
 
 void print_mir_instruction(MIRInstruction *mir) {
-  print("%31m%Z | %34%s %36(%31%d%36) ", mir->id, mir_common_opcode_mnemonic(mir->opcode), mir->opcode);
-  for (size_t j = 0; j < sizeof(mir->operands) / sizeof(mir->operands[0]); ++j) {
+  print("%31m%Z | ", mir->id);
+  if (mir->opcode < MIR_COUNT) print("%34%s ", mir_common_opcode_mnemonic(mir->opcode));
+  else print("%31op%d%36 ", (int)mir->opcode);
+  const size_t max_j = sizeof(mir->operands) / sizeof(mir->operands[0]);
+  for (size_t j = 0; j < max_j; ++j) {
     MIROperand *op = mir->operands + j;
     if (op->kind == MIR_OP_NONE) break;
     //print("  %34%s ", mir_operand_kind_string(op->kind));
     switch (op->kind) {
     case MIR_OP_REGISTER: {
-      print(" %34r%u %36(%34%u%36)",
+      print(" %34r%u %37(%34%u%37)",
             (unsigned)op->value.reg.value,
             (unsigned)op->value.reg.size);
     } break;
@@ -289,6 +292,7 @@ void print_mir_instruction(MIRInstruction *mir) {
     } break;
     case MIR_OP_NONE: UNREACHABLE();
     }
+    if (j < max_j - 1 && mir->operands[j + 1].kind != MIR_OP_NONE) print(",");
   }
   print("\n%m");
 }
