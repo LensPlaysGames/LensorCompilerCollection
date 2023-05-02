@@ -7,4 +7,7 @@
 /// Given Intercept IR, return a vector of machine instructions for x86_64 that represents the program.
 MIRVector select_instructions(CodegenContext *context);
 
+/// Given freshly-lowered MIR, return a vector of machine instructions for x86_64 that represents the program.
+MIRVector select_instructions2(MIRVector input);
+
 #endif /* ARCH_X86_64_ISEL_H */
