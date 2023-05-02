@@ -25,6 +25,8 @@ typedef struct MIROperandRegister {
   uint16_t size;
 } MIROperandRegister;
 
+typedef const char* MIROperandName;
+
 typedef int64_t MIROperandImmediate;
 typedef IRBlock* MIROperandBlock;
 typedef IRFunction* MIROperandFunction;
@@ -36,6 +38,7 @@ typedef struct MIROperand {
     MIROperandReference ref;
     MIROperandRegister reg;
     MIROperandImmediate imm;
+    MIROperandName name;
     MIROperandBlock block;
     MIROperandFunction function;
   } value;
@@ -67,6 +70,9 @@ typedef struct MIRInstruction {
 } MIRInstruction;
 
 /// dwisott
+MIRInstruction *mir_makenew(uint32_t opcode);
+MIRInstruction *mir_makecopy(MIRInstruction *original, uint32_t opcode);
+
 /// Caller is responsible for calling vector_delete() on returned vector.
 MIRVector mir_from_ir(CodegenContext *context);
 
@@ -76,5 +82,12 @@ MIRVector mir_from_ir(CodegenContext *context);
 const char *mir_common_opcode_mnemonic(uint32_t opcode);
 
 void print_mir_instruction(MIRInstruction *m_inst);
+
+MIROperand mir_op_function(IRFunction *f);
+MIROperand mir_op_block(IRBlock *block);
+MIROperand mir_op_reference(MIRInstruction *m_inst, IRInstruction *inst);
+MIROperand mir_op_immediate(int64_t imm);
+MIROperand mir_op_name(const char *name);
+MIROperand mir_op_register(RegisterDescriptor reg, uint16_t size);
 
 #endif /* MACHINE_IR_H */

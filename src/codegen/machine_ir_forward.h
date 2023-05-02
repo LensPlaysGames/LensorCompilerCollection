@@ -14,7 +14,8 @@ typedef enum MIROpcodeCommon {
   MIR_FUNCTION,
   /// Marks beginning of block
   MIR_BLOCK,
-  MIR_COUNT
+  MIR_COUNT,
+  MIR_ARCH_START = 0x420
 } MIROpcodeCommon;
 #undef DEFINE_MIR_INSTRUCTION_TYPE
 
@@ -27,6 +28,8 @@ typedef enum MIROperandKind {
   MIR_OP_IMMEDIATE,
   MIR_OP_BLOCK,
   MIR_OP_FUNCTION,
+  MIR_OP_NAME,
+  MIR_OP_COUNT,
 } MIROperandKind;
 
 typedef struct MIRInstruction MIRInstruction;
