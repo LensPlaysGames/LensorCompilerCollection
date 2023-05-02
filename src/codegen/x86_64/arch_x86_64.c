@@ -3054,9 +3054,19 @@ void codegen_emit_x86_64(CodegenContext *context) {
     if (!function->attr_nomangle) mangle_function_name(function);
   }
 
-  MIRVector machine_instructions_new = mir_from_ir(context);
+  MIRVector machine_instructions_from_ir = mir_from_ir(context);
 
-  foreach_ptr (MIRInstruction*, mir, machine_instructions_new) {
+  foreach_ptr (MIRInstruction*, mir, machine_instructions_from_ir) {
+    print_mir_instruction(mir);
+  }
+
+  MIRVector machine_instructions_selected = select_instructions2(machine_instructions_from_ir);
+
+  foreach_ptr (MIRInstruction*, mir, machine_instructions_from_ir) free(mir);
+  vector_delete(machine_instructions_from_ir);
+
+  print("\n");
+  foreach_ptr (MIRInstruction*, mir, machine_instructions_selected) {
     print_mir_instruction(mir);
   }
 
