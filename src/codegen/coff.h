@@ -360,7 +360,7 @@ typedef struct coff_line_number_entry {
 
 /**
  * The Section table name field and the Symbol table name field are
- * actaully more complicated than was detailed above, they in fact look
+ * actually more complicated than was detailed above, they in fact look
  * more like this:
  *
  * union {
