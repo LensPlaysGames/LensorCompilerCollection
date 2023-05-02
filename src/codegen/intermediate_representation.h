@@ -3,6 +3,7 @@
 
 #include <codegen.h>
 #include <codegen/codegen_forward.h>
+#include <codegen/machine_ir_forward.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <vector.h>
@@ -23,74 +24,6 @@
 
 #define FOREACH_INSTRUCTION(context) FOREACH_INSTRUCTION_N(context, function, block, instruction)
 #define FOREACH_INSTRUCTION_IN_FUNCTION(function) FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block, instruction)
-
-/// All instructions that take two arguments.
-#define ALL_BINARY_INSTRUCTION_TYPES(F) \
-  F(ADD, add)                           \
-  F(SUB, sub)                           \
-  F(MUL, mul)                           \
-  F(DIV, div)                           \
-  F(MOD, mod)                           \
-                                        \
-  F(SHL, shl)                           \
-  F(SAR, sar)                           \
-  F(SHR, shr)                           \
-  F(AND, and)                           \
-  F(OR, or)                             \
-                                        \
-  F(LT, lt)                             \
-  F(LE, le)                             \
-  F(GT, gt)                             \
-  F(GE, ge)                             \
-  F(EQ, eq)                             \
-  F(NE, ne)
-
-/// Some of these are also used in the parser, and until C implements
-/// inheriting from enums (i.e. never), this is the best we can do.
-#define ALL_IR_INSTRUCTION_TYPES(F)                              \
-  F(IMMEDIATE)                                                   \
-  F(CALL)                                                        \
-  F(LOAD)                                                        \
-                                                                 \
-  F(RETURN)                                                      \
-  F(BRANCH)                                                      \
-  F(BRANCH_CONDITIONAL)                                          \
-  F(UNREACHABLE)                                                 \
-                                                                 \
-  F(PHI)                                                         \
-  F(COPY)                                                        \
-                                                                 \
-  ALL_BINARY_INSTRUCTION_TYPES(F)                                \
-                                                                 \
-  F(STATIC_REF)                                                  \
-  F(FUNC_REF)                                                    \
-                                                                 \
-  F(ZERO_EXTEND)                                                 \
-  F(SIGN_EXTEND)                                                 \
-  F(TRUNCATE)                                                    \
-                                                                 \
-  /** Reinterpret bits as new type **/                           \
-  F(BITCAST)                                                     \
-                                                                 \
-  /** Store data at an address. **/                              \
-  F(STORE)                                                       \
-                                                                 \
-  F(NOT)                                                         \
-                                                                 \
-  F(PARAMETER)                                                   \
-                                                                 \
-  /**                                                            \
-   * A lot of backends have these instructions, but the IR isn't \
-   * generated with them in it.                                  \
-   */                                                            \
-  F(REGISTER)                                                    \
-  F(ALLOCA)                                                      \
-  /**                                                            \
-   * Literal types (not generated, but used for data transfer    \
-   * between frontend and backend)                               \
-   */                                                            \
-  F(LIT_INTEGER)                                                 \
-  F(LIT_STRING)
 
 #define BINARY_INSTRUCTION_CASE_HELPER(enumerator, name) case IR_##enumerator:
 #define ALL_BINARY_INSTRUCTION_CASES() ALL_BINARY_INSTRUCTION_TYPES(BINARY_INSTRUCTION_CASE_HELPER)
@@ -141,7 +74,9 @@ void mark_used(IRInstruction *usee, IRInstruction *user);
 
 typedef struct IRInstruction {
   enum IRType kind;
+
   Register result;
+  MIRInstruction *machine_inst;
 
   Type *type;
 

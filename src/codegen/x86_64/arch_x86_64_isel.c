@@ -168,9 +168,10 @@ static MIRValue_x86_64 mir_jcc(IndirectJumpType jump_type, const char *name) {
 
 static void append_mir(MIRVector *mir, MIRValue_x86_64 value, IRInstruction *origin) {
   ASSERT(mir, "Invalid argument");
-  MIRInstruction m_inst = {0};
-  m_inst.x64 = value;
-  m_inst.origin = origin;
+  MIRInstruction *m_inst = calloc(1, sizeof(*m_inst));
+  ASSERT(m_inst, "Memory allocation failure");
+  m_inst->x64 = value;
+  m_inst->origin = origin;
   vector_push(*mir, m_inst);
 }
 
