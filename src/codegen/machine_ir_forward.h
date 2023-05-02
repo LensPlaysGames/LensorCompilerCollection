@@ -23,22 +23,26 @@ typedef struct MIRValue_x86_64 MIRValue_x86_64;
 
 typedef enum MIROperandKind {
   MIR_OP_NONE,
-  MIR_OP_REFERENCE,
   MIR_OP_REGISTER,
   MIR_OP_IMMEDIATE,
   MIR_OP_BLOCK,
   MIR_OP_FUNCTION,
   MIR_OP_NAME,
-  MIR_OP_COUNT,
+  MIR_OP_COUNT
 } MIROperandKind;
 
 typedef struct MIRInstruction MIRInstruction;
 typedef Vector(MIRInstruction*) MIRVector;
 
-typedef struct MIROperandRegister MIROperandRegister;
+typedef struct MIROperandRegister {
+  uint32_t value;
+  uint16_t size;
+} MIROperandRegister;
+typedef const char* MIROperandName;
 typedef int64_t MIROperandImmediate;
 typedef IRBlock* MIROperandBlock;
 typedef IRFunction* MIROperandFunction;
-typedef MIRInstruction* MIROperandReference;
+
+typedef unsigned int MIRRegister;
 
 #endif /* MACHINE_IR_FORWARD_H */

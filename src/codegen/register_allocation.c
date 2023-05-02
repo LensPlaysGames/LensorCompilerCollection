@@ -400,6 +400,8 @@ static void collect_interferences_for_function
 {
   // Collect all blocks that end with `ret` or `unreachable`.
   BlockVector exits = {0};
+  // TODO: Use instruction_is_exit(opcode) (make part of
+  // MachineDescription) instead of explicitly checking opcode.
   list_foreach (IRBlock*, b, function->blocks)
     if (b->instructions.last && (b->instructions.last->kind == IR_RETURN || b->instructions.last->kind == IR_UNREACHABLE))
       vector_push(exits, b);
