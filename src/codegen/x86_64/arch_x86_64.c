@@ -275,15 +275,29 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
     } break;
     case r16: {
       // Move imm16 to r16
-      // 0xb8+ rw iw
+      // 0x66 + 0xb8+ rw iw
+      // Encode a REX prefix if the ModRM register descriptor needs
+      // the bit extension.
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+        mcode_1(context->object, rex);
+      }
       uint8_t op = 0xb8 + rw_encoding(destination_register);
       int16_t imm16 = (int16_t)immediate;
-      mcode_1(context->object, op);
+      mcode_2(context->object, 0x66, op);
       mcode_n(context->object, &imm16, 2);
     } break;
     case r32: {
       // Move imm32 to r32
       // 0xb8+ rd id
+      // Encode a REX prefix if the ModRM register descriptor needs
+      // the bit extension.
+      uint8_t destination_regbits = regbits(destination_register);
+      if (REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+        mcode_1(context->object, rex);
+      }
       uint8_t op = 0xb8 + rd_encoding(destination_register);
       int32_t imm32 = (int32_t)immediate;
       mcode_1(context->object, op);
@@ -292,7 +306,7 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
     case r64: {
       // Move imm64 to r64
       // REX.W + 0xb8+ rd io
-      uint8_t rex = rexw_byte();
+      uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(regbits(destination_register)));
       uint8_t op = 0xb8 + rd_encoding(destination_register);
       mcode_2(context->object, rex, op);
       mcode_n(context->object, &immediate, 8);
