@@ -20,22 +20,9 @@ typedef struct MIRValue_x86_64 {
   IRFunction *ir_function;
 } MIRValue_x86_64;
 
-typedef struct MIROperandRegister {
-  uint32_t value;
-  uint16_t size;
-} MIROperandRegister;
-
-typedef const char* MIROperandName;
-
-typedef int64_t MIROperandImmediate;
-typedef IRBlock* MIROperandBlock;
-typedef IRFunction* MIROperandFunction;
-typedef MIRInstruction* MIROperandReference;
-
 typedef struct MIROperand {
   MIROperandKind kind;
   union {
-    MIROperandReference ref;
     MIROperandRegister reg;
     MIROperandImmediate imm;
     MIROperandName name;
@@ -44,10 +31,14 @@ typedef struct MIROperand {
   } value;
 } MIROperand;
 
+#define MIR_OPERAND_SSO_THRESHOLD 3
+
 // NOTE: There is no way of keeping track of which ISA a particular
 // instruction is for; that's up to each backend that uses it!
 typedef struct MIRInstruction {
   size_t id;
+
+  MIRRegister reg;
 
   /// An MIR opcode is some integer that has the 1:1 IR types from 0->N
   /// and then after that each ISA starts it's own opcode enum for
@@ -57,7 +48,11 @@ typedef struct MIRInstruction {
   /// new MIR with) the arch-specific opcodes.
   uint32_t opcode;
 
-  MIROperand operands[4];
+  uint8_t operand_count;
+  union {
+    MIROperand arr[MIR_OPERAND_SSO_THRESHOLD];
+    Vector(MIROperand) vec;
+  } operands;
 
   // Architecture-specific values.
   union {
@@ -67,11 +62,20 @@ typedef struct MIRInstruction {
   // Keep track of originating IR instruction.
   IRInstruction *origin;
 
+  // If an architecture lowers a generically-lowered MIR instruction,
+  // store the arch-lowered MIR instruction in the generic instruction
+  // so that we may properly update references going forward.
+  struct MIRInstruction *lowered;
+
 } MIRInstruction;
 
 /// dwisott
 MIRInstruction *mir_makenew(uint32_t opcode);
+/// Copy the entire instruction
 MIRInstruction *mir_makecopy(MIRInstruction *original, uint32_t opcode);
+
+/// Clear the given instructions operands.
+void mir_op_clear(MIRInstruction *);
 
 /// Caller is responsible for calling vector_delete() on returned vector.
 MIRVector mir_from_ir(CodegenContext *context);
@@ -85,9 +89,17 @@ void print_mir_instruction(MIRInstruction *m_inst);
 
 MIROperand mir_op_function(IRFunction *f);
 MIROperand mir_op_block(IRBlock *block);
-MIROperand mir_op_reference(MIRInstruction *m_inst, IRInstruction *inst);
+MIROperand mir_op_reference(MIRInstruction *inst);
+MIROperand mir_op_reference_ir(IRInstruction *inst);
 MIROperand mir_op_immediate(int64_t imm);
 MIROperand mir_op_name(const char *name);
 MIROperand mir_op_register(RegisterDescriptor reg, uint16_t size);
+
+void mir_add_op(MIRInstruction *inst, MIROperand op);
+/// Return a pointer to operand at index within instruction.
+MIROperand *mir_get_op(MIRInstruction *inst, size_t index);
+
+void mir_push(MIRVector *mir, MIRInstruction *mi);
+MIRInstruction *mir_find_by_vreg(MIRVector mir, size_t reg);
 
 #endif /* MACHINE_IR_H */
