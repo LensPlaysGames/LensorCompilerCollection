@@ -740,7 +740,7 @@ MIRInstructionVector select_instructions(CodegenContext *context) {
 MIRFunctionVector select_instructions2(MIRFunctionVector input) {
   MIRFunctionVector mir = {0};
   foreach_ptr (MIRFunction*, mir_f, input) {
-    size_t extra_instruction_reg = mir_f->instructions.size + MIR_ARCH_START;
+    size_t extra_instruction_reg = mir_f->inst_count + MIR_ARCH_START;
     // Create new function
     MIRFunction *f = mir_function(mir_f->origin);
     vector_push(mir, f);
@@ -748,7 +748,7 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
     foreach_ptr (MIRBlock*, mir_bb, mir_f->blocks) {
       // Create new block
       (void)mir_block(f, mir_bb->origin);
-      MIR_FOREACH_INST_IN_BLOCK(mir_bb, inst) {
+      foreach_ptr (MIRInstruction*, inst, mir_bb->instructions) {
         // We have to pass through register-assigned instructions, assumedly.
         // TODO: Enable this once we wait until after isel to do RA.
         //if (inst->origin && inst->origin->result) {
@@ -1056,6 +1056,7 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         } break;
 
         case MIR_UNREACHABLE:
+        case MIR_SUB:
         case MIR_MUL:
         case MIR_DIV:
         case MIR_MOD:
