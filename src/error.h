@@ -46,8 +46,7 @@ typedef struct {
 #ifdef NDEBUG
 # define DBGASSERT(...)
 #else
-# define DBGASSERT(cond, ...) \
-  ((cond) ? (void)(0) : (raise_fatal_error_impl(__FILE__, PRETTY_FUNCTION, __LINE__, false, false, #cond, "" __VA_ARGS__), BUILTIN_UNREACHABLE()))
+# define DBGASSERT(...) ASSERT(__VA_ARGS__)
 #endif
 
 #if __STDC_VERSION__ >= 201112L
