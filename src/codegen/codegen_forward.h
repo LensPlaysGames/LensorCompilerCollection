@@ -1,6 +1,8 @@
 #ifndef CODEGEN_FORWARD_H
 #define CODEGEN_FORWARD_H
 
+#include <vector.h>
+
 typedef struct IRInstruction IRInstruction;
 typedef struct IRBlock IRBlock;
 typedef struct IRFunction IRFunction;
@@ -127,5 +129,12 @@ enum ComparisonType {
    */                                                            \
   F(LIT_INTEGER)                                                 \
   F(LIT_STRING)
+
+typedef struct MIRFunction MIRFunction;
+typedef struct MIRBlock MIRBlock;
+typedef struct MIRInstruction MIRInstruction;
+typedef Vector(MIRFunction*) MIRFunctionVector;
+typedef Vector(MIRBlock*) MIRBlockVector;
+typedef Vector(MIRInstruction*) MIRInstructionVector;
 
 #endif // CODEGEN_FORWARD_H

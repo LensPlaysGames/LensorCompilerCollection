@@ -9,9 +9,8 @@
 #define DEFINE_MIR_INSTRUCTION_TYPE(type, ...) CAT(MIR_, type),
 typedef enum MIROpcodeCommon {
   ALL_IR_INSTRUCTION_TYPES(DEFINE_MIR_INSTRUCTION_TYPE)
-  /// Marks beginning of function
-  MIR_FUNCTION,
   /// Marks beginning of block
+  // TODO: Do we need this?
   MIR_BLOCK,
   MIR_COUNT,
   MIR_ARCH_START = 0x420
@@ -93,6 +92,8 @@ typedef struct MIRInstruction {
     MIRValue_x86_64 x64;
   };
 
+  MIRBlock *block;
+
   // Keep track of originating IR instruction.
   IRInstruction *origin;
 
@@ -102,7 +103,31 @@ typedef struct MIRInstruction {
   struct MIRInstruction *lowered;
 
 } MIRInstruction;
-typedef Vector(MIRInstruction*) MIRVector;
+
+typedef struct MIRBlock {
+  string name;
+
+  // Index within `instructions` of MIRFunction pointing to first
+  // instruction executed in basic block.
+  MIRRegister entry;
+  // Index within `instructions` of MIRFunction pointing to last
+  // instruction of basic block.
+  MIRRegister exit;
+
+  MIRFunction *function;
+
+  IRBlock *origin;
+} MIRBlock;
+
+typedef struct MIRFunction {
+  string name;
+
+  /// Flat list of all instructions in function.
+  MIRInstructionVector instructions;
+  MIRBlockVector blocks;
+
+  IRFunction *origin;
+} MIRFunction;
 
 /// dwisott
 MIRInstruction *mir_makenew(uint32_t opcode);
@@ -113,7 +138,7 @@ MIRInstruction *mir_makecopy(MIRInstruction *original);
 void mir_op_clear(MIRInstruction *);
 
 /// Caller is responsible for calling vector_delete() on returned vector.
-MIRVector mir_from_ir(CodegenContext *context);
+MIRFunctionVector mir_from_ir(CodegenContext *context);
 
 /// If opcode is within common opcode range (less than or equal to
 /// MIR_COUNT), return a pointer to a NULL-terminated string containing
@@ -134,7 +159,20 @@ void mir_add_op(MIRInstruction *inst, MIROperand op);
 /// Return a pointer to operand at index within instruction.
 MIROperand *mir_get_op(MIRInstruction *inst, size_t index);
 
-void mir_push(MIRVector *mir, MIRInstruction *mi);
-MIRInstruction *mir_find_by_vreg(MIRVector mir, size_t reg);
+void mir_push(MIRFunction *mir, MIRInstruction *mi);
+MIRInstruction *mir_find_by_vreg(MIRFunction *mir, size_t reg);
+
+MIRFunction *mir_function(IRFunction *ir_f);
+MIRBlock *mir_block(MIRFunction *function, IRBlock *ir_bb);
+
+// MIRBlock *block, MIRInstruction *(it_name) <- name of iterator available in loop
+#define MIR_FOREACH_INST_IN_BLOCK(block, it_name)                       \
+  const size_t block##idx_start = (size_t)(block)->entry - (size_t)MIR_ARCH_START; \
+  const size_t block##idx_end = (size_t)(block)->exit - (size_t)MIR_ARCH_START; \
+  DBGASSERT(block##idx_start < block->function->instructions.size, "MIRBlock entry (%Z) is not less than size of machine instruction vector (%Z)", block##idx_start, block->function->instructions.size); \
+  DBGASSERT(block##idx_end < block->function->instructions.size, "MIRBlock exit (%Z) larger than size of machine instruction vector (%Z) of function %S", block##idx_end, block->function->instructions.size, block->function->name); \
+  DBGASSERT(block##idx_start <= block##idx_end, "MIRBlock exit is before it's entry: %Z < %Z", block##idx_end, block##idx_start); \
+  MIRInstruction *it_name = block->function->instructions.data[block##idx_start]; \
+  for (size_t it = block##idx_start; it <= block##idx_end; ++it, it_name = block->function->instructions.data[it])
 
 #endif /* MACHINE_IR_H */

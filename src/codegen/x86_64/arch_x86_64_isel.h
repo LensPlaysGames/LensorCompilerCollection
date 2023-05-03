@@ -5,9 +5,9 @@
 #include <codegen/machine_ir.h>
 
 /// Given Intercept IR, return a vector of machine instructions for x86_64 that represents the program.
-MIRVector select_instructions(CodegenContext *context);
+MIRInstructionVector select_instructions(CodegenContext *context);
 
 /// Given freshly-lowered MIR, return a vector of machine instructions for x86_64 that represents the program.
-MIRVector select_instructions2(MIRVector input);
+MIRFunctionVector select_instructions2(MIRFunctionVector input);
 
 #endif /* ARCH_X86_64_ISEL_H */
