@@ -570,11 +570,11 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
     if (optimise && inst->parent_block) inst->parent_block->done = true;
   } break;
-  case IR_EQ: // FALLTHROUGH to case IR_GE
-  case IR_NE: // FALLTHROUGH to case IR_GE
-  case IR_LT: // FALLTHROUGH to case IR_GE
-  case IR_GT: // FALLTHROUGH to case IR_GE
-  case IR_LE: // FALLTHROUGH to case IR_GE
+  case IR_EQ: FALLTHROUGH;
+  case IR_NE: FALLTHROUGH;
+  case IR_LT: FALLTHROUGH;
+  case IR_GT: FALLTHROUGH;
+  case IR_LE: FALLTHROUGH;
   case IR_GE: {
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
     codegen_comparison(context, inst, inst->lhs->result, inst->rhs->result, inst->result, size);

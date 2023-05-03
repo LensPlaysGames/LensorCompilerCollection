@@ -349,7 +349,7 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
       // 0x66 + 0x81 /5 iw
       uint8_t sixteen_bit_prefix = 0x66;
       mcode_1(context->object, sixteen_bit_prefix);
-    } // FALLTHROUGH to case r32
+    } FALLTHROUGH;
     case r32: {
       // 0x81 /5 id
       uint8_t op = 0x81;
@@ -446,7 +446,7 @@ static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
       // 0x66 + 0x8d /r
       uint8_t sixteen_bit_prefix = 0x66;
       mcode_1(context->object, sixteen_bit_prefix);
-    } // FALLTHROUGH to case r32
+    } FALLTHROUGH;
     case r32: {
       // 0x8d /r
       uint8_t op = 0x8d;
@@ -519,7 +519,7 @@ static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
         // 0x66 + 0x8b /r
         uint8_t sixteen_bit_prefix = 0x66;
         mcode_1(context->object, sixteen_bit_prefix);
-      } // FALLTHROUGH to case r32
+      } FALLTHROUGH;
       case r32: {
         // 0x8b /r
         uint8_t op = 0x8b;
@@ -561,7 +561,7 @@ static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
         // 0x66 + 0x8b /r
         uint8_t sixteen_bit_prefix = 0x66;
         mcode_1(context->object, sixteen_bit_prefix);
-      } // FALLTHROUGH to case r32
+      } FALLTHROUGH;
       case r32: {
         // 0x8b /r
         uint8_t op = 0x8b;
@@ -603,7 +603,7 @@ static void mcode_mem_to_reg(CodegenContext *context, enum Instruction inst, Reg
         // 0x66 + 0x8b /r
         uint8_t sixteen_bit_prefix = 0x66;
         mcode_1(context->object, sixteen_bit_prefix);
-      } // FALLTHROUGH to case r32
+      } FALLTHROUGH;
       case r32: {
         // 0x8b /r
         uint8_t op = 0x8b;
@@ -643,7 +643,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       // 0x66 + 0x8d /r
       uint8_t sixteen_bit_prefix = 0x66;
       mcode_1(context->object, sixteen_bit_prefix);
-    } // FALLTHROUGH to case r32
+    } FALLTHROUGH;
     case r32: {
       // 0x8d /r
       uint8_t op = 0x8d;
@@ -833,7 +833,7 @@ static void mcode_name_to_reg(CodegenContext *context, enum Instruction inst, Re
       // 0x66 + 0x8b /r
       uint8_t sixteen_bit_prefix = 0x66;
       mcode_1(context->object, sixteen_bit_prefix);
-    } // FALLTHROUGH to case r32
+    } FALLTHROUGH;
     case r32: {
       // 0x8b /r
       uint8_t op = 0x8b;
@@ -1021,7 +1021,7 @@ static void mcode_reg_to_mem(CodegenContext *context, enum Instruction inst, Reg
       // 0x66 + 0x89 /r
       uint8_t sixteen_bit_prefix = 0x66;
       mcode_1(context->object, sixteen_bit_prefix);
-    } // FALLTHROUGH to case r32
+    } FALLTHROUGH;
     case r32: {
       // Move r32 into m32
       // 0x89 /r
@@ -1127,7 +1127,7 @@ static void mcode_reg_to_reg
       // 0x66 + 0x89 /r
       uint8_t sixteen_bit_prefix = 0x66;
       mcode_1(context->object, sixteen_bit_prefix);
-    } // FALLTHROUGH to case r32
+    } FALLTHROUGH;
     case r32: {
       // 0x89 /r
       uint8_t op = 0x89;
@@ -1176,7 +1176,7 @@ static void mcode_reg_to_reg
       // 0x66 + 0x01 /r
       uint8_t sixteen_bit_prefix = 0x66;
       mcode_1(context->object, sixteen_bit_prefix);
-    } // FALLTHROUGH to case r32
+    } FALLTHROUGH;
     case r32: {
       // 0x01 /r
       uint8_t op = 0x01;
@@ -1223,7 +1223,7 @@ static void mcode_reg_to_reg
       // 0x66 + 0x29 /r
       uint8_t sixteen_bit_prefix = 0x66;
       mcode_1(context->object, sixteen_bit_prefix);
-    } // FALLTHROUGH to case r32
+    } FALLTHROUGH;
     case r32: {
       // 0x29 /r
       uint8_t op = 0x29;
@@ -1269,7 +1269,7 @@ static void mcode_reg_to_reg
       // 0x66 + 0x39 /r
       uint8_t sixteen_bit_prefix = 0x66;
       mcode_1(context->object, sixteen_bit_prefix);
-    } // FALLTHROUGH to case r32
+    } FALLTHROUGH;
     case r32: {
       // 0x39 /r
       uint8_t op = 0x39;
@@ -1314,7 +1314,7 @@ static void mcode_reg_to_reg
       // 0x66 + 0x85 /r
       uint8_t sixteen_bit_prefix = 0x66;
       mcode_1(context->object, sixteen_bit_prefix);
-    } // FALLTHROUGH to case r32
+    } FALLTHROUGH;
     case r32: {
       // 0x85 /r
       uint8_t op = 0x85;
@@ -1485,7 +1485,7 @@ static void mcode_reg_to_name(CodegenContext *context, enum Instruction inst, Re
     case r16: {
       // 0x66 + 0x89 /r
       mcode_1(context->object, 0x66);
-    } // FALLTHROUGH to r32
+    } FALLTHROUGH;
     case r32: {
       // 0x89 /r
       if (address_register == REG_RIP) {
@@ -1679,7 +1679,7 @@ static void mcode_none(CodegenContext *context, enum Instruction inst) {
   case I_CWD: { // 0x66 + 0x99
     uint8_t sixteen_bit_prefix = 0x66;
     mcode_1(context->object, sixteen_bit_prefix);
-  } // FALLTHROUGH to case I_CDQ
+  } FALLTHROUGH;
   case I_CDQ: { // 0x99
     uint8_t op = 0x99;
     mcode_1(context->object, op);
@@ -2408,6 +2408,7 @@ static void lower(CodegenContext *context) {
       size_t argcount = instruction->call.arguments.size;
 
       switch (context->call_convention) {
+      default: ICE("Unhandled calling convention in x86_64 lowering of calls");
       case CG_CALL_CONV_LINUX: {
         Type *function_type = NULL;
         if (instruction->call.is_indirect) {
