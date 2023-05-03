@@ -3,7 +3,6 @@
 #include <codegen.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/codegen_forward.h>
-#include <codegen/machine_ir_forward.h>
 #include <utils.h>
 
 MIROperand mir_op_function(IRFunction *f) {

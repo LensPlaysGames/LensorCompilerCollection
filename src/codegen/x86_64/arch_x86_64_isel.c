@@ -2,7 +2,6 @@
 
 #include <codegen.h>
 #include <codegen/intermediate_representation.h>
-#include <codegen/machine_ir_forward.h>
 #include <codegen/machine_ir.h>
 #include <codegen/x86_64/arch_x86_64_common.h>
 #include <codegen/x86_64/arch_x86_64.h>
