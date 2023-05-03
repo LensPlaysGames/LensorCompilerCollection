@@ -742,7 +742,7 @@ MIRVector select_instructions2(MIRVector input) {
     // We have to pass through register-assigned instructions, assumedly.
     // TODO: Enable this once we wait until after isel to do RA.
     //if (inst->origin && inst->origin->result) {
-    //  MIRInstruction *something = mir_makecopy(inst, inst->opcode);
+    //  MIRInstruction *something = mir_makecopy(inst);
     //  inst->lowered = something;
     //  mir_push(&mir, something);
     //  continue;
@@ -757,19 +757,14 @@ MIRVector select_instructions2(MIRVector input) {
     case MIR_REGISTER:
     case IR_STATIC_REF:
     case IR_FUNC_REF: {
-      // FIXME: Because we are just copying operands, that means that
-      // they still reference the "unlowered" versions in their
-      // operands... We need to be able to somehow get the new arch-
-      // specific MIR associated with the MIR being referenced...
-      MIRInstruction *something = mir_makecopy(inst, inst->opcode);
+      MIRInstruction *something = mir_makecopy(inst);
       inst->lowered = something;
       mir_push(&mir, something);
     } break;
 
-
     case MIR_CALL: {
       // TODO: A bunch of call stuff, like we do in `emit_instruction`
-      MIRInstruction *call = mir_makecopy(inst, MX64_CALL);
+      MIRInstruction *call = mir_makecopy(inst);
       inst->lowered = call;
       if (mir_get_op(inst, 0)->kind == MIR_OP_NAME)
         call->x64.instruction_form = I_FORM_NAME;

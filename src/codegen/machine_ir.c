@@ -71,8 +71,9 @@ MIRInstruction *mir_makenew(uint32_t opcode) {
   mir->opcode = opcode;
   return mir;
 }
-MIRInstruction *mir_makecopy(MIRInstruction *original, uint32_t opcode) {
-  MIRInstruction *mir = mir_makenew(opcode);
+MIRInstruction *mir_makecopy(MIRInstruction *original) {
+  MIRInstruction *mir = mir_makenew(MIR_UNREACHABLE);
+  mir->opcode = original->opcode;
   mir->operand_count = original->operand_count;
   if (mir->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
     memcpy(mir->operands.arr, original->operands.arr, sizeof(mir->operands.arr));
