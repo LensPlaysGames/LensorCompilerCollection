@@ -3,7 +3,6 @@
 
 #include <codegen.h>
 #include <codegen/codegen_forward.h>
-#include <codegen/machine_ir_forward.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <vector.h>
