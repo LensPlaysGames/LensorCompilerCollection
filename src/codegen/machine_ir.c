@@ -347,7 +347,9 @@ void print_mir_operand(MIROperand *op) {
 }
 
 void print_mir_instruction(MIRInstruction *mir) {
-  print("%31m%Z %37| %34v%Z %37| ", mir->id, mir->reg);
+  if (mir->reg < MIR_ARCH_START)
+    print("%31m%Z %37| %32r%Z %37| ", mir->id, (usz)mir->reg);
+  else print("%31m%Z %37| %34v%Z %37| ", mir->id, (usz)mir->reg);
   if (mir->opcode < MIR_COUNT) print("%34%s ", mir_common_opcode_mnemonic(mir->opcode));
   else print("%31op%d%36 ", (int)mir->opcode);
   MIROperand *base = NULL;
