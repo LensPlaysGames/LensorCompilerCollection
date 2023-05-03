@@ -2,6 +2,7 @@
 #define COFF_H
 
 #include <stdint.h>
+#include <utils.h>
 
 // 0x0001 IMAGE_FILE_RELOCS_STRIPPED
 #define HDR_RELOC_STRIPPED     0b0000000000000001
@@ -47,7 +48,7 @@
 #define COFF_MACHINE_UNKNOWN 0
 #define COFF_MACHINE_AMD64 0x8664
 
-typedef struct coff_header {
+typedef struct PACKED coff_header {
   // Machine type
   // 0x0    IMAGE_FILE_MACHINE_UNKNOWN
   // 0x184  IMAGE_FILE_MACHINE_ALPHA Alpha AXP, 32-bit address space
@@ -94,9 +95,9 @@ typedef struct coff_header {
   // NOTE: Also known as "characteristics" field in some docs.
   // See HDR_* defines above
   uint16_t f_flags;
-} __attribute__((packed)) coff_header;
+} coff_header;
 
-typedef struct coff_opt_header {
+typedef struct PACKED coff_opt_header {
   uint16_t magic;
   /// Version stamp.
   uint16_t vstamp;
@@ -109,7 +110,7 @@ typedef struct coff_opt_header {
   uint32_t entry;
   uint32_t text_start;
   uint32_t data_start;
-} __attribute__((packed)) coff_opt_header;
+} coff_opt_header;
 
 // Regular section (allocated, relocated, loaded)
 #define STYP_REG    0b00000000
@@ -156,7 +157,7 @@ typedef struct coff_opt_header {
 // The section can be written to.
 #define COFF_SCN_MEM_WRITE 0x80000000
 
-typedef struct coff_section_header {
+typedef struct PACKED coff_section_header {
   /// Section Name
   union {
     char s_name[8];
@@ -182,7 +183,7 @@ typedef struct coff_section_header {
   /// Number of Line Number table entries
   uint16_t s_nlnno;
   int32_t s_flags;
-} __attribute__((packed)) coff_section_header;
+} coff_section_header;
 
 // x86_64 Absolute Relocation (the relocation is ignored)
 #define COFF_REL_AMD64_ABS 0x0000
@@ -237,16 +238,16 @@ typedef struct coff_section_header {
 // A 32-bit signed span-dependent value that is applied at link time.
 #define COFF_REL_AMD64_SSPAN32 0x0010
 
-typedef struct coff_relocation_entry {
+typedef struct PACKED coff_relocation_entry {
   /// Reference Virtual Address
   uint32_t r_vaddr;
   /// Index of symbol
   uint32_t r_symndx;
   /// Type of relocation
   uint16_t r_type;
-} __attribute__((packed)) coff_relocation_entry;
+} coff_relocation_entry;
 
-typedef struct coff_line_number_entry {
+typedef struct PACKED coff_line_number_entry {
   union {
     /// Index of symbol
     uint32_t l_symndx;
@@ -255,7 +256,7 @@ typedef struct coff_line_number_entry {
   } l_addr;
   /// Line number
   uint16_t l_lnno;
-} __attribute__((packed)) coff_line_number_entry;
+} coff_line_number_entry;
 
 // No assigned storage class.
 #define COFF_STORAGE_CLASS_NULL 0
@@ -433,7 +434,7 @@ typedef struct coff_line_number_entry {
  *   any
  *   offset into section
  */
-typedef struct coff_symbol_entry {
+typedef struct PACKED coff_symbol_entry {
   /// Symbol Name
   union {
     char n_name[8];
@@ -456,9 +457,9 @@ typedef struct coff_symbol_entry {
   char n_sclass;
   /// Auxiliary Count
   char n_numaux;
-} __attribute__((packed)) coff_symbol_entry;
+} coff_symbol_entry;
 
-typedef struct coff_aux_section {
+typedef struct PACKED coff_aux_section {
   uint32_t length;
   uint16_t number_relocations;
   uint16_t number_line_numbers;
@@ -467,22 +468,22 @@ typedef struct coff_aux_section {
   uint8_t  selection;
   uint8_t  unused;
   uint16_t number_high;
-} __attribute__((packed)) coff_aux_section;
+} coff_aux_section;
 
-typedef struct coff_aux_function_definition {
+typedef struct PACKED coff_aux_function_definition {
   uint32_t tag_index;
   uint32_t total_size;
   uint32_t pointer_to_line_number;
   uint32_t pointer_to_next_function;
   char unused[2];
-} __attribute__((packed)) coff_aux_function_definition;
+} coff_aux_function_definition;
 
-typedef struct coff_aux_file {
+typedef struct PACKED coff_aux_file {
   char filename[18];
-} __attribute__((packed)) coff_aux_file;
+} coff_aux_file;
 
 /// String Table Offset = File Header.f_symptr + File Header.f_nsyms * sizeof(coff_symbol_entry)
-typedef struct coff_string_entry {
+typedef struct PACKED coff_string_entry {
   union {
     char name[8];
     struct {
@@ -490,7 +491,7 @@ typedef struct coff_string_entry {
       uint32_t offset;
     };
   };
-} __attribute__((packed)) coff_string_entry;
+} coff_string_entry;
 
 
 #endif /* COFF_H */

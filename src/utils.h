@@ -47,6 +47,14 @@ typedef ptrdiff_t isz;
 #  define THREAD_LOCAL __declspec(thread)
 #endif
 
+/// PACKED **must** go inbetween the struct keyword and the struct
+/// name, or else it won't work.
+#if !defined(_MSC_VER) || defined(__clang__)
+#  define PACKED __attribute__((packed))
+#else
+#  define PACKED _Pragma("pack(1)")
+#endif
+
 #ifdef __EXT_FORMAT__
 #  define EXT_FORMAT(fmt, arg) __attribute__((ext_format(fmt, arg)))
 #else
