@@ -1,10 +1,10 @@
-#include "vector.h"
 #include <codegen/machine_ir.h>
 
 #include <codegen.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/codegen_forward.h>
 #include <utils.h>
+#include <vector.h>
 
 MIROperand mir_op_function(IRFunction *f) {
   MIROperand out = {0};
@@ -31,6 +31,12 @@ MIROperand mir_op_reference(MIRInstruction *inst) {
 
 MIROperand mir_op_reference_ir(IRInstruction *inst) {
   ASSERT(inst, "Invalid argument");
+  {
+    IRInstruction *it = inst;
+    for (; it->kind == IR_COPY; it = it->operand);
+    if (it->kind == IR_IMMEDIATE) return mir_op_immediate((i64)it->imm);
+    if (it->kind == IR_REGISTER) return mir_op_register(it->result, 0);
+  }
   if (!inst->machine_inst) {
     ir_femit_instruction(stdout, inst);
     ICE("Must translate IRInstruction into MIR before taking reference to it.");
@@ -83,8 +89,15 @@ MIRInstruction *mir_makecopy(MIRInstruction *original) {
   return mir;
 }
 
-void mir_push(MIRFunction *f, MIRInstruction *mi) {
+static void mir_push(MIRFunction *f, MIRInstruction *mi) {
   mi->reg = (MIRRegister)(f->instructions.size + (size_t)MIR_ARCH_START);
+  if (f->blocks.size)
+    vector_back(f->blocks)->exit = mi->reg;
+  vector_push(f->instructions, mi);
+}
+
+void mir_push_with_reg(MIRFunction *f, MIRInstruction *mi, MIRRegister reg) {
+  mi->reg = reg;
   if (f->blocks.size)
     vector_back(f->blocks)->exit = mi->reg;
   vector_push(f->instructions, mi);
@@ -130,19 +143,18 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
       list_foreach (IRInstruction*, inst, bb->instructions) {
         //ir_femit_instruction(stdout, inst);
         switch (inst->kind) {
-        case IR_IMMEDIATE: {
-          MIRInstruction *mir = mir_imm((int64_t)inst->imm);
-          mir->origin = inst;
-          inst->machine_inst = mir;
-          mir_push(function, mir);
-        } break;
+
+        case IR_IMMEDIATE:
+        case IR_REGISTER:
+          break;
+
         case IR_CALL: {
           MIRInstruction *mir = mir_makenew(MIR_CALL);
           mir->origin = inst;
           if (inst->call.is_indirect)
             mir_add_op(mir, mir_op_reference_ir(inst->call.callee_instruction));
           else mir_add_op(mir, mir_op_function(inst->call.callee_function));
-          // TODO: Arguments...
+          // TODO: Arguments...?
           inst->machine_inst = mir;
           mir_push(function, mir);
         } break;
@@ -151,7 +163,6 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
         case IR_SIGN_EXTEND:
         case IR_TRUNCATE:
         case IR_BITCAST:
-        case IR_COPY:
         case IR_LOAD: {
           MIRInstruction *mir = mir_makenew((uint32_t)inst->kind);
           mir->origin = inst;
@@ -159,6 +170,16 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           inst->machine_inst = mir;
           mir_push(function, mir);
         } break;
+
+        case IR_COPY: {
+          if (inst->operand->kind == IR_IMMEDIATE || inst->operand->kind == IR_REGISTER) break;
+          MIRInstruction *mir = mir_makenew(MIR_COPY);
+          mir->origin = inst;
+          mir_add_op(mir, mir_op_reference_ir(inst->operand));
+          inst->machine_inst = mir;
+          mir_push(function, mir);
+        } break;
+
         case IR_RETURN: {
           MIRInstruction *mir = mir_makenew(MIR_RETURN);
           mir->origin = inst;
@@ -232,15 +253,6 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
         case IR_PHI: {
           TODO("How does phi work?");
         } break;
-
-        case IR_REGISTER: {
-          MIRInstruction *mir = mir_makenew(MIR_REGISTER);
-          mir->origin = inst;
-          mir_add_op(mir, mir_op_register(inst->result, 0));
-          inst->machine_inst = mir;
-          mir_push(function, mir);
-        } break;
-
         case IR_UNREACHABLE: {
           MIRInstruction *mir = mir_makenew(MIR_UNREACHABLE);
           mir->origin = inst;
@@ -321,7 +333,7 @@ const char *mir_common_opcode_mnemonic(uint32_t opcode) {
 }
 
 void print_mir_operand(MIROperand *op) {
-  STATIC_ASSERT(MIR_OP_COUNT == 6, "Exhaustive handling of MIR operand kinds");
+  STATIC_ASSERT(MIR_OP_COUNT == 8, "Exhaustive handling of MIR operand kinds");
   switch (op->kind) {
   case MIR_OP_REGISTER: {
     // TODO: Maybe print size?
@@ -340,6 +352,12 @@ void print_mir_operand(MIROperand *op) {
   } break;
   case MIR_OP_NAME: {
     print("%37\"%33%s%37\"%m", op->value.name);
+  } break;
+  case MIR_OP_STATIC_REF: {
+    print("%37\"%33%s%37\" %36%T%m", op->value.static_ref->name, op->value.static_ref->name);
+  } break;
+  case MIR_OP_LOCAL_REF: {
+    print("offs:%Z sz:%Z", op->value.local_ref->offset, op->value.local_ref->size);
   } break;
   case MIR_OP_COUNT:
   case MIR_OP_NONE: UNREACHABLE();
@@ -403,7 +421,9 @@ MIROperand *mir_get_op(MIRInstruction *inst, size_t index) {
 MIRInstruction *mir_find_by_vreg(MIRFunction *f, size_t reg) {
   ASSERT(f, "Invalid argument");
   ASSERT(reg >= (size_t)MIR_ARCH_START, "Invalid MIR virtual register");
-  size_t index = reg - (size_t)MIR_ARCH_START;
-  ASSERT(index < f->instructions.size, "Invalid index");
-  return f->instructions.data[index];
+
+  foreach_ptr (MIRInstruction*, inst, f->instructions)
+    if (inst->reg == reg) return inst;
+
+  ICE("Could not find machine instruction in function \"%S\" with register %Z\n", f->name, reg);
 }

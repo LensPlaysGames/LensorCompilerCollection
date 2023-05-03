@@ -130,6 +130,9 @@ enum ComparisonType {
   F(LIT_INTEGER)                                                 \
   F(LIT_STRING)
 
+typedef struct IRStaticVariable IRStaticVariable;
+typedef struct IRStackAllocation IRStackAllocation;
+
 typedef struct MIRFunction MIRFunction;
 typedef struct MIRBlock MIRBlock;
 typedef struct MIRInstruction MIRInstruction;

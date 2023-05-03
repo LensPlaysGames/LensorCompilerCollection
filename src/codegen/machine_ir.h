@@ -25,6 +25,8 @@ typedef enum MIROperandKind {
   MIR_OP_BLOCK,
   MIR_OP_FUNCTION,
   MIR_OP_NAME,
+  MIR_OP_STATIC_REF,
+  MIR_OP_LOCAL_REF,
   MIR_OP_COUNT
 } MIROperandKind;
 
@@ -36,6 +38,8 @@ typedef const char* MIROperandName;
 typedef int64_t MIROperandImmediate;
 typedef IRBlock* MIROperandBlock;
 typedef IRFunction* MIROperandFunction;
+typedef IRStaticVariable* MIROperandStatic;
+typedef IRStackAllocation* MIROperandLocal;
 
 typedef unsigned int MIRRegister;
 
@@ -62,6 +66,8 @@ typedef struct MIROperand {
     MIROperandName name;
     MIROperandBlock block;
     MIROperandFunction function;
+    MIROperandStatic static_ref;
+    MIROperandLocal local_ref;
   } value;
 } MIROperand;
 
@@ -161,7 +167,8 @@ void mir_add_op(MIRInstruction *inst, MIROperand op);
 /// Return a pointer to operand at index within instruction.
 MIROperand *mir_get_op(MIRInstruction *inst, size_t index);
 
-void mir_push(MIRFunction *mir, MIRInstruction *mi);
+void mir_push_with_reg(MIRFunction *mir, MIRInstruction *mi, MIRRegister reg);
+
 MIRInstruction *mir_find_by_vreg(MIRFunction *mir, size_t reg);
 
 MIRFunction *mir_function(IRFunction *ir_f);
