@@ -3068,23 +3068,42 @@ void codegen_emit_x86_64(CodegenContext *context) {
     if (!function->attr_nomangle) mangle_function_name(function);
   }
 
-  MIRVector machine_instructions_from_ir = mir_from_ir(context);
+  MIRFunctionVector machine_instructions_from_ir = mir_from_ir(context);
 
-  foreach_ptr (MIRInstruction*, mir, machine_instructions_from_ir) {
-    print_mir_instruction(mir);
+  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
+    print("%S {\n", f->name);
+    foreach_ptr (MIRBlock*, bb, f->blocks) {
+      print("%S:\n", bb->name);
+      MIR_FOREACH_INST_IN_BLOCK(bb, mi) {
+        print_mir_instruction(mi);
+      }
+    }
+    print("}\n");
   }
 
-  MIRVector machine_instructions_selected = select_instructions2(machine_instructions_from_ir);
+  MIRFunctionVector machine_instructions_selected = select_instructions2(machine_instructions_from_ir);
 
-  foreach_ptr (MIRInstruction*, mir, machine_instructions_from_ir) free(mir);
+  /*
+  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
+    foreach_ptr (MIRInstruction*, mir, f->instructions) free(mir);
+    vector_delete(f->instructions);
+  }
   vector_delete(machine_instructions_from_ir);
+  */
 
   print("\n");
-  foreach_ptr (MIRInstruction*, mir, machine_instructions_selected) {
-    print_mir_instruction(mir);
+  foreach_ptr (MIRFunction*, f, machine_instructions_selected) {
+    print("%S {\n", f->name);
+    foreach_ptr (MIRBlock*, bb, f->blocks) {
+      print("%S:\n", bb->name);
+      MIR_FOREACH_INST_IN_BLOCK(bb, mi) {
+        print_mir_instruction(mi);
+      }
+    }
+    print("}\n");
   }
 
-  MIRVector machine_instructions = select_instructions(context);
+  MIRInstructionVector machine_instructions = select_instructions(context);
 
   { // Emit entry
     fprint(context->code,
