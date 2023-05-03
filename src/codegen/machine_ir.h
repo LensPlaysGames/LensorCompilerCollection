@@ -2,6 +2,7 @@
 #define MACHINE_IR_H
 
 #include <codegen/codegen_forward.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <vector.h>
 #include <utils.h>
