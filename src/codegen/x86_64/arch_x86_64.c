@@ -3075,7 +3075,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     print("%S {\n", f->name);
     foreach_ptr (MIRBlock*, bb, f->blocks) {
       print("%S:\n", bb->name);
-      MIR_FOREACH_INST_IN_BLOCK(bb, mi) {
+      foreach_ptr (MIRInstruction*, mi, bb->instructions) {
         print_mir_instruction(mi);
       }
     }
@@ -3097,7 +3097,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     print("%S {\n", f->name);
     foreach_ptr (MIRBlock*, bb, f->blocks) {
       print("%S:\n", bb->name);
-      MIR_FOREACH_INST_IN_BLOCK(bb, mi) {
+      foreach_ptr (MIRInstruction*, mi, bb->instructions) {
         print_mir_instruction(mi);
       }
     }

@@ -89,18 +89,14 @@ MIRInstruction *mir_makecopy(MIRInstruction *original) {
   return mir;
 }
 
-static void mir_push(MIRFunction *f, MIRInstruction *mi) {
-  mi->reg = (MIRRegister)(f->instructions.size + (size_t)MIR_ARCH_START);
-  if (f->blocks.size)
-    vector_back(f->blocks)->exit = mi->reg;
-  vector_push(f->instructions, mi);
-}
-
 void mir_push_with_reg(MIRFunction *f, MIRInstruction *mi, MIRRegister reg) {
   mi->reg = reg;
-  if (f->blocks.size)
-    vector_back(f->blocks)->exit = mi->reg;
-  vector_push(f->instructions, mi);
+  vector_push(vector_back(f->blocks)->instructions, mi);
+  f->inst_count++;
+}
+
+static void mir_push(MIRFunction *f, MIRInstruction *mi) {
+  mir_push_with_reg(f, mi, (MIRRegister)(f->inst_count + (size_t)MIR_ARCH_START));
 }
 
 MIRFunction *mir_function(IRFunction *ir_f) {
@@ -115,12 +111,6 @@ MIRBlock *mir_block(MIRFunction *function, IRBlock *ir_bb) {
   bb->function = function;
   bb->origin = ir_bb;
   bb->name = string_dup(ir_bb->name);
-  bb->entry = (MIRRegister)(function->instructions.size + MIR_ARCH_START);
-
-  // Close old block if there is one.
-  if (function->blocks.size)
-    vector_back(function->blocks)->exit = (MIRRegister)(function->instructions.size + MIR_ARCH_START);
-
   vector_push(function->blocks, bb);
   return bb;
 }
@@ -274,18 +264,22 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
 }
 
 const char *mir_operand_kind_string(MIROperandKind opkind) {
+  STATIC_ASSERT(MIR_OP_COUNT == 8, "Exhaustive handling of MIR operand kinds");
   switch (opkind) {
   case MIR_OP_NONE: return "none";
   case MIR_OP_REGISTER: return "register";
   case MIR_OP_IMMEDIATE: return "immediate";
   case MIR_OP_BLOCK: return "block";
   case MIR_OP_FUNCTION: return "function";
+  case MIR_OP_STATIC_REF: return "static";
+  case MIR_OP_LOCAL_REF: return "local";
   default: break;
   }
   return "";
 }
 
 const char *mir_common_opcode_mnemonic(uint32_t opcode) {
+  STATIC_ASSERT(MIR_COUNT == 39, "Exhaustive handling of MIRCommonOpcodes (string conversion)");
   switch (opcode) {
   case MIR_IMMEDIATE: return "immediate";
   case MIR_CALL: return "call";
@@ -365,10 +359,13 @@ void print_mir_operand(MIROperand *op) {
 }
 
 void print_mir_instruction(MIRInstruction *mir) {
+  //if (mir->reg < MIR_ARCH_START)
+  //  print("%31m%Z %37| %32r%Z %37| ", mir->id, (usz)mir->reg);
+  //else print("%31m%Z %37| %34v%Z %37| ", mir->id, (usz)mir->reg);
   if (mir->reg < MIR_ARCH_START)
-    print("%31m%Z %37| %32r%Z %37| ", mir->id, (usz)mir->reg);
-  else print("%31m%Z %37| %34v%Z %37| ", mir->id, (usz)mir->reg);
-  if (mir->opcode < MIR_COUNT) print("%34%s ", mir_common_opcode_mnemonic(mir->opcode));
+    print("%32r%Z %37| ", (usz)mir->reg);
+  else print("%34v%Z %37| ", (usz)mir->reg);
+  if (mir->opcode < MIR_COUNT) print("%31%s%m ", mir_common_opcode_mnemonic(mir->opcode));
   else print("%31op%d%36 ", (int)mir->opcode);
   MIROperand *base = NULL;
   if (mir->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
@@ -422,8 +419,10 @@ MIRInstruction *mir_find_by_vreg(MIRFunction *f, size_t reg) {
   ASSERT(f, "Invalid argument");
   ASSERT(reg >= (size_t)MIR_ARCH_START, "Invalid MIR virtual register");
 
-  foreach_ptr (MIRInstruction*, inst, f->instructions)
-    if (inst->reg == reg) return inst;
+  // Bad linear lookup == sad times
+  foreach_ptr (MIRBlock*, block, f->blocks)
+    foreach_ptr (MIRInstruction*, inst, block->instructions)
+      if (inst->reg == reg) return inst;
 
   ICE("Could not find machine instruction in function \"%S\" with register %Z\n", f->name, reg);
 }

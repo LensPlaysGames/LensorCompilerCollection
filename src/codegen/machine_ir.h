@@ -114,23 +114,16 @@ typedef struct MIRInstruction {
 typedef struct MIRBlock {
   string name;
 
-  // Index within `instructions` of MIRFunction pointing to first
-  // instruction executed in basic block.
-  MIRRegister entry;
-  // Index within `instructions` of MIRFunction pointing to last
-  // instruction of basic block.
-  MIRRegister exit;
+  MIRInstructionVector instructions;
 
   MIRFunction *function;
-
   IRBlock *origin;
 } MIRBlock;
 
 typedef struct MIRFunction {
   string name;
 
-  /// Flat list of all instructions in function.
-  MIRInstructionVector instructions;
+  uint32_t inst_count;
   MIRBlockVector blocks;
 
   IRFunction *origin;
@@ -173,15 +166,5 @@ MIRInstruction *mir_find_by_vreg(MIRFunction *mir, size_t reg);
 
 MIRFunction *mir_function(IRFunction *ir_f);
 MIRBlock *mir_block(MIRFunction *function, IRBlock *ir_bb);
-
-// MIRBlock *block, MIRInstruction *(it_name) <- name of iterator available in loop
-#define MIR_FOREACH_INST_IN_BLOCK(block, it_name)                       \
-  const size_t block##idx_start = (size_t)(block)->entry - (size_t)MIR_ARCH_START; \
-  const size_t block##idx_end = (size_t)(block)->exit - (size_t)MIR_ARCH_START; \
-  DBGASSERT(block##idx_start < block->function->instructions.size, "MIRBlock entry (%Z) is not less than size of machine instruction vector (%Z)", block##idx_start, block->function->instructions.size); \
-  DBGASSERT(block##idx_end < block->function->instructions.size, "MIRBlock exit (%Z) larger than size of machine instruction vector (%Z) of function %S", block##idx_end, block->function->instructions.size, block->function->name); \
-  DBGASSERT(block##idx_start <= block##idx_end, "MIRBlock exit is before its entry: %Z < %Z", block##idx_end, block##idx_start); \
-  MIRInstruction *it_name = block->function->instructions.data[block##idx_start]; \
-  for (size_t it = block##idx_start; it <= block##idx_end; ++it, it_name = block->function->instructions.data[it])
 
 #endif /* MACHINE_IR_H */
