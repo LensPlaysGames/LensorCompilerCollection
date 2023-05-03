@@ -107,7 +107,7 @@ typedef Vector(MIRInstruction*) MIRVector;
 /// dwisott
 MIRInstruction *mir_makenew(uint32_t opcode);
 /// Copy the entire instruction
-MIRInstruction *mir_makecopy(MIRInstruction *original, uint32_t opcode);
+MIRInstruction *mir_makecopy(MIRInstruction *original);
 
 /// Clear the given instructions operands.
 void mir_op_clear(MIRInstruction *);
