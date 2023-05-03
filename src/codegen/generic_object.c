@@ -348,6 +348,7 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
 
   // Cleanup
   vector_delete(string_table);
+  vector_delete(relocations);
   vector_delete(syms);
   vector_delete(shdrs);
 }
