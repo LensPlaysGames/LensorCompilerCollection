@@ -141,6 +141,9 @@ if (NOT MSVC)
     -Werror=implicit-int -Werror=pointer-arith
     -Werror=incompatible-pointer-types
 
+    # TEMPORARY
+    -Wno-implicit-fallthrough
+
     -Wno-unused-parameter -Wno-unused-function
     -Wno-format-zero-length -Wno-comment
     -Wno-cast-function-type
