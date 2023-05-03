@@ -145,6 +145,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context);
 /// a human-readable name of the opcode.
 const char *mir_common_opcode_mnemonic(uint32_t opcode);
 
+void print_mir_operand(MIROperand *m_op);
 void print_mir_instruction(MIRInstruction *m_inst);
 
 MIROperand mir_op_function(IRFunction *f);

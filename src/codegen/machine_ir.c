@@ -320,6 +320,32 @@ const char *mir_common_opcode_mnemonic(uint32_t opcode) {
   return "";
 }
 
+void print_mir_operand(MIROperand *op) {
+  STATIC_ASSERT(MIR_OP_COUNT == 6, "Exhaustive handling of MIR operand kinds");
+  switch (op->kind) {
+  case MIR_OP_REGISTER: {
+    // TODO: Maybe print size?
+    if (op->value.reg.value >= MIR_ARCH_START)
+      print("%34v%u%m", (unsigned)op->value.reg.value);
+    else print("%32r%u%m", (unsigned)op->value.reg.value);
+  } break;
+  case MIR_OP_IMMEDIATE: {
+    print("%35%I%m", op->value.imm);
+  } break;
+  case MIR_OP_BLOCK: {
+    print("%33%S%m", op->value.block->name);
+  } break;
+  case MIR_OP_FUNCTION: {
+    print("%33%S%m", op->value.function->name);
+  } break;
+  case MIR_OP_NAME: {
+    print("%37\"%33%s%37\"%m", op->value.name);
+  } break;
+  case MIR_OP_COUNT:
+  case MIR_OP_NONE: UNREACHABLE();
+  }
+}
+
 void print_mir_instruction(MIRInstruction *mir) {
   print("%31m%Z %37| %34v%Z %37| ", mir->id, mir->reg);
   if (mir->opcode < MIR_COUNT) print("%34%s ", mir_common_opcode_mnemonic(mir->opcode));
@@ -331,31 +357,9 @@ void print_mir_instruction(MIRInstruction *mir) {
   for (size_t j = 0; j < mir->operand_count; ++j) {
     MIROperand *op = base + j;
     if (op->kind == MIR_OP_NONE) break;
-    STATIC_ASSERT(MIR_OP_COUNT == 6, "Exhaustive handling of MIR operand kinds");
-    switch (op->kind) {
-    case MIR_OP_REGISTER: {
-      // TODO: Maybe print size?
-      if (op->value.reg.value >= MIR_ARCH_START)
-        print(" %34v%u", (unsigned)op->value.reg.value);
-      else print(" %32r%u", (unsigned)op->value.reg.value);
-    } break;
-    case MIR_OP_IMMEDIATE: {
-      print(" %35%I", op->value.imm);
-    } break;
-    case MIR_OP_BLOCK: {
-      print(" %33%S", op->value.block->name);
-    } break;
-    case MIR_OP_FUNCTION: {
-      print(" %33%S", op->value.function->name);
-    } break;
-    case MIR_OP_NAME: {
-      print(" %37\"%33%s%37\"", op->value.name);
-    } break;
-    case MIR_OP_COUNT:
-    case MIR_OP_NONE: UNREACHABLE();
-    }
+    print_mir_operand(op);
     if (j < mir->operand_count - 1 && (op + 1)->kind != MIR_OP_NONE)
-      print("%37,");
+      print("%37, ");
   }
   print("\n%m");
 }
