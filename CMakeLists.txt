@@ -139,6 +139,7 @@ if (NOT MSVC)
     -Wshadow -Wconversion
     -Werror=return-type -Werror=implicit-function-declaration
     -Werror=implicit-int -Werror=pointer-arith
+    -Werror=incompatible-pointer-types
 
     -Wno-unused-parameter -Wno-unused-function
     -Wno-format-zero-length -Wno-comment
