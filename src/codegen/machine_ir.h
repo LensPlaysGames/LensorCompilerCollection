@@ -173,7 +173,7 @@ MIRBlock *mir_block(MIRFunction *function, IRBlock *ir_bb);
   const size_t block##idx_end = (size_t)(block)->exit - (size_t)MIR_ARCH_START; \
   DBGASSERT(block##idx_start < block->function->instructions.size, "MIRBlock entry (%Z) is not less than size of machine instruction vector (%Z)", block##idx_start, block->function->instructions.size); \
   DBGASSERT(block##idx_end < block->function->instructions.size, "MIRBlock exit (%Z) larger than size of machine instruction vector (%Z) of function %S", block##idx_end, block->function->instructions.size, block->function->name); \
-  DBGASSERT(block##idx_start <= block##idx_end, "MIRBlock exit is before it's entry: %Z < %Z", block##idx_end, block##idx_start); \
+  DBGASSERT(block##idx_start <= block##idx_end, "MIRBlock exit is before its entry: %Z < %Z", block##idx_end, block##idx_start); \
   MIRInstruction *it_name = block->function->instructions.data[block##idx_start]; \
   for (size_t it = block##idx_start; it <= block##idx_end; ++it, it_name = block->function->instructions.data[it])
 
