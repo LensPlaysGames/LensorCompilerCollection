@@ -763,21 +763,41 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         case MIR_IMMEDIATE:
         case MIR_BLOCK:
         case MIR_REGISTER:
-        case IR_STATIC_REF:
-        case IR_FUNC_REF: {
+        case MIR_STATIC_REF:
+        case MIR_FUNC_REF: {
           MIRInstruction *something = mir_makecopy(inst);
           inst->lowered = something;
           mir_push(f, something);
         } break;
 
         case MIR_CALL: {
-          // TODO: A bunch of call stuff, like we do in `emit_instruction`
-          MIRInstruction *call = mir_makecopy(inst);
+          MIROperand *op = mir_get_op(inst, 0);
+          MIRInstruction *call = mir_makenew(MX64_CALL);
+          call->origin = inst->origin;
           inst->lowered = call;
-          if (mir_get_op(inst, 0)->kind == MIR_OP_NAME)
+          switch (op->kind) {
+          case MIR_OP_NAME: {
             call->x64.instruction_form = I_FORM_NAME;
-          else call->x64.instruction_form = I_FORM_INDIRECT_BRANCH;
-          mir_push(f, call);
+            mir_add_op(call, mir_op_name(op->value.name));
+            mir_push(f, call);
+          } break;
+          case MIR_OP_BLOCK: {
+            call->x64.instruction_form = I_FORM_NAME;
+            mir_add_op(call, mir_op_name(op->value.block->name.data));
+            mir_push(f, call);
+          } break;
+          case MIR_OP_FUNCTION: {
+            call->x64.instruction_form = I_FORM_NAME;
+            mir_add_op(call, mir_op_name(op->value.function->name.data));
+            mir_push(f, call);
+          } break;
+          case MIR_OP_REGISTER: {
+            call->x64.instruction_form = I_FORM_REG;
+            mir_add_op(call, *op);
+            mir_push(f, call);
+          } break;
+          default: ICE("Unhandled call operand kind: %d", (int)op->kind);
+          }
         } break;
 
         case MIR_LOAD: {
@@ -1025,7 +1045,6 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         } break;
 
         case MIR_UNREACHABLE:
-        case MIR_PHI:
         case MIR_SUB:
         case MIR_MUL:
         case MIR_DIV:
@@ -1048,6 +1067,7 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         case MIR_ARCH_START:
           TODO("[x86_64]:isel: \"%s\" MIR instruction opcode", mir_common_opcode_mnemonic(inst->opcode));
 
+        case MIR_PHI:
         case MIR_PARAMETER:
         case MIR_LIT_INTEGER:
         case MIR_LIT_STRING:
