@@ -1078,6 +1078,36 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
           mir_push_with_reg(f, m_inst, inst->reg);
         } break;
 
+        // Single-instruction non-commutative operations
+        case MIR_SUB: {
+          RegSize size = regsize_from_bytes(type_sizeof(inst->origin->type));
+
+          MIROperand lhs = *mir_get_op(inst, 0);
+          MIROperand rhs = *mir_get_op(inst, 1);
+
+          // To subtract two immediates, we must first load the left hand side into a register.
+          if (lhs.kind == MIR_OP_IMMEDIATE && rhs.kind == MIR_OP_IMMEDIATE) {
+            MIRInstruction *load_imm = mir_makenew(MX64_MOV);
+            load_imm->origin = inst->origin;
+            load_imm->x64.instruction_form = I_FORM_IMM_TO_REG;
+            mir_add_op(load_imm, lhs);
+            mir_add_op(load_imm, mir_op_immediate(0)); // fake entry
+            mir_push_with_reg(f, load_imm, (MIRRegister)extra_instruction_reg++);
+            *mir_get_op(load_imm, 1) = mir_op_reference(load_imm);
+            lhs = mir_op_reference(load_imm);
+          }
+          else if (lhs.kind == MIR_OP_IMMEDIATE) {
+            TODO("Handle immediate - value form of non-commutative binary operations");
+          }
+
+          MIRInstruction *m_inst = mir_makenew((uint32_t)gmir_binop_to_x64((MIROpcodeCommon)inst->opcode));
+          m_inst->origin = inst->origin;
+          inst->lowered = m_inst;
+          mir_add_op(m_inst, lhs);
+          mir_add_op(m_inst, rhs);
+          mir_push_with_reg(f, m_inst, inst->reg);
+        } break;
+
         case MIR_NOT: {
           MIROperand op = *mir_get_op(inst, 0);
 
@@ -1101,7 +1131,6 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         } break;
 
         case MIR_UNREACHABLE:
-        case MIR_SUB:
         case MIR_DIV:
         case MIR_MOD:
         case MIR_SHL:
