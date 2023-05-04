@@ -2389,8 +2389,12 @@ usz sysv_argument_register_index_x86_64(CodegenContext *context, Type *function,
 
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
+
   FOREACH_INSTRUCTION (context) {
     switch (instruction->kind) {
+    default:
+      break;
+
     case IR_LOAD: {
       lower_load(context, instruction);
     } break;
@@ -2682,9 +2686,6 @@ static void lower(CodegenContext *context) {
     case IR_BITCAST: {
       instruction->kind = IR_COPY;
     } break;
-
-    default:
-      break;
     }
   }
 
