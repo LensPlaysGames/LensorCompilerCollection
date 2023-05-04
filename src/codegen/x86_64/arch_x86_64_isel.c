@@ -1108,6 +1108,59 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
           mir_push_with_reg(f, m_inst, inst->reg);
         } break;
 
+        // Comparisons
+        case MIR_EQ: FALLTHROUGH;
+        case MIR_NE: FALLTHROUGH;
+        case MIR_LT: FALLTHROUGH;
+        case MIR_GT: FALLTHROUGH;
+        case MIR_LE: FALLTHROUGH;
+        case MIR_GE: {
+
+          enum ComparisonType type = COMPARE_COUNT;
+          switch (inst->opcode) {
+          case MIR_EQ: type = COMPARE_EQ; break;
+          case MIR_NE: type = COMPARE_NE; break;
+          case MIR_LT: type = COMPARE_LT; break;
+          case MIR_GT: type = COMPARE_GT; break;
+          case MIR_LE: type = COMPARE_LE; break;
+          case MIR_GE: type = COMPARE_GE; break;
+          default: ICE("Unsupported IR instruction in codegen_comparison: %d (%s)",
+                       inst->opcode, mir_common_opcode_mnemonic(inst->opcode));
+          }
+
+          // Perform the comparison.
+          // TODO: register size
+          MIRInstruction *cmp = mir_makenew(MX64_CMP);
+          cmp->origin = inst->origin;
+          cmp->x64.instruction_form = I_FORM_REG_TO_REG;
+          mir_add_op(cmp, *mir_get_op(inst, 1));
+          mir_add_op(cmp, *mir_get_op(inst, 0));
+
+          mir_push_with_reg(f, cmp, (MIRRegister)extra_instruction_reg++);
+
+          // IF YOU REPLACE THIS WITH A XOR IT WILL BREAK HORRIBLY
+          // We use MOV because it doesn't set flags.
+          // TODO: 32-bit move
+          MIRInstruction *move = mir_makenew(MX64_MOV);
+          move->origin = inst->origin;
+          move->x64.instruction_form = I_FORM_IMM_TO_REG;
+          mir_add_op(move, mir_op_immediate(0));
+          mir_add_op(move, mir_op_immediate(0)); // fake entry
+          mir_push_with_reg(f, move, (MIRRegister)extra_instruction_reg++);
+
+          MIRInstruction *setcc = mir_makenew(MX64_SETCC);
+          inst->lowered = setcc;
+          setcc->origin = inst->origin;
+          setcc->x64.instruction_form = I_FORM_SETCC;
+          mir_add_op(setcc, mir_op_immediate(type));
+          mir_add_op(setcc, mir_op_immediate(0));
+          mir_push_with_reg(f, setcc, inst->reg);
+          // Destination of move is same vreg that setcc operates on.
+          *mir_get_op(setcc, 1) = mir_op_reference(setcc);
+          *mir_get_op(move, 1) = mir_op_reference(setcc);
+
+        } break;
+
         case MIR_NOT: {
           MIROperand op = *mir_get_op(inst, 0);
 
@@ -1136,12 +1189,6 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         case MIR_SHL:
         case MIR_SAR:
         case MIR_SHR:
-        case MIR_LT:
-        case MIR_LE:
-        case MIR_GT:
-        case MIR_GE:
-        case MIR_EQ:
-        case MIR_NE:
         case MIR_ZERO_EXTEND:
         case MIR_SIGN_EXTEND:
         case MIR_TRUNCATE:
