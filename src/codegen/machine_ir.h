@@ -44,8 +44,8 @@ typedef IRStackAllocation* MIROperandLocal;
 typedef unsigned int MIRRegister;
 
 typedef struct MIRValue_x86_64 {
-  uint8_t instruction_form;
   uint16_t instruction;
+  uint8_t instruction_form;
   uint8_t reg_src_sz;
   uint8_t reg_src;
   uint8_t reg_dst_sz;
