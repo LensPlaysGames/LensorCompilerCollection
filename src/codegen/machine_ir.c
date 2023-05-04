@@ -518,11 +518,11 @@ void print_mir_operand(MIROperand *op) {
   } break;
   case MIR_OP_BLOCK: {
     ASSERT(op->value.block, "Invalid block operand");
-    print("%33%S%m", op->value.block->name);
+    print("%37Block:%33%S%m", op->value.block->name);
   } break;
   case MIR_OP_FUNCTION: {
     ASSERT(op->value.function, "Invalid function operand");
-    print("%33%S%m", op->value.function->name);
+    print("%37Function:%33%S%m", op->value.function->name);
   } break;
   case MIR_OP_NAME: {
     print("%37\"%33%s%37\"%m", op->value.name);
