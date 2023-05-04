@@ -321,11 +321,18 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
         case IR_CALL: {
           MIRInstruction *mir = mir_makenew(MIR_CALL);
           mir->origin = inst;
+          inst->machine_inst = mir;
+
+          // Call target (destination)
           if (inst->call.is_indirect)
             mir_add_op(mir, mir_op_reference_ir(inst->call.callee_instruction));
           else mir_add_op(mir, mir_op_function(inst->call.callee_function->machine_func));
-          // TODO: Arguments...?
-          inst->machine_inst = mir;
+
+          // Call arguments
+          foreach_ptr (IRInstruction*, arg, inst->call.arguments) {
+            mir_add_op(mir, mir_op_reference_ir(arg));
+          }
+
           mir_push_into_block(function, mir_bb, mir);
         } break;
 

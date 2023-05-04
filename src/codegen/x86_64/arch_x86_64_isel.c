@@ -784,33 +784,41 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         } break;
 
         case MIR_CALL: {
-          MIROperand *op = mir_get_op(inst, 0);
           MIRInstruction *call = mir_makenew(MX64_CALL);
           call->origin = inst->origin;
           inst->lowered = call;
-          switch (op->kind) {
+          MIROperand *op_dst = mir_get_op(inst, 0);
+          switch (op_dst->kind) {
           case MIR_OP_NAME: {
             call->x64.instruction_form = I_FORM_NAME;
-            mir_add_op(call, mir_op_name(op->value.name));
-            mir_push_with_reg(f, call, inst->reg);
+            mir_add_op(call, mir_op_name(op_dst->value.name));
           } break;
           case MIR_OP_BLOCK: {
             call->x64.instruction_form = I_FORM_NAME;
-            mir_add_op(call, mir_op_name(op->value.block->name.data));
-            mir_push_with_reg(f, call, inst->reg);
+            mir_add_op(call, mir_op_name(op_dst->value.block->name.data));
           } break;
           case MIR_OP_FUNCTION: {
             call->x64.instruction_form = I_FORM_NAME;
-            mir_add_op(call, mir_op_name(op->value.function->name.data));
-            mir_push_with_reg(f, call, inst->reg);
+            mir_add_op(call, mir_op_name(op_dst->value.function->name.data));
           } break;
           case MIR_OP_REGISTER: {
             call->x64.instruction_form = I_FORM_REG;
-            mir_add_op(call, *op);
-            mir_push_with_reg(f, call, inst->reg);
+            mir_add_op(call, *op_dst);
           } break;
-          default: ICE("Unhandled call operand kind: %d", (int)op->kind);
+          default: ICE("Unhandled call operand kind: %d", (int)op_dst->kind);
           }
+
+          // foreach operand
+          MIROperand *base = NULL;
+          if (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
+            base = inst->operands.arr;
+          else base = inst->operands.vec.data;
+          for (size_t j = 1; j < inst->operand_count; ++j) {
+            MIROperand *op_arg = base + j;
+            mir_add_op(call, *op_arg);
+          }
+
+          mir_push_with_reg(f, call, inst->reg);
         } break;
 
         case MIR_LOAD: {
@@ -944,6 +952,8 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
             move->origin = inst->origin;
             move->x64.instruction_form = I_FORM_REG_TO_REG;
             mir_add_op(move, *op);
+            // TODO: Probably need some way to convey to register
+            // allocation that this is the function return register.
             mir_add_op(move, mir_op_immediate(0)); // fake entry
             mir_push_with_reg(f, move, (MIRRegister)extra_instruction_reg++);
             *mir_get_op(move, 1) = mir_op_reference(move);
@@ -978,8 +988,6 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
           if (optimise && inst->origin->parent_block) inst->origin->parent_block->done = true;
         } break;
         case MIR_BRANCH_CONDITIONAL: {
-          //IRBranchConditional *branch = &inst->origin->cond_br;
-
           MIROperand *cond = mir_get_op(inst, 0);
           MIROperand *then = mir_get_op(inst, 1);
           MIROperand *else_ = mir_get_op(inst, 2);
@@ -1012,7 +1020,6 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
             mir_push_with_reg(f, jcc, (MIRRegister)extra_instruction_reg++);
           }
           else {
-
             MIRInstruction *jcc = mir_makenew(MX64_JCC);
             jcc->origin = inst->origin;
             jcc->x64.instruction_form = I_FORM_JCC;
