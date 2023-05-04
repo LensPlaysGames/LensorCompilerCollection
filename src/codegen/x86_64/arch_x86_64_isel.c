@@ -58,6 +58,7 @@ static MIROpcodex86_64 gmir_binop_to_x64(MIROpcodeCommon opcode) {
   switch (opcode) {
   case MIR_ADD: return MX64_ADD;
   case MIR_SUB: return MX64_SUB;
+  case MIR_MUL: return MX64_IMUL;
   case MIR_AND: return MX64_AND;
   case MIR_OR: return MX64_OR;
   default: ICE("Unhandled binary operator general MIRInstruction opcode: %u (%s)",
@@ -1036,6 +1037,7 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         } break;
 
         // Commutative binary
+        case MIR_MUL:
         case MIR_OR:
         case MIR_AND:
         case MIR_ADD: {
@@ -1093,7 +1095,6 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
 
         case MIR_UNREACHABLE:
         case MIR_SUB:
-        case MIR_MUL:
         case MIR_DIV:
         case MIR_MOD:
         case MIR_SHL:
