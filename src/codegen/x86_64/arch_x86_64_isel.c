@@ -979,34 +979,37 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
           if (optimise && inst->origin->parent_block) inst->origin->parent_block->done = true;
         } break;
         case MIR_BRANCH_CONDITIONAL: {
-          IRBranchConditional *branch = &inst->origin->cond_br;
+          //IRBranchConditional *branch = &inst->origin->cond_br;
+
+          MIROperand *cond = mir_get_op(inst, 0);
+          MIROperand *then = mir_get_op(inst, 1);
+          MIROperand *else_ = mir_get_op(inst, 2);
 
           MIRInstruction *test = mir_makenew(MX64_TEST);
           inst->lowered = test;
           test->origin = inst->origin;
           test->x64.instruction_form = I_FORM_REG_TO_REG;
 
-          MIROperand cond = mir_op_reference(branch->condition->machine_inst);
-          mir_add_op(test, cond);
-          mir_add_op(test, cond);
+          mir_add_op(test, *cond);
+          mir_add_op(test, *cond);
           mir_push_with_reg(f, test, inst->reg);
 
           /// If either target is the next block, arrange the jumps in such a way
           /// that we can save one and simply fallthrough to the next block.
-          if (optimise && branch->then == inst->origin->parent_block->next) {
+          if (optimise && then->value.block->origin == inst->origin->parent_block->next) {
             MIRInstruction *jcc = mir_makenew(MX64_JCC);
             jcc->origin = inst->origin;
             jcc->x64.instruction_form = I_FORM_JCC;
             mir_add_op(jcc, mir_op_immediate(JUMP_TYPE_Z));
-            mir_add_op(jcc, mir_op_name(branch->else_->name.data));
+            mir_add_op(jcc, *else_);
             mir_push_with_reg(f, jcc, (MIRRegister)extra_instruction_reg++);
           }
-          else if (optimise && branch->else_ == inst->origin->parent_block->next) {
+          else if (optimise && else_->value.block->origin == inst->origin->parent_block->next) {
             MIRInstruction *jcc = mir_makenew(MX64_JCC);
             jcc->origin = inst->origin;
             jcc->x64.instruction_form = I_FORM_JCC;
             mir_add_op(jcc, mir_op_immediate(JUMP_TYPE_NZ));
-            mir_add_op(jcc, mir_op_name(branch->then->name.data));
+            mir_add_op(jcc, *then);
             mir_push_with_reg(f, jcc, (MIRRegister)extra_instruction_reg++);
           }
           else {
@@ -1015,12 +1018,12 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
             jcc->origin = inst->origin;
             jcc->x64.instruction_form = I_FORM_JCC;
             mir_add_op(jcc, mir_op_immediate(JUMP_TYPE_Z));
-            mir_add_op(jcc, mir_op_name(branch->else_->name.data));
+            mir_add_op(jcc, *else_);
 
             MIRInstruction *jmp = mir_makenew(MX64_JMP);
             jmp->origin = inst->origin;
             jmp->x64.instruction_form = I_FORM_NAME;
-            mir_add_op(jmp, mir_op_name(branch->then->name.data));
+            mir_add_op(jmp, *then);
 
             mir_push_with_reg(f, jcc, (MIRRegister)extra_instruction_reg++);
             mir_push_with_reg(f, jmp, (MIRRegister)extra_instruction_reg++);
