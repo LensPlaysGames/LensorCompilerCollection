@@ -3006,8 +3006,8 @@ void codegen_emit_x86_64(CodegenContext *context) {
     .instruction_register_interference = interfering_regs
   };
 
-  foreach_ptr (IRFunction*, f, context->functions)
-    if (!f->is_extern) allocate_registers(f, &desc);
+//  foreach_ptr (IRFunction*, f, context->functions)
+//    if (!f->is_extern) allocate_registers(f, &desc);
 
   if (debug_ir) ir_femit(stdout, context);
 
@@ -3099,7 +3099,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     foreach_ptr (MIRBlock*, bb, f->blocks) {
       print("%S:\n", bb->name);
       foreach_ptr (MIRInstruction*, mi, bb->instructions) {
-        print_mir_instruction(mi);
+        print_mir_instruction_with_mnemonic(mi, &mir_x86_64_opcode_mnemonic);
       }
     }
     print("}\n");

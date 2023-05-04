@@ -145,6 +145,15 @@ MIRFunctionVector mir_from_ir(CodegenContext *context);
 /// a human-readable name of the opcode.
 const char *mir_common_opcode_mnemonic(uint32_t opcode);
 
+/// \param opcode_mnemonic
+///   A function that will be used to get a human-readable mnemonic for
+///   any given opcode. If NULL returned, will fallback to mir_common_opcode_mnemonic().
+typedef const char* (*OpcodeMnemonicFunction)(uint32_t);
+void print_mir_instruction_with_mnemonic(MIRInstruction *inst, OpcodeMnemonicFunction opcode_mnemonic);
+void print_mir_block_with_mnemonic(MIRBlock *block, OpcodeMnemonicFunction opcode_mnemonic);
+void print_mir_function_with_mnemonic(MIRFunction *function, OpcodeMnemonicFunction opcode_mnemonic);
+
+/// Same as above but with mir_common_opcode_mnemonic passed implicitly.
 void print_mir_operand(MIROperand *op);
 void print_mir_instruction(MIRInstruction *inst);
 void print_mir_block(MIRBlock *block);
