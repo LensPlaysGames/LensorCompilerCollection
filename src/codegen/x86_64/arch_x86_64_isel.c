@@ -774,12 +774,12 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
 
         switch ((MIROpcodeCommon)inst->opcode) {
 
+        case MIR_REGISTER:
         case MIR_IMMEDIATE:
           break;
 
         case MIR_BITCAST:
         case MIR_BLOCK:
-        case MIR_REGISTER:
         case MIR_STATIC_REF:
         case MIR_FUNC_REF: {
           MIRInstruction *something = mir_makecopy(inst);
@@ -941,6 +941,17 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         } break;
 
         case MIR_RETURN: {
+          if (inst->operand_count) {
+            MIROperand *op = mir_get_op(inst, 0);
+            MIRInstruction *move = mir_makenew(MX64_MOV);
+            inst->lowered = move;
+            move->origin = inst->origin;
+            move->x64.instruction_form = I_FORM_REG_TO_REG;
+            mir_add_op(move, *op);
+            // FIXME: This should be the return register based on calling convention.
+            mir_add_op(move, mir_op_register(REG_RAX, r64));
+            mir_push_with_reg(f, move, (MIRRegister)extra_instruction_reg++);
+          }
           MIRInstruction *ret = mir_makenew(MX64_RET);
           inst->lowered = ret;
           ret->origin = inst->origin;

@@ -359,9 +359,6 @@ void print_mir_operand(MIROperand *op) {
 }
 
 void print_mir_instruction(MIRInstruction *mir) {
-  //if (mir->reg < MIR_ARCH_START)
-  //  print("%31m%Z %37| %32r%Z %37| ", mir->id, (usz)mir->reg);
-  //else print("%31m%Z %37| %34v%Z %37| ", mir->id, (usz)mir->reg);
   if (mir->reg < MIR_ARCH_START)
     print("%32r%Z %37| ", (usz)mir->reg);
   else print("%34v%Z %37| ", (usz)mir->reg);
