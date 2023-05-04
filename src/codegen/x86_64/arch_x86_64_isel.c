@@ -842,7 +842,7 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
             *mir_get_op(move, 2) = mir_op_reference(move);
           }
 
-            /// Load from a local.
+          /// Load from a local.
           else if (ref->opcode == MIR_ALLOCA) {
             size = regsize_from_bytes((size_t)mir_get_op(inst, 0)->value.imm);
             if (size == r8 || size == r16) {
@@ -944,9 +944,9 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
             move->origin = inst->origin;
             move->x64.instruction_form = I_FORM_REG_TO_REG;
             mir_add_op(move, *op);
-            // FIXME: This should be the return register based on calling convention.
-            mir_add_op(move, mir_op_register(REG_RAX, r64));
+            mir_add_op(move, mir_op_immediate(0)); // fake entry
             mir_push_with_reg(f, move, (MIRRegister)extra_instruction_reg++);
+            *mir_get_op(move, 1) = mir_op_reference(move);
           }
           MIRInstruction *ret = mir_makenew(MX64_RET);
           inst->lowered = ret;
@@ -972,8 +972,7 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
             MIRInstruction *jmp = mir_makenew(MX64_JMP);
             inst->lowered = jmp;
             jmp->origin = inst->origin;
-            jmp->x64.instruction_form = I_FORM_NAME;
-            mir_add_op(jmp, mir_op_name(mir_get_op(inst, 0)->value.block->name.data));
+            mir_add_op(jmp, *mir_get_op(inst, 0));
             mir_push_with_reg(f, jmp, inst->reg);
           }
           if (optimise && inst->origin->parent_block) inst->origin->parent_block->done = true;
