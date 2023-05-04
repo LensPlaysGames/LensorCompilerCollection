@@ -6,14 +6,16 @@
 #include <utils.h>
 #include <vector.h>
 
-MIROperand mir_op_function(IRFunction *f) {
+MIROperand mir_op_function(MIRFunction *f) {
+  ASSERT(f, "Cannot create MIR function operand from NULL MIR function.");
   MIROperand out = {0};
   out.kind = MIR_OP_FUNCTION;
   out.value.function = f;
   return out;
 }
 
-MIROperand mir_op_block(IRBlock *block) {
+MIROperand mir_op_block(MIRBlock *block) {
+  ASSERT(block, "Cannot create MIR block operand from NULL MIR block.");
   MIROperand out = {0};
   out.kind = MIR_OP_BLOCK;
   out.value.block = block;
@@ -89,10 +91,20 @@ MIRInstruction *mir_makecopy(MIRInstruction *original) {
   return mir;
 }
 
-void mir_push_with_reg(MIRFunction *f, MIRInstruction *mi, MIRRegister reg) {
+/// Function is only needed to update instruction count. May pass NULL.
+static void mir_push_with_reg_into_block(MIRFunction *f, MIRBlock *block, MIRInstruction *mi, MIRRegister reg) {
+  vector_push(block->instructions, mi);
+  mi->block = block;
   mi->reg = reg;
-  vector_push(vector_back(f->blocks)->instructions, mi);
-  f->inst_count++;
+  if (f) f->inst_count++;
+}
+
+static void mir_push_into_block(MIRFunction *f, MIRBlock *block, MIRInstruction *mi) {
+  mir_push_with_reg_into_block(f, block, mi, (MIRRegister)(f->inst_count + (size_t)MIR_ARCH_START));
+}
+
+void mir_push_with_reg(MIRFunction *f, MIRInstruction *mi, MIRRegister reg) {
+  mir_push_with_reg_into_block(f, vector_back(f->blocks), mi, reg);
 }
 
 static void mir_push(MIRFunction *f, MIRInstruction *mi) {
@@ -103,6 +115,7 @@ MIRFunction *mir_function(IRFunction *ir_f) {
   MIRFunction* f = calloc(1, sizeof(*f));
   f->origin = ir_f;
   f->name = string_dup(ir_f->name);
+  ir_f->machine_func = f;
   return f;
 }
 
@@ -111,6 +124,15 @@ MIRBlock *mir_block(MIRFunction *function, IRBlock *ir_bb) {
   bb->function = function;
   bb->origin = ir_bb;
   bb->name = string_dup(ir_bb->name);
+  ir_bb->machine_block = bb;
+  vector_push(function->blocks, bb);
+  return bb;
+}
+
+MIRBlock *mir_block_makenew(MIRFunction *function, const char *name) {
+  MIRBlock* bb = calloc(1, sizeof(*bb));
+  bb->function = function;
+  bb->name = string_create(name);
   vector_push(function->blocks, bb);
   return bb;
 }
@@ -121,33 +143,192 @@ MIRInstruction *mir_imm(int64_t imm) {
   return mir;
 }
 
+/// MAY RETURN NULL iff copy operand is of inlined operand type (static ref, local ref, register, or immediate).
+MIRInstruction *mir_from_ir_copy(IRInstruction *copy) {
+  if (copy->operand->kind == IR_IMMEDIATE || copy->operand->kind == IR_REGISTER) return NULL;
+  MIRInstruction *mir = mir_makenew(MIR_COPY);
+  mir->origin = copy;
+  mir_add_op(mir, mir_op_reference_ir(copy->operand));
+  copy->machine_inst = mir;
+  return mir;
+}
+
+/// Return non-zero iff given instruction needs a register.
+static bool needs_register(IRInstruction *instruction) {
+  STATIC_ASSERT(IR_COUNT == 38, "Exhaustively handle all instruction types");
+  ASSERT(instruction);
+  switch (instruction->kind) {
+    case IR_LOAD:
+    case IR_PHI:
+    case IR_COPY:
+    case IR_IMMEDIATE:
+    case IR_CALL:
+    case IR_REGISTER:
+    case IR_NOT:
+    case IR_ZERO_EXTEND:
+    case IR_SIGN_EXTEND:
+    case IR_TRUNCATE:
+    case IR_BITCAST:
+    ALL_BINARY_INSTRUCTION_CASES()
+      return true;
+
+    case IR_PARAMETER:
+      ICE("Unlowered parameter instruction in register allocator");
+
+    /// Allocas and static refs need a register iff they are actually used.
+    case IR_ALLOCA:
+    case IR_STATIC_REF:
+    case IR_FUNC_REF:
+      return instruction->users.size;
+
+    default:
+      return false;
+  }
+}
+
+/// For each argument of each phi instruction, add in a copy to the phi's virtual register.
+static void phi2copy(MIRFunction *function) {
+  IRBlock *last_block = NULL;
+  foreach_ptr (MIRBlock*, block, function->blocks) {
+    MIRInstructionVector instructions_to_remove = {0};
+    foreach_ptr (MIRInstruction*, instruction, block->instructions) {
+      if (instruction->opcode != MIR_PHI) continue;
+      IRInstruction *phi = instruction->origin;
+      ASSERT(phi->parent_block != last_block,
+             "Multiple PHI instructions in a single block are not allowed!");
+      last_block = phi->parent_block;
+
+      /// Single PHI argument means that we can replace it with a simple copy.
+      if (phi->phi_args.size == 1) {
+        instruction->opcode = MIR_COPY;
+        mir_op_clear(instruction);
+        mir_add_op(instruction, mir_op_reference_ir(phi->phi_args.data[0]->value));
+        continue;
+      }
+
+      /// For each of the PHI arguments, we basically insert a copy.
+      /// Where we insert it depends on some complicated factors
+      /// that have to do with control flow.
+      foreach_ptr (IRPhiArgument *, arg, phi->phi_args) {
+        STATIC_ASSERT(IR_COUNT == 38, "Handle all branch types");
+        IRInstruction *branch = arg->block->instructions.last;
+        switch (branch->kind) {
+        /// If the predecessor returns or is unreachable, then the PHI
+        /// is never going to be reached, so we can just ignore
+        /// this argument.
+        case IR_UNREACHABLE:
+        case IR_RETURN: continue;
+
+        /// For direct branches, we just insert the copy before the branch.
+        case IR_BRANCH: {
+          if (needs_register(arg->value)) {
+            MIRInstruction *copy = mir_makenew(MIR_COPY);
+            copy->reg = instruction->reg;
+            mir_add_op(copy, mir_op_reference_ir(arg->value));
+            // Insert copy before branch machine instruction.
+            // mir_push_before(branch->machine_inst, copy);
+            MIRInstructionVector *instructions = &arg->value->machine_inst->block->instructions;
+            vector_insert(*instructions, instructions->data + (instructions->size - 1), copy);
+          } else {
+            print("\n\n%31Offending block%m:\n");
+            ir_femit_block(stdout, arg->value->parent_block);
+            ICE("Block ends with instruction that does not return value.");
+          }
+        } break;
+
+        /// Indirect branches are a bit more complicated. We need to insert an
+        /// additional block for the copy instruction and replace the branch
+        /// to the phi block with a branch to that block.
+        case IR_BRANCH_CONDITIONAL: {
+
+          // Create a COPY of the argument into the MIR PHI's vreg.
+          // When we eventually remove the MIR PHI, what will be left is a bunch
+          // of copies into the same virtual register. RA can then fill this virtual
+          // register in with a single register and boom our PHI is codegenned
+          // properly.
+          MIRInstruction *copy = mir_makenew(MIR_COPY);
+          mir_add_op(copy, mir_op_reference_ir(arg->value));
+          copy->reg = instruction->reg;
+
+          // Possible FIXME: This relies on backend filling empty block
+          // names with something.
+          MIRBlock *critical_edge_trampoline = mir_block_makenew(function, "");
+          mir_push_into_block(function, critical_edge_trampoline, copy);
+          // Branch to phi block from critical edge
+          MIRInstruction *critical_edge_branch = mir_makenew(MIR_BRANCH);
+          critical_edge_branch->block = instruction->block;
+          mir_push_into_block(function, critical_edge_trampoline, critical_edge_branch);
+
+          // The critical edge trampoline block is now complete. This
+          // means we can replace the branch of the argument block to that
+          // of this critical edge trampoline.
+
+          // Condition is first operand, then the "then" branch, then "else".
+          MIROperand *branch_then = mir_get_op(branch->machine_inst, 1);
+          MIROperand *branch_else = mir_get_op(branch->machine_inst, 2);
+          if (branch_then->value.block->origin == phi->parent_block)
+            *branch_then = mir_op_block(critical_edge_trampoline);
+          else {
+            ASSERT(branch_else->value.block->origin == phi->parent_block,
+                   "Branch to phi block is neither true nor false branch of conditional branch!");
+            *branch_else = mir_op_block(critical_edge_trampoline);
+          }
+        } break;
+        default: UNREACHABLE();
+        }
+
+        // Add index of phi instruction to list of instructions to remove.
+        vector_push(instructions_to_remove, instruction);
+      }
+
+      foreach_ptr(MIRInstruction*, to_remove, instructions_to_remove) {
+        vector_remove_element(block->instructions, to_remove);
+      }
+    }
+  }
+}
+
 MIRFunctionVector mir_from_ir(CodegenContext *context) {
   MIRFunctionVector out = {0};
+  // Forward function references require this.
   foreach_ptr (IRFunction*, f, context->functions) {
     MIRFunction *function = mir_function(f);
     vector_push(out, function);
-    if (f->is_extern) continue;
-    list_foreach (IRBlock*, bb, f->blocks) {
-      //print("Block %S\n", bb->name);
+  }
+  foreach_ptr (MIRFunction*, function, out) {
+    // NOTE for devs: function->origin == IRFunction*
+    if (function->origin->is_extern) continue;
+    // Forward block references require this.
+    list_foreach (IRBlock*, bb, function->origin->blocks) {
       (void)mir_block(function, bb);
+    }
+    foreach_ptr (MIRBlock*, mir_bb, function->blocks) {
+      IRBlock *bb = mir_bb->origin;
       list_foreach (IRInstruction*, inst, bb->instructions) {
-        //ir_femit_instruction(stdout, inst);
         switch (inst->kind) {
 
         case IR_IMMEDIATE:
         case IR_REGISTER:
           break;
 
+        case IR_PHI: {
+          MIRInstruction *mir = mir_makenew(MIR_PHI);
+          mir->origin = inst;
+          inst->machine_inst = mir;
+          mir_push_into_block(function, mir_bb, mir);
+        } break;
+
         case IR_CALL: {
           MIRInstruction *mir = mir_makenew(MIR_CALL);
           mir->origin = inst;
           if (inst->call.is_indirect)
             mir_add_op(mir, mir_op_reference_ir(inst->call.callee_instruction));
-          else mir_add_op(mir, mir_op_function(inst->call.callee_function));
+          else mir_add_op(mir, mir_op_function(inst->call.callee_function->machine_func));
           // TODO: Arguments...?
           inst->machine_inst = mir;
-          mir_push(function, mir);
+          mir_push_into_block(function, mir_bb, mir);
         } break;
+
         case IR_NOT:
         case IR_ZERO_EXTEND:
         case IR_SIGN_EXTEND:
@@ -158,16 +339,13 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir->origin = inst;
           mir_add_op(mir, mir_op_reference_ir(inst->operand));
           inst->machine_inst = mir;
-          mir_push(function, mir);
+          mir_push_into_block(function, mir_bb, mir);
         } break;
 
         case IR_COPY: {
           if (inst->operand->kind == IR_IMMEDIATE || inst->operand->kind == IR_REGISTER) break;
-          MIRInstruction *mir = mir_makenew(MIR_COPY);
-          mir->origin = inst;
-          mir_add_op(mir, mir_op_reference_ir(inst->operand));
-          inst->machine_inst = mir;
-          mir_push(function, mir);
+          MIRInstruction *mir = mir_from_ir_copy(inst);
+          mir_push_into_block(function, mir_bb, mir);
         } break;
 
         case IR_RETURN: {
@@ -175,23 +353,23 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir->origin = inst;
           if (inst->operand) mir_add_op(mir, mir_op_reference_ir(inst->operand));
           inst->machine_inst = mir;
-          mir_push(function, mir);
+          mir_push_into_block(function, mir_bb, mir);
         } break;
         case IR_BRANCH: {
           MIRInstruction *mir = mir_makenew(MIR_BRANCH);
           mir->origin = inst;
-          mir_add_op(mir, mir_op_block(inst->destination_block));
+          mir_add_op(mir, mir_op_block(inst->destination_block->machine_block));
           inst->machine_inst = mir;
-          mir_push(function, mir);
+          mir_push_into_block(function, mir_bb, mir);
         } break;
         case IR_BRANCH_CONDITIONAL: {
           MIRInstruction *mir = mir_makenew(MIR_BRANCH_CONDITIONAL);
           mir->origin = inst;
           mir_add_op(mir, mir_op_reference_ir(inst->cond_br.condition));
-          mir_add_op(mir, mir_op_block(inst->cond_br.then));
-          mir_add_op(mir, mir_op_block(inst->cond_br.else_));
+          mir_add_op(mir, mir_op_block(inst->cond_br.then->machine_block));
+          mir_add_op(mir, mir_op_block(inst->cond_br.else_->machine_block));
           inst->machine_inst = mir;
-          mir_push(function, mir);
+          mir_push_into_block(function, mir_bb, mir);
         } break;
         case IR_ADD:
         case IR_SUB:
@@ -214,7 +392,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir_add_op(mir, mir_op_reference_ir(inst->lhs));
           mir_add_op(mir, mir_op_reference_ir(inst->rhs));
           inst->machine_inst = mir;
-          mir_push(function, mir);
+          mir_push_into_block(function, mir_bb, mir);
         } break;
         case IR_STATIC_REF:
         case IR_FUNC_REF: {
@@ -222,7 +400,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           inst->machine_inst = mir;
           mir->origin = inst;
           mir_add_op(mir, mir_op_reference_ir(inst));
-          mir_push(function, mir);
+          mir_push_into_block(function, mir_bb, mir);
         } break;
         case IR_STORE: {
           MIRInstruction *mir = mir_makenew(MIR_STORE);
@@ -230,24 +408,21 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir_add_op(mir, mir_op_reference_ir(inst->store.value));
           mir_add_op(mir, mir_op_reference_ir(inst->store.addr));
           inst->machine_inst = mir;
-          mir_push(function, mir);
+          mir_push_into_block(function, mir_bb, mir);
         } break;
         case IR_ALLOCA: {
           MIRInstruction *mir = mir_makenew(MIR_ALLOCA);
           mir->origin = inst;
           mir_add_op(mir, mir_op_immediate((int64_t)inst->alloca.size));
           inst->machine_inst = mir;
-          mir_push(function, mir);
+          mir_push_into_block(function, mir_bb, mir);
         } break;
 
-        case IR_PHI: {
-          TODO("How does phi work?");
-        } break;
         case IR_UNREACHABLE: {
           MIRInstruction *mir = mir_makenew(MIR_UNREACHABLE);
           mir->origin = inst;
           inst->machine_inst = mir;
-          mir_push(function, mir);
+          mir_push_into_block(function, mir_bb, mir);
         } break;
 
         case IR_PARAMETER:
@@ -258,7 +433,10 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
         } // switch (inst->kind)
       }
     }
+
+    phi2copy(function);
   }
+
   mir_make_arch = true;
   return out;
 }
@@ -339,9 +517,11 @@ void print_mir_operand(MIROperand *op) {
     print("%35%I%m", op->value.imm);
   } break;
   case MIR_OP_BLOCK: {
+    ASSERT(op->value.block, "Invalid block operand");
     print("%33%S%m", op->value.block->name);
   } break;
   case MIR_OP_FUNCTION: {
+    ASSERT(op->value.function, "Invalid function operand");
     print("%33%S%m", op->value.function->name);
   } break;
   case MIR_OP_NAME: {
@@ -376,6 +556,19 @@ void print_mir_instruction(MIRInstruction *mir) {
       print("%37, ");
   }
   print("\n%m");
+}
+
+void print_mir_block(MIRBlock *block) {
+  print("%S:\n", block->name);
+  foreach_ptr (MIRInstruction*, inst, block->instructions)
+    print_mir_instruction(inst);
+}
+void print_mir_function(MIRFunction *function) {
+  print("%S {\n", function->name);
+  foreach_ptr (MIRBlock*, block, function->blocks) {
+    print_mir_block(block);
+  }
+  print("}\n");
 }
 
 /// Clear the given instructions operands.

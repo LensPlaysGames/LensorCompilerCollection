@@ -129,6 +129,10 @@ typedef struct IRBlock {
 
   // Unique ID (among blocks)
   size_t id;
+
+  // MIRBlock that was created to represent this IRBlock.
+  MIRBlock *machine_block;
+
   // For the backend.
   bool done;
 } IRBlock;
@@ -148,6 +152,9 @@ typedef struct IRFunction {
 
   // Unique ID (among functions)
   size_t id;
+
+  // MIRFunction that was created to represent this IRFunction.
+  MIRFunction *machine_func;
 
   // Used by certain backends.
   size_t locals_total_size;

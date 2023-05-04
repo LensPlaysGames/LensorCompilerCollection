@@ -36,8 +36,8 @@ typedef struct MIROperandRegister {
 } MIROperandRegister;
 typedef const char* MIROperandName;
 typedef int64_t MIROperandImmediate;
-typedef IRBlock* MIROperandBlock;
-typedef IRFunction* MIROperandFunction;
+typedef MIRBlock* MIROperandBlock;
+typedef MIRFunction* MIROperandFunction;
 typedef IRStaticVariable* MIROperandStatic;
 typedef IRStackAllocation* MIROperandLocal;
 
@@ -145,11 +145,13 @@ MIRFunctionVector mir_from_ir(CodegenContext *context);
 /// a human-readable name of the opcode.
 const char *mir_common_opcode_mnemonic(uint32_t opcode);
 
-void print_mir_operand(MIROperand *m_op);
-void print_mir_instruction(MIRInstruction *m_inst);
+void print_mir_operand(MIROperand *op);
+void print_mir_instruction(MIRInstruction *inst);
+void print_mir_block(MIRBlock *block);
+void print_mir_function(MIRFunction *function);
 
-MIROperand mir_op_function(IRFunction *f);
-MIROperand mir_op_block(IRBlock *block);
+MIROperand mir_op_function(MIRFunction *f);
+MIROperand mir_op_block(MIRBlock *block);
 MIROperand mir_op_reference(MIRInstruction *inst);
 MIROperand mir_op_reference_ir(IRInstruction *inst);
 MIROperand mir_op_immediate(int64_t imm);
