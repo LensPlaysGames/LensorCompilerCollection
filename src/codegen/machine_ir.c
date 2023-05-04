@@ -538,11 +538,14 @@ void print_mir_operand(MIROperand *op) {
   }
 }
 
-void print_mir_instruction(MIRInstruction *mir) {
+void print_mir_instruction_with_mnemonic(MIRInstruction *mir, OpcodeMnemonicFunction opcode_mnemonic) {
+  ASSERT(mir, "Invalid argument");
+  ASSERT(opcode_mnemonic, "Invalid argument");
   if (mir->reg < MIR_ARCH_START)
     print("%32r%Z %37| ", (usz)mir->reg);
   else print("%34v%Z %37| ", (usz)mir->reg);
-  if (mir->opcode < MIR_COUNT) print("%31%s%m ", mir_common_opcode_mnemonic(mir->opcode));
+  const char *mnemonic = opcode_mnemonic(mir->opcode);
+  if (mnemonic && *mnemonic != '\0') print("%31%s%m ", opcode_mnemonic(mir->opcode));
   else print("%31op%d%36 ", (int)mir->opcode);
   MIROperand *base = NULL;
   if (mir->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
@@ -558,17 +561,27 @@ void print_mir_instruction(MIRInstruction *mir) {
   print("\n%m");
 }
 
-void print_mir_block(MIRBlock *block) {
+void print_mir_instruction(MIRInstruction *mir) {
+  print_mir_instruction_with_mnemonic(mir, &mir_common_opcode_mnemonic);
+}
+
+void print_mir_block_with_mnemonic(MIRBlock *block, OpcodeMnemonicFunction opcode_mnemonic) {
   print("%S:\n", block->name);
   foreach_ptr (MIRInstruction*, inst, block->instructions)
-    print_mir_instruction(inst);
+    print_mir_instruction_with_mnemonic(inst, opcode_mnemonic);
 }
-void print_mir_function(MIRFunction *function) {
+void print_mir_block(MIRBlock *block) {
+  print_mir_block_with_mnemonic(block, &mir_common_opcode_mnemonic);
+}
+void print_mir_function_with_mnemonic(MIRFunction *function, OpcodeMnemonicFunction opcode_mnemonic) {
   print("%S {\n", function->name);
   foreach_ptr (MIRBlock*, block, function->blocks) {
-    print_mir_block(block);
+    print_mir_block_with_mnemonic(block, opcode_mnemonic);
   }
   print("}\n");
+}
+void print_mir_function(MIRFunction *function) {
+  print_mir_function_with_mnemonic(function, &mir_common_opcode_mnemonic);
 }
 
 /// Clear the given instructions operands.
