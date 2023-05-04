@@ -8,49 +8,45 @@
 #include <opt.h>
 #include <utils.h>
 
-STATIC_ASSERT(I_COUNT == 29, "Exhaustive handling of x86_64 instructions in x86_64 MIR");
-typedef enum MIROpcodex86_64 {
-  /// Arithmetic instructions.
-  MX64_ADD = MIR_ARCH_START,
-  MX64_SUB,
-  // I_MUL,
-  MX64_IMUL,
-  MX64_DIV,
-  MX64_IDIV,
-  MX64_XOR,
-  MX64_CMP,
-  MX64_TEST,
-  MX64_CWD,
-  MX64_CDQ,
-  MX64_CQO,
-  MX64_SETCC,
-  MX64_SAL,
-  MX64_SHL = MX64_SAL,
-  MX64_SAR,
-  MX64_SHR,
-  MX64_AND,
-  MX64_OR,
-  MX64_NOT,
-
-  /// Stack instructions.
-  MX64_PUSH,
-  MX64_POP,
-
-  /// Control flow.
-  MX64_CALL,
-  MX64_JMP,
-  MX64_RET,
-  MX64_JCC,
-
-  /// Memory stuff.
-  MX64_MOV,
-  MX64_LEA,
-
-  MX64_MOVSX,
-  MX64_MOVZX,
-
-  MX64_XCHG,
-} MIROpcodex86_64;
+const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {
+  STATIC_ASSERT(MX64_COUNT == 29, "Exhaustive handling of x86_64 opcodes (string conversion)");
+  ASSERT(opcode >= MIR_ARCH_START && opcode < MX64_END, "Opcode is not x86_64 opcode");
+  switch ((MIROpcodex86_64)opcode) {
+  case MX64_ADD: return "add";
+  case MX64_SUB: return "sub";
+  case MX64_IMUL: return "imul";
+  case MX64_DIV: return "div";
+  case MX64_IDIV: return "idiv";
+  case MX64_XOR: return "xor";
+  case MX64_CMP: return "cmp";
+  case MX64_TEST: return "test";
+  case MX64_CWD: return "cwd";
+  case MX64_CDQ: return "cdq";
+  case MX64_CQO: return "cqo";
+  case MX64_SETCC: return "setcc";
+  case MX64_SAL: return "sal";
+  case MX64_SAR: return "sar";
+  case MX64_SHR: return "shr";
+  case MX64_AND: return "and";
+  case MX64_OR: return "or";
+  case MX64_NOT: return "not";
+  case MX64_PUSH: return "push";
+  case MX64_POP: return "pop";
+  case MX64_CALL: return "call";
+  case MX64_JMP: return "jmp";
+  case MX64_RET: return "ret";
+  case MX64_JCC: return "jcc";
+  case MX64_MOV: return "mov";
+  case MX64_LEA: return "lea";
+  case MX64_MOVSX: return "movsx";
+  case MX64_MOVZX: return "movzx";
+  case MX64_XCHG: return "xchg";
+  case MX64_END: return "end";
+  case MX64_COUNT: return "count";
+  default: break;
+  }
+  ICE("Unhandled x86_64 MIR instruction in string conversion");
+}
 
 static MIROpcodex86_64 gmir_binop_to_x64(MIROpcodeCommon opcode) {
   DBGASSERT(opcode < MIR_COUNT, "Argument is meant to be a general MIR instruction opcode.");
