@@ -985,7 +985,7 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         case MIR_BRANCH_CONDITIONAL: {
           IRBranchConditional *branch = &inst->origin->cond_br;
 
-          MIRInstruction *test = mir_makenew(MX64_JCC);
+          MIRInstruction *test = mir_makenew(MX64_TEST);
           inst->lowered = test;
           test->origin = inst->origin;
           test->x64.instruction_form = I_FORM_REG_TO_REG;
@@ -1047,10 +1047,10 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
           *mir_get_op(alloca, 2) = mir_op_reference(alloca);
         } break;
 
-        // Commutative binary
-        case MIR_MUL:
-        case MIR_OR:
-        case MIR_AND:
+        // Single-instruction commutative binary operations
+        case MIR_MUL: FALLTHROUGH;
+        case MIR_OR: FALLTHROUGH;
+        case MIR_AND: FALLTHROUGH;
         case MIR_ADD: {
           RegSize size = regsize_from_bytes(type_sizeof(inst->origin->type));
 
