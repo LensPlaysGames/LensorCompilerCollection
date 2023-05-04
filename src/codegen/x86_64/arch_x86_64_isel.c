@@ -52,6 +52,19 @@ typedef enum MIROpcodex86_64 {
   MX64_XCHG,
 } MIROpcodex86_64;
 
+static MIROpcodex86_64 gmir_binop_to_x64(MIROpcodeCommon opcode) {
+  DBGASSERT(opcode < MIR_COUNT, "Argument is meant to be a general MIR instruction opcode.");
+  STATIC_ASSERT(MIR_COUNT == 39, "Exhaustive handling of binary operator machine instruction opcodes for x86_64 backend");
+  switch (opcode) {
+  case MIR_ADD: return MX64_ADD;
+  case MIR_SUB: return MX64_SUB;
+  case MIR_AND: return MX64_AND;
+  case MIR_OR: return MX64_OR;
+  default: ICE("Unhandled binary operator general MIRInstruction opcode: %u (%s)",
+               (unsigned)opcode, mir_common_opcode_mnemonic((uint32_t)opcode));
+  }
+}
+
 static MIRValue_x86_64 mir_none(Instruction inst) {
   MIRValue_x86_64 out = {0};
   out.instruction_form = I_FORM_NONE;
@@ -889,8 +902,6 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         case MIR_STORE: {
           RegSize size = regsize_from_bytes(type_sizeof(inst->origin->store.value->type));
 
-
-
           MIRInstruction *store = mir_makenew(MX64_MOV);
           inst->lowered = store;
           store->origin = inst->origin;
@@ -1024,6 +1035,9 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
           *mir_get_op(alloca, 2) = mir_op_reference(alloca);
         } break;
 
+        // Commutative binary
+        case MIR_OR:
+        case MIR_AND:
         case MIR_ADD: {
           RegSize size = regsize_from_bytes(type_sizeof(inst->origin->type));
 
@@ -1047,11 +1061,33 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
             rhs = tmp;
           }
 
-          MIRInstruction *m_inst = mir_makenew(inst->opcode == MIR_SUB ? MX64_SUB : MX64_ADD);
+          MIRInstruction *m_inst = mir_makenew((uint32_t)gmir_binop_to_x64((MIROpcodeCommon)inst->opcode));
           m_inst->origin = inst->origin;
           inst->lowered = m_inst;
           mir_add_op(m_inst, lhs);
           mir_add_op(m_inst, rhs);
+          mir_push_with_reg(f, m_inst, inst->reg);
+        } break;
+
+        case MIR_NOT: {
+          MIROperand op = *mir_get_op(inst, 0);
+
+          // To not (reverse bits) of an immediate, we must first load it into a register.
+          if (op.kind == MIR_OP_IMMEDIATE) {
+            MIRInstruction *load_imm = mir_makenew(MX64_MOV);
+            load_imm->origin = inst->origin;
+            load_imm->x64.instruction_form = I_FORM_IMM_TO_REG;
+            mir_add_op(load_imm, op);
+            mir_add_op(load_imm, mir_op_immediate(0)); // fake entry
+            mir_push_with_reg(f, load_imm, (MIRRegister)extra_instruction_reg++);
+            *mir_get_op(load_imm, 1) = mir_op_reference(load_imm);
+            op = mir_op_reference(load_imm);
+          }
+
+          MIRInstruction *m_inst = mir_makenew(MX64_NOT);
+          m_inst->origin = inst->origin;
+          inst->lowered = m_inst;
+          mir_add_op(m_inst, op);
           mir_push_with_reg(f, m_inst, inst->reg);
         } break;
 
@@ -1063,8 +1099,6 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         case MIR_SHL:
         case MIR_SAR:
         case MIR_SHR:
-        case MIR_AND:
-        case MIR_OR:
         case MIR_LT:
         case MIR_LE:
         case MIR_GT:
@@ -1074,7 +1108,6 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
         case MIR_ZERO_EXTEND:
         case MIR_SIGN_EXTEND:
         case MIR_TRUNCATE:
-        case MIR_NOT:
           TODO("[x86_64]:isel: \"%s\" MIR instruction opcode", mir_common_opcode_mnemonic(inst->opcode));
 
         case MIR_ARCH_START:
