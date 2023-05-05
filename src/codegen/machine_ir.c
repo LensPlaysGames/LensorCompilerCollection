@@ -609,6 +609,8 @@ void mir_add_op(MIRInstruction *inst, MIROperand op) {
     memset(&inst->operands.vec, 0, sizeof(inst->operands.vec));
     for (size_t i = 0; i < MIR_OPERAND_SSO_THRESHOLD; ++i)
       vector_push(inst->operands.vec, tmp[i]);
+
+    vector_push(inst->operands.vec, op);
   } else {
     // inst->operand_count > MIR_OPERAND_SSO_THRESHOLD
     vector_push(inst->operands.vec, op);
