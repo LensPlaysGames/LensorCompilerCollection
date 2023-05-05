@@ -1059,9 +1059,8 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
           inst->lowered = alloca;
           alloca->x64.instruction_form = I_FORM_MEM_TO_REG;
           MIROperand address_register = mir_op_register(REG_RBP, r64);
-          MIROperand offset = mir_op_immediate(- (i64)inst->origin->alloca.offset);
           mir_add_op(alloca, address_register);
-          mir_add_op(alloca, offset);
+          mir_add_op(alloca, *mir_get_op(inst, 0));
           mir_add_op(alloca, mir_op_immediate(0)); // fake entry
           mir_push_with_reg(f, alloca, inst->reg);
           *mir_get_op(alloca, 2) = mir_op_reference(alloca);
