@@ -2,6 +2,7 @@
 #define ARCH_X86_64_ISEL_H
 
 #include <codegen/codegen_forward.h>
+#include <codegen/register_allocation.h>
 #include <codegen/machine_ir.h>
 #include <codegen/x86_64/arch_x86_64_common.h>
 #include <error.h>
@@ -10,7 +11,7 @@
 MIRInstructionVector select_instructions(CodegenContext *context);
 
 /// Given freshly-lowered MIR, return a vector of machine instructions for x86_64 that represents the program.
-MIRFunctionVector select_instructions2(MIRFunctionVector input);
+MIRFunctionVector select_instructions2(const MachineDescription*, MIRFunctionVector input);
 
 STATIC_ASSERT(I_COUNT == 29, "Exhaustive handling of x86_64 instructions in x86_64 MIR");
 typedef enum MIROpcodex86_64 {

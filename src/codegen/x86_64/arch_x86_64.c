@@ -2688,60 +2688,6 @@ static void lower(CodegenContext *context) {
     } break;
     }
   }
-
-  FOREACH_INSTRUCTION (context) {
-    Clobbers status;
-    if ((status = does_clobber(instruction))) {
-      switch (status) {
-      case CLOBBERS_BOTH:
-        TODO("Handle clobbering of both registers by a two address instruction.");
-      case CLOBBERS_REFERENCE: {
-        // TODO: Reduce code duplication.
-        IRInstruction *copy = ir_copy(context, instruction->operand);
-        ir_remove_use(instruction->operand, instruction);
-        mark_used(copy, instruction);
-        insert_instruction_before(copy, instruction);
-        instruction->operand = copy;
-      } break;
-      case CLOBBERS_LEFT: {
-        IRInstruction *copy = ir_copy(context, instruction->lhs);
-        ir_remove_use(instruction->lhs, instruction);
-        mark_used(copy, instruction);
-        insert_instruction_before(copy, instruction);
-        instruction->lhs = copy;
-      } break;
-      case CLOBBERS_RIGHT: {
-        IRInstruction *copy = ir_copy(context, instruction->rhs);
-        ir_remove_use(instruction->rhs, instruction);
-        mark_used(copy, instruction);
-        insert_instruction_before(copy, instruction);
-        instruction->rhs = copy;
-      } break;
-      default:
-      case CLOBBERS_NEITHER:
-        break;
-      }
-    }
-  }
-}
-
-void calculate_stack_offsets(CodegenContext *context) {
-  foreach_ptr (IRFunction*, function, context->functions) {
-    size_t offset = 0;
-    list_foreach (IRBlock *, block, function->blocks) {
-      list_foreach (IRInstruction *, instruction, block->instructions) {
-        switch (instruction->kind) {
-        case IR_ALLOCA:
-          offset += instruction->alloca.size;
-          instruction->alloca.offset = offset;
-          break;
-        default:
-          break;
-        }
-      }
-    }
-    function->locals_total_size = offset;
-  }
 }
 
 static size_t interfering_regs(IRInstruction *instruction) {
@@ -3076,23 +3022,26 @@ void codegen_emit_x86_64(CodegenContext *context) {
     print_mir_function(f);
   }
 
-  MIRFunctionVector machine_instructions_selected = select_instructions2(machine_instructions_from_ir);
+  MIRFunctionVector machine_instructions_selected = select_instructions2(&desc, machine_instructions_from_ir);
 
-  /*
+  // Free preselection MIR.
   foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
-    foreach_ptr (MIRInstruction*, mir, f->instructions) free(mir);
-    vector_delete(f->instructions);
+    foreach_ptr (MIRBlock*, bb, f->blocks) {
+      foreach_ptr (MIRInstruction*, mi, bb->instructions) {
+        free(mi);
+      }
+      vector_delete(bb->instructions);
+    }
+    vector_delete(f->blocks);
   }
   vector_delete(machine_instructions_from_ir);
-  */
 
   print("\n");
   foreach_ptr (MIRFunction*, f, machine_instructions_selected) {
     print_mir_function_with_mnemonic(f, &mir_x86_64_opcode_mnemonic);
   }
 
-  MIRInstructionVector machine_instructions = select_instructions(context);
-
+  // EMIT ASSEMBLY CODE
   { // Emit entry
     fprint(context->code,
            "%s"
@@ -3100,94 +3049,234 @@ void codegen_emit_x86_64(CodegenContext *context) {
            context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
 
     fprint(context->code, "\n");
-    foreach_ptr (IRFunction*, function, context->functions) {
-      if (!function->attr_global) continue;
+    foreach_ptr (MIRFunction*, function, machine_instructions_selected) {
+      if (!function->origin->attr_global) continue;
       fprint(context->code, ".global %S\n", function->name);
     }
   }
+  foreach_ptr (MIRFunction*, function, machine_instructions_selected) {
+    // Generate function entry label if function has definition.
+    if (!function->origin->is_extern)
+      fprint(context->code, "\n%s:\n", function->name.data);
 
-  STATIC_ASSERT(I_FORM_COUNT == 19, "Exhaustive handling of instruction forms for x86_64");
-  foreach_ptr (MIRInstruction*, mir, machine_instructions) {
-    switch (mir->x64.instruction_form) {
-    case I_FORM_NONE: femit_none(context, mir->x64.instruction); break;
-    case I_FORM_IMM: femit_imm(context, mir->x64.instruction, mir->x64.immediate); break;
-    case I_FORM_IMM_TO_MEM: femit_imm_to_mem(context, mir->x64.instruction, mir->x64.immediate, mir->x64.reg_addr, mir->x64.offset); break;
-    case I_FORM_IMM_TO_REG: femit_imm_to_reg(context, mir->x64.instruction, mir->x64.immediate, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
-    case I_FORM_INDIRECT_BRANCH: femit_indirect_branch(context, mir->x64.instruction, mir->x64.reg_addr); break;
-    case I_FORM_MEM: femit_mem(context, mir->x64.instruction, mir->x64.offset, mir->x64.reg_addr); break;
-    case I_FORM_MEM_TO_REG: femit_mem_to_reg(context, mir->x64.instruction, mir->x64.reg_addr, mir->x64.offset, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
-    case I_FORM_NAME: femit_name(context, mir->x64.instruction, mir->x64.name); break;
-    case I_FORM_NAME_TO_REG: femit_name_to_reg(context, mir->x64.instruction, mir->x64.reg_addr, mir->x64.name, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
-    case I_FORM_REG: femit_reg(context, mir->x64.instruction, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
-    case I_FORM_REG_SHIFT: femit_reg_shift(context, mir->x64.instruction, mir->x64.reg_dst); break;
-    case I_FORM_REG_TO_MEM: femit_reg_to_mem(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.offset); break;
-    case I_FORM_REG_TO_NAME: femit_reg_to_name(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.name); break;
-    case I_FORM_REG_TO_OFFSET_NAME: femit_reg_to_offset_name(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.name, (usz)mir->x64.offset); break;
-    case I_FORM_REG_TO_REG: femit_reg_to_reg(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
-    case I_FORM_SETCC: femit_setcc(context, (enum ComparisonType)mir->x64.immediate, mir->x64.reg_dst); break;
-    case I_FORM_JCC: femit_jcc(context, (IndirectJumpType)mir->x64.immediate, mir->x64.name); break;
-    case I_FORM_IRBLOCK: {
-      /// Emit block label if it is used.
-      if (mir->x64.ir_block->name.size) {
-        fprint(context->code,
-               "%s:\n",
-               mir->x64.ir_block->name.data);
-      }
+    // Calculate stack offsets
+    isz frame_offset = 0;
+    foreach (MIRFrameObject, fo, function->frame_objects) {
+      frame_offset -= fo->size;
+      fo->offset = frame_offset;
+    }
 
-    } break;
-    case I_FORM_IRFUNCTION: {
-      if (!mir->x64.ir_function->is_extern) {
-        // Generate function entry.
-        fprint(context->code,
-               "\n%s:\n",
-               mir->x64.ir_function->name.data);
+    foreach_ptr (MIRBlock*, block, function->blocks) {
+      /// Emit block symbol if it is used.
+      if (block->name.size)
+        fprint(context->code, "%s:\n", block->name.data);
+
+      foreach_ptr (MIRInstruction*, instruction, block->instructions) {
+        switch (instruction->opcode) {
+
+        case MX64_LEA: {
+          MIROperand *address = mir_get_op(instruction, 0);
+          MIROperand *local = mir_get_op(instruction, 1);
+          MIROperand *destination = mir_get_op(instruction, 2);
+          ASSERT(address->kind == MIR_OP_REGISTER && address->value.reg.value == REG_RBP,
+                 "LEA expected first operand to be address register");
+          ASSERT(local->kind == MIR_OP_LOCAL_REF && local->value.local_ref != (usz)-1,
+                 "LEA expected second operand to be frame object reference");
+          ASSERT(destination->kind == MIR_OP_REGISTER,
+                 "LEA requires third operand to be a destination register");
+          femit_mem_to_reg(context, I_LEA, address->value.reg.value, mir_get_frame_object(function, local->value.local_ref)->offset, destination->value.reg.value, destination->value.reg.size);
+        }
+
+        case MX64_CALL: {
+          MIROperand *dst = mir_get_op(instruction, 0);
+
+          switch (dst->kind) {
+
+          case MIR_OP_NAME: {
+            print("|> call %s", dst->value.name);
+            femit_name(context, I_CALL, dst->value.name);
+          } break;
+
+          case MIR_OP_BLOCK: {
+            print("|> call %s", dst->value.block->name.data);
+            femit_name(context, I_CALL, dst->value.block->name.data);
+          } break;
+
+          case MIR_OP_FUNCTION: {
+            print("|> call %s", dst->value.function->name.data);
+            femit_name(context, I_CALL, dst->value.function->name.data);
+          } break;
+
+          default: ICE("Unhandled operand type in CALL");
+
+          } // switch (dst->kind)
+
+        } break;
+
+        default: {
+          print("Unhandled opcode: %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
+        } break;
+        }
       }
-    } break;
+    }
+  }
+
+  // EMIT MACHINE CODE (GENERAL OBJECT FILE)
+  foreach_ptr (MIRFunction*, function, machine_instructions_selected) {
+    { // Function symbol
+      GObjSymbol sym = {0};
+      sym.type = function->origin->is_extern ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
+      sym.name = strdup(function->name.data);
+      sym.section_name = strdup(code_section(&object)->name);
+      sym.byte_offset = code_section(&object)->data.bytes.size;
+      vector_push(object.symbols, sym);
+    }
+    foreach_ptr (MIRBlock*, block, function->blocks) {
+      { // Block label symbol
+        GObjSymbol sym = {0};
+        sym.type = GOBJ_SYMTYPE_STATIC;
+        sym.name = strdup(block->name.data);
+        sym.section_name = strdup(code_section(context->object)->name);
+        sym.byte_offset = code_section(context->object)->data.bytes.size;
+        vector_push(context->object->symbols, sym);
+      }
+      foreach_ptr (MIRInstruction*, instruction, block->instructions) {
+        switch (instruction->opcode) {
+
+        case MX64_MOV: {
+          if (instruction->operand_count == 2) {
+            // imm to reg          imm, dst
+            // imm to mem (local)  imm, local
+            // reg to reg          src, dst
+            // reg to mem (local)  src, local
+            // mem to reg (local)  local, src
+            MIROperand *op0 = mir_get_op(instruction, 0);
+            MIROperand *op1 = mir_get_op(instruction, 1);
+
+            switch (op0->kind) {
+
+            case MIR_OP_IMMEDIATE: {
+              // imm to reg          imm, dst
+              // imm to mem (local)  imm, local
+              switch (op1->kind) {
+
+              case MIR_OP_REGISTER: {
+                // imm to reg          imm, dst
+                mcode_imm_to_reg(context, I_MOV, op0->value.imm, op1->value.reg.value, op1->value.reg.size);
+              } break;
+
+              case MIR_OP_LOCAL_REF: {
+                // imm to mem (local)  imm, local
+                mcode_imm_to_mem(context, I_MOV, op0->value.imm, REG_RBP, function->frame_objects.data[op1->value.local_ref].offset);
+              } break;
+
+              default: ICE("Unhandled destination operand type of immediate-source two-operand move");
+              } // switch (op1->kind)
+
+            } break; // case MIR_OP_IMMEDIATE
+
+            case MIR_OP_REGISTER: {
+              // reg to reg          src, dst
+              // reg to mem (local)  src, local
+
+              switch (op1->kind) {
+
+              case MIR_OP_REGISTER: {
+                // reg to reg          src, dst
+                mcode_reg_to_reg(context, I_MOV, op0->value.reg.value, op0->value.reg.size, op1->value.reg.value, op1->value.reg.size);
+              }
+
+              case MIR_OP_LOCAL_REF: {
+                // reg to mem (local)  src, local
+                mcode_reg_to_mem(context, I_MOV, op0->value.reg.value, op0->value.reg.size,
+                                 REG_RBP, function->frame_objects.data[op1->value.local_ref].offset);
+              }
+
+              default: ICE("Unhandled destination operand type of register-source two-operand move");
+              } // switch (op1->kind)
+
+            } break; // case MIR_OP_REGISTER
+
+            default: ICE("Unhandled source operand type of two-operand move");
+
+            } // switch (op0->kind)
+
+          } else if (instruction->operand_count == 3) {
+            // imm to mem          imm, addr, offset
+            // reg to mem          src, addr, offset
+            // mem to reg          addr, offset, src
+            MIROperand *op0 = mir_get_op(instruction, 0);
+            MIROperand *op1 = mir_get_op(instruction, 1);
+            MIROperand *op2 = mir_get_op(instruction, 2);
+
+            switch (op0->kind) {
+
+            case MIR_OP_IMMEDIATE: {
+              // imm to mem          imm, addr, offset
+              ASSERT(op1->kind == MIR_OP_REGISTER);
+              ASSERT(op2->kind == MIR_OP_IMMEDIATE);
+              mcode_imm_to_mem(context, I_MOV, op0->value.imm, op1->value.reg.value, op2->value.imm);
+            } break;
+
+            case MIR_OP_REGISTER: {
+              // reg to mem          src, addr, offset
+              // mem to reg          addr, offset, src
+
+              switch (op1->kind) {
+
+              case MIR_OP_REGISTER: {
+                // reg to mem          src, addr, offset
+                ASSERT(op2->kind == MIR_OP_IMMEDIATE);
+                mcode_reg_to_mem(context, I_MOV, op0->value.reg.value, op0->value.reg.size, op1->value.reg.value, op2->value.imm);
+              } break;
+
+              case MIR_OP_IMMEDIATE: {
+                // mem to reg          addr, offset, src
+                ASSERT(op2->kind == MIR_OP_REGISTER);
+                mcode_mem_to_reg(context, I_MOV, op0->value.reg.value, op1->value.imm, op2->value.reg.value, op2->value.reg.size);
+              } break;
+
+              default: ICE("Unhandled second operand of three-operand move");
+              } // switch (op1->kind)
+
+            } break; // case MIR_OP_REGISTER
+
+            default: ICE("Unhandled source operand type of three-operand move");
+            } // switch (op0->kind)
+          }
+        }break; // case MX64_MOV
+
+
+        case MX64_CALL: {
+          MIROperand *dst = mir_get_op(instruction, 0);
+
+          switch (dst->kind) {
+
+          case MIR_OP_NAME: {
+            mcode_name(context, I_CALL, dst->value.name);
+          } break;
+          case MIR_OP_BLOCK: {
+            mcode_name(context, I_CALL, dst->value.block->name.data);
+          } break;
+          case MIR_OP_FUNCTION: {
+            mcode_name(context, I_CALL, dst->value.function->name.data);
+          } break;
+
+          default: ICE("Unhandled operand type in CALL");
+
+          } // switch (dst->kind)
+
+        } break;
+
+        default: {
+          print("Unhandled opcode (mcode): %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
+        } break;
+        }
+      }
     }
   }
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
-
-  // Actually assemble into MIR into machine code.
-  STATIC_ASSERT(I_FORM_COUNT == 19, "Exhaustive handling of instruction forms for x86_64");
-  foreach_ptr (MIRInstruction*, mir, machine_instructions) {
-    switch (mir->x64.instruction_form) {
-    case I_FORM_NONE: mcode_none(context, mir->x64.instruction); break;
-    case I_FORM_IMM: mcode_imm(context, mir->x64.instruction, mir->x64.immediate); break;
-    case I_FORM_IMM_TO_MEM: mcode_imm_to_mem(context, mir->x64.instruction, mir->x64.immediate, mir->x64.reg_addr, mir->x64.offset); break;
-    case I_FORM_IMM_TO_REG: mcode_imm_to_reg(context, mir->x64.instruction, mir->x64.immediate, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
-    case I_FORM_INDIRECT_BRANCH: mcode_indirect_branch(context, mir->x64.instruction, mir->x64.reg_addr); break;
-    case I_FORM_MEM: mcode_mem(context, mir->x64.instruction, mir->x64.offset, mir->x64.reg_addr); break;
-    case I_FORM_MEM_TO_REG: mcode_mem_to_reg(context, mir->x64.instruction, mir->x64.reg_addr, mir->x64.offset, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
-    case I_FORM_NAME: mcode_name(context, mir->x64.instruction, mir->x64.name); break;
-    case I_FORM_NAME_TO_REG: mcode_name_to_reg(context, mir->x64.instruction, mir->x64.reg_addr, mir->x64.name, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
-    case I_FORM_REG: mcode_reg(context, mir->x64.instruction, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
-    case I_FORM_REG_SHIFT: mcode_reg_shift(context, mir->x64.instruction, mir->x64.reg_dst); break;
-    case I_FORM_REG_TO_MEM: mcode_reg_to_mem(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.offset); break;
-    case I_FORM_REG_TO_NAME: mcode_reg_to_name(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.name); break;
-    case I_FORM_REG_TO_OFFSET_NAME: mcode_reg_to_offset_name(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_addr, mir->x64.name, (usz)mir->x64.offset); break;
-    case I_FORM_REG_TO_REG: mcode_reg_to_reg(context, mir->x64.instruction, mir->x64.reg_src, mir->x64.reg_src_sz, mir->x64.reg_dst, mir->x64.reg_dst_sz); break;
-    case I_FORM_SETCC: mcode_setcc(context, (enum ComparisonType)mir->x64.immediate, mir->x64.reg_dst); break;
-    case I_FORM_JCC: mcode_jcc(context, (IndirectJumpType)mir->x64.immediate, mir->x64.name); break;
-    case I_FORM_IRBLOCK: {
-      GObjSymbol sym = {0};
-      sym.type = GOBJ_SYMTYPE_STATIC;
-      sym.name = strdup(mir->x64.ir_block->name.data);
-      sym.section_name = strdup(code_section(context->object)->name);
-      sym.byte_offset = code_section(context->object)->data.bytes.size;
-      vector_push(context->object->symbols, sym);
-    } break;
-    case I_FORM_IRFUNCTION: {
-      GObjSymbol sym = {0};
-      sym.type = mir->x64.ir_function->is_extern ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
-      sym.name = strdup(mir->x64.ir_function->name.data);
-      sym.section_name = strdup(code_section(&object)->name);
-      sym.byte_offset = code_section(&object)->data.bytes.size;
-      vector_push(object.symbols, sym);
-    } break;
-    }
-  }
-
   // Resolve local label (".Lxxxx") relocations.
   Vector(size_t) relocations_to_remove = {0};
   foreach_index (idx, object.relocs) {

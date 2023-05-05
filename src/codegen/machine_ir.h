@@ -127,6 +127,9 @@ typedef struct MIRFrameObject {
   /// ISel may require general MIR frame objects to be mapped to the
   /// lowered MIR frame objects they have created; that's what this is for.
   usz lowered;
+  ///  Goes unassigned+unused by compiler, but backend probably needs
+  /// this so it's here for convenience.
+  isz offset;
 } MIRFrameObject;
 
 typedef struct MIRFunction {

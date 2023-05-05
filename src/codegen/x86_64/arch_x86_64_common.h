@@ -146,10 +146,10 @@ typedef enum InstructionForm {
 extern const char *jump_type_names_x86_64[JUMP_TYPE_COUNT];
 
 typedef enum RegSize {
-  r64,
-  r32,
-  r16,
-  r8,
+  r8 = 1,
+  r16 = 2,
+  r32 = 4,
+  r64 = 8,
 } RegSize;
 
 /// Return the corresponding RegSize enum value to the given amount of
