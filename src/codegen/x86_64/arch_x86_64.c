@@ -3062,7 +3062,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   /*ir_set_ids(context);
   ir_femit(stdout, context);*/
 
-  calculate_stack_offsets(context);
+  //calculate_stack_offsets(context);
 
   // FUNCTION NAME MANGLING
   foreach_ptr (IRFunction*, function, context->functions) {
@@ -3073,14 +3073,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   MIRFunctionVector machine_instructions_from_ir = mir_from_ir(context);
 
   foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
-    print("%S {\n", f->name);
-    foreach_ptr (MIRBlock*, bb, f->blocks) {
-      print("%S:\n", bb->name);
-      foreach_ptr (MIRInstruction*, mi, bb->instructions) {
-        print_mir_instruction(mi);
-      }
-    }
-    print("}\n");
+    print_mir_function(f);
   }
 
   MIRFunctionVector machine_instructions_selected = select_instructions2(machine_instructions_from_ir);
@@ -3095,14 +3088,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   print("\n");
   foreach_ptr (MIRFunction*, f, machine_instructions_selected) {
-    print("%S {\n", f->name);
-    foreach_ptr (MIRBlock*, bb, f->blocks) {
-      print("%S:\n", bb->name);
-      foreach_ptr (MIRInstruction*, mi, bb->instructions) {
-        print_mir_instruction_with_mnemonic(mi, &mir_x86_64_opcode_mnemonic);
-      }
-    }
-    print("}\n");
+    print_mir_function_with_mnemonic(f, &mir_x86_64_opcode_mnemonic);
   }
 
   MIRInstructionVector machine_instructions = select_instructions(context);
