@@ -14,6 +14,7 @@ typedef enum MIROpcodeCommon {
   // TODO: Do we need this?
   MIR_BLOCK,
   MIR_COUNT,
+
   MIR_ARCH_START = 0x420
 } MIROpcodeCommon;
 #undef DEFINE_MIR_INSTRUCTION_TYPE
@@ -34,12 +35,13 @@ typedef struct MIROperandRegister {
   uint32_t value;
   uint16_t size;
 } MIROperandRegister;
+typedef usz MIROperandLocal; // index into function FrameObject vector
 typedef const char* MIROperandName;
 typedef int64_t MIROperandImmediate;
 typedef MIRBlock* MIROperandBlock;
 typedef MIRFunction* MIROperandFunction;
-typedef IRStaticVariable* MIROperandStatic;
-typedef IRStackAllocation* MIROperandLocal;
+/// Pointer to IR_STATIC_REF IR instruction
+typedef IRInstruction* MIROperandStatic;
 
 typedef unsigned int MIRRegister;
 
@@ -120,10 +122,22 @@ typedef struct MIRBlock {
   IRBlock *origin;
 } MIRBlock;
 
+typedef struct MIRFrameObject {
+  usz size;
+  /// ISel may require general MIR frame objects to be mapped to the
+  /// lowered MIR frame objects they have created; that's what this is for.
+  usz lowered;
+} MIRFrameObject;
+
 typedef struct MIRFunction {
   string name;
 
   uint32_t inst_count;
+
+  /// TL;DR: Locals go here so they can be referenced by index via
+  /// stack type MIROperand.
+  Vector(MIRFrameObject) frame_objects;
+
   MIRBlockVector blocks;
 
   IRFunction *origin;
@@ -154,15 +168,18 @@ void print_mir_block_with_mnemonic(MIRBlock *block, OpcodeMnemonicFunction opcod
 void print_mir_function_with_mnemonic(MIRFunction *function, OpcodeMnemonicFunction opcode_mnemonic);
 
 /// Same as above but with mir_common_opcode_mnemonic passed implicitly.
-void print_mir_operand(MIROperand *op);
+void print_mir_operand(MIRFunction *function, MIROperand *op);
 void print_mir_instruction(MIRInstruction *inst);
 void print_mir_block(MIRBlock *block);
 void print_mir_function(MIRFunction *function);
 
 MIROperand mir_op_function(MIRFunction *f);
 MIROperand mir_op_block(MIRBlock *block);
+MIROperand mir_op_local_ref(MIRFunction *function, usz size);
+MIROperand mir_op_local_ref_fo(MIRFunction *function, MIRFrameObject *fo);
+MIROperand mir_op_local_ref_ir(MIRFunction *function, IRStackAllocation *alloca);
 MIROperand mir_op_reference(MIRInstruction *inst);
-MIROperand mir_op_reference_ir(IRInstruction *inst);
+MIROperand mir_op_reference_ir(MIRFunction *function, IRInstruction *inst);
 MIROperand mir_op_immediate(int64_t imm);
 MIROperand mir_op_name(const char *name);
 MIROperand mir_op_register(RegisterDescriptor reg, uint16_t size);
@@ -170,6 +187,9 @@ MIROperand mir_op_register(RegisterDescriptor reg, uint16_t size);
 void mir_add_op(MIRInstruction *inst, MIROperand op);
 /// Return a pointer to operand at index within instruction.
 MIROperand *mir_get_op(MIRInstruction *inst, size_t index);
+
+/// Return a pointer to frame object at operand within function.
+MIRFrameObject *mir_get_frame_object(MIRFunction *function, MIROperandLocal op);
 
 void mir_push_with_reg(MIRFunction *mir, MIRInstruction *mi, MIRRegister reg);
 

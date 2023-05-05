@@ -747,6 +747,17 @@ MIRInstructionVector select_instructions(CodegenContext *context) {
   return mir;
 }
 
+/// Zero out the given register using MX64_XOR in reg to reg form.
+static MIRInstruction *zero_reg(usz reg, RegSize size, IRInstruction *origin) {
+  MIRInstruction *xor = mir_makenew(MX64_XOR);
+  xor->origin = origin;
+  xor->x64.instruction_form = I_FORM_REG_TO_REG;
+  MIROperand op_reg = mir_op_register((RegisterDescriptor)reg, (uint16_t)size);
+  mir_add_op(xor, op_reg);
+  mir_add_op(xor, op_reg);
+  return xor;
+}
+
 MIRFunctionVector select_instructions2(MIRFunctionVector input) {
   MIRFunctionVector mir = {0};
   foreach_ptr (MIRFunction*, mir_f, input) {
@@ -823,18 +834,65 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
 
         case MIR_LOAD: {
           RegSize size = (RegSize)-1u;
-          MIRInstruction *ref = mir_find_by_vreg(f, mir_get_op(inst, 0)->value.reg.value);
-          /// Load from a static variable.
-          if (ref->opcode == MIR_STATIC_REF) {
-            IRInstruction *static_ref = ref->origin;
+          MIROperand *op = mir_get_op(inst, 0);
+          switch (op->kind) {
+
+          case MIR_OP_LOCAL_REF: {
+            /// Load from a local.
+
+            // mov mem to reg (load from stack address)
+            MIRFrameObject *frame_obj = mir_get_frame_object(mir_f, op->value.local_ref);
+            size = regsize_from_bytes(frame_obj->size);
+            if (size == r8 || size == r16) {
+              MIRInstruction *xor_zero = zero_reg(inst->reg, r32, inst->origin);
+              mir_push_with_reg(f, xor_zero, (MIRRegister)extra_instruction_reg++);
+            }
+            MIRInstruction *move = mir_makenew(MX64_MOV);
+            inst->lowered = move;
+            move->origin = inst->origin;
+            move->x64.instruction_form = I_FORM_MEM_TO_REG;
+            MIROperand address_register = mir_op_register(REG_RBP, r64);
+            MIROperand local = mir_op_local_ref_fo(f, frame_obj);
+            mir_add_op(move, address_register);
+            mir_add_op(move, local);
+            mir_add_op(move, mir_op_immediate(0)); // fake entry
+            mir_push_with_reg(f, move, inst->reg);
+            *mir_get_op(move, 2) = mir_op_reference(move);
+          } break;
+
+          case MIR_OP_REGISTER: {
+            /// Load from a pointer
+            // FIXME: This assumes register size is in bytes, or set at all.
+            size = regsize_from_bytes(op->value.reg.size);
+            if (size == r8 || size == r16) {
+              MIRInstruction *xor_zero = zero_reg(op->value.reg.value, r32, inst->origin);
+              mir_push_with_reg(f, xor_zero, (MIRRegister)extra_instruction_reg++);
+            }
+            MIRInstruction *move = mir_makenew(MX64_MOV);
+            inst->lowered = move;
+            move->origin = inst->origin;
+            move->x64.instruction_form = I_FORM_REG_TO_REG;
+            mir_add_op(move, *op);
+            mir_add_op(move, mir_op_immediate(0)); // fake entry
+            mir_push_with_reg(f, move, inst->reg);
+            *mir_get_op(move, 2) = mir_op_reference(move);
+
+          } break;
+
+          case MIR_OP_IMMEDIATE: {
+            TODO("MIR_LOAD: mov imm to reg");
+          } break;
+
+          case MIR_OP_NAME: {
+            TODO("MIR_LOAD: mov name to reg (load name address)");
+          } break;
+
+          case MIR_OP_STATIC_REF: {
+            /// Load from a static variable.
+            IRInstruction *static_ref = op->value.static_ref;
             size = regsize_from_bytes(type_sizeof(static_ref->type->pointer.to));
             if (size == r8 || size == r16) {
-              MIRInstruction *xor_zero = mir_makenew(MX64_XOR);
-              xor_zero->origin = inst->origin;
-              xor_zero->x64.instruction_form = I_FORM_REG_TO_REG;
-              MIROperand reg = mir_op_register(inst->origin->result, r32);
-              mir_add_op(xor_zero, reg);
-              mir_add_op(xor_zero, reg);
+              MIRInstruction *xor_zero = zero_reg(inst->reg, r32, inst->origin);
               mir_push_with_reg(f, xor_zero, (MIRRegister)extra_instruction_reg++);
             }
             MIRInstruction *move = mir_makenew(MX64_MOV);
@@ -848,59 +906,16 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
             mir_add_op(move, mir_op_immediate(0));
             mir_push_with_reg(f, move, inst->reg);
             *mir_get_op(move, 2) = mir_op_reference(move);
-          }
+          } break;
 
-          /// Load from a local.
-          else if (ref->opcode == MIR_ALLOCA) {
-            size = regsize_from_bytes((size_t)mir_get_op(inst, 0)->value.imm);
-            if (size == r8 || size == r16) {
-              MIRInstruction *xor_zero = mir_makenew(MX64_XOR);
-              xor_zero->origin = inst->origin;
-              xor_zero->x64.instruction_form = I_FORM_REG_TO_REG;
-              MIROperand reg = mir_op_register(inst->origin->result, r32);
-              mir_add_op(xor_zero, reg);
-              mir_add_op(xor_zero, reg);
-              mir_push_with_reg(f, xor_zero, (MIRRegister)extra_instruction_reg++);
-            }
-            MIRInstruction *move = mir_makenew(MX64_MOV);
-            inst->lowered = move;
-            move->origin = inst->origin;
-            move->x64.instruction_form = I_FORM_MEM_TO_REG;
-            MIROperand address_register = mir_op_register(REG_RBP, r64);
-            // TODO: This is bad. Maybe we should store offset in MIR
-            // alloca? Or maybe we should be calculating offsets as we go,
-            // here.
-            MIROperand offset = mir_op_immediate(- (i64)inst->origin->operand->alloca.offset);
-            mir_add_op(move, address_register);
-            mir_add_op(move, offset);
-            mir_add_op(move, mir_op_immediate(0)); // fake entry
-            mir_push_with_reg(f, move, inst->reg);
-            *mir_get_op(move, 2) = mir_op_reference(move);
-          }
 
-          /// Load from a pointer
-          else {
-            size = regsize_from_bytes(type_sizeof(inst->origin->operand->type));
-            if (size == r8 || size == r16) {
-              MIRInstruction *xor_zero = mir_makenew(MX64_XOR);
-              xor_zero->origin = inst->origin;
-              xor_zero->x64.instruction_form = I_FORM_REG_TO_REG;
-              MIROperand reg = mir_op_reference(xor_zero);
-              mir_add_op(xor_zero, reg);
-              mir_add_op(xor_zero, reg);
-              mir_push_with_reg(f, xor_zero, (MIRRegister)extra_instruction_reg++);
-            }
-            MIRInstruction *move = mir_makenew(MX64_MOV);
-            inst->lowered = move;
-            move->origin = inst->origin;
-            move->x64.instruction_form = I_FORM_MEM_TO_REG;
-            MIROperand address = mir_op_reference(inst->origin->operand->machine_inst);
-            MIROperand offset = mir_op_immediate(0);
-            mir_add_op(move, address);
-            mir_add_op(move, offset);
-            mir_add_op(move, mir_op_immediate(0)); // fake entry
-            mir_push_with_reg(f, move, inst->reg);
-            *mir_get_op(move, 2) = mir_op_reference(move);
+          case MIR_OP_BLOCK: FALLTHROUGH
+          case MIR_OP_FUNCTION:
+            ICE("[x86_64]: Unsupported operand kind for MIR_LOAD: %d\n", (int)op->kind);
+
+          case MIR_OP_NONE: FALLTHROUGH
+          case MIR_OP_COUNT:
+            UNREACHABLE();
           }
         } break;
 
@@ -919,7 +934,7 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
           case MIR_OP_STATIC_REF: {
             /// Store to a static variable.
             store->x64.instruction_form = I_FORM_REG_TO_NAME;
-            MIROperand name = mir_op_name(op_address->value.static_ref->name.data);
+            MIROperand name = mir_op_name(op_address->value.static_ref->static_ref->name.data);
             MIROperand offset = mir_op_immediate(0);
             mir_add_op(store, name);
             mir_add_op(store, offset);
@@ -928,9 +943,9 @@ MIRFunctionVector select_instructions2(MIRFunctionVector input) {
             /// Store to a local.
             store->x64.instruction_form = I_FORM_REG_TO_MEM;
             MIROperand address = mir_op_register(REG_RBP, r64);
-            MIROperand offset = mir_op_immediate(- (i64)op_address->value.local_ref->offset);
+            MIROperand local = mir_op_local_ref_fo(f, mir_get_frame_object(mir_f, op_address->value.local_ref));
             mir_add_op(store, address);
-            mir_add_op(store, offset);
+            mir_add_op(store, local);
           } break;
           default: {
             /// Store to a pointer.
