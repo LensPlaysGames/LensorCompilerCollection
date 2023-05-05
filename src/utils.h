@@ -72,6 +72,12 @@ typedef ptrdiff_t isz;
 
 #define VA_FIRST(X, ...) X
 
+/// return_type == return type of function that is pointed to
+/// name == name of function pointer type
+/// ... == arg types (pass `void` if none)
+#define FUNCTION_POINTER(return_type, name, ...) \
+  typedef return_type (*name)(__VA_ARGS__)
+
 /// ===========================================================================
 ///  Global settings.
 /// ===========================================================================
