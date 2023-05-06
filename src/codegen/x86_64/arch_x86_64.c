@@ -3098,17 +3098,17 @@ void codegen_emit_x86_64(CodegenContext *context) {
           switch (dst->kind) {
 
           case MIR_OP_NAME: {
-            print("|> call %s", dst->value.name);
+            print("|> call %s\n", dst->value.name);
             femit_name(context, I_CALL, dst->value.name);
           } break;
 
           case MIR_OP_BLOCK: {
-            print("|> call %s", dst->value.block->name.data);
+            print("|> call %s\n", dst->value.block->name.data);
             femit_name(context, I_CALL, dst->value.block->name.data);
           } break;
 
           case MIR_OP_FUNCTION: {
-            print("|> call %s", dst->value.function->name.data);
+            print("|> call %s\n", dst->value.function->name.data);
             femit_name(context, I_CALL, dst->value.function->name.data);
           } break;
 

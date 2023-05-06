@@ -225,50 +225,14 @@ static void collect_interferences_from_block
   if (b == b->function->blocks.data[0])
     return;
 
-  /* TODO: This is important, it needs reenabled. BUT! We can't check
-   * opcodes of every arch here. So we need some different way of doing
-   * this...
-  BlockVector parent_blocks = {0};
-  foreach_ptr (MIRBlock*, parent_candidate, b->function->blocks) {
-    if (parent_candidate == b) continue; // Yourself is not a candidate.
-    if (parent_candidate->instructions.last) {
-      STATIC_ASSERT(IR_COUNT == 38,
-                    "Exhaustively handle all branch-type instructions when following control flow.");
-      switch (parent_candidate->instructions.last->kind) {
-
-      // If a branch's destination is this block, the parent candidate is valid.
-      case IR_BRANCH: {
-        if (parent_candidate->instructions.last->destination_block == b)
-          vector_push(parent_blocks, parent_candidate);
-      } break;
-
-
-      case IR_BRANCH_CONDITIONAL: {
-        if (parent_candidate->instructions.last->cond_br.then == b)
-          vector_push(parent_blocks, parent_candidate);
-        else if (parent_candidate->instructions.last->cond_br.else_ == b)
-          vector_push(parent_blocks, parent_candidate);
-      } break;
-
-      // Ignore all branch types that can't possibly branch to this block.
-      case IR_UNREACHABLE:
-      case IR_RETURN:
-        continue;
-
-      default:
-        UNREACHABLE();
-      }
-    }
-     }
-
 #ifdef DEBUG_RA
-  foreach_ptr (IRBlock*, parent, parent_blocks) {
+  foreach_ptr (MIRBlock*, parent, b->predecessors) {
     print("  Parent block:\n");
     ir_femit_block(stdout, parent);
   }
 #endif
 
-  foreach_ptr (IRBlock*, parent, parent_blocks) {
+  foreach_ptr (MIRBlock*, parent, b->predecessors) {
     // Copy live vals
     VRegVector live_vals_copy = {0};
     foreach (usz, lv, *live_vals)
@@ -278,7 +242,6 @@ static void collect_interferences_from_block
 
     vector_delete(live_vals_copy);
   }
- */
 }
 
 /// For each exit block `b` in given function, collect interferences
@@ -304,7 +267,7 @@ static void collect_interferences_for_function
 #ifdef DEBUG_RA
   foreach_ptr (MIRBlock*, b, exits) {
     print("Exit block:\n");
-    print_mir_block(stdout, b);
+    print_mir_block(b);
   }
 #endif
 
