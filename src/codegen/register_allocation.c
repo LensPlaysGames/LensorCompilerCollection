@@ -179,10 +179,10 @@ static void collect_interferences(IRInstruction *inst, IRInstruction **child, vo
 /// that are currently live.
 static void collect_interferences_from_block
 (const MachineDescription *desc,
- IRBlock *b,
- IRInstructions *live_vals,
- BlockVector *visited,
- BlockVector *doubly_visited,
+ MIRBlock *b,
+ VRegVector *live_vals,
+ MIRBlockVector *visited,
+ MIRBlockVector *doubly_visited,
  AdjacencyGraph *G
  )
 {
@@ -196,11 +196,14 @@ static void collect_interferences_from_block
 
   DEBUG("  from block...\n");
 
+  /* TODO: This is important, it needs reenabled
   /// Collect interferences for instructions in this block.
-  list_foreach_rev (IRInstruction*, inst, b->instructions) {
+  foreach_ptr_rev (MIRInstruction*, inst, b->instructions) {
     /// Make this value interfere with all values that are live at this point.
+
     usz mask = desc->instruction_register_interference(inst);
-    foreach_ptr (IRInstruction *, live_val, *live_vals) {
+    foreach (usz, live_val, *live_vals) {
+
       if (needs_register(inst))
         adjm_set(G->matrix, inst->index, live_val->index);
 
@@ -209,20 +212,24 @@ static void collect_interferences_from_block
     }
 
     /// Remove its result from the set of live variables;
-    if (needs_register(inst)) vector_remove_element_unordered(*live_vals, inst);
+    vector_remove_element_unordered(*live_vals, inst);
 
     /// Add its operands to the set of live variables.
     ir_for_each_child(inst, collect_interferences, live_vals);
   }
+  */
 
   // Collect all blocks in function that branch to this block (parent blocks).
 
   // The entry block has no parents.
-  if (b == b->function->blocks.first)
+  if (b == b->function->blocks.data[0])
     return;
 
+  /* TODO: This is important, it needs reenabled. BUT! We can't check
+   * opcodes of every arch here. So we need some different way of doing
+   * this...
   BlockVector parent_blocks = {0};
-  list_foreach (IRBlock*, parent_candidate, b->function->blocks) {
+  foreach_ptr (MIRBlock*, parent_candidate, b->function->blocks) {
     if (parent_candidate == b) continue; // Yourself is not a candidate.
     if (parent_candidate->instructions.last) {
       STATIC_ASSERT(IR_COUNT == 38,
@@ -252,7 +259,7 @@ static void collect_interferences_from_block
         UNREACHABLE();
       }
     }
-  }
+     }
 
 #ifdef DEBUG_RA
   foreach_ptr (IRBlock*, parent, parent_blocks) {
@@ -263,14 +270,15 @@ static void collect_interferences_from_block
 
   foreach_ptr (IRBlock*, parent, parent_blocks) {
     // Copy live vals
-    IRInstructions live_vals_copy = {0};
-    foreach_ptr (IRInstruction*, lv, *live_vals)
-      vector_push(live_vals_copy, lv);
+    VRegVector live_vals_copy = {0};
+    foreach (usz, lv, *live_vals)
+      vector_push(live_vals_copy, *lv);
 
     collect_interferences_from_block(desc, parent, &live_vals_copy, visited, doubly_visited, G);
 
     vector_delete(live_vals_copy);
   }
+ */
 }
 
 /// For each exit block `b` in given function, collect interferences
@@ -300,20 +308,18 @@ static void collect_interferences_for_function
   }
 #endif
 
-  IRInstructions live_vals = {0};
-  BlockVector visited = {0};
-  BlockVector doubly_visited = {0};
+  VRegVector live_vals = {0};
+  MIRBlockVector visited = {0};
+  MIRBlockVector doubly_visited = {0};
 
-  /*
   // From each exit block (collected above), follow control flow to the
   // root of the function (entry block), or to a block already visited.
-  foreach_ptr (IRBlock*, b, exits) {
+  foreach_ptr (MIRBlock*, b, exits) {
     vector_clear(live_vals);
     vector_clear(visited);
     vector_clear(doubly_visited);
     collect_interferences_from_block(desc, b, &live_vals, &visited, &doubly_visited, G);
   }
-  */
 
   vector_delete(doubly_visited);
   vector_delete(visited);
