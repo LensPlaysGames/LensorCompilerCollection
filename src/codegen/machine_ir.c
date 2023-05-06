@@ -447,6 +447,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           if (inst->operand) mir_add_op(mir, mir_op_reference_ir(function, inst->operand));
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
+          mir_bb->is_exit = true;
         } break;
         case IR_BRANCH: {
           MIRInstruction *mir = mir_makenew(MIR_BRANCH);
@@ -521,6 +522,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir->origin = inst;
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
+          mir_bb->is_exit = true;
         } break;
 
         case IR_PARAMETER:
