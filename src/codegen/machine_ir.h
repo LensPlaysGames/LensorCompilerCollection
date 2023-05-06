@@ -10,9 +10,6 @@
 #define DEFINE_MIR_INSTRUCTION_TYPE(type, ...) CAT(MIR_, type),
 typedef enum MIROpcodeCommon {
   ALL_IR_INSTRUCTION_TYPES(DEFINE_MIR_INSTRUCTION_TYPE)
-  /// Marks beginning of block
-  // TODO: Do we need this?
-  MIR_BLOCK,
   MIR_COUNT,
 
   MIR_ARCH_START = 0x420
@@ -117,9 +114,12 @@ typedef struct MIRBlock {
   string name;
 
   MIRInstructionVector instructions;
+  MIRBlockVector predecessors;
 
   MIRFunction *function;
   IRBlock *origin;
+
+  MIRBlock* lowered;
 
   bool is_exit;
 } MIRBlock;
@@ -196,11 +196,23 @@ MIROperand *mir_get_op(MIRInstruction *inst, size_t index);
 /// Return a pointer to frame object at operand within function.
 MIRFrameObject *mir_get_frame_object(MIRFunction *function, MIROperandLocal op);
 
+void mir_push_with_reg_into_block(MIRFunction *f, MIRBlock *block, MIRInstruction *mi, MIRRegister reg);
 void mir_push_with_reg(MIRFunction *mir, MIRInstruction *mi, MIRRegister reg);
 
 MIRInstruction *mir_find_by_vreg(MIRFunction *mir, size_t reg);
 
+/// Create an MIR function from an IR function.
 MIRFunction *mir_function(IRFunction *ir_f);
+
+/// Create an MIR basic block from an IR basic block
 MIRBlock *mir_block(MIRFunction *function, IRBlock *ir_bb);
+
+/// Create an MIR basic block from another MIR basic block.
+/// Updates "lowered" member/field of original to new block.
+/// This is mostly needed during ISel, as the general MIR has a block
+/// that we want to create a new version of, and by setting the lowered
+/// field, we are able to properly update references to the old block to
+/// references to the new block.
+MIRBlock *mir_block_copy(MIRFunction *function, MIRBlock *bb);
 
 #endif /* MACHINE_IR_H */

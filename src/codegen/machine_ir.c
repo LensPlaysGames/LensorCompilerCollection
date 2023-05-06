@@ -175,7 +175,7 @@ MIRInstruction *mir_makecopy(MIRInstruction *original) {
 }
 
 /// Function is only needed to update instruction count. May pass NULL.
-static void mir_push_with_reg_into_block(MIRFunction *f, MIRBlock *block, MIRInstruction *mi, MIRRegister reg) {
+void mir_push_with_reg_into_block(MIRFunction *f, MIRBlock *block, MIRInstruction *mi, MIRRegister reg) {
   vector_push(block->instructions, mi);
   mi->block = block;
   mi->reg = reg;
@@ -202,21 +202,27 @@ MIRFunction *mir_function(IRFunction *ir_f) {
   return f;
 }
 
-MIRBlock *mir_block(MIRFunction *function, IRBlock *ir_bb) {
-  MIRBlock* bb = calloc(1, sizeof(*bb));
-  bb->function = function;
-  bb->origin = ir_bb;
-  bb->name = string_dup(ir_bb->name);
-  ir_bb->machine_block = bb;
-  vector_push(function->blocks, bb);
-  return bb;
-}
-
 MIRBlock *mir_block_makenew(MIRFunction *function, const char *name) {
   MIRBlock* bb = calloc(1, sizeof(*bb));
   bb->function = function;
   bb->name = string_create(name);
   vector_push(function->blocks, bb);
+  return bb;
+}
+
+MIRBlock *mir_block(MIRFunction *function, IRBlock *ir_bb) {
+  MIRBlock *bb = mir_block_makenew(function, ir_bb->name.data);
+  bb->origin = ir_bb;
+  ir_bb->machine_block = bb;
+  return bb;
+}
+
+MIRBlock *mir_block_copy(MIRFunction *function, MIRBlock *original) {
+  ASSERT(function, "Invalid argument");
+  ASSERT(original, "Invalid argument");
+  MIRBlock *bb = mir_block_makenew(function, original->name.data);
+  bb->origin = original->origin;
+  original->lowered = bb;
   return bb;
 }
 
@@ -388,6 +394,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
     if (function->origin->is_extern) continue;
     foreach_ptr (MIRBlock*, mir_bb, function->blocks) {
       IRBlock *bb = mir_bb->origin;
+      ASSERT(bb, "Origin of general MIR block not set (what gives?)");
       list_foreach (IRInstruction*, inst, bb->instructions) {
         switch (inst->kind) {
 
@@ -428,8 +435,6 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
         case IR_LOAD: {
           MIRInstruction *mir = mir_makenew((uint32_t)inst->kind);
           mir->origin = inst;
-          print("HERE\n");
-          ir_femit_instruction(stdout, inst->operand);
           mir_add_op(mir, mir_op_reference_ir(function, inst->operand));
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
@@ -455,6 +460,8 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir_add_op(mir, mir_op_block(inst->destination_block->machine_block));
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
+          // CFG
+          vector_push(inst->destination_block->machine_block->predecessors, mir_bb);
         } break;
         case IR_BRANCH_CONDITIONAL: {
           MIRInstruction *mir = mir_makenew(MIR_BRANCH_CONDITIONAL);
@@ -464,6 +471,8 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir_add_op(mir, mir_op_block(inst->cond_br.else_->machine_block));
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
+          vector_push(inst->cond_br.then->machine_block->predecessors, mir_bb);
+          vector_push(inst->cond_br.else_->machine_block->predecessors, mir_bb);
         } break;
         case IR_ADD:
         case IR_SUB:
@@ -500,10 +509,6 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           MIRInstruction *mir = mir_makenew(MIR_STORE);
           mir->origin = inst;
           mir_add_op(mir, mir_op_reference_ir(function, inst->store.value));
-
-          print("HERE\n");
-          ir_femit_instruction(stdout, inst->store.addr);
-
           mir_add_op(mir, mir_op_reference_ir(function, inst->store.addr));
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
@@ -557,7 +562,7 @@ const char *mir_operand_kind_string(MIROperandKind opkind) {
 }
 
 const char *mir_common_opcode_mnemonic(uint32_t opcode) {
-  STATIC_ASSERT(MIR_COUNT == 39, "Exhaustive handling of MIRCommonOpcodes (string conversion)");
+  STATIC_ASSERT(MIR_COUNT == 38, "Exhaustive handling of MIRCommonOpcodes (string conversion)");
   switch (opcode) {
   case MIR_IMMEDIATE: return "immediate";
   case MIR_CALL: return "call";
@@ -597,7 +602,6 @@ const char *mir_common_opcode_mnemonic(uint32_t opcode) {
   case MIR_PARAMETER: return "parameter";
   case MIR_LIT_INTEGER: return "literal_integer";
   case MIR_LIT_STRING: return "literal_string";
-  case MIR_BLOCK: return "block";
   case MIR_COUNT: return "count";
   default: break;
   }
@@ -677,7 +681,12 @@ void print_mir_block_with_mnemonic(MIRBlock *block, OpcodeMnemonicFunction opcod
   ASSERT(block, "Invalid argument");
   ASSERT(block->function, "Cannot print block without MIRFunction reference (frame objects)");
   ASSERT(opcode_mnemonic, "Invalid argument");
-  print("%S:\n", block->name);
+  print("%S: ", block->name);
+  print(" { ");
+  foreach_ptr (MIRBlock*, predecessor, block->predecessors) {
+    print("%S,", predecessor->name);
+  }
+  print("\b }\n");
   foreach_ptr (MIRInstruction*, inst, block->instructions)
     print_mir_instruction_with_mnemonic(inst, opcode_mnemonic);
 }
