@@ -2,6 +2,7 @@
 #define REGISTER_ALLOCATION_H
 
 #include <codegen.h>
+#include <codegen/machine_ir.h>
 
 typedef struct MachineDescription {
   size_t register_count;
@@ -17,6 +18,6 @@ typedef struct MachineDescription {
 } MachineDescription;
 
 /// Peform register allocation for a function.
-void allocate_registers(IRFunction *f, const MachineDescription *desc);
+void allocate_registers(MIRFunction *f, const MachineDescription *desc);
 
 #endif /* REGISTER_ALLOCATION_H */

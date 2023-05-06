@@ -120,6 +120,8 @@ typedef struct MIRBlock {
 
   MIRFunction *function;
   IRBlock *origin;
+
+  bool is_exit;
 } MIRBlock;
 
 typedef struct MIRFrameObject {
