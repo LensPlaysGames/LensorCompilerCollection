@@ -23,10 +23,19 @@ enum diagnostic_level {
 };
 
 /// Source location.
-typedef struct {
+typedef struct loc {
   u32 start;
   u32 end;
 } loc;
+
+/// Seek to a source location.
+void seek_location(
+  span source,
+  loc location,
+  u32 *line,
+  u32 *line_start,
+  u32 *line_end
+);
 
 /// ===========================================================================
 ///  Error handling macros.
