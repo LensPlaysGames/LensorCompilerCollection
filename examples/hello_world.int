@@ -1,5 +1,5 @@
-; 13
-; Hello, World!
+;; 13
+;; Hello, World!
 
 puts : ext integer(s : @byte)
 str : @byte = "Hello, World!"[0]
