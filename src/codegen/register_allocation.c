@@ -924,7 +924,7 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
       }
     }
 
-    print("Vreg v%Z mapped to HWreg r%Z\n", vreg, color);
+    print("Vreg v%Z mapped to HWreg r%Z\n", vreg.value, (usz)color);
   }
 
   DEBUG("After coloring\n");

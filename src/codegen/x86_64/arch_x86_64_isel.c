@@ -933,11 +933,11 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
           } break;
 
 
-          case MIR_OP_BLOCK: FALLTHROUGH
+          case MIR_OP_BLOCK: FALLTHROUGH;
           case MIR_OP_FUNCTION:
             ICE("[x86_64]: Unsupported operand kind for MIR_LOAD: %d\n", (int)op->kind);
 
-          case MIR_OP_NONE: FALLTHROUGH
+          case MIR_OP_NONE: FALLTHROUGH;
           case MIR_OP_COUNT:
             UNREACHABLE();
           }
@@ -951,6 +951,8 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
           store->origin = inst->origin;
 
           MIROperand *op_value = mir_get_op(inst, 0);
+          ASSERT(op_value->kind == MIR_OP_REGISTER, "Only stores from registers are currently handled");
+          op_value->value.reg.size = (uint16_t)size;
           mir_add_op(store, *op_value);
 
           MIROperand *op_address = mir_get_op(inst, 1);
