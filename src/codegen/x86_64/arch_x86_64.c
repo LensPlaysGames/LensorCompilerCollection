@@ -3118,7 +3118,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
           ASSERT(destination->kind == MIR_OP_REGISTER,
                  "LEA requires third operand to be a destination register");
           femit_mem_to_reg(context, I_LEA, address->value.reg.value, mir_get_frame_object(function, local->value.local_ref)->offset, destination->value.reg.value, destination->value.reg.size);
-        }
+        } break; // case MX64_LEA
 
         case MX64_CALL: {
           MIROperand *dst = mir_get_op(instruction, 0);
@@ -3140,11 +3140,11 @@ void codegen_emit_x86_64(CodegenContext *context) {
             femit_name(context, I_CALL, dst->value.function->name.data);
           } break;
 
-          default: ICE("Unhandled operand type in CALL");
+          default: ICE("Unhandled operand kind in CALL: %d (%s)", dst->kind, mir_operand_kind_string(dst->kind));
 
           } // switch (dst->kind)
 
-        } break;
+        } break; // case MX64_CALL
 
         case MX64_MOV: {
           // TODO: mem to reg (local)  local, src
@@ -3262,12 +3262,12 @@ void codegen_emit_x86_64(CodegenContext *context) {
             // imm to reg | imm, dst
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);
-            femit_imm_to_reg(context, I_ADD, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
+            mcode_imm_to_reg(context, I_ADD, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
             MIROperand *dst = mir_get_op(instruction, 1);
-            femit_reg_to_reg(context, I_ADD, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+            mcode_reg_to_reg(context, I_ADD, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
