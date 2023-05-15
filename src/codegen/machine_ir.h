@@ -31,6 +31,8 @@ typedef enum MIROperandKind {
 typedef struct MIROperandRegister {
   uint32_t value;
   uint16_t size;
+
+  bool defining_use;
 } MIROperandRegister;
 typedef usz MIROperandLocal; // index into function FrameObject vector
 typedef const char* MIROperandName;
@@ -188,7 +190,7 @@ MIROperand mir_op_reference(MIRInstruction *inst);
 MIROperand mir_op_reference_ir(MIRFunction *function, IRInstruction *inst);
 MIROperand mir_op_immediate(int64_t imm);
 MIROperand mir_op_name(const char *name);
-MIROperand mir_op_register(RegisterDescriptor reg, uint16_t size);
+MIROperand mir_op_register(RegisterDescriptor reg, uint16_t size, bool defining_use);
 
 void mir_add_op(MIRInstruction *inst, MIROperand op);
 /// Return a pointer to operand at index within instruction.

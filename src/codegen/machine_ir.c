@@ -118,7 +118,8 @@ MIROperand mir_op_reference_ir(MIRFunction *function, IRInstruction *inst) {
     // FIXME: I don't know if we should try to inline the operand of copies like this.
     //for (; it->kind == IR_COPY; it = it->operand);
     if (it->kind == IR_IMMEDIATE) return mir_op_immediate((i64)it->imm);
-    if (it->kind == IR_REGISTER) return mir_op_register(it->result, 0);
+    // FIXME: What size is an IR register?
+    if (it->kind == IR_REGISTER) return mir_op_register(it->result, 0, false);
     if (it->kind == IR_ALLOCA) return mir_op_local_ref_ir(function, &it->alloca);
     if (it->kind == IR_STATIC_REF) return mir_op_static_ref(it);
   }
@@ -143,11 +144,12 @@ MIROperand mir_op_name(const char *name) {
   return out;
 }
 
-MIROperand mir_op_register(RegisterDescriptor reg, uint16_t size) {
+MIROperand mir_op_register(RegisterDescriptor reg, uint16_t size, bool defining_use) {
   MIROperand out = {0};
   out.kind = MIR_OP_REGISTER;
   out.value.reg.value = reg;
   out.value.reg.size = size;
+  out.value.reg.defining_use = defining_use;
   return out;
 }
 
@@ -222,6 +224,7 @@ MIRBlock *mir_block_copy(MIRFunction *function, MIRBlock *original) {
   ASSERT(original, "Invalid argument");
   MIRBlock *bb = mir_block_makenew(function, original->name.data);
   bb->origin = original->origin;
+  bb->is_exit = original->is_exit;
   original->lowered = bb;
   return bb;
 }
@@ -617,6 +620,7 @@ void print_mir_operand(MIRFunction *function, MIROperand *op) {
     if (op->value.reg.value >= MIR_ARCH_START)
       print("%34v%u%m", (unsigned)op->value.reg.value);
     else print("%32r%u%m", (unsigned)op->value.reg.value);
+    if (op->value.reg.defining_use) print(" DEF");
   } break;
   case MIR_OP_IMMEDIATE: {
     print("%35%I%m", op->value.imm);
@@ -633,7 +637,7 @@ void print_mir_operand(MIRFunction *function, MIROperand *op) {
     print("%37\"%33%s%37\"%m", op->value.name);
   } break;
   case MIR_OP_STATIC_REF: {
-    print("%37\"%33%s%37\" %36%T%m", op->value.static_ref->static_ref->name, op->value.static_ref->static_ref->type);
+    print("%37\"%33%S%37\" %36%T%m", op->value.static_ref->static_ref->name, op->value.static_ref->static_ref->type);
   } break;
   case MIR_OP_LOCAL_REF: {
     ASSERT(op->value.local_ref < function->frame_objects.size,
@@ -682,6 +686,7 @@ void print_mir_block_with_mnemonic(MIRBlock *block, OpcodeMnemonicFunction opcod
   ASSERT(block->function, "Cannot print block without MIRFunction reference (frame objects)");
   ASSERT(opcode_mnemonic, "Invalid argument");
   print("%S: ", block->name);
+  if (block->is_exit) print("EXITS");
   print(" { ");
   foreach_ptr (MIRBlock*, predecessor, block->predecessors) {
     print("%S,", predecessor->name);
