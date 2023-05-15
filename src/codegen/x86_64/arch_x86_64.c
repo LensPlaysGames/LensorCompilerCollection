@@ -2498,9 +2498,9 @@ static void lower(CodegenContext *context) {
           // Remove argument from call, and replace with two new arguments.
           ir_remove_use(argument, instruction);
           vector_remove_index(instruction->call.arguments, *i);
-          vector_insert_after(instruction->call.arguments, load1, *i);
+          vector_insert_after(instruction->call.arguments, load1, instruction->call.arguments.data + *i);
           mark_used(load1, instruction);
-          vector_insert_after(instruction->call.arguments, load2, *i);
+          vector_insert_after(instruction->call.arguments, load2, instruction->call.arguments.data + *i);
           mark_used(load2, instruction);
 
         }
