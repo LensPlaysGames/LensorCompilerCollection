@@ -1208,7 +1208,7 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
 
           mir_push_with_reg_into_block(f, bb, cmp, (MIRRegister)extra_instruction_reg++);
 
-          // IF YOU REPLACE THIS WITH A XOR IT WILL BREAK HORRIBLY
+          // IF YOU REPLACE THIS WITH AN XOR IT WILL BREAK HORRIBLY
           // We use MOV because it doesn't set flags.
           // TODO: 32-bit move
           MIRInstruction *move = mir_makenew(MX64_MOV);

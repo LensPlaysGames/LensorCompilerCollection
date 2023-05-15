@@ -196,6 +196,11 @@ static void collect_interferences_from_block
 
   DEBUG("  from block...\n");
 
+  // TODO: Collect interferences for virtual registers in this block.
+  // Basically, walk over the instructions of the block backwards, keeping
+  // track of the latest (earliest when not backwards) occurence of any
+  // virtual register operand.
+
   /* TODO: This is important, it needs reenabled
   /// Collect interferences for instructions in this block.
   foreach_ptr_rev (MIRInstruction*, inst, b->instructions) {
@@ -218,8 +223,6 @@ static void collect_interferences_from_block
     ir_for_each_child(inst, collect_interferences, live_vals);
   }
   */
-
-  // Collect all blocks in function that branch to this block (parent blocks).
 
   // The entry block has no parents.
   if (b == b->function->blocks.data[0])
@@ -846,6 +849,22 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
 
   // List of all virtual registers that need coloured.
   VRegVector vregs = {0};
+
+  // Populate list of vregs
+  foreach_ptr (MIRBlock*, bb, f->blocks) {
+    foreach_ptr (MIRInstruction*, inst, bb->instructions) {
+      MIROperand *base = NULL;
+      if (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
+        base = inst->operands.arr;
+      else base = inst->operands.vec.data;
+      for (size_t j = 0; j < inst->operand_count; ++j) {
+        MIROperand *op = base + j;
+        if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START) {
+          vector_push(vregs, op->value.reg.value);
+        }
+      }
+    }
+  }
 
   AdjacencyGraph G = {0};
   G.order = desc->register_count;

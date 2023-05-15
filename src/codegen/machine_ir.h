@@ -77,6 +77,7 @@ typedef struct MIROperand {
 typedef struct MIRInstruction {
   size_t id;
 
+  // TODO: Expand upon the meaning of "register" here, and the register namespace.
   MIRRegister reg;
 
   /// An MIR opcode is some integer that has the 1:1 IR types from 0->N
