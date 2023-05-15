@@ -1,0 +1,184 @@
+* Instruction Selection
+
+Instruction selection is complicated; it is the act of taking general machine IR (gMIR) instructions and converting them into beautiful, /actual/ hardware instructions (lowered MIR, or lMIR).
+
+The idea is this: each ISA describes a table of patterns that match upon one or more gMIR instructions in a domain-specific language parsed specifically by Intercept, and the corresponding x86_64 machine instructions to replace the matched instructions with. HOWEVER! Some instructions kind of *need* to be lowered in code (i.e. calls, function entry, etc. would be horrendous). So, if an instruction did not match as part of any pattern, did not get lowered (is still a gMIR opcode), and is about to be emitted to the output, there will first be a /fallback/ in place in the form of a function implemented in C code. If the fallback doesn't handle the instruction, only then will we just pass the instruction through. To reiterate: the ISel table will handle nearly everything, but single instructions that are quite complex /may/ be implemented in C, so that the scope of the DSL can have a reasonable limit.
+
+#+begin_example
++---------------+  +-----------+  +--------+
+| ISel Patterns |->| C Handler |->| PANIC! |
++---------------+  +-----------+  +--------+
+#+end_example
+
+** Aho-Corasick pattern matching
+
+*** On Strings
+
+NOTE: The Aho-Corasick title isn't exactly accurate, but that's a small nitpick that you'll come to understand as you read.
+
+First, let's go through Aho-Corasick for character-based strings. Each match is just a list of character elements. For each character in each match, Aho-Corasick adds a node with that character as a value to a trie (pronounced "try"), or prefix tree.
+
+Let's say we have three matches we want to find in any given input:
+- ~he~
+- ~hers~
+- ~she~
+
+~he~ is simple and short, so let's start with that. First, we will iterate character by character, creating a node with that character and adding it to either the node we've just created for this match or the root node. The last node added is a special case: it is a terminal node and as such indicates a match when this node is reached. A lot of times the matched string is stored in the terminal node, for easy access. We'll mark terminal nodes by surrounding their value with parenthesis like this: ~(<value>)~.
+#+begin_example
+root
+`- 'h'
+    `- ('e')
+#+end_example
+
+For the next match, we don't have to add a new node for every character, as they are already present as nodes in the trie. So ~h~ and ~e~ of ~hers~ do not create new nodes, we simply "traverse into" the nodes with the given value. So, starting at the root node, we find ~h~ in our match; ~h~ is already present as a child of the root, so we traverse to that node and advance the input. Same deal with ~e~. When ~r~ is reached, a new node is added as a child to the *most-recently traversed* node. This allows a "chain" of nodes to form multiple matches.
+#+begin_example
+root
+`- 'h'
+   `- ('e')
+      `- 'r'
+         `- ('s')
+#+end_example
+
+And for ~she~:
+#+begin_example
+root
+|- 'h'
+|  `- ('e')
+|     `- 'r'
+|        `- ('s')
+`- 's'
+   `- 'h'
+      `- ('e')
+#+end_example
+
+Now, there is one last thing to do to make this a fully Aho-Corasick trie, and that is to calculate fail paths. When we are iterating over input to find matches, the input may contain a character value that is not a child of the currently-visited trie node. When this happens, instead of starting at the beginning, we actually follow a fail path to another node with the same value that may have the failing character value as a child. The nodes in the tree have been numbered for convenience.
+#+begin_example
+root
+|- 1 'h'           fails to root
+|  `- 2 ('e')      fails to root
+|     `- 3 'r'     fails to root
+|        `- ('s')  fails to 4
+`- 4 's'           fails to root
+   `- 5 'h'        fails to 1
+      `- 6 ('e')   fails to 2
+#+end_example
+
+Fail paths are calculated breadth-first, as follows:
+- The root fails to itself/nothing.
+- (1) Any node with the root as a parent fails to the root.
+- (2) Otherwise, first set the fail node to the fail node of the parent. If the fail node has a child node that *does* match, the fail node is updated to that child node. Otherwise, set the fail node to the fail node of the fail node, and try again.
+
+To traverse this trie on a given input, keep track of the current trie node (starting at root) and the match beginning (input index). If the current node is a terminal, emit a match from the match beginning to the current input index. If the current node has the input character as a child, set the current node to that node, and continue. Otherwise, if the current node has *no* child with the current input character as it's value, then we must follow the fail path of the current node until we reach either A. a node with a child with the needed value or B. the root node, in which case we update the match beginning to the next input character and continue.
+
+While that was a lot, hopefully it wasn't too much. Because now we get to imagine that on MIR instructions ~:^&~.
+
+*** On Instructions
+
+So, for each "match string" up above, we actually have a "vector of MIRInstructions"; each character in the match string is equivalent to each MIRInstruction in the vector.
+
+Here we have a pattern that matches one MIR_ADD instruction ~i1~ with two immediate operands, and emits two lowered MIR instructions for x86_64.
+#+begin_example
+MIR_ADD i1(imm o1, imm o2) {
+  MX64_MOV(imm o2, reg i1)
+  MX64_ADD(imm o1, reg i1)
+}
+
+MIR_RET i1() {
+  MX64_RET()
+}
+MIR_RET i1(reg o1) {
+  MX64_MOV(reg o1, %rax)
+  MX64_RET()
+}
+#+end_example
+
+The match part is actually just the first line (with the opening brace); the rest is just how to handle when a match actually occurs. When we are then looping over MIR instructions, we can compare these patterns against the instructions being iterated.
+
+Intercept source:
+#+begin_src int-ts
+4 + 4
+#+end_src
+
+This is the gMIR our program has generated.
+#+begin_example
+v1056 | add 4, 4
+v1057 | return v1056
+#+end_example
+
+Now, with this as our input, we can begin traversing the trie; luckily, our trie is very simple for these simple patterns. The current node is marked with ~^~, and all of the nodes are terminals in this trie.
+#+begin_example
+^root
+|- MIR_ADD i1(imm o1, imm o2)
+|- MIR_RET i1()
+|- MIR_RET i1(reg o1)
+#+end_example
+
+Now as we can see, our first input ~v1056~ /does/ match with the first pattern in the table. So we will consult it's terminal value to see how we can replace it (this is the macro expansion part).
+
+This is the instruction list after the macro replacement; we will keep matching patterns without advancing instructions until no patterns match at all. This allows for optimisation patterns that fold together instructions, among other things.
+#+begin_example
+v1056 | x64_mov 4, v1056
+v1056 | x64_add 4, v1056
+v1057 | return v1056
+#+end_example
+
+Because there are no patterns matching the current instruction list, we will pop one off the front, emit that instruction to the final, lowered MIR, and try again.
+#+begin_example
+output:
+v1056 | x64_mov 4, v1056
+
+instructions:
+v1056 | x64_add 4, v1056
+v1057 | return v1056
+#+end_example
+
+#+begin_example
+output:
+v1056 | x64_mov 4, v1056
+v1056 | x64_add 4, v1056
+
+instructions:
+v1057 | return v1056
+#+end_example
+
+At this point we match another pattern, ~MIR_RET i1(reg o1)~, so we do the replacement.
+#+begin_example
+output:
+v1056 | x64_mov 4, v1056
+v1056 | x64_add 4, v1056
+
+instructions:
+v1057 | x64_mov v1056, %rax
+v1057 | x64_ret
+#+end_example
+
+No matches at this point, so we keep popping and matching.
+#+begin_example
+output:
+v1056 | x64_mov 4, v1056
+v1056 | x64_add 4, v1056
+v1057 | x64_mov v1056, %rax
+
+instructions:
+v1057 | x64_ret
+#+end_example
+
+#+begin_example
+output:
+v1056 | x64_mov 4, v1056
+v1056 | x64_add 4, v1056
+v1057 | x64_mov v1056, %rax
+v1057 | x64_ret
+
+instructions:
+#+end_example
+
+And at this point we have completed ISel for this set of instructions, as there are no more in the input. Hopefully this helps you understand how Intercept utilised Aho-Corasick pattern matching to make the instruction selection of any ISA easier to write, more efficient, and really just doable at all.
+
+After ISel applies all of our patterns:
+#+begin_example
+v1056 | x64_mov 4, v1056
+v1056 | x64_add 4, v1056
+v1057 | x64_mov v1056, %rax
+v1057 | x64_ret
+#+end_example
