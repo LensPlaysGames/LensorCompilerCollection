@@ -11,7 +11,7 @@
 
 const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {
   STATIC_ASSERT(MX64_COUNT == 29, "Exhaustive handling of x86_64 opcodes (string conversion)");
-  ASSERT(opcode >= MIR_ARCH_START && opcode < MX64_END, "Opcode is not x86_64 opcode");
+  //ASSERT(opcode >= MIR_ARCH_START && opcode < MX64_END, "Opcode is not x86_64 opcode");
   switch ((MIROpcodex86_64)opcode) {
   case MX64_ADD: return "add";
   case MX64_SUB: return "sub";
@@ -46,7 +46,7 @@ const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {
   case MX64_COUNT: return "count";
   default: break;
   }
-  ICE("Unhandled x86_64 MIR instruction in string conversion");
+  return mir_common_opcode_mnemonic(opcode);
 }
 
 static MIROpcodex86_64 gmir_binop_to_x64(MIROpcodeCommon opcode) {
