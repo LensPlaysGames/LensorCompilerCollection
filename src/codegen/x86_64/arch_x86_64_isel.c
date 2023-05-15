@@ -749,11 +749,14 @@ MIRInstructionVector select_instructions(CodegenContext *context) {
 }
 
 /// Zero out the given register using MX64_XOR in reg to reg form.
-static MIRInstruction *zero_reg(usz reg, RegSize size, IRInstruction *origin) {
+static MIRInstruction *zero_reg(usz reg, RegSize size, bool defining_use, IRInstruction *origin) {
+  // 32-bit XOR clears top bits of register as well.
+  if (size == r64) size = r32;
+
   MIRInstruction *xor = mir_makenew(MX64_XOR);
   xor->origin = origin;
   xor->x64.instruction_form = I_FORM_REG_TO_REG;
-  MIROperand op_reg = mir_op_register((RegisterDescriptor)reg, (uint16_t)size);
+  MIROperand op_reg = mir_op_register((RegisterDescriptor)reg, (uint16_t)size, defining_use);
   mir_add_op(xor, op_reg);
   mir_add_op(xor, op_reg);
   return xor;
@@ -849,7 +852,9 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
 
         case MIR_LOAD: {
           RegSize size = (RegSize)-1u;
+
           MIROperand *op = mir_get_op(inst, 0);
+          bool defined_set = false;
           switch (op->kind) {
 
           case MIR_OP_LOCAL_REF: {
@@ -859,20 +864,21 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
             MIRFrameObject *frame_obj = mir_get_frame_object(mir_f, op->value.local_ref);
             size = regsize_from_bytes(frame_obj->size);
             if (size == r8 || size == r16) {
-              MIRInstruction *xor_zero = zero_reg(inst->reg, r32, inst->origin);
+              MIRInstruction *xor_zero = zero_reg(inst->reg, r32, !defined_set, inst->origin);
+              defined_set = true;
               mir_push_with_reg_into_block(f, bb, xor_zero, (MIRRegister)extra_instruction_reg++);
             }
             MIRInstruction *move = mir_makenew(MX64_MOV);
             inst->lowered = move;
             move->origin = inst->origin;
             move->x64.instruction_form = I_FORM_MEM_TO_REG;
-            MIROperand address_register = mir_op_register(REG_RBP, r64);
+            MIROperand address_register = mir_op_register(REG_RBP, r64, false);
             MIROperand local = mir_op_local_ref_fo(f, frame_obj);
             mir_add_op(move, address_register);
             mir_add_op(move, local);
-            mir_add_op(move, mir_op_immediate(0)); // fake entry
+            mir_add_op(move, mir_op_register(inst->reg, (uint16_t)size, !defined_set));
+            defined_set = true;
             mir_push_with_reg_into_block(f, bb, move, inst->reg);
-            *mir_get_op(move, 2) = mir_op_reference(move);
           } break;
 
           case MIR_OP_REGISTER: {
@@ -880,15 +886,17 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
             // FIXME: This assumes register size is in bytes, or set at all.
             size = regsize_from_bytes(op->value.reg.size);
             if (size == r8 || size == r16) {
-              MIRInstruction *xor_zero = zero_reg(inst->reg, r32, inst->origin);
-              mir_push_with_reg_into_block(f, bb, xor_zero, (MIRRegister)extra_instruction_reg++);
+              MIRInstruction *xor_zero = zero_reg(inst->reg, r32, !defined_set, inst->origin);
+              defined_set = true;
+              mir_push_with_reg_into_block(f, bb, xor_zero, inst->reg);
             }
             MIRInstruction *move = mir_makenew(MX64_MOV);
             inst->lowered = move;
             move->origin = inst->origin;
             move->x64.instruction_form = I_FORM_REG_TO_REG;
             mir_add_op(move, *op);
-            mir_add_op(move, mir_op_register(inst->reg, 0));
+            mir_add_op(move, mir_op_register(inst->reg, (uint16_t)size, !defined_set));
+            defined_set = true;
             mir_push_with_reg_into_block(f, bb, move, inst->reg);
 
           } break;
@@ -906,18 +914,20 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
             IRInstruction *static_ref = op->value.static_ref;
             size = regsize_from_bytes(type_sizeof(static_ref->type->pointer.to));
             if (size == r8 || size == r16) {
-              MIRInstruction *xor_zero = zero_reg(inst->reg, r32, inst->origin);
+              MIRInstruction *xor_zero = zero_reg(inst->reg, r32, !defined_set, inst->origin);
+              defined_set = true;
               mir_push_with_reg_into_block(f, bb, xor_zero, inst->reg);
             }
             MIRInstruction *move = mir_makenew(MX64_MOV);
             inst->lowered = move;
             move->origin = inst->origin;
             move->x64.instruction_form = I_FORM_NAME_TO_REG;
-            MIROperand address_register = mir_op_register(REG_RIP, r64);
+            MIROperand address_register = mir_op_register(REG_RIP, r64, false);
             MIROperand name = mir_op_name(static_ref->static_ref->name.data);
             mir_add_op(move, address_register);
             mir_add_op(move, name);
-            mir_add_op(move, mir_op_register(inst->reg, 0));
+            mir_add_op(move, mir_op_register(inst->reg, (uint16_t)size, !defined_set));
+            defined_set = true;
             mir_push_with_reg_into_block(f, bb, move, inst->reg);
           } break;
 
@@ -955,7 +965,7 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
           case MIR_OP_LOCAL_REF: {
             /// Store to a local.
             store->x64.instruction_form = I_FORM_REG_TO_MEM;
-            MIROperand address = mir_op_register(REG_RBP, r64);
+            MIROperand address = mir_op_register(REG_RBP, r64, false);
             MIROperand local = mir_op_local_ref_fo(f, mir_get_frame_object(mir_f, op_address->value.local_ref));
             mir_add_op(store, address);
             mir_add_op(store, local);
@@ -980,7 +990,7 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
             move->origin = inst->origin;
             move->x64.instruction_form = I_FORM_REG_TO_REG;
             mir_add_op(move, *op);
-            mir_add_op(move, mir_op_register(machine_description->result_register, 8));
+            mir_add_op(move, mir_op_register(machine_description->result_register, r64, false));
             mir_push_with_reg_into_block(f, bb, move, (MIRRegister)extra_instruction_reg++);
           }
           MIRInstruction *ret = mir_makenew(MX64_RET);
@@ -1082,7 +1092,7 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
           alloca->origin = inst->origin;
           inst->lowered = alloca;
           alloca->x64.instruction_form = I_FORM_MEM_TO_REG;
-          MIROperand address_register = mir_op_register(REG_RBP, r64);
+          MIROperand address_register = mir_op_register(REG_RBP, r64, false);
           mir_add_op(alloca, address_register);
           mir_add_op(alloca, mir_op_local_ref_fo(f, mir_get_frame_object(mir_f, mir_get_op(inst, 0)->value.local_ref)));
           mir_add_op(alloca, mir_op_immediate(0)); // fake entry
@@ -1097,6 +1107,14 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
         case MIR_ADD: {
           RegSize size = regsize_from_bytes(type_sizeof(inst->origin->type));
 
+          // If the vreg of the MIRInstruction we are lowering from has
+          // had it's defining use set, this will be set to true.
+          bool defined_set = false;
+
+          MIRInstruction *m_inst = mir_makenew((uint32_t)gmir_binop_to_x64((MIROpcodeCommon)inst->opcode));
+          m_inst->origin = inst->origin;
+          inst->lowered = m_inst;
+
           MIROperand lhs = *mir_get_op(inst, 0);
           MIROperand rhs = *mir_get_op(inst, 1);
 
@@ -1106,7 +1124,8 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
             load_imm->origin = inst->origin;
             load_imm->x64.instruction_form = I_FORM_IMM_TO_REG;
             mir_add_op(load_imm, rhs);
-            mir_add_op(load_imm, mir_op_register(inst->reg, 0));
+            mir_add_op(load_imm, mir_op_register(inst->reg, (uint16_t)size, !defined_set));
+            defined_set = true;
             mir_push_with_reg_into_block(f, bb, load_imm, inst->reg);
             rhs = mir_op_reference(load_imm);
           }
@@ -1116,22 +1135,19 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
             rhs = tmp;
           }
 
-          MIRInstruction *m_inst = mir_makenew((uint32_t)gmir_binop_to_x64((MIROpcodeCommon)inst->opcode));
-          m_inst->origin = inst->origin;
-          inst->lowered = m_inst;
-          mir_add_op(m_inst, lhs);
-
           // Two address lowering (insert copy).
           if (rhs.kind == MIR_OP_REGISTER && rhs.value.reg.value != inst->reg) {
             MIRInstruction *copy = mir_makenew(MX64_MOV);
             copy->origin = inst->origin;
             copy->x64.instruction_form = I_FORM_REG_TO_REG;
             mir_add_op(copy, rhs);
-            mir_add_op(copy, mir_op_register(inst->reg, 0));
+            mir_add_op(copy, mir_op_register(inst->reg, (uint16_t)size, !defined_set));
+            defined_set = true;
             mir_push_with_reg_into_block(f, bb, copy, inst->reg);
             rhs = mir_op_reference(copy);
           }
 
+          mir_add_op(m_inst, lhs);
           mir_add_op(m_inst, rhs);
           mir_push_with_reg_into_block(f, bb, m_inst, inst->reg);
         } break;
@@ -1143,13 +1159,16 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
           MIROperand lhs = *mir_get_op(inst, 0);
           MIROperand rhs = *mir_get_op(inst, 1);
 
+          bool defined_set = false;
+
           // To subtract two immediates, we must first load the left hand side into a register.
           if (lhs.kind == MIR_OP_IMMEDIATE && rhs.kind == MIR_OP_IMMEDIATE) {
             MIRInstruction *load_imm = mir_makenew(MX64_MOV);
             load_imm->origin = inst->origin;
             load_imm->x64.instruction_form = I_FORM_IMM_TO_REG;
             mir_add_op(load_imm, lhs);
-            mir_add_op(load_imm, mir_op_immediate(0)); // fake entry
+            mir_add_op(load_imm, mir_op_register(inst->reg, (uint16_t)size, !defined_set));
+            defined_set = true;
             mir_push_with_reg_into_block(f, bb, load_imm, (MIRRegister)extra_instruction_reg++);
             *mir_get_op(load_imm, 1) = mir_op_reference(load_imm);
             lhs = mir_op_reference(load_imm);
@@ -1169,7 +1188,8 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
             copy->origin = inst->origin;
             copy->x64.instruction_form = I_FORM_REG_TO_REG;
             mir_add_op(copy, rhs);
-            mir_add_op(copy, mir_op_register(inst->reg, 0));
+            mir_add_op(copy, mir_op_register(inst->reg, (uint16_t)size, !defined_set));
+            defined_set = true;
             mir_push_with_reg_into_block(f, bb, copy, inst->reg);
             rhs = mir_op_reference(copy);
           }
