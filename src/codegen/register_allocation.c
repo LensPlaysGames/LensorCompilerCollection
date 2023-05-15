@@ -32,8 +32,19 @@ CodegenContext *debug_context = NULL;
 #  define DEBUG(...)
 #endif
 
-// TODO: Store register size here as well, not just vreg
-typedef Vector(usz) VRegVector;
+typedef struct VReg {
+  usz value;
+  usz size;
+} VReg;
+typedef Vector(VReg) VRegVector;
+
+bool vreg_vector_contains(VRegVector *vregs, usz vreg_value) {
+  foreach (VReg, v, *vregs) {
+    if (v->value == vreg_value)
+      return true;
+  }
+  return false;
+}
 
 /// Return non-zero iff given instruction needs a register.
 bool needs_register(IRInstruction *instruction) {
@@ -203,10 +214,26 @@ static void collect_interferences_from_block
   /// Collect interferences for instructions in this block.
   foreach_ptr_rev (MIRInstruction*, inst, b->instructions) {
 
+    MIROperand *base = NULL;
+    if (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
+      base = inst->operands.arr;
+    else base = inst->operands.vec.data;
+
+    for (int j = 0; j < inst->operand_count; ++j) {
+      MIROperand *op = base + j;
+      if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START && op->value.reg.defining_use) {
+        VReg op_vreg = {0};
+        op_vreg.value = op->value.reg.value;
+        //op_vreg.size = op->value.reg.size;
+        DEBUG("  Defining use, removing live value %Z\n", op_vreg.value);
+        vector_remove_element_unordered(*live_vals, op_vreg);
+      }
+    }
+
     // Find this instruction's index in vregs vector.
     usz inst_idx = (usz)-1;
     foreach_index (i, *vregs) {
-      if (vregs->data[i] == inst->reg) {
+      if (vregs->data[i].value == inst->reg) {
         inst_idx = i;
         break;
       }
@@ -219,22 +246,22 @@ static void collect_interferences_from_block
       DEBUG("inst_idx=%Z\n", inst_idx);
 
       /// Make this value interfere with all values that are live at this point.
-      foreach (usz, live_val, *live_vals) {
-        if (inst->reg == *live_val) {
+      foreach (VReg, live_val, *live_vals) {
+        if (inst->reg == live_val->value) {
           DEBUG("  Automatically skipping \"interference with self\": %Z (%Z)\n", inst->reg, inst_idx);
           continue;
         }
 
         usz live_idx = (usz)-1;
         foreach_index (i, *vregs) {
-          if (vregs->data[i] == *live_val) {
+          if (vregs->data[i].value == live_val->value) {
             live_idx = i;
             break;
           }
         }
-        ASSERT(live_idx != (usz)-1, "Could not find vreg from live values vector in list of vregs: %Z\n", *live_val);
+        ASSERT(live_idx != (usz)-1, "Could not find vreg from live values vector in list of vregs: %Z\n", live_val->value);
 
-        DEBUG("  Setting live value %Z (%Z) within %Z (%Z)\n", *live_val, live_idx, inst->reg, inst_idx);
+        DEBUG("  Setting live value %Z (%Z) within %Z (%Z)\n", live_val->value, live_idx, inst->reg, inst_idx);
 
         if (live_idx >= G->matrix.size) ICE("Index out of bounds (live value vreg index)", live_idx);
         if (inst_idx >= G->matrix.size) ICE("Index out of bounds (instruction vreg index)", live_idx);
@@ -248,19 +275,15 @@ static void collect_interferences_from_block
     /// instruction, remove it from vector of live vals.
     /// If a virtual register is not live and is seen as an operand, it
     /// is added to the vector of live values.
-    MIROperand *base = NULL;
-    if (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
-      base = inst->operands.arr;
-    else base = inst->operands.vec.data;
     for (size_t j = 0; j < inst->operand_count; ++j) {
       MIROperand *op = base + j;
       if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START) {
-        if (op->value.reg.defining_use) {
-          DEBUG("  Defining use, removing live value %Z\n", op->value.reg.value);
-          vector_remove_element_unordered(*live_vals, op->value.reg.value);
-        } else if (!vector_contains(*live_vals, op->value.reg.value)) {
-          DEBUG("  Adding live value %Z\n", op->value.reg.value);
-          vector_push(*live_vals, op->value.reg.value);
+        if (!op->value.reg.defining_use && !vreg_vector_contains(live_vals, op->value.reg.value)) {
+          VReg v = {0};
+          v.value = op->value.reg.value;
+          v.size = op->value.reg.size;
+          DEBUG("  Adding live value %Z\n", v.value);
+          vector_push(*live_vals, v);
         }
       }
     }
@@ -298,7 +321,7 @@ static void collect_interferences_from_block
   foreach_ptr (MIRBlock*, parent, b->predecessors) {
     // Copy live vals
     VRegVector live_vals_copy = {0};
-    foreach (usz, lv, *live_vals)
+    foreach (VReg, lv, *live_vals)
       vector_push(live_vals_copy, *lv);
 
     collect_interferences_from_block(desc, parent, &live_vals_copy, vregs, visited, doubly_visited, G);
@@ -453,8 +476,7 @@ typedef struct AdjacencyList {
 
   IRInstruction *instruction;
 
-  // TODO: Store size here as well...
-  MIRRegister vreg; // vreg this adjacency list is for
+  VReg vreg; // vreg this adjacency list is for
 
   // Unique integer index.
   usz index;
@@ -491,7 +513,7 @@ void build_adjacency_lists(VRegVector *vregs, AdjacencyGraph *G) {
     AdjacencyList *list = calloc(1, sizeof(AdjacencyList));
     G->lists.data[i] = list;
     list->index = i;
-    list->vreg = (MIRRegister)vregs->data[i];
+    list->vreg = vregs->data[i];
     //list->color = i->result;
     //list->instruction = i;
     list->regmask = G->regmasks[i];
@@ -512,9 +534,9 @@ void build_adjacency_lists(VRegVector *vregs, AdjacencyGraph *G) {
 
 void print_adjacency_lists(AdjacencyLists *array) {
   print("[RA]: Adjacency lists\n"
-        "  id     idx\n");
+        "  id      idx\n");
   foreach_ptr (AdjacencyList*, list, *array) {
-    printf("%6u::%5u: ", (unsigned)list->vreg, (unsigned)list->index);
+    printf("%6u | %5u: ", (unsigned)list->vreg.value, (unsigned)list->index);
     if (list->color) print("(r%u) ", list->color);
 
     /// Print the adjacent nodes.
@@ -693,7 +715,7 @@ void print_number_stack(NumberStack *stack) {
 #  define PRINT_NUMBER_STACK(stack)
 #endif
 
-NumberStack build_coloring_stack(const MachineDescription *desc, VRegVector *vregs, AdjacencyGraph *G) {
+NumberStack build_coloring_stack(const MachineDescription *desc, AdjacencyGraph *G) {
   NumberStack stack = {0};
 
   usz k = desc->register_count;
@@ -724,7 +746,6 @@ NumberStack build_coloring_stack(const MachineDescription *desc, VRegVector *vre
       usz min_cost = (usz) -1; /// (!)
       usz node_to_spill = 0;
 
-      // TODO: Just loop over adjacency lists here, no need to loop over instructions or registers.
       foreach_ptr (AdjacencyList*, list, G->lists) {
         if (list->color || list->allocated) continue;
 
@@ -835,8 +856,12 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
         MIROperand *op = base + j;
         if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START) {
           // Only push if vector does not already contain the value.
-          if (!vector_contains(vregs, op->value.reg.value))
-            vector_push(vregs, op->value.reg.value);
+          if (!vreg_vector_contains(&vregs, op->value.reg.value)) {
+            VReg v  = {0};
+            v.value = op->value.reg.value;
+            v.size = op->value.reg.size;
+            vector_push(vregs, v);
+          }
         }
       }
     }
@@ -869,7 +894,7 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
   PRINT_ADJACENCY_LISTS(&G.lists);
   */
 
-  NumberStack stack = build_coloring_stack(desc, &vregs, &G);
+  NumberStack stack = build_coloring_stack(desc, &G);
 
   DEBUG("After build color stack\n");
   MIR_PRINT(f);
@@ -880,7 +905,7 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
   color(desc, &stack, &G);
 
   foreach_ptr (AdjacencyList*, list, G.lists) {
-    MIRRegister vreg = list->vreg;
+    VReg vreg = list->vreg;
     Register color = list->color;
 
     foreach_ptr (MIRBlock*, bb, f->blocks) {
@@ -891,8 +916,10 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
         else base = inst->operands.vec.data;
         for (size_t j = 0; j < inst->operand_count; ++j) {
           MIROperand *op = base + j;
-          if (op->kind == MIR_OP_REGISTER && op->value.reg.value == vreg)
+          if (op->kind == MIR_OP_REGISTER && op->value.reg.value == vreg.value) {
             op->value.reg.value = color;
+            op->value.reg.size = (uint16_t)vreg.size;
+          }
         }
       }
     }
