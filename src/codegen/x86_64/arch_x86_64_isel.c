@@ -501,7 +501,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     // Push caller saved registers
     // TODO: Don't push registers that are used for arguments.
     for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i)
-      if (func_regs & (1 << i) && is_caller_saved(i))
+      if (func_regs & ((usz)1 << i) && is_caller_saved(i))
         append_mir(context->mir, mir_reg(I_PUSH, i, r64), inst);
 
     usz bytes_pushed = 0;
@@ -531,7 +531,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
     // Restore caller saved registers used in called function.
     for (Register i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i)
-      if (func_regs & (1 << i) && is_caller_saved(i))
+      if (func_regs & ((usz)1 << i) && is_caller_saved(i))
         append_mir(context->mir, mir_reg(I_POP, i, r64), inst);
 
     // Restore stack pointer from stack alignment, if necessary.

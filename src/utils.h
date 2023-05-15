@@ -37,10 +37,12 @@ typedef ptrdiff_t isz;
 #  define NORETURN __declspec(noreturn)
 #  define FALLTHROUGH
 #  define FORMAT(...)
-#  define PRAGMA_STR(...)
+#  define PRAGMA_STR(_Str) _Pragma(#_Str)
 #  define PUSH_IGNORE_WARNING(...)
 #  define POP_WARNINGS()
-#  define FORCEINLINE __forceinline inline
+#  ifndef FORCEINLINE
+#    define FORCEINLINE __forceinline inline
+#  endif
 #  define PRETTY_FUNCTION __FUNCSIG__
 #  define NODISCARD
 #  define BUILTIN_UNREACHABLE() __assume(0)
@@ -51,8 +53,10 @@ typedef ptrdiff_t isz;
 /// name, or else it won't work.
 #if !defined(_MSC_VER) || defined(__clang__)
 #  define PACKED __attribute__((packed))
+#  define PACKED_DEFAULT
 #else
-#  define PACKED _Pragma("pack(1)")
+#  define PACKED PRAGMA_STR("pack(1)")
+#  define PACKED_DEFAULT PRAGMA_STR("pack()")
 #endif
 
 #ifdef __EXT_FORMAT__

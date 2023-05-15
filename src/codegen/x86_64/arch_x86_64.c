@@ -2704,8 +2704,8 @@ static size_t interfering_regs(IRInstruction *instruction) {
   // the dividend must go.
   foreach_ptr (IRInstruction*, inst, instruction->users) {
     if ((inst->kind == IR_DIV || inst->kind == IR_MOD) && inst->rhs == instruction) {
-      mask |= (1 << REG_RAX);
-      mask |= (1 << REG_RDX);
+      mask |= ((usz)1 << REG_RAX);
+      mask |= ((usz)1 << REG_RDX);
     }
   }
 
@@ -2713,15 +2713,15 @@ static size_t interfering_regs(IRInstruction *instruction) {
   case IR_SHL:
   case IR_SHR:
   case IR_SAR:
-    mask |= (1 << REG_RCX);
+    mask |= ((usz)1 << REG_RCX);
     break;
   case IR_DIV:
   case IR_MOD:
-    mask |= (1 << REG_RAX);
-    mask |= (1 << REG_RDX);
+    mask |= ((usz)1 << REG_RAX);
+    mask |= ((usz)1 << REG_RDX);
     break;
   case IR_CALL: // FIXME: This seems specific to calling convention...
-    mask |= (1 << REG_RAX);
+    mask |= ((usz)1 << REG_RAX);
   default:
     break;
   }

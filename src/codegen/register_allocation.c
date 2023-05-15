@@ -559,7 +559,7 @@ void print_adjacency_lists(AdjacencyLists *array) {
 
 /// Determine whether an instruction interferes with a register.
 bool check_register_interference(usz regmask, IRInstruction *instruction) {
-  return (regmask & (1 << (instruction->result - 1))) != 0;
+  return (regmask & ((usz)1 << (instruction->result - 1))) != 0;
 }
 
 /*
@@ -724,7 +724,7 @@ NumberStack build_coloring_stack(const MachineDescription *desc, AdjacencyGraph 
     /// degree < k rule:
     ///   A graph G is k-colorable if, for every node N in G, the degree
     ///   of N < k.
-    bool done;
+    bool done = true;
     do {
       done = true;
       foreach_index(i, G->lists) {
@@ -782,12 +782,12 @@ static void color(
     foreach (usz, adj, list->adjacencies) {
       AdjacencyList *adjacent = g->lists.data[*adj];
       //register_interferences |= desc->instruction_register_interference(adjacent->instruction);
-      if (adjacent->color) register_interferences |= 1 << (adjacent->color - 1);
+      if (adjacent->color) register_interferences |= (usz)1 << (adjacent->color - 1);
     }
 
     Register r = 0;
     for (usz x = 0; x < desc->register_count; ++x) {
-      if (!(register_interferences & 1 << x)) {
+      if (!(register_interferences & (usz)1 << x)) {
         r = (Register) (x + 1);
         break;
       }
@@ -823,7 +823,7 @@ static void color(
 // Keep track of what registers are used in each function.
 void track_registers(IRFunction *f) {
   FOREACH_INSTRUCTION_IN_FUNCTION(f) {
-    f->registers_in_use |= 1 << instruction->result;
+    f->registers_in_use |= (usz)1 << instruction->result;
   }
 }
 

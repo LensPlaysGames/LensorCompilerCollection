@@ -1096,7 +1096,7 @@ void ast_print_scope_tree(FILE *file, const AST *ast) {
     foreach (scope_tree_node, node, scope_tree) {
         /// If this scope has a parent, add it to the parent's children.
         if (node->scope->parent) {
-            scope_tree_node *n;
+            scope_tree_node *n = NULL;
             vector_find_if(scope_tree, n, i, scope_tree.data[i].scope == node->scope->parent);
             ASSERT(n);
             vector_push(n->children, node);
