@@ -163,7 +163,7 @@ static OverloadSet collect_overload_set(Node *func) {
         continue;
       }
       if (string_eq(sym->name, func->funcref.name)) {
-        Candidate s;
+        Candidate s = {0};
         s.symbol = sym;
         s.score = 0;
         s.validity = candidate_valid;
@@ -1218,7 +1218,6 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         if (!expr->literal.compound.size) {
           ERR(expr->source_location,
               "An array literal must have elements within it, as a zero-sized array makes no sense!");
-          return false;
         }
         Type *type = NULL;
         foreach_ptr (Node *, node, expr->literal.compound) {
@@ -1227,7 +1226,6 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
             ERR(node->source_location,
                 "Every expression within an array literal must be convertible to the same type: %T.",
                 type);
-            return false;
           }
           if (!type) type = node->type;
         }
@@ -1284,8 +1282,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         return false;
       // FIXME: Should be t_bool
       if (!convertible(t_integer, expr->for_.condition->type)) {
-        ERR(expr->for_.condition->source_location, "Type of condition expression of for loop %T is not convertible to %T", expr->for_.condition->type, t_integer);
-        return false;
+        ERR(expr->for_.condition->source_location,
+            "Type of condition expression of for loop %T is not convertible to %T",
+            expr->for_.condition->type, t_integer);
       }
 
       expr->type = t_void;

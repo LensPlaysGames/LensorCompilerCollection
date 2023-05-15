@@ -493,6 +493,7 @@ typedef struct PACKED coff_string_entry {
   };
 } coff_string_entry;
 
+PACKED_DEFAULT
 
 #endif /* COFF_H */
 

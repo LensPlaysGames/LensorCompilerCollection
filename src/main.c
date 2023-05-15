@@ -7,6 +7,7 @@
 #include <string.h>
 #include <typechecker.h>
 #include <platform.h>
+#include <utils.h>
 
 void print_usage(char **argv) {
   print("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", 0[argv]);

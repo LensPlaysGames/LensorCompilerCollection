@@ -9,6 +9,7 @@
 
 #define INSTRUCTION(name, given_type)                       \
   IRInstruction *(name) = calloc(1, sizeof(IRInstruction)); \
+  DBGASSERT((name), "Memory allocation failure");           \
   (name)->kind = (given_type);                              \
   (name)->type = t_void
 

@@ -1,24 +1,14 @@
+#include <ir_parser.h>
+
 #include <codegen/intermediate_representation.h>
 #include <ctype.h>
 #include <errno.h>
 #include <error.h>
-#include <ir_parser.h>
 #include <math.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <string.h>
-
-PUSH_IGNORE_WARNING("-Wshadow")
-#ifdef _WIN32
-/// Basically strndup(), but for Windows.
-static char *strndup(const char *str, size_t sz) {
-  char *dup = malloc(sz + 1);
-  memcpy(dup, str, sz);
-  dup[sz] = 0;
-  return dup;
-}
-#endif
-POP_WARNINGS()
+#include <utils.h>
 
 /// ===========================================================================
 ///  Lexer

@@ -15,6 +15,7 @@ PUSH_IGNORE_WARNING("-Wshadow")
 /// Basically strndup(), but for Windows.
 static char *strndup(const char *str, usz sz) {
   char *dup = malloc(sz + 1);
+  DBGASSERT(dup, "Memory allocation failure!");
   memcpy(dup, str, sz);
   dup[sz] = 0;
   return dup;
@@ -326,7 +327,7 @@ string format(const char *fmt, ...) {
 
 /// Print a string to a file.
 void vfprint(FILE *file, const char *fmt, va_list args) {
-  return vformat_to_impl(fmt, args, write_string_to_file, file);
+  vformat_to_impl(fmt, args, write_string_to_file, file);
 }
 
 /// Print a string to a file.

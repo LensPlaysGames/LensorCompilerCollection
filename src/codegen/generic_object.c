@@ -614,7 +614,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
   // STRING TABLE
   uint32_t string_table_size = (uint32_t)string_table.size;
   fwrite(&string_table_size, 1, 4, f);
-  fwrite(string_table.data + 4, 1, string_table_size - 4, f);
+  fwrite(string_table.data + 4, 1, (size_t)string_table_size - 4, f);
   // RELOCATIONS
   fwrite(relocations.data, relocations.size, sizeof(*relocations.data), f);
 
