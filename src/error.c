@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <parser.h>
 
 static const char *diagnostic_level_names[DIAG_COUNT] = {
     "Note",
@@ -188,4 +187,28 @@ void raise_fatal_error_impl (
 
   /// Exit.
   _Exit(1);
+}
+
+void seek_location(span source, loc location, u32 *o_line, u32 *o_line_start, u32 *o_line_end) {
+  /// Seek to the start of the line. Keep track of the line number.
+  u32 line = 1;
+  u32 line_start = 0;
+  for (u32 i = location.start; i > 0; --i) {
+    if (source.data[i] == '\n') {
+      if (!line_start) line_start = i + 1;
+      ++line;
+    }
+  }
+
+  /// Don’t include the newline in the line.
+  if (source.data[line_start] == '\n') ++line_start;
+
+  /// Seek to the end of the line.
+  u32 line_end = location.end;
+  while (line_end < source.size && source.data[line_end] != '\n') line_end++;
+
+  /// Return the results.
+  if (o_line) *o_line = line;
+  if (o_line_start) *o_line_start = line_start;
+  if (o_line_end) *o_line_end = line_end;
 }
