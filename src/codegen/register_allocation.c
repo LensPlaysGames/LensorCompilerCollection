@@ -195,26 +195,10 @@ static void collect_interferences_from_block
 
   DEBUG("  from block...\n");
 
-  // TODO: Collect interferences for virtual registers in this block.
+  // Collect interferences for virtual registers in this block.
   // Basically, walk over the instructions of the block backwards, keeping
-  // track of the latest (earliest when not backwards) occurence of any
-  // virtual register operand.
-
-  // An MIRInstruction is not tied to a virtual register,
-  // necessarily, and it especially doesn't uniquely identify each one.
-  // This causes a problem with how we were calculating interferences
-  // before. We *were* adding live values to a vector each time we
-  // encountered a use, and then removing them each time we found a
-  // definition, meanwhile setting all interferences as we go along.
-  // The problem now is that we don't necessarily know where a virtual
-  // register is defined, and therefore we don't know when to actually
-  // remove it from the vector of live values. The only solution I can
-  // come up with to this relies on ISel, and even then it's pretty
-  // horrid, as ISel would have to explicitly mark the first use of
-  // each virtual register, or something...
-
-  // TODO: I'M AN IDIOT AND SIRRAIDE IS SMART
-  // We should first loop over the instructions (backwards) to compute live ranges AND THEN
+  // track of all virtual registers that have been encountered but not
+  // their defining use, as these are our "live values".
 
   /// Collect interferences for instructions in this block.
   foreach_ptr_rev (MIRInstruction*, inst, b->instructions) {
@@ -229,15 +213,15 @@ static void collect_interferences_from_block
     }
     // Skip instruction if it's vreg is not in vregs.
     if (inst_idx == (usz)-1) {
-      print("Skipping live value setting stuff\n");
+      DEBUG("Skipping live value setting stuff\n");
     } else {
 
-      print("inst_idx=%Z\n", inst_idx);
+      DEBUG("inst_idx=%Z\n", inst_idx);
 
       /// Make this value interfere with all values that are live at this point.
       foreach (usz, live_val, *live_vals) {
         if (inst->reg == *live_val) {
-          print("  Automatically skipping \"interference with self\": %Z (%Z)\n", inst->reg, inst_idx);
+          DEBUG("  Automatically skipping \"interference with self\": %Z (%Z)\n", inst->reg, inst_idx);
           continue;
         }
 
@@ -250,7 +234,7 @@ static void collect_interferences_from_block
         }
         ASSERT(live_idx != (usz)-1, "Could not find vreg from live values vector in list of vregs: %Z\n", *live_val);
 
-        print("  Setting live value %Z (%Z) within %Z (%Z)\n", *live_val, live_idx, inst->reg, inst_idx);
+        DEBUG("  Setting live value %Z (%Z) within %Z (%Z)\n", *live_val, live_idx, inst->reg, inst_idx);
 
         if (live_idx >= G->matrix.size) ICE("Index out of bounds (live value vreg index)", live_idx);
         if (inst_idx >= G->matrix.size) ICE("Index out of bounds (instruction vreg index)", live_idx);
@@ -272,10 +256,10 @@ static void collect_interferences_from_block
       MIROperand *op = base + j;
       if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START) {
         if (op->value.reg.defining_use) {
-          print("  Defining use, removing live value %Z\n", op->value.reg.value);
+          DEBUG("  Defining use, removing live value %Z\n", op->value.reg.value);
           vector_remove_element_unordered(*live_vals, op->value.reg.value);
         } else if (!vector_contains(*live_vals, op->value.reg.value)) {
-          print("  Adding live value %Z\n", op->value.reg.value);
+          DEBUG("  Adding live value %Z\n", op->value.reg.value);
           vector_push(*live_vals, op->value.reg.value);
         }
       }
