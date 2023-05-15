@@ -354,35 +354,60 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
       mcode_1(context->object, sixteen_bit_prefix);
     } FALLTHROUGH;
     case r32: {
-      // 0x81 /5 id
-      uint8_t op = 0x81;
+      if (immediate >= INT8_MIN && immediate <= INT8_MAX) {
+        // 0x83 /5 ib
+        uint8_t op = 0x83;
 
-      // Encode a REX prefix if the ModRM register descriptor needs
-      // the bit extension.
-      if (REGBITS_TOP(destination_regbits)) {
-        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
-        mcode_1(context->object, rex);
-      }
+        // Encode a REX prefix if the ModRM register descriptor needs
+        // the bit extension.
+        if (REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+          mcode_1(context->object, rex);
+        }
 
-      mcode_2(context->object, op, modrm);
-      if (size == r16) {
-        int16_t imm16 = (int16_t)immediate;
-        mcode_n(context->object, &imm16, 2);
+        int8_t imm8 = (int8_t)immediate;
+        mcode_3(context->object, op, modrm, (uint8_t)imm8);
+
       } else {
-        int32_t imm32 = (int32_t)immediate;
-        mcode_n(context->object, &imm32, 4);
+        // 0x81 /5 id
+        uint8_t op = 0x81;
+
+        // Encode a REX prefix if the ModRM register descriptor needs
+        // the bit extension.
+        if (REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
+          mcode_1(context->object, rex);
+        }
+
+        mcode_2(context->object, op, modrm);
+        if (size == r16) {
+          int16_t imm16 = (int16_t)immediate;
+          mcode_n(context->object, &imm16, 2);
+        } else {
+          int32_t imm32 = (int32_t)immediate;
+          mcode_n(context->object, &imm32, 4);
+        }
       }
     } break;
 
     case r64: {
-      // Subtract imm32 sign extended to 64-bits from r64
-      // REX.W + 0x81 /5 id
-      uint8_t op = 0x81;
-      uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(destination_regbits));
-      int32_t imm32 = (int32_t)immediate;
+      if (immediate >= INT8_MIN && immediate <= INT8_MAX) {
+        // Subtract imm8 sign extended to 64-bits from r64
+        // REX.W + 0x83 /5 ib
+        uint8_t op = 0x83;
+        uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(destination_regbits));
+        int8_t imm8 = (int8_t)immediate;
+        mcode_4(context->object, rex, op, modrm, (uint8_t)imm8);
+      } else {
+        // Subtract imm32 sign extended to 64-bits from r64
+        // REX.W + 0x81 /5 id
+        uint8_t op = 0x81;
+        uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(destination_regbits));
+        int32_t imm32 = (int32_t)immediate;
 
-      mcode_3(context->object, rex, op, modrm);
-      mcode_n(context->object, &imm32, 4);
+        mcode_3(context->object, rex, op, modrm);
+        mcode_n(context->object, &imm32, 4);
+      }
     } break;
 
     } // switch (size)
