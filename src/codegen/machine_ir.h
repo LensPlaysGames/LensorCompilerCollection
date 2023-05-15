@@ -162,6 +162,8 @@ void mir_op_clear(MIRInstruction *);
 /// Caller is responsible for calling vector_delete() on returned vector.
 MIRFunctionVector mir_from_ir(CodegenContext *context);
 
+const char *mir_operand_kind_string(MIROperandKind);
+
 /// If opcode is within common opcode range (less than or equal to
 /// MIR_COUNT), return a pointer to a NULL-terminated string containing
 /// a human-readable name of the opcode.
