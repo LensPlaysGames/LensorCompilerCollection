@@ -498,6 +498,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     if (regs_pushed_count & 0b1)
       append_mir(context->mir, mir_imm_to_reg(I_SUB, 8, REG_RSP, r64), inst);
 
+    // Push caller saved registers
     // TODO: Don't push registers that are used for arguments.
     for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i)
       if (func_regs & (1 << i) && is_caller_saved(i))
@@ -1206,6 +1207,8 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
         case MIR_LE: FALLTHROUGH;
         case MIR_GE: {
 
+          bool defined_set = false;
+
           enum ComparisonType type = COMPARE_COUNT;
           switch (inst->opcode) {
           case MIR_EQ: type = COMPARE_EQ; break;
@@ -1235,7 +1238,8 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
           move->origin = inst->origin;
           move->x64.instruction_form = I_FORM_IMM_TO_REG;
           mir_add_op(move, mir_op_immediate(0));
-          mir_add_op(move, mir_op_immediate(0)); // fake entry
+          mir_add_op(move, mir_op_register(inst->reg, r32, !defined_set));
+          defined_set = true;
           mir_push_with_reg_into_block(f, bb, move, (MIRRegister)extra_instruction_reg++);
 
           MIRInstruction *setcc = mir_makenew(MX64_SETCC);
@@ -1243,11 +1247,8 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
           setcc->origin = inst->origin;
           setcc->x64.instruction_form = I_FORM_SETCC;
           mir_add_op(setcc, mir_op_immediate(type));
-          mir_add_op(setcc, mir_op_immediate(0));
+          mir_add_op(setcc, mir_op_register(inst->reg, r8, !defined_set));
           mir_push_with_reg_into_block(f, bb, setcc, inst->reg);
-          // Destination of move is same vreg that setcc operates on.
-          *mir_get_op(setcc, 1) = mir_op_reference(setcc);
-          *mir_get_op(move, 1) = mir_op_reference(setcc);
 
         } break;
 
@@ -1298,4 +1299,3 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
   }
   return mir;
 }
-
