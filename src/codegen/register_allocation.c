@@ -38,12 +38,21 @@ typedef struct VReg {
 } VReg;
 typedef Vector(VReg) VRegVector;
 
-bool vreg_vector_contains(VRegVector *vregs, usz vreg_value) {
+static bool vreg_vector_contains(VRegVector *vregs, usz vreg_value) {
   foreach (VReg, v, *vregs) {
     if (v->value == vreg_value)
       return true;
   }
   return false;
+}
+
+static void vreg_vector_remove_element_unordered(VRegVector *vregs, usz vreg_value) {
+  size_t _index = 0;
+  for (; _index < vregs->size; ++_index) {
+    if (vregs->data[_index].value == vreg_value)
+      break;
+  }
+  if (_index < vregs->size) vector_remove_unordered(*vregs, _index);
 }
 
 /// Return non-zero iff given instruction needs a register.
@@ -78,48 +87,6 @@ bool needs_register(IRInstruction *instruction) {
       return false;
   }
 }
-
-//==== BEG INSTRUCTION LIST ====
-
-typedef Vector(IRInstruction *) IRInstructions;
-
-/// If needs_register is non-zero, return only instructions that need a register allocated.
-void collect_instructions_into(IRFunction *f, IRInstructions *instructions, char needs_register_filter) {
-  vector_clear(*instructions);
-  FOREACH_INSTRUCTION_IN_FUNCTION(f) {
-    // Add instruction to flat list iff instruction needs register
-    // allocated.
-    if (!needs_register_filter || needs_register(instruction)) {
-      instruction->index = (u32) instructions->size;
-      vector_push(*instructions, instruction);
-    }
-  }
-}
-
-IRInstructions collect_instructions(IRFunction *f, char needs_register_filter) {
-  IRInstructions instructions = {0};
-  collect_instructions_into(f, &instructions, needs_register_filter);
-  return instructions;
-}
-
-void print_instruction_list(IRInstructions *list) {
-  foreach_ptr (IRInstruction *, instruction, *list) {
-    ir_femit_instruction(stdout, instruction);
-  }
-}
-
-#ifdef DEBUG_RA
-#  define PRINT_INSTRUCTION_LIST(list) print_instruction_list(list)
-#else
-#  define PRINT_INSTRUCTION_LIST(list)
-#endif
-
-//==== END INSTRUCTION LIST ====
-
-typedef struct IRBlockList {
-  IRBlock *block;
-  struct IRBlockList *next;
-} IRBlockList;
 
 //==== BEG ADJACENCY MATRIX ====
 
@@ -174,15 +141,6 @@ void allocate_adjacency_graph(AdjacencyGraph *G, usz size) {
   G->regmasks = calloc(1, size * sizeof(usz));
 }
 
-/// Callback called by `ir_for_each_child()` in `build_adjacency_graph()`.
-static void collect_interferences(IRInstruction *inst, IRInstruction **child, void* data) {
-  (void) inst;
-  IRInstructions *live_vals = data;
-  if (needs_register(*child)) {
-    if (!vector_contains(*live_vals, *child)) vector_push(*live_vals, *child);
-  }
-}
-
 /// Walk over all possible paths in the control flow graph upwards from
 /// given block, computing instruction interferences based on the values
 /// that are currently live.
@@ -222,11 +180,8 @@ static void collect_interferences_from_block
     for (int j = 0; j < inst->operand_count; ++j) {
       MIROperand *op = base + j;
       if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START && op->value.reg.defining_use) {
-        VReg op_vreg = {0};
-        op_vreg.value = op->value.reg.value;
-        //op_vreg.size = op->value.reg.size;
-        DEBUG("  Defining use, removing live value %Z\n", op_vreg.value);
-        vector_remove_element_unordered(*live_vals, op_vreg);
+        DEBUG("  Defining use, removing live value %Z\n", op->value.reg.value);
+        vreg_vector_remove_element_unordered(live_vals, op->value.reg.value);
       }
     }
 
@@ -287,24 +242,6 @@ static void collect_interferences_from_block
         }
       }
     }
-
-    /*
-    usz mask = desc->instruction_register_interference(inst);
-    foreach (usz, live_val, *live_vals) {
-
-      if (needs_register(inst))
-        adjm_set(G->matrix, inst->index, live_val->index);
-
-      /// Also take special interferences into account.
-      G->regmasks[live_val->index] |= mask;
-    }
-
-    /// Remove its result from the set of live variables;
-    vector_remove_element_unordered(*live_vals, inst);
-
-    /// Add its operands to the set of live variables.
-    ir_for_each_child(inst, collect_interferences, live_vals);
-    */
   }
 
   // The entry block has no parents.
