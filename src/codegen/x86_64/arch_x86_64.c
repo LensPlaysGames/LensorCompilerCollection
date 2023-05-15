@@ -3258,29 +3258,21 @@ void codegen_emit_x86_64(CodegenContext *context) {
         switch (instruction->opcode) {
 
         case MX64_ADD: {
-          ASSERT(instruction->operand_count == 2);
-          // imm to reg          imm, dst
-          MIROperand *lhs = mir_get_op(instruction, 0);
-          MIROperand *rhs = mir_get_op(instruction, 1);
-
-          switch (lhs->kind) {
-
-          case MIR_OP_IMMEDIATE: {
-            // imm to reg          imm, dst
-            switch (rhs->kind) {
-
-            case MIR_OP_REGISTER: {
-              mcode_imm_to_reg(context, I_ADD, lhs->value.imm, rhs->value.reg.value, rhs->value.reg.size);
-            } break;
-
-            default: ICE("Unhandled rhs operand kind of add: %d", mir_operand_kind_string(rhs->kind));
-            } // switch (op1->kind)
-
-          } break; // case MIR_OP_IMMEDIATE
-
-          default: ICE("Unhandled lhs operand kind of add: %d", mir_operand_kind_string(lhs->kind));
-          } // switch (op0->kind)
-
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
+            // imm to reg | imm, dst
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *reg = mir_get_op(instruction, 1);
+            femit_imm_to_reg(context, I_ADD, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            // reg to reg | src, dst
+            MIROperand *src = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            femit_reg_to_reg(context, I_ADD, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
         } break; // case MX64_ADD
 
         case MX64_MOV: {

@@ -951,9 +951,14 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
           store->origin = inst->origin;
 
           MIROperand *op_value = mir_get_op(inst, 0);
-          ASSERT(op_value->kind == MIR_OP_REGISTER, "Only stores from registers are currently handled");
-          op_value->value.reg.size = (uint16_t)size;
-          mir_add_op(store, *op_value);
+          if (op_value->kind == MIR_OP_REGISTER) {
+            MIROperand op_reg = *op_value;
+            op_reg.value.reg.size = (uint16_t)size;
+            mir_add_op(store, op_reg);
+          } else if (op_value->kind == MIR_OP_IMMEDIATE) {
+            TODO("Operands for sized immediate to memory...");
+          }
+          ASSERT(op_value->kind == MIR_OP_REGISTER, "Only stores from registers or immediates are currently handled");
 
           MIROperand *op_address = mir_get_op(inst, 1);
           switch (op_address->kind) {

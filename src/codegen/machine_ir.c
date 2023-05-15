@@ -317,6 +317,8 @@ static void phi2copy(MIRFunction *function) {
         case IR_BRANCH: {
           if (needs_register(arg->value)) {
             MIRInstruction *copy = mir_makenew(MIR_COPY);
+            ASSERT(arg->value->machine_inst);
+            ASSERT(arg->value->machine_inst->block);
             copy->block = arg->value->machine_inst->block;
             copy->reg = instruction->reg;
             mir_add_op(copy, mir_op_reference_ir(function, arg->value));
