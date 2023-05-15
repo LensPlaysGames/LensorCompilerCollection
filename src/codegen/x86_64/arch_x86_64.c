@@ -256,6 +256,9 @@ static void mcode_imm_to_reg(CodegenContext *context, enum Instruction inst, int
   switch (inst) {
   case I_MOV: {
 
+    if (size == r64 && immediate > INT32_MIN && immediate < INT32_MAX)
+      size = r32;
+
     switch (size) {
     case r8: {
       // Move imm8 to r8
@@ -3148,6 +3151,32 @@ void codegen_emit_x86_64(CodegenContext *context) {
       foreach_ptr (MIRInstruction*, instruction, block->instructions) {
         switch (instruction->opcode) {
 
+        case MX64_ADD: {
+          ASSERT(instruction->operand_count == 2);
+          // imm to reg          imm, dst
+          MIROperand *lhs = mir_get_op(instruction, 0);
+          MIROperand *rhs = mir_get_op(instruction, 1);
+
+          switch (lhs->kind) {
+
+          case MIR_OP_IMMEDIATE: {
+            // imm to reg          imm, dst
+            switch (rhs->kind) {
+
+            case MIR_OP_REGISTER: {
+              mcode_imm_to_reg(context, I_ADD, lhs->value.imm, rhs->value.reg.value, rhs->value.reg.size);
+            } break;
+
+            default: ICE("Unhandled rhs operand kind of add: %d", mir_operand_kind_string(rhs->kind));
+            } // switch (op1->kind)
+
+          } break; // case MIR_OP_IMMEDIATE
+
+          default: ICE("Unhandled lhs operand kind of add: %d", mir_operand_kind_string(lhs->kind));
+          } // switch (op0->kind)
+
+        } break; // case MX64_ADD
+
         case MX64_MOV: {
           if (instruction->operand_count == 2) {
             // imm to reg          imm, dst
@@ -3189,13 +3218,19 @@ void codegen_emit_x86_64(CodegenContext *context) {
               case MIR_OP_REGISTER: {
                 // reg to reg          src, dst
                 mcode_reg_to_reg(context, I_MOV, op0->value.reg.value, op0->value.reg.size, op1->value.reg.value, op1->value.reg.size);
-              }
+              } break;
 
               case MIR_OP_LOCAL_REF: {
                 // reg to mem (local)  src, local
+                ASSERT(function->frame_objects.size,
+                       "Cannot reference local at index %Z when there are no frame objects in this function",
+                       op1->value.local_ref);
+                ASSERT(op1->value.local_ref < function->frame_objects.size,
+                       "Local reference index %Z is larger than maximum possible local index %Z",
+                       op1->value.local_ref, function->frame_objects.size);
                 mcode_reg_to_mem(context, I_MOV, op0->value.reg.value, op0->value.reg.size,
                                  REG_RBP, function->frame_objects.data[op1->value.local_ref].offset);
-              }
+              } break;
 
               default: ICE("Unhandled destination operand type of register-source two-operand move");
               } // switch (op1->kind)
@@ -3271,6 +3306,10 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
           } // switch (dst->kind)
 
+        } break;
+
+        case MX64_RET: {
+          mcode_none(context, I_RET);
         } break;
 
         default: {
