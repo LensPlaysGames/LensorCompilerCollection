@@ -120,10 +120,10 @@ MIROperand mir_op_reference_ir(MIRFunction *function, IRInstruction *inst) {
     // FIXME: I don't know if we should try to inline the operand of copies like this.
     //for (; it->kind == IR_COPY; it = it->operand);
     if (it->kind == IR_IMMEDIATE) return mir_op_immediate((i64)it->imm);
-    // FIXME: What size is an IR register?
-    if (it->kind == IR_REGISTER) return mir_op_register(it->result, 0, false);
     if (it->kind == IR_ALLOCA) return mir_op_local_ref_ir(function, &it->alloca);
     if (it->kind == IR_STATIC_REF) return mir_op_static_ref(it);
+    // FIXME: What size is an IR register?
+    if (it->kind == IR_REGISTER) return mir_op_register(it->result, 0, false);
   }
   if (!inst->machine_inst) {
     ir_femit_instruction(stdout, inst);
@@ -280,11 +280,33 @@ static bool needs_register(IRInstruction *instruction) {
   }
 }
 
+/// Remove MIR instructions from given function that have an
+/// MIR_IMMEDIATE opcode, as immediates are inlined into operands with
+/// no load instruction required. The only reason we include them at
+/// all is to satisfy `phi` nonsense, among other things.
+static void remove_immediates(MIRFunction *function) {
+  MIRInstructionVector instructions_to_remove = {0};
+  foreach_ptr (MIRBlock*, block, function->blocks) {
+    // Gather immediate instructions to remove
+    vector_clear(instructions_to_remove);
+    foreach_ptr (MIRInstruction*, instruction, block->instructions) {
+      if (instruction->opcode != MIR_IMMEDIATE) continue;
+      vector_push(instructions_to_remove, instruction);
+    }
+    // Remove gathered instructions
+    foreach_ptr(MIRInstruction*, to_remove, instructions_to_remove) {
+      vector_remove_element(block->instructions, to_remove);
+    }
+  }
+  vector_delete(instructions_to_remove);
+}
+
 /// For each argument of each phi instruction, add in a copy to the phi's virtual register.
 static void phi2copy(MIRFunction *function) {
   IRBlock *last_block = NULL;
+  MIRInstructionVector instructions_to_remove = {0};
   foreach_ptr (MIRBlock*, block, function->blocks) {
-    MIRInstructionVector instructions_to_remove = {0};
+    vector_clear(instructions_to_remove);
     foreach_ptr (MIRInstruction*, instruction, block->instructions) {
       if (instruction->opcode != MIR_PHI) continue;
       IRInstruction *phi = instruction->origin;
@@ -383,6 +405,7 @@ static void phi2copy(MIRFunction *function) {
       }
     }
   }
+  vector_delete(instructions_to_remove);
 }
 
 MIRFunctionVector mir_from_ir(CodegenContext *context) {
@@ -405,7 +428,13 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
       list_foreach (IRInstruction*, inst, bb->instructions) {
         switch (inst->kind) {
 
-        case IR_IMMEDIATE:
+        case IR_IMMEDIATE: {
+          MIRInstruction *mir = mir_makenew(MIR_IMMEDIATE);
+          mir->origin = inst;
+          inst->machine_inst = mir;
+          mir_push_into_block(function, mir_bb, mir);
+        } break;
+
         case IR_REGISTER:
           break;
 
@@ -547,6 +576,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
     }
 
     phi2copy(function);
+    remove_immediates(function);
   }
 
   mir_make_arch = true;
