@@ -835,7 +835,7 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
             call->x64.instruction_form = I_FORM_REG;
             mir_add_op(call, *op_dst);
           } break;
-          default: ICE("Unhandled call operand kind: %d", (int)op_dst->kind);
+          default: ICE("Unhandled call operand kind: %d (%s)", (int)op_dst->kind, mir_operand_kind_string(op_dst->kind));
           }
 
           // foreach operand
@@ -873,9 +873,7 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
             inst->lowered = move;
             move->origin = inst->origin;
             move->x64.instruction_form = I_FORM_MEM_TO_REG;
-            MIROperand address_register = mir_op_register(REG_RBP, r64, false);
             MIROperand local = mir_op_local_ref_fo(f, frame_obj);
-            mir_add_op(move, address_register);
             mir_add_op(move, local);
             mir_add_op(move, mir_op_register(inst->reg, (uint16_t)size, !defined_set));
             defined_set = true;
@@ -973,9 +971,7 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
           case MIR_OP_LOCAL_REF: {
             /// Store to a local.
             store->x64.instruction_form = I_FORM_REG_TO_MEM;
-            MIROperand address = mir_op_register(REG_RBP, r64, false);
             MIROperand local = mir_op_local_ref_fo(f, mir_get_frame_object(mir_f, op_address->value.local_ref));
-            mir_add_op(store, address);
             mir_add_op(store, local);
           } break;
           default: {
@@ -993,13 +989,16 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
         case MIR_RETURN: {
           if (inst->operand_count) {
             MIROperand *op = mir_get_op(inst, 0);
+            ASSERT(op->kind == MIR_OP_REGISTER, "May only return register operands (for now)");
             MIRInstruction *move = mir_makenew(MX64_MOV);
             inst->lowered = move;
             move->origin = inst->origin;
             move->x64.instruction_form = I_FORM_REG_TO_REG;
-            mir_add_op(move, *op);
+            MIROperand src = *op;
+            if (!src.value.reg.size) src.value.reg.size = r64;
+            mir_add_op(move, src);
             mir_add_op(move, mir_op_register(machine_description->result_register, r64, false));
-            mir_push_with_reg_into_block(f, bb, move, (MIRRegister)extra_instruction_reg++);
+            mir_push_with_reg_into_block(f, bb, move, inst->reg);
           }
           MIRInstruction *ret = mir_makenew(MX64_RET);
           inst->lowered = ret;
@@ -1103,9 +1102,8 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
           MIROperand address_register = mir_op_register(REG_RBP, r64, false);
           mir_add_op(alloca, address_register);
           mir_add_op(alloca, mir_op_local_ref_fo(f, mir_get_frame_object(mir_f, mir_get_op(inst, 0)->value.local_ref)));
-          mir_add_op(alloca, mir_op_immediate(0)); // fake entry
+          mir_add_op(alloca, mir_op_register(inst->reg, r64, true));
           mir_push_with_reg_into_block(f, bb, alloca, inst->reg);
-          *mir_get_op(alloca, 2) = mir_op_reference(alloca);
         } break;
 
         // Single-instruction commutative binary operations
