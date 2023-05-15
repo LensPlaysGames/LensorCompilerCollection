@@ -95,7 +95,7 @@ MIROperand mir_op_local_ref_ir(MIRFunction *function, IRStackAllocation *alloca)
   /// Otherwise, we need to add a new frame object.
   out.value.local_ref = function->frame_objects.size;
   alloca->offset = out.value.local_ref;
-  MIRFrameObject frame_obj = { alloca->size, (usz)-1 };
+  MIRFrameObject frame_obj = { alloca->size, (usz)-1, -1 };
   vector_push(function->frame_objects, frame_obj);
 
   return out;
