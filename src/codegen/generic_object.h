@@ -103,4 +103,9 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path);
 /// a file at the given path.
 void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path);
 
+/// Free any resources that have been allocated for the given generic
+/// object file. Invalidates the passed-in generic object file, so don't
+/// try to use it after calling this or it's UB.
+void generic_object_delete(GenericObjectFile *object);
+
 #endif /* GENERIC_OBJECT_H */

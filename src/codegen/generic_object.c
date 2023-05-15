@@ -4,6 +4,13 @@
 #include <codegen/elf.h>
 #include <vector.h>
 
+void generic_object_delete(GenericObjectFile *object) {
+  ASSERT(object, "Invalid argument");
+  vector_delete(object->relocs);
+  vector_delete(object->sections);
+  vector_delete(object->symbols);
+}
+
 Section *code_section(GenericObjectFile *object) {
   return object ? object->sections.data : NULL;
 }
