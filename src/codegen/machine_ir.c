@@ -1,5 +1,7 @@
 #include <codegen/machine_ir.h>
 
+#include <stdarg.h>
+
 #include <codegen.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/codegen_forward.h>
@@ -773,4 +775,23 @@ MIRFrameObject *mir_get_frame_object(MIRFunction *function, MIROperandLocal op) 
   ASSERT(function, "Invalid argument");
   ASSERT(function->frame_objects.size > op, "Index out of bounds (stack frame object you are trying to access does not exist)");
   return function->frame_objects.data + op;
+}
+
+static bool mir_operand_kinds_match_v(MIRInstruction *inst, usz operand_count, va_list args) {
+  for (usz i = 0; i < operand_count; ++i) {
+    MIROperandKind expected_kind = (MIROperandKind)va_arg(args, int);
+    if (expected_kind == MIR_OP_ANY) continue;
+    if (mir_get_op(inst, i)->kind != expected_kind) return false;
+  }
+  return true;
+}
+
+bool mir_operand_kinds_match(MIRInstruction *inst, usz operand_count, ...) {
+  if (inst->operand_count != operand_count) return false;
+
+  va_list args;
+  va_start(args, operand_count);
+  bool out = mir_operand_kinds_match_v(inst, operand_count, args);
+  va_end(args);
+  return out;
 }

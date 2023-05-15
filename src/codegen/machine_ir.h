@@ -25,7 +25,8 @@ typedef enum MIROperandKind {
   MIR_OP_NAME,
   MIR_OP_STATIC_REF,
   MIR_OP_LOCAL_REF,
-  MIR_OP_COUNT
+  MIR_OP_COUNT,
+  MIR_OP_ANY // Not an operand kind; used for matching on any operand kind.
 } MIROperandKind;
 
 typedef struct MIROperandRegister {
@@ -193,6 +194,13 @@ MIROperand mir_op_reference_ir(MIRFunction *function, IRInstruction *inst);
 MIROperand mir_op_immediate(int64_t imm);
 MIROperand mir_op_name(const char *name);
 MIROperand mir_op_register(RegisterDescriptor reg, uint16_t size, bool defining_use);
+
+/// Return true iff the given MIRInstruction has A. the correct amount
+/// of operands and B. the operands match the given kinds; otherwise,
+/// return false.
+/// USAGE: if (mir_operand_kinds_match(my_inst, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) { /* ... */ }
+/// NOTE: UB if operand_count is larger than amount of passed `int` type
+bool mir_operand_kinds_match(MIRInstruction *inst, usz operand_count, ...);
 
 void mir_add_op(MIRInstruction *inst, MIROperand op);
 /// Return a pointer to operand at index within instruction.
