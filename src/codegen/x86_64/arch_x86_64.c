@@ -3146,6 +3146,87 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
         } break;
 
+        case MX64_MOV: {
+          // TODO: mem to reg (local)  local, src
+
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
+            // imm to reg | imm, dst
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *reg = mir_get_op(instruction, 1);
+            femit_imm_to_reg(context, I_MOV, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_LOCAL_REF)) {
+            // imm to mem (local) | imm, local
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *local = mir_get_op(instruction, 1);
+            ASSERT(local->value.local_ref < function->frame_objects.size,
+                   "MX64_MOV(imm, local): local index %d is greater than amount of frame objects in function: %Z",
+                   (int)local->value.local_ref, function->frame_objects.size);
+            femit_imm_to_mem(context, I_MOV, imm->value.imm, REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            // reg to reg | src, dst
+            MIROperand *src = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            femit_reg_to_reg(context, I_MOV, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_LOCAL_REF)) {
+            // reg to mem (local) | src, local
+            MIROperand *reg = mir_get_op(instruction, 0);
+            MIROperand *local = mir_get_op(instruction, 1);
+
+            ASSERT(function->frame_objects.size,
+                   "Cannot reference local at index %Z when there are no frame objects in this function",
+                   local->value.local_ref);
+            ASSERT(local->value.local_ref < function->frame_objects.size,
+                   "Local reference index %Z is larger than maximum possible local index %Z",
+                   local->value.local_ref, function->frame_objects.size - 1);
+
+            femit_reg_to_mem(context, I_MOV, reg->value.reg.value, reg->value.reg.size,
+                             REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
+          } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
+            // imm to mem | imm, addr, offset
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *reg_address = mir_get_op(instruction, 1);
+            MIROperand *offset = mir_get_op(instruction, 2);
+            femit_imm_to_mem(context, I_MOV, imm->value.imm, reg_address->value.reg.value, offset->value.imm);
+          } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
+            // reg to mem | src, addr, offset
+            MIROperand *reg_source = mir_get_op(instruction, 0);
+            MIROperand *reg_address = mir_get_op(instruction, 1);
+            MIROperand *offset = mir_get_op(instruction, 2);
+            femit_reg_to_mem(context, I_MOV, reg_source->value.reg.value, reg_source->value.reg.size, reg_address->value.reg.value, offset->value.imm);
+          } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
+            // mem to reg | addr, offset, dst
+            MIROperand *reg_address = mir_get_op(instruction, 0);
+            MIROperand *offset = mir_get_op(instruction, 1);
+            MIROperand *reg_dst = mir_get_op(instruction, 2);
+            femit_mem_to_reg(context, I_MOV, reg_address->value.reg.value, offset->value.imm, reg_dst->value.reg.value, reg_dst->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+
+        } break; // case MX64_MOV
+
+        case MX64_ADD: {
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
+            // imm to reg | imm, dst
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *reg = mir_get_op(instruction, 1);
+            femit_imm_to_reg(context, I_ADD, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            // reg to reg | src, dst
+            MIROperand *src = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            femit_reg_to_reg(context, I_ADD, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break; // case MX64_ADD
+
+        case MX64_RET: femit_none(context, I_RET); break;
+
         default: {
           print("Unhandled opcode: %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
         } break;
@@ -3203,114 +3284,65 @@ void codegen_emit_x86_64(CodegenContext *context) {
         } break; // case MX64_ADD
 
         case MX64_MOV: {
-          if (instruction->operand_count == 2) {
-            // imm to reg          imm, dst
-            // imm to mem (local)  imm, local
-            // reg to reg          src, dst
-            // reg to mem (local)  src, local
-            // mem to reg (local)  local, src
-            MIROperand *op0 = mir_get_op(instruction, 0);
-            MIROperand *op1 = mir_get_op(instruction, 1);
+          // TODO: mem to reg (local)  local, src
 
-            switch (op0->kind) {
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
+            // imm to reg | imm, dst
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *reg = mir_get_op(instruction, 1);
+            mcode_imm_to_reg(context, I_MOV, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_LOCAL_REF)) {
+            // imm to mem (local) | imm, local
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *local = mir_get_op(instruction, 1);
+            ASSERT(local->value.local_ref < function->frame_objects.size,
+                   "MX64_MOV(imm, local): local index %d is greater than amount of frame objects in function: %Z",
+                   (int)local->value.local_ref, function->frame_objects.size);
+            mcode_imm_to_mem(context, I_MOV, imm->value.imm, REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            // reg to reg | src, dst
+            MIROperand *src = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            mcode_reg_to_reg(context, I_MOV, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_LOCAL_REF)) {
+            // reg to mem (local) | src, local
+            MIROperand *reg = mir_get_op(instruction, 0);
+            MIROperand *local = mir_get_op(instruction, 1);
 
-            case MIR_OP_IMMEDIATE: {
-              // imm to reg          imm, dst
-              // imm to mem (local)  imm, local
-              switch (op1->kind) {
+            ASSERT(function->frame_objects.size,
+                   "Cannot reference local at index %Z when there are no frame objects in this function",
+                   local->value.local_ref);
+            ASSERT(local->value.local_ref < function->frame_objects.size,
+                   "Local reference index %Z is larger than maximum possible local index %Z",
+                   local->value.local_ref, function->frame_objects.size - 1);
 
-              case MIR_OP_REGISTER: {
-                // imm to reg          imm, dst
-                mcode_imm_to_reg(context, I_MOV, op0->value.imm, op1->value.reg.value, op1->value.reg.size);
-              } break;
-
-              case MIR_OP_LOCAL_REF: {
-                // imm to mem (local)  imm, local
-                mcode_imm_to_mem(context, I_MOV, op0->value.imm, REG_RBP, function->frame_objects.data[op1->value.local_ref].offset);
-              } break;
-
-              default: ICE("Unhandled destination operand type of immediate-source two-operand move");
-              } // switch (op1->kind)
-
-            } break; // case MIR_OP_IMMEDIATE
-
-            case MIR_OP_REGISTER: {
-              // reg to reg          src, dst
-              // reg to mem (local)  src, local
-
-              switch (op1->kind) {
-
-              case MIR_OP_REGISTER: {
-                // reg to reg          src, dst
-                mcode_reg_to_reg(context, I_MOV, op0->value.reg.value, op0->value.reg.size, op1->value.reg.value, op1->value.reg.size);
-              } break;
-
-              case MIR_OP_LOCAL_REF: {
-                // reg to mem (local)  src, local
-                ASSERT(function->frame_objects.size,
-                       "Cannot reference local at index %Z when there are no frame objects in this function",
-                       op1->value.local_ref);
-                ASSERT(op1->value.local_ref < function->frame_objects.size,
-                       "Local reference index %Z is larger than maximum possible local index %Z",
-                       op1->value.local_ref, function->frame_objects.size);
-                mcode_reg_to_mem(context, I_MOV, op0->value.reg.value, op0->value.reg.size,
-                                 REG_RBP, function->frame_objects.data[op1->value.local_ref].offset);
-              } break;
-
-              default: ICE("Unhandled destination operand type of register-source two-operand move");
-              } // switch (op1->kind)
-
-            } break; // case MIR_OP_REGISTER
-
-            default: ICE("Unhandled source operand type of two-operand move");
-
-            } // switch (op0->kind)
-
-          } else if (instruction->operand_count == 3) {
-            // imm to mem          imm, addr, offset
-            // reg to mem          src, addr, offset
-            // mem to reg          addr, offset, src
-            MIROperand *op0 = mir_get_op(instruction, 0);
-            MIROperand *op1 = mir_get_op(instruction, 1);
-            MIROperand *op2 = mir_get_op(instruction, 2);
-
-            switch (op0->kind) {
-
-            case MIR_OP_IMMEDIATE: {
-              // imm to mem          imm, addr, offset
-              ASSERT(op1->kind == MIR_OP_REGISTER);
-              ASSERT(op2->kind == MIR_OP_IMMEDIATE);
-              mcode_imm_to_mem(context, I_MOV, op0->value.imm, op1->value.reg.value, op2->value.imm);
-            } break;
-
-            case MIR_OP_REGISTER: {
-              // reg to mem          src, addr, offset
-              // mem to reg          addr, offset, src
-
-              switch (op1->kind) {
-
-              case MIR_OP_REGISTER: {
-                // reg to mem          src, addr, offset
-                ASSERT(op2->kind == MIR_OP_IMMEDIATE);
-                mcode_reg_to_mem(context, I_MOV, op0->value.reg.value, op0->value.reg.size, op1->value.reg.value, op2->value.imm);
-              } break;
-
-              case MIR_OP_IMMEDIATE: {
-                // mem to reg          addr, offset, src
-                ASSERT(op2->kind == MIR_OP_REGISTER);
-                mcode_mem_to_reg(context, I_MOV, op0->value.reg.value, op1->value.imm, op2->value.reg.value, op2->value.reg.size);
-              } break;
-
-              default: ICE("Unhandled second operand of three-operand move");
-              } // switch (op1->kind)
-
-            } break; // case MIR_OP_REGISTER
-
-            default: ICE("Unhandled source operand type of three-operand move");
-            } // switch (op0->kind)
+            mcode_reg_to_mem(context, I_MOV, reg->value.reg.value, reg->value.reg.size,
+                             REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
+          } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
+            // imm to mem | imm, addr, offset
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *reg_address = mir_get_op(instruction, 1);
+            MIROperand *offset = mir_get_op(instruction, 2);
+            mcode_imm_to_mem(context, I_MOV, imm->value.imm, reg_address->value.reg.value, offset->value.imm);
+          } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
+            // reg to mem | src, addr, offset
+            MIROperand *reg_source = mir_get_op(instruction, 0);
+            MIROperand *reg_address = mir_get_op(instruction, 1);
+            MIROperand *offset = mir_get_op(instruction, 2);
+            mcode_reg_to_mem(context, I_MOV, reg_source->value.reg.value, reg_source->value.reg.size, reg_address->value.reg.value, offset->value.imm);
+          } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
+            // mem to reg | addr, offset, dst
+            MIROperand *reg_address = mir_get_op(instruction, 0);
+            MIROperand *offset = mir_get_op(instruction, 1);
+            MIROperand *reg_dst = mir_get_op(instruction, 2);
+            mcode_mem_to_reg(context, I_MOV, reg_address->value.reg.value, offset->value.imm, reg_dst->value.reg.value, reg_dst->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled mov instruction, sorry");
           }
-        }break; // case MX64_MOV
 
+        } break; // case MX64_MOV
 
         case MX64_CALL: {
           MIROperand *dst = mir_get_op(instruction, 0);
