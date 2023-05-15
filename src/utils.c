@@ -2,11 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <utils.h>
-#include <error.h>
 #include <math.h>
-#include <inttypes.h>
+
 #include <ast.h>
+#include <error.h>
+#include <inttypes.h>
+#include <utils.h>
 #include <vector.h>
 
 PUSH_IGNORE_WARNING("-Wshadow")
