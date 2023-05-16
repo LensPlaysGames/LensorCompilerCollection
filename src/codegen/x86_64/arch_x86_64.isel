@@ -1,0 +1,90 @@
+Version: 1
+ISA: x86_64
+
+;; Comment
+
+;; At top of every isel file is metadata. One definition per line. Ends
+;; with an empty line, and that is where the match definitions may
+;; begin.
+
+;; Each definition begins with the keyword `match`.
+;; Following `match` comes one or more instruction specifications,
+;; constrained to general MIR opcodes.
+;; An instruction specification is constructed like so:
+;;   `<opcode> <identifier> "(" { <operand-type> <identifier> [ "=" <expression> ] [ "," ] } ")" [ "," ]`
+;; After the instruction specifications comes the emitted instructions,
+;; after the keyword `emit`. This is a block (wrapped in curly brackets)
+;; of instruction specifications that are not constrained in any way.
+
+;; Commas are optional.
+;; Identifiers ARE case sensitive.
+
+;; For now, just use C identifiers for opcodes
+
+;; Operand Kind
+;; Register == REG  == MIR_OP_REGISTER
+;; Immediate == IMM == MIR_OP_IMMEDIATE
+;; Block            == MIR_OP_BLOCK
+;; Function == FUN  == MIR_OP_FUNCTION
+;; Local            == MIR_OP_LOCAL_REF
+;; Static           == MIR_OP_STATIC_REF
+
+;; Every isel file that is parsed will start with the general MIR
+;; opcodes defined, as well as some other things like the CompareType
+;; enum.
+;; The ISA should add definitions for its opcodes.
+
+;; NOTE: Input MIR instructions are lowered from IR (general MIR), so
+;; each one technically has it's own "result" virtual register that may
+;; be accesed by using the name of the matched instruction. YOU CANNOT
+;; USE THE RESULT REGISTER OF A LOWERED INSTRUCTION!
+
+;; TODO: Special Operands:
+;; ZERO  == MIR_OP_IMMEDIATE with value of 0
+;; VREG  == MIR_OP_REGISTER with new virtual register value
+
+match
+MIR_ADD i1(Immediate lhs, Immediate rhs)
+emit {
+  MX64_MOV(rhs, Register i1)
+  MX64_ADD(lhs, Register i1)
+}
+
+match
+MIR_ADD i1(Register reg, Immediate imm)
+emit MX64_ADD(imm, reg)
+
+;; COMPARISON
+;; TODO: Not just LT, do one for each comparison type
+match
+MIR_LT cmp(Register lhs, Register rhs),
+MIR_BRANCH branch(Block dest)
+emit {
+  MX64_CMP(lhs, rhs)
+  MX64_JCC(Immediate cmp_type = COMPARE_LT, dest)
+}
+match
+MIR_LT lt(Register lhs, Register rhs)
+emit {
+  MX64_CMP(lhs, rhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, lt)
+  MX64_SETCC(Immediate cmp_type = COMPARE_LT, lt)
+}
+
+;; Alternative Syntax Experiments:
+
+;;match MIR_ADD i1
+;;  where i1 has Immediate lhs, Immediate rhs
+;;emit
+;;  MX64_MOV(rhs, REG i1)
+;;  MX64_ADD(lhs, REG i1)
+;;  .
+
+;;match i1
+;;  where i1 MIR_ADD
+;;    with o1 IMM, o2 IMM
+;;emit {
+;;  MOV o1, i1 REG
+;;  ADD o2, i1 REG
+;;} .
