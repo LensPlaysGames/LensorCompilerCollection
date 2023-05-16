@@ -10,6 +10,7 @@
 #include <vector.h>
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdbool.h>
 
 typedef enum ISelTokenKind {
@@ -50,9 +51,12 @@ typedef struct ISelToken {
 
   usz integer;
   string_buffer text;
+
+  loc source_location;
 } ISelToken;
 
 typedef struct ISelParser {
+  const char *source_filepath;
   span source;
   ISelToken tok;
 
@@ -72,7 +76,7 @@ static void isel_next_c(ISelParser *p) {
   /// Read the next character.
   // TODO: Read next utf8 codepoint.
   p->lastc = *p->beg++;
-  if (p->lastc == 0) ICE("ISel lexer can not handle null bytes within the input");
+  if (p->lastc == 0) return;
 
   /// Collapse CRLF and LFCR to a single newline,
   /// but keep CRCR and LFLF as two newlines.
@@ -107,11 +111,11 @@ static bool isel_iscontinue(isz codepoint) {
 
 /// Lex an identifier.
 static void isel_next_identifier(ISelParser *p) {
-  DBGASSERT(isel_isstart(p->lastc), "");
-
   /// The start of the identifier.
-  p->tok.kind = TOKEN_IDENTIFIER;
+  DBGASSERT(isel_isstart(p->lastc), "");
   isel_next_c(p);
+
+  p->tok.kind = TOKEN_IDENTIFIER;
 
   /// Read the rest of the identifier.
   while (isel_iscontinue(p->lastc)) {
@@ -121,7 +125,7 @@ static void isel_next_identifier(ISelParser *p) {
   }
 }
 /// Parse a number.
-static void parse_number(ISelParser *p, int base) {
+static void isel_parse_number(ISelParser *p, int base) {
   /// Zero-terminate the string or else `strtoull()` might try
   /// to convert data left over from the previous token.
   string_buf_zterm(&p->tok.text);
@@ -135,7 +139,7 @@ static void parse_number(ISelParser *p, int base) {
 }
 
 /// Lex a number.
-static void next_number(ISelParser *p) {
+static void isel_next_number(ISelParser *p) {
   /// Record the start of the number.
   vector_clear(p->tok.text);
   p->tok.integer = 0;
@@ -162,11 +166,11 @@ static void next_number(ISelParser *p) {
     }                                                                       \
                                                                             \
     /** We need at least one digit. **/                                     \
-    /*p->tok.source_location.end = (u32) ((p->beg - 1) - p->source.data);*/ \
+    p->tok.source_location.end = (u32) ((p->beg - 1) - p->source.data);     \
     if (p->tok.text.size == 0) ICE("Expected at least one " name " digit"); \
                                                                             \
     /** Actually parse the number. **/                                      \
-    return parse_number(p, base);                                           \
+    return isel_parse_number(p, base);                                      \
   }
 
     DO_PARSE_NUMBER("binary", "bB", p->lastc == '0' || p->lastc == '1', 2)
@@ -188,14 +192,14 @@ static void next_number(ISelParser *p) {
       vector_push(p->tok.text, (char)p->lastc);
       isel_next_c(p);
     } while (isdigit((char)p->lastc));
-    return parse_number(p, 10);
+    return isel_parse_number(p, 10);
   }
 
   /// Anything else is an error.
   ICE("Invalid integer literal");
 }
 
-const struct {
+static const struct {
   span kw;
   ISelTokenKind kind;
 } keywords[11] = {
@@ -227,13 +231,13 @@ static void isel_next_tok(ISelParser *p) {
   while (isspace((char)p->lastc)) isel_next_c(p);
 
   /// Start of the token.
-  //p->tok.source_location.start = (u32) (p->curr - p->source.data - 1);
+  p->tok.source_location.start = (u32) (p->beg - p->source.data - 1);
 
   /// Lex the token.
   switch (p->lastc) {
 
     /// EOF.
-    case 0:
+    case '\0':
       p->tok.kind = TOKEN_EOF;
       break;
 
@@ -246,7 +250,7 @@ static void isel_next_tok(ISelParser *p) {
     case TOKEN_LT: FALLTHROUGH;
     case TOKEN_GT: FALLTHROUGH;
     case TOKEN_EQ: FALLTHROUGH;
-    case TOKEN_COMMA: FALLTHROUGH;
+    case TOKEN_COMMA:
       p->tok.kind = (int)p->lastc;
       isel_next_c(p);
       break;
@@ -263,7 +267,7 @@ static void isel_next_tok(ISelParser *p) {
     } break;
 
     default: {
-      // Number or Identifier
+      /// Identifier
       if (isel_isstart(p->lastc)) {
         vector_clear(p->tok.text);
         // TODO: Push utf8 encoding of codepoint.
@@ -273,6 +277,8 @@ static void isel_next_tok(ISelParser *p) {
         for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
           if (string_eq(keywords[i].kw, p->tok.text)) {
             p->tok.kind = keywords[i].kind;
+            /// Set the end of the token before returning.
+            p->tok.source_location.end = (u32) (p->beg - p->source.data - 1);
             return;
           }
         }
@@ -280,9 +286,9 @@ static void isel_next_tok(ISelParser *p) {
         break;
       }
 
-      /// Number.
+      /// Number
       if (isdigit((char)p->lastc)) {
-        next_number(p);
+        isel_next_number(p);
 
         /// The character after a number must be a whitespace or delimiter.
         if (isel_isstart(p->lastc)) ICE("Junk after integer literal");
@@ -290,15 +296,22 @@ static void isel_next_tok(ISelParser *p) {
       }
 
       /// Anything else is invalid.
-      ICE("ISel: invalid token");
+      ICE("ISel: unknown how to handle codepoint %I at (%u, %u)", p->lastc, p->tok.source_location.start, p->tok.source_location.end);
 
     } break;
   }
+
+  /// Set the end of the token.
+  p->tok.source_location.end = (u32) (p->beg - p->source.data - 1);
 }
 
 /// <operand> ::= OPERAND_KIND IDENTIFIER [ "=" <expression> ] [ "," ]
 static MIROperand isel_parse_operand(ISelParser *p) {
   MIROperand out = {0};
+  out.kind = MIR_OP_ANY;
+
+  // FIXME: Throwaway a token so that parsing progresses.
+  isel_next_tok(p);
 
   // TODO: Parse operand kind (should be one of TOKEN_OPKIND_*)
 
@@ -313,11 +326,33 @@ static MIROperand isel_parse_operand(ISelParser *p) {
   return out;
 }
 
+
+// XXX TODO YYY
+// Hey stupidface, here's your todo:
+// 1. Write like a consume or expect or whatever combination of those
+//    helpers that you need for tokens.
+// 2. Write like a string hashmap that corresponds to a new struct
+//    `ISelValue` which may be a reference to an MIROperand or
+//    MIRInstruction within an isel pattern, or an immediate/text
+//    value; this is for match identifiers given to instructions and
+//    operands.
+// 3. Also use the string hashmap code to implement the top-level
+//    environment, which is persistent and immutable all the way
+//    through parsing. It contains general MIR opcodes, COMPARE_EQ and
+//    friends, and any extras added by the ISA after it is detected in
+//    the header.
+// 4. Suck today's dick!
+// 5. Fill in insane amount of todos in parsing (so like ya know, the
+//    parsing bit).
+// 6. hope it all comes together and you can actually parse patterns
+// 7. use patterns to do selection, better matching with aho-corasick, etc
+// ZZZ TODO AAA
+
+
 /// <inst-spec> ::= <opcode> IDENTIFIER "(" { <operand> } ")" [ "," ]
 static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
-  MIRInstruction *out = mir_makenew(MIR_IMMEDIATE);
-
   // TODO: The current token should be an identifier that maps to a general MIR opcode.
+  MIRInstruction *out = mir_makenew(MIR_IMMEDIATE);
 
   // TODO: Parse identifier (name bound to this instruction while parsing this match)
 
@@ -325,9 +360,15 @@ static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
 
   // Add operands to instruction as we parse them.
   while (p->tok.kind != TOKEN_RPAREN) {
-    if (p->tok.kind == TOKEN_EOF) ICE("ISel reached EOF while parsing operands of instruction");
+    issue_diagnostic(DIAG_ERR, p->source_filepath, p->source, p->tok.source_location, "ISel reached EOF while parsing operands of instruction");
+    if (p->tok.kind == TOKEN_EOF) {
+      issue_diagnostic(DIAG_ERR, p->source_filepath, p->source, p->tok.source_location, "ISel reached EOF while parsing operands of instruction");
+      exit(0);
+    }
     mir_add_op(out, isel_parse_operand(p));
   }
+  // Yeet closing paren
+  isel_next_tok(p);
 
   // TODO: Eat comma, if present
 
@@ -357,7 +398,6 @@ static ISelPattern isel_parse_match(ISelParser *p) {
   // Parse either a single instruction to match in the pattern or an
   // opening brace and then until the closing one.
   if (p->tok.kind == TOKEN_LBRACE) {
-
     // Yeet opening brace
     isel_next_tok(p);
 
@@ -365,7 +405,7 @@ static ISelPattern isel_parse_match(ISelParser *p) {
     ASSERT(p->tok.kind != TOKEN_RBRACE, "There must be at least one instruction emitted by a pattern (use discard keyword if on purpose)");
 
     while (p->tok.kind != TOKEN_RBRACE) {
-    if (p->tok.kind == TOKEN_EOF) ICE("ISel reached EOF while parsing output instructions of match definition");
+      if (p->tok.kind == TOKEN_EOF) ICE("ISel reached EOF while parsing output instructions of match definition");
       MIRInstruction *inst = isel_parse_inst_spec(p);
       vector_push(out.output, inst);
     }
@@ -392,8 +432,25 @@ ISelPatterns isel_parse(ISelParser *p) {
   // Advance past metadata (find first empty line).
   // TODO: Parse metadata to get ISA, use ISA to setup initial
   // environment (MIR opcode identifiers specific to the ISA)
-  for (const char *last = NULL; p->beg != last && *p->beg && *p->beg != '\n'; p->beg += strcspn(p->beg, "\n") + 1)
-    last = p->beg;
+  {
+    bool lfcr = false; // to catch (CR)LFCR(LF) sequences
+    bool lflf = false; // to catch LFLF sequences
+    char lastc = '\0';
+    while (*p->beg) {
+      if (lfcr && *p->beg == '\n') {
+        printf("Skipped metadata:\n```\n%.*s```\n", (int)(p->beg - p->source.data), p->source.data);
+        print("How's Windows treatin ya?\n");
+        break;
+      }
+      lfcr = *p->beg == '\r' && lastc == '\n';
+      lflf = *p->beg == lastc && lastc == '\n';
+      if (lflf) {
+        print("Unix user, I see...\n");
+        break;
+      }
+      lastc = *p->beg++;
+    }
+  }
 
   /// Lex the first character and token.
   isel_next_c(p);
@@ -418,6 +475,7 @@ ISelPatterns isel_parse_file(const char *filepath) {
 
   string contents = platform_read_file(filepath, &success);
   if (!success) ICE("Failed to read file at \"%s\" for instruction selection", filepath);
+  p.source_filepath = filepath;
   p.source = as_span(contents);
 
   ISelPatterns out = isel_parse(&p);
