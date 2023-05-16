@@ -13,6 +13,15 @@
 #include <errno.h>
 #include <stdbool.h>
 
+#define ISSUE_DIAGNOSTIC(sev, loc, parser, ...)                         \
+  do {                                                                  \
+    issue_diagnostic((sev), (parser)->source_filepath, (parser)->source, (loc), __VA_ARGS__); \
+    exit(0);                                                            \
+  } while (0)
+
+#define ERR_AT(loc, ...) ISSUE_DIAGNOSTIC(DIAG_ERR, loc, p, __VA_ARGS__)
+#define ERR(...) ERR_AT(p->tok.source_location, __VA_ARGS__)
+
 typedef enum ISelTokenKind {
   TOKEN_EOF = 0,
 
@@ -46,6 +55,34 @@ typedef enum ISelTokenKind {
   TOKEN_INTEGER = '0',
 } ISelTokenKind;
 
+static const char *isel_token_kind_to_string(ISelTokenKind kind) {
+  switch (kind) {
+  case TOKEN_EOF: return "EOF";
+  case TOKEN_OPKIND_REGISTER: return "OpKind Register";
+  case TOKEN_OPKIND_IMMEDIATE: return "OpKind Immediate";
+  case TOKEN_OPKIND_BLOCK: return "OpKind Block";
+  case TOKEN_OPKIND_FUNCTION: return "OpKind Function";
+  case TOKEN_OPKIND_NAME: return "OpKind Name";
+  case TOKEN_OPKIND_STATIC: return "OpKind Static";
+  case TOKEN_OPKIND_LOCAL: return "OpKind Local";
+  case TOKEN_LPAREN: return "(";
+  case TOKEN_RPAREN: return ")";
+  case TOKEN_LBRACE: return "{";
+  case TOKEN_RBRACE: return "}";
+  case TOKEN_LBRACKET: return "[";
+  case TOKEN_RBRACKET: return "]";
+  case TOKEN_LT: return "<";
+  case TOKEN_GT: return ">";
+  case TOKEN_EQ: return "=";
+  case TOKEN_COMMA: return ",";
+  case TOKEN_SEMICOLON: return ";";
+  case TOKEN_KW_MATCH: return "match";
+  case TOKEN_KW_EMIT: return "emit";
+  case TOKEN_IDENTIFIER: return "identifier";
+  }
+  UNREACHABLE();
+}
+
 typedef struct ISelToken {
   ISelTokenKind kind;
 
@@ -69,6 +106,7 @@ typedef struct ISelParser {
 static void isel_next_c(ISelParser *p) {
    /// Keep returning EOF once EOF has been reached.
   if (p->beg >= p->end) {
+    // beg is >= end, must be EOF
     p->lastc = 0;
     return;
   }
@@ -220,6 +258,7 @@ static const struct {
 static void isel_next_tok(ISelParser *p) {
   /// Keep returning EOF once EOF has been reached.
   if (!p->lastc) {
+    // Last codepoint is 0 so must be EOF
     p->tok.kind = TOKEN_EOF;
     return;
   }
@@ -236,8 +275,9 @@ static void isel_next_tok(ISelParser *p) {
   /// Lex the token.
   switch (p->lastc) {
 
-    /// EOF.
+    /// EOF
     case '\0':
+      // Reached null byte in input, must be EOF.
       p->tok.kind = TOKEN_EOF;
       break;
 
@@ -305,23 +345,76 @@ static void isel_next_tok(ISelParser *p) {
   p->tok.source_location.end = (u32) (p->beg - p->source.data - 1);
 }
 
+/// Consume a token; error if it's not the expected type.
+static void isel_consume(ISelParser *p, ISelTokenKind kind) {
+  if (p->tok.kind != kind) {
+    ERR("Expected %s, but got %s",
+        isel_token_kind_to_string(kind), isel_token_kind_to_string(p->tok.kind));
+  }
+  isel_next_tok(p);
+}
+
+static bool isel_token_kind_is_opkind(ISelTokenKind kind) {
+  return kind == TOKEN_OPKIND_IMMEDIATE
+    || kind == TOKEN_OPKIND_REGISTER
+    || kind == TOKEN_OPKIND_BLOCK
+    || kind == TOKEN_OPKIND_FUNCTION
+    || kind == TOKEN_OPKIND_NAME
+    || kind == TOKEN_OPKIND_LOCAL
+    || kind == TOKEN_OPKIND_STATIC;
+}
+
+static MIROperandKind isel_token_kind_to_opkind(ISelTokenKind kind) {
+  switch (kind) {
+  case TOKEN_OPKIND_IMMEDIATE: return MIR_OP_IMMEDIATE;
+  case TOKEN_OPKIND_REGISTER: return MIR_OP_REGISTER;
+  case TOKEN_OPKIND_BLOCK: return MIR_OP_BLOCK;
+  case TOKEN_OPKIND_FUNCTION: return MIR_OP_FUNCTION;
+  case TOKEN_OPKIND_NAME: return MIR_OP_NAME;
+  case TOKEN_OPKIND_LOCAL: return MIR_OP_LOCAL_REF;
+  case TOKEN_OPKIND_STATIC: return MIR_OP_STATIC_REF;
+  default: break;
+  }
+  ICE("Cannot convert token kind %s into MIROperandKind", isel_token_kind_to_string(kind));
+}
+
+static MIROperandKind isel_parse_operand_kind(ISelParser *p) {
+  MIROperandKind out = isel_token_kind_to_opkind(p->tok.kind);
+  isel_next_tok(p);
+  return out;
+}
+
 /// <operand> ::= OPERAND_KIND IDENTIFIER [ "=" <expression> ] [ "," ]
 static MIROperand isel_parse_operand(ISelParser *p) {
   MIROperand out = {0};
-  out.kind = MIR_OP_ANY;
+  out.kind = MIR_OP_IMMEDIATE;
 
-  // FIXME: Throwaway a token so that parsing progresses.
-  isel_next_tok(p);
-
-  // TODO: Parse operand kind (should be one of TOKEN_OPKIND_*)
-
-  // TODO: Parse identifier (name bound to this operand while parsing this match)
+  // Either parse (OPKIND IDENTIFER) and create binding or (IDENTIFIER) with binding lookup
+  if (isel_token_kind_is_opkind(p->tok.kind)) {
+    // Parse operand kind (should be one of TOKEN_OPKIND_*)
+    out.kind = isel_parse_operand_kind(p);
+    // Optionally parse identifier (name bound to this operand while parsing this match)
+    if (p->tok.kind == TOKEN_IDENTIFIER) {
+      // TODO: Bind name in local match environment
+      isel_next_tok(p);
+    }
+  } else {
+    // TODO: Lookup bound name and ensure it is bound to a valid operand.
+    isel_consume(p, TOKEN_IDENTIFIER);
+  }
 
   // TODO: If an "=" is parsed, parse an initialising expression and
   // use it's value to set the operand value. Ensure type makes sense
   // (i.e. don't initialise a register operand with an identifier).
+  if (p->tok.kind == TOKEN_EQ) {
+    // Yeet '='
+    isel_next_tok(p);
+
+    // TODO: Parse expression
+  }
 
   // TODO: Eat comma, if present
+  if (p->tok.kind == TOKEN_COMMA) isel_next_tok(p);
 
   return out;
 }
@@ -331,6 +424,7 @@ static MIROperand isel_parse_operand(ISelParser *p) {
 // Hey stupidface, here's your todo:
 // 1. Write like a consume or expect or whatever combination of those
 //    helpers that you need for tokens.
+// DONE
 // 2. Write like a string hashmap that corresponds to a new struct
 //    `ISelValue` which may be a reference to an MIROperand or
 //    MIRInstruction within an isel pattern, or an immediate/text
@@ -348,29 +442,47 @@ static MIROperand isel_parse_operand(ISelParser *p) {
 // 7. use patterns to do selection, better matching with aho-corasick, etc
 // ZZZ TODO AAA
 
+static MIROpcodeCommon isel_parse_opcode(ISelParser *p) {
+  if (p->tok.kind != TOKEN_IDENTIFIER)
+    ERR("Expected identifier in order to parse a generalMIR opcode");
+
+  //printf("opcode identifier: %.*s\n", (int)p->tok.text.size, p->tok.text.data);
+
+  // Yeet general opcode identifier
+  isel_next_tok(p);
+
+  return MIR_IMMEDIATE;
+}
 
 /// <inst-spec> ::= <opcode> IDENTIFIER "(" { <operand> } ")" [ "," ]
 static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
   // TODO: The current token should be an identifier that maps to a general MIR opcode.
   MIRInstruction *out = mir_makenew(MIR_IMMEDIATE);
 
-  // TODO: Parse identifier (name bound to this instruction while parsing this match)
+  // Parse opcode
+  isel_parse_opcode(p);
+  // TODO: Lookup name in global environment to find MIR opcode.
 
-  // TODO: Consume opening paren
+  // Parse identifier, if present (name bound to this instruction while parsing this match)
+  if (p->tok.kind == TOKEN_IDENTIFIER) {
+    // TODO: Bind name in match pattern scope to `out` instruction
+    isel_next_tok(p);
+  }
+
+  // Consume opening paren
+  isel_consume(p, TOKEN_LPAREN);
 
   // Add operands to instruction as we parse them.
   while (p->tok.kind != TOKEN_RPAREN) {
-    issue_diagnostic(DIAG_ERR, p->source_filepath, p->source, p->tok.source_location, "ISel reached EOF while parsing operands of instruction");
-    if (p->tok.kind == TOKEN_EOF) {
-      issue_diagnostic(DIAG_ERR, p->source_filepath, p->source, p->tok.source_location, "ISel reached EOF while parsing operands of instruction");
-      exit(0);
-    }
+    if (p->tok.kind == TOKEN_EOF)
+      ERR("ISel reached EOF while parsing operands of instruction");
     mir_add_op(out, isel_parse_operand(p));
   }
   // Yeet closing paren
   isel_next_tok(p);
 
-  // TODO: Eat comma, if present
+  // Eat comma, if present
+  if (p->tok.kind == TOKEN_COMMA) isel_next_tok(p);
 
   return out;
 }
