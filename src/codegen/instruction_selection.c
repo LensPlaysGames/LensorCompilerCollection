@@ -251,7 +251,7 @@ static void isel_next_tok(ISelParser *p) {
       isel_next_c(p);
       break;
 
-    case TOKEN_SEMICOLON: {
+    case ';': {
       p->tok.kind = TOKEN_SEMICOLON;
       // Yeet ';'
       isel_next_c(p);
