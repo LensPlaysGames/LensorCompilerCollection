@@ -1,0 +1,11 @@
+<match-pattern> ::= "match"
+                    <inst-spec> { <inst-spec> }
+                    "emit" "{"
+                      <inst-spec> { <inst-spec> }
+                    "}"
+
+<inst-spec> ::= <opcode> IDENTIFIER "(" { <operand> } ")" [ "," ]
+<operand>   ::= OPERAND_KIND IDENTIFIER [ "=" <expression> ] [ "," ]
+
+<opcode>        ::= IDENTIFIER
+<expression>    ::= IDENTIFIER | INTEGER
