@@ -10,6 +10,8 @@ typedef struct ISelPattern {
 typedef Vector(ISelPattern)
 ISelPatterns;
 
+ISelPatterns isel_parse_file(const char *filepath);
+
 typedef enum ISelCompareValueOption {
   ISEL_DONT_COMPARE_VALUE,
   ISEL_DO_COMPARE_VALUE
