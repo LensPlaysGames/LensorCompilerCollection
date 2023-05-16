@@ -674,6 +674,7 @@ void print_mir_operand(MIRFunction *function, MIROperand *op) {
     print("%37\"%33%S%37\" %36%T%m", op->value.static_ref->static_ref->name, op->value.static_ref->static_ref->type);
   } break;
   case MIR_OP_LOCAL_REF: {
+    ASSERT(function, "Function required to print local ref operand");
     ASSERT(op->value.local_ref < function->frame_objects.size,
            "Index out of bounds (stack frame object referenced has higher index than there are frame objects)");
     print("%37Stack:%35%Z %37#%Z", (usz)op->value.local_ref, (usz)(function->frame_objects.data + op->value.local_ref)->size);
@@ -683,14 +684,10 @@ void print_mir_operand(MIRFunction *function, MIROperand *op) {
   }
 }
 
-void print_mir_instruction_with_mnemonic(MIRInstruction *mir, OpcodeMnemonicFunction opcode_mnemonic) {
+
+void print_mir_instruction_with_function_with_mnemonic(MIRFunction *function, MIRInstruction *mir, OpcodeMnemonicFunction opcode_mnemonic) {
   ASSERT(opcode_mnemonic, "Invalid argument");
   ASSERT(mir, "Invalid argument");
-  ASSERT(mir->block,
-         "Cannot print instruction without MIRBlock reference (need block to get function for frame object operands)");
-  ASSERT(mir->block->function,
-         "Cannot print instruction without being able to reach MIRFunction (block->function invalid); need function for frame object operands");
-  MIRFunction *function = mir->block->function;
   if (mir->reg < MIR_ARCH_START)
     print("%32r%Z %37| ", (usz)mir->reg);
   else print("%34v%Z %37| ", (usz)mir->reg);
@@ -709,6 +706,16 @@ void print_mir_instruction_with_mnemonic(MIRInstruction *mir, OpcodeMnemonicFunc
       print("%37, ");
   }
   print("\n%m");
+}
+
+void print_mir_instruction_with_mnemonic(MIRInstruction *mir, OpcodeMnemonicFunction opcode_mnemonic) {
+  ASSERT(opcode_mnemonic, "Invalid argument");
+  ASSERT(mir, "Invalid argument");
+  ASSERT(mir->block,
+         "Cannot print instruction without MIRBlock reference (need block to get function for frame object operands)");
+  ASSERT(mir->block->function,
+         "Cannot print instruction without being able to reach MIRFunction (block->function invalid); need function for frame object operands");
+  print_mir_instruction_with_function_with_mnemonic(mir->block->function, mir, opcode_mnemonic);
 }
 
 void print_mir_instruction(MIRInstruction *mir) {
