@@ -543,7 +543,24 @@ static MIROperandKind isel_parse_operand_kind(ISelParser *p) {
   return out;
 }
 
-/// <operand> ::= OPERAND_KIND IDENTIFIER [ "=" <expression> ] [ "," ]
+static ISelValue isel_parse_expression(ISelParser *p) {
+  // number or bound identifier
+  if (p->tok.kind == TOKEN_IDENTIFIER) {
+    // Lookup identifier in global environment
+    ISelEnvironmentEntry *entry = isel_env_entry(&p->global, p->tok.text.data);
+    // FIXME: Should be ERR
+    if (!entry->key.data) WARN("Expected expression, got unknown identifier \"%s\"", p->tok.text.data);
+
+    // Yeet identifier
+    isel_next_tok(p);
+
+    return entry->value;
+  }
+
+  UNREACHABLE();
+}
+
+/// <operand> ::= [ OPERAND_KIND ] IDENTIFIER [ "=" <expression> ] [ "," ]
 static MIROperand isel_parse_operand(ISelParser *p) {
   MIROperand out = {0};
   out.kind = MIR_OP_IMMEDIATE;
@@ -558,8 +575,15 @@ static MIROperand isel_parse_operand(ISelParser *p) {
       isel_next_tok(p);
     }
   } else {
+    // Ensure it is an identifier.
+    if (p->tok.kind != TOKEN_IDENTIFIER)
+      ERR("Expected operand kind or operand identifier, but got %s instead", isel_token_kind_to_string(p->tok.kind));
+
     // TODO: Lookup bound name and ensure it is bound to a valid operand.
-    isel_consume(p, TOKEN_IDENTIFIER);
+    WARN("TODO: Lookup identifier in local environment and ensure it is bound to an operand reference.\n");
+
+    // Yeet operand identifier
+    isel_next_tok(p);
   }
 
   // If an "=" is parsed, parse an initialising expression and
@@ -569,7 +593,8 @@ static MIROperand isel_parse_operand(ISelParser *p) {
     // Yeet '='
     isel_next_tok(p);
 
-    // TODO: Parse expression
+    // Parse expression
+    isel_parse_expression(p);
   }
 
   // Eat comma, if present

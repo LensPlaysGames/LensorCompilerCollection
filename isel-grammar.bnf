@@ -5,7 +5,7 @@
                     "}"
 
 <inst-spec> ::= <opcode> IDENTIFIER "(" { <operand> } ")" [ "," ]
-<operand>   ::= OPERAND_KIND IDENTIFIER [ "=" <expression> ] [ "," ]
+<operand>   ::= [ OPERAND_KIND ] IDENTIFIER [ "=" <expression> ] [ "," ]
 
 <opcode>        ::= IDENTIFIER
 <expression>    ::= IDENTIFIER | INTEGER
