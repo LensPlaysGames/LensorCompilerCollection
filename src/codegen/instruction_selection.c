@@ -1,11 +1,13 @@
 #include <codegen/instruction_selection.h>
 
 #include <codegen.h>
+#include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/machine_ir.h>
 #include <error.h>
 #include <inttypes.h>
 #include <platform.h>
+#include <stdlib.h>
 #include <utils.h>
 #include <vector.h>
 
@@ -91,29 +93,6 @@ static const char *isel_token_kind_to_string(ISelTokenKind kind) {
   UNREACHABLE();
 }
 
-typedef enum ISelEnvironmentEntryKind {
-  ISEL_ENV_OPCODE,
-  ISEL_ENV_OP_KIND,
-} ISelEnvironmentEntryKind;
-
-typedef struct ISelValue {
-  ISelEnvironmentEntryKind kind;
-
-  isz integer;
-  string_buffer text;
-} ISelValue;
-
-typedef struct ISelEnvironmentEntry {
-  string key;
-  ISelValue value;
-} ISelEnvironmentEntry;
-
-typedef struct ISelEnvironment {
-  usz size;
-  usz capacity;
-  ISelEnvironmentEntry *data;
-} ISelEnvironment;
-
 typedef struct ISelToken {
   ISelTokenKind kind;
 
@@ -147,14 +126,33 @@ static usz sdbm(const unsigned char *str) {
   return hash;
 }
 
-static ISelEnvironment isel_env_create(usz initial_capacity) {
+
+static void isel_env_init_common(ISelEnvironment *env) {
+#define ADD_OPCODE(opcode, ...) isel_env_add_opcode(env, STR(CAT(MIR_, opcode)), CAT(MIR_, opcode));
+  ALL_IR_INSTRUCTION_TYPES(ADD_OPCODE);
+#undef ADD_OPCODE
+  isel_env_add_integer(env, "COMPARE_EQ", (isz)COMPARE_EQ);
+  isel_env_add_integer(env, "COMPARE_NE", (isz)COMPARE_NE);
+  isel_env_add_integer(env, "COMPARE_LT", (isz)COMPARE_LT);
+  isel_env_add_integer(env, "COMPARE_GT", (isz)COMPARE_GT);
+  isel_env_add_integer(env, "COMPARE_LE", (isz)COMPARE_LE);
+  isel_env_add_integer(env, "COMPARE_GE", (isz)COMPARE_GE);
+}
+
+ISelEnvironment isel_env_create_empty(usz initial_capacity) {
   ISelEnvironment out = {0};
   out.capacity = initial_capacity;
   out.data = calloc(out.capacity, sizeof(out.data[0]));
   return out;
 }
 
-static void isel_env_delete(ISelEnvironment *env) {
+ISelEnvironment isel_env_create(usz initial_capacity) {
+  ISelEnvironment out = isel_env_create_empty(initial_capacity);
+  isel_env_init_common(&out);
+  return out;
+}
+
+void isel_env_delete(ISelEnvironment *env) {
   ASSERT(env, "Invalid argument");
   for (usz i = 0; i < env->capacity; ++i) {
     ISelEnvironmentEntry *entry = env->data + i;
@@ -164,8 +162,7 @@ static void isel_env_delete(ISelEnvironment *env) {
   if (env->data) free(env->data);
 }
 
-/// Return pointer to environment entry associated with the given key.
-static ISelEnvironmentEntry *isel_env_entry(ISelEnvironment *env, const char *key) {
+ISelEnvironmentEntry *isel_env_entry(ISelEnvironment *env, const char *key) {
   ASSERT(env, "Invalid argument");
   ASSERT(env->capacity, "Zero capacity environment; forgot to initialise?");
   ASSERT(key, "Invalid argument");
@@ -211,11 +208,11 @@ static ISelEnvironmentEntry *isel_env_entry(ISelEnvironment *env, const char *ke
   */
 }
 
-static void isel_env_print_entry(ISelEnvironmentEntry *entry) {
+void isel_env_print_entry(ISelEnvironmentEntry *entry) {
   ASSERT(entry, "Invalid argument");
   print("%S (kind %d | integer %d | text \"%S\")\n", entry->key, entry->value.kind, entry->value.integer, entry->value.text);
 }
-static void isel_env_print(ISelEnvironment *env) {
+void isel_env_print(ISelEnvironment *env) {
   for (usz i = 0; i < env->capacity; ++i) {
     ISelEnvironmentEntry *entry = env->data + i;
     if (entry->key.data) isel_env_print_entry(entry);
@@ -229,7 +226,7 @@ static ISelEnvironmentEntry *isel_env_insert(ISelEnvironment *env, const char *k
   return entry;
 }
 
-static void isel_env_add_opcode(ISelEnvironment *env, const char *key, usz opcode) {
+void isel_env_add_opcode(ISelEnvironment *env, const char *key, usz opcode) {
   ISelValue newval = {0};
   newval.kind = ISEL_ENV_OPCODE;
   newval.integer = (isz)opcode;
@@ -239,28 +236,25 @@ static void isel_env_add_opcode(ISelEnvironment *env, const char *key, usz opcod
   //isel_env_print_entry(entry);
 }
 
-static void isel_env_add_op_kind(ISelEnvironment *env, const char *key, usz opkind) {
+void isel_env_add_integer(ISelEnvironment *env, const char *key, isz value) {
   ISelValue newval = {0};
-  newval.kind = ISEL_ENV_OPCODE;
-  newval.integer = (isz)opkind;
+  newval.kind = ISEL_ENV_INTEGER;
+  newval.integer = value;
   isel_env_insert(env, key, newval);
 
   //ISelEnvironmentEntry *entry = isel_env_entry(env, key);
   //isel_env_print_entry(entry);
 }
 
-static void isel_env_init_common_opcodes(ISelEnvironment *env) {
-#define ADD_OPCODE(opcode, ...) isel_env_add_opcode(env, STR(CAT(MIR_, opcode)), CAT(MIR_, opcode));
-  ALL_IR_INSTRUCTION_TYPES(ADD_OPCODE);
-#undef ADD_OPCODE
-}
+static void isel_env_add_op_kind(ISelEnvironment *env, const char *key, usz opkind) {
+  ISelValue newval = {0};
+  newval.kind = ISEL_ENV_OP_KIND;
+  newval.integer = (isz)opkind;
+  isel_env_insert(env, key, newval);
 
-void isel_env_test() {
-  ISelEnvironment env = isel_env_create(1024);
-  isel_env_init_common_opcodes(&env);
-  isel_env_delete(&env);
+  //ISelEnvironmentEntry *entry = isel_env_entry(env, key);
+  //isel_env_print_entry(entry);
 }
-
 
 static void isel_next_c(ISelParser *p) {
    /// Keep returning EOF once EOF has been reached.
@@ -725,6 +719,24 @@ static ISelPattern isel_parse_match(ISelParser *p) {
   return out;
 }
 
+/// Add the opcodes and values needed for the arch's ISel.
+// TODO: This *can't* be the best way of doing things...
+void isel_x86_64_env(ISelEnvironment *env);
+static void isel_env_arch_specific(ISelEnvironment *env, CodegenArchitecture arch) {
+  STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures in ISel environment initialisation");
+  switch (arch) {
+  case ARCH_X86_64: isel_x86_64_env(env); break;
+  case ARCH_NONE:
+  case ARCH_COUNT:
+    UNREACHABLE();
+  }
+}
+
+static CodegenArchitecture isel_arch_from_string(span string) {
+  if (string_eq(string, literal_span("x86_64"))) return ARCH_X86_64;
+  ICE("Invalid architecture string \"%S\"\n", string);
+}
+
 ISelPatterns isel_parse(ISelParser *p) {
   ASSERT(p, "Invalid argument");
   ASSERT(p->global.capacity, "Zero sized environment; forgot to initialise?");
@@ -741,6 +753,7 @@ ISelPatterns isel_parse(ISelParser *p) {
     bool lfcr = false; // to catch (CR)LFCR(LF) sequences
     bool lflf = false; // to catch LFLF sequences
     char lastc = '\0';
+    const char *line_begin = p->beg;
     while (*p->beg) {
       if (lfcr && *p->beg == '\n') {
         printf("Skipped metadata:\n```\n%.*s```\n", (int)(p->beg - p->source.data), p->source.data);
@@ -753,6 +766,39 @@ ISelPatterns isel_parse(ISelParser *p) {
         print("Unix user, I see...\n");
         break;
       }
+
+      // At end of every non-empty line, parse `<left>: <right>` identifier
+      if (*p->beg == '\n') {
+        usz line_length = (usz)(p->beg - p->source.data);
+        if (lastc == '\r' || lastc == '\n') --line_length;
+        string_buffer left = {0};
+        string_buffer right = {0};
+        usz i = 0;
+        for (; i < line_length; ++i) {
+          char c = line_begin[i];
+          if (c == ':') {
+            ++i;
+            break;
+          }
+          vector_push(left, c);
+        }
+        while (i < line_length && isspace(line_begin[i])) ++i;
+        for (; i < line_length; ++i) {
+          char c = line_begin[i];
+          vector_push(right, c);
+        }
+        ASSERT(left.size, "Metadata line has invalid left hand side!");
+        ASSERT(right.size, "Metadata line has invalid right hand side!");
+        //print("left:\"%S\" right:\"%S\"\n", as_span(left), as_span(right));
+
+        if (string_eq(left, literal_span("ISA"))) {
+          CodegenArchitecture arch = isel_arch_from_string(as_span(right));
+          isel_env_arch_specific(&p->global, arch);
+        }
+
+        line_begin = p->beg + 1;
+      }
+
       lastc = *p->beg++;
     }
   }
@@ -778,7 +824,6 @@ ISelPatterns isel_parse_file(const char *filepath) {
   bool success = false;
   ISelParser p = {0};
   p.global = isel_env_create(1024);
-  isel_env_init_common_opcodes(&p.global);
 
   string contents = platform_read_file(filepath, &success);
   if (!success) ICE("Failed to read file at \"%s\" for instruction selection", filepath);
@@ -839,7 +884,6 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
   if (!patterns.size) return;
 
   ISelEnvironment env = isel_env_create(1024);
-  isel_env_init_common_opcodes(&env);
 
   // TODO: Everything past this point is temporary and will change :P
   // We will eventually use a modified Aho-Corasick pattern matching

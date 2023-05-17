@@ -63,6 +63,7 @@ add_executable(
   src/platform.c
   src/codegen/dom.c
   src/codegen/generic_object.c
+  src/codegen/instruction_selection.c
   src/codegen/intermediate_representation.c
   src/codegen/register_allocation.c
   src/codegen/machine_ir.c
@@ -137,6 +138,7 @@ if (NOT MSVC)
     PRIVATE
     -Wall -Wextra
     -Wshadow -Wconversion
+
     -Werror=return-type -Werror=implicit-function-declaration
     -Werror=implicit-int -Werror=pointer-arith
     -Werror=incompatible-pointer-types

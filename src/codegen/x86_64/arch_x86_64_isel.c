@@ -3,6 +3,7 @@
 #include <codegen.h>
 #include <codegen/register_allocation.h>
 #include <codegen/intermediate_representation.h>
+#include <codegen/instruction_selection.h>
 #include <codegen/machine_ir.h>
 #include <codegen/x86_64/arch_x86_64_common.h>
 #include <codegen/x86_64/arch_x86_64.h>
@@ -1303,4 +1304,10 @@ MIRFunctionVector select_instructions2(const MachineDescription *machine_descrip
     }
   }
   return mir;
+}
+
+void isel_x86_64_env(ISelEnvironment *env) {
+#define ADD_OPCODE(opcode) isel_env_add_opcode(env, STR(CAT(MX64_, opcode)), CAT(MX64_, opcode));
+  ALL_MX64_INSTRUCTIONS(ADD_OPCODE)
+#undef ADD_OPCODE
 }
