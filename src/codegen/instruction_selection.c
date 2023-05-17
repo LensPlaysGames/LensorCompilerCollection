@@ -83,6 +83,29 @@ static const char *isel_token_kind_to_string(ISelTokenKind kind) {
   UNREACHABLE();
 }
 
+typedef enum ISelEnvironmentEntryKind {
+  ISEL_ENV_OPCODE,
+  ISEL_ENV_OP_KIND,
+} ISelEnvironmentEntryKind;
+
+typedef struct ISelValue {
+  ISelEnvironmentEntryKind kind;
+
+  isz integer;
+  string_buffer text;
+} ISelValue;
+
+typedef struct ISelEnvironmentEntry {
+  string key;
+  ISelValue value;
+} ISelEnvironmentEntry;
+
+typedef struct ISelEnvironment {
+  usz size;
+  usz capacity;
+  ISelEnvironmentEntry *data;
+} ISelEnvironment;
+
 typedef struct ISelToken {
   ISelTokenKind kind;
 
@@ -102,6 +125,97 @@ typedef struct ISelParser {
   isz lastc;
 
 } ISelParser;
+
+static usz sdbm(const unsigned char *str) {
+  usz hash = 0;
+  usz c;
+
+  while ((c = *str++))
+    hash = c + (hash << 6) + (hash << 16) - hash;
+
+  return hash;
+}
+
+ISelEnvironment isel_env_create(usz initial_capacity) {
+  ISelEnvironment out = {0};
+  out.capacity = initial_capacity;
+  out.data = calloc(out.capacity, sizeof(out.data[0]));
+  return out;
+}
+
+void isel_env_delete(ISelEnvironment *env) {
+  for (usz i = 0; i < env->capacity; ++i) {
+    ISelEnvironmentEntry *entry = env->data + i;
+    if (entry->key.data) free(entry->key.data);
+    if (entry->value.text.data) free(entry->value.text.data);
+  }
+  free(env->data);
+}
+
+/// Return pointer to environment entry associated with the given key.
+ISelEnvironmentEntry *isel_env_entry(ISelEnvironment *env, const char *key) {
+  ASSERT(env, "Invalid argument");
+  ASSERT(key, "Invalid argument");
+
+  usz key_length = strlen(key);
+
+  usz hash = sdbm((const unsigned char*)key);
+  usz index = hash % env->capacity;
+
+  ISelEnvironmentEntry *entry = NULL;
+
+  // Begin searching for a matching or empty slot.
+  size_t index_it = index;
+  for (; index_it < env->capacity; ++index_it) {
+    entry = env->data + index_it;
+    // Empty entry
+    if (entry->key.data == NULL) return entry;
+    // If the lengths don't match, they aren't equal.
+    if (entry->key.size != key_length) continue;
+    // If the lengths match, compare data.
+    if (memcmp(entry->key.data, key, key_length) == 0) return entry;
+  }
+
+  index_it = 0;
+  for (; index_it < index; ++index_it) {
+    entry = env->data + index_it;
+    // Empty entry
+    if (entry->key.data == NULL) return entry;
+    // If the lengths don't match, they aren't equal.
+    if (entry->key.size != key_length) continue;
+    // If the lengths match, compare data.
+    if (memcmp(entry->key.data, key, key_length) == 0) return entry;
+  }
+
+  TODO("Handle expansion of ISel environment");
+
+  /*
+  // Expand and try again.
+  // FIXME: It's probably best to expand BEFORE the hash table is
+  // completely full...
+  isel_env_expand(env);
+  return isel_env_entry(env, key);
+  */
+}
+
+static ISelEnvironmentEntry *isel_env_insert(ISelEnvironment *env, const char *key, ISelValue to_insert) {
+  ISelEnvironmentEntry *entry = isel_env_entry(env, key);
+  entry->key = string_create(key);
+  entry->value = to_insert;
+  return entry;
+}
+
+static void isel_env_print_entry(ISelEnvironmentEntry *entry) {
+  ASSERT(entry, "Invalid argument");
+  print("%S (kind %d | integer %d | text \"%S\")\n", entry->key, entry->value.kind, entry->value.integer, entry->value.text);
+}
+static void isel_env_print(ISelEnvironment *env) {
+  for (usz i = 0; i < env->capacity; ++i) {
+    ISelEnvironmentEntry *entry = env->data + i;
+    if (entry->key.data) isel_env_print_entry(entry);
+  }
+}
+
 
 static void isel_next_c(ISelParser *p) {
    /// Keep returning EOF once EOF has been reached.
@@ -403,7 +517,7 @@ static MIROperand isel_parse_operand(ISelParser *p) {
     isel_consume(p, TOKEN_IDENTIFIER);
   }
 
-  // TODO: If an "=" is parsed, parse an initialising expression and
+  // If an "=" is parsed, parse an initialising expression and
   // use it's value to set the operand value. Ensure type makes sense
   // (i.e. don't initialise a register operand with an identifier).
   if (p->tok.kind == TOKEN_EQ) {
@@ -413,7 +527,7 @@ static MIROperand isel_parse_operand(ISelParser *p) {
     // TODO: Parse expression
   }
 
-  // TODO: Eat comma, if present
+  // Eat comma, if present
   if (p->tok.kind == TOKEN_COMMA) isel_next_tok(p);
 
   return out;
@@ -446,7 +560,7 @@ static MIROpcodeCommon isel_parse_opcode(ISelParser *p) {
   if (p->tok.kind != TOKEN_IDENTIFIER)
     ERR("Expected identifier in order to parse a generalMIR opcode");
 
-  //printf("opcode identifier: %.*s\n", (int)p->tok.text.size, p->tok.text.data);
+  printf("TODO: resolve opcode %.*s\n", (int)p->tok.text.size, p->tok.text.data);
 
   // Yeet general opcode identifier
   isel_next_tok(p);
@@ -638,9 +752,38 @@ bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructi
   return true;
 }
 
+void isel_env_add_opcode(ISelEnvironment *env, const char *key, usz opcode) {
+  ISelValue newval = {0};
+  newval.kind = ISEL_ENV_OPCODE;
+  newval.integer = (isz)opcode;
+  isel_env_insert(env, key, newval);
+
+  ISelEnvironmentEntry *entry = isel_env_entry(env, key);
+  isel_env_print_entry(entry);
+}
+
+void isel_env_add_op_kind(ISelEnvironment *env, const char *key, usz opkind) {
+  ISelValue newval = {0};
+  newval.kind = ISEL_ENV_OPCODE;
+  newval.integer = (isz)opkind;
+  isel_env_insert(env, key, newval);
+
+  ISelEnvironmentEntry *entry = isel_env_entry(env, key);
+  isel_env_print_entry(entry);
+}
+
+void isel_env_init_common_opcodes(ISelEnvironment *env) {
+#define ADD_OPCODE(opcode, ...) isel_env_add_opcode(env, STR(opcode), CAT(MIR_, opcode));
+  ALL_IR_INSTRUCTION_TYPES(ADD_OPCODE);
+#undef ADD_OPCODE
+}
+
 void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
   if (!mir.size) return;
   if (!patterns.size) return;
+
+  ISelEnvironment env = isel_env_create(1024);
+  isel_env_init_common_opcodes(&env);
 
   // TODO: Everything past this point is temporary and will change :P
   // We will eventually use a modified Aho-Corasick pattern matching
@@ -741,4 +884,5 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
   } // foreach_ptr (MIRFunction*, f, ...)
 
   vector_delete(instructions);
+  isel_env_delete(&env);
 }
