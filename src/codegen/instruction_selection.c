@@ -18,7 +18,7 @@
     issue_diagnostic((sev), (parser)->source_filepath, (parser)->source, (loc), __VA_ARGS__); \
   } while (0)
 
-#define ISSUE_FATAL_DIAGNOSTIC(sev, loc, parser, ...)                         \
+#define ISSUE_FATAL_DIAGNOSTIC(sev, loc, parser, ...)                   \
   do {                                                                  \
     issue_diagnostic((sev), (parser)->source_filepath, (parser)->source, (loc), __VA_ARGS__); \
     exit(0);                                                            \
@@ -235,8 +235,8 @@ static void isel_env_add_opcode(ISelEnvironment *env, const char *key, usz opcod
   newval.integer = (isz)opcode;
   isel_env_insert(env, key, newval);
 
-  ISelEnvironmentEntry *entry = isel_env_entry(env, key);
-  isel_env_print_entry(entry);
+  //ISelEnvironmentEntry *entry = isel_env_entry(env, key);
+  //isel_env_print_entry(entry);
 }
 
 static void isel_env_add_op_kind(ISelEnvironment *env, const char *key, usz opkind) {
@@ -245,8 +245,8 @@ static void isel_env_add_op_kind(ISelEnvironment *env, const char *key, usz opki
   newval.integer = (isz)opkind;
   isel_env_insert(env, key, newval);
 
-  ISelEnvironmentEntry *entry = isel_env_entry(env, key);
-  isel_env_print_entry(entry);
+  //ISelEnvironmentEntry *entry = isel_env_entry(env, key);
+  //isel_env_print_entry(entry);
 }
 
 static void isel_env_init_common_opcodes(ISelEnvironment *env) {
@@ -549,7 +549,7 @@ static ISelValue isel_parse_expression(ISelParser *p) {
     // Lookup identifier in global environment
     ISelEnvironmentEntry *entry = isel_env_entry(&p->global, p->tok.text.data);
     // FIXME: Should be ERR
-    if (!entry->key.data) WARN("Expected expression, got unknown identifier \"%s\"", p->tok.text.data);
+    if (!entry->key.data) WARN("Expected expression, got unknown identifier \"%S\"", as_span(p->tok.text));
 
     // Yeet identifier
     isel_next_tok(p);
@@ -614,15 +614,19 @@ static MIROperand isel_parse_operand(ISelParser *p) {
 //    MIRInstruction within an isel pattern, or an immediate/text
 //    value; this is for match identifiers given to instructions and
 //    operands.
+// DONE
 // 3. Also use the string hashmap code to implement the top-level
 //    environment, which is persistent and immutable all the way
 //    through parsing. It contains general MIR opcodes, COMPARE_EQ and
 //    friends, and any extras added by the ISA after it is detected in
 //    the header.
+// Halfway: we still need to add COMAPARE_* and somehow implement backend-specific environment stuff.
 // 4. Suck today's dick!
+// DONE
 // 5. Fill in insane amount of todos in parsing (so like ya know, the
 //    parsing bit).
 // 6. hope it all comes together and you can actually parse patterns
+// DONE
 // 7. use patterns to do selection, better matching with aho-corasick, etc
 // ZZZ TODO AAA
 
