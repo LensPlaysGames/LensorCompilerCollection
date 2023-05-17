@@ -20,10 +20,16 @@ static usz is_power_of_two(usz i) {
 #define ISSUE_DIAGNOSTIC(sev, loc, parser, ...)                                        \
   do {                                                                                 \
     issue_diagnostic((sev), (parser)->filename, (parser)->source, (loc), __VA_ARGS__); \
+  } while (0)
+#define ISSUE_FATAL_DIAGNOSTIC(sev, loc, parser, ...)                                        \
+  do {                                                                                 \
+    issue_diagnostic((sev), (parser)->filename, (parser)->source, (loc), __VA_ARGS__); \
     longjmp(parser->error_buffer, 1);                                                  \
   } while (0)
-#define ERR_AT(loc, ...) ISSUE_DIAGNOSTIC(DIAG_ERR, loc, p, __VA_ARGS__)
-#define ERR(...)         ERR_AT(p->tok.source_location, __VA_ARGS__)
+#define WARN_AT(loc, ...) ISSUE_DIAGNOSTIC(DIAG_ERR, loc, p, __VA_ARGS__)
+#define WARN(...) WARN_AT(p->tok.source_location, __VA_ARGS__)
+#define ERR_AT(loc, ...) ISSUE_FATAL_DIAGNOSTIC(DIAG_ERR, loc, p, __VA_ARGS__)
+#define ERR(...) ERR_AT(p->tok.source_location, __VA_ARGS__)
 
 /// ===========================================================================
 ///  Types and enums.
