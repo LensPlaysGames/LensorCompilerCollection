@@ -21,7 +21,7 @@ static usz is_power_of_two(usz i) {
   do {                                                                                 \
     issue_diagnostic((sev), (parser)->filename, (parser)->source, (loc), __VA_ARGS__); \
   } while (0)
-#define ISSUE_FATAL_DIAGNOSTIC(sev, loc, parser, ...)                                        \
+#define ISSUE_FATAL_DIAGNOSTIC(sev, loc, parser, ...)                                  \
   do {                                                                                 \
     issue_diagnostic((sev), (parser)->filename, (parser)->source, (loc), __VA_ARGS__); \
     longjmp(parser->error_buffer, 1);                                                  \
