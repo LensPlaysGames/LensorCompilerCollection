@@ -128,6 +128,9 @@ typedef struct ISelParser {
   span source;
   ISelToken tok;
 
+  // Does not change as things are parsed.
+  ISelEnvironment global;
+
   const char *beg;
   const char *end;
   isz lastc;
@@ -144,25 +147,27 @@ static usz sdbm(const unsigned char *str) {
   return hash;
 }
 
-ISelEnvironment isel_env_create(usz initial_capacity) {
+static ISelEnvironment isel_env_create(usz initial_capacity) {
   ISelEnvironment out = {0};
   out.capacity = initial_capacity;
   out.data = calloc(out.capacity, sizeof(out.data[0]));
   return out;
 }
 
-void isel_env_delete(ISelEnvironment *env) {
+static void isel_env_delete(ISelEnvironment *env) {
+  ASSERT(env, "Invalid argument");
   for (usz i = 0; i < env->capacity; ++i) {
     ISelEnvironmentEntry *entry = env->data + i;
     if (entry->key.data) free(entry->key.data);
     if (entry->value.text.data) free(entry->value.text.data);
   }
-  free(env->data);
+  if (env->data) free(env->data);
 }
 
 /// Return pointer to environment entry associated with the given key.
-ISelEnvironmentEntry *isel_env_entry(ISelEnvironment *env, const char *key) {
+static ISelEnvironmentEntry *isel_env_entry(ISelEnvironment *env, const char *key) {
   ASSERT(env, "Invalid argument");
+  ASSERT(env->capacity, "Zero capacity environment; forgot to initialise?");
   ASSERT(key, "Invalid argument");
 
   usz key_length = strlen(key);
@@ -206,13 +211,6 @@ ISelEnvironmentEntry *isel_env_entry(ISelEnvironment *env, const char *key) {
   */
 }
 
-static ISelEnvironmentEntry *isel_env_insert(ISelEnvironment *env, const char *key, ISelValue to_insert) {
-  ISelEnvironmentEntry *entry = isel_env_entry(env, key);
-  entry->key = string_create(key);
-  entry->value = to_insert;
-  return entry;
-}
-
 static void isel_env_print_entry(ISelEnvironmentEntry *entry) {
   ASSERT(entry, "Invalid argument");
   print("%S (kind %d | integer %d | text \"%S\")\n", entry->key, entry->value.kind, entry->value.integer, entry->value.text);
@@ -222,6 +220,45 @@ static void isel_env_print(ISelEnvironment *env) {
     ISelEnvironmentEntry *entry = env->data + i;
     if (entry->key.data) isel_env_print_entry(entry);
   }
+}
+
+static ISelEnvironmentEntry *isel_env_insert(ISelEnvironment *env, const char *key, ISelValue to_insert) {
+  ISelEnvironmentEntry *entry = isel_env_entry(env, key);
+  entry->key = string_create(key);
+  entry->value = to_insert;
+  return entry;
+}
+
+static void isel_env_add_opcode(ISelEnvironment *env, const char *key, usz opcode) {
+  ISelValue newval = {0};
+  newval.kind = ISEL_ENV_OPCODE;
+  newval.integer = (isz)opcode;
+  isel_env_insert(env, key, newval);
+
+  ISelEnvironmentEntry *entry = isel_env_entry(env, key);
+  isel_env_print_entry(entry);
+}
+
+static void isel_env_add_op_kind(ISelEnvironment *env, const char *key, usz opkind) {
+  ISelValue newval = {0};
+  newval.kind = ISEL_ENV_OPCODE;
+  newval.integer = (isz)opkind;
+  isel_env_insert(env, key, newval);
+
+  ISelEnvironmentEntry *entry = isel_env_entry(env, key);
+  isel_env_print_entry(entry);
+}
+
+static void isel_env_init_common_opcodes(ISelEnvironment *env) {
+#define ADD_OPCODE(opcode, ...) isel_env_add_opcode(env, STR(CAT(MIR_, opcode)), CAT(MIR_, opcode));
+  ALL_IR_INSTRUCTION_TYPES(ADD_OPCODE);
+#undef ADD_OPCODE
+}
+
+void isel_env_test() {
+  ISelEnvironment env = isel_env_create(1024);
+  isel_env_init_common_opcodes(&env);
+  isel_env_delete(&env);
 }
 
 
@@ -568,12 +605,16 @@ static MIROpcodeCommon isel_parse_opcode(ISelParser *p) {
   if (p->tok.kind != TOKEN_IDENTIFIER)
     ERR("Expected identifier in order to parse a generalMIR opcode");
 
-  printf("TODO: resolve opcode %.*s\n", (int)p->tok.text.size, p->tok.text.data);
+  string_buf_zterm(&p->tok.text); // just to make sure
+  ISelEnvironmentEntry *entry = isel_env_entry(&p->global, p->tok.text.data);
+
+  // FIXME: Should be an ERR, but for dev I want to keep going.
+  if (!entry->key.data) WARN("Unknown opcode \"%s\"\n", p->tok.text.data);
 
   // Yeet general opcode identifier
   isel_next_tok(p);
 
-  return MIR_IMMEDIATE;
+  return (MIROpcodeCommon)entry->value.integer;
 }
 
 /// <inst-spec> ::= <opcode> IDENTIFIER "(" { <operand> } ")" [ "," ]
@@ -582,7 +623,7 @@ static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
   MIRInstruction *out = mir_makenew(MIR_IMMEDIATE);
 
   // Parse opcode
-  isel_parse_opcode(p);
+  out->opcode = (uint32_t)isel_parse_opcode(p);
   // TODO: Lookup name in global environment to find MIR opcode.
 
   // Parse identifier, if present (name bound to this instruction while parsing this match)
@@ -657,6 +698,7 @@ static ISelPattern isel_parse_match(ISelParser *p) {
 
 ISelPatterns isel_parse(ISelParser *p) {
   ASSERT(p, "Invalid argument");
+  ASSERT(p->global.capacity, "Zero sized environment; forgot to initialise?");
   ASSERT(p->source.data, "NULL source input");
   ASSERT(p->source.size, "Empty source input");
 
@@ -706,6 +748,8 @@ ISelPatterns isel_parse(ISelParser *p) {
 ISelPatterns isel_parse_file(const char *filepath) {
   bool success = false;
   ISelParser p = {0};
+  p.global = isel_env_create(1024);
+  isel_env_init_common_opcodes(&p.global);
 
   string contents = platform_read_file(filepath, &success);
   if (!success) ICE("Failed to read file at \"%s\" for instruction selection", filepath);
@@ -715,6 +759,7 @@ ISelPatterns isel_parse_file(const char *filepath) {
   ISelPatterns out = isel_parse(&p);
 
   vector_delete(p.tok.text);
+  isel_env_delete(&p.global);
   free(contents.data);
   return out;
 }
@@ -758,32 +803,6 @@ bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructi
   }
 
   return true;
-}
-
-void isel_env_add_opcode(ISelEnvironment *env, const char *key, usz opcode) {
-  ISelValue newval = {0};
-  newval.kind = ISEL_ENV_OPCODE;
-  newval.integer = (isz)opcode;
-  isel_env_insert(env, key, newval);
-
-  ISelEnvironmentEntry *entry = isel_env_entry(env, key);
-  isel_env_print_entry(entry);
-}
-
-void isel_env_add_op_kind(ISelEnvironment *env, const char *key, usz opkind) {
-  ISelValue newval = {0};
-  newval.kind = ISEL_ENV_OPCODE;
-  newval.integer = (isz)opkind;
-  isel_env_insert(env, key, newval);
-
-  ISelEnvironmentEntry *entry = isel_env_entry(env, key);
-  isel_env_print_entry(entry);
-}
-
-void isel_env_init_common_opcodes(ISelEnvironment *env) {
-#define ADD_OPCODE(opcode, ...) isel_env_add_opcode(env, STR(opcode), CAT(MIR_, opcode));
-  ALL_IR_INSTRUCTION_TYPES(ADD_OPCODE);
-#undef ADD_OPCODE
 }
 
 void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
