@@ -6,6 +6,7 @@
 #include <codegen/x86_64/arch_x86_64_isel.h>
 #include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
+#include <codegen/instruction_selection.h>
 #include <codegen/machine_ir.h>
 #include <codegen/register_allocation.h>
 #include <error.h>
@@ -3049,6 +3050,52 @@ void codegen_emit_x86_64(CodegenContext *context) {
   foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
     print_mir_function(f);
   }
+
+  // TODO: Either embed x86_64 isel or somehow make this path knowable (i.e. via install).
+  const char isel_filepath[] = "src/codegen/x86_64/arch_x86_64.isel";
+  ISelPatterns patterns =  isel_parse_file(isel_filepath);
+
+  foreach (ISelPattern, pattern, patterns) {
+    print("\nmatch\n");
+    foreach_ptr (MIRInstruction *, inst, pattern->input) {
+      print("%s(", mir_x86_64_opcode_mnemonic(inst->opcode));
+      MIROperand *base = NULL;
+      if (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
+        base = inst->operands.arr;
+      else base = inst->operands.vec.data;
+      for (size_t j = 0; j < inst->operand_count; ++j) {
+        MIROperand *op = base + j;
+        print("%s", mir_operand_kind_string(op->kind));
+        if (j < inst->operand_count - 1) print(", ");
+      }
+      print(")\n");
+    }
+    print("emit {\n");
+    foreach_ptr (MIRInstruction *, inst, pattern->output) {
+      print("  %s(", mir_x86_64_opcode_mnemonic(inst->opcode));
+      MIROperand *base = NULL;
+      if (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
+        base = inst->operands.arr;
+      else base = inst->operands.vec.data;
+      for (size_t j = 0; j < inst->operand_count; ++j) {
+        MIROperand *op = base + j;
+        print("%s", mir_operand_kind_string(op->kind));
+        if (j < inst->operand_count - 1) print(", ");
+      }
+      print(")\n");
+    }
+    print("}\n");
+  }
+
+  isel_do_selection(machine_instructions_from_ir, patterns);
+
+  print("================ ISel ================\n");
+  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
+    print_mir_function(f);
+  }
+
+  vector_delete(patterns);
+
 
   MIRFunctionVector machine_instructions_selected = select_instructions2(&desc, machine_instructions_from_ir);
 

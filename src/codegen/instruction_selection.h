@@ -21,4 +21,43 @@ bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructi
 
 void isel_do_selection(MIRFunctionVector mir, ISelPatterns);
 
+typedef enum ISelEnvironmentEntryKind {
+  ISEL_ENV_NONE,
+  ISEL_ENV_OPCODE,
+  ISEL_ENV_OP_KIND,
+  ISEL_ENV_INTEGER,
+  ISEL_ENV_COUNT,
+} ISelEnvironmentEntryKind;
+
+typedef struct ISelValue {
+  ISelEnvironmentEntryKind kind;
+
+  isz integer;
+  string_buffer text;
+} ISelValue;
+
+typedef struct ISelEnvironmentEntry {
+  string key;
+  ISelValue value;
+} ISelEnvironmentEntry;
+
+typedef struct ISelEnvironment {
+  usz size;
+  usz capacity;
+  ISelEnvironmentEntry *data;
+} ISelEnvironment;
+
+ISelEnvironment isel_env_create_empty(usz initial_capacity);
+ISelEnvironment isel_env_create(usz initial_capacity);
+void isel_env_delete(ISelEnvironment *env);
+
+/// Return pointer to environment entry associated with the given key.
+ISelEnvironmentEntry *isel_env_entry(ISelEnvironment *env, const char *key);
+
+void isel_env_add_integer(ISelEnvironment *env, const char *key, isz value);
+void isel_env_add_opcode(ISelEnvironment *env, const char *key, usz opcode);
+
+void isel_env_print_entry(ISelEnvironmentEntry *entry);
+void isel_env_print(ISelEnvironment *env);
+
 #endif /* INSTRUCTION_SELECTION_H */

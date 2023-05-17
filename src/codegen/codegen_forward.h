@@ -14,6 +14,22 @@ typedef struct RegisterPool RegisterPool;
 typedef unsigned Register;
 typedef struct CodegenContext CodegenContext;
 
+// TODO: Reorganise codegen specification
+// CURRENTLY: Format + Assembly Dialect
+// PROPOSED: Architecture + Target [ + Target-specific Value ] or smth like this
+
+typedef enum CodegenArchitecture {
+  ARCH_NONE,
+  ARCH_X86_64,
+  ARCH_COUNT,
+} CodegenArchitecture;
+
+typedef enum CodegenTarget {
+  TARGET_ASM,
+  TARGET_OBJ,
+} CodegenTarget;
+
+
 enum CodegenAssemblyDialect {
   CG_ASM_DIALECT_ATT,
   CG_ASM_DIALECT_INTEL,
