@@ -8,12 +8,6 @@
 #include <error.h>
 #include <utils.h>
 
-/// Given Intercept IR, return a vector of machine instructions for x86_64 that represents the program.
-MIRInstructionVector select_instructions(CodegenContext *context);
-
-/// Given freshly-lowered MIR, return a vector of machine instructions for x86_64 that represents the program.
-MIRFunctionVector select_instructions2(const MachineDescription*, MIRFunctionVector input);
-
 #define ALL_MX64_INSTRUCTIONS(X)                \
   /* Arithmetic instructions. */                \
   X(ADD)                                        \

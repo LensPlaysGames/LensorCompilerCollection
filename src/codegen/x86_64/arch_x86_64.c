@@ -3075,37 +3075,18 @@ void codegen_emit_x86_64(CodegenContext *context) {
     print("}\n");
   }
 
+  print("================ ISel ================\n");
+
   isel_do_selection(machine_instructions_from_ir, patterns);
 
-  print("================ ISel ================\n");
   foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
-    print_mir_function(f);
+    print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
   }
 
-  vector_delete(patterns);
-
-
-  MIRFunctionVector machine_instructions_selected = select_instructions2(&desc, machine_instructions_from_ir);
-
-  // Free preselection MIR.
-  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
-    foreach_ptr (MIRBlock*, bb, f->blocks) {
-      foreach_ptr (MIRInstruction*, mi, bb->instructions) {
-        free(mi);
-      }
-      vector_delete(bb->instructions);
-    }
-    vector_delete(f->blocks);
-  }
-  vector_delete(machine_instructions_from_ir);
-
-  print("\n");
-  foreach_ptr (MIRFunction*, f, machine_instructions_selected) {
-    print_mir_function_with_mnemonic(f, &mir_x86_64_opcode_mnemonic);
-  }
+  isel_patterns_delete(&patterns);
 
   // RA -- Register Allocation
-  foreach_ptr (MIRFunction*, f, machine_instructions_selected) {
+  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
     allocate_registers(f, &desc);
   }
 
@@ -3117,12 +3098,12 @@ void codegen_emit_x86_64(CodegenContext *context) {
            context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
 
     fprint(context->code, "\n");
-    foreach_ptr (MIRFunction*, function, machine_instructions_selected) {
+    foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
       if (!function->origin->attr_global) continue;
       fprint(context->code, ".global %S\n", function->name);
     }
   }
-  foreach_ptr (MIRFunction*, function, machine_instructions_selected) {
+  foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
     // Generate function entry label if function has definition.
     if (!function->origin->is_extern)
       fprint(context->code, "\n%s:\n", function->name.data);
@@ -3283,6 +3264,13 @@ void codegen_emit_x86_64(CodegenContext *context) {
             // imm to reg | imm, dst
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg->value.reg.size = r64;
+            }
             femit_imm_to_reg(context, I_ADD, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             // reg to reg | src, dst
@@ -3296,7 +3284,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
           }
         } break; // case MX64_ADD
 
-        case MX64_RET: femit_none(context, I_RET); break;
+        case MX64_RET:
+          femit_none(context, I_RET);
+          break;
 
         default: {
           print("Unhandled opcode: %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
@@ -3307,7 +3297,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   }
 
   // EMIT MACHINE CODE (GENERAL OBJECT FILE)
-  foreach_ptr (MIRFunction*, function, machine_instructions_selected) {
+  foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
     { // Function symbol
       GObjSymbol sym = {0};
       sym.type = function->origin->is_extern ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
