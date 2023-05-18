@@ -226,6 +226,7 @@ MIRFrameObject *mir_get_frame_object(MIRFunction *function, MIROperandLocal op);
 void mir_push_with_reg_into_block(MIRFunction *f, MIRBlock *block, MIRInstruction *mi, MIRRegister reg);
 void mir_push_with_reg(MIRFunction *mir, MIRInstruction *mi, MIRRegister reg);
 
+/// DEPRECATED
 MIRInstruction *mir_find_by_vreg(MIRFunction *mir, size_t reg);
 
 /// Create an MIR function from an IR function.

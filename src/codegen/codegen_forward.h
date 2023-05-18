@@ -162,4 +162,9 @@ typedef Vector(MIRFunction*) MIRFunctionVector;
 typedef Vector(MIRBlock*) MIRBlockVector;
 typedef Vector(MIRInstruction*) MIRInstructionVector;
 
+typedef struct VReg {
+  usz value;
+  usz size;
+} VReg;
+
 #endif // CODEGEN_FORWARD_H

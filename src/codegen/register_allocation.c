@@ -32,10 +32,6 @@ CodegenContext *debug_context = NULL;
 #  define DEBUG(...)
 #endif
 
-typedef struct VReg {
-  usz value;
-  usz size;
-} VReg;
 typedef Vector(VReg) VRegVector;
 
 static bool vreg_vector_contains(VRegVector *vregs, usz vreg_value) {
@@ -861,7 +857,7 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
       }
     }
 
-    print("Vreg v%Z mapped to HWreg r%Z\n", vreg.value, (usz)color);
+    print("Vreg v%Z mapped to HWreg r%Z\n", vreg.value - MIR_ARCH_START, (usz)color);
   }
 
   DEBUG("After coloring\n");

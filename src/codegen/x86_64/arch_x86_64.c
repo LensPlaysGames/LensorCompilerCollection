@@ -3079,6 +3079,8 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   isel_do_selection(machine_instructions_from_ir, patterns);
 
+  // TODO: Calculate defining use of each vreg, or smth.
+
   foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
     print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
   }

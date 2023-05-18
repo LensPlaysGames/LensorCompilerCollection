@@ -19,7 +19,6 @@
   do {                                                                  \
     issue_diagnostic((sev), (parser)->source_filepath, (parser)->source, (loc), __VA_ARGS__); \
   } while (0)
-
 #define ISSUE_FATAL_DIAGNOSTIC(sev, loc, parser, ...)                   \
   do {                                                                  \
     issue_diagnostic((sev), (parser)->source_filepath, (parser)->source, (loc), __VA_ARGS__); \
@@ -220,7 +219,7 @@ ISelEnvironmentEntry *isel_env_entry(ISelEnvironment *env, const char *key) {
 
 void isel_env_print_entry(ISelEnvironmentEntry *entry) {
   ASSERT(entry, "Invalid argument");
-  STATIC_ASSERT(ISEL_ENV_COUNT == 6, "Exhaustive handling of ISel environment value types during printing");
+  STATIC_ASSERT(ISEL_ENV_COUNT == 7, "Exhaustive handling of ISel environment value types during printing");
   print("%S ", entry->key);
   switch (entry->value.kind) {
   case ISEL_ENV_NONE: print("NONE"); break;
@@ -229,6 +228,7 @@ void isel_env_print_entry(ISelEnvironmentEntry *entry) {
   case ISEL_ENV_INTEGER: print("INTEGER %d", entry->value.integer); break;
   case ISEL_ENV_OP_REF: print("OP_REF inst:%u op:%u", entry->value.op.pattern_instruction_index, entry->value.op.operand_index); break;
   case ISEL_ENV_INST_REF: print("INST_REF %u", entry->value.inst); break;
+  case ISEL_ENV_REGISTER: print("REG %Z.%Z", entry->value.vreg.value, entry->value.vreg.size); break;
   case ISEL_ENV_COUNT:
   default: UNREACHABLE();
   }
@@ -263,9 +263,13 @@ void isel_env_add_integer(ISelEnvironment *env, const char *key, isz value) {
   newval.kind = ISEL_ENV_INTEGER;
   newval.integer = value;
   isel_env_insert(env, key, newval);
+}
 
-  //ISelEnvironmentEntry *entry = isel_env_entry(env, key);
-  //isel_env_print_entry(entry);
+void isel_env_add_register(ISelEnvironment *env, const char *key, VReg vreg) {
+  ISelValue newval = {0};
+  newval.kind = ISEL_ENV_REGISTER;
+  newval.vreg = vreg;
+  isel_env_insert(env, key, newval);
 }
 
 static void isel_env_add_operand_reference(ISelEnvironment *env, const char *key, unsigned int pattern_instruction_index, unsigned int operand_index) {
@@ -274,9 +278,6 @@ static void isel_env_add_operand_reference(ISelEnvironment *env, const char *key
   newval.op.pattern_instruction_index = pattern_instruction_index;
   newval.op.operand_index = operand_index;
   isel_env_insert(env, key, newval);
-
-  //ISelEnvironmentEntry *entry = isel_env_entry(env, key);
-  //isel_env_print_entry(entry);
 }
 
 static void isel_env_add_instruction_reference(ISelEnvironment *env, const char *key, unsigned int pattern_instruction_index) {
@@ -284,9 +285,6 @@ static void isel_env_add_instruction_reference(ISelEnvironment *env, const char 
   newval.kind = ISEL_ENV_INST_REF;
   newval.inst = pattern_instruction_index;
   isel_env_insert(env, key, newval);
-
-  //ISelEnvironmentEntry *entry = isel_env_entry(env, key);
-  //isel_env_print_entry(entry);
 }
 
 static void isel_env_add_op_kind(ISelEnvironment *env, const char *key, usz opkind) {
@@ -294,9 +292,6 @@ static void isel_env_add_op_kind(ISelEnvironment *env, const char *key, usz opki
   newval.kind = ISEL_ENV_OP_KIND;
   newval.integer = (isz)opkind;
   isel_env_insert(env, key, newval);
-
-  //ISelEnvironmentEntry *entry = isel_env_entry(env, key);
-  //isel_env_print_entry(entry);
 }
 
 static void isel_next_c(ISelParser *p) {
@@ -646,9 +641,8 @@ static MIROperand isel_parse_operand(ISelParser *p) {
     } else if (entry->value.kind == ISEL_ENV_INST_REF) {
       out.kind = MIR_OP_INST_REF;
       out.value.inst_ref = entry->value.inst;
-    } else {
-      ERR("Identifier is bound in environment but has unexpected value kind");
-    }
+    } else ERR("Identifier is bound in environment but has unexpected value kind");
+
 
     // Yeet operand identifier
     isel_next_tok(p);
@@ -662,11 +656,18 @@ static MIROperand isel_parse_operand(ISelParser *p) {
     isel_next_tok(p);
 
     // Parse expression
+    loc expr_loc = p->tok.source_location;
     ISelValue value = isel_parse_expression(p);
     if (value.kind == ISEL_ENV_INTEGER) {
       if (out.kind == MIR_OP_IMMEDIATE) out.value.imm = value.integer;
-      else ERR("Cannot initialise this type of operand with integer expression");
-    }
+      else ERR_AT(expr_loc, "Cannot initialise this type of operand with integer expression");
+    } else if (value.kind == ISEL_ENV_REGISTER) {
+      if (out.kind == MIR_OP_REGISTER) {
+        out.value.reg.value = (uint32_t)value.vreg.value;
+        out.value.reg.size = (uint16_t)value.vreg.size;
+      }
+      else ERR_AT(expr_loc, "Cannot initialise this type of operand with register expression");
+    } else ERR_AT(expr_loc, "Unhandled expression kind");
   }
 
   // Eat comma, if present
@@ -967,10 +968,11 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
     // Find longest in rest of vector
     ISelPattern *pattern_to_swap = patterns.data + i;
     ISelPattern *largest = pattern_to_swap;
-    for (size_t j = i; j < patterns.size; j++) {
-      ISelPattern *largest_candidate = patterns.data + i;
-      if (largest_candidate->input.size > largest->input.size)
+    for (size_t j = i + 1; j < patterns.size; j++) {
+      ISelPattern *largest_candidate = patterns.data + j;
+      if (largest_candidate->input.size > largest->input.size) {
         largest = largest_candidate;
+      }
     }
     if (pattern_to_swap != largest) {
       ISelPattern tmp = *pattern_to_swap;
@@ -1002,13 +1004,18 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
       /// match on it.
     add_instructions:
       for (; instructions_handled < bb->instructions.size; ++instructions_handled) {
-        MIRInstruction *inst = bb->instructions.data[instructions_handled];
-
         // Add (up to) `longest_pattern_length` instructions to the instructions vector.
         if (instructions.size >= longest_pattern_length) break;
 
+        MIRInstruction *inst = bb->instructions.data[instructions_handled];
+
+        print_mir_instruction(inst);
+
         vector_push(instructions, inst);
       }
+
+      print("|");
+      print_mir_instruction(instructions.data[0]);
 
       bool matched = false;
       foreach (ISelPattern, pattern, patterns) {
@@ -1025,17 +1032,9 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
           }
 
           // Prepend output instructions from pattern to instructions.
-          // TODO: This part absolutely sucks and is wrong.
-          // We *cannot* just use the pattern's output instructions. We
-          // need to iterate over the pattern output instructions, making
-          // a copy of each and populating operands as necessary
+          // Iterate over the pattern output instructions, making a
+          // copy of each and populating operands as necessary,
           // corresponding to pattern references.
-          // So with: MIR_ADD i1(Immediate lhs, Register rhs) -> MX64_ADD(lhs, rhs), MX64_MOV(rhs, i1)
-          // it stands to reason that when we reach `lhs` we need to
-          // actually look at the instruction in the input pattern and
-          // copy that operand in it's entirety. And when we reach `i1`
-          // we have to create a register operand referencing the vreg of
-          // the instruction it references.
           MIRInstruction *last_input_inst = vector_back(pattern_input);
           foreach_index (i, pattern->output) {
             MIRInstruction *pattern_inst = pattern->output.data[i];
@@ -1061,8 +1060,10 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
               }
             }
 
-            vector_insert(instructions, instructions.data, out);
+            vector_insert(instructions, instructions.data + i, out);
           }
+
+          vector_delete(pattern_input);
 
           // Again attempt to pattern match and do all this over again, until nothing happens.
           break;
@@ -1073,17 +1074,19 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
       // into the output, before going back to the "add instructions"
       // bit.
       if (!matched) {
-        // If there are more instructions in this block to match
-        // against, go back and them, pattern match again, etc.
-
         // Add front of `instructions` to emission output.
         vector_push(new_instructions, instructions.data[0]);
         // Pop instruction.
         vector_remove_index(instructions, 0);
       }
 
+      // If there are more instructions in this block to match
+      // against, go back and them, pattern match again, etc.
       if (instructions_handled < bb->instructions.size)
         goto add_instructions;
+
+      // Otherwise, if there are remaining instructions, go again.
+      if (instructions.size != 0) goto add_instructions;
 
       // Fully handled instructions of block; replace old instructions with newly selected ones.
       MIRInstructionVector tmp = bb->instructions;
