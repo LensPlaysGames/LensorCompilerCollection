@@ -75,5 +75,7 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns);
 void isel_patterns_delete(ISelPatterns *patterns);
 
 void isel_print_mir_operand(MIROperand *operand);
+void isel_print_pattern(ISelPattern *pattern, OpcodeMnemonicFunction opcode_mnemonic);
+void isel_print_patterns(ISelPatterns *patterns, OpcodeMnemonicFunction opcode_mnemonic);
 
 #endif /* INSTRUCTION_SELECTION_H */
