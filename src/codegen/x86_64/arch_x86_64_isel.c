@@ -741,4 +741,11 @@ void isel_x86_64_env(ISelEnvironment *env) {
 #define ADD_OPCODE(opcode) isel_env_add_opcode(env, STR(CAT(MX64_, opcode)), CAT(MX64_, opcode));
   ALL_MX64_INSTRUCTIONS(ADD_OPCODE)
 #undef ADD_OPCODE
+#define ADD_HWREG(reg, rname64, rname32, rname16, rname8)               \
+    isel_env_add_register(env, rname64, (VReg){CAT(REG_, reg), r64});   \
+    isel_env_add_register(env, rname32, (VReg){CAT(REG_, reg), r32});   \
+    isel_env_add_register(env, rname16, (VReg){CAT(REG_, reg), r16});   \
+    isel_env_add_register(env, rname8, (VReg){CAT(REG_, reg), r8});
+  FOR_ALL_X86_64_REGISTERS(ADD_HWREG)
+#undef ADD_HWREG
 }

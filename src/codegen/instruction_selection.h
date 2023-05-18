@@ -11,6 +11,7 @@ typedef enum ISelEnvironmentEntryKind {
   ISEL_ENV_INTEGER,
   ISEL_ENV_OP_REF,
   ISEL_ENV_INST_REF,
+  ISEL_ENV_REGISTER,
   ISEL_ENV_COUNT
 } ISelEnvironmentEntryKind;
 
@@ -19,6 +20,8 @@ typedef struct ISelValue {
 
   isz integer;
   string_buffer text;
+
+  VReg vreg;
 
   unsigned int inst;
   MIROperandOpRef op;
@@ -44,6 +47,7 @@ void isel_env_delete(ISelEnvironment *env);
 ISelEnvironmentEntry *isel_env_entry(ISelEnvironment *env, const char *key);
 
 void isel_env_add_integer(ISelEnvironment *env, const char *key, isz value);
+void isel_env_add_register(ISelEnvironment *env, const char *key, VReg reg);
 void isel_env_add_opcode(ISelEnvironment *env, const char *key, usz opcode);
 
 void isel_env_print_entry(ISelEnvironmentEntry *entry);
