@@ -34,7 +34,6 @@
 
 typedef enum ISelTokenKind {
   TOKEN_EOF = 0,
-
   TOKEN_OPKIND_REGISTER = MIR_OP_REGISTER,
   TOKEN_OPKIND_IMMEDIATE = MIR_OP_IMMEDIATE,
   TOKEN_OPKIND_BLOCK = MIR_OP_BLOCK,
@@ -42,6 +41,17 @@ typedef enum ISelTokenKind {
   TOKEN_OPKIND_NAME = MIR_OP_NAME,
   TOKEN_OPKIND_STATIC = MIR_OP_STATIC_REF,
   TOKEN_OPKIND_LOCAL = MIR_OP_LOCAL_REF,
+
+  TOKEN_INTEGER,
+  TOKEN_IDENTIFIER,
+
+  // Keywords
+  TOKEN_KW_MATCH,
+  TOKEN_KW_EMIT,
+
+  TOKEN_SEMICOLON,
+
+  // ADD NEW ONES HERE PLEASE
 
   // ASCII simply-lexed Operators/Punctuation
   TOKEN_LPAREN = '(',
@@ -54,27 +64,18 @@ typedef enum ISelTokenKind {
   TOKEN_GT = '>',
   TOKEN_EQ = '=',
   TOKEN_COMMA = ',',
-
-  TOKEN_SEMICOLON,
-
-  // Keywords
-  TOKEN_KW_MATCH,
-  TOKEN_KW_EMIT,
-
-  TOKEN_IDENTIFIER,
-  TOKEN_INTEGER = '0',
 } ISelTokenKind;
 
 static const char *isel_token_kind_to_string(ISelTokenKind kind) {
   switch (kind) {
   case TOKEN_EOF: return "EOF";
-  case TOKEN_OPKIND_REGISTER: return "OpKind Register";
-  case TOKEN_OPKIND_IMMEDIATE: return "OpKind Immediate";
-  case TOKEN_OPKIND_BLOCK: return "OpKind Block";
-  case TOKEN_OPKIND_FUNCTION: return "OpKind Function";
-  case TOKEN_OPKIND_NAME: return "OpKind Name";
-  case TOKEN_OPKIND_STATIC: return "OpKind Static";
-  case TOKEN_OPKIND_LOCAL: return "OpKind Local";
+  case TOKEN_OPKIND_REGISTER: return "Register";
+  case TOKEN_OPKIND_IMMEDIATE: return "Immediate";
+  case TOKEN_OPKIND_BLOCK: return "Block";
+  case TOKEN_OPKIND_FUNCTION: return "Function";
+  case TOKEN_OPKIND_NAME: return "Name";
+  case TOKEN_OPKIND_STATIC: return "Static";
+  case TOKEN_OPKIND_LOCAL: return "Local";
   case TOKEN_LPAREN: return "(";
   case TOKEN_RPAREN: return ")";
   case TOKEN_LBRACE: return "{";
@@ -89,6 +90,7 @@ static const char *isel_token_kind_to_string(ISelTokenKind kind) {
   case TOKEN_KW_MATCH: return "match";
   case TOKEN_KW_EMIT: return "emit";
   case TOKEN_IDENTIFIER: return "identifier";
+  case TOKEN_INTEGER: return "integer";
   }
   UNREACHABLE();
 }
@@ -109,6 +111,14 @@ typedef struct ISelParser {
 
   // Does not change as things are parsed.
   ISelEnvironment global;
+
+  // Pointer to `local` member within currently-being-parsed ISelPattern, or NULL.
+  ISelEnvironment *local;
+
+  // Index of instruction being parsed within match pattern.
+  unsigned int pattern_instruction_index;
+  // Index of operand being parsed within instruction.
+  unsigned int operand_index;
 
   const char *beg;
   const char *end;
@@ -210,7 +220,19 @@ ISelEnvironmentEntry *isel_env_entry(ISelEnvironment *env, const char *key) {
 
 void isel_env_print_entry(ISelEnvironmentEntry *entry) {
   ASSERT(entry, "Invalid argument");
-  print("%S (kind %d | integer %d | text \"%S\")\n", entry->key, entry->value.kind, entry->value.integer, entry->value.text);
+  STATIC_ASSERT(ISEL_ENV_COUNT == 6, "Exhaustive handling of ISel environment value types during printing");
+  print("%S ", entry->key);
+  switch (entry->value.kind) {
+  case ISEL_ENV_NONE: print("NONE"); break;
+  case ISEL_ENV_OPCODE: print("OPCODE %d", entry->value.integer); break;
+  case ISEL_ENV_OP_KIND: print("OPKIND %d", entry->value.integer); break;
+  case ISEL_ENV_INTEGER: print("INTEGER %d", entry->value.integer); break;
+  case ISEL_ENV_OP_REF: print("OP_REF inst:%u op:%u", entry->value.op.pattern_instruction_index, entry->value.op.operand_index); break;
+  case ISEL_ENV_INST_REF: print("INST_REF %u", entry->value.inst); break;
+  case ISEL_ENV_COUNT:
+  default: UNREACHABLE();
+  }
+  print("\n");
 }
 void isel_env_print(ISelEnvironment *env) {
   for (usz i = 0; i < env->capacity; ++i) {
@@ -240,6 +262,27 @@ void isel_env_add_integer(ISelEnvironment *env, const char *key, isz value) {
   ISelValue newval = {0};
   newval.kind = ISEL_ENV_INTEGER;
   newval.integer = value;
+  isel_env_insert(env, key, newval);
+
+  //ISelEnvironmentEntry *entry = isel_env_entry(env, key);
+  //isel_env_print_entry(entry);
+}
+
+static void isel_env_add_operand_reference(ISelEnvironment *env, const char *key, unsigned int pattern_instruction_index, unsigned int operand_index) {
+  ISelValue newval = {0};
+  newval.kind = ISEL_ENV_OP_REF;
+  newval.op.pattern_instruction_index = pattern_instruction_index;
+  newval.op.operand_index = operand_index;
+  isel_env_insert(env, key, newval);
+
+  //ISelEnvironmentEntry *entry = isel_env_entry(env, key);
+  //isel_env_print_entry(entry);
+}
+
+static void isel_env_add_instruction_reference(ISelEnvironment *env, const char *key, unsigned int pattern_instruction_index) {
+  ISelValue newval = {0};
+  newval.kind = ISEL_ENV_INST_REF;
+  newval.inst = pattern_instruction_index;
   isel_env_insert(env, key, newval);
 
   //ISelEnvironmentEntry *entry = isel_env_entry(env, key);
@@ -537,18 +580,28 @@ static MIROperandKind isel_parse_operand_kind(ISelParser *p) {
   return out;
 }
 
+// number or bound identifier
 static ISelValue isel_parse_expression(ISelParser *p) {
-  // number or bound identifier
   if (p->tok.kind == TOKEN_IDENTIFIER) {
     // Lookup identifier in global environment
     ISelEnvironmentEntry *entry = isel_env_entry(&p->global, p->tok.text.data);
-    // FIXME: Should be ERR
-    if (!entry->key.data) WARN("Expected expression, got unknown identifier \"%S\"", as_span(p->tok.text));
+    if (!entry->key.data) ERR("Expected expression, got unknown identifier \"%S\"", as_span(p->tok.text));
 
     // Yeet identifier
     isel_next_tok(p);
 
     return entry->value;
+  }
+
+  if (p->tok.kind == TOKEN_INTEGER) {
+    ISelValue out = {0};
+    out.kind = ISEL_ENV_INTEGER;
+    out.integer = (isz)p->tok.integer;
+
+    // Yeet integer
+
+    isel_next_tok(p);
+    return out;
   }
 
   UNREACHABLE();
@@ -557,7 +610,6 @@ static ISelValue isel_parse_expression(ISelParser *p) {
 /// <operand> ::= [ OPERAND_KIND ] IDENTIFIER [ "=" <expression> ] [ "," ]
 static MIROperand isel_parse_operand(ISelParser *p) {
   MIROperand out = {0};
-  out.kind = MIR_OP_IMMEDIATE;
 
   // Either parse (OPKIND IDENTIFER) and create binding or (IDENTIFIER) with binding lookup
   if (isel_token_kind_is_opkind(p->tok.kind)) {
@@ -565,7 +617,16 @@ static MIROperand isel_parse_operand(ISelParser *p) {
     out.kind = isel_parse_operand_kind(p);
     // Optionally parse identifier (name bound to this operand while parsing this match)
     if (p->tok.kind == TOKEN_IDENTIFIER) {
-      // TODO: Bind name in local match environment
+      // Bind name in local match environment
+      string_buf_zterm(&p->tok.text);
+      isel_env_add_operand_reference(p->local, p->tok.text.data, p->pattern_instruction_index, p->operand_index);
+
+      // DEBUG
+      print("Bound \"%s\" to new operand\n", p->tok.text.data);
+      ISelEnvironmentEntry *entry = isel_env_entry(p->local, p->tok.text.data);
+      isel_env_print_entry(entry);
+
+      // Yeet identifier
       isel_next_tok(p);
     }
   } else {
@@ -573,8 +634,21 @@ static MIROperand isel_parse_operand(ISelParser *p) {
     if (p->tok.kind != TOKEN_IDENTIFIER)
       ERR("Expected operand kind or operand identifier, but got %s instead", isel_token_kind_to_string(p->tok.kind));
 
-    // TODO: Lookup bound name and ensure it is bound to a valid operand.
-    WARN("TODO: Lookup identifier in local environment and ensure it is bound to an operand reference.\n");
+    // Lookup identifier in local environment and ensure it is bound to an operand reference
+    string_buf_zterm(&p->tok.text);
+    ISelEnvironmentEntry *entry = isel_env_entry(p->local, p->tok.text.data);
+    if (!entry->key.data) ERR("Referenced operand does not exist; maybe a typo?");
+
+    if (entry->value.kind == ISEL_ENV_OP_REF) {
+      out.kind = MIR_OP_OP_REF;
+      out.value.op_ref.pattern_instruction_index = entry->value.op.pattern_instruction_index;
+      out.value.op_ref.operand_index = entry->value.op.operand_index;
+    } else if (entry->value.kind == ISEL_ENV_INST_REF) {
+      out.kind = MIR_OP_INST_REF;
+      out.value.inst_ref = entry->value.inst;
+    } else {
+      ERR("Identifier is bound in environment but has unexpected value kind");
+    }
 
     // Yeet operand identifier
     isel_next_tok(p);
@@ -588,7 +662,11 @@ static MIROperand isel_parse_operand(ISelParser *p) {
     isel_next_tok(p);
 
     // Parse expression
-    isel_parse_expression(p);
+    ISelValue value = isel_parse_expression(p);
+    if (value.kind == ISEL_ENV_INTEGER) {
+      if (out.kind == MIR_OP_IMMEDIATE) out.value.imm = value.integer;
+      else ERR("Cannot initialise this type of operand with integer expression");
+    }
   }
 
   // Eat comma, if present
@@ -596,33 +674,6 @@ static MIROperand isel_parse_operand(ISelParser *p) {
 
   return out;
 }
-
-
-// XXX TODO YYY
-// Hey stupidface, here's your todo:
-// 1. Write like a consume or expect or whatever combination of those
-//    helpers that you need for tokens.
-// DONE
-// 2. Write like a string hashmap that corresponds to a new struct
-//    `ISelValue` which may be a reference to an MIROperand or
-//    MIRInstruction within an isel pattern, or an immediate/text
-//    value; this is for match identifiers given to instructions and
-//    operands.
-// DONE
-// 3. Also use the string hashmap code to implement the top-level
-//    environment, which is persistent and immutable all the way
-//    through parsing. It contains general MIR opcodes, COMPARE_EQ and
-//    friends, and any extras added by the ISA after it is detected in
-//    the header.
-// Halfway: we still need to add COMAPARE_* and somehow implement backend-specific environment stuff.
-// 4. Suck today's dick!
-// DONE
-// 5. Fill in insane amount of todos in parsing (so like ya know, the
-//    parsing bit).
-// 6. hope it all comes together and you can actually parse patterns
-// DONE
-// 7. use patterns to do selection, better matching with aho-corasick, etc
-// ZZZ TODO AAA
 
 static MIROpcodeCommon isel_parse_opcode(ISelParser *p) {
   if (p->tok.kind != TOKEN_IDENTIFIER)
@@ -642,16 +693,22 @@ static MIROpcodeCommon isel_parse_opcode(ISelParser *p) {
 
 /// <inst-spec> ::= <opcode> IDENTIFIER "(" { <operand> } ")" [ "," ]
 static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
-  // TODO: The current token should be an identifier that maps to a general MIR opcode.
   MIRInstruction *out = mir_makenew(MIR_IMMEDIATE);
 
   // Parse opcode
   out->opcode = (uint32_t)isel_parse_opcode(p);
-  // TODO: Lookup name in global environment to find MIR opcode.
 
   // Parse identifier, if present (name bound to this instruction while parsing this match)
   if (p->tok.kind == TOKEN_IDENTIFIER) {
-    // TODO: Bind name in match pattern scope to `out` instruction
+    // Bind name in match pattern scope to `out` instruction
+    string_buf_zterm(&p->tok.text);
+    isel_env_add_instruction_reference(p->local, p->tok.text.data, p->pattern_instruction_index);
+
+    // DEBUG
+    print("Bound \"%s\" to new instruction\n", p->tok.text.data);
+    ISelEnvironmentEntry *entry = isel_env_entry(p->local, p->tok.text.data);
+    isel_env_print_entry(entry);
+
     isel_next_tok(p);
   }
 
@@ -659,11 +716,14 @@ static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
   isel_consume(p, TOKEN_LPAREN);
 
   // Add operands to instruction as we parse them.
+  p->operand_index = 0;
   while (p->tok.kind != TOKEN_RPAREN) {
     if (p->tok.kind == TOKEN_EOF)
       ERR("ISel reached EOF while parsing operands of instruction");
     mir_add_op(out, isel_parse_operand(p));
+    ++p->operand_index;
   }
+
   // Yeet closing paren
   isel_next_tok(p);
 
@@ -676,6 +736,8 @@ static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
 /// <match-pattern> ::= "match" <inst-spec> { <inst-spec> } "emit" "{" <inst-spec> { <inst-spec> } "}"
 static ISelPattern isel_parse_match(ISelParser *p) {
   ISelPattern out = {0};
+  out.local = isel_env_create_empty(16);
+  p->local = &out.local;
 
   if (p->tok.kind != TOKEN_KW_MATCH) {
     ICE("Expected match keyword at beginning of match");
@@ -684,10 +746,13 @@ static ISelPattern isel_parse_match(ISelParser *p) {
   isel_next_tok(p);
 
   // Parse instructions to match in the pattern until the emit keyword is reached.
+  p->pattern_instruction_index = 0;
   while (p->tok.kind != TOKEN_KW_EMIT) {
     if (p->tok.kind == TOKEN_EOF) ICE("ISel reached EOF while parsing input pattern instructions of match definition");
+    print("Instruction index %u\n", p->pattern_instruction_index);
     MIRInstruction *inst = isel_parse_inst_spec(p);
     vector_push(out.input, inst);
+    ++p->pattern_instruction_index;
   }
 
   // Yeet "emit" keyword.
@@ -715,6 +780,8 @@ static ISelPattern isel_parse_match(ISelParser *p) {
     MIRInstruction *inst = isel_parse_inst_spec(p);
     vector_push(out.output, inst);
   }
+
+  p->local = NULL;
 
   return out;
 }
@@ -747,7 +814,7 @@ ISelPatterns isel_parse(ISelParser *p) {
   p->end = p->source.data + p->source.size;
 
   // Advance past metadata (find first empty line).
-  // TODO: Parse metadata to get ISA, use ISA to setup initial
+  // Parse metadata to get ISA, use ISA to setup initial
   // environment (MIR opcode identifiers specific to the ISA)
   {
     bool lfcr = false; // to catch (CR)LFCR(LF) sequences
@@ -756,14 +823,13 @@ ISelPatterns isel_parse(ISelParser *p) {
     const char *line_begin = p->beg;
     while (*p->beg) {
       if (lfcr && *p->beg == '\n') {
-        printf("Skipped metadata:\n```\n%.*s```\n", (int)(p->beg - p->source.data), p->source.data);
-        print("How's Windows treatin ya?\n");
+        //print("How's Windows treatin ya?\n");
         break;
       }
       lfcr = *p->beg == '\r' && lastc == '\n';
       lflf = *p->beg == lastc && lastc == '\n';
       if (lflf) {
-        print("Unix user, I see...\n");
+        //print("Unix user, I see...\n");
         break;
       }
 
@@ -806,8 +872,6 @@ ISelPatterns isel_parse(ISelParser *p) {
   /// Lex the first character and token.
   isel_next_c(p);
   isel_next_tok(p);
-
-  // TODO: Setup common environment (general MIR opcode identifiers, COMPARE_EQ and friends, etc)
 
   /// Parse the match definitions within the file.
   ISelPatterns patterns = {0};
@@ -917,6 +981,7 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
 
   usz longest_pattern_length = patterns.data->input.size;
 
+  // Instructions currently being expanded/dealt with.
   MIRInstructionVector instructions = {0};
 
   foreach_ptr (MIRFunction*, f, mir) {
@@ -924,6 +989,8 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
 
     foreach_ptr (MIRBlock*, bb, f->blocks) {
       vector_clear(instructions);
+      // Instructions that will be output.
+      MIRInstructionVector new_instructions = {0};
 
       // Amount of instructions that have been pushed to the
       // instructions vector for instruction selection. Used to continue
@@ -950,12 +1017,51 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
 
           // Remove first N instructions where N is the amount of
           // instructions that matched in the pattern.
-          for (usz j = 0; j < pattern->input.size; ++j)
+          // Put these in a "pattern input" tmp buffer as we remove them.
+          MIRInstructionVector pattern_input = {0};
+          for (usz j = 0; j < pattern->input.size; ++j) {
+            vector_push(pattern_input, vector_front(instructions));
             vector_remove_index(instructions, 0);
+          }
 
           // Prepend output instructions from pattern to instructions.
-          foreach_ptr (MIRInstruction*, pattern_inst, pattern->output) {
-            vector_insert(instructions, instructions.data, pattern_inst);
+          // TODO: This part absolutely sucks and is wrong.
+          // We *cannot* just use the pattern's output instructions. We
+          // need to iterate over the pattern output instructions, making
+          // a copy of each and populating operands as necessary
+          // corresponding to pattern references.
+          // So with: MIR_ADD i1(Immediate lhs, Register rhs) -> MX64_ADD(lhs, rhs), MX64_MOV(rhs, i1)
+          // it stands to reason that when we reach `lhs` we need to
+          // actually look at the instruction in the input pattern and
+          // copy that operand in it's entirety. And when we reach `i1`
+          // we have to create a register operand referencing the vreg of
+          // the instruction it references.
+          MIRInstruction *last_input_inst = vector_back(pattern_input);
+          foreach_index (i, pattern->output) {
+            MIRInstruction *pattern_inst = pattern->output.data[i];
+            MIRInstruction *out = mir_makecopy(pattern_inst);
+            out->reg = last_input_inst->reg;
+            out->origin = last_input_inst->origin;
+            out->block = bb;
+
+            FOREACH_MIR_OPERAND(out, op) {
+              // Resolve operand and instruction pattern references...
+              if (op->kind == MIR_OP_OP_REF) {
+                ASSERT(op->value.op_ref.pattern_instruction_index < pattern_input.size,
+                       "Invalid pattern instruction index in operand reference (parser went wrong)");
+                MIRInstruction *inst = pattern_input.data[op->value.op_ref.pattern_instruction_index];
+                ASSERT(op->value.op_ref.operand_index < inst->operand_count,
+                       "Invalid operand index (parser went wrong)");
+                *op = *mir_get_op(inst, op->value.op_ref.operand_index);
+              } else if (op->kind == MIR_OP_INST_REF) {
+                ASSERT(op->value.inst_ref < pattern_input.size,
+                       "Invalid pattern instruction index in instruction reference (parser went wrong)");
+                MIRInstruction *inst = pattern_input.data[op->value.inst_ref];
+                *op = mir_op_reference(inst);
+              }
+            }
+
+            vector_insert(instructions, instructions.data, out);
           }
 
           // Again attempt to pattern match and do all this over again, until nothing happens.
@@ -969,20 +1075,54 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
       if (!matched) {
         // If there are more instructions in this block to match
         // against, go back and them, pattern match again, etc.
-        // Pop instruction from front of `instructions` and add it to emission output.
-        // TODO: Add removed instruction to emission output, or whatever. I
-        // think the actual implementation will be like this: we will build a
-        // new vector of emitted instructions and then swap the vector in the
-        // basic block once we are done iterating over it.
+
+        // Add front of `instructions` to emission output.
+        vector_push(new_instructions, instructions.data[0]);
+        // Pop instruction.
         vector_remove_index(instructions, 0);
       }
 
       if (instructions_handled < bb->instructions.size)
         goto add_instructions;
 
+      // Fully handled instructions of block; replace old instructions with newly selected ones.
+      MIRInstructionVector tmp = bb->instructions;
+      bb->instructions = new_instructions; // new_instructions is moved
+      // Delete vector of old instructions.
+      vector_delete(tmp);
     } // foreach_ptr (MIRBlock*, bb, ...)
   } // foreach_ptr (MIRFunction*, f, ...)
 
   vector_delete(instructions);
   isel_env_delete(&env);
+}
+
+// Delete ISelPatterns.
+void isel_patterns_delete(ISelPatterns *patterns) {
+  foreach (ISelPattern, pattern, *patterns) {
+    isel_env_delete(&pattern->local);
+  }
+  vector_delete(*patterns);
+}
+
+void isel_print_mir_operand(MIROperand *operand) {
+  print("%s", mir_operand_kind_string(operand->kind));
+  switch (operand->kind) {
+  case MIR_OP_NONE: break;
+  case MIR_OP_REGISTER: print(" %Z.%Z", operand->value.reg.value, operand->value.reg.size); break;
+  case MIR_OP_IMMEDIATE: print(" %Z", operand->value.imm); break;
+  case MIR_OP_BLOCK: break;//print(" %S", operand->value.block->name); break;
+  case MIR_OP_FUNCTION: print(" %S", operand->value.function->name); break;
+  case MIR_OP_NAME: print("", operand->value.name); break;
+  case MIR_OP_STATIC_REF: print(" %S", operand->value.static_ref->static_ref->name); break;
+  case MIR_OP_LOCAL_REF: print(" %Z", operand->value.local_ref); break;
+
+  case MIR_OP_OP_REF: print(" inst:%u op:%u", operand->value.op_ref.pattern_instruction_index, operand->value.op_ref.operand_index); break;
+  case MIR_OP_INST_REF: print(" %u", operand->value.inst_ref); break;
+
+  case MIR_OP_COUNT:
+  case MIR_OP_ANY:
+    UNREACHABLE();
+    break;
+  }
 }

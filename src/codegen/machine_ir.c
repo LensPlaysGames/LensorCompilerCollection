@@ -593,6 +593,8 @@ const char *mir_operand_kind_string(MIROperandKind opkind) {
   case MIR_OP_FUNCTION: return "function";
   case MIR_OP_STATIC_REF: return "static";
   case MIR_OP_LOCAL_REF: return "local";
+  case MIR_OP_OP_REF: return "(isel)operand";
+  case MIR_OP_INST_REF: return "(isel)instruction";
   default: break;
   }
   return "";
@@ -652,7 +654,7 @@ void print_mir_operand(MIRFunction *function, MIROperand *op) {
   case MIR_OP_REGISTER: {
     // TODO: Maybe print size?
     if (op->value.reg.value >= MIR_ARCH_START)
-      print("%34v%u%m", (unsigned)op->value.reg.value);
+      print("%34v%u%m", (unsigned)op->value.reg.value - MIR_ARCH_START);
     else print("%32r%u%m", (unsigned)op->value.reg.value);
     if (op->value.reg.defining_use) print(" DEF");
   } break;
@@ -679,8 +681,18 @@ void print_mir_operand(MIRFunction *function, MIROperand *op) {
            "Index out of bounds (stack frame object referenced has higher index than there are frame objects)");
     print("%37Stack:%35%Z %37#%Z", (usz)op->value.local_ref, (usz)(function->frame_objects.data + op->value.local_ref)->size);
   } break;
+  case MIR_OP_ANY: {
+    print("ANY");
+  } break;
+  case MIR_OP_OP_REF: {
+    print("OP_REF inst:%u op:%u", op->value.op_ref.pattern_instruction_index, op->value.op_ref.operand_index);
+  } break;
+  case MIR_OP_INST_REF: {
+    print("INST_REF %u", op->value.inst_ref);
+  } break;
   case MIR_OP_COUNT:
   case MIR_OP_NONE: UNREACHABLE();
+    break;
   }
 }
 
@@ -690,19 +702,14 @@ void print_mir_instruction_with_function_with_mnemonic(MIRFunction *function, MI
   ASSERT(mir, "Invalid argument");
   if (mir->reg < MIR_ARCH_START)
     print("%32r%Z %37| ", (usz)mir->reg);
-  else print("%34v%Z %37| ", (usz)mir->reg);
+  else print("%34v%Z %37| ", (usz)mir->reg - MIR_ARCH_START);
   const char *mnemonic = opcode_mnemonic(mir->opcode);
   if (mnemonic && *mnemonic != '\0') print("%31%s%m ", opcode_mnemonic(mir->opcode));
   else print("%31op%d%36 ", (int)mir->opcode);
-  MIROperand *base = NULL;
-  if (mir->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
-    base = mir->operands.arr;
-  else base = mir->operands.vec.data;
-  for (size_t j = 0; j < mir->operand_count; ++j) {
-    MIROperand *op = base + j;
+  FOREACH_MIR_OPERAND(mir, op) {
     if (op->kind == MIR_OP_NONE) break;
     print_mir_operand(function, op);
-    if (j < mir->operand_count - 1 && (op + 1)->kind != MIR_OP_NONE)
+    if (op != opbase + mir->operand_count - 1 && (op + 1)->kind != MIR_OP_NONE)
       print("%37, ");
   }
   print("\n%m");

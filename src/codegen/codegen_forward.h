@@ -149,6 +149,12 @@ enum ComparisonType {
 typedef struct IRStaticVariable IRStaticVariable;
 typedef struct IRStackAllocation IRStackAllocation;
 
+typedef struct MIROperandOpRef {
+    unsigned int pattern_instruction_index;
+    unsigned int operand_index;
+} MIROperandOpRef;
+typedef unsigned int MIROperandInstRef;
+
 typedef struct MIRFunction MIRFunction;
 typedef struct MIRBlock MIRBlock;
 typedef struct MIRInstruction MIRInstruction;

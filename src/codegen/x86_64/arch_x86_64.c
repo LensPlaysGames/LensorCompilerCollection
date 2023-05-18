@@ -3037,8 +3037,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
   /*ir_set_ids(context);
   ir_femit(stdout, context);*/
 
-  //calculate_stack_offsets(context);
-
   // FUNCTION NAME MANGLING
   foreach_ptr (IRFunction*, function, context->functions) {
     // Don't mangle external function(s).
@@ -3059,28 +3057,18 @@ void codegen_emit_x86_64(CodegenContext *context) {
     print("\nmatch\n");
     foreach_ptr (MIRInstruction *, inst, pattern->input) {
       print("%s(", mir_x86_64_opcode_mnemonic(inst->opcode));
-      MIROperand *base = NULL;
-      if (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
-        base = inst->operands.arr;
-      else base = inst->operands.vec.data;
-      for (size_t j = 0; j < inst->operand_count; ++j) {
-        MIROperand *op = base + j;
-        print("%s", mir_operand_kind_string(op->kind));
-        if (j < inst->operand_count - 1) print(", ");
+      FOREACH_MIR_OPERAND(inst, op) {
+        isel_print_mir_operand(op);
+        if (op != opbase + inst->operand_count - 1) print(", ");
       }
       print(")\n");
     }
     print("emit {\n");
     foreach_ptr (MIRInstruction *, inst, pattern->output) {
       print("  %s(", mir_x86_64_opcode_mnemonic(inst->opcode));
-      MIROperand *base = NULL;
-      if (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
-        base = inst->operands.arr;
-      else base = inst->operands.vec.data;
-      for (size_t j = 0; j < inst->operand_count; ++j) {
-        MIROperand *op = base + j;
-        print("%s", mir_operand_kind_string(op->kind));
-        if (j < inst->operand_count - 1) print(", ");
+      FOREACH_MIR_OPERAND(inst, op) {
+        isel_print_mir_operand(op);
+        if (op != opbase + inst->operand_count - 1) print(", ");
       }
       print(")\n");
     }
