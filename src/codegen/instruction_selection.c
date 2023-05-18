@@ -1090,6 +1090,25 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
     } // foreach_ptr (MIRBlock*, bb, ...)
   } // foreach_ptr (MIRFunction*, f, ...)
 
+  // Mark defining uses of virtual register operands for RA.
+  Vector(usz) vregs_seen = {0};
+  // For every virtual register operand...
+  foreach_ptr (MIRFunction*, f, mir) {
+    foreach_ptr (MIRBlock*, bb, f->blocks) {
+      foreach_ptr (MIRInstruction*, inst, bb->instructions) {
+        FOREACH_MIR_OPERAND(inst, op) {
+          if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START) {
+            if (!vector_contains(vregs_seen, op->value.reg.value)) {
+              op->value.reg.defining_use = true;
+              vector_push(vregs_seen, op->value.reg.value);
+            }
+          }
+        }
+      }
+    }
+  }
+  vector_delete(vregs_seen);
+
   vector_delete(instructions);
   isel_env_delete(&env);
 }
