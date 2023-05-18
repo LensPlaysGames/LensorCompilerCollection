@@ -1,32 +1,17 @@
 #ifndef INSTRUCTION_SELECTION_H
 #define INSTRUCTION_SELECTION_H
 
+#include <codegen/codegen_forward.h>
 #include <codegen/machine_ir.h>
-
-typedef struct ISelPattern {
-  MIRInstructionVector input;
-  MIRInstructionVector output;
-} ISelPattern;
-typedef Vector(ISelPattern)
-ISelPatterns;
-
-ISelPatterns isel_parse_file(const char *filepath);
-
-typedef enum ISelCompareValueOption {
-  ISEL_DONT_COMPARE_VALUE,
-  ISEL_DO_COMPARE_VALUE
-} ISelCompareValueOption;
-/// Return true iff given instructions match pattern.
-bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructions, ISelCompareValueOption);
-
-void isel_do_selection(MIRFunctionVector mir, ISelPatterns);
 
 typedef enum ISelEnvironmentEntryKind {
   ISEL_ENV_NONE,
   ISEL_ENV_OPCODE,
   ISEL_ENV_OP_KIND,
   ISEL_ENV_INTEGER,
-  ISEL_ENV_COUNT,
+  ISEL_ENV_OP_REF,
+  ISEL_ENV_INST_REF,
+  ISEL_ENV_COUNT
 } ISelEnvironmentEntryKind;
 
 typedef struct ISelValue {
@@ -34,6 +19,10 @@ typedef struct ISelValue {
 
   isz integer;
   string_buffer text;
+
+  unsigned int inst;
+  MIROperandOpRef op;
+
 } ISelValue;
 
 typedef struct ISelEnvironmentEntry {
@@ -59,5 +48,28 @@ void isel_env_add_opcode(ISelEnvironment *env, const char *key, usz opcode);
 
 void isel_env_print_entry(ISelEnvironmentEntry *entry);
 void isel_env_print(ISelEnvironment *env);
+
+typedef struct ISelPattern {
+  MIRInstructionVector input;
+  MIRInstructionVector output;
+  ISelEnvironment local;
+} ISelPattern;
+typedef Vector(ISelPattern)
+ISelPatterns;
+
+ISelPatterns isel_parse_file(const char *filepath);
+
+typedef enum ISelCompareValueOption {
+  ISEL_DONT_COMPARE_VALUE,
+  ISEL_DO_COMPARE_VALUE
+} ISelCompareValueOption;
+/// Return true iff given instructions match pattern.
+bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructions, ISelCompareValueOption);
+
+void isel_do_selection(MIRFunctionVector mir, ISelPatterns);
+
+void isel_patterns_delete(ISelPatterns *patterns);
+
+void isel_print_mir_operand(MIROperand *operand);
 
 #endif /* INSTRUCTION_SELECTION_H */

@@ -26,7 +26,10 @@ typedef enum MIROperandKind {
   MIR_OP_STATIC_REF,
   MIR_OP_LOCAL_REF,
   MIR_OP_COUNT,
-  MIR_OP_ANY // Not an operand kind; used for matching on any operand kind.
+  // Operand kinds used exclusively during instruction selection.
+  MIR_OP_OP_REF,
+  MIR_OP_INST_REF,
+  MIR_OP_ANY,
 } MIROperandKind;
 
 typedef struct MIROperandRegister {
@@ -70,6 +73,9 @@ typedef struct MIROperand {
     MIROperandFunction function;
     MIROperandStatic static_ref;
     MIROperandLocal local_ref;
+
+    MIROperandOpRef op_ref;
+    MIROperandInstRef inst_ref;
   } value;
 } MIROperand;
 
@@ -113,6 +119,13 @@ typedef struct MIRInstruction {
   struct MIRInstruction *lowered;
 
 } MIRInstruction;
+
+/// Like `foreach (MIROperand, (name), inst->operands)`/`for (auto* name : inst->operands)`
+#define FOREACH_MIR_OPERAND(inst, name)                                 \
+  MIROperand *CAT(name, base) = (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD) ? (inst)->operands.arr : (inst)->operands.vec.data; \
+  for (MIROperand *(name) = CAT(name, base);                            \
+       (name) < CAT(name, base) + inst->operand_count;                  \
+       ++(name))
 
 typedef struct MIRBlock {
   string name;

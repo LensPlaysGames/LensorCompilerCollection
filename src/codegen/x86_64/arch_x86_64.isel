@@ -45,8 +45,8 @@ ISA: x86_64
 match
 MIR_ADD i1(Immediate lhs, Immediate rhs)
 emit {
-  MX64_MOV(rhs, Register i1)
-  MX64_ADD(lhs, Register i1)
+  MX64_MOV(rhs, i1)
+  MX64_ADD(lhs, i1)
 }
 
 match
@@ -69,6 +69,22 @@ emit {
   ;; We MUST use mov here instead of xor as mov does not clobber flags.
   MX64_MOV(Immediate i = 0, lt)
   MX64_SETCC(Immediate cmp_type = COMPARE_LT, lt)
+}
+
+match
+MIR_GT cmp(Register lhs, Register rhs),
+MIR_BRANCH branch(Block dest)
+emit {
+  MX64_CMP(lhs, rhs)
+  MX64_JCC(Immediate cmp_type = COMPARE_GT, dest)
+}
+match
+MIR_GT gt(Register lhs, Register rhs)
+emit {
+  MX64_CMP(lhs, rhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, gt)
+  MX64_SETCC(Immediate cmp_type = COMPARE_GT, gt)
 }
 
 ;; Alternative Syntax Experiments:
