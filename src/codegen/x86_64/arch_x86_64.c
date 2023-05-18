@@ -3049,33 +3049,13 @@ void codegen_emit_x86_64(CodegenContext *context) {
     print_mir_function(f);
   }
 
+  print("================ ISel ================\n");
+
   // TODO: Either embed x86_64 isel or somehow make this path knowable (i.e. via install).
   const char isel_filepath[] = "src/codegen/x86_64/arch_x86_64.isel";
   ISelPatterns patterns =  isel_parse_file(isel_filepath);
 
-  foreach (ISelPattern, pattern, patterns) {
-    print("\nmatch\n");
-    foreach_ptr (MIRInstruction *, inst, pattern->input) {
-      print("%s(", mir_x86_64_opcode_mnemonic(inst->opcode));
-      FOREACH_MIR_OPERAND(inst, op) {
-        isel_print_mir_operand(op);
-        if (op != opbase + inst->operand_count - 1) print(", ");
-      }
-      print(")\n");
-    }
-    print("emit {\n");
-    foreach_ptr (MIRInstruction *, inst, pattern->output) {
-      print("  %s(", mir_x86_64_opcode_mnemonic(inst->opcode));
-      FOREACH_MIR_OPERAND(inst, op) {
-        isel_print_mir_operand(op);
-        if (op != opbase + inst->operand_count - 1) print(", ");
-      }
-      print(")\n");
-    }
-    print("}\n");
-  }
-
-  print("================ ISel ================\n");
+  //isel_print_patterns(&patterns, mir_x86_64_opcode_mnemonic);
 
   isel_do_selection(machine_instructions_from_ir, patterns);
 

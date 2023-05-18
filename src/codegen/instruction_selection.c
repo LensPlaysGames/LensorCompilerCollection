@@ -617,9 +617,9 @@ static MIROperand isel_parse_operand(ISelParser *p) {
       isel_env_add_operand_reference(p->local, p->tok.text.data, p->pattern_instruction_index, p->operand_index);
 
       // DEBUG
-      print("Bound \"%s\" to new operand\n", p->tok.text.data);
-      ISelEnvironmentEntry *entry = isel_env_entry(p->local, p->tok.text.data);
-      isel_env_print_entry(entry);
+      //print("Bound \"%s\" to new operand\n", p->tok.text.data);
+      //ISelEnvironmentEntry *entry = isel_env_entry(p->local, p->tok.text.data);
+      //isel_env_print_entry(entry);
 
       // Yeet identifier
       isel_next_tok(p);
@@ -706,9 +706,9 @@ static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
     isel_env_add_instruction_reference(p->local, p->tok.text.data, p->pattern_instruction_index);
 
     // DEBUG
-    print("Bound \"%s\" to new instruction\n", p->tok.text.data);
-    ISelEnvironmentEntry *entry = isel_env_entry(p->local, p->tok.text.data);
-    isel_env_print_entry(entry);
+    //print("Bound \"%s\" to new instruction\n", p->tok.text.data);
+    //ISelEnvironmentEntry *entry = isel_env_entry(p->local, p->tok.text.data);
+    //isel_env_print_entry(entry);
 
     isel_next_tok(p);
   }
@@ -750,7 +750,6 @@ static ISelPattern isel_parse_match(ISelParser *p) {
   p->pattern_instruction_index = 0;
   while (p->tok.kind != TOKEN_KW_EMIT) {
     if (p->tok.kind == TOKEN_EOF) ICE("ISel reached EOF while parsing input pattern instructions of match definition");
-    print("Instruction index %u\n", p->pattern_instruction_index);
     MIRInstruction *inst = isel_parse_inst_spec(p);
     vector_push(out.input, inst);
     ++p->pattern_instruction_index;
@@ -1009,13 +1008,8 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
 
         MIRInstruction *inst = bb->instructions.data[instructions_handled];
 
-        print_mir_instruction(inst);
-
         vector_push(instructions, inst);
       }
-
-      print("|");
-      print_mir_instruction(instructions.data[0]);
 
       bool matched = false;
       foreach (ISelPattern, pattern, patterns) {
@@ -1127,5 +1121,33 @@ void isel_print_mir_operand(MIROperand *operand) {
   case MIR_OP_ANY:
     UNREACHABLE();
     break;
+  }
+}
+
+void isel_print_pattern(ISelPattern *pattern, OpcodeMnemonicFunction opcode_mnemonic) {
+  print("\nmatch\n");
+  foreach_ptr (MIRInstruction *, inst, pattern->input) {
+    print("%s(", opcode_mnemonic(inst->opcode));
+    FOREACH_MIR_OPERAND(inst, op) {
+      isel_print_mir_operand(op);
+      if (op != opbase + inst->operand_count - 1) print(", ");
+    }
+    print(")\n");
+  }
+  print("emit {\n");
+  foreach_ptr (MIRInstruction *, inst, pattern->output) {
+    print("  %s(", opcode_mnemonic(inst->opcode));
+    FOREACH_MIR_OPERAND(inst, op) {
+      isel_print_mir_operand(op);
+      if (op != opbase + inst->operand_count - 1) print(", ");
+    }
+    print(")\n");
+  }
+  print("}\n");
+}
+
+void isel_print_patterns(ISelPatterns *patterns, OpcodeMnemonicFunction opcode_mnemonic) {
+  foreach (ISelPattern, pattern, *patterns) {
+    isel_print_pattern(pattern, opcode_mnemonic);
   }
 }
