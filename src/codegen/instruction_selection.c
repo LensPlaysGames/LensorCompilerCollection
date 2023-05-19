@@ -1033,7 +1033,9 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
           foreach_index (i, pattern->output) {
             MIRInstruction *pattern_inst = pattern->output.data[i];
             MIRInstruction *out = mir_makecopy(pattern_inst);
-            out->reg = last_input_inst->reg;
+            if (i == pattern->output.size - 1)
+              out->reg = last_input_inst->reg;
+            else out->reg = MIR_ARCH_START + f->inst_count++;
             out->origin = last_input_inst->origin;
             out->block = bb;
 
