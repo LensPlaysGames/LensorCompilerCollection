@@ -30,6 +30,7 @@ MIROperand mir_op_reference(MIRInstruction *inst) {
   out.kind = MIR_OP_REGISTER;
   while (inst->lowered) inst = inst->lowered;
   out.value.reg.value = inst->reg;
+  if (inst->origin) out.value.reg.size = (uint16_t)type_sizeof(inst->origin->type);
   return out;
 }
 
@@ -122,8 +123,7 @@ MIROperand mir_op_reference_ir(MIRFunction *function, IRInstruction *inst) {
     if (it->kind == IR_IMMEDIATE) return mir_op_immediate((i64)it->imm);
     if (it->kind == IR_ALLOCA) return mir_op_local_ref_ir(function, &it->alloca);
     if (it->kind == IR_STATIC_REF) return mir_op_static_ref(it);
-    // FIXME: What size is an IR register?
-    if (it->kind == IR_REGISTER) return mir_op_register(it->result, 0, false);
+    if (it->kind == IR_REGISTER) return mir_op_register(it->result, (uint16_t)type_sizeof(it->type), false);
   }
   if (!inst->machine_inst) {
     ir_femit_instruction(stdout, inst);
@@ -652,11 +652,17 @@ void print_mir_operand(MIRFunction *function, MIROperand *op) {
   STATIC_ASSERT(MIR_OP_COUNT == 8, "Exhaustive handling of MIR operand kinds");
   switch (op->kind) {
   case MIR_OP_REGISTER: {
-    // TODO: Maybe print size?
+    // Print register name
     if (op->value.reg.value >= MIR_ARCH_START)
-      print("%34v%u%m", (unsigned)op->value.reg.value - MIR_ARCH_START);
-    else print("%32r%u%m", (unsigned)op->value.reg.value);
-    if (op->value.reg.defining_use) print(" DEF");
+      print("%34v%u", (unsigned)op->value.reg.value - MIR_ARCH_START);
+    else print("%32r%u", (unsigned)op->value.reg.value);
+
+    // Print register size
+    print(" %37%Z%m", op->value.reg.size);
+
+    // Print register is defining use
+    if (op->value.reg.defining_use) print(" %35DEF%m");
+
   } break;
   case MIR_OP_IMMEDIATE: {
     print("%35%I%m", op->value.imm);

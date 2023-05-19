@@ -46,12 +46,12 @@ match MIR_RETURN ret()
 emit MX64_RET()
 match MIR_RETURN ret(Register reg)
 emit {
-  MX64_MOV(reg, Register out = rax) ;; TODO: Calling convention...
+  MX64_MOV(reg, ret)
   MX64_RET()
 }
 match MIR_RETURN ret(Immediate imm)
 emit {
-  MX64_MOV(imm, Register out = rax) ;; TODO: Calling convention...
+  MX64_MOV(imm, ret)
   MX64_RET()
 }
 
