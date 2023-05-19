@@ -168,16 +168,20 @@ static void collect_interferences_from_block
   /// Collect interferences for instructions in this block.
   foreach_ptr_rev (MIRInstruction*, inst, b->instructions) {
 
-    MIROperand *base = NULL;
-    if (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
-      base = inst->operands.arr;
-    else base = inst->operands.vec.data;
+    FOREACH_MIR_OPERAND(inst, op) {
+      DEBUG("operand:\n");
+      foreach_index (idx, *live_vals) {
+        VReg live_val = live_vals->data[idx];
+        DEBUG("  %Z (%Z) is live\n", live_val.value - MIR_ARCH_START, idx);
+      }
 
-    for (int j = 0; j < inst->operand_count; ++j) {
-      MIROperand *op = base + j;
       if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START && op->value.reg.defining_use) {
-        DEBUG("  Defining use, removing live value %Z\n", op->value.reg.value);
-        vreg_vector_remove_element_unordered(live_vals, op->value.reg.value);
+        DEBUG("  Defining use, removing live value %Z\n", op->value.reg.value - MIR_ARCH_START);
+        vreg_vector_remove_element(live_vals, op->value.reg.value);
+        foreach_index (idx, *live_vals) {
+          VReg live_val = live_vals->data[idx];
+          DEBUG("++%Z (%Z) is live\n", live_val.value - MIR_ARCH_START, idx);
+        }
       }
     }
 
@@ -841,12 +845,7 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
 
     foreach_ptr (MIRBlock*, bb, f->blocks) {
       foreach_ptr (MIRInstruction*, inst, bb->instructions) {
-        MIROperand *base = NULL;
-        if (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
-          base = inst->operands.arr;
-        else base = inst->operands.vec.data;
-        for (size_t j = 0; j < inst->operand_count; ++j) {
-          MIROperand *op = base + j;
+        FOREACH_MIR_OPERAND(inst, op) {
           if (op->kind == MIR_OP_REGISTER && op->value.reg.value == vreg.value) {
             op->value.reg.value = color;
             op->value.reg.size = (uint16_t)vreg.size;
@@ -855,7 +854,7 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
       }
     }
 
-    print("Vreg v%Z mapped to HWreg r%Z\n", vreg.value - MIR_ARCH_START, (usz)color);
+    DEBUG("Vreg v%Z mapped to HWreg r%Z\n", vreg.value - MIR_ARCH_START, (usz)color);
   }
 
   DEBUG("After coloring\n");
