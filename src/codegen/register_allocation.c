@@ -169,19 +169,23 @@ static void collect_interferences_from_block
   foreach_ptr_rev (MIRInstruction*, inst, b->instructions) {
 
     FOREACH_MIR_OPERAND(inst, op) {
-      DEBUG("operand:\n");
+#ifdef DEBUG_RA
+      print("operand:\n");
       foreach_index (idx, *live_vals) {
         VReg live_val = live_vals->data[idx];
-        DEBUG("  %Z (%Z) is live\n", live_val.value - MIR_ARCH_START, idx);
+        print("  %Z (%Z) is live\n", live_val.value - MIR_ARCH_START, idx);
       }
+#endif
 
       if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START && op->value.reg.defining_use) {
-        DEBUG("  Defining use, removing live value %Z\n", op->value.reg.value - MIR_ARCH_START);
         vreg_vector_remove_element(live_vals, op->value.reg.value);
+#ifdef DEBUG_RA
+        print("  Defining use, removing live value %Z\n", op->value.reg.value - MIR_ARCH_START);
         foreach_index (idx, *live_vals) {
           VReg live_val = live_vals->data[idx];
-          DEBUG("++%Z (%Z) is live\n", live_val.value - MIR_ARCH_START, idx);
+          print("++%Z (%Z) is live\n", live_val.value - MIR_ARCH_START, idx);
         }
+#endif
       }
     }
 
