@@ -1820,6 +1820,31 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           mcode_none(context, MX64_RET);
         } break;
 
+        case MX64_SHL: FALLTHROUGH;
+        case MX64_SAR: FALLTHROUGH;
+        case MX64_SHR: {
+          if (mir_operand_kinds_match(instruction, 1, MIR_OP_REGISTER)) {
+            MIROperand *reg = mir_get_op(instruction, 0);
+            mcode_reg(context, instruction->opcode, reg->value.reg.value, reg->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break;
+
+        case MX64_POP: FALLTHROUGH;
+        case MX64_PUSH: {
+          if (mir_operand_kinds_match(instruction, 1, MIR_OP_REGISTER)) {
+            MIROperand *reg = mir_get_op(instruction, 0);
+            mcode_reg(context, instruction->opcode, reg->value.reg.value, reg->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break;
+
         default: {
           print("Unhandled opcode (mcode): %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
         } break;

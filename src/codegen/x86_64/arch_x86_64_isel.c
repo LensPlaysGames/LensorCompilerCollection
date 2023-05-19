@@ -373,4 +373,34 @@ void isel_x86_64_env(ISelEnvironment *env) {
     isel_env_add_register(env, rname8, (VReg){CAT(REG_, reg), r8});
   FOR_ALL_X86_64_REGISTERS(ADD_HWREG)
 #undef ADD_HWREG
+  isel_env_add_integer(env, "JUMP_TYPE_A", JUMP_TYPE_A);
+  isel_env_add_integer(env, "JUMP_TYPE_AE", JUMP_TYPE_AE);
+  isel_env_add_integer(env, "JUMP_TYPE_B", JUMP_TYPE_B);
+  isel_env_add_integer(env, "JUMP_TYPE_BE", JUMP_TYPE_BE);
+  isel_env_add_integer(env, "JUMP_TYPE_C", JUMP_TYPE_C);
+  isel_env_add_integer(env, "JUMP_TYPE_Z", JUMP_TYPE_Z);
+  isel_env_add_integer(env, "JUMP_TYPE_E", JUMP_TYPE_E);
+  isel_env_add_integer(env, "JUMP_TYPE_G", JUMP_TYPE_G);
+  isel_env_add_integer(env, "JUMP_TYPE_GE", JUMP_TYPE_GE);
+  isel_env_add_integer(env, "JUMP_TYPE_L", JUMP_TYPE_L);
+  isel_env_add_integer(env, "JUMP_TYPE_LE", JUMP_TYPE_LE);
+  isel_env_add_integer(env, "JUMP_TYPE_NA", JUMP_TYPE_NA);
+  isel_env_add_integer(env, "JUMP_TYPE_NAE", JUMP_TYPE_NAE);
+  isel_env_add_integer(env, "JUMP_TYPE_NB", JUMP_TYPE_NB);
+  isel_env_add_integer(env, "JUMP_TYPE_NBE", JUMP_TYPE_NBE);
+  isel_env_add_integer(env, "JUMP_TYPE_NC", JUMP_TYPE_NC);
+  isel_env_add_integer(env, "JUMP_TYPE_NE", JUMP_TYPE_NE);
+  isel_env_add_integer(env, "JUMP_TYPE_NZ", JUMP_TYPE_NZ);
+  isel_env_add_integer(env, "JUMP_TYPE_NG", JUMP_TYPE_NG);
+  isel_env_add_integer(env, "JUMP_TYPE_NGE", JUMP_TYPE_NGE);
+  isel_env_add_integer(env, "JUMP_TYPE_NL", JUMP_TYPE_NL);
+  isel_env_add_integer(env, "JUMP_TYPE_NLE", JUMP_TYPE_NLE);
+  isel_env_add_integer(env, "JUMP_TYPE_NO", JUMP_TYPE_NO);
+  isel_env_add_integer(env, "JUMP_TYPE_NP", JUMP_TYPE_NP);
+  isel_env_add_integer(env, "JUMP_TYPE_NS", JUMP_TYPE_NS);
+  isel_env_add_integer(env, "JUMP_TYPE_O", JUMP_TYPE_O);
+  isel_env_add_integer(env, "JUMP_TYPE_P", JUMP_TYPE_P);
+  isel_env_add_integer(env, "JUMP_TYPE_PE", JUMP_TYPE_PE);
+  isel_env_add_integer(env, "JUMP_TYPE_PO", JUMP_TYPE_PO);
+  isel_env_add_integer(env, "JUMP_TYPE_S", JUMP_TYPE_S);
 }
