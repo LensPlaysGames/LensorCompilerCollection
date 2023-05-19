@@ -50,21 +50,6 @@ typedef IRInstruction* MIROperandStatic;
 
 typedef unsigned int MIRRegister;
 
-typedef struct MIRValue_x86_64 {
-  uint16_t instruction;
-  uint8_t instruction_form;
-  uint8_t reg_src_sz;
-  uint8_t reg_src;
-  uint8_t reg_dst_sz;
-  uint8_t reg_dst;
-  uint8_t reg_addr;
-  int64_t immediate;
-  int64_t offset;
-  const char *name;
-  IRBlock *ir_block;
-  IRFunction *ir_function;
-} MIRValue_x86_64;
-
 typedef struct MIROperand {
   MIROperandKind kind;
   union {
@@ -104,11 +89,6 @@ typedef struct MIRInstruction {
     MIROperand arr[MIR_OPERAND_SSO_THRESHOLD];
     Vector(MIROperand) vec;
   } operands;
-
-  // Architecture-specific values.
-  union {
-    MIRValue_x86_64 x64;
-  };
 
   MIRBlock *block;
 
