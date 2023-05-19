@@ -180,28 +180,44 @@ MIRInstruction *mir_makecopy(MIRInstruction *original) {
 
 /// Function is only needed to update instruction count. May pass NULL.
 void mir_push_with_reg_into_block(MIRFunction *f, MIRBlock *block, MIRInstruction *mi, MIRRegister reg) {
+  DBGASSERT(f, "Invalid argument");
+  DBGASSERT(block, "Invalid argument");
+  DBGASSERT(mi, "Invalid argument");
   vector_push(block->instructions, mi);
   mi->block = block;
   mi->reg = reg;
   if (f) f->inst_count++;
 }
+void mir_insert_instruction_with_reg(MIRBlock *bb, MIRInstruction *mi, usz index, MIRRegister reg) {
+  DBGASSERT(bb, "Invalid argument");
+  DBGASSERT(mi, "Invalid argument");
+  vector_insert(bb->instructions, bb->instructions.data + index, mi);
+  mi->block = bb;
+  mi->reg = reg;
+  if (bb->function) ++bb->function->inst_count;
+}
+void mir_remove_instruction(MIRInstruction *mi) {
+  ASSERT(mi, "Invalid argument");
+  ASSERT(mi->block, "Cannot remove MIR instruction that has no block reference");
+  vector_remove_element(mi->block->instructions, mi);
+  if (mi->block->function) --mi->block->function->inst_count;
+  mi->block = NULL;
+}
+void mir_insert_instruction(MIRBlock *bb, MIRInstruction *mi, usz index) {
+  ASSERT(bb, "Invalid argument");
+  if (bb->function) mir_insert_instruction_with_reg(bb, mi, index, bb->function->inst_count + (size_t)MIR_ARCH_START);
+  else mir_insert_instruction_with_reg(bb, mi, index, mi->reg);
+}
 void mir_prepend_instruction(MIRFunction *f, MIRInstruction *mi) {
   ASSERT(f, "Invalid argument");
   ASSERT(f->blocks.size, "Function must have at least one block in order to prepend an instruction to it");
-  MIRBlock *bb = vector_front(f->blocks);
-  vector_insert(bb->instructions, bb->instructions.data, mi);
-  mi->block = bb;
-  mi->reg = f->inst_count + (size_t)MIR_ARCH_START;
-  f->inst_count++;
+  mir_insert_instruction(vector_front(f->blocks), mi, 0);
 }
 void mir_append_instruction(MIRFunction *f, MIRInstruction *mi) {
   ASSERT(f, "Invalid argument");
   ASSERT(f->blocks.size, "Function must have at least one block in order to append an instruction to it");
   MIRBlock *bb = vector_back(f->blocks);
-  vector_insert(bb->instructions, bb->instructions.data + bb->instructions.size - 1, mi);
-  mi->block = vector_back(f->blocks);
-  mi->reg = f->inst_count + (size_t)MIR_ARCH_START;
-  f->inst_count++;
+  mir_insert_instruction(bb, mi, bb->instructions.size - 1);
 }
 
 static void mir_push_into_block(MIRFunction *f, MIRBlock *block, MIRInstruction *mi) {
