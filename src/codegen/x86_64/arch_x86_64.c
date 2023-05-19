@@ -3178,15 +3178,45 @@ void codegen_emit_x86_64(CodegenContext *context) {
     allocate_registers(f, &desc);
   }
 
-  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
-    print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
+  // It's not necessary at all, but doing peephole opt here would
+  // be a great idea, I think. Things like removing reg-to-reg moves when
+  // they are the same.
+  foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
+    foreach_ptr (MIRBlock*, block, function->blocks) {
+
+      MIRInstructionVector instructions_to_remove = {0};
+
+      foreach_ptr (MIRInstruction*, instruction, block->instructions) {
+        switch (instruction->opcode) {
+        default: break;
+
+        case MX64_MOV: {
+          // MOV(REG x, REG x) -> NOP
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER) &&
+              mir_get_op(instruction, 0)->value.reg.value == mir_get_op(instruction, 1)->value.reg.value &&
+              mir_get_op(instruction, 0)->value.reg.size == mir_get_op(instruction, 1)->value.reg.size) {
+            vector_push(instructions_to_remove, instruction);
+          }
+        } break;
+        } // switch (instruction->opcode)
+
+      }
+
+      foreach_ptr (MIRInstruction*, instruction, instructions_to_remove) {
+        mir_remove_instruction(instruction);
+      }
+      vector_delete(instructions_to_remove);
+
+    }
+
+    print_mir_function_with_mnemonic(function, mir_x86_64_opcode_mnemonic);
   }
 
   // EMIT ASSEMBLY CODE
   { // Emit entry
     fprint(context->code,
            "%s"
-         ".section .text\n",
+           ".section .text\n",
            context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
 
     fprint(context->code, "\n");
