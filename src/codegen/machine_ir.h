@@ -2,10 +2,12 @@
 #define MACHINE_IR_H
 
 #include <codegen/codegen_forward.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <vector.h>
 #include <utils.h>
+
 
 #define DEFINE_MIR_INSTRUCTION_TYPE(type, ...) CAT(MIR_, type),
 typedef enum MIROpcodeCommon {
@@ -33,8 +35,8 @@ typedef enum MIROperandKind {
 } MIROperandKind;
 
 typedef struct MIROperandRegister {
-  uint32_t value;
-  uint16_t size;
+  usz value;
+  usz size;
 
   bool defining_use;
 } MIROperandRegister;
