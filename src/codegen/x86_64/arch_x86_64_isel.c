@@ -273,63 +273,6 @@ static RegisterDescriptor codegen_comparison
   return result;
 }
 
-enum StackFrameKind {
-  FRAME_FULL,
-  FRAME_MINIMAL,
-  FRAME_NONE,
-};
-
-static enum StackFrameKind stack_frame_kind(IRFunction *f) {
-  /// Always emit a frame if we’re not optimising.
-  if (!optimise) return FRAME_FULL;
-
-  /// Emit a frame if we have local variables.
-  if (f->locals_total_size) return FRAME_FULL;
-
-  /// We need *some* sort of prologue if we don’t use the stack but
-  /// still call other functions.
-  if (!f->attr_leaf) return FRAME_MINIMAL;
-
-  /// Otherwise, no frame is required.
-  return FRAME_NONE;
-}
-
-/// Emit the function prologue.
-static void codegen_prologue(CodegenContext *cg_context, IRFunction *f) {
-  enum StackFrameKind frame_kind = stack_frame_kind(f);
-  switch (frame_kind) {
-    case FRAME_NONE: break;
-
-    case FRAME_FULL: {
-      append_mir(cg_context->mir, mir_reg(I_PUSH, REG_RBP, r64), NULL);
-      append_mir(cg_context->mir, mir_reg_to_reg(I_MOV, REG_RSP, r64, REG_RBP, r64), NULL);
-      if (!optimise || f->locals_total_size)
-        append_mir(cg_context->mir, mir_imm_to_reg(I_SUB, (int64_t)f->locals_total_size, REG_RSP, r64), NULL);
-    } break;
-
-    case FRAME_MINIMAL: {
-      append_mir(cg_context->mir, mir_reg(I_PUSH, REG_RBP, r64), NULL);
-    } break;
-  }
-}
-
-/// Emit the function epilogue.
-static void codegen_epilogue(CodegenContext *cg_context, IRFunction *f) {
-  enum StackFrameKind frame_kind = stack_frame_kind(f);
-  switch (frame_kind) {
-    case FRAME_NONE: break;
-
-    case FRAME_FULL: {
-      append_mir(cg_context->mir, mir_reg_to_reg(I_MOV, REG_RBP, r64, REG_RSP, r64), NULL);
-      append_mir(cg_context->mir, mir_reg(I_POP, REG_RBP, r64), NULL);
-    } break;
-
-    case FRAME_MINIMAL: {
-      append_mir(cg_context->mir, mir_reg(I_POP, REG_RBP, r64), NULL);
-    } break;
-  }
-}
-
 static void divmod(CodegenContext *context, IRInstruction *inst) {
   ASSERT(inst->kind == IR_DIV || inst->kind == IR_MOD, "divmod must be passed a div or mod instruction!");
   // Dividend of div/mod goes in rdx:rax; divisor must not be in those registers.
@@ -469,7 +412,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     // Tail call.
     if (inst->call.tail_call) {
       // Restore the frame pointer if we have one.
-      codegen_epilogue(context, inst->parent_block->function);
+      //codegen_epilogue(context, inst->parent_block->function);
       if (inst->call.is_indirect)
         append_mir(context->mir, mir_reg(I_JMP, inst->call.callee_instruction->result, r64), inst);
       else append_mir(context->mir, mir_name(I_JMP, inst->call.callee_function->name.data), inst);
@@ -554,7 +497,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
       if (inst->parent_block->function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i))
         append_mir(context->mir, mir_reg(I_POP, i, r64), inst);
 
-    codegen_epilogue(context, inst->parent_block->function);
+    //codegen_epilogue(context, inst->parent_block->function);
     append_mir(context->mir, mir_none(I_RET), inst);
     if (optimise && inst->parent_block) inst->parent_block->done = true;
     break;
@@ -727,7 +670,7 @@ static void emit_block(CodegenContext *context, IRBlock *block) {
 }
 
 static void emit_function(CodegenContext *context, IRFunction *function) {
-  codegen_prologue(context, function);
+  //codegen_prologue(context, function);
   // Save all callee-saved registers in use in the function.
   for (Register i = 1; i < sizeof(function->registers_in_use) * 8; ++i) {
     if ((size_t)function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i))

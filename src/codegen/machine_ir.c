@@ -185,6 +185,24 @@ void mir_push_with_reg_into_block(MIRFunction *f, MIRBlock *block, MIRInstructio
   mi->reg = reg;
   if (f) f->inst_count++;
 }
+void mir_prepend_instruction(MIRFunction *f, MIRInstruction *mi) {
+  ASSERT(f, "Invalid argument");
+  ASSERT(f->blocks.size, "Function must have at least one block in order to prepend an instruction to it");
+  MIRBlock *bb = vector_front(f->blocks);
+  vector_insert(bb->instructions, bb->instructions.data, mi);
+  mi->block = bb;
+  mi->reg = f->inst_count + (size_t)MIR_ARCH_START;
+  f->inst_count++;
+}
+void mir_append_instruction(MIRFunction *f, MIRInstruction *mi) {
+  ASSERT(f, "Invalid argument");
+  ASSERT(f->blocks.size, "Function must have at least one block in order to append an instruction to it");
+  MIRBlock *bb = vector_back(f->blocks);
+  vector_insert(bb->instructions, bb->instructions.data + bb->instructions.size - 1, mi);
+  mi->block = vector_back(f->blocks);
+  mi->reg = f->inst_count + (size_t)MIR_ARCH_START;
+  f->inst_count++;
+}
 
 static void mir_push_into_block(MIRFunction *f, MIRBlock *block, MIRInstruction *mi) {
   if (mi->origin && mi->origin->result)
