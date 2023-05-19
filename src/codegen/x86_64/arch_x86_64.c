@@ -33,6 +33,17 @@ size_t argument_register_count = 0;
 
 span unreferenced_block_name = literal_span_raw("");
 
+NODISCARD static bool is_caller_saved(Register r) {
+  for (size_t i = 0; i < caller_saved_register_count; ++i) {
+    if (caller_saved_registers[i] == r) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+NODISCARD static bool is_callee_saved(Register r) { return !is_caller_saved(r); }
+
 // Maximum size of parameter that can go in a register vs on the stack.
 // TODO: Has to do with calling convention?
 static const usz max_register_size = 8;
@@ -3088,6 +3099,15 @@ void codegen_emit_x86_64(CodegenContext *context) {
   foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
     print_mir_function(f);
 
+    // Restore callee-saved registers used in the function.
+    for (Register i = sizeof(f->origin->registers_in_use) * 8 - 1; i > 0; --i) {
+      if (f->origin->registers_in_use & ((size_t)1 << i) && is_callee_saved(i)) {
+        MIRInstruction *restore = mir_makenew(MX64_POP);
+        mir_add_op(restore, mir_op_register(i, r64, false));
+        mir_append_instruction(f, restore);
+      }
+    }
+
     enum StackFrameKind frame_kind = stack_frame_kind(f->origin);
     switch (frame_kind) {
     case FRAME_NONE: break;
@@ -3100,7 +3120,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
       MIRInstruction *save_sp = mir_makenew(MX64_MOV);
       mir_add_op(save_sp, mir_op_register(REG_RSP, r64, false));
       mir_add_op(save_sp, mir_op_register(REG_RBP, r64, false));
-      if (!optimise || f->origin->locals_total_size) {
+      if (f->origin->locals_total_size) {
         // SUB $f->locals_total_size, %RSP
         MIRInstruction *locals = mir_makenew(MX64_SUB);
         mir_add_op(locals, mir_op_immediate((int64_t)f->origin->locals_total_size));
