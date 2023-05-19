@@ -42,6 +42,34 @@ ISA: x86_64
 ;; ZERO  == MIR_OP_IMMEDIATE with value of 0
 ;; VREG  == MIR_OP_REGISTER with new virtual register value
 
+match MIR_IMMEDIATE i1(Immediate imm)
+emit MX64_MOV(imm, i1)
+
+match MIR_NOT i1(Register r)
+emit {
+  MX64_NOT(r)
+  MX64_MOV(r, i1)
+}
+
+match MIR_ZERO_EXTEND i1(Immediate i)
+emit MX64_MOVZX(i, i1)
+match MIR_ZERO_EXTEND i1(Register r)
+emit MX64_MOVZX(r, i1)
+match MIR_SIGN_EXTEND i1(Immediate i)
+emit MX64_MOVSX(i, i1)
+match MIR_SIGN_EXTEND i1(Register r)
+emit MX64_MOVSX(r, i1)
+
+;; TODO MIR_TRUNCATE (emit different things based on result register size or smth)
+
+;; TODO MIR_BITCAST (emit nothing)
+
+match MIR_COPY i1(Register src)
+emit MX64_MOV(src, i1)
+
+match MIR_BRANCH br(Block b)
+emit MX64_JMP(b)
+
 match MIR_RETURN ret()
 emit MX64_RET()
 match MIR_RETURN ret(Register reg)
@@ -73,11 +101,22 @@ emit {
   MX64_ADD(imm, reg)
   MX64_MOV(reg, i1)
 }
+
 match
-MIR_ADD i1(Immediate imm, Register reg)
+MIR_ADD i1(Immediate lhs, Immediate rhs)
 emit {
-  MX64_ADD(imm, reg)
+  MX64_MOV(lhs, i1)
+  MX64_SUB(rhs, i1)
+}
+match MIR_SUB i1(Register reg, Immediate imm)
+emit {
+  MX64_SUB(imm, reg)
   MX64_MOV(reg, i1)
+}
+match MIR_SUB i1(Immediate imm, Register reg)
+emit {
+  MX64_MOV(imm, i1)
+  MX64_SUB(reg, i1)
 }
 
 ;; COMPARISON
