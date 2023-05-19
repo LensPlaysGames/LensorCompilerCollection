@@ -3072,6 +3072,10 @@ void codegen_emit_x86_64(CodegenContext *context) {
     allocate_registers(f, &desc);
   }
 
+  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
+    print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
+  }
+
   // EMIT ASSEMBLY CODE
   { // Emit entry
     fprint(context->code,
