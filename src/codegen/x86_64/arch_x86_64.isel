@@ -1,5 +1,8 @@
 ISA: x86_64
 
+;;;; PRELIMINARY COMMENTARY
+;; NOTE: Search `;;;;` at beginning of line for section annotations
+
 ;; Comment
 
 ;; At top of every isel file is metadata. One definition per line. Ends
@@ -40,15 +43,22 @@ ISA: x86_64
 
 ;; TODO: Special Operands:
 ;; ZERO  == MIR_OP_IMMEDIATE with value of 0
-;; VREG  == MIR_OP_REGISTER with new virtual register value
+;; VREG  == MIR_OP_REGISTER with new virtual register value (TODO: is this actually needed/allowed?)
 
 ;; TODO: Figure out how to handle opcodes that should never show up here
 ;; MIR_PHI
 ;; MIR_REGISTER
+;; MIR_PARAMETER
 ;; MIR_LIT_INTEGER
 ;; MIR_LIT_STRING
 
-;; TODO: MIR_CALL... do it in code because it's complicated? *Where* in code?
+;; TODO: Write patterns for these opcodes
+;; MIR_STORE
+;; MIR_STATIC_REFERENCE
+;; MIR_FUNCTION_REFERENCE
+;; MIR_TRUNCATE (emit different things based on result register size or smth)
+;; MIR_BITCAST (emit nothing)
+;; MIR_CALL... do it in code because it's complicated? *Where* in code?
 
 match MIR_IMMEDIATE i1(Immediate imm)
 emit MX64_MOV(imm, i1)
@@ -64,12 +74,19 @@ emit MX64_MOVZX(r, i1)
 match MIR_SIGN_EXTEND i1(Register r)
 emit MX64_MOVSX(r, i1)
 
-;; TODO MIR_TRUNCATE (emit different things based on result register size or smth)
+match MIR_AND i1(Register value, Immediate mask)
+emit {
+  MX64_AND(mask, value)
+  MX64_MOV(value, i1)
+}
 
-;; TODO MIR_BITCAST (emit nothing)
+match MIR_ALLOCA i1(Local object)
+emit MX64_LEA(Register bp = rbp, object, i1)
 
 match MIR_COPY i1(Register src)
 emit MX64_MOV(src, i1)
+
+;;;; CONTROL FLOW
 
 match MIR_BRANCH br(Block b)
 emit MX64_JMP(b)
@@ -93,6 +110,8 @@ emit {
   MX64_MOV(imm, ret)
   MX64_RET()
 }
+
+;;;; ARITHMETIC
 
 match
 MIR_ADD i1(Immediate lhs, Immediate rhs)
@@ -161,7 +180,50 @@ emit {
   MX64_SUB(reg, i1)
 }
 
-;; BITWISE
+;;;; BITWISE
+
+match MIR_AND i1(Immediate value, Immediate mask)
+emit {
+  MX64_MOV(value, i1)
+  MX64_AND(mask, i1)
+}
+match MIR_AND i1(Immediate value, Register mask)
+emit {
+  MX64_MOV(value, i1)
+  MX64_AND(mask, i1)
+}
+match MIR_AND i1(Register value, Register mask)
+emit {
+  MX64_AND(mask, value)
+  MX64_MOV(value, i1)
+}
+match MIR_AND i1(Register value, Immediate mask)
+emit {
+  MX64_AND(mask, value)
+  MX64_MOV(value, i1)
+}
+
+match MIR_OR i1(Immediate value, Immediate bits)
+emit {
+  MX64_MOV(value, i1)
+  MX64_OR(bits, i1)
+}
+match MIR_OR i1(Immediate value, Register bits)
+emit {
+  MX64_MOV(value, i1)
+  MX64_OR(bits, i1)
+}
+match MIR_OR i1(Register value, Register bits)
+emit {
+  MX64_OR(bits, value)
+  MX64_MOV(value, i1)
+}
+match MIR_OR i1(Register value, Immediate bits)
+emit {
+  MX64_OR(bits, value)
+  MX64_MOV(value, i1)
+}
+
 match MIR_SHL i1(Immediate value, Immediate shift_amount)
 emit {
   MX64_MOV(shift_amount, Register = ecx)
@@ -174,6 +236,7 @@ emit {
   MX64_SAL(value)
   MX64_MOV(value, i1)
 }
+
 match MIR_SHR i1(Immediate value, Immediate shift_amount)
 emit {
   MX64_MOV(shift_amount, Register = ecx)
@@ -186,6 +249,7 @@ emit {
   MX64_SHR(value)
   MX64_MOV(value, i1)
 }
+
 match MIR_SAR i1(Immediate value, Immediate shift_amount)
 emit {
   MX64_MOV(shift_amount, Register = ecx)
@@ -199,15 +263,7 @@ emit {
   MX64_MOV(value, i1)
 }
 
-;; COMPARISON
-;; TODO: Not just LT, do one for each comparison type
-match
-MIR_LT cmp(Register lhs, Register rhs),
-MIR_BRANCH branch(Block dest)
-emit {
-  MX64_CMP(lhs, rhs)
-  MX64_JCC(Immediate cmp_type = COMPARE_LT, dest)
-}
+;;;; COMPARISON
 match
 MIR_LT lt(Register lhs, Register rhs)
 emit {
@@ -216,8 +272,48 @@ emit {
   MX64_MOV(Immediate i = 0, lt)
   MX64_SETCC(Immediate cmp_type = COMPARE_LT, lt)
 }
+match
+MIR_GT gt(Register lhs, Register rhs)
+emit {
+  MX64_CMP(lhs, rhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, gt)
+  MX64_SETCC(Immediate cmp_type = COMPARE_GT, gt)
+}
+match
+MIR_LE le(Register lhs, Register rhs)
+emit {
+  MX64_CMP(lhs, rhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, le)
+  MX64_SETCC(Immediate cmp_type = COMPARE_LE, le)
+}
+match
+MIR_GE ge(Register lhs, Register rhs)
+emit {
+  MX64_CMP(lhs, rhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, ge)
+  MX64_SETCC(Immediate cmp_type = COMPARE_GE, ge)
+}
+match
+MIR_EQ eq(Register lhs, Register rhs)
+emit {
+  MX64_CMP(lhs, rhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, eq)
+  MX64_SETCC(Immediate cmp_type = COMPARE_GT, eq)
+}
+match
+MIR_NE ne(Register lhs, Register rhs)
+emit {
+  MX64_CMP(lhs, rhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, ne)
+  MX64_SETCC(Immediate cmp_type = COMPARE_NE, ne)
+}
 
-;; Alternative Syntax Experiments:
+;;;; Alternative Syntax Experiments:
 
 ;;match MIR_ADD i1
 ;;  where i1 has Immediate lhs, Immediate rhs
