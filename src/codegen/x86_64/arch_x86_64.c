@@ -2416,6 +2416,27 @@ usz sysv_argument_register_index_x86_64(CodegenContext *context, Type *function,
   return argument_register_offset;
 }
 
+enum StackFrameKind {
+  FRAME_FULL,
+  FRAME_MINIMAL,
+  FRAME_NONE,
+};
+
+static enum StackFrameKind stack_frame_kind(IRFunction *f) {
+  /// Always emit a frame if we’re not optimising.
+  if (!optimise) return FRAME_FULL;
+
+  /// Emit a frame if we have local variables.
+  if (f->locals_total_size) return FRAME_FULL;
+
+  /// We need *some* sort of prologue if we don’t use the stack but
+  /// still call other functions.
+  if (!f->attr_leaf) return FRAME_MINIMAL;
+
+  /// Otherwise, no frame is required.
+  return FRAME_NONE;
+}
+
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
 
@@ -3066,6 +3087,54 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
     print_mir_function(f);
+
+    enum StackFrameKind frame_kind = stack_frame_kind(f->origin);
+    switch (frame_kind) {
+    case FRAME_NONE: break;
+
+    case FRAME_FULL: {
+      // PUSH %RBP
+      MIRInstruction *save_bp = mir_makenew(MX64_PUSH);
+      mir_add_op(save_bp, mir_op_register(REG_RBP, r64, false));
+      // MOV %RSP, %RBP
+      MIRInstruction *save_sp = mir_makenew(MX64_MOV);
+      mir_add_op(save_sp, mir_op_register(REG_RSP, r64, false));
+      mir_add_op(save_sp, mir_op_register(REG_RBP, r64, false));
+      if (!optimise || f->origin->locals_total_size) {
+        // SUB $f->locals_total_size, %RSP
+        MIRInstruction *locals = mir_makenew(MX64_SUB);
+        mir_add_op(locals, mir_op_immediate((int64_t)f->origin->locals_total_size));
+        mir_add_op(locals, mir_op_register(REG_RSP, r64, false));
+        mir_prepend_instruction(f, locals);
+      }
+
+      // Function entry (backwards because prepending)
+      mir_prepend_instruction(f, save_sp);
+      mir_prepend_instruction(f, save_bp);
+
+      // MOV %RBP, %RSP
+      MIRInstruction *restore_sp = mir_makenew(MX64_MOV);
+      mir_add_op(restore_sp, mir_op_register(REG_RBP, r64, false));
+      mir_add_op(restore_sp, mir_op_register(REG_RSP, r64, false));
+      mir_append_instruction(f, restore_sp);
+      // POP %RBP
+      MIRInstruction *restore_bp = mir_makenew(MX64_POP);
+      mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
+      mir_append_instruction(f, restore_bp);
+    } break;
+
+    case FRAME_MINIMAL: {
+      // PUSH %RBP
+      MIRInstruction *save_bp = mir_makenew(MX64_PUSH);
+      mir_add_op(save_bp, mir_op_register(REG_RBP, r64, false));
+      mir_prepend_instruction(f, save_bp);
+
+      // POP %RBP
+      MIRInstruction *restore_bp = mir_makenew(MX64_POP);
+      mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
+      mir_append_instruction(f, restore_bp);
+    } break;
+    }
   }
 
   print("================ ISel ================\n");

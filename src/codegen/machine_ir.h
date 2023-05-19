@@ -225,6 +225,9 @@ MIROperand *mir_get_op(MIRInstruction *inst, size_t index);
 /// Return a pointer to frame object at operand within function.
 MIRFrameObject *mir_get_frame_object(MIRFunction *function, MIROperandLocal op);
 
+void mir_prepend_instruction(MIRFunction *f, MIRInstruction *mi);
+void mir_append_instruction(MIRFunction *f, MIRInstruction *mi);
+
 void mir_push_with_reg_into_block(MIRFunction *f, MIRBlock *block, MIRInstruction *mi, MIRRegister reg);
 void mir_push_with_reg(MIRFunction *mir, MIRInstruction *mi, MIRRegister reg);
 
