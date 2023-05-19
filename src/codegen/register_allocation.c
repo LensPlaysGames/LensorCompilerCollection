@@ -42,13 +42,13 @@ static bool vreg_vector_contains(VRegVector *vregs, usz vreg_value) {
   return false;
 }
 
-static void vreg_vector_remove_element_unordered(VRegVector *vregs, usz vreg_value) {
-  size_t _index = 0;
-  for (; _index < vregs->size; ++_index) {
-    if (vregs->data[_index].value == vreg_value)
+static void vreg_vector_remove_element(VRegVector *vregs, usz vreg_value) {
+  size_t i = 0;
+  for (; i < vregs->size; ++i) {
+    if (vregs->data[i].value == vreg_value)
       break;
   }
-  if (_index < vregs->size) vector_remove_unordered(*vregs, _index);
+  if (i < vregs->size) vector_remove_unordered(*vregs, i);
 }
 
 /// Return non-zero iff given instruction needs a register.
@@ -192,48 +192,48 @@ static void collect_interferences_from_block
     // Skip instruction if it's vreg is not in vregs.
     if (inst_idx == (usz)-1) {
       DEBUG("Skipping live value setting stuff\n");
-    } else {
+      continue;
+    }
 
-      DEBUG("inst_idx=%Z\n", inst_idx);
+    DEBUG("inst_idx=%Z\n", inst_idx);
 
-      /// Make this value interfere with all values that are live at this point.
-      foreach (VReg, live_val, *live_vals) {
-        if (inst->reg == live_val->value) {
-          DEBUG("  Automatically skipping \"interference with self\": %Z (%Z)\n", inst->reg, inst_idx);
-          continue;
-        }
+    /// Make this value interfere with all values that are live at this point.
+    foreach (VReg, live_val, *live_vals) {
+      DEBUG("--%Z (%Z) is live\n", inst->reg - MIR_ARCH_START, inst_idx);
 
-        usz live_idx = (usz)-1;
-        foreach_index (i, *vregs) {
-          if (vregs->data[i].value == live_val->value) {
-            live_idx = i;
-            break;
-          }
-        }
-        ASSERT(live_idx != (usz)-1, "Could not find vreg from live values vector in list of vregs: %Z\n", live_val->value);
-
-        DEBUG("  Setting live value %Z (%Z) within %Z (%Z)\n", live_val->value, live_idx, inst->reg, inst_idx);
-
-        if (live_idx >= G->matrix.size) ICE("Index out of bounds (live value vreg index)", live_idx);
-        if (inst_idx >= G->matrix.size) ICE("Index out of bounds (instruction vreg index)", live_idx);
-
-        adjm_set(G->matrix, inst_idx, live_idx);
+      if (inst->reg == live_val->value) {
+        DEBUG("  Automatically skipping \"interference with self\": %Z (%Z)\n", inst->reg - MIR_ARCH_START, inst_idx);
+        continue;
       }
 
+      usz live_idx = (usz)-1;
+      foreach_index (i, *vregs) {
+        if (vregs->data[i].value == live_val->value) {
+          live_idx = i;
+          break;
+        }
+      }
+      ASSERT(live_idx != (usz)-1, "Could not find vreg from live values vector in list of vregs: %Z\n", live_val->value - MIR_ARCH_START);
+
+      DEBUG("  Setting live value %Z (%Z) within %Z (%Z)\n", live_val->value - MIR_ARCH_START, live_idx, inst->reg - MIR_ARCH_START, inst_idx);
+
+      if (live_idx >= G->matrix.size) ICE("Index out of bounds (live value vreg index)", live_idx);
+      if (inst_idx >= G->matrix.size) ICE("Index out of bounds (instruction vreg index)", live_idx);
+
+      adjm_set(G->matrix, inst_idx, live_idx);
     }
 
     /// If the defining use of a virtual register is an operand of this
     /// instruction, remove it from vector of live vals.
     /// If a virtual register is not live and is seen as an operand, it
     /// is added to the vector of live values.
-    for (size_t j = 0; j < inst->operand_count; ++j) {
-      MIROperand *op = base + j;
-      if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START) {
-        if (!op->value.reg.defining_use && !vreg_vector_contains(live_vals, op->value.reg.value)) {
+    FOREACH_MIR_OPERAND(inst, operand) {
+      if (operand->kind == MIR_OP_REGISTER && operand->value.reg.value >= MIR_ARCH_START) {
+        if (!operand->value.reg.defining_use && !vreg_vector_contains(live_vals, operand->value.reg.value)) {
           VReg v = {0};
-          v.value = op->value.reg.value;
-          v.size = op->value.reg.size;
-          DEBUG("  Adding live value %Z\n", v.value);
+          v.value = operand->value.reg.value;
+          v.size = operand->value.reg.size;
+          DEBUG("  Adding live value %Z\n", v.value - MIR_ARCH_START);
           vector_push(*live_vals, v);
         }
       }
@@ -276,10 +276,8 @@ static void collect_interferences_for_function
  AdjacencyGraph *G
  )
 {
-  // Collect all blocks that end with `ret` or `unreachable`.
+  // Collect all blocks that exit from the function.
   MIRBlockVector exits = {0};
-  // TODO: Use instruction_is_exit(opcode) (make part of
-  // MachineDescription) instead of explicitly checking opcode.
   foreach_ptr (MIRBlock*, b, function->blocks) {
     if (b->is_exit) vector_push(exits, b);
   }
@@ -469,7 +467,7 @@ void print_adjacency_lists(AdjacencyLists *array) {
   print("[RA]: Adjacency lists\n"
         "  id      idx\n");
   foreach_ptr (AdjacencyList*, list, *array) {
-    printf("%6u | %5u: ", (unsigned)list->vreg.value, (unsigned)list->index);
+    printf("%6u | %5u: ", (unsigned)list->vreg.value - MIR_ARCH_START, (unsigned)list->index);
     if (list->color) print("(r%u) ", list->color);
 
     /// Print the adjacent nodes.
