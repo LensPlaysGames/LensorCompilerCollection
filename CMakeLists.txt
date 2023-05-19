@@ -224,6 +224,7 @@ if (BUILD_TESTING)
       --test ${test}
       --intc $<TARGET_FILE:intc>
       --cc ${CMAKE_C_COMPILER}
+      WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
       COMMAND_EXPAND_LISTS
     )
     if (BUILD_OPT_TESTING)
@@ -234,6 +235,7 @@ if (BUILD_TESTING)
         --intc $<TARGET_FILE:intc>
         --cc ${CMAKE_C_COMPILER}
         -O
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
     endif()
