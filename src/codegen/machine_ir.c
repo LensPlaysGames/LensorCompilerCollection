@@ -45,7 +45,7 @@ MIROperand mir_op_local_ref(MIRFunction *function, usz size) {
   out.kind = MIR_OP_LOCAL_REF;
   out.value.local_ref = function->frame_objects.size;
 
-  MIRFrameObject frame_obj = { size, (usz)-1 };
+  MIRFrameObject frame_obj = { size, (usz)-1, -1 };
 
   vector_push(function->frame_objects, frame_obj);
   return out;
@@ -71,7 +71,7 @@ MIROperand mir_op_local_ref_fo(MIRFunction *function, MIRFrameObject *fo) {
   out.value.local_ref = function->frame_objects.size;
   fo->lowered = function->frame_objects.size;
 
-  MIRFrameObject frame_obj = { fo->size, (usz)-1 };
+  MIRFrameObject frame_obj = { fo->size, (usz)-1, -1 };
   vector_push(function->frame_objects, frame_obj);
 
 
