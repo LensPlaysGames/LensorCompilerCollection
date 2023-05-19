@@ -64,215 +64,7 @@ static MIROpcodex86_64 gmir_binop_to_x64(MIROpcodeCommon opcode) {
   }
 }
 
-static MIRValue_x86_64 mir_none(Instruction inst) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_NONE;
-  out.instruction = (uint16_t)inst;
-  return out;
-}
-
-static MIRValue_x86_64 mir_imm(Instruction inst, int64_t immediate) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_IMM;
-  out.instruction = (uint16_t)inst;
-  out.immediate = immediate;
-  return out;
-}
-static MIRValue_x86_64 mir_imm_to_mem(Instruction inst, int64_t immediate, RegisterDescriptor address, int64_t offset) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_IMM_TO_MEM;
-  out.instruction = (uint16_t)inst;
-  out.immediate = immediate;
-  out.reg_addr = (uint8_t)address;
-  out.offset = offset;
-  return out;
-
-}
-static MIRValue_x86_64 mir_imm_to_reg(Instruction inst, int64_t immediate, RegisterDescriptor destination, RegSize size) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_IMM_TO_REG;
-  out.instruction = (uint16_t)inst;
-  out.immediate = immediate;
-  out.reg_dst = (uint8_t)destination;
-  out.reg_dst_sz = (uint8_t)size;
-  return out;
-
-}
-static MIRValue_x86_64 mir_indirect_branch(Instruction inst, RegisterDescriptor address) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_INDIRECT_BRANCH;
-  out.instruction = (uint16_t)inst;
-  out.reg_addr = (uint8_t)address;
-  return out;
-
-}
-static MIRValue_x86_64 mir_mem(Instruction inst, int64_t offset, RegisterDescriptor address) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_MEM;
-  out.instruction = (uint16_t)inst;
-  out.offset = offset;
-  out.reg_addr = (uint8_t)address;
-  return out;
-
-}
-static MIRValue_x86_64 mir_mem_to_reg(Instruction inst, RegisterDescriptor address_register, int64_t offset, RegisterDescriptor destination_register, RegSize size) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_MEM_TO_REG;
-  out.instruction = (uint16_t)inst;
-  out.reg_addr = (uint8_t)address_register;
-  out.reg_dst = (uint8_t)destination_register;
-  out.reg_dst_sz = (uint8_t)size;
-  out.offset = offset;
-  return out;
-
-}
-static MIRValue_x86_64 mir_name(Instruction inst, const char *name) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_NAME;
-  out.instruction = (uint16_t)inst;
-  out.name = name;
-  return out;
-
-}
-static MIRValue_x86_64 mir_name_to_reg(Instruction inst, RegisterDescriptor address_register, const char *name, RegisterDescriptor destination_register, RegSize size) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_NAME_TO_REG;
-  out.instruction = (uint16_t)inst;
-  out.reg_addr = (uint8_t)address_register;
-  out.name = name;
-  out.reg_dst = (uint8_t)destination_register;
-  out.reg_dst_sz = (uint8_t)size;
-  return out;
-}
-static MIRValue_x86_64 mir_reg(Instruction inst, RegisterDescriptor reg, RegSize size) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_REG;
-  out.instruction = (uint16_t)inst;
-  out.reg_dst = (uint8_t)reg;
-  out.reg_dst_sz = (uint8_t)size;
-  return out;
-}
-static MIRValue_x86_64 mir_reg_shift(Instruction inst, RegisterDescriptor reg) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_REG_SHIFT;
-  out.instruction = (uint16_t)inst;
-  out.reg_dst = (uint8_t)reg;
-  return out;
-}
-static MIRValue_x86_64 mir_reg_to_mem(Instruction inst, RegisterDescriptor source_register, RegSize size, RegisterDescriptor address_register, int64_t offset) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_REG_TO_MEM;
-  out.instruction = (uint16_t)inst;
-  out.reg_src = (uint8_t)source_register;
-  out.reg_src_sz = (uint8_t)size;
-  out.reg_addr = (uint8_t)address_register;
-  out.offset = offset;
-  return out;
-}
-static MIRValue_x86_64 mir_reg_to_name(Instruction inst, RegisterDescriptor source_register, RegSize size, RegisterDescriptor address_register, const char *name) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_REG_TO_NAME;
-  out.instruction = (uint16_t)inst;
-  out.reg_src = (uint8_t)source_register;
-  out.reg_src_sz = (uint8_t)size;
-  out.reg_addr = (uint8_t)address_register;
-  out.name = name;
-  return out;
-}
-static MIRValue_x86_64 mir_reg_to_offset_name(Instruction inst, RegisterDescriptor source_register, RegSize size, RegisterDescriptor address_register, const char *name, int64_t offset) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_REG_TO_OFFSET_NAME;
-  out.instruction = (uint16_t)inst;
-  out.reg_src = (uint8_t)source_register;
-  out.reg_src_sz = (uint8_t)size;
-  out.reg_addr = (uint8_t)address_register;
-  out.offset = offset;
-  out.name = name;
-  return out;
-}
-static MIRValue_x86_64 mir_reg_to_reg
-(Instruction inst,
- RegisterDescriptor source_register, enum RegSize source_size,
- RegisterDescriptor destination_register, enum RegSize destination_size
-) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_REG_TO_REG;
-  out.instruction = (uint16_t)inst;
-  out.reg_src = (uint8_t)source_register;
-  out.reg_dst = (uint8_t)destination_register;
-  out.reg_src_sz = (uint8_t)source_size;
-  out.reg_dst_sz = (uint8_t)destination_size;
-  return out;
-}
-
-static MIRValue_x86_64 mir_setcc(enum ComparisonType compare_type, RegisterDescriptor destination_register) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_SETCC;
-  out.instruction = (uint16_t)I_SETCC;
-  out.immediate = (int64_t)compare_type;
-  out.reg_dst = (uint8_t)destination_register;
-  return out;
-}
-
-static MIRValue_x86_64 mir_jcc(IndirectJumpType jump_type, const char *name) {
-  MIRValue_x86_64 out = {0};
-  out.instruction_form = I_FORM_JCC;
-  out.instruction = (uint16_t)I_JCC;
-  out.immediate = (int64_t)jump_type;
-  out.name = name;
-  return out;
-}
-
-static void append_mir(MIRInstructionVector *mir, MIRValue_x86_64 value, IRInstruction *origin) {
-  ASSERT(mir, "Invalid argument");
-  MIRInstruction *m_inst = calloc(1, sizeof(*m_inst));
-  ASSERT(m_inst, "Memory allocation failure");
-  m_inst->x64 = value;
-  m_inst->origin = origin;
-  vector_push(*mir, m_inst);
-}
-
-NODISCARD static bool is_caller_saved(Register r) {
-  for (size_t i = 0; i < caller_saved_register_count; ++i) {
-    if (caller_saved_registers[i] == r) {
-      return 1;
-    }
-  }
-  return 0;
-}
-
-NODISCARD static bool is_callee_saved(Register r) { return !is_caller_saved(r); }
-
-/// Generate a comparison between two registers.
-static RegisterDescriptor codegen_comparison
-(CodegenContext *cg_context,
- IRInstruction *inst,
- RegisterDescriptor lhs,
- RegisterDescriptor rhs,
- RegisterDescriptor result,
- enum RegSize size)
-{
-  enum ComparisonType type = COMPARE_COUNT;
-  switch (inst->kind) {
-    case IR_EQ: type = COMPARE_EQ; break;
-    case IR_NE: type = COMPARE_NE; break;
-    case IR_LT: type = COMPARE_LT; break;
-    case IR_GT: type = COMPARE_GT; break;
-    case IR_LE: type = COMPARE_LE; break;
-    case IR_GE: type = COMPARE_GE; break;
-    default: ICE("Unsupported IR instruction in codegen_comparison: %d", inst->kind);
-  }
-
-  // Perform the comparison.
-  append_mir(cg_context->mir, mir_reg_to_reg(I_CMP, rhs, size, lhs, size), inst);
-  // IF YOU REPLACE THIS WITH A XOR IT WILL BREAK HORRIBLY
-  // We use MOV because it doesn't set flags.
-  append_mir(cg_context->mir, mir_imm_to_reg(I_MOV, 0, result, r32), inst);
-  append_mir(cg_context->mir, mir_setcc(type, result), inst);
-
-  return result;
-}
-
+/* FIXME: Remove (still need for reference...)
 static void divmod(CodegenContext *context, IRInstruction *inst) {
   ASSERT(inst->kind == IR_DIV || inst->kind == IR_MOD, "divmod must be passed a div or mod instruction!");
   // Dividend of div/mod goes in rdx:rax; divisor must not be in those registers.
@@ -314,6 +106,7 @@ static void divmod(CodegenContext *context, IRInstruction *inst) {
     append_mir(context->mir, mir_reg(I_DIV, inst->rhs->result, lhs_size), inst);
   }
 }
+*/
 
 static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
   STATIC_ASSERT(IR_COUNT == 38, "Handle all IR instructions");
@@ -326,45 +119,8 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     thread_use_colours = true;
   }
 
+  /*
   switch (inst->kind) {
-  case IR_PHI:
-  case IR_REGISTER:
-  case IR_UNREACHABLE:
-  case IR_LIT_INTEGER:
-  case IR_LIT_STRING:
-    break;
-  case IR_IMMEDIATE:
-    if (inst->imm <= UINT32_MAX)
-      append_mir(context->mir, mir_imm_to_reg(I_MOV, (int64_t)inst->imm, inst->result, r32), inst);
-    else if (inst->imm <= UINT64_MAX)
-      append_mir(context->mir, mir_imm_to_reg(I_MOV, (int64_t)inst->imm, inst->result, r64), inst);
-    else ICE("Unsupported integer literal immediate on x86_64 (out of range)");
-    break;
-  case IR_NOT: {
-    append_mir(context->mir, mir_reg(I_NOT, inst->operand->result, r64), inst);
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->operand->type));
-    append_mir(context->mir, mir_reg_to_reg(I_MOV, inst->operand->result, size, inst->result, size), inst);
-  } break;
-  case IR_ZERO_EXTEND: {
-    usz operand_byte_size = type_sizeof(inst->operand->type);
-    usz result_byte_size = type_sizeof(inst->type);
-    ASSERT (result_byte_size > operand_byte_size, "Zero extension result must be larger than operand");
-
-    enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
-    enum RegSize result_size = regsize_from_bytes(result_byte_size);
-
-    append_mir(context->mir, mir_reg_to_reg(I_MOVZX, inst->operand->result, operand_size, inst->result, result_size), inst);
-  } break;
-  case IR_SIGN_EXTEND: {
-    usz operand_byte_size = type_sizeof(inst->operand->type);
-    usz result_byte_size = type_sizeof(inst->type);
-    ASSERT (result_byte_size > operand_byte_size, "Sign extension result must be larger than operand");
-
-    enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
-    enum RegSize result_size = regsize_from_bytes(result_byte_size);
-
-    append_mir(context->mir, mir_reg_to_reg(I_MOVSX, inst->operand->result, operand_size, inst->result, result_size), inst);
-  } break;
   case IR_TRUNCATE: {
     usz operand_byte_size = type_sizeof(inst->operand->type);
     usz result_byte_size = type_sizeof(inst->type);
@@ -391,19 +147,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
   } break;
 
-  case IR_BITCAST: break;
-
-  case IR_COPY: {
-    usz operand_byte_size = type_sizeof(inst->operand->type);
-    usz result_byte_size = type_sizeof(inst->type);
-
-    // TODO: Handle things larger than a register, somehow... may need
-    // to push/pop registers...
-    enum RegSize operand_size = regsize_from_bytes(operand_byte_size);
-    enum RegSize result_size = regsize_from_bytes(result_byte_size);
-
-    append_mir(context->mir, mir_reg_to_reg(I_MOV, inst->operand->result, operand_size, inst->result, result_size), inst);
-  } break;
   case IR_CALL: {
     // Save caller saved registers used in caller function.
     ASSERT(inst->parent_block, "call instruction null block");
@@ -491,23 +234,6 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
   } break;
 
-  case IR_RETURN:
-    // Restore callee-saved registers used in the function.
-    for (Register i = sizeof(inst->parent_block->function->registers_in_use) * 8 - 1; i > 0; --i)
-      if (inst->parent_block->function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i))
-        append_mir(context->mir, mir_reg(I_POP, i, r64), inst);
-
-    //codegen_epilogue(context, inst->parent_block->function);
-    append_mir(context->mir, mir_none(I_RET), inst);
-    if (optimise && inst->parent_block) inst->parent_block->done = true;
-    break;
-
-  case IR_BRANCH:
-    /// Only emit a jump if the target isn’t the next block.
-    if (!optimise || (inst->parent_block && inst->destination_block != inst->parent_block->next && !inst->parent_block->done))
-      append_mir(context->mir, mir_name(I_JMP, inst->destination_block->name.data), inst);
-    if (optimise && inst->parent_block) inst->parent_block->done = true;
-    break;
   case IR_BRANCH_CONDITIONAL: {
     IRBranchConditional *branch = &inst->cond_br;
 
@@ -526,30 +252,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
 
     if (optimise && inst->parent_block) inst->parent_block->done = true;
   } break;
-  case IR_EQ: FALLTHROUGH;
-  case IR_NE: FALLTHROUGH;
-  case IR_LT: FALLTHROUGH;
-  case IR_GT: FALLTHROUGH;
-  case IR_LE: FALLTHROUGH;
-  case IR_GE: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    codegen_comparison(context, inst, inst->lhs->result, inst->rhs->result, inst->result, size);
-  } break;
-  case IR_ADD: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    append_mir(context->mir, mir_reg_to_reg(I_ADD, inst->lhs->result, size, inst->rhs->result, size), inst);
-    append_mir(context->mir, mir_reg_to_reg(I_MOV, inst->rhs->result, size, inst->result, size), inst);
-  } break;
-  case IR_SUB: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    append_mir(context->mir, mir_reg_to_reg(I_SUB, inst->rhs->result, size, inst->lhs->result, size), inst);
-    append_mir(context->mir, mir_reg_to_reg(I_MOV, inst->lhs->result, size, inst->result, size), inst);
-  } break;
-  case IR_MUL: {
-    enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
-    append_mir(context->mir, mir_reg_to_reg(I_IMUL, inst->lhs->result, size, inst->rhs->result, size), inst);
-    append_mir(context->mir, mir_reg_to_reg(I_MOV, inst->rhs->result, size, inst->result, size), inst);
-  } break;
+
   case IR_DIV: {
     divmod(context, inst);
     enum RegSize size = regsize_from_bytes(type_sizeof(inst->type));
@@ -656,28 +359,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     TODO("Handle IRtype %d\n", inst->kind);
     break;
   }
-}
-
-static void emit_block(CodegenContext *context, IRBlock *block) {
-  MIRValue_x86_64 mir_block = {0};
-  mir_block.instruction_form = I_FORM_IRBLOCK;
-  mir_block.ir_block = block;
-  append_mir(context->mir, mir_block, NULL);
-
-  list_foreach (IRInstruction*, instruction, block->instructions) {
-    emit_instruction(context, instruction);
-  }
-}
-
-static void emit_function(CodegenContext *context, IRFunction *function) {
-  //codegen_prologue(context, function);
-  // Save all callee-saved registers in use in the function.
-  for (Register i = 1; i < sizeof(function->registers_in_use) * 8; ++i) {
-    if ((size_t)function->registers_in_use & ((size_t)1 << i) && is_callee_saved(i))
-      append_mir(context->mir, mir_reg(I_PUSH, i, r64), NULL);
-  }
-  list_foreach (IRBlock*, block, function->blocks) { emit_block(context, block); }
-  // NOTE: Epilogue is generated by `return` instruction.
+  */
 }
 
 void isel_x86_64_env(ISelEnvironment *env) {

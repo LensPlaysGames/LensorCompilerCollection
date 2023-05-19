@@ -46,7 +46,6 @@
   X(XCHG)
 
 
-STATIC_ASSERT(I_COUNT == 29, "Exhaustive handling of x86_64 instructions in x86_64 MIR");
 #define DEFINE_MX64_OPCODE(opcode) CAT(MX64_, opcode),
 typedef enum MIROpcodex86_64 {
   MX64_START = MIR_ARCH_START,
