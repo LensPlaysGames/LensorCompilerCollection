@@ -116,6 +116,7 @@ MIROperand mir_op_static_ref(IRInstruction *static_ref) {
 
 MIROperand mir_op_reference_ir(MIRFunction *function, IRInstruction *inst) {
   ASSERT(inst, "Invalid argument");
+  if (inst->result) return mir_op_register(inst->result, (uint16_t)type_sizeof(inst->type), false);
   {
     IRInstruction *it = inst;
     // FIXME: I don't know if we should try to inline the operand of copies like this.
@@ -123,7 +124,6 @@ MIROperand mir_op_reference_ir(MIRFunction *function, IRInstruction *inst) {
     if (it->kind == IR_IMMEDIATE) return mir_op_immediate((i64)it->imm);
     if (it->kind == IR_ALLOCA) return mir_op_local_ref_ir(function, &it->alloca);
     if (it->kind == IR_STATIC_REF) return mir_op_static_ref(it);
-    if (it->kind == IR_REGISTER) return mir_op_register(it->result, (uint16_t)type_sizeof(it->type), false);
   }
   if (!inst->machine_inst) {
     ir_femit_instruction(stdout, inst);
