@@ -579,6 +579,7 @@ static MIROperandKind isel_parse_operand_kind(ISelParser *p) {
 static ISelValue isel_parse_expression(ISelParser *p) {
   if (p->tok.kind == TOKEN_IDENTIFIER) {
     // Lookup identifier in global environment
+    string_buf_zterm(&p->tok.text);
     ISelEnvironmentEntry *entry = isel_env_entry(&p->global, p->tok.text.data);
     if (!entry->key.data) ERR("Expected expression, got unknown identifier \"%S\"", as_span(p->tok.text));
 
