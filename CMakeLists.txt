@@ -71,6 +71,8 @@ add_executable(
   src/codegen/x86_64/arch_x86_64.c
   src/codegen/x86_64/arch_x86_64_common.c
   src/codegen/x86_64/arch_x86_64_isel.c
+  src/codegen/x86_64/arch_x86_64_tgt_assembly.c
+  src/codegen/x86_64/arch_x86_64_tgt_generic_object.c
 )
 target_include_directories(
   intc
