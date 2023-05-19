@@ -770,7 +770,7 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
   ASSERT(f, "Invalid argument");
   ASSERT(desc, "Invalid argument");
 
-  if (f->blocks.size == 0 || f->inst_count == 0) return;
+  if (f->blocks.size == 0 || f->inst_count == 0 || (f->origin && f->origin->is_extern)) return;
 
 #ifdef DEBUG_RA
   fprintf(stdout, "======================= MIR RA =======================\n");
