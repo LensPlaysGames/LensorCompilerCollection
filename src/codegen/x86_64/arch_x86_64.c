@@ -2424,6 +2424,25 @@ static void lower(CodegenContext *context) {
     default:
       break;
 
+    case IR_RETURN: {
+      STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling convention return register during x86_64 lowering");
+      switch (context->call_convention) {
+      case CG_CALL_CONV_MSWIN: {
+        instruction->result = REG_RAX;
+        if (instruction->operand)
+          instruction->type = instruction->operand->type;
+        else instruction->type = t_integer;
+      } break;
+      case CG_CALL_CONV_LINUX: {
+        instruction->result = REG_RAX;
+        if (instruction->operand)
+          instruction->type = instruction->operand->type;
+        else instruction->type = t_integer;
+      } break;
+      default: UNREACHABLE();
+      }
+    } break;
+
     case IR_LOAD: {
       lower_load(context, instruction);
     } break;
