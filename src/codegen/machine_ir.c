@@ -187,7 +187,9 @@ void mir_push_with_reg_into_block(MIRFunction *f, MIRBlock *block, MIRInstructio
 }
 
 static void mir_push_into_block(MIRFunction *f, MIRBlock *block, MIRInstruction *mi) {
-  mir_push_with_reg_into_block(f, block, mi, (MIRRegister)(f->inst_count + (size_t)MIR_ARCH_START));
+  if (mi->origin && mi->origin->result)
+    mir_push_with_reg_into_block(f, block, mi, mi->origin->result);
+  else mir_push_with_reg_into_block(f, block, mi, (MIRRegister)(f->inst_count + (size_t)MIR_ARCH_START));
 }
 
 void mir_push_with_reg(MIRFunction *f, MIRInstruction *mi, MIRRegister reg) {
