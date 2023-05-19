@@ -1043,6 +1043,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   MIRFunctionVector machine_instructions_from_ir = mir_from_ir(context);
 
   foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
+    if (f->origin && f->origin->is_extern) continue;
     print_mir_function(f);
 
     // Restore callee-saved registers used in the function.
@@ -1128,6 +1129,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   // be a great idea, I think. Things like removing reg-to-reg moves when
   // they are the same.
   foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
+    if (function->origin && function->origin->is_extern) continue;
     foreach_ptr (MIRBlock*, block, function->blocks) {
 
       MIRInstructionVector instructions_to_remove = {0};
