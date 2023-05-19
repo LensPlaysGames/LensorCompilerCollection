@@ -799,9 +799,9 @@ static void isel_env_arch_specific(ISelEnvironment *env, CodegenArchitecture arc
   }
 }
 
-static CodegenArchitecture isel_arch_from_string(span string) {
-  if (string_eq(string, literal_span("x86_64"))) return ARCH_X86_64;
-  ICE("Invalid architecture string \"%S\"\n", string);
+static CodegenArchitecture isel_arch_from_string(span arch_string) {
+  if (string_eq(arch_string, literal_span("x86_64"))) return ARCH_X86_64;
+  ICE("Invalid architecture string \"%S\"\n", arch_string);
 }
 
 ISelPatterns isel_parse(ISelParser *p) {
