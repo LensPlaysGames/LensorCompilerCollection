@@ -1279,19 +1279,65 @@ static void mcode_indirect_branch(CodegenContext *context, MIROpcodex86_64 inst,
   }
 }
 
-static void mcode_reg_shift(CodegenContext *context, MIROpcodex86_64 inst, RegisterDescriptor register_to_shift) {
+// Basically, with a shift instruction, use the `%given_reg << %cl` encoding.
+static void mcode_reg_shift(CodegenContext *context, MIROpcodex86_64 inst, RegisterDescriptor register_to_shift, RegSize size) {
   switch (inst) {
+  case MX64_SAR: FALLTHROUGH;
+  case MX64_SHR: FALLTHROUGH;
+  case MX64_SHL: {
+    uint8_t rbits = regbits(register_to_shift);
+    // [0x66] + 0xd2/0xd3 /4
+    uint8_t opcode_extension = 0;
+    if (inst == MX64_SHL) opcode_extension = 4;
+    else if (inst == MX64_SHR) opcode_extension = 5;
+    else if (inst == MX64_SAR) opcode_extension = 7;
+    else ICE("Unhandled shift opcode");
+    uint8_t modrm = modrm_byte(0b11, opcode_extension, rbits);
+
+    switch (size) {
+    case r8: {
+      // 0xd2 /4
+      if (REGBITS_TOP(rbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(rbits), false, false);
+        mcode_1(context->object, rex);
+      }
+      mcode_2(context->object, 0xd2, modrm);
+    } break;
+
+    case r16: {
+      // 0x66 + 0xd3 /4
+      mcode_1(context->object, 0x66);
+    } FALLTHROUGH;
+    case r32: {
+      // 0xd3 /4
+      if (REGBITS_TOP(rbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(rbits), false, false);
+        mcode_1(context->object, rex);
+      }
+
+      mcode_2(context->object, 0xd3, modrm);
+    } break;
+
+    case r64: {
+      // REX.W + 0xd3 /4
+      uint8_t rex = rex_byte(true, REGBITS_TOP(rbits), false, false);
+      mcode_3(context->object, rex, 0xd3, modrm);
+    } break;
+    } // switch (size)
+
+  } break; // case MX64_SHL
+
   default: ICE("ERROR: mcode_reg_shift(): Unsupported instruction %d (%s)", inst, mir_x86_64_opcode_mnemonic(inst));
   }
 }
 
-static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDescriptor reg, enum RegSize size) {
+static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDescriptor reg, RegSize size) {
   if (inst == MX64_JMP || inst == MX64_CALL) {
     mcode_indirect_branch(context, inst, reg);
     return;
   }
   if (inst == MX64_SAL || inst == MX64_SAR || inst == MX64_SHL || inst == MX64_SHR) {
-    mcode_reg_shift(context, inst, reg);
+    mcode_reg_shift(context, inst, reg, size);
     return;
   }
 
