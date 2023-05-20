@@ -23,48 +23,46 @@ typedef enum CodegenArchitecture {
   ARCH_X86_64,
   ARCH_COUNT,
 } CodegenArchitecture;
+#ifndef ARCH_DEFAULT
+#  define ARCH_DEFAULT ARCH_X86_64
+#endif
 
 typedef enum CodegenTarget {
-  TARGET_ASM,
-  TARGET_OBJ,
+  TARGET_NONE,
+  TARGET_GNU_ASM_ATT,
+  TARGET_GNU_ASM_INTEL,
+  TARGET_COFF_OBJECT,
+  TARGET_ELF_OBJECT,
+  TARGET_COUNT,
 } CodegenTarget;
+#define TARGET_DEFAULT TARGET_GNU_ASM_ATT
+#ifndef TARGET_DEFAULT
+#  ifdef _WIN32
+#    define TARGET_DEFAULT TARGET_COFF_OBJECT
+#  else
+#    define TARGET_DEFAULT TARGET_ELF_OBJECT
+#  endif
+#endif
 
-
-enum CodegenAssemblyDialect {
-  CG_ASM_DIALECT_ATT,
-  CG_ASM_DIALECT_INTEL,
-  CG_ASM_DIALECT_COUNT,
-
-  CG_ASM_DIALECT_DEFAULT = CG_ASM_DIALECT_ATT
-};
-
-enum CodegenOutputFormat {
-  CG_FMT_x86_64_GAS,
-  CG_FMT_IR,
-  CG_FMT_COUNT,
-
-  CG_FMT_DEFAULT = CG_FMT_x86_64_GAS,
-};
-
-enum CodegenCallingConvention {
+typedef enum CodegenCallingConvention {
   CG_CALL_CONV_MSWIN,
-  CG_CALL_CONV_LINUX,
+  CG_CALL_CONV_SYSV,
   CG_CALL_CONV_COUNT,
 
 #ifndef _WIN32
-  CG_CALL_CONV_DEFAULT = CG_CALL_CONV_LINUX,
+  CG_CALL_CONV_DEFAULT = CG_CALL_CONV_SYSV,
 #else
   CG_CALL_CONV_DEFAULT = CG_CALL_CONV_MSWIN,
 #endif
-};
+} CodegenCallingConvention;
 
-enum CodegenLanguage {
+typedef enum CodegenLanguage {
   LANG_FUN,
   LANG_IR,
   LANG_COUNT,
 
   LANG_DEFAULT = LANG_FUN,
-};
+} CodegenLanguage;
 
 // Types of comparison to be implemented by codegen backend.
 enum ComparisonType {

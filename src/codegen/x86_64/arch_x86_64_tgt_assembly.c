@@ -53,9 +53,9 @@ static const char *instruction_mnemonic(CodegenContext *context, MIROpcodex86_64
   case MX64_JCC: return "j";
   }
 
-  switch (context->dialect) {
+  switch (context->target) {
 
-  case CG_ASM_DIALECT_ATT: {
+  case TARGET_GNU_ASM_ATT: {
     switch (instruction) {
     case MX64_CWD: return "cwtd";
     case MX64_CDQ: return "cltd";
@@ -64,7 +64,7 @@ static const char *instruction_mnemonic(CodegenContext *context, MIROpcodex86_64
     }
   } break;
 
-  case CG_ASM_DIALECT_INTEL: {
+  case TARGET_GNU_ASM_INTEL: {
     switch (instruction) {
     case MX64_CWD: return "cwd";
     case MX64_CDQ: return "cdq";
@@ -87,32 +87,32 @@ static void femit_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
 
   const char *mnemonic    = instruction_mnemonic(context, inst);
   const char *destination = regname(destination_register, size);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT:
       fprint(context->code, "    %s $%D, %%%s\n",
           mnemonic, immediate, destination);
       break;
-    case CG_ASM_DIALECT_INTEL:
+    case TARGET_GNU_ASM_INTEL:
       fprint(context->code, "    %s %s, %D\n",
           mnemonic, destination, immediate);
       break;
-    default: ICE("ERROR: femit_imm_to_reg(): Unsupported dialect %d", context->dialect);
+    default: ICE("ERROR: femit_imm_to_reg(): Unsupported dialect %d", context->target);
   }
 }
 
 static void femit_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate, RegisterDescriptor address_register, int64_t offset) {
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT:
       fprint(context->code, "    %s $%D, %D(%%%s)\n",
           mnemonic, immediate, offset, address);
       break;
-    case CG_ASM_DIALECT_INTEL:
+    case TARGET_GNU_ASM_INTEL:
       fprint(context->code, "    %s [%s + %D], %D\n",
           mnemonic, address, offset, immediate);
       break;
-    default: ICE("ERROR: femit_imm_to_mem(): Unsupported dialect %d", context->dialect);
+    default: ICE("ERROR: femit_imm_to_mem(): Unsupported dialect %d", context->target);
   }
 }
 
@@ -120,16 +120,16 @@ static void femit_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
   const char *destination = regname(destination_register, size);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT:
       fprint(context->code, "    %s %D(%%%s), %%%s\n",
           mnemonic, offset, address, destination);
       break;
-    case CG_ASM_DIALECT_INTEL:
+    case TARGET_GNU_ASM_INTEL:
       fprint(context->code, "    %s %s, [%s + %D]\n",
           mnemonic, destination, address, offset);
       break;
-    default: ICE("ERROR: femit_mem_to_reg(): Unsupported dialect %d", context->dialect);
+    default: ICE("ERROR: femit_mem_to_reg(): Unsupported dialect %d", context->target);
   }
 }
 
@@ -137,16 +137,16 @@ static void femit_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
   const char *destination = regname(destination_register, size);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT:
       fprint(context->code, "    %s (%s)(%%%s), %%%s\n",
           mnemonic, name, address, destination);
       break;
-    case CG_ASM_DIALECT_INTEL:
+    case TARGET_GNU_ASM_INTEL:
       fprint(context->code, "    %s %s, [%s + %s]\n",
           mnemonic, destination, address, name);
       break;
-    default: ICE("ERROR: femit_name_to_reg(): Unsupported dialect %d", context->dialect);
+    default: ICE("ERROR: femit_name_to_reg(): Unsupported dialect %d", context->target);
   }
 }
 
@@ -154,8 +154,8 @@ static void femit_reg_to_mem(CodegenContext *context, MIROpcodex86_64 inst, Regi
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT:
       if (offset) {
         fprint(context->code, "    %s %%%s, %D(%%%s)\n",
                 mnemonic, source, offset, address);
@@ -164,7 +164,7 @@ static void femit_reg_to_mem(CodegenContext *context, MIROpcodex86_64 inst, Regi
                 mnemonic, source, address);
       }
       break;
-    case CG_ASM_DIALECT_INTEL:
+    case TARGET_GNU_ASM_INTEL:
       if (offset) {
         fprint(context->code, "    %s [%s + %D], %s\n",
                 mnemonic, address, offset, source);
@@ -173,7 +173,7 @@ static void femit_reg_to_mem(CodegenContext *context, MIROpcodex86_64 inst, Regi
                 mnemonic, address, source);
       }
       break;
-    default: ICE("ERROR: femit_reg_to_mem(): Unsupported dialect %d", context->dialect);
+    default: ICE("ERROR: femit_reg_to_mem(): Unsupported dialect %d", context->target);
   }
 }
 
@@ -197,16 +197,16 @@ static void femit_reg_to_reg
   const char *source = regname(source_register, source_size);
   const char *destination = regname(destination_register, destination_size);
 
-  switch (context->dialect) {
-  case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+  case TARGET_GNU_ASM_ATT:
     fprint(context->code, "    %s %%%s, %%%s\n",
            mnemonic, source, destination);
     break;
-  case CG_ASM_DIALECT_INTEL:
+  case TARGET_GNU_ASM_INTEL:
     fprint(context->code, "    %s %s, %s\n",
            mnemonic, destination, source);
     break;
-  default: ICE("ERROR: femit_reg_to_reg(): Unsupported dialect %d", context->dialect);
+  default: ICE("ERROR: femit_reg_to_reg(): Unsupported dialect %d", context->target);
   }
 }
 
@@ -214,16 +214,16 @@ static void femit_reg_to_name(CodegenContext *context, MIROpcodex86_64 inst, Reg
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT:
       fprint(context->code, "    %s %%%s, (%s)(%%%s)\n",
           mnemonic, source, name, address);
       break;
-    case CG_ASM_DIALECT_INTEL:
+    case TARGET_GNU_ASM_INTEL:
       fprint(context->code, "    %s [%s + %s], %s\n",
           mnemonic, address, name, source);
       break;
-    default: ICE("ERROR: femit_reg_to_name(): Unsupported dialect %d", context->dialect);
+    default: ICE("ERROR: femit_reg_to_name(): Unsupported dialect %d", context->target);
   }
 }
 
@@ -231,48 +231,48 @@ static void femit_reg_to_offset_name(CodegenContext *context, MIROpcodex86_64 in
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT:
       fprint(context->code, "    %s %%%s, (%s+%Z)(%%%s)\n",
           mnemonic, source, name, offset, address);
       break;
-    case CG_ASM_DIALECT_INTEL:
+    case TARGET_GNU_ASM_INTEL:
       fprint(context->code, "    %s %Z[%s + %s], %s\n",
           mnemonic, offset, name, address, source);
       break;
-    default: ICE("ERROR: femit_reg_to_name(): Unsupported dialect %d", context->dialect);
+    default: ICE("ERROR: femit_reg_to_name(): Unsupported dialect %d", context->target);
   }
 }
 
 static void femit_mem(CodegenContext *context, MIROpcodex86_64 inst, int64_t offset, RegisterDescriptor address_register) {
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT:
       fprint(context->code, "    %s %D(%%%s)\n",
           mnemonic, offset, address);
       break;
-    case CG_ASM_DIALECT_INTEL:
+    case TARGET_GNU_ASM_INTEL:
       fprint(context->code, "    %s [%s + %D]\n",
           mnemonic, address, offset);
       break;
-    default: ICE("ERROR: femit_mem(): Unsupported dialect %d", context->dialect);
+    default: ICE("ERROR: femit_mem(): Unsupported dialect %d", context->target);
   }
 }
 
 static void femit_reg_shift(CodegenContext *context, MIROpcodex86_64 inst, RegisterDescriptor register_to_shift) {
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *cl = register_name_8(REG_RCX);
-  switch (context->dialect) {
-  case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+  case TARGET_GNU_ASM_ATT:
     fprint(context->code, "    %s %%%s, %%%s\n",
            mnemonic, cl, register_name(register_to_shift));
     break;
-  case CG_ASM_DIALECT_INTEL:
+  case TARGET_GNU_ASM_INTEL:
     fprint(context->code, "    %s %s, %s\n",
            mnemonic, register_name(register_to_shift), cl);
     break;
-  default: ICE("ERROR: femit_reg_shift(): Unsupported dialect %d for shift instruction", context->dialect);
+  default: ICE("ERROR: femit_reg_shift(): Unsupported dialect %d for shift instruction", context->target);
   }
 }
 
@@ -280,16 +280,16 @@ static void femit_reg_shift(CodegenContext *context, MIROpcodex86_64 inst, Regis
 static void femit_indirect_branch(CodegenContext *context, MIROpcodex86_64 inst, RegisterDescriptor address_register) {
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT:
       fprint(context->code, "    %s *%%%s\n",
           mnemonic, address);
       break;
-    case CG_ASM_DIALECT_INTEL:
+    case TARGET_GNU_ASM_INTEL:
       fprint(context->code, "    %s %s\n",
           mnemonic, address);
       break;
-    default: ICE("ERROR: femit_indirect_branch(): Unsupported dialect %d", context->dialect);
+    default: ICE("ERROR: femit_indirect_branch(): Unsupported dialect %d", context->target);
   }
 }
 
@@ -305,31 +305,31 @@ static void femit_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDes
 
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(reg, size);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT:
       fprint(context->code, "    %s %%%s\n",
           mnemonic, source);
       break;
-    case CG_ASM_DIALECT_INTEL:
+    case TARGET_GNU_ASM_INTEL:
       fprint(context->code, "    %s %s\n",
           mnemonic, source);
       break;
-    default: ICE("ERROR: femit_reg(): Unsupported dialect %d", context->dialect);
+    default: ICE("ERROR: femit_reg(): Unsupported dialect %d", context->target);
   }
 }
 
 static void femit_imm(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate) {
   const char *mnemonic = instruction_mnemonic(context, inst);
-  switch (context->dialect) {
-    case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT:
       fprint(context->code, "    %s $%D\n",
           mnemonic, immediate);
       break;
-    case CG_ASM_DIALECT_INTEL:
+    case TARGET_GNU_ASM_INTEL:
       fprint(context->code, "    %s %D\n",
           mnemonic, immediate);
       break;
-    default: ICE("ERROR: femit_imm(): Unsupported dialect %d", context->dialect);
+    default: ICE("ERROR: femit_imm(): Unsupported dialect %d", context->target);
   }
 }
 
@@ -337,34 +337,34 @@ static void femit_name(CodegenContext *context, MIROpcodex86_64 inst, const char
   ASSERT(name, "NAME must not be NULL.");
 
   const char *mnemonic = instruction_mnemonic(context, inst);
-  switch (context->dialect) {
-  case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+  case TARGET_GNU_ASM_ATT:
     fprint(context->code, "    %s (%s)\n",
            mnemonic, name);
     break;
-  case CG_ASM_DIALECT_INTEL:
+  case TARGET_GNU_ASM_INTEL:
     fprint(context->code, "    %s %s\n",
            mnemonic, name);
     break;
-  default: ICE("ERROR: femit_name(): Unsupported dialect %d for CALL/JMP instruction", context->dialect);
+  default: ICE("ERROR: femit_name(): Unsupported dialect %d for CALL/JMP instruction", context->target);
   }
 }
 
 static void femit_setcc(CodegenContext *context, enum ComparisonType comparison_type, RegisterDescriptor value_register) {
   const char *mnemonic = instruction_mnemonic(context, MX64_SETCC);
   const char *value = register_name_8(value_register);
-  switch (context->dialect) {
-  case CG_ASM_DIALECT_ATT:
+  switch (context->target) {
+  case TARGET_GNU_ASM_ATT:
     fprint(context->code, "    %s%s %%%s\n",
            mnemonic,
            setcc_suffixes_x86_64[comparison_type], value);
     break;
-  case CG_ASM_DIALECT_INTEL:
+  case TARGET_GNU_ASM_INTEL:
     fprint(context->code, "    %s%s %s\n",
            mnemonic,
            setcc_suffixes_x86_64[comparison_type], value);
     break;
-  default: ICE("ERROR: femit_setcc(): Unsupported dialect %d", context->dialect);
+  default: ICE("ERROR: femit_setcc(): Unsupported dialect %d", context->target);
   }
 
 }
@@ -374,13 +374,13 @@ static void femit_setcc(CodegenContext *context, enum ComparisonType comparison_
 static void femit_jcc(CodegenContext *context, IndirectJumpType type, const char *label) {
       const char *mnemonic = instruction_mnemonic(context, MX64_JCC);
 
-      switch (context->dialect) {
-        case CG_ASM_DIALECT_ATT:
-        case CG_ASM_DIALECT_INTEL:
+      switch (context->target) {
+        case TARGET_GNU_ASM_ATT:
+        case TARGET_GNU_ASM_INTEL:
           fprint(context->code, "    %s%s %s\n",
               mnemonic, jump_type_names_x86_64[type], label);
           break;
-        default: ICE("ERROR: femit_direct_branch(): Unsupported dialect %d", context->dialect);
+        default: ICE("ERROR: femit_direct_branch(): Unsupported dialect %d", context->target);
       }
 }
 
@@ -406,7 +406,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
     fprint(context->code,
            "%s"
            ".section .text\n",
-           context->dialect == CG_ASM_DIALECT_INTEL ? ".intel_syntax noprefix\n" : "");
+           context->target == TARGET_GNU_ASM_INTEL ? ".intel_syntax noprefix\n" : "");
 
     fprint(context->code, "\n");
     foreach_ptr (MIRFunction*, function, machine_instructions) {
@@ -453,26 +453,17 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
         case MX64_CALL: {
           MIROperand *dst = mir_get_op(instruction, 0);
 
-          switch (dst->kind) {
-
-          case MIR_OP_NAME: {
-            print("|> call %s\n", dst->value.name);
-            femit_name(context, MX64_CALL, dst->value.name);
-          } break;
-
-          case MIR_OP_BLOCK: {
-            print("|> call %s\n", dst->value.block->name.data);
-            femit_name(context, MX64_CALL, dst->value.block->name.data);
-          } break;
-
-          case MIR_OP_FUNCTION: {
-            print("|> call %s\n", dst->value.function->name.data);
+          if (mir_operand_kinds_match(instruction, 1, MIR_OP_FUNCTION))
             femit_name(context, MX64_CALL, dst->value.function->name.data);
-          } break;
-
-          default: ICE("Unhandled operand kind in CALL: %d (%s)", dst->kind, mir_operand_kind_string(dst->kind));
-
-          } // switch (dst->kind)
+          else if (mir_operand_kinds_match(instruction, 1, MIR_OP_NAME))
+            femit_name(context, MX64_CALL, dst->value.name);
+          else if (mir_operand_kinds_match(instruction, 1, MIR_OP_BLOCK))
+            femit_name(context, MX64_CALL, dst->value.block->name.data);
+          else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
 
         } break; // case MX64_CALL
 

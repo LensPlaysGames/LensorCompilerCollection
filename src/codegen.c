@@ -31,42 +31,45 @@ char codegen_verbose = 1;
 /// ===========================================================================
 CodegenContext *codegen_context_create
 (AST *ast,
- enum CodegenOutputFormat format,
- enum CodegenCallingConvention call_convention,
- enum CodegenAssemblyDialect dialect,
+ CodegenArchitecture arch,
+ CodegenTarget target,
+ CodegenCallingConvention call_convention,
  FILE* code
  )
 {
   CodegenContext *context;
 
-  STATIC_ASSERT(CG_FMT_COUNT == 2, "codegen_context_create_top_level() must exhaustively handle all codegen output formats.");
-  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_create_top_level() must exhaustively handle all calling conventions.");
-  switch (format) {
-    case CG_FMT_x86_64_GAS:
+  STATIC_ASSERT(ARCH_COUNT == 2, "codegen_context_create() must exhaustively handle all codegen architectures.");
+  STATIC_ASSERT(TARGET_COUNT == 5, "codegen_context_create() must exhaustively handle all codegen targets.");
+  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_create() must exhaustively handle all codegen calling conventions.");
+  switch (arch) {
+    case ARCH_X86_64:
       // Handle call_convention for creating codegen context!
       if (call_convention == CG_CALL_CONV_MSWIN) {
         context = codegen_context_x86_64_mswin_create();
-      } else if (call_convention == CG_CALL_CONV_LINUX) {
+      } else if (call_convention == CG_CALL_CONV_SYSV) {
         context = codegen_context_x86_64_linux_create();
       } else {
         ICE("Unrecognized calling convention!");
       }
       break;
-    case CG_FMT_IR:
-      context = codegen_context_ir_create();
-      break;
     default: UNREACHABLE();
   }
 
+  context->arch = arch;
+  context->target = target;
+  context->call_convention = call_convention;
+
   context->ast = ast;
   context->code = code;
-  context->dialect = dialect;
+
   return context;
 }
 
 void codegen_context_free(CodegenContext *context) {
-  STATIC_ASSERT(CG_FMT_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen output formats.");
-  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all calling conventions.");
+  STATIC_ASSERT(ARCH_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen architectures.");
+  STATIC_ASSERT(TARGET_COUNT == 5, "codegen_context_free() must exhaustively handle all codegen targets.");
+  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen calling conventions.");
 
   /// Free all IR Functions.
   foreach_ptr (IRFunction *, f, context->functions) {
@@ -107,18 +110,16 @@ void codegen_context_free(CodegenContext *context) {
   vector_delete(context->removed_instructions);
 
   /// Free backend-specific data.
-  switch (context->format) {
+  STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures");
+  switch (context->arch) {
     default: UNREACHABLE();
 
-    case CG_FMT_x86_64_GAS:
+    case ARCH_X86_64: {
+      STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling conventions");
       if (context->call_convention == CG_CALL_CONV_MSWIN) codegen_context_x86_64_mswin_free(context);
-      else if (context->call_convention == CG_CALL_CONV_LINUX) codegen_context_x86_64_linux_free(context);
+      else if (context->call_convention == CG_CALL_CONV_SYSV) codegen_context_x86_64_linux_free(context);
       else ICE("Unrecognized calling convention!");
-      break;
-
-    case CG_FMT_IR:
-      codegen_context_ir_free(context);
-      break;
+    } break;
   }
 
   /// Free the context itself.
@@ -126,9 +127,10 @@ void codegen_context_free(CodegenContext *context) {
 }
 
 bool parameter_is_in_register(CodegenContext *context, IRFunction *function, usz parameter_index) {
-  switch (context->format) {
-  case CG_FMT_x86_64_GAS: return parameter_is_in_register_x86_64(context, function, parameter_index);
-  default: ICE("Unrecognized format!");
+  STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures");
+  switch (context->arch) {
+  case ARCH_X86_64: return parameter_is_in_register_x86_64(context, function, parameter_index);
+  default: ICE("Unrecognized architecture %d!", context->arch);
   }
   UNREACHABLE();
 }
@@ -767,36 +769,32 @@ void codegen_function(CodegenContext *ctx, Node *node) {
 ///  Driver
 /// ===========================================================================
 void codegen_lower(CodegenContext *context) {
-  switch (context->format) {
-    case CG_FMT_x86_64_GAS:
+  STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures");
+  switch (context->arch) {
+    case ARCH_X86_64:
       codegen_lower_x86_64(context);
       break;
-    case CG_FMT_IR:
-      codegen_lower_ir_backend(context);
-      break;
     default:
-      TODO("Handle %d code generation format.", context->format);
+      TODO("Handle %d code generation architecture.", context->arch);
   }
 }
 
 void codegen_emit(CodegenContext *context) {
-  switch (context->format) {
-    case CG_FMT_x86_64_GAS:
-      codegen_emit_x86_64(context);
-      break;
-    case CG_FMT_IR:
-      codegen_emit_ir_backend(context);
-      break;
-    default:
-      TODO("Handle %d code generation format.", context->format);
+  STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures");
+  switch (context->arch) {
+  case ARCH_X86_64: {
+    codegen_emit_x86_64(context);
+  } break;
+  case ARCH_NONE: FALLTHROUGH;
+  case ARCH_COUNT: UNREACHABLE();
   }
 }
 
 bool codegen
-(enum CodegenLanguage lang,
- enum CodegenOutputFormat format,
- enum CodegenCallingConvention call_convention,
- enum CodegenAssemblyDialect dialect,
+(CodegenLanguage lang,
+ CodegenArchitecture arch,
+ CodegenTarget target,
+ CodegenCallingConvention call_convention,
  const char *infile,
  const char *outfile,
  AST *ast,
@@ -808,7 +806,7 @@ bool codegen
   FILE *code = fopen(outfile, "w");
   if (!code) ICE("codegen(): failed to open file at path: \"%s\"\n", outfile);
 
-  CodegenContext *context = codegen_context_create(ast, format, call_convention, dialect, code);
+  CodegenContext *context = codegen_context_create(ast, arch, target, call_convention, code);
 
   switch (lang) {
     /// Parse an IR file.
