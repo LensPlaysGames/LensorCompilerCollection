@@ -273,9 +273,7 @@ MIRInstruction *mir_imm(int64_t imm) {
   return mir;
 }
 
-/// MAY RETURN NULL iff copy operand is of inlined operand type (static ref, local ref, register, or immediate).
 MIRInstruction *mir_from_ir_copy(MIRFunction *function, IRInstruction *copy) {
-  if (copy->operand->kind == IR_IMMEDIATE || copy->operand->kind == IR_REGISTER) return NULL;
   MIRInstruction *mir = mir_makenew(MIR_COPY);
   mir->origin = copy;
   mir_add_op(mir, mir_op_reference_ir(function, copy->operand));
@@ -513,7 +511,6 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
         } break;
 
         case IR_COPY: {
-          if (inst->operand->kind == IR_IMMEDIATE || inst->operand->kind == IR_REGISTER) break;
           MIRInstruction *mir = mir_from_ir_copy(function, inst);
           mir_push_into_block(function, mir_bb, mir);
         } break;
