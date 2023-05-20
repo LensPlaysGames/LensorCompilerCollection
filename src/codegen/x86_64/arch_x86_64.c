@@ -1178,6 +1178,8 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   isel_patterns_delete(&patterns);
 
+  print("================ RA ================\n");
+
   // RA -- Register Allocation
   foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
     allocate_registers(f, &desc);
@@ -1372,6 +1374,16 @@ void codegen_emit_x86_64(CodegenContext *context) {
     }
 
     print_mir_function_with_mnemonic(function, mir_x86_64_opcode_mnemonic);
+  }
+
+  // Calculate stack offsets
+  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
+    if (f->origin->is_extern) continue;
+    isz offset = 0;
+    foreach (MIRFrameObject, fo, f->frame_objects) {
+      offset -= fo->size;
+      fo->offset = offset;
+    }
   }
 
   // CODE EMISSION
