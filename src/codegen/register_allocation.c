@@ -760,9 +760,17 @@ static void color(
 }
 
 // Keep track of what registers are used in each function.
-void track_registers(IRFunction *f) {
-  FOREACH_INSTRUCTION_IN_FUNCTION(f) {
-    f->registers_in_use |= (usz)1 << instruction->result;
+void track_registers(MIRFunction *f) {
+  ASSERT(f->origin, "MIRFunction origin required to be set in order for shoddy register tracking");
+  foreach_ptr (MIRBlock*, bb, f->blocks) {
+    foreach_ptr (MIRInstruction*, inst, bb->instructions) {
+      if (inst->reg < MIR_ARCH_START) f->origin->registers_in_use |= (usz)1 << inst->reg;
+      FOREACH_MIR_OPERAND(inst, op) {
+        if (op->kind == MIR_OP_REGISTER && op->value.reg.value < MIR_ARCH_START) {
+          f->origin->registers_in_use |= (usz)1 << op->value.reg.value;
+        }
+      }
+    }
   }
 }
 
@@ -849,6 +857,7 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
 
     foreach_ptr (MIRBlock*, bb, f->blocks) {
       foreach_ptr (MIRInstruction*, inst, bb->instructions) {
+        if (inst->reg == vreg.value) inst->reg = color;
         FOREACH_MIR_OPERAND(inst, op) {
           if (op->kind == MIR_OP_REGISTER && op->value.reg.value == vreg.value) {
             op->value.reg.value = color;
@@ -867,9 +876,9 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
   PRINT_ADJACENCY_LISTS(&G.lists);
   PRINT_NUMBER_STACK(&stack);
 
-  // TODO: Reenable this stuff
-  //track_registers(f);
+  track_registers(f);
 
+  // TODO: Reenable this
   //if (optimise) codegen_optimise_blocks(f->context);
 
   /// Free allocated resources.
