@@ -355,3 +355,19 @@ void eprint(const char *fmt, ...) {
 }
 
 usz number_width(u64 n) { return n ? (usz) log10((double)n) + 1 : 1; }
+
+/// Find *last* occurence of entire string TOKEN within INPUT string.
+char *strrstr(char *input, const char *token) {
+  const size_t input_length = strlen(input);
+  if (!input_length) return NULL;
+
+  const size_t token_length = strlen(token);
+  if (!token_length) return NULL;
+
+  // Start looking at input_length - token_length for matches, backwards.
+  size_t input_left = input_length;
+  for (char *it = input + input_length - token_length; input_left; --it, --input_left) {
+    if (memcmp(it, token, token_length) == 0) return it;
+  }
+  return NULL;
+}
