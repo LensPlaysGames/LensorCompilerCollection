@@ -271,7 +271,66 @@ int main(int argc, char **argv) {
   thread_use_colours = prefer_using_diagnostics_colours;
 
   const char *infile = argv[input_filepath_index];
-  const char *output_filepath = output_filepath_index == -1 ? "code.S" : argv[output_filepath_index];
+
+  string output_filepath = {0};
+  if (output_filepath_index != -1)
+    output_filepath = string_create(argv[output_filepath_index]);
+  else {
+    // Create output filepath from infile
+
+    // Copy input filepath starting at last path separator.
+
+    // TODO: Strip path separator from end, if present.
+
+    // Find last occurence of path separator in input filepath.
+    char *last_path_separator = strrstr((char*)infile, PLATFORM_PATH_SEPARATOR);
+    // If there are no occurences of a path separator, just use the entire thing.
+    if (!last_path_separator) last_path_separator = (char*)infile;
+    else ++last_path_separator; // Yeet path separator.
+
+    string_buffer path = {0};
+    for (const char *c = last_path_separator; *c; ++c)
+      vector_push(path, *c);
+    // Strip file extension
+    char *last_dot = strrchr(path.data, '.');
+    if (last_dot) {
+      usz last_dot_index = (usz)(last_dot - path.data);
+      path.size = last_dot_index;
+    }
+
+    // Add extension based on target
+    vector_push(path, '.');
+    STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of targets during generation of automatic extension for output file");
+    switch (output_target) {
+
+    case TARGET_GNU_ASM_INTEL: FALLTHROUGH;
+    case TARGET_GNU_ASM_ATT: {
+      vector_push(path, 's');
+    } break;
+
+    case TARGET_COFF_OBJECT: {
+      vector_push(path, 'o');
+      vector_push(path, 'b');
+      vector_push(path, 'j');
+    } break;
+    case TARGET_ELF_OBJECT: {
+      vector_push(path, 'o');
+    } break;
+
+    case TARGET_NONE: FALLTHROUGH;
+    case TARGET_COUNT:
+      UNREACHABLE();
+    }
+
+    string_buf_zterm(&path);
+
+    // Move string buffer `path` to `output_filepath` string.
+    output_filepath.data = path.data;
+    output_filepath.size = path.size;
+    path.data = NULL;
+    path.size = 0;
+
+  }
   size_t len = strlen(infile);
   bool ok = false;
   string s = platform_read_file(infile, &ok);
@@ -289,7 +348,7 @@ int main(int argc, char **argv) {
       output_target,
       output_calling_convention,
       infile,
-      output_filepath,
+      output_filepath.data,
       NULL,
       s
      )) {
@@ -329,7 +388,7 @@ int main(int argc, char **argv) {
       output_target,
       output_calling_convention,
       infile,
-      output_filepath,
+      output_filepath.data,
       ast,
       (string){0}
     )) exit(3);
@@ -338,9 +397,12 @@ int main(int argc, char **argv) {
     ast_free(ast);
   }
 
-  /// Free the input file.
+  /// Free the input file contents.
   free(s.data);
 
   /// Done!
-  if (verbosity) print("\nGenerated code at output filepath \"%s\"\n", output_filepath);
+  if (verbosity) print("\nGenerated code at output filepath \"%S\"\n", output_filepath);
+
+  /// Free the output filepath.
+  free(output_filepath.data);
 }
