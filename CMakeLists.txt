@@ -67,7 +67,7 @@ add_executable(
   src/codegen/intermediate_representation.c
   src/codegen/register_allocation.c
   src/codegen/machine_ir.c
-  src/codegen/ir/ir.c
+  #src/codegen/ir/ir.c
   src/codegen/x86_64/arch_x86_64.c
   src/codegen/x86_64/arch_x86_64_common.c
   src/codegen/x86_64/arch_x86_64_isel.c
