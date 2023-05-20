@@ -1001,42 +1001,46 @@ void codegen_emit_x86_64(CodegenContext *context) {
     /// Emit a data section directive if we haven't already.
     if (!have_data_section) {
       have_data_section = true;
-      fprint(context->code, ".section .data\n");
+      if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL)
+        fprint(context->code, ".section .data\n");
     }
 
     // Do compile-time known static assignment.
 
     if (var->init) {
       if (var->init->kind == IR_LIT_INTEGER) {
-        fprint(context->code, "%S: .byte ", var->name);
         uint8_t *byte_repr = (uint8_t*)(&var->init->imm);
+        STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of assembly targets");
+        if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL) {
+          // TODO: Endianness selection
+          // `%u` and the `(unsigned)` cast is because variadic arguments
+          // of integral types are always promoted to at least `int` or
+          // `unsigned` in C.
+          fprint(context->code, "%S: .byte %u", var->name, (unsigned) byte_repr[0]);
+          for (usz i = 1; i < type_sizeof(var->type); ++i)
+            fprint(context->code, ",%u", (unsigned) byte_repr[i]);
 
-        // TODO: Endianness selection
-
-        // `%u` and the `(unsigned)` cast is because variadic arguments
-        // of integral types are always promoted to at least `int` or
-        // `unsigned` in C.
-        fprint(context->code, "%u", (unsigned) byte_repr[0]);
-        for (usz i = 1; i < type_sizeof(var->type); ++i)
-          fprint(context->code, ",%u", (unsigned) byte_repr[i]);
-
-        fprint(context->code, "\n");
-
+          fprint(context->code, "\n");
+        }
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
-        // Create symbol for var->name at current offset within the .data section
-        GObjSymbol sym = {0};
-        sym.type = GOBJ_SYMTYPE_STATIC;
-        sym.name = strdup(var->name.data);
-        sym.section_name = strdup(".data");
-        sym.byte_offset = sec_initdata->data.bytes.size;
-        vector_push(object.symbols, sym);
-        // Write initialised bytes to .data section
-        sec_write_n(sec_initdata, byte_repr, type_sizeof(var->type));
+        STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of object targets");
+        if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT) {
+          // Create symbol for var->name at current offset within the .data section
+          GObjSymbol sym = {0};
+          sym.type = GOBJ_SYMTYPE_STATIC;
+          sym.name = strdup(var->name.data);
+          sym.section_name = strdup(".data");
+          sym.byte_offset = sec_initdata->data.bytes.size;
+          vector_push(object.symbols, sym);
+          // Write initialised bytes to .data section
+          sec_write_n(sec_initdata, byte_repr, type_sizeof(var->type));
+        }
 #endif // x86_64_GENERATE_MACHINE_CODE
 
       } else if (var->init->kind == IR_LIT_STRING) {
-        {// MANUAL (required because multiline strings)
+        STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of assembly targets");
+        if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL) {
           fprint(context->code, "%S: .byte ", var->name);
           if (var->init->str.size)
             fprint(context->code, "%u", (unsigned) var->init->str.data[0]);
@@ -1046,16 +1050,19 @@ void codegen_emit_x86_64(CodegenContext *context) {
         }
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
-        // Create symbol for var->name at current offset within the .rodata section
-        GObjSymbol sym = {0};
-        sym.type = GOBJ_SYMTYPE_STATIC;
-        sym.name = strdup(var->name.data);
-        sym.section_name = strdup(".rodata");
-        sym.byte_offset = sec_initdata->data.bytes.size;
-        vector_push(object.symbols, sym);
-        // Write string bytes to .rodata section
-        sec_write_n(sec_rodata, var->init->str.data, var->init->str.size);
-        sec_write_1(sec_rodata, 0);
+        STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of object targets");
+        if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT) {
+          // Create symbol for var->name at current offset within the .rodata section
+          GObjSymbol sym = {0};
+          sym.type = GOBJ_SYMTYPE_STATIC;
+          sym.name = strdup(var->name.data);
+          sym.section_name = strdup(".rodata");
+          sym.byte_offset = sec_initdata->data.bytes.size;
+          vector_push(object.symbols, sym);
+          // Write string bytes to .rodata section
+          sec_write_n(sec_rodata, var->init->str.data, var->init->str.size);
+          sec_write_1(sec_rodata, 0);
+        }
 #endif // x86_64_GENERATE_MACHINE_CODE
 
       }
@@ -1066,18 +1073,23 @@ void codegen_emit_x86_64(CodegenContext *context) {
     } else {
       /// Allocate space for the variable.
       usz sz = type_sizeof(var->type);
-      fprint(context->code, "%S: .space %zu\n", var->name, sz);
+      STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of assembly targets");
+      if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL)
+        fprint(context->code, "%S: .space %zu\n", var->name, sz);
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
-      // Create symbol for var->name at current offset within the .bss section
-      GObjSymbol sym = {0};
-      sym.type = GOBJ_SYMTYPE_STATIC;
-      sym.name = strdup(var->name.data);
-      sym.section_name = strdup(".bss");
-      sym.byte_offset = sec_initdata->data.bytes.size;
-      vector_push(object.symbols, sym);
-      // Write uninitialised bytes to .data section
-      sec_uninitdata->data.fill.amount += sz;
+      STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of object targets");
+      if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT) {
+        // Create symbol for var->name at current offset within the .bss section
+        GObjSymbol sym = {0};
+        sym.type = GOBJ_SYMTYPE_STATIC;
+        sym.name = strdup(var->name.data);
+        sym.section_name = strdup(".bss");
+        sym.byte_offset = sec_initdata->data.bytes.size;
+        vector_push(object.symbols, sym);
+        // Write uninitialised bytes to .data section
+        sec_uninitdata->data.fill.amount += sz;
+      }
 #endif
     }
   }
@@ -1190,6 +1202,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   // Remove register to register moves when value and size are equal.
   foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
     if (function->origin && function->origin->is_extern) continue;
+
     foreach_ptr (MIRBlock*, block, function->blocks) {
 
       MIRInstructionVector instructions_to_remove = {0};
