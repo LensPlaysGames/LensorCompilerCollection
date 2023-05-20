@@ -1245,7 +1245,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         // Save return register if it is not the result of this
         // function call already; if it is, the RA has already asserted
         // that RAX can be clobbered by this instruction.
-        if (inst->reg != desc.result_register && func_regs & desc.result_register) {
+        if (inst->reg < MIR_ARCH_START && inst->reg != desc.result_register && func_regs & desc.result_register) {
           MIRInstruction *push = mir_makenew(MX64_PUSH);
           mir_add_op(push, mir_op_register(desc.result_register, r64, false));
           mir_insert_instruction(inst->block, push, inst_index++);
@@ -1258,14 +1258,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
           if (x & ((usz)1 << i) && is_caller_saved((MIRRegister)i))
             regs_pushed_count++;
 
-        // Align stack pointer before call, if necessary.
-        if (regs_pushed_count & 0b1) {
-          MIRInstruction *sub = mir_makenew(MX64_SUB);
-          mir_add_op(sub, mir_op_immediate(8));
-          mir_add_op(sub, mir_op_register(REG_RSP, r64, false));
-          mir_insert_instruction(inst->block, sub, inst_index++);
-        }
-
         // Push caller saved registers
         // TODO: Don't push registers that are used for arguments.
         for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i) {
@@ -1276,14 +1268,22 @@ void codegen_emit_x86_64(CodegenContext *context) {
           }
         }
 
-        usz bytes_pushed = 0;
+        // The amount of bytes that need to be pushed onto/popped off
+        // of the stack, not including saving/restoring of registers.
+        isz bytes_pushed = 0;
+
+        // Align stack pointer before call, if necessary.
+        if (!(regs_pushed_count & 0b1))
+          bytes_pushed += 8;
         // Shadow stack
-        if (context->call_convention == CG_CALL_CONV_MSWIN) {
+        if (context->call_convention == CG_CALL_CONV_MSWIN)
+          bytes_pushed += 32;
+
+        if (bytes_pushed) {
           MIRInstruction *sub = mir_makenew(MX64_SUB);
-          mir_add_op(sub, mir_op_immediate(32));
+          mir_add_op(sub, mir_op_immediate(bytes_pushed));
           mir_add_op(sub, mir_op_register(REG_RSP, r64, false));
           mir_insert_instruction(inst->block, sub, inst_index++);
-          bytes_pushed += 32;
         }
 
         // Push argument addresses, if need be.
@@ -1333,14 +1333,17 @@ void codegen_emit_x86_64(CodegenContext *context) {
         }
 
         // Restore stack pointer from stack alignment, if necessary.
-        if (regs_pushed_count & 0b1) {
+        if (!(regs_pushed_count & 0b1)) {
           MIRInstruction *add = mir_makenew(MX64_ADD);
           mir_add_op(add, mir_op_immediate(8));
           mir_add_op(add, mir_op_register(REG_RSP, r64, false));
           mir_insert_instruction(inst->block, add, inst_index++);
         }
 
-        if (inst->reg != desc.result_register) {
+        // If inst->reg is still a virtual register, then this call's
+        // result just gets discarded (no use of it's vreg) so we can just
+        // /not/ do this part.
+        if (inst->reg < MIR_ARCH_START && inst->reg != desc.result_register) {
           MIRInstruction *move = mir_makenew(MX64_MOV);
           mir_add_op(move, mir_op_register(desc.result_register, r64, false));
           mir_add_op(move, mir_op_register(inst->reg, r64, false));
