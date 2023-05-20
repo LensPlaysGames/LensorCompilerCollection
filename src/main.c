@@ -137,7 +137,7 @@ static int handle_command_line_arguments(int argc, char **argv) {
         print_acceptable_architectures();
         return 1;
       }
-    } else if (strcmp(argument, "--targets") == 0) {
+    } else if (strcmp(argument, "-ts") == 0 || strcmp(argument, "--targets") == 0) {
       print_acceptable_targets();
       exit(0);
     } else if (strcmp(argument, "-t") == 0 || strcmp(argument, "--target") == 0) {
