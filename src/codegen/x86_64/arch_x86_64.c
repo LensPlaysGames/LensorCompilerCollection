@@ -1246,7 +1246,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
           isz bytes_pushed = 0;
 
           // Align stack pointer before call, if necessary.
-          if (!(regs_pushed_count & 0b1))
+          if (regs_pushed_count & 0b1)
             bytes_pushed += 8;
           // Shadow stack
           if (context->call_convention == CG_CALL_CONV_MSWIN)
@@ -1306,7 +1306,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
           }
 
           // Restore stack pointer from stack alignment, if necessary.
-          if (!(regs_pushed_count & 0b1)) {
+          if (regs_pushed_count & 0b1) {
             MIRInstruction *add = mir_makenew(MX64_ADD);
             mir_add_op(add, mir_op_immediate(8));
             mir_add_op(add, mir_op_register(REG_RSP, r64, false));
