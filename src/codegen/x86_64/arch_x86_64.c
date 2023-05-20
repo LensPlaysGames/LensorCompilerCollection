@@ -983,9 +983,12 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   if (debug_ir) ir_femit(stdout, context);
 
-  // Assign block labels.
+  // Mangle function names, and assign block labels.
   usz block_cnt = 0;
   foreach_ptr (IRFunction*, function, context->functions) {
+    // Don't mangle external function(s).
+    if (!function->attr_nomangle) mangle_function_name(function);
+
     list_foreach (IRBlock *, block, function->blocks) {
       if (optimise) {
         /// Determine whether this block is ever referenced anywhere.
@@ -1034,17 +1037,13 @@ void codegen_emit_x86_64(CodegenContext *context) {
   /*ir_set_ids(context);
   ir_femit(stdout, context);*/
 
-  // FUNCTION NAME MANGLING
-  foreach_ptr (IRFunction*, function, context->functions) {
-    // Don't mangle external function(s).
-    if (!function->attr_nomangle) mangle_function_name(function);
-  }
-
   MIRFunctionVector machine_instructions_from_ir = mir_from_ir(context);
 
+  // Lowering in code.
   foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
-    if (f->origin && f->origin->is_extern) continue;
     print_mir_function(f);
+
+    if (f->origin && f->origin->is_extern) continue;
 
     // Restore callee-saved registers used in the function.
     for (Register i = sizeof(f->origin->registers_in_use) * 8 - 1; i > 0; --i) {
