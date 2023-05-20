@@ -1327,14 +1327,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
             }
           }
 
-          // Restore stack pointer from stack alignment, if necessary.
-          if (regs_pushed_count & 0b1) {
-            MIRInstruction *add = mir_makenew(MX64_ADD);
-            mir_add_op(add, mir_op_immediate(8));
-            mir_add_op(add, mir_op_register(REG_RSP, r64, false));
-            mir_insert_instruction(instruction->block, add, i++);
-          }
-
           // If inst->reg is still a virtual register, then this call's
           // result just gets discarded (no use of it's vreg) so we can just
           // /not/ do this part.
