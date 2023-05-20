@@ -112,7 +112,7 @@ size_t regbytes_from_size(RegSize r) {
   case r16: return 2;
   case r32: return 4;
   case r64: return 8;
-  default: ICE("Register size can not be converted into byte count on x86_64: %U", r);
+  default: ICE("Register size can not be converted into byte count on x86_64: %d", r);
   }
 }
 
@@ -122,7 +122,7 @@ const char *regname(RegisterDescriptor reg, RegSize size) {
   case r32: return register_name_32(reg);
   case r16: return register_name_16(reg);
   case r8:  return register_name_8(reg);
-  default: ICE("Register size can not be converted into name on x86_64: %U", size);
+  default: ICE("Register size can not be converted into name on x86_64: %d", size);
   }
 }
 const char *regname_from_bytes(RegisterDescriptor reg, size_t bytes) {
