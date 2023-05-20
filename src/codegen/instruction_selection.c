@@ -1044,17 +1044,41 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
             FOREACH_MIR_OPERAND(out, op) {
               // Resolve operand and instruction pattern references...
               if (op->kind == MIR_OP_OP_REF) {
-                ASSERT(op->value.op_ref.pattern_instruction_index < pattern_input.size,
+                ASSERT(op->value.op_ref.pattern_instruction_index < pattern_input.size + pattern->output.size,
                        "Invalid pattern instruction index in operand reference (parser went wrong)");
-                MIRInstruction *inst = pattern_input.data[op->value.op_ref.pattern_instruction_index];
+                MIRInstruction *inst = NULL;
+                if (op->value.op_ref.pattern_instruction_index >= pattern_input.size) {
+                  usz pattern_output_inst_index = op->value.op_ref.pattern_instruction_index - pattern_input.size;
+                  ASSERT(pattern_output_inst_index <= i, "Cannot forward-reference emission instructions... How'd you even manage this?");
+                  // Self-reference or backward-reference
+                  if (pattern_output_inst_index == i) inst = out;
+                  else inst = instructions.data[pattern_output_inst_index];
+                }
+                else inst = pattern_input.data[op->value.op_ref.pattern_instruction_index];
+
+                // Get operand from resolved instruction reference
                 ASSERT(op->value.op_ref.operand_index < inst->operand_count,
                        "Invalid operand index (parser went wrong)");
                 *op = *mir_get_op(inst, op->value.op_ref.operand_index);
+
               } else if (op->kind == MIR_OP_INST_REF) {
-                ASSERT(op->value.inst_ref < pattern_input.size,
+                ASSERT(op->value.inst_ref < pattern_input.size + pattern->output.size,
                        "Invalid pattern instruction index in instruction reference (parser went wrong)");
-                MIRInstruction *inst = pattern_input.data[op->value.inst_ref];
-                *op = mir_op_reference(inst);
+                if (op->value.op_ref.pattern_instruction_index >= pattern_input.size) {
+                  usz pattern_output_inst_index = op->value.op_ref.pattern_instruction_index - pattern_input.size;
+                  ASSERT(pattern_output_inst_index <= i, "Cannot forward-reference emission instructions... How'd you even manage this?");
+                  // Self-reference
+                  if (pattern_output_inst_index == i) {
+                    *op = mir_op_reference(out);
+                  } else {
+                    // Create a register reference to the OUTPUT instruction corresponding to the referenced *pattern* output instruction.
+                    MIRInstruction *inst = instructions.data[pattern_output_inst_index];
+                    *op = mir_op_reference(inst);
+                  }
+                } else {
+                  MIRInstruction *inst = pattern_input.data[op->value.op_ref.pattern_instruction_index];
+                  *op = mir_op_reference(inst);
+                }
               }
             }
 
