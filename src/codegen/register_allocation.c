@@ -189,6 +189,41 @@ static void collect_interferences_from_block
       }
     }
 
+    // Make all vreg operands interfere with each other; if they are used as operands of the same instruction, they *must* interfere.
+    typedef struct MIROperandPlusLiveValIndex {
+      MIROperand *op;
+      usz live_idx;
+    } MIROperandPlusLiveValIndex;
+    Vector(MIROperandPlusLiveValIndex) vreg_operands = {0};
+    FOREACH_MIR_OPERAND(inst, oper) {
+      if (oper->kind == MIR_OP_REGISTER && oper->value.reg.value >= MIR_ARCH_START) {
+        // Get index within adjacency matrix of vreg operand.
+        usz live_idx = (usz)-1;
+        foreach_index (i, *vregs) {
+          if (vregs->data[i].value == oper->value.reg.value) {
+            live_idx = i;
+            break;
+          }
+        }
+        ASSERT(live_idx != (usz)-1, "Could not find vreg from live values vector in list of vregs: %Z\n", oper->value.reg.value - MIR_ARCH_START);
+        MIROperandPlusLiveValIndex val = {0};
+        val.op = oper;
+        val.live_idx = live_idx;
+        vector_push(vreg_operands, val);
+      }
+    }
+    if (vreg_operands.size > 1) {
+      foreach (MIROperandPlusLiveValIndex, A, vreg_operands) {
+        // Set interference with all other vreg operands
+        foreach (MIROperandPlusLiveValIndex, B, vreg_operands) {
+          if (B->live_idx == A->live_idx) continue;
+          DEBUG("Setting v%Z interfere with v%Z (used in same instruction)\n", A->op->value.reg.value - MIR_ARCH_START, B->op->value.reg.value - MIR_ARCH_START);
+          adjm_set(G->matrix, A->live_idx, B->live_idx);
+        }
+      }
+    }
+    vector_delete(vreg_operands);
+
     // Find this instruction's index in vregs vector.
     usz inst_idx = (usz)-1;
     foreach_index (i, *vregs) {
