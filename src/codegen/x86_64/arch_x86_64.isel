@@ -114,6 +114,16 @@ emit MX64_MOV(src, i1, Immediate offset = 0)
 
 match MIR_STORE(Immediate value, Register dst)
 emit MX64_MOV(value, dst, Immediate offset = 0)
+match MIR_STORE(Static value, Register dst)
+emit MX64_MOV(value, dst, Immediate offset = 0)
+match MIR_STORE(Static value, Static dst)
+emit {
+  ;; Load pointer to static value
+  MX64_MOV i1(value, i1)
+  ;; Copy pointer of static value to value of destination
+  MX64_MOV(i1, dst)
+}
+
 
 match
 MIR_STORE i1(Immediate imm, Local l)
