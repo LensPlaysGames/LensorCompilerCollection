@@ -660,14 +660,14 @@ static MIROperand isel_parse_operand(ISelParser *p) {
     loc expr_loc = p->tok.source_location;
     ISelValue value = isel_parse_expression(p);
     if (value.kind == ISEL_ENV_INTEGER) {
-      if (out.kind == MIR_OP_IMMEDIATE) out.value.imm = value.integer;
-      else ERR_AT(expr_loc, "Cannot initialise this type of operand with integer expression");
+      if (out.kind != MIR_OP_IMMEDIATE)
+        ERR_AT(expr_loc, "Cannot initialise this type of operand with integer expression");
+      out.value.imm = value.integer;
     } else if (value.kind == ISEL_ENV_REGISTER) {
-      if (out.kind == MIR_OP_REGISTER) {
-        out.value.reg.value = (uint32_t)value.vreg.value;
-        out.value.reg.size = (uint16_t)value.vreg.size;
-      }
-      else ERR_AT(expr_loc, "Cannot initialise this type of operand with register expression");
+      if (out.kind != MIR_OP_REGISTER)
+        ERR_AT(expr_loc, "Cannot initialise this type of operand with register expression");
+      out.value.reg.value = (uint32_t)value.vreg.value;
+      out.value.reg.size = (uint16_t)value.vreg.size;
     } else ERR_AT(expr_loc, "Unhandled expression kind");
   }
 
@@ -732,6 +732,8 @@ static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
   // Eat comma, if present
   if (p->tok.kind == TOKEN_COMMA) isel_next_tok(p);
 
+  ++p->pattern_instruction_index;
+
   return out;
 }
 
@@ -753,7 +755,6 @@ static ISelPattern isel_parse_match(ISelParser *p) {
     if (p->tok.kind == TOKEN_EOF) ICE("ISel reached EOF while parsing input pattern instructions of match definition");
     MIRInstruction *inst = isel_parse_inst_spec(p);
     vector_push(out.input, inst);
-    ++p->pattern_instruction_index;
   }
 
   // Yeet "emit" keyword.
