@@ -182,4 +182,7 @@ NODISCARD usz number_width(u64 n);
 
 #define ALIGN_TO(value, alignment) (value + ((alignment - (value % alignment)) % alignment))
 
+/// Find *last* occurence of entire string TOKEN within INPUT string.
+char *strrstr(char *input, const char *token);
+
 #endif // FUNCOMPILER_UTILS_H
