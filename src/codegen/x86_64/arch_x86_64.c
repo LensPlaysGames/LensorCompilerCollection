@@ -377,6 +377,7 @@ enum StackFrameKind {
   FRAME_FULL,
   FRAME_MINIMAL,
   FRAME_NONE,
+  FRAME_COUNT
 };
 
 static enum StackFrameKind stack_frame_kind(IRFunction *f) {
@@ -842,6 +843,101 @@ bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *functi
 
 }
 
+static void mir_x86_64_function_entry(enum StackFrameKind frame_kind, MIRFunction *f) {
+  ASSERT(f, "Invalid argument");
+  STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of stack frame kinds in function entry MIR lowering");
+  ASSERT(frame_kind < FRAME_COUNT, "Invalid stack frame kind!");
+  switch (frame_kind) {
+  case FRAME_COUNT: UNREACHABLE();
+  case FRAME_NONE: break;
+
+  case FRAME_FULL: {
+    // PUSH %RBP
+    MIRInstruction *save_bp = mir_makenew(MX64_PUSH);
+    mir_add_op(save_bp, mir_op_register(REG_RBP, r64, false));
+    // MOV %RSP, %RBP
+    MIRInstruction *save_sp = mir_makenew(MX64_MOV);
+    mir_add_op(save_sp, mir_op_register(REG_RSP, r64, false));
+    mir_add_op(save_sp, mir_op_register(REG_RBP, r64, false));
+    if (f->origin->locals_total_size) {
+      // SUB $f->locals_total_size, %RSP
+      MIRInstruction *locals = mir_makenew(MX64_SUB);
+      mir_add_op(locals, mir_op_immediate((int64_t)f->origin->locals_total_size));
+      mir_add_op(locals, mir_op_register(REG_RSP, r64, false));
+      mir_prepend_instruction(f, locals);
+    }
+
+    // Function entry (backwards because prepending)
+    mir_prepend_instruction(f, save_sp);
+    mir_prepend_instruction(f, save_bp);
+  } break;
+
+  case FRAME_MINIMAL: {
+    // PUSH %RBP
+    MIRInstruction *save_bp = mir_makenew(MX64_PUSH);
+    mir_add_op(save_bp, mir_op_register(REG_RBP, r64, false));
+    mir_prepend_instruction(f, save_bp);
+  } break;
+  }
+}
+
+static void mir_x86_64_function_exit_at(enum StackFrameKind frame_kind, MIRBlock *block, usz *index) {
+  STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of stack frame kinds in function entry MIR lowering");
+  ASSERT(frame_kind < FRAME_COUNT, "Invalid stack frame kind!");
+  switch (frame_kind) {
+  case FRAME_COUNT: UNREACHABLE();
+  case FRAME_NONE: break;
+
+  case FRAME_FULL: {
+    // MOV %RBP, %RSP
+    MIRInstruction *restore_sp = mir_makenew(MX64_MOV);
+    mir_add_op(restore_sp, mir_op_register(REG_RBP, r64, false));
+    mir_add_op(restore_sp, mir_op_register(REG_RSP, r64, false));
+    mir_insert_instruction(block, restore_sp, ++*index);
+    // POP %RBP
+    MIRInstruction *restore_bp = mir_makenew(MX64_POP);
+    mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
+    mir_insert_instruction(block, restore_sp, ++*index);
+  } break;
+
+  case FRAME_MINIMAL: {
+    // POP %RBP
+    MIRInstruction *restore_bp = mir_makenew(MX64_POP);
+    mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
+    mir_insert_instruction(block, restore_bp, ++*index);
+  } break;
+  }
+}
+
+static void mir_x86_64_function_exit(enum StackFrameKind frame_kind, MIRFunction *f) {
+  ASSERT(f, "Invalid argument");
+  STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of stack frame kinds in function entry MIR lowering");
+  ASSERT(frame_kind < FRAME_COUNT, "Invalid stack frame kind!");
+  switch (frame_kind) {
+  case FRAME_COUNT: UNREACHABLE();
+  case FRAME_NONE: break;
+
+  case FRAME_FULL: {
+    // MOV %RBP, %RSP
+    MIRInstruction *restore_sp = mir_makenew(MX64_MOV);
+    mir_add_op(restore_sp, mir_op_register(REG_RBP, r64, false));
+    mir_add_op(restore_sp, mir_op_register(REG_RSP, r64, false));
+    mir_append_instruction(f, restore_sp);
+    // POP %RBP
+    MIRInstruction *restore_bp = mir_makenew(MX64_POP);
+    mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
+    mir_append_instruction(f, restore_bp);
+  } break;
+
+  case FRAME_MINIMAL: {
+    // POP %RBP
+    MIRInstruction *restore_bp = mir_makenew(MX64_POP);
+    mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
+    mir_append_instruction(f, restore_bp);
+  } break;
+  }
+}
+
 void codegen_emit_x86_64(CodegenContext *context) {
 #ifdef X86_64_GENERATE_MACHINE_CODE
   GenericObjectFile object = {0};
@@ -1054,53 +1150,11 @@ void codegen_emit_x86_64(CodegenContext *context) {
       }
     }
 
+    // Function prologue/epilogue
     enum StackFrameKind frame_kind = stack_frame_kind(f->origin);
-    switch (frame_kind) {
-    case FRAME_NONE: break;
+    mir_x86_64_function_entry(frame_kind, f);
+    mir_x86_64_function_exit(frame_kind, f);
 
-    case FRAME_FULL: {
-      // PUSH %RBP
-      MIRInstruction *save_bp = mir_makenew(MX64_PUSH);
-      mir_add_op(save_bp, mir_op_register(REG_RBP, r64, false));
-      // MOV %RSP, %RBP
-      MIRInstruction *save_sp = mir_makenew(MX64_MOV);
-      mir_add_op(save_sp, mir_op_register(REG_RSP, r64, false));
-      mir_add_op(save_sp, mir_op_register(REG_RBP, r64, false));
-      if (f->origin->locals_total_size) {
-        // SUB $f->locals_total_size, %RSP
-        MIRInstruction *locals = mir_makenew(MX64_SUB);
-        mir_add_op(locals, mir_op_immediate((int64_t)f->origin->locals_total_size));
-        mir_add_op(locals, mir_op_register(REG_RSP, r64, false));
-        mir_prepend_instruction(f, locals);
-      }
-
-      // Function entry (backwards because prepending)
-      mir_prepend_instruction(f, save_sp);
-      mir_prepend_instruction(f, save_bp);
-
-      // MOV %RBP, %RSP
-      MIRInstruction *restore_sp = mir_makenew(MX64_MOV);
-      mir_add_op(restore_sp, mir_op_register(REG_RBP, r64, false));
-      mir_add_op(restore_sp, mir_op_register(REG_RSP, r64, false));
-      mir_append_instruction(f, restore_sp);
-      // POP %RBP
-      MIRInstruction *restore_bp = mir_makenew(MX64_POP);
-      mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
-      mir_append_instruction(f, restore_bp);
-    } break;
-
-    case FRAME_MINIMAL: {
-      // PUSH %RBP
-      MIRInstruction *save_bp = mir_makenew(MX64_PUSH);
-      mir_add_op(save_bp, mir_op_register(REG_RBP, r64, false));
-      mir_prepend_instruction(f, save_bp);
-
-      // POP %RBP
-      MIRInstruction *restore_bp = mir_makenew(MX64_POP);
-      mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
-      mir_append_instruction(f, restore_bp);
-    } break;
-    }
   }
 
   print("================ ISel ================\n");
@@ -1124,18 +1178,31 @@ void codegen_emit_x86_64(CodegenContext *context) {
     allocate_registers(f, &desc);
   }
 
-  // It's not necessary at all, but doing peephole opt here would
-  // be a great idea, I think. Things like removing reg-to-reg moves when
-  // they are the same.
+  /// After RA, the last fixups before code emission are applied.
+  // Lowering of MIR_CALL
+  // Remove register to register moves when value and size are equal.
   foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
     if (function->origin && function->origin->is_extern) continue;
     foreach_ptr (MIRBlock*, block, function->blocks) {
 
+      struct MIRInstructionPlusIndex {
+        MIRInstruction *inst;
+        usz index;
+      };
+      Vector(struct MIRInstructionPlusIndex) calls_to_fixup = {0};
       MIRInstructionVector instructions_to_remove = {0};
 
-      foreach_ptr (MIRInstruction*, instruction, block->instructions) {
+      foreach_index (i, block->instructions) {
+        MIRInstruction *instruction = block->instructions.data[i];
         switch (instruction->opcode) {
         default: break;
+
+        case MIR_CALL: {
+          struct MIRInstructionPlusIndex val = {0};
+          val.inst = instruction;
+          val.index = i;
+          vector_push(calls_to_fixup, val);
+        } break; // case MIR_CALL
 
         case MX64_MOV: {
           // MOV(REG x, REG x) -> NOP
@@ -1148,6 +1215,146 @@ void codegen_emit_x86_64(CodegenContext *context) {
         } // switch (instruction->opcode)
 
       }
+
+      usz index_difference = 0;
+      foreach (struct MIRInstructionPlusIndex, val, calls_to_fixup) {
+        // Account for added instructions
+        usz inst_index = val->index + index_difference;
+        MIRInstruction *inst = val->inst;
+
+        // Tail call.
+        if (inst->origin->call.tail_call) {
+          // Restore the frame pointer if we have one.
+          mir_x86_64_function_exit_at(stack_frame_kind(inst->origin->parent_block->function), inst->block, &inst_index);
+          MIRInstruction *jump = mir_makenew(MX64_JMP);
+          mir_add_op(jump, *mir_get_op(inst, 0));
+          mir_insert_instruction(inst->block, jump, inst_index++);
+          // FIXME: I don't think this does anything; what was it for?
+          if (inst->origin->parent_block) inst->origin->parent_block->done = true;
+          break;
+        }
+
+        size_t func_regs = inst->block->function->origin->registers_in_use;
+        size_t regs_pushed_count = 0;
+
+        // Save return register if it is not the result of this
+        // function call already; if it is, the RA has already asserted
+        // that RAX can be clobbered by this instruction.
+        if (inst->reg != desc.result_register && func_regs & desc.result_register) {
+          MIRInstruction *push = mir_makenew(MX64_PUSH);
+          mir_add_op(push, mir_op_register(desc.result_register, r64, false));
+          mir_insert_instruction(inst->block, push, inst_index++);
+          regs_pushed_count++;
+        }
+
+        // Count caller-saved registers used in function, excluding result register (counted above).
+        size_t x = func_regs;
+        for (size_t i = REG_RAX + 1; i < sizeof(x) * 8; ++i)
+          if (x & ((usz)1 << i) && is_caller_saved((MIRRegister)i))
+            regs_pushed_count++;
+
+        // Align stack pointer before call, if necessary.
+        if (regs_pushed_count & 0b1) {
+          MIRInstruction *sub = mir_makenew(MX64_SUB);
+          mir_add_op(sub, mir_op_immediate(8));
+          mir_add_op(sub, mir_op_register(REG_RSP, r64, false));
+          mir_insert_instruction(inst->block, sub, inst_index++);
+        }
+
+        // Push caller saved registers
+        // TODO: Don't push registers that are used for arguments.
+        for (Register i = REG_RAX + 1; i < sizeof(func_regs) * 8; ++i) {
+          if (func_regs & ((usz)1 << i) && is_caller_saved(i)) {
+            MIRInstruction *push = mir_makenew(MX64_PUSH);
+            mir_add_op(push, mir_op_register(i, r64, false));
+            mir_insert_instruction(inst->block, push, inst_index++);
+          }
+        }
+
+        usz bytes_pushed = 0;
+        // Shadow stack
+        if (context->call_convention == CG_CALL_CONV_MSWIN) {
+          MIRInstruction *sub = mir_makenew(MX64_SUB);
+          mir_add_op(sub, mir_op_immediate(32));
+          mir_add_op(sub, mir_op_register(REG_RSP, r64, false));
+          mir_insert_instruction(inst->block, sub, inst_index++);
+          bytes_pushed += 32;
+        }
+
+        // Push argument addresses, if need be.
+        bool first = true;
+        FOREACH_MIR_OPERAND(inst, arg) {
+          if (first) {
+            first = false;
+            continue;
+          }
+          // If argument is passed on stack due to ABI.
+          if (arg->kind == MIR_OP_LOCAL_REF) {
+            // Push the base pointer.
+            MIRInstruction *push = mir_makenew(MX64_PUSH);
+            mir_add_op(push, mir_op_register(REG_RBP, r64, false));
+            mir_insert_instruction(inst->block, push, inst_index++);
+            bytes_pushed += 8;
+            // Subtract local's offset from base pointer from the newly pushed base pointer.
+            MIRInstruction *sub = mir_makenew(MX64_SUB);
+            ASSERT(arg->value.local_ref < function->frame_objects.size, "Referenced frame object does not exist");
+            mir_add_op(sub, mir_op_immediate(function->frame_objects.data[arg->value.local_ref].offset));
+            mir_add_op(sub, mir_op_register(REG_RSP, r64, false));
+            mir_insert_instruction(inst->block, sub, inst_index++);
+          }
+        }
+
+        MIRInstruction *call = mir_makenew(MX64_CALL);
+        call->origin = inst->origin;
+        inst->lowered = call;
+        mir_add_op(call, *mir_get_op(inst, 0));
+        mir_insert_instruction_with_reg(inst->block, call, inst_index++, inst->reg);
+
+        // Restore stack
+        if (bytes_pushed) {
+          MIRInstruction *add = mir_makenew(MX64_ADD);
+          mir_add_op(add, mir_op_immediate((isz)bytes_pushed));
+          mir_add_op(add, mir_op_register(REG_RSP, r64, false));
+          mir_insert_instruction(inst->block, add, inst_index++);
+        }
+
+        // Restore caller saved registers used in called function.
+        for (Register i = sizeof(func_regs) * 8 - 1; i > REG_RAX; --i) {
+          if (func_regs & ((usz)1 << i) && is_caller_saved(i)) {
+            MIRInstruction *pop = mir_makenew(MX64_POP);
+            mir_add_op(pop, mir_op_register(i, r64, false));
+            mir_insert_instruction(inst->block, pop, inst_index++);
+          }
+        }
+
+        // Restore stack pointer from stack alignment, if necessary.
+        if (regs_pushed_count & 0b1) {
+          MIRInstruction *add = mir_makenew(MX64_ADD);
+          mir_add_op(add, mir_op_immediate(8));
+          mir_add_op(add, mir_op_register(REG_RSP, r64, false));
+          mir_insert_instruction(inst->block, add, inst_index++);
+        }
+
+        if (inst->reg != desc.result_register) {
+          MIRInstruction *move = mir_makenew(MX64_MOV);
+          mir_add_op(move, mir_op_register(desc.result_register, r64, false));
+          mir_add_op(move, mir_op_register(inst->reg, r64, false));
+          mir_insert_instruction(inst->block, move, inst_index++);
+
+          // Restore return register.
+          if (func_regs & desc.result_register) {
+            MIRInstruction *pop = mir_makenew(MX64_POP);
+            mir_add_op(pop, mir_op_register(desc.result_register, r64, false));
+            mir_insert_instruction(inst->block, pop, inst_index++);
+          }
+        }
+
+        vector_push(instructions_to_remove, inst);
+
+        // Record added instructions
+        index_difference += inst_index - val->index;
+      }
+      vector_delete(calls_to_fixup);
 
       foreach_ptr (MIRInstruction*, instruction, instructions_to_remove) {
         mir_remove_instruction(instruction);
