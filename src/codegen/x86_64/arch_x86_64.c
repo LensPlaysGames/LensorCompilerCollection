@@ -1237,7 +1237,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
             if (func_regs & ((usz)1 << r) && is_caller_saved(r)) {
               MIRInstruction *push = mir_makenew(MX64_PUSH);
               mir_add_op(push, mir_op_register(r, r64, false));
-              mir_insert_instruction(instruction->block, push, r++);
+              mir_insert_instruction(instruction->block, push, i++);
             }
           }
 
@@ -1301,7 +1301,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
             if (func_regs & ((usz)1 << r) && is_caller_saved(r)) {
               MIRInstruction *pop = mir_makenew(MX64_POP);
               mir_add_op(pop, mir_op_register(r, r64, false));
-              mir_insert_instruction(instruction->block, pop, r++);
+              mir_insert_instruction(instruction->block, pop, i++);
             }
           }
 
