@@ -119,7 +119,7 @@ emit MX64_MOV(value, dst, Immediate offset = 0)
 match MIR_STORE(Static value, Static dst)
 emit {
   ;; Load pointer to static value
-  MX64_MOV i1(value, i1)
+  MX64_LEA i1(value, i1)
   ;; Copy pointer of static value to value of destination
   MX64_MOV(i1, dst)
 }
