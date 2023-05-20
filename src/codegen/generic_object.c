@@ -91,16 +91,7 @@ size_t elf_add_string(ByteBuffer* buffer, const char *new_string) {
   return out;
 }
 
-/// Write the given generic object file in ELF object file format into
-/// a file at the given path.
-void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
-  ASSERT(object && path, "Invalid arguments");
-  FILE *f = fopen(path, "wb");
-  if (!f) {
-    print("ERROR: Could not open file at \"%s\"\n", path);
-    return;
-  }
-
+void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
   elf64_header hdr = {0};
   hdr.e_ident[EI_MAG0] = 0x7f;
   hdr.e_ident[EI_MAG1] = 'E';
@@ -170,14 +161,16 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
       data_offset += shdr.sh_size;
     }
 
-    // Assign flags
-    if (strcmp(s->name, ".text") == 0)
-      shdr.sh_flags |= SHF_ALLOC | SHF_EXECINSTR;
-    else if (strcmp(s->name, ".bss") == 0 || strcmp(s->name, ".data") == 0)
-      shdr.sh_flags = SHF_ALLOC | SHF_WRITE;
-    else if (strcmp(s->name, ".rodata") == 0)
-      shdr.sh_flags = SHF_ALLOC; // FIXME: Is SHF_STRINGS appropriate?
-    else ICE("[GObj]:ELF: Unrecognised section in GenericObjectFile: \"%s\"", s->name);
+    if (s->attributes & SEC_ATTR_WRITABLE)
+      shdr.sh_flags |= SHF_WRITE;
+    if (s->attributes & SEC_ATTR_EXECUTABLE)
+      shdr.sh_flags |= SHF_EXECINSTR;
+
+    // Only program sections need allocated at load time.
+    // TODO: Is SHF_STRINGS appropriate for ".rodata"?
+    if (strcmp(s->name, ".text") == 0 || strcmp(s->name, ".bss") == 0 ||
+        strcmp(s->name, ".data") == 0 || strcmp(s->name, ".rodata") == 0)
+      shdr.sh_flags |= SHF_ALLOC;
 
     uint32_t section_name = (uint32_t)elf_add_string(&string_table, s->name);
     shdr.sh_name = section_name;
@@ -351,8 +344,6 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
     fwrite(c, 1, 1, f);
   }
 
-  fclose(f);
-
   // Cleanup
   vector_delete(string_table);
   vector_delete(relocations);
@@ -360,9 +351,7 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path) {
   vector_delete(shdrs);
 }
 
-/// Write the given generic object file in COFF object file format into
-/// a file at the given path.
-void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) {
+void generic_object_as_elf_x86_64_at_path(GenericObjectFile *object, const char *path) {
   ASSERT(object && path, "Invalid arguments");
   FILE *f = fopen(path, "wb");
   if (!f) {
@@ -370,6 +359,12 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
     return;
   }
 
+  generic_object_as_elf_x86_64(object, f);
+
+  fclose(f);
+}
+
+void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
   // PREPARE STRING TABLE
   ByteBuffer string_table = {0};
   // At the beginning of the COFF string table are 4 bytes that contain
@@ -625,11 +620,23 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path) 
   // RELOCATIONS
   fwrite(relocations.data, relocations.size, sizeof(*relocations.data), f);
 
-  fclose(f);
-
+  // CLEANUP
   vector_delete(relocations);
   vector_delete(string_table);
   vector_delete(symbol_table);
   vector_delete(shdrs);
+}
+
+void generic_object_as_coff_x86_64_at_path(GenericObjectFile *object, const char *path) {
+  ASSERT(object && path, "Invalid arguments");
+  FILE *f = fopen(path, "wb");
+  if (!f) {
+    print("ERROR: Could not open file at \"%s\"\n", path);
+    return;
+  }
+
+  generic_object_as_coff_x86_64(object, f);
+
+  fclose(f);
 }
 

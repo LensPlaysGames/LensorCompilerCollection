@@ -1378,9 +1378,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
   if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT)
     emit_x86_64_generic_object(context, machine_instructions_from_ir);
   if (context->target == TARGET_COFF_OBJECT)
-    generic_object_as_coff_x86_64(&object, "out.obj");
+    generic_object_as_coff_x86_64(&object, context->code);
   if (context->target == TARGET_ELF_OBJECT)
-    generic_object_as_elf_x86_64(&object, "out.o");
+    generic_object_as_elf_x86_64(&object, context->code);
 
   generic_object_delete(&object);
 #endif // x86_64_GENERATE_MACHINE_CODE

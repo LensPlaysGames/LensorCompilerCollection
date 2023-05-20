@@ -96,12 +96,14 @@ void mcode_n(GenericObjectFile *object, void* buffer, size_t n);
 Section *get_section_by_name(const Sections sections, const char *name);
 
 /// Write the given generic object file in ELF object file format into
-/// a file at the given path.
-void generic_object_as_elf_x86_64(GenericObjectFile *object, const char *path);
+/// a given file.
+void generic_object_as_elf_x86_64(GenericObjectFile*, FILE*);
+void generic_object_as_elf_x86_64_at_path(GenericObjectFile*, const char *path);
 
 /// Write the given generic object file in COFF object file format into
-/// a file at the given path.
-void generic_object_as_coff_x86_64(GenericObjectFile *object, const char *path);
+/// a given file.
+void generic_object_as_coff_x86_64(GenericObjectFile*, FILE*);
+void generic_object_as_coff_x86_64_at_path(GenericObjectFile *object, const char *path);
 
 /// Free any resources that have been allocated for the given generic
 /// object file. Invalidates the passed-in generic object file, so don't
