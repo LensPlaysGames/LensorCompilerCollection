@@ -18,9 +18,9 @@ typedef Vector(IRInstruction *) InstructionVector;
 
 CodegenContext *codegen_context_create
 (AST *ast,
- enum CodegenOutputFormat format,
- enum CodegenCallingConvention call_convention,
- enum CodegenAssemblyDialect dialect,
+ CodegenArchitecture,
+ CodegenTarget,
+ CodegenCallingConvention call_convention,
  FILE* code);
 
 void codegen_context_free(CodegenContext *context);
@@ -38,31 +38,36 @@ typedef struct IRStaticVariable {
 } IRStaticVariable;
 
 struct CodegenContext {
-  FILE *code;
-  GenericObjectFile *object;
-  MIRInstructionVector *mir;
-  AST *ast;
-
+  /// The IR
   Vector(IRFunction *) functions;
   Vector(IRStaticVariable *) static_vars;
   Vector(IRInstruction*) removed_instructions;
+
+  /// Code emission (targets)
+  FILE *code;
+  GenericObjectFile *object;
+
+  /// (Used to construct IR)
+  AST *ast;
   IRFunction *function;
   IRFunction *entry;
   IRBlock *block;
 
-  enum CodegenOutputFormat format;
-  enum CodegenCallingConvention call_convention;
-  enum CodegenAssemblyDialect dialect;
+  /// Options
+  CodegenArchitecture arch;
+  // TODO: Allow for multiple targets.
+  CodegenTarget target;
+  CodegenCallingConvention call_convention;
 };
 
 // TODO/FIXME: Make this a parameter affectable by command line arguments.
 extern char codegen_verbose;
 
 NODISCARD bool codegen
-(enum CodegenLanguage,
- enum CodegenOutputFormat,
- enum CodegenCallingConvention,
- enum CodegenAssemblyDialect,
+(CodegenLanguage,
+ CodegenArchitecture arch,
+ CodegenTarget target,
+ CodegenCallingConvention,
  const char *infile,
  const char *outfile,
  AST *ast,

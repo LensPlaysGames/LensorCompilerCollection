@@ -65,13 +65,10 @@ CodegenContext *codegen_context_x86_64_mswin_create() {
   argument_registers = mswin_argument_registers;
 
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
-  cg_ctx->format = CG_FMT_x86_64_GAS;
-  cg_ctx->call_convention = CG_CALL_CONV_MSWIN;
-  cg_ctx->dialect = CG_ASM_DIALECT_ATT;
   return cg_ctx;
 }
 
-/// Creates a context for the x86_64/CG_CALL_CONV_LINUX.
+/// Creates a context for the x86_64/CG_CALL_CONV_SYSV.
 CodegenContext *codegen_context_x86_64_linux_create() {
   caller_saved_register_count = LINUX_CALLER_SAVED_REGISTER_COUNT;
   caller_saved_registers = linux_caller_saved_registers;
@@ -79,9 +76,6 @@ CodegenContext *codegen_context_x86_64_linux_create() {
   argument_registers = linux_argument_registers;
 
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
-  cg_ctx->format = CG_FMT_x86_64_GAS;
-  cg_ctx->call_convention = CG_CALL_CONV_LINUX;
-  cg_ctx->dialect = CG_ASM_DIALECT_ATT;
   return cg_ctx;
 }
 
@@ -340,7 +334,7 @@ SysVArgumentClass sysv_classify_argument(Type *given_type) {
 
 /// @return How many registers an argument takes up.
 usz sysv_argument_register_count_x86_64(CodegenContext *context, Type *function, usz parameter_index) {
-  ASSERT(context->call_convention == CG_CALL_CONV_LINUX, "Don't call sysv_* things unless you are using the SYSV ABI!!");
+  ASSERT(context->call_convention == CG_CALL_CONV_SYSV, "Don't call sysv_* things unless you are using the SYSV ABI!!");
   ASSERT(function->kind == TYPE_FUNCTION);
 
   if (parameter_index >= function->function.parameters.size)
@@ -360,7 +354,7 @@ usz sysv_argument_register_count_x86_64(CodegenContext *context, Type *function,
 }
 
 usz sysv_argument_register_index_x86_64(CodegenContext *context, Type *function, usz parameter_index) {
-  ASSERT(context->call_convention == CG_CALL_CONV_LINUX, "Don't call sysv_* things unless you are using the SYSV ABI!!");
+  ASSERT(context->call_convention == CG_CALL_CONV_SYSV, "Don't call sysv_* things unless you are using the SYSV ABI!!");
   ASSERT(function->kind == TYPE_FUNCTION);
 
   if (parameter_index >= function->function.parameters.size)
@@ -412,7 +406,7 @@ static void lower(CodegenContext *context) {
           instruction->type = instruction->operand->type;
         else instruction->type = t_integer;
       } break;
-      case CG_CALL_CONV_LINUX: {
+      case CG_CALL_CONV_SYSV: {
         instruction->result = REG_RAX;
         if (instruction->operand)
           instruction->type = instruction->operand->type;
@@ -440,7 +434,7 @@ static void lower(CodegenContext *context) {
 
       switch (context->call_convention) {
       default: ICE("Unhandled calling convention in x86_64 lowering of calls");
-      case CG_CALL_CONV_LINUX: {
+      case CG_CALL_CONV_SYSV: {
         Type *function_type = NULL;
         if (instruction->call.is_indirect) {
           if (type_is_pointer(instruction->call.callee_instruction->type))
@@ -533,7 +527,7 @@ static void lower(CodegenContext *context) {
     case IR_PARAMETER: {
       switch (context->call_convention) {
 
-      case CG_CALL_CONV_LINUX: {
+      case CG_CALL_CONV_SYSV: {
         if (parameter_is_in_register_x86_64(context, instruction->parent_block->function, instruction->imm)) {
           // Classify argument into register class.
           // NOTE: This has probably already been done, and we could
@@ -828,7 +822,7 @@ bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *functi
     if (type_sizeof(parameter->type) > 8) return false;
   } return true;
 
-  case CG_CALL_CONV_LINUX: {
+  case CG_CALL_CONV_SYSV: {
     SysVArgumentClass class = SYSV_REGCLASS_INVALID;
     class = sysv_classify_argument(parameter->type);
     ASSERT(class != SYSV_REGCLASS_INVALID, "Could not classify argument according to SYSV ABI, sorry");
@@ -939,6 +933,15 @@ static void mir_x86_64_function_exit(enum StackFrameKind frame_kind, MIRFunction
 }
 
 void codegen_emit_x86_64(CodegenContext *context) {
+  const MachineDescription desc = {
+    .registers = general,
+    .register_count = GENERAL_REGISTER_COUNT,
+    .argument_registers = argument_registers,
+    .argument_register_count = argument_register_count,
+    .result_register = REG_RAX,
+    .instruction_register_interference = interfering_regs
+  };
+
 #ifdef X86_64_GENERATE_MACHINE_CODE
   GenericObjectFile object = {0};
   context->object = &object;
@@ -1063,19 +1066,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
 #endif
     }
   }
-
-  /// Allocate registers to each temporary within the program.
-  const MachineDescription desc = {
-    .registers = general,
-    .register_count = GENERAL_REGISTER_COUNT,
-    .argument_registers = argument_registers,
-    .argument_register_count = argument_register_count,
-    .result_register = REG_RAX,
-    .instruction_register_interference = interfering_regs
-  };
-
-//  foreach_ptr (IRFunction*, f, context->functions)
-//    if (!f->is_extern) allocate_registers(f, &desc);
 
   if (debug_ir) ir_femit(stdout, context);
 
@@ -1366,15 +1356,21 @@ void codegen_emit_x86_64(CodegenContext *context) {
     print_mir_function_with_mnemonic(function, mir_x86_64_opcode_mnemonic);
   }
 
+  // CODE EMISSION
+  // TODO: Allow for multiple targets here.
+
   // EMIT ASSEMBLY CODE
-  emit_x86_64_assembly(context, machine_instructions_from_ir);
+  if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL)
+    emit_x86_64_assembly(context, machine_instructions_from_ir);
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
   // EMIT MACHINE CODE (GENERAL OBJECT FILE)
-  emit_x86_64_generic_object(context, machine_instructions_from_ir);
-
-  generic_object_as_coff_x86_64(&object, "out.obj");
-  generic_object_as_elf_x86_64(&object, "out.o");
+  if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT)
+    emit_x86_64_generic_object(context, machine_instructions_from_ir);
+  if (context->target == TARGET_COFF_OBJECT)
+    generic_object_as_coff_x86_64(&object, "out.obj");
+  if (context->target == TARGET_ELF_OBJECT)
+    generic_object_as_elf_x86_64(&object, "out.o");
 
   generic_object_delete(&object);
 #endif // x86_64_GENERATE_MACHINE_CODE

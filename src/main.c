@@ -9,34 +9,34 @@
 #include <platform.h>
 #include <utils.h>
 
-void print_usage(char **argv) {
+static void print_usage(char **argv) {
   print("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", 0[argv]);
   print("Flags:\n"
-         "   `-h`, `--help`    :: Show this help and usage information.\n"
-         "   `--formats`       :: List acceptable output formats.\n"
-         "   `--callings`      :: List acceptable calling conventions.\n"
-         "   `--dialects`      :: List acceptable assembly dialects.\n"
-         "   `--debug-ir`      :: Dump IR to stdout (in debug format).\n"
-         "   `--print-ast      :: Print the AST and exit.\n"
-         "   `--syntax-only    :: Perform no semantic analysis.\n"
-         "   `--print-scopes   :: Print the scope tree and exit.\n"
-         "   `--annotate-code  :: Print comments in generated code.\n"
-         "   `-O`, `--optimize`:: Optimize the generated code.\n"
-         "   `-v`, `--verbose` :: Print out more information.\n");
+        "   `-h`, `--help`      :: Show this help and usage information.\n"
+        "   `-as`, `--archs`    :: List acceptable architectures.\n"
+        "   `-ts`, `--targets`  :: List acceptable targets.\n"
+        "   `-ccs`, `--callings`:: List acceptable calling conventions.\n"
+        "   `--debug-ir`        :: Dump IR to stdout (in debug format).\n"
+        "   `--print-ast        :: Print the AST and exit.\n"
+        "   `--syntax-only      :: Perform no semantic analysis.\n"
+        "   `--print-scopes     :: Print the scope tree and exit.\n"
+        "   `--annotate-code    :: Print comments in generated code. TODO: WIP\n"
+        "   `-O`, `--optimize`  :: Optimize the generated code.\n"
+        "   `-v`, `--verbose`   :: Print out more information.\n");
   print("Options:\n"
-         "    `-o`, `--output`   :: Set the output filepath to the one given.\n"
-         "    `-f`, `--format`   :: Set the output format to the one given.\n"
-         "    `-cc`, `--calling` :: Set the calling convention to the one given.\n"
-         "    `-d`, `--dialect`  :: Set the output assembly dialect to the one given.\n"
-         "    `--colours`        :: Set whether to use colours in diagnostics.\n"
-         "Anything other arguments are treated as input filepaths (source code).\n");
+        "    `-o`, `--output`   :: Set the output filepath to the one given.\n"
+        "    `-a`, `--arch`     :: Set the output architecture to the one given.\n"
+        "    `-t`, `--target`   :: Set the output target to the one given.\n"
+        "    `-cc`, `--calling` :: Set the calling convention to the one given.\n"
+        "    `--colours`        :: Set whether to use colours in diagnostics.\n"
+        "Anything other arguments are treated as input filepaths (source code).\n");
 }
 
 int input_filepath_index = -1;
 int output_filepath_index = -1;
-enum CodegenOutputFormat output_format = CG_FMT_DEFAULT;
+CodegenArchitecture output_arch = ARCH_DEFAULT;
+CodegenTarget output_target = TARGET_DEFAULT;
 enum CodegenCallingConvention output_calling_convention = CG_CALL_CONV_DEFAULT;
-enum CodegenAssemblyDialect output_assembly_dialect = CG_ASM_DIALECT_DEFAULT;
 
 int verbosity = 0;
 int optimise = 0;
@@ -48,28 +48,31 @@ bool prefer_using_diagnostics_colours = true;
 bool colours_blink = false;
 bool annotate_code = false;
 
-void print_acceptable_formats() {
-  print("Acceptable formats include:\n"
+static void print_acceptable_architectures() {
+  STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures when printing out all available");
+  print("Acceptable architectures include:\n"
          " -> default\n"
-         " -> x86_64_gas\n"
-         " -> ir\n");
+         " -> x86_64\n");
 }
 
-void print_acceptable_calling_conventions() {
+static void print_acceptable_targets() {
+  STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of targets when printing out all available");
+  print("Acceptable targets include:\n"
+        " -> default\n"
+        " -> asm, assembly\n"
+        " -> asm:intel\n"
+        "  -> elf_object\n"
+        "  -> coff_object\n");
+}
+
+static void print_acceptable_calling_conventions() {
   print("Acceptable calling conventions include:\n"
          " -> default\n"
-         " -> LINUX\n"
+         " -> SYSV, LINUX\n"
          " -> MSWIN\n");
 }
 
-void print_acceptable_asm_dialects() {
-  print("Acceptable dialects include:\n"
-         " -> default\n"
-         " -> att\n"
-         " -> intel\n");
-}
-
-void print_acceptable_colour_settings() {
+static void print_acceptable_colour_settings() {
   print("Acceptable values for `--colours` include:\n"
          " -> auto\n"
          " -> always\n"
@@ -78,7 +81,7 @@ void print_acceptable_colour_settings() {
 }
 
 /// @return Zero if everything goes well, otherwise return non-zero value.
-int handle_command_line_arguments(int argc, char **argv) {
+static int handle_command_line_arguments(int argc, char **argv) {
   /// Default settings.
   prefer_using_diagnostics_colours = platform_isatty(fileno(stdout));
 
@@ -90,15 +93,6 @@ int handle_command_line_arguments(int argc, char **argv) {
     if (strcmp(argument, "-h") == 0
         || strcmp(argument, "--help") == 0) {
       print_usage(argv);
-      exit(0);
-    } else if (strcmp(argument, "--formats") == 0) {
-      print_acceptable_formats();
-      exit(0);
-    } else if (strcmp(argument, "--callings") == 0) {
-      print_acceptable_calling_conventions();
-      exit(0);
-    } else if (strcmp(argument, "--dialects") == 0) {
-      print_acceptable_asm_dialects();
       exit(0);
     } else if (strcmp(argument, "--debug-ir") == 0) {
       debug_ir = true;
@@ -116,6 +110,66 @@ int handle_command_line_arguments(int argc, char **argv) {
     }  else if (strcmp(argument, "-v") == 0
                || strcmp(argument, "--verbose") == 0) {
       verbosity = 1;
+    } else if (strcmp(argument, "-as") == 0 || strcmp(argument, "--archs") == 0) {
+      print_acceptable_architectures();
+      exit(0);
+    } else if (strcmp(argument, "-a") == 0 || strcmp(argument, "--arch") == 0) {
+      i++;
+      if (i >= argc)
+        ICE("Expected architecture after command line argument %s", argument);
+
+      /// Anything that starts w/ `-` is treated as a command line argument.
+      /// If the user has a filepath that starts w/ `-...`, then they should use
+      /// `./-...` instead.
+      if (0[i[argv]] == '-') {
+        ICE("Expected architecture after command line argument %s\n"
+               "Instead, got what looks like another command line argument.\n"
+               " -> \"%s\"", argument, argv[i]);
+      }
+      STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architecture count in command line argument parsing");
+      if (strcmp(argv[i], "default") == 0) {
+        output_arch = ARCH_DEFAULT;
+      } else if (strcmp(argv[i], "x86_64_gas") == 0) {
+        output_arch = ARCH_X86_64;
+      } else {
+        print("Expected architecture after command line argument %s\n"
+               "Instead, got unrecognized: \"%s\".\n", argument, argv[i]);
+        print_acceptable_architectures();
+        return 1;
+      }
+    } else if (strcmp(argument, "--targets") == 0) {
+      print_acceptable_targets();
+      exit(0);
+    } else if (strcmp(argument, "-t") == 0 || strcmp(argument, "--target") == 0) {
+      i++;
+      if (i >= argc)
+        ICE("Expected target after command line argument %s", argument);
+
+      /// Anything that starts w/ `-` is treated as a command line argument.
+      /// If the user has a filepath that starts w/ `-...`, then they should use
+      /// `./-...` instead.
+      if (0[i[argv]] == '-') {
+        ICE("Expected target after command line argument %s\n"
+               "Instead, got what looks like another command line argument.\n"
+               " -> \"%s\"", argument, argv[i]);
+      }
+      STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of target count in command line argument parsing");
+      if (strcmp(argv[i], "default") == 0) {
+        output_target = TARGET_DEFAULT;
+      } else if (strcmp(argv[i], "asm") == 0 || strcmp(argv[i], "assembly") == 0) {
+        output_target = TARGET_GNU_ASM_ATT;
+      } else if (strcmp(argv[i], "asm:intel") == 0) {
+        output_target = TARGET_GNU_ASM_INTEL;
+      } else if (strcmp(argv[i], "elf_object") == 0) {
+        output_target = TARGET_ELF_OBJECT;
+      } else if (strcmp(argv[i], "coff_object") == 0) {
+        output_target = TARGET_COFF_OBJECT;
+      } else {
+        print("Expected architecture after command line argument %s\n"
+               "Instead, got unrecognized: \"%s\".\n", argument, argv[i]);
+        print_acceptable_architectures();
+        return 1;
+      }
     } else if (strcmp(argument, "-o") == 0
                || strcmp(argument, "--output") == 0) {
       i++;
@@ -131,29 +185,6 @@ int handle_command_line_arguments(int argc, char **argv) {
                " -> \"%s\"", argv[i]);
       }
       output_filepath_index = i;
-    } else if (strcmp(argument, "-f") == 0
-               || strcmp(argument, "--format") == 0) {
-      i++;
-      if (i >= argc) {
-        ICE("Expected format after format command line argument");
-      }
-      if (*argv[i] == '-') {
-        ICE("Expected format after format command line argument\n"
-               "Instead, got what looks like another command line argument.\n"
-               " -> \"%s\"", argv[i]);
-      }
-      if (strcmp(argv[i], "default") == 0) {
-        output_format = CG_FMT_DEFAULT;
-      } else if (strcmp(argv[i], "x86_64_gas") == 0) {
-        output_format = CG_FMT_x86_64_GAS;
-      } else if (strcmp(argv[i], "ir") == 0) {
-        output_format = CG_FMT_IR;
-      } else {
-        print("Expected format after format command line argument\n"
-               "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
-        print_acceptable_formats();
-        return 1;
-      }
     } else if (strcmp(argument, "--colours") == 0 || strcmp(argument, "--colors") == 0) {
       i++;
       if (i >= argc) {
@@ -172,54 +203,34 @@ int handle_command_line_arguments(int argc, char **argv) {
         prefer_using_diagnostics_colours = true;
       } else {
         print("Expected colour option after colour option command line argument\n"
-               "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
+               "Instead, got unrecognized: \"%s\".\n", argv[i]);
         print_acceptable_colour_settings();
         return 1;
       }
-    } else if (strcmp(argument, "-cc") == 0
-               || strcmp(argument, "--calling") == 0) {
+    } else if (strcmp(argument, "-ccs") == 0 || strcmp(argument, "--callings") == 0) {
+      print_acceptable_calling_conventions();
+      exit(0);
+    } else if (strcmp(argument, "-cc") == 0 || strcmp(argument, "--calling") == 0) {
       i++;
       if (i >= argc) {
-        ICE("Expected calling convention after format command line argument");
+        ICE("Expected calling convention after command line argument %s", argument);
       }
       if (*argv[i] == '-') {
-        ICE("Expected calling convention after format command line argument\n"
-               "Instead, got what looks like another command line argument.\n"
-               " -> \"%s\"", argv[i]);
+        ICE("Expected calling convention after command line argument %s\n"
+            "Instead, got what looks like another command line argument.\n"
+            " -> \"%s\"", argument, argv[i]);
       }
+      STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling conventions in command line argument parsing");
       if (strcmp(argv[i], "default") == 0) {
         output_calling_convention = CG_CALL_CONV_DEFAULT;
       } else if (strcmp(argv[i], "MSWIN") == 0) {
         output_calling_convention = CG_CALL_CONV_MSWIN;
-      } else if (strcmp(argv[i], "LINUX") == 0) {
-        output_calling_convention = CG_CALL_CONV_LINUX;
+      } else if (strcmp(argv[i], "SYSV") == 0 || strcmp(argv[i], "LINUX") == 0) {
+        output_calling_convention = CG_CALL_CONV_SYSV;
       } else {
-        print("Expected calling convention after calling convention command line argument\n"
-               "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
+        print("Expected calling convention after command line argument %s\n"
+              "Instead, got unrecognized: \"%s\".\n", argument, argv[i]);
         print_acceptable_calling_conventions();
-        return 1;
-      }
-    } else if (strcmp(argument, "-d") == 0
-               || strcmp(argument, "--dialect") == 0) {
-      i++;
-      if (i >= argc) {
-        ICE("Expected assembly dialect after format command line argument");
-      }
-      if (*argv[i] == '-') {
-        ICE("Expected assembly dialect after format command line argument\n"
-              "Instead, got what looks like another command line argument.\n"
-              " -> \"%s\"", argv[i]);
-      }
-      if (strcmp(argv[i], "default") == 0) {
-        output_assembly_dialect = CG_ASM_DIALECT_DEFAULT;
-      } else if (strcmp(argv[i], "att") == 0) {
-        output_assembly_dialect = CG_ASM_DIALECT_ATT;
-      } else if (strcmp(argv[i], "intel") == 0) {
-        output_assembly_dialect = CG_ASM_DIALECT_INTEL;
-      } else {
-        print("Expected assembly dialect after calling convention command line argument\n"
-               "Instead, got an unrecognized format: \"%s\".\n", argv[i]);
-        print_acceptable_asm_dialects();
         return 1;
       }
     } else if (strcmp(argument, "--aluminium") == 0) {
@@ -274,9 +285,9 @@ int main(int argc, char **argv) {
 
     if (!codegen(
       LANG_IR,
-      output_format,
+      output_arch,
+      output_target,
       output_calling_convention,
-      output_assembly_dialect,
       infile,
       output_filepath,
       NULL,
@@ -314,9 +325,9 @@ int main(int argc, char **argv) {
     /// Generate code.
     if (!codegen(
       LANG_FUN,
-      output_format,
+      output_arch,
+      output_target,
       output_calling_convention,
-      output_assembly_dialect,
       infile,
       output_filepath,
       ast,
