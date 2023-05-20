@@ -443,12 +443,22 @@ static void lower(CodegenContext *context) {
         } else function_type = instruction->call.callee_function->type;
         ASSERT(function_type->kind == TYPE_FUNCTION, "Expected callee of IR_CALL to be a function, but got %T\n", function_type);
 
+        usz argument_registers_used = 0;
         Vector(usz) sixteen_bytes_that_need_split = {0};
         foreach_index (i, function_type->function.parameters) {
           Parameter *parameter = function_type->function.parameters.data + i;
           SysVArgumentClass class = sysv_classify_argument(parameter->type);
-          if (class == SYSV_REGCLASS_INTEGER && type_sizeof(parameter->type) > 8)
-            vector_push(sixteen_bytes_that_need_split, i);
+          if (class == SYSV_REGCLASS_INTEGER) {
+            if (type_sizeof(parameter->type) > 8)
+              vector_push(sixteen_bytes_that_need_split, i);
+            else {
+              IRInstruction *copy = ir_copy(context, instruction->call.arguments.data[i]);
+              ASSERT(argument_registers_used < argument_register_count, "Invalid argument register index");
+              copy->result = argument_registers[argument_registers_used++];
+              insert_instruction_before(copy, instruction);
+              instruction->call.arguments.data[i] = copy;
+            }
+          }
         }
 
         foreach_rev (usz, i, sixteen_bytes_that_need_split) {
@@ -505,8 +515,13 @@ static void lower(CodegenContext *context) {
         foreach_ptr (IRInstruction *, argument, instruction->call.arguments) {
           if (idx >= argument_register_count) break;
           Type *type = type_canonical(argument->type);
-          if ((type->kind == TYPE_STRUCT || type->kind == TYPE_ARRAY) && type_sizeof(type) > 8) {
+          if (type_sizeof(type) > 8) {
             instruction->call.arguments.data[idx] = alloca_copy_of(context, argument, instruction);
+          } else {
+            IRInstruction *copy = ir_copy(context, instruction->call.arguments.data[idx]);
+            copy->result = argument_registers[idx];
+            insert_instruction_before(copy, instruction);
+            instruction->call.arguments.data[idx] = copy;
           }
           ++idx;
         }
