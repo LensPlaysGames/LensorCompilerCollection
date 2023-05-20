@@ -435,16 +435,19 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
         switch (instruction->opcode) {
 
         case MX64_LEA: {
-          MIROperand *address = mir_get_op(instruction, 0);
-          MIROperand *local = mir_get_op(instruction, 1);
-          MIROperand *destination = mir_get_op(instruction, 2);
-          ASSERT(address->kind == MIR_OP_REGISTER && address->value.reg.value == REG_RBP,
-                 "LEA expected first operand to be address register");
-          ASSERT(local->kind == MIR_OP_LOCAL_REF && local->value.local_ref != (usz)-1,
-                 "LEA expected second operand to be frame object reference");
-          ASSERT(destination->kind == MIR_OP_REGISTER,
-                 "LEA requires third operand to be a destination register");
-          femit_mem_to_reg(context, MX64_LEA, address->value.reg.value, mir_get_frame_object(function, local->value.local_ref)->offset, destination->value.reg.value, destination->value.reg.size);
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_LOCAL_REF, MIR_OP_REGISTER)) {
+            MIROperand *local = mir_get_op(instruction, 0);
+            MIROperand *destination = mir_get_op(instruction, 1);
+            ASSERT(local->kind == MIR_OP_LOCAL_REF && local->value.local_ref != (usz)-1,
+                   "LEA expected second operand to be frame object reference");
+            ASSERT(destination->kind == MIR_OP_REGISTER,
+                   "LEA requires third operand to be a destination register");
+            femit_mem_to_reg(context, MX64_LEA, REG_RBP, mir_get_frame_object(function, local->value.local_ref)->offset, destination->value.reg.value, destination->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
         } break; // case MX64_LEA
 
         case MX64_CALL: {
@@ -588,6 +591,31 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
             MIROperand *src = mir_get_op(instruction, 0);
             MIROperand *dst = mir_get_op(instruction, 1);
             femit_reg_to_reg(context, MX64_ADD, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break; // case MX64_ADD
+
+        case MX64_SUB: {
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
+            // imm to reg | imm, dst
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *reg = mir_get_op(instruction, 1);
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg->value.reg.size = r64;
+            }
+            femit_imm_to_reg(context, MX64_SUB, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            // reg to reg | src, dst
+            MIROperand *src = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            femit_reg_to_reg(context, MX64_SUB, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);

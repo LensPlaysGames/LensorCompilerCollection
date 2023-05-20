@@ -319,12 +319,36 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
   }
 }
 
-static void mcode_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate, RegisterDescriptor address_register, int64_t offset) {
+static void mcode_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate, RegSize size, RegisterDescriptor address_register, int64_t offset) {
   switch (inst) {
+
+  case MX64_MOV: {
+    // REX.W + 0xc7 /0 id
+    ASSERT(size == r64, "Unhandled size");
+    uint8_t address_regbits = regbits(address_register);
+    uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(address_regbits));
+    // Mod == 0b10  ->  (R/M)+disp32
+    // Reg == Opcode Extension
+    // R/M == Address
+    uint8_t modrm = modrm_byte(0b10, 0, address_regbits);
+    int32_t imm32 = (int32_t)immediate;
+    int32_t disp32 = (int32_t)offset;
+
+    mcode_3(context->object, rex, 0xc7, modrm);
+    if (address_register == REG_RSP) {
+      /// Scaling Factor == 0b00  ->  1
+      /// Index == 0b100  ->  None
+      /// Base == RSP bits (0b100)
+      mcode_1(context->object, sib_byte(0b00, 0b100, address_regbits));
+    }
+    mcode_n(context->object, &disp32, 4);
+    mcode_n(context->object, &imm32, 4);
+
+  } break; // case MX64_MOV
 
   case MX64_SUB: {
     // REX.W 0x81 /5 id
-
+    ASSERT(size == r64, "Unhandled size");
     if (offset == 0) {
       uint8_t address_regbits = regbits(address_register);
       uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(address_regbits));
@@ -1767,6 +1791,24 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           }
         } break; // case MX64_ADD
 
+        case MX64_SUB: {
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
+            // imm to reg | imm, dst
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *reg = mir_get_op(instruction, 1);
+            mcode_imm_to_reg(context, MX64_SUB, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            // reg to reg | src, dst
+            MIROperand *src = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            mcode_reg_to_reg(context, MX64_SUB, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break; // case MX64_SUB
+
         case MX64_MOV: {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
             // imm to reg | imm, dst
@@ -1780,7 +1822,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             ASSERT(local->value.local_ref < function->frame_objects.size,
                    "MX64_MOV(imm, local): local index %d is greater than amount of frame objects in function: %Z",
                    (int)local->value.local_ref, function->frame_objects.size);
-            mcode_imm_to_mem(context, MX64_MOV, imm->value.imm, REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
+            mcode_imm_to_mem(context, MX64_MOV, imm->value.imm, function->frame_objects.data[local->value.local_ref].size, REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
@@ -1805,7 +1847,8 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *reg_address = mir_get_op(instruction, 1);
             MIROperand *offset = mir_get_op(instruction, 2);
-            mcode_imm_to_mem(context, MX64_MOV, imm->value.imm, reg_address->value.reg.value, offset->value.imm);
+            // FIXME: This just *assumes* an eight byte operation... probably very bad.
+            mcode_imm_to_mem(context, MX64_MOV, imm->value.imm, r64, reg_address->value.reg.value, offset->value.imm);
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
             // reg to mem | src, addr, offset
             MIROperand *reg_source = mir_get_op(instruction, 0);
@@ -1884,6 +1927,18 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           if (mir_operand_kinds_match(instruction, 1, MIR_OP_REGISTER)) {
             MIROperand *reg = mir_get_op(instruction, 0);
             mcode_reg(context, instruction->opcode, reg->value.reg.value, reg->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break;
+
+        case MX64_LEA: {
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_LOCAL_REF, MIR_OP_REGISTER)) {
+            MIROperand *local = mir_get_op(instruction, 0);
+            MIROperand *reg = mir_get_op(instruction, 1);
+            mcode_mem_to_reg(context, MX64_LEA, REG_RBP, function->frame_objects.data[local->value.local_ref].offset, reg->value.reg.value, reg->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
