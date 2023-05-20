@@ -60,6 +60,13 @@ ISA: x86_64
 ;; MIR_BITCAST (emit nothing)
 ;; MIR_CALL... do it in code because it's complicated? *Where* in code?
 
+;; TODO: Allow patterns to constrain input by ensuring equality of certain operands
+;;   match
+;;   MIR_STORE i1(Immediate imm, Local l0)
+;;   MIR_LOAD i2(l0)
+;;   emit MX64_MOV(imm, l0)
+
+
 match MIR_IMMEDIATE i1(Immediate imm)
 emit MX64_MOV(imm, i1)
 
@@ -80,11 +87,32 @@ emit {
   MX64_MOV(value, i1)
 }
 
+;;;; MEMORY
+
 match MIR_ALLOCA i1(Local object)
-emit MX64_LEA(Register bp = rbp, object, i1)
+emit MX64_LEA(object, i1)
 
 match MIR_COPY i1(Register src)
 emit MX64_MOV(src, i1)
+
+match
+MIR_STORE i1(Immediate imm, Local l)
+MIR_LOAD i2(l)
+emit MX64_MOV(imm, l)
+
+match MIR_STORE i1(Immediate imm, Local local)
+emit MX64_MOV(imm, local)
+match MIR_STORE i1(Register r, Local local)
+emit MX64_MOV(r, local)
+match MIR_STORE i1(Immediate imm, Static static)
+emit MX64_MOV(imm, static)
+match MIR_STORE i1(Register r, Static static)
+emit MX64_MOV(r, static)
+
+match MIR_LOAD i1(Local local)
+emit MX64_MOV(local, i1)
+match MIR_LOAD i1(Register reg)
+emit MX64_MOV(reg, i1)
 
 ;;;; CONTROL FLOW
 
