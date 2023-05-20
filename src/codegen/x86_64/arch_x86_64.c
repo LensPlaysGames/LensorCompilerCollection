@@ -1198,10 +1198,19 @@ void codegen_emit_x86_64(CodegenContext *context) {
   }
 
   /// After RA, the last fixups before code emission are applied.
-  // Lowering of MIR_CALL
+  // Calculate stack offsets
+  // Lowering of MIR_CALL, among other things
   // Remove register to register moves when value and size are equal.
   foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
     if (function->origin && function->origin->is_extern) continue;
+
+    // Calculate stack offsets of frame objects
+    if (function->origin->is_extern) continue;
+    isz offset = 0;
+    foreach (MIRFrameObject, fo, function->frame_objects) {
+      offset -= fo->size;
+      fo->offset = offset;
+    }
 
     foreach_ptr (MIRBlock*, block, function->blocks) {
 
@@ -1369,18 +1378,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
     print_mir_function_with_mnemonic(function, mir_x86_64_opcode_mnemonic);
   }
 
-  // Calculate stack offsets
-  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
-    if (f->origin->is_extern) continue;
-    isz offset = 0;
-    foreach (MIRFrameObject, fo, f->frame_objects) {
-      offset -= fo->size;
-      fo->offset = offset;
-    }
-  }
 
   // CODE EMISSION
-  // TODO: Allow for multiple targets here.
+  // TODO: Allow for multiple targets here?
 
   // EMIT ASSEMBLY CODE
   if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL)
