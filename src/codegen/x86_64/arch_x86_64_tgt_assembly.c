@@ -446,6 +446,13 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_STATIC_REF, MIR_OP_REGISTER)) {
             MIROperand *object = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg->value.reg.size = r64;
+            }
             femit_name_to_reg(context, MX64_LEA, REG_RIP, object->value.static_ref->static_ref->name.data, reg->value.reg.value, reg->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
@@ -514,9 +521,16 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
                              src->value.reg.value, src->value.reg.size,
                              dst->value.reg.value, dst->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_STATIC_REF, MIR_OP_REGISTER)) {
-            // reg to mem (static) | static, dst
+            // mem (static) to reg | static, dst
             MIROperand *src = mir_get_op(instruction, 0);
             MIROperand *dst = mir_get_op(instruction, 1);
+            if (!dst->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              dst->value.reg.size = r64;
+            }
             femit_name_to_reg(context, MX64_MOV, REG_RIP, src->value.static_ref->static_ref->name.data, dst->value.reg.value, dst->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_LOCAL_REF)) {
             // reg to mem (local) | src, local
@@ -532,6 +546,19 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
 
             femit_reg_to_mem(context, MX64_MOV, reg->value.reg.value, reg->value.reg.size,
                              REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_STATIC_REF)) {
+            // reg to mem (static) | src, local
+            MIROperand *reg = mir_get_op(instruction, 0);
+            MIROperand *stc = mir_get_op(instruction, 1);
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg->value.reg.size = r64;
+            }
+            femit_reg_to_name(context, MX64_MOV, reg->value.reg.value, reg->value.reg.size,
+                              REG_RIP, stc->value.static_ref->static_ref->name.data);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_LOCAL_REF, MIR_OP_REGISTER)) {
             // mem (local) to reg | local, src
             MIROperand *local = mir_get_op(instruction, 0);
