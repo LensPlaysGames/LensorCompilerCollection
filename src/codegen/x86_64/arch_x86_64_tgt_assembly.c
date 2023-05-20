@@ -443,6 +443,10 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
             ASSERT(destination->kind == MIR_OP_REGISTER,
                    "LEA requires third operand to be a destination register");
             femit_mem_to_reg(context, MX64_LEA, REG_RBP, mir_get_frame_object(function, local->value.local_ref)->offset, destination->value.reg.value, destination->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_STATIC_REF, MIR_OP_REGISTER)) {
+            MIROperand *object = mir_get_op(instruction, 0);
+            MIROperand *reg = mir_get_op(instruction, 1);
+            femit_name_to_reg(context, MX64_LEA, REG_RIP, object->value.static_ref->static_ref->name.data, reg->value.reg.value, reg->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
@@ -509,6 +513,11 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
             femit_reg_to_reg(context, MX64_MOV,
                              src->value.reg.value, src->value.reg.size,
                              dst->value.reg.value, dst->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_STATIC_REF, MIR_OP_REGISTER)) {
+            // reg to mem (static) | static, dst
+            MIROperand *src = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            femit_name_to_reg(context, MX64_MOV, REG_RIP, src->value.static_ref->static_ref->name.data, dst->value.reg.value, dst->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_LOCAL_REF)) {
             // reg to mem (local) | src, local
             MIROperand *reg = mir_get_op(instruction, 0);
