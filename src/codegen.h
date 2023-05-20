@@ -25,22 +25,6 @@ CodegenContext *codegen_context_create
 
 void codegen_context_free(CodegenContext *context);
 
-struct Register {
-  /// If non-zero, this register is in use.
-  char in_use;
-  /// Identifies a register uniquely.
-  RegisterDescriptor descriptor;
-};
-
-/// Architecture-specific register information.
-// TODO: Can probably just get rid of this
-struct RegisterPool {
-  Register *registers;
-  Register **scratch_registers;
-  usz num_scratch_registers;
-  usz num_registers;
-};
-
 typedef struct IRStaticVariable {
   string name;
   Type *type;
@@ -66,7 +50,6 @@ struct CodegenContext {
   IRFunction *entry;
   IRBlock *block;
 
-  RegisterPool register_pool;
   enum CodegenOutputFormat format;
   enum CodegenCallingConvention call_convention;
   enum CodegenAssemblyDialect dialect;
