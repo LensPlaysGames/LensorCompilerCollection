@@ -112,4 +112,6 @@ void generic_object_as_coff_x86_64_at_path(GenericObjectFile *object, const char
 /// try to use it after calling this or it's UB.
 void generic_object_delete(GenericObjectFile *object);
 
+void generic_object_print(GenericObjectFile *object);
+
 #endif /* GENERIC_OBJECT_H */
