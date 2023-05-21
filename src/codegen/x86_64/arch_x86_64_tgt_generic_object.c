@@ -1821,6 +1821,30 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
       sym.byte_offset = code_section(context->object)->data.bytes.size;
       vector_push(context->object->symbols, sym);
     }
+    if (function->origin && function->origin->is_extern) continue;
+
+    STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of x86_64 frame kinds");
+    StackFrameKind frame_kind = stack_frame_kind(function);
+    switch (frame_kind) {
+    case FRAME_NONE: break;
+
+    case FRAME_MINIMAL: {
+      // PUSH %RBP
+      mcode_reg(context, MX64_PUSH, REG_RBP, r64);
+    } break;
+
+    case FRAME_FULL: {
+      // PUSH %RBP
+      // MOV %RSP, %RBP
+      mcode_reg(context, MX64_PUSH, REG_RBP, r64);
+      mcode_reg_to_reg(context, MX64_MOV, REG_RSP, r64, REG_RBP, r64);
+    } break;
+
+    case FRAME_COUNT: FALLTHROUGH;
+    default: UNREACHABLE();
+
+    }
+
     foreach_ptr (MIRBlock*, block, function->blocks) {
       { // Block label symbol
         GObjSymbol sym = {0};
@@ -1999,7 +2023,27 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
         } break;
 
         case MX64_RET: {
+
+          STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of x86_64 frame kinds");
+          switch (frame_kind) {
+          case FRAME_NONE: break;
+
+          case FRAME_FULL: {
+            // MOV %RBP, %RSP
+            mcode_reg_to_reg(context, MX64_MOV, REG_RBP, r64, REG_RSP, r64);
+          } FALLTHROUGH;
+          case FRAME_MINIMAL: {
+            // POP %RBP
+            mcode_reg(context, MX64_POP, REG_RBP, r64);
+          } break;
+
+          case FRAME_COUNT: FALLTHROUGH;
+          default: UNREACHABLE();
+
+          }
+
           mcode_none(context, MX64_RET);
+
         } break;
 
         case MX64_SHL: FALLTHROUGH;

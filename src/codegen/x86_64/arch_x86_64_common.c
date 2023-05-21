@@ -152,3 +152,27 @@ IndirectJumpType comparison_to_jump_type(enum ComparisonType comparison) {
     default: ICE("Unknown comparison type.");
   }
 }
+
+// NOTE
+// Normally I don't like putting includes later on in a file, but most
+// of the above is freestanding and I'd like to keep it separate.
+
+#include <codegen/machine_ir.h>
+#include <codegen/intermediate_representation.h>
+#include <opt.h>
+
+StackFrameKind stack_frame_kind(MIRFunction *f) {
+  ASSERT(f->origin, "Cannot get stack frame kind of MIRFunction with no IRFunction origin set");
+  /// Always emit a frame if we’re not optimising.
+  if (!optimise) return FRAME_FULL;
+
+  /// Emit a frame if we have local variables.
+  if (f->origin->locals_total_size) return FRAME_FULL;
+
+  /// We need *some* sort of prologue if we don’t use the stack but
+  /// still call other functions.
+  if (!f->origin->attr_leaf) return FRAME_MINIMAL;
+
+  /// Otherwise, no frame is required.
+  return FRAME_NONE;
+}
