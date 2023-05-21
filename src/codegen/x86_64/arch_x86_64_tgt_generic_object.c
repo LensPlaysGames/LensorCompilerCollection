@@ -1067,6 +1067,37 @@ static void mcode_reg_to_reg
 
   switch (inst) {
 
+  case MX64_IMUL: {
+    ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg imuls to be of equal size.");
+
+    switch (source_size) {
+    case r8: ICE("x86_64 doesn't have an IMUL r8, r8 opcode, sorry");
+
+    case r16: {
+      TODO("Signed multiply r16 into r16");
+      // TODO:
+      // Signed multiply r16 into r16
+      // 0x66 + 0x0f 0xaf /r
+      //mcode_1(context->object, 0x66);
+    } FALLTHROUGH;
+    case r32: {
+      TODO("Signed multiply r32 into r32");
+      // TODO:
+      // Signed multiply r32 into r32
+      // 0x0f 0xaf /r
+    } break;
+
+    case r64: {
+      TODO("Signed multiply r64 into r64");
+      // TODO:
+      // Signed multiply r64 into r64
+      // REX.W + 0x0f 0xaf /r
+    } break;
+
+    } // switch (size)
+
+  } break; // case MX64_IMUL
+
   case MX64_MOV: {
     ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg moves to be of equal size.");
 
@@ -1858,6 +1889,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
         switch (instruction->opcode) {
 
         case MX64_AND: FALLTHROUGH;
+        case MX64_IMUL: FALLTHROUGH; // TODO/FIXME: Separate IMUL to it's own thing. It has three-address opcodes that the others don't.
         case MX64_ADD: {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
             // imm to reg | imm, dst
