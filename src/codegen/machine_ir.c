@@ -173,7 +173,7 @@ MIRInstruction *mir_makecopy(MIRInstruction *original) {
   mir->operand_count = original->operand_count;
   if (mir->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
     memcpy(mir->operands.arr, original->operands.arr, sizeof(mir->operands.arr));
-  else vector_append_all(mir->operands.vec, original->operands.vec);
+  else vector_append(mir->operands.vec, original->operands.vec);
   mir->origin = original->origin;
   return mir;
 }

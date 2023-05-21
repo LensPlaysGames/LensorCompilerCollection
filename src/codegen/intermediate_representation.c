@@ -938,7 +938,7 @@ void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
     ir_for_each_child(user, ir_internal_replace_use, &replace);
   }
 
-  vector_append_all(replacement->users, instruction->users);
+  vector_append(replacement->users, instruction->users);
   vector_clear(instruction->users);
 }
 

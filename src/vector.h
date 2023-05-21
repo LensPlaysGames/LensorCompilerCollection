@@ -95,14 +95,6 @@
     vector_clear(elements);                                           \
   } while (0)
 
-/// Append a vector to another vector
-#define vector_append(to, from)                                                         \
-  do {                                                                                  \
-    vector_reserve((to), (from)->size);                                                 \
-    memcpy((to)->data + (to)->size, (from)->data, (from)->size * sizeof *(from)->data); \
-    (to)->size += (from)->size;                                                         \
-  } while (0)
-
 /// Remove all elements from a vector.
 #define vector_clear(vector) ((void) ((vector).size = 0))
 
@@ -147,9 +139,10 @@
     vector_remove_index(vector, _index);               \
   } while (0)
 
-#define vector_append_all(to, from)                                                \
-  do {                                                                             \
-    vector_reserve((to), (from).size);                                             \
+/// Append a vector to another vector
+#define vector_append(to, from)                                         \
+  do {                                                                  \
+    vector_reserve((to), (from).size);                                  \
     memcpy((to).data + (to).size, (from).data, (from).size * sizeof *(from).data); \
     (to).size += (from).size;                                                      \
   } while (0)
