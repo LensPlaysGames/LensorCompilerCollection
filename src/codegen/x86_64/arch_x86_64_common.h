@@ -125,4 +125,13 @@ const char *register_name_8(RegisterDescriptor descriptor);
 IndirectJumpType negate_jump(IndirectJumpType j);
 IndirectJumpType comparison_to_jump_type(enum ComparisonType comparison);
 
+typedef enum StackFrameKind {
+  FRAME_FULL,
+  FRAME_MINIMAL,
+  FRAME_NONE,
+  FRAME_COUNT
+} StackFrameKind;
+
+StackFrameKind stack_frame_kind(MIRFunction *f);
+
 #endif /* ARCH_X86_64_COMMON_H */

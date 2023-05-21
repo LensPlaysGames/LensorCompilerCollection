@@ -367,28 +367,6 @@ usz sysv_argument_register_index_x86_64(CodegenContext *context, Type *function,
   return argument_register_offset;
 }
 
-enum StackFrameKind {
-  FRAME_FULL,
-  FRAME_MINIMAL,
-  FRAME_NONE,
-  FRAME_COUNT
-};
-
-static enum StackFrameKind stack_frame_kind(IRFunction *f) {
-  /// Always emit a frame if we’re not optimising.
-  if (!optimise) return FRAME_FULL;
-
-  /// Emit a frame if we have local variables.
-  if (f->locals_total_size) return FRAME_FULL;
-
-  /// We need *some* sort of prologue if we don’t use the stack but
-  /// still call other functions.
-  if (!f->attr_leaf) return FRAME_MINIMAL;
-
-  /// Otherwise, no frame is required.
-  return FRAME_NONE;
-}
-
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
 
@@ -894,7 +872,6 @@ static void mir_x86_64_function_exit_at(enum StackFrameKind frame_kind, MIRBlock
   STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of stack frame kinds in function entry MIR lowering");
   ASSERT(frame_kind < FRAME_COUNT, "Invalid stack frame kind!");
   switch (frame_kind) {
-  case FRAME_COUNT: UNREACHABLE();
   case FRAME_NONE: break;
 
   case FRAME_FULL: {
@@ -903,47 +880,17 @@ static void mir_x86_64_function_exit_at(enum StackFrameKind frame_kind, MIRBlock
     mir_add_op(restore_sp, mir_op_register(REG_RBP, r64, false));
     mir_add_op(restore_sp, mir_op_register(REG_RSP, r64, false));
     mir_insert_instruction(block, restore_sp, ++*index);
-    // POP %RBP
-    MIRInstruction *restore_bp = mir_makenew(MX64_POP);
-    mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
-    mir_insert_instruction(block, restore_sp, ++*index);
-  } break;
-
+  } FALLTHROUGH;
   case FRAME_MINIMAL: {
     // POP %RBP
     MIRInstruction *restore_bp = mir_makenew(MX64_POP);
     mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
     mir_insert_instruction(block, restore_bp, ++*index);
   } break;
-  }
-}
 
-static void mir_x86_64_function_exit(enum StackFrameKind frame_kind, MIRFunction *f) {
-  ASSERT(f, "Invalid argument");
-  STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of stack frame kinds in function entry MIR lowering");
-  ASSERT(frame_kind < FRAME_COUNT, "Invalid stack frame kind!");
-  switch (frame_kind) {
-  case FRAME_COUNT: UNREACHABLE();
-  case FRAME_NONE: break;
+  case FRAME_COUNT: FALLTHROUGH;
+  default: UNREACHABLE();
 
-  case FRAME_FULL: {
-    // MOV %RBP, %RSP
-    MIRInstruction *restore_sp = mir_makenew(MX64_MOV);
-    mir_add_op(restore_sp, mir_op_register(REG_RBP, r64, false));
-    mir_add_op(restore_sp, mir_op_register(REG_RSP, r64, false));
-    mir_append_instruction(f, restore_sp);
-    // POP %RBP
-    MIRInstruction *restore_bp = mir_makenew(MX64_POP);
-    mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
-    mir_append_instruction(f, restore_bp);
-  } break;
-
-  case FRAME_MINIMAL: {
-    // POP %RBP
-    MIRInstruction *restore_bp = mir_makenew(MX64_POP);
-    mir_add_op(restore_bp, mir_op_register(REG_RBP, r64, false));
-    mir_append_instruction(f, restore_bp);
-  } break;
   }
 }
 
@@ -1166,12 +1113,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
         mir_append_instruction(f, restore);
       }
     }
-
-    // Function prologue/epilogue
-    enum StackFrameKind frame_kind = stack_frame_kind(f->origin);
-    mir_x86_64_function_entry(frame_kind, f);
-    mir_x86_64_function_exit(frame_kind, f);
-
   }
 
   print("================ ISel ================\n");
@@ -1225,7 +1166,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
           // Tail call.
           if (instruction->origin->call.tail_call) {
             // Restore the frame pointer if we have one.
-            mir_x86_64_function_exit_at(stack_frame_kind(instruction->origin->parent_block->function), instruction->block, &i);
+            mir_x86_64_function_exit_at(stack_frame_kind(instruction->block->function), instruction->block, &i);
             MIRInstruction *jump = mir_makenew(MX64_JMP);
             mir_add_op(jump, *mir_get_op(instruction, 0));
             mir_insert_instruction(instruction->block, jump, i++);

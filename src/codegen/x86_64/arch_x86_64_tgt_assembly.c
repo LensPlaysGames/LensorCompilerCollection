@@ -416,14 +416,39 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
   }
   foreach_ptr (MIRFunction*, function, machine_instructions) {
     // Generate function entry label if function has definition.
-    if (!function->origin->is_extern)
-      fprint(context->code, "\n%s:\n", function->name.data);
+    if (function->origin->is_extern) continue;
+
+    fprint(context->code, "\n%s:\n", function->name.data);
 
     // Calculate stack offsets
     isz frame_offset = 0;
     foreach (MIRFrameObject, fo, function->frame_objects) {
       frame_offset -= fo->size;
       fo->offset = frame_offset;
+    }
+
+    if (function->origin && function->origin->is_extern) continue;
+
+    STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of x86_64 frame kinds");
+    StackFrameKind frame_kind = stack_frame_kind(function);
+    switch (frame_kind) {
+    case FRAME_NONE: break;
+
+    case FRAME_MINIMAL: {
+      // PUSH %RBP
+      femit_reg(context, MX64_PUSH, REG_RBP, r64);
+    } break;
+
+    case FRAME_FULL: {
+      // PUSH %RBP
+      // MOV %RSP, %RBP
+      femit_reg(context, MX64_PUSH, REG_RBP, r64);
+      femit_reg_to_reg(context, MX64_MOV, REG_RSP, r64, REG_RBP, r64);
+    } break;
+
+    case FRAME_COUNT: FALLTHROUGH;
+    default: UNREACHABLE();
+
     }
 
     foreach_ptr (MIRBlock*, block, function->blocks) {
@@ -652,7 +677,26 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
         } break; // case MX64_ADD
 
         case MX64_RET: {
+          STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of x86_64 frame kinds");
+          switch (frame_kind) {
+          case FRAME_NONE: break;
+
+          case FRAME_FULL: {
+            // MOV %RBP, %RSP
+            femit_reg_to_reg(context, MX64_MOV, REG_RBP, r64, REG_RSP, r64);
+          } FALLTHROUGH;
+          case FRAME_MINIMAL: {
+            // POP %RBP
+            femit_reg(context, MX64_POP, REG_RBP, r64);
+          } break;
+
+          case FRAME_COUNT: FALLTHROUGH;
+          default: UNREACHABLE();
+
+          }
+
           femit_none(context, MX64_RET);
+
         } break;
 
         case MX64_SHL: FALLTHROUGH;
