@@ -328,8 +328,10 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
       if (reloc->sym.type == GOBJ_SYMTYPE_FUNCTION)
         elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_PLT32);
       else elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_PC32);
+
       // DISP*32* -> 32-bit displacement -> 4 byte offset
       elf_reloc.r_addend = -4;
+
     } break;
     case RELOC_DISP32:
       elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_32);
@@ -660,3 +662,97 @@ void generic_object_as_coff_x86_64_at_path(GenericObjectFile *object, const char
   fclose(f);
 }
 
+static const char *generic_object_symbol_type_string(GObjSymbolType t) {
+  STATIC_ASSERT(GOBJ_SYMTYPE_COUNT == 4, "Exhaustive handling of GObj symbol types during string conversion");
+  switch (t) {
+  case GOBJ_SYMTYPE_NONE: return "None";
+  case GOBJ_SYMTYPE_FUNCTION: return "Function";
+  case GOBJ_SYMTYPE_STATIC: return "Static";
+  case GOBJ_SYMTYPE_EXTERNAL: return "External";
+  case GOBJ_SYMTYPE_COUNT: UNREACHABLE();
+  }
+  UNREACHABLE();
+}
+
+void generic_object_print(GenericObjectFile *object) {
+  print("GObj dump:\n"
+        "  Sections:\n");
+  foreach (Section, s, object->sections) {
+    print("    %s", s->name);
+    if (s->attributes & SEC_ATTR_SPAN_FILL)
+      print(" Fill %Z bytes with '%u'\n", s->data.fill.amount, (unsigned)s->data.fill.value);
+    else if (s->data.bytes.size == 0) {
+      print(" EMPTY\n");
+    } else {
+      print(" Data: %Z bytes:\n", s->data.bytes.size);
+      if (s->data.bytes.size) {
+        // Print bytes of data like hexdump, kinda.
+        size_t index = 0;
+        if (s->data.bytes.size > 15) {
+          for (; index < s->data.bytes.size - 16; index += 16) {
+            printf("      %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x %02x %02x %02x %02x",
+                   (unsigned)s->data.bytes.data[index],
+                   (unsigned)s->data.bytes.data[index + 1],
+                   (unsigned)s->data.bytes.data[index + 2],
+                   (unsigned)s->data.bytes.data[index + 3],
+                   (unsigned)s->data.bytes.data[index + 4],
+                   (unsigned)s->data.bytes.data[index + 5],
+                   (unsigned)s->data.bytes.data[index + 6],
+                   (unsigned)s->data.bytes.data[index + 7],
+                   (unsigned)s->data.bytes.data[index + 8],
+                   (unsigned)s->data.bytes.data[index + 9],
+                   (unsigned)s->data.bytes.data[index + 10],
+                   (unsigned)s->data.bytes.data[index + 11],
+                   (unsigned)s->data.bytes.data[index + 12],
+                   (unsigned)s->data.bytes.data[index + 13],
+                   (unsigned)s->data.bytes.data[index + 14],
+                   (unsigned)s->data.bytes.data[index + 15]);
+
+            print("      |");
+            // Loop over 16 bytes starting at index
+            for (size_t i = index; i < index + 16; ++i) {
+              unsigned char c = s->data.bytes.data[i];
+              if (c < ' ' || c > '~') c = '.';
+              print("%c", c);
+            }
+            print("|\n");
+          }
+        }
+        // Last line
+        if (index < s->data.bytes.size) {
+          print("      ");
+          const size_t end_index = index + 16;
+          for (size_t i = index; i < end_index; ++i) {
+            if (end_index - i == 8) print(" ");
+            if (i < s->data.bytes.size)
+              printf("%02x", s->data.bytes.data[i]);
+            else print("  ");
+            if (end_index - i != 1) print(" ");
+          }
+          print("      |");
+          for (size_t i = index; i < s->data.bytes.size; ++i) {
+            unsigned char c = s->data.bytes.data[i];
+            if (c < ' ' || c > '~') c = '.';
+            print("%c", c);
+          }
+          print("|\n");
+        }
+      }
+    }
+  }
+
+  print("  Relocations:\n");
+  foreach (RelocationEntry, reloc, object->relocs) {
+    print("    %d: %s in %s at offset %zu : %s\n",
+          reloc->type,
+          reloc->sym.name, reloc->sym.section_name, reloc->sym.byte_offset,
+          generic_object_symbol_type_string(reloc->sym.type));
+  }
+
+  print("  Symbols:\n");
+  foreach (GObjSymbol, sym, object->symbols) {
+    print("    %s in %s at offset %zu : %s\n",
+          sym->name, sym->section_name, sym->byte_offset,
+          generic_object_symbol_type_string(sym->type));
+  }
+}
