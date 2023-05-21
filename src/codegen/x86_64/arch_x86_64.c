@@ -803,6 +803,8 @@ void mangle_function_name(IRFunction *function) {
 void codegen_lower_x86_64(CodegenContext *context) { lower(context); }
 
 bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *function, usz parameter_index) {
+  ASSERT(context->arch == ARCH_X86_64);
+
   if (parameter_index >= function->type->function.parameters.size)
     ICE("Parameter index out of bounds");
 
@@ -828,44 +830,6 @@ bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *functi
     ICE("Unhandled calling convention: %d\n", context->call_convention);
   }
 
-}
-
-static void mir_x86_64_function_entry(enum StackFrameKind frame_kind, MIRFunction *f) {
-  ASSERT(f, "Invalid argument");
-  STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of stack frame kinds in function entry MIR lowering");
-  ASSERT(frame_kind < FRAME_COUNT, "Invalid stack frame kind!");
-  switch (frame_kind) {
-  case FRAME_COUNT: UNREACHABLE();
-  case FRAME_NONE: break;
-
-  case FRAME_FULL: {
-    // PUSH %RBP
-    MIRInstruction *save_bp = mir_makenew(MX64_PUSH);
-    mir_add_op(save_bp, mir_op_register(REG_RBP, r64, false));
-    // MOV %RSP, %RBP
-    MIRInstruction *save_sp = mir_makenew(MX64_MOV);
-    mir_add_op(save_sp, mir_op_register(REG_RSP, r64, false));
-    mir_add_op(save_sp, mir_op_register(REG_RBP, r64, false));
-    if (f->origin->locals_total_size) {
-      // SUB $f->locals_total_size, %RSP
-      MIRInstruction *locals = mir_makenew(MX64_SUB);
-      mir_add_op(locals, mir_op_immediate((int64_t)f->origin->locals_total_size));
-      mir_add_op(locals, mir_op_register(REG_RSP, r64, false));
-      mir_prepend_instruction(f, locals);
-    }
-
-    // Function entry (backwards because prepending)
-    mir_prepend_instruction(f, save_sp);
-    mir_prepend_instruction(f, save_bp);
-  } break;
-
-  case FRAME_MINIMAL: {
-    // PUSH %RBP
-    MIRInstruction *save_bp = mir_makenew(MX64_PUSH);
-    mir_add_op(save_bp, mir_op_register(REG_RBP, r64, false));
-    mir_prepend_instruction(f, save_bp);
-  } break;
-  }
 }
 
 static void mir_x86_64_function_exit_at(enum StackFrameKind frame_kind, MIRBlock *block, usz *index) {
@@ -1032,7 +996,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         sym.type = GOBJ_SYMTYPE_STATIC;
         sym.name = strdup(var->name.data);
         sym.section_name = strdup(".bss");
-        sym.byte_offset = sec_initdata->data.bytes.size;
+        sym.byte_offset = sec_uninitdata->data.bytes.size;
         vector_push(object.symbols, sym);
         // Write uninitialised bytes to .data section
         sec_uninitdata->data.fill.amount += sz;
