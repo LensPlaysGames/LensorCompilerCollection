@@ -166,6 +166,15 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
     if (s->attributes & SEC_ATTR_EXECUTABLE)
       shdr.sh_flags |= SHF_EXECINSTR;
 
+    // Assign flags of known sections
+    if (strcmp(s->name, ".text") == 0)
+      shdr.sh_flags = SHF_ALLOC | SHF_EXECINSTR;
+    else if (strcmp(s->name, ".bss") == 0 || strcmp(s->name, ".data") == 0)
+      shdr.sh_flags = SHF_ALLOC | SHF_WRITE;
+    else if (strcmp(s->name, ".rodata") == 0)
+      shdr.sh_flags = SHF_ALLOC; // FIXME: Is SHF_STRINGS appropriate?
+    else ICE("[GObj]:ELF: Unrecognised section in GenericObjectFile: \"%s\"", s->name);
+
     // Only program sections need allocated at load time.
     // TODO: Is SHF_STRINGS appropriate for ".rodata"?
     if (strcmp(s->name, ".text") == 0 || strcmp(s->name, ".bss") == 0 ||
@@ -289,25 +298,39 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
   Vector(elf64_rela) relocations = {0};
   foreach (RelocationEntry, reloc, object->relocs) {
     // Find symbol with matching name.
+    elf64_sym *sym = NULL;
     size_t sym_index = 0;
     foreach_index (i, syms) {
-      elf64_sym *sym = syms.data + i;
-      char *sym_name = (char*)string_table.data + sym->st_name;
+      elf64_sym *sym_candidate = syms.data + i;
+      char *sym_name = (char*)string_table.data + sym_candidate->st_name;
       if (strcmp(sym_name, reloc->sym.name) == 0) {
+        sym = sym_candidate;
         sym_index = i;
         break;
       }
     }
-    if (sym_index == 0) ICE("Could not find symbol referenced by relocation: \"%s\"", reloc->sym.name);
-
+    if (!sym) ICE("Could not find symbol referenced by relocation: \"%s\"", reloc->sym.name);
 
     elf64_rela elf_reloc = {0};
     elf_reloc.r_offset = reloc->sym.byte_offset;
     switch (reloc->type) {
-    case RELOC_DISP32_PCREL:
-      elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_PC32);
+    case RELOC_DISP32_PCREL: {
+      GObjSymbol *sym_reloc = NULL;
+      foreach (GObjSymbol, sym_function, object->symbols) {
+        if (strcmp(sym_function->name, reloc->sym.name) == 0) {
+          sym_reloc = sym_function;
+          break;
+        }
+      }
+      ASSERT(sym_reloc, "Could not find symbol referenced by relocation: \"%s\"", reloc->sym.name);
+      //print("sym_reloc->name: %s sym_reloc->type: %d\n", sym_reloc->name, (int)sym_reloc->type);
+
+      if (reloc->sym.type == GOBJ_SYMTYPE_FUNCTION)
+        elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_PLT32);
+      else elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_PC32);
+      // DISP*32* -> 32-bit displacement -> 4 byte offset
       elf_reloc.r_addend = -4;
-      break;
+    } break;
     case RELOC_DISP32:
       elf_reloc.r_info = ELF64_R_INFO(sym_index, R_X86_64_32);
       break;
@@ -600,25 +623,22 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
   // HEADER
   fwrite(&hdr, 1, sizeof(hdr), f);
   // SECTION HEADER TABLE
-  fwrite(shdrs.data, shdrs.size, sizeof(*shdrs.data), f);
+  fwrite(shdrs.data, sizeof(*shdrs.data), shdrs.size, f);
   // SECTION DATA
   foreach (Section, s, object->sections) {
     if (s->attributes & SEC_ATTR_SPAN_FILL) {
-      for (size_t n = s->data.fill.amount; n; --n) {
+      for (size_t n = s->data.fill.amount; n; --n)
         fwrite(&s->data.fill.value, 1, 1, f);
-      }
-    } else {
-      fwrite(s->data.bytes.data, 1, s->data.bytes.size, f);
-    }
+    } else fwrite(s->data.bytes.data, 1, s->data.bytes.size, f);
   }
   // SYMBOL TABLE
-  fwrite(symbol_table.data, symbol_table.size, sizeof(*symbol_table.data), f);
+  fwrite(symbol_table.data, sizeof(*symbol_table.data), symbol_table.size, f);
   // STRING TABLE
   uint32_t string_table_size = (uint32_t)string_table.size;
-  fwrite(&string_table_size, 1, 4, f);
+  fwrite(&string_table_size, 4, 1, f);
   fwrite(string_table.data + 4, 1, (size_t)string_table_size - 4, f);
   // RELOCATIONS
-  fwrite(relocations.data, relocations.size, sizeof(*relocations.data), f);
+  fwrite(relocations.data, sizeof(*relocations.data), relocations.size, f);
 
   // CLEANUP
   vector_delete(relocations);

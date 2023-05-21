@@ -289,6 +289,12 @@ typedef struct elf64_sym {
 // dword S + A
 #define R_X86_64_32	10
 // dword L + A – P
+// ffs...
+// https://github.com/torvalds/linux/commit/b21ebf2fb4cde1618915a97cc773e287ff49173e
+// > As for symbol resolution, PLT32 and PC32 relocations are almost
+// > interchangeable. But when linker sees PLT32 relocation against a
+// > protected symbol, it can resolved locally at link-time since it is used
+// > on a branch instruction. Linker can't do that for PC32 relocation
 #define R_X86_64_PLT32 4
 
 ///     A relocation section references two other sections: a symbol

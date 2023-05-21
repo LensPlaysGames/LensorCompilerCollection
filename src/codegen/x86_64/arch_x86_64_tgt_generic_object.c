@@ -1682,8 +1682,8 @@ static void mcode_imm(CodegenContext *context, MIROpcodex86_64 inst, int64_t imm
   }
 }
 
-static void mcode_name(CodegenContext *context, MIROpcodex86_64 inst, const char *name) {
-  // TODO: Generate a relocation entry that will end up in the object file...
+/// IS_FUNCTION should be true iff NAME is the symbol of a function.
+static void mcode_name(CodegenContext *context, MIROpcodex86_64 inst, const char *name, bool is_function) {
   switch (inst) {
 
   case MX64_CALL: {
@@ -1695,6 +1695,7 @@ static void mcode_name(CodegenContext *context, MIROpcodex86_64 inst, const char
     RelocationEntry reloc = {0};
     Section *sec_code = code_section(context->object);
     // Current offset in machine code byte buffer
+    if (is_function) reloc.sym.type = GOBJ_SYMTYPE_FUNCTION;
     reloc.sym.byte_offset = sec_code->data.bytes.size;
     reloc.sym.name = strdup(name);
     reloc.sym.section_name = strdup(sec_code->name);
@@ -1712,6 +1713,7 @@ static void mcode_name(CodegenContext *context, MIROpcodex86_64 inst, const char
     // Make disp32 relocation to lea from symbol
     RelocationEntry reloc = {0};
     Section *sec_code = code_section(context->object);
+    if (is_function) reloc.sym.type = GOBJ_SYMTYPE_FUNCTION;
     reloc.sym.byte_offset = sec_code->data.bytes.size;
     reloc.sym.name = strdup(name);
     reloc.sym.section_name = strdup(sec_code->name);
@@ -1776,7 +1778,8 @@ static void mcode_setcc(CodegenContext *context, enum ComparisonType comparison_
   mcode_3(context->object, op_escape, op, modrm);
 }
 
-static void mcode_jcc(CodegenContext *context, IndirectJumpType type, const char *label) {
+/// IS_FUNCTION should be true iff LABEL is the symbol of a function.
+static void mcode_jcc(CodegenContext *context, IndirectJumpType type, const char *label, bool is_function) {
   uint8_t op = 0;
   switch (type) {
   case JUMP_TYPE_E:  op = 0x84; break;
@@ -1796,6 +1799,7 @@ static void mcode_jcc(CodegenContext *context, IndirectJumpType type, const char
   // Make disp32 relocation to lea from symbol
   RelocationEntry reloc = {0};
   Section *sec_code = code_section(context->object);
+  if (is_function) reloc.sym.type = GOBJ_SYMTYPE_FUNCTION;
   reloc.sym.byte_offset = sec_code->data.bytes.size;
   reloc.sym.name = strdup(label);
   reloc.sym.section_name = strdup(sec_code->name);
@@ -1979,13 +1983,13 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           switch (dst->kind) {
 
           case MIR_OP_NAME: {
-            mcode_name(context, MX64_CALL, dst->value.name);
+            mcode_name(context, MX64_CALL, dst->value.name, false);
           } break;
           case MIR_OP_BLOCK: {
-            mcode_name(context, MX64_CALL, dst->value.block->name.data);
+            mcode_name(context, MX64_CALL, dst->value.block->name.data, false);
           } break;
           case MIR_OP_FUNCTION: {
-            mcode_name(context, MX64_CALL, dst->value.function->name.data);
+            mcode_name(context, MX64_CALL, dst->value.function->name.data, true);
           } break;
 
           default: ICE("Unhandled operand kind in CALL: %d (%s)", dst->kind, mir_operand_kind_string(dst->kind));
