@@ -803,7 +803,7 @@ bool codegen
 {
   if (!outfile) ICE("codegen(): outfile can not be NULL!");
   // Open file for writing.
-  FILE *code = fopen(outfile, "w");
+  FILE *code = fopen(outfile, "wb");
   if (!code) ICE("codegen(): failed to open file at path: \"%s\"\n", outfile);
 
   CodegenContext *context = codegen_context_create(ast, arch, target, call_convention, code);
