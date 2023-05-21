@@ -11,6 +11,9 @@
 \usetikzlibrary{positioning}
 \tikzstyle{arrow} = [thick,->,>=stealth]
 
+% Provides `\FloatBarrier`, which, when placed at the end of a figure, fixes figures being drawn IN THE NEXT SECTION...
+\usepackage{placeins}
+
 \begin{document}
 
 \begin{center}
@@ -28,7 +31,7 @@
 \section{Compilation Overview}
 \label{sec:overview}
 
-\begin{figure}[ht]
+\begin{figure}[h]
   \centering
   \begin{tikzpicture}
     \node (src) [draw] {Source Code};
@@ -48,33 +51,34 @@
     \node (lmir) [draw, below of=gmir] {Lowered Machine IR}; % ISel into lMIR, do register allocation for virtual registers
     \draw [arrow] (gmir) -- (lmir);
 
-    \node (code) [draw, below of=lmir] {Emit Target Code}; % lMIR gets converted directly into target code (assembly, object file, etc)
+    \node (code) [draw, below of=lmir] {Target Code}; % lMIR gets converted directly into target code (assembly, object file, etc)
     \draw [arrow] (lmir) -- (code);
   \end{tikzpicture}
   \caption{Steps of the compilation process implemented by Intercept}
 \end{figure}
+\FloatBarrier
 
 It should be noted that both general and lowered MIR are stored in the same data structure.
 
 \section{Source Code}
 \label{sec:source-code}
 
-\par
 This is what programmers will write, expecting this compiler to be able to turn it into target code.
 
-\begin{figure}[ht]
+\begin{figure}[h]
   \centering
   foo :: 69; foo
   \caption{Source code of a very simple Intercept program}
   \label{fig:int-source}
 \end{figure}
+\FloatBarrier
 
 \section{Token Sequence}
 \label{sec:tokens}
 
 The source code is first split into lexemes, or tokens. Each of these tokens may have a both a number and/or a textual value associated with it. The act of splitting input into tokens like this is called \emph{lexing}.
 
-\begin{figure}[ht]
+\begin{figure}[h]
   \centering
   \begin{tikzpicture}
     \node (decl-id) [draw] {IDENTIFIER ``foo''};
@@ -95,6 +99,7 @@ The source code is first split into lexemes, or tokens. Each of these tokens may
   \caption{Sequence of tokens that would be produced by lexing \autoref{fig:int-source}}
   \label{fig:int-tokens}
 \end{figure}
+\FloatBarrier
 
 \section{Tree of Nodes}
 \label{sec:node-tree}
@@ -103,7 +108,7 @@ The act of converting lexemes/tokens into a more meaningful program representati
 
 Each node within the tree has a node kind, some sort of value (text, an integer), a type associated with it, and any amount of other nodes as children. The types of most nodes are set to NULL during parsing, when creating new nodes. Types get filled in during semantic analysis.
 
-\begin{figure}[ht]
+\begin{figure}[h]
   \centering
   \begin{tikzpicture}
     \node (r) [draw, anchor=west] {Root};
@@ -122,6 +127,7 @@ Each node within the tree has a node kind, some sort of value (text, an integer)
   \caption{Node tree produced by parsing tokens from \autoref{fig:int-tokens})}
   \label{fig:int-tree}
 \end{figure}
+\FloatBarrier
 
 \subsection{Notable Actions}
 \label{subsec:node-tree:notable-actions}
@@ -224,6 +230,33 @@ At this point, the lowered MIR is traversed and emitted. What is emitted and how
 
 Currently, x86\_64 architecture supports GNU assembly in both AT\&T and Intel syntax, as well as a GenericObjectFile backend which may be emitted as an ELF or COFF object file.
 
-% TODO: Example, what does output assembly look like?
+
+\begin{figure}[h]
+  \centering
+  \fbox{%
+    % Everything except non-local labels are indented in GCC assembly output
+    \begin{minipage}{0.75\textwidth}
+      \setlength{\parindent}{2em}%
+      .section .data\\
+      foo: .byte 69,0,0,0,0,0,0,0
+
+      .section .text\\
+      \indent .global main\\
+      main:\\
+      \indent push \%rbp\\
+      \indent mov \%rsp, \%rbp\\
+      \indent .L0:\\
+      \indent lea (foo)(\%rip), \%rax\\
+      \indent mov (foo)(\%rip), \%rax\\
+      \indent mov \%rbp, \%rsp\\
+      \indent pop \%rbp\\
+      \indent ret
+      \setlength{\parindent}{0em}%
+    \end{minipage}
+  }
+  \caption{Output of compiling \autoref{fig:int-source} to x86\_64 GNU ASM (AT\&T) target with SysV calling convention.}
+  \label{fig:int-gnu-asm-att}
+\end{figure}
+\FloatBarrier
 
 \end{document}
