@@ -48,7 +48,7 @@
     \node (lmir) [draw, below of=gmir] {Lowered Machine IR}; % ISel into lMIR, do register allocation for virtual registers
     \draw [arrow] (gmir) -- (lmir);
 
-    \node (code) [draw, below of=gmir] {Emit Target Code}; % lMIR gets converted directly into target code (assembly, object file, etc)
+    \node (code) [draw, below of=lmir] {Emit Target Code}; % lMIR gets converted directly into target code (assembly, object file, etc)
     \draw [arrow] (lmir) -- (code);
   \end{tikzpicture}
   \caption{Steps of the compilation process implemented by Intercept}
