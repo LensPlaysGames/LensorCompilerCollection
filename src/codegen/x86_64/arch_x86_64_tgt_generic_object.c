@@ -1829,17 +1829,18 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
       foreach_ptr (MIRInstruction*, instruction, block->instructions) {
         switch (instruction->opcode) {
 
+        case MX64_AND: FALLTHROUGH;
         case MX64_ADD: {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
             // imm to reg | imm, dst
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);
-            mcode_imm_to_reg(context, MX64_ADD, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
+            mcode_imm_to_reg(context, instruction->opcode, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
             MIROperand *dst = mir_get_op(instruction, 1);
-            mcode_reg_to_reg(context, MX64_ADD, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+            mcode_reg_to_reg(context, instruction->opcode, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
@@ -1883,12 +1884,34 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
             MIROperand *dst = mir_get_op(instruction, 1);
+            if (!src->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized source register, assuming 64-bit...\n");
+              putchar('\n');
+              src->value.reg.size = r64;
+            }
+            if (!dst->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register destination register, assuming 64-bit...\n");
+              putchar('\n');
+              dst->value.reg.size = r64;
+            }
             mcode_reg_to_reg(context, MX64_MOV, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
-          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_STATIC_REF, MIR_OP_REGISTER)) {
-            // reg to mem (static) | static, dst
-            MIROperand *src = mir_get_op(instruction, 0);
-            MIROperand *dst = mir_get_op(instruction, 1);
-            mcode_name_to_reg(context, MX64_MOV, REG_RIP, src->value.static_ref->static_ref->name.data, dst->value.reg.value, dst->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_STATIC_REF)) {
+            // reg to mem (static) | src, static
+            MIROperand *reg = mir_get_op(instruction, 0);
+            MIROperand *stc = mir_get_op(instruction, 1);
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg->value.reg.size = r64;
+            }
+            mcode_reg_to_name(context, MX64_MOV, reg->value.reg.value, reg->value.reg.size,
+                              REG_RIP, stc->value.static_ref->static_ref->name.data);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_LOCAL_REF)) {
             // reg to mem (local) | src, local
             MIROperand *reg = mir_get_op(instruction, 0);
@@ -1937,6 +1960,11 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             mcode_mem_to_reg(context, MX64_MOV,
                              REG_RBP, function->frame_objects.data[local->value.local_ref].offset,
                              reg->value.reg.value, reg->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_STATIC_REF, MIR_OP_REGISTER)) {
+            // mem (static) to reg | static, dst
+            MIROperand *stc = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            mcode_name_to_reg(context, MX64_MOV, REG_RIP, stc->value.static_ref->static_ref->name.data, dst->value.reg.value, dst->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
@@ -2004,6 +2032,62 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             MIROperand *object = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);
             mcode_name_to_reg(context, MX64_LEA, REG_RIP, object->value.static_ref->static_ref->name.data, reg->value.reg.value, reg->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break;
+
+        case MX64_JMP: {
+          if (mir_operand_kinds_match(instruction, 1, MIR_OP_BLOCK)) {
+            MIROperand *destination = mir_get_op(instruction, 0);
+            mcode_name(context, MX64_JMP, destination->value.block->name.data, false);
+          } else if (mir_operand_kinds_match(instruction, 1, MIR_OP_FUNCTION)) {
+            MIROperand *destination = mir_get_op(instruction, 0);
+            mcode_name(context, MX64_JMP, destination->value.function->name.data, true);
+          } else if (mir_operand_kinds_match(instruction, 1, MIR_OP_NAME)) {
+            MIROperand *destination = mir_get_op(instruction, 0);
+            mcode_name(context, MX64_JMP, destination->value.name, false);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break;
+
+        case MX64_CMP: FALLTHROUGH;
+        case MX64_TEST: {
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            MIROperand *lhs = mir_get_op(instruction, 0);
+            MIROperand *rhs = mir_get_op(instruction, 1);
+            mcode_reg_to_reg(context, instruction->opcode, lhs->value.reg.value, lhs->value.reg.size, rhs->value.reg.value, rhs->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break;
+
+        case MX64_SETCC: {
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
+            MIROperand *compare_type = mir_get_op(instruction, 0);
+            MIROperand *destination = mir_get_op(instruction, 1);
+            ASSERT(compare_type->value.imm < COMPARE_COUNT, "Invalid compare type for setcc: %I", compare_type->value.imm);
+            mcode_setcc(context, (enum ComparisonType)compare_type->value.imm, destination->value.reg.value);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break;
+
+        case MX64_JCC: {
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_BLOCK)) {
+            MIROperand *jump_type = mir_get_op(instruction, 0);
+            MIROperand *destination = mir_get_op(instruction, 1);
+            ASSERT(jump_type->value.imm < JUMP_TYPE_COUNT, "Invalid jump type for jcc: %I", jump_type->value.imm);
+            mcode_jcc(context, (IndirectJumpType)jump_type->value.imm, destination->value.block->name.data, false);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
