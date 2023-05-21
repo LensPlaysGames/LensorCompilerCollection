@@ -287,7 +287,7 @@ FORCEINLINE static void write_string_to_string(const char *str, usz size, void *
   };
 
   /// Append the buffer to the string.
-  vector_append_all(*buf, v);
+  vector_append(*buf, v);
 }
 
 /// Callback to write to a file.

@@ -912,7 +912,7 @@ void ast_print_node_internal(
 
       Nodes nodes = {0};
       if (node->call.callee) vector_push(nodes, node->call.callee);
-      vector_append_all(nodes, node->call.arguments);
+      vector_append(nodes, node->call.arguments);
       ast_print_children(file, logical_parent, node, &nodes, leading_text);
       vector_delete(nodes);
     } break;
