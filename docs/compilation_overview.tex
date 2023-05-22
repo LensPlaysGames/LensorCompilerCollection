@@ -8,6 +8,7 @@
 \usepackage{hyperref}
 
 \usepackage{tikz}
+\usetikzlibrary{fit}
 \usetikzlibrary{positioning}
 \tikzstyle{arrow} = [thick,->,>=stealth]
 
@@ -36,23 +37,28 @@
   \begin{tikzpicture}
     \node (src) [draw] {Source Code};
 
-    \node (tok) [draw, below of=src] at (0,0) {Sequence of Tokens}; % lex into tokens (skip whitespace/comments, interpret numbers, etc)
+    \node (tok) [draw, below=2ex of src] {Sequence of Tokens}; % lex into tokens (skip whitespace/comments, interpret numbers, etc)
     \draw [arrow] (src) -- (tok);
 
-    \node (ast) [draw, below of=tok] {Tree of Nodes; AST/DAG}; % parse into ast/dag, semantic analysis (type checking, program correctness, etc)
+    \node (ast) [draw, below=2ex of tok] {Tree of Nodes; AST/DAG}; % parse into ast/dag, semantic analysis (type checking, program correctness, etc)
     \draw [arrow] (tok) -- (ast);
 
-    \node (ir) [draw, below of=ast] {Intermediate Representation (IR)}; % codegen ast/dag into unlowered IR, optimise IR, *lower IR
+    \node (ir) [draw, below=2ex of ast] {Intermediate Representation (IR)}; % codegen ast/dag into unlowered IR, optimise IR, *lower IR
     \draw [arrow] (ast) -- (ir);
 
-    \node (gmir) [draw, below of=ir] {General Machine IR}; % lower IR into gMIR (near 1:1 mapping of IR), phi2copy, operand inlining
+    \node (gmir) [draw, below=2ex of ir] {General Machine IR}; % lower IR into gMIR (near 1:1 mapping of IR), phi2copy, operand inlining
     \draw [arrow] (ir) -- (gmir);
 
-    \node (lmir) [draw, below of=gmir] {Lowered Machine IR}; % ISel into lMIR, do register allocation for virtual registers
+    \node (lmir) [draw, below=2ex of gmir] {Lowered Machine IR}; % ISel into lMIR, do register allocation for virtual registers
     \draw [arrow] (gmir) -- (lmir);
 
-    \node (code) [draw, below of=lmir] {Target Code}; % lMIR gets converted directly into target code (assembly, object file, etc)
+    \node (code) [draw, below=2ex of lmir] {Target Code}; % lMIR gets converted directly into target code (assembly, object file, etc)
     \draw [arrow] (lmir) -- (code);
+
+    % Draw boxes around grouped parts of the compilation flow
+    % By drawing a very short but wide line segment with round line caps, we get a circle :^)
+    \node (frontend) [draw, thick, line width=0.3ex, dash pattern=on 0.05ex off 0.9ex, line cap=round, fit=(tok)(ast)(ir), inner sep=1.2ex, label=left:Frontend] {};
+    \node (backend) [draw, solid, fit=(ir)(gmir)(lmir), inner sep=1.2ex, label=left:Backend] {};
   \end{tikzpicture}
   \caption{Steps of the compilation process implemented by Intercept}
 \end{figure}
