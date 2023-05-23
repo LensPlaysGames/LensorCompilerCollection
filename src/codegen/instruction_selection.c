@@ -47,6 +47,7 @@ typedef enum ISelTokenKind {
   // Keywords
   TOKEN_KW_MATCH,
   TOKEN_KW_EMIT,
+  TOKEN_KW_DISCARD,
 
   TOKEN_SEMICOLON,
 
@@ -88,6 +89,7 @@ static const char *isel_token_kind_to_string(ISelTokenKind kind) {
   case TOKEN_SEMICOLON: return ";";
   case TOKEN_KW_MATCH: return "match";
   case TOKEN_KW_EMIT: return "emit";
+  case TOKEN_KW_DISCARD: return "discard";
   case TOKEN_IDENTIFIER: return "identifier";
   case TOKEN_INTEGER: return "integer";
   }
@@ -431,9 +433,10 @@ static void isel_next_number(ISelParser *p) {
 static const struct {
   span kw;
   ISelTokenKind kind;
-} keywords[11] = {
+} keywords[12] = {
   {literal_span_raw("match"), TOKEN_KW_MATCH},
   {literal_span_raw("emit"), TOKEN_KW_EMIT},
+  {literal_span_raw("discard"), TOKEN_KW_DISCARD},
   {literal_span_raw("Register"), TOKEN_OPKIND_REGISTER},
   {literal_span_raw("Immediate"), TOKEN_OPKIND_IMMEDIATE},
   {literal_span_raw("Name"), TOKEN_OPKIND_NAME},
@@ -679,7 +682,7 @@ static MIROperand isel_parse_operand(ISelParser *p) {
 
 static MIROpcodeCommon isel_parse_opcode(ISelParser *p) {
   if (p->tok.kind != TOKEN_IDENTIFIER)
-    ERR("Expected identifier in order to parse a generalMIR opcode");
+    ERR("Expected identifier in order to parse an opcode");
 
   string_buf_zterm(&p->tok.text); // just to make sure
   ISelEnvironmentEntry *entry = isel_env_entry(&p->global, p->tok.text.data);
@@ -737,7 +740,7 @@ static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
   return out;
 }
 
-/// <match-pattern> ::= "match" <inst-spec> { <inst-spec> } "emit" "{" <inst-spec> { <inst-spec> } "}"
+///<match-pattern> ::= "match" <inst-spec> { <inst-spec> } ( "emit" | "discard" ) ( <inst-block> | <inst-spec> )
 static ISelPattern isel_parse_match(ISelParser *p) {
   ISelPattern out = {0};
   out.local = isel_env_create_empty(16);
@@ -751,36 +754,42 @@ static ISelPattern isel_parse_match(ISelParser *p) {
 
   // Parse instructions to match in the pattern until the emit keyword is reached.
   p->pattern_instruction_index = 0;
-  while (p->tok.kind != TOKEN_KW_EMIT) {
+  while (p->tok.kind != TOKEN_KW_EMIT && p->tok.kind != TOKEN_KW_DISCARD) {
     if (p->tok.kind == TOKEN_EOF) ICE("ISel reached EOF while parsing input pattern instructions of match definition");
     MIRInstruction *inst = isel_parse_inst_spec(p);
     vector_push(out.input, inst);
   }
 
-  // Yeet "emit" keyword.
-  isel_next_tok(p);
-
-  // Parse either a single instruction to match in the pattern or an
-  // opening brace and then until the closing one.
-  if (p->tok.kind == TOKEN_LBRACE) {
-    // Yeet opening brace
+  if (p->tok.kind == TOKEN_KW_EMIT) {
+    // Yeet "emit" keyword.
     isel_next_tok(p);
 
-    // Ensure there is at least one instruction emitted.
-    ASSERT(p->tok.kind != TOKEN_RBRACE, "There must be at least one instruction emitted by a pattern (use discard keyword if on purpose)");
+    // Parse either:
+    // - a single instruction to match in the pattern, or
+    // - an opening brace and then until the closing one.
+    if (p->tok.kind == TOKEN_LBRACE) {
+      // Yeet opening brace
+      isel_next_tok(p);
 
-    while (p->tok.kind != TOKEN_RBRACE) {
-      if (p->tok.kind == TOKEN_EOF) ICE("ISel reached EOF while parsing output instructions of match definition");
+      // Ensure there is at least one instruction emitted.
+      ASSERT(p->tok.kind != TOKEN_RBRACE, "There must be at least one instruction emitted by a pattern (use discard keyword if on purpose)");
+
+      while (p->tok.kind != TOKEN_RBRACE) {
+        if (p->tok.kind == TOKEN_EOF) ICE("ISel reached EOF while parsing output instructions of match definition");
+        MIRInstruction *inst = isel_parse_inst_spec(p);
+        vector_push(out.output, inst);
+      }
+
+      // Yeet closing brace
+      isel_next_tok(p);
+
+    } else {
       MIRInstruction *inst = isel_parse_inst_spec(p);
       vector_push(out.output, inst);
     }
-
-    // Yeet closing brace
-    isel_next_tok(p);
-
   } else {
-    MIRInstruction *inst = isel_parse_inst_spec(p);
-    vector_push(out.output, inst);
+    // Yeet "discard" keyword.
+    isel_next_tok(p);
   }
 
   p->local = NULL;
