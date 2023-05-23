@@ -420,9 +420,11 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
 
     fprint(context->code, "\n%s:\n", function->name.data);
 
-    // Calculate stack offsets
+    // Calculate stack offsets, frame size
     isz frame_offset = 0;
+    isz frame_size = 0;
     foreach (MIRFrameObject, fo, function->frame_objects) {
+      frame_size += fo->size;
       frame_offset -= fo->size;
       fo->offset = frame_offset;
     }
@@ -437,6 +439,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
     case FRAME_MINIMAL: {
       // PUSH %RBP
       femit_reg(context, MX64_PUSH, REG_RBP, r64);
+      if (frame_size) femit_imm_to_reg(context, MX64_SUB, frame_size, REG_RSP, r64);
     } break;
 
     case FRAME_FULL: {
@@ -444,6 +447,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
       // MOV %RSP, %RBP
       femit_reg(context, MX64_PUSH, REG_RBP, r64);
       femit_reg_to_reg(context, MX64_MOV, REG_RSP, r64, REG_RBP, r64);
+      if (frame_size) femit_imm_to_reg(context, MX64_SUB, frame_size, REG_RSP, r64);
     } break;
 
     case FRAME_COUNT: FALLTHROUGH;
