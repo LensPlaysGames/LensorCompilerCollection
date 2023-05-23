@@ -1,8 +1,7 @@
-<match-pattern> ::= "match"
-                    <inst-spec> { <inst-spec> }
-                    "emit" "{"
-                      <inst-spec> { <inst-spec> }
-                    "}"
+<match-pattern> ::= "match" <inst-spec> { <inst-spec> }
+                    ( "emit" | "discard" ) ( <inst-block> | <inst-spec> )
+
+<inst-block> ::= "{" <inst-spec> { <inst-spec> } "}"
 
 <inst-spec> ::= <opcode> IDENTIFIER "(" { <operand> } ")" [ "," ]
 <operand>   ::= [ OPERAND_KIND ] IDENTIFIER [ "=" <expression> ] [ "," ]

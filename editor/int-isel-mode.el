@@ -102,7 +102,7 @@ Examples include addition (+) and subtraction (-)."
 
 ;; Gather all keyword font locks together into big daddy keyword font-lock
 (setq int-isel--font-lock-defaults
-      (let* ((keywords '("match" "emit"))
+      (let* ((keywords '("match" "emit" "discard"))
              (operators '("+" "*" "-" "/" "%"
                           "<" ">"
                           ":" ";" "=" ":=" "::"
