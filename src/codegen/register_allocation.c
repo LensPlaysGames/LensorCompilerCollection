@@ -830,12 +830,7 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
   // Populate list of vregs
   foreach_ptr (MIRBlock*, bb, f->blocks) {
     foreach_ptr (MIRInstruction*, inst, bb->instructions) {
-      MIROperand *base = NULL;
-      if (inst->operand_count <= MIR_OPERAND_SSO_THRESHOLD)
-        base = inst->operands.arr;
-      else base = inst->operands.vec.data;
-      for (size_t j = 0; j < inst->operand_count; ++j) {
-        MIROperand *op = base + j;
+      FOREACH_MIR_OPERAND(inst, op) {
         if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START) {
           // Only push if vector does not already contain the value.
           if (!vreg_vector_contains(&vregs, op->value.reg.value)) {
