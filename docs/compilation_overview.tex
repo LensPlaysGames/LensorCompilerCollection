@@ -60,7 +60,7 @@
     \node (frontend) [draw, thick, line width=0.3ex, dash pattern=on 0.05ex off 0.9ex, line cap=round, fit=(tok)(ast)(ir), inner sep=1.2ex, label=left:Frontend] {};
     \node (backend) [draw, solid, fit=(ir)(gmir)(lmir), inner sep=1.2ex, label=left:Backend] {};
   \end{tikzpicture}
-  \caption{Steps of the compilation process implemented by Intercept}
+  \caption{Steps of the compilation process implemented by Intercept.}
 \end{figure}
 \FloatBarrier
 
@@ -74,7 +74,7 @@ This is what programmers will write, expecting this compiler to be able to turn 
 \begin{figure}[h]
   \centering
   foo :: 69; foo
-  \caption{Source code of a very simple Intercept program}
+  \caption{Source code of a very simple Intercept program.}
   \label{fig:int-source}
 \end{figure}
 \FloatBarrier
@@ -102,7 +102,7 @@ The source code is first split into lexemes, or tokens. Each of these tokens may
     \draw [arrow] (expr-term) -- (access);
 
   \end{tikzpicture}
-  \caption{Sequence of tokens that would be produced by lexing \autoref{fig:int-source}}
+  \caption{Sequence of tokens that would be produced by lexing \autoref{fig:int-source}.}
   \label{fig:int-tokens}
 \end{figure}
 \FloatBarrier
@@ -130,7 +130,7 @@ Each node within the tree has a node kind, some sort of value (text, an integer)
     \draw [arrow] (r) |- (ref);
 
   \end{tikzpicture}
-  \caption{Node tree produced by parsing tokens from \autoref{fig:int-tokens})}
+  \caption{Node tree produced by parsing tokens from \autoref{fig:int-tokens}.}
   \label{fig:int-tree}
 \end{figure}
 \FloatBarrier
@@ -150,7 +150,24 @@ What is passed in from the frontend is regarded as \emph{unlowered} IR. Unlowere
 
 After optimisations are applied, the IR is lowered; this is when target triples come into play. Basically, each target may have slightly different semantics/requirements. For example, to lower the IR to fit a specific calling convention, copies to argument registers are often inserted (and stack allocations and corresponding loads/stores). If it doesn't require specific machine instructions to implement, and can be represented by generalised machine instructions like ``load'', ``store'', etc, then it goes here. Mostly calling convention stuff here, but could also be lowering of unaligned accesses and stuff like that, for other arches.
 
-% TODO: What does IR for Intercept example look like?
+\begin{figure}[h]
+  \centering
+  \fbox{%
+    \begin{minipage}{0.75\textwidth}
+      defun main (\%1, \%2) global \{\\
+      bb1:\\
+      \%1 | .param \%1 | integer\\
+      \%2 | .param \%2 | @@integer\\
+      \%3 | .ref foo | @integer\\
+      \%4 | load \%3 | integer\\
+      \phantom{\%5} | ret \%4 | void\\
+      \}
+    \end{minipage}
+  }
+  \caption{Textual intermediate representation codegenned from \autoref{fig:int-tree}.}
+  \label{fig:int-ir}
+\end{figure}
+\FloatBarrier
 
 \subsection{Notable Actions}
 \label{subsec:ir:notable-actions}
