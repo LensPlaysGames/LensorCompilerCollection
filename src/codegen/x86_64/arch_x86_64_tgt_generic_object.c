@@ -1898,12 +1898,6 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
       }
       foreach_ptr (MIRInstruction*, instruction, block->instructions) {
         switch (instruction->opcode) {
-
-        // TODO: Remove these
-        // They'll be here until we get `discard` in instruction selection...
-        case MIR_STATIC_REF: break;
-        case MIR_ALLOCA: break;
-
         case MX64_AND: FALLTHROUGH;
         case MX64_IMUL: FALLTHROUGH; // TODO/FIXME: Separate IMUL to it's own thing. It has three-address opcodes that the others don't.
         case MX64_ADD: {
