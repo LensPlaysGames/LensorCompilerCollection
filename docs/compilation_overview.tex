@@ -1,8 +1,11 @@
 \documentclass[12pt]{article}
 
-% Indent the first paragraph of a chapter/section
-% Apparently this package just sets \@afterindentfalse to (always) true.
-\usepackage{indentfirst}
+% Confusingly, this *disables* french spacing...
+\frenchspacing
+
+% Math mode font that is beautiful
+\usepackage[small,euler-digits]{eulervm}
+\usepackage{fontspec}
 
 % Non-terrible references
 \usepackage{hyperref}
@@ -18,10 +21,10 @@
 \begin{document}
 
 \begin{center}
-  \Large{\textbf{Intercept Compilation Overview}}
+  {\Large \textbf{Intercept Compilation Overview}}
 
   \vspace{1ex}
-  \large{From Source Code to Machine Code}
+  {\large From Source Code to Machine Code}
 
   \vspace{1ex}
   \textbf{Lens\_r}
@@ -64,7 +67,8 @@
 \end{figure}
 \FloatBarrier
 
-It should be noted that both general and lowered MIR are stored in the same data structure.
+% noindent for paragraph following figure
+\noindent It should be noted that both general and lowered MIR are stored in the same data structure.
 
 \section{Source Code}
 \label{sec:source-code}
@@ -87,20 +91,19 @@ The source code is first split into lexemes, or tokens. Each of these tokens may
 \begin{figure}[h]
   \centering
   \begin{tikzpicture}
-    \node (decl-id) [draw] {IDENTIFIER ``foo''};
+    \node (decl-id) [draw] {\texttt{IDENTIFIER} ``\texttt{foo}''};
 
-    \node (decl-op) [draw, below=of decl-id] {COLON\_COLON ``::''};
+    \node (decl-op) [draw, below=of decl-id] {\texttt{COLON\_COLON} ``\texttt{::}''};
     \draw [arrow] (decl-id) -- (decl-op);
 
-    \node (decl-init) [draw, below=of decl-op] {INTEGER ``69''};
+    \node (decl-init) [draw, below=of decl-op] {\texttt{INTEGER} ``\texttt{69}''};
     \draw [arrow] (decl-op) -- (decl-init);
 
-    \node (expr-term) [draw, below=of decl-init] {SEMICOLON ``;''};
+    \node (expr-term) [draw, below=of decl-init] {\texttt{SEMICOLON} ``\texttt{;}''};
     \draw [arrow] (decl-init) -- (expr-term);
 
-    \node (access)[draw, below=of expr-term] {IDENTIFIER ``foo''};
+    \node (access)[draw, below=of expr-term] {\texttt{IDENTIFIER} ``\texttt{foo}''};
     \draw [arrow] (expr-term) -- (access);
-
   \end{tikzpicture}
   \caption{Sequence of tokens that would be produced by lexing \autoref{fig:int-source}.}
   \label{fig:int-tokens}
@@ -193,11 +196,11 @@ Some types of IRInstruction are removed during generation of gMIR. For example, 
 \label{subsec:general-machine-ir:notable-actions}
 
 \noindent\textbf{phi2copy}\\
-\indent For each function translated, there is a phi2copy pass where PHI instructions are removed, and copies are inserted for each argument into a virtual register.
+\noindent For each function translated, there is a phi2copy pass where PHI instructions are removed, and copies are inserted for each argument into a virtual register.
 
 % TODO: Add a little diagram here with before and after gMIR, PHI'd up and then PHI-less with copies.
 \noindent\textbf{Instruction Selection}\\
-\indent This is a doozy. It's such a doozy that there is an entire (domain-specific) language built-in to the compiler to accomplish this. But the basics go like this: each supported ISA defines it's own MIR opcodes (separate from the general MIR opcodes). The DSL is then used to write a file containing match/emit patterns, where general MIR instructions with specific patterns of operands are converted into lowered MIR instructions. See \emph{src/codegen/x86\_64/arch\_x86\_64.isel}.
+\noindent This is a doozy. It's such a doozy that there is an entire (domain-specific) language built-in to the compiler to accomplish this. But the basics go like this: each supported ISA defines it's own MIR opcodes (separate from the general MIR opcodes). The DSL is then used to write a file containing match/emit patterns, where general MIR instructions with specific patterns of operands are converted into lowered MIR instructions. See \emph{src/codegen/x86\_64/arch\_x86\_64.isel}.
 
 \vspace{1ex}
 Example of a simple x86\_64 instruction selection pattern:\\
@@ -222,10 +225,10 @@ After register allocation there is a final fixup pass before moving on to actual
 \label{subsec:lowered-machine-ir:notable-actions}
 
 \noindent\textbf{Complex Lowering}\\
-\indent Instruction selection isn't able to handle every corner case of every target, so some lowering happens in code vs through pattern matching.
+\noindent Instruction selection isn't able to handle every corner case of every target, so some lowering happens in code vs through pattern matching.
 
 \noindent\textbf{Register Allocation}\\
-\indent Register allocation is an NP-complete problem, so you \emph{know} this is going to be good.
+\noindent Register allocation is an NP-complete problem, so you \emph{know} this is going to be good.
 
 To prepare, we calculate defining uses of virtual registers within a function: currently this is a bit hacked, and I don't believe we are setting defining uses \emph{perfectly}. But it's close enough for now. In the future, we would ideally follow control flow of the program to determine a virtual register operands first use. This may produce multiple defining uses, depending on the control flow of the input program (imagine a variable $x$ in virtual register $v1$ that is assigned to $2$ in a then branch and assigned to $3$ in the else branch: in the block that both the then and otherwise branch to, the defining use of virtual register $v1$ depends entirely on which control flow is taken).
 
@@ -244,7 +247,7 @@ With adjacency lists created, we apply a graph-colouring algorithm to the graph,
 At this point, each virtual register operand has been coloured, AKA mapped to a hardware register. All that's left is to loop over the instructions and replace all references to virtual registers with references to the hardware register mapped to it. The function gets a bitmask set for each register in use within the function, that way backends can determine which caller/callee saved registers need to be saved/restored, for example.
 
 \noindent\textbf{Final Fixup}\\
-\indent While it may seem kind of crazy, there is yet another stage where the lMIR is altered, even after RA. This is for target-specific things like removing register to register moves when the registers are equal, or (final) lowering of calls (i.e. insert saving/restoration of caller-saved registers, if needed).
+\noindent While it may seem kind of crazy, there is yet another stage where the lMIR is altered, even after RA. This is for target-specific things like removing register to register moves when the registers are equal, or (final) lowering of calls (i.e. insert saving/restoration of caller-saved registers, if needed).
 
 \section{Target Code}
 \label{sec:target-code}
