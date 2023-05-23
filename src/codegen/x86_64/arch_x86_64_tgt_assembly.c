@@ -462,12 +462,6 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
 
       foreach_ptr (MIRInstruction*, instruction, block->instructions) {
         switch (instruction->opcode) {
-
-        // TODO: Remove these
-        // They'll be here until we get `discard` in instruction selection...
-        case MIR_STATIC_REF: break;
-        case MIR_ALLOCA: break;
-
         case MX64_LEA: {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_LOCAL_REF, MIR_OP_REGISTER)) {
             MIROperand *local = mir_get_op(instruction, 0);

@@ -89,12 +89,10 @@ emit {
 
 ;;;; MEMORY
 
-;; TODO: I think we can actually now get away with never emitting
-;; these, as they *should* be inlined.
-;;match MIR_ALLOCA i1(Local object)
-;;emit MX64_LEA(object, i1)
-;;match MIR_STATIC_REF i1(Static object)
-;;emit MX64_LEA(object, i1)
+;; We can get away with never emitting these, as they *should* be
+;; inlined as operands when used.
+match MIR_ALLOCA i1(Local) discard
+match MIR_STATIC_REF i1(Static) discard
 
 match MIR_COPY i1(Immediate imm)
 emit MX64_MOV(imm, i1)
@@ -112,7 +110,7 @@ emit MX64_MOV(src, i1)
 match MIR_LOAD i1(Local src)
 emit MX64_MOV(src, i1)
 match MIR_LOAD i1(Register src)
-emit MX64_MOV(src, i1, Immediate offset = 0)
+emit MX64_MOV(src, Immediate offset = 0, i1)
 
 match MIR_STORE(Immediate value, Register dst)
 emit MX64_MOV(value, dst, Immediate offset = 0)
