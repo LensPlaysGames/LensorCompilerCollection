@@ -91,10 +91,10 @@ emit {
 
 ;; TODO: I think we can actually now get away with never emitting
 ;; these, as they *should* be inlined.
-match MIR_ALLOCA i1(Local object)
-emit MX64_LEA(object, i1)
-match MIR_STATIC_REF i1(Static object)
-emit MX64_LEA(object, i1)
+;;match MIR_ALLOCA i1(Local object)
+;;emit MX64_LEA(object, i1)
+;;match MIR_STATIC_REF i1(Static object)
+;;emit MX64_LEA(object, i1)
 
 match MIR_COPY i1(Immediate imm)
 emit MX64_MOV(imm, i1)
