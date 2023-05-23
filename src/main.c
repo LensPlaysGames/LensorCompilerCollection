@@ -16,11 +16,11 @@ static void print_usage(char **argv) {
         "   `-as`, `--archs`    :: List acceptable architectures.\n"
         "   `-ts`, `--targets`  :: List acceptable targets.\n"
         "   `-ccs`, `--callings`:: List acceptable calling conventions.\n"
-        "   `--debug-ir`        :: Dump IR to stdout (in debug format).\n"
-        "   `--print-ast        :: Print the AST and exit.\n"
-        "   `--syntax-only      :: Perform no semantic analysis.\n"
-        "   `--print-scopes     :: Print the scope tree and exit.\n"
-        "   `--annotate-code    :: Print comments in generated code. TODO: WIP\n"
+        "   `--syntax-only      :: Exit just after parsing, before semantic analysis.\n"
+        "   `--print-ast        :: Print the syntax tree.\n"
+        "   `--print-scopes     :: Print the scope tree.\n"
+        "   `--print-ir`        :: Print the intermediate representation.\n"
+        "   `--annotate-code    :: Emit comments in generated code. TODO: WIP\n"
         "   `-O`, `--optimize`  :: Optimize the generated code.\n"
         "   `-v`, `--verbose`   :: Print out more information.\n");
   print("Options:\n"
@@ -94,7 +94,7 @@ static int handle_command_line_arguments(int argc, char **argv) {
         || strcmp(argument, "--help") == 0) {
       print_usage(argv);
       exit(0);
-    } else if (strcmp(argument, "--debug-ir") == 0) {
+    } else if (strcmp(argument, "--print-ir") == 0) {
       debug_ir = true;
     } else if (strcmp(argument, "--print-ast") == 0) {
       print_ast = true;
@@ -358,7 +358,7 @@ int main(int argc, char **argv) {
     free(s.data);
   }
 
-  /// The input is a FUN file.
+  /// The input is an Intercept file.
   else {
     /// Parse the file.
     AST *ast = parse(as_span(s), infile);
