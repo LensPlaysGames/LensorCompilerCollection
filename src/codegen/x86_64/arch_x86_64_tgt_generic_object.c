@@ -220,7 +220,7 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
 
   } break; // case MX64_MOV
 
-  case MX64_ADD:
+  case MX64_ADD: FALLTHROUGH;
   case MX64_SUB: {
 
     // Immediate add/sub both share the same opcodes, just with a different opcode extension in ModRM:reg.
@@ -1854,6 +1854,15 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
     }
     if (function->origin && function->origin->is_extern) continue;
 
+    // Calculate stack offsets, frame size
+    isz frame_offset = 0;
+    isz frame_size = 0;
+    foreach (MIRFrameObject, fo, function->frame_objects) {
+      frame_size += fo->size;
+      frame_offset -= fo->size;
+      fo->offset = frame_offset;
+    }
+
     STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of x86_64 frame kinds");
     StackFrameKind frame_kind = stack_frame_kind(function);
     switch (frame_kind) {
@@ -1862,6 +1871,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
     case FRAME_MINIMAL: {
       // PUSH %RBP
       mcode_reg(context, MX64_PUSH, REG_RBP, r64);
+      if (frame_size) mcode_imm_to_reg(context, MX64_SUB, frame_size, REG_RSP, r64);
     } break;
 
     case FRAME_FULL: {
@@ -1869,6 +1879,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
       // MOV %RSP, %RBP
       mcode_reg(context, MX64_PUSH, REG_RBP, r64);
       mcode_reg_to_reg(context, MX64_MOV, REG_RSP, r64, REG_RBP, r64);
+      if (frame_size) mcode_imm_to_reg(context, MX64_SUB, frame_size, REG_RSP, r64);
     } break;
 
     case FRAME_COUNT: FALLTHROUGH;
