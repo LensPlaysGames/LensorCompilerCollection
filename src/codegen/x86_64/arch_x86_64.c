@@ -899,14 +899,14 @@ void codegen_emit_x86_64(CodegenContext *context) {
   foreach_ptr (IRStaticVariable*, var, context->static_vars) {
     /// Do not emit unused variables.
     if (optimise) {
-        bool used = false;
-        foreach_ptr (IRInstruction*, ref, var->references) {
-            if (ref->users.size) {
-                used = true;
-                break;
-            }
+      bool used = false;
+      foreach_ptr (IRInstruction*, ref, var->references) {
+        if (ref->users.size) {
+          used = true;
+          break;
         }
-        if (!used) continue;
+      }
+      if (!used) continue;
     }
 
     /// Emit a data section directive if we haven't already.
@@ -1103,18 +1103,50 @@ void codegen_emit_x86_64(CodegenContext *context) {
   }
 
   /// After RA, the last fixups before code emission are applied.
-  // Calculate stack offsets
-  // Lowering of MIR_CALL, among other things
-  // Remove register to register moves when value and size are equal.
+  /// Calculate stack offsets
+  /// Lowering of MIR_CALL, among other things (caller-saved registers)
+  /// Remove register to register moves when value and size are equal.
+  /// Saving/restoration of callee-saved registers used in function.
   foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
-    if (function->origin && function->origin->is_extern) continue;
+    if (!function->origin || function->origin->is_extern) continue;
 
     // Calculate stack offsets of frame objects
-    if (function->origin->is_extern) continue;
     isz offset = 0;
     foreach (MIRFrameObject, fo, function->frame_objects) {
       offset -= fo->size;
       fo->offset = offset;
+    }
+
+    ASSERT(function->blocks.size, "Zero blocks within non-extern MIRFunction... How did you manage this?");
+
+    size_t func_regs = function->origin->registers_in_use;
+
+    { // Save callee-saved registers used in this function
+      MIRBlock *first_block = vector_front(function->blocks);
+      for (Register r = 1; r < sizeof(func_regs) * 8; ++r) {
+        if (r == desc.result_register) continue;
+        if (func_regs & ((usz)1 << r) && is_callee_saved(r)) {
+          MIRInstruction *push = mir_makenew(MX64_PUSH);
+          mir_add_op(push, mir_op_register(r, r64, false));
+          mir_insert_instruction(first_block, push, 0);
+        }
+      }
+    }
+
+    { // Restore callee-saved registers used in this function
+      // Okay, I know this looks weird to insert push and pop without
+      // reversing iteration direction, but the key here is the insert
+      // function we are using; this one adds to the end, whereas the push
+      // one adds to the beginning. Therefore, we can do the same loop but
+      // have reversed order of output instructions.
+      for (Register r = 1; r < sizeof(func_regs) * 8; ++r) {
+        if (r == desc.result_register) continue;
+        if (func_regs & ((usz)1 << r) && is_callee_saved(r)) {
+          MIRInstruction *pop = mir_makenew(MX64_POP);
+          mir_add_op(pop, mir_op_register(r, r64, false));
+          mir_append_instruction(function, pop);
+        }
+      }
     }
 
     foreach_ptr (MIRBlock*, block, function->blocks) {
@@ -1139,7 +1171,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
             break;
           }
 
-          size_t func_regs = instruction->block->function->origin->registers_in_use;
           size_t regs_pushed_count = 0;
 
           // Save return register if it is not the result of this
@@ -1263,17 +1294,17 @@ void codegen_emit_x86_64(CodegenContext *context) {
         } break;
         } // switch (instruction->opcode)
 
-      }
+      } // foreach (MIRInstruction*)
 
       foreach_ptr (MIRInstruction*, instruction, instructions_to_remove) {
         mir_remove_instruction(instruction);
       }
       vector_delete(instructions_to_remove);
 
-    }
+    } // foreach (MIRBlock*)
 
     print_mir_function_with_mnemonic(function, mir_x86_64_opcode_mnemonic);
-  }
+  } // foreach (MIRFunction*)
 
 
   // CODE EMISSION
