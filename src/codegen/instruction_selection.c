@@ -48,6 +48,7 @@ typedef enum ISelTokenKind {
   TOKEN_KW_MATCH,
   TOKEN_KW_EMIT,
   TOKEN_KW_DISCARD,
+  TOKEN_KW_CLOBBERS,
 
   TOKEN_SEMICOLON,
 
@@ -90,6 +91,7 @@ static const char *isel_token_kind_to_string(ISelTokenKind kind) {
   case TOKEN_KW_MATCH: return "match";
   case TOKEN_KW_EMIT: return "emit";
   case TOKEN_KW_DISCARD: return "discard";
+  case TOKEN_KW_CLOBBERS: return "clobbers";
   case TOKEN_IDENTIFIER: return "identifier";
   case TOKEN_INTEGER: return "integer";
   }
@@ -433,10 +435,11 @@ static void isel_next_number(ISelParser *p) {
 static const struct {
   span kw;
   ISelTokenKind kind;
-} keywords[12] = {
+} keywords[13] = {
   {literal_span_raw("match"), TOKEN_KW_MATCH},
   {literal_span_raw("emit"), TOKEN_KW_EMIT},
   {literal_span_raw("discard"), TOKEN_KW_DISCARD},
+  {literal_span_raw("clobbers"), TOKEN_KW_CLOBBERS},
   {literal_span_raw("Register"), TOKEN_OPKIND_REGISTER},
   {literal_span_raw("Immediate"), TOKEN_OPKIND_IMMEDIATE},
   {literal_span_raw("Name"), TOKEN_OPKIND_NAME},
@@ -647,7 +650,6 @@ static MIROperand isel_parse_operand(ISelParser *p) {
       out.value.inst_ref = entry->value.inst;
     } else ERR("Identifier is bound in environment but has unexpected value kind");
 
-
     // Yeet operand identifier
     isel_next_tok(p);
   }
@@ -732,6 +734,43 @@ static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
   // Yeet closing paren
   isel_next_tok(p);
 
+  // Parse clobbers
+  if (p->tok.kind == TOKEN_KW_CLOBBERS) {
+    // Yeet "clobbers" keyword
+    isel_next_tok(p);
+
+    while (p->tok.kind != TOKEN_SEMICOLON) {
+      if (p->tok.kind == TOKEN_EOF)
+        ERR("ISel reached EOF while parsing list of clobbers; did you forget a semi-colon?");
+
+
+      if (p->tok.kind != TOKEN_IDENTIFIER)
+        ERR("ISel expected identifier (bound to something in the environment), but got (a) %s instead", isel_token_kind_to_string(p->tok.kind));
+
+      string_buf_zterm(&p->tok.text);
+      ISelEnvironmentEntry *entry = isel_env_entry(p->local, p->tok.text.data);
+      if (!entry->key.data) entry = isel_env_entry(&p->global, p->tok.text.data);
+      if (!entry->key.data) ERR("ISel expected identifier bound to something in the environment, but %s is not bound in any environment", p->tok.text.data);
+
+      if (entry->value.kind != ISEL_ENV_REGISTER)
+        ERR("ISel expected identifier bound to a register, but %s is bound to some other kind.");
+
+      MIROperandRegister r = {0};
+      r.value = entry->value.vreg.value;
+      r.size = entry->value.vreg.size;
+      vector_push(out->clobbers, r);
+
+      // Yeet bound identifier
+      isel_next_tok(p);
+
+      // Yeet comma, if present
+      if (p->tok.kind == TOKEN_COMMA) isel_next_tok(p);
+    }
+
+    // Yeet ';'
+    isel_next_tok(p);
+  }
+
   // Eat comma, if present
   if (p->tok.kind == TOKEN_COMMA) isel_next_tok(p);
 
@@ -746,9 +785,9 @@ static ISelPattern isel_parse_match(ISelParser *p) {
   out.local = isel_env_create_empty(16);
   p->local = &out.local;
 
-  if (p->tok.kind != TOKEN_KW_MATCH) {
+  if (p->tok.kind != TOKEN_KW_MATCH)
     ICE("Expected match keyword at beginning of match");
-  }
+
   // Yeet "match" keyword.
   isel_next_tok(p);
 
@@ -787,10 +826,10 @@ static ISelPattern isel_parse_match(ISelParser *p) {
       MIRInstruction *inst = isel_parse_inst_spec(p);
       vector_push(out.output, inst);
     }
-  } else {
+  } else if (p->tok.kind == TOKEN_KW_DISCARD) {
     // Yeet "discard" keyword.
     isel_next_tok(p);
-  }
+  } else ERR("Unrecognised token following match pattern instructions");
 
   p->local = NULL;
 
@@ -978,11 +1017,10 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
     // Find longest in rest of vector
     ISelPattern *pattern_to_swap = patterns.data + i;
     ISelPattern *largest = pattern_to_swap;
-    for (size_t j = i + 1; j < patterns.size; j++) {
+    for (size_t j = i + 1; j < patterns.size; ++j) {
       ISelPattern *largest_candidate = patterns.data + j;
-      if (largest_candidate->input.size > largest->input.size) {
+      if (largest_candidate->input.size > largest->input.size)
         largest = largest_candidate;
-      }
     }
     if (pattern_to_swap != largest) {
       ISelPattern tmp = *pattern_to_swap;

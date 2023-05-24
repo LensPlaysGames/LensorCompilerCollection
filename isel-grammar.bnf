@@ -3,7 +3,9 @@
 
 <inst-block> ::= "{" <inst-spec> { <inst-spec> } "}"
 
-<inst-spec> ::= <opcode> IDENTIFIER "(" { <operand> } ")" [ "," ]
+<inst-spec> ::= <opcode> [ IDENTIFIER ] "(" { <operand> } ")"
+                [ "clobbers" IDENTIFIER { [ "," ] IDENTIFIER } ";" ] [ "," ]
+
 <operand>   ::= [ OPERAND_KIND ] IDENTIFIER [ "=" <expression> ] [ "," ]
 
 <opcode>        ::= IDENTIFIER
