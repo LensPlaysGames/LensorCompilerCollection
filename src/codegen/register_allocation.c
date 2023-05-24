@@ -223,6 +223,7 @@ static void collect_interferences_from_block
           if (B->live_idx == A->live_idx) continue;
           DEBUG("Setting v%Z interfere with v%Z (used in same instruction)\n", A->op->value.reg.value - MIR_ARCH_START, B->op->value.reg.value - MIR_ARCH_START);
           adjm_set(G->matrix, A->live_idx, B->live_idx);
+          adjm_set(G->matrix, B->live_idx, A->live_idx);
         }
       }
     }
@@ -244,6 +245,35 @@ static void collect_interferences_from_block
         adjm_set(G->matrix, clobbered_idx, A->live_idx);
       }
     }
+    // Make all vreg operands interfere with all currently live values
+    foreach (MIROperandPlusLiveValIndex, A, vreg_operands) {
+      foreach (VReg, live_val, *live_vals) {
+        DEBUG("--%Z (%Z) is live\n", inst->reg - MIR_ARCH_START, A->live_idx);
+
+        if (inst->reg == live_val->value) {
+          DEBUG("  Automatically skipping \"interference with self\": %Z (%Z)\n", inst->reg - MIR_ARCH_START, A->live_idx);
+          continue;
+        }
+
+        usz live_idx = (usz)-1;
+        foreach_index (i, *vregs) {
+          if (vregs->data[i].value == live_val->value) {
+            live_idx = i;
+            break;
+          }
+        }
+        ASSERT(live_idx != (usz)-1, "Could not find vreg from live values vector in list of vregs: %Z\n", live_val->value - MIR_ARCH_START);
+
+        DEBUG("--Setting live value %Z (%Z) within %Z (%Z)\n", live_val->value - MIR_ARCH_START, live_idx, inst->reg - MIR_ARCH_START, A->live_idx);
+
+        if (live_idx >= G->matrix.size) ICE("Index out of bounds (live value vreg index)", live_idx);
+        if (A->live_idx >= G->matrix.size) ICE("Index out of bounds (instruction vreg index)", live_idx);
+
+        adjm_set(G->matrix, A->live_idx, live_idx);
+        adjm_set(G->matrix, live_idx, A->live_idx);
+      }
+    }
+
     vector_delete(vreg_operands);
 
     // Find this instruction's index in vregs vector.
@@ -254,42 +284,56 @@ static void collect_interferences_from_block
         break;
       }
     }
-    // Skip instruction if it's vreg is not in vregs.
-    if (inst_idx == (usz)-1) {
-      DEBUG("Skipping live value setting stuff\n");
-      continue;
-    }
 
-    DEBUG("inst_idx=%Z\n", inst_idx);
+    // Skip instruction's "result" register if it's vreg is not in vregs.
+    // TODO: Truthfully, we should *not* **ever** need the result register anywhere past the input of ISel.
+    if (inst_idx != (usz)-1) {
+      DEBUG("inst_idx=%Z\n", inst_idx);
 
-    /// Make this value interfere with all values that are live at this point.
-    foreach (VReg, live_val, *live_vals) {
-      DEBUG("--%Z (%Z) is live\n", inst->reg - MIR_ARCH_START, inst_idx);
-
-      if (inst->reg == live_val->value) {
-        DEBUG("  Automatically skipping \"interference with self\": %Z (%Z)\n", inst->reg - MIR_ARCH_START, inst_idx);
-        continue;
-      }
-
-      usz live_idx = (usz)-1;
-      foreach_index (i, *vregs) {
-        if (vregs->data[i].value == live_val->value) {
-          live_idx = i;
-          break;
+      /// Make this value interfere with all clobbers
+      foreach (MIROperandRegister, clobbered, inst->clobbers) {
+        // Get index of clobbered register.
+        usz clobbered_idx = (usz)-1;
+        foreach_index (i, *vregs) {
+          if (vregs->data[i].value == clobbered->value) {
+            clobbered_idx = i;
+            break;
+          }
         }
+        ASSERT(clobbered_idx != (usz)-1, "Could not find vreg from clobbers list in list of vregs: %Z\n", clobbered->value - MIR_ARCH_START);
+
+        adjm_set(G->matrix, inst->reg, clobbered_idx);
+        adjm_set(G->matrix, clobbered_idx, inst->reg);
       }
-      ASSERT(live_idx != (usz)-1, "Could not find vreg from live values vector in list of vregs: %Z\n", live_val->value - MIR_ARCH_START);
 
-      DEBUG("  Setting live value %Z (%Z) within %Z (%Z)\n", live_val->value - MIR_ARCH_START, live_idx, inst->reg - MIR_ARCH_START, inst_idx);
+      /// Make this value interfere with all values that are live at this point.
+      foreach (VReg, live_val, *live_vals) {
+        DEBUG("--%Z (%Z) is live\n", inst->reg - MIR_ARCH_START, inst_idx);
 
-      if (live_idx >= G->matrix.size) ICE("Index out of bounds (live value vreg index)", live_idx);
-      if (inst_idx >= G->matrix.size) ICE("Index out of bounds (instruction vreg index)", live_idx);
+        if (inst->reg == live_val->value) {
+          DEBUG("  Automatically skipping \"interference with self\": %Z (%Z)\n", inst->reg - MIR_ARCH_START, inst_idx);
+          continue;
+        }
 
-      adjm_set(G->matrix, inst_idx, live_idx);
+        usz live_idx = (usz)-1;
+        foreach_index (i, *vregs) {
+          if (vregs->data[i].value == live_val->value) {
+            live_idx = i;
+            break;
+          }
+        }
+        ASSERT(live_idx != (usz)-1, "Could not find vreg from live values vector in list of vregs: %Z\n", live_val->value - MIR_ARCH_START);
+
+        DEBUG("  Setting live value %Z (%Z) within %Z (%Z)\n", live_val->value - MIR_ARCH_START, live_idx, inst->reg - MIR_ARCH_START, inst_idx);
+
+        if (live_idx >= G->matrix.size) ICE("Index out of bounds (live value vreg index)", live_idx);
+        if (inst_idx >= G->matrix.size) ICE("Index out of bounds (instruction vreg index)", live_idx);
+
+        adjm_set(G->matrix, inst_idx, live_idx);
+        adjm_set(G->matrix, live_idx, inst_idx);
+      }
     }
 
-    /// If the defining use of a virtual register is an operand of this
-    /// instruction, remove it from vector of live vals.
     /// If a virtual register is not live and is seen as an operand, it
     /// is added to the vector of live values.
     FOREACH_MIR_OPERAND(inst, operand) {
