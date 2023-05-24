@@ -725,11 +725,13 @@ void codegen_function(CodegenContext *ctx, Node *node) {
   ctx->block = node->function.ir->blocks.first;
   ctx->function = node->function.ir;
 
+  /* I have no idea why we would need or want to do this. A static will always be at the same address...
   /// Create new references to all already emitted
   /// static variables.
   foreach_ptr (IRStaticVariable *, s, ctx->static_vars)
     if (s->decl)
       s->decl->address = ir_static_reference(ctx, s);
+  */
 
   /// Next, emit all parameter declarations and store
   /// the initial parameter values in them.
