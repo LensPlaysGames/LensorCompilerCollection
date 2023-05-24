@@ -796,6 +796,26 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             MIROperand *lhs = mir_get_op(instruction, 0);
             MIROperand *rhs = mir_get_op(instruction, 1);
+            if (!lhs->value.reg.size && !rhs->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Both lhs and rhs are zero sized registers, assuming 64-bit...\n");
+              putchar('\n');
+              lhs->value.reg.size = r64;
+              rhs->value.reg.size = r64;
+            } else if (!lhs->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register on lhs, assuming 64-bit...\n");
+              putchar('\n');
+              lhs->value.reg.size = r64;
+            } else if (!rhs->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register on rhs, assuming 64-bit...\n");
+              putchar('\n');
+              lhs->value.reg.size = r64;
+            }
             femit_reg_to_reg(context, instruction->opcode, lhs->value.reg.value, lhs->value.reg.size, rhs->value.reg.value, rhs->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
