@@ -175,6 +175,7 @@ MIRInstruction *mir_makecopy(MIRInstruction *original) {
     memcpy(mir->operands.arr, original->operands.arr, sizeof(mir->operands.arr));
   else vector_append(mir->operands.vec, original->operands.vec);
   mir->origin = original->origin;
+  vector_append(mir->clobbers, original->clobbers);
   return mir;
 }
 

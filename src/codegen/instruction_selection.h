@@ -58,8 +58,7 @@ typedef struct ISelPattern {
   MIRInstructionVector output;
   ISelEnvironment local;
 } ISelPattern;
-typedef Vector(ISelPattern)
-ISelPatterns;
+typedef Vector(ISelPattern) ISelPatterns;
 
 ISelPatterns isel_parse_file(const char *filepath);
 

@@ -40,6 +40,8 @@ typedef struct MIROperandRegister {
 
   bool defining_use;
 } MIROperandRegister;
+typedef Vector(MIROperandRegister) MIROperandRegisters;
+
 typedef usz MIROperandLocal; // index into function FrameObject vector
 typedef const char* MIROperandName;
 typedef int64_t MIROperandImmediate;
@@ -52,7 +54,7 @@ typedef unsigned int MIRRegister;
 
 typedef struct MIROperand {
   MIROperandKind kind;
-  union {
+  union MIROperandValue {
     MIROperandRegister reg;
     MIROperandImmediate imm;
     MIROperandName name;
@@ -61,6 +63,7 @@ typedef struct MIROperand {
     MIROperandStatic static_ref;
     MIROperandLocal local_ref;
 
+    /// Used *only* by instruction selection.
     MIROperandOpRef op_ref;
     MIROperandInstRef inst_ref;
   } value;
@@ -89,6 +92,8 @@ typedef struct MIRInstruction {
     MIROperand arr[MIR_OPERAND_SSO_THRESHOLD];
     Vector(MIROperand) vec;
   } operands;
+
+  MIROperandRegisters clobbers;
 
   MIRBlock *block;
 

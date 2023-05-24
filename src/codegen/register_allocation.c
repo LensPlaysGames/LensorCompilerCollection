@@ -226,6 +226,24 @@ static void collect_interferences_from_block
         }
       }
     }
+    /// Make all vreg operands interfere with all clobbers of this instruction
+    foreach (MIROperandPlusLiveValIndex, A, vreg_operands) {
+      foreach (MIROperandRegister, clobbered, inst->clobbers) {
+        // Get index of clobbered register.
+        usz clobbered_idx = (usz)-1;
+        foreach_index (i, *vregs) {
+          if (vregs->data[i].value == clobbered->value) {
+            clobbered_idx = i;
+            break;
+          }
+        }
+        if (clobbered->value < MIR_ARCH_START) TODO("Add hardware registers to list of registers used for interference checking in register allocation");
+        ASSERT(clobbered_idx != (usz)-1, "Could not find register from clobbers list in list of registers: %Z\n", clobbered->value > MIR_ARCH_START ? clobbered->value - MIR_ARCH_START : clobbered->value);
+
+        adjm_set(G->matrix, A->live_idx, clobbered_idx);
+        adjm_set(G->matrix, clobbered_idx, A->live_idx);
+      }
+    }
     vector_delete(vreg_operands);
 
     // Find this instruction's index in vregs vector.
@@ -825,11 +843,16 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
   print_mir_function(f);
 #endif
 
+  // TODO: Virtual register renaming step: start renumbering virtual registers at the number of available hardware registers.
+
   DEBUG("MTX\n");
   MIR_PRINT(f);
 
   // List of all virtual registers that need coloured.
+  // TODO: List of all *registers* that need coloured.
   VRegVector vregs = {0};
+
+  // TODO: Populate list of registers, first using hardware registers, then using virtual registers.
 
   // Populate list of vregs
   foreach_ptr (MIRBlock*, bb, f->blocks) {
