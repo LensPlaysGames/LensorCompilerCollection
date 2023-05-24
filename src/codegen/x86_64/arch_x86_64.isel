@@ -103,25 +103,29 @@ emit MX64_LEA(src, i1)
 match MIR_COPY i1(Local src)
 emit MX64_LEA(src, i1)
 
-match MIR_LOAD i1(Immediate src)
-emit MX64_MOV(src, i1)
 match MIR_LOAD i1(Static src)
 emit MX64_MOV(src, i1)
 match MIR_LOAD i1(Local src)
 emit MX64_MOV(src, i1)
-;; FIXME: Load of a register needs some way to specify how much memory
-;; it needs to load from the register. I think that MIR_LOAD(REG) is an
-;; invalid form (but one that is currently produced when lowering IR to
-;; MIR).
-match MIR_LOAD i1(Register src)
-emit MX64_MOV(src, Immediate offset = 0, i1)
+match MIR_LOAD i1(Immediate src)
+emit MX64_MOV(src, i1)
+match MIR_LOAD i1(Register src, IMM size)
+emit MX64_MOV(src, Immediate offset = 0, i1, size)
 
-match MIR_STORE(Immediate value, Register dst)
-emit MX64_MOV(value, dst, Immediate offset = 0)
-match MIR_STORE(Static value, Register dst)
-emit MX64_MOV(value, dst, Immediate offset = 0)
+match MIR_STORE(Immediate value, Register dst, IMM size)
+emit MX64_MOV(value, dst, Immediate offset = 0, size)
+match MIR_STORE i1(Immediate imm, Local local)
+emit MX64_MOV(imm, local)
+match MIR_STORE i1(Immediate imm, Static static)
+emit MX64_MOV(imm, static)
 match MIR_STORE(Register src, Register dst)
 emit MX64_MOV(src, dst, Immediate offset = 0)
+match MIR_STORE i1(Register r, Local local)
+emit MX64_MOV(r, local)
+match MIR_STORE i1(Register r, Static static)
+emit MX64_MOV(r, static)
+match MIR_STORE(Static value, Register dst)
+emit MX64_MOV(value, dst, Immediate offset = 0)
 match MIR_STORE(Static value, Static dst)
 emit {
   ;; Load pointer to static value
@@ -129,21 +133,13 @@ emit {
   ;; Copy pointer of static value to value of destination
   MX64_MOV(i1, dst)
 }
-
-
-match
-MIR_STORE i1(Immediate imm, Local l)
-MIR_LOAD i2(l)
-emit MX64_MOV(imm, l)
-
-match MIR_STORE i1(Immediate imm, Local local)
-emit MX64_MOV(imm, local)
-match MIR_STORE i1(Register r, Local local)
-emit MX64_MOV(r, local)
-match MIR_STORE i1(Immediate imm, Static static)
-emit MX64_MOV(imm, static)
-match MIR_STORE i1(Register r, Static static)
-emit MX64_MOV(r, static)
+match MIR_STORE(Local value, Local dst)
+emit {
+  ;; Load pointer to local value
+  MX64_LEA i1(value, i1)
+  ;; Copy pointer of local value to value of destination
+  MX64_MOV(i1, dst)
+}
 
 match MIR_LOAD i1(Local local)
 emit MX64_MOV(local, i1)

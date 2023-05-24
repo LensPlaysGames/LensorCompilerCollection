@@ -2,6 +2,7 @@
 
 #include <stdarg.h>
 
+#include <ast.h>
 #include <codegen.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/codegen_forward.h>
@@ -498,12 +499,27 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir_push_into_block(function, mir_bb, mir);
         } break;
 
+        case IR_LOAD: {
+          MIRInstruction *mir = mir_makenew(MIR_LOAD);
+          mir->origin = inst;
+
+          // Address of load
+          MIROperand addr = mir_op_reference_ir(function, inst->operand);
+          mir_add_op(mir, addr);
+          // Size of load (if needed)
+          if (addr.kind == MIR_OP_REGISTER) {
+            MIROperand size = mir_op_immediate((i64)type_sizeof(inst->operand->type));
+            mir_add_op(mir, size);
+          }
+          inst->machine_inst = mir;
+          mir_push_into_block(function, mir_bb, mir);
+        } break;
+
         case IR_NOT:
         case IR_ZERO_EXTEND:
         case IR_SIGN_EXTEND:
         case IR_TRUNCATE:
-        case IR_BITCAST:
-        case IR_LOAD: {
+        case IR_BITCAST: {
           MIRInstruction *mir = mir_makenew((uint32_t)inst->kind);
           mir->origin = inst;
           mir_add_op(mir, mir_op_reference_ir(function, inst->operand));
@@ -578,8 +594,21 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
         case IR_STORE: {
           MIRInstruction *mir = mir_makenew(MIR_STORE);
           mir->origin = inst;
-          mir_add_op(mir, mir_op_reference_ir(function, inst->store.value));
-          mir_add_op(mir, mir_op_reference_ir(function, inst->store.addr));
+          MIROperand value = mir_op_reference_ir(function, inst->store.value);
+          MIROperand addr = mir_op_reference_ir(function, inst->store.addr);
+          mir_add_op(mir, value);
+          mir_add_op(mir, addr);
+          // Size of store (if needed)
+          if (addr.kind == MIR_OP_REGISTER && value.kind == MIR_OP_IMMEDIATE) {
+            if (type_is_reference(inst->store.addr->type)) {
+              MIROperand size = mir_op_immediate((i64)type_sizeof(inst->store.addr->type->reference.to));
+              mir_add_op(mir, size);
+            } else if (type_is_pointer(inst->store.addr->type)) {
+              Type *ptr_type = type_strip_references(inst->store.addr->type);
+              MIROperand size = mir_op_immediate((i64)type_sizeof(ptr_type->pointer.to));
+              mir_add_op(mir, size);
+            } else ICE("Cannot IR_STORE into a non-pointer/reference typed address");
+          }
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
         } break;
