@@ -100,7 +100,7 @@ static void femit_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
   }
 }
 
-static void femit_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate, RegisterDescriptor address_register, int64_t offset) {
+static void femit_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate, RegisterDescriptor address_register, int64_t offset, RegSize size) {
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
   switch (context->target) {
@@ -526,7 +526,8 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
             ASSERT(local->value.local_ref < function->frame_objects.size,
                    "MX64_MOV(imm, local): local index %d is greater than amount of frame objects in function: %Z",
                    (int)local->value.local_ref, function->frame_objects.size);
-            femit_imm_to_mem(context, MX64_MOV, imm->value.imm, REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
+            MIRFrameObject *fo = function->frame_objects.data + local->value.local_ref;
+            femit_imm_to_mem(context, MX64_MOV, imm->value.imm, REG_RBP, fo->offset, (RegSize)fo->size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
@@ -603,11 +604,12 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
                              REG_RBP, function->frame_objects.data[local->value.local_ref].offset,
                              reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
+            TODO("MOV(IMM, REG, IMM) would normally be 'imm to mem' form, but that requires a fourth memory size operand");
             // imm to mem | imm, addr, offset
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *reg_address = mir_get_op(instruction, 1);
             MIROperand *offset = mir_get_op(instruction, 2);
-            femit_imm_to_mem(context, MX64_MOV, imm->value.imm, reg_address->value.reg.value, offset->value.imm);
+            femit_imm_to_mem(context, MX64_MOV, imm->value.imm, reg_address->value.reg.value, offset->value.imm, -1);
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
             // reg to mem | src, addr, offset
             MIROperand *reg_source = mir_get_op(instruction, 0);
@@ -629,6 +631,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
         } break; // case MX64_MOV
 
         case MX64_AND: FALLTHROUGH;
+        case MX64_IMUL: FALLTHROUGH; // TODO: separate this inst handling (three address operands possible)
         case MX64_ADD: {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
             // imm to reg | imm, dst
