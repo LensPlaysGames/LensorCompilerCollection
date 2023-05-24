@@ -2172,6 +2172,10 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           }
         } break;
 
+        case MX64_CQO: {
+          mcode_none(context, (MIROpcodex86_64)instruction->opcode);
+        } break;
+
         case MX64_JCC: {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_BLOCK)) {
             MIROperand *jump_type = mir_get_op(instruction, 0);
