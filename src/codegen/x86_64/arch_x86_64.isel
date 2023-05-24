@@ -109,6 +109,10 @@ match MIR_LOAD i1(Static src)
 emit MX64_MOV(src, i1)
 match MIR_LOAD i1(Local src)
 emit MX64_MOV(src, i1)
+;; FIXME: Load of a register needs some way to specify how much memory
+;; it needs to load from the register. I think that MIR_LOAD(REG) is an
+;; invalid form (but one that is currently produced when lowering IR to
+;; MIR).
 match MIR_LOAD i1(Register src)
 emit MX64_MOV(src, Immediate offset = 0, i1)
 
@@ -221,6 +225,35 @@ MIR_MUL i1(Immediate imm, Register reg)
 emit {
   MX64_IMUL(imm, reg)
   MX64_MOV(reg, i1)
+}
+
+match
+MIR_DIV i1(Register lhs, IMM rhs)
+emit {
+  MX64_MOV i2(rhs, i2)
+  MIR_DIV(lhs, i2)
+}
+match
+MIR_DIV i1(Register lhs, Register rhs)
+emit {
+  MX64_MOV(lhs, Register = rax)
+  MX64_CQO()
+  MX64_IDIV(rhs) clobbers rax, rdx;
+  MX64_MOV(Register = rax, i1)
+}
+match
+MIR_MOD i1(Register lhs, IMM rhs)
+emit {
+  MX64_MOV i2(rhs, i2)
+  MIR_MOD(lhs, i2)
+}
+match
+MIR_MOD i1(Register lhs, Register rhs)
+emit {
+  MX64_MOV(lhs, Register = rax)
+  MX64_CQO()
+  MX64_IDIV(rhs) clobbers rax, rdx;
+  MX64_MOV(Register = rdx, i1)
 }
 
 match
