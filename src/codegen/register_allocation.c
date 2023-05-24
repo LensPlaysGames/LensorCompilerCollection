@@ -168,6 +168,8 @@ static void collect_interferences_from_block
   /// Collect interferences for instructions in this block.
   foreach_ptr_rev (MIRInstruction*, inst, b->instructions) {
 
+    /// If the defining use of a virtual register is an operand of this
+    /// instruction, remove it from vector of live vals.
     FOREACH_MIR_OPERAND(inst, op) {
 #ifdef DEBUG_RA
       print("operand:\n");
@@ -214,8 +216,10 @@ static void collect_interferences_from_block
     }
     if (vreg_operands.size > 1) {
       foreach (MIROperandPlusLiveValIndex, A, vreg_operands) {
+        if (A->op->value.reg.defining_use) continue;
         // Set interference with all other vreg operands
         foreach (MIROperandPlusLiveValIndex, B, vreg_operands) {
+          if (B->op->value.reg.defining_use) continue;
           if (B->live_idx == A->live_idx) continue;
           DEBUG("Setting v%Z interfere with v%Z (used in same instruction)\n", A->op->value.reg.value - MIR_ARCH_START, B->op->value.reg.value - MIR_ARCH_START);
           adjm_set(G->matrix, A->live_idx, B->live_idx);
