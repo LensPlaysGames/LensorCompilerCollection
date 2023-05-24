@@ -104,14 +104,30 @@ static void femit_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int6
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *address = register_name(address_register);
   switch (context->target) {
-    case TARGET_GNU_ASM_ATT:
-      fprint(context->code, "    %s $%D, %D(%%%s)\n",
-          mnemonic, immediate, offset, address);
+    case TARGET_GNU_ASM_ATT: {
+      const char *mnemonic_suffix = "";
+      switch (size) {
+      case r8: mnemonic_suffix = "b";
+      case r16: mnemonic_suffix = "w";
+      case r32: mnemonic_suffix = "l";
+      case r64: mnemonic_suffix = "q";
+        break;
+      }
+      fprint(context->code, "    %s%s $%D, %D(%%%s)\n",
+             mnemonic, mnemonic_suffix, immediate, offset, address);
+    } break;
+  case TARGET_GNU_ASM_INTEL: {
+    const char *memory_size = "";
+    switch (size) {
+    case r8: memory_size = "BYTE PTR ";
+    case r16: memory_size = "WORD PTR ";
+    case r32: memory_size = "DWORD PTR ";
+    case r64: memory_size = "QWORD PTR ";
       break;
-    case TARGET_GNU_ASM_INTEL:
-      fprint(context->code, "    %s [%s + %D], %D\n",
-          mnemonic, address, offset, immediate);
-      break;
+    }
+    fprint(context->code, "    %s %s[%s + %D], %D\n",
+           mnemonic, memory_size, address, offset, immediate);
+  } break;
     default: ICE("ERROR: femit_imm_to_mem(): Unsupported dialect %d", context->target);
   }
 }
@@ -470,6 +486,13 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
                    "LEA expected second operand to be frame object reference");
             ASSERT(destination->kind == MIR_OP_REGISTER,
                    "LEA requires third operand to be a destination register");
+            if (!destination->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              destination->value.reg.size = r64;
+            }
             femit_mem_to_reg(context, MX64_LEA, REG_RBP, mir_get_frame_object(function, local->value.local_ref)->offset, destination->value.reg.value, destination->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_STATIC_REF, MIR_OP_REGISTER)) {
             MIROperand *object = mir_get_op(instruction, 0);
@@ -573,10 +596,18 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
                    "Local reference index %Z is larger than maximum possible local index %Z",
                    local->value.local_ref, function->frame_objects.size - 1);
 
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming same size as local...\n");
+              putchar('\n');
+              reg->value.reg.size = (usz)regsize_from_bytes(function->frame_objects.data[local->value.local_ref].size);
+            }
+
             femit_reg_to_mem(context, MX64_MOV, reg->value.reg.value, reg->value.reg.size,
                              REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_STATIC_REF)) {
-            // reg to mem (static) | src, local
+            // reg to mem (static) | src, static
             MIROperand *reg = mir_get_op(instruction, 0);
             MIROperand *stc = mir_get_op(instruction, 1);
             if (!reg->value.reg.size) {
@@ -600,16 +631,26 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
                    "Local reference index %Z is larger than maximum possible local index %Z",
                    local->value.local_ref, function->frame_objects.size - 1);
 
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming same size as local...\n");
+              putchar('\n');
+              reg->value.reg.size = (usz)regsize_from_bytes(function->frame_objects.data[local->value.local_ref].size);
+            }
+
             femit_mem_to_reg(context, MX64_MOV,
                              REG_RBP, function->frame_objects.data[local->value.local_ref].offset,
                              reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
             TODO("MOV(IMM, REG, IMM) would normally be 'imm to mem' form, but that requires a fourth memory size operand");
-            // imm to mem | imm, addr, offset
+          } else if (mir_operand_kinds_match(instruction, 4, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE, MIR_OP_IMMEDIATE)) {
+            // imm to mem | imm, addr, offset, size
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *reg_address = mir_get_op(instruction, 1);
             MIROperand *offset = mir_get_op(instruction, 2);
-            femit_imm_to_mem(context, MX64_MOV, imm->value.imm, reg_address->value.reg.value, offset->value.imm, -1);
+            MIROperand *size = mir_get_op(instruction, 3);
+            femit_imm_to_mem(context, MX64_MOV, imm->value.imm, reg_address->value.reg.value, offset->value.imm, (RegSize)size->value.imm);
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
             // reg to mem | src, addr, offset
             MIROperand *reg_source = mir_get_op(instruction, 0);
@@ -617,11 +658,14 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
             MIROperand *offset = mir_get_op(instruction, 2);
             femit_reg_to_mem(context, MX64_MOV, reg_source->value.reg.value, reg_source->value.reg.size, reg_address->value.reg.value, offset->value.imm);
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
-            // mem to reg | addr, offset, dst
+            TODO("MOV(REG, IMM, REG) would normally be 'mem to reg' form, but that requires a fourth memory size operand");
+          } else if (mir_operand_kinds_match(instruction, 4, MIR_OP_REGISTER, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
+            // mem to reg | addr, offset, dst, size
             MIROperand *reg_address = mir_get_op(instruction, 0);
             MIROperand *offset = mir_get_op(instruction, 1);
             MIROperand *reg_dst = mir_get_op(instruction, 2);
-            femit_mem_to_reg(context, MX64_MOV, reg_address->value.reg.value, offset->value.imm, reg_dst->value.reg.value, reg_dst->value.reg.size);
+            MIROperand *size = mir_get_op(instruction, 3);
+            femit_mem_to_reg(context, MX64_MOV, reg_address->value.reg.value, offset->value.imm, reg_dst->value.reg.value, (RegSize)size->value.imm);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
