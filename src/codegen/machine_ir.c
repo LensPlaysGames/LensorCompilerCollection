@@ -752,6 +752,15 @@ void print_mir_instruction_with_function_with_mnemonic(MIRFunction *function, MI
     if (op != opbase + mir->operand_count - 1 && (op + 1)->kind != MIR_OP_NONE)
       print("%37, ");
   }
+  if (mir->clobbers.size) {
+    print(" clobbers ");
+    foreach (MIROperandRegister, clobbered, mir->clobbers) {
+      if (clobbered->value < MIR_ARCH_START)
+        print("%32r%Z", (usz)clobbered->value);
+      else print("%34v%Z", (usz)clobbered->value - MIR_ARCH_START);
+      if ((usz)(clobbered - mir->clobbers.data) < mir->clobbers.size - 1) print("%37, ");
+    }
+  }
   print("\n%m");
 }
 
