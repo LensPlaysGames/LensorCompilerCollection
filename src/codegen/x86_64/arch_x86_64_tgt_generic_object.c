@@ -319,42 +319,141 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
   }
 }
 
-static void mcode_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate, RegSize size, RegisterDescriptor address_register, int64_t offset) {
+static void mcode_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate, RegisterDescriptor address_register, int64_t offset, RegSize size) {
   switch (inst) {
 
   case MX64_MOV: {
-    // REX.W + 0xc7 /0 id
-    ASSERT(size == r64, "Unhandled size");
-    uint8_t address_regbits = regbits(address_register);
-    uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(address_regbits));
-    // Mod == 0b10  ->  (R/M)+disp32
-    // Reg == Opcode Extension
-    // R/M == Address
-    int32_t imm32 = (int32_t)immediate;
-    int32_t disp32 = (int32_t)offset;
 
-    // Make output code smaller when possible by omitting zero displacements.
-    if (offset == 0) {
-      // Mod == 0b00  ->  R/M
-      // Reg == Source
+    switch (size) {
+    case r8: {
+      // 0xc6 /0 ib
+      uint8_t address_regbits = regbits(address_register);
+      int8_t imm8 = (int8_t)immediate;
+
+      // Encode a REX prefix if the ModRM register descriptor needs
+      // the bit extension.
+      if (REGBITS_TOP(address_regbits)) {
+        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(address_regbits));
+        mcode_1(context->object, rex);
+      }
+
+      // Make output code smaller when possible by omitting zero displacements.
+      if (offset == 0) {
+        // Mod == 0b00  ->  (R/M)
+        // Reg == Opcode Extension
+        // R/M == Address
+        uint8_t modrm = modrm_byte(0b00, 0, address_regbits);
+        mcode_2(context->object, 0xc6, modrm);
+        mcode_1(context->object, (uint8_t)imm8);
+        break;
+      }
+
+      // Mod == 0b10  ->  (R/M+disp32)
+      // Reg == Opcode Extension
       // R/M == Address
-      uint8_t modrm = modrm_byte(0b00, 0, address_regbits);
+      uint8_t modrm = modrm_byte(0b10, 0, address_regbits);
+      int32_t disp32 = (int32_t)offset;
+
+      mcode_2(context->object, 0xc6, modrm);
+
+      if (address_register == REG_RSP) {
+        /// Scaling Factor == 0b00  ->  1
+        /// Index == 0b100  ->  None
+        /// Base == RSP bits (0b100)
+        mcode_1(context->object, sib_byte(0b00, 0b100, address_regbits));
+      }
+      mcode_n(context->object, &disp32, 4);
+      mcode_1(context->object, (uint8_t)imm8);
+    }
+    case r16: {
+      // 0x66 + 0xc7 /0 iw
+      mcode_1(context->object, 0x66);
+    } FALLTHROUGH;
+    case r32: {
+      // 0xc7 /0 id
+      uint8_t address_regbits = regbits(address_register);
+
+      // Encode a REX prefix if the ModRM register descriptor needs
+      // the bit extension.
+      if (REGBITS_TOP(address_regbits)) {
+        uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(address_regbits));
+        mcode_1(context->object, rex);
+      }
+
+      if (offset == 0) {
+        // Mod == 0b00  ->  (R/M)
+        // Reg == Opcode Extension
+        // R/M == Address
+        uint8_t modrm = modrm_byte(0b00, 0, address_regbits);
+        mcode_2(context->object, 0xc7, modrm);
+        if (size == r16) {
+          int16_t imm16 = (int16_t)immediate;
+          mcode_n(context->object, &imm16, 2);
+        } else {
+          int32_t imm32 = (int32_t)immediate;
+          mcode_n(context->object, &imm32, 4);
+        }
+        break;
+      }
+
+      // Mod == 0b10  ->  (R/M+disp32)
+      // Reg == Opcode Extension
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, 0, address_regbits);
+      int32_t disp32 = (int32_t)offset;
+
+      mcode_2(context->object, 0xc7, modrm);
+      if (address_register == REG_RSP) {
+        /// Scaling Factor == 0b00  ->  1
+        /// Index == 0b100  ->  None
+        /// Base == RSP bits (0b100)
+        mcode_1(context->object, sib_byte(0b00, 0b100, address_regbits));
+      }
+      mcode_n(context->object, &disp32, 4);
+      if (size == r16) {
+        int16_t imm16 = (int16_t)immediate;
+        mcode_n(context->object, &imm16, 2);
+      } else {
+        int32_t imm32 = (int32_t)immediate;
+        mcode_n(context->object, &imm32, 4);
+      }
+
+    } break;
+    case r64: {
+      // REX.W + 0xc7 /0 id
+      uint8_t address_regbits = regbits(address_register);
+      uint8_t rex = rex_byte(true, false, false, REGBITS_TOP(address_regbits));
+      int32_t imm32 = (int32_t)immediate;
+
+      // Make output code smaller when possible by omitting zero displacements.
+      if (offset == 0) {
+        // Mod == 0b00  ->  R/M
+        // Reg == Opcode Extension
+        // R/M == Address
+        uint8_t modrm = modrm_byte(0b00, 0, address_regbits);
+        mcode_3(context->object, rex, 0xc7, modrm);
+        mcode_n(context->object, &imm32, 4);
+        break;
+      }
+
+      // Mod == 0b10  ->  (R/M+disp32)
+      // Reg == Opcode Extension
+      // R/M == Address
+      uint8_t modrm = modrm_byte(0b10, 0, address_regbits);
+      int32_t disp32 = (int32_t)offset;
+
       mcode_3(context->object, rex, 0xc7, modrm);
+      if (address_register == REG_RSP) {
+        /// Scaling Factor == 0b00  ->  1
+        /// Index == 0b100  ->  None
+        /// Base == RSP bits (0b100)
+        mcode_1(context->object, sib_byte(0b00, 0b100, address_regbits));
+      }
+      mcode_n(context->object, &disp32, 4);
       mcode_n(context->object, &imm32, 4);
-      break;
-    }
+    } break;
 
-    uint8_t modrm = modrm_byte(0b10, 0, address_regbits);
-    mcode_3(context->object, rex, 0xc7, modrm);
-    if (address_register == REG_RSP) {
-      /// Scaling Factor == 0b00  ->  1
-      /// Index == 0b100  ->  None
-      /// Base == RSP bits (0b100)
-      mcode_1(context->object, sib_byte(0b00, 0b100, address_regbits));
-    }
-    mcode_n(context->object, &disp32, 4);
-    mcode_n(context->object, &imm32, 4);
-
+    } // switch (size)
   } break; // case MX64_MOV
 
   case MX64_SUB: {
@@ -1949,7 +2048,8 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             ASSERT(local->value.local_ref < function->frame_objects.size,
                    "MX64_MOV(imm, local): local index %d is greater than amount of frame objects in function: %Z",
                    (int)local->value.local_ref, function->frame_objects.size);
-            mcode_imm_to_mem(context, MX64_MOV, imm->value.imm, function->frame_objects.data[local->value.local_ref].size, REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
+            MIRFrameObject *fo = function->frame_objects.data + local->value.local_ref;
+            mcode_imm_to_mem(context, MX64_MOV, imm->value.imm, REG_RBP, fo->offset, (RegSize)fo->size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
@@ -1997,12 +2097,14 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             mcode_reg_to_mem(context, MX64_MOV, reg->value.reg.value, reg->value.reg.size,
                              REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
-            // imm to mem | imm, addr, offset
+            TODO("MOV(IMM, REG, IMM) would normally be in the 'imm to mem' form, but an extra size operand is required (how many bytes to store)");
+          } else if (mir_operand_kinds_match(instruction, 4, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE, MIR_OP_IMMEDIATE)) {
+            // imm to mem | imm, addr, offset, size
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *reg_address = mir_get_op(instruction, 1);
             MIROperand *offset = mir_get_op(instruction, 2);
-            // FIXME: This just *assumes* an eight byte operation... probably very bad.
-            mcode_imm_to_mem(context, MX64_MOV, imm->value.imm, r64, reg_address->value.reg.value, offset->value.imm);
+            MIROperand *size = mir_get_op(instruction, 3);
+            mcode_imm_to_mem(context, MX64_MOV, imm->value.imm, reg_address->value.reg.value, offset->value.imm, (RegSize)size->value.imm);
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
             // reg to mem | src, addr, offset
             MIROperand *reg_source = mir_get_op(instruction, 0);
@@ -2010,11 +2112,14 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             MIROperand *offset = mir_get_op(instruction, 2);
             mcode_reg_to_mem(context, MX64_MOV, reg_source->value.reg.value, reg_source->value.reg.size, reg_address->value.reg.value, offset->value.imm);
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
-            // mem to reg | addr, offset, dst
+            TODO("MOV(REG, IMM, REG) would normally be in the 'mem to reg' form, but an extra size operand is required (how many bytes to store)");
+          } else if (mir_operand_kinds_match(instruction, 4, MIR_OP_REGISTER, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
+            // mem to reg | addr, offset, dst, size
             MIROperand *reg_address = mir_get_op(instruction, 0);
             MIROperand *offset = mir_get_op(instruction, 1);
             MIROperand *reg_dst = mir_get_op(instruction, 2);
-            mcode_mem_to_reg(context, MX64_MOV, reg_address->value.reg.value, offset->value.imm, reg_dst->value.reg.value, reg_dst->value.reg.size);
+            MIROperand *size = mir_get_op(instruction, 3);
+            mcode_mem_to_reg(context, MX64_MOV, reg_address->value.reg.value, offset->value.imm, reg_dst->value.reg.value, (RegSize)size->value.imm);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_LOCAL_REF, MIR_OP_REGISTER)) {
             // mem (local) to reg | local, src
             MIROperand *local = mir_get_op(instruction, 0);
