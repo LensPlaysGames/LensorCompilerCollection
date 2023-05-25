@@ -2111,20 +2111,6 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
             MIROperand *dst = mir_get_op(instruction, 1);
-            if (!src->value.reg.size) {
-              putchar('\n');
-              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
-              print("%35WARNING%m: Zero sized source register, assuming 64-bit...\n");
-              putchar('\n');
-              src->value.reg.size = r64;
-            }
-            if (!dst->value.reg.size) {
-              putchar('\n');
-              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
-              print("%35WARNING%m: Zero sized register destination register, assuming 64-bit...\n");
-              putchar('\n');
-              dst->value.reg.size = r64;
-            }
             mcode_reg_to_reg(context, MX64_MOV, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_STATIC_REF)) {
             // reg to mem (static) | src, static
