@@ -113,8 +113,12 @@ static void femit_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int6
       case r64: mnemonic_suffix = "q"; break;
         break;
       }
-      fprint(context->code, "    %s%s $%D, %D(%%%s)\n",
-             mnemonic, mnemonic_suffix, immediate, offset, address);
+      if (offset)
+        fprint(context->code, "    %s%s $%D, %D(%%%s)\n",
+               mnemonic, mnemonic_suffix, immediate, offset, address);
+      else
+        fprint(context->code, "    %s%s $%D, (%%%s)\n",
+               mnemonic, mnemonic_suffix, immediate, address);
     } break;
   case TARGET_GNU_ASM_INTEL: {
     const char *memory_size = "";
@@ -125,8 +129,12 @@ static void femit_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int6
     case r64: memory_size = "QWORD PTR "; break;
       break;
     }
-    fprint(context->code, "    %s %s[%s + %D], %D\n",
-           mnemonic, memory_size, address, offset, immediate);
+    if (offset)
+      fprint(context->code, "    %s %s[%s + %D], %D\n",
+             mnemonic, memory_size, address, offset, immediate);
+    else
+      fprint(context->code, "    %s %s[%s], %D\n",
+             mnemonic, memory_size, address, immediate);
   } break;
     default: ICE("ERROR: femit_imm_to_mem(): Unsupported dialect %d", context->target);
   }
@@ -138,12 +146,20 @@ static void femit_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
   const char *destination = regname(destination_register, size);
   switch (context->target) {
     case TARGET_GNU_ASM_ATT:
-      fprint(context->code, "    %s %D(%%%s), %%%s\n",
-          mnemonic, offset, address, destination);
+      if (offset)
+        fprint(context->code, "    %s %D(%%%s), %%%s\n",
+               mnemonic, offset, address, destination);
+      else
+        fprint(context->code, "    %s (%%%s), %%%s\n",
+               mnemonic, address, destination);
       break;
     case TARGET_GNU_ASM_INTEL:
-      fprint(context->code, "    %s %s, [%s + %D]\n",
-          mnemonic, destination, address, offset);
+      if (offset)
+        fprint(context->code, "    %s %s, [%s + %D]\n",
+               mnemonic, destination, address, offset);
+      else
+        fprint(context->code, "    %s %s, [%s]\n",
+               mnemonic, destination, address);
       break;
     default: ICE("ERROR: femit_mem_to_reg(): Unsupported dialect %d", context->target);
   }
@@ -244,6 +260,10 @@ static void femit_reg_to_name(CodegenContext *context, MIROpcodex86_64 inst, Reg
 }
 
 static void femit_reg_to_offset_name(CodegenContext *context, MIROpcodex86_64 inst, RegisterDescriptor source_register, enum RegSize size, RegisterDescriptor address_register, const char *name, usz offset) {
+  if (!offset) {
+    femit_reg_to_name(context, inst, source_register, size, address_register, name);
+    return;
+  }
   const char *mnemonic = instruction_mnemonic(context, inst);
   const char *source = regname(source_register, size);
   const char *address = register_name(address_register);
@@ -265,12 +285,20 @@ static void femit_mem(CodegenContext *context, MIROpcodex86_64 inst, int64_t off
   const char *address = register_name(address_register);
   switch (context->target) {
     case TARGET_GNU_ASM_ATT:
-      fprint(context->code, "    %s %D(%%%s)\n",
-          mnemonic, offset, address);
+      if (offset)
+        fprint(context->code, "    %s %D(%%%s)\n",
+               mnemonic, offset, address);
+      else
+        fprint(context->code, "    %s (%%%s)\n",
+               mnemonic, address);
       break;
     case TARGET_GNU_ASM_INTEL:
-      fprint(context->code, "    %s [%s + %D]\n",
-          mnemonic, address, offset);
+      if (offset)
+        fprint(context->code, "    %s [%s + %D]\n",
+               mnemonic, address, offset);
+      else
+        fprint(context->code, "    %s [%s]\n",
+               mnemonic, address);
       break;
     default: ICE("ERROR: femit_mem(): Unsupported dialect %d", context->target);
   }
