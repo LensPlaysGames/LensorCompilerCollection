@@ -346,51 +346,53 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   ///  | join     |
   ///  +----------+
   case NODE_WHILE: {
-      IRBlock *while_cond_block = ir_block_create();
-      IRBlock *join_block = ir_block_create();
+    IRBlock *while_cond_block = ir_block_create();
+    IRBlock *join_block = ir_block_create();
 
-      /// Branch to the condition block and emit the condition.
-      ir_branch(ctx, while_cond_block);
-      ir_block_attach(ctx, while_cond_block);
-      codegen_expr(ctx, expr->while_.condition);
+    /// Branch to the new condition block, then attach that as the current block.
+    ir_branch(ctx, while_cond_block);
+    ir_block_attach(ctx, while_cond_block);
 
-      /// If while body is empty, don't use body block.
-      if (expr->while_.body->block.children.size == 0) {
-        ir_branch_conditional(ctx, expr->while_.condition->ir, while_cond_block, join_block);
-        ir_block_attach(ctx, join_block);
-        return;
-      }
+    // Emit condition
+    codegen_expr(ctx, expr->while_.condition);
 
-      /// Otherwise, emit the body of the while loop.
-      IRBlock *while_body_block = ir_block_create();
-      ir_branch_conditional(ctx, expr->while_.condition->ir, while_body_block, join_block);
-      ir_block_attach(ctx, while_body_block);
-      codegen_expr(ctx, expr->while_.body);
-
-      /// Emit a branch to the join block and attach the join block.
-      if (!ir_is_closed(ctx->block)) ir_branch(ctx, while_cond_block);
+    /// If while body is empty, don't use body block.
+    if (expr->while_.body->block.children.size == 0) {
+      ir_branch_conditional(ctx, expr->while_.condition->ir, while_cond_block, join_block);
       ir_block_attach(ctx, join_block);
       return;
+    }
+
+    /// Otherwise, emit the body of the while loop.
+    IRBlock *while_body_block = ir_block_create();
+    ir_branch_conditional(ctx, expr->while_.condition->ir, while_body_block, join_block);
+    ir_block_attach(ctx, while_body_block);
+    codegen_expr(ctx, expr->while_.body);
+
+    /// Emit a branch to the join block and attach the join block.
+    if (!ir_is_closed(ctx->block)) ir_branch(ctx, while_cond_block);
+    ir_block_attach(ctx, join_block);
+    return;
   }
 
   /// Block expression.
   case NODE_BLOCK: {
-      /// Emit everything that isn’t a function.
-      Node *last = NULL;
-      foreach_ptr (Node *, child, expr->block.children) {
-        if (child->kind == NODE_FUNCTION) continue;
-        last = child;
-        codegen_expr(ctx, child);
-      }
+    /// Emit everything that isn’t a function.
+    Node *last = NULL;
+    foreach_ptr (Node *, child, expr->block.children) {
+      if (child->kind == NODE_FUNCTION) continue;
+      last = child;
+      codegen_expr(ctx, child);
+    }
 
-      /// The yield of a block is that of its last expression;
-      /// If a block doesn’t yield `void`, then it is guaranteed
-      /// to not be empty, which is why we don’t check its size here.
-      if (!type_is_void(expr->type)) {
-        ASSERT(last && last->ir);
-        expr->ir = last->ir;
-      }
-      return;
+    /// The yield of a block is that of its last expression;
+    /// If a block doesn’t yield `void`, then it is guaranteed
+    /// to not be empty, which is why we don’t check its size here.
+    if (!type_is_void(expr->type)) {
+      ASSERT(last && last->ir);
+      expr->ir = last->ir;
+    }
+    return;
   }
 
   /// Function call.
