@@ -683,8 +683,45 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
 
         } break; // case MX64_MOV
 
+        case MX64_IMUL: {
+          // TODO: Three address versions of imul.
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
+            // imm to reg | imm, dst
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *reg = mir_get_op(instruction, 1);
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg->value.reg.size = r64;
+            }
+            femit_imm_to_reg(context, instruction->opcode, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            // reg to reg | src, dst
+            MIROperand *src = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            femit_reg_to_reg(context, instruction->opcode, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break; // case MX64_IMUL
+
+        case MX64_DIV: FALLTHROUGH;
+        case MX64_IDIV: {
+          if (mir_operand_kinds_match(instruction, 1, MIR_OP_REGISTER)) {
+            MIROperand *reg = mir_get_op(instruction, 0);
+            femit_reg(context, instruction->opcode, reg->value.reg.value, reg->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break; // case MX64_IDIV
+
         case MX64_AND: FALLTHROUGH;
-        case MX64_IMUL: FALLTHROUGH; // TODO: separate this inst handling (three address operands possible)
         case MX64_ADD: {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
             // imm to reg | imm, dst
