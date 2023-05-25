@@ -52,7 +52,7 @@ static void vreg_vector_remove_element(VRegVector *vregs, usz vreg_value) {
 }
 
 /// Return non-zero iff given instruction needs a register.
-bool needs_register(IRInstruction *instruction) {
+static bool needs_register(IRInstruction *instruction) {
   STATIC_ASSERT(IR_COUNT == 38, "Exhaustively handle all instruction types");
   ASSERT(instruction);
   switch (instruction->kind) {
@@ -150,7 +150,7 @@ static void collect_interferences_from_block
  AdjacencyGraph *G
  )
 {
-  /// Don't visit the same block twice.
+  /// Don't visit the same block thrice.
   if (vector_contains(*visited, b)) {
     if (vector_contains(*doubly_visited, b))
       return;
@@ -349,9 +349,8 @@ static void collect_interferences_from_block
     }
   }
 
-  // The entry block has no parents.
-  if (b == b->function->blocks.data[0])
-    return;
+  // The entry block has no predecessors.
+  if (b->is_entry) return;
 
 #ifdef DEBUG_RA
   foreach_ptr (MIRBlock*, parent, b->predecessors) {
@@ -554,8 +553,6 @@ void build_adjacency_lists(VRegVector *vregs, AdjacencyGraph *G) {
     G->lists.data[i] = list;
     list->index = i;
     list->vreg = vregs->data[i];
-    //list->color = i->result;
-    //list->instruction = i;
     list->regmask = G->regmasks[i];
   }
 
