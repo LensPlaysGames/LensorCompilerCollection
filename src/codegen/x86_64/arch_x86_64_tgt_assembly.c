@@ -514,6 +514,17 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
               reg->value.reg.size = r64;
             }
             femit_name_to_reg(context, MX64_LEA, REG_RIP, object->value.static_ref->static_ref->name.data, reg->value.reg.value, reg->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_FUNCTION, MIR_OP_REGISTER)) {
+            MIROperand *f = mir_get_op(instruction, 0);
+            MIROperand *reg = mir_get_op(instruction, 1);
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg->value.reg.size = r64;
+            }
+            femit_name_to_reg(context, MX64_LEA, REG_RIP, f->value.function->name.data, reg->value.reg.value, reg->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
@@ -526,6 +537,8 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
 
           if (mir_operand_kinds_match(instruction, 1, MIR_OP_FUNCTION))
             femit_name(context, MX64_CALL, dst->value.function->name.data);
+          else if (mir_operand_kinds_match(instruction, 1, MIR_OP_REGISTER))
+            femit_indirect_branch(context, MX64_CALL, dst->value.reg.value);
           else if (mir_operand_kinds_match(instruction, 1, MIR_OP_NAME))
             femit_name(context, MX64_CALL, dst->value.name);
           else if (mir_operand_kinds_match(instruction, 1, MIR_OP_BLOCK))
