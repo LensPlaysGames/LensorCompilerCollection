@@ -107,10 +107,10 @@ static void femit_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int6
     case TARGET_GNU_ASM_ATT: {
       const char *mnemonic_suffix = "";
       switch (size) {
-      case r8: mnemonic_suffix = "b";
-      case r16: mnemonic_suffix = "w";
-      case r32: mnemonic_suffix = "l";
-      case r64: mnemonic_suffix = "q";
+      case r8: mnemonic_suffix = "b"; break;
+      case r16: mnemonic_suffix = "w"; break;
+      case r32: mnemonic_suffix = "l"; break;
+      case r64: mnemonic_suffix = "q"; break;
         break;
       }
       fprint(context->code, "    %s%s $%D, %D(%%%s)\n",
@@ -119,10 +119,10 @@ static void femit_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int6
   case TARGET_GNU_ASM_INTEL: {
     const char *memory_size = "";
     switch (size) {
-    case r8: memory_size = "BYTE PTR ";
-    case r16: memory_size = "WORD PTR ";
-    case r32: memory_size = "DWORD PTR ";
-    case r64: memory_size = "QWORD PTR ";
+    case r8: memory_size = "BYTE PTR "; break;
+    case r16: memory_size = "WORD PTR "; break;
+    case r32: memory_size = "DWORD PTR "; break;
+    case r64: memory_size = "QWORD PTR "; break;
       break;
     }
     fprint(context->code, "    %s %s[%s + %D], %D\n",
