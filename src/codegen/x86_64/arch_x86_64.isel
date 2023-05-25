@@ -102,6 +102,8 @@ match MIR_COPY i1(Static src)
 emit MX64_LEA(src, i1)
 match MIR_COPY i1(Local src)
 emit MX64_LEA(src, i1)
+match MIR_COPY i1(Function f)
+emit MX64_LEA(f, i1)
 
 match MIR_LOAD i1(Static src)
 emit MX64_MOV(src, i1)
