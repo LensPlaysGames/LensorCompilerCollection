@@ -1324,6 +1324,20 @@ void codegen_emit_x86_64(CodegenContext *context) {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             MIROperand *lhs = mir_get_op(instruction, 0);
             MIROperand *rhs = mir_get_op(instruction, 1);
+            if (!lhs->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register on rhs, assuming 64-bit...\n");
+              putchar('\n');
+              lhs->value.reg.size = r64;
+            }
+            if (!rhs->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register on rhs, assuming 64-bit...\n");
+              putchar('\n');
+              rhs->value.reg.size = r64;
+            }
             if (lhs->value.reg.size != rhs->value.reg.size)
               ICE("x86_64 cannot move between mismatched-sized registers %s and %s, sorry", regname(lhs->value.reg.value, lhs->value.reg.size), regname(rhs->value.reg.value, rhs->value.reg.size));
             if (lhs->value.reg.value == rhs->value.reg.value && lhs->value.reg.size == rhs->value.reg.size) {

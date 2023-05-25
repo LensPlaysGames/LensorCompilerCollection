@@ -426,6 +426,14 @@ emit {
   MX64_SETCC(Immediate cmp_type = COMPARE_EQ, eq)
 }
 match
+MIR_EQ eq(Register lhs, Immediate imm)
+emit {
+  MX64_CMP(imm, lhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, eq)
+  MX64_SETCC(Immediate cmp_type = COMPARE_EQ, eq)
+}
+match
 MIR_NE ne(Register lhs, Register rhs)
 emit {
   MX64_CMP(rhs, lhs)
