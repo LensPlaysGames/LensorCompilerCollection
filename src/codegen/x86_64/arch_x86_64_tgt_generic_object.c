@@ -151,6 +151,7 @@ static uint8_t sib_byte(uint8_t scale_factor, uint8_t index, uint8_t base) {
   return (uint8_t)((scale_factor << 6) | ((index & 0b111) << 3) | base);
 }
 
+/// NOTE: Caller must first zero out the destination register unless `size` is r32 or r64.
 static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate, RegisterDescriptor destination_register, enum RegSize size) {
   if ((inst == MX64_SUB || inst == MX64_ADD) && immediate == 0) return;
 
@@ -694,7 +695,10 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
   }
 }
 
-/// Write x86_64 machine code for instruction `inst` with `name` offset from `address_register` and store the result in register `destination_register` with size `size`.
+/// Write x86_64 machine code for instruction `inst` with `name` offset
+/// from `address_register` and store the result in register
+/// `destination_register` with size `size`.
+/// NOTE: Caller must first zero out the destination register unless `size` is r32 or r64.
 static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDescriptor address_register, const char *name, RegisterDescriptor destination_register, enum RegSize size) {
   switch (inst) {
 
@@ -2282,6 +2286,8 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_STATIC_REF, MIR_OP_REGISTER)) {
             MIROperand *object = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);
+            if (reg->value.reg.size == r8 || reg->value.reg.size == r16)
+              mcode_imm_to_reg(context, MX64_MOV, 0, reg->value.reg.value, r32);
             mcode_name_to_reg(context, MX64_LEA, REG_RIP, object->value.static_ref->static_ref->name.data, reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_FUNCTION, MIR_OP_REGISTER)) {
             MIROperand *f = mir_get_op(instruction, 0);
@@ -2293,6 +2299,8 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
               putchar('\n');
               reg->value.reg.size = r64;
             }
+            if (reg->value.reg.size == r8 || reg->value.reg.size == r16)
+              mcode_imm_to_reg(context, MX64_MOV, 0, reg->value.reg.value, r32);
             mcode_name_to_reg(context, MX64_LEA, REG_RIP, f->value.function->name.data, reg->value.reg.value, reg->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
