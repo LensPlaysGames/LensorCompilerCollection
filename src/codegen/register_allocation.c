@@ -238,7 +238,6 @@ static void collect_interferences_from_block
             break;
           }
         }
-        if (clobbered->value < MIR_ARCH_START) TODO("Add hardware registers to list of registers used for interference checking in register allocation");
         ASSERT(clobbered_idx != (usz)-1, "Could not find register from clobbers list in list of registers: %Z\n", clobbered->value > MIR_ARCH_START ? clobbered->value - MIR_ARCH_START : clobbered->value);
 
         adjm_set(G->matrix, A->live_idx, clobbered_idx);
@@ -547,8 +546,6 @@ void build_adjacency_lists(VRegVector *vregs, AdjacencyGraph *G) {
   G->lists.size = vregs->size;
 
   foreach_index (i, *vregs) {
-    if (G->lists.data[i]) vector_delete(G->lists.data[i]->adjacencies);
-    free(G->lists.data[i]);
     AdjacencyList *list = calloc(1, sizeof(AdjacencyList));
     G->lists.data[i] = list;
     list->index = i;
@@ -571,9 +568,12 @@ void build_adjacency_lists(VRegVector *vregs, AdjacencyGraph *G) {
 
 void print_adjacency_lists(AdjacencyLists *array) {
   print("[RA]: Adjacency lists\n"
-        "  id      idx\n");
+        "id       idx\n");
   foreach_ptr (AdjacencyList*, list, *array) {
-    printf("%6u | %5u: ", (unsigned)list->vreg.value - MIR_ARCH_START, (unsigned)list->index);
+    if (list->vreg.value < MIR_ARCH_START)
+      printf("r%-5u ", (unsigned)list->vreg.value);
+    else printf("v%-5u ", (unsigned)list->vreg.value);
+    printf("| %5u: ", (unsigned)list->index);
     if (list->color) print("(r%u) ", list->color);
 
     /// Print the adjacent nodes.
@@ -766,7 +766,7 @@ NumberStack build_coloring_stack(const MachineDescription *desc, AdjacencyGraph 
       done = true;
       foreach_index(i, G->lists) {
         AdjacencyList *list = G->lists.data[i];
-        if (list->color || list->allocated) continue;
+        if (list->vreg.value < MIR_ARCH_START || list->color || list->allocated) continue;
         if (list->degree < k) {
           list->allocated = 1;
           done = false;
@@ -784,7 +784,7 @@ NumberStack build_coloring_stack(const MachineDescription *desc, AdjacencyGraph 
       usz node_to_spill = 0;
 
       foreach_ptr (AdjacencyList*, list, G->lists) {
-        if (list->color || list->allocated) continue;
+        if (list->vreg.value < MIR_ARCH_START || list->color || list->allocated) continue;
 
         list->spill_cost = list->degree ? (list->spill_cost / list->degree) : 0;
         if (list->degree && list->spill_cost <= min_cost) {
@@ -811,7 +811,7 @@ static void color(
 ) {
   foreach (usz, i, *stack) {
     AdjacencyList *list = g->lists.data[*i];
-    if (list->color) continue;
+    if (list->vreg.value < MIR_ARCH_START || list->color) continue;
 
     /// Each bit that is set refers to register in register list that
     /// must not be assigned to this.
@@ -893,9 +893,12 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
   // TODO: List of all *registers* that need coloured.
   VRegVector vregs = {0};
 
-  // TODO: Populate list of registers, first using hardware registers, then using virtual registers.
-
-  // Populate list of vregs
+  // Populate list of registers, first using hardware registers, then using virtual registers.
+  for (usz i = 0; i < desc->register_count; ++i) {
+    VReg r = {0};
+    r.value = desc->registers[i];
+    vector_push(vregs, r);
+  }
   foreach_ptr (MIRBlock*, bb, f->blocks) {
     foreach_ptr (MIRInstruction*, inst, bb->instructions) {
       FOREACH_MIR_OPERAND(inst, op) {
@@ -951,6 +954,8 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
 
   foreach_ptr (AdjacencyList*, list, G.lists) {
     VReg vreg = list->vreg;
+    if (vreg.value < MIR_ARCH_START) continue;
+
     Register color = list->color;
 
     foreach_ptr (MIRBlock*, bb, f->blocks) {
