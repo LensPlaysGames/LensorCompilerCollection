@@ -20,15 +20,9 @@
  ?, "."
  int-mode-syntax-table)
 
-;; Allowed within symbols: _-#$
+;; Allowed within symbols: _$
 (modify-syntax-entry
  ?_ "_"
- int-mode-syntax-table)
-(modify-syntax-entry
- ?- "_"
- int-mode-syntax-table)
-(modify-syntax-entry
- ?# "_"
  int-mode-syntax-table)
 (modify-syntax-entry
  ?$ "_"
@@ -102,7 +96,10 @@ Examples include addition (+) and subtraction (-)."
 
 ;; Gather all keyword font locks together into big daddy keyword font-lock
 (setq int--font-lock-defaults
-      (let* ((keywords '("if" "else" "ext" "while"))
+      (let* ((keywords '("if" "else" "while" "for" "type" "ext" ;; keywords
+                         "discardable ""nomangle" ;; function attributes
+                         "alignas" ;; type attributes
+                         ))
              (operators '("+" "*" "-" "/" "%"
                           "<" ">"
                           ":" ";" "=" ":=" "::"
