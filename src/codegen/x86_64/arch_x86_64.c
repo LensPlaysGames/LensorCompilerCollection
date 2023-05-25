@@ -1319,13 +1319,19 @@ void codegen_emit_x86_64(CodegenContext *context) {
         } break; // case MIR_CALL
 
         case MX64_MOV: {
+          // MOV(eax, rax) -> ERROR (mov cannot move from mismatched size registers when equal)
           // MOV(REG x, REG x) -> NOP
-          if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER) &&
-              mir_get_op(instruction, 0)->value.reg.value == mir_get_op(instruction, 1)->value.reg.value &&
-              mir_get_op(instruction, 0)->value.reg.size == mir_get_op(instruction, 1)->value.reg.size) {
-            vector_push(instructions_to_remove, instruction);
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            MIROperand *lhs = mir_get_op(instruction, 0);
+            MIROperand *rhs = mir_get_op(instruction, 1);
+            if (lhs->value.reg.size != rhs->value.reg.size)
+              ICE("x86_64 cannot move between mismatched-sized registers %s and %s, sorry", regname(lhs->value.reg.value, lhs->value.reg.size), regname(rhs->value.reg.value, rhs->value.reg.size));
+            if (lhs->value.reg.value == rhs->value.reg.value && lhs->value.reg.size == rhs->value.reg.size) {
+              vector_push(instructions_to_remove, instruction);
+            }
           }
         } break;
+
         } // switch (instruction->opcode)
 
       } // foreach (MIRInstruction*)
