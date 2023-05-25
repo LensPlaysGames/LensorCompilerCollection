@@ -199,6 +199,18 @@ emit {
   MX64_ADD(imm, reg)
   MX64_MOV(reg, i1)
 }
+match
+MIR_ADD i1(Static object, Immediate imm)
+emit {
+  MX64_LEA(object, i1)
+  MX64_ADD(imm, i1)
+}
+match
+MIR_ADD i1(Immediate imm, Static object)
+emit {
+  MX64_LEA(object, i1)
+  MX64_ADD(imm, i1)
+}
 
 match
 MIR_MUL i1(Immediate lhs, Immediate rhs)
