@@ -477,7 +477,16 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
         fprint(context->code, "%s:\n", block->name.data);
 
       foreach_ptr (MIRInstruction*, instruction, block->instructions) {
-        switch (instruction->opcode) {
+        if (instruction->opcode < MX64_START) {
+          eprint("\n\n%31UNLOWERED INSTRUCTION:%m\n");
+          print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+          ICE("It seems instruction selection has not lowered a general MIR instruction");
+        }
+        switch ((MIROpcodex86_64)instruction->opcode) {
+        default: {
+          print("Unhandled opcode: %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
+        } break;
+
         case MX64_LEA: {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_LOCAL_REF, MIR_OP_REGISTER)) {
             MIROperand *local = mir_get_op(instruction, 0);
@@ -854,9 +863,19 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
           }
         } break;
 
-        default: {
-          print("Unhandled opcode: %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
-        } break;
+        case MX64_XOR: FALLTHROUGH;
+        case MX64_CWD: FALLTHROUGH;
+        case MX64_CDQ: FALLTHROUGH;
+        case MX64_OR: FALLTHROUGH;
+        case MX64_NOT: FALLTHROUGH;
+        case MX64_MOVSX: FALLTHROUGH;
+        case MX64_MOVZX: FALLTHROUGH;
+        case MX64_XCHG:
+          TODO("Implement assembly emission from opcode %d (%s)", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
+
+        case MX64_START: FALLTHROUGH;
+        case MX64_END: FALLTHROUGH;
+        case MX64_COUNT: UNREACHABLE();
         }
       }
     }
