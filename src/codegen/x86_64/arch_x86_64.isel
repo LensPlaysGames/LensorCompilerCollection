@@ -143,6 +143,17 @@ emit {
   MX64_MOV(i1, dst)
 }
 
+;; This is the pattern of instructions emitted when calculating stack
+;; parameter's offsets, and can be implemented using a single `mov` instruction.
+;; v0 | copy r15 8
+;; v2 | add v0 8, 40
+;; v3 | load v2 8, 8
+match
+MIR_COPY cp(Register src)
+MIR_ADD add(Register lhs, Immediate imm) ;; TODO: lhs is cp
+MIR_LOAD load(Register ptr, Immediate sz) ;; TODO: ptr is add
+emit MX64_MOV(src, imm, add, sz)
+
 match MIR_LOAD i1(Local local)
 emit MX64_MOV(local, i1)
 match MIR_LOAD i1(Register reg)
