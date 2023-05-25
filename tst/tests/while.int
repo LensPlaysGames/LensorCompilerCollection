@@ -10,7 +10,7 @@
 ;; 1
 ;; 0
 
-putchar : ext void(c : integer)
+putchar : ext s32(c : integer) discardable
 
 cond : integer = 10
 while cond {

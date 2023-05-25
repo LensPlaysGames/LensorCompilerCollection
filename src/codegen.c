@@ -836,6 +836,7 @@ bool codegen
       Parameters main_params = {0};
       vector_push(main_params, argc);
       vector_push(main_params, argv);
+      // TODO: envp?
 
       Type *main_type = ast_make_type_function(context->ast, (loc){0}, t_integer, main_params);
       context->entry = ir_function(context, literal_span("main"), main_type);
@@ -849,10 +850,11 @@ bool codegen
         /// Mark the function as extern if it is.
         if (!func->function.body) func->function.ir->is_extern = true;
 
-        /// Mark the function as global if it is global.
-        if (func->function.global) func->function.ir->attr_global = true;
-
-        if (func->function.nomangle) func->function.ir->attr_nomangle = true;
+        /// Handle attributes
+        STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of function attributes");
+        func->function.ir->attr_global = func->type->function.global;
+        func->function.ir->attr_nomangle = func->type->function.nomangle;
+        // TODO: Should we propagate "discardable" to the IR?
       }
 
       /// Emit the main function.

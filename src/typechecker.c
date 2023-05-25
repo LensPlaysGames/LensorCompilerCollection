@@ -774,7 +774,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           // just the function type; this means following funcrefs.
           if (node->kind == NODE_CALL && node->call.callee->type->function.return_type != t_void) {
             ERR(node->source_location,
-                "Discarding return value of function that does not return void.");
+                "Discarding return value of function that was not declared with `discardable` attribute and does not return void.");
           }
         }
       }
@@ -917,10 +917,9 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
                 token_type_to_string(TK_COLON_EQ));
 
           // If the function being called doesn't return void, it is being discarded.
-          // TODO: We should ensure the function does *not* have a discardable
-          // attribute. We will need to find the actual function node and not
-          // just the function type; this means following funcrefs.
-          if (node->kind == NODE_CALL && node->call.callee->type->function.return_type != t_void) {
+          if (node->kind == NODE_CALL
+              && !node->call.callee->type->function.discardable
+              && node->call.callee->type->function.return_type != t_void) {
             ERR(node->source_location,
                 "Discarding return value of function that does not return void.");
           }
@@ -944,7 +943,8 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       if (callee->type->kind == TYPE_FUNCTION) {
         /// Set the resolved function as the new callee.
         if (callee->kind != NODE_FUNCTION) {
-          expr->call.callee = callee = callee->funcref.resolved->val.node;
+          expr->call.callee = callee->funcref.resolved->val.node;
+          callee = expr->call.callee;
           if (!typecheck_expression(ast, callee)) return false;
         }
       } else {

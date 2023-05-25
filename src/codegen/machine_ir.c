@@ -676,7 +676,7 @@ const char *mir_operand_kind_string(MIROperandKind opkind) {
 
 const char *mir_common_opcode_mnemonic(uint32_t opcode) {
   STATIC_ASSERT(MIR_COUNT == 38, "Exhaustive handling of MIRCommonOpcodes (string conversion)");
-  switch (opcode) {
+  switch ((MIROpcodeCommon)opcode) {
   case MIR_IMMEDIATE: return "immediate";
   case MIR_CALL: return "call";
   case MIR_NOT: return "not";
@@ -716,7 +716,7 @@ const char *mir_common_opcode_mnemonic(uint32_t opcode) {
   case MIR_LIT_INTEGER: return "literal_integer";
   case MIR_LIT_STRING: return "literal_string";
   case MIR_COUNT: return "count";
-  default: break;
+  case MIR_ARCH_START: break;
   }
   return "";
 }
