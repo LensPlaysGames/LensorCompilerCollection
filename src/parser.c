@@ -629,13 +629,14 @@ static bool is_right_associative(Parser *p, Token t) {
 ///  Attributes
 /// ===========================================================================
 
-STATIC_ASSERT(ATTR_COUNT == 2, "Exhaustive handling of attributes");
+STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of attributes");
 
 static struct {
   span name;
   AttributeKind kind;
 } function_attributes[] = {
   {literal_span_raw("nomangle"), ATTR_NOMANGLE},
+  {literal_span_raw("discardable"), ATTR_DISCARDABLE},
 };
 
 static struct {
@@ -647,12 +648,15 @@ static struct {
 
 /// Helper to apply each attribute within attribs to function. Calls ERR
 /// if a non-function attribute is present in the given attribute list.
-static void apply_function_attributes(Parser *p, Node *func, Attributes attribs) {
-  STATIC_ASSERT(ATTR_COUNT == 2, "Exhaustive handling of function attribute types");
+static void apply_function_attributes(Parser *p, Type *func, Attributes attribs) {
+  STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of function attribute types");
   foreach(Attribute, attr, attribs) {
     switch (attr->kind) {
     case ATTR_NOMANGLE: {
       func->function.nomangle = true;
+    } break;
+    case ATTR_DISCARDABLE: {
+      func->function.discardable = true;
     } break;
     default: {
       // TODO: Actually print out the attribute string or something like that.
@@ -663,7 +667,7 @@ static void apply_function_attributes(Parser *p, Node *func, Attributes attribs)
 }
 
 static void apply_struct_type_attributes(Parser *p, Type *type, Attributes attribs) {
-  STATIC_ASSERT(ATTR_COUNT == 2, "Exhaustive handling of type attributes");
+  STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of type attributes");
   foreach(Attribute, attr, attribs) {
     switch (attr->kind) {
     case ATTR_ALIGNAS: {
@@ -766,6 +770,32 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
   return call;
 }
 
+/// Parse and collect attributes within the `attribs` out parameter.
+static void parse_attributes(Parser *p, Attributes *attribs) {
+  while (p->tok.type == TK_IDENT) {
+    AttributeKind attr_kind = ATTR_COUNT;
+    for (size_t i = 0; i < sizeof function_attributes / sizeof *function_attributes; i++) {
+      if (string_eq(function_attributes[i].name, p->tok.text)) {
+        // We found an attribute!
+        attr_kind = function_attributes[i].kind;
+        break;
+      }
+    }
+    if (attr_kind == ATTR_COUNT) break;
+
+    // Yeet the attribute identifier that gave us the attribute kind.
+    next_token(p);
+
+    // If the attribute requires an argument/data to go along with it,
+    // parse that HERE!
+    union AttributeValue value = {0};
+
+    // We found an attribute, add it to the list!
+    Attribute new_attribute = { attr_kind, value };
+    vector_push(*attribs, new_attribute);
+  }
+}
+
 /// Parse the body of a function.
 ///
 /// This is basically just a wrapper around `parse_block()` that
@@ -776,36 +806,11 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
   p->in_function = true;
 
   // Collect attributes and return them through an out parameter.
-  while (p->tok.type == TK_IDENT) {
-    AttributeKind attr_kind = ATTR_COUNT;
-    for (size_t i = 0; i < sizeof function_attributes / sizeof *function_attributes; i++) {
-      if (string_eq(function_attributes[i].name, p->tok.text)) {
-        // We found an attribute!
-        attr_kind = function_attributes[i].kind;
-        break;
-      }
-    }
-    // FIXME: If there is an identifier preceding a function body that is
-    // *not* an attribute applicable to functions, that should probably be
-    // an error if we go through with the "function bodies must be blocks
-    // or preceded by '='" thing.
-    if (attr_kind == ATTR_COUNT) break;
-      //ERR("Unexpected identifier when parsing function body: \"%S\"", p->tok.text);
-
-    // Yeet the attribute identifier that gave us the attribute kind.
-    next_token(p);
-
-    // If the attribute requires an argument/data to go along with it,
-    // parse that HERE!
-
-    Attribute new_attribute = { attr_kind, {0} };
-
-    // We found an attribute, add it to the list!
-    vector_push(*attribs, new_attribute);
-  }
+  parse_attributes(p, attribs);
 
   /// Yeet "=" if found.
   if (p->tok.type == TK_EQ) next_token(p);
+  // TODO: Probably should ensure that if it's not an `=` it's a `{` (start of block)
 
   /// Push a new scope for the body and parameters.
   scope_push(p->ast);
@@ -840,12 +845,14 @@ static Node *parse_type_expr(Parser *p, Type *type) {
     Attributes attribs = {0};
     Node *body = parse_function_body(p, type, &params, &attribs);
 
+    apply_function_attributes(p, type, attribs);
+    vector_delete(attribs);
+
     /// Create a function for the lambda.
     string name = format("_XLambda_%Z", p->ast->counter++);
     Node *func = ast_make_function(p->ast, type->source_location, type, params, body, as_span(name));
-    apply_function_attributes(p, func, attribs);
     free(name.data);
-    func->function.global = false;
+    type->function.global = false;
     return func;
   }
 
@@ -1048,7 +1055,7 @@ static Type *parse_type(Parser *p) {
 
       // If the attribute requires an argument/data to go along with it,
       // parse that HERE!
-      STATIC_ASSERT(ATTR_COUNT == 2, "Exhaustive handling of type attributes");
+      STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of type attributes");
       switch (new_attribute.kind) {
       case ATTR_ALIGNAS: {
         if (p->tok.type != TK_NUMBER)
@@ -1122,8 +1129,11 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
       Nodes params = {0};
       Attributes attribs = {0};
       Node *body = parse_function_body(p, type, &params, &attribs);
+
+      apply_function_attributes(p, type, attribs);
+      vector_delete(attribs);
+
       Node *func = ast_make_function(p->ast, location, type, params, body, as_span(ident));
-      apply_function_attributes(p, func, attribs);
       sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, location, as_span(ident));
       funcref->funcref.resolved = sym;
@@ -1137,10 +1147,16 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
       if (sym->kind != SYM_FUNCTION || sym->val.node)
         ERR_AT(location, "Redefinition of symbol '%S'", as_span(ident));
 
+      /// Parse the function's attributes, if any.
+      Attributes attribs = {0};
+      parse_attributes(p, &attribs);
+      apply_function_attributes(p, type, attribs);
+      vector_delete(attribs);
+
       /// Create the function.
       Node *func = ast_make_function(p->ast, location, type, (Nodes){0}, NULL, as_span(ident));
       // External functions should *not* be mangled
-      func->function.nomangle = true;
+      type->function.nomangle = true;
       sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, location, as_span(ident));
       funcref->funcref.resolved = sym;

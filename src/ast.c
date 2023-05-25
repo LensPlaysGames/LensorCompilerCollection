@@ -176,7 +176,6 @@ Node *ast_make_function(
   node->type = type;
   node->function.body = body;
   node->function.param_decls = param_decls;
-  node->function.global = true;
   node->parent = ast->root;
   if (body) body->parent = node;
 
@@ -485,6 +484,7 @@ Type *ast_make_type_function(
   Type *type = mktype(ast, TYPE_FUNCTION, source_location);
   type->function.parameters = parameters;
   type->function.return_type = return_type;
+  type->function.global = true;
   return type;
 }
 

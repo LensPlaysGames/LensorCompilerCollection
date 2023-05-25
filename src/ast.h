@@ -112,6 +112,7 @@ enum TokenType {
 /// Types of attributes
 typedef enum AttributeKind {
   ATTR_NOMANGLE,
+  ATTR_DISCARDABLE,
   ATTR_ALIGNAS,
   ATTR_COUNT
 } AttributeKind;
@@ -187,7 +188,7 @@ struct Scope {
 /// ===========================================================================
 typedef struct Attribute {
   AttributeKind kind;
-  union {
+  union AttributeValue {
     usz integer;
   } value;
 } Attribute;
@@ -207,8 +208,6 @@ typedef struct NodeFunction {
   Node *body;
   string name;
   IRFunction *ir;
-  bool global : 1;
-  bool nomangle : 1;
 } NodeFunction;
 
 /// Variable declaration.
@@ -329,6 +328,9 @@ typedef struct TypeArray {
 typedef struct TypeFunction {
   Parameters parameters;
   Type *return_type;
+  bool global : 1;
+  bool nomangle : 1;
+  bool discardable : 1;
 } TypeFunction;
 
 /// Struct type.
