@@ -264,6 +264,7 @@ MIRBlock *mir_block_copy(MIRFunction *function, MIRBlock *original) {
   ASSERT(original, "Invalid argument");
   MIRBlock *bb = mir_block_makenew(function, original->name.data);
   bb->origin = original->origin;
+  bb->is_entry = original->is_entry;
   bb->is_exit = original->is_exit;
   original->lowered = bb;
   return bb;
@@ -450,14 +451,20 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
   foreach_ptr (IRFunction*, f, context->functions) {
     MIRFunction *function = mir_function(f);
     // Forward block references require this.
-    list_foreach (IRBlock*, bb, function->origin->blocks) {
+    list_foreach (IRBlock*, bb, function->origin->blocks)
       (void)mir_block(function, bb);
-    }
     vector_push(out, function);
   }
   foreach_ptr (MIRFunction*, function, out) {
     // NOTE for devs: function->origin == IRFunction*
     if (function->origin->is_extern) continue;
+
+    ASSERT(function->blocks.size, "Zero blocks in non-extern MIRFunction... what have you done?!");
+    // NOTE: This assumes the first block of the function is the entry
+    // point; it may be smart to set the entry point within the IR,
+    // that reordering optimisations may truly happen to any block.
+    vector_front(function->blocks)->is_entry = true;
+
     foreach_ptr (MIRBlock*, mir_bb, function->blocks) {
       IRBlock *bb = mir_bb->origin;
       ASSERT(bb, "Origin of general MIR block not set (what gives?)");
@@ -547,6 +554,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
           // CFG
+          vector_push(mir_bb->successors, inst->destination_block->machine_block);
           vector_push(inst->destination_block->machine_block->predecessors, mir_bb);
         } break;
         case IR_BRANCH_CONDITIONAL: {
@@ -557,6 +565,9 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir_add_op(mir, mir_op_block(inst->cond_br.else_->machine_block));
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
+          // CFG
+          vector_push(mir_bb->successors, inst->cond_br.then->machine_block);
+          vector_push(mir_bb->successors, inst->cond_br.else_->machine_block);
           vector_push(inst->cond_br.then->machine_block->predecessors, mir_bb);
           vector_push(inst->cond_br.else_->machine_block->predecessors, mir_bb);
         } break;
@@ -812,11 +823,15 @@ void print_mir_block_with_mnemonic(MIRBlock *block, OpcodeMnemonicFunction opcod
   ASSERT(block->function, "Cannot print block without MIRFunction reference (frame objects)");
   ASSERT(opcode_mnemonic, "Invalid argument");
   print("%S: ", block->name);
+  if (block->is_entry) print("ENTRY");
   if (block->is_exit) print("EXITS");
-  print(" { ");
-  foreach_ptr (MIRBlock*, predecessor, block->predecessors) {
+  print(" predecessors: { ");
+  foreach_ptr (MIRBlock*, predecessor, block->predecessors)
     print("%S,", predecessor->name);
-  }
+  print("\b }");
+  print(" successors: { ");
+  foreach_ptr (MIRBlock*, succecessor, block->successors)
+    print("%S,", succecessor->name);
   print("\b }\n");
   foreach_ptr (MIRInstruction*, inst, block->instructions)
     print_mir_instruction_with_mnemonic(inst, opcode_mnemonic);

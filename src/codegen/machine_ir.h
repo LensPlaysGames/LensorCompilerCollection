@@ -116,16 +116,18 @@ typedef struct MIRInstruction {
 
 typedef struct MIRBlock {
   string name;
-
   MIRInstructionVector instructions;
-  MIRBlockVector predecessors;
 
   MIRFunction *function;
   IRBlock *origin;
-
   MIRBlock* lowered;
 
-  bool is_exit;
+  /// Control flow
+  MIRBlockVector predecessors;
+  MIRBlockVector successors;
+  bool is_entry : 1;
+  bool is_exit : 1;
+
 } MIRBlock;
 
 typedef struct MIRFrameObject {
