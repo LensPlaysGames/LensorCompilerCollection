@@ -58,15 +58,9 @@
  ?, "."
  int-ts-mode--syntax-table)
 
-;; Allowed within symbols: _-#$
+;; Allowed within symbols: _$
 (modify-syntax-entry
  ?_ "_"
- int-ts-mode--syntax-table)
-(modify-syntax-entry
- ?- "_"
- int-ts-mode--syntax-table)
-(modify-syntax-entry
- ?# "_"
  int-ts-mode--syntax-table)
 (modify-syntax-entry
  ?$ "_"
@@ -103,7 +97,10 @@
  int-ts-mode--syntax-table)
 
 (defvar int-ts-mode--keywords
-  '("if" "else" "ext" "while" "for" "type")
+  '("if" "else" "ext" "while" "for" "type" ;; keywords
+    "discardable" "nomangle" ;; function attributes
+    "alignas" ;; type attributes
+    )
   "Intercept keywords for tree-sitter font-locking.")
 
 (defvar int-ts-mode--operators
@@ -145,11 +142,12 @@
    :language 'int
    :override t
    :feature 'type
-   `((type_base)       @font-lock-type-face
-     (type_pointer)    @font-lock-type-face
-     (type_reference)  @font-lock-type-face
-     (type_function)   @font-lock-type-face
-     (type_array)      @font-lock-type-face)
+   `((type_base)          @font-lock-type-face
+     (type_pointer)       @font-lock-type-face
+     (type_reference)     @font-lock-type-face
+     (type_arbitrary_int) @font-lock-type-face
+     (type_function)      @font-lock-type-face
+     (type_array)         @font-lock-type-face)
 
    :language 'int
    :override t
