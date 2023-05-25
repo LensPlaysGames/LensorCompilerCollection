@@ -142,6 +142,13 @@ emit {
   ;; Copy pointer of local value to value of destination
   MX64_MOV(i1, dst)
 }
+match MIR_STORE(Function f, Static object)
+emit {
+  ;; Load pointer to function
+  MX64_LEA i1(f, i1)
+  ;; Copy pointer of function to value of destination
+  MX64_MOV(i1, object)
+}
 
 ;; This is the pattern of instructions emitted when calculating stack
 ;; parameter's offsets, and can be implemented using a single `mov` instruction.
