@@ -993,6 +993,66 @@ bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructi
   return true;
 }
 
+
+typedef Vector(usz) ISelRegisterValues;
+
+static void mark_defining_uses(ISelRegisterValues *regs_seen, MIRBlock *block) {
+  foreach_ptr (MIRInstruction*, inst, block->instructions) {
+    FOREACH_MIR_OPERAND(inst, op) {
+      if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START) {
+        if (!vector_contains(*regs_seen, op->value.reg.value)) {
+          op->value.reg.defining_use = true;
+          vector_push(*regs_seen, op->value.reg.value);
+        }
+      }
+    }
+  }
+}
+
+/// NOTE: Pass empty vectors for visited and doubly_visited when
+/// calling on entry of function.
+static void calculate_defining_uses_for_block(ISelRegisterValues *regs_seen, MIRBlock *block, MIRBlockVector *visited, MIRBlockVector *doubly_visited) {
+  /// Don't visit the same block thrice.
+  if (vector_contains(*visited, block)) {
+    if (vector_contains(*doubly_visited, block))
+      return;
+    else vector_push(*doubly_visited, block);
+  } else vector_push(*visited, block);
+
+  // At each block of the function, starting at the entry, walk the
+  // control flow. The first operand usage of a virtual register will
+  // be set to a defining use (i.e. the first place that that register
+  // must be classified as "in use" by the register allocator).
+
+  mark_defining_uses(regs_seen, block);
+
+  // To follow control flow of an exit block, we stop.
+  if (block->is_exit) return;
+
+  // If a block has only a single successor, we don't need to do
+  // anything fancy; just follow the simple control flow for as long as
+  // possible.
+  while (block->successors.size == 1) {
+    block = vector_front(block->successors);
+    mark_defining_uses(regs_seen, block);
+  }
+  // If a block has multiple successors, we will "remember" the
+  // registers that we had seen at the beginning, and reset
+  // to that after following each one.
+  // To follow control flow, we sometimes have to come back to a
+  // block after reaching the exit, as some blocks have multiple
+  // successors. We use recursion for this.
+  foreach_ptr(MIRBlock*, successor, block->successors) {
+    // Copy registers seen.
+    ISelRegisterValues regs_seen_copy = {0};
+    vector_append(regs_seen_copy, *regs_seen);
+
+    calculate_defining_uses_for_block(&regs_seen_copy, successor, visited, doubly_visited);
+
+    vector_delete(regs_seen_copy);
+  }
+}
+
 void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
   if (!mir.size) return;
   if (!patterns.size) return;
@@ -1166,22 +1226,20 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
   } // foreach_ptr (MIRFunction*, f, ...)
 
   // Mark defining uses of virtual register operands for RA.
-  Vector(usz) vregs_seen = {0};
-  // For every virtual register operand...
+  ISelRegisterValues vregs_seen = {0};
+  MIRBlockVector visited = {0};
+  MIRBlockVector doubly_visited = {0};
   foreach_ptr (MIRFunction*, f, mir) {
-    foreach_ptr (MIRBlock*, bb, f->blocks) {
-      foreach_ptr (MIRInstruction*, inst, bb->instructions) {
-        FOREACH_MIR_OPERAND(inst, op) {
-          if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START) {
-            if (!vector_contains(vregs_seen, op->value.reg.value)) {
-              op->value.reg.defining_use = true;
-              vector_push(vregs_seen, op->value.reg.value);
-            }
-          }
-        }
-      }
-    }
+    if (f->origin->is_extern) continue;
+
+    MIRBlock *entry = vector_front(f->blocks);
+    ASSERT(entry->is_entry, "First block within MIRFunction is not entry point; we should do more work to find the entry, sorry");
+
+    // NOTE: This function is an absolute doozy; check it out, iff you must.
+    calculate_defining_uses_for_block(&vregs_seen, entry, &visited, &doubly_visited);
+
   }
+
   vector_delete(vregs_seen);
 
   vector_delete(instructions);
