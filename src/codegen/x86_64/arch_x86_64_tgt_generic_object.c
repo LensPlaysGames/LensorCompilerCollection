@@ -2074,6 +2074,13 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             MIROperand *src = mir_get_op(instruction, 0);
             MIROperand *dst = mir_get_op(instruction, 1);
             mcode_reg_to_reg(context, MX64_SUB, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 4, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE, MIR_OP_IMMEDIATE)) {
+            // imm to mem | imm, address, offset, size
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *addr = mir_get_op(instruction, 1);
+            MIROperand *offset = mir_get_op(instruction, 2);
+            MIROperand *size = mir_get_op(instruction, 3);
+            mcode_imm_to_mem(context, MX64_SUB, imm->value.imm, addr->value.reg.value, offset->value.imm, (RegSize)size->value.imm);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
