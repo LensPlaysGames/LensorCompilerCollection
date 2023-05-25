@@ -125,6 +125,7 @@ MIROperand mir_op_reference_ir(MIRFunction *function, IRInstruction *inst) {
     if (it->kind == IR_IMMEDIATE) return mir_op_immediate((i64)it->imm);
     if (it->kind == IR_ALLOCA) return mir_op_local_ref_ir(function, &it->alloca);
     if (it->kind == IR_STATIC_REF) return mir_op_static_ref(it);
+    if (it->kind == IR_FUNC_REF) return mir_op_function(it->function_ref->machine_func);
   }
   if (!inst->machine_inst) {
     ir_femit_instruction(stdout, inst);
@@ -318,16 +319,17 @@ static bool needs_register(IRInstruction *instruction) {
 }
 
 /// Remove MIR instructions from given function that have an
-/// MIR_IMMEDIATE opcode, as immediates are inlined into operands with
-/// no load instruction required. The only reason we include them at
-/// all is to satisfy `phi` nonsense, among other things.
-static void remove_immediates(MIRFunction *function) {
+/// MIR_IMMEDIATE or MIR_FUNC_REF opcode, as these are inlined into
+/// operands with no load instruction required. The only reason we
+/// include them at all is to satisfy `phi` nonsense, among other
+/// things.
+static void remove_inlined(MIRFunction *function) {
   MIRInstructionVector instructions_to_remove = {0};
   foreach_ptr (MIRBlock*, block, function->blocks) {
     // Gather immediate instructions to remove
     vector_clear(instructions_to_remove);
     foreach_ptr (MIRInstruction*, instruction, block->instructions) {
-      if (instruction->opcode != MIR_IMMEDIATE) continue;
+      if (instruction->opcode != MIR_IMMEDIATE && instruction->opcode != MIR_FUNC_REF) continue;
       vector_push(instructions_to_remove, instruction);
     }
     // Remove gathered instructions
@@ -478,6 +480,14 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir_push_into_block(function, mir_bb, mir);
         } break;
 
+        case IR_FUNC_REF: {
+          MIRInstruction *mir = mir_makenew(MIR_FUNC_REF);
+          inst->machine_inst = mir;
+          mir->origin = inst;
+          mir_add_op(mir, mir_op_reference_ir(function, inst));
+          mir_push_into_block(function, mir_bb, mir);
+        } break;
+
         case IR_REGISTER:
           break;
 
@@ -594,8 +604,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
         } break;
-        case IR_STATIC_REF:
-        case IR_FUNC_REF: {
+        case IR_STATIC_REF: {
           MIRInstruction *mir = mir_makenew((uint32_t)inst->kind);
           inst->machine_inst = mir;
           mir->origin = inst;
@@ -650,7 +659,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
     }
 
     phi2copy(function);
-    remove_immediates(function);
+    remove_inlined(function);
   }
 
   mir_make_arch = true;
