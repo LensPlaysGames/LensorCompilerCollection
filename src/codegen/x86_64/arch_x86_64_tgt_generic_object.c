@@ -1996,7 +1996,16 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
         vector_push(context->object->symbols, sym);
       }
       foreach_ptr (MIRInstruction*, instruction, block->instructions) {
-        switch (instruction->opcode) {
+        if (instruction->opcode < MX64_START) {
+          eprint("\n\n%31UNLOWERED INSTRUCTION:%m\n");
+          print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+          ICE("It seems instruction selection has not lowered a general MIR instruction");
+        }
+        switch ((MIROpcodex86_64)instruction->opcode) {
+        default: {
+          print("Unhandled opcode (mcode): %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
+        } break;
+
         case MX64_AND: FALLTHROUGH;
         case MX64_IMUL: FALLTHROUGH; // TODO/FIXME: Separate IMUL to it's own thing. It has three-address opcodes that the others don't.
         case MX64_ADD: {
@@ -2294,10 +2303,21 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           }
         } break;
 
-        default: {
-          print("Unhandled opcode (mcode): %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
-        } break;
-        }
+        case MX64_XOR: FALLTHROUGH;
+        case MX64_CWD: FALLTHROUGH;
+        case MX64_CDQ: FALLTHROUGH;
+        case MX64_OR: FALLTHROUGH;
+        case MX64_NOT: FALLTHROUGH;
+        case MX64_MOVSX: FALLTHROUGH;
+        case MX64_MOVZX: FALLTHROUGH;
+        case MX64_XCHG:
+          TODO("Implement machine code emission from opcode %d (%s)", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
+
+        case MX64_START: FALLTHROUGH;
+        case MX64_END: FALLTHROUGH;
+        case MX64_COUNT: UNREACHABLE();
+
+        } // switch (instruction->opcode)
       }
     }
   }
