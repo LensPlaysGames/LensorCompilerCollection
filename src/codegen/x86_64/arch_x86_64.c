@@ -656,12 +656,20 @@ static void lower(CodegenContext *context) {
           rbp->type = t_integer;
           insert_instruction_before(rbp, instruction);
 
+          IRInstruction *copy_rbp = ir_copy(context, rbp);
+          insert_instruction_before(copy_rbp, instruction);
+
           usz parameter_index = instruction->imm;
 
           INSTRUCTION(offset, IR_IMMEDIATE);
           offset->type = t_integer;
 
           // FIXME: Tail calls, leaf functions, etc. may alter the size of the stack frame here.
+          // FIXME: Siraide and I have discussed; it seems like trying
+          // to get tail calls/minimal stack frames to work with stack-
+          // based parameter passing is just asking too much. We should
+          // disallow tail calls/emitting minimal stack frames when a
+          // function has stack based parameters.
           // Skip pushed RBP and return addess.
           offset->imm += 16;
 
@@ -674,8 +682,8 @@ static void lower(CodegenContext *context) {
           insert_instruction_before(offset, instruction);
 
           INSTRUCTION(address, IR_ADD);
-          address->lhs = rbp;
-          mark_used(rbp, address);
+          address->lhs = copy_rbp;
+          mark_used(copy_rbp, address);
           address->rhs = offset;
           mark_used(offset, address);
           if (type_sizeof(type) > 8)
@@ -1063,22 +1071,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   MIRFunctionVector machine_instructions_from_ir = mir_from_ir(context);
 
-  // Lowering in code.
-  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
-    print_mir_function(f);
-
-    if (f->origin && f->origin->is_extern) continue;
-
-    // Restore callee-saved registers used in the function.
-    for (Register i = sizeof(f->origin->registers_in_use) * 8 - 1; i > 0; --i) {
-      if (f->origin->registers_in_use & ((size_t)1 << i) && is_callee_saved(i)) {
-        MIRInstruction *restore = mir_makenew(MX64_POP);
-        mir_add_op(restore, mir_op_register(i, r64, false));
-        mir_append_instruction(f, restore);
-      }
-    }
-  }
-
   print("================ ISel ================\n");
 
   // TODO: Either embed x86_64 isel or somehow make this path knowable (i.e. via install).
@@ -1274,8 +1266,10 @@ void codegen_emit_x86_64(CodegenContext *context) {
               // Subtract local's offset from base pointer from the newly pushed base pointer.
               MIRInstruction *sub = mir_makenew(MX64_SUB);
               ASSERT(arg->value.local_ref < function->frame_objects.size, "Referenced frame object does not exist");
-              mir_add_op(sub, mir_op_immediate(function->frame_objects.data[arg->value.local_ref].offset));
-              mir_add_op(sub, mir_op_register(REG_RSP, r64, false));
+              mir_add_op(sub, mir_op_immediate(-function->frame_objects.data[arg->value.local_ref].offset)); // value to subtract
+              mir_add_op(sub, mir_op_register(REG_RSP, r64, false)); // base address
+              mir_add_op(sub, mir_op_immediate(0)); // zero offset from rsp
+              mir_add_op(sub, mir_op_immediate(8)); // 8 == sizeof address on stack
               mir_insert_instruction(instruction->block, sub, i++);
             }
           }
