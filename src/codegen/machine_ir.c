@@ -532,14 +532,26 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir_push_into_block(function, mir_bb, mir);
         } break;
 
-        case IR_NOT:
-        case IR_ZERO_EXTEND:
-        case IR_SIGN_EXTEND:
-        case IR_TRUNCATE:
+        case IR_NOT: FALLTHROUGH;
         case IR_BITCAST: {
           MIRInstruction *mir = mir_makenew((uint32_t)inst->kind);
           mir->origin = inst;
           mir_add_op(mir, mir_op_reference_ir(function, inst->operand));
+          inst->machine_inst = mir;
+          mir_push_into_block(function, mir_bb, mir);
+        } break;
+
+        case IR_ZERO_EXTEND: FALLTHROUGH;
+        case IR_SIGN_EXTEND: FALLTHROUGH;
+        case IR_TRUNCATE: {
+          MIRInstruction *mir = mir_makenew((uint32_t)inst->kind);
+          mir->origin = inst;
+          // Thing to truncate
+          mir_add_op(mir, mir_op_reference_ir(function, inst->operand));
+          // Amount of bytes to truncate from
+          mir_add_op(mir, mir_op_immediate((i64)type_sizeof(inst->operand->type)));
+          // Amount of bytes to truncate to
+          mir_add_op(mir, mir_op_immediate((i64)type_sizeof(inst->type)));
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
         } break;

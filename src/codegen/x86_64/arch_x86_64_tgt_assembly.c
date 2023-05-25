@@ -563,6 +563,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
               putchar('\n');
               reg->value.reg.size = r64;
             }
+            if (reg->value.reg.size == r8 || reg->value.reg.size == r16) reg->value.reg.size = r32;
             femit_imm_to_reg(context, MX64_MOV, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_LOCAL_REF)) {
             // imm to mem (local) | imm, local
@@ -911,7 +912,19 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
             ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
           }
-        } break;
+        } break; // case MX64_JCC
+
+        case MX64_MOVZX: {
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            MIROperand *src = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            femit_reg_to_reg(context, instruction->opcode, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break; // case MX64_MOVZX
 
         case MX64_XOR: FALLTHROUGH;
         case MX64_CWD: FALLTHROUGH;
@@ -919,7 +932,6 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
         case MX64_OR: FALLTHROUGH;
         case MX64_NOT: FALLTHROUGH;
         case MX64_MOVSX: FALLTHROUGH;
-        case MX64_MOVZX: FALLTHROUGH;
         case MX64_XCHG:
           TODO("Implement assembly emission from opcode %d (%s)", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
 
