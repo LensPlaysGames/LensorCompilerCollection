@@ -748,9 +748,7 @@ void print_mir_operand(MIRFunction *function, MIROperand *op) {
   switch (op->kind) {
   case MIR_OP_REGISTER: {
     // Print register name
-    if (op->value.reg.value >= MIR_ARCH_START)
-      print("%34v%u", (unsigned)op->value.reg.value - MIR_ARCH_START);
-    else print("%32r%u", (unsigned)op->value.reg.value);
+    print("%V", (usz)op->value.reg.value);
 
     // Print register size
     print(" %37%Z%m", op->value.reg.size);
@@ -801,9 +799,7 @@ void print_mir_operand(MIRFunction *function, MIROperand *op) {
 void print_mir_instruction_with_function_with_mnemonic(MIRFunction *function, MIRInstruction *mir, OpcodeMnemonicFunction opcode_mnemonic) {
   ASSERT(opcode_mnemonic, "Invalid argument");
   ASSERT(mir, "Invalid argument");
-  if (mir->reg < MIR_ARCH_START)
-    print("%32r%Z %37| ", (usz)mir->reg);
-  else print("%34v%Z %37| ", (usz)mir->reg - MIR_ARCH_START);
+  print("%V %37| ", (usz)mir->reg);
   const char *mnemonic = opcode_mnemonic(mir->opcode);
   if (mnemonic && *mnemonic != '\0') print("%31%s%m ", opcode_mnemonic(mir->opcode));
   else print("%31op%d%36 ", (int)mir->opcode);
@@ -816,9 +812,7 @@ void print_mir_instruction_with_function_with_mnemonic(MIRFunction *function, MI
   if (mir->clobbers.size) {
     print(" clobbers ");
     foreach (MIROperandRegister, clobbered, mir->clobbers) {
-      if (clobbered->value < MIR_ARCH_START)
-        print("%32r%Z", (usz)clobbered->value);
-      else print("%34v%Z", (usz)clobbered->value - MIR_ARCH_START);
+      print("%V", (usz)clobbered->value);
       if ((usz)(clobbered - mir->clobbers.data) < mir->clobbers.size - 1) print("%37, ");
     }
   }

@@ -5,6 +5,7 @@
 #include <math.h>
 
 #include <ast.h>
+#include <codegen/machine_ir.h>
 #include <error.h>
 #include <inttypes.h>
 #include <utils.h>
@@ -67,6 +68,7 @@ void string_buf_zterm(string_buffer *buf) {
 ///   - %p: void *
 ///   - %b: bool
 ///   - %T: Type *
+///   - %V: MIR Register (if less than MIR_ARCH_START, a hardware register, otherwise a virtual register). usz type
 ///   - %F: Another format string + va_list. This format spec therefore takes *two* arguments.
 ///   - %%: A '%' character.
 ///   - %m: Reset colours if colours are enabled.
@@ -215,6 +217,29 @@ static inline void vformat_to_impl(
         string s = typename(va_arg(args, Type *), !thread_disable_type_colours && thread_use_colours);
         write_string(s.data, s.size, to);
         free(s.data);
+      } break;
+
+      case 'V': {
+        usz reg = va_arg(args, usz);
+
+        if (thread_use_colours) {
+          // Hardware registers are green.
+          // Virtual registers are blue.
+          if (reg < MIR_ARCH_START)
+            write_string("\033[32m", 5, to);
+          else write_string("\033[34m", 5, to);
+        }
+
+        char buf[32];
+        if (reg < MIR_ARCH_START)
+          buf[0] = 'r';
+        else {
+          buf[0] = 'v';
+          reg -= MIR_ARCH_START;
+        }
+        sprintf(buf + 1, "%zu", (size_t)reg);
+        write_string(buf, strlen(buf), to);
+        if (thread_use_colours) write_string("\033[m", 3, to);
       } break;
 /*
       case 'F': {
