@@ -224,10 +224,10 @@ static void collect_interferences_from_block
     /// Make all reg operands interfere with each other.
     if (reg_operands.size > 1) {
       foreach (MIROperandPlusLiveValIndex, A, reg_operands) {
-        if (A->op->value.reg.defining_use) continue;
+        if (A->op->value.reg.defining_use || A->op->value.reg.value < MIR_ARCH_START) continue;
         // Set interference with all other reg operands
         foreach (MIROperandPlusLiveValIndex, B, reg_operands) {
-          if (B->op->value.reg.defining_use) continue;
+          if (B->op->value.reg.defining_use || B->op->value.reg.value < MIR_ARCH_START) continue;
           if (B->live_idx == A->live_idx) continue;
 #ifdef DEBUG_RA
           print("Setting r%Z interfere with r%Z (used in same instruction)\n", A->op->value.reg.value, B->op->value.reg.value);
