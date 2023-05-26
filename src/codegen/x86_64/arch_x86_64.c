@@ -377,6 +377,7 @@ static void lower(CodegenContext *context) {
 
     case IR_RETURN: {
       STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling convention return register during x86_64 lowering");
+      // TODO: Use desc.result_register instead of REG_RAX.
       switch (context->call_convention) {
       case CG_CALL_CONV_MSWIN: {
         instruction->result = REG_RAX;
@@ -529,11 +530,8 @@ static void lower(CodegenContext *context) {
       // TODO: desc.result_register, not REG_RAX
       if (!type_is_void(instruction->type)) {
         instruction->result = REG_RAX;
-        INSTRUCTION(reg_result, IR_REGISTER);
-        reg_result->result = REG_RAX;
         IRInstruction *copy = ir_copy(context, instruction);
         insert_instruction_after(copy, instruction);
-        insert_instruction_after(reg_result, instruction);
         ir_replace_uses(instruction, copy);
       }
     } break;
