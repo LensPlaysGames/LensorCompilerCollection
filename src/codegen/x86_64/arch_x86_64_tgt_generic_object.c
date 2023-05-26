@@ -2153,6 +2153,8 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
             MIROperand *dst = mir_get_op(instruction, 1);
+            if (dst->value.reg.size == r8 || dst->value.reg.size == r16)
+              mcode_imm_to_reg(context, MX64_MOV, 0, dst->value.reg.value, r32);
             mcode_reg_to_reg(context, MX64_MOV, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_STATIC_REF)) {
             // reg to mem (static) | src, static

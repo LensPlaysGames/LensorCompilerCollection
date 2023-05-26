@@ -610,6 +610,8 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
             MIROperand *dst = mir_get_op(instruction, 1);
+            if (dst->value.reg.size == r8 || dst->value.reg.size == r16)
+              femit_imm_to_reg(context, MX64_MOV, 0, dst->value.reg.value, r32);
             femit_reg_to_reg(context, MX64_MOV,
                              src->value.reg.value, src->value.reg.size,
                              dst->value.reg.value, dst->value.reg.size);
@@ -743,6 +745,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
           }
         } break; // case MX64_IMUL
 
+        case MX64_NOT: FALLTHROUGH;
         case MX64_DIV: FALLTHROUGH;
         case MX64_IDIV: {
           if (mir_operand_kinds_match(instruction, 1, MIR_OP_REGISTER)) {
@@ -961,7 +964,6 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
         case MX64_CWD: FALLTHROUGH;
         case MX64_CDQ: FALLTHROUGH;
         case MX64_OR: FALLTHROUGH;
-        case MX64_NOT: FALLTHROUGH;
         case MX64_MOVSX: FALLTHROUGH;
         case MX64_XCHG:
           TODO("Implement assembly emission from opcode %d (%s)", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
