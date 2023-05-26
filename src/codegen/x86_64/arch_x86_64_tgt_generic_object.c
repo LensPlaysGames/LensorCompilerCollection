@@ -221,18 +221,22 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
 
   } break; // case MX64_MOV
 
+  case MX64_AND: FALLTHROUGH;
   case MX64_ADD: FALLTHROUGH;
   case MX64_SUB: {
 
-    // Immediate add/sub both share the same opcodes, just with a different opcode extension in ModRM:reg.
-    uint8_t add_extension = 0;
-    uint8_t sub_extension = 5;
+    // Immediate add/sub/and all share the same opcodes, just with a different opcode extension in ModRM:reg.
+    const uint8_t add_extension = 0;
+    const uint8_t and_extension = 4;
+    const uint8_t sub_extension = 5;
     uint8_t modrm = 0;
     uint8_t destination_regbits = regbits(destination_register);
     // Mod == 0b11  ->  register
-    // Reg == Opcode Extension (5 for sub, 0 for add)
+    // Reg == Opcode Extension (5 for sub, 4 for and, 0 for add)
     // R/M == Destination
-    if (inst == MX64_ADD)
+    if (inst == MX64_AND)
+      modrm = modrm_byte(0b11, and_extension, destination_regbits);
+    else if (inst == MX64_ADD)
       modrm = modrm_byte(0b11, add_extension, destination_regbits);
     else modrm = modrm_byte(0b11, sub_extension, destination_regbits);
 
