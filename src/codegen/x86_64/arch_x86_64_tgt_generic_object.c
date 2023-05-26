@@ -223,22 +223,24 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
 
   case MX64_AND: FALLTHROUGH;
   case MX64_ADD: FALLTHROUGH;
+  case MX64_CMP: FALLTHROUGH;
   case MX64_SUB: {
 
     // Immediate add/sub/and all share the same opcodes, just with a different opcode extension in ModRM:reg.
     const uint8_t add_extension = 0;
     const uint8_t and_extension = 4;
     const uint8_t sub_extension = 5;
-    uint8_t modrm = 0;
-    uint8_t destination_regbits = regbits(destination_register);
+    const uint8_t cmp_extension = 7;
+    uint8_t extension = cmp_extension;
+    if (inst == MX64_SUB) extension = sub_extension;
+    else if (inst == MX64_AND) extension = and_extension;
+    else if (inst == MX64_ADD) extension = add_extension;
+
     // Mod == 0b11  ->  register
-    // Reg == Opcode Extension (5 for sub, 4 for and, 0 for add)
+    // Reg == Opcode Extension (7 for cmp, 5 for sub, 4 for and, 0 for add)
     // R/M == Destination
-    if (inst == MX64_AND)
-      modrm = modrm_byte(0b11, and_extension, destination_regbits);
-    else if (inst == MX64_ADD)
-      modrm = modrm_byte(0b11, add_extension, destination_regbits);
-    else modrm = modrm_byte(0b11, sub_extension, destination_regbits);
+    uint8_t destination_regbits = regbits(destination_register);
+    uint8_t modrm = modrm_byte(0b11, extension, destination_regbits);
 
     switch (size) {
     case r8: {
@@ -1205,6 +1207,65 @@ static void mcode_reg_to_reg
 
   } break; // case MX64_IMUL
 
+  case MX64_MOVSX: {
+    ASSERT(source_size < destination_size, "Extension requires source to be smaller than destination!");
+
+    switch (source_size) {
+    case r64: ICE("x86_64 movzx does not have a 64 bit source operand encoding");
+    case r32: {
+      ASSERT(destination_size == r64);
+      // REX.W + 0x63 /r
+      uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+      mcode_3(context->object, rex, 0x63, modrm);
+    } break; // case r32
+    case r16: {
+      ASSERT(destination_size >= r32);
+      switch (destination_size) {
+      case r8: ICE("x86_64 movzx does not have a 16 to 8 bit operand encoding");
+      case r16: ICE("x86_64 movzx does not have a 16 to 16 bit operand encoding");
+      case r32: {
+        // 0x0f + 0xbf /r
+        if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+          mcode_1(context->object, rex);
+        }
+        mcode_3(context->object, 0x0f, 0xbf, modrm);
+      } break;
+      case r64: {
+        // REX.W + 0x0f + 0xbf /r
+        uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        mcode_4(context->object, rex, 0x0f, 0xbf, modrm);
+      } break;
+      } // switch (destination_size)
+
+    } break; // case r16
+    case r8: {
+      ASSERT(destination_size >= r16);
+      switch (destination_size) {
+      case r8: ICE("x86_64 movzx does not have an 8 to 8 bit operand encoding");
+      case r16: {
+        // 0x66 + 0x0f + 0xbe /r
+        mcode_1(context->object, 0x66);
+      } break;
+      case r32: {
+        // 0x0f + 0xbe /r
+        if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+          mcode_1(context->object, rex);
+        }
+        mcode_3(context->object, 0x0f, 0xbe, modrm);
+      } break;
+      case r64: {
+        // REX.W + 0x0f + 0xbe /r
+        uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        mcode_4(context->object, rex, 0x0f, 0xbe, modrm);
+      } break;
+      } // switch (destination_size)
+
+    } break; // case r8
+    } // switch (source_size)
+  } break; // case MX64_MOVSX
+
   case MX64_MOV: {
     ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg moves to be of equal size.");
 
@@ -1908,6 +1969,7 @@ static void mcode_none(CodegenContext *context, MIROpcodex86_64 inst) {
     uint8_t op = 0xc3;
     mcode_1(context->object, op);
   } break;
+
   case MX64_CWD: { // 0x66 + 0x99
     uint8_t sixteen_bit_prefix = 0x66;
     mcode_1(context->object, sixteen_bit_prefix);
@@ -2362,6 +2424,10 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             MIROperand *lhs = mir_get_op(instruction, 0);
             MIROperand *rhs = mir_get_op(instruction, 1);
             mcode_reg_to_reg(context, instruction->opcode, lhs->value.reg.value, lhs->value.reg.size, rhs->value.reg.value, rhs->value.reg.size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *rhs = mir_get_op(instruction, 1);
+            mcode_imm_to_reg(context, instruction->opcode, imm->value.imm, rhs->value.reg.value, rhs->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
@@ -2382,6 +2448,8 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           }
         } break;
 
+        case MX64_CWD: FALLTHROUGH;
+        case MX64_CDQ: FALLTHROUGH;
         case MX64_CQO: {
           mcode_none(context, (MIROpcodex86_64)instruction->opcode);
         } break;
@@ -2399,12 +2467,21 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           }
         } break;
 
-        case MX64_XOR: FALLTHROUGH;
-        case MX64_CWD: FALLTHROUGH;
-        case MX64_CDQ: FALLTHROUGH;
-        case MX64_OR: FALLTHROUGH;
         case MX64_MOVSX: FALLTHROUGH;
-        case MX64_MOVZX: FALLTHROUGH;
+        case MX64_MOVZX: {
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            MIROperand *src = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            mcode_reg_to_reg(context, instruction->opcode, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
+          } else {
+            print("\n\nUNHANDLED INSTRUCTION:\n");
+            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
+          }
+        } break; // case MX64_MOVZX
+
+        case MX64_XOR: FALLTHROUGH;
+        case MX64_OR: FALLTHROUGH;
         case MX64_XCHG:
           TODO("Implement machine code emission from opcode %d (%s)", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
 
