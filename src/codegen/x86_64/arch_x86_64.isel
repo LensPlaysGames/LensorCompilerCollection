@@ -75,6 +75,11 @@ emit {
   MX64_NOT(r)
   MX64_MOV(r, i1)
 }
+match MIR_NOT i1(Immediate imm)
+emit {
+  MX64_MOV(imm, i1)
+  MX64_NOT(i1)
+}
 
 match MIR_ZERO_EXTEND i1(Register r, IMM, IMM)
 emit MX64_MOVZX(r, i1)
