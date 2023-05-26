@@ -1346,6 +1346,19 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
         } break; // case MIR_CALL
 
+        case MX64_MOVZX: {
+          if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
+            MIROperand *src = mir_get_op(instruction, 0);
+            MIROperand *dst = mir_get_op(instruction, 1);
+            // There is no movzx r32, r64 ... that's just called a
+            // `mov r32, r32`, due to false dependency nonsense. And we
+            // don't even need to do that, because the register that we
+            // *would* be zeroing out the top bits of has already had to
+            // have been moved into or something that clears the top bits.
+            if (src->value.reg.size == r32) vector_push(instructions_to_remove, instruction);
+          }
+        } break; // case MX64_MOVZX
+
         case MX64_MOV: {
           // MOV(eax, rax) -> ERROR (mov cannot move from mismatched size registers when equal)
           // MOV(REG x, REG x) -> NOP (remove)
