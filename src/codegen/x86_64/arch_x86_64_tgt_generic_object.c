@@ -1623,6 +1623,8 @@ static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDes
   // NOTE: +rb/+rw/+rd/+ro indicate the lower three bits of the opcode byte are used to indicate the register operand.
   // In 64-bit mode, indicates the four bit field of REX.b and opcode[2:0] field encodes the register operand.
 
+  uint8_t source_regbits = regbits(reg);
+
   switch (inst) {
   case MX64_PUSH: {
     switch (size) {
@@ -1637,7 +1639,6 @@ static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDes
     } break;
     case r64: {
       // 0x50+rd
-      uint8_t source_regbits = regbits(reg);
       if (REGBITS_TOP(source_regbits)) {
         uint8_t rex = rex_byte(false, false,false, REGBITS_TOP(source_regbits));
         mcode_1(context->object, rex);
@@ -1661,7 +1662,6 @@ static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDes
     } break;
     case r64: {
       // 0x58+rd
-      uint8_t source_regbits = regbits(reg);
       if (REGBITS_TOP(source_regbits)) {
         uint8_t rex = rex_byte(false, false,false, REGBITS_TOP(source_regbits));
         mcode_1(context->object, rex);
@@ -1672,13 +1672,20 @@ static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDes
     } // switch (size)
   } break; // case MX64_POP
 
+  case MX64_IDIV: FALLTHROUGH;
   case MX64_NOT: {
-    uint8_t source_regbits = regbits(reg);
+    // idiv == [REX.W] + 0xf6/0xf7 /7
+    // not  == [REX.W] + 0xf6/0xf7 /2
+    // Only differ in opcode extension
+    uint8_t idiv_extension = 2;
+    uint8_t not_extension = 2;
 
     // Mod == 0b11  ->  register
     // Reg == Opcode Extension
     // R/M == Register Encoding
-    uint8_t modrm = modrm_byte(0b11, 2, source_regbits);
+    uint8_t extension = idiv_extension;
+    if (inst == MX64_NOT) extension = not_extension;
+    uint8_t modrm = modrm_byte(0b11, extension, source_regbits);
 
     switch (size) {
     case r8: {
