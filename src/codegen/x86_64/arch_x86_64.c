@@ -514,6 +514,23 @@ static void lower(CodegenContext *context) {
           }
         }
       } break;
+      } // switch (calling convention)
+      // This is a bit scuffed. Firstly, *reasonably*, we set the call's
+      // result to the result register. But then in order to get
+      // future uses of the call's "virtual register" to properly be
+      // the virtual register that contains the result, we need to copy
+      // the result register into a virtual register and then replace
+      // all uses of the call result with that virtual register... As I
+      // said, a bit scuffed.
+      // TODO: desc.result_register, not REG_RAX
+      if (!type_is_void(instruction->type)) {
+        instruction->result = REG_RAX;
+        INSTRUCTION(reg_result, IR_REGISTER);
+        reg_result->result = REG_RAX;
+        IRInstruction *copy = ir_copy(context, instruction);
+        insert_instruction_after(copy, instruction);
+        insert_instruction_after(reg_result, instruction);
+        ir_replace_uses(instruction, copy);
       }
     } break;
 
@@ -1320,7 +1337,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
         case MX64_MOV: {
           // MOV(eax, rax) -> ERROR (mov cannot move from mismatched size registers when equal)
-          // MOV(REG x, REG x) -> NOP
+          // MOV(REG x, REG x) -> NOP (remove)
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             MIROperand *lhs = mir_get_op(instruction, 0);
             MIROperand *rhs = mir_get_op(instruction, 1);
