@@ -440,7 +440,9 @@ static void lower(CodegenContext *context) {
             } else {
               TODO("SysV: All argument registers are used, we have to start spilling to stack.");
             }
-          }
+          } else if (class == SYSV_REGCLASS_MEMORY) {
+            TODO("SysV: Handle memory class parameter");
+          } else ICE("SysV: Unhandled register class of parameter %d", (int)class);
         }
 
         foreach_rev (usz, i, sixteen_bytes_that_need_split) {
