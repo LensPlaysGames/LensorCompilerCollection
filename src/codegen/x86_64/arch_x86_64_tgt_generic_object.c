@@ -1580,8 +1580,8 @@ static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDes
       uint8_t op = 0x50 + rd_encoding(reg);
       mcode_1(context->object, op);
     } break;
-    }
-  } break;
+    } // switch (size)
+  } break; // case MX64_PUSH
 
   case MX64_POP: {
     switch (size) {
@@ -1604,8 +1604,45 @@ static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDes
       uint8_t op = 0x58 + rd_encoding(reg);
       mcode_1(context->object, op);
     } break;
-    }
-  } break;
+    } // switch (size)
+  } break; // case MX64_POP
+
+  case MX64_NOT: {
+    uint8_t source_regbits = regbits(reg);
+
+    // Mod == 0b11  ->  register
+    // Reg == Opcode Extension
+    // R/M == Register Encoding
+    uint8_t modrm = modrm_byte(0b11, 2, source_regbits);
+
+    switch (size) {
+    case r8: {
+      // 0xf6 /2
+      if (REGBITS_TOP(source_regbits)) {
+        uint8_t rex = rex_byte(false, false,false, REGBITS_TOP(source_regbits));
+        mcode_1(context->object, rex);
+      }
+      mcode_2(context->object, 0xf6, modrm);
+    } break;
+    case r16: {
+      // 0x66 + 0xf7 /2
+      mcode_1(context->object, 0x66);
+    } FALLTHROUGH;
+    case r32: {
+      // 0xf7 /2
+      if (REGBITS_TOP(source_regbits)) {
+        uint8_t rex = rex_byte(false, false,false, REGBITS_TOP(source_regbits));
+        mcode_1(context->object, rex);
+      }
+      mcode_2(context->object, 0xf7, modrm);
+    } break;
+    case r64: {
+      // REX.W + 0xf7 /2
+      uint8_t rex = rex_byte(true, false,false, REGBITS_TOP(source_regbits));
+      mcode_3(context->object, rex, 0xf7, modrm);
+    } break;
+    } // switch (size)
+  } break; // case MX64_NOT
 
   default:
     ICE("ERROR: mcode_reg(): Unsupported instruction %d (%s)", inst, mir_x86_64_opcode_mnemonic(inst));
@@ -2036,6 +2073,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           }
         } break; // case MX64_IMUL
 
+        case MX64_NOT: FALLTHROUGH;
         case MX64_DIV: FALLTHROUGH;
         case MX64_IDIV: {
           if (mir_operand_kinds_match(instruction, 1, MIR_OP_REGISTER)) {
@@ -2359,7 +2397,6 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
         case MX64_CWD: FALLTHROUGH;
         case MX64_CDQ: FALLTHROUGH;
         case MX64_OR: FALLTHROUGH;
-        case MX64_NOT: FALLTHROUGH;
         case MX64_MOVSX: FALLTHROUGH;
         case MX64_MOVZX: FALLTHROUGH;
         case MX64_XCHG:
