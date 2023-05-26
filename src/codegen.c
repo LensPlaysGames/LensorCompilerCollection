@@ -435,9 +435,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     usz to_sz = type_sizeof(t_to);
     usz from_sz = type_sizeof(t_from);
 
-    bool from_signed = false;
-    if (t_from->kind == TYPE_PRIMITIVE)
-      from_signed = t_from->primitive.is_signed;
+    bool from_signed = type_is_signed(t_from);
 
     codegen_expr(ctx, expr->cast.value);
 
