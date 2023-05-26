@@ -1088,7 +1088,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   MIRFunctionVector machine_instructions_from_ir = mir_from_ir(context);
 
-  print("================ ISel ================\n");
 
   // TODO: Either embed x86_64 isel or somehow make this path knowable (i.e. via install).
   const char isel_filepath[] = "src/codegen/x86_64/arch_x86_64.isel";
@@ -1096,15 +1095,25 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   //isel_print_patterns(&patterns, mir_x86_64_opcode_mnemonic);
 
+  if (debug_ir) {
+    print("================ ISel ================\n"
+          "Before:\n");
+    foreach_ptr (MIRFunction*, f, machine_instructions_from_ir)
+      print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
+  }
+
   isel_do_selection(machine_instructions_from_ir, patterns);
 
-  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
-    print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
+  if (debug_ir) {
+    print("After:\n");
+    foreach_ptr (MIRFunction*, f, machine_instructions_from_ir)
+      print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
   }
 
   isel_patterns_delete(&patterns);
 
-  print("================ RA ================\n");
+  if (debug_ir)
+    print("================ RA ================\n");
 
   // RA -- Register Allocation
   foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
@@ -1374,7 +1383,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
     } // foreach (MIRBlock*)
 
-    print_mir_function_with_mnemonic(function, mir_x86_64_opcode_mnemonic);
+    if (debug_ir) print_mir_function_with_mnemonic(function, mir_x86_64_opcode_mnemonic);
   } // foreach (MIRFunction*)
 
 
