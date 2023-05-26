@@ -2,13 +2,10 @@
 ;; E0
 ;; y
 
-arr : integer[4];; = [ 69 42 10 420 ]
-@arr[0] := 69
-@arr[1] := 48
-@arr[2] := 10
-@arr[3] := 121
+arr : integer[4] = [ 69 48 10 121 ]
 for ptr : @integer = arr[0], ptr <= arr[3], ptr := ptr[1] {
   putchar(@ptr)
 }
+;; for ptr in arr[0]..arr[3]  putchar(@ptr)
 
-putchar : ext integer(n : integer)
+putchar : ext s32(n : integer) discardable
