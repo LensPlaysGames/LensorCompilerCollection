@@ -427,14 +427,17 @@ static void lower(CodegenContext *context) {
           Parameter *parameter = function_type->function.parameters.data + i;
           SysVArgumentClass class = sysv_classify_argument(parameter->type);
           if (class == SYSV_REGCLASS_INTEGER) {
-            if (type_sizeof(parameter->type) > 8)
+            if (argument_registers_used + 2 <= argument_register_count && type_sizeof(parameter->type) > 8) {
               vector_push(sixteen_bytes_that_need_split, i);
-            else {
+              argument_registers_used += 2;
+            } else if (argument_registers_used < argument_register_count) {
               IRInstruction *copy = ir_copy(context, instruction->call.arguments.data[i]);
               ASSERT(argument_registers_used < argument_register_count, "Invalid argument register index");
               copy->result = argument_registers[argument_registers_used++];
               insert_instruction_before(copy, instruction);
               instruction->call.arguments.data[i] = copy;
+            } else {
+              TODO("SysV: All argument registers are used, we have to start spilling to stack.");
             }
           }
         }
@@ -486,6 +489,7 @@ static void lower(CodegenContext *context) {
 
         }
       } break;
+
       case CG_CALL_CONV_MSWIN: {
         usz idx = 0;
 
