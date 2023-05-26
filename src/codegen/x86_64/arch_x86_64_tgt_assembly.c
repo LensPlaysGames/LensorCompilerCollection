@@ -931,6 +931,8 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
           }
         } break;
 
+        case MX64_CWD: FALLTHROUGH;
+        case MX64_CDQ: FALLTHROUGH;
         case MX64_CQO: {
           femit_none(context, (MIROpcodex86_64)instruction->opcode);
         } break;
@@ -948,6 +950,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
           }
         } break; // case MX64_JCC
 
+        case MX64_MOVSX: FALLTHROUGH;
         case MX64_MOVZX: {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             MIROperand *src = mir_get_op(instruction, 0);
@@ -961,10 +964,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
         } break; // case MX64_MOVZX
 
         case MX64_XOR: FALLTHROUGH;
-        case MX64_CWD: FALLTHROUGH;
-        case MX64_CDQ: FALLTHROUGH;
         case MX64_OR: FALLTHROUGH;
-        case MX64_MOVSX: FALLTHROUGH;
         case MX64_XCHG:
           TODO("Implement assembly emission from opcode %d (%s)", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
 
