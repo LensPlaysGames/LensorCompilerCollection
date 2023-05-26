@@ -385,10 +385,29 @@ emit {
 }
 
 ;;;; COMPARISON
+;; TODO: Dear God, we need a macro system of *some* sort, even if it's
+;; at the lexing level :eyes:
 match
 MIR_LT lt(Register lhs, Register rhs)
 emit {
   MX64_CMP(rhs, lhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, lt)
+  MX64_SETCC(Immediate cmp_type = COMPARE_LT, lt)
+}
+match
+MIR_LT lt(Register lhs, Immediate imm)
+emit {
+  MX64_CMP(imm, lhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, lt)
+  MX64_SETCC(Immediate cmp_type = COMPARE_LT, lt)
+}
+match
+MIR_LT lt(Immediate lhs, Immediate rhs)
+emit {
+  MX64_MOV i1(lhs, i1)
+  MX64_CMP(rhs, i1)
   ;; We MUST use mov here instead of xor as mov does not clobber flags.
   MX64_MOV(Immediate i = 0, lt)
   MX64_SETCC(Immediate cmp_type = COMPARE_LT, lt)
@@ -402,6 +421,23 @@ emit {
   MX64_SETCC(Immediate cmp_type = COMPARE_GT, gt)
 }
 match
+MIR_GT gt(Register lhs, IMM imm)
+emit {
+  MX64_CMP(imm, lhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, gt)
+  MX64_SETCC(Immediate cmp_type = COMPARE_GT, gt)
+}
+match
+MIR_GT gt(Immediate lhs, Immediate rhs)
+emit {
+  MX64_MOV i1(lhs, i1)
+  MX64_CMP(rhs, i1)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, gt)
+  MX64_SETCC(Immediate cmp_type = COMPARE_GT, gt)
+}
+match
 MIR_LE le(Register lhs, Register rhs)
 emit {
   MX64_CMP(rhs, lhs)
@@ -410,9 +446,43 @@ emit {
   MX64_SETCC(Immediate cmp_type = COMPARE_LE, le)
 }
 match
+MIR_LE le(Register lhs, Immediate imm)
+emit {
+  MX64_CMP(imm, lhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, le)
+  MX64_SETCC(Immediate cmp_type = COMPARE_LE, le)
+}
+match
+MIR_LE le(Immediate lhs, Immediate rhs)
+emit {
+  MX64_MOV i1(lhs, i1)
+  MX64_CMP(rhs, i1)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, le)
+  MX64_SETCC(Immediate cmp_type = COMPARE_LE, le)
+}
+match
 MIR_GE ge(Register lhs, Register rhs)
 emit {
   MX64_CMP(rhs, lhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, ge)
+  MX64_SETCC(Immediate cmp_type = COMPARE_GE, ge)
+}
+match
+MIR_GE ge(Register lhs, IMM imm)
+emit {
+  MX64_CMP(imm, lhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, ge)
+  MX64_SETCC(Immediate cmp_type = COMPARE_GE, ge)
+}
+match
+MIR_GE ge(Immediate lhs, Immediate rhs)
+emit {
+  MX64_MOV i1(lhs, i1)
+  MX64_CMP(rhs, i1)
   ;; We MUST use mov here instead of xor as mov does not clobber flags.
   MX64_MOV(Immediate i = 0, ge)
   MX64_SETCC(Immediate cmp_type = COMPARE_GE, ge)
@@ -434,9 +504,35 @@ emit {
   MX64_SETCC(Immediate cmp_type = COMPARE_EQ, eq)
 }
 match
+MIR_EQ eq(Immediate lhs, Immediate rhs)
+emit {
+  MX64_MOV i1(lhs, i1)
+  MX64_CMP(rhs, i1)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, eq)
+  MX64_SETCC(Immediate cmp_type = COMPARE_EQ, eq)
+}
+match
 MIR_NE ne(Register lhs, Register rhs)
 emit {
   MX64_CMP(rhs, lhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, ne)
+  MX64_SETCC(Immediate cmp_type = COMPARE_NE, ne)
+}
+match
+MIR_NE ne(Register lhs, Immediate imm)
+emit {
+  MX64_CMP(imm, lhs)
+  ;; We MUST use mov here instead of xor as mov does not clobber flags.
+  MX64_MOV(Immediate i = 0, ne)
+  MX64_SETCC(Immediate cmp_type = COMPARE_NE, ne)
+}
+match
+MIR_NE ne(Immediate lhs, Immediate rhs)
+emit {
+  MX64_MOV i1(lhs, i1)
+  MX64_CMP(rhs, i1)
   ;; We MUST use mov here instead of xor as mov does not clobber flags.
   MX64_MOV(Immediate i = 0, ne)
   MX64_SETCC(Immediate cmp_type = COMPARE_NE, ne)
