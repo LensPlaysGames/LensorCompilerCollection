@@ -1246,7 +1246,7 @@ static void mcode_reg_to_reg
       case r16: {
         // 0x66 + 0x0f + 0xbe /r
         mcode_1(context->object, 0x66);
-      } break;
+      } FALLTHROUGH;
       case r32: {
         // 0x0f + 0xbe /r
         if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
