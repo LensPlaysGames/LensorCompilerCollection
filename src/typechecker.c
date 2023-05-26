@@ -1130,13 +1130,16 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
               // Disallow divide by zero...
               if (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer == 0)
                 ERR(expr->source_location, "Cannot perform division by zero.");
-
-              if (!type_equals(lhs->type, rhs->type)) {
-                // Insert cast from rhs type to lhs type, as they are convertible but not equal.
-                Node *cast = ast_make_cast(ast, rhs->source_location, lhs->type, rhs);
-                expr->binary.rhs = cast;
-                if (!typecheck_expression(ast, cast)) return false;
-              }
+            }
+            if (!type_equals(lhs->type, rhs->type)) {
+              // Insert cast from rhs type to lhs type, as they are convertible but not equal.
+              usz lhs_sz = type_sizeof(lhs->type);
+              usz rhs_sz = type_sizeof(rhs->type);
+              Node **smaller = lhs_sz < rhs_sz ? &expr->binary.lhs : &expr->binary.rhs;
+              Node *larger = lhs_sz >= rhs_sz ? expr->binary.lhs : expr->binary.rhs;
+              Node *cast = ast_make_cast(ast, (*smaller)->source_location, larger->type, *smaller);
+              *smaller = cast;
+              if (!typecheck_expression(ast, cast)) return false;
             }
           } else {
             // Check for operator overloads, or replace binary operator with a call, or something...
