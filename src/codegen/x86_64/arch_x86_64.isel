@@ -176,6 +176,14 @@ emit MX64_MOV(reg, i1)
 match MIR_BRANCH br(Block b)
 emit MX64_JMP(b)
 
+match MIR_BRANCH_CONDITIONAL cond_br(Immediate cond, Block then, Block otherwise)
+emit {
+  ;; Load condition immediate so we can test it
+  MX64_MOV i1(cond, i1)
+  MX64_TEST(i1, i1)
+  MX64_JCC(Immediate jump_type = JUMP_TYPE_Z, otherwise)
+  MX64_JMP(then)
+}
 match MIR_BRANCH_CONDITIONAL cond_br(Register cond, Block then, Block otherwise)
 emit {
   MX64_TEST(cond, cond)
