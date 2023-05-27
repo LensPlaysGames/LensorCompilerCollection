@@ -1207,11 +1207,64 @@ static void mcode_reg_to_reg
 
   } break; // case MX64_IMUL
 
-  case MX64_MOVSX: {
-    ASSERT(source_size < destination_size, "Extension requires source to be smaller than destination!");
+  case MX64_MOVZX: {
+    ASSERT(source_size < destination_size, "Zero extension requires source to be smaller than destination!");
 
     switch (source_size) {
     case r64: ICE("x86_64 movzx does not have a 64 bit source operand encoding");
+    case r32: ICE("x86_64 movzx does not have a 32 bit source operand encoding");
+    case r16: {
+      switch (destination_size) {
+      case r8: ICE("x86_64 movzx does not have a 16 bit to 8 bit operand encoding");
+      case r16: ICE("x86_64 movzx does not have a 16 bit to 16 bit operand encoding");
+      case r32: {
+        // 0x0f + 0xb7 /r
+        if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+          mcode_1(context->object, rex);
+        }
+        mcode_3(context->object, 0x0f, 0xb7, modrm);
+      } break;
+      case r64: {
+        // REX.W + 0x0f + 0xb7 /r
+        uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        mcode_4(context->object, rex, 0x0f, 0xb7, modrm);
+      } break;
+      }
+
+    } break;
+    case r8: {
+      switch (destination_size) {
+      case r8: ICE("x86_64 movzx does not have an 8 bit to 8 bit operand encoding");
+      case r16: {
+        // 0x66 + 0x0f + 0xb6 /r
+        mcode_1(context->object, 0x66);
+      } FALLTHROUGH;
+      case r32: {
+        // 0x0f + 0xb6 /r
+        if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+          uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+          mcode_1(context->object, rex);
+        }
+        mcode_3(context->object, 0x0f, 0xb6, modrm);
+      } break;
+      case r64: {
+        // REX.W + 0x0f + 0xb6 /r
+        uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        mcode_4(context->object, rex, 0x0f, 0xb6, modrm);
+      } break;
+      } // switch (destination_size)
+
+    } break; // case r8
+    } // switch (source_size)
+
+  } break; // MX64_MOVZX
+
+  case MX64_MOVSX: {
+    ASSERT(source_size < destination_size, "Sign extension requires source to be smaller than destination!");
+
+    switch (source_size) {
+    case r64: ICE("x86_64 movsx does not have a 64 bit source operand encoding");
     case r32: {
       ASSERT(destination_size == r64);
       // REX.W + 0x63 /r
@@ -1221,8 +1274,8 @@ static void mcode_reg_to_reg
     case r16: {
       ASSERT(destination_size >= r32);
       switch (destination_size) {
-      case r8: ICE("x86_64 movzx does not have a 16 to 8 bit operand encoding");
-      case r16: ICE("x86_64 movzx does not have a 16 to 16 bit operand encoding");
+      case r8: ICE("x86_64 movsx does not have a 16 to 8 bit operand encoding");
+      case r16: ICE("x86_64 movsx does not have a 16 to 16 bit operand encoding");
       case r32: {
         // 0x0f + 0xbf /r
         if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
@@ -1242,7 +1295,7 @@ static void mcode_reg_to_reg
     case r8: {
       ASSERT(destination_size >= r16);
       switch (destination_size) {
-      case r8: ICE("x86_64 movzx does not have an 8 to 8 bit operand encoding");
+      case r8: ICE("x86_64 movsx does not have an 8 to 8 bit operand encoding");
       case r16: {
         // 0x66 + 0x0f + 0xbe /r
         mcode_1(context->object, 0x66);
