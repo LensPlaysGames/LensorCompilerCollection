@@ -371,7 +371,7 @@ static void mcode_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int6
       }
       mcode_n(context->object, &disp32, 4);
       mcode_1(context->object, (uint8_t)imm8);
-    }
+    } break;
     case r16: {
       // 0x66 + 0xc7 /0 iw
       mcode_1(context->object, 0x66);
