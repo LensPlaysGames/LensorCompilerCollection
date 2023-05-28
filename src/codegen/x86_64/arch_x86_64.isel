@@ -369,6 +369,12 @@ emit {
   MX64_MOV(value, i1)
   MX64_SAL(i1)
 }
+match MIR_SHL i1(Register value, Immediate shift_amount)
+emit {
+  MX64_MOV(shift_amount, Register = ecx)
+  MX64_SAL(value)
+  MX64_MOV(value, i1)
+}
 match MIR_SHL i1(Register value, Register shift_amount)
 emit {
   MX64_MOV(shift_amount, Register = ecx)
