@@ -219,18 +219,43 @@ if (BUILD_TESTING)
   file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
   foreach (test ${tests})
     add_test(
-      NAME ${test}
+      NAME ASM${test}
       COMMAND $<TARGET_FILE:test_instantiator>
+      --target asm
       --test ${test}
       --intc $<TARGET_FILE:intc>
       --cc ${CMAKE_C_COMPILER}
       WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
       COMMAND_EXPAND_LISTS
     )
+    if (WIN32)
+      add_test(
+        NAME OBJ${test}
+        COMMAND $<TARGET_FILE:test_instantiator>
+        --target coff_object
+        --test ${test}
+        --intc $<TARGET_FILE:intc>
+        --cc ${CMAKE_C_COMPILER}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+        COMMAND_EXPAND_LISTS
+      )
+    else()
+      add_test(
+        NAME OBJ${test}
+        COMMAND $<TARGET_FILE:test_instantiator>
+        --target elf_object
+        --test ${test}
+        --intc $<TARGET_FILE:intc>
+        --cc ${CMAKE_C_COMPILER}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+        COMMAND_EXPAND_LISTS
+      )
+    endif()
     if (BUILD_OPT_TESTING)
       add_test(
         NAME OPT_${test}
         COMMAND $<TARGET_FILE:test_instantiator>
+        --target asm
         --test ${test}
         --intc $<TARGET_FILE:intc>
         --cc ${CMAKE_C_COMPILER}
