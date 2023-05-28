@@ -54,7 +54,7 @@ while rowcount {
 
 
 ;;; Functions
-display_state : integer(state : integer) {
+display_state : void(state : integer) {
   idx : integer = 0
   while idx < colcount {
     putchar(
@@ -63,7 +63,6 @@ display_state : integer(state : integer) {
     idx := idx + 1
   }
   putchar(10)
-  0
 }
 
 calculate_state : integer(state : integer) {
@@ -98,6 +97,6 @@ calculate_state : integer(state : integer) {
 ;;; Externals
 
 ;; Print a character represented by `c` to stdout. Requires linking with `libc`.
-putchar : ext integer(c : integer)
+putchar : ext integer(c : integer) discardable
 
 0
