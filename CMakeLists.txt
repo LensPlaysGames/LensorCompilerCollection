@@ -48,6 +48,11 @@ set(
   CACHE BOOL
   "Whether or not to include optimisation tests in ctest"
 )
+set(
+  BUILD_OBJ_TESTING FALSE
+  CACHE BOOL
+  "Whether or not to include object file target tests in ctest (default just includes assembly)"
+)
 
 add_executable(
   intc
@@ -219,7 +224,7 @@ if (BUILD_TESTING)
   file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
   foreach (test ${tests})
     add_test(
-      NAME ASM${test}
+      NAME ASM_${test}
       COMMAND $<TARGET_FILE:test_instantiator>
       --target asm
       --test ${test}
@@ -228,28 +233,30 @@ if (BUILD_TESTING)
       WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
       COMMAND_EXPAND_LISTS
     )
-    if (WIN32)
-      add_test(
-        NAME OBJ${test}
-        COMMAND $<TARGET_FILE:test_instantiator>
-        --target coff_object
-        --test ${test}
-        --intc $<TARGET_FILE:intc>
-        --cc ${CMAKE_C_COMPILER}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-        COMMAND_EXPAND_LISTS
-      )
-    else()
-      add_test(
-        NAME OBJ${test}
-        COMMAND $<TARGET_FILE:test_instantiator>
-        --target elf_object
-        --test ${test}
-        --intc $<TARGET_FILE:intc>
-        --cc ${CMAKE_C_COMPILER}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-        COMMAND_EXPAND_LISTS
-      )
+    if (BUILD_OBJ_TESTING)
+      if (WIN32)
+        add_test(
+          NAME OBJ_${test}
+          COMMAND $<TARGET_FILE:test_instantiator>
+          --target coff_object
+          --test ${test}
+          --intc $<TARGET_FILE:intc>
+          --cc ${CMAKE_C_COMPILER}
+          WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+          COMMAND_EXPAND_LISTS
+        )
+      else()
+        add_test(
+          NAME OBJ_${test}
+          COMMAND $<TARGET_FILE:test_instantiator>
+          --target elf_object
+          --test ${test}
+          --intc $<TARGET_FILE:intc>
+          --cc ${CMAKE_C_COMPILER}
+          WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+          COMMAND_EXPAND_LISTS
+        )
+      endif()
     endif()
     if (BUILD_OPT_TESTING)
       add_test(
