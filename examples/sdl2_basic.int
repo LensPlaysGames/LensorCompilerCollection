@@ -1,5 +1,5 @@
 ;; libc Declarations
-puts: ext integer(str: @byte)
+puts: ext integer(str: @byte) discardable
 
 ;; SDL2 Declarations
 SDL_Window :> type {}
