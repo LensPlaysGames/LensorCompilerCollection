@@ -829,7 +829,7 @@ bool codegen
       };
       Parameter argv =  {
         .name = string_create("__argv__"),
-        .type = ast_make_type_pointer(ast, (loc){0}, ast_make_type_pointer(ast, (loc){0}, t_integer)),
+        .type = ast_make_type_pointer(ast, (loc){0}, ast_make_type_pointer(ast, (loc){0}, t_byte)),
         .source_location = {0},
       };
 
