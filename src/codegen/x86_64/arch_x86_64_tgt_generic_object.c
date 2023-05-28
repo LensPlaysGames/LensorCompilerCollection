@@ -156,6 +156,47 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
   if ((inst == MX64_SUB || inst == MX64_ADD) && immediate == 0) return;
 
   switch (inst) {
+  case MX64_IMUL: {
+    if (size == r8) {
+      print("%35WARNING:%m IMUL of eight-byte register doesn't exist!\n");
+      size = r16;
+    }
+    uint8_t destination_regbits = regbits(destination_register);
+    switch (size) {
+    case r8: UNREACHABLE();
+    case r16: {
+      // 0x66 + 0x69 /r iw
+      uint8_t modrm = modrm_byte(0b11, destination_regbits, destination_regbits);
+      int16_t imm16 = (int16_t)immediate;
+      if (REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(destination_regbits));
+        mcode_1(context->object, rex);
+      }
+      mcode_3(context->object, 0x66, 0x69, modrm);
+      mcode_n(context->object, &imm16, 2);
+    } break;
+    case r32: {
+      // 0x69 /r id
+      uint8_t modrm = modrm_byte(0b11, destination_regbits, destination_regbits);
+      int32_t imm32 = (int32_t)immediate;
+      if (REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(destination_regbits));
+        mcode_1(context->object, rex);
+      }
+      mcode_2(context->object, 0x69, modrm);
+      mcode_n(context->object, &imm32, 4);
+    } break;
+    case r64: {
+      // REX.W + 0x69 /r id
+      uint8_t modrm = modrm_byte(0b11, destination_regbits, destination_regbits);
+      int32_t imm32 = (int32_t)immediate;
+      uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(destination_regbits));
+      mcode_3(context->object, rex, 0x69, modrm);
+      mcode_n(context->object, &imm32, 4);
+    } break;
+    } // switch (size)
+  } break;
+
   case MX64_MOV: {
 
     if (size == r64 && immediate > INT32_MIN && immediate < INT32_MAX)
