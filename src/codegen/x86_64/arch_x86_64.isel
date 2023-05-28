@@ -313,6 +313,11 @@ emit {
   MX64_MOV(imm, i1)
   MX64_SUB(reg, i1)
 }
+match MIR_SUB i1(Register lhs, Register rhs)
+emit {
+  MX64_SUB(rhs, lhs)
+  MX64_MOV(lhs, i1)
+}
 
 ;;;; BITWISE
 
