@@ -2434,10 +2434,24 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_LOCAL_REF, MIR_OP_REGISTER)) {
             MIROperand *local = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg->value.reg.size = r64;
+            }
             mcode_mem_to_reg(context, MX64_LEA, REG_RBP, function->frame_objects.data[local->value.local_ref].offset, reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_STATIC_REF, MIR_OP_REGISTER)) {
             MIROperand *object = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg->value.reg.size = r64;
+            }
             if (reg->value.reg.size == r8 || reg->value.reg.size == r16)
               mcode_imm_to_reg(context, MX64_MOV, 0, reg->value.reg.value, r32);
             mcode_name_to_reg(context, MX64_LEA, REG_RIP, object->value.static_ref->static_ref->name.data, reg->value.reg.value, reg->value.reg.size);
