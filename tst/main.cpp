@@ -181,6 +181,9 @@ int main(int argc, char **argv) {
     std::filesystem::remove(intc_outpath);
 
     if (status) {
+        // Delete generated output file
+        std::filesystem::remove(cc_outpath);
+
         fprintf(stderr,
                 "\nFAILURE: C compiler returned non-zero exit code\n"
                 "  intc_invocation: \"%s\"\n"
