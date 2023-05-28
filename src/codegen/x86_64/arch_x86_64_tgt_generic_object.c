@@ -222,22 +222,25 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
   } break; // case MX64_MOV
 
   case MX64_AND: FALLTHROUGH;
+  case MX64_OR: FALLTHROUGH;
   case MX64_ADD: FALLTHROUGH;
   case MX64_CMP: FALLTHROUGH;
   case MX64_SUB: {
 
     // Immediate add/sub/and all share the same opcodes, just with a different opcode extension in ModRM:reg.
     const uint8_t add_extension = 0;
+    const uint8_t or_extension  = 1;
     const uint8_t and_extension = 4;
     const uint8_t sub_extension = 5;
     const uint8_t cmp_extension = 7;
     uint8_t extension = cmp_extension;
     if (inst == MX64_SUB) extension = sub_extension;
     else if (inst == MX64_AND) extension = and_extension;
+    else if (inst == MX64_OR) extension = or_extension;
     else if (inst == MX64_ADD) extension = add_extension;
 
     // Mod == 0b11  ->  register
-    // Reg == Opcode Extension (7 for cmp, 5 for sub, 4 for and, 0 for add)
+    // Reg == Opcode Extension (7 for cmp, 5 for sub, 4 for and, 1 for or, 0 for add)
     // R/M == Destination
     uint8_t destination_regbits = regbits(destination_register);
     uint8_t modrm = modrm_byte(0b11, extension, destination_regbits);
@@ -2213,7 +2216,9 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
         } break; // case MX64_IDIV
 
         case MX64_AND: FALLTHROUGH;
-        case MX64_ADD: {
+        case MX64_OR: FALLTHROUGH;
+        case MX64_ADD: FALLTHROUGH;
+        case MX64_SUB: {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
             // imm to reg | imm, dst
             MIROperand *imm = mir_get_op(instruction, 0);
@@ -2224,37 +2229,19 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             MIROperand *src = mir_get_op(instruction, 0);
             MIROperand *dst = mir_get_op(instruction, 1);
             mcode_reg_to_reg(context, instruction->opcode, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
-          } else {
-            print("\n\nUNHANDLED INSTRUCTION:\n");
-            print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
-            ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
-          }
-        } break; // case MX64_ADD
-
-        case MX64_SUB: {
-          if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
-            // imm to reg | imm, dst
-            MIROperand *imm = mir_get_op(instruction, 0);
-            MIROperand *reg = mir_get_op(instruction, 1);
-            mcode_imm_to_reg(context, MX64_SUB, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
-          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
-            // reg to reg | src, dst
-            MIROperand *src = mir_get_op(instruction, 0);
-            MIROperand *dst = mir_get_op(instruction, 1);
-            mcode_reg_to_reg(context, MX64_SUB, src->value.reg.value, src->value.reg.size, dst->value.reg.value, dst->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 4, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE, MIR_OP_IMMEDIATE)) {
             // imm to mem | imm, address, offset, size
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *addr = mir_get_op(instruction, 1);
             MIROperand *offset = mir_get_op(instruction, 2);
             MIROperand *size = mir_get_op(instruction, 3);
-            mcode_imm_to_mem(context, MX64_SUB, imm->value.imm, addr->value.reg.value, offset->value.imm, (RegSize)size->value.imm);
+            mcode_imm_to_mem(context, instruction->opcode, imm->value.imm, addr->value.reg.value, offset->value.imm, (RegSize)size->value.imm);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
             ICE("[x86_64/CodeEmission]: Unhandled instruction, sorry");
           }
-        } break; // case MX64_SUB
+        } break; // case MX64_ADD
 
         case MX64_MOV: {
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
@@ -2555,7 +2542,6 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
         } break; // case MX64_MOVZX
 
         case MX64_XOR: FALLTHROUGH;
-        case MX64_OR: FALLTHROUGH;
         case MX64_XCHG:
           TODO("Implement machine code emission from opcode %d (%s)", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
 
