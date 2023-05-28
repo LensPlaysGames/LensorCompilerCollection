@@ -9,9 +9,11 @@
 
 #ifdef _WIN32
 # define PLATFORM_EXE_PREFIX ""
+# define PLATFORM_EXE_SUFFIX ".exe"
 # define CALLING_CONVENTION "MSWIN"
 #else
 # define PLATFORM_EXE_PREFIX "./"
+# define PLATFORM_EXE_SUFFIX ""
 # define CALLING_CONVENTION "LINUX"
 #endif
 
@@ -94,9 +96,12 @@ int main(int argc, char **argv) {
     testfile.close();
 
 
-    std::filesystem::path intc_outpath{"test"};
+    std::filesystem::path intc_outpath{"inttest"};
+    intc_outpath += intc_target;
     intc_outpath += testpath.filename().string();
-
+    if (intc_target.starts_with("asm"))
+        intc_outpath += ".s";
+    else intc_outpath += ".o";
     std::string intc_invocation{};
     intc_invocation += intcpath.string();
     // Set calling convention
@@ -113,8 +118,9 @@ int main(int argc, char **argv) {
     // Path to file to compile
     intc_invocation += testpath.string();
 
-    std::filesystem::path cc_outpath{"test"};
+    std::filesystem::path cc_outpath{"cctest"};
     cc_outpath += testpath.filename().string();
+    cc_outpath += PLATFORM_EXE_SUFFIX;
     std::string cc_invocation{};
     cc_invocation += ccpath.string();
     cc_invocation += " -o ";
@@ -123,6 +129,7 @@ int main(int argc, char **argv) {
     cc_invocation += intc_outpath.string();
 
     std::filesystem::path outpath{"out"};
+    outpath += intc_target;
     outpath += testpath.filename().string();
     outpath += ".txt";
     std::string test_invocation{};
@@ -153,7 +160,8 @@ int main(int argc, char **argv) {
         }
         // If status is non-zero (unsucessful) and error was expected, we good.
         return 0;
-    } else if (status) {
+    }
+    if (status) {
         // Delete generated output file (possibly created even though the compiler returned failure code)
         std::filesystem::remove(intc_outpath);
 
