@@ -1,21 +1,75 @@
+#include <array>
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <random>
+#include <ranges>
 #include <string>
+#include <thread>
 
 #include <cstring>
 #include <cstdio>
 
 #ifdef _WIN32
 # define PLATFORM_EXE_PREFIX ""
-# define PLATFORM_EXE_SUFFIX ".exe"
+# define PLATFORM_EXE_SUFFIX "exe"
 # define CALLING_CONVENTION "MSWIN"
 #else
 # define PLATFORM_EXE_PREFIX "./"
 # define PLATFORM_EXE_SUFFIX ""
 # define CALLING_CONVENTION "LINUX"
 #endif
+
+std::filesystem::path temppath(std::string_view extension) {
+    std::mt19937 rd(std::random_device{}());
+
+    /// Get the temporary directory.
+    auto tmp_dir = std::filesystem::temp_directory_path();
+
+    /// Get the current time, pid, and tid.
+    auto now = std::chrono::system_clock::now().time_since_epoch().count();
+    auto pid = std::to_string(rd());
+    auto tid = std::to_string((uint32_t) std::hash<std::thread::id>{}(std::this_thread::get_id()));
+
+    /// And some random letters too.
+    /// Do NOT use `char` for this because it’s signed on some systems (including mine),
+    /// which completely breaks the modulo operation below... Thanks a lot, C.
+    std::array<uint8_t, 8> rand{};
+    std::ranges::generate(rand, [&] { return rd() % 26 + 'a'; });
+
+    /// Create a unique path.
+    tmp_dir /= pid; tmp_dir += ".";
+    tmp_dir += tid; tmp_dir += ".";
+    tmp_dir += std::to_string(now); tmp_dir += ".";
+    tmp_dir += std::string_view{(char*) rand.data(), rand.size()};
+    if (not extension.empty()) {
+        if (not extension.starts_with('.')) tmp_dir += ".";
+        tmp_dir += extension;
+    }
+
+    return tmp_dir;
+}
+
+#define CAT_(x, y) x##y
+#define CAT(x, y)  CAT_(x, y)
+
+#define defer auto CAT($$defer_instance_, __COUNTER__) = $$defer{} % [&]()
+
+template <typename callable>
+struct $$defer_type {
+    callable cb;
+    explicit $$defer_type(callable&& _cb) : cb(std::forward<callable>(_cb)) {}
+    ~$$defer_type() { cb(); }
+};
+
+struct $$defer {
+    template <typename callable>
+    $$defer_type<callable> operator%(callable&& cb) {
+        return $$defer_type<callable>{std::forward<callable>(cb)};
+    }
+};
 
 int main(int argc, char **argv) {
     // Expecting signature:
@@ -96,12 +150,11 @@ int main(int argc, char **argv) {
     testfile.close();
 
 
-    std::filesystem::path intc_outpath{"inttest"};
-    intc_outpath += intc_target;
-    intc_outpath += testpath.filename().string();
+    std::filesystem::path intc_outpath{};
     if (intc_target.starts_with("asm"))
-        intc_outpath += ".s";
-    else intc_outpath += ".o";
+        intc_outpath = temppath("s");
+    else intc_outpath = temppath("o");
+
     std::string intc_invocation{};
     intc_invocation += intcpath.string();
     // Set calling convention
@@ -118,9 +171,7 @@ int main(int argc, char **argv) {
     // Path to file to compile
     intc_invocation += testpath.string();
 
-    std::filesystem::path cc_outpath{"cctest"};
-    cc_outpath += testpath.filename().string();
-    cc_outpath += PLATFORM_EXE_SUFFIX;
+    std::filesystem::path cc_outpath = temppath(PLATFORM_EXE_SUFFIX);
     std::string cc_invocation{};
     cc_invocation += ccpath.string();
     cc_invocation += " -o ";
@@ -128,10 +179,7 @@ int main(int argc, char **argv) {
     cc_invocation += " ";
     cc_invocation += intc_outpath.string();
 
-    std::filesystem::path outpath{"out"};
-    outpath += intc_target;
-    outpath += testpath.filename().string();
-    outpath += ".txt";
+    std::filesystem::path outpath = temppath("txt");
     std::string test_invocation{};
     test_invocation += PLATFORM_EXE_PREFIX;
     test_invocation += cc_outpath.string();
@@ -141,13 +189,15 @@ int main(int argc, char **argv) {
     int status = 0;
 
     status = system(intc_invocation.c_str());
+    // Delete generated output file at end of scope.
+    defer {
+        if (std::filesystem::exists(intc_outpath))
+            std::filesystem::remove(intc_outpath);
+    };
     // TODO: Error on ICE no matter what. Check output for "Internal Compiler Error".
     // This means we'd have to redirect and capture intc_invocation output as well.
     if (expected_error) {
         if (!status) {
-            // Delete generated output file (presumably created since compiler returned success code)
-            std::filesystem::remove(intc_outpath);
-
             fprintf(stderr,
                     "\nFAILURE: Test returned successful exit code but an error was expected\n"
                     "  intc_invocation: \"%s\"\n"
@@ -162,9 +212,6 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (status) {
-        // Delete generated output file (possibly created even though the compiler returned failure code)
-        std::filesystem::remove(intc_outpath);
-
         fprintf(stderr,
                 "\nFAILURE: intc returned non-zero exit code\n"
                 "  intc_invocation: \"%s\"\n"
@@ -175,15 +222,12 @@ int main(int argc, char **argv) {
     }
 
     status = system(cc_invocation.c_str());
-
-    // As the C compiler has already used it, we can delete the intc-
-    // generated assembly now.
-    std::filesystem::remove(intc_outpath);
+    defer {
+        if (std::filesystem::exists(cc_outpath))
+            std::filesystem::remove(cc_outpath);
+    };
 
     if (status) {
-        // Delete generated output file
-        std::filesystem::remove(cc_outpath);
-
         fprintf(stderr,
                 "\nFAILURE: C compiler returned non-zero exit code\n"
                 "  intc_invocation: \"%s\"\n"
@@ -196,14 +240,12 @@ int main(int argc, char **argv) {
     }
 
     status = system(test_invocation.c_str());
-
-    // The test has been run; we can delete the executable now.
-    std::filesystem::remove(cc_outpath);
+    defer {
+        if (std::filesystem::exists(outpath))
+            std::filesystem::remove(outpath);
+    };
 
     if (status != expected_status) {
-        // The test's status didn't match; it's output isn't ever needed.
-        std::filesystem::remove(outpath);
-
         fprintf(stderr,
                 "\nFAILURE: Test returned unexpected exit code\n"
                 "  intc_invocation: \"%s\"\n"
@@ -226,7 +268,6 @@ int main(int argc, char **argv) {
     };
     // Delete test output file
     test_output.close();
-    std::filesystem::remove(outpath);
 
     // NOTE: there is some nonsense here having to do with newlines
     // being automatically added/translated into \r\n from \n, etc.
