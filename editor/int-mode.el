@@ -20,12 +20,12 @@
  ?, "."
  int-mode-syntax-table)
 
-;; Allowed within symbols: _$
+;; Allowed within words: \_
 (modify-syntax-entry
- ?_ "_"
+ ?_ "w"
  int-mode-syntax-table)
 (modify-syntax-entry
- ?$ "_"
+ ?\\ "w"
  int-mode-syntax-table)
 
 ;; Parenthesis
@@ -68,7 +68,7 @@
   :group 'int-mode
   :tag "Syntax Highlight Types")
 
-(defcustom int-mode-face-numbers nil
+(defcustom int-mode-face-numbers 'font-lock-number-face
   "Symbol name of face to highlight int-mode immediate numbers with."
   :group 'int-mode
   :tag "Syntax Highlight Numbers")
@@ -78,7 +78,7 @@
   :group 'int-mode
   :tag "Syntax Highlight Strings")
 
-(defcustom int-mode-face-operators nil
+(defcustom int-mode-face-operators 'font-lock-operator-face
   "Symbol name of face to highlight int-mode builtin binary operators with.
 Examples include addition (+) and subtraction (-)."
   :group 'int-mode
@@ -89,6 +89,11 @@ Examples include addition (+) and subtraction (-)."
   :group 'int-mode
   :tag "Syntax Highlight Negation Character")
 
+(defcustom int-mode-face-macro-args 'font-lock-property-face
+  "Symbol name of face to highlight int-mode macro arguments with (starts with $)."
+  :group 'int-mode
+  :tag "Syntax Highlight Macro Arguments")
+
 (defcustom int-mode-face-function-names 'font-lock-function-name-face
   "Symbol name of face to highlight int-mode function names in definitions."
   :group 'int-mode
@@ -96,7 +101,7 @@ Examples include addition (+) and subtraction (-)."
 
 ;; Gather all keyword font locks together into big daddy keyword font-lock
 (setq int--font-lock-defaults
-      (let* ((keywords '("if" "else" "while" "for" "type" "ext" ;; keywords
+      (let* ((keywords '("if" "else" "while" "for" "type" "ext" "macro" "emits" "endmacro" ;; keywords
                          "discardable ""nomangle" ;; function attributes
                          "alignas" ;; type attributes
                          ))
@@ -106,8 +111,9 @@ Examples include addition (+) and subtraction (-)."
                           "&" "@"
                           ">>" "<<" "&" "|" "~"))
 
+             (macro-arg-regex        "\\$[a-zA-Z_][a-zA-Z0-9_]*")
              (keywords-regex         (regexp-opt keywords 'words))
-             (operators-regex (regexp-opt operators))
+             (operators-regex        (regexp-opt operators))
              (negation-char-regex    (regexp-opt '("!" "~")))
              (number-regex           (rx (one-or-more digit)))
              (string-regex           (rx "\"" (*? (not "\"")) "\""))
@@ -115,12 +121,13 @@ Examples include addition (+) and subtraction (-)."
                                          (zero-or-more "@")
                                          (or "integer" "byte" "void"))))
         `(
-          (,keywords-regex          . ,int-mode-face-keywords)
-          (,builtin-types-regex     . ,int-mode-face-types)
-          (,number-regex            . ,int-mode-face-numbers)
-          (,operators-regex  . ,int-mode-face-operators)
-          (,negation-char-regex     . ,int-mode-face-negation-char)
-          (,string-regex            . ,int-mode-face-strings)
+          (,macro-arg-regex         . ',int-mode-face-macro-args)
+          (,keywords-regex          . ',int-mode-face-keywords)
+          (,builtin-types-regex     . ',int-mode-face-types)
+          (,number-regex            . ',int-mode-face-numbers)
+          (,operators-regex  . ',int-mode-face-operators)
+          (,negation-char-regex     . ',int-mode-face-negation-char)
+          (,string-regex            . ',int-mode-face-strings)
           )))
 
 (defcustom int-mode-indent-amount 2

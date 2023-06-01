@@ -58,13 +58,13 @@
  ?, "."
  int-ts-mode--syntax-table)
 
-;; Allowed within symbols: _$
+;; Allowed within symbols: _
 (modify-syntax-entry
- ?_ "_"
- int-ts-mode--syntax-table)
+ ?_ "w"
+ int-mode-syntax-table)
 (modify-syntax-entry
- ?$ "_"
- int-ts-mode--syntax-table)
+ ?\\ "w"
+ int-mode-syntax-table)
 
 ;; Parenthesis
 (modify-syntax-entry
