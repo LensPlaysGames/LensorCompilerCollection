@@ -125,7 +125,7 @@ Examples include addition (+) and subtraction (-)."
           (,keywords-regex          . ',int-mode-face-keywords)
           (,builtin-types-regex     . ',int-mode-face-types)
           (,number-regex            . ',int-mode-face-numbers)
-          (,operators-regex  . ',int-mode-face-operators)
+          (,operators-regex         . ',int-mode-face-operators)
           (,negation-char-regex     . ',int-mode-face-negation-char)
           (,string-regex            . ',int-mode-face-strings)
           )))

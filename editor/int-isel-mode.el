@@ -22,16 +22,16 @@
 
 ;; Allowed within symbols: _-#$
 (modify-syntax-entry
- ?_ "_"
+ ?_ "w"
  int-isel-mode-syntax-table)
 (modify-syntax-entry
- ?- "_"
+ ?- "w"
  int-isel-mode-syntax-table)
 (modify-syntax-entry
- ?# "_"
+ ?# "w"
  int-isel-mode-syntax-table)
 (modify-syntax-entry
- ?$ "_"
+ ?$ "w"
  int-isel-mode-syntax-table)
 
 ;; Parenthesis
@@ -74,7 +74,7 @@
   :group 'int-isel-mode
   :tag "Syntax Highlight Types")
 
-(defcustom int-isel-mode-face-numbers nil
+(defcustom int-isel-mode-face-numbers 'font-lock-number-face
   "Symbol name of face to highlight int-isel-mode immediate numbers with."
   :group 'int-isel-mode
   :tag "Syntax Highlight Numbers")
@@ -84,9 +84,9 @@
   :group 'int-isel-mode
   :tag "Syntax Highlight Strings")
 
-(defcustom int-isel-mode-face-operators nil
-  "Symbol name of face to highlight int-isel-mode builtin binary operators with.
-Examples include addition (+) and subtraction (-)."
+(defcustom int-isel-mode-face-operators 'font-lock-operator-face
+  "Symbol name of face to highlight int-isel-mode builtin operators with.
+Examples include equality (=)."
   :group 'int-isel-mode
   :tag "Syntax Highlight Binary Operators")
 
@@ -102,12 +102,8 @@ Examples include addition (+) and subtraction (-)."
 
 ;; Gather all keyword font locks together into big daddy keyword font-lock
 (setq int-isel--font-lock-defaults
-      (let* ((keywords '("match" "emit" "discard"))
-             (operators '("+" "*" "-" "/" "%"
-                          "<" ">"
-                          ":" ";" "=" ":=" "::"
-                          "&" "@"
-                          ">>" "<<" "&" "|" "~"))
+      (let* ((keywords '("match" "emit" "discard" "is"))
+             (operators '("="))
              (builtin-types '("Immediate" "IMM" "Register" "REG"
                               "Name" "Block" "Function"
                               "Local" "Static"))
@@ -115,15 +111,15 @@ Examples include addition (+) and subtraction (-)."
              (keywords-regex         (regexp-opt keywords 'words))
              (operators-regex (regexp-opt operators))
              (negation-char-regex    (regexp-opt '("!" "~")))
-             (number-regex           (rx (one-or-more digit)))
+             (number-regex           (rx word-start (one-or-more digit) word-end))
              (string-regex           (rx "\"" (*? (not "\"")) "\""))
              (builtin-types-regex    (regexp-opt builtin-types 'words)))
-        `((,keywords-regex          . ,int-isel-mode-face-keywords)
-          (,builtin-types-regex     . ,int-isel-mode-face-types)
-          (,number-regex            . ,int-isel-mode-face-numbers)
-          (,operators-regex  . ,int-isel-mode-face-operators)
-          (,negation-char-regex     . ,int-isel-mode-face-negation-char)
-          (,string-regex            . ,int-isel-mode-face-strings)
+        `((,keywords-regex          . ',int-isel-mode-face-keywords)
+          (,builtin-types-regex     . ',int-isel-mode-face-types)
+          (,number-regex            . ',int-isel-mode-face-numbers)
+          (,operators-regex         . ',int-isel-mode-face-operators)
+          (,negation-char-regex     . ',int-isel-mode-face-negation-char)
+          (,string-regex            . ',int-isel-mode-face-strings)
           )))
 
 (defcustom int-isel-mode-indent-amount 2
