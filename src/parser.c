@@ -11,6 +11,11 @@
 #include <utils.h>
 #include <vector.h>
 
+// Forward declares.
+typedef struct Parser Parser;
+static Type *parse_type(Parser *p);
+static Node *parse_expr(Parser *p);
+
 static usz is_power_of_two(usz i) {
   return (i & (i - 1)) == 0;
 }
@@ -42,11 +47,27 @@ enum {
 typedef struct Token {
   enum TokenType type;
   loc source_location;
-  string_buffer text;
+
+  // Yes, this is cursed. There is an AST node stored in a token because
+  // of macro reasons.
+  Node *node;
+
+  // Just a simple number.
   u64 integer;
+
+  // Any text; may be an identifier, keyword, etc.
+  string_buffer text;
   // True iff identifier created via escaping.
   bool artificial;
 } Token;
+
+// A macro argument selector (i.e. the "token" part of `$name:token`)
+// This is the value of the `integer` member of the macro argument
+// token.
+typedef enum MacroArgumentSelector {
+  MACRO_ARG_SEL_TOKEN,
+  MACRO_ARG_SEL_EXPR,
+} MacroArgumentSelector;
 
 typedef Vector(Token) TokenVector;
 typedef struct Macro {
@@ -417,22 +438,42 @@ static bool token_equals(Token *A, Token *B) {
 }
 
 static void expand_macro(Parser *p, Macro *m) {
-  // Found macro, do expansion things!
+  // Found macro invocation, do expansion things!
   MacroExpansion expansion = {0};
-
   expansion.macro_index = (usz)(m - p->macros.data);
 
-  // Yeet name of macro
   p->raw_mode = true;
 
   foreach (Token, param_tok, m->parameters) {
     next_token(p);
 
+    // param_tok == parameter
+    // p->tok == argument
+
     if (param_tok->type == TK_MACRO_ARG) {
-      NamedToken bound_arg = {0};
-      bound_arg.name = as_span(param_tok->text);
-      bound_arg.token = copy_token(p->tok);
-      vector_push(expansion.bound_arguments, bound_arg);
+      switch ((MacroArgumentSelector)param_tok->integer) {
+      case MACRO_ARG_SEL_TOKEN: {
+        NamedToken bound_arg = {0};
+        bound_arg.name = as_span(param_tok->text);
+        bound_arg.token = copy_token(p->tok);
+        vector_push(expansion.bound_arguments, bound_arg);
+      } break;
+      case MACRO_ARG_SEL_EXPR: {
+        u32 beg = p->tok.source_location.start;
+
+        // Yes, this is cursed. The lexer calls into the parser. This is called
+        // mutual recursion. But macros go brr, amirite?
+        Node *expr = parse_expr(p);
+        NamedToken bound_arg = {0};
+        bound_arg.name = as_span(param_tok->text);
+        bound_arg.token.type = TK_AST_NODE;
+        bound_arg.token.node = expr;
+        bound_arg.token.source_location.start = beg;
+        bound_arg.token.source_location.end = p->tok.source_location.end;
+        vector_push(expansion.bound_arguments, bound_arg);
+      } break;
+      default: ICE("Unhandled macro argument selector type");
+      }
       continue;
     }
 
@@ -447,28 +488,37 @@ static void expand_macro(Parser *p, Macro *m) {
 
 /// Lex the next token.
 static void next_token(Parser *p) {
+  // Pop empty macro expansions off of the expansion stack.
   foreach_rev (MacroExpansion, expansion, p->macro_expansion_stack) {
     Macro *expandee = p->macros.data + expansion->macro_index;
     if (expansion->expansion_index >= expandee->expansion.size)
       vector_pop(p->macro_expansion_stack);
   }
+  // Iff there are macro expansions to handle, get tokens from there
+  // instead of from the file.
   if (p->macro_expansion_stack.size) {
     MacroExpansion *expansion = &vector_back(p->macro_expansion_stack);
     Macro *expandee = p->macros.data + expansion->macro_index;
     Token *macro_expansion_token = expandee->expansion.data + expansion->expansion_index;
     if (macro_expansion_token->type == TK_MACRO_ARG) {
+      ASSERT(expansion->bound_arguments.size,
+             "Macro argument \"%S\" encountered, but none are defined for this macro",
+             as_span(macro_expansion_token->text));
       // Get it from bound arguments
       NamedToken *found = NULL;
       vector_find_if(expansion->bound_arguments, found, index,
                      string_eq(expansion->bound_arguments.data[index].name, macro_expansion_token->text));
-      ASSERT(found, "Macro argument does not exist (lexer screwed up!)");
+      ASSERT(found, "Macro argument \"%S\" does not exist (lexer screwed up!)",
+             as_span(macro_expansion_token->text));
       p->tok = copy_token(found->token);
     } else p->tok = copy_token(*macro_expansion_token);
     ++expansion->expansion_index;
+
     // Set artificial to false, because, for example, if we are inserting
     // "endmacro", then we want the inserted identifier to *not* be
     // artificial and be treated *seriously*.
     p->tok.artificial = false;
+    // macros within macros within macros within ...
     if (p->tok.type == TK_IDENT && string_eq(p->tok.text, literal_span("macro")))
       next_macro(p);
 
@@ -541,7 +591,7 @@ static void next_token(Parser *p) {
       p->tok.artificial = true;
     } break;
 
-    // TODO: It may be interesting to parse $ as an identifier when not in raw mode.
+    // TODO: It may be interesting to parse $ as (part of) an identifier when not in raw mode.
     case '$': {
       // Yeet '$';
       next_char(p);
@@ -550,11 +600,28 @@ static void next_token(Parser *p) {
       if (p->tok.type != TK_IDENT)
         ERR("Expected identifier following '$' to name macro argument");
 
+      string name = string_dup(p->tok.text);
+
+      // Parse token category term or whatever (sets integer token member)
       if (p->lastc == ':') {
-        // TODO: Parse token category term or whatever (sets integer token member)
-        p->tok.integer = 0;
+        // Yeet ':'
+        next_char(p);
+        // Get selector identifier.
+        next_token(p);
+        if (p->tok.type != TK_IDENT)
+          ERR("Expected identifier following ':' in named macro argument");
+
+        MacroArgumentSelector selector = MACRO_ARG_SEL_TOKEN;
+        if (string_eq(p->tok.text, literal_span("expr")))
+          selector = MACRO_ARG_SEL_EXPR;
+        else if (string_eq(p->tok.text, literal_span("token")))
+          ;
+        else ERR("Unrecognised macro argument selector identifier");
+
+        p->tok.integer = (usz)selector;
       }
 
+      p->tok.text = as_string_buffer(name);
       p->tok.type = TK_MACRO_ARG;
     } break;
 
@@ -1574,6 +1641,17 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
   switch (p->tok.type) {
     default: ERR("Expected expression, got %s", token_type_to_string(p->tok.type));
 
+    case TK_AST_NODE: {
+      ASSERT(p->tok.node);
+      // FIXME: WE NEED TO DEEP COPY AST NODES FOR THIS TO WORK PROPERLY, AND
+      // THAT IS SO MUCH WORK IT'S FUCKING INSANE. SO RIGHT NOW WE SHALLOW COPY
+      // AND IT'S ON YOU IF YOU WRITE A MACRO THAT REQUIRES A DEEP COPIED AST
+      // NODE EXPRESSION
+      lhs = ast_make_integer_literal(p->ast, p->tok.source_location, p->tok.integer);
+      *lhs = *p->tok.node;
+      next_token(p);
+    } break;
+
     /// An identifier can either be a declaration, function call, or cast.
     case TK_IDENT: lhs = parse_ident_expr(p); break;
     case TK_VOID:
@@ -1816,7 +1894,7 @@ AST *parse(span source, const char *filename) {
 }
 
 NODISCARD const char *token_type_to_string(enum TokenType type) {
-  STATIC_ASSERT(TK_COUNT == 51, "Exhaustive handling of token types in token type to string conversion");
+  STATIC_ASSERT(TK_COUNT == 52, "Exhaustive handling of token types in token type to string conversion");
   switch (type) {
     case TK_COUNT:
     case TK_INVALID: return "invalid";
@@ -1870,6 +1948,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_COLON_COLON: return "\"::\"";
     case TK_COLON_GT: return "\":>\"";
     case TK_MACRO_ARG: return "macro_arg";
+    case TK_AST_NODE: return "ast_node";
   }
   UNREACHABLE();
 }

@@ -1,0 +1,8 @@
+;; 69
+
+macro capture_binary $binop:expr emits
+  $binop + $binop
+endmacro
+
+1 + capture_binary 17 + 17
+

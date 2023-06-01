@@ -107,6 +107,10 @@ enum TokenType {
   TK_COLON_GT,
 
   TK_MACRO_ARG,
+  // Yes, this is cursed. Thanks to macros, it is technically possible to
+  // "lex" an expression (which calls into the parser and creates an AST
+  // node...).
+  TK_AST_NODE,
 
   TK_COUNT
 };
