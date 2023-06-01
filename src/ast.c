@@ -645,7 +645,7 @@ usz type_alignof(Type *type) {
     case TYPE_NAMED: return type->named->val.type ? type_alignof(type->named->val.type) : 0;
     case TYPE_REFERENCE:
     case TYPE_POINTER: return _Alignof(void *);
-    case TYPE_ARRAY: return type->array.size * type_alignof(type->array.of);
+    case TYPE_ARRAY: return type_alignof(type->array.of);
     case TYPE_FUNCTION: return _Alignof(void *);
     case TYPE_STRUCT: return type->structure.alignment;
     case TYPE_INTEGER: return ALIGN_TO(type->integer.bit_width, 8) / 8;
