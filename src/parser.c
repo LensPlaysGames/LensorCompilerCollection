@@ -189,9 +189,14 @@ static void next_char(Parser *p) {
 }
 
 /// Lex an identifier.
+/// This function assumes that the Parser.lastc member refers to the first
+/// character in the identifier.
 static void next_identifier(Parser *p) {
-  /// The start of the identifier.
   p->tok.type = TK_IDENT;
+
+  /// The start of the identifier.
+  vector_clear(p->tok.text);
+  vector_push(p->tok.text, p->lastc);
   next_char(p);
 
   /// Read the rest of the identifier.
@@ -486,6 +491,50 @@ static void expand_macro(Parser *p, Macro *m) {
   next_token(p);
 }
 
+/// Further lex an identifier, as it may be a keyword, arbitrary integer type, etc.
+/// NOTE: Expects Parser.tok member to be the identifier.
+static void handle_identifier(Parser *p) {
+  // Handle macro definition.
+  // "macro" within argument list of macro == ill-formed program.
+  if (!p->raw_mode && !p->tok.artificial && string_eq(p->tok.text, literal_span("macro"))) {
+    next_macro(p);
+    return;
+  }
+
+  Macro *found_macro = NULL;
+  vector_find_if(p->macros, found_macro, index,
+                 string_eq(p->macros.data[index].name, p->tok.text));
+  if (found_macro) {
+    expand_macro(p, found_macro);
+    return;
+  }
+
+  for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
+    if (string_eq(keywords[i].kw, p->tok.text)) {
+      p->tok.type = keywords[i].type;
+      return;
+    }
+  }
+
+  // Try and parse a number just after encountering `s` or `u` at the
+  // beginning of an identifier.
+  if (p->tok.text.size > 1 && (p->tok.text.data[0] == 's' || p->tok.text.data[0] == 'u')) {
+    /// Zero-terminate the string or else `strtoull()` might try
+    /// to convert data left over from the previous token.
+    string_buf_zterm(&p->tok.text);
+
+    /// Convert the number.
+    char *end;
+    errno = 0;
+    p->tok.integer = (u64) strtoull(p->tok.text.data + 1, &end, 10);
+    if (errno == ERANGE) ERR("Bit width of integer is too large.");
+    // If the identifier is something like `s64iam`, it's simply an identifier.
+    if (end != p->tok.text.data + p->tok.text.size) return;
+
+    p->tok.type = TK_ARBITRARY_INT;
+  }
+}
+
 /// Lex the next token.
 static void next_token(Parser *p) {
   // Pop empty macro expansions off of the expansion stack.
@@ -591,38 +640,43 @@ static void next_token(Parser *p) {
       p->tok.artificial = true;
     } break;
 
-    // TODO: It may be interesting to parse $ as (part of) an identifier when not in raw mode.
     case '$': {
-      // Yeet '$';
-      next_char(p);
-      // Get name of macro argument (identifier)
-      next_token(p);
-      if (p->tok.type != TK_IDENT)
-        ERR("Expected identifier following '$' to name macro argument");
-
-      string name = string_dup(p->tok.text);
-
-      // Parse token category term or whatever (sets integer token member)
-      if (p->lastc == ':') {
-        // Yeet ':'
+      if (p->raw_mode) {
+        // Yeet '$';
         next_char(p);
-        // Get selector identifier.
+        // Get name of macro argument (identifier)
         next_token(p);
         if (p->tok.type != TK_IDENT)
-          ERR("Expected identifier following ':' in named macro argument");
+          ERR("Expected identifier following '$' to name macro argument");
 
-        MacroArgumentSelector selector = MACRO_ARG_SEL_TOKEN;
-        if (string_eq(p->tok.text, literal_span("expr")))
-          selector = MACRO_ARG_SEL_EXPR;
-        else if (string_eq(p->tok.text, literal_span("token")))
-          ;
-        else ERR("Unrecognised macro argument selector identifier");
+        string name = string_dup(p->tok.text);
 
-        p->tok.integer = (usz)selector;
+        // Parse token category term or whatever (sets integer token member)
+        if (p->lastc == ':') {
+          // Yeet ':'
+          next_char(p);
+          // Get selector identifier.
+          next_token(p);
+          if (p->tok.type != TK_IDENT)
+            ERR("Expected identifier following ':' in named macro argument");
+
+          MacroArgumentSelector selector = MACRO_ARG_SEL_TOKEN;
+          if (string_eq(p->tok.text, literal_span("expr")))
+            selector = MACRO_ARG_SEL_EXPR;
+          else if (string_eq(p->tok.text, literal_span("token")))
+            ;
+          else ERR("Unrecognised macro argument selector identifier");
+
+          p->tok.integer = (usz)selector;
+        }
+
+        p->tok.text = as_string_buffer(name);
+        p->tok.type = TK_MACRO_ARG;
+      } else {
+        next_identifier(p);
+        handle_identifier(p);
+        break;
       }
-
-      p->tok.text = as_string_buffer(name);
-      p->tok.type = TK_MACRO_ARG;
     } break;
 
     case '(':
@@ -806,49 +860,8 @@ static void next_token(Parser *p) {
     default:
       /// Identifier.
       if (isstart(p->lastc)) {
-        vector_clear(p->tok.text);
-        vector_push(p->tok.text, p->lastc);
         next_identifier(p);
-
-        // Handle macro definition.
-        // "macro" within argument list of macro == ill-formed program.
-        if (!p->raw_mode && !p->tok.artificial && string_eq(p->tok.text, literal_span("macro"))) {
-          next_macro(p);
-          return;
-        }
-
-        Macro *found_macro = NULL;
-        vector_find_if(p->macros, found_macro, index,
-                       string_eq(p->macros.data[index].name, p->tok.text));
-        if (found_macro) {
-          expand_macro(p, found_macro);
-          return;
-        }
-
-        for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
-          if (string_eq(keywords[i].kw, p->tok.text)) {
-            p->tok.type = keywords[i].type;
-            goto done;
-          }
-        }
-
-        // Try and parse a number just after encountering `s` or `u` at the
-        // beginning of an identifier.
-        if (p->tok.text.size > 1 && (p->tok.text.data[0] == 's' || p->tok.text.data[0] == 'u')) {
-          /// Zero-terminate the string or else `strtoull()` might try
-          /// to convert data left over from the previous token.
-          string_buf_zterm(&p->tok.text);
-
-          /// Convert the number.
-          char *end;
-          errno = 0;
-          p->tok.integer = (u64) strtoull(p->tok.text.data + 1, &end, 10);
-          if (errno == ERANGE) ERR("Bit width of integer is too large.");
-          if (end != p->tok.text.data + p->tok.text.size) break;
-
-          p->tok.type = TK_ARBITRARY_INT;
-        }
-
+        handle_identifier(p);
         break;
       }
 
