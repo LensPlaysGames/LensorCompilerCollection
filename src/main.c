@@ -61,8 +61,9 @@ static void print_acceptable_targets() {
         " -> default\n"
         " -> asm, assembly\n"
         " -> asm:intel\n"
-        "  -> elf_object\n"
-        "  -> coff_object\n");
+        " -> obj, object  --  system default object file format\n"
+        " -> elf_object\n"
+        " -> coff_object\n");
 }
 
 static void print_acceptable_calling_conventions() {
@@ -160,6 +161,12 @@ static int handle_command_line_arguments(int argc, char **argv) {
         output_target = TARGET_GNU_ASM_ATT;
       } else if (strcmp(argv[i], "asm:intel") == 0) {
         output_target = TARGET_GNU_ASM_INTEL;
+      } else if (strcmp(argv[i], "obj") == 0 || strcmp(argv[i], "object") == 0) {
+#ifdef _WIN32
+        output_target = TARGET_COFF_OBJECT;
+#else
+        output_target = TARGET_ELF_OBJECT;
+#endif
       } else if (strcmp(argv[i], "elf_object") == 0) {
         output_target = TARGET_ELF_OBJECT;
       } else if (strcmp(argv[i], "coff_object") == 0) {
