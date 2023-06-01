@@ -2,43 +2,54 @@ if exists('b:current_syntax')
   finish
 endif
 
-syntax keyword intTodo contained TODO FIXME XXX NOTE
+syn keyword intTodo contained TODO FIXME XXX NOTE
 
-syntax region intCommentLine start=";" end="$" display contains=intTodo
+syn region intCommentLine start=";" end="$" display contains=intTodo
 
-syntax match intSpecial contained "\\[nr\\\"\'t]" display
+syn match intSpecial contained "\\[nr\\\"\'t]" display
 
-syntax region intString start="\"" skip="\\\"" end="\"" contains=intSpecial
+syn region intString start="\"" skip="\\\"" end="\"" contains=intSpecial
 
-syntax keyword intPrimitiveTypes
+syn keyword intPrimitiveTypes
   \ integer
   \ void
   \ byte
 
-syntax keyword intKeywords
+syn keyword intKeywords
   \ ext
   \ type
 
-syntax keyword intRepeat
+syn keyword intRepeat
   \ for
   \ while
 
-syntax keyword intConditional
+syn keyword intConditional
   \ if
   \ else
 
-syntax match intOperators "?\|+\|-\|\*\|:\|,\|<\|>\|&\||\|!\|\~\|%\|=\|\.\|/\(/\|*\)\@!"
+syn keyword intMacro macro emits endmacro
+syn match intMacroArgs '\$[a-zA-Z_][a-zA-Z0-9_]*'
 
-syntax match intNumber "\v<\d+>"
+syn keyword intFunctionAttributes discardable nomangle
 
-highlight default link intPrimitiveTypes Type
-highlight default link intKeywords       Keyword
-highlight default link intRepeat         Repeat
-highlight default link intConditional    Conditional
-highlight default link intNumber         Number
-highlight default link intCommentLine    Comment
-highlight default link intOperators      Operator
-highlight default link intSpecial        Special
-highlight default link intString         String
+syn keyword intTypeAttributes alignas
+
+syn match intOperators "?\|+\|-\|\*\|:\|,\|<\|>\|&\||\|!\|\~\|%\|=\|\.\|/\(/\|*\)\@!"
+
+syn match intNumber "\v<\d+>"
+
+hi def link intPrimitiveTypes     Type
+hi def link intKeywords           Keyword
+hi def link intRepeat             Repeat
+hi def link intConditional        Conditional
+hi def link intNumber             Number
+hi def link intCommentLine        Comment
+hi def link intOperators          Operator
+hi def link intSpecial            Special
+hi def link intString             String
+hi def link intFunctionAttributes StorageClass
+hi def link intTypeAttributes     StorageClass
+hi def link intMacro              Macro
+hi def link intMacroArgs          Function
 
 let b:current_syntax = 'int'
