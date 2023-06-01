@@ -2506,18 +2506,8 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
 
         case MX64_JMP: {
           if (mir_operand_kinds_match(instruction, 1, MIR_OP_BLOCK)) {
-            MIROperand *op = mir_get_op(instruction, 0);
-            MIRBlock *destination = op->value.block;
-
-            // Don't emit a jump if it is the next sequential block to be output in
-            // code. This means we will fallthrough with no branch, increasing more
-            // space for actually useful jumps in the BTB.
-            MIRBlock *next_block = NULL;
-            if (block_index + 1 < function->blocks.size)
-              next_block = function->blocks.data[block_index + 1];
-            if (destination != next_block)
-              mcode_name(context, MX64_JMP, destination->name.data, false);
-
+            MIROperand *destination = mir_get_op(instruction, 0);
+            mcode_name(context, MX64_JMP, destination->value.block->name.data, false);
           } else if (mir_operand_kinds_match(instruction, 1, MIR_OP_FUNCTION)) {
             MIROperand *destination = mir_get_op(instruction, 0);
             mcode_name(context, MX64_JMP, destination->value.function->name.data, true);

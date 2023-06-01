@@ -1171,10 +1171,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
       }
     }
 
-    foreach_ptr (MIRBlock*, block, function->blocks) {
-
+    foreach_index (block_index, function->blocks) {
+      MIRBlock *block = function->blocks.data[block_index];
       MIRInstructionVector instructions_to_remove = {0};
-
       foreach_index (i, block->instructions) {
         MIRInstruction *instruction = block->instructions.data[i];
         switch (instruction->opcode) {
@@ -1219,6 +1218,22 @@ void codegen_emit_x86_64(CodegenContext *context) {
           mir_insert_instruction(instruction->block, and, i++);
 
         } break; // case MIR_TRUNCATE
+
+        // Basic jump threading
+        case MX64_JMP: {
+          if (mir_operand_kinds_match(instruction, 1, MIR_OP_BLOCK)) {
+            MIROperand *op = mir_get_op(instruction, 0);
+            MIRBlock *destination = op->value.block;
+
+            // Remove a jump if it is to the next sequential block to be output in
+            // code. This means we will fallthrough with no branch, increasing more
+            // space for actually useful jumps in the BTB.
+            MIRBlock *next_block = NULL;
+            if (block_index + 1 < function->blocks.size)
+              next_block = function->blocks.data[block_index + 1];
+            if (destination == next_block) vector_push(instructions_to_remove, instruction);
+          }
+        } break; // case MX64_JMP
 
         case MIR_CALL: {
           // Tail call.
