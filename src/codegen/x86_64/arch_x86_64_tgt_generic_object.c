@@ -376,6 +376,7 @@ static void mcode_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int6
   case MX64_MOV: {
 
     switch (size) {
+    default: ICE("Unhandled register size");
     case r8: {
       // 0xc6 /0 ib
       uint8_t address_regbits = regbits(address_register);
@@ -555,6 +556,7 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
   case MX64_LEA: {
 
     switch (size) {
+    default: ICE("Unhandled register size");
     case r8: ICE("x86_64 machine code backend: LEA does not have an 8-bit encoding.");
     case r16: {
       // 0x66 + 0x8d /r
@@ -619,6 +621,7 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
       uint8_t modrm = modrm_byte(0b00, destination_regbits, address_regbits);
 
       switch (size) {
+      default: ICE("Unhandled register size");
       case r8: {
         // 0x8a /r
         uint8_t op = 0x8a;
@@ -661,6 +664,7 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
       int8_t disp8 = (int8_t)offset;
 
       switch (size) {
+      default: ICE("Unhandled register size");
       case r8: {
         // 0x8a /r
         uint8_t op = 0x8a;
@@ -703,6 +707,7 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
       int32_t disp32 = (int32_t)offset;
 
       switch (size) {
+      default: ICE("Unhandled register size");
       case r8: {
         // 0x8a /r
         uint8_t op = 0x8a;
@@ -755,6 +760,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
   case MX64_LEA: {
 
     switch (size) {
+    default: ICE("Unhandled register size");
     case r8: ICE("x86_64 machine code backend: LEA does not have an 8-bit encoding.");
     case r16: {
       // 0x66 + 0x8d /r
@@ -884,6 +890,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
   case MX64_MOV: {
 
     switch (size) {
+    default: ICE("Unhandled register size");
 
     case r8: {
       // 0x8a /r
@@ -1082,6 +1089,7 @@ static void mcode_reg_to_mem(CodegenContext *context, MIROpcodex86_64 inst, Regi
   case MX64_MOV: {
 
     switch (size) {
+    default: ICE("Unhandled register size");
     case r8: {
       // Move r8 into m8
       // 0x88 /r
@@ -1255,10 +1263,12 @@ static void mcode_reg_to_reg
     ASSERT(source_size < destination_size, "Zero extension requires source to be smaller than destination!");
 
     switch (source_size) {
+    default: ICE("Unhandled register size");
     case r64: ICE("x86_64 movzx does not have a 64 bit source operand encoding");
     case r32: ICE("x86_64 movzx does not have a 32 bit source operand encoding");
     case r16: {
       switch (destination_size) {
+      default: ICE("Unhandled register size");
       case r8: ICE("x86_64 movzx does not have a 16 bit to 8 bit operand encoding");
       case r16: ICE("x86_64 movzx does not have a 16 bit to 16 bit operand encoding");
       case r32: {
@@ -1279,6 +1289,7 @@ static void mcode_reg_to_reg
     } break;
     case r8: {
       switch (destination_size) {
+      default: ICE("Unhandled register size");
       case r8: ICE("x86_64 movzx does not have an 8 bit to 8 bit operand encoding");
       case r16: {
         // 0x66 + 0x0f + 0xb6 /r
@@ -1308,6 +1319,7 @@ static void mcode_reg_to_reg
     ASSERT(source_size < destination_size, "Sign extension requires source to be smaller than destination!");
 
     switch (source_size) {
+    default: ICE("Unhandled register size");
     case r64: ICE("x86_64 movsx does not have a 64 bit source operand encoding");
     case r32: {
       ASSERT(destination_size == r64);
@@ -1367,6 +1379,7 @@ static void mcode_reg_to_reg
     ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg moves to be of equal size.");
 
     switch (source_size) {
+    default: ICE("Unhandled register size");
 
     case r8: {
       // Move r8 to r8
@@ -1418,6 +1431,7 @@ static void mcode_reg_to_reg
     ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg ands to be of equal size.");
 
     switch (source_size) {
+    default: ICE("Unhandled register size");
     case r8: {
       // Bitwise and r8 with r8
       // 0x20 /r
@@ -1464,6 +1478,7 @@ static void mcode_reg_to_reg
     ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg adds to be of equal size.");
 
     switch (source_size) {
+    default: ICE("Unhandled register size");
     case r8: {
       // Add r8 to r8
       // 0x00 /r
@@ -1511,6 +1526,7 @@ static void mcode_reg_to_reg
     ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg subs to be of equal size.");
 
     switch (source_size) {
+    default: ICE("Unhandled register size");
     case r8: {
       // Subtract r8 from r8
       // 0x28 /r
@@ -1558,6 +1574,7 @@ static void mcode_reg_to_reg
     ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg cmps to be of equal size.");
 
     switch (source_size) {
+    default: ICE("Unhandled register size");
     case r8: {
       // 0x38 /r
       uint8_t op = 0x38;
@@ -1603,6 +1620,7 @@ static void mcode_reg_to_reg
     ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg tests to be of equal size.");
 
     switch (source_size) {
+    default: ICE("Unhandled register size");
     case r8: {
       // 0x84 /r
       uint8_t op = 0x84;
