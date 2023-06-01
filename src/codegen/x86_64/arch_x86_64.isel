@@ -436,6 +436,14 @@ emit {
   MX64_JMP(then)
 }
 match
+MIR_LT lt(Register lhs, Register rhs)
+MIR_BRANCH_CONDITIONAL(Register cond is lt, Block then, Block otherwise)
+emit {
+  MX64_CMP(rhs, lhs)
+  MX64_JCC(Immediate jump_type = JUMP_TYPE_GE, otherwise)
+  MX64_JMP(then)
+}
+match
 MIR_LT lt(Immediate lhs, Immediate rhs)
 emit {
   MX64_MOV i1(lhs, i1)
@@ -466,6 +474,14 @@ MIR_GT gt(Register lhs, Immediate imm)
 MIR_BRANCH_CONDITIONAL(Register cond is gt, Block then, Block otherwise)
 emit {
   MX64_CMP(imm, lhs)
+  MX64_JCC(Immediate jump_type = JUMP_TYPE_LE, otherwise)
+  MX64_JMP(then)
+}
+match
+MIR_GT gt(Register lhs, Register rhs)
+MIR_BRANCH_CONDITIONAL(Register cond is gt, Block then, Block otherwise)
+emit {
+  MX64_CMP(rhs, lhs)
   MX64_JCC(Immediate jump_type = JUMP_TYPE_LE, otherwise)
   MX64_JMP(then)
 }
@@ -504,6 +520,14 @@ emit {
   MX64_JMP(then)
 }
 match
+MIR_LE le(Register lhs, Register rhs)
+MIR_BRANCH_CONDITIONAL(Register cond is le, Block then, Block otherwise)
+emit {
+  MX64_CMP(rhs, lhs)
+  MX64_JCC(Immediate jump_type = JUMP_TYPE_G, otherwise)
+  MX64_JMP(then)
+}
+match
 MIR_LE le(Immediate lhs, Immediate rhs)
 emit {
   MX64_MOV i1(lhs, i1)
@@ -534,6 +558,14 @@ MIR_GE ge(Register lhs, Immediate imm)
 MIR_BRANCH_CONDITIONAL(Register cond is ge, Block then, Block otherwise)
 emit {
   MX64_CMP(imm, lhs)
+  MX64_JCC(Immediate jump_type = JUMP_TYPE_L, otherwise)
+  MX64_JMP(then)
+}
+match
+MIR_GE ge(Register lhs, Register rhs)
+MIR_BRANCH_CONDITIONAL(Register cond is ge, Block then, Block otherwise)
+emit {
+  MX64_CMP(rhs, lhs)
   MX64_JCC(Immediate jump_type = JUMP_TYPE_L, otherwise)
   MX64_JMP(then)
 }
@@ -572,6 +604,14 @@ emit {
   MX64_JMP(then)
 }
 match
+MIR_EQ eq(Register lhs, Register rhs)
+MIR_BRANCH_CONDITIONAL(Register cond is eq, Block then, Block otherwise)
+emit {
+  MX64_CMP(rhs, lhs)
+  MX64_JCC(Immediate jump_type = JUMP_TYPE_NZ, otherwise)
+  MX64_JMP(then)
+}
+match
 MIR_EQ eq(Immediate lhs, Immediate rhs)
 emit {
   MX64_MOV i1(lhs, i1)
@@ -602,6 +642,14 @@ MIR_NE ne(Register lhs, Immediate imm)
 MIR_BRANCH_CONDITIONAL(Register cond is ne, Block then, Block otherwise)
 emit {
   MX64_CMP(imm, lhs)
+  MX64_JCC(Immediate jump_type = JUMP_TYPE_Z, otherwise)
+  MX64_JMP(then)
+}
+match
+MIR_NE ne(Register lhs, Register rhs)
+MIR_BRANCH_CONDITIONAL(Register cond is ne, Block then, Block otherwise)
+emit {
+  MX64_CMP(rhs, lhs)
   MX64_JCC(Immediate jump_type = JUMP_TYPE_Z, otherwise)
   MX64_JMP(then)
 }
