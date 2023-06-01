@@ -499,7 +499,9 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
 
     }
 
-    foreach_ptr (MIRBlock*, block, function->blocks) {
+    foreach_index (block_index, function->blocks) {
+      MIRBlock *block = function->blocks.data[block_index];
+
       /// Emit block symbol if it is used.
       if (block->name.size)
         fprint(context->code, "%s:\n", block->name.data);
@@ -846,8 +848,17 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
             MIROperand *destination = mir_get_op(instruction, 0);
             femit_name(context, MX64_JMP, destination->value.function->name.data);
           } else if (mir_operand_kinds_match(instruction, 1, MIR_OP_BLOCK)) {
-            MIROperand *destination = mir_get_op(instruction, 0);
-            femit_name(context, MX64_JMP, destination->value.block->name.data);
+            MIROperand *op = mir_get_op(instruction, 0);
+            MIRBlock *destination = op->value.block;
+
+            // Don't emit a jump if it is the next sequential block to be output in
+            // code. This means we will fallthrough with no branch, increasing more
+            // space for actually useful jumps in the BTB.
+            MIRBlock *next_block = NULL;
+            if (block_index + 1 < function->blocks.size)
+              next_block = function->blocks.data[block_index + 1];
+            if (destination != next_block) femit_name(context, MX64_JMP, destination->name.data);
+
           } else if (mir_operand_kinds_match(instruction, 1, MIR_OP_NAME)) {
             MIROperand *destination = mir_get_op(instruction, 0);
             femit_name(context, MX64_JMP, destination->value.name);
