@@ -163,6 +163,7 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
     }
     uint8_t destination_regbits = regbits(destination_register);
     switch (size) {
+    default: ICE("Unhandled register size!");
     case r8: UNREACHABLE();
     case r16: {
       // 0x66 + 0x69 /r iw
@@ -203,6 +204,7 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
       size = r32;
 
     switch (size) {
+    default: ICE("Unhandled register size!");
     case r8: {
       // Move imm8 to r8
       // 0xb0+ rb ib
@@ -287,6 +289,7 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
     uint8_t modrm = modrm_byte(0b11, extension, destination_regbits);
 
     switch (size) {
+    default: ICE("Unhandled register size!");
     case r8: {
       // 0x80 /5 ib
       uint8_t op = 0x80;
@@ -1689,6 +1692,7 @@ static void mcode_reg_shift(CodegenContext *context, MIROpcodex86_64 inst, Regis
     uint8_t modrm = modrm_byte(0b11, opcode_extension, rbits);
 
     switch (size) {
+    default: ICE("Unhandled register size");
     case r8: {
       // 0xd2 /4
       if (REGBITS_TOP(rbits)) {
@@ -1743,6 +1747,7 @@ static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDes
   switch (inst) {
   case MX64_PUSH: {
     switch (size) {
+    default: ICE("Unhandled register size");
     case r8:
     case r32:
       ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
@@ -1766,6 +1771,7 @@ static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDes
 
   case MX64_POP: {
     switch (size) {
+    default: ICE("Unhandled register size");
     case r8:
     case r32:
       ICE("ERROR: x86_64 doesn't support pushing %Z-byte registers to the stack.", regbytes_from_size(size));
@@ -1803,6 +1809,7 @@ static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDes
     uint8_t modrm = modrm_byte(0b11, extension, source_regbits);
 
     switch (size) {
+    default: ICE("Unhandled register size");
     case r8: {
       // 0xf6 /2
       if (REGBITS_TOP(source_regbits)) {
@@ -1842,6 +1849,7 @@ static void mcode_reg_to_name(CodegenContext *context, MIROpcodex86_64 inst, Reg
   case MX64_MOV: {
 
     switch (size) {
+    default: ICE("Unhandled register size");
     case r8: {
       // 0x88 /r
       if (address_register == REG_RIP) {
@@ -2245,8 +2253,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             if (!reg->value.reg.size) {
               putchar('\n');
               print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
-              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
-              putchar('\n');
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n\n");
               reg->value.reg.size = r64;
             }
             mcode_imm_to_reg(context, instruction->opcode, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
@@ -2283,6 +2290,12 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             // imm to reg | imm, dst
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n\n");
+              reg->value.reg.size = r64;
+            }
             mcode_imm_to_reg(context, instruction->opcode, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             // reg to reg | src, dst
@@ -2308,6 +2321,13 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             // imm to reg | imm, dst
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg->value.reg.size = r64;
+            }
             mcode_imm_to_reg(context, MX64_MOV, imm->value.imm, reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_LOCAL_REF)) {
             // imm to mem (local) | imm, local
