@@ -49,6 +49,7 @@ typedef enum ISelTokenKind {
   TOKEN_KW_EMIT,
   TOKEN_KW_DISCARD,
   TOKEN_KW_CLOBBERS,
+  TOKEN_KW_IS,
 
   TOKEN_SEMICOLON,
 
@@ -57,14 +58,14 @@ typedef enum ISelTokenKind {
   // ASCII simply-lexed Operators/Punctuation
   TOKEN_LPAREN = '(',
   TOKEN_RPAREN = ')',
-  TOKEN_LBRACE = '{',
-  TOKEN_RBRACE = '}',
+  TOKEN_COMMA = ',',
+  TOKEN_LT = '<',
+  TOKEN_EQ = '=',
+  TOKEN_GT = '>',
   TOKEN_LBRACKET = '[',
   TOKEN_RBRACKET = ']',
-  TOKEN_LT = '<',
-  TOKEN_GT = '>',
-  TOKEN_EQ = '=',
-  TOKEN_COMMA = ',',
+  TOKEN_LBRACE = '{',
+  TOKEN_RBRACE = '}',
 } ISelTokenKind;
 
 static const char *isel_token_kind_to_string(ISelTokenKind kind) {
@@ -92,6 +93,7 @@ static const char *isel_token_kind_to_string(ISelTokenKind kind) {
   case TOKEN_KW_EMIT: return "emit";
   case TOKEN_KW_DISCARD: return "discard";
   case TOKEN_KW_CLOBBERS: return "clobbers";
+  case TOKEN_KW_IS: return "is";
   case TOKEN_IDENTIFIER: return "identifier";
   case TOKEN_INTEGER: return "integer";
   }
@@ -435,11 +437,12 @@ static void isel_next_number(ISelParser *p) {
 static const struct {
   span kw;
   ISelTokenKind kind;
-} keywords[13] = {
+} keywords[14] = {
   {literal_span_raw("match"), TOKEN_KW_MATCH},
   {literal_span_raw("emit"), TOKEN_KW_EMIT},
   {literal_span_raw("discard"), TOKEN_KW_DISCARD},
   {literal_span_raw("clobbers"), TOKEN_KW_CLOBBERS},
+  {literal_span_raw("is"), TOKEN_KW_IS},
   {literal_span_raw("Register"), TOKEN_OPKIND_REGISTER},
   {literal_span_raw("Immediate"), TOKEN_OPKIND_IMMEDIATE},
   {literal_span_raw("Name"), TOKEN_OPKIND_NAME},
@@ -676,6 +679,25 @@ static MIROperand isel_parse_operand(ISelParser *p) {
     } else ERR_AT(expr_loc, "Unhandled expression kind");
   }
 
+  if (p->tok.kind == TOKEN_KW_IS) {
+    // Yeet 'is'
+    isel_next_tok(p);
+
+    loc op_loc = p->tok.source_location;
+    MIROperand op = isel_parse_operand(p);
+    switch (op.kind) {
+    case MIR_OP_OP_REF: {
+      out.value_constraint_kind = MIR_OP_OP_REF;
+      out.value_constraint.op_ref = op.value.op_ref;
+    } break;
+    case MIR_OP_INST_REF: {
+      out.value_constraint_kind = MIR_OP_INST_REF;
+      out.value_constraint.inst_ref = op.value.inst_ref;
+    } break;
+    default: ERR_AT(op_loc, "Unhandled operand kind %d following 'is' keyword...", (int)op.kind);
+    }
+  }
+
   // Eat comma, if present
   if (p->tok.kind == TOKEN_COMMA) isel_next_tok(p);
 
@@ -727,7 +749,8 @@ static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
   while (p->tok.kind != TOKEN_RPAREN) {
     if (p->tok.kind == TOKEN_EOF)
       ERR("ISel reached EOF while parsing operands of instruction");
-    mir_add_op(out, isel_parse_operand(p));
+    MIROperand op = isel_parse_operand(p);
+    mir_add_op(out, op);
     ++p->operand_index;
   }
 
@@ -952,8 +975,7 @@ ISelPatterns isel_parse_file(const char *filepath) {
   return out;
 }
 
-
-bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructions, ISelCompareValueOption compare_value) {
+bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructions) {
   /// A pattern that is larger than the instructions given means it will never match.
   if (pattern.input.size > instructions.size) return false;
 
@@ -982,10 +1004,40 @@ bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructi
       MIROperand *op = base + j;
       // Two operands' kinds must be equal.
       if (op->kind != op_pattern->kind) return false;
-      // Two operands' values may be equal or not, depending on parameter.
-      if (compare_value == ISEL_DO_COMPARE_VALUE &&
-          memcmp(&op->value, &op_pattern->value, sizeof(op->value)) != 0)
-        return false;
+      // Value constraint
+      switch (op_pattern->value_constraint_kind) {
+      default: ICE("Unhandled value constraint kind %d", (int)op_pattern->value_constraint_kind);
+      case MIR_OP_NONE: break;
+      case MIR_OP_OP_REF: {
+        // RESOLVE INSTRUCTION REFERENCE
+        ASSERT(op_pattern->value_constraint.op_ref.pattern_instruction_index < instructions.size,
+               "OP_REF type value constraint must only reference a pattern instruction, not an emitted instruction.");
+        MIRInstruction *resolved_inst = instructions.data[op_pattern->value_constraint.op_ref.pattern_instruction_index];
+        // RESOLVE OPERAND REFERENCE
+        ASSERT(op_pattern->value_constraint.op_ref.operand_index < resolved_inst->operand_count,
+               "OP_REF type value constraint references an operand that does not exist within pattern instruction.");
+        MIROperand *resolved_op = mir_get_op(resolved_inst, op_pattern->value_constraint.op_ref.operand_index);
+
+        // Ensure `op` is a register and has a value that matches the
+        // instruction's register.
+        if (op->kind != resolved_op->kind) return false;
+        if (memcmp(&op->value, &resolved_op->value, sizeof(op->value)) != 0) return false;
+
+      } break;
+      case MIR_OP_INST_REF: {
+        // RESOLVE INSTRUCTION REFERENCE
+        ASSERT(op_pattern->value_constraint.inst_ref < instructions.size,
+               "INST_REF type value constraint must only reference a pattern instruction, not an emitted instruction.");
+        MIRInstruction *resolved_inst = instructions.data[op_pattern->value_constraint.inst_ref];
+        MIROperand resolved_inst_reg = mir_op_reference(resolved_inst);
+
+        // Ensure `op` is a register and has a value that matches the
+        // instruction's register.
+        if (op->kind != resolved_inst_reg.kind) return false;
+        if (memcmp(&op->value, &resolved_inst_reg.value, sizeof(op->value)) != 0) return false;
+
+      } break;
+      } // switch (value_constraint_kind)
     }
 
   }
@@ -1122,7 +1174,7 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
 
       bool matched = false;
       foreach (ISelPattern, pattern, patterns) {
-        if (isel_does_pattern_match(*pattern, instructions, ISEL_DONT_COMPARE_VALUE)) {
+        if (isel_does_pattern_match(*pattern, instructions)) {
           matched = true;
 
           // Remove first N instructions where N is the amount of
@@ -1166,6 +1218,7 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
                 // Get operand from resolved instruction reference
                 ASSERT(op->value.op_ref.operand_index < inst->operand_count,
                        "Invalid operand index (parser went wrong)");
+
                 *op = *mir_get_op(inst, op->value.op_ref.operand_index);
 
               } else if (op->kind == MIR_OP_INST_REF) {

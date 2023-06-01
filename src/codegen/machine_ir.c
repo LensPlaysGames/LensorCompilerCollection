@@ -897,7 +897,7 @@ void mir_add_op(MIRInstruction *inst, MIROperand op) {
     // inst->operand_count > MIR_OPERAND_SSO_THRESHOLD
     vector_push(inst->operands.vec, op);
   }
-  inst->operand_count++;
+  ++inst->operand_count;
 }
 
 MIROperand *mir_get_op(MIRInstruction *inst, size_t index) {

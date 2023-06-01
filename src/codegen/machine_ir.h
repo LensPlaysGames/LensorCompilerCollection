@@ -67,6 +67,15 @@ typedef struct MIROperand {
     MIROperandOpRef op_ref;
     MIROperandInstRef inst_ref;
   } value;
+  /// Used *only* by instruction selection.
+  // When `value_constraint_kind` is not equal to MIR_OP_NONE,
+  // instruction selection will ensure equality of the referenced
+  // operand/instruction during pattern expansion.
+  MIROperandKind value_constraint_kind;
+  union {
+    MIROperandOpRef op_ref;
+    MIROperandInstRef inst_ref;
+  } value_constraint;
 } MIROperand;
 
 #define MIR_OPERAND_SSO_THRESHOLD 3

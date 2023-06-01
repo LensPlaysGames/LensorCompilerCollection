@@ -62,12 +62,8 @@ typedef Vector(ISelPattern) ISelPatterns;
 
 ISelPatterns isel_parse_file(const char *filepath);
 
-typedef enum ISelCompareValueOption {
-  ISEL_DONT_COMPARE_VALUE,
-  ISEL_DO_COMPARE_VALUE
-} ISelCompareValueOption;
 /// Return true iff given instructions match pattern.
-bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructions, ISelCompareValueOption);
+bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructions);
 
 void isel_do_selection(MIRFunctionVector mir, ISelPatterns);
 
