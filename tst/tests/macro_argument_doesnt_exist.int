@@ -1,0 +1,3 @@
+;; ERROR
+
+macro foo emits $arg1 endmacro

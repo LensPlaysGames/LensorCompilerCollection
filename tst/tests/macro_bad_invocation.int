@@ -1,0 +1,5 @@
+;; ERROR
+
+macro foo ( ) emits 69 endmacro
+
+foo[]

@@ -1,0 +1,4 @@
+;; ERROR
+
+macro foo emits 69 endmacro
+macro foo emits 42 endmacro

@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <utils.h>
 #include <vector.h>
 
 static usz is_power_of_two(usz i) {
@@ -43,7 +44,34 @@ typedef struct Token {
   loc source_location;
   string_buffer text;
   u64 integer;
+  // True iff identifier created via escaping.
+  bool artificial;
 } Token;
+
+typedef Vector(Token) TokenVector;
+typedef struct Macro {
+  string name;
+  TokenVector parameters;
+  TokenVector expansion;
+  loc source_location;
+} Macro;
+typedef Vector(Macro) MacroVector;
+
+typedef struct NamedToken {
+  span name;
+  Token token;
+} NamedToken;
+
+typedef struct MacroExpansion {
+  // This is an index into the Parser.macros vector where we will find
+  // the macro being expanded by this expansion.
+  usz macro_index;
+
+  // Index into Macro.expansion vector.
+  usz expansion_index;
+
+  Vector(NamedToken) bound_arguments;
+} MacroExpansion;
 
 typedef struct Parser {
   /// The source code that we’re parsing.
@@ -58,6 +86,10 @@ typedef struct Parser {
   /// Lexer state.
   const char *curr;
   const char *end;
+  MacroVector macros;
+  Vector(MacroExpansion) macro_expansion_stack;
+  // When true, don't expand anything, like macros.
+  bool raw_mode;
 
   /// Whether we’re in a function.
   bool in_function;
@@ -95,7 +127,7 @@ const struct {
 
 /// Check if a character may start an identifier.
 static bool isstart(char c) {
-  return isalpha(c) || c == '_' || c == '$';
+  return isalpha(c) || c == '_';
 }
 
 /// Check if a character may be part of an identifier.
@@ -277,8 +309,175 @@ static void next_number(Parser *p) {
   ERR("Invalid integer literal");
 }
 
+static bool token_has_string(enum TokenType tt) {
+  return tt == TK_MACRO_ARG || tt == TK_IDENT || tt == TK_STRING;
+}
+
+static bool token_has_integer(enum TokenType tt) {
+  return tt == TK_ARBITRARY_INT || tt == TK_NUMBER || tt == TK_MACRO_ARG;
+}
+
+static Token copy_token(Token token) {
+  Token new_tok = token;
+
+  if (token_has_string(new_tok.type)) {
+    // This horribleness is because we don't have a way to duplicate
+    // string_buffer!
+    string new_string = string_dup(new_tok.text);
+    new_tok.text.data = new_string.data;
+    new_tok.text.size = new_string.size;
+    new_tok.text.capacity = new_tok.text.size;
+  } else new_tok.text = (string_buffer){0};
+
+  return new_tok;
+}
+
+static void next_token(Parser *p);
+static void next_macro(Parser *p) {
+  // At this point, the parser state is at the "macro" keyword.
+  p->raw_mode = true;
+
+  // Yeet "macro"
+  next_token(p);
+
+  // Parse identifier (name of macro)
+  if (p->tok.type != TK_IDENT)
+    ERR("Expected identifier following macro keyword");
+
+  Macro out = {0};
+  out.source_location = p->tok.source_location;
+  out.name = string_dup(p->tok.text);
+
+  // Yeet name of macro
+  next_token(p);
+
+  // Parse token list
+  while (!(p->tok.type == TK_IDENT && !p->tok.artificial && string_eq(p->tok.text, literal_span("emits")))) {
+    if (p->tok.type == TK_EOF)
+      ERR_AT(out.source_location, "Reached EOF when lexing argument tokens of macro");
+
+    // Ensure macro arg doesn't exist in parameter list
+    if (p->tok.type == TK_MACRO_ARG) {
+      Token *found = NULL;
+      vector_find_if(out.parameters, found, index,
+                     out.parameters.data[index].type == TK_MACRO_ARG
+                     && string_eq(out.parameters.data[index].text, p->tok.text));
+      if (found) ERR("Duplicate macro argument identifier! Pick another name.");
+    }
+
+    // Push deep-copied token into parameters.
+    Token new_tok = copy_token(p->tok);
+    vector_push(out.parameters, new_tok);
+
+    next_token(p);
+  }
+
+  // Skip "emits"
+  next_token(p);
+
+  // Parse output token list
+  while (!(p->tok.type == TK_IDENT && !p->tok.artificial && string_eq(p->tok.text, literal_span("endmacro")))) {
+    if (p->tok.type == TK_EOF)
+      ERR_AT(out.source_location, "Reached EOF when lexing expansion tokens of macro");
+
+    if (p->tok.type == TK_MACRO_ARG) {
+      // Ensure macro arg exists in parameter list
+      Token *found = NULL;
+      vector_find_if(out.parameters, found, index,
+                     out.parameters.data[index].type == TK_MACRO_ARG
+                     && string_eq(out.parameters.data[index].text, p->tok.text));
+      if (!found) ERR("Macro argument identifier does not refer to a bound macro argument! Maybe a typo?");
+    }
+
+    // Push deep-copied token into parameters.
+    Token new_tok = copy_token(p->tok);
+    vector_push(out.expansion, new_tok);
+
+    next_token(p);
+  }
+
+  Macro *found = NULL;
+  vector_find_if(p->macros, found, index,
+                 string_eq(p->macros.data[index].name, out.name));
+  if (found) ERR("Redefinition of macro %S", found->name);
+
+  vector_push(p->macros, out);
+
+  // Skip "endmacro"
+  p->raw_mode = false;
+  next_token(p);
+}
+
+static bool token_equals(Token *A, Token *B) {
+  if (!A || !B) return false;
+  if (A->type != B->type) return false;
+  if (token_has_string(A->type) && !string_eq(A->text, B->text)) return false;
+  if (token_has_integer(A->type) && A->integer != B->integer) return false;
+  return true;
+}
+
+static void expand_macro(Parser *p, Macro *m) {
+  // Found macro, do expansion things!
+  MacroExpansion expansion = {0};
+
+  expansion.macro_index = (usz)(m - p->macros.data);
+
+  // Yeet name of macro
+  p->raw_mode = true;
+
+  foreach (Token, param_tok, m->parameters) {
+    next_token(p);
+
+    if (param_tok->type == TK_MACRO_ARG) {
+      NamedToken bound_arg = {0};
+      bound_arg.name = as_span(param_tok->text);
+      bound_arg.token = copy_token(p->tok);
+      vector_push(expansion.bound_arguments, bound_arg);
+      continue;
+    }
+
+    if (!token_equals(&p->tok, param_tok))
+      ERR("Ill-formed macro invocation");
+  }
+
+  vector_push(p->macro_expansion_stack, expansion);
+  p->raw_mode = false;
+  next_token(p);
+}
+
 /// Lex the next token.
 static void next_token(Parser *p) {
+  foreach_rev (MacroExpansion, expansion, p->macro_expansion_stack) {
+    Macro *expandee = p->macros.data + expansion->macro_index;
+    if (expansion->expansion_index >= expandee->expansion.size)
+      vector_pop(p->macro_expansion_stack);
+  }
+  if (p->macro_expansion_stack.size) {
+    MacroExpansion *expansion = &vector_back(p->macro_expansion_stack);
+    Macro *expandee = p->macros.data + expansion->macro_index;
+    Token *macro_expansion_token = expandee->expansion.data + expansion->expansion_index;
+    if (macro_expansion_token->type == TK_MACRO_ARG) {
+      // Get it from bound arguments
+      NamedToken *found = NULL;
+      vector_find_if(expansion->bound_arguments, found, index,
+                     string_eq(expansion->bound_arguments.data[index].name, macro_expansion_token->text));
+      ASSERT(found, "Macro argument does not exist (lexer screwed up!)");
+      p->tok = copy_token(found->token);
+    } else p->tok = copy_token(*macro_expansion_token);
+    ++expansion->expansion_index;
+    // Set artificial to false, because, for example, if we are inserting
+    // "endmacro", then we want the inserted identifier to *not* be
+    // artificial and be treated *seriously*.
+    p->tok.artificial = false;
+    if (p->tok.type == TK_IDENT && string_eq(p->tok.text, literal_span("macro")))
+      next_macro(p);
+
+    return;
+  }
+
+  // Reset artificial flag.
+  p->tok.artificial = false;
+
   /// Keep returning EOF once EOF has been reached.
   if (!p->lastc) {
     p->tok.type = TK_EOF;
@@ -300,6 +499,64 @@ static void next_token(Parser *p) {
     case 0:
       p->tok.type = TK_EOF;
       break;
+
+    case '\\': {
+      // Yeet backslash;
+      next_char(p);
+      // Get identifier
+      bool in_raw_mode = p->raw_mode;
+      p->raw_mode = true;
+      next_token(p);
+      p->raw_mode = in_raw_mode;
+      if (p->tok.type != TK_IDENT) {
+        switch (p->tok.type) {
+        case TK_IDENT: break;
+        case TK_MACRO_ARG: {
+          // Prepend dollar sign.
+          string text = format("$%S", as_span(p->tok.text));
+          p->tok.text = as_string_buffer(text);
+        } break;
+        case TK_STRING: {
+          // Wrap in double quotes.
+          string text = format("\"%S\"", as_span(p->tok.text));
+          p->tok.text = as_string_buffer(text);
+        } break;
+        case TK_NUMBER: {
+          // Convert number to string
+          string text = format("%I", p->tok.integer);
+          p->tok.text = as_string_buffer(text);
+        } break;
+        case TK_ARBITRARY_INT: {
+          // Prepend signed/unsigned
+          string text = format("s%Z", p->tok.integer);
+          p->tok.text = as_string_buffer(text);
+        } break;
+        default: {
+          string text = string_create(token_type_to_string(p->tok.type));
+          p->tok.text = as_string_buffer(text);
+        } break;
+        }
+      }
+      p->tok.type = TK_IDENT;
+      p->tok.artificial = true;
+    } break;
+
+    // TODO: It may be interesting to parse $ as an identifier when not in raw mode.
+    case '$': {
+      // Yeet '$';
+      next_char(p);
+      // Get name of macro argument (identifier)
+      next_token(p);
+      if (p->tok.type != TK_IDENT)
+        ERR("Expected identifier following '$' to name macro argument");
+
+      if (p->lastc == ':') {
+        // TODO: Parse token category term or whatever (sets integer token member)
+        p->tok.integer = 0;
+      }
+
+      p->tok.type = TK_MACRO_ARG;
+    } break;
 
     case '(':
       p->tok.type = TK_LPAREN;
@@ -486,6 +743,21 @@ static void next_token(Parser *p) {
         vector_push(p->tok.text, p->lastc);
         next_identifier(p);
 
+        // Handle macro definition.
+        // "macro" within argument list of macro == ill-formed program.
+        if (!p->raw_mode && !p->tok.artificial && string_eq(p->tok.text, literal_span("macro"))) {
+          next_macro(p);
+          return;
+        }
+
+        Macro *found_macro = NULL;
+        vector_find_if(p->macros, found_macro, index,
+                       string_eq(p->macros.data[index].name, p->tok.text));
+        if (found_macro) {
+          expand_macro(p, found_macro);
+          return;
+        }
+
         for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
           if (string_eq(keywords[i].kw, p->tok.text)) {
             p->tok.type = keywords[i].type;
@@ -509,6 +781,7 @@ static void next_token(Parser *p) {
 
           p->tok.type = TK_ARBITRARY_INT;
         }
+
         break;
       }
 
@@ -1514,6 +1787,7 @@ AST *parse(span source, const char *filename) {
   p.filename = filename;
   p.curr = source.data;
   p.end = source.data + source.size - 1;
+  p.raw_mode = false;
   p.lastc = ' ';
   p.ast = ast_create();
   p.ast->filename = string_create(filename);
@@ -1542,7 +1816,7 @@ AST *parse(span source, const char *filename) {
 }
 
 NODISCARD const char *token_type_to_string(enum TokenType type) {
-  STATIC_ASSERT(TK_COUNT == 50, "Exhaustive handling of token types in token type to string conversion");
+  STATIC_ASSERT(TK_COUNT == 51, "Exhaustive handling of token types in token type to string conversion");
   switch (type) {
     case TK_COUNT:
     case TK_INVALID: return "invalid";
@@ -1595,6 +1869,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_COLON_EQ: return "\":=\"";
     case TK_COLON_COLON: return "\"::\"";
     case TK_COLON_GT: return "\":>\"";
+    case TK_MACRO_ARG: return "macro_arg";
   }
   UNREACHABLE();
 }

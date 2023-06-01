@@ -174,6 +174,15 @@ void eprint(const char *fmt, ...);
 #define literal_span_raw(lit) {(lit), sizeof(lit) - 1}
 #define literal_span(lit) ((span)literal_span_raw((lit)))
 
+/// Create a string from a const char*
+static inline string_buffer as_string_buffer(string s) {
+  return (string_buffer){
+    .data = s.data,
+    .size = s.size,
+    .capacity = s.size
+  };
+}
+
 /// ===========================================================================
 ///  Other.
 /// ===========================================================================

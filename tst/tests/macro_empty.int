@@ -1,0 +1,4 @@
+;; 0
+
+macro foo emits endmacro
+foo

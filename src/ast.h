@@ -106,6 +106,8 @@ enum TokenType {
   TK_COLON_COLON,
   TK_COLON_GT,
 
+  TK_MACRO_ARG,
+
   TK_COUNT
 };
 
