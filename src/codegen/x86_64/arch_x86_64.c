@@ -1015,7 +1015,10 @@ void codegen_emit_x86_64(CodegenContext *context) {
       usz sz = type_sizeof(var->type);
       STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of assembly targets");
       if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL)
-        fprint(context->code, "%S: .space %zu\n", var->name, sz);
+        fprint(context->code,
+               ".align %Z\n"
+               "%S: .space %zu\n",
+               (usz)type_alignof(var->type), var->name, sz);
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
       STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of object targets");
@@ -1025,7 +1028,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
         sym.type = GOBJ_SYMTYPE_STATIC;
         sym.name = strdup(var->name.data);
         sym.section_name = strdup(".bss");
-        sym.byte_offset = sec_uninitdata->data.bytes.size;
+        // Align to type's alignment requirements.
+        sec_uninitdata->data.fill.amount = ALIGN_TO(sec_uninitdata->data.fill.amount, type_alignof(var->type));
+        sym.byte_offset = sec_uninitdata->data.fill.amount;
         vector_push(object.symbols, sym);
         // Write uninitialised bytes to .data section
         sec_uninitdata->data.fill.amount += sz;
