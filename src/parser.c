@@ -57,8 +57,14 @@ typedef struct Token {
 
   // Any text; may be an identifier, keyword, etc.
   string_buffer text;
-  // True iff identifier created via escaping.
+
+  // True iff identifier found in `text` was created via escaping.
   bool artificial;
+
+  // True iff `node` shouldn't be deep copied when parsed, but used
+  // directly (for expressions with side effects).
+  bool expr_once;
+
 } Token;
 
 // A macro argument selector (i.e. the "token" part of `$name:token`)
@@ -67,6 +73,7 @@ typedef struct Token {
 typedef enum MacroArgumentSelector {
   MACRO_ARG_SEL_TOKEN,
   MACRO_ARG_SEL_EXPR,
+  MACRO_ARG_SEL_EXPR_ONCE,
 } MacroArgumentSelector;
 
 typedef Vector(Token) TokenVector;
@@ -463,6 +470,7 @@ static void expand_macro(Parser *p, Macro *m) {
         bound_arg.token = copy_token(p->tok);
         vector_push(expansion.bound_arguments, bound_arg);
       } break;
+      case MACRO_ARG_SEL_EXPR_ONCE: FALLTHROUGH;
       case MACRO_ARG_SEL_EXPR: {
         u32 beg = p->tok.source_location.start;
 
@@ -475,6 +483,7 @@ static void expand_macro(Parser *p, Macro *m) {
         bound_arg.token.node = expr;
         bound_arg.token.source_location.start = beg;
         bound_arg.token.source_location.end = p->tok.source_location.end;
+        bound_arg.token.expr_once = param_tok->integer == MACRO_ARG_SEL_EXPR_ONCE;
         vector_push(expansion.bound_arguments, bound_arg);
       } break;
       default: ICE("Unhandled macro argument selector type");
@@ -662,6 +671,8 @@ static void next_token(Parser *p) {
           MacroArgumentSelector selector = MACRO_ARG_SEL_TOKEN;
           if (string_eq(p->tok.text, literal_span("expr")))
             selector = MACRO_ARG_SEL_EXPR;
+          else if (string_eq(p->tok.text, literal_span("expr_once")))
+            selector = MACRO_ARG_SEL_EXPR_ONCE;
           else if (string_eq(p->tok.text, literal_span("token")))
             ;
           else ERR("Unrecognised macro argument selector identifier");
@@ -1655,13 +1666,18 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
 
     case TK_AST_NODE: {
       ASSERT(p->tok.node);
-      // FIXME: WE NEED TO DEEP COPY AST NODES FOR THIS TO WORK PROPERLY, AND
-      // THAT IS SO MUCH WORK IT'S FUCKING INSANE. SO RIGHT NOW WE SHALLOW COPY
-      // AND IT'S ON YOU IF YOU WRITE A MACRO THAT REQUIRES A DEEP COPIED AST
-      // NODE EXPRESSION
-      lhs = ast_make_integer_literal(p->ast, p->tok.source_location, p->tok.integer);
-      *lhs = *p->tok.node;
-      next_token(p);
+      if (p->tok.expr_once) {
+        lhs = p->tok.node;
+        next_token(p);
+      } else {
+        // FIXME: WE NEED TO DEEP COPY AST NODES FOR THIS TO WORK PROPERLY, AND
+        // THAT IS SO MUCH WORK IT'S FUCKING INSANE. SO RIGHT NOW WE SHALLOW COPY
+        // AND IT'S ON YOU IF YOU WRITE A MACRO THAT REQUIRES A DEEP COPIED AST
+        // NODE EXPRESSION
+        lhs = ast_make_integer_literal(p->ast, p->tok.source_location, p->tok.integer);
+        *lhs = *p->tok.node;
+        next_token(p);
+      }
     } break;
 
     /// An identifier can either be a declaration, function call, or cast.
@@ -1678,11 +1694,9 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
       loc source_location = p->tok.source_location;
 
       Node *init = parse_expr(p);
-      if (p->tok.type == TK_COMMA)
-        next_token(p);
+      if (p->tok.type == TK_COMMA) next_token(p);
       Node *condition = parse_expr(p);
-      if (p->tok.type == TK_COMMA)
-        next_token(p);
+      if (p->tok.type == TK_COMMA) next_token(p);
       Node *iterator = parse_expr(p);
       Node *body = parse_expr(p);
 

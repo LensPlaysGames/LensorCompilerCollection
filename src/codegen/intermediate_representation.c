@@ -8,8 +8,9 @@
 
 //#define DEBUG_USES
 void mark_used(IRInstruction *usee, IRInstruction *user) {
+  // Don't push duplicate users.
   foreach_ptr (IRInstruction *, i_user, usee->users) {
-    ASSERT(i_user != user, "Instruction already marked as user.");
+    if (i_user == user) return;
   }
   vector_push(usee->users, user);
 }
