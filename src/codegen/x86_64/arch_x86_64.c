@@ -795,6 +795,11 @@ static void mangle_type_to(string_buffer *buf, Type *t) {
       else mangle_type_to(buf, t->named->val.type);
       break;
 
+    case TYPE_INTEGER: {
+      usz length = 1 + number_width(t->integer.bit_width);
+      format_to(buf, "%Z%c%Z", length, t->integer.is_signed ? 's' : 'u', t->integer.bit_width);
+    } break;
+
     case TYPE_POINTER:
       format_to(buf, "P");
       mangle_type_to(buf, t->pointer.to);

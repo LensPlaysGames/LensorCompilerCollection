@@ -81,9 +81,17 @@ NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
   /// if the smaller type is unsigned.
   bool to_is_int = type_is_integer_canon(to);
   bool from_is_int = type_is_integer_canon(from);
+
   if (to_is_int && from_is_int) {
-    if (type_sizeof(to) > type_sizeof(from) &&
-        (type_is_signed_canon(to) || !type_is_signed_canon(from)))
+    usz to_sz = type_sizeof(to);
+    bool to_sign = type_is_signed_canon(to);
+    usz from_sz = type_sizeof(from);
+    bool from_sign = type_is_signed_canon(from);
+    // Exactly equal integers.
+    if (to_sz == from_sz && to_sign == from_sign) return 0;
+    // Convertible integers.
+    // TODO/FIXME: I have no idea if this is correct, it's just what was here before.
+    if (to_sz > from_sz && (to_sign || !from_sign))
       return 1;
   }
 

@@ -518,7 +518,7 @@ static void handle_identifier(Parser *p) {
 
   // Try and parse a number just after encountering `s` or `u` at the
   // beginning of an identifier.
-  if (p->tok.text.size > 1 && (p->tok.text.data[0] == 's' || p->tok.text.data[0] == 'u')) {
+  if (p->tok.text.size > 1 && (p->tok.text.data[0] == 's' || p->tok.text.data[0] == 'i' || p->tok.text.data[0] == 'u') && isdigit(p->tok.text.data[1])) {
     /// Zero-terminate the string or else `strtoull()` might try
     /// to convert data left over from the previous token.
     string_buf_zterm(&p->tok.text);
@@ -626,8 +626,7 @@ static void next_token(Parser *p) {
           p->tok.text = as_string_buffer(text);
         } break;
         case TK_ARBITRARY_INT: {
-          // Prepend signed/unsigned
-          string text = format("s%Z", p->tok.integer);
+          string text = format("%c%Z", p->tok.text.data[0], p->tok.integer);
           p->tok.text = as_string_buffer(text);
         } break;
         default: {
@@ -1376,7 +1375,7 @@ static Type *parse_type(Parser *p) {
     next_token(p);
   } break;
   case TK_ARBITRARY_INT: {
-    bool is_signed = p->tok.text.data[0] == 's';
+    bool is_signed = p->tok.text.data[0] == 's' || p->tok.text.data[0] == 'i';
     out = ast_make_type_integer(p->ast, p->tok.source_location, is_signed, p->tok.integer);
     next_token(p);
   } break;
