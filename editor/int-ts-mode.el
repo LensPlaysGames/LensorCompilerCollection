@@ -97,7 +97,7 @@
  int-ts-mode--syntax-table)
 
 (defvar int-ts-mode--keywords
-  '("if" "else" "ext" "while" "for" "type" ;; keywords
+  '("if" "else" "ext" "while" "for" "type" "macro" "emits" "endmacro" ;; keywords
     "discardable" "nomangle" ;; function attributes
     "alignas" ;; type attributes
     )
@@ -128,7 +128,8 @@
 
    :language 'int
    :feature 'variable
-   `((identifier) @font-lock-variable-name-face)
+   `((identifier) @font-lock-variable-name-face
+     (macro_arg) @font-lock-property-face)
 
    :language 'int
    :override t
