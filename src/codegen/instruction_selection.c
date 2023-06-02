@@ -146,6 +146,10 @@ static void isel_env_init_common(ISelEnvironment *env) {
 #define ADD_OPCODE(opcode, ...) isel_env_add_opcode(env, STR(CAT(MIR_, opcode)), CAT(MIR_, opcode));
   ALL_IR_INSTRUCTION_TYPES(ADD_OPCODE);
 #undef ADD_OPCODE
+
+  STATIC_ASSERT(MPSEUDO_COUNT == 2, "Exhaustive handling of MIR pseudo-instructions in instruction selection global environment initialisation");
+  isel_env_add_opcode(env, "MPSEUDO_R2R", MPSEUDO_R2R);
+
   isel_env_add_integer(env, "COMPARE_EQ", (isz)COMPARE_EQ);
   isel_env_add_integer(env, "COMPARE_NE", (isz)COMPARE_NE);
   isel_env_add_integer(env, "COMPARE_LT", (isz)COMPARE_LT);
@@ -301,7 +305,7 @@ static void isel_env_add_op_kind(ISelEnvironment *env, const char *key, usz opki
 }
 
 static void isel_next_c(ISelParser *p) {
-   /// Keep returning EOF once EOF has been reached.
+  /// Keep returning EOF once EOF has been reached.
   if (p->beg >= p->end) {
     // beg is >= end, must be EOF
     p->lastc = 0;

@@ -739,6 +739,13 @@ const char *mir_common_opcode_mnemonic(uint32_t opcode) {
   case MIR_COUNT: return "count";
   case MIR_ARCH_START: break;
   }
+  switch ((MIROpcodePseudo)opcode) {
+  case MPSEUDO_START: return "pseudo:start";
+  case MPSEUDO_R2R: return "pseudo:r2r";
+  case MPSEUDO_END: return "pseudo:end";
+  case MPSEUDO_COUNT: return "pseudo:count";
+    break;
+  }
   return "";
 }
 

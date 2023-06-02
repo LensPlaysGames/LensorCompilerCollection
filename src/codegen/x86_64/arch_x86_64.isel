@@ -367,18 +367,24 @@ match MIR_SHL i1(Immediate value, Immediate shift_amount)
 emit {
   MX64_MOV(shift_amount, Register = ecx)
   MX64_MOV(value, i1)
-  MX64_SAL(i1)
+  MX64_SAL(i1) clobbers rcx;
+}
+match MIR_SHL i1(Immediate value, Register shift_amount)
+emit {
+  MPSEUDO_R2R(shift_amount, Register = ecx)
+  MX64_MOV(value, i1)
+  MX64_SAL(i1) clobbers rcx;
 }
 match MIR_SHL i1(Register value, Immediate shift_amount)
 emit {
   MX64_MOV(shift_amount, Register = ecx)
-  MX64_SAL(value)
+  MX64_SAL(value) clobbers rcx;
   MX64_MOV(value, i1)
 }
 match MIR_SHL i1(Register value, Register shift_amount)
 emit {
-  MX64_MOV(shift_amount, Register = ecx)
-  MX64_SAL(value)
+  MPSEUDO_R2R(shift_amount, Register = ecx)
+  MX64_SAL(value) clobbers rcx;
   MX64_MOV(value, i1)
 }
 
@@ -386,12 +392,24 @@ match MIR_SHR i1(Immediate value, Immediate shift_amount)
 emit {
   MX64_MOV(shift_amount, Register = ecx)
   MX64_MOV(value, i1)
-  MX64_SHR(i1)
+  MX64_SHR(i1) clobbers rcx;
+}
+match MIR_SHR i1(Immediate value, Register shift_amount)
+emit {
+  MPSEUDO_R2R(shift_amount, Register = ecx)
+  MX64_MOV(value, i1)
+  MX64_SHR(i1) clobbers rcx;
+}
+match MIR_SHR i1(Register value, Immediate shift_amount)
+emit {
+  MX64_MOV(shift_amount, Register = ecx)
+  MX64_SHR(value) clobbers rcx;
+  MX64_MOV(value, i1)
 }
 match MIR_SHR i1(Register value, Register shift_amount)
 emit {
-  MX64_MOV(shift_amount, Register = ecx)
-  MX64_SHR(value)
+  MPSEUDO_R2R(shift_amount, Register = ecx)
+  MX64_SHR(value) clobbers rcx;
   MX64_MOV(value, i1)
 }
 
@@ -399,12 +417,24 @@ match MIR_SAR i1(Immediate value, Immediate shift_amount)
 emit {
   MX64_MOV(shift_amount, Register = ecx)
   MX64_MOV(value, i1)
-  MX64_SAR(i1)
+  MX64_SAR(i1) clobbers rcx;
+}
+match MIR_SAR i1(Immediate value, Register shift_amount)
+emit {
+  MPSEUDO_R2R(shift_amount, Register = ecx)
+  MX64_MOV(value, i1)
+  MX64_SAR(i1) clobbers rcx;
+}
+match MIR_SAR i1(Register value, Immediate shift_amount)
+emit {
+  MX64_MOV(shift_amount, Register = ecx)
+  MX64_SAR(value) clobbers rcx;
+  MX64_MOV(value, i1)
 }
 match MIR_SAR i1(Register value, Register shift_amount)
 emit {
-  MX64_MOV(shift_amount, Register = ecx)
-  MX64_SAR(value)
+  MPSEUDO_R2R(shift_amount, Register = ecx)
+  MX64_SAR(value) clobbers rcx;
   MX64_MOV(value, i1)
 }
 

@@ -1386,6 +1386,29 @@ void codegen_emit_x86_64(CodegenContext *context) {
           }
         } break; // case MX64_MOVZX
 
+        case MPSEUDO_R2R: {
+          if (!mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER))
+            ICE("MPSEUDO_R2R instruction does not have two register operands.");
+          MIROperand *src = mir_get_op(instruction, 0);
+          MIROperand *dst = mir_get_op(instruction, 1);
+
+          // Register move from self to self is a no-op.
+          if (src->value.reg.value == dst->value.reg.value && src->value.reg.size == dst->value.reg.size)
+            vector_push(instructions_to_remove, instruction);
+          else if (src->value.reg.size < dst->value.reg.size) {
+            // Register move from smaller register to larger register requires zero extension.
+            instruction->opcode = MX64_MOVZX;
+          } else if (src->value.reg.size > dst->value.reg.size) {
+            // Register move from larger register to smaller register requires truncation.
+            // To accomplish this, we simply move from a smaller version of the
+            // same register; by reducing the source, we have effectively truncated
+            // the result.
+            instruction->opcode = MX64_MOV;
+            src->value.reg.size = dst->value.reg.size;
+          }
+
+        } break;
+
         case MX64_MOV: {
           // MOV(eax, rax) -> ERROR (mov cannot move from mismatched size registers when equal)
           // MOV(REG x, REG x) -> NOP (remove)

@@ -18,6 +18,22 @@ typedef enum MIROpcodeCommon {
 } MIROpcodeCommon;
 #undef DEFINE_MIR_INSTRUCTION_TYPE
 
+/// Pseudo-instructions that each backend must provide implementations for.
+typedef enum MIROpcodePseudo {
+  MPSEUDO_START = MIR_COUNT,
+
+  // Do everything in your power to move a register into another
+  // register. For use in ISel where one of the register sizes may not be
+  // equal to another, but you still need to move between them.
+  MPSEUDO_R2R,
+
+  // TODO: MPSEUDO_SPILL_REG    Save register, somehow
+  // TODO: MPSEUDO_UNSPILL_REG  Restore register, somehow
+
+  MPSEUDO_END,
+  MPSEUDO_COUNT = MPSEUDO_END - MPSEUDO_START
+} MIROpcodePseudo;
+
 typedef enum MIROperandKind {
   MIR_OP_NONE,
   MIR_OP_REGISTER,

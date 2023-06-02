@@ -577,13 +577,12 @@ static void write_typename(string_buffer *s, const Type *type) {
 
     case TYPE_STRUCT:
       format_to(s, "struct");
-      if (type->structure.decl) {
+      if (type->structure.decl)
         format_to(s, " %S", type->structure.decl->struct_decl->name);
-      }
       break;
 
     case TYPE_INTEGER: {
-      format_to(s, "%s%Z", type->integer.is_signed ? "s" : "u" , type->integer.bit_width);
+      format_to(s, "%36%c%Z%m", type->integer.is_signed ? 's' : 'u' , type->integer.bit_width);
     } break;
   }
 }
@@ -602,8 +601,9 @@ string typename(Type *type, bool colour) {
 }
 
 Type *type_canonical(Type *type) {
-    while (type && type->kind == TYPE_NAMED) type = type->named->val.type;
-    return type;
+  while (type && type->kind == TYPE_NAMED)
+    type = type->named->val.type;
+  return type;
 }
 
 Type *type_last_alias(Type *type) {
@@ -613,7 +613,8 @@ Type *type_last_alias(Type *type) {
 }
 
 bool type_is_incomplete(Type *type) {
-  return type_is_incomplete_canon(type_canonical(type));
+  Type *canon_type = type_canonical(type);
+  return type_is_incomplete_canon(canon_type);
 }
 
 bool type_is_incomplete_canon(Type *type) {
