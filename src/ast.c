@@ -1319,7 +1319,7 @@ bool type_equals_canon(Type *a, Type *b) {
 }
 
 IncompleteResult compare_incomplete(Type *a, Type *b) {
-  if (type_is_incomplete(a) && type_is_incomplete(a)) {
+  if (type_is_incomplete(a) && type_is_incomplete(b)) {
     /// Void is always equal to itself.
     if (type_is_void(a) && type_is_void(b)) return (IncompleteResult){.incomplete = true, .equal = true};
 
