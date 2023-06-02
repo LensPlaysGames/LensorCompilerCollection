@@ -61,10 +61,10 @@
 ;; Allowed within symbols: _
 (modify-syntax-entry
  ?_ "w"
- int-mode-syntax-table)
+ int-ts-mode--syntax-table)
 (modify-syntax-entry
  ?\\ "w"
- int-mode-syntax-table)
+ int-ts-mode--syntax-table)
 
 ;; Parenthesis
 (modify-syntax-entry
