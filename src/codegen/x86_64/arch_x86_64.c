@@ -381,9 +381,65 @@ static void lower(CodegenContext *context) {
       switch (context->call_convention) {
       case CG_CALL_CONV_MSWIN: {
         instruction->result = REG_RAX;
-        if (instruction->operand)
-          instruction->type = instruction->operand->type;
-        else instruction->type = t_integer;
+        instruction->type = t_integer;
+        // Cast returned value iff not equal. Probably not needed in
+        // all cases, but definitely needed in some (i.e. returning
+        // byte-typed variable from program).
+        if (instruction->operand && !type_equals(instruction->type, instruction->operand->type)) {
+          // Just like NODE_CAST handling in codegen.c
+          Type *t_to = instruction->type;
+          Type *t_from = instruction->operand->type;
+
+          usz to_sz = type_sizeof(t_to);
+          usz from_sz = type_sizeof(t_from);
+
+          bool from_signed = type_is_signed(t_from);
+
+          if (from_sz == to_sz) {
+            INSTRUCTION(bitcast, IR_BITCAST);
+            bitcast->operand = instruction->operand;
+            bitcast->type = t_to;
+            mark_used(instruction->operand, bitcast);
+            insert_instruction_before(bitcast, instruction);
+            ir_remove_use(instruction->operand, instruction);
+            instruction->operand = bitcast;
+            break;
+          }
+          else if (from_sz < to_sz) {
+            // smaller to larger: sign extend if needed, otherwise zero extend.
+            if (from_signed) {
+              INSTRUCTION(sext, IR_SIGN_EXTEND);
+              sext->operand = instruction->operand;
+              sext->type = t_to;
+              mark_used(instruction->operand, sext);
+              insert_instruction_before(sext, instruction);
+              ir_remove_use(instruction->operand, instruction);
+              instruction->operand = sext;
+            }
+            else {
+              INSTRUCTION(zext, IR_ZERO_EXTEND);
+              zext->operand = instruction->operand;
+              zext->type = t_to;
+              mark_used(instruction->operand, zext);
+              insert_instruction_before(zext, instruction);
+              ir_remove_use(instruction->operand, instruction);
+              instruction->operand = zext;
+            }
+            break;
+          }
+          else if (from_sz > to_sz) {
+            // larger to smaller: truncate.
+            INSTRUCTION(trunc, IR_TRUNCATE);
+            trunc->operand = instruction->operand;
+            trunc->type = t_to;
+            mark_used(instruction->operand, trunc);
+            insert_instruction_before(trunc, instruction);
+            ir_remove_use(instruction->operand, instruction);
+            instruction->operand = trunc;
+            break;
+          }
+          UNREACHABLE();
+        }
       } break;
       case CG_CALL_CONV_SYSV: {
         instruction->result = REG_RAX;
