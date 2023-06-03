@@ -82,6 +82,7 @@ typedef struct Macro {
   TokenVector parameters;
   TokenVector expansion;
   loc source_location;
+  usz gensym_count;
 } Macro;
 typedef Vector(Macro) MacroVector;
 
@@ -101,6 +102,11 @@ typedef struct MacroExpansion {
   Vector(NamedToken) bound_arguments;
 
   loc source_location;
+
+  // Value of gensym counter before incrementing by amount of gensym
+  // definitions in this macro, that way we can use the index of each
+  // gensym to uniquely map it to it's gensym.
+  usz gensym_counter;
 } MacroExpansion;
 
 typedef struct Parser {
@@ -120,6 +126,8 @@ typedef struct Parser {
   Vector(MacroExpansion) macro_expansion_stack;
   // When true, don't expand anything, like macros.
   bool raw_mode;
+
+  usz gensym_counter;
 
   /// Whether we’re in a function.
   bool in_function;
@@ -367,6 +375,10 @@ static Token copy_token(Token token) {
   return new_tok;
 }
 
+static string gensym(usz number) {
+  return format("_G_xX_%Z_Xx_G_", number);
+}
+
 static void next_token(Parser *p);
 static void next_macro(Parser *p) {
   // At this point, the parser state is at the "macro" keyword.
@@ -387,7 +399,7 @@ static void next_macro(Parser *p) {
   next_token(p);
 
   // Parse token list
-  while (!(p->tok.type == TK_IDENT && !p->tok.artificial && string_eq(p->tok.text, literal_span("emits")))) {
+  while (!(p->tok.type == TK_IDENT && !p->tok.artificial && (string_eq(p->tok.text, literal_span("emits")) || string_eq(p->tok.text, literal_span("defines"))))) {
     if (p->tok.type == TK_EOF)
       ERR_AT(out.source_location, "Reached EOF when lexing argument tokens of macro");
 
@@ -407,13 +419,42 @@ static void next_macro(Parser *p) {
     next_token(p);
   }
 
+  // If we hit a "defines" contextual keyword, then we need to parse a
+  // list of definitions and keep track of them for proper handling during
+  // lexing of the expansion tokens.
+  Vector(string) gensym_definitions = {0};
+  if (string_eq(p->tok.text, literal_span("defines"))) {
+    // Skip "defines"
+    next_token(p);
+    while (!(p->tok.type == TK_IDENT && !p->tok.artificial && string_eq(p->tok.text, literal_span("emits")))) {
+      if (p->tok.type == TK_EOF)
+        ERR_AT(out.source_location, "Reached EOF when lexing gensym definitions of macro");
+
+      if (p->tok.type != TK_IDENT)
+        ERR("Expected identifier within macro's \"defines\" list");
+
+      string *duplicate = NULL;
+      vector_find_if(gensym_definitions, duplicate,
+                     i,
+                     (string_eq(p->tok.text, gensym_definitions.data[i])));
+      if (duplicate) ERR("Duplicate identifier in gensym definitions of macro");
+
+      vector_push(gensym_definitions, string_dup(p->tok.text));
+
+      next_token(p);
+
+      // Eat commas in-between definitions.
+      if (p->tok.type == TK_COMMA) next_token(p);
+    }
+  }
+
   // Skip "emits"
   next_token(p);
 
   // Parse output token list
   while (!(p->tok.type == TK_IDENT && !p->tok.artificial && string_eq(p->tok.text, literal_span("endmacro")))) {
     if (p->tok.type == TK_EOF)
-      ERR_AT(out.source_location, "Reached EOF when lexing expansion tokens of macro");
+      ERR_AT(out.source_location, "Reached EOF when lexing expansion tokens of macro; expected \"endmacro\" keyword.");
 
     if (p->tok.type == TK_MACRO_ARG) {
       // Ensure macro arg exists in parameter list
@@ -422,6 +463,19 @@ static void next_macro(Parser *p) {
                      out.parameters.data[index].type == TK_MACRO_ARG
                      && string_eq(out.parameters.data[index].text, p->tok.text));
       if (!found) ERR("Macro argument identifier does not refer to a bound macro argument! Maybe a typo?");
+    } else if (p->tok.type == TK_IDENT && gensym_definitions.size) {
+      // If the token in the expansion list is an identifier and there
+      // are gensym definitions for this macro, we need to replace the
+      // uses of the gensym'd identifier with a gensym token, which the
+      // parser will replace with a generated identifier.
+      foreach_index (i, gensym_definitions) {
+        string *def = gensym_definitions.data + i;
+        if (string_eq(*def, p->tok.text)) {
+          p->tok.type = TK_GENSYM;
+          p->tok.integer = i;
+          break;
+        }
+      }
     }
 
     // Push deep-copied token into parameters.
@@ -435,6 +489,9 @@ static void next_macro(Parser *p) {
   vector_find_if(p->macros, found, index,
                  string_eq(p->macros.data[index].name, out.name));
   if (found) ERR("Redefinition of macro %S", found->name);
+
+  out.gensym_count = gensym_definitions.size;
+  vector_delete(gensym_definitions);
 
   vector_push(p->macros, out);
 
@@ -499,6 +556,9 @@ static void expand_macro(Parser *p, Macro *m) {
   }
 
   expansion.source_location.end = p->tok.source_location.end;
+
+  expansion.gensym_counter = p->gensym_counter;
+  p->gensym_counter += m->gensym_count;
 
   vector_push(p->macro_expansion_stack, expansion);
   p->raw_mode = false;
@@ -1174,7 +1234,7 @@ static void ensure_hygienic_declaration_if_within_macro(Parser *p, span ident, l
       if ((t->token.type == TK_IDENT && string_eq(t->token.text, ident)) || (t->token.type == TK_AST_NODE && t->token.node->kind == NODE_VARIABLE_REFERENCE && string_eq(t->token.node->var->name, ident))) {
         if (source_location)
           ISSUE_DIAGNOSTIC(DIAG_NOTE, *source_location, p, "This declaration within a macro would shadow a passed identifier\n");
-        ERR_AT(p->macro_expansion_stack.data[0].source_location, "Unhygienic expansion of macro\n");
+        ERR_AT(p->macro_expansion_stack.data[0].source_location, "Unhygienic expansion of macro. Probably need \"defines %S\" specified for macro\n", as_span(ident));
       }
     }
   }
@@ -1688,6 +1748,18 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
   switch (p->tok.type) {
     default: ERR("Expected expression, got %s", token_type_to_string(p->tok.type));
 
+  case TK_GENSYM: {
+    ASSERT(p->macro_expansion_stack.size, "Sorry, cannot currently handle GENSYM token when not inside of macro expansion");
+
+    vector_clear(p->tok.text);
+    // Cursed use of macro to append string (non-vector) to string buffer
+    string generated_sym = gensym(vector_back(p->macro_expansion_stack).gensym_counter + p->tok.integer);
+    vector_append(p->tok.text, generated_sym);
+    free(generated_sym.data);
+    // From this point on, matches TK_IDENTIFIER handling.
+    lhs = parse_ident_expr(p);
+  } break;
+
     case TK_AST_NODE: {
       ASSERT(p->tok.node);
       if (p->tok.expr_once) {
@@ -1944,7 +2016,7 @@ AST *parse(span source, const char *filename) {
 }
 
 NODISCARD const char *token_type_to_string(enum TokenType type) {
-  STATIC_ASSERT(TK_COUNT == 52, "Exhaustive handling of token types in token type to string conversion");
+  STATIC_ASSERT(TK_COUNT == 53, "Exhaustive handling of token types in token type to string conversion");
   switch (type) {
     case TK_COUNT:
     case TK_INVALID: return "invalid";
@@ -1997,6 +2069,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_COLON_EQ: return "\":=\"";
     case TK_COLON_COLON: return "\"::\"";
     case TK_COLON_GT: return "\":>\"";
+    case TK_GENSYM: return "gensym";
     case TK_MACRO_ARG: return "macro_arg";
     case TK_AST_NODE: return "ast_node";
   }

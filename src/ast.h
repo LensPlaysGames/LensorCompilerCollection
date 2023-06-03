@@ -106,6 +106,9 @@ enum TokenType {
   TK_COLON_COLON,
   TK_COLON_GT,
 
+  // Tells the parser to generate a unique identifier per integer
+  // value. Used to implement macro "defines".
+  TK_GENSYM,
   TK_MACRO_ARG,
   // Yes, this is cursed. Thanks to macros, it is technically possible to
   // "lex" an expression (which calls into the parser and creates an AST

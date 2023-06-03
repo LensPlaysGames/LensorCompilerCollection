@@ -1,0 +1,22 @@
+;; 69
+
+;; While the Intercept compiler is smart enough to error during an
+;; unhygienic expansion, it's much better to have it be nearly
+;; impossible to occur. To accomplish this, we can tell the compiler
+;; that we define a variable within the macro (along with it's name).
+;; In fact, you can do that with as many names as you want. For each of
+;; the names provided, the compiler will *rename* the use of that
+;; identifier within the macro uniquely for each expansion of the macro.
+
+macro increment $i
+defines a
+emits {
+  a :: 0
+  $i := $i + 1
+  a := 42
+  $i
+} endmacro
+
+a :: 67
+increment a
+increment a
