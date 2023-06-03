@@ -99,6 +99,8 @@ typedef struct MacroExpansion {
   usz expansion_index;
 
   Vector(NamedToken) bound_arguments;
+
+  loc source_location;
 } MacroExpansion;
 
 typedef struct Parser {
@@ -453,6 +455,7 @@ static void expand_macro(Parser *p, Macro *m) {
   // Found macro invocation, do expansion things!
   MacroExpansion expansion = {0};
   expansion.macro_index = (usz)(m - p->macros.data);
+  expansion.source_location.start = p->tok.source_location.start;
 
   p->raw_mode = true;
 
@@ -494,6 +497,8 @@ static void expand_macro(Parser *p, Macro *m) {
     if (!token_equals(&p->tok, param_tok))
       ERR("Ill-formed macro invocation");
   }
+
+  expansion.source_location.end = p->tok.source_location.end;
 
   vector_push(p->macro_expansion_stack, expansion);
   p->raw_mode = false;
@@ -550,7 +555,7 @@ static void next_token(Parser *p) {
   foreach_rev (MacroExpansion, expansion, p->macro_expansion_stack) {
     Macro *expandee = p->macros.data + expansion->macro_index;
     if (expansion->expansion_index >= expandee->expansion.size)
-      vector_pop(p->macro_expansion_stack);
+      (void)vector_pop(p->macro_expansion_stack);
   }
   // Iff there are macro expansions to handle, get tokens from there
   // instead of from the file.
@@ -888,7 +893,6 @@ static void next_token(Parser *p) {
       ERR("Invalid token");
   }
 
-done:
   /// Set the end of the token.
   p->tok.source_location.end = (u32) (p->curr - p->source.data - 1);
 }
@@ -1159,6 +1163,23 @@ static void parse_attributes(Parser *p, Attributes *attribs) {
   }
 }
 
+static void ensure_hygienic_declaration_if_within_macro(Parser *p, span ident, loc *source_location) {
+  // If we are
+  //   1. reading from a macro expansion, and
+  //   2. encounter a variable declaration,
+  // we need to **ensure** that there are no identifiers with the same
+  // name passed as macro arguments (hygiene).
+  if (p->macro_expansion_stack.size) {
+    foreach (NamedToken, t, p->macro_expansion_stack.data[0].bound_arguments) {
+      if ((t->token.type == TK_IDENT && string_eq(t->token.text, ident)) || (t->token.type == TK_AST_NODE && t->token.node->kind == NODE_VARIABLE_REFERENCE && string_eq(t->token.node->var->name, ident))) {
+        if (source_location)
+          ISSUE_DIAGNOSTIC(DIAG_NOTE, *source_location, p, "This declaration within a macro would shadow a passed identifier\n");
+        ERR_AT(p->macro_expansion_stack.data[0].source_location, "Unhygienic expansion of macro\n");
+      }
+    }
+  }
+}
+
 /// Parse the body of a function.
 ///
 /// This is basically just a wrapper around `parse_block()` that
@@ -1181,6 +1202,7 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
   /// Create a declaration for each parameter.
   foreach (Parameter , param, function_type->function.parameters) {
     Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
+    ensure_hygienic_declaration_if_within_macro(p, as_span(param->name), &param->source_location);
     if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var))
       ERR_AT(var->source_location, "Redefinition of parameter '%S'", var->declaration.name);
     vector_push(*param_decls, var);
@@ -1529,6 +1551,7 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
 
   /// Create the declaration.
   Node *decl = ast_make_declaration(p->ast, location, type, as_span(ident), NULL);
+  ensure_hygienic_declaration_if_within_macro(p, as_span(ident), &location);
 
   /// Make the variable static if we’re at global scope.
   decl->declaration.static_ = p->ast->scope_stack.size == 1;
@@ -1589,6 +1612,7 @@ static Node *parse_ident_expr(Parser *p) {
   } else if (p->tok.type == TK_COLON_COLON) {
     /// Create the declaration.
     Node *decl = ast_make_declaration(p->ast, location, NULL, as_span(ident), NULL);
+    ensure_hygienic_declaration_if_within_macro(p, as_span(ident), &location);
 
     /// Make the variable static if we’re at global scope.
     decl->declaration.static_ = p->ast->scope_stack.size == 1;
