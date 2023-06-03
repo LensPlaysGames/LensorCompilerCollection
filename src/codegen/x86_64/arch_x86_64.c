@@ -1002,7 +1002,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
           sym.type = GOBJ_SYMTYPE_STATIC;
           sym.name = strdup(var->name.data);
           sym.section_name = strdup(".rodata");
-          sym.byte_offset = sec_initdata->data.bytes.size;
+          sym.byte_offset = sec_rodata->data.bytes.size;
           vector_push(object.symbols, sym);
           // Write string bytes to .rodata section
           sec_write_n(sec_rodata, var->init->str.data, var->init->str.size);
