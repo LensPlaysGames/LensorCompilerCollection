@@ -103,10 +103,8 @@ typedef struct MacroExpansion {
 
   loc source_location;
 
-  // Value of gensym counter before incrementing by amount of gensym
-  // definitions in this macro, that way we can use the index of each
-  // gensym to uniquely map it to it's gensym.
-  usz gensym_counter;
+  // Index into this vector using TK_GENSYM.integer value.
+  Vector(string) gensyms;
 } MacroExpansion;
 
 typedef struct Parser {
@@ -557,8 +555,8 @@ static void expand_macro(Parser *p, Macro *m) {
 
   expansion.source_location.end = p->tok.source_location.end;
 
-  expansion.gensym_counter = p->gensym_counter;
-  p->gensym_counter += m->gensym_count;
+  for (usz i = 0; i < m->gensym_count; ++i)
+    vector_push(expansion.gensyms, gensym(p->gensym_counter++));
 
   vector_push(p->macro_expansion_stack, expansion);
   p->raw_mode = false;
@@ -614,8 +612,14 @@ static void next_token(Parser *p) {
   // Pop empty macro expansions off of the expansion stack.
   foreach_rev (MacroExpansion, expansion, p->macro_expansion_stack) {
     Macro *expandee = p->macros.data + expansion->macro_index;
-    if (expansion->expansion_index >= expandee->expansion.size)
+    if (expansion->expansion_index >= expandee->expansion.size) {
+      foreach (string, s, expansion->gensyms) {
+        if (s->data) free(s->data);
+      }
+      vector_delete(expansion->gensyms);
+      vector_delete(expansion->bound_arguments);
       (void)vector_pop(p->macro_expansion_stack);
+    }
   }
   // Iff there are macro expansions to handle, get tokens from there
   // instead of from the file.
@@ -1753,9 +1757,8 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
 
     vector_clear(p->tok.text);
     // Cursed use of macro to append string (non-vector) to string buffer
-    string generated_sym = gensym(vector_back(p->macro_expansion_stack).gensym_counter + p->tok.integer);
+    string generated_sym = vector_back(p->macro_expansion_stack).gensyms.data[p->tok.integer];
     vector_append(p->tok.text, generated_sym);
-    free(generated_sym.data);
     // From this point on, matches TK_IDENTIFIER handling.
     lhs = parse_ident_expr(p);
   } break;
