@@ -1476,6 +1476,44 @@ static void mcode_reg_to_reg
 
   } break; // case MX64_AND
 
+  case MX64_OR: {
+    ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg ors to be of equal size.");
+
+    switch (source_size) {
+    default: ICE("Unhandled register size");
+    case r8: {
+      // Bitwise or r8 with r8
+      // 0x08 /r
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        mcode_1(context->object, rex);
+      }
+      mcode_2(context->object, 0x08, modrm);
+    } break;
+
+    case r16: {
+      // 0x66 + 0x09 /r
+      mcode_1(context->object, 0x66);
+    } FALLTHROUGH;
+    case r32: {
+      // 0x09 /r
+      if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
+        uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+        mcode_1(context->object, rex);
+      }
+      mcode_2(context->object, 0x09, modrm);
+    } break;
+
+    case r64: {
+      // REX.W + 0x09 /r
+      uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
+      mcode_3(context->object, rex, 0x09, modrm);
+    } break;
+
+    } // switch (size)
+
+  } break; // case MX64_OR
+
   case MX64_ADD: {
 
     ASSERT(source_size == destination_size, "x86_64 machine code backend requires reg-to-reg adds to be of equal size.");
