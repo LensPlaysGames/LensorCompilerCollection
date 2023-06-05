@@ -1798,8 +1798,8 @@ static void mcode_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDes
     // idiv == [REX.W] + 0xf6/0xf7 /7
     // not  == [REX.W] + 0xf6/0xf7 /2
     // Only differ in opcode extension
-    uint8_t idiv_extension = 2;
-    uint8_t not_extension = 2;
+    const uint8_t idiv_extension = 7;
+    const uint8_t not_extension = 2;
 
     // Mod == 0b11  ->  register
     // Reg == Opcode Extension
