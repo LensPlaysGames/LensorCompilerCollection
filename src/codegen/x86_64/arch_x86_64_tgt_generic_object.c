@@ -1672,6 +1672,16 @@ static void mcode_reg_to_reg
 
 static void mcode_indirect_branch(CodegenContext *context, MIROpcodex86_64 inst, RegisterDescriptor address_register) {
   switch (inst) {
+  case MX64_CALL: {
+    // 0xff /2
+    uint8_t address_regbits = regbits(address_register);
+    if (REGBITS_TOP(address_regbits)) {
+      uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, false);
+      mcode_1(context->object, rex);
+    }
+    uint8_t modrm = modrm_byte(0b11, 2, address_regbits);
+    mcode_2(context->object, 0xff, modrm);
+  } break;
   default: ICE("ERROR: mcode_indirect_branch(): Unsupported instruction %d (%s)", inst, mir_x86_64_opcode_mnemonic(inst));
   }
 }
