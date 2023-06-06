@@ -7,5 +7,4 @@ foo : integer[2]() {
   out
 }
 
-gnu :: foo()
-@gnu[1]
+@(foo()[1])
