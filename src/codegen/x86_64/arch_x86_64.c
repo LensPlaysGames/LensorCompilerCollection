@@ -550,6 +550,41 @@ static void lower(CodegenContext *context) {
       } break;
 
       case CG_CALL_CONV_MSWIN: {
+        // TODO: desc.result_register, not REG_RAX
+        if (!type_is_void(instruction->type)) {
+          instruction->result = REG_RAX;
+
+          // TODO: Returning types larger than a register isn't fully handled yet...
+          if (type_sizeof(instruction->type) > max_register_size) {
+            Type *large_type = instruction->type;
+
+            // Lower to pointer return type
+            instruction->type = ast_make_type_pointer(context->ast, large_type->source_location, large_type);
+
+            // TODO: Insert extra argument (pointer to local allocation of return type)
+
+            // Replace uses of the call result with loads from the returned pointer.
+            INSTRUCTION(load, IR_LOAD);
+            load->type = large_type;
+            load->operand = instruction;
+            mark_used(instruction, load);
+            insert_instruction_after(load, instruction);
+            ir_replace_uses(instruction, load);
+            lower_load(context, load);
+          } else {
+            // This is a bit scuffed. Firstly, *reasonably*, we set the call's
+            // result to the result register. But then in order to get
+            // future uses of the call's "virtual register" to properly be
+            // the virtual register that contains the result, we need to copy
+            // the result register into a virtual register and then replace
+            // all uses of the call result with that virtual register... As I
+            // said, a bit scuffed.
+            IRInstruction *copy = ir_copy(context, instruction);
+            insert_instruction_after(copy, instruction);
+            ir_replace_uses(instruction, copy);
+          }
+        }
+
         usz idx = 0;
 
         // Lower aggregates in possible-register arguments by allocating a copy of them on the stack.
@@ -578,20 +613,6 @@ static void lower(CodegenContext *context) {
         }
       } break;
       } // switch (calling convention)
-      // This is a bit scuffed. Firstly, *reasonably*, we set the call's
-      // result to the result register. But then in order to get
-      // future uses of the call's "virtual register" to properly be
-      // the virtual register that contains the result, we need to copy
-      // the result register into a virtual register and then replace
-      // all uses of the call result with that virtual register... As I
-      // said, a bit scuffed.
-      // TODO: desc.result_register, not REG_RAX
-      if (!type_is_void(instruction->type)) {
-        instruction->result = REG_RAX;
-        IRInstruction *copy = ir_copy(context, instruction);
-        insert_instruction_after(copy, instruction);
-        ir_replace_uses(instruction, copy);
-      }
     } break;
 
     case IR_PARAMETER: {
