@@ -90,7 +90,7 @@ static uint8_t rb_encoding(RegisterDescriptor reg) {
 
 // Don't use me directly!
 static uint8_t rex_byte(bool w, bool r, bool x, bool b) {
-  return (uint8_t)(0b01000000 | ((int)w << 3) | ((int)r << 2) | ((int)x << 1) | (int)b);
+  return (uint8_t)(0b01000000 | ((uint8_t)w << 3) | ((uint8_t)r << 2) | ((uint8_t)x << 1) | (uint8_t)b);
 }
 /// REX.W prefix is commonly used to promote a 32-bit operation to 64-bit.
 static uint8_t rexw_byte() {
@@ -148,7 +148,7 @@ static uint8_t sib_byte(uint8_t scale_factor, uint8_t index, uint8_t base) {
   ASSERT((scale_factor & (~0b11)) == 0);
   ASSERT((index & (~0b1111)) == 0);
   ASSERT((base & (~0b1111)) == 0);
-  return (uint8_t)((scale_factor << 6) | ((index & 0b111) << 3) | base);
+  return (uint8_t)((scale_factor << 6) | ((index & 0b111) << 3) | (base & 0b111));
 }
 
 /// NOTE: Caller must first zero out the destination register unless `size` is r32 or r64.
