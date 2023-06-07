@@ -151,6 +151,29 @@ static uint8_t sib_byte(uint8_t scale_factor, uint8_t index, uint8_t base) {
   return (uint8_t)((scale_factor << 6) | ((index & 0b111) << 3) | (base & 0b111));
 }
 
+// TODO/FIXME: There are lots of issues regarding Chapter 2, Volume 2,
+// Table 2-5 "Special Cases of REX Encodings" of the Intel SDM.
+// - SIB byte also required for R12-based addressing.
+//   I *think*, based on other things in the table, that this only
+//   applies when mod != 0b11.
+// - Using RBP or R13 without displacement must be done using mod = 01
+//   with a displacement of 0.
+// - SIB Byte base = 0101(EBP)
+//   Base register is unused if mod = 0.
+//   This requires explicit displacement to be used with EBP/RBP or
+//   R13.
+//   NOTE: I have no clue what this one means.
+
+/// Should be used after every modrm byte with a mod not equal to 0b11
+/// is written that may contain r12 in the r/m field.
+/// Implicitly captures `address_register`, `context`, and `modrm`.
+#define MCODE_SIB_IF_R12 do {                                           \
+    if (address_register == REG_R12 && (modrm & 0b11000000) != 0b11) {  \
+      uint8_t sib = sib_byte(0b00, 0b100, 0b100);                       \
+      mcode_1(context->object, sib);                                    \
+    }                                                                   \
+  } while (0)
+
 /// NOTE: Caller must first zero out the destination register unless `size` is r32 or r64.
 static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate, RegisterDescriptor destination_register, enum RegSize size) {
   if ((inst == MX64_SUB || inst == MX64_ADD) && immediate == 0) return;
@@ -630,6 +653,7 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
           mcode_1(context->object, rex);
         }
         mcode_2(context->object, 0x8a, modrm);
+        MCODE_SIB_IF_R12;
       } break;
 
       case r16: {
@@ -643,12 +667,14 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
           mcode_1(context->object, rex);
         }
         mcode_2(context->object, 0x8b, modrm);
+        MCODE_SIB_IF_R12;
       } break;
 
       case r64: {
         // REX.W + 0x8b /r
         uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
         mcode_3(context->object, rex, 0x8b, modrm);
+        MCODE_SIB_IF_R12;
       } break;
 
       } // switch (size)
@@ -669,6 +695,7 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
           mcode_1(context->object, rex);
         }
         mcode_3(context->object, 0x8a, modrm, (uint8_t)disp8);
+        MCODE_SIB_IF_R12;
       } break;
 
       case r16: {
@@ -682,12 +709,14 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
           mcode_1(context->object, rex);
         }
         mcode_3(context->object, 0x8b, modrm, (uint8_t)disp8);
+        MCODE_SIB_IF_R12;
       } break;
 
       case r64: {
         // REX.W + 0x8b /r
         uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
         mcode_4(context->object, rex, 0x8b, modrm, (uint8_t)disp8);
+        MCODE_SIB_IF_R12;
       } break;
 
       } // switch (size)
@@ -708,6 +737,7 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
           mcode_1(context->object, rex);
         }
         mcode_2(context->object, 0x8a, modrm);
+        MCODE_SIB_IF_R12;
         mcode_n(context->object, &disp32, 4);
       } break;
       case r16: {
@@ -722,12 +752,14 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
           mcode_1(context->object, rex);
         }
         mcode_2(context->object, 0x8b, modrm);
+        MCODE_SIB_IF_R12;
         mcode_n(context->object, &disp32, 4);
       } break;
       case r64: {
         // REX.W + 0x8b /r
         uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
         mcode_3(context->object, rex, 0x8b, modrm);
+        MCODE_SIB_IF_R12;
         mcode_n(context->object, &disp32, 4);
       } break;
 
@@ -807,6 +839,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
       uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
 
       mcode_2(context->object, op, modrm);
+      MCODE_SIB_IF_R12;
 
       // Make disp32 relocation to lea from symbol
       RelocationEntry reloc = {0};
@@ -834,6 +867,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
         int32_t disp32 = 0;
 
         mcode_3(context->object, rex, op, modrm);
+        MCODE_SIB_IF_R12;
 
         // Make RIP-relative disp32 relocation
         RelocationEntry reloc = {0};
@@ -859,6 +893,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
       uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
 
       mcode_3(context->object, rex, op, modrm);
+      MCODE_SIB_IF_R12;
 
       // Make disp32 relocation to lea from symbol
       RelocationEntry reloc = {0};
@@ -899,6 +934,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
         uint8_t modrm = modrm_byte(0b00, destination_regbits, 0b101);
 
         mcode_2(context->object, op, modrm);
+        MCODE_SIB_IF_R12;
 
         // Make RIP-relative disp32 relocation
         RelocationEntry reloc = {0};
@@ -930,6 +966,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
       uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
 
       mcode_2(context->object, op, modrm);
+      MCODE_SIB_IF_R12;
 
       // Make disp32 relocation to lea from symbol
       RelocationEntry reloc = {0};
@@ -965,6 +1002,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
         uint8_t modrm = modrm_byte(0b00, destination_regbits, 0b101);
 
         mcode_2(context->object, op, modrm);
+        MCODE_SIB_IF_R12;
 
         // Make RIP-relative disp32 relocation
         RelocationEntry reloc = {0};
@@ -996,6 +1034,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
       uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
 
       mcode_2(context->object, op, modrm);
+      MCODE_SIB_IF_R12;
 
       // Make disp32 relocation to lea from symbol
       RelocationEntry reloc = {0};
@@ -1023,6 +1062,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
         uint8_t modrm = modrm_byte(0b00, destination_regbits, 0b101);
 
         mcode_3(context->object, rex, op, modrm);
+        MCODE_SIB_IF_R12;
 
         // Make RIP-relative disp32 relocation
         RelocationEntry reloc = {0};
@@ -1051,6 +1091,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
       uint8_t modrm = modrm_byte(0b10, destination_regbits, address_regbits);
 
       mcode_3(context->object, rex, op, modrm);
+      MCODE_SIB_IF_R12;
 
       // Make disp32 relocation to lea from symbol
       RelocationEntry reloc = {0};
@@ -1106,7 +1147,9 @@ static void mcode_reg_to_mem(CodegenContext *context, MIROpcodex86_64 inst, Regi
         uint8_t modrm = modrm_byte(0b01, source_regbits, address_regbits);
         int8_t displacement = (int8_t)offset;
 
-        mcode_3(context->object, op, modrm, (uint8_t)displacement);
+        mcode_2(context->object, op, modrm);
+        MCODE_SIB_IF_R12;
+        mcode_1(context->object, (uint8_t)displacement);
 
       } else if (offset) {
 
@@ -1117,6 +1160,7 @@ static void mcode_reg_to_mem(CodegenContext *context, MIROpcodex86_64 inst, Regi
         int32_t displacement = (int32_t)offset;
 
         mcode_2(context->object, op, modrm);
+        MCODE_SIB_IF_R12;
         mcode_n(context->object, &displacement, 4);
 
       } else {
@@ -1128,6 +1172,7 @@ static void mcode_reg_to_mem(CodegenContext *context, MIROpcodex86_64 inst, Regi
         uint8_t modrm = modrm_byte(0b00, source_regbits, address_regbits);
 
         mcode_2(context->object, op, modrm);
+        MCODE_SIB_IF_R12;
 
       }
 
@@ -1158,6 +1203,7 @@ static void mcode_reg_to_mem(CodegenContext *context, MIROpcodex86_64 inst, Regi
       int32_t displacement = (int32_t)offset;
 
       mcode_2(context->object, op, modrm);
+      MCODE_SIB_IF_R12;
       mcode_n(context->object, &displacement, 4);
 
     } break;
@@ -1180,6 +1226,7 @@ static void mcode_reg_to_mem(CodegenContext *context, MIROpcodex86_64 inst, Regi
         uint8_t modrm = modrm_byte(0b00, source_regbits, address_regbits);
 
         mcode_3(context->object, rex, op, modrm);
+        MCODE_SIB_IF_R12;
       } else {
         // Mod == 0b10  ->  R/M + disp32
         // Reg == Source
@@ -1188,6 +1235,7 @@ static void mcode_reg_to_mem(CodegenContext *context, MIROpcodex86_64 inst, Regi
         int32_t displacement = (int32_t)offset;
 
         mcode_3(context->object, rex, op, modrm);
+        MCODE_SIB_IF_R12;
         mcode_n(context->object, &displacement, 4);
       }
     } break;
@@ -1877,6 +1925,7 @@ static void mcode_reg_to_name(CodegenContext *context, MIROpcodex86_64 inst, Reg
         mcode_1(context->object, rex);
       }
       mcode_2(context->object, 0x88, modrm);
+      MCODE_SIB_IF_R12;
 
       // Generate disp32 relocation!
       RelocationEntry reloc = {0};
@@ -1935,6 +1984,7 @@ static void mcode_reg_to_name(CodegenContext *context, MIROpcodex86_64 inst, Reg
         mcode_1(context->object, rex);
       }
       mcode_2(context->object, 0x89, modrm);
+      MCODE_SIB_IF_R12;
 
       // Generate disp32 relocation!
       RelocationEntry reloc = {0};
@@ -1982,6 +2032,7 @@ static void mcode_reg_to_name(CodegenContext *context, MIROpcodex86_64 inst, Reg
       // R/M == Address
       uint8_t modrm = modrm_byte(0b10, source_regbits, address_regbits);
       mcode_3(context->object, rex, 0x89, modrm);
+      MCODE_SIB_IF_R12;
 
       // Generate disp32 relocation!
       RelocationEntry reloc = {0};
