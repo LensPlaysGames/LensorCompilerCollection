@@ -396,13 +396,13 @@ static void lower(CodegenContext *context) {
           bool from_signed = type_is_signed(t_from);
 
           if (from_sz == to_sz) {
-            INSTRUCTION(bitcast, IR_BITCAST);
-            bitcast->operand = instruction->operand;
-            bitcast->type = t_to;
-            mark_used(instruction->operand, bitcast);
-            insert_instruction_before(bitcast, instruction);
-            ir_remove_use(instruction->operand, instruction);
-            instruction->operand = bitcast;
+            //INSTRUCTION(bitcast, IR_BITCAST);
+            //bitcast->operand = instruction->operand;
+            //bitcast->type = t_to;
+            //mark_used(instruction->operand, bitcast);
+            //insert_instruction_before(bitcast, instruction);
+            //ir_remove_use(instruction->operand, instruction);
+            //instruction->operand = bitcast;
             break;
           }
           else if (from_sz < to_sz) {

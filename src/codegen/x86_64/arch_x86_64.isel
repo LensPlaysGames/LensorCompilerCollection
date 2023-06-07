@@ -99,6 +99,9 @@ emit {
 match MIR_ALLOCA i1(Local) discard
 match MIR_STATIC_REF i1(Static) discard
 
+;;match MIR_BITCAST i1(Local src)
+;;emit MX64_LEA(src, i1)
+
 match MIR_COPY i1(Immediate imm)
 emit MX64_MOV(imm, i1)
 match MIR_COPY i1(Register src)
@@ -193,6 +196,11 @@ emit {
 
 match MIR_RETURN ret()
 emit MX64_RET()
+match MIR_RETURN ret(Local src)
+emit {
+  MX64_LEA(src, ret)
+  MX64_RET()
+}
 match MIR_RETURN ret(Register reg)
 emit {
   MX64_MOV(reg, ret)
