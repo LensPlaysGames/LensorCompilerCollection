@@ -1198,16 +1198,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
       print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
   }
 
-  isel_do_selection(machine_instructions_from_ir, patterns);
-
-  if (debug_ir) {
-    print("After:\n");
-    foreach_ptr (MIRFunction*, f, machine_instructions_from_ir)
-      print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
-  }
-
-  isel_patterns_delete(&patterns);
-
   // ISel in code...
   foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
     if (!function->origin || function->origin->is_extern) continue;
@@ -1242,7 +1232,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
             MIRInstruction *move = mir_makenew(MX64_MOV);
             mir_add_op(move, mir_op_immediate(imm));
             mir_add_op(move, mir_op_reference(instruction));
-            mir_insert_instruction(instruction->block, move, i++);
+            mir_insert_instruction_with_reg(instruction->block, move, i++, instruction->reg);
             break;
           }
 
@@ -1254,7 +1244,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
           MIRInstruction *and = mir_makenew(MX64_AND);
           mir_add_op(and, mir_op_immediate(mask));
           mir_add_op(and, mir_op_reference(instruction));
-          mir_insert_instruction(instruction->block, and, i++);
+          mir_insert_instruction_with_reg(instruction->block, and, i++, instruction->reg);
         } break; // case MIR_TRUNCATE
 
         }
@@ -1267,6 +1257,17 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
     } // foreach (MIRBlock)
   } // foreach (MIRFunction)
+
+  // ISel using DSL
+  isel_do_selection(machine_instructions_from_ir, patterns);
+
+  if (debug_ir) {
+    print("After:\n");
+    foreach_ptr (MIRFunction*, f, machine_instructions_from_ir)
+      print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
+  }
+
+  isel_patterns_delete(&patterns);
 
   if (debug_ir)
     print("================ RA ================\n");
@@ -1512,7 +1513,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         } break;
 
         case MX64_MOV: {
-          // MOV(eax, rax) -> ERROR (mov cannot move from mismatched size registers when equal)
+          // MOV(eax, rax) -> ERROR (mov cannot move between mismatched size registers)
           // MOV(REG x, REG x) -> NOP (remove)
           if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             MIROperand *lhs = mir_get_op(instruction, 0);
