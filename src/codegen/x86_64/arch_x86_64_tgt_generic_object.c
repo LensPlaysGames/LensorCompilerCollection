@@ -133,7 +133,7 @@ static uint8_t modrm_byte(uint8_t mod, uint8_t reg, uint8_t rm) {
   // Top bit of register stored in REX bit(s), but may still be present here.
   ASSERT((reg & (~0b1111)) == 0);
   ASSERT((rm & (~0b1111)) == 0);
-  return (uint8_t)((mod << 6) | ((reg & 0b111) << 3) | rm);
+  return (uint8_t)((mod << 6) | ((reg & 0b111) << 3) | (rm & 0b111));
 }
 
 /// A SIB byte is needed in the following cases:
