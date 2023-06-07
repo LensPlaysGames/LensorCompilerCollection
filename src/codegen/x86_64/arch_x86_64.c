@@ -612,7 +612,8 @@ static void lower(CodegenContext *context) {
           usz i = instruction->call.arguments.size - 1;
           foreach_ptr_rev (IRInstruction *, argument, instruction->call.arguments) {
             if (i < argument_register_count) break;
-            instruction->call.arguments.data[i] = alloca_copy_of(context, argument, instruction);
+            if (type_sizeof(argument->type) > 8)
+              instruction->call.arguments.data[i] = alloca_copy_of(context, argument, instruction);
             --i;
           }
         }
@@ -779,7 +780,7 @@ static void lower(CodegenContext *context) {
           usz i = instruction->parent_block->function->type->function.parameters.size - 1;
           foreach_rev (Parameter, param, instruction->parent_block->function->type->function.parameters) {
             if (i <= parameter_index) break;
-            offset->imm += type_sizeof(param->type);
+            offset->imm += 8;
             --i;
           }
           insert_instruction_before(offset, instruction);
@@ -1393,43 +1394,79 @@ void codegen_emit_x86_64(CodegenContext *context) {
           // of the stack, not including saving/restoring of registers.
           isz bytes_pushed = 0;
 
-          // Align stack pointer before call, if necessary.
-          if (regs_pushed_count & 0b1)
-            bytes_pushed += 8;
-          // Shadow stack
-          if (context->call_convention == CG_CALL_CONV_MSWIN)
-            bytes_pushed += 32;
-
-          if (bytes_pushed) {
-            MIRInstruction *sub = mir_makenew(MX64_SUB);
-            mir_add_op(sub, mir_op_immediate(bytes_pushed));
-            mir_add_op(sub, mir_op_register(REG_RSP, r64, false));
-            mir_insert_instruction(instruction->block, sub, i++);
+          if (context->call_convention == CG_CALL_CONV_MSWIN) {
+            // Push arguments, if need be.
+            isz argument_registers_left = (isz)argument_register_count;
+            bool first = true;
+            FOREACH_MIR_OPERAND(instruction, arg) {
+              if (first) {
+                first = false;
+                continue;
+              }
+              --argument_registers_left;
+              // If argument is passed on stack due to ABI.
+              if (arg->kind == MIR_OP_LOCAL_REF) {
+                // Push the base pointer.
+                MIRInstruction *push = mir_makenew(MX64_PUSH);
+                mir_add_op(push, mir_op_register(REG_RBP, r64, false));
+                mir_insert_instruction(instruction->block, push, i++);
+                bytes_pushed += 8;
+                // Subtract local's offset from base pointer from the newly pushed base pointer.
+                MIRInstruction *sub = mir_makenew(MX64_SUB);
+                ASSERT(arg->value.local_ref < function->frame_objects.size, "Referenced frame object does not exist");
+                mir_add_op(sub, mir_op_immediate(-function->frame_objects.data[arg->value.local_ref].offset)); // value to subtract
+                mir_add_op(sub, mir_op_register(REG_RSP, r64, false)); // base address
+                mir_add_op(sub, mir_op_immediate(0)); // zero offset from rsp
+                mir_add_op(sub, mir_op_immediate(8)); // 8 == sizeof address on stack
+                mir_insert_instruction(instruction->block, sub, i++);
+              } else if (argument_registers_left < 0) {
+                if (arg->kind == MIR_OP_REGISTER) {
+                  if (arg->value.reg.size == r64) {
+                    MIRInstruction *push = mir_makenew(MX64_PUSH);
+                    mir_add_op(push, *arg);
+                    mir_insert_instruction(instruction->block, push, i++);
+                    bytes_pushed += 8;
+                  } else if (arg->value.reg.size == r32) {
+                    MIRInstruction *move = mir_makenew(MX64_MOV);
+                    mir_add_op(move, *arg);
+                    mir_add_op(move, mir_op_register(REG_RAX, r32, false));
+                    mir_insert_instruction(instruction->block, move, i++);
+                    MIRInstruction *push = mir_makenew(MX64_PUSH);
+                    mir_add_op(push, mir_op_register(REG_RAX, r64, false));
+                    mir_insert_instruction(instruction->block, push, i++);
+                    bytes_pushed += 8;
+                  } else {
+                    MIRInstruction *move = mir_makenew(MX64_MOVZX);
+                    mir_add_op(move, *arg);
+                    mir_add_op(move, mir_op_register(REG_RAX, r64, false));
+                    mir_insert_instruction(instruction->block, move, i++);
+                    MIRInstruction *push = mir_makenew(MX64_PUSH);
+                    mir_add_op(push, mir_op_register(REG_RAX, r64, false));
+                    mir_insert_instruction(instruction->block, push, i++);
+                    bytes_pushed += 8;
+                  }
+                } else {
+                  print_mir_operand(function, arg);
+                  TODO("Unhandled stack argument operand with kind %s", mir_operand_kind_string(arg->kind));
+                }
+              }
+            }
           }
 
-          // Push argument addresses, if need be.
-          bool first = true;
-          FOREACH_MIR_OPERAND(instruction, arg) {
-            if (first) {
-              first = false;
-              continue;
-            }
-            // If argument is passed on stack due to ABI.
-            if (arg->kind == MIR_OP_LOCAL_REF) {
-              // Push the base pointer.
-              MIRInstruction *push = mir_makenew(MX64_PUSH);
-              mir_add_op(push, mir_op_register(REG_RBP, r64, false));
-              mir_insert_instruction(instruction->block, push, i++);
-              bytes_pushed += 8;
-              // Subtract local's offset from base pointer from the newly pushed base pointer.
-              MIRInstruction *sub = mir_makenew(MX64_SUB);
-              ASSERT(arg->value.local_ref < function->frame_objects.size, "Referenced frame object does not exist");
-              mir_add_op(sub, mir_op_immediate(-function->frame_objects.data[arg->value.local_ref].offset)); // value to subtract
-              mir_add_op(sub, mir_op_register(REG_RSP, r64, false)); // base address
-              mir_add_op(sub, mir_op_immediate(0)); // zero offset from rsp
-              mir_add_op(sub, mir_op_immediate(8)); // 8 == sizeof address on stack
-              mir_insert_instruction(instruction->block, sub, i++);
-            }
+          isz bytes_to_push = 0;
+          // Align stack pointer before call, if necessary.
+          if (regs_pushed_count & 0b1)
+            bytes_to_push += 8;
+          // Shadow stack
+          if (context->call_convention == CG_CALL_CONV_MSWIN)
+            bytes_to_push += 32;
+
+          if (bytes_to_push) {
+            MIRInstruction *sub = mir_makenew(MX64_SUB);
+            mir_add_op(sub, mir_op_immediate(bytes_to_push));
+            mir_add_op(sub, mir_op_register(REG_RSP, r64, false));
+            mir_insert_instruction(instruction->block, sub, i++);
+            bytes_pushed += bytes_to_push;
           }
 
           MIRInstruction *call = mir_makenew(MX64_CALL);
