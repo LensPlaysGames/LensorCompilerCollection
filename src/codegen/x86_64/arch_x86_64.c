@@ -561,7 +561,12 @@ static void lower(CodegenContext *context) {
             // Lower to pointer return type
             instruction->type = ast_make_type_pointer(context->ast, large_type->source_location, large_type);
 
-            // TODO: Insert extra argument (pointer to local allocation of return type)
+            // Insert extra argument (pointer to local allocation of return type)
+            INSTRUCTION(alloca, IR_ALLOCA);
+            alloca->type = instruction->type;
+            alloca->alloca.size = type_sizeof(large_type);
+            insert_instruction_before(alloca, instruction);
+            vector_insert(instruction->call.arguments, instruction->call.arguments.data, alloca);
 
             // Replace uses of the call result with loads from the returned pointer.
             INSTRUCTION(load, IR_LOAD);
