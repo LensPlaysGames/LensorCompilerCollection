@@ -1208,6 +1208,66 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   isel_patterns_delete(&patterns);
 
+  // ISel in code...
+  foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
+    if (!function->origin || function->origin->is_extern) continue;
+    foreach_ptr (MIRBlock*, block, function->blocks) {
+      MIRInstructionVector instructions_to_remove = {0};
+      foreach_index (i, block->instructions) {
+        MIRInstruction* instruction = block->instructions.data[i];
+        switch (instruction->opcode) {
+        default: break;
+
+        case MIR_TRUNCATE: {
+          vector_push(instructions_to_remove, instruction);
+
+          MIROperand *src = mir_get_op(instruction, 0);
+          MIROperand *from_op = mir_get_op(instruction, 1);
+          MIROperand *to_op = mir_get_op(instruction, 2);
+          i64 sz_from = from_op->value.imm;
+          i64 sz_to = to_op->value.imm;
+          ASSERT(sz_from > sz_to, "Truncate must be from larger to smaller size");
+          ASSERT(sz_from <= 8, "Cannot truncate something larger than a register!");
+
+          i64 mask = 0;
+          switch (sz_to) {
+          case 1: mask = 0xff; break;
+          case 2: mask = 0xffff; break;
+          case 4: mask = 0xffffffff; break;
+          default: ICE("Unhandled truncate \"to\" size %I", sz_to);
+          }
+
+          if (src->kind == MIR_OP_IMMEDIATE) {
+            i64 imm = src->value.imm & mask;
+            MIRInstruction *move = mir_makenew(MX64_MOV);
+            mir_add_op(move, mir_op_immediate(imm));
+            mir_add_op(move, mir_op_reference(instruction));
+            mir_insert_instruction(instruction->block, move, i++);
+            break;
+          }
+
+          MIRInstruction *move = mir_makenew(MX64_MOV);
+          mir_add_op(move, *src);
+          mir_add_op(move, mir_op_reference(instruction));
+          mir_insert_instruction(instruction->block, move, i++);
+
+          MIRInstruction *and = mir_makenew(MX64_AND);
+          mir_add_op(and, mir_op_immediate(mask));
+          mir_add_op(and, mir_op_reference(instruction));
+          mir_insert_instruction(instruction->block, and, i++);
+        } break; // case MIR_TRUNCATE
+
+        }
+      } // foreach (MIRInstruction)
+
+      foreach_ptr (MIRInstruction*, instruction, instructions_to_remove) {
+        mir_remove_instruction(instruction);
+      }
+      vector_delete(instructions_to_remove);
+
+    } // foreach (MIRBlock)
+  } // foreach (MIRFunction)
+
   if (debug_ir)
     print("================ RA ================\n");
 
@@ -1270,46 +1330,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
         MIRInstruction *instruction = block->instructions.data[i];
         switch (instruction->opcode) {
         default: break;
-
-        case MIR_TRUNCATE: {
-          vector_push(instructions_to_remove, instruction);
-
-          MIROperand *src = mir_get_op(instruction, 0);
-          MIROperand *from_op = mir_get_op(instruction, 1);
-          MIROperand *to_op = mir_get_op(instruction, 2);
-          i64 sz_from = from_op->value.imm;
-          i64 sz_to = to_op->value.imm;
-          ASSERT(sz_from > sz_to, "Truncate must be from larger to smaller size");
-          ASSERT(sz_from <= 8, "Cannot truncate something larger than a register!");
-
-          i64 mask = 0;
-          switch (sz_to) {
-          case 1: mask = 0xff; break;
-          case 2: mask = 0xffff; break;
-          case 4: mask = 0xffffffff; break;
-          default: ICE("Unhandled truncate \"to\" size %I", sz_to);
-          }
-
-          if (src->kind == MIR_OP_IMMEDIATE) {
-            i64 imm = src->value.imm & mask;
-            MIRInstruction *move = mir_makenew(MX64_MOV);
-            mir_add_op(move, mir_op_immediate(imm));
-            mir_add_op(move, mir_op_reference(instruction));
-            mir_insert_instruction(instruction->block, move, i++);
-            break;
-          }
-
-          MIRInstruction *move = mir_makenew(MX64_MOV);
-          mir_add_op(move, *src);
-          mir_add_op(move, mir_op_reference(instruction));
-          mir_insert_instruction(instruction->block, move, i++);
-
-          MIRInstruction *and = mir_makenew(MX64_AND);
-          mir_add_op(and, mir_op_immediate(mask));
-          mir_add_op(and, mir_op_reference(instruction));
-          mir_insert_instruction(instruction->block, and, i++);
-
-        } break; // case MIR_TRUNCATE
 
         // Basic jump threading
         case MX64_JMP: {
