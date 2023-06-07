@@ -1445,6 +1445,17 @@ void codegen_emit_x86_64(CodegenContext *context) {
                     mir_insert_instruction(instruction->block, push, i++);
                     bytes_pushed += 8;
                   }
+                } else if (arg->kind == MIR_OP_IMMEDIATE) {
+                  MIRInstruction *move = mir_makenew(MX64_MOV);
+                  mir_add_op(move, *arg);
+                  if (arg->value.imm >= INT32_MIN && arg->value.imm <= INT32_MAX)
+                    mir_add_op(move, mir_op_register(REG_RAX, r32, false));
+                  else mir_add_op(move, mir_op_register(REG_RAX, r64, false));
+                  mir_insert_instruction(instruction->block, move, i++);
+                  MIRInstruction *push = mir_makenew(MX64_PUSH);
+                  mir_add_op(push, mir_op_register(REG_RAX, r64, false));
+                  mir_insert_instruction(instruction->block, push, i++);
+                  bytes_pushed += 8;
                 } else {
                   print_mir_operand(function, arg);
                   TODO("Unhandled stack argument operand with kind %s", mir_operand_kind_string(arg->kind));
