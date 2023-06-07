@@ -524,7 +524,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
     case FRAME_MINIMAL: {
       // PUSH %RBP
       femit_reg(context, MX64_PUSH, REG_RBP, r64);
-      if (frame_size) femit_imm_to_reg(context, MX64_SUB, frame_size, REG_RSP, r64);
+      if (frame_size) femit_imm_to_reg(context, MX64_SUB, ALIGN_TO(frame_size, 16), REG_RSP, r64);
     } break;
 
     case FRAME_FULL: {
@@ -532,7 +532,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
       // MOV %RSP, %RBP
       femit_reg(context, MX64_PUSH, REG_RBP, r64);
       femit_reg_to_reg(context, MX64_MOV, REG_RSP, r64, REG_RBP, r64);
-      if (frame_size) femit_imm_to_reg(context, MX64_SUB, frame_size, REG_RSP, r64);
+      if (frame_size) femit_imm_to_reg(context, MX64_SUB, ALIGN_TO(frame_size, 16), REG_RSP, r64);
     } break;
 
     case FRAME_COUNT: FALLTHROUGH;
