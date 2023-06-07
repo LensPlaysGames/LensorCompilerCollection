@@ -101,7 +101,7 @@ Examples include addition (+) and subtraction (-)."
 
 ;; Gather all keyword font locks together into big daddy keyword font-lock
 (setq int--font-lock-defaults
-      (let* ((keywords '("if" "else" "while" "for" "type" "ext" "macro" "emits" "defines" "endmacro" ;; keywords
+      (let* ((keywords '("if" "else" "while" "for" "type" "ext" "return" "macro" "emits" "defines" "endmacro" ;; keywords
                          "discardable ""nomangle" ;; function attributes
                          "alignas" ;; type attributes
                          ))
