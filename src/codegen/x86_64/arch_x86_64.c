@@ -802,6 +802,17 @@ static void lower(CodegenContext *context) {
         } else {
           instruction->kind = IR_REGISTER;
           instruction->result = argument_registers[instruction->imm];
+          // Save register parameter on stack
+          INSTRUCTION(alloca, IR_ALLOCA);
+          alloca->imm = 8; // sizeof register
+          mark_used(instruction, alloca);
+          insert_instruction_before(alloca, instruction);
+          INSTRUCTION(store, IR_STORE);
+          store->store.value = instruction;
+          store->store.addr = alloca;
+          mark_used(instruction, alloca);
+          insert_instruction_before(store, instruction);
+          ir_replace_uses(instruction, alloca);
         }
       } break;
 
