@@ -292,7 +292,6 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
     default: ICE("Unhandled register size!");
     case r8: {
       // 0x80 /5 ib
-      uint8_t op = 0x80;
       int8_t imm8 = (int8_t)immediate;
 
       // Encode a REX prefix if the ModRM register descriptor needs
@@ -301,12 +300,11 @@ static void mcode_imm_to_reg(CodegenContext *context, MIROpcodex86_64 inst, int6
         uint8_t rex = rex_byte(false, false, false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
-      mcode_3(context->object, op, modrm, (uint8_t)imm8);
+      mcode_3(context->object, 0x80, modrm, (uint8_t)imm8);
     } break;
     case r16: {
       // 0x66 + 0x81 /5 iw
-      uint8_t sixteen_bit_prefix = 0x66;
-      mcode_1(context->object, sixteen_bit_prefix);
+      mcode_1(context->object, 0x66);
     } FALLTHROUGH;
     case r32: {
       if (immediate >= INT8_MIN && immediate <= INT8_MAX) {
@@ -636,8 +634,7 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
 
       case r16: {
         // 0x66 + 0x8b /r
-        uint8_t sixteen_bit_prefix = 0x66;
-        mcode_1(context->object, sixteen_bit_prefix);
+        mcode_1(context->object, 0x66);
       } FALLTHROUGH;
       case r32: {
         // 0x8b /r
@@ -967,7 +964,7 @@ static void mcode_name_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Reg
         // R/M == 0b101 (none)
         uint8_t modrm = modrm_byte(0b00, destination_regbits, 0b101);
 
-        mcode_2(context->object, op, modrm) ;
+        mcode_2(context->object, op, modrm);
 
         // Make RIP-relative disp32 relocation
         RelocationEntry reloc = {0};
@@ -1377,43 +1374,34 @@ static void mcode_reg_to_reg
     case r8: {
       // Move r8 to r8
       // 0x88 /r
-      uint8_t op = 0x88;
-
       // Encode a REX prefix if either of the ModRM register
       // descriptors need the bit extension.
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
-
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x88, modrm);
     } break;
 
     case r16: {
       // 0x66 + 0x89 /r
-      uint8_t sixteen_bit_prefix = 0x66;
-      mcode_1(context->object, sixteen_bit_prefix);
+      mcode_1(context->object, 0x66);
     } FALLTHROUGH;
     case r32: {
       // 0x89 /r
-      uint8_t op = 0x89;
-
       // Encode a REX prefix if either of the ModRM register descriptors need
       // the bit extension.
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
-
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x89, modrm);
     } break;
 
     case r64: {
       // REX.W + 0x89 /r
-      uint8_t op = 0x89;
       uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
-
-      mcode_3(context->object, rex, op, modrm);
+      mcode_3(context->object, rex, 0x89, modrm);
     } break;
 
     } // switch (size)
@@ -1428,14 +1416,11 @@ static void mcode_reg_to_reg
     case r8: {
       // Bitwise and r8 with r8
       // 0x20 /r
-      uint8_t op = 0x20;
-
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
-
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x20, modrm);
     } break;
 
     case r16: {
@@ -1444,22 +1429,17 @@ static void mcode_reg_to_reg
     } FALLTHROUGH;
     case r32: {
       // 0x21 /r
-      uint8_t op = 0x21;
-
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
-
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x21, modrm);
     } break;
 
     case r64: {
       // REX.W + 0x21 /r
-      uint8_t op = 0x21;
       uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
-
-      mcode_3(context->object, rex, op, modrm);
+      mcode_3(context->object, rex, 0x21, modrm);
     } break;
 
     } // switch (size)
@@ -1513,39 +1493,34 @@ static void mcode_reg_to_reg
     case r8: {
       // Add r8 to r8
       // 0x00 /r
-      uint8_t op = 0x00;
 
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
 
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x00, modrm);
     } break;
 
     case r16: {
       // 0x66 + 0x01 /r
-      uint8_t sixteen_bit_prefix = 0x66;
-      mcode_1(context->object, sixteen_bit_prefix);
+      mcode_1(context->object, 0x66);
     } FALLTHROUGH;
     case r32: {
       // 0x01 /r
-      uint8_t op = 0x01;
 
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
 
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x01, modrm);
     } break;
 
     case r64: {
       // REX.W + 0x01 /r
-      uint8_t op = 0x01;
       uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
-
-      mcode_3(context->object, rex, op, modrm);
+      mcode_3(context->object, rex, 0x01, modrm);
     } break;
 
     } // switch (size)
@@ -1561,39 +1536,30 @@ static void mcode_reg_to_reg
     case r8: {
       // Subtract r8 from r8
       // 0x28 /r
-      uint8_t op = 0x28;
-
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
-
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x28, modrm);
     } break;
 
     case r16: {
       // 0x66 + 0x29 /r
-      uint8_t sixteen_bit_prefix = 0x66;
-      mcode_1(context->object, sixteen_bit_prefix);
+      mcode_1(context->object, 0x66);
     } FALLTHROUGH;
     case r32: {
       // 0x29 /r
-      uint8_t op = 0x29;
-
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
-
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x29, modrm);
     } break;
 
     case r64: {
       // REX.W + 0x29 /r
-      uint8_t op = 0x29;
       uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
-
-      mcode_3(context->object, rex, op, modrm);
+      mcode_3(context->object, rex, 0x29, modrm);
     } break;
 
     } // switch (size)
@@ -1608,39 +1574,30 @@ static void mcode_reg_to_reg
     default: ICE("Unhandled register size");
     case r8: {
       // 0x38 /r
-      uint8_t op = 0x38;
-
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
-
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x38, modrm);
     } break;
 
     case r16: {
       // 0x66 + 0x39 /r
-      uint8_t sixteen_bit_prefix = 0x66;
-      mcode_1(context->object, sixteen_bit_prefix);
+      mcode_1(context->object, 0x66);
     } FALLTHROUGH;
     case r32: {
       // 0x39 /r
-      uint8_t op = 0x39;
-
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
-
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x39, modrm);
     } break;
 
     case r64: {
       // REX.W + 0x39 /r
       uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
-      uint8_t op = 0x39;
-
-      mcode_3(context->object, rex, op, modrm);
+      mcode_3(context->object, rex, 0x39, modrm);
     } break;
 
     } // switch (size)
@@ -1654,14 +1611,11 @@ static void mcode_reg_to_reg
     default: ICE("Unhandled register size");
     case r8: {
       // 0x84 /r
-      uint8_t op = 0x84;
-
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
-
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x84, modrm);
     } break;
 
     case r16: {
@@ -1671,22 +1625,17 @@ static void mcode_reg_to_reg
     } FALLTHROUGH;
     case r32: {
       // 0x85 /r
-      uint8_t op = 0x85;
-
       if (REGBITS_TOP(source_regbits) || REGBITS_TOP(destination_regbits)) {
         uint8_t rex = rex_byte(false, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
         mcode_1(context->object, rex);
       }
-
-      mcode_2(context->object, op, modrm);
+      mcode_2(context->object, 0x85, modrm);
     } break;
 
     case r64: {
       // REX.W + 0x85 /r
-      uint8_t op = 0x85;
-
       uint8_t rex = rex_byte(true, REGBITS_TOP(source_regbits), false, REGBITS_TOP(destination_regbits));
-      mcode_3(context->object, rex, op, modrm);
+      mcode_3(context->object, rex, 0x85, modrm);
     } break;
 
     } // switch (size)
