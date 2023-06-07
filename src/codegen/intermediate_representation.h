@@ -15,12 +15,12 @@
 
 #define FOREACH_INSTRUCTION_N(context, function, block, instruction) \
   foreach_ptr (IRFunction *, function, context->functions)           \
-  list_foreach (IRBlock *, block, function->blocks)                   \
+    list_foreach (IRBlock *, block, function->blocks)                \
       list_foreach (IRInstruction *, instruction, block->instructions)
 
 #define FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block, instruction) \
-  list_foreach (IRBlock *, block, function->blocks)                      \
-      list_foreach (IRInstruction *, instruction, block->instructions)
+  list_foreach (IRBlock *, block, function->blocks)                     \
+    list_foreach (IRInstruction *, instruction, block->instructions)
 
 #define FOREACH_INSTRUCTION(context) FOREACH_INSTRUCTION_N(context, function, block, instruction)
 #define FOREACH_INSTRUCTION_IN_FUNCTION(function) FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block, instruction)
