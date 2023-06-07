@@ -627,12 +627,11 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
       default: ICE("Unhandled register size");
       case r8: {
         // 0x8a /r
-        uint8_t op = 0x8a;
         if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
           mcode_1(context->object, rex);
         }
-        mcode_2(context->object, op, modrm);
+        mcode_2(context->object, 0x8a, modrm);
       } break;
 
       case r16: {
@@ -642,19 +641,17 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
       } FALLTHROUGH;
       case r32: {
         // 0x8b /r
-        uint8_t op = 0x8b;
         if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
           mcode_1(context->object, rex);
         }
-        mcode_2(context->object, op, modrm);
+        mcode_2(context->object, 0x8b, modrm);
       } break;
 
       case r64: {
         // REX.W + 0x8b /r
-        uint8_t op = 0x8b;
-        uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
-        mcode_3(context->object, rex, op, modrm);
+        uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
+        mcode_3(context->object, rex, 0x8b, modrm);
       } break;
 
       } // switch (size)
@@ -670,34 +667,30 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
       default: ICE("Unhandled register size");
       case r8: {
         // 0x8a /r
-        uint8_t op = 0x8a;
         if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
           mcode_1(context->object, rex);
         }
-        mcode_3(context->object, op, modrm, (uint8_t)disp8);
+        mcode_3(context->object, 0x8a, modrm, (uint8_t)disp8);
       } break;
 
       case r16: {
         // 0x66 + 0x8b /r
-        uint8_t sixteen_bit_prefix = 0x66;
-        mcode_1(context->object, sixteen_bit_prefix);
+        mcode_1(context->object, 0x66);
       } FALLTHROUGH;
       case r32: {
         // 0x8b /r
-        uint8_t op = 0x8b;
         if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
           mcode_1(context->object, rex);
         }
-        mcode_3(context->object, op, modrm, (uint8_t)disp8);
+        mcode_3(context->object, 0x8b, modrm, (uint8_t)disp8);
       } break;
 
       case r64: {
         // REX.W + 0x8b /r
-        uint8_t op = 0x8b;
-        uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
-        mcode_4(context->object, rex, op, modrm, (uint8_t)disp8);
+        uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
+        mcode_4(context->object, rex, 0x8b, modrm, (uint8_t)disp8);
       } break;
 
       } // switch (size)
@@ -713,12 +706,11 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
       default: ICE("Unhandled register size");
       case r8: {
         // 0x8a /r
-        uint8_t op = 0x8a;
         if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
           mcode_1(context->object, rex);
         }
-        mcode_2(context->object, op, modrm);
+        mcode_2(context->object, 0x8a, modrm);
         mcode_n(context->object, &disp32, 4);
       } break;
       case r16: {
@@ -728,19 +720,17 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
       } FALLTHROUGH;
       case r32: {
         // 0x8b /r
-        uint8_t op = 0x8b;
         if (REGBITS_TOP(address_regbits) || REGBITS_TOP(destination_regbits)) {
-          uint8_t rex = rex_byte(false, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
+          uint8_t rex = rex_byte(false, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
           mcode_1(context->object, rex);
         }
-        mcode_2(context->object, op, modrm);
+        mcode_2(context->object, 0x8b, modrm);
         mcode_n(context->object, &disp32, 4);
       } break;
       case r64: {
         // REX.W + 0x8b /r
-        uint8_t op = 0x8b;
-        uint8_t rex = rex_byte(true, REGBITS_TOP(address_regbits), false, REGBITS_TOP(destination_regbits));
-        mcode_3(context->object, rex, op, modrm);
+        uint8_t rex = rex_byte(true, REGBITS_TOP(destination_regbits), false, REGBITS_TOP(address_regbits));
+        mcode_3(context->object, rex, 0x8b, modrm);
         mcode_n(context->object, &disp32, 4);
       } break;
 
