@@ -43,22 +43,17 @@ ISA: x86_64
 
 ;; TODO: Special Operands:
 ;; ZERO  == MIR_OP_IMMEDIATE with value of 0
-;; VREG  == MIR_OP_REGISTER with new virtual register value (TODO: is this actually needed/allowed?)
 
 ;; TODO: Figure out how to handle opcodes that should never show up here
+;; Currently we have `discard`, but that doesn't error or anything. We
+;; may want a keyword like `error` in the same place, which would print
+;; the given error message and point to the source location, for
+;; disallowed instructions or patterns.
 ;; MIR_PHI
 ;; MIR_REGISTER
 ;; MIR_PARAMETER
 ;; MIR_LIT_INTEGER
 ;; MIR_LIT_STRING
-
-;; TODO: Write patterns for these opcodes
-;; MIR_STORE
-;; MIR_STATIC_REFERENCE
-;; MIR_FUNCTION_REFERENCE
-;; MIR_TRUNCATE (emit different things based on result register size or smth)
-;; MIR_BITCAST (emit nothing)
-;; MIR_CALL... do it in code because it's complicated? *Where* in code?
 
 ;; TODO: Allow patterns to constrain input by ensuring equality of certain operands
 ;;   match
@@ -165,8 +160,8 @@ emit {
 ;; v3 | load v2 8, 8
 match
 MIR_COPY cp(Register src)
-MIR_ADD add(Register lhs, Immediate imm) ;; TODO: lhs is cp
-MIR_LOAD load(Register ptr, Immediate sz) ;; TODO: ptr is add
+MIR_ADD add(Register lhs is cp, Immediate imm)
+MIR_LOAD load(Register ptr is add, Immediate sz)
 emit MX64_MOV(src, imm, add, sz)
 
 match MIR_LOAD i1(Local local)
