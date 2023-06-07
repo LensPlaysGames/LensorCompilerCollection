@@ -574,6 +574,11 @@ static void mcode_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int6
   }
 }
 
+static void mcode_imm_to_offset_name(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate, RegSize size, RegisterDescriptor address_register, const char *name, int64_t offset) {
+  TODO("Implement instruction %d (%s) in `imm to offset name` form",
+       inst, mir_x86_64_opcode_mnemonic(inst));
+}
+
 static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, RegisterDescriptor address_register, int64_t offset, RegisterDescriptor destination_register, enum RegSize size) {
   switch (inst) {
 
@@ -2376,6 +2381,13 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
                    (int)local->value.local_ref, function->frame_objects.size);
             MIRFrameObject *fo = function->frame_objects.data + local->value.local_ref;
             mcode_imm_to_mem(context, MX64_MOV, imm->value.imm, REG_RBP, fo->offset, (RegSize)fo->size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_STATIC_REF)) {
+            // imm to mem (static) | imm, static
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *stc = mir_get_op(instruction, 1);
+            mcode_imm_to_offset_name(context, MX64_MOV,
+                                     imm->value.imm, (RegSize)type_sizeof(stc->value.static_ref->static_ref->type),
+                                     REG_RIP, stc->value.static_ref->static_ref->name.data, 0);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);

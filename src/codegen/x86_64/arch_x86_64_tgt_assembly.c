@@ -136,7 +136,48 @@ static void femit_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int6
       fprint(context->code, "    %s %s[%s], %D\n",
              mnemonic, memory_size, address, immediate);
   } break;
-    default: ICE("ERROR: femit_imm_to_mem(): Unsupported dialect %d", context->target);
+    default: ICE("ERROR: femit_imm_to_mem(): Unsupported target %d", context->target);
+  }
+}
+
+static void femit_imm_to_offset_name(CodegenContext *context, MIROpcodex86_64 inst, int64_t immediate, RegSize size, RegisterDescriptor address_register, const char *name, int64_t offset) {
+  const char *mnemonic = instruction_mnemonic(context, inst);
+  const char *address = register_name(address_register);
+  switch (context->target) {
+    case TARGET_GNU_ASM_ATT: {
+      const char *mnemonic_suffix = "";
+      switch (size) {
+      case r8: mnemonic_suffix = "b"; break;
+      case r16: mnemonic_suffix = "w"; break;
+      case r32: mnemonic_suffix = "l"; break;
+      case r64: mnemonic_suffix = "q"; break;
+        break;
+      }
+      if (offset)
+        fprint(context->code, "    %s%s $%D, (%s + %D)(%%%s)\n",
+               mnemonic, mnemonic_suffix, immediate, name, offset, address);
+      else
+        fprint(context->code, "    %s%s $%D, (%s)(%%%s)\n",
+               mnemonic, mnemonic_suffix, immediate, name, address);
+    } break;
+    case TARGET_GNU_ASM_INTEL: {
+      const char *memory_size = "";
+      switch (size) {
+      case r8: memory_size = "BYTE PTR "; break;
+      case r16: memory_size = "WORD PTR "; break;
+      case r32: memory_size = "DWORD PTR "; break;
+      case r64: memory_size = "QWORD PTR "; break;
+        break;
+      }
+      if (offset)
+        // mov QWORD PTR [foo + 32 + rip], 69
+        fprint(context->code, "    %s %s[%s + %D + %s], %D\n",
+               mnemonic, memory_size, name, offset, address, immediate);
+      else
+        fprint(context->code, "    %s %s[%s + %s], %D\n",
+               mnemonic, memory_size, name, address, immediate);
+    } break;
+    default: ICE("ERROR: femit_imm_to_offset_name(): Unsupported target %d", context->target);
   }
 }
 
@@ -608,6 +649,13 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
                    (int)local->value.local_ref, function->frame_objects.size);
             MIRFrameObject *fo = function->frame_objects.data + local->value.local_ref;
             femit_imm_to_mem(context, MX64_MOV, imm->value.imm, REG_RBP, fo->offset, (RegSize)fo->size);
+          } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_IMMEDIATE, MIR_OP_STATIC_REF)) {
+            // imm to mem (static) | imm, static
+            MIROperand *imm = mir_get_op(instruction, 0);
+            MIROperand *stc = mir_get_op(instruction, 1);
+            femit_imm_to_offset_name(context, MX64_MOV,
+                                     imm->value.imm, (RegSize)type_sizeof(stc->value.static_ref->static_ref->type),
+                                     REG_RIP, stc->value.static_ref->static_ref->name.data, 0);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
