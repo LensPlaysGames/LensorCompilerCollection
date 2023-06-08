@@ -749,7 +749,10 @@ static void lower(CodegenContext *context) {
         // __m128 types, arrays, and strings are never passed by immediate value.
         // Structs and unions of size 8, 16, 32, or 64 bits, and __m64
         // types, are passed as if they were integers of the same size.
-        if (instruction->imm >= argument_register_count) {
+        if (instruction->imm < argument_register_count) {
+          instruction->kind = IR_REGISTER;
+          instruction->result = argument_registers[instruction->imm];
+        } else {
 
           // Calculate offset to caller-allocated stack memory for large parameters.
 
@@ -775,7 +778,7 @@ static void lower(CodegenContext *context) {
           // disallow tail calls/emitting minimal stack frames when a
           // function has stack based parameters.
           // Skip pushed RBP and return addess.
-          offset->imm += 16;
+          offset->imm += 32 + 16; // 32 = shadow stack, 16 = stack frame
 
           usz i = instruction->parent_block->function->type->function.parameters.size - 1;
           foreach_rev (Parameter, param, instruction->parent_block->function->type->function.parameters) {
@@ -798,21 +801,6 @@ static void lower(CodegenContext *context) {
           instruction->kind = IR_LOAD;
           instruction->operand = address;
           mark_used(address, instruction);
-
-        } else {
-          instruction->kind = IR_REGISTER;
-          instruction->result = argument_registers[instruction->imm];
-          // Save register parameter on stack
-          INSTRUCTION(alloca, IR_ALLOCA);
-          alloca->imm = 8; // sizeof register
-          mark_used(instruction, alloca);
-          insert_instruction_before(alloca, instruction);
-          INSTRUCTION(store, IR_STORE);
-          store->store.value = instruction;
-          store->store.addr = alloca;
-          mark_used(instruction, alloca);
-          insert_instruction_before(store, instruction);
-          ir_replace_uses(instruction, alloca);
         }
       } break;
 

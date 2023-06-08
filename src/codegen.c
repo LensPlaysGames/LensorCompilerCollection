@@ -135,6 +135,22 @@ bool parameter_is_in_register(CodegenContext *context, IRFunction *function, usz
   UNREACHABLE();
 }
 
+static bool parameter_is_passed_as_pointer(CodegenContext *context, IRFunction *function, usz parameter_index) {
+  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling conventions");
+  switch (context->call_convention) {
+
+  case CG_CALL_CONV_MSWIN:
+    return type_sizeof(function->parameters.data[parameter_index]->type) > 8;
+
+  case CG_CALL_CONV_SYSV:
+    // FIXME: This is not how sysv works, nearly at all. But it's good enough for us right now.
+    return type_sizeof(function->parameters.data[parameter_index]->type) > 16;
+
+  default: ICE("Unrecognized calling convention %d!", context->call_convention);
+  }
+  UNREACHABLE();
+}
+
 /// ===========================================================================
 ///  Code generation.
 /// ===========================================================================
@@ -735,25 +751,20 @@ void codegen_function(CodegenContext *ctx, Node *node) {
 
   /// Next, emit all parameter declarations and store
   /// the initial parameter values in them.
-  // TODO: Make this backend dependent.
+  // TODO: Make this backend dependent?
   foreach_index(i, node->function.param_decls) {
     Node *decl = node->function.param_decls.data[i];
-    // TODO: We may want to create a pointer parameter here? I don't
-    // even know at this point.
-    if (type_is_reference(decl->type)) {
-      node->function.param_decls.data[i]->address = ir_parameter(ctx, i);
-    } else if (parameter_is_in_register(ctx, ctx->function, i)) {
+    IRInstruction *p = ir_parameter(ctx, i);
+    if (type_is_reference(decl->type))
+      decl->address = p;
+    else if (parameter_is_passed_as_pointer(ctx, ctx->function, i)) {
+      p->type = ast_make_type_pointer(ctx->ast, p->type->source_location, p->type);
+      decl->address = p;
+    } else {
       /// Allocate a variable for the parameter.
       codegen_lvalue(ctx, decl);
-
       /// Store the parameter value in the variable.
-      IRInstruction *p = ir_parameter(ctx, i);
       ir_store(ctx, p, decl->address);
-    } else {
-      // If it's not in a register, it's in memory. That means it's a pointer!
-      IRInstruction *p = ir_parameter(ctx, i);
-      p->type = ast_make_type_pointer(ctx->ast, p->type->source_location, p->type);
-      node->function.param_decls.data[i]->address = p;
     }
   }
 
