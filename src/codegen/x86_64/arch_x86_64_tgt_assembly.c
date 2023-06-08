@@ -553,6 +553,12 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
           print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
           ICE("It seems instruction selection has not lowered a general MIR instruction");
         }
+        if (annotate_code && instruction->origin) {
+          fprint(context->code, ";;#; ");
+          thread_use_colours = false;
+          ir_femit_instruction(context->code, instruction->origin);
+          thread_use_colours = true;
+        }
         switch ((MIROpcodex86_64)instruction->opcode) {
         default: {
           print("Unhandled opcode: %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
