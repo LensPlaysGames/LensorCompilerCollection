@@ -7,14 +7,7 @@ SDL_Surface :> type {}
 SDL_Event :> type {
   data: byte[128]
 }
-sdl_event_type: integer(event: SDL_Event) {
-  out :: @(event.data[0]) as integer
-  out := out | (@(event.data[1]) as integer << 8)
-  out := out | (@(event.data[2]) as integer << 16)
-  out := out | (@(event.data[3]) as integer << 24)
-  out
-}
-SDL_EVENT_QUIT :: 0x100
+SDL_EVENT_QUIT: u32 =  0x100
 SDL_PollEvent: ext integer(event: @SDL_Event)
 SDL_INIT_VIDEO: u32 = 0x20
 SDL_WINDOWPOS_UNDEFINED: s32 = 0x1FFF0000
@@ -35,6 +28,7 @@ window: @SDL_Window
 
 if SDL_Init(SDL_INIT_VIDEO) != 0 {
   puts("Failed to initialise SDL"[0])
+  puts(SDL_GetError())
   return 1;
 }
 
@@ -57,7 +51,8 @@ event: SDL_Event
 quit: integer = 0
 while quit = 0 {
   while SDL_PollEvent(&event) {
-    if sdl_event_type(event) = SDL_EVENT_QUIT {
+    etype :: @(event.data[0] as @u32)
+    if etype = SDL_EVENT_QUIT {
       quit := 1
     }
   }
