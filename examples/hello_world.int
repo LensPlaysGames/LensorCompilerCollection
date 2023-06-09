@@ -1,6 +1,0 @@
-;; 13
-;; Hello, World!
-
-puts : ext integer(s : @byte)
-str : @byte = "Hello, World!"[0]
-puts(str)

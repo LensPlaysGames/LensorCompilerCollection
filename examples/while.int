@@ -1,8 +1,0 @@
-putchar : ext void(c : integer)
-
-cond : integer = 10
-while cond {
-  cond := cond - 1
-  putchar(48 + cond)
-  putchar(10)
-}

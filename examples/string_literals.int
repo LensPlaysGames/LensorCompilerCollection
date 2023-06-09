@@ -1,6 +1,13 @@
 puts : ext void(s : @byte)
 
-str : @byte = "Hello, LISP programmer!"[0]
+;; A string literal may use single quotes for a /raw/ string (no escape
+;; characters), or double quotes for an escaped string (backslash
+;; escapes). A string literal is an expression which returns a byte
+;; array, the size of which is determined by the length of the string
+;; plus one to account for a NULL terminator.
+str :: "Hello, LISP programmer!"
 
-puts(str)
+;; For interop with C-style strings, simply pass the address of the
+;; first element in the byte array using the subscript operator.
+puts(str[0])
 0

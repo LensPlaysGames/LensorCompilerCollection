@@ -1,3 +1,0 @@
-div : integer (a : integer) {
-    a / 256
-}

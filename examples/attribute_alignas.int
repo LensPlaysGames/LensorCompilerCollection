@@ -1,7 +1,0 @@
-foo :> type alignas 16 {
-  n: integer
-}
-
-a: foo
-a.n := 69
-a.n
