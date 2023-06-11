@@ -289,45 +289,39 @@ SysVArgumentClass sysv_classify_argument(Type *given_type) {
   // TODO: Use type_is_integer instead of t_integer comparisons, etc.
   if (type_is_pointer(type) ||
       type_is_reference(type) ||
+      (type->kind == TYPE_INTEGER && type->integer.bit_width <= 64) ||
       type == t_integer ||
       type == t_byte) {
     return SYSV_REGCLASS_INTEGER;
   }
-  // FIXME: Probably more efficient to have the size check be the
-  // outermost check, and then divy it up based on more type specifics.
-  if (type_is_array(type) || type_is_struct(type)) {
-    usz size = type_sizeof(type);
-    // If the size of an object is larger than four eightbytes, or it
-    // contains unaligned fields, it has class MEMORY.
-    // TODO: Check for unaligned fields.
-    // Technically, the only things that get lowered into multiple
-    // registers are two eightbytes or smaller; so while the "rule"
-    // above *does* say four eightbytes, it actually is only two.
-    if (size > 16) return SYSV_REGCLASS_MEMORY;
-    // If the size of the aggregate exceeds a single eightbyte,
-    // each is classified separately. Each eightbyte gets
-    // initialized to class NO_CLASS.
-    else if (size > 8) {
-
-      // At this point we have a 9-16 byte aggregate type.
-
-      if (type_is_array(type)) {
-        // Classify base type of array.
-        SysVArgumentClass base_class = sysv_classify_argument(type->array.of);
-        if (type->array.size == 1) return base_class;
-        usz base_size = type_sizeof(type->array.of);
-        // If an aggregate exceeds two eightbytes, the whole argument is passed in memory.
-        if (type->array.size * base_size > 16) return SYSV_REGCLASS_MEMORY;
-        // Otherwise, the aggregate is less than or equal to two
-        // eightbytes, and can be passed in one or two registers.
-        return SYSV_REGCLASS_INTEGER;
-      }
-
-      if (type_is_struct(type))
-        return SYSV_REGCLASS_INTEGER;
-    }
-    // Anything 1, 2, 4, or 8 bytes can go in a register.
-    else return SYSV_REGCLASS_INTEGER;
+  usz size = type_sizeof(type);
+  // Anything 8 bytes or less can go in a register.
+  if (size <= 8) return SYSV_REGCLASS_INTEGER;
+  // Anything larger than "two eight-bytes" (16 bytes) goes in memory.
+  // "If the size of an object is larger than four eightbytes, or it
+  // contains unaligned fields, it has class MEMORY."
+  // Technically, the only things that get lowered into multiple
+  // registers are two eightbytes or smaller; so while the "rule"
+  // above *does* say four eightbytes, it actually is only two.
+  // TODO: Check for "unaligned fields".
+  if (size > 16) return SYSV_REGCLASS_MEMORY;
+  // At this point we have a 9-16 byte type.
+  // "If the size of the aggregate exceeds a single eightbyte,
+  // each is classified separately. Each eightbyte gets
+  // initialized to class NO_CLASS."
+  // Things that are 9-16 bytes are where SYSV tries to split things
+  // across registers, basically.
+  if (type_is_struct(type)) return SYSV_REGCLASS_INTEGER;
+  if (type_is_array(type)) {
+    // Classify base type of array.
+    SysVArgumentClass base_class = sysv_classify_argument(type->array.of);
+    if (type->array.size == 1) return base_class;
+    usz base_size = type_sizeof(type->array.of);
+    // If an aggregate exceeds two eightbytes, the whole argument is passed in memory.
+    if (type->array.size * base_size > 16) return SYSV_REGCLASS_MEMORY;
+    // Otherwise, the aggregate is less than or equal to two
+    // eightbytes, and can be passed in one or two registers.
+    return SYSV_REGCLASS_INTEGER;
   }
   return SYSV_REGCLASS_INVALID;
 }
@@ -338,7 +332,7 @@ usz sysv_argument_register_count_x86_64(CodegenContext *context, Type *function,
   ASSERT(function->kind == TYPE_FUNCTION);
 
   if (parameter_index >= function->function.parameters.size)
-    ICE("Parameter index out of bounds");
+    ICE("SysV: Parameter index out of bounds");
 
   Parameter *parameter = function->function.parameters.data + parameter_index;
 
@@ -361,9 +355,9 @@ usz sysv_argument_register_index_x86_64(CodegenContext *context, Type *function,
     ICE("Parameter index out of bounds");
 
   usz argument_register_offset = 0;
-  for (usz i = 0; i < parameter_index; ++i) {
+  for (usz i = 0; i < parameter_index; ++i)
     argument_register_offset += sysv_argument_register_count_x86_64(context, function, i);
-  }
+
   return argument_register_offset;
 }
 
@@ -554,7 +548,6 @@ static void lower(CodegenContext *context) {
         if (!type_is_void(instruction->type)) {
           instruction->result = REG_RAX;
 
-          // TODO: Returning types larger than a register isn't fully handled yet...
           if (type_sizeof(instruction->type) > max_register_size) {
             Type *large_type = instruction->type;
 
