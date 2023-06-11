@@ -643,7 +643,10 @@ static void mcode_mem_to_reg(CodegenContext *context, MIROpcodex86_64 inst, Regi
     uint8_t destination_regbits = regbits(destination_register);
 
     // Each of these branches *must* assign modrm.
-    if (offset == 0) {
+
+    // "Using RBP or R13 without displacement must be done using mod = 01 with a displacement of 0."
+    //     ~ Intel Software Developer's Manual, p. 517, Vol. 2A, Ch. 2, Table 2-5, "Special Cases of REX Encodings"
+    if (offset == 0 && (address_register != REG_RBP && address_register != REG_R13)) {
       // Mod == 0b00  (register)
       // Reg == Destination
       // R/M == Address
