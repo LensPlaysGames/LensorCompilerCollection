@@ -195,7 +195,6 @@ static void emit_memcpy(CodegenContext *context, IRInstruction *to_, IRInstructi
   insert_instruction_before(to, insert_before_this);
   // Switch type to reflect storing 8 bytes.
   to->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
-
   if ((byte_size = emit_memcpy_impl(context, to, from, byte_size, 8, insert_before_this))) {
     // Switch type to reflect storing 1 byte.
     from->type = ast_make_type_pointer(context->ast, t_byte->source_location, t_byte);
@@ -216,6 +215,9 @@ static bool lower_load(CodegenContext *context, IRInstruction *instruction) {
 
     // Create space for a copy on the stack.
     INSTRUCTION(alloca, IR_ALLOCA);
+    // Replace `load` with `alloca`.
+    ir_replace_uses(instruction, alloca);
+
     alloca->alloca.size = byte_size;
     alloca->type = ast_make_type_pointer(context->ast, type->source_location, type);
     ir_set_backend_flag(alloca, STORE_UNDERLYING);
@@ -224,8 +226,6 @@ static bool lower_load(CodegenContext *context, IRInstruction *instruction) {
 
     emit_memcpy(context, alloca, instruction->operand, type_sizeof(instruction->type), instruction);
 
-    // Replace `load` with `alloca`.
-    ir_replace_uses(instruction, alloca);
     ir_remove(instruction);
     return true;
   }
@@ -570,11 +570,12 @@ static void lower(CodegenContext *context) {
 
             // Replace uses of the call result with loads from the returned pointer.
             INSTRUCTION(load, IR_LOAD);
+            ir_replace_uses(instruction, load);
+
             load->type = large_type;
             load->operand = instruction;
             mark_used(instruction, load);
             insert_instruction_after(load, instruction);
-            ir_replace_uses(instruction, load);
             lower_load(context, load);
           } else {
             // This is a bit scuffed. Firstly, *reasonably*, we set the call's
@@ -585,8 +586,9 @@ static void lower(CodegenContext *context) {
             // all uses of the call result with that virtual register... As I
             // said, a bit scuffed.
             IRInstruction *copy = ir_copy(context, instruction);
-            insert_instruction_after(copy, instruction);
             ir_replace_uses(instruction, copy);
+
+            insert_instruction_after(copy, instruction);
           }
         }
 

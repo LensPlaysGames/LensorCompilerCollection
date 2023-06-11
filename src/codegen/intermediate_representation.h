@@ -334,6 +334,18 @@ bool ir_is_value(IRInstruction *instruction);
 void ir_print_defun(FILE *file, IRFunction *function);
 
 /// Replace all uses of instruction with replacement.
+/// NOTE: If you are trying to replace an instruction, `A`, with
+/// another instruction, `B`, that references `A` as an operand (or any
+/// of it's operands do, and so forth), then you *must* either call
+/// this *first* and then insert the new instruction (preferred), OR
+/// wait to mark uses until after this has been called (but this is
+/// riskier, and should only be used to fix complex code with this
+/// issue without changing anything too much).
+/// For example (correct):
+///     INSTRUCTION(B, IR_COPY);
+///     ir_replace_uses(A, B);
+///     B->operand = A;
+///     mark_used(A, B);
 void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement);
 
 /// Remove this instruction from the users lists of its children.
