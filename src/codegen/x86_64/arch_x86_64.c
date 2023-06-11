@@ -361,6 +361,70 @@ usz sysv_argument_register_index_x86_64(CodegenContext *context, Type *function,
   return argument_register_offset;
 }
 
+/// Insert instructions to load a parameter split across two registers
+/// in place of given `parameter` instruction.
+void sysv_load_two_register_parameter(CodegenContext *context, IRInstruction *parameter) {
+  usz size = type_sizeof(parameter->type);
+  ASSERT(size > 8, "%T is less than or equal to eight bytes, and should be passed in a single register, not two.", parameter->type);
+  ASSERT(size <= 16, "Can only pass things that are two-eightbytes or less in general purpose registers.");
+
+  INSTRUCTION(eightbyte1, IR_REGISTER);
+  usz argument_register_index = sysv_argument_register_index_x86_64(context, parameter->parent_block->function->type, parameter->imm);
+  ASSERT(argument_register_index + 1 < argument_register_count);
+  eightbyte1->result = argument_registers[argument_register_index];
+  eightbyte1->type = t_integer;
+  insert_instruction_before(eightbyte1, parameter);
+
+  INSTRUCTION(eightbyte2, IR_REGISTER);
+  eightbyte2->result = argument_registers[argument_register_index + 1];
+  eightbyte2->type = t_integer;
+  insert_instruction_before(eightbyte2, parameter);
+
+  INSTRUCTION(alloca, IR_ALLOCA);
+  // While it may be possible that this particular type is only 12
+  // bytes, we allocate 16 (the max) no matter what.
+  alloca->alloca.size = 16;
+  alloca->type = ast_make_type_pointer(context->ast, parameter->type->source_location, parameter->type);
+  insert_instruction_before(alloca, parameter);
+
+  // Store first eight bytes from parameter register into
+  // newly allocated local variable.
+  INSTRUCTION(store1, IR_STORE);
+  store1->store.addr = alloca;
+  mark_used(alloca, store1);
+  store1->store.value = eightbyte1;
+  mark_used(eightbyte1, store1);
+  insert_instruction_before(store1, parameter);
+
+  // Increment address
+  INSTRUCTION(offset, IR_IMMEDIATE);
+  offset->type = t_integer;
+  offset->imm = 8;
+  insert_instruction_before(offset, parameter);
+
+  INSTRUCTION(address, IR_ADD);
+  address->lhs = alloca;
+  mark_used(alloca, address);
+  address->rhs = offset;
+  mark_used(offset, address);
+  address->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
+  insert_instruction_before(address, parameter);
+
+  // Store second eightbyte.
+  INSTRUCTION(store2, IR_STORE);
+  store2->kind = IR_STORE;
+  store2->store.addr = address;
+  mark_used(address, store2);
+  store2->store.value = eightbyte2;
+  mark_used(eightbyte2, store2);
+  insert_instruction_before(store2, parameter);
+
+  parameter->kind = IR_LOAD;
+  parameter->operand = alloca;
+
+  lower_load(context, parameter);
+}
+
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
 
@@ -630,64 +694,8 @@ static void lower(CodegenContext *context) {
           ASSERT(class != SYSV_REGCLASS_INVALID, "Could not classify argument according to SYSV ABI, sorry");
           switch(class) {
           case SYSV_REGCLASS_INTEGER: {
-            usz size = type_sizeof(instruction->type);
-            if (size > 8) {
-              ASSERT(size <= 16, "Can only pass things that are two-eightbytes or less in general purpose registers.");
-
-              INSTRUCTION(eightbyte1, IR_REGISTER);
-              usz argument_register_index = sysv_argument_register_index_x86_64(context, instruction->parent_block->function->type, instruction->imm);
-              ASSERT(argument_register_index + 1 < argument_register_count);
-              eightbyte1->result = argument_registers[argument_register_index];
-              eightbyte1->type = t_integer;
-              insert_instruction_before(eightbyte1, instruction);
-
-              INSTRUCTION(eightbyte2, IR_REGISTER);
-              eightbyte2->result = argument_registers[argument_register_index + 1];
-              eightbyte2->type = t_integer;
-              insert_instruction_before(eightbyte2, instruction);
-
-              INSTRUCTION(alloca, IR_ALLOCA);
-              alloca->alloca.size = 16;
-              alloca->type = ast_make_type_pointer(context->ast, instruction->type->source_location, instruction->type);
-              insert_instruction_before(alloca, instruction);
-
-              // Store first eight bytes from parameter register into
-              // newly allocated local variable.
-              INSTRUCTION(store1, IR_STORE);
-              store1->store.addr = alloca;
-              mark_used(alloca, store1);
-              store1->store.value = eightbyte1;
-              mark_used(eightbyte1, store1);
-              insert_instruction_before(store1, instruction);
-
-              // Increment address
-              INSTRUCTION(offset, IR_IMMEDIATE);
-              offset->type = t_integer;
-              offset->imm = 8;
-              insert_instruction_before(offset, instruction);
-
-              INSTRUCTION(address, IR_ADD);
-              address->lhs = alloca;
-              mark_used(alloca, address);
-              address->rhs = offset;
-              mark_used(offset, address);
-              address->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
-              insert_instruction_before(address, instruction);
-
-              // Store second eightbyte.
-              INSTRUCTION(store2, IR_STORE);
-              store2->kind = IR_STORE;
-              store2->store.addr = address;
-              mark_used(address, store2);
-              store2->store.value = eightbyte2;
-              mark_used(eightbyte2, store2);
-              insert_instruction_before(store2, instruction);
-
-              instruction->kind = IR_LOAD;
-              instruction->operand = alloca;
-
-              lower_load(context, instruction);
-            } else {
+            if (type_sizeof(instruction->type) > 8) sysv_load_two_register_parameter(context, instruction);
+            else {
               instruction->kind = IR_REGISTER;
               instruction->result = argument_registers[instruction->imm];
             }
