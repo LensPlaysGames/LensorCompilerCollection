@@ -36,7 +36,7 @@ std::filesystem::path temppath(std::string_view extension) {
     /// Do NOT use `char` for this because it’s signed on some systems (including mine),
     /// which completely breaks the modulo operation below... Thanks a lot, C.
     std::array<uint8_t, 8> rand{};
-    for (size_t i = 0; i < 8; ++i) rand[i] = std::rand() % 26 + 'a';
+    std::generate(rand.begin(), rand.end(), [&] () { return rd() % 26 + 'a'; });
 
     /// Create a unique path.
     tmp_dir /= pid; tmp_dir += ".";
