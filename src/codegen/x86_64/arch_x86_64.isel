@@ -245,6 +245,18 @@ emit {
   MX64_LEA(object, i1)
   MX64_ADD(imm, i1)
 }
+match
+MIR_ADD i1(Local object, Immediate imm)
+emit {
+  MX64_LEA(object, i1)
+  MX64_ADD(imm, i1)
+}
+match
+MIR_ADD i1(Immediate imm, Local object)
+emit {
+  MX64_LEA(object, i1)
+  MX64_ADD(imm, i1)
+}
 
 match
 MIR_MUL i1(Immediate lhs, Immediate rhs)
