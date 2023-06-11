@@ -574,7 +574,7 @@ static void lower(CodegenContext *context) {
           insert_instruction_before(load1, instruction);
 
           // Load second eightbyte of the parameter.
-          // FIXME: Second eightbyte may not be fully eight bytes.
+          // FIXME: Second eightbyte shouldn't have to be fully eight bytes.
           ASSERT(type_sizeof(argument->type->pointer.to) == 16,
                  "SysV ABI requires alignment of a multiple of 16 for aggregate types from (8 to 16]: %T",
                  argument->type->pointer.to);
@@ -595,6 +595,11 @@ static void lower(CodegenContext *context) {
           load2->operand = second_eightbyte_addr;
           load2->type = t_integer;
           insert_instruction_before(load2, instruction);
+
+          usz arg_reg_index = sysv_argument_register_index_x86_64(context, function_type, *i);
+          ASSERT(arg_reg_index + 1 < argument_register_count);
+          load1->result = argument_registers[arg_reg_index];
+          load2->result = argument_registers[arg_reg_index + 1];
 
           // Remove argument from call, and replace with two new arguments.
           ir_remove_use(argument, instruction);
