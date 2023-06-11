@@ -141,14 +141,14 @@ emit {
 match MIR_STORE(Local value, Local dst)
 emit {
   ;; Load pointer to local value
-  MX64_LEA i1(value, i1)
+  MX64_LEA i1(value, i1) ;; TODO: size of i1 is zero...
   ;; Copy pointer of local value to value of destination
   MX64_MOV(i1, dst)
 }
 match MIR_STORE(Function f, Static object)
 emit {
   ;; Load pointer to function
-  MX64_LEA i1(f, i1)
+  MX64_LEA i1(f, i1) ;; TODO: size of i1 is zero...
   ;; Copy pointer of function to value of destination
   MX64_MOV(i1, object)
 }

@@ -2423,6 +2423,13 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
                    "Local reference index %Z is larger than maximum possible local index %Z",
                    local->value.local_ref, function->frame_objects.size - 1);
 
+            if (!reg->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n\n");
+              reg->value.reg.size = r64;
+            }
+
             mcode_reg_to_mem(context, MX64_MOV, reg->value.reg.value, reg->value.reg.size,
                              REG_RBP, function->frame_objects.data[local->value.local_ref].offset);
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_IMMEDIATE, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
