@@ -38,6 +38,8 @@ syn match intOperators "?\|+\|-\|\*\|:\|,\|<\|>\|&\||\|!\|\~\|%\|=\|\.\|/\(/\|*\
 
 syn match intNumber "\v<\d+>"
 
+syn keyword intStatement return
+
 hi def link intPrimitiveTypes     Type
 hi def link intKeywords           Keyword
 hi def link intRepeat             Repeat
@@ -51,5 +53,6 @@ hi def link intFunctionAttributes StorageClass
 hi def link intTypeAttributes     StorageClass
 hi def link intMacro              Macro
 hi def link intMacroArgs          Function
+hi def link intStatement          Statement
 
 let b:current_syntax = 'int'
