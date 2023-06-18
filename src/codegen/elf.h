@@ -120,7 +120,7 @@
 typedef struct elf64_header {
   /// Identifying information. See EI_* macros for more info.
   uint8_t e_ident[16];
-  /// Type of file (executable, object, etc).
+  /// Type of file (executable, object, etc). See ET_* macros for more info.
   uint16_t e_type;
   /// Machine that is targeted (instruction set architecture).
   /// See EM_* macros for more info.
@@ -145,7 +145,7 @@ typedef struct elf64_header {
   uint16_t e_shentsize;
   /// Amount of entries present in the section header table.
   uint16_t e_shnum;
-  /// Index of the section header tanble entry that contains the section names.
+  /// Index of the section header table entry that contains the section names.
   uint16_t e_shstrndx;
 } elf64_header;
 
