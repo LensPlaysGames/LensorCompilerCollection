@@ -164,6 +164,9 @@ void eprint(const char *fmt, ...);
 /// Create a string from a const char*
 #define string_create(src) string_dup_impl(src, strlen(src))
 
+/// Check if string A starts with string B.
+#define string_starts_with(a, b) ((a).size >= (b).size && memcmp((a).data, (b).data, (b).size) == 0)
+
 /// Check if two strings are equal.
 #define string_eq(a, b) ((a).size == (b).size && memcmp((a).data, (b).data, (a).size) == 0)
 
