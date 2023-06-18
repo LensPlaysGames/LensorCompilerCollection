@@ -176,6 +176,9 @@ in Intercept source code will be indented."
   (setq font-lock-defaults '((int--font-lock-defaults)))
   (setq indent-line-function #'int--indent-line))
 
+;;;###autoload
+(add-to-list 'auto-mode-alist '("\\.int\\'" . int-mode))
+
 (provide 'int-mode)
 
 ;;; int-mode.el ends here
