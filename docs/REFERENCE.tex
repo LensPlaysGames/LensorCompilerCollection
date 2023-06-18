@@ -528,4 +528,118 @@ less_than_100 : integer(n : integer) = integer(n : integer) {
 }
 ```
 
+\chapter{Macros}
+\label{chpt:macros}
+
+A macro is a \emph{rule} or \emph{pattern} that specifies how a certain input should be mapped to a replacement output.
+
+\textbf{Defining a Simple Macro}
+
+A macro must have a minimum of three things: a name (which must be an identifier), an input list (the parameters), and an output list (the expansion).
+
+First, let's look at the most basic macro: \emph{empty}.
+
+```[Int]
+macro empty emits endmacro
+```
+
+Here the macro \emph{empty} is defined as a macro that takes no inputs and emits no outputs. Usage of the \emph{empty} macro would do nothing, as it is replaced with it's output: nothing.
+
+
+\section{Hygiene}
+\label{sec:macros-hygiene}
+
+\textbf{Staying Clean in Intercept}
+
+In Intercept, macro expansions are guaranteed to be hygienic at parse time. That's right: an error will be issued if a macro expansion is unhygienic, and the program will not compile successfully. To avoid users running into these sorts of errors all the time, however, an astute Intercept programmer may write macros in such a way (i.e. using \verb|defines|) that it is impossible for an unhygienic expansion to occur.
+
+```[Int]
+macro foo $t emits
+  a :: 35
+  $t + a
+endmacro
+```
+
+Let's consider a use case of the macro above, where a programmer would like to call it twice in a row.
+
+```[Int]
+foo 34
+foo 34
+```
+
+And after expansion:
+
+```[Int]
+a :: 35
+34 + a
+a :: 35
+34 + a
+```
+
+Uh oh! This program no longer compiles, as $a$ is declared twice in the same scope. So, as a macro author, how can we ensure the user can call it as many times as they want, without causing issues like this? Enter \verb|defines|.
+
+\verb|defines| is an optional part of a macro definition that allows the author to declare that the macro defines a unique variable somewhere in it's output.
+
+```[Int]
+macro foo $t
+defines a
+emits
+  a :: 35
+  $t + a
+endmacro
+```
+
+Now, the same usage as before:
+```[Int]
+foo 34
+foo 34
+```
+
+And after expansion...
+
+```[Int]
+__G_xX_1_Xx_ :: 35
+34 + __G_xX_1_Xx_
+__G_xX_2_Xx_ :: 35
+34 + __G_xX_2_Xx_
+```
+
+Woah! What happened there? Well, the Intercept compiler now knows that any usage of the symbol $a$ within the expansion of the $foo$ macro should actually be unique per macro invocation (as each invocation should define that variable). So, for each invocation, the symbol $a$, when encountered within the macro expansion output, is replaced with a program-wide, unique symbol. This means each invocation acts as expected, and the program is able to compile successfully.
+
+This isn't the only problem \verb|defines| solves; because it allows a macro author to bind a symbol in the output to a program-wide unique symbol, \verb|defines| is basically a fancy syntax for \verb|gensym|. This means that a macro may define a variable in a child scope without worry of it shadowing parent declarations. For example:
+
+```[Int]
+macro foo $t
+defines a
+emits {
+  a :: 35
+  $t + a
+} endmacro
+
+a :: 34
+foo a
+```
+
+Expansion with \verb|defines|:
+```[Int]
+a :: 34
+{
+  __G_xX_1_Xx_ :: 35
+  a + __G_xX_1_Xx_
+}
+```
+
+Expansion without \verb|defines|:
+```[Int]
+a :: 34
+{
+  a :: 35
+  a + a ;; 70?! Uh oh, that's not right!
+}
+```
+
+As you can see, without generating a unique symbol, it is possible for very confusing expansions to occur. Well, it would be, if Intercept didn't check specifically for this case and emit an error in it's presence.
+
+These are just a few ways to stay hygienic in Intercept while writing and using macros.
+
 \end{document}
