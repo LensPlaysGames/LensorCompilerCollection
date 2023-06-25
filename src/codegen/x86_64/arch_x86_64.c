@@ -1374,7 +1374,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
           // Save return register if it is not the result of this
           // function call already; if it is, the RA has already asserted
           // that RAX can be clobbered by this instruction.
-          if (instruction->reg < MIR_ARCH_START && instruction->reg != desc.result_register && func_regs & desc.result_register) {
+          // TODO: Determine a better way to figure out if we actually
+          // need to save the result register over this call boundary.
+          if (instruction->reg < MIR_ARCH_START && instruction->reg != desc.result_register && func_regs & (1 << desc.result_register)) {
             MIRInstruction *push = mir_makenew(MX64_PUSH);
             mir_add_op(push, mir_op_register(desc.result_register, r64, false));
             mir_insert_instruction(instruction->block, push, i++);
@@ -1520,7 +1522,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
             mir_insert_instruction(instruction->block, move, i++);
 
             // Restore return register.
-            if (func_regs & desc.result_register) {
+            if (func_regs & (1 << desc.result_register)) {
               MIRInstruction *pop = mir_makenew(MX64_POP);
               mir_add_op(pop, mir_op_register(desc.result_register, r64, false));
               mir_insert_instruction(instruction->block, pop, i++);
