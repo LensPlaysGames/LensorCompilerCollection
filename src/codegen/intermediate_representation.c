@@ -992,6 +992,21 @@ bool ir_get_backend_flag(const IRInstruction *const instruction, const int bit_i
   return instruction->backend_flags & (1 << bit_index);
 }
 
+IRInstruction *ir_get_literal_string(CodegenContext *ctx, usz string_index) {
+  ASSERT(string_index < ctx->ast->strings.size, "Invalid string index %Z", string_index);
+  INSTRUCTION(s, IR_LIT_STRING);
+  s->str = ctx->ast->strings.data[string_index];
+  s->string_index = string_index;
+  return s;
+}
+
+Type* ir_call_get_callee_type(IRInstruction* inst) {
+    return !inst->call.is_indirect
+        ? inst->call.callee_function->type
+        : type_is_pointer(inst->call.callee_instruction->type)
+            ? inst->call.callee_instruction->type->pointer.to
+            : inst->call.callee_instruction->type;
+}
 
 #undef INSERT
 

@@ -2287,7 +2287,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
         }
         switch ((MIROpcodex86_64)instruction->opcode) {
         default: {
-          print("Unhandled opcode (mcode): %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
+          print("Unhandled opcode (mcode): %u (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
         } break;
 
         case MX64_IMUL: {

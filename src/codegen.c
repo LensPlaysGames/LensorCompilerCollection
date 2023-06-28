@@ -4,6 +4,7 @@
 #include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/x86_64/arch_x86_64.h>
+#include <codegen/llvm/llvm_target.h>
 #include <codegen/ir/ir.h>
 #include <error.h>
 #include <ir_parser.h>
@@ -40,21 +41,27 @@ CodegenContext *codegen_context_create
   CodegenContext *context;
 
   STATIC_ASSERT(ARCH_COUNT == 2, "codegen_context_create() must exhaustively handle all codegen architectures.");
-  STATIC_ASSERT(TARGET_COUNT == 5, "codegen_context_create() must exhaustively handle all codegen targets.");
+  STATIC_ASSERT(TARGET_COUNT == 6, "codegen_context_create() must exhaustively handle all codegen targets.");
   STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_create() must exhaustively handle all codegen calling conventions.");
-  switch (arch) {
-    case ARCH_X86_64:
-      // Handle call_convention for creating codegen context!
-      if (call_convention == CG_CALL_CONV_MSWIN) {
-        context = codegen_context_x86_64_mswin_create();
-      } else if (call_convention == CG_CALL_CONV_SYSV) {
-        context = codegen_context_x86_64_linux_create();
-      } else {
-        ICE("Unrecognized calling convention!");
-      }
-      break;
-    default: UNREACHABLE();
+
+  if (target == TARGET_LLVM) {
+    context = codegen_context_llvm_create();
+  } else {
+    switch (arch) {
+      case ARCH_X86_64:
+        // Handle call_convention for creating codegen context!
+        if (call_convention == CG_CALL_CONV_MSWIN) {
+          context = codegen_context_x86_64_mswin_create();
+        } else if (call_convention == CG_CALL_CONV_SYSV) {
+          context = codegen_context_x86_64_linux_create();
+        } else {
+          ICE("Unrecognized calling convention!");
+        }
+        break;
+      default: UNREACHABLE();
+    }
   }
+
 
   context->arch = arch;
   context->target = target;
@@ -68,7 +75,7 @@ CodegenContext *codegen_context_create
 
 void codegen_context_free(CodegenContext *context) {
   STATIC_ASSERT(ARCH_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen architectures.");
-  STATIC_ASSERT(TARGET_COUNT == 5, "codegen_context_free() must exhaustively handle all codegen targets.");
+  STATIC_ASSERT(TARGET_COUNT == 6, "codegen_context_free() must exhaustively handle all codegen targets.");
   STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen calling conventions.");
 
   /// Free all IR Functions.
@@ -111,15 +118,19 @@ void codegen_context_free(CodegenContext *context) {
 
   /// Free backend-specific data.
   STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures");
-  switch (context->arch) {
-    default: UNREACHABLE();
+  if (context->target == TARGET_LLVM) {
+    codegen_context_llvm_free(context);
+  } else {
+    switch (context->arch) {
+      default: UNREACHABLE();
 
-    case ARCH_X86_64: {
-      STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling conventions");
-      if (context->call_convention == CG_CALL_CONV_MSWIN) codegen_context_x86_64_mswin_free(context);
-      else if (context->call_convention == CG_CALL_CONV_SYSV) codegen_context_x86_64_linux_free(context);
-      else ICE("Unrecognized calling convention!");
-    } break;
+      case ARCH_X86_64: {
+        STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling conventions");
+        if (context->call_convention == CG_CALL_CONV_MSWIN) codegen_context_x86_64_mswin_free(context);
+        else if (context->call_convention == CG_CALL_CONV_SYSV) codegen_context_x86_64_linux_free(context);
+        else ICE("Unrecognized calling convention!");
+      } break;
+    }
   }
 
   /// Free the context itself.
@@ -181,9 +192,7 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
               i->imm = lval->declaration.init->literal.integer;
               lval->address->static_ref->init = i;
             } else if (lval->declaration.init->literal.type == TK_STRING) {
-              INSTRUCTION(s, IR_LIT_STRING);
-              s->str = ctx->ast->strings.data[lval->declaration.init->literal.string_index];
-              lval->address->static_ref->init = s;
+              lval->address->static_ref->init = ir_get_literal_string(ctx, lval->declaration.init->literal.string_index);
             } else ICE("Unhandled literal type for static variable initialisation.");
           } else {
             codegen_expr(ctx, lval->declaration.init);
@@ -641,9 +650,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
       expr->ir = ir_create_static(ctx, expr, expr->type, as_span(string_create(buf)));
       // Set static initialiser so backend will properly fill in data from string literal.
-      INSTRUCTION(s, IR_LIT_STRING);
-      s->str = ctx->ast->strings.data[expr->literal.string_index];
-      expr->ir->static_ref->init = s;
+      expr->ir->static_ref->init = ir_get_literal_string(ctx, expr->literal.string_index);
 
     } break;
 
@@ -794,6 +801,12 @@ void codegen_lower(CodegenContext *context) {
 
 void codegen_emit(CodegenContext *context) {
   STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures");
+
+  if (context->target == TARGET_LLVM) {
+    codegen_emit_llvm(context);
+    return;
+  }
+
   switch (context->arch) {
   case ARCH_X86_64: {
     codegen_emit_x86_64(context);
@@ -894,11 +907,14 @@ bool codegen
       ir_femit(stdout, context);
   }
 
-  codegen_lower(context);
+  /// No need to lower anything if we’re emitting LLVM IR.
+  if (target != TARGET_LLVM) {
+    codegen_lower(context);
 
-  if (debug_ir) {
-    print("After lowering:\n");
-    ir_femit(stdout, context);
+    if (debug_ir) {
+      print("After lowering:\n");
+      ir_femit(stdout, context);
+    }
   }
 
   codegen_emit(context);
@@ -907,4 +923,68 @@ bool codegen
 
   fclose(code);
   return true;
+}
+
+
+static void mangle_type_to(string_buffer *buf, Type *t) {
+  ASSERT(t);
+  switch (t->kind) {
+    default: TODO("Handle type kind %d in type mangling!", (int)t->kind);
+
+    case TYPE_STRUCT:
+      if (t->structure.decl->struct_decl->name.size)
+        format_to(buf, "%Z%S", t->structure.decl->struct_decl->name.size, t->structure.decl->struct_decl->name);
+      else {
+        static usz struct_count = 0;
+        format_to(buf, "%Z%Z", number_width(struct_count), struct_count);
+        ++struct_count;
+      }
+      break;
+
+    case TYPE_PRIMITIVE:
+      format_to(buf, "%Z%S", t->primitive.name.size, t->primitive.name);
+      break;
+
+    case TYPE_NAMED:
+      if (!t->named->val.type) format_to(buf, "%Z%S", t->named->name.size, t->named->name);
+      else mangle_type_to(buf, t->named->val.type);
+      break;
+
+    case TYPE_INTEGER: {
+      usz length = 1 + number_width(t->integer.bit_width);
+      format_to(buf, "%Z%c%Z", length, t->integer.is_signed ? 's' : 'u', t->integer.bit_width);
+    } break;
+
+    case TYPE_POINTER:
+      format_to(buf, "P");
+      mangle_type_to(buf, t->pointer.to);
+      break;
+
+    case TYPE_REFERENCE:
+      format_to(buf, "R");
+      mangle_type_to(buf, t->reference.to);
+      break;
+
+    case TYPE_ARRAY:
+      format_to(buf, "A%ZE", t->array.size);
+      mangle_type_to(buf, t->array.of);
+      break;
+
+    case TYPE_FUNCTION:
+      format_to(buf, "F");
+      mangle_type_to(buf, t->function.return_type);
+      foreach (Parameter, param, t->function.parameters) mangle_type_to(buf, param->type);
+      format_to(buf, "E");
+      break;
+  }
+}
+
+void mangle_function_name(IRFunction *function) {
+  if (function->is_extern || function->attr_nomangle) return;
+
+  string_buffer buf = {0};
+  format_to(&buf, "_XF%Z%S", function->name.size, function->name);
+  mangle_type_to(&buf, function->type);
+  free(function->name.data);
+  function->name = (string){buf.data, buf.size};
 }

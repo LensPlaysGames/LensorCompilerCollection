@@ -73,4 +73,7 @@ NODISCARD bool codegen
  AST *ast,
  string ir);
 
+/// Mangle a function name.
+void mangle_function_name(IRFunction *function);
+
 #endif /* CODEGEN_H */

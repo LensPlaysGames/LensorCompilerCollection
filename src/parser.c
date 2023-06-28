@@ -700,11 +700,11 @@ static void next_token(Parser *p) {
         } break;
         case TK_NUMBER: {
           // Convert number to string
-          string text = format("%I", p->tok.integer);
+          string text = format("%U", p->tok.integer);
           p->tok.text = as_string_buffer(text);
         } break;
         case TK_ARBITRARY_INT: {
-          string text = format("%c%Z", p->tok.text.data[0], p->tok.integer);
+          string text = format("%c%U", p->tok.text.data[0], p->tok.integer);
           p->tok.text = as_string_buffer(text);
         } break;
         default: {
@@ -1495,7 +1495,7 @@ static Type *parse_type(Parser *p) {
         }
       }
       if (attr_kind == ATTR_COUNT)
-        ERR("Unexpected identifier when parsing type attributes: \"%S\"", p->tok.text);
+        ERR("Unexpected identifier when parsing type attributes: \"%S\"", as_span(p->tok.text));
 
       // Yeet the attribute identifier that gave us the attribute kind.
       next_token(p);
@@ -1510,7 +1510,7 @@ static Type *parse_type(Parser *p) {
         if (p->tok.type != TK_NUMBER)
           ERR("The alignas type attribute requires an integer number");
         if (!is_power_of_two(p->tok.integer))
-          ERR("The alignas type attribute requires a power of two, which %u is not", p->tok.integer);
+          ERR("The alignas type attribute requires a power of two, which %U is not", p->tok.integer);
 
         new_attribute.value.integer = p->tok.integer;
         // Yeet the number!

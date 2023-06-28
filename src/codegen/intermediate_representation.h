@@ -111,7 +111,10 @@ typedef struct IRInstruction {
     IRStaticVariable* static_ref;
     IRFunction *function_ref;
     IRStackAllocation alloca;
-    string str;
+    struct {
+      string str;
+      usz string_index;
+    };
   };
 } IRInstruction;
 
@@ -386,5 +389,11 @@ void ir_set_backend_flag(IRInstruction *const, const int bit_index);
 /// NOTE: Undefined behaviour if bit_index is negative, or greater than
 /// or equal to the bitwidth of backend_flags.
 bool ir_get_backend_flag(const IRInstruction *const, const int bit_index);
+
+/// Get a literal string.
+IRInstruction *ir_get_literal_string(CodegenContext *context, usz string_index);
+
+/// Get the function type of a call.
+Type* ir_call_get_callee_type(IRInstruction* inst);
 
 #endif /* INTERMEDIATE_REPRESENTATION_H */

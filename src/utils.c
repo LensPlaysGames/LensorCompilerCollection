@@ -61,15 +61,16 @@ void string_buf_zterm(string_buffer *buf) {
 ///   - %D: int64_t
 ///   - %I: int64_t
 ///   - %U: uint64_t
-///   - %Z: size_t
-///   - %zu: size_t
+///   - %Z: usz
+///   - %zu: usz
+///   - %z: isz
+///   - %zi: isz
 ///   - %x: hexadecimal (32-bit)
 ///   - %X: hexadecimal (64-bit)
 ///   - %p: void *
 ///   - %b: bool
 ///   - %T: Type *
 ///   - %V: MIR Register (if less than MIR_ARCH_START, a hardware register, otherwise a virtual register). usz type
-///   - %F: Another format string + va_list. This format spec therefore takes *two* arguments.
 ///   - %%: A '%' character.
 ///   - %m: Reset colours if colours are enabled.
 ///   - %X, where X is ESCAPE: A literal escape character if you need that for some ungodly reason.
@@ -175,13 +176,21 @@ static inline void vformat_to_impl(
       } break;
 
       case 'z': {
+        if (*fmt != 'u') {
+            if (*fmt == 'i') fmt++;
+            isz n = va_arg(args, isz);
+            char buf[32];
+            sprintf(buf, "%zi", n);
+            write_string(buf, strlen(buf), to);
+            break;
+        }
+
         /// Backwards compatibility with '%zu' because we were using that all over the place.
-        if (*fmt != 'u') ICE("Invalid format specifier: '%%z%c'", *fmt);
         fmt++;
       } FALLTHROUGH;
 
       case 'Z': {
-        size_t n = va_arg(args, size_t);
+        usz n = va_arg(args, usz);
         char buf[32];
         sprintf(buf, "%zu", n);
         write_string(buf, strlen(buf), to);
@@ -241,11 +250,6 @@ static inline void vformat_to_impl(
         write_string(buf, strlen(buf), to);
         if (thread_use_colours) write_string("\033[m", 3, to);
       } break;
-/*
-      case 'F': {
-        const char *fmt2 = va_arg(args, const char *);
-        vformat_to_impl(fmt2, *va_arg(args, va_list*), write_string, to);
-      } break;*/
 
       case '%': {
         write_string("%", 1, to);

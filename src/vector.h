@@ -25,12 +25,21 @@
     (vector).capacity = 0;    \
   } while (0)
 
+/// Iterate over a vector by reference.
 #define foreach(type, element, vector) \
   for (type *element = (vector).data; element < (vector).data + (vector).size; element++)
+
+/// Iterate over a vector of pointers by value.
 #define foreach_ptr(type, element, vector)                                                                  \
   for (type *element##_ptr = (vector).data, *element = NULL;                                                \
        element##_ptr < (vector).data + (vector).size && (element = *element##_ptr, 1); /* "=", not "=="! */ \
        element##_ptr++)
+
+/// Iterate over a vector by value.
+#define foreach_value(type, element, vector)                                                       \
+    for (type element, *element##_ptr = (vector).data;                                             \
+         element##_ptr < (vector).data + (vector).size ? (element = *element##_ptr, true) : false; \
+         element##_ptr++)
 
 #define foreach_rev(type, element, vector) \
   if ((vector).size)                       \
