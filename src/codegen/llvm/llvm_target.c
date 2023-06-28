@@ -451,8 +451,8 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
             format_to(out, ", ");
             emit_value(out, inst->rhs, false);
 
-            /// Sign-extend or zero-extend the result back to the original type.
-            format_to(out, "\n    %%%u = %s i1 %%i1.%u to ", inst->index, type_is_signed(inst->type) ? "sext" : "zext", inst->index);
+            /// ALWAYS zero-extend an i1, as sign-extending would broadcast the sign bit.
+            format_to(out, "\n    %%%u = zext i1 %%i1.%u to ", inst->index, inst->index);
             emit_type(out, inst->type);
             format_to(out, "\n");
         } break;
