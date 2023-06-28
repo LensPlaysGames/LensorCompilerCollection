@@ -20,6 +20,12 @@ set(
 )
 
 set(
+  BUILD_NATIVE_TESTING TRUE
+  CACHE BOOL
+  "Whether or not to include native tests in ctest"
+)
+
+set(
   BUILD_OPT_TESTING FALSE
   CACHE BOOL
   "Whether or not to include optimisation tests in ctest"
@@ -232,16 +238,18 @@ if (BUILD_TESTING)
 
   file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
   foreach (test ${tests})
-    add_test(
-      NAME ASM_${test}
-      COMMAND $<TARGET_FILE:test_instantiator>
-      --target asm
-      --test ${test}
-      --intc $<TARGET_FILE:intc>
-      --cc ${CMAKE_C_COMPILER}
-      WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-      COMMAND_EXPAND_LISTS
-    )
+    if (BUILD_NATIVE_TESTING)
+      add_test(
+        NAME ASM_${test}
+        COMMAND $<TARGET_FILE:test_instantiator>
+        --target asm
+        --test ${test}
+        --intc $<TARGET_FILE:intc>
+        --cc ${CMAKE_C_COMPILER}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+        COMMAND_EXPAND_LISTS
+      )
+    endif()
     if (BUILD_OBJ_TESTING)
       if (WIN32)
         add_test(
