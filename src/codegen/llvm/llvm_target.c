@@ -563,9 +563,11 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
             break;
 
         case IR_ALLOCA: {
+            Type *t = type_canonical(inst->type);
+            ASSERT(type_is_pointer(t));
             emit_instruction_index(out, inst);
             format_to(out, "alloca ");
-            emit_type(out, inst->type);
+            emit_type(out, t->pointer.to);
 
             /// Specifying the alignment isn’t strictly necessary,
             /// but it’s probably a good idea.
