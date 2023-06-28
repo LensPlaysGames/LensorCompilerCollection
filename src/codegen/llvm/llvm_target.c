@@ -85,6 +85,25 @@ static void emit_type(string_buffer *out, Type *t) {
     }
 }
 
+/// Check if a bitcast should be elided.
+static bool is_noop_bitcast(IRInstruction *inst) {
+    ASSERT(inst->kind == IR_BITCAST);
+
+    /// Types are the same.
+    Type* from = type_canonical(inst->operand->type);
+    Type* to = type_canonical(inst->type);
+    if (type_equals_canon(from, to)) return true;
+
+    /// Either is a function pointer and the other is a function. No
+    /// need to check for the function type since Sema has already
+    /// verified that this conversion is valid.
+    if (from->kind == TYPE_POINTER && to->kind == TYPE_FUNCTION) return true;
+    if (from->kind == TYPE_FUNCTION && to->kind == TYPE_POINTER) return true;
+
+    /// Not pointless (hopefully).
+    return false;
+}
+
 /// Check if an instruction is a value.
 ///
 /// This determines whether an instruction should be emitted as
@@ -123,6 +142,13 @@ static bool llvm_is_numbered_value(IRInstruction *inst) {
         case IR_BRANCH_CONDITIONAL:
             return true;
 
+        /// The frontend uses this to convert between types that have the
+        /// same size; however, we can’t convert from a type to itself, and
+        /// we can especially not convert a function to a function pointer
+        /// like that; the latter conversion is implicit.
+        case IR_BITCAST:
+            return !is_noop_bitcast(inst);
+
         case IR_LOAD:
         case IR_PHI:
         case IR_ADD:
@@ -144,7 +170,6 @@ static bool llvm_is_numbered_value(IRInstruction *inst) {
         case IR_ZERO_EXTEND:
         case IR_SIGN_EXTEND:
         case IR_TRUNCATE:
-        case IR_BITCAST:
         case IR_NOT:
         case IR_ALLOCA:
             return true;
@@ -169,8 +194,15 @@ static void emit_value(string_buffer *out, IRInstruction *value, bool print_type
 
     /// Emit the type if requested.
     if (print_type) {
-        emit_type(out, value->type);
-        format_to(out, " ");
+        /// If this is a function reference, then emit the
+        /// type as `ptr`. The function type is only used
+        /// by calls, and calls emit the type manually.
+        if (value->kind == IR_FUNC_REF) {
+            format_to(out, "ptr ");
+        } else {
+            emit_type(out, value->type);
+            format_to(out, " ");
+        }
     }
 
     /// Emit the value.
@@ -214,6 +246,13 @@ static void emit_value(string_buffer *out, IRInstruction *value, bool print_type
         case IR_STORE:
             ICE("Refusing to emit non-value as value");
 
+        case IR_BITCAST:
+            /// If this is a noop bitcast, just emit the operand. If
+            /// this is a real bitcast, emit the index.
+            if (value->index == NO_INDEX) emit_value(out, value->operand, false);
+            else format_to(out, "%%%u", value->index);
+            return;
+
         /// These all have values, so emit their indices.
         case IR_CALL:
         case IR_LOAD:
@@ -237,7 +276,6 @@ static void emit_value(string_buffer *out, IRInstruction *value, bool print_type
         case IR_ZERO_EXTEND:
         case IR_SIGN_EXTEND:
         case IR_TRUNCATE:
-        case IR_BITCAST:
         case IR_NOT:
         case IR_ALLOCA:
             format_to(out, "%%%u", value->index);
@@ -433,7 +471,11 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
         case IR_ZERO_EXTEND: emit_conversion(out, "zext", inst); break;
         case IR_SIGN_EXTEND: emit_conversion(out, "sext", inst); break;
         case IR_TRUNCATE: emit_conversion(out, "trunc", inst); break;
-        case IR_BITCAST: emit_conversion(out, "bitcast", inst); break;
+
+        case IR_BITCAST:
+            if (inst->index == NO_INDEX) break;
+            emit_conversion(out, "bitcast", inst);
+            break;
 
         case IR_STORE:
             format_to(out, "    store ");

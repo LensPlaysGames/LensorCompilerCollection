@@ -24,10 +24,17 @@ set(
   CACHE BOOL
   "Whether or not to include optimisation tests in ctest"
 )
+
 set(
   BUILD_OBJ_TESTING FALSE
   CACHE BOOL
   "Whether or not to include object file target tests in ctest (default just includes assembly)"
+)
+
+set(
+  BUILD_LLVM_TESTING FALSE
+  CACHE BOOL
+  "Whether or not to include LLVM target tests in ctest (default just includes assembly)"
 )
 
 add_executable(
@@ -269,6 +276,22 @@ if (BUILD_TESTING)
         --intc $<TARGET_FILE:intc>
         --cc ${CMAKE_C_COMPILER}
         -O
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+        COMMAND_EXPAND_LISTS
+      )
+    endif()
+    if (BUILD_LLVM_TESTING)
+      if (NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        message(FATAL_ERROR "LLVM testing requires clang")
+      endif()
+
+      add_test(
+        NAME LLVM_${test}
+        COMMAND $<TARGET_FILE:test_instantiator>
+        --target llvm
+        --test ${test}
+        --intc $<TARGET_FILE:intc>
+        --cc ${CMAKE_C_COMPILER} # FIXME: should probably find_program(clang)
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
