@@ -837,9 +837,10 @@ bool codegen
     /// Codegen a FUN program.
     case LANG_FUN: {
       /// Create the main function.
+      Type* c_int = ast_make_type_integer(ast, (loc){0}, true, context->ffi.cint_size);
       Parameter argc =  {
         .name = string_create("__argc__"),
-        .type = t_integer,
+        .type = c_int,
         .source_location = {0},
       };
       Parameter argv =  {
@@ -847,12 +848,19 @@ bool codegen
         .type = ast_make_type_pointer(ast, (loc){0}, ast_make_type_pointer(ast, (loc){0}, t_byte)),
         .source_location = {0},
       };
+      Parameter envp =  {
+        .name = string_create("__envp__"),
+        .type = ast_make_type_pointer(ast, (loc){0}, ast_make_type_pointer(ast, (loc){0}, t_byte)),
+        .source_location = {0},
+      };
 
       Parameters main_params = {0};
       vector_push(main_params, argc);
       vector_push(main_params, argv);
+      vector_push(main_params, envp);
       // TODO: envp?
 
+      /// FIXME: return type should be int as well, but that currently breaks the x86_64 backend.
       Type *main_type = ast_make_type_function(context->ast, (loc){0}, t_integer, main_params);
       context->entry = ir_function(context, literal_span("main"), main_type);
       context->entry->attr_global = true;

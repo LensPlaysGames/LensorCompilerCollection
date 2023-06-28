@@ -810,6 +810,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       /// add a literal 0 so that `main()` returns 0. If the last
       /// expression is an integer, make sure to convert it to the
       /// right integer type.
+      /// FIXME: Should be int, but that currently breaks the x86_64 backend.
       if (expr->root.children.size && convertible(t_integer, vector_back(expr->root.children)->type)) {
           Node* back = vector_back(expr->root.children);
           if (!type_equals(t_integer, back->type)) {
