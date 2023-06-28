@@ -293,6 +293,27 @@ static void emit_value(string_buffer *out, IRInstruction *value, bool print_type
     }
 }
 
+/// Emit a string as an LLVM string value.
+void emit_string_data(string_buffer *out, span s, bool print_type) {
+    if (print_type) format_to(out, "[%Z x i8] ", s.size + 1);
+    format_to(out, "c\"");
+
+    /// Emit data.
+    foreach_index (i, s) {
+        char c = s.data[i];
+        if (isprint(c) && c != '"' && c != '\\' && c != '\n' && c != '\r' && c != '\t' && c != '\v' && c != '\f') {
+            format_to(out, "%c", c);
+        } else {
+            char arr[4] = {0};
+            snprintf(arr, sizeof(arr), "\\%02X", c);
+            vector_append(*out, literal_span(arr));
+        }
+    }
+
+    /// Emit null terminator and close string.
+    format_to(out, "\\00\"");
+}
+
 /// Emit the index of an instruction, if any.
 static void emit_instruction_index(string_buffer *out, IRInstruction *inst) {
     if (inst->index != NO_INDEX) format_to(out, "    %%%u = ", inst->index);
@@ -684,24 +705,9 @@ void codegen_emit_llvm(CodegenContext *ctx) {
 
     /// Emit strings.
     foreach_index (i, ctx->ast->strings) {
-        string *s = ctx->ast->strings.data + i;
-        format_to(&out, "@str.%Z private unnamed_addr constant [%Z x i8] c\"", i, s->size + 1);
-
-        /// Emit data.
-        foreach_value (char, c, *s) {
-            if (isprint(c)) {
-                if (c == '"') format_to(&out, "\\22");
-                else if (c == '\\') format_to(&out, "\\5C");
-                else format_to(&out, "%c", c);
-            } else {
-                char arr[3] = {0};
-                snprintf(arr, sizeof(arr), "%02X", c);
-                vector_append(out, literal_span(arr));
-            }
-        }
-
-        /// Emit null terminator and close string.
-        format_to(&out, "\\00\", align 1\n");
+        format_to(&out, "@str.%Z = private unnamed_addr constant ", i);
+        emit_string_data(&out, as_span(ctx->ast->strings.data[i]), true);
+        format_to(&out, ", align 1\n");
     }
 
     /// Add a newline after the strings.
@@ -714,7 +720,7 @@ void codegen_emit_llvm(CodegenContext *ctx) {
         if (var->init) {
             switch (var->init->kind) {
                 case IR_LIT_INTEGER: format_to(&out, " %U", var->init->imm); break;
-                case IR_LIT_STRING: format_to(&out, " @str.%Z", var->init->string_index); break;
+                case IR_LIT_STRING: emit_string_data(&out, as_span(var->init->str), false); break;
                 default: UNREACHABLE();
             }
         } else {
