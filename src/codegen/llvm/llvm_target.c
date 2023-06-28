@@ -611,7 +611,11 @@ void codegen_emit_llvm(CodegenContext *ctx) {
         } else {
             format_to(&out, " zeroinitializer");
         }
-        format_to(&out, "\n");
+
+        /// Globals must be aligned manually, else they are thought
+        /// to have an alignment of 1, which breaks default-aligned
+        /// loads and stores.
+        format_to(&out, ", align %Z\n", type_alignof(var->type));
     }
 
     /// Add a newline after the globals.
