@@ -758,7 +758,7 @@ void print_mir_operand(MIRFunction *function, MIROperand *op) {
     print("%V", (usz)op->value.reg.value);
 
     // Print register size
-    print(" %37%Z%m", op->value.reg.size);
+    print(" %37%u%m", op->value.reg.size);
 
     // Print register is defining use
     if (op->value.reg.defining_use) print(" %35DEF%m");

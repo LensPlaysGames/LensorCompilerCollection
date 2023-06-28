@@ -122,7 +122,9 @@
     if ((pos) >= (vector).data + (vector).size) {               \
       vector_push(vector, element);                             \
     } else {                                                    \
-      size_t _index = (pos) - (vector).data;                    \
+      isz _diff = (pos) - (vector).data;                        \
+      ASSERT(_diff >= 0);                                       \
+      usz _index = (usz)_diff;                                  \
       vector_reserve((vector), 1);                              \
       memmove((vector).data + _index + 1,                       \
               (vector).data + _index,                           \

@@ -52,7 +52,7 @@ typedef enum MIROperandKind {
 
 typedef struct MIROperandRegister {
   usz value;
-  usz size;
+  u32 size;
 
   bool defining_use;
 } MIROperandRegister;

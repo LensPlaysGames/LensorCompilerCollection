@@ -495,7 +495,7 @@ static void isel_next_tok(ISelParser *p) {
     case TOKEN_GT: FALLTHROUGH;
     case TOKEN_EQ: FALLTHROUGH;
     case TOKEN_COMMA:
-      p->tok.kind = (int)p->lastc;
+      p->tok.kind = (ISelTokenKind) p->lastc;
       isel_next_c(p);
       break;
 
@@ -784,7 +784,7 @@ static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
 
       MIROperandRegister r = {0};
       r.value = entry->value.vreg.value;
-      r.size = entry->value.vreg.size;
+      r.size = (u32) entry->value.vreg.size;
       vector_push(out->clobbers, r);
 
       // Yeet bound identifier
@@ -1315,7 +1315,7 @@ void isel_print_mir_operand(MIROperand *operand) {
   print("%s", mir_operand_kind_string(operand->kind));
   switch (operand->kind) {
   case MIR_OP_NONE: break;
-  case MIR_OP_REGISTER: print(" %Z.%Z", operand->value.reg.value, operand->value.reg.size); break;
+  case MIR_OP_REGISTER: print(" %Z.%u", operand->value.reg.value, operand->value.reg.size); break;
   case MIR_OP_IMMEDIATE: print(" %I", operand->value.imm); break;
   case MIR_OP_BLOCK: break;//print(" %S", operand->value.block->name); break;
   case MIR_OP_FUNCTION: print(" %S", operand->value.function->name); break;

@@ -702,7 +702,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
               print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
               print("%35WARNING%m: Zero sized register, assuming same size as local...\n");
               putchar('\n');
-              reg->value.reg.size = (usz)regsize_from_bytes(function->frame_objects.data[local->value.local_ref].size);
+              reg->value.reg.size = regsize_from_bytes(function->frame_objects.data[local->value.local_ref].size);
             }
 
             femit_reg_to_mem(context, MX64_MOV, reg->value.reg.value, reg->value.reg.size,
@@ -737,7 +737,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
               print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
               print("%35WARNING%m: Zero sized register, assuming same size as local...\n");
               putchar('\n');
-              reg->value.reg.size = (usz)regsize_from_bytes(function->frame_objects.data[local->value.local_ref].size);
+              reg->value.reg.size = regsize_from_bytes(function->frame_objects.data[local->value.local_ref].size);
             }
 
             femit_mem_to_reg(context, MX64_MOV,

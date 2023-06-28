@@ -495,7 +495,7 @@ static void emit_function(string_buffer *out, IRFunction *f) {
     if (f->is_extern) return;
 
     /// Assign indices to all instructions and blocks.
-    usz value_index = f->type->function.parameters.size;
+    u32 value_index = (u32) f->type->function.parameters.size;
     usz block_index = 0;
     list_foreach (IRBlock *, block, f->blocks) {
         block->id = block_index++;
