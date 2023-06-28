@@ -754,7 +754,20 @@ IRInstruction *ir_bitcast
     INSERT(x);                                                                                \
     return x;                                                                                 \
   }
-ALL_BINARY_INSTRUCTION_TYPES(CREATE_BINARY_INSTRUCTION)
+
+/// TODO: Should set type to bool once we have that.
+#define CREATE_COMPARISON_INSTRUCTION(enumerator, name)                                       \
+  IRInstruction *ir_##name(CodegenContext *context, IRInstruction *lhs, IRInstruction *rhs) { \
+    INSTRUCTION(x, IR_##enumerator);                                                          \
+    x->type = t_integer;                                                                      \
+    set_pair_and_mark(x, lhs, rhs);                                                           \
+    INSERT(x);                                                                                \
+    return x;                                                                                 \
+  }
+
+ALL_BINARY_INSTRUCTION_TYPES_EXCEPT_COMPARISONS(CREATE_BINARY_INSTRUCTION)
+ALL_BINARY_COMPARISON_TYPES(CREATE_COMPARISON_INSTRUCTION)
+#undef CREATE_COMPARISON_INSTRUCTION
 #undef CREATE_BINARY_INSTRUCTION
 
 IRInstruction *ir_create_static(CodegenContext *context, Node* decl, Type *type, span name) {

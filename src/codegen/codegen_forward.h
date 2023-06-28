@@ -77,8 +77,8 @@ enum ComparisonType {
   COMPARE_COUNT,
 };
 
-/// All instructions that take two arguments.
-#define ALL_BINARY_INSTRUCTION_TYPES(F) \
+/// All instructions that take two arguments that aren’t comparisons.
+#define ALL_BINARY_INSTRUCTION_TYPES_EXCEPT_COMPARISONS(F) \
   F(ADD, add)                           \
   F(SUB, sub)                           \
   F(MUL, mul)                           \
@@ -90,13 +90,20 @@ enum ComparisonType {
   F(SHR, shr)                           \
   F(AND, and)                           \
   F(OR, or)                             \
-                                        \
+
+
+#define ALL_BINARY_COMPARISON_TYPES(F)  \
   F(LT, lt)                             \
   F(LE, le)                             \
   F(GT, gt)                             \
   F(GE, ge)                             \
   F(EQ, eq)                             \
   F(NE, ne)
+
+/// All instructions that take two arguments.
+#define ALL_BINARY_INSTRUCTION_TYPES(F) \
+    ALL_BINARY_INSTRUCTION_TYPES_EXCEPT_COMPARISONS(F) \
+    ALL_BINARY_COMPARISON_TYPES(F)
 
 /// Some of these are also used in the parser, and until C implements
 /// inheriting from enums (i.e. never), this is the best we can do.
