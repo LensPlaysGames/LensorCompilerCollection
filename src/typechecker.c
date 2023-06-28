@@ -807,8 +807,23 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       }
 
       /// If the last expression in the root is not of type integer,
-      /// add a literal 0 so that `main()` returns 0.
-      if (!expr->root.children.size || !convertible(t_integer, vector_back(expr->root.children)->type)) {
+      /// add a literal 0 so that `main()` returns 0. If the last
+      /// expression is an integer, make sure to convert it to the
+      /// right integer type.
+      if (expr->root.children.size && convertible(t_integer, vector_back(expr->root.children)->type)) {
+          Node* back = vector_back(expr->root.children);
+          if (!type_equals(t_integer, back->type)) {
+            Node *cast = ast_make_cast(
+              ast,
+              back->source_location,
+              t_integer,
+              back
+            );
+            ASSERT(typecheck_expression(ast, cast));
+            back->parent = cast;
+            vector_back(expr->root.children) = cast;
+          }
+      } else {
         Node *lit = ast_make_integer_literal(ast, (loc){0}, 0);
         vector_push(expr->root.children, lit);
         lit->parent = expr;
