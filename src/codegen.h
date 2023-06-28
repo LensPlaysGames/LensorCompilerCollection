@@ -58,6 +58,17 @@ struct CodegenContext {
   // TODO: Allow for multiple targets.
   CodegenTarget target;
   CodegenCallingConvention call_convention;
+
+  /// FFI type sizes in BITS (!)
+  struct {
+    u8 cchar_size;
+    u8 cshort_size;
+    u8 cint_size;
+    u8 clong_size;
+    u8 cllong_size;
+    u8 pointer_size;
+    u8 integer_size; /// Intercept `integer` type.
+  } ffi;
 };
 
 // TODO/FIXME: Make this a parameter affectable by command line arguments.
