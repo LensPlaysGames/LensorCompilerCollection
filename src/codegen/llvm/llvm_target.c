@@ -573,6 +573,21 @@ static void emit_function(string_buffer *out, IRFunction *f) {
         Parameter *p = f->type->function.parameters.data + i;
         format_to(out, "%s", i == 0 ? "" : ", ");
         emit_type(out, p->type);
+
+        /// Reference parameters get some optimisation hints. This
+        /// is also what Clang uses for C++ references.
+        Type *canon = type_canonical(p->type);
+        if (type_is_reference(canon)) {
+            usz element_size = type_sizeof(canon->reference.to);
+            format_to(
+                out,
+                " noundef nonnull align %Z dereferenceable(%Z)",
+                element_size,
+                element_size
+            );
+        }
+
+        /// Parameter name.
         format_to(out, " %%%Z", i);
     }
 
