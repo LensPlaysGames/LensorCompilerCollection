@@ -156,9 +156,6 @@ if (NOT MSVC)
     -Wno-format-zero-length -Wno-comment
     -Wno-cast-function-type
 
-    ## DO NOT COMMIT THIS FOR GOODNESS’ SAKE.
-    -Wno-conversion -Wno-sign-conversion -Wno-shorten-64-to-32 -Wno-unused
-
     -fdiagnostics-color=always
   )
 else()
