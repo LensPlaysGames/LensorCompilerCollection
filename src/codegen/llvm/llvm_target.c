@@ -521,10 +521,30 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
         case IR_SIGN_EXTEND: emit_conversion(out, "sext", inst); break;
         case IR_TRUNCATE: emit_conversion(out, "trunc", inst); break;
 
-        case IR_BITCAST:
+        case IR_BITCAST: {
             if (inst->index == NO_INDEX) break;
+
+            /// LLVM doesn’t allow bitcasts between aggregates, so
+            /// we gotta do it the janky way.
+            Type *from = type_canonical(inst->operand->type);
+            Type *to = type_canonical(inst->type);
+            if (from->kind == TYPE_STRUCT || to->kind == TYPE_STRUCT ||
+                from->kind == TYPE_ARRAY || to->kind == TYPE_ARRAY) {
+                format_to(out, "    %%alloca.%u = alloca ", inst->index);
+                emit_type(out, to);
+                format_to(out, ", align %Z\n", type_alignof(to));
+                format_to(out, "    store ");
+                emit_value(out, inst->operand, true);
+                format_to(out, ", ptr %%alloca.%u\n", inst->index);
+                format_to(out, "    %%%u = load ", inst->index);
+                emit_type(out, inst->type);
+                format_to(out, ", ptr %%alloca.%u\n", inst->index);
+                break;
+            }
+
+            /// Otherwise, just emit a normal bitcast.
             emit_conversion(out, "bitcast", inst);
-            break;
+        } break;
 
         case IR_STORE:
             format_to(out, "    store ");
