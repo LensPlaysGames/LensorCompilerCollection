@@ -16,6 +16,33 @@ void codegen_context_llvm_free(CodegenContext *ctx) {
     (void) ctx;
 }
 
+/// Forward decl because mutual recursion.
+static void emit_type(string_buffer *out, Type *t);
+
+/// Emit struct members between braces.
+static void emit_struct_members(string_buffer *out, Type *t) {
+    format_to(out, "{ ");
+
+    /// Add the struct members.
+    ///
+    /// FIXME: LLVM addresses struct fields by index, but it has no concept
+    /// of `alignas`, so we have to insert padding bytes manually into the
+    /// struct if a member is overaligned; this however, invalidates the
+    /// indices of the members after the padding, so actually, members also
+    /// need to store a `backend_index`, which is the *actual* index of the
+    /// member in the LLVM struct type.
+    Type *canon = type_canonical(t);
+    bool first = true;
+    foreach (Member, m, canon->structure.members) {
+        if (first) first = false;
+        else format_to(out, ", ");
+        emit_type(out, m->type);
+    }
+
+    format_to(out, " }");
+}
+
+/// Emit an LLVM type.
 static void emit_type(string_buffer *out, Type *t) {
     /// Get canonical type or last reference.
     Type *canon = type_canonical(t);
@@ -52,24 +79,7 @@ static void emit_type(string_buffer *out, Type *t) {
                 return;
             }
 
-            format_to(out, "{ ");
-
-            /// Add the struct members.
-            ///
-            /// FIXME: LLVM addresses struct fields by index, but it has no concept
-            /// of `alignas`, so we have to insert padding bytes manually into the
-            /// struct if a member is overaligned; this however, invalidates the
-            /// indices of the members after the padding, so actually, members also
-            /// need to store a `backend_index`, which is the *actual* index of the
-            /// member in the LLVM struct type.
-            bool first = true;
-            foreach (Member, m, canon->structure.members) {
-                if (first) first = false;
-                else format_to(out, ", ");
-                emit_type(out, m->type);
-            }
-
-            format_to(out, " }");
+            emit_struct_members(out, canon);
             return;
         }
 
@@ -658,6 +668,19 @@ void codegen_emit_llvm(CodegenContext *ctx) {
 
     /// Mangle all function names.
     foreach_ptr (IRFunction *, f, ctx->functions) mangle_function_name(f);
+
+    /// Emit named types.
+    bool type_emitted = false;
+    foreach_ptr (Type *, t, ctx->ast->_types_) {
+        if (t->kind != TYPE_STRUCT || t->structure.decl->struct_decl->name.size == 0) continue;
+        type_emitted = true;
+        format_to(&out, "%%struct.%S = type ", t->structure.decl->struct_decl->name);
+        emit_struct_members(&out, t);
+        format_to(&out, "\n");
+    }
+
+    /// Add a newline after the types.
+    if (type_emitted) format_to(&out, "\n");
 
     /// Emit strings.
     foreach_index (i, ctx->ast->strings) {
