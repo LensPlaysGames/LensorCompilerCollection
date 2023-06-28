@@ -56,11 +56,12 @@ static void print_acceptable_architectures() {
 }
 
 static void print_acceptable_targets() {
-  STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of targets when printing out all available");
+  STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of targets when printing out all available");
   print("Acceptable targets include:\n"
         " -> default\n"
         " -> asm, assembly\n"
         " -> asm:intel\n"
+        " -> llvm -- LLVM IR\n"
         " -> obj, object  --  system default object file format\n"
         " -> elf_object\n"
         " -> coff_object\n");
@@ -154,13 +155,15 @@ static int handle_command_line_arguments(int argc, char **argv) {
                "Instead, got what looks like another command line argument.\n"
                " -> \"%s\"", argument, argv[i]);
       }
-      STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of target count in command line argument parsing");
+      STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of target count in command line argument parsing");
       if (strcmp(argv[i], "default") == 0) {
         output_target = TARGET_DEFAULT;
       } else if (strcmp(argv[i], "asm") == 0 || strcmp(argv[i], "assembly") == 0) {
         output_target = TARGET_GNU_ASM_ATT;
       } else if (strcmp(argv[i], "asm:intel") == 0) {
         output_target = TARGET_GNU_ASM_INTEL;
+      } else if (strcmp(argv[i], "llvm") == 0) {
+        output_target = TARGET_LLVM;
       } else if (strcmp(argv[i], "obj") == 0 || strcmp(argv[i], "object") == 0) {
 #ifdef _WIN32
         output_target = TARGET_COFF_OBJECT;
@@ -307,12 +310,16 @@ int main(int argc, char **argv) {
 
     // Add extension based on target
     vector_push(path, '.');
-    STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of targets during generation of automatic extension for output file");
+    STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of targets during generation of automatic extension for output file");
     switch (output_target) {
 
     case TARGET_GNU_ASM_INTEL: FALLTHROUGH;
     case TARGET_GNU_ASM_ATT: {
       vector_push(path, 's');
+    } break;
+
+    case TARGET_LLVM: {
+      format_to(&path, "ll");
     } break;
 
     case TARGET_COFF_OBJECT: {

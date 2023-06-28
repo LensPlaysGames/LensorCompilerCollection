@@ -859,71 +859,6 @@ static size_t interfering_regs(IRInstruction *instruction) {
   return mask >> 1;
 }
 
-// TODO: This should probably be used by every backend, so it should
-// move "up" somewhere.
-static void mangle_type_to(string_buffer *buf, Type *t) {
-  ASSERT(t);
-  switch (t->kind) {
-    default: TODO("Handle type kind %d in type mangling!", (int)t->kind);
-
-    case TYPE_STRUCT:
-      if (t->structure.decl->struct_decl->name.size)
-        format_to(buf, "%Z%S", t->structure.decl->struct_decl->name.size, t->structure.decl->struct_decl->name);
-      else {
-        static usz struct_count = 0;
-        format_to(buf, "%Z%Z", number_width(struct_count), struct_count);
-        ++struct_count;
-      }
-      break;
-
-    case TYPE_PRIMITIVE:
-      format_to(buf, "%Z%S", t->primitive.name.size, t->primitive.name);
-      break;
-
-    case TYPE_NAMED:
-      if (!t->named->val.type) format_to(buf, "%Z%S", t->named->name.size, t->named->name);
-      else mangle_type_to(buf, t->named->val.type);
-      break;
-
-    case TYPE_INTEGER: {
-      usz length = 1 + number_width(t->integer.bit_width);
-      format_to(buf, "%Z%c%Z", length, t->integer.is_signed ? 's' : 'u', t->integer.bit_width);
-    } break;
-
-    case TYPE_POINTER:
-      format_to(buf, "P");
-      mangle_type_to(buf, t->pointer.to);
-      break;
-
-    case TYPE_REFERENCE:
-      format_to(buf, "R");
-      mangle_type_to(buf, t->reference.to);
-      break;
-
-    case TYPE_ARRAY:
-      format_to(buf, "A%ZE", t->array.size);
-      mangle_type_to(buf, t->array.of);
-      break;
-
-    case TYPE_FUNCTION:
-      format_to(buf, "F");
-      mangle_type_to(buf, t->function.return_type);
-      foreach (Parameter, param, t->function.parameters) mangle_type_to(buf, param->type);
-      format_to(buf, "E");
-      break;
-  }
-}
-
-void mangle_function_name(IRFunction *function) {
-  if (function->is_extern) return;
-
-  string_buffer buf = {0};
-  format_to(&buf, "_XF%Z%S", function->name.size, function->name);
-  mangle_type_to(&buf, function->type);
-  free(function->name.data);
-  function->name = (string){buf.data, buf.size};
-}
-
 void codegen_lower_x86_64(CodegenContext *context) { lower(context); }
 
 bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *function, usz parameter_index) {
@@ -1045,7 +980,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     if (var->init) {
       if (var->init->kind == IR_LIT_INTEGER) {
         uint8_t *byte_repr = (uint8_t*)(&var->init->imm);
-        STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of assembly targets");
+        STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of assembly targets");
         if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL) {
           // TODO: Endianness selection
           // `%u` and the `(unsigned)` cast is because variadic arguments
@@ -1059,7 +994,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         }
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
-        STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of object targets");
+        STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of object targets");
         if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT) {
           // Create symbol for var->name at current offset within the .data section
           GObjSymbol sym = {0};
@@ -1074,7 +1009,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 #endif // x86_64_GENERATE_MACHINE_CODE
 
       } else if (var->init->kind == IR_LIT_STRING) {
-        STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of assembly targets");
+        STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of assembly targets");
         if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL) {
           fprint(context->code, "%S: .byte ", var->name);
           if (var->init->str.size)
@@ -1085,7 +1020,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         }
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
-        STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of object targets");
+        STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of object targets");
         if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT) {
           // Create symbol for var->name at current offset within the .rodata section
           GObjSymbol sym = {0};
@@ -1108,7 +1043,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     } else {
       /// Allocate space for the variable.
       usz sz = type_sizeof(var->type);
-      STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of assembly targets");
+      STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of assembly targets");
       if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL)
         fprint(context->code,
                ".align %Z\n"
@@ -1116,7 +1051,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
                (usz)type_alignof(var->type), var->name, sz);
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
-      STATIC_ASSERT(TARGET_COUNT == 5, "Exhaustive handling of object targets");
+      STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of object targets");
       if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT) {
         // Create symbol for var->name at current offset within the .bss section
         GObjSymbol sym = {0};
@@ -1139,8 +1074,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   // Mangle function names, and assign block labels.
   usz block_cnt = 0;
   foreach_ptr (IRFunction*, function, context->functions) {
-    // Don't mangle external function(s).
-    if (!function->attr_nomangle) mangle_function_name(function);
+    mangle_function_name(function);
 
     list_foreach (IRBlock *, block, function->blocks) {
       if (optimise) {

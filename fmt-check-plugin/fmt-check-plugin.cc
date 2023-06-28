@@ -5,6 +5,7 @@
 #include <iostream>
 #include <mutex>
 #include <ranges>
+#include <optional>
 
 #define EXT_FORMAT "ext_format"
 
@@ -162,6 +163,16 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
         "Not enough arguments to format string"));             \
     return;                                                    \
   }                                                            \
+  auto arg = call->getArg(arg_index++)->IgnoreImplicit();      \
+  auto type = arg->getType()
+
+#define GET_ARG_IMPLICIT(type)                                 \
+  if (arg_index >= call->getNumArgs()) {                       \
+    diags.Report(call->getBeginLoc(),                          \
+      diags.getCustomDiagID(clang::DiagnosticsEngine::Error,   \
+        "Not enough arguments to format string"));             \
+    return;                                                    \
+  }                                                            \
   auto arg = call->getArg(arg_index++);                        \
   auto type = arg->getType()
 
@@ -173,11 +184,11 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
       switch (auto spec = fmt[0]; fmt.remove_prefix(1), spec) {
         case 'c': {
           GET_ARG(type);
-          if (!type->isCharType()) return report(arg, "%c");
+          if (type != ctx.CharTy and type != ctx.SignedCharTy and type != ctx.UnsignedCharTy and type != ctx.IntTy) return report(arg, "%c");
         } break;
 
         case 's': {
-          GET_ARG(type);
+          GET_ARG_IMPLICIT(type);
           if (!type->isPointerType() || !type->getPointeeType()->isCharType()) return report(arg, "%s");
         } break;
 
@@ -216,7 +227,7 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
         case 'd':
         case 'i': {
           GET_ARG(type);
-          if (!type->isSignedIntegerType() || ci.getASTContext().getTypeSize(type) > 32)
+          if ((not type->isSignedIntegerType() and not type->getUnqualifiedDesugaredType()->isEnumeralType()) || ci.getASTContext().getTypeSize(type) > 32)
             return report(arg, std::string{"%"} + spec);
         } break;
 
@@ -242,24 +253,24 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
         case 'z': {
           GET_ARG(type);
 
-          /// Backwards compatibility with '%zu' because we were using that all over the place.
           if (fmt[0] != 'u') {
-            diags.Report(arg->getExprLoc(),
-              diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
-                "Invalid format specifier '%0' in format string"))
-                  << std::string{"%z"} + (spec == 0 ? std::string{""} : std::string{spec});
-            return;
+            if (fmt.starts_with('i')) fmt.remove_prefix(1);
+            if (!type->isSignedIntegerType() || ci.getASTContext().getTypeSize(type) != sizeof(size_t) * CHAR_BIT)
+                return report(arg, "%zu");
+            break;
           }
 
+          /// Backwards compatibility with '%zu' because we were using that all over the place.
           fmt.remove_prefix(1);
           if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) != sizeof(size_t) * CHAR_BIT)
             return report(arg, "%zu");
         } break;
 
+        case 'V':
         case 'Z': {
           GET_ARG(type);
           if (!type->isUnsignedIntegerType() || ci.getASTContext().getTypeSize(type) != sizeof(size_t) * CHAR_BIT)
-            return report(arg, "%Z");
+            return report(arg, spec == 'Z' ? "%Z" : "%V");
         } break;
 
         case 'x': {
@@ -297,60 +308,6 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
           if (!type->isPointerType() || type->getPointeeType().getUnqualifiedType().getAsString() != "Type")
             return report(arg, "%T");
         } break;
-
-/*        case 'F': {
-          GET_ARG(type);
-
-          /// The first argument must be a '[const] char *'.
-          if (!type->isPointerType() || !type->getPointeeType()->isCharType())
-            return report(arg, "%F");
-
-          /// After that, we need a 'va_list' argument.
-          if (arg_index >= call->getNumArgs()) {
-            diags.Report(call->getBeginLoc(),
-              diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
-                "Not enough arguments to format string. Hint: %F requires two arguments "
-                "(a '[const] char*' and a 'va_list')"));
-            return;
-          }
-
-          /// The second argument must be a 'va_list*'.
-#ifdef __x86_64__
-          auto va_arg = call->getArg(arg_index++);
-          auto va_type = va_arg->getType().getCanonicalType().IgnoreParens();
-          auto va_list_tag = cast<clang::RecordDecl>(ci.getASTContext().getVaListTagDecl())->getTypeForDecl();
-
-          /// A 'va_list *' is either a '__va_list_tag **' or a '__va_list_tag (*)[1]'.
-          if (
-            /// First level of indirection must be a pointer.
-            not va_type->isPointerType() or
-
-            /// Either '__va_list_tag *' or a '__va_list_tag [1]'.
-            (not va_type->getPointeeType()->isPointerType() and not va_type->getPointeeType()->isArrayType()) or
-
-            /// Pointee or element type must be '__va_list_tag'.
-            va_type->getPointeeType()->getPointeeOrArrayElementType()->getUnqualifiedDesugaredType() != va_list_tag
-          ) {
-            /// Pretty print the argument name.
-            std::string name = "'" + va_arg->getType().getAsString() + "'";
-            if (va_arg->getType()->isTypedefNameType()) {
-              name += " [aka '";
-              name += va_arg->getType().getCanonicalType().getAsString();
-              name += "']";
-            }
-
-            /// Report the error.
-            diags.Report(va_arg->getExprLoc(),
-              diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
-                "Second argument of '%0' must be a 'va_list*', but was %1"))
-                  << std::vector{va_arg->getSourceRange()} << "%F" << name;
-          }
-#else
-          diags.Report(call->getArg(arg_index++)->getBeginLoc(),
-             diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
-               "Typechecking of %F is not implemented on this platform. Make sure you’re passing a 'va_list*' (!)"));
-#endif
-        } break;*/
 
         case '%':
         case '\033':

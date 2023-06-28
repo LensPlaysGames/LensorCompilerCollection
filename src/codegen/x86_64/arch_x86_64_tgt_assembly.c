@@ -561,7 +561,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
         }
         switch ((MIROpcodex86_64)instruction->opcode) {
         default: {
-          print("Unhandled opcode: %d (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
+          print("Unhandled opcode: %u (%s)\n", instruction->opcode, mir_x86_64_opcode_mnemonic(instruction->opcode));
         } break;
 
         case MX64_LEA: {

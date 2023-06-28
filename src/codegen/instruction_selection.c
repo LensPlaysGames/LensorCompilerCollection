@@ -233,9 +233,9 @@ void isel_env_print_entry(ISelEnvironmentEntry *entry) {
   print("%S ", entry->key);
   switch (entry->value.kind) {
   case ISEL_ENV_NONE: print("NONE"); break;
-  case ISEL_ENV_OPCODE: print("OPCODE %d", entry->value.integer); break;
-  case ISEL_ENV_OP_KIND: print("OPKIND %d", entry->value.integer); break;
-  case ISEL_ENV_INTEGER: print("INTEGER %d", entry->value.integer); break;
+  case ISEL_ENV_OPCODE: print("OPCODE %z", entry->value.integer); break;
+  case ISEL_ENV_OP_KIND: print("OPKIND %z", entry->value.integer); break;
+  case ISEL_ENV_INTEGER: print("INTEGER %z", entry->value.integer); break;
   case ISEL_ENV_OP_REF: print("OP_REF inst:%u op:%u", entry->value.op.pattern_instruction_index, entry->value.op.operand_index); break;
   case ISEL_ENV_INST_REF: print("INST_REF %u", entry->value.inst); break;
   case ISEL_ENV_REGISTER: print("REG %Z.%Z", entry->value.vreg.value, entry->value.vreg.size); break;
@@ -777,10 +777,10 @@ static MIRInstruction *isel_parse_inst_spec(ISelParser *p) {
       string_buf_zterm(&p->tok.text);
       ISelEnvironmentEntry *entry = isel_env_entry(p->local, p->tok.text.data);
       if (!entry->key.data) entry = isel_env_entry(&p->global, p->tok.text.data);
-      if (!entry->key.data) ERR("ISel expected identifier bound to something in the environment, but %s is not bound in any environment", p->tok.text.data);
+      if (!entry->key.data) ERR("ISel expected identifier bound to something in the environment, but %S is not bound in any environment", as_span(p->tok.text));
 
       if (entry->value.kind != ISEL_ENV_REGISTER)
-        ERR("ISel expected identifier bound to a register, but %s is bound to some other kind.");
+        ERR("ISel expected identifier bound to a register, but %S is bound to some other kind.", as_span(p->tok.text));
 
       MIROperandRegister r = {0};
       r.value = entry->value.vreg.value;
@@ -1316,10 +1316,10 @@ void isel_print_mir_operand(MIROperand *operand) {
   switch (operand->kind) {
   case MIR_OP_NONE: break;
   case MIR_OP_REGISTER: print(" %Z.%Z", operand->value.reg.value, operand->value.reg.size); break;
-  case MIR_OP_IMMEDIATE: print(" %Z", operand->value.imm); break;
+  case MIR_OP_IMMEDIATE: print(" %I", operand->value.imm); break;
   case MIR_OP_BLOCK: break;//print(" %S", operand->value.block->name); break;
   case MIR_OP_FUNCTION: print(" %S", operand->value.function->name); break;
-  case MIR_OP_NAME: print("", operand->value.name); break;
+  case MIR_OP_NAME: print("%s", operand->value.name); break;
   case MIR_OP_STATIC_REF: print(" %S", operand->value.static_ref->static_ref->name); break;
   case MIR_OP_LOCAL_REF: print(" %Z", operand->value.local_ref); break;
 

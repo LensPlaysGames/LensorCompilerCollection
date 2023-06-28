@@ -12,30 +12,6 @@ set(CMAKE_C_STANDARD 11)
 
 project(Intercept C CXX)
 
-## Clang plugin to typecheck format strings.
-if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
-  find_package(LLVM CONFIG)
-  if (DEFINED LLVM_PACKAGE_VERSION)
-    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-
-    ## Add the plugin as a target.
-    set (CMAKE_CXX_STANDARD 20)
-    add_library(fmt-check-plugin SHARED fmt-check-plugin/fmt-check-plugin.cc)
-
-    ## LLVM include dirs and definitions.
-    target_include_directories(fmt-check-plugin PRIVATE ${LLVM_INCLUDE_DIRS})
-    separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
-    target_compile_definitions(fmt-check-plugin PRIVATE ${LLVM_DEFINITIONS_LIST})
-
-    ## LLVM libs.
-    llvm_map_components_to_libnames(llvm_libs all)
-    target_link_libraries(fmt-check-plugin PRIVATE ${llvm_libs})
-
-    ## Disable this since is a bit annoying.
-    add_compile_options(-Wno-unused-command-line-argument)
-  endif()
-endif()
-
 # User Option(s)
 set(
   NATIVE_OPT TRUE
@@ -73,6 +49,7 @@ add_executable(
   src/codegen/register_allocation.c
   src/codegen/machine_ir.c
   #src/codegen/ir/ir.c
+  src/codegen/llvm/llvm_target.c
   src/codegen/x86_64/arch_x86_64.c
   src/codegen/x86_64/arch_x86_64_common.c
   src/codegen/x86_64/arch_x86_64_isel.c
@@ -84,17 +61,42 @@ target_include_directories(
   PUBLIC src/
 )
 
+## Build the format check plugin *now*, as CMake will complain otherwise when we
+## try to add it to the command-line for the Intercept compiler below.
+if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
+  find_package(LLVM CONFIG)
+  if (DEFINED LLVM_PACKAGE_VERSION)
+    execute_process(
+      COMMAND "${CMAKE_COMMAND}"
+        -S .
+        -B out
+        "-DLLVM_DIR=${LLVM_DIR}"
+        "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
+        "-DCMAKE_GENERATOR=${CMAKE_GENERATOR}"
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/fmt-check-plugin"
+      ECHO_OUTPUT_VARIABLE
+      ECHO_ERROR_VARIABLE
+      COMMAND_ERROR_IS_FATAL ANY
+    )
+
+    execute_process(
+      COMMAND "${CMAKE_COMMAND}" --build out --target fmt-check-plugin
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/fmt-check-plugin"
+      ECHO_OUTPUT_VARIABLE
+      ECHO_ERROR_VARIABLE
+      COMMAND_ERROR_IS_FATAL ANY
+    )
+
+    # Run the format checking plugin.
+    message(STATUS "Done compiling format check plugin.")
+    target_compile_options(intc PRIVATE "-fplugin=${PROJECT_SOURCE_DIR}/fmt-check-plugin/out/fmt-check-plugin")
+  endif()
+endif()
+
 # Do not link with libm (math) when target is windows executable.
 if (NOT WIN32)
   target_link_libraries(intc PRIVATE m)
-endif()
-
-# Run the format checking plugin if possible.
-if (CMAKE_C_COMPILER_ID STREQUAL "Clang" AND DEFINED LLVM_PACKAGE_VERSION)
-  add_dependencies(intc fmt-check-plugin)
-  if (EXISTS "./libfmt-check-plugin.so")
-    target_compile_options(intc PRIVATE "-fplugin=./libfmt-check-plugin.so")
-  endif()
 endif()
 
 ## Debug/Release flags.
@@ -129,7 +131,7 @@ endif()
 
 # When compiling with clang-cl, MSVC is also defined, so we put this here instead.
 if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
-  target_compile_options(intc PRIVATE $<$<CONFIG:DEBUG>:-Wl,-export-dynamic>)
+  target_link_options(intc PRIVATE $<$<CONFIG:DEBUG>:-Wl,-export-dynamic>)
 endif()
 
 # Enable asan if requested and possible.
@@ -153,6 +155,9 @@ if (NOT MSVC)
     -Wno-unused-parameter -Wno-unused-function
     -Wno-format-zero-length -Wno-comment
     -Wno-cast-function-type
+
+    ## DO NOT COMMIT THIS FOR GOODNESS’ SAKE.
+    -Wno-conversion -Wno-sign-conversion -Wno-shorten-64-to-32 -Wno-unused
 
     -fdiagnostics-color=always
   )
