@@ -12,11 +12,10 @@
 #include <cstdio>
 
 #ifdef _WIN32
-# define PLATFORM_EXE_PREFIX ""
 # define PLATFORM_EXE_SUFFIX "exe"
 # define CALLING_CONVENTION "MSWIN"
 #else
-# define PLATFORM_EXE_PREFIX "./"
+# include <sys/wait.h>
 # define PLATFORM_EXE_SUFFIX ""
 # define CALLING_CONVENTION "LINUX"
 #endif
@@ -69,6 +68,47 @@ struct $$defer {
         return $$defer_type<callable>{std::forward<callable>(cb)};
     }
 };
+
+/// The code returned by system() is *very* platform-specific. On Linux,
+/// you have to use a bunch of macros to get the actual exit code.
+struct exit_status {
+    std::uint8_t code{};
+    bool success{};
+    bool exited{};
+    int raw_code{};
+};
+
+/// Use this instead of system().
+auto run_command(std::string_view command) -> exit_status {
+    auto code = std::system(command.data());
+    exit_status st;
+    st.raw_code = code;
+
+#ifndef _WIN32
+    /// Process creation failed.
+    if (code == -1) {
+        st.success = false;
+        st.exited = false;
+        st.code = -1;
+        return st;
+    }
+
+    st.exited = WIFEXITED(code);
+    st.success = not WIFSIGNALED(code) and WEXITSTATUS(code) == 0;
+    st.code = WEXITSTATUS(code);
+#else
+    st.exited = true;
+    st.success = code == 0;
+    st.code = std::uint8_t(code);
+#endif
+
+    return st;
+}
+
+/// Disallow using system directly for portability reasons.
+#if __GNUG__ || __clang__
+#pragma GCC poison system
+#endif
 
 int main(int argc, char **argv) {
     // Expecting signature:
@@ -150,9 +190,8 @@ int main(int argc, char **argv) {
 
 
     std::filesystem::path intc_outpath{};
-    if (intc_target.starts_with("asm"))
-        intc_outpath = temppath("s");
-    else intc_outpath = temppath("o");
+    if (intc_target.starts_with("asm")) intc_outpath = temppath("s");
+    else intc_outpath = temppath(intc_target == "llvm" ? "ll" : "o");
 
     std::string intc_invocation{};
     intc_invocation += intcpath.string();
@@ -179,15 +218,11 @@ int main(int argc, char **argv) {
     cc_invocation += intc_outpath.string();
 
     std::filesystem::path outpath = temppath("txt");
-    std::string test_invocation{};
-    test_invocation += PLATFORM_EXE_PREFIX;
-    test_invocation += cc_outpath.string();
+    std::string test_invocation = cc_outpath.is_absolute() ? cc_outpath : std::filesystem::current_path() / cc_outpath;
     test_invocation += " > ";
     test_invocation += outpath.string();
 
-    int status = 0;
-
-    status = system(intc_invocation.c_str());
+    auto status = run_command(intc_invocation);
     // Delete generated output file at end of scope.
     defer {
         if (std::filesystem::exists(intc_outpath))
@@ -196,7 +231,7 @@ int main(int argc, char **argv) {
     // TODO: Error on ICE no matter what. Check output for "Internal Compiler Error".
     // This means we'd have to redirect and capture intc_invocation output as well.
     if (expected_error) {
-        if (!status) {
+        if (status.success) {
             fprintf(stderr,
                     "\nFAILURE: Test returned successful exit code but an error was expected\n"
                     "  intc_invocation: \"%s\"\n"
@@ -210,54 +245,70 @@ int main(int argc, char **argv) {
         // If status is non-zero (unsucessful) and error was expected, we good.
         return 0;
     }
-    if (status) {
+    if (not status.success) {
         fprintf(stderr,
-                "\nFAILURE: intc returned non-zero exit code\n"
+                "\nFAILURE: intc did not exit successfully\n"
                 "  intc_invocation: \"%s\"\n"
                 "  return status:   %d\n",
                 intc_invocation.c_str(),
-                status);
+                status.raw_code);
         return 127;
     }
 
-    status = system(cc_invocation.c_str());
+    status = run_command(cc_invocation);
     defer {
         if (std::filesystem::exists(cc_outpath))
             std::filesystem::remove(cc_outpath);
     };
 
-    if (status) {
+    if (not status.success) {
         fprintf(stderr,
-                "\nFAILURE: C compiler returned non-zero exit code\n"
+                "\nFAILURE: C compiler errored\n"
                 "  intc_invocation: \"%s\"\n"
                 "  cc_invocation:   \"%s\"\n"
                 "  return status:   %d\n",
                 intc_invocation.c_str(),
                 cc_invocation.c_str(),
-                status);
-        return status;
+                status.raw_code);
+        return 1;
     }
 
-    status = system(test_invocation.c_str());
+    status = run_command(test_invocation);
     defer {
         if (std::filesystem::exists(outpath))
             std::filesystem::remove(outpath);
     };
 
-    if (status != expected_status) {
+#ifdef __linux__
+    if (not status.exited) {
+        fprintf(stderr,
+                "\nFAILURE: Test was terminated by signal\n"
+                "  intc_invocation: \"%s\"\n"
+                "  cc_invocation:   \"%s\"\n"
+                "  test_invocation: \"%s\"\n"
+                "  signal:          %d\n",
+                intc_invocation.c_str(),
+                cc_invocation.c_str(),
+                test_invocation.c_str(),
+                WTERMSIG(status.code));
+        return 1;
+    }
+#endif
+
+    if (status.code != expected_status) {
         fprintf(stderr,
                 "\nFAILURE: Test returned unexpected exit code\n"
                 "  intc_invocation: \"%s\"\n"
                 "  cc_invocation:   \"%s\"\n"
                 "  test_invocation: \"%s\"\n"
-                "  return status:   %d\n"
+                "  return code:     %d\n"
                 "  expected:        %d\n",
                 intc_invocation.c_str(),
                 cc_invocation.c_str(),
                 test_invocation.c_str(),
-                status,
+                status.code,
                 expected_status);
-        return status;
+        return 1;
     }
 
     std::fstream test_output(outpath);
