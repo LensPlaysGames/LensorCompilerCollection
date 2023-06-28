@@ -6,21 +6,18 @@
 
 #define NO_INDEX (-1u) /// Index for valueless instructions.
 
-/// Creates a context for emitting LLVM IR.
-CodegenContext *codegen_context_llvm_create() {
-    CodegenContext *cg_ctx = calloc(1, sizeof(CodegenContext));
-    return cg_ctx;
-}
-
-void codegen_context_llvm_free(CodegenContext *ctx) {
-    (void) ctx;
-}
+/// IR generation context.
+typedef struct LLVMContext {
+    CodegenContext *cg;
+    string_buffer out;
+} LLVMContext;
 
 /// Forward decl because mutual recursion.
-static void emit_type(string_buffer *out, Type *t);
+static void emit_type(LLVMContext *ctx, Type *t);
 
 /// Emit struct members between braces.
-static void emit_struct_members(string_buffer *out, Type *t) {
+static void emit_struct_members(LLVMContext *ctx, Type *t) {
+    string_buffer *out = &ctx->out;
     format_to(out, "{ ");
 
     /// Add the struct members.
@@ -36,15 +33,16 @@ static void emit_struct_members(string_buffer *out, Type *t) {
     foreach (Member, m, canon->structure.members) {
         if (first) first = false;
         else format_to(out, ", ");
-        emit_type(out, m->type);
+        emit_type(ctx, m->type);
     }
 
     format_to(out, " }");
 }
 
 /// Emit an LLVM type.
-static void emit_type(string_buffer *out, Type *t) {
+static void emit_type(LLVMContext *ctx, Type *t) {
     /// Get canonical type or last reference.
+    string_buffer *out = &ctx->out;
     Type *canon = type_canonical(t);
     ASSERT(canon, "Cannot emit incomplete type in LLVM codegen: %T", t);
 
@@ -56,9 +54,8 @@ static void emit_type(string_buffer *out, Type *t) {
             if (canon == t_void) return format_to(out, "void");
             if (canon == t_void_ptr) return format_to(out, "ptr");
             if (canon == t_byte) return format_to(out, "i8");
-
-            /// FIXME: Arch-dependent.
-            if (canon == t_integer || canon == t_integer_literal) return format_to(out, "i64");
+            if (canon == t_integer || canon == t_integer_literal)
+                return format_to(out, "i%u", ctx->cg->ffi.integer_size);
             UNREACHABLE();
 
         /// All pointers are just 'ptr'.
@@ -79,13 +76,13 @@ static void emit_type(string_buffer *out, Type *t) {
                 return;
             }
 
-            emit_struct_members(out, canon);
+            emit_struct_members(ctx, canon);
             return;
         }
 
         case TYPE_ARRAY:
             format_to(out, "[%Z x ", canon->array.size);
-            emit_type(out, canon->array.of);
+            emit_type(ctx, canon->array.of);
             format_to(out, "]");
             return;
 
@@ -194,12 +191,35 @@ static bool llvm_is_numbered_value(IRInstruction *inst) {
     UNREACHABLE();
 }
 
+/// Emit a string as an LLVM string value.
+void emit_string_data(LLVMContext *ctx, span s, bool print_type) {
+    string_buffer *out = &ctx->out;
+    if (print_type) format_to(out, "[%Z x i8] ", s.size + 1);
+    format_to(out, "c\"");
+
+    /// Emit data.
+    foreach_index (i, s) {
+        char c = s.data[i];
+        if (isprint(c) && c != '"' && c != '\\' && c != '\n' && c != '\r' && c != '\t' && c != '\v' && c != '\f') {
+            format_to(out, "%c", c);
+        } else {
+            char arr[4] = {0};
+            snprintf(arr, sizeof(arr), "\\%02X", c);
+            vector_append(*out, literal_span(arr));
+        }
+    }
+
+    /// Emit null terminator and close string.
+    format_to(out, "\\00\"");
+}
+
 /// Emit an LLVM value.
 ///
 /// This emits a value, meaning a reference to an instruction, global,
 /// inline immediate etc. This is intended to be used when emitting
 /// operands of instructions.
-static void emit_value(string_buffer *out, IRInstruction *value, bool print_type) {
+static void emit_value(LLVMContext *ctx, IRInstruction *value, bool print_type) {
+    string_buffer *out = &ctx->out;
     STATIC_ASSERT(IR_COUNT == 38, "Handle all IR instructions");
 
     /// Emit the type if requested.
@@ -210,7 +230,7 @@ static void emit_value(string_buffer *out, IRInstruction *value, bool print_type
         if (value->kind == IR_FUNC_REF) {
             format_to(out, "ptr ");
         } else {
-            emit_type(out, value->type);
+            emit_type(ctx, value->type);
             format_to(out, " ");
         }
     }
@@ -227,7 +247,7 @@ static void emit_value(string_buffer *out, IRInstruction *value, bool print_type
 
         /// Copies just forward the copied value.
         case IR_COPY:
-            emit_value(out, value->operand, false);
+            emit_value(ctx, value->operand, false);
             return;
 
         /// The first N temporaries are the parameters.
@@ -241,9 +261,10 @@ static void emit_value(string_buffer *out, IRInstruction *value, bool print_type
             format_to(out, "@%S", value->static_ref->name);
             return;
 
-        /// Strings are emitted as global constants.
+        /// Strings are emitted in-line since the semantics of
+        /// string literals is different from C.
         case IR_LIT_STRING:
-            format_to(out, "@.str.%U", value->string_index);
+            emit_string_data(ctx, as_span(value->str), false);
             return;
 
         case IR_REGISTER:
@@ -259,7 +280,7 @@ static void emit_value(string_buffer *out, IRInstruction *value, bool print_type
         case IR_BITCAST:
             /// If this is a noop bitcast, just emit the operand. If
             /// this is a real bitcast, emit the index.
-            if (value->index == NO_INDEX) emit_value(out, value->operand, false);
+            if (value->index == NO_INDEX) emit_value(ctx, value->operand, false);
             else format_to(out, "%%%u", value->index);
             return;
 
@@ -293,110 +314,95 @@ static void emit_value(string_buffer *out, IRInstruction *value, bool print_type
     }
 }
 
-/// Emit a string as an LLVM string value.
-void emit_string_data(string_buffer *out, span s, bool print_type) {
-    if (print_type) format_to(out, "[%Z x i8] ", s.size + 1);
-    format_to(out, "c\"");
-
-    /// Emit data.
-    foreach_index (i, s) {
-        char c = s.data[i];
-        if (isprint(c) && c != '"' && c != '\\' && c != '\n' && c != '\r' && c != '\t' && c != '\v' && c != '\f') {
-            format_to(out, "%c", c);
-        } else {
-            char arr[4] = {0};
-            snprintf(arr, sizeof(arr), "\\%02X", c);
-            vector_append(*out, literal_span(arr));
-        }
-    }
-
-    /// Emit null terminator and close string.
-    format_to(out, "\\00\"");
-}
-
 /// Emit the index of an instruction, if any.
-static void emit_instruction_index(string_buffer *out, IRInstruction *inst) {
+static void emit_instruction_index(LLVMContext *ctx, IRInstruction *inst) {
+    string_buffer *out = &ctx->out;
     if (inst->index != NO_INDEX) format_to(out, "    %%%u = ", inst->index);
     else format_to(out, "    ");
 }
 
 /// Emit a binary instruction.
 static void emit_binary(
-    string_buffer *out,
+    LLVMContext *ctx,
     const char *op,
     IRInstruction *inst
 ) {
-    emit_instruction_index(out, inst);
+    string_buffer *out = &ctx->out;
+    emit_instruction_index(ctx, inst);
     format_to(out, "%s ", op);
-    emit_value(out, inst->lhs, true);
+    emit_value(ctx, inst->lhs, true);
     format_to(out, ", ");
-    emit_value(out, inst->rhs, false);
+    emit_value(ctx, inst->rhs, false);
     format_to(out, "\n");
 }
 
 /// Emit a binary instruction that cares about signedness.
 static void emit_binary_signed(
-    string_buffer *out,
+    LLVMContext *ctx,
     const char *op_signed,
     const char *op_unsigned,
     IRInstruction *inst
 ) {
-    emit_instruction_index(out, inst);
+    string_buffer *out = &ctx->out;
+    emit_instruction_index(ctx, inst);
     format_to(out, "%s ", type_is_signed(inst->lhs->type) ? op_signed : op_unsigned);
-    emit_value(out, inst->lhs, true);
+    emit_value(ctx, inst->lhs, true);
     format_to(out, ", ");
-    emit_value(out, inst->rhs, false);
+    emit_value(ctx, inst->rhs, false);
     format_to(out, "\n");
 }
 
 /// Emit a conversion operation (`X ... to Y`).
 static void emit_conversion(
-    string_buffer *out,
+    LLVMContext *ctx,
     const char *op,
     IRInstruction *inst
 ) {
-    emit_instruction_index(out, inst);
+    string_buffer *out = &ctx->out;
+    emit_instruction_index(ctx, inst);
     format_to(out, "%s ", op);
-    emit_value(out, inst->lhs, true);
+    emit_value(ctx, inst->lhs, true);
     format_to(out, " to ");
-    emit_type(out, inst->type);
+    emit_type(ctx, inst->type);
     format_to(out, "\n");
 }
 
 /// Emit an add of a pointer and an int.
 static void emit_pointer_add(
-    string_buffer *out,
+    LLVMContext *ctx,
     IRInstruction *inst,
     IRInstruction *pointer,
     IRInstruction *integer
 ) {
+    string_buffer *out = &ctx->out;
+
     /// If the displacement is known at compile time and a multiple of
     /// the pointee size, convert it to a GEP and emit that instead.
     if (integer->kind == IR_IMMEDIATE && integer->imm % type_sizeof(pointer->type->pointer.to) == 0) {
-        emit_instruction_index(out, inst);
+        emit_instruction_index(ctx, inst);
         format_to(out, "getelementptr ");
-        emit_type(out, pointer->type->pointer.to);
+        emit_type(ctx, pointer->type->pointer.to);
         format_to(out, ", ");
-        emit_value(out, pointer, true);
+        emit_value(ctx, pointer, true);
         format_to(out, ", i64 %Z\n", integer->imm / type_sizeof(pointer->type->pointer.to));
         return;
     }
 
     /// Otherwise, convert the pointer to an int.
     format_to(out, "    %%ptrtoint.%u = ptrtoint ", inst->index);
-    emit_value(out, pointer, true);
+    emit_value(ctx, pointer, true);
     format_to(out, " to ");
-    emit_type(out, integer->type);
+    emit_type(ctx, integer->type);
     format_to(out, "\n");
 
     /// Add them.
     format_to(out, "    %%add.%u = add ", inst->index);
-    emit_value(out, integer, true);
+    emit_value(ctx, integer, true);
     format_to(out, ", %%ptrtoint.%u\n", inst->index);
 
     /// Cast back to a pointer.
     format_to(out, "    %%%u = inttoptr ", inst->index);
-    emit_type(out, integer->type);
+    emit_type(ctx, integer->type);
     format_to(out, " %%add.%u to ptr\n", inst->index);
 }
 
@@ -404,7 +410,8 @@ static void emit_pointer_add(
 ///
 /// This emits an instruction as part of a function body. For emitting
 /// instructions in other places, see `emit_value`.
-static void emit_instruction(string_buffer *out, IRInstruction *inst) {
+static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
+    string_buffer *out = &ctx->out;
     STATIC_ASSERT(IR_COUNT == 38, "Handle all IR instructions");
     switch (inst->kind) {
         case IR_COUNT: UNREACHABLE();
@@ -423,34 +430,34 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
             ICE("LLVM backend cannot emit IR_REGISTER instructions");
 
         case IR_CALL: {
-            emit_instruction_index(out, inst);
+            emit_instruction_index(ctx, inst);
             Type *call_ty = ir_call_get_callee_type(inst);
             format_to(out, "call ");
-            emit_type(out, call_ty->function.return_type);
+            emit_type(ctx, call_ty->function.return_type);
 
-            if (inst->call.is_indirect) emit_value(out, inst->call.callee_instruction, false);
+            if (inst->call.is_indirect) emit_value(ctx, inst->call.callee_instruction, false);
             else format_to(out, " @%S", inst->call.callee_function->name);
 
             format_to(out, "(");
             foreach_ptr (IRInstruction *, arg, inst->call.arguments) {
                 if (arg != *inst->call.arguments.data) format_to(out, ", ");
-                emit_value(out, arg, true);
+                emit_value(ctx, arg, true);
             }
             format_to(out, ")\n");
         } break;
 
         case IR_LOAD:
-            emit_instruction_index(out, inst);
+            emit_instruction_index(ctx, inst);
             format_to(out, "load ");
-            emit_type(out, inst->type);
+            emit_type(ctx, inst->type);
             format_to(out, ", ");
-            emit_value(out, inst->operand, true);
+            emit_value(ctx, inst->operand, true);
             format_to(out, "\n");
             break;
 
         case IR_RETURN:
             format_to(out, "    ret ");
-            if (inst->operand) emit_value(out, inst->operand, true);
+            if (inst->operand) emit_value(ctx, inst->operand, true);
             else format_to(out, "void");
             format_to(out, "\n");
             break;
@@ -462,7 +469,7 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
         case IR_BRANCH_CONDITIONAL:
             /// Narrow the condition to a bool.
             format_to(out, "    %%%u = icmp ne ", inst->index);
-            emit_value(out, inst->cond_br.condition, true);
+            emit_value(ctx, inst->cond_br.condition, true);
             format_to(out, ", 0\n");
 
             /// Emit the branch.
@@ -480,14 +487,14 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
             break;
 
         case IR_PHI:
-            emit_instruction_index(out, inst);
+            emit_instruction_index(ctx, inst);
             format_to(out, "phi ");
-            emit_type(out, inst->type);
+            emit_type(ctx, inst->type);
             format_to(out, " ");
             foreach_ptr (IRPhiArgument *, arg, inst->phi_args) {
                 if (arg != *inst->phi_args.data) format_to(out, ", ");
                 format_to(out, "[ ");
-                emit_value(out, arg->value, false);
+                emit_value(ctx, arg->value, false);
                 format_to(out, ", %%bb%Z ]", arg->block->id);
             }
             format_to(out, "\n");
@@ -515,13 +522,13 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
                 case IR_GT: format_to(out, "%s", type_is_signed(inst->lhs->type) ? "sgt " : "ugt "); break;
                 case IR_GE: format_to(out, "%s", type_is_signed(inst->lhs->type) ? "sge " : "uge "); break;
             }
-            emit_value(out, inst->lhs, true);
+            emit_value(ctx, inst->lhs, true);
             format_to(out, ", ");
-            emit_value(out, inst->rhs, false);
+            emit_value(ctx, inst->rhs, false);
 
             /// ALWAYS zero-extend an i1, as sign-extending would broadcast the sign bit.
             format_to(out, "\n    %%%u = zext i1 %%i1.%u to ", inst->index, inst->index);
-            emit_type(out, inst->type);
+            emit_type(ctx, inst->type);
             format_to(out, "\n");
         } break;
 
@@ -531,26 +538,26 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
         case IR_ADD:
             /// Pointer arithmetic.
             if (type_is_pointer(inst->lhs->type) && !type_is_pointer(inst->rhs->type))
-                emit_pointer_add(out, inst, inst->lhs, inst->rhs);
+                emit_pointer_add(ctx, inst, inst->lhs, inst->rhs);
             else if (!type_is_pointer(inst->lhs->type) && type_is_pointer(inst->rhs->type))
-                emit_pointer_add(out, inst, inst->rhs, inst->lhs);
+                emit_pointer_add(ctx, inst, inst->rhs, inst->lhs);
             else
-                emit_binary(out, "add", inst);
+                emit_binary(ctx, "add", inst);
             break;
 
-        case IR_SUB: emit_binary(out, "sub", inst); break;
-        case IR_MUL: emit_binary(out, "mul", inst); break;
-        case IR_SHL: emit_binary(out, "shl", inst); break;
-        case IR_SAR: emit_binary(out, "ashr", inst); break;
-        case IR_SHR: emit_binary(out, "lshr", inst); break;
-        case IR_AND: emit_binary(out, "and", inst); break;
-        case IR_OR: emit_binary(out, "or", inst); break;
-        case IR_DIV: emit_binary_signed(out, "sdiv", "udiv", inst); break;
-        case IR_MOD: emit_binary_signed(out, "srem", "urem", inst); break;
+        case IR_SUB: emit_binary(ctx, "sub", inst); break;
+        case IR_MUL: emit_binary(ctx, "mul", inst); break;
+        case IR_SHL: emit_binary(ctx, "shl", inst); break;
+        case IR_SAR: emit_binary(ctx, "ashr", inst); break;
+        case IR_SHR: emit_binary(ctx, "lshr", inst); break;
+        case IR_AND: emit_binary(ctx, "and", inst); break;
+        case IR_OR: emit_binary(ctx, "or", inst); break;
+        case IR_DIV: emit_binary_signed(ctx, "sdiv", "udiv", inst); break;
+        case IR_MOD: emit_binary_signed(ctx, "srem", "urem", inst); break;
 
-        case IR_ZERO_EXTEND: emit_conversion(out, "zext", inst); break;
-        case IR_SIGN_EXTEND: emit_conversion(out, "sext", inst); break;
-        case IR_TRUNCATE: emit_conversion(out, "trunc", inst); break;
+        case IR_ZERO_EXTEND: emit_conversion(ctx, "zext", inst); break;
+        case IR_SIGN_EXTEND: emit_conversion(ctx, "sext", inst); break;
+        case IR_TRUNCATE: emit_conversion(ctx, "trunc", inst); break;
 
         case IR_BITCAST: {
             if (inst->index == NO_INDEX) break;
@@ -562,43 +569,43 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
             if (from->kind == TYPE_STRUCT || to->kind == TYPE_STRUCT ||
                 from->kind == TYPE_ARRAY || to->kind == TYPE_ARRAY) {
                 format_to(out, "    %%alloca.%u = alloca ", inst->index);
-                emit_type(out, to);
+                emit_type(ctx, to);
                 format_to(out, ", align %Z\n", type_alignof(to));
                 format_to(out, "    store ");
-                emit_value(out, inst->operand, true);
+                emit_value(ctx, inst->operand, true);
                 format_to(out, ", ptr %%alloca.%u\n", inst->index);
                 format_to(out, "    %%%u = load ", inst->index);
-                emit_type(out, inst->type);
+                emit_type(ctx, inst->type);
                 format_to(out, ", ptr %%alloca.%u\n", inst->index);
                 break;
             }
 
             /// Otherwise, just emit a normal bitcast.
-            emit_conversion(out, "bitcast", inst);
+            emit_conversion(ctx, "bitcast", inst);
         } break;
 
         case IR_STORE:
             format_to(out, "    store ");
-            emit_value(out, inst->store.value, true);
+            emit_value(ctx, inst->store.value, true);
             format_to(out, ", ");
-            emit_value(out, inst->store.addr, true);
+            emit_value(ctx, inst->store.addr, true);
             format_to(out, "\n");
             break;
 
         /// There is no `not` instruction, so we emit a `xor` instead.
         case IR_NOT:
-            emit_instruction_index(out, inst);
+            emit_instruction_index(ctx, inst);
             format_to(out, "xor ");
-            emit_value(out, inst->operand, true);
+            emit_value(ctx, inst->operand, true);
             format_to(out, ", -1\n");
             break;
 
         case IR_ALLOCA: {
             Type *t = type_canonical(inst->type);
             ASSERT(type_is_pointer(t));
-            emit_instruction_index(out, inst);
+            emit_instruction_index(ctx, inst);
             format_to(out, "alloca ");
-            emit_type(out, t->pointer.to);
+            emit_type(ctx, t->pointer.to);
 
             /// Specifying the alignment isn’t strictly necessary,
             /// but it’s probably a good idea.
@@ -611,21 +618,22 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
 ///
 /// This declares external functions and defines
 /// defined functions.
-static void emit_function(string_buffer *out, IRFunction *f) {
+static void emit_function(LLVMContext *ctx, IRFunction *f) {
+    string_buffer *out = &ctx->out;
     if (f != *f->context->functions.data) format_to(out, "\n");
 
     /// Write function header.
     format_to(out, "%s ", f->is_extern ? "declare" : "define");
     if (!f->is_extern && !string_eq(f->name, literal_span("main")))
         format_to(out, "private "); /// TODO: Make private only if not exported.
-    emit_type(out, f->type->function.return_type);
+    emit_type(ctx, f->type->function.return_type);
     format_to(out, " @%S(", f->name);
 
     /// Write the argument types.
     foreach_index (i, f->type->function.parameters) {
         Parameter *p = f->type->function.parameters.data + i;
         format_to(out, "%s", i == 0 ? "" : ", ");
-        emit_type(out, p->type);
+        emit_type(ctx, p->type);
 
         /// Reference parameters get some optimisation hints. This
         /// is also what Clang uses for C++ references.
@@ -673,7 +681,7 @@ static void emit_function(string_buffer *out, IRFunction *f) {
         if (block->name.size) format_to(out, " ; %S", block->name);
         format_to(out, "\n");
         list_foreach (IRInstruction *, inst, block->instructions) {
-            emit_instruction(out, inst);
+            emit_instruction(ctx, inst);
         }
     }
 
@@ -681,64 +689,57 @@ static void emit_function(string_buffer *out, IRFunction *f) {
     format_to(out, "}\n");
 }
 
-void codegen_emit_llvm(CodegenContext *ctx) {
-    string_buffer out = {0};
+void codegen_emit_llvm(CodegenContext *cg) {
+    LLVMContext ctx = {
+        .cg = cg};
 
     /// We don’t want colours in our LLVM IR.
     disable_colours();
 
     /// Mangle all function names.
-    foreach_ptr (IRFunction *, f, ctx->functions) mangle_function_name(f);
+    foreach_ptr (IRFunction *, f, cg->functions) mangle_function_name(f);
 
     /// Emit named types.
     bool type_emitted = false;
-    foreach_ptr (Type *, t, ctx->ast->_types_) {
+    foreach_ptr (Type *, t, cg->ast->_types_) {
         if (t->kind != TYPE_STRUCT || t->structure.decl->struct_decl->name.size == 0) continue;
         type_emitted = true;
-        format_to(&out, "%%struct.%S = type ", t->structure.decl->struct_decl->name);
-        emit_struct_members(&out, t);
-        format_to(&out, "\n");
+        format_to(&ctx.out, "%%struct.%S = type ", t->structure.decl->struct_decl->name);
+        emit_struct_members(&ctx, t);
+        format_to(&ctx.out, "\n");
     }
 
     /// Add a newline after the types.
-    if (type_emitted) format_to(&out, "\n");
-
-    /// Emit strings.
-    foreach_index (i, ctx->ast->strings) {
-        format_to(&out, "@str.%Z = private unnamed_addr constant ", i);
-        emit_string_data(&out, as_span(ctx->ast->strings.data[i]), true);
-        format_to(&out, ", align 1\n");
-    }
-
-    /// Add a newline after the strings.
-    if (ctx->ast->strings.size) format_to(&out, "\n");
+    if (type_emitted) format_to(&ctx.out, "\n");
 
     /// Emit global variables.
-    foreach_ptr (IRStaticVariable *, var, ctx->static_vars) {
-        format_to(&out, "@%S = private global ", var->name);
-        emit_type(&out, var->type);
+    foreach_ptr (IRStaticVariable *, var, cg->static_vars) {
+        format_to(&ctx.out, "@%S = private global ", var->name);
+        emit_type(&ctx, var->type);
+        format_to(&ctx.out, " ");
         if (var->init) {
             switch (var->init->kind) {
-                case IR_LIT_INTEGER: format_to(&out, " %U", var->init->imm); break;
-                case IR_LIT_STRING: emit_string_data(&out, as_span(var->init->str), false); break;
+                case IR_LIT_INTEGER: format_to(&ctx.out, "%U", var->init->imm); break;
+                case IR_LIT_STRING: emit_string_data(&ctx, as_span(var->init->str), false); break;
                 default: UNREACHABLE();
             }
         } else {
-            format_to(&out, " zeroinitializer");
+            format_to(&ctx.out, "zeroinitializer");
         }
 
         /// Globals must be aligned manually, else they are thought
         /// to have an alignment of 1, which breaks default-aligned
         /// loads and stores.
-        format_to(&out, ", align %Z\n", type_alignof(var->type));
+        format_to(&ctx.out, ", align %Z\n", type_alignof(var->type));
     }
 
     /// Add a newline after the globals.
-    if (ctx->static_vars.size) format_to(&out, "\n");
+    if (cg->static_vars.size) format_to(&ctx.out, "\n");
 
     /// Emit each function.
-    foreach_ptr (IRFunction *, f, ctx->functions) emit_function(&out, f);
+    foreach_ptr (IRFunction *, f, cg->functions) emit_function(&ctx, f);
 
     /// Write to file.
-    fprint(ctx->code, "%S", as_span(out));
+    fprint(cg->code, "%S", as_span(ctx.out));
+    vector_delete(ctx.out);
 }
