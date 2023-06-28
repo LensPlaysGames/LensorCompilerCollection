@@ -90,8 +90,8 @@ static bool is_noop_bitcast(IRInstruction *inst) {
     ASSERT(inst->kind == IR_BITCAST);
 
     /// Types are the same.
-    Type* from = type_canonical(inst->operand->type);
-    Type* to = type_canonical(inst->type);
+    Type *from = type_canonical(inst->operand->type);
+    Type *to = type_canonical(inst->type);
     if (type_equals_canon(from, to)) return true;
 
     /// Either is a function pointer and the other is a function. No
@@ -332,6 +332,43 @@ static void emit_conversion(
     format_to(out, "\n");
 }
 
+/// Emit an add of a pointer and an int.
+static void emit_pointer_add(
+    string_buffer *out,
+    IRInstruction *inst,
+    IRInstruction *pointer,
+    IRInstruction *integer
+) {
+    /// If the displacement is known at compile time and a multiple of
+    /// the pointee size, convert it to a GEP and emit that instead.
+    if (integer->kind == IR_IMMEDIATE && integer->imm % type_sizeof(pointer->type->pointer.to) == 0) {
+        emit_instruction_index(out, inst);
+        format_to(out, "getelementptr ");
+        emit_type(out, pointer->type->pointer.to);
+        format_to(out, ", ");
+        emit_value(out, pointer, true);
+        format_to(out, ", i64 %Z\n", integer->imm / type_sizeof(pointer->type->pointer.to));
+        return;
+    }
+
+    /// Otherwise, convert the pointer to an int.
+    format_to(out, "    %%ptrtoint.%u = ptrtoint ", inst->index);
+    emit_value(out, pointer, true);
+    format_to(out, " to ");
+    emit_type(out, integer->type);
+    format_to(out, "\n");
+
+    /// Add them.
+    format_to(out, "    %%add.%u = add ", inst->index);
+    emit_value(out, integer, true);
+    format_to(out, ", %%ptrtoint.%u\n", inst->index);
+
+    /// Cast back to a pointer.
+    format_to(out, "    %%%u = inttoptr ", inst->index);
+    emit_type(out, integer->type);
+    format_to(out, " %%add.%u to ptr\n", inst->index);
+}
+
 /// Emit an LLVM instruction.
 ///
 /// This emits an instruction as part of a function body. For emitting
@@ -457,7 +494,19 @@ static void emit_instruction(string_buffer *out, IRInstruction *inst) {
             format_to(out, "\n");
         } break;
 
-        case IR_ADD: emit_binary(out, "add", inst); break;
+        /// The frontend lowers pointer arithmetic to adds, but
+        /// we need to emit a GEP for this since LLVM doesn’t
+        /// let us add ints to pointers.
+        case IR_ADD:
+            /// Pointer arithmetic.
+            if (type_is_pointer(inst->lhs->type) && !type_is_pointer(inst->rhs->type))
+                emit_pointer_add(out, inst, inst->lhs, inst->rhs);
+            else if (!type_is_pointer(inst->lhs->type) && type_is_pointer(inst->rhs->type))
+                emit_pointer_add(out, inst, inst->rhs, inst->lhs);
+            else
+                emit_binary(out, "add", inst);
+            break;
+
         case IR_SUB: emit_binary(out, "sub", inst); break;
         case IR_MUL: emit_binary(out, "mul", inst); break;
         case IR_SHL: emit_binary(out, "shl", inst); break;
