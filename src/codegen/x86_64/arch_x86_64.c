@@ -65,6 +65,13 @@ CodegenContext *codegen_context_x86_64_mswin_create() {
   argument_registers = mswin_argument_registers;
 
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
+  cg_ctx->ffi.cchar_size = 8;
+  cg_ctx->ffi.cshort_size = 16;
+  cg_ctx->ffi.cint_size = 32;
+  cg_ctx->ffi.clong_size = 32;
+  cg_ctx->ffi.cllong_size = 64;
+  cg_ctx->ffi.pointer_size = 64;
+  cg_ctx->ffi.integer_size = 64;
   return cg_ctx;
 }
 
@@ -76,6 +83,13 @@ CodegenContext *codegen_context_x86_64_linux_create() {
   argument_registers = linux_argument_registers;
 
   CodegenContext *cg_ctx = calloc(1,sizeof(CodegenContext));
+  cg_ctx->ffi.cchar_size = 8;
+  cg_ctx->ffi.cshort_size = 16;
+  cg_ctx->ffi.cint_size = 32;
+  cg_ctx->ffi.clong_size = 64;
+  cg_ctx->ffi.cllong_size = 64;
+  cg_ctx->ffi.pointer_size = 64;
+  cg_ctx->ffi.integer_size = 64;
   return cg_ctx;
 }
 

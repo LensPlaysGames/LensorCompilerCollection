@@ -44,24 +44,19 @@ CodegenContext *codegen_context_create
   STATIC_ASSERT(TARGET_COUNT == 6, "codegen_context_create() must exhaustively handle all codegen targets.");
   STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_create() must exhaustively handle all codegen calling conventions.");
 
-  if (target == TARGET_LLVM) {
-    context = codegen_context_llvm_create();
-  } else {
-    switch (arch) {
-      case ARCH_X86_64:
-        // Handle call_convention for creating codegen context!
-        if (call_convention == CG_CALL_CONV_MSWIN) {
-          context = codegen_context_x86_64_mswin_create();
-        } else if (call_convention == CG_CALL_CONV_SYSV) {
-          context = codegen_context_x86_64_linux_create();
-        } else {
-          ICE("Unrecognized calling convention!");
-        }
-        break;
-      default: UNREACHABLE();
-    }
+  switch (arch) {
+    case ARCH_X86_64:
+      // Handle call_convention for creating codegen context!
+      if (call_convention == CG_CALL_CONV_MSWIN) {
+        context = codegen_context_x86_64_mswin_create();
+      } else if (call_convention == CG_CALL_CONV_SYSV) {
+        context = codegen_context_x86_64_linux_create();
+      } else {
+        ICE("Unrecognized calling convention!");
+      }
+      break;
+    default: UNREACHABLE();
   }
-
 
   context->arch = arch;
   context->target = target;
@@ -118,19 +113,15 @@ void codegen_context_free(CodegenContext *context) {
 
   /// Free backend-specific data.
   STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures");
-  if (context->target == TARGET_LLVM) {
-    codegen_context_llvm_free(context);
-  } else {
-    switch (context->arch) {
-      default: UNREACHABLE();
+  switch (context->arch) {
+    default: UNREACHABLE();
 
-      case ARCH_X86_64: {
-        STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling conventions");
-        if (context->call_convention == CG_CALL_CONV_MSWIN) codegen_context_x86_64_mswin_free(context);
-        else if (context->call_convention == CG_CALL_CONV_SYSV) codegen_context_x86_64_linux_free(context);
-        else ICE("Unrecognized calling convention!");
-      } break;
-    }
+    case ARCH_X86_64: {
+      STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling conventions");
+      if (context->call_convention == CG_CALL_CONV_MSWIN) codegen_context_x86_64_mswin_free(context);
+      else if (context->call_convention == CG_CALL_CONV_SYSV) codegen_context_x86_64_linux_free(context);
+      else ICE("Unrecognized calling convention!");
+    } break;
   }
 
   /// Free the context itself.
