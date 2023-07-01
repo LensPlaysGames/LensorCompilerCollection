@@ -390,10 +390,8 @@ int main(int argc, char **argv) {
     if (!ok) exit(2);
 
     /// Print if requested.
-    if (print_ast || print_scopes) {
-      if (print_ast) ast_print(stdout, ast);
-      if (print_scopes) ast_print_scope_tree(stdout, ast);
-    }
+    if (print_ast) ast_print(stdout, ast);
+    if (print_scopes) ast_print_scope_tree(stdout, ast);
 
     /// Generate code.
     if (!codegen(
