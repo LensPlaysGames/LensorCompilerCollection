@@ -691,7 +691,8 @@ static void emit_function(LLVMContext *ctx, IRFunction *f) {
 
 void codegen_emit_llvm(CodegenContext *cg) {
     LLVMContext ctx = {
-        .cg = cg};
+        .cg = cg,
+    };
 
     /// We don’t want colours in our LLVM IR.
     disable_colours();
