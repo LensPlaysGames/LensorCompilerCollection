@@ -65,17 +65,17 @@ control flow starts at the very top of the file and makes it's way to
 the bottom of the file.
 
 Let's take a look at a basic program:
-#+begin_example un
-fact : integer (n : integer) {
-  if n < 2 {
-    1
-  } else {
-    n * fact(n - 1)
+#+begin_src int
+  fact : integer (n : integer) {
+    if n < 2 {
+      1
+    } else {
+      n * fact(n - 1)
+    }
   }
-}
 
-fact(5)
-#+end_example
+  fact(5)
+#+end_src
 
 This program will return 120 as a status code. The result of the last
 expression in the file is the return value. The same holds true for
