@@ -1,5 +1,10 @@
 /// Top-level rule.
-<file>           ::= { <expression> }
+<file> ::= <preamble> { <expression> | ";" }
+
+<preamble> ::= [ <module-declaration> ] { <import-declaration> | ";" }
+
+<module-declaration> ::= MODULE IDENTIFIER
+<import-declaration> ::= IMPORT IDENTIFIER
 
 /// Expression.
 <expression>     ::= <expr-decl>
@@ -18,7 +23,7 @@
 
 /// Declarations.
 <expr-decl>      ::= <decl-start> <decl-rest>
-<decl-start>     ::= IDENTIFIER ":"
+<decl-start>     ::= [ EXPORT ] IDENTIFIER ":"
 <decl-rest>      ::= <type-function> <function-body>
                    | <type> [ "=" <expression> ]
                    | EXT <type-function>
