@@ -833,6 +833,8 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       break;
 
+    case NODE_MODULE_REFERENCE: break;
+
     /// Typecheck the function body if there is one.
     case NODE_FUNCTION: {
       if (!expr->function.body) break;

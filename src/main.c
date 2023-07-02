@@ -271,7 +271,7 @@ int main(int argc, char **argv) {
   }
 
   int status = handle_command_line_arguments(argc, argv);
-  if (status) { return status; }
+  if (status) return status;
   if (input_filepath_index == -1) {
     print("Input file path was not provided.");
     print_usage(argv);
