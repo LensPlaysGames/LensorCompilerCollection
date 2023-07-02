@@ -119,6 +119,7 @@ typedef struct string {
 } string;
 
 /// Resizeable string buffer
+/// This is techincally a Vector(char), but circular dependencies go brrr.
 typedef struct string_buffer {
   char *data;
   usz size;
