@@ -1278,29 +1278,73 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// The type of a structure declaration is the type of the struct.
     case NODE_MEMBER_ACCESS: {
       // TODO: Auto dereference left hand side of pointers.
-      // Ensure struct_ is of struct type.
+
+      // FIXME: This is slightly scuffed to call this "_struct" when it
+      // now also may represent modules.
       if (!typecheck_expression(ast, expr->member_access.struct_)) return false;
-      Type *struct_type = type_canonical(expr->member_access.struct_->type);
-      if (!struct_type || struct_type->kind != TYPE_STRUCT)
-        ERR(expr->member_access.struct_->source_location,
-            "Cannot access member of type %T", struct_type);
 
-      Member *member;
-      vector_find_if(struct_type->structure.members, member, i,
-        string_eq(
-          struct_type->structure.members.data[i].name,
-          expr->member_access.ident
-        )
-      );
-      if (!member)
-        ERR(expr->source_location,
-            "Cannot access member \"%S\" that does not exist in \"%S\", an instance of %T",
-            expr->member_access.ident, expr->member_access.struct_->struct_decl->name, struct_type);
+      if (expr->member_access.struct_->kind == NODE_MODULE_REFERENCE) {
+        /*
+        print("Lookup %S in module %S\n",
+              as_span(expr->member_access.ident),
+              as_span(expr->member_access.struct_->module_ref.ast->module_name));
+        */
 
-      expr->member_access.member = member;
-      expr->type = member->type;
+        AST *module = NULL;
+        foreach_ptr (AST *, m, ast->imports) {
+          if (string_eq(m->module_name, expr->member_access.struct_->module_ref.ast->module_name)) {
+            module = m;
+            break;
+          }
+        }
+        if (!module) ERR((loc){0}, "Attempt to reference module which has not been imported!");
 
-      return true;
+        Node *found = NULL;
+        foreach_ptr (Node *, n, module->exports) {
+          // TODO: Look for more than just declarations...
+          if (n->kind == NODE_DECLARATION) {
+            if (string_eq(n->declaration.name, expr->member_access.ident)) {
+              found = n;
+              break;
+            }
+          }
+        }
+        if (!found)
+          ERR(expr->source_location, "Undefined reference to \"%S\" in module %S",
+              as_span(expr->member_access.ident),
+              as_span(expr->member_access.struct_->module_ref.ast->module_name));
+
+        expr->member_access.member = calloc(1, sizeof(Member));
+        expr->member_access.member->type = found->type;
+        expr->member_access.member->name = expr->member_access.ident;
+        expr->type = found->type;
+
+        return true;
+
+      } else {
+        // Ensure struct_ is of struct type.
+        Type *struct_type = type_canonical(expr->member_access.struct_->type);
+        if (!struct_type || struct_type->kind != TYPE_STRUCT)
+          ERR(expr->member_access.struct_->source_location,
+              "Cannot access member of type %T", struct_type);
+
+        Member *member;
+        vector_find_if(struct_type->structure.members, member, i,
+                       string_eq(
+                                 struct_type->structure.members.data[i].name,
+                                 expr->member_access.ident
+                                 )
+                       );
+        if (!member)
+          ERR(expr->source_location,
+              "Cannot access member \"%S\" that does not exist in \"%S\", an instance of %T",
+              expr->member_access.ident, expr->member_access.struct_->struct_decl->name, struct_type);
+
+        expr->member_access.member = member;
+        expr->type = member->type;
+
+        return true;
+      }
     }
 
     case NODE_FOR: {
