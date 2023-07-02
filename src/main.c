@@ -390,6 +390,8 @@ int main(int argc, char **argv) {
       goto done;
     }
 
+    // TODO: Resolve imported modules
+
     /// Perform semantic analysis program expressions.
     ok = typecheck_expression(ast, ast->root);
     if (!ok) exit(2);

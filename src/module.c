@@ -316,12 +316,12 @@ AST *deserialise_module(span metadata) {
   // parse module declarations (name + index in type table)
   uint8_t* begin_ptr = (uint8_t*)(metadata.data + sizeof(*desc));
 
-  for (size_t i = 0; i < desc->type_count; ++i) {
+  for (size_t i = 0; i < desc->declaration_count; ++i) {
 
     // Get pointer within preallocated types using type index
     uint64_t type_index = *(uint64_t *)(begin_ptr);
     Type *type = module->_types_.data[type_index];
-    print("deserialised type: %T\n", type);
+    //print("deserialised type: %T\n", type);
 
     // Get name length and then the name data
     uint32_t name_length = *(uint32_t *)(begin_ptr + sizeof(type_index));
@@ -330,7 +330,7 @@ AST *deserialise_module(span metadata) {
     vector_reserve(name, name_length);
     name.size = name_length;
     memcpy(name.data, name_ptr, name_length);
-    print("deserialised name: %S\n", as_span(name));
+    //print("deserialised name: %S\n", as_span(name));
 
     // Construct an AST node to represent the deserialised declaration
     Node *node = NULL;
@@ -417,6 +417,7 @@ string serialise_module(CodegenContext *context, AST *module) {
   desc_ptr->type_count = (uint32_t)cache.size;
   desc_ptr->type_table_offset = (uint32_t)type_table_offset;
   desc_ptr->name_offset = (uint32_t)module_name_offset;
+  desc_ptr->declaration_count = (uint32_t)module->exports.size;
 
   string ret = {0};
   ret.size = out.size;
