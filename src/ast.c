@@ -1027,16 +1027,24 @@ void ast_print_node_internal(
     } break;
 
     case NODE_MEMBER_ACCESS: {
-      fprint(file, "%31Member Access %35<%u> %36%T%31.%35%S %31: %T\n",
-             node->source_location.start,
-             node->member_access.struct_->type,
-             node->member_access.ident,
-             node->type);
+      if (node->member_access.struct_->kind == NODE_MODULE_REFERENCE) {
+        fprint(file, "%31Module Access %35<%u> %36%S%31.%35%S %31: %T\n",
+               node->source_location.start,
+               node->member_access.struct_->module_ref.ast->module_name,
+               node->member_access.ident,
+               node->type);
+      } else {
+        fprint(file, "%31Member Access %35<%u> %36%T%31.%35%S %31: %T\n",
+               node->source_location.start,
+               node->member_access.struct_->type,
+               node->member_access.ident,
+               node->type);
 
-      ast_print_children(file, logical_parent, node, &(Nodes) {
-        .data = (Node *[]) {node->member_access.struct_},
-        .size = 1
-      }, leading_text);
+        ast_print_children(file, logical_parent, node, &(Nodes) {
+          .data = (Node *[]) {node->member_access.struct_},
+          .size = 1
+        }, leading_text);
+      }
     } break;
   }
 
