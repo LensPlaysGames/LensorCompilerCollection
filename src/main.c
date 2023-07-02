@@ -9,6 +9,11 @@
 #include <platform.h>
 #include <utils.h>
 
+// TODO: TMP
+#include <module.h>
+#include <codegen/coff.h>
+#include <codegen/elf.h>
+
 static void print_usage(char **argv) {
   print("\nUSAGE: %s [FLAGS] [OPTIONS] <path to file to compile>\n", 0[argv]);
   print("Flags:\n"
@@ -262,6 +267,44 @@ static int handle_command_line_arguments(int argc, char **argv) {
   return 0;
 }
 
+// TODO: Dear god, please move this.
+span grab_section_reference_elf(span object_file, const char *section_name) {
+  // Check if file is actually big enough to be an ELF file.
+  elf64_header* header = (elf64_header*)object_file.data;
+  if (header->e_machine != EM_X86_64)
+    ICE("ELF has invalid machine type");
+
+  // Offset into file to find section header table.
+  // TODO: Validate offset within file.
+  elf64_shdr* section_header = (elf64_shdr*)(object_file.data + header->e_shoff);
+  elf64_shdr* string_table_header = section_header + header->e_shstrndx;
+  span string_table = {
+    object_file.data + string_table_header->sh_offset,
+    string_table_header->sh_size
+  };
+  for (size_t i = 0; i < header->e_shnum; ++i) {
+    const char *sh_name = string_table.data + section_header->sh_name;
+    if (strcmp(sh_name, section_name) == 0) {
+      span section_reference = {0};
+      section_reference.data = object_file.data + section_header->sh_offset;
+      section_reference.size = section_header->sh_size;
+      return section_reference;
+    }
+    section_header++;
+  }
+  ICE("Could not find section %s within ELF object file", section_name);
+}
+
+span grab_section_reference_coff(span object_file, const char *section_name) {
+  TODO("COFF is not my priority unless it's 4/20");
+}
+
+span grab_section_reference(span object_file, const char *section_name) {
+  if (string_starts_with(object_file, literal_span("\x7f""ELF")))
+    return grab_section_reference_elf(object_file, section_name);
+  return grab_section_reference_coff(object_file, section_name);
+}
+
 int main(int argc, char **argv) {
   primitive_types[0] = t_integer;
   primitive_types[1] = t_void;
@@ -390,7 +433,39 @@ int main(int argc, char **argv) {
       goto done;
     }
 
-    // TODO: Resolve imported modules
+    // Resolve imported modules
+    foreach_index (i, ast->imports) {
+      AST *import = ast->imports.data[i];
+
+      string_buffer path = {0};
+      vector_append(path, import->module_name);
+      size_t base_path_length = path.size;
+
+      format_to(&path, ".o");
+      string_buf_zterm(&path);
+
+      string module_object = {0};
+      bool success = false;
+      module_object = platform_read_file(path.data, &success);
+      if (!success) {
+        // Reset path to base path, try new extension
+        path.size = base_path_length;
+        format_to(&path, ".obj");
+        string_buf_zterm(&path);
+
+        module_object = platform_read_file(path.data, &success);
+        ASSERT(success, "Could not find module description for module %S", import->module_name);
+      }
+
+      print("Resolved module %S at path %S\n", import->module_name, as_span(path));
+
+      span metadata = grab_section_reference(as_span(module_object), INTC_MODULE_SECTION_NAME);
+      ast->imports.data[i] = deserialise_module(metadata);
+      ast->imports.data[i]->module_name = import->module_name;
+
+      free(module_object.data);
+      vector_delete(path);
+    }
 
     /// Perform semantic analysis program expressions.
     ok = typecheck_expression(ast, ast->root);
