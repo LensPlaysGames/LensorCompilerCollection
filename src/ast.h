@@ -22,8 +22,9 @@ enum NodeKind {
   NODE_BINARY,
   NODE_UNARY,
   NODE_LITERAL,
-  NODE_VARIABLE_REFERENCE,
   NODE_FUNCTION_REFERENCE,
+  NODE_MODULE_REFERENCE,
+  NODE_VARIABLE_REFERENCE,
   NODE_STRUCTURE_DECLARATION,
   NODE_MEMBER_ACCESS,
   NODE_FOR,
@@ -32,7 +33,7 @@ enum NodeKind {
 };
 
 /// The kind of a type.
-enum TypeKind {
+typedef enum TypeKind {
   TYPE_PRIMITIVE,
   TYPE_NAMED,
   TYPE_POINTER,
@@ -42,7 +43,7 @@ enum TypeKind {
   TYPE_STRUCT,
   TYPE_INTEGER,
   TYPE_COUNT
-};
+} TypeKind;
 
 /// The type of a token. These are only in this header
 /// because some of them are also used in the AST.
@@ -66,6 +67,7 @@ enum TokenType {
   TK_ARBITRARY_INT,
   TK_FOR,
   TK_RETURN,
+  TK_EXPORT,
 
   TK_LPAREN,
   TK_RPAREN,
@@ -298,6 +300,10 @@ typedef struct NodeMemberAccess {
 /// Variable reference.
 typedef Symbol *NodeVariableReference;
 
+typedef struct NodeModuleReference {
+  struct AST *ast;
+} NodeModuleReference;
+
 typedef struct NodeFor {
   Node *init;
   Node *condition;
@@ -415,8 +421,9 @@ struct Node {
     NodeBinary binary;
     NodeUnary unary;
     NodeLiteral literal;
-    NodeVariableReference var;
     NodeFunctionReference funcref;
+    NodeModuleReference module_ref;
+    NodeVariableReference var;
     NodeStructDecl struct_decl;
     NodeMemberAccess member_access;
     NodeFor for_;
@@ -424,10 +431,17 @@ struct Node {
   };
 };
 
-/// Data structure that stores an AST.
+/// Data structure that stores an AST; a module.
+// TODO: Rename to "Module"
 typedef struct AST {
   /// The root node of the AST.
   Node *root;
+
+  string module_name;
+  bool is_module;
+
+  Vector(struct AST *) imports;
+  Vector(Node *) exports;
 
   /// Filename of the source file and source code.
   /// TODO: If we ever allow multiple source files, then we
@@ -605,6 +619,13 @@ Node *ast_make_variable_reference(
     AST *ast,
     loc source_location,
     Symbol *symbol
+);
+
+/// Create a new module reference.
+Node *ast_make_module_reference(
+    AST *ast,
+    loc source_location,
+    AST *module
 );
 
 /// Create a new function reference.
@@ -824,5 +845,7 @@ extern Type *const t_void_ptr;
 extern Type *const t_integer_literal;
 extern Type *const t_integer;
 extern Type *const t_byte;
+
+extern Type *primitive_types[4];
 
 #endif // FUNCOMPILER_AST_H

@@ -67,6 +67,8 @@ Type *const t_integer_literal = &t_integer_literal_def;
 Type *const t_integer = &t_integer_def;
 Type *const t_byte = &t_byte_def;
 
+Type *primitive_types[4];
+
 /// ===========================================================================
 ///  Scope/symbol functions.
 /// ===========================================================================
@@ -380,6 +382,16 @@ void ast_add_to_compound_literal(
     Node *node
 ) {
   vector_push(compound->literal.compound, node);
+}
+
+Node *ast_make_module_reference(
+  AST *ast,
+  loc source_location,
+  AST *module
+) {
+  Node *node = mknode(ast, NODE_MODULE_REFERENCE, source_location);
+  node->module_ref.ast = module;
+  return node;
 }
 
 /// Create a new variable reference.
@@ -714,7 +726,7 @@ void ast_free(AST *ast) {
   /// Some nodes may contain strings, vectors, etc.. Iterate over all
   /// nodes and free all resources they may have.
   foreach_ptr (Node *, node, ast->_nodes_) {
-    STATIC_ASSERT(NODE_COUNT == 17, "Exhaustive handling of node types when freeing AST.");
+    STATIC_ASSERT(NODE_COUNT == 18, "Exhaustive handling of node types when freeing AST.");
     switch (node->kind) {
       case NODE_FUNCTION:
         free(node->function.name.data);
@@ -736,6 +748,7 @@ void ast_free(AST *ast) {
       case NODE_UNARY:
       case NODE_LITERAL:
       case NODE_VARIABLE_REFERENCE:
+      case NODE_MODULE_REFERENCE:
       case NODE_STRUCTURE_DECLARATION:
         continue;
       case NODE_FUNCTION_REFERENCE:
@@ -821,13 +834,17 @@ void ast_print_node_internal(
   const Node *node,
   string_buffer *leading_text
 ) {
-  STATIC_ASSERT(NODE_COUNT == 17, "Exhaustive handling of AST node types while printing AST nodes.");
+  STATIC_ASSERT(NODE_COUNT == 18, "Exhaustive handling of AST node types while printing AST nodes.");
   switch (node->kind) {
     default: TODO("Print node of type %d", node->kind);
 
     case NODE_ROOT: {
       fprint(file, "%31Root %35<%u>\n", node->source_location.start);
       ast_print_children(file, logical_parent, node, &node->root.children, leading_text);
+    } break;
+
+    case NODE_MODULE_REFERENCE: {
+      fprint(file, "%31Module %35%S\n", node->module_ref.ast->module_name);
     } break;
 
     case NODE_FUNCTION: {
@@ -1170,7 +1187,7 @@ void ast_replace_node(AST *ast, Node *old, Node *new) {
   (void) ast;
 
   /// Find the node in the parent.
-  STATIC_ASSERT(NODE_COUNT == 17, "Exhaustive handling of AST node types while replacing AST nodes.");
+  STATIC_ASSERT(NODE_COUNT == 18, "Exhaustive handling of AST node types while replacing AST nodes.");
   ASSERT(old->parent);
   switch (old->parent->kind) {
     default: UNREACHABLE();

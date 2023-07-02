@@ -147,7 +147,7 @@ typedef struct Parser {
 const struct {
   span kw;
   enum TokenType type;
-} keywords[11] = {
+} keywords[12] = {
   {literal_span_raw("if"), TK_IF},
   {literal_span_raw("else"), TK_ELSE},
   {literal_span_raw("while"), TK_WHILE},
@@ -159,6 +159,7 @@ const struct {
   {literal_span_raw("integer"), TK_INTEGER_KW},
   {literal_span_raw("for"), TK_FOR},
   {literal_span_raw("return"), TK_RETURN},
+  {literal_span_raw("export"), TK_EXPORT}
 };
 
 /// Check if a character may start an identifier.
@@ -1639,24 +1640,20 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
   return decl;
 }
 
-/// Declaration, call, or cast.
-///
-/// <decl-start>   ::= IDENTIFIER ":"
-/// <expr-primary> ::= NUMBER | IDENTIFIER
-static Node *parse_ident_expr(Parser *p) {
-  /// We know that we’re looking at an identifier; save it for later.
-  string ident = string_dup(p->tok.text);
-  loc location = p->tok.source_location;
-  next_token(p);
-
+static Node *parse_declaration(Parser *p, string ident, loc location) {
   /// If the next token is a colon, then this is some sort of declaration.
-  if (p->tok.type == TK_COLON) {
+  switch (p->tok.type) {
+  default: break;
+
+  case TK_COLON: {
     /// Parse the rest of the declaration.
     next_token(p);
     Node *decl = parse_decl_rest(p, ident, location);
     free(ident.data);
     return decl;
-  } else if (p->tok.type == TK_COLON_GT) {
+  }
+
+  case TK_COLON_GT: {
     next_token(p);
 
     /// Parse the type.
@@ -1673,7 +1670,9 @@ static Node *parse_ident_expr(Parser *p) {
     }
     free(ident.data);
     TODO("Named type alias not implemented");
-  } else if (p->tok.type == TK_COLON_COLON) {
+  }
+
+  case TK_COLON_COLON: {
     /// Create the declaration.
     Node *decl = ast_make_declaration(p->ast, location, NULL, as_span(ident), NULL);
     ensure_hygienic_declaration_if_within_macro(p, as_span(ident), &location);
@@ -1696,6 +1695,33 @@ static Node *parse_ident_expr(Parser *p) {
     /// Done.
     free(ident.data);
     return decl;
+  }
+
+  } // switch (p->tok.type)
+  ERR_AT(location, "Expected declaration!");
+}
+
+/// Declaration, call, or cast.
+///
+/// <decl-start>   ::= IDENTIFIER ":"
+/// <expr-primary> ::= NUMBER | IDENTIFIER
+static Node *parse_ident_expr(Parser *p) {
+  /// We know that we’re looking at an identifier; save it for later.
+  ASSERT(p->tok.type == TK_IDENT,
+         "parse_ident_expr() may only be called with identifier token, but it was called with %s.",
+         token_type_to_string(p->tok.type));
+  string ident = string_dup(p->tok.text);
+  loc location = p->tok.source_location;
+  next_token(p);
+
+  if (p->tok.type == TK_COLON || p->tok.type == TK_COLON_GT || p->tok.type == TK_COLON_COLON)
+    return parse_declaration(p, ident, location);
+
+  // FIXME: DONT ASSUME THIS IS A FUNCTION
+  // FIXME: MOVE ALL OF THIS TO SEMANTIC ANALYSIS
+  foreach_ptr (AST*, import, p->ast->imports) {
+    if (string_eq(import->module_name, ident))
+      return ast_make_module_reference(p->ast, p->tok.source_location, import);
   }
 
   /// Otherwise, check if the identifier is a declared symbol; if it isn’t,
@@ -1760,6 +1786,7 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
     string generated_sym = vector_back(p->macro_expansion_stack).gensyms.data[p->tok.integer];
     vector_append(p->tok.text, generated_sym);
     // From this point on, matches TK_IDENTIFIER handling.
+    p->tok.type = TK_IDENT;
     lhs = parse_ident_expr(p);
   } break;
 
@@ -1777,6 +1804,20 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
         *lhs = *p->tok.node;
         next_token(p);
       }
+    } break;
+
+    case TK_EXPORT: {
+      // FIXME: Only allow at top level?
+
+      // Yeet "export"
+      next_token(p);
+
+      if (p->tok.type != TK_IDENT) ERR("Expected identifier following \"export\"");
+      string ident = string_dup(p->tok.text);
+
+      next_token(p);
+      lhs = parse_declaration(p, ident, p->tok.source_location);
+      vector_push(p->ast->exports, lhs);
     } break;
 
     /// An identifier can either be a declaration, function call, or cast.
@@ -2006,6 +2047,37 @@ AST *parse(span source, const char *filename) {
   next_char(&p);
   next_token(&p);
 
+  if (p.tok.type == TK_IDENT && string_eq(p.tok.text, literal_span("module")) && !p.tok.artificial) {
+    // Yeet "module"
+    next_token(&p);
+    if (p.tok.type != TK_IDENT)
+      ISSUE_FATAL_DIAGNOSTIC(DIAG_ERR, p.tok.source_location, (&p),
+                             "Expected module name following \"module\"");
+
+    p.ast->is_module = true;
+    p.ast->module_name = string_dup(p.tok.text);
+
+    next_token(&p);
+  }
+
+  while (p.tok.type == TK_SEMICOLON) next_token(&p);
+
+  while (p.tok.type == TK_IDENT && string_eq(p.tok.text, literal_span("import")) && !p.tok.artificial) {
+    // Yeet "import"
+    next_token(&p);
+    if (p.tok.type != TK_IDENT)
+      ISSUE_FATAL_DIAGNOSTIC(DIAG_ERR, p.tok.source_location, (&p),
+                             "Expected module name following \"import\"");
+
+    AST *module = calloc(1, sizeof(AST));
+    module->module_name = string_dup(p.tok.text);
+    vector_push(p.ast->imports, module);
+
+    next_token(&p);
+
+    while (p.tok.type == TK_SEMICOLON) next_token(&p);
+  }
+
   /// Parse the file.
   /// <file> ::= { <expression> }
   while (p.tok.type != TK_EOF) {
@@ -2019,7 +2091,7 @@ AST *parse(span source, const char *filename) {
 }
 
 NODISCARD const char *token_type_to_string(enum TokenType type) {
-  STATIC_ASSERT(TK_COUNT == 53, "Exhaustive handling of token types in token type to string conversion");
+  STATIC_ASSERT(TK_COUNT == 54, "Exhaustive handling of token types in token type to string conversion");
   switch (type) {
     case TK_COUNT:
     case TK_INVALID: return "invalid";
@@ -2032,6 +2104,7 @@ NODISCARD const char *token_type_to_string(enum TokenType type) {
     case TK_WHILE: return "while";
     case TK_EXT: return "ext";
     case TK_AS: return "as";
+    case TK_EXPORT: return "export";
     case TK_TYPE: return "type";
     case TK_VOID: return "void";
     case TK_BYTE: return "byte";
