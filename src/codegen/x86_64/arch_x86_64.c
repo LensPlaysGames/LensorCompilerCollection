@@ -13,17 +13,19 @@
 #include <codegen/register_allocation.h>
 #include <error.h>
 #include <inttypes.h>
+#include <module.h>
 #include <opt.h>
 #include <parser.h>
+#include <typechecker.h>
+#include <vector.h>
+#include <utils.h>
+
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <typechecker.h>
-#include <vector.h>
-#include <utils.h>
 
 #define X86_64_GENERATE_MACHINE_CODE
 
@@ -1558,6 +1560,18 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
     if (debug_ir) print_mir_function_with_mnemonic(function, mir_x86_64_opcode_mnemonic);
   } // foreach (MIRFunction*)
+
+
+  // Emit module metadata
+  if (context->ast->is_module) {
+    string module_cereal = serialise_module(context, context->ast);
+    Section sec_module_metadata = {0};
+    sec_module_metadata.name = INTC_MODULE_SECTION_NAME;
+    sec_module_metadata.data.bytes.data = (uint8_t*)module_cereal.data;
+    sec_module_metadata.data.bytes.size = module_cereal.size;
+    sec_module_metadata.data.bytes.capacity = module_cereal.size;
+    vector_push(object.sections, sec_module_metadata);
+  }
 
 
   // CODE EMISSION

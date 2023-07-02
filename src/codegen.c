@@ -245,7 +245,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   if (expr->emitted) return;
   expr->emitted = true;
 
-  STATIC_ASSERT(NODE_COUNT == 17, "Exhaustive handling of node types during code generation (AST->IR).");
+  STATIC_ASSERT(NODE_COUNT == 18, "Exhaustive handling of node types during code generation (AST->IR).");
   switch (expr->kind) {
   default: ICE("Unrecognized expression kind: %d", expr->kind);
 
@@ -253,6 +253,9 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_FUNCTION:
       expr->ir = ir_funcref(ctx, expr->function.ir);
       return;
+
+  case NODE_MODULE_REFERENCE:
+    ERR("Module reference must not be used unless to access module exports");
 
   /// Root node.
   case NODE_ROOT: {

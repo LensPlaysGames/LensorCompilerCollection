@@ -263,6 +263,11 @@ static int handle_command_line_arguments(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+  primitive_types[0] = t_integer;
+  primitive_types[1] = t_void;
+  primitive_types[2] = t_byte;
+  primitive_types[3] = NULL;
+
   platform_init();
 
   if (argc < 2) {
