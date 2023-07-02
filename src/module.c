@@ -219,7 +219,7 @@ uint8_t *deserialise_type(uint8_t *from, Type *type, Type **types) {
     type->named = calloc(1, sizeof(Symbol));
     type->named->kind = SYM_TYPE;
     type->named->val.type = primitive_types[index];
-    type->named->name = string_create("");
+    type->named->name = string_dup(primitive_types[index]->primitive.name);
 
     return from + 1 + sizeof(uint8_t);
   }
@@ -316,22 +316,44 @@ AST *deserialise_module(span metadata) {
   // parse module declarations (name + index in type table)
   uint8_t* begin_ptr = (uint8_t*)(metadata.data + sizeof(*desc));
 
-  uint32_t name_length = *(uint32_t *)begin_ptr;
-  char *name_ptr = (char *)(begin_ptr + sizeof(uint32_t));
+  // Get pointer within preallocated types using type index
+  uint64_t type_index = *(uint64_t *)(begin_ptr);
+  Type *type = module->_types_.data[type_index];
+  print("deserialised type: %T\n", type);
+
+  uint32_t name_length = *(uint32_t *)(begin_ptr + sizeof(type_index));
+  char *name_ptr = (char *)(begin_ptr + sizeof(type_index) + sizeof(uint32_t));
   string_buffer name = {0};
   vector_reserve(name, name_length);
+  name.size = name_length;
   memcpy(name.data, name_ptr, name_length);
+  print("deserialised name: %S\n", as_span(name));
 
-  // Get pointer within preallocated types using type index
-  uint64_t type_index = *(uint64_t *)(begin_ptr + 4 + name_length);
-  print("type_index: %U\n", type_index);
-  Type *type = module->_types_.data[type_index];
+  Node *node = NULL;
+  switch (type->kind) {
+  case TYPE_FUNCTION: {
+    node = ast_make_function_reference(module, (loc){0}, as_span(name));
+  } break;
+  case TYPE_PRIMITIVE:
+  case TYPE_NAMED:
+  case TYPE_POINTER:
+  case TYPE_REFERENCE:
+  case TYPE_ARRAY:
+  case TYPE_STRUCT:
+  case TYPE_INTEGER: {
+    node = ast_make_declaration(module, (loc){0}, type, as_span(name), NULL);
+  } break;
 
-  // Based on type kind...
-  // ast_make_function();
-  //Node *node = ast_make_declaration(module, );
+  case TYPE_COUNT:
+  default: ICE("Unhandled type kind in switch...");
+  }
 
-  // TODO: ADD NODE TO MODULE EXPORTS
+  // ADD NODE TO MODULE EXPORTS
+  vector_push(module->exports, node);
+
+  foreach_ptr (Node *, export, module->exports) {
+    ast_print_node(export);
+  }
 
   return module;
 }
@@ -344,17 +366,18 @@ string serialise_module(CodegenContext *context, AST *module) {
   // module code -> object file containing module description -> used
   // by Intercept compiler to typecheck calls to this module and such.
 
-  /// Map types to offsets within type table.
+  /// Map types to indices within type table.
   /// Map symbols to types
-  // [type_offset: uint64_t, name_length: uint32_t, name]
+  // [type_index: uint64_t, name_length: uint32_t, name]
   TypeCache cache = {0};
   string_buffer types = {0};
   string_buffer declarations = {0};
   foreach_ptr (Node *, node, module->exports) {
-    uint64_t type_offset = serialise_type(&types, node->type, &cache);
+    uint64_t type_index = serialise_type(&types, node->type, &cache);
     if (node->kind == NODE_DECLARATION) {
-      write_bytes(&declarations, (const char*)&type_offset, sizeof(type_offset));
-      write_bytes(&declarations, (const char*)&node->declaration.name.size, sizeof(node->declaration.name.size));
+      write_bytes(&declarations, (const char*)&type_index, sizeof(type_index));
+      uint32_t name_length = (uint32_t)node->declaration.name.size;
+      write_bytes(&declarations, (const char*)&name_length, sizeof(name_length));
       write_bytes(&declarations, (const char*)node->declaration.name.data, node->declaration.name.size);
     } else {
       ast_print_node(node);
