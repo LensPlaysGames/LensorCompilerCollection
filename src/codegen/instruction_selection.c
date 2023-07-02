@@ -1260,10 +1260,12 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
       // into the output, before going back to the "add instructions"
       // bit.
       if (!matched) {
-        // Add front of `instructions` to emission output.
-        vector_push(new_instructions, instructions.data[0]);
-        // Pop instruction.
-        vector_remove_index(instructions, 0);
+        if (instructions.size) {
+          // Add front of `instructions` to emission output.
+          vector_push(new_instructions, instructions.data[0]);
+          // Pop instruction.
+          vector_remove_index(instructions, 0);
+        }
       }
 
       // If there are more instructions in this block to match
