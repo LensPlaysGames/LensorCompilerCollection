@@ -166,20 +166,11 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
     if (s->attributes & SEC_ATTR_EXECUTABLE)
       shdr.sh_flags |= SHF_EXECINSTR;
 
-    // Assign flags of known sections
-    if (strcmp(s->name, ".text") == 0)
-      shdr.sh_flags = SHF_ALLOC | SHF_EXECINSTR;
-    else if (strcmp(s->name, ".bss") == 0 || strcmp(s->name, ".data") == 0)
-      shdr.sh_flags = SHF_ALLOC | SHF_WRITE;
-    else if (strcmp(s->name, ".rodata") == 0)
-      shdr.sh_flags = SHF_ALLOC; // FIXME: Is SHF_STRINGS appropriate?
-    else ICE("[GObj]:ELF: Unrecognised section in GenericObjectFile: \"%s\"", s->name);
-
     // Only program sections need allocated at load time.
-    // TODO: Is SHF_STRINGS appropriate for ".rodata"?
     if (strcmp(s->name, ".text") == 0 || strcmp(s->name, ".bss") == 0 ||
         strcmp(s->name, ".data") == 0 || strcmp(s->name, ".rodata") == 0)
       shdr.sh_flags |= SHF_ALLOC;
+    else shdr.sh_flags &= ~(uint64_t)SHF_ALLOC;
 
     uint32_t section_name = (uint32_t)elf_add_string(&string_table, s->name);
     shdr.sh_name = section_name;
@@ -222,6 +213,8 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
       elf_sym.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
       elf_sym.st_value = sym->byte_offset;
       break;
+    case GOBJ_SYMTYPE_NONE: UNREACHABLE();
+    case GOBJ_SYMTYPE_COUNT: UNREACHABLE();
     }
     vector_push(syms, elf_sym);
   }
@@ -497,6 +490,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
     if (sec_name_length <= sizeof(symbol_entry.n_name))
       strncpy(symbol_entry.n_name, s->name, sizeof(symbol_entry.n_name));
     else {
+      symbol_entry.n_name_zeroes = 0;
       symbol_entry.n_name_offset = (uint32_t)string_table.size;
       uint8_t *sym_name_it = (uint8_t*)s->name;
       for (size_t i = 0; i < sec_name_length; ++i)
