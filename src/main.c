@@ -305,6 +305,24 @@ span grab_section_reference(span object_file, const char *section_name) {
   return grab_section_reference_coff(object_file, section_name);
 }
 
+// TODO: MOVE THIS
+/// Return the file extension expected by a given target.
+const char *target_extension(CodegenTarget target) {
+  STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of codegen targets while returning expected file extension");
+  switch (target) {
+  case TARGET_GNU_ASM_ATT: FALLTHROUGH;
+  case TARGET_GNU_ASM_INTEL: return ".s";
+
+  case TARGET_LLVM: return "ll";
+  case TARGET_COFF_OBJECT: return "obj";
+  case TARGET_ELF_OBJECT: return "o";
+
+  default:
+  case TARGET_NONE:
+  case TARGET_COUNT: UNREACHABLE();
+  }
+}
+
 int main(int argc, char **argv) {
   primitive_types[0] = t_integer;
   primitive_types[1] = t_void;
@@ -357,33 +375,7 @@ int main(int argc, char **argv) {
     }
 
     // Add extension based on target
-    vector_push(path, '.');
-    STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of targets during generation of automatic extension for output file");
-    switch (output_target) {
-
-    case TARGET_GNU_ASM_INTEL: FALLTHROUGH;
-    case TARGET_GNU_ASM_ATT: {
-      vector_push(path, 's');
-    } break;
-
-    case TARGET_LLVM: {
-      format_to(&path, "ll");
-    } break;
-
-    case TARGET_COFF_OBJECT: {
-      vector_push(path, 'o');
-      vector_push(path, 'b');
-      vector_push(path, 'j');
-    } break;
-    case TARGET_ELF_OBJECT: {
-      vector_push(path, 'o');
-    } break;
-
-    case TARGET_NONE: FALLTHROUGH;
-    case TARGET_COUNT:
-      UNREACHABLE();
-    }
-
+    format_to(&path, ".%s", target_extension(output_target));
     string_buf_zterm(&path);
 
     // Move string buffer `path` to `output_filepath` string.
@@ -425,6 +417,23 @@ int main(int argc, char **argv) {
     /// Parse the file.
     AST *ast = parse(as_span(s), infile);
     if (!ast) exit(1);
+
+    // If this is a module and the user did not provide output
+    // filename, use the module name.
+    if (ast->is_module && output_filepath_index == -1) {
+      free(output_filepath.data);
+
+      // Construct output path from module name
+      string_buffer path = {0};
+      vector_append(path, ast->module_name);
+      format_to(&path, ".%s", target_extension(output_target));
+
+      // MOVE path -> output_filepath
+      output_filepath.data = path.data;
+      output_filepath.size = path.size;
+      path.data = NULL;
+      path.size = 0;
+    }
 
     /// Print if requested.
     if (syntax_only) {
