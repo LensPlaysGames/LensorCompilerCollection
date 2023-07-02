@@ -78,7 +78,7 @@ target_include_directories(
 ## try to add it to the command-line for the Intercept compiler below.
 if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
   find_package(LLVM CONFIG)
-  if (DEFINED LLVM_PACKAGE_VERSION)
+  if (DEFINED LLVM_PACKAGE_VERSION AND LLVM_VERSION_MAJOR GREATER_EQUAL 15)
     execute_process(
       COMMAND "${CMAKE_COMMAND}"
         -S .
