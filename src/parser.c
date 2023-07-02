@@ -1719,6 +1719,7 @@ static Node *parse_ident_expr(Parser *p) {
 
   // FIXME: DONT ASSUME THIS IS A FUNCTION
   // FIXME: MOVE ALL OF THIS TO SEMANTIC ANALYSIS
+
   foreach_ptr (AST*, import, p->ast->imports) {
     if (string_eq(import->module_name, ident))
       return ast_make_module_reference(p->ast, p->tok.source_location, import);

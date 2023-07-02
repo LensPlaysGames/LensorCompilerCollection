@@ -316,40 +316,48 @@ AST *deserialise_module(span metadata) {
   // parse module declarations (name + index in type table)
   uint8_t* begin_ptr = (uint8_t*)(metadata.data + sizeof(*desc));
 
-  // Get pointer within preallocated types using type index
-  uint64_t type_index = *(uint64_t *)(begin_ptr);
-  Type *type = module->_types_.data[type_index];
-  print("deserialised type: %T\n", type);
+  for (size_t i = 0; i < desc->type_count; ++i) {
 
-  uint32_t name_length = *(uint32_t *)(begin_ptr + sizeof(type_index));
-  char *name_ptr = (char *)(begin_ptr + sizeof(type_index) + sizeof(uint32_t));
-  string_buffer name = {0};
-  vector_reserve(name, name_length);
-  name.size = name_length;
-  memcpy(name.data, name_ptr, name_length);
-  print("deserialised name: %S\n", as_span(name));
+    // Get pointer within preallocated types using type index
+    uint64_t type_index = *(uint64_t *)(begin_ptr);
+    Type *type = module->_types_.data[type_index];
+    print("deserialised type: %T\n", type);
 
-  Node *node = NULL;
-  switch (type->kind) {
-  case TYPE_FUNCTION: {
-    node = ast_make_function_reference(module, (loc){0}, as_span(name));
-  } break;
-  case TYPE_PRIMITIVE:
-  case TYPE_NAMED:
-  case TYPE_POINTER:
-  case TYPE_REFERENCE:
-  case TYPE_ARRAY:
-  case TYPE_STRUCT:
-  case TYPE_INTEGER: {
-    node = ast_make_declaration(module, (loc){0}, type, as_span(name), NULL);
-  } break;
+    // Get name length and then the name data
+    uint32_t name_length = *(uint32_t *)(begin_ptr + sizeof(type_index));
+    char *name_ptr = (char *)(begin_ptr + sizeof(type_index) + sizeof(uint32_t));
+    string_buffer name = {0};
+    vector_reserve(name, name_length);
+    name.size = name_length;
+    memcpy(name.data, name_ptr, name_length);
+    print("deserialised name: %S\n", as_span(name));
 
-  case TYPE_COUNT:
-  default: ICE("Unhandled type kind in switch...");
+    // Construct an AST node to represent the deserialised declaration
+    Node *node = NULL;
+    switch (type->kind) {
+    case TYPE_FUNCTION: {
+      node = ast_make_function_reference(module, (loc){0}, as_span(name));
+    } break;
+    case TYPE_PRIMITIVE:
+    case TYPE_NAMED:
+    case TYPE_POINTER:
+    case TYPE_REFERENCE:
+    case TYPE_ARRAY:
+    case TYPE_STRUCT:
+    case TYPE_INTEGER: {
+      node = ast_make_declaration(module, (loc){0}, type, as_span(name), NULL);
+    } break;
+
+    case TYPE_COUNT:
+    default: ICE("Unhandled type kind in switch...");
+    }
+
+    // ADD NODE TO MODULE EXPORTS
+    vector_push(module->exports, node);
+
+    // ADVANCE deserialisation pointer
+    begin_ptr += sizeof(type_index) + sizeof(name_length) + name_length;
   }
-
-  // ADD NODE TO MODULE EXPORTS
-  vector_push(module->exports, node);
 
   foreach_ptr (Node *, export, module->exports) {
     ast_print_node(export);
