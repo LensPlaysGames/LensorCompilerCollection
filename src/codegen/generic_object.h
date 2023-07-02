@@ -12,6 +12,7 @@ typedef enum GObjSymbolType {
   GOBJ_SYMTYPE_NONE,
   GOBJ_SYMTYPE_FUNCTION,
   GOBJ_SYMTYPE_STATIC,
+  GOBJ_SYMTYPE_EXPORT, // like static but global
   GOBJ_SYMTYPE_EXTERNAL,
   GOBJ_SYMTYPE_COUNT
 } GObjSymbolType;

@@ -984,12 +984,17 @@ void codegen_emit_x86_64(CodegenContext *context) {
       if (!used) continue;
     }
 
+
     /// Emit a data section directive if we haven't already.
     if (!have_data_section) {
       have_data_section = true;
       if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL)
         fprint(context->code, ".section .data\n");
     }
+
+    GObjSymbolType sym_type = var->decl->declaration.exported
+                              ? GOBJ_SYMTYPE_EXPORT
+                              : GOBJ_SYMTYPE_STATIC;
 
     // Do compile-time known static assignment.
 
@@ -1014,7 +1019,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT) {
           // Create symbol for var->name at current offset within the .data section
           GObjSymbol sym = {0};
-          sym.type = GOBJ_SYMTYPE_STATIC;
+          sym.type = sym_type;
           sym.name = strdup(var->name.data);
           sym.section_name = strdup(".data");
           sym.byte_offset = sec_initdata->data.bytes.size;
@@ -1040,7 +1045,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT) {
           // Create symbol for var->name at current offset within the .rodata section
           GObjSymbol sym = {0};
-          sym.type = GOBJ_SYMTYPE_STATIC;
+          sym.type = sym_type;
           sym.name = strdup(var->name.data);
           sym.section_name = strdup(".rodata");
           sym.byte_offset = sec_rodata->data.bytes.size;
@@ -1069,17 +1074,26 @@ void codegen_emit_x86_64(CodegenContext *context) {
 #ifdef X86_64_GENERATE_MACHINE_CODE
       STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of object targets");
       if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT) {
-        // Create symbol for var->name at current offset within the .bss section
-        GObjSymbol sym = {0};
-        sym.type = GOBJ_SYMTYPE_STATIC;
-        sym.name = strdup(var->name.data);
-        sym.section_name = strdup(".bss");
-        // Align to type's alignment requirements.
-        sec_uninitdata->data.fill.amount = ALIGN_TO(sec_uninitdata->data.fill.amount, type_alignof(var->type));
-        sym.byte_offset = sec_uninitdata->data.fill.amount;
-        vector_push(object.symbols, sym);
-        // Write uninitialised bytes to .data section
-        sec_uninitdata->data.fill.amount += sz;
+        if (var->decl->declaration.external) {
+          // Create symbol referencing external var->name
+          GObjSymbol sym = {0};
+          sym.type = GOBJ_SYMTYPE_EXTERNAL;
+          sym.name = strdup(var->name.data);
+          sym.section_name = strdup(".bss");
+          vector_push(object.symbols, sym);
+        } else {
+          // Create symbol for var->name at current offset within the .bss section
+          GObjSymbol sym = {0};
+          sym.type = GOBJ_SYMTYPE_STATIC;
+          sym.name = strdup(var->name.data);
+          sym.section_name = strdup(".bss");
+          // Align to type's alignment requirements.
+          sec_uninitdata->data.fill.amount = ALIGN_TO(sec_uninitdata->data.fill.amount, type_alignof(var->type));
+          sym.byte_offset = sec_uninitdata->data.fill.amount;
+          vector_push(object.symbols, sym);
+          // Write uninitialised bytes to .data section
+          sec_uninitdata->data.fill.amount += sz;
+        }
       }
 #endif
     }

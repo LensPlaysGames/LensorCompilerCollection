@@ -1818,6 +1818,8 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
 
       next_token(p);
       lhs = parse_declaration(p, ident, p->tok.source_location);
+      lhs->declaration.exported = true;
+
       vector_push(p->ast->exports, lhs);
     } break;
 
