@@ -55,6 +55,7 @@ add_executable(
   src/opt.c
   src/utils.c
   src/platform.c
+  src/module.c
   src/codegen/dom.c
   src/codegen/generic_object.c
   src/codegen/instruction_selection.c
