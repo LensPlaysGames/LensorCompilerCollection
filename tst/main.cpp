@@ -218,7 +218,9 @@ int main(int argc, char **argv) {
     cc_invocation += intc_outpath.string();
 
     std::filesystem::path outpath = temppath("txt");
-    std::string test_invocation = cc_outpath.is_absolute() ? cc_outpath : std::filesystem::current_path() / cc_outpath;
+    std::string test_invocation = cc_outpath.is_absolute()
+        ? cc_outpath.string()
+        : (std::filesystem::current_path() / cc_outpath).string();
     test_invocation += " > ";
     test_invocation += outpath.string();
 
