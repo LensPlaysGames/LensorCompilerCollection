@@ -1,5 +1,5 @@
-#ifndef FUNCOMPILER_AST_H
-#define FUNCOMPILER_AST_H
+#ifndef INTC_AST_H
+#define INTC_AST_H
 
 #include <codegen/codegen_forward.h>
 #include <error.h>
@@ -848,4 +848,4 @@ extern Type *const t_byte;
 
 extern Type *primitive_types[4];
 
-#endif // FUNCOMPILER_AST_H
+#endif // INTC_AST_H
