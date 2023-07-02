@@ -885,6 +885,12 @@ bool codegen
         // TODO: Should we propagate "discardable" to the IR?
       }
 
+      foreach_ptr (AST *, import, context->ast->imports) {
+        foreach_ptr (Node *, n, import->exports) {
+          codegen_expr(context, n);
+        }
+      }
+
       if (!ast->is_module) {
         /// Emit the main function.
         context->block = context->entry->blocks.first;
