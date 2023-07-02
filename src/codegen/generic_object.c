@@ -170,7 +170,6 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
     if (strcmp(s->name, ".text") == 0 || strcmp(s->name, ".bss") == 0 ||
         strcmp(s->name, ".data") == 0 || strcmp(s->name, ".rodata") == 0)
       shdr.sh_flags |= SHF_ALLOC;
-    else shdr.sh_flags &= ~(uint64_t)SHF_ALLOC;
 
     uint32_t section_name = (uint32_t)elf_add_string(&string_table, s->name);
     shdr.sh_name = section_name;
@@ -201,9 +200,13 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
     }
     if (!section_index) ICE("Could not find section mentioned by symbol: \"%s\"", sym->section_name);
     elf_sym.st_shndx = (uint16_t)section_index;
+    STATIC_ASSERT(GOBJ_SYMTYPE_COUNT == 5, "Exhaustive handling of symbol types");
     switch (sym->type) {
     case GOBJ_SYMTYPE_STATIC:
       elf_sym.st_info = ELF64_ST_INFO(STB_LOCAL, STT_OBJECT);
+      break;
+    case GOBJ_SYMTYPE_EXPORT:
+      elf_sym.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_OBJECT);
       break;
     case GOBJ_SYMTYPE_EXTERNAL:
       elf_sym.st_shndx = 0;
@@ -213,7 +216,7 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
       elf_sym.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
       elf_sym.st_value = sym->byte_offset;
       break;
-    case GOBJ_SYMTYPE_NONE: UNREACHABLE();
+    case GOBJ_SYMTYPE_NONE:
     case GOBJ_SYMTYPE_COUNT: UNREACHABLE();
     }
     vector_push(syms, elf_sym);
@@ -557,10 +560,15 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
     // MS sets this field to four different values, and uses
     // proprietary Visual C++ debug format for most symbolic
     // information: EXTERNAL, STATIC, FUNCTION, and FILE.
-    // FIXME: Actually assign based on type of symbol
+    STATIC_ASSERT(GOBJ_SYMTYPE_COUNT == 5, "Exhaustive handling of symbol types");
     switch (sym->type) {
     case GOBJ_SYMTYPE_STATIC: {
       entry.n_sclass = COFF_STORAGE_CLASS_STAT;
+      // Byte offset within .bss/.data section where static object lies.
+      entry.n_value = (int32_t)sym->byte_offset;
+    } break;
+    case GOBJ_SYMTYPE_EXPORT: {
+      entry.n_sclass = COFF_STORAGE_CLASS_EXT;
       // Byte offset within .bss/.data section where static object lies.
       entry.n_value = (int32_t)sym->byte_offset;
     } break;
@@ -570,9 +578,13 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
       entry.n_value = (int32_t)sym->byte_offset;
     } break;
     case GOBJ_SYMTYPE_EXTERNAL: {
+      // TODO: What about COFF_STORAGE_CLASS_EXTDEF?
       entry.n_scnum = 0;
       entry.n_sclass = COFF_STORAGE_CLASS_EXT;
     } break;
+    case GOBJ_SYMTYPE_NONE:
+    case GOBJ_SYMTYPE_COUNT:
+      UNREACHABLE();
     }
 
     vector_push(symbol_table, entry);
@@ -657,11 +669,12 @@ void generic_object_as_coff_x86_64_at_path(GenericObjectFile *object, const char
 }
 
 static const char *generic_object_symbol_type_string(GObjSymbolType t) {
-  STATIC_ASSERT(GOBJ_SYMTYPE_COUNT == 4, "Exhaustive handling of GObj symbol types during string conversion");
+  STATIC_ASSERT(GOBJ_SYMTYPE_COUNT == 5, "Exhaustive handling of GObj symbol types during string conversion");
   switch (t) {
   case GOBJ_SYMTYPE_NONE: return "None";
   case GOBJ_SYMTYPE_FUNCTION: return "Function";
   case GOBJ_SYMTYPE_STATIC: return "Static";
+  case GOBJ_SYMTYPE_EXPORT: return "Export";
   case GOBJ_SYMTYPE_EXTERNAL: return "External";
   case GOBJ_SYMTYPE_COUNT: UNREACHABLE();
   }

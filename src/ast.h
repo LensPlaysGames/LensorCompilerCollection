@@ -226,6 +226,8 @@ typedef struct NodeDeclaration {
   Node *init;
   string name;
   bool static_;
+  bool external; // don't emit, but act like we did
+  bool exported;
 } NodeDeclaration;
 
 /// If expression.
