@@ -1314,10 +1314,16 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
               as_span(expr->member_access.ident),
               as_span(expr->member_access.struct_->module_ref.ast->module_name));
 
-        expr->member_access.member = calloc(1, sizeof(Member));
-        expr->member_access.member->type = found->type;
-        expr->member_access.member->name = expr->member_access.ident;
-        expr->type = found->type;
+        if (found->kind == NODE_DECLARATION) {
+          expr->kind = NODE_VARIABLE_REFERENCE;
+          expr->var = calloc(1, sizeof(Symbol));
+          expr->var->kind = SYM_VARIABLE;
+          expr->var->name = string_dup(found->declaration.name);
+          expr->var->val.node = found;
+          expr->type = found->type;
+        } else if (found->kind == NODE_FUNCTION) {
+          TODO("Generate funcref");
+        } else *expr = *found;
 
         return true;
 

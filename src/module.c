@@ -346,6 +346,7 @@ AST *deserialise_module(span metadata) {
     case TYPE_STRUCT:
     case TYPE_INTEGER: {
       node = ast_make_declaration(module, (loc){0}, type, as_span(name), NULL);
+      node->declaration.static_ = true;
     } break;
 
     case TYPE_COUNT:
