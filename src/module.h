@@ -29,6 +29,8 @@ typedef struct ModuleDescription {
   uint32_t type_count;
   uint32_t type_table_offset;
 
+  uint32_t declaration_count;
+
   // Offset to NULL-terminated module name.
   uint32_t name_offset;
 
