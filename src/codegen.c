@@ -869,6 +869,15 @@ bool codegen
         context->entry = ir_function(context, literal_span("main"), main_type);
         context->entry->attr_global = true;
         context->entry->attr_nomangle = true;
+      } else {
+        Parameters entry_params = {0};
+        Type *entry_type = ast_make_type_function(context->ast, (loc){0}, t_void, entry_params);
+        string_buffer name = {0};
+        format_to(&name, "__module%S_entry", context->ast->module_name);
+        context->entry = ir_function(context, as_span(name), entry_type);
+        context->entry->attr_global = true;
+        context->entry->attr_nomangle = true;
+        vector_delete(name);
       }
 
       /// Create the remaining functions and set the address of each function.
@@ -887,16 +896,14 @@ bool codegen
 
       foreach_ptr (AST *, import, context->ast->imports) {
         foreach_ptr (Node *, n, import->exports) {
-          codegen_expr(context, n);
+          codegen_lvalue(context, n);
         }
       }
 
-      if (!ast->is_module) {
-        /// Emit the main function.
-        context->block = context->entry->blocks.first;
-        context->function = context->entry;
-        codegen_expr(context, ast->root);
-      }
+      /// Emit the main function.
+      context->block = context->entry->blocks.first;
+      context->function = context->entry;
+      codegen_expr(context, ast->root);
 
       /// Emit the remaining functions that aren’t extern.
       foreach_ptr (Node*, func, ast->functions) {
