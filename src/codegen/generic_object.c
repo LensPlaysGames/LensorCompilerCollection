@@ -466,13 +466,14 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
     shdr.s_scnptr = (int32_t)data_offset;
     shdr.s_flags = 0;
     if (strcmp(s->name, ".text") == 0)
-      shdr.s_flags |= STYP_TEXT | COFF_SCN_MEM_READ | COFF_SCN_MEM_EXECUTE | COFF_SCN_CNT_CODE;
+      shdr.s_flags |= COFF_SCN_CNT_CODE | COFF_SCN_MEM_READ | COFF_SCN_MEM_EXECUTE;
     else if (strcmp(s->name, ".rodata") == 0)
-      shdr.s_flags |= STYP_DATA | COFF_SCN_MEM_READ | COFF_SCN_CNT_INIT_DATA;
+      shdr.s_flags |= COFF_SCN_CNT_INIT_DATA | COFF_SCN_MEM_READ;
     else if (strcmp(s->name, ".data") == 0)
-      shdr.s_flags |= STYP_DATA | COFF_SCN_MEM_READ | COFF_SCN_MEM_WRITE | COFF_SCN_CNT_INIT_DATA;
+      shdr.s_flags |= COFF_SCN_CNT_INIT_DATA | COFF_SCN_MEM_READ | COFF_SCN_MEM_WRITE;
     else if (strcmp(s->name, ".bss") == 0)
-      shdr.s_flags |= STYP_BSS | COFF_SCN_MEM_READ | COFF_SCN_MEM_WRITE | COFF_SCN_CNT_UNINIT_DATA;
+      shdr.s_flags |= COFF_SCN_CNT_UNINIT_DATA | COFF_SCN_MEM_READ | COFF_SCN_MEM_WRITE;
+    else shdr.s_flags |= COFF_SCN_LNK_REMOVE | COFF_SCN_MEM_READ | COFF_SCN_MEM_DISCARDABLE;
 
     // Calculate number of relocations for this section.
     uint16_t relocation_count = 0;

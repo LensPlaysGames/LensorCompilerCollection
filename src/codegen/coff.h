@@ -139,11 +139,120 @@ typedef struct PACKED coff_opt_header {
 // For .lib section (treated like STYP_INFO)
 #define STYP_LIB    (0b00000100 << 8)
 
+/// IMAGE_SCN_*
+// 0x00000000 RESERVED
+// 0x00000001 RESERVED
+// 0x00000002 RESERVED
+// 0x00000004 RESERVED
+// 0x00000008 IMAGE_SCN_TYPE_NO_PAD
+// The section should not be padded to the next boundary. This flag is
+// obsolete and is replaced by IMAGE_SCN_ALIGN_1BYTES. This is valid
+// only for object files.
+#define COFF_SCN_TYPE_NO_PAD 0x00000008
+// 0x00000010 RESERVED
 // 0x00000020 IMAGE_SCN_CNT_CODE
 // The section contains executable code.
 #define COFF_SCN_CNT_CODE 0x00000020
+// 0x00000040 IMAGE_SCN_CNT_INITIALIZED_DATA
+// The section contains initialized data.
 #define COFF_SCN_CNT_INIT_DATA 0x00000040
+// 0x00000040 IMAGE_SCN_CNT_UNINITIALIZED_DATA
+// The section contains uninitialized data.
 #define COFF_SCN_CNT_UNINIT_DATA 0x00000080
+// 0x00000100 IMAGE_SCN_LNK_OTHER
+// Reserved for future use.
+#define COFF_SCN_LNK_OTHER 0x00000100
+// 0x00000200 IMAGE_SCN_LNK_INFO
+// The section contains comments or other information. The .drectve
+// section has this type. This is valid for object files only.
+#define COFF_SCN_LNK_INFO 0x00000200
+// 0x00000400 RESERVED
+// 0x00000800 IMAGE_SCN_LNK_REMOVE
+// The section will not become part of the image. This is valid only for
+// object files.
+#define COFF_SCN_LNK_REMOVE 0x00000800
+// 0x00001000 IMAGE_SCN_LNK_COMDAT
+// The section contains COMDAT data. This is valid only for object files.
+#define COFF_SCN_LNK_COMDAT 0x00001000
+// 0x00008000 IMAGE_SCN_GPREL
+// The section contains data referenced through the global pointer (GP).
+#define COFF_SCN_GPREL 0x00008000
+// 0x00020000 IMAGE_SCN_MEM_PURGEABLE
+// Reserved for future use.
+#define COFF_SCN_MEM_PURGEABLE 0x00020000
+// 0x00020000 IMAGE_SCN_MEM_16BIT
+// Reserved for future use.
+#define COFF_SCN_MEM_16BIT 0x00020000
+// 0x00040000 IMAGE_SCN_MEM_LOCKED
+// Reserved for future use.
+#define COFF_SCN_MEM_LOCKED 0x00040000
+// 0x00080000 IMAGE_SCN_MEM_PRELOAD
+// Reserved for future use.
+#define COFF_SCN_MEM_PRELOAD 0x00080000
+// 0x00100000 IMAGE_SCN_ALIGN_1BYTES
+// Align data on a 1-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_1BYTES 0x00100000
+
+// 0x00200000 IMAGE_SCN_ALIGN_2BYTES
+// Align data on a 2-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_2BYTES 0x00200000
+
+// 0x00300000 IMAGE_SCN_ALIGN_4BYTES
+// Align data on a 4-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_4BYTES 0x00300000
+
+// 0x00400000 IMAGE_SCN_ALIGN_8BYTES
+// Align data on an 8-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_8BYTES 0x00400000
+// 0x00500000 IMAGE_SCN_ALIGN_16BYTES
+// Align data on a 16-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_16BYTES 0x00500000
+// 0x00600000 IMAGE_SCN_ALIGN_32BYTES
+// Align data on a 32-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_32BYTES 0x00600000
+// 0x00700000 IMAGE_SCN_ALIGN_64BYTES
+// Align data on a 64-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_64BYTES 0x00700000
+// 0x00800000 IMAGE_SCN_ALIGN_128BYTES
+// Align data on a 128-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_128BYTES 0x00800000
+// 0x00900000 IMAGE_SCN_ALIGN_256BYTES
+// Align data on a 256-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_256BYTES 0x00900000
+// 0x00A00000 IMAGE_SCN_ALIGN_512BYTES
+// Align data on a 512-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_512BYTES 0x00A00000
+// 0x00B00000 IMAGE_SCN_ALIGN_1024BYTES
+// Align data on a 1024-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_1024BYTES 0x00B00000
+// 0x00C00000 IMAGE_SCN_ALIGN_2048BYTES
+// Align data on a 2048-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_2048BYTES 0x00C00000
+// 0x00D00000 IMAGE_SCN_ALIGN_4096BYTES
+// Align data on a 4096-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_4096BYTES 0x00D00000
+// 0x00E00000 IMAGE_SCN_ALIGN_8192BYTES
+// Align data on an 8192-byte boundary. Valid only for object files.
+#define COFF_SCN_ALIGN_8192BYTES 0x00E00000
+// 0x01000000 IMAGE_SCN_LNK_NRELOC_OVFL
+// The section contains extended relocations.
+// IMAGE_SCN_LNK_NRELOC_OVFL indicates that the count of relocations for
+// the section exceeds the 16 bits that are reserved for it in the section
+// header. If the bit is set and the NumberOfRelocations field in the
+// section header is 0xffff, the actual relocation count is stored in the
+// 32-bit VirtualAddress field of the first relocation. It is an error if
+// IMAGE_SCN_LNK_NRELOC_OVFL is set and there are fewer than 0xffff
+// relocations in the section.
+#define COFF_SCN_LNK_NRELOC_OVFL 0x01000000
+// 0x02000000 IMAGE_SCN_MEM_DISCARDABLE
+// The section can be discarded as needed.
+#define COFF_SCN_MEM_DISCARDABLE 0x02000000
+// 0x04000000 IMAGE_SCN_MEM_NOT_CACHED
+// The section cannot be cached.
+#define COFF_SCN_MEM_NOT_CACHED 0x04000000
+// 0x08000000 IMAGE_SCN_MEM_NOT_PAGED
+// The section is not pageable.
+#define COFF_SCN_MEM_NOT_PAGED 0x08000000
 // 0x10000000 IMAGE_SCN_MEM_SHARED
 // The section can be shared in memory.
 #define COFF_SCN_MEM_SHARED 0x10000000
