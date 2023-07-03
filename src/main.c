@@ -271,6 +271,7 @@ static int handle_command_line_arguments(int argc, char **argv) {
 span grab_section_reference_elf(span object_file, const char *section_name) {
   // Check if file is actually big enough to be an ELF file.
   elf64_header* header = (elf64_header*)object_file.data;
+  // TODO: Validate header.
   if (header->e_machine != EM_X86_64)
     ICE("ELF has invalid machine type");
 
@@ -485,7 +486,15 @@ int main(int argc, char **argv) {
       vector_append(path, import->module_name);
       size_t base_path_length = path.size;
 
-      format_to(&path, ".o");
+#ifdef _WIN32
+      const char *first_ext = ".obj";
+      const char *second_ext = ".o";
+#else
+      const char *first_ext = ".o";
+      const char *second_ext = ".obj";
+#endif
+
+      format_to(&path, first_ext);
       string_buf_zterm(&path);
 
       string module_object = {0};
@@ -494,7 +503,7 @@ int main(int argc, char **argv) {
       if (!success) {
         // Reset path to base path, try new extension
         path.size = base_path_length;
-        format_to(&path, ".obj");
+        format_to(&path, second_ext);
         string_buf_zterm(&path);
 
         module_object = platform_read_file(path.data, &success);
