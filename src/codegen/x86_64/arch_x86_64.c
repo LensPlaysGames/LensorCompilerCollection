@@ -984,7 +984,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
       if (!used) continue;
     }
 
-
     /// Emit a data section directive if we haven't already.
     if (!have_data_section) {
       have_data_section = true;
@@ -1007,6 +1006,8 @@ void codegen_emit_x86_64(CodegenContext *context) {
           // `%u` and the `(unsigned)` cast is because variadic arguments
           // of integral types are always promoted to at least `int` or
           // `unsigned` in C.
+          if (var->decl->declaration.exported)
+            fprint(context->code, ".global %S\n", var->name);
           fprint(context->code, "%S: .byte %u", var->name, (unsigned) byte_repr[0]);
           for (usz i = 1; i < type_sizeof(var->type); ++i)
             fprint(context->code, ",%u", (unsigned) byte_repr[i]);
@@ -1032,6 +1033,8 @@ void codegen_emit_x86_64(CodegenContext *context) {
       } else if (var->init->kind == IR_LIT_STRING) {
         STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of assembly targets");
         if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL) {
+          if (var->decl->declaration.exported)
+            fprint(context->code, ".global %S\n", var->name);
           fprint(context->code, "%S: .byte ", var->name);
           if (var->init->str.size)
             fprint(context->code, "%u", (unsigned) var->init->str.data[0]);
@@ -1065,11 +1068,14 @@ void codegen_emit_x86_64(CodegenContext *context) {
       /// Allocate space for the variable.
       usz sz = type_sizeof(var->type);
       STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of assembly targets");
-      if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL)
+      if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL) {
+        if (var->decl->declaration.exported)
+          fprint(context->code, ".global %S\n", var->name);
         fprint(context->code,
                ".align %Z\n"
                "%S: .space %zu\n",
                (usz)type_alignof(var->type), var->name, sz);
+      }
 
 #ifdef X86_64_GENERATE_MACHINE_CODE
       STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of object targets");
