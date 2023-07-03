@@ -493,7 +493,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
     string module_cereal = serialise_module(context, context->ast);
     if (module_cereal.size) {
       fprint(context->code,
-             ".section %s\n"
+             ".section %s, \"n\"\n"
              ".byte %u",
              INTC_MODULE_SECTION_NAME,
              (unsigned) module_cereal.data[0]);
