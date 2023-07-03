@@ -296,7 +296,42 @@ span grab_section_reference_elf(span object_file, const char *section_name) {
 }
 
 span grab_section_reference_coff(span object_file, const char *section_name) {
-  TODO("COFF is not my priority unless it's 4/20");
+  ASSERT(object_file.data, "Invalid argument");
+  ASSERT(section_name, "Invalid argument");
+  const size_t section_name_length = strlen(section_name);
+
+  coff_header *header = (coff_header*)object_file.data;
+  // TODO: Validate header.
+
+  span string_table = {0};
+  // The string table starts after the symbol table.
+  string_table.data = object_file.data + header->f_symptr + ((usz)header->f_nsyms * sizeof(coff_symbol_entry));
+  string_table.size = *(uint32_t*)string_table.data;
+
+  coff_section_header *section_header = (coff_section_header*)(object_file.data + sizeof(*header));
+  for (size_t i = 0; i < header->f_nscns; ++i, ++section_header) {
+    if (section_name_length > sizeof(section_header->s_name)) {
+      if (section_header->s_name[0] != '/') continue;
+      // TODO: Parse unsigned decimal integer from the last seven digits of s_name
+      char *end = NULL;
+      usz name_offset_in_string_table = (usz)strtoull(section_header->s_name + 1, &end, 10);
+      // TODO: Use parsed integer as offset into string table to find name.
+      if (strncmp(string_table.data + name_offset_in_string_table, section_name, section_name_length) == 0) {
+        span section_reference = {0};
+        section_reference.data = object_file.data + section_header->s_scnptr;
+        section_reference.size = (usz)section_header->s_size;
+        return section_reference;
+      }
+    } else {
+      if (strncmp(section_header->s_name, section_name, 8) == 0) {
+        span section_reference = {0};
+        section_reference.data = object_file.data + section_header->s_scnptr;
+        section_reference.size = (usz)section_header->s_size;
+        return section_reference;
+      }
+    }
+  }
+  ICE("Could not find section %s within COFF object file", section_name);
 }
 
 span grab_section_reference(span object_file, const char *section_name) {
