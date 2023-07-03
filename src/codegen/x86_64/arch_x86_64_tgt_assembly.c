@@ -7,6 +7,7 @@
 #include <codegen/x86_64/arch_x86_64.h>
 #include <codegen/x86_64/arch_x86_64_common.h>
 #include <codegen/x86_64/arch_x86_64_isel.h>
+#include <module.h>
 #include <utils.h>
 #include <vector.h>
 
@@ -487,6 +488,23 @@ static void femit_none(CodegenContext *context, MIROpcodex86_64 instruction) {
 }
 
 void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_instructions) {
+  // Emit module metadata
+  if (context->ast->is_module) {
+    string module_cereal = serialise_module(context, context->ast);
+    if (module_cereal.size) {
+      fprint(context->code,
+             ".section %s\n"
+             ".byte %u",
+             INTC_MODULE_SECTION_NAME,
+             (unsigned) module_cereal.data[0]);
+
+      for (size_t i = 1; i < module_cereal.size; ++i)
+        fprint(context->code, ",%u", module_cereal.data[i]);
+
+      fprint(context->code, "\n");
+    }
+  }
+
   { // Emit entry
     fprint(context->code,
            "%s"

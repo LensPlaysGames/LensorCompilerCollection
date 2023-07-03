@@ -6,6 +6,7 @@
 #include <codegen/generic_object.h>
 #include <codegen/x86_64/arch_x86_64_common.h>
 #include <codegen/x86_64/arch_x86_64_isel.h>
+#include <module.h>
 #include <vector.h>
 #include <utils.h>
 
@@ -2225,6 +2226,17 @@ static void mcode_jcc(CodegenContext *context, IndirectJumpType type, const char
 void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machine_instructions) {
   DBGASSERT(context, "Invalid argument");
   ASSERT(context->object, "Cannot emit into NULL generic object");
+
+  if (context->ast->is_module) {
+    string module_cereal = serialise_module(context, context->ast);
+    Section sec_module_metadata = {0};
+    sec_module_metadata.name = strdup(INTC_MODULE_SECTION_NAME);
+    sec_module_metadata.data.bytes.data = (uint8_t*)module_cereal.data;
+    sec_module_metadata.data.bytes.size = module_cereal.size;
+    sec_module_metadata.data.bytes.capacity = module_cereal.size;
+    vector_push(context->object->sections, sec_module_metadata);
+  }
+
   foreach_ptr (MIRFunction*, function, machine_instructions) {
     { // Function symbol
       GObjSymbol sym = {0};

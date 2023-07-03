@@ -1576,20 +1576,10 @@ void codegen_emit_x86_64(CodegenContext *context) {
   } // foreach (MIRFunction*)
 
 
-  // Emit module metadata
-  if (context->ast->is_module) {
-    string module_cereal = serialise_module(context, context->ast);
-    Section sec_module_metadata = {0};
-    sec_module_metadata.name = INTC_MODULE_SECTION_NAME;
-    sec_module_metadata.data.bytes.data = (uint8_t*)module_cereal.data;
-    sec_module_metadata.data.bytes.size = module_cereal.size;
-    sec_module_metadata.data.bytes.capacity = module_cereal.size;
-    vector_push(object.sections, sec_module_metadata);
-  }
-
-
   // CODE EMISSION
   // TODO: Allow for multiple targets here?
+
+  STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of target formats in x86_64 backend");
 
   // EMIT ASSEMBLY CODE
   if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL)
