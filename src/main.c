@@ -311,7 +311,7 @@ const char *target_extension(CodegenTarget target) {
   STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of codegen targets while returning expected file extension");
   switch (target) {
   case TARGET_GNU_ASM_ATT: FALLTHROUGH;
-  case TARGET_GNU_ASM_INTEL: return ".s";
+  case TARGET_GNU_ASM_INTEL: return "s";
 
   case TARGET_LLVM: return "ll";
   case TARGET_COFF_OBJECT: return "obj";
