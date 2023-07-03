@@ -297,7 +297,7 @@ typedef struct PACKED coff_line_number_entry {
 // A Typedef entry.
 #define COFF_STORAGE_CLASS_TYPEDEF 13
 // 14 IMAGE_SYM_CLASS_UNDEFINED_STATIC
-// A static data declaration.
+// A static data declaration (undefined static).
 #define COFF_STORAGE_CLASS_USTATIC 14
 // 15 IMAGE_SYM_CLASS_ENUM_TAG
 // An enumerated type tagname entry.
