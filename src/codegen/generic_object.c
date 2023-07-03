@@ -387,6 +387,8 @@ void generic_object_as_elf_x86_64_at_path(GenericObjectFile *object, const char 
 
 void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
   // PREPARE STRING TABLE
+  // TODO: Write helper function to add string, and make a string cache
+  // to prevent encoding duplicate strings.
   ByteBuffer string_table = {0};
   // At the beginning of the COFF string table are 4 bytes that contain
   // the total size (in bytes) of the rest of the string table. This size
@@ -440,11 +442,19 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
     if (sec_name_length <= sizeof(shdr.s_name))
       strncpy(shdr.s_name, s->name, sizeof(shdr.s_name));
     else {
-      shdr.s_name_offset = (uint32_t)string_table.size;
-      uint8_t *sym_name_it = (uint8_t*)s->name;
-      for (size_t i = 0; i < sec_name_length; ++i)
-        vector_push(string_table, *sym_name_it++);
-      vector_push(string_table, 0);
+      // NOTE: COFF *used* to use the whole zeros/offset thing for section
+      // names, but modern versions of the format use a `/<offset>` name
+      // instead.
+      string_buffer special_name = {0};
+      format_to(&special_name, "/%u", (uint32_t)string_table.size);
+      for (unsigned i = 0; i < sizeof(shdr.s_name); ++i)
+        shdr.s_name[i] = (i < special_name.size) ? special_name.data[i] : 0;
+      vector_delete(special_name);
+      // Just assume the string table is never larger than 9999999 bytes
+      // (name has 8 byte max)...
+      vector_reserve(string_table, sec_name_length + 1);
+      memcpy(string_table.data + string_table.size, s->name, sec_name_length + 1);
+      string_table.size += sec_name_length + 1;
     }
 
     size_t size = 0;
@@ -495,10 +505,9 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
     else {
       symbol_entry.n_name_zeroes = 0;
       symbol_entry.n_name_offset = (uint32_t)string_table.size;
-      uint8_t *sym_name_it = (uint8_t*)s->name;
-      for (size_t i = 0; i < sec_name_length; ++i)
-        vector_push(string_table, *sym_name_it++);
-      vector_push(string_table, 0);
+      vector_reserve(string_table, sec_name_length + 1);
+      memcpy(string_table.data + string_table.size, s->name, sec_name_length + 1);
+      string_table.size += sec_name_length + 1;
     }
     symbol_entry.n_scnum = (int16_t)section_header_index++;
     symbol_entry.n_sclass = COFF_STORAGE_CLASS_STAT;
