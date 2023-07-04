@@ -20,10 +20,12 @@ Upon clicking the button labelled ~Modify~, pointed to by the giant red arrow in
 #+ATTR_HTML: :alt Screenshot of Visual Studio Installer Opened to Modify Window with Red Arrow Pointing to Individual components Tab
 [[file:img/VS_Installer_Modify_ArrowToIndividualComponentsTab.png]]
 
-Within this new window, navigate to the =Individual components= tab.
+Within this new window, navigate to the =Individual components= tab, shown just below.
 
 #+ATTR_HTML: :alt Screenshot of Visual Studio Installer Opened to Individual components tab within Modify Window with "clang" entered in the search box, resulting in two entries both of which have a checkbox checked.
 [[file:img/VS_Installer_Modify_IndividualComponents.png]]
+
+Once there, type "clang" into the search box, and select both "C++ Clang Compiler for Windows" and "MSBuild support for LLVM (clang-cl) toolset".
 
 *Finally, with the toolset selected, click the button in the bottom right labelled "Modify".*
 
