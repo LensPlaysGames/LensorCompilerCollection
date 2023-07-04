@@ -457,6 +457,14 @@ int main(int argc, char **argv) {
     // If this is a module and the user did not provide output
     // filename, use the module name.
     if (ast->is_module && output_filepath_index == -1) {
+      // TODO: "contains" isn't the best check, but I don't want to write a
+      // path parser to get the base name right now.
+      if (!strstr(infile, ast->module_name.data)) {
+        issue_diagnostic(DIAG_WARN, infile, as_span(s), (loc){0},
+                         "Source file name does not match name of exported module: %s doesn't contain %S",
+                         infile, ast->module_name);
+      }
+
       free(output_filepath.data);
 
       // Construct output path from module name
