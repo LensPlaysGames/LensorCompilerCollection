@@ -1,0 +1,45 @@
+* Building Intercept Compiler with Visual Studio
+
+Although it is not recommended, if you prefer to work in Visual Studio, the following is a guide to help you out.
+
+It should be noted that Intercept compiler likely does not compile with MSVC due to the use of ~typeof~, a C23 language feature currently only supported by GCC and Clang. Luckily, Visual Studio can work with =clang-cl=, a tool that mimics MSVC on the command line but is just Clang in a trenchcoat.
+
+NOTE: This assumes you already have some version of Visual Studio installed, and that you are on Windows.
+
+** Installing =clang-cl= with Visual Studio Installer
+
+If you already have =clang-cl= (MSBuild support for LLVM toolset) installed, feel free to skip this section.
+
+#+ATTR_HTML: :alt Screenshot of Visual Studio Installer with Red Arrow Pointing to Modify Button
+[[file:img/VS_Installer_ArrowToModifyButton.png]]
+
+In the Windows Search Bar (accessible by pressing the "Windows key" and then typing), enter "Visual Studio Installer" and then press return/enter.
+
+Upon clicking the button labelled ~Modify~, pointed to by the giant red arrow in the picture above, a new window will appear.
+
+#+ATTR_HTML: :alt Screenshot of Visual Studio Installer Opened to Modify Window with Red Arrow Pointing to Individual components Tab
+[[file:img/VS_Installer_Modify_ArrowToIndividualComponentsTab.png]]
+
+Within this new window, navigate to the =Individual components= tab.
+
+#+ATTR_HTML: :alt Screenshot of Visual Studio Installer Opened to Individual components tab within Modify Window with "clang" entered in the search box, resulting in two entries both of which have a checkbox checked.
+[[file:img/VS_Installer_Modify_IndividualComponents.png]]
+
+*Finally, with the toolset selected, click the button in the bottom right labelled "Modify".*
+
+** Generate a CMake Build Tree
+
+It would be kind of a mess if all of the intermediate build files were interspersed with all of the source files, so CMake delineates what are called "build trees" where all of these files are stored for a particular build of the program.
+
+#+begin_src sh
+  cmake -B bld -T ClangCL
+#+end_src
+
+Assuming everything was installed properly with the Visual Studio Installer, the above command should generate a Visual Studio Solution using the =clang-cl= toolset.
+
+Run the following command to launch Visual Studio into the generated solution.
+#+begin_src sh
+  start bld\Intercept.sln
+#+end_src
+
+Alternatively, navigate to the ~bld~ subdirectory in explorer and double click the ~.sln~ file to open the Visual Studio project and build Intercept just like any other program!

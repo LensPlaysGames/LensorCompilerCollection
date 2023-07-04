@@ -18,6 +18,8 @@ Dependencies:
 
 - Any C Compiler (We like [[https://gcc.gnu.org/][GCC]])
 
+NOTE: If on Windows *and* using Visual Studio, see [[file:docs/VISUAL_STUDIO.org][this document]] instead.
+
 First, generate a build tree using CMake.
 #+begin_src shell
   cmake -B bld
