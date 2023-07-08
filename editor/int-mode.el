@@ -104,6 +104,7 @@ Examples include addition (+) and subtraction (-)."
       (let* ((keywords '("if" "else" "while" "for" "type" "ext" "return" "macro" "emits" "defines" "endmacro" ;; keywords
                          "discardable ""nomangle" ;; function attributes
                          "alignas" ;; type attributes
+                         "import" "export" "module" ;; not technically keywords but whatever
                          ))
              (operators '("+" "*" "-" "/" "%"
                           "<" ">"
