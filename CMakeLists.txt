@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 
 # Use `ccache` if it is installed in system's PATH.
 find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
+if (CCACHE_PROGRAM)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
 endif()
 
@@ -169,9 +169,14 @@ if (NOT MSVC)
     -Wno-unused-parameter -Wno-unused-function
     -Wno-format-zero-length -Wno-comment
     -Wno-cast-function-type
-
-    -fdiagnostics-color=always
   )
+  # Use color codes in the output of the compiler for readability.
+  # FIXME: Make this a generator expression
+  if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(intc PRIVATE -fcolor-diagnostics)
+  else()
+    target_compile_options(intc PRIVATE -fdiagnostics-color=always)
+  endif()
 else()
   target_compile_options(
     intc
