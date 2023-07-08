@@ -100,6 +100,7 @@
   '("if" "else" "ext" "while" "for" "type" "macro" "emits" "endmacro" ;; keywords
     "discardable" "nomangle" ;; function attributes
     "alignas" ;; type attributes
+    "module" "import" "export" ;; not really keywords, but that's fine
     )
   "Intercept keywords for tree-sitter font-locking.")
 
