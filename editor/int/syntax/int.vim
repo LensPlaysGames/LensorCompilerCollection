@@ -40,6 +40,13 @@ syn match intNumber "\v<\d+>"
 
 syn keyword intStatement return
 
+syn keyword intImport import nextgroup=intModuleName skipwhite
+syn keyword intModule module nextgroup=intModuleName skipwhite
+syn keyword intExportSymbol export
+
+" NOTE: Include semicolon at the end of line?
+syn match intModuleName "\<[a-zA-Z0-9_]*" contained skipwhite
+
 hi def link intPrimitiveTypes     Type
 hi def link intKeywords           Keyword
 hi def link intRepeat             Repeat
@@ -54,5 +61,9 @@ hi def link intTypeAttributes     StorageClass
 hi def link intMacro              Macro
 hi def link intMacroArgs          Function
 hi def link intStatement          Statement
+hi def link intModule             Special
+hi def link intImport             Special
+hi def link intExportSymbol       Special
+hi def link intModuleName         Function
 
 let b:current_syntax = 'int'
