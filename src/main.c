@@ -8,6 +8,7 @@
 #include <typechecker.h>
 #include <platform.h>
 #include <utils.h>
+#include <vector.h>
 
 // TODO: TMP
 #include <module.h>
@@ -25,7 +26,7 @@ static void print_usage(char **argv) {
         "   `--print-ast        :: Print the syntax tree.\n"
         "   `--print-scopes     :: Print the scope tree.\n"
         "   `--print-ir`        :: Print the intermediate representation.\n"
-        "   `--annotate-code    :: Emit comments in generated code. TODO: WIP\n"
+        "   `--annotate-code    :: Emit comments in generated code.\n"
         "   `-O`, `--optimize`  :: Optimize the generated code.\n"
         "   `-v`, `--verbose`   :: Print out more information.\n");
   print("Options:\n"
@@ -33,6 +34,7 @@ static void print_usage(char **argv) {
         "    `-a`, `--arch`     :: Set the output architecture to the one given.\n"
         "    `-t`, `--target`   :: Set the output target to the one given.\n"
         "    `-cc`, `--calling` :: Set the calling convention to the one given.\n"
+        "    `-L`               :: Check for modules within the given directory.\n"
         "    `--colours`        :: Set whether to use colours in diagnostics.\n"
         "Anything other arguments are treated as input filepaths (source code).\n");
 }
@@ -52,6 +54,7 @@ bool print_scopes = false;
 bool prefer_using_diagnostics_colours = true;
 bool colours_blink = false;
 bool annotate_code = false;
+Vector(string) search_paths = {};
 
 static void print_acceptable_architectures() {
   STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures when printing out all available");
@@ -248,6 +251,14 @@ static int handle_command_line_arguments(int argc, char **argv) {
         print_acceptable_calling_conventions();
         return 1;
       }
+    } else if (strcmp(argument, "-L") == 0) {
+      i++;
+      if (i >= argc) {
+        fprint(stderr, "Error: Expected directory path after `-L`\n");
+        print_acceptable_colour_settings();
+        exit(1);
+      }
+      vector_push(search_paths, string_create(argv[i]));
     } else if (strcmp(argument, "--aluminium") == 0) {
 #     if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
       // Windows
@@ -487,46 +498,55 @@ int main(int argc, char **argv) {
     }
 
     // Resolve imported modules
+    vector_push(search_paths, string_create("."));
+
+    Vector(span) extensions_to_try = {0};
+#ifdef _WIN32
+      vector_push(extensions_to_try, literal_span(".obj"));
+      vector_push(extensions_to_try, literal_span(".o"));
+#else
+      vector_push(extensions_to_try, literal_span(".o"));
+      vector_push(extensions_to_try, literal_span(".obj"));
+#endif
+
     foreach_index (i, ast->imports) {
       AST *import = ast->imports.data[i];
 
-      string_buffer path = {0};
-      vector_append(path, import->module_name);
-      size_t base_path_length = path.size;
-
-#ifdef _WIN32
-      const char *first_ext = ".obj";
-      const char *second_ext = ".o";
-#else
-      const char *first_ext = ".o";
-      const char *second_ext = ".obj";
-#endif
-
-      format_to(&path, first_ext);
-      string_buf_zterm(&path);
-
       string module_object = {0};
       bool success = false;
-      module_object = platform_read_file(path.data, &success);
-      if (!success) {
-        // Reset path to base path, try new extension
-        path.size = base_path_length;
-        format_to(&path, second_ext);
-        string_buf_zterm(&path);
 
-        module_object = platform_read_file(path.data, &success);
-        ASSERT(success, "Could not find module description for module %S", import->module_name);
+      string_buffer search_path = {0};
+      const span dir_sep = literal_span("/");
+      foreach_index(j, search_paths) {
+        vector_clear(search_path);
+        vector_append(search_path, search_paths.data[j]);
+        // TODO: Only do this if path doesn't already end with dir sep.
+        vector_append(search_path, dir_sep);
+        vector_append(search_path, import->module_name);
+        usz module_path_length_without_extension = search_path.size;
+        foreach (span, extension, extensions_to_try) {
+          search_path.size = module_path_length_without_extension;
+          vector_append(search_path, *extension);
+          //print("Looking for module %S at %S\n", as_span(import->module_name), as_span(search_path));
+          module_object = platform_read_file(search_path.data, &success);
+          if (success) break;
+        }
+        if (success) break;
       }
 
-      print("Resolved module %S at path %S\n", import->module_name, as_span(path));
+      ASSERT(success, "Could not find module description for module %S", import->module_name);
+
+      print("Resolved module %S at path %S\n", import->module_name, as_span(search_path));
+
+      vector_delete(search_path);
 
       span metadata = grab_section_reference(as_span(module_object), INTC_MODULE_SECTION_NAME);
       ast->imports.data[i] = deserialise_module(metadata);
       ast->imports.data[i]->module_name = import->module_name;
 
       free(module_object.data);
-      vector_delete(path);
     }
+    vector_delete(extensions_to_try);
 
     /// Perform semantic analysis program expressions.
     ok = typecheck_expression(ast, ast->root);
