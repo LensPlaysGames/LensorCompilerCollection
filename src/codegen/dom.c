@@ -74,7 +74,7 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
     BlockVector reachable = collect_reachable_blocks(f->blocks.first, NULL);
     BlockVector blocks_to_remove = {0};
 
-    list_foreach (IRBlock*, b, f->blocks) {
+    list_foreach (b, f->blocks) {
       if (!vector_contains(reachable, b)) vector_push(blocks_to_remove, b);
     }
 
@@ -93,7 +93,7 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
 
   /// Add a node for each block.
   ASSERT(f->blocks.first);
-  list_foreach (IRBlock*, b, f->blocks) {
+  list_foreach (b, f->blocks) {
     DomTreeNode node = {0};
     node.block = b;
     vector_push(info->nodes, node);

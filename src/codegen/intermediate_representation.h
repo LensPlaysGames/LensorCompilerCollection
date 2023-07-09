@@ -14,13 +14,13 @@
   (name)->type = t_void
 
 #define FOREACH_INSTRUCTION_N(context, function, block, instruction) \
-    foreach_val(function, context->functions)           \
-    list_foreach (IRBlock *, block, function->blocks)                \
-      list_foreach (IRInstruction *, instruction, block->instructions)
+    foreach_val(function, context->functions)                        \
+    list_foreach (block, function->blocks)                           \
+      list_foreach (instruction, block->instructions)
 
 #define FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block, instruction) \
-  list_foreach (IRBlock *, block, function->blocks)                     \
-    list_foreach (IRInstruction *, instruction, block->instructions)
+  list_foreach (block, function->blocks)                                \
+    list_foreach (instruction, block->instructions)
 
 #define FOREACH_INSTRUCTION(context) FOREACH_INSTRUCTION_N(context, function, block, instruction)
 #define FOREACH_INSTRUCTION_IN_FUNCTION(function) FOREACH_INSTRUCTION_IN_FUNCTION_N(function, block, instruction)

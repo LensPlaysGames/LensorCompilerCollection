@@ -347,7 +347,7 @@ void ir_femit_block
  )
 {
   fprint(file, "%33bb%Z%31:\n", block->id);
-  list_foreach (IRInstruction*, instruction, block->instructions) {
+  list_foreach (instruction, block->instructions) {
     ir_femit_instruction(file, instruction);
   }
   fprint(file, "%m");
@@ -361,7 +361,7 @@ void ir_femit_function
   ir_print_defun(file, function);
   if (!function->is_extern) {
     fprint(file, " %31{\n");
-    list_foreach (IRBlock*, block, function->blocks) ir_femit_block(file, block);
+    list_foreach (block, function->blocks) ir_femit_block(file, block);
     fprint(file, "%31}");
   }
   fprint(file, "%m\n");
@@ -385,9 +385,9 @@ void ir_set_func_ids(IRFunction *f) {
   usz block_id = 1;
   u32 instruction_id = (u32) f->parameters.size + 1;
 
-  list_foreach (IRBlock *, block, f->blocks) {
+  list_foreach (block, f->blocks) {
     block->id = block_id++;
-    list_foreach (IRInstruction *, instruction, block->instructions) {
+    list_foreach (instruction, block->instructions) {
         if (instruction->kind == IR_PARAMETER || !ir_is_value(instruction)) continue;
         instruction->id = instruction_id++;
     }

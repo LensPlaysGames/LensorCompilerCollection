@@ -282,19 +282,19 @@
     (after)->next = (element);                  \
   } while (0)
 
-#define list_size(type, size_out, list)                   \
-  do {                                                    \
-    size_t _size = 0;                                     \
-    for (type _it = (list).first; _it; _it = _it->next) { \
-      _size++;                                            \
-    }                                                     \
-    size_out = _size;                                     \
-  } while (0)
+#define list_size(type, size_out, list) ({                                      \
+    usz _size = 0;                                                              \
+    for (__typeof__(*(list).first) *_it = (list).first; _it; _it = _it->next) { \
+        _size++;                                                                \
+    }                                                                           \
+    _size;                                                                      \
+})
 
-#define list_foreach(type, it, list) \
-  for (type it = (list).first; it; it = it->next)
 
-#define list_foreach_rev(type, it, list) \
-  for (type it = (list).last; it; it = it->prev)
+#define list_foreach(it, list) \
+  for (__typeof__(*(list).first) *it = (list).first; it; it = it->next)
+
+#define list_foreach_rev(it, list) \
+  for (__typeof__(*(list).first) *it = (list).last; it; it = it->prev)
 
 #endif // VECTOR_H

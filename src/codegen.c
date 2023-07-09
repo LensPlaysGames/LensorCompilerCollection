@@ -76,9 +76,9 @@ void codegen_context_free(CodegenContext *context) {
   /// Free all IR Functions.
   foreach_val (f, context->functions) {
     /// Free each block.
-    list_foreach (IRBlock*, b, f->blocks) {
+    list_foreach (b, f->blocks) {
       /// Free each instruction.
-      list_foreach (IRInstruction *, i, b->instructions) ir_free_instruction_data(i);
+      list_foreach (i, b->instructions) ir_free_instruction_data(i);
       list_delete (b->instructions);
 
       /// Free the block name.

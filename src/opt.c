@@ -87,8 +87,8 @@ static bool has_side_effects(IRInstruction *i) {
 /// ===========================================================================
 static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
   bool changed = false;
-  list_foreach (IRBlock*, b, f->blocks) {
-    list_foreach (IRInstruction*, i, b->instructions) {
+  list_foreach (b, f->blocks) {
+    list_foreach (i, b->instructions) {
       switch (i->kind) {
       case IR_ADD:
         IR_REDUCE_BINARY(+)
@@ -200,7 +200,7 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
 /// ===========================================================================
 static bool opt_dce(IRFunction *f) {
   bool changed = false;
-  list_foreach (IRBlock*, b, f->blocks) {
+  list_foreach (b, f->blocks) {
     for (IRInstruction *i = b->instructions.first; i;) {
       if (!i->users.size && !has_side_effects(i)) {
         IRInstruction *next = i->next;
@@ -273,8 +273,8 @@ static bool tail_call_possible(IRInstruction *i) {
 
 static bool opt_tail_call_elim(IRFunction *f) {
   bool changed = false;
-  list_foreach (IRBlock*, b, f->blocks) {
-    list_foreach (IRInstruction*, i, b->instructions) {
+  list_foreach (b, f->blocks) {
+    list_foreach (i, b->instructions) {
       if (i->kind != IR_CALL) { continue; }
 
       /// An instruction is a tail call iff there are no other instruction
@@ -312,8 +312,8 @@ static bool opt_mem2reg(IRFunction *f) {
 
   /// Collect all stack variables that are stored into once, and
   /// whose address is never taken.
-  list_foreach (IRBlock*, b, f->blocks) {
-    list_foreach (IRInstruction*, i, b->instructions) {
+  list_foreach (b, f->blocks) {
+    list_foreach (i, b->instructions) {
       switch (i->kind) {
         default: break;
 
@@ -673,12 +673,12 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
   ///
   /// Also simplify conditional branches whose true and false
   /// blocks are the same.
-  list_foreach (IRBlock*, b, f->blocks) {
+  list_foreach (b, f->blocks) {
     IRInstruction *last = b->instructions.last;
     if (last == b->instructions.first && last->kind == IR_BRANCH) {
       /// Update any blocks that branch to this to branch to our
       /// target instead.
-      list_foreach (IRBlock*, b2, f->blocks) {
+      list_foreach (b2, f->blocks) {
         if (b == b2) continue;
 
         STATIC_ASSERT(IR_COUNT == 38, "Handle all branch instructions");
@@ -698,7 +698,7 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
         }
 
         /// Also update PHIs.
-        list_foreach (IRInstruction*, i, b2->instructions) {
+        list_foreach (i, b2->instructions) {
           if (i->kind == IR_PHI) {
             foreach_val (arg, i->phi_args) {
               if (arg->block == b) {

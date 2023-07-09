@@ -1112,7 +1112,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   foreach_val (function, context->functions) {
     mangle_function_name(function);
 
-    list_foreach (IRBlock *, block, function->blocks) {
+    list_foreach (block, function->blocks) {
       if (optimise) {
         /// Determine whether this block is ever referenced anywhere.
         bool referenced = false;
