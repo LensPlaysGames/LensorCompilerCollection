@@ -1,3 +1,4 @@
+#include <ast.h>
 #include <codegen.h>
 #include <error.h>
 #include <locale.h>
@@ -280,7 +281,7 @@ static int handle_command_line_arguments(int argc, char **argv) {
 
 // TODO: Dear god, please move this.
 span grab_section_reference_elf(span object_file, const char *section_name) {
-  // Check if file is actually big enough to be an ELF file.
+  // TODO: Check if file is actually big enough to be an ELF file.
   elf64_header* header = (elf64_header*)object_file.data;
   // TODO: Validate header.
   if (header->e_machine != EM_X86_64)
@@ -544,11 +545,21 @@ int main(int argc, char **argv) {
       ast->imports.data[i] = deserialise_module(metadata);
       ast->imports.data[i]->module_name = import->module_name;
 
+      foreach_val (export, ast->imports.data[i]->exports) {
+        if (export->kind == NODE_FUNCTION_REFERENCE) {
+          Scope *global_scope = vector_front(ast->scope_stack);
+          Symbol *func_sym = scope_find_or_add_symbol(global_scope, SYM_FUNCTION, as_span(export->funcref.name), true);
+          func_sym->val.node = ast_make_function(ast, (loc){0}, export->type, (Nodes){0}, NULL, as_span(export->funcref.name));
+          export->funcref.scope = global_scope;
+          export->funcref.resolved = func_sym;
+        }
+      }
+
       free(module_object.data);
     }
     vector_delete(extensions_to_try);
 
-    /// Perform semantic analysis program expressions.
+    /// Perform semantic analysis on program expressions.
     ok = typecheck_expression(ast, ast->root);
     if (!ok) exit(2);
 

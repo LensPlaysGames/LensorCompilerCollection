@@ -227,8 +227,8 @@ NODISCARD static bool resolve_overload(
       ERR(funcref->source_location, "Unknown Symbol");
     }
 
-    /// Print parameter types if this is a call.
-    if (funcref->parent->kind == NODE_CALL) {
+    /// Print parameter types if this is a call and there is at least one argument.
+    if (funcref->parent->kind == NODE_CALL && funcref->parent->call.arguments.size) {
       eprint("\n    %B38Where%m\n");
       size_t index = 1;
       foreach_val (arg, funcref->parent->call.arguments)
@@ -1301,12 +1301,15 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
         Node *found = NULL;
         foreach_val (n, module->exports) {
-          // TODO: Look for more than just declarations...
-          if (n->kind == NODE_DECLARATION) {
-            if (string_eq(n->declaration.name, expr->member_access.ident)) {
-              found = n;
-              break;
-            }
+          string *name = NULL;
+          if (n->kind == NODE_DECLARATION)
+            name = &n->declaration.name;
+          else if (n->kind == NODE_FUNCTION_REFERENCE)
+            name = &n->funcref.name;
+          else ICE("Unexpected node type exported by module");
+          if (string_eq(*name, expr->member_access.ident)) {
+            found = n;
+            break;
           }
         }
         if (!found)
@@ -1321,9 +1324,13 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           expr->var->name = string_dup(found->declaration.name);
           expr->var->val.node = found;
           expr->type = found->type;
-        } else if (found->kind == NODE_FUNCTION) {
-          TODO("Generate funcref");
-        } else *expr = *found;
+        } else if (found->kind == NODE_FUNCTION_REFERENCE) {
+          expr->kind = NODE_FUNCTION_REFERENCE;
+          expr->funcref.name = string_dup(found->funcref.name);
+          expr->funcref.resolved = found->funcref.resolved;
+          expr->funcref.scope = found->funcref.scope;
+          expr->type = found->type;
+        } else ICE("Unrecognised deseraialised module declaration kind %d\n", (int)found->kind);
 
         return true;
 
