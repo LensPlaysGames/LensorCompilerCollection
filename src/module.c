@@ -266,7 +266,58 @@ uint8_t *deserialise_type(uint8_t *from, Type *type, Type **types) {
     // [attributes : uint32_t]
     // [param_count : uint32_t, param_types, return_type],
     // [param_name_length : uint32_t, param_name]*
-    TODO("Deserialise functions");
+    uint8_t *from_it = from + 1;
+
+    uint32_t attributes = *(uint32_t*)from_it;
+    from_it += sizeof(uint32_t);
+
+    type->kind = TYPE_FUNCTION;
+
+    type->function.discardable = attributes & (1 << CEREAL_ATTR_DISCARDABLE);
+
+    uint32_t param_count = *(uint32_t*)from_it;
+    from_it += sizeof(uint32_t);
+
+    vector_clear(type->function.parameters);
+    for (uint32_t param_index = 0; param_index < param_count; ++param_index) {
+      Parameter param = {0};
+
+      uint64_t param_type_index = *(uint64_t*)from_it;
+      from_it += sizeof(uint64_t);
+
+      param.type = types[param_type_index];
+      vector_push(type->function.parameters, param);
+    }
+
+    uint64_t return_type_index = *(uint64_t*)from_it;
+    from_it += sizeof(uint64_t);
+
+    type->function.return_type = types[return_type_index];
+
+    for (uint32_t i = 0; i < param_count; ++i) {
+      uint32_t param_name_length = *(uint32_t*)from_it;
+      from_it += sizeof(uint32_t);
+
+      ASSERT(param_name_length < 1000, "Sorry, parameter names longer than a kilobyte aren't supported, you psycho");
+
+      string_buffer param_name = {0};
+      vector_reserve(param_name, param_name_length);
+      param_name.size = param_name_length;
+      memcpy(param_name.data, from_it, param_name_length);
+      from_it += param_name_length;
+
+      // MOVE param_name vector into param.name string
+      type->function.parameters.data[i].name.data = param_name.data;
+      type->function.parameters.data[i].name.size = param_name.size;
+      param_name.data = NULL;
+      param_name.size = 0;
+      param_name.capacity = 0;
+    }
+
+    // FIXME: Is this correct?
+    type->function.global = true;
+
+    return from_it;
   }
   case TYPE_STRUCT: {
     // [member_count : uint32_t, member_types],
