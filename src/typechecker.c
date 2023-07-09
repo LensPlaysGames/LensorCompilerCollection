@@ -395,7 +395,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   /// 1. Collect all functions with the same name as the function being
   ///    resolved into an *overload set* O. We cannot filter out any
   ///    functions just yet.
-  OverloadSet overload_set = collect_overload_set(func), arg_overload_set = {0};
+  OverloadSet overload_set = collect_overload_set(func);
+  OverloadSet arg_overload_set = {0};
 
   // Extra validation step: ensure all functions within overload set
   // have matching return type.
