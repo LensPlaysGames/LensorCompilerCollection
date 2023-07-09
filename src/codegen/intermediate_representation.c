@@ -24,7 +24,7 @@ void ir_remove_use(IRInstruction *usee, IRInstruction *user) {
 }
 
 bool ir_is_branch(IRInstruction* i) {
-  STATIC_ASSERT(IR_COUNT == 38, "Handle all branch types.");
+  STATIC_ASSERT(IR_COUNT == 39, "Handle all branch types.");
   switch (i->kind) {
     case IR_BRANCH:
     case IR_BRANCH_CONDITIONAL:
@@ -135,11 +135,15 @@ void ir_remove_and_free_block(IRBlock *block) {
 
 void ir_free_instruction_data(IRInstruction *i) {
   if (!i) return;
-  STATIC_ASSERT(IR_COUNT == 38, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 39, "Handle all instruction types.");
   switch (i->kind) {
-    case IR_CALL: vector_delete(i->call.arguments); break;
+    case IR_INTRINSIC:
+    case IR_CALL:
+      vector_delete(i->call.arguments);
+      break;
+
     case IR_PHI:
-        foreach_val (arg, i->phi_args) free(arg);
+      foreach_val (arg, i->phi_args) free(arg);
       vector_delete(i->phi_args);
       break;
     default: break;
@@ -150,12 +154,13 @@ void ir_free_instruction_data(IRInstruction *i) {
 }
 
 const char *ir_irtype_string(IRType t) {
-  STATIC_ASSERT(IR_COUNT == 38, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 39, "Handle all instruction types.");
   switch (t) {
   case IR_IMMEDIATE: return "imm";
   case IR_LIT_INTEGER: return "lit.int";
   case IR_LIT_STRING: return "lit.str";
   case IR_CALL: return "call";
+  case IR_INTRINSIC: return "intrinsic";
   case IR_STATIC_REF: return ".ref";
   case IR_FUNC_REF: return "ref";
 
@@ -214,7 +219,7 @@ void ir_femit_instruction
     fprint(file, "  %31│ ");
   }
 
-  STATIC_ASSERT(IR_COUNT == 38, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 39, "Handle all instruction types.");
   switch (inst->kind) {
   case IR_IMMEDIATE:
     fprint(file, "%33imm %35%U", inst->imm);
@@ -227,6 +232,22 @@ void ir_femit_instruction
   case IR_LIT_STRING:
     fprint(file, "%33lit.str %35%S", inst->str);
     break;
+
+  case IR_INTRINSIC: {
+    switch (inst->call.intrinsic) {
+      default: fprint(file, "%33intrinsic.%d ", inst->call.intrinsic); break;
+      case INTRINSIC_BUILTIN_SYSCALL: fprint(file, "%33intrinsic.syscall "); break;
+    }
+
+    fprint(file, "%31(");
+    bool first = true;
+    foreach_val (i, inst->call.arguments) {
+      if (!first) { fprint(file, "%31, "); }
+      else first = false;
+      fprint(file, "%34%%%u", i->id);
+    }
+    fprint(file, "%31)");
+  } break;
 
   case IR_CALL: {
     if (inst->call.tail_call) { fprint(file, "%33tail "); }
@@ -829,7 +850,7 @@ void ir_for_each_child(
   void callback(IRInstruction *user, IRInstruction **child, void *data),
   void *data
 ) {
-  STATIC_ASSERT(IR_COUNT == 38, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 39, "Handle all instruction types.");
   switch (user->kind) {
   case IR_PHI:
       foreach_val (arg, user->phi_args) {
@@ -860,6 +881,7 @@ void ir_for_each_child(
     callback(user, &user->rhs, data);
     break;
 
+  case IR_INTRINSIC:
   case IR_CALL:
     if (user->call.is_indirect) callback(user, &user->call.callee_instruction, data);
     foreach (arg, user->call.arguments) callback(user, arg, data);
@@ -884,12 +906,13 @@ void ir_for_each_child(
 }
 
 bool ir_is_value(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 38, "Handle all instruction types.");
+  STATIC_ASSERT(IR_COUNT == 39, "Handle all instruction types.");
   // NOTE: If you are changing this switch, you also need to change
   // `needs_register()` in register_allocation.c
   switch (instruction->kind) {
     default: TODO("Handle %d IR instruction type in ir_is_value()", instruction->kind);
     case IR_IMMEDIATE:
+    case IR_INTRINSIC:
     case IR_CALL:
     case IR_LOAD:
     case IR_PHI:
@@ -971,7 +994,7 @@ void ir_unmark_usees(IRInstruction *instruction) {
 }
 
 void ir_mark_unreachable(IRBlock *block) {
-  STATIC_ASSERT(IR_COUNT == 38, "Handle all branch types");
+  STATIC_ASSERT(IR_COUNT == 39, "Handle all branch types");
   IRInstruction *i = block->instructions.last;
   switch (i->kind) {
     default: break;
@@ -1019,6 +1042,14 @@ Type* ir_call_get_callee_type(IRInstruction* inst) {
         : type_is_pointer(inst->call.callee_instruction->type)
             ? inst->call.callee_instruction->type->pointer.to
             : inst->call.callee_instruction->type;
+}
+
+IRInstruction *ir_intrinsic(CodegenContext *ctx, Type *t, enum IntrinsicKind intrinsic) {
+    (void) ctx;
+    INSTRUCTION(i, IR_INTRINSIC);
+    i->call.intrinsic = intrinsic;
+    i->type = t;
+    return i;
 }
 
 #undef INSERT

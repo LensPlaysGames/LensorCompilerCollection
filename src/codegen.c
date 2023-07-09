@@ -19,6 +19,7 @@
 
 #define DIAG(sev, loc, ...)                                                                                 \
   do {                                                                                                      \
+    ctx->has_err = true;                                                                                    \
     issue_diagnostic(DIAG_ERR, (ctx)->ast->filename.data, as_span((ctx)->ast->source), (loc), __VA_ARGS__); \
     return;                                                                                                 \
   } while (0)
@@ -245,7 +246,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   if (expr->emitted) return;
   expr->emitted = true;
 
-  STATIC_ASSERT(NODE_COUNT == 18, "Exhaustive handling of node types during code generation (AST->IR).");
+  STATIC_ASSERT(NODE_COUNT == 19, "Exhaustive handling of node types during code generation (AST->IR).");
   switch (expr->kind) {
   default: ICE("Unrecognized expression kind: %d", expr->kind);
 
@@ -416,6 +417,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Function call.
   case NODE_CALL: {
+    ASSERT(expr->call.intrinsic == INTRINSIC_COUNT, "Refusing to codegen intrinsic as a regular call");
     IRInstruction *call = NULL;
 
     /// Direct call.
@@ -444,6 +446,39 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     ir_insert(ctx, call);
     expr->ir = call;
     return;
+  }
+
+  /// Intrinsic.
+  case NODE_INTRINSIC_CALL: {
+    ASSERT(expr->call.callee->kind = NODE_FUNCTION_REFERENCE);
+    STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics in codegen");
+    switch (expr->call.intrinsic) {
+      case INTRINSIC_COUNT: ICE("Call is not an intrinsic");
+
+      /// System call.
+      case INTRINSIC_BUILTIN_SYSCALL: {
+        /// Syscalls are not a thing on Windows.
+        if (ctx->call_convention == CG_CALL_CONV_MSWIN) {
+          ERR("Sorry, syscalls are not supported on Windows.");
+        }
+
+        expr->ir = ir_intrinsic(ctx, t_integer, expr->call.intrinsic);
+        foreach_val (arg, expr->call.arguments) {
+          if (type_is_reference(arg->type)) {
+            codegen_lvalue(ctx, arg);
+            vector_push(expr->ir->call.arguments, arg->address);
+          } else {
+            codegen_expr(ctx, arg);
+            vector_push(expr->ir->call.arguments, arg->ir);
+          }
+        }
+
+        ir_insert(ctx, expr->ir);
+        return;
+      }
+    }
+
+    UNREACHABLE();
   }
 
   /// Typecast.
@@ -917,6 +952,9 @@ bool codegen
     /// Anything else is not supported.
     default: ICE("Language %d not supported.", lang);
   }
+
+  /// Don’t codegen a faulty program.
+  if (context->has_err) return false;
 
   if (debug_ir) {
     ir_femit(stdout, context);

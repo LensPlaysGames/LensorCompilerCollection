@@ -726,7 +726,7 @@ void ast_free(AST *ast) {
   /// Some nodes may contain strings, vectors, etc.. Iterate over all
   /// nodes and free all resources they may have.
   foreach_val(node, ast->_nodes_) {
-    STATIC_ASSERT(NODE_COUNT == 18, "Exhaustive handling of node types when freeing AST.");
+    STATIC_ASSERT(NODE_COUNT == 19, "Exhaustive handling of node types when freeing AST.");
     switch (node->kind) {
       case NODE_FUNCTION:
         free(node->function.name.data);
@@ -735,9 +735,12 @@ void ast_free(AST *ast) {
 
       case NODE_ROOT: vector_delete(node->root.children); continue;
       case NODE_BLOCK: vector_delete(node->block.children); continue;
-      case NODE_CALL: vector_delete(node->call.arguments); continue;
       case NODE_DECLARATION: free(node->declaration.name.data); continue;
       case NODE_MEMBER_ACCESS: free(node->member_access.ident.data); continue;
+
+      case NODE_INTRINSIC_CALL:
+      case NODE_CALL:
+        vector_delete(node->call.arguments); continue;
 
       case NODE_IF:
       case NODE_WHILE:
@@ -834,7 +837,7 @@ void ast_print_node_internal(
   const Node *node,
   string_buffer *leading_text
 ) {
-  STATIC_ASSERT(NODE_COUNT == 18, "Exhaustive handling of AST node types while printing AST nodes.");
+  STATIC_ASSERT(NODE_COUNT == 19, "Exhaustive handling of AST node types while printing AST nodes.");
   switch (node->kind) {
     default: TODO("Print node of type %d", node->kind);
 
@@ -923,6 +926,16 @@ void ast_print_node_internal(
     case NODE_BLOCK: {
       fprint(file, "%31Block %35<%u> %T\n", node->source_location.start, node->type);
       ast_print_children(file, logical_parent, node, &node->block.children, leading_text);
+    } break;
+
+    case NODE_INTRINSIC_CALL: {
+      fprint(file, "%31Intrinsic %32%S %35<%u> %T\n", node->call.callee->funcref.name,
+        node->source_location.start, node->type);
+
+      Nodes nodes = {0};
+      vector_append(nodes, node->call.arguments);
+      ast_print_children(file, logical_parent, node, &nodes, leading_text);
+      vector_delete(nodes);
     } break;
 
     case NODE_CALL: {
@@ -1193,7 +1206,7 @@ void ast_replace_node(AST *ast, Node *old, Node *new) {
   (void) ast;
 
   /// Find the node in the parent.
-  STATIC_ASSERT(NODE_COUNT == 18, "Exhaustive handling of AST node types while replacing AST nodes.");
+  STATIC_ASSERT(NODE_COUNT == 19, "Exhaustive handling of AST node types while replacing AST nodes.");
   ASSERT(old->parent);
   switch (old->parent->kind) {
     default: UNREACHABLE();
@@ -1226,6 +1239,7 @@ void ast_replace_node(AST *ast, Node *old, Node *new) {
       REPLACE_IN_CHILDREN(old->parent->block.children);
       break;
 
+    case NODE_INTRINSIC_CALL:
     case NODE_CALL:
       REPLACE_IN_CHILDREN(old->parent->call.arguments);
       if (old->parent->call.callee == old) old->parent->call.callee = new;

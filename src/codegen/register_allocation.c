@@ -53,7 +53,7 @@ static void vreg_vector_remove_element(VRegVector *vregs, usz vreg_value) {
 
 /// Return non-zero iff given instruction needs a register.
 static bool needs_register(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 38, "Exhaustively handle all instruction types");
+  STATIC_ASSERT(IR_COUNT == 39, "Exhaustively handle all instruction types");
   ASSERT(instruction);
   switch (instruction->kind) {
     case IR_LOAD:
@@ -61,6 +61,7 @@ static bool needs_register(IRInstruction *instruction) {
     case IR_COPY:
     case IR_IMMEDIATE:
     case IR_CALL:
+    case IR_INTRINSIC:
     case IR_REGISTER:
     case IR_NOT:
     case IR_ZERO_EXTEND:
