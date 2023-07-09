@@ -896,7 +896,9 @@ bool codegen
 
       foreach_val (import, context->ast->imports) {
         foreach_val (n, import->exports) {
-          codegen_lvalue(context, n);
+          // Declarations need an IR instruction generated, just to match how we
+          // deal with regular declarations.
+          if (n->kind == NODE_DECLARATION) codegen_lvalue(context, n);
         }
       }
 
@@ -999,7 +1001,7 @@ static void mangle_type_to(string_buffer *buf, Type *t) {
 }
 
 void mangle_function_name(IRFunction *function) {
-  if (function->is_extern || function->attr_nomangle) return;
+  if (function->attr_nomangle) return;
 
   string_buffer buf = {0};
   format_to(&buf, "_XF%Z%S", function->name.size, function->name);
