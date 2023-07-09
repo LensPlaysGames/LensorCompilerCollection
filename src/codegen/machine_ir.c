@@ -453,7 +453,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
   foreach_val (f, context->functions) {
     MIRFunction *function = mir_function(f);
     // Forward block references require this.
-    list_foreach (IRBlock*, bb, function->origin->blocks)
+    list_foreach (bb, function->origin->blocks)
       (void)mir_block(function, bb);
     vector_push(out, function);
   }
@@ -470,7 +470,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
     foreach_val (mir_bb, function->blocks) {
       IRBlock *bb = mir_bb->origin;
       ASSERT(bb, "Origin of general MIR block not set (what gives?)");
-      list_foreach (IRInstruction*, inst, bb->instructions) {
+      list_foreach (inst, bb->instructions) {
         switch (inst->kind) {
 
         case IR_IMMEDIATE: {

@@ -664,9 +664,9 @@ static void emit_function(LLVMContext *ctx, IRFunction *f) {
     /// Assign indices to all instructions and blocks.
     u32 value_index = (u32) f->type->function.parameters.size;
     usz block_index = 0;
-    list_foreach (IRBlock *, block, f->blocks) {
+    list_foreach (block, f->blocks) {
         block->id = block_index++;
-        list_foreach (IRInstruction *, inst, block->instructions) {
+        list_foreach (inst, block->instructions) {
             /// Values are numbered.
             inst->index = llvm_is_numbered_value(inst)
                             ? value_index++
@@ -675,12 +675,12 @@ static void emit_function(LLVMContext *ctx, IRFunction *f) {
     }
 
     /// Emit the function body.
-    list_foreach (IRBlock *, block, f->blocks) {
+    list_foreach (block, f->blocks) {
         if (block->id) format_to(out, "\n");
         format_to(out, "bb%Z:", block->id);
         if (block->name.size) format_to(out, " ; %S", block->name);
         format_to(out, "\n");
-        list_foreach (IRInstruction *, inst, block->instructions) {
+        list_foreach (inst, block->instructions) {
             emit_instruction(ctx, inst);
         }
     }
