@@ -282,7 +282,7 @@
     (after)->next = (element);                  \
   } while (0)
 
-#define list_size(type, size_out, list) ({                                      \
+#define list_size(list) ({                                                      \
     usz _size = 0;                                                              \
     for (__typeof__(*(list).first) *_it = (list).first; _it; _it = _it->next) { \
         _size++;                                                                \
