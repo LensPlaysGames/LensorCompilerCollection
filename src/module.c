@@ -388,6 +388,7 @@ AST *deserialise_module(span metadata) {
     switch (type->kind) {
     case TYPE_FUNCTION: {
       node = ast_make_function_reference(module, (loc){0}, as_span(name));
+      node->type = type;
     } break;
     case TYPE_PRIMITIVE:
     case TYPE_NAMED:
@@ -435,11 +436,15 @@ string serialise_module(CodegenContext *context, AST *module) {
   string_buffer declarations = {0};
   foreach_val (node, module->exports) {
     uint64_t type_index = serialise_type(&types, node->type, &cache);
+    write_bytes(&declarations, (const char*)&type_index, sizeof(type_index));
     if (node->kind == NODE_DECLARATION) {
-      write_bytes(&declarations, (const char*)&type_index, sizeof(type_index));
       uint32_t name_length = (uint32_t)node->declaration.name.size;
       write_bytes(&declarations, (const char*)&name_length, sizeof(name_length));
       write_bytes(&declarations, (const char*)node->declaration.name.data, node->declaration.name.size);
+    } else if (node->kind == NODE_FUNCTION_REFERENCE) {
+      uint32_t name_length = (uint32_t)node->funcref.name.size;
+      write_bytes(&declarations, (const char*)&name_length, sizeof(name_length));
+      write_bytes(&declarations, (const char*)node->funcref.name.data, node->funcref.name.size);
     } else {
       ast_print_node(node);
       ICE("You've exported something absolutely ridiculous");
