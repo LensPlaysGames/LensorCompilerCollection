@@ -2237,7 +2237,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
     vector_push(context->object->sections, sec_module_metadata);
   }
 
-  foreach_ptr (MIRFunction*, function, machine_instructions) {
+  foreach_val (function, machine_instructions) {
     { // Function symbol
       GObjSymbol sym = {0};
       sym.type = function->origin->is_extern ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
@@ -2251,7 +2251,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
     // Calculate stack offsets, frame size
     isz frame_offset = 0;
     isz frame_size = 0;
-    foreach (MIRFrameObject, fo, function->frame_objects) {
+    foreach (fo, function->frame_objects) {
       frame_size += fo->size;
       frame_offset -= fo->size;
       fo->offset = frame_offset;
@@ -2291,7 +2291,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
         sym.byte_offset = code_section(context->object)->data.bytes.size;
         vector_push(context->object->symbols, sym);
       }
-      foreach_ptr (MIRInstruction*, instruction, block->instructions) {
+      foreach_val (instruction, block->instructions) {
         if (instruction->opcode < MX64_START) {
           eprint("\n\n%31UNLOWERED INSTRUCTION:%m\n");
           print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
@@ -2734,7 +2734,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
       // the code section and then fill in the next bytes depending on the
       // relocation type.
       GObjSymbol *label_sym = NULL;
-      foreach (GObjSymbol, s, context->object->symbols) {
+      foreach (s, context->object->symbols) {
         if (strcmp(s->name, sym->name) == 0) {
           label_sym = s;
           break;
@@ -2753,7 +2753,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
       vector_push(relocations_to_remove, idx);
     }
   }
-  foreach_rev (size_t, idx, relocations_to_remove) {
+  foreach_rev (idx, relocations_to_remove) {
     vector_remove_index(context->object->relocs, *idx);
   }
 
@@ -2764,7 +2764,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
     if (strlen(sym->name) > 2 && memcmp(sym->name, ".L", 2) == 0)
       vector_push(symbols_to_remove, idx);
   }
-  foreach_rev (size_t, idx, symbols_to_remove) {
+  foreach_rev (idx, symbols_to_remove) {
     vector_remove_index(context->object->symbols, *idx);
   }
 }

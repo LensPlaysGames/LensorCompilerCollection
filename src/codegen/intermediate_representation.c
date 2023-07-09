@@ -9,7 +9,7 @@
 //#define DEBUG_USES
 void mark_used(IRInstruction *usee, IRInstruction *user) {
   // Don't push duplicate users.
-  foreach_ptr (IRInstruction *, i_user, usee->users) {
+  foreach_val (i_user, usee->users) {
     if (i_user == user) return;
   }
   vector_push(usee->users, user);
@@ -121,7 +121,7 @@ void ir_remove_and_free_block(IRBlock *block) {
   while (block->instructions.last) {
     /// Remove this instruction from PHIs.
     if (block->instructions.last->kind == IR_PHI) {
-      foreach_ptr (IRInstruction *, user, block->instructions.first->users) {
+      foreach_val (user, block->instructions.first->users) {
             if (user->kind == IR_PHI) ir_phi_remove_argument(user, block);
         }
     }
@@ -139,7 +139,7 @@ void ir_free_instruction_data(IRInstruction *i) {
   switch (i->kind) {
     case IR_CALL: vector_delete(i->call.arguments); break;
     case IR_PHI:
-        foreach_ptr (IRPhiArgument*, arg, i->phi_args) free(arg);
+        foreach_val (arg, i->phi_args) free(arg);
       vector_delete(i->phi_args);
       break;
     default: break;
@@ -238,7 +238,7 @@ void ir_femit_instruction
     }
     fprint(file, "%31(");
     bool first = true;
-    foreach_ptr (IRInstruction*, i, inst->call.arguments) {
+    foreach_val (i, inst->call.arguments) {
       if (!first) { fprint(file, "%31, "); }
       else first = false;
       fprint(file, "%34%%%u", i->id);
@@ -299,7 +299,7 @@ void ir_femit_instruction
   case IR_PHI: {
     fprint(file, "%33phi ");
     bool first = true;
-    foreach_ptr (IRPhiArgument*, arg, inst->phi_args) {
+    foreach_val (arg, inst->phi_args) {
       if (first) { first = false; }
       else { fprint(file, "%31, "); }
       fprint(file, "%31[%33bb%Z%31 : %34%%%u%31]", arg->block->id, arg->value->id);
@@ -373,7 +373,7 @@ void ir_femit
  )
 {
   ir_set_ids(context);
-  foreach_ptr (IRFunction*, function, context->functions) {
+  foreach_val (function, context->functions) {
     if (function_ptr != context->functions.data) fprint(file, "\n");
     ir_femit_function(file, function);
   }
@@ -397,7 +397,7 @@ void ir_set_func_ids(IRFunction *f) {
 void ir_set_ids(CodegenContext *context) {
   usz function_id = 0;
 
-  foreach_ptr (IRFunction*, function, context->functions) {
+  foreach_val (function, context->functions) {
     function->id = function_id++;
     ir_set_func_ids(function);
   }
@@ -456,7 +456,7 @@ void ir_phi_argument
 }
 
 void ir_phi_remove_argument(IRInstruction *phi, IRBlock *block) {
-  foreach_ptr (IRPhiArgument*, argument, phi->phi_args) {
+  foreach_val (argument, phi->phi_args) {
     if (argument->block == block) {
       ir_remove_use(argument->value, phi);
       vector_remove_element_unordered(phi->phi_args, argument);
@@ -832,7 +832,7 @@ void ir_for_each_child(
   STATIC_ASSERT(IR_COUNT == 38, "Handle all instruction types.");
   switch (user->kind) {
   case IR_PHI:
-      foreach_ptr (IRPhiArgument*, arg, user->phi_args) {
+      foreach_val (arg, user->phi_args) {
       callback(user, &arg->value, data);
     }
     break;
@@ -862,7 +862,7 @@ void ir_for_each_child(
 
   case IR_CALL:
     if (user->call.is_indirect) callback(user, &user->call.callee_instruction, data);
-    foreach (IRInstruction*, arg, user->call.arguments) callback(user, arg, data);
+    foreach (arg, user->call.arguments) callback(user, arg, data);
     break;
 
   case IR_BRANCH_CONDITIONAL:
@@ -947,7 +947,7 @@ void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
 #ifdef DEBUG_USES
   eprint("[Use] Replacing uses of %%%u with %%%u\n", instruction->id, replacement->id);
 #endif
-  foreach_ptr (IRInstruction *, user, instruction->users) {
+  foreach_val (user, instruction->users) {
     ir_internal_replace_use_t replace = { instruction, replacement };
     ir_for_each_child(user, ir_internal_replace_use, &replace);
   }
@@ -958,7 +958,7 @@ void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
 
 static void ir_internal_unmark_usee(IRInstruction *user, IRInstruction **child, void *_) {
   (void) _;
-  foreach_ptr (IRInstruction *, child_user, (*child)->users) {
+  foreach_val (child_user, (*child)->users) {
     if (child_user == user) {
       vector_remove_element_unordered((*child)->users, child_user);
       break;

@@ -17,7 +17,7 @@ Section *code_section(GenericObjectFile *object) {
 
 Section *get_section_by_name(const Sections sections, const char *name) {
   if (!name) return NULL;
-  foreach(Section, s, sections) {
+  foreach (s, sections) {
     if (s->name && strcmp(s->name, name) == 0)
       return s;
   }
@@ -148,7 +148,7 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
   }
 
   // Section headers from the given generic object file.
-  foreach (Section, s, object->sections) {
+  foreach (s, object->sections) {
     elf64_shdr shdr = {0};
 
     if (s->attributes & SEC_ATTR_SPAN_FILL) {
@@ -186,7 +186,7 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
     vector_push(shdrs, shdr);
   }
 
-  foreach (GObjSymbol, sym, object->symbols) {
+  foreach (sym, object->symbols) {
     elf64_sym elf_sym = {0};
     elf_sym.st_name = (uint32_t)elf_add_string(&string_table, sym->name);
     // Get index of section by name
@@ -292,7 +292,7 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
 
   // Build elf64_rela relocations
   Vector(elf64_rela) relocations = {0};
-  foreach (RelocationEntry, reloc, object->relocs) {
+  foreach (reloc, object->relocs) {
     // Find symbol with matching name.
     elf64_sym *sym = NULL;
     size_t sym_index = 0;
@@ -312,7 +312,7 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
     switch (reloc->type) {
     case RELOC_DISP32_PCREL: {
       GObjSymbol *sym_reloc = NULL;
-      foreach (GObjSymbol, sym_function, object->symbols) {
+      foreach (sym_function, object->symbols) {
         if (strcmp(sym_function->name, reloc->sym.name) == 0) {
           sym_reloc = sym_function;
           break;
@@ -338,11 +338,11 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
   }
 
   fwrite(&hdr, 1, sizeof(hdr), f);
-  foreach (elf64_shdr, shdr, shdrs) {
+  foreach (shdr, shdrs) {
     fwrite(shdr, 1, sizeof(*shdr), f);
   }
   // Write data of GObj sections
-  foreach (Section, s, object->sections) {
+  foreach (s, object->sections) {
     if (s->attributes & SEC_ATTR_SPAN_FILL) {
       if (strcmp(s->name, ".bss") == 0) continue;
       for (size_t n = s->data.fill.amount; n; --n) {
@@ -353,15 +353,15 @@ void generic_object_as_elf_x86_64(GenericObjectFile *object, FILE *f) {
     }
   }
   // Write symbol table (".symtab").
-  foreach (elf64_sym, sym, syms) {
+  foreach (sym, syms) {
     fwrite(sym, 1, sizeof(*sym), f);
   }
   // Write text section relocations (".rela.text").
-  foreach (elf64_rela, reloc, relocations) {
+  foreach (reloc, relocations) {
     fwrite(reloc, 1, sizeof(*reloc), f);
   }
   // Write string table (".strtab").
-  foreach (uint8_t, c, string_table) {
+  foreach (c, string_table) {
     fwrite(c, 1, 1, f);
   }
 
@@ -417,7 +417,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
   // can be written, as well as relocations and line number info.
   size_t data_start = section_table_end;
   size_t data_offset = data_start;
-  foreach (Section, s, object->sections) {
+  foreach (s, object->sections) {
     size_t size = 0;
     if (s->attributes & SEC_ATTR_SPAN_FILL)
       size = s->data.fill.amount;
@@ -432,7 +432,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
   // PREPARE SECTION HEADER TABLE
   Vector(coff_section_header) shdrs = {0};
   data_offset = data_start;
-  foreach (Section, s, object->sections) {
+  foreach (s, object->sections) {
     coff_section_header shdr = {0};
 
     // If first four bytes are zero, it's an offset into the string table.
@@ -477,7 +477,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
 
     // Calculate number of relocations for this section.
     uint16_t relocation_count = 0;
-    foreach (RelocationEntry, reloc, object->relocs) {
+    foreach (reloc, object->relocs) {
       if (strcmp(reloc->sym.section_name, s->name) == 0)
         ++relocation_count;
     }
@@ -493,7 +493,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
   size_t symbol_count = 0;
   // Create a symbol entry for each section
   size_t section_header_index = 1; // 1-based
-  foreach (Section, s, object->sections) {
+  foreach (s, object->sections) {
     coff_symbol_entry symbol_entry = {0};
     coff_symbol_entry aux_section_data = {0};
     coff_aux_section *aux_section = (coff_aux_section*)&aux_section_data;
@@ -522,7 +522,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
 
     // Calculate number of relocations for this section.
     uint16_t relocation_count = 0;
-    foreach (RelocationEntry, reloc, object->relocs) {
+    foreach (reloc, object->relocs) {
       if (strcmp(reloc->sym.section_name, s->name) == 0)
         ++relocation_count;
     }
@@ -535,7 +535,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
   }
   size_t symbol_count_after_sections = symbol_count;
 
-  foreach (GObjSymbol, sym, object->symbols) {
+  foreach (sym, object->symbols) {
     coff_symbol_entry entry = {0};
     // If first four bytes are zero, it's an offset into the string table.
     // Some implementations use a `/<decimal-digits>` format instead.
@@ -607,7 +607,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
   // actually know the offset of the relocations that follow it.
   size_t string_table_offset = (size_t)hdr.f_symptr + ((size_t)symbol_table.size * sizeof(*symbol_table.data));
   size_t relocations_offset = string_table_offset + string_table.size;
-  foreach (coff_section_header, shdr, shdrs) {
+  foreach (shdr, shdrs) {
     if (shdr->s_nreloc) {
       shdr->s_relptr = (int32_t)relocations_offset;
       relocations_offset += shdr->s_nreloc + sizeof(coff_relocation_entry);
@@ -616,7 +616,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
 
   // PREPARE RELOCATIONS
   Vector(coff_relocation_entry) relocations = {0};
-  foreach (RelocationEntry, reloc, object->relocs) {
+  foreach (reloc, object->relocs) {
     coff_relocation_entry entry = {0};
     // Zero-based index within symbol table to which the reference refers.
     uint32_t i = 0;
@@ -643,7 +643,7 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
   // SECTION HEADER TABLE
   fwrite(shdrs.data, sizeof(*shdrs.data), shdrs.size, f);
   // SECTION DATA
-  foreach (Section, s, object->sections) {
+  foreach (s, object->sections) {
     if (s->attributes & SEC_ATTR_SPAN_FILL) {
       for (size_t n = s->data.fill.amount; n; --n)
         fwrite(&s->data.fill.value, 1, 1, f);
@@ -694,7 +694,7 @@ static const char *generic_object_symbol_type_string(GObjSymbolType t) {
 void generic_object_print(GenericObjectFile *object) {
   print("GObj dump:\n"
         "  Sections:\n");
-  foreach (Section, s, object->sections) {
+  foreach (s, object->sections) {
     print("    %s", s->name);
     if (s->attributes & SEC_ATTR_SPAN_FILL)
       print(" Fill %Z bytes with '%u'\n", s->data.fill.amount, (unsigned)s->data.fill.value);
@@ -759,7 +759,7 @@ void generic_object_print(GenericObjectFile *object) {
   }
 
   print("  Relocations:\n");
-  foreach (RelocationEntry, reloc, object->relocs) {
+  foreach (reloc, object->relocs) {
     print("    %d: %s in %s at offset %zu : %s\n",
           reloc->type,
           reloc->sym.name, reloc->sym.section_name, reloc->sym.byte_offset,
@@ -767,7 +767,7 @@ void generic_object_print(GenericObjectFile *object) {
   }
 
   print("  Symbols:\n");
-  foreach (GObjSymbol, sym, object->symbols) {
+  foreach (sym, object->symbols) {
     print("    %s in %s at offset %zu : %s\n",
           sym->name, sym->section_name, sym->byte_offset,
           generic_object_symbol_type_string(sym->type));

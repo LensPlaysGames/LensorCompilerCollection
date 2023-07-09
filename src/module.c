@@ -136,7 +136,7 @@ uint64_t serialise_type(string_buffer *out, Type *type, TypeCache *cache) {
     usz return_byte_offset = out->size;
     out->size += sizeof(uint64_t);
 
-    foreach (Parameter, param, type->function.parameters) {
+    foreach (param, type->function.parameters) {
       uint32_t param_name_length = (uint32_t)param->name.size;
       write_bytes(out, (const char *)&param_name_length, 4);
       format_to(out, "%S", param->name);
@@ -177,7 +177,7 @@ uint64_t serialise_type(string_buffer *out, Type *type, TypeCache *cache) {
     format_to(out, "%S", type->structure.decl->struct_decl->name);
 
     // Writing member names
-    foreach (Member, member, type->structure.members) {
+    foreach (member, type->structure.members) {
       uint32_t member_name_length = (uint32_t)member->name.size;
       write_bytes(out, (const char *)&member_name_length, 4);
       format_to(out, "%S", member->name);
@@ -361,7 +361,7 @@ AST *deserialise_module(span metadata) {
     begin_ptr += sizeof(type_index) + sizeof(name_length) + name_length;
   }
 
-  foreach_ptr (Node *, export, module->exports) {
+  foreach_val (export, module->exports) {
     ast_print_node(export);
   }
 
@@ -382,7 +382,7 @@ string serialise_module(CodegenContext *context, AST *module) {
   TypeCache cache = {0};
   string_buffer types = {0};
   string_buffer declarations = {0};
-  foreach_ptr (Node *, node, module->exports) {
+  foreach_val (node, module->exports) {
     uint64_t type_index = serialise_type(&types, node->type, &cache);
     if (node->kind == NODE_DECLARATION) {
       write_bytes(&declarations, (const char*)&type_index, sizeof(type_index));

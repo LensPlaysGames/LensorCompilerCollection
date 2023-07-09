@@ -229,9 +229,9 @@ static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
     if (i->kind == IR_PHI) {
       /// If this is a phi node, then the call or a previous phi
       /// must be an argument of the phi.
-      foreach_ptr (IRPhiArgument*, arg, i->phi_args) {
+      foreach_val (arg, i->phi_args) {
         if (arg->value == tc->call) { goto phi; }
-        foreach_ptr (IRInstruction *, a, tc->phis) {
+        foreach_val (a, tc->phis) {
           if (a == arg->value) { goto phi; }
         }
       }
@@ -246,7 +246,7 @@ static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
     /// is only possible if the return value is the call, or
     /// any of the PHIs.
     if (i->kind == IR_RETURN) {
-      foreach_ptr (IRInstruction *, a, tc->phis) { if (a == i->operand) { return true; } }
+      foreach_val (a, tc->phis) { if (a == i->operand) { return true; } }
       return i->operand == tc->call;
     }
 
@@ -326,7 +326,7 @@ static bool opt_mem2reg(IRFunction *f) {
 
         /// Record the first store into a variable.
         case IR_STORE: {
-          foreach (stack_var, a, vars) {
+          foreach (a, vars) {
             if (!a->unoptimisable && a->alloca == i->store.addr) {
               /// If there are multiple stores, mark the variable as unoptimisable.
               if (a->store) a->unoptimisable = true;
@@ -338,7 +338,7 @@ static bool opt_mem2reg(IRFunction *f) {
 
         /// Record all loads; also check for loads before the first store.
         case IR_LOAD: {
-          foreach (stack_var, a, vars) {
+          foreach (a, vars) {
             if (!a->unoptimisable && a->alloca == i->operand) {
               /// Load before store.
               if (!a->store) {
@@ -357,7 +357,7 @@ static bool opt_mem2reg(IRFunction *f) {
   }
 
   /// Optimise all optimisable variables.
-  foreach (stack_var, a, vars) {
+  foreach (a, vars) {
     /// If the variable is unoptimisable, do nothing.
     ///
     /// Since we don’t have `addressof` instructions or anything like
@@ -372,7 +372,7 @@ static bool opt_mem2reg(IRFunction *f) {
     changed = true;
 
     /// Replace all loads with the stored value.
-    foreach_ptr (IRInstruction*, i, a->loads) {
+    foreach_val (i, a->loads) {
       ir_replace_uses(i, a->store->store.value);
       ir_remove(i);
     }
@@ -409,8 +409,7 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
   /// Since loads from global variables before the first store
   /// are possible, we only check if the first store occurs
   /// before any loads and in main() for now.
-  IRFunction **main = NULL;
-  vector_find_if(ctx->functions, main, i, string_eq(ctx->functions.data[i]->name, literal_span("main")));
+  IRFunction **main = vector_find_if (m, ctx->functions, string_eq((*m)->name, literal_span("main")));
   ASSERT(main, "No main() function!");
 
   FOREACH_INSTRUCTION (ctx) {
@@ -419,7 +418,7 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
 
       /// Record the first store into a variable.
       case IR_STORE: {
-        foreach (global_var, a, vars) {
+        foreach (a, vars) {
           if (!a->unoptimisable && a->store->store.addr == a->var) {
             /// If there are multiple stores, mark the variable as unoptimisable.
             if (a->store || function != *main) a->unoptimisable = true;
@@ -438,7 +437,7 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
 
       /// Record all loads; also check for loads before the first store.
       case IR_LOAD: {
-        foreach (global_var, a, vars) {
+        foreach (a, vars) {
           if (!a->unoptimisable && a->store->store.addr == a->var) {
             /// Load before store.
             if (!a->store) a->unoptimisable = true;
@@ -459,7 +458,7 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
 
   /// Optimise all optimisable variables.
   bool changed = false;
-  foreach (global_var, a, vars) {
+  foreach (a, vars) {
     /// If the variable is unoptimisable, do nothing.
     ///
     /// Since we don’t have `addressof` instructions or anything like
@@ -472,7 +471,7 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
 
     /// Replace all loads with the stored value.
     changed = true;
-    foreach_ptr (IRInstruction*, i, a->loads) {
+    foreach_val (i, a->loads) {
       ir_replace_uses(i, a->store->store.value);
       ir_remove(i);
     }
@@ -608,7 +607,7 @@ bool opt_analyse_functions(CodegenContext *ctx) {
   do {
     changed = false;
 
-    foreach_ptr (IRFunction*, f, ctx->functions) {
+    foreach_val (f, ctx->functions) {
       if (f->is_extern) continue;
       changed |= opt_check_pure(f);
       changed |= opt_check_leaf(f);
@@ -648,7 +647,7 @@ static void opt_reorder_blocks(IRFunction *f, DominatorInfo* info) {
     else if (last->kind == IR_BRANCH_CONDITIONAL) next = last->cond_br.then;
 
     /// Insert all children except for the next node.
-    foreach_ptr (DomTreeNode*, child, node->children) {
+    foreach_val (child, node->children) {
       if (child->block == next) {
         next_node = child;
         continue;
@@ -701,7 +700,7 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
         /// Also update PHIs.
         list_foreach (IRInstruction*, i, b2->instructions) {
           if (i->kind == IR_PHI) {
-            foreach_ptr (IRPhiArgument*, arg, i->phi_args) {
+            foreach_val (arg, i->phi_args) {
               if (arg->block == b) {
                 arg->block = last->destination_block;
                 changed = true;
@@ -725,7 +724,7 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
   }
 
   /// Remove the blocks.
-  foreach_ptr (IRBlock*, b, blocks_to_remove) {
+  foreach_val (b, blocks_to_remove) {
     ir_remove_and_free_block(b);
   }
 
@@ -743,7 +742,7 @@ void codegen_optimise(CodegenContext *ctx) {
 
   /// Optimise each function individually.
   do {
-    foreach_ptr (IRFunction*, f, ctx->functions) {
+    foreach_val (f, ctx->functions) {
       if (f->is_extern) continue;
 
       DominatorInfo dom = {0};
@@ -767,7 +766,7 @@ void codegen_optimise(CodegenContext *ctx) {
 
 /// Called after RA.
 void codegen_optimise_blocks(CodegenContext *ctx) {
-  foreach_ptr (IRFunction*, f, ctx->functions) {
+  foreach_val (f, ctx->functions) {
     if (f->is_extern) continue;
 
     DominatorInfo dom = {0};

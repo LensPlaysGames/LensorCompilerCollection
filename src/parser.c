@@ -404,10 +404,12 @@ static void next_macro(Parser *p) {
 
     // Ensure macro arg doesn't exist in parameter list
     if (p->tok.type == TK_MACRO_ARG) {
-      Token *found = NULL;
-      vector_find_if(out.parameters, found, index,
-                     out.parameters.data[index].type == TK_MACRO_ARG
-                     && string_eq(out.parameters.data[index].text, p->tok.text));
+      Token *found = vector_find_if(
+        el,
+        out.parameters,
+        el->type == TK_MACRO_ARG && string_eq(el->text, p->tok.text)
+      );
+
       if (found) ERR("Duplicate macro argument identifier! Pick another name.");
     }
 
@@ -432,11 +434,8 @@ static void next_macro(Parser *p) {
       if (p->tok.type != TK_IDENT)
         ERR("Expected identifier within macro's \"defines\" list");
 
-      string *duplicate = NULL;
-      vector_find_if(gensym_definitions, duplicate,
-                     i,
-                     (string_eq(p->tok.text, gensym_definitions.data[i])));
-      if (duplicate) ERR("Duplicate identifier in gensym definitions of macro");
+      if (vector_find_if(dup, gensym_definitions, string_eq(p->tok.text, *dup)))
+        ERR("Duplicate identifier in gensym definitions of macro");
 
       vector_push(gensym_definitions, string_dup(p->tok.text));
 
@@ -457,10 +456,12 @@ static void next_macro(Parser *p) {
 
     if (p->tok.type == TK_MACRO_ARG) {
       // Ensure macro arg exists in parameter list
-      Token *found = NULL;
-      vector_find_if(out.parameters, found, index,
-                     out.parameters.data[index].type == TK_MACRO_ARG
-                     && string_eq(out.parameters.data[index].text, p->tok.text));
+      Token *found = vector_find_if(
+        t,
+        out.parameters,
+        t->type == TK_MACRO_ARG && string_eq(t->text, p->tok.text)
+      );
+
       if (!found) ERR("Macro argument identifier does not refer to a bound macro argument! Maybe a typo?");
     } else if (p->tok.type == TK_IDENT && gensym_definitions.size) {
       // If the token in the expansion list is an identifier and there
@@ -484,10 +485,8 @@ static void next_macro(Parser *p) {
     next_token(p);
   }
 
-  Macro *found = NULL;
-  vector_find_if(p->macros, found, index,
-                 string_eq(p->macros.data[index].name, out.name));
-  if (found) ERR("Redefinition of macro %S", found->name);
+  if (vector_find_if(m, p->macros, string_eq(m->name, out.name)))
+    ERR("Redefinition of macro %S", out.name);
 
   out.gensym_count = gensym_definitions.size;
   vector_delete(gensym_definitions);
@@ -515,7 +514,7 @@ static void expand_macro(Parser *p, Macro *m) {
 
   p->raw_mode = true;
 
-  foreach (Token, param_tok, m->parameters) {
+  foreach (param_tok, m->parameters) {
     next_token(p);
 
     // param_tok == parameter
@@ -574,9 +573,7 @@ static void handle_identifier(Parser *p) {
     return;
   }
 
-  Macro *found_macro = NULL;
-  vector_find_if(p->macros, found_macro, index,
-                 string_eq(p->macros.data[index].name, p->tok.text));
+  Macro *found_macro = vector_find_if(m, p->macros, string_eq(m->name, p->tok.text));
   if (found_macro) {
     expand_macro(p, found_macro);
     return;
@@ -611,10 +608,10 @@ static void handle_identifier(Parser *p) {
 /// Lex the next token.
 static void next_token(Parser *p) {
   // Pop empty macro expansions off of the expansion stack.
-  foreach_rev (MacroExpansion, expansion, p->macro_expansion_stack) {
+  foreach_rev (expansion, p->macro_expansion_stack) {
     Macro *expandee = p->macros.data + expansion->macro_index;
     if (expansion->expansion_index >= expandee->expansion.size) {
-      foreach (string, s, expansion->gensyms) {
+      foreach (s, expansion->gensyms) {
         if (s->data) free(s->data);
       }
       vector_delete(expansion->gensyms);
@@ -633,9 +630,11 @@ static void next_token(Parser *p) {
              "Macro argument \"%S\" encountered, but none are defined for this macro",
              as_span(macro_expansion_token->text));
       // Get it from bound arguments
-      NamedToken *found = NULL;
-      vector_find_if(expansion->bound_arguments, found, index,
-                     string_eq(expansion->bound_arguments.data[index].name, macro_expansion_token->text));
+      NamedToken *found = vector_find_if(
+        t,
+        expansion->bound_arguments,
+        string_eq(t->name, macro_expansion_token->text)
+      );
       ASSERT(found, "Macro argument \"%S\" does not exist (lexer screwed up!)",
              as_span(macro_expansion_token->text));
       p->tok = copy_token(found->token);
@@ -1082,7 +1081,7 @@ static struct {
 /// if a non-function attribute is present in the given attribute list.
 static void apply_function_attributes(Parser *p, Type *func, Attributes attribs) {
   STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of function attribute types");
-  foreach(Attribute, attr, attribs) {
+  foreach(attr, attribs) {
     switch (attr->kind) {
     case ATTR_NOMANGLE: {
       func->function.nomangle = true;
@@ -1100,7 +1099,7 @@ static void apply_function_attributes(Parser *p, Type *func, Attributes attribs)
 
 static void apply_struct_type_attributes(Parser *p, Type *type, Attributes attribs) {
   STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of type attributes");
-  foreach(Attribute, attr, attribs) {
+  foreach(attr, attribs) {
     switch (attr->kind) {
     case ATTR_ALIGNAS: {
       type->structure.alignment = attr->value.integer;
@@ -1235,7 +1234,7 @@ static void ensure_hygienic_declaration_if_within_macro(Parser *p, span ident, l
   // we need to **ensure** that there are no identifiers with the same
   // name passed as macro arguments (hygiene).
   if (p->macro_expansion_stack.size) {
-    foreach (NamedToken, t, p->macro_expansion_stack.data[0].bound_arguments) {
+    foreach (t, p->macro_expansion_stack.data[0].bound_arguments) {
       if ((t->token.type == TK_IDENT && string_eq(t->token.text, ident)) || (t->token.type == TK_AST_NODE && t->token.node->kind == NODE_VARIABLE_REFERENCE && string_eq(t->token.node->var->name, ident))) {
         if (source_location)
           ISSUE_DIAGNOSTIC(DIAG_NOTE, *source_location, p, "This declaration within a macro would shadow a passed identifier\n");
@@ -1265,7 +1264,7 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
   scope_push(p->ast);
 
   /// Create a declaration for each parameter.
-  foreach (Parameter , param, function_type->function.parameters) {
+  foreach (param, function_type->function.parameters) {
     Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
     ensure_hygienic_declaration_if_within_macro(p, as_span(param->name), &param->source_location);
     if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var))
@@ -1720,7 +1719,7 @@ static Node *parse_ident_expr(Parser *p) {
   // FIXME: DONT ASSUME THIS IS A FUNCTION
   // FIXME: MOVE ALL OF THIS TO SEMANTIC ANALYSIS
 
-  foreach_ptr (AST*, import, p->ast->imports) {
+  foreach_val(import, p->ast->imports) {
     if (string_eq(import->module_name, ident))
       return ast_make_module_reference(p->ast, p->tok.source_location, import);
   }

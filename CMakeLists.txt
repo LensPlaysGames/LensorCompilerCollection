@@ -49,7 +49,7 @@ add_executable(
   src/codegen.c
   src/error.c
   src/main.c
-  src/ir_parser.c
+  #src/ir_parser.c
   src/parser.c
   src/typechecker.c
   src/opt.c

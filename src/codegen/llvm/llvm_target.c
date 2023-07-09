@@ -30,7 +30,7 @@ static void emit_struct_members(LLVMContext *ctx, Type *t) {
     /// member in the LLVM struct type.
     Type *canon = type_canonical(t);
     bool first = true;
-    foreach (Member, m, canon->structure.members) {
+    foreach (m, canon->structure.members) {
         if (first) first = false;
         else format_to(out, ", ");
         emit_type(ctx, m->type);
@@ -439,7 +439,7 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
             else format_to(out, " @%S", inst->call.callee_function->name);
 
             format_to(out, "(");
-            foreach_ptr (IRInstruction *, arg, inst->call.arguments) {
+            foreach_val (arg, inst->call.arguments) {
                 if (arg != *inst->call.arguments.data) format_to(out, ", ");
                 emit_value(ctx, arg, true);
             }
@@ -491,7 +491,7 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
             format_to(out, "phi ");
             emit_type(ctx, inst->type);
             format_to(out, " ");
-            foreach_ptr (IRPhiArgument *, arg, inst->phi_args) {
+            foreach_val (arg, inst->phi_args) {
                 if (arg != *inst->phi_args.data) format_to(out, ", ");
                 format_to(out, "[ ");
                 emit_value(ctx, arg->value, false);
@@ -698,11 +698,11 @@ void codegen_emit_llvm(CodegenContext *cg) {
     disable_colours();
 
     /// Mangle all function names.
-    foreach_ptr (IRFunction *, f, cg->functions) mangle_function_name(f);
+    foreach_val (f, cg->functions) mangle_function_name(f);
 
     /// Emit named types.
     bool type_emitted = false;
-    foreach_ptr (Type *, t, cg->ast->_types_) {
+    foreach_val (t, cg->ast->_types_) {
         if (t->kind != TYPE_STRUCT || t->structure.decl->struct_decl->name.size == 0) continue;
         type_emitted = true;
         format_to(&ctx.out, "%%struct.%S = type ", t->structure.decl->struct_decl->name);
@@ -714,7 +714,7 @@ void codegen_emit_llvm(CodegenContext *cg) {
     if (type_emitted) format_to(&ctx.out, "\n");
 
     /// Emit global variables.
-    foreach_ptr (IRStaticVariable *, var, cg->static_vars) {
+    foreach_val (var, cg->static_vars) {
         format_to(&ctx.out, "@%S = private global ", var->name);
         emit_type(&ctx, var->type);
         format_to(&ctx.out, " ");
@@ -738,7 +738,7 @@ void codegen_emit_llvm(CodegenContext *cg) {
     if (cg->static_vars.size) format_to(&ctx.out, "\n");
 
     /// Emit each function.
-    foreach_ptr (IRFunction *, f, cg->functions) emit_function(&ctx, f);
+    foreach_val (f, cg->functions) emit_function(&ctx, f);
 
     /// Write to file.
     fprint(cg->code, "%S", as_span(ctx.out));

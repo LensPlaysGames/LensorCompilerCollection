@@ -74,12 +74,12 @@ void codegen_context_free(CodegenContext *context) {
   STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen calling conventions.");
 
   /// Free all IR Functions.
-  foreach_ptr (IRFunction *, f, context->functions) {
+  foreach_val (f, context->functions) {
     /// Free each block.
     list_foreach (IRBlock*, b, f->blocks) {
       /// Free each instruction.
       list_foreach (IRInstruction *, i, b->instructions) ir_free_instruction_data(i);
-      list_delete(IRInstruction, b->instructions);
+      list_delete (b->instructions);
 
       /// Free the block name.
       free(b->name.data);
@@ -88,7 +88,7 @@ void codegen_context_free(CodegenContext *context) {
     /// Free the name, params, and block list.
     free(f->name.data);
     vector_delete(f->parameters);
-    list_delete(IRBlock, f->blocks);
+    list_delete(f->blocks);
 
     /// Free the function itself.
     free(f);
@@ -98,14 +98,14 @@ void codegen_context_free(CodegenContext *context) {
   vector_delete(context->functions);
 
   /// Free static variables.
-  foreach_ptr (IRStaticVariable*, var, context->static_vars) {
+  foreach_val (var, context->static_vars) {
     free(var->name.data);
     free(var);
   }
   vector_delete(context->static_vars);
 
   /// Free parameter instructions that were removed, but not freed.
-  foreach_ptr (IRInstruction*, i, context->removed_instructions) {
+  foreach_val (i, context->removed_instructions) {
     ir_free_instruction_data(i);
     free(i);
   }
@@ -260,7 +260,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// Root node.
   case NODE_ROOT: {
     /// Emit everything that isn’t a function.
-    foreach_ptr (Node *, child, expr->root.children) {
+    foreach_val (child, expr->root.children) {
       if (child->kind == NODE_FUNCTION) continue;
       codegen_expr(ctx, child);
     }
@@ -398,7 +398,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_BLOCK: {
     /// Emit everything that isn’t a function.
     Node *last = NULL;
-    foreach_ptr (Node *, child, expr->block.children) {
+    foreach_val (child, expr->block.children) {
       if (child->kind == NODE_FUNCTION) continue;
       last = child;
       codegen_expr(ctx, child);
@@ -430,7 +430,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     }
 
     /// Emit the arguments.
-    foreach_ptr (Node*, arg, expr->call.arguments) {
+    foreach_val (arg, expr->call.arguments) {
       if (type_is_reference(arg->type)) {
         codegen_lvalue(ctx, arg);
         ir_add_function_call_argument(ctx, call, arg->address);
@@ -657,7 +657,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       address->type = ast_make_type_pointer(ctx->ast, expr->source_location, expr->type->array.of);
       ir_insert(ctx, address);
       usz index = 0;
-      foreach_ptr (Node *, node, expr->literal.compound) {
+      foreach_val (node, expr->literal.compound) {
         codegen_expr(ctx, node);
         ir_store(ctx, node->ir, address);
         if (index == expr->literal.compound.size - 1) break;
@@ -881,7 +881,7 @@ bool codegen
       }
 
       /// Create the remaining functions and set the address of each function.
-      foreach_ptr (Node*, func, ast->functions) {
+      foreach_val (func, ast->functions) {
         func->function.ir = ir_function(context, as_span(func->function.name), func->type);
 
         /// Mark the function as extern if it is.
@@ -894,8 +894,8 @@ bool codegen
         // TODO: Should we propagate "discardable" to the IR?
       }
 
-      foreach_ptr (AST *, import, context->ast->imports) {
-        foreach_ptr (Node *, n, import->exports) {
+      foreach_val (import, context->ast->imports) {
+        foreach_val (n, import->exports) {
           codegen_lvalue(context, n);
         }
       }
@@ -906,7 +906,7 @@ bool codegen
       codegen_expr(context, ast->root);
 
       /// Emit the remaining functions that aren’t extern.
-      foreach_ptr (Node*, func, ast->functions) {
+      foreach_val (func, ast->functions) {
         if (!func->function.body) continue;
         codegen_function(context, func);
       }
@@ -992,7 +992,7 @@ static void mangle_type_to(string_buffer *buf, Type *t) {
     case TYPE_FUNCTION:
       format_to(buf, "F");
       mangle_type_to(buf, t->function.return_type);
-      foreach (Parameter, param, t->function.parameters) mangle_type_to(buf, param->type);
+      foreach (param, t->function.parameters) mangle_type_to(buf, param->type);
       format_to(buf, "E");
       break;
   }

@@ -79,7 +79,7 @@ static Scope *scope_create(Scope *parent) {
 }
 
 static void scope_delete(Scope *scope) {
-  foreach_ptr (Symbol *, symbol, scope->symbols) {
+  foreach_val (symbol, scope->symbols) {
     free(symbol->name.data);
     free(symbol);
   }
@@ -122,7 +122,7 @@ Symbol *scope_add_symbol(Scope *scope, enum SymbolKind kind, span name, void *va
 Symbol *scope_find_symbol(Scope *scope, span name, bool this_scope_only) {
   while (scope) {
     /// Return the symbol if it exists.
-    foreach_ptr (Symbol *, symbol, scope->symbols)
+    foreach_val (symbol, scope->symbols)
       if (string_eq(symbol->name, name))
         return symbol;
 
@@ -276,7 +276,7 @@ Node *ast_make_block(
 ) {
   Node *node = mknode(ast, NODE_BLOCK, source_location);
   node->block.children = children;
-  foreach_ptr (Node *, child, children) child->parent = node;
+  foreach_val (child, children) child->parent = node;
   return node;
 }
 
@@ -291,7 +291,7 @@ Node *ast_make_call(
   node->call.callee = callee;
   node->call.arguments = arguments;
   callee->parent = node;
-  foreach_ptr (Node *, argument, arguments) argument->parent = node;
+  foreach_val (argument, arguments) argument->parent = node;
   return node;
 }
 
@@ -579,7 +579,7 @@ static void write_typename(string_buffer *s, const Type *type) {
       format_to(s, "%31(");
 
       /// Parameters.
-      foreach (Parameter, param, type->function.parameters) {
+      foreach (param, type->function.parameters) {
         write_typename(s, param->type);
         if (param != type->function.parameters.data + type->function.parameters.size - 1)
           format_to(s, "%31, ");
@@ -725,7 +725,7 @@ AST *ast_create() {
 void ast_free(AST *ast) {
   /// Some nodes may contain strings, vectors, etc.. Iterate over all
   /// nodes and free all resources they may have.
-  foreach_ptr (Node *, node, ast->_nodes_) {
+  foreach_val(node, ast->_nodes_) {
     STATIC_ASSERT(NODE_COUNT == 18, "Exhaustive handling of node types when freeing AST.");
     switch (node->kind) {
       case NODE_FUNCTION:
@@ -761,17 +761,17 @@ void ast_free(AST *ast) {
   }
 
   /// Now that that’s done, free all nodes.
-  foreach_ptr (Node *, node, ast->_nodes_) free(node);
+  foreach_val(node, ast->_nodes_) free(node);
   vector_delete(ast->_nodes_);
   vector_delete(ast->functions);
 
   /// Free all types.
-  foreach_ptr (Type *, type, ast->_types_) {
+  foreach_val(type, ast->_types_) {
     if (type->kind == TYPE_FUNCTION) {
-      foreach (Parameter, param, type->function.parameters) free(param->name.data);
+      foreach (param, type->function.parameters) free(param->name.data);
       vector_delete(type->function.parameters);
     } else if (type->kind == TYPE_STRUCT) {
-      foreach (Member, member, type->structure.members) free(member->name.data);
+      foreach (member, type->structure.members) free(member->name.data);
       vector_delete(type->structure.members);
     }
     free(type);
@@ -779,12 +779,12 @@ void ast_free(AST *ast) {
   vector_delete(ast->_types_);
 
   /// Free all scopes. This also deletes all symbols.
-  foreach_ptr (Scope *, scope, ast->_scopes_) scope_delete(scope);
+  foreach_val(scope, ast->_scopes_) scope_delete(scope);
   vector_delete(ast->_scopes_);
   vector_delete(ast->scope_stack);
 
   /// Free all interned strings.
-  foreach (string, s, ast->strings) free(s->data);
+  foreach (s, ast->strings) free(s->data);
   vector_delete(ast->strings);
 
   /// Free the filename and source code.
@@ -805,7 +805,7 @@ static void ast_print_children(
 );
 
 static void print_struct_members(FILE *file, Members *members, string_buffer *leading_text) {
-  foreach(Member, member, *members) {
+  foreach(member, *members) {
     fprint(file, "%31%S%s", as_span(*leading_text), member == &vector_back(*members) ? "└─" : "├─");
     if (member->type->kind == TYPE_STRUCT && !member->type->structure.decl) {
       fprint(file, "%31Struct %35%S%31@%35%Z%31 %31#%35%Z%31/%35%Z\n",
@@ -1069,7 +1069,7 @@ static void print_scope(FILE *file, scope_tree_node *node, string_buffer *buf) {
     const Scope *s = node->scope;
 
     /// Print all symbols in this scope.
-    foreach_ptr (Symbol*, sym, s->symbols) {
+    foreach_val (sym, s->symbols) {
         /// Print the leading text.
         bool last_child = sym_ptr == s->symbols.data + s->symbols.size - 1 && !node->children.size;
         fprint(file, "%31%S%s", as_span(*buf), last_child ? "└─" : "├─");
@@ -1087,7 +1087,7 @@ static void print_scope(FILE *file, scope_tree_node *node, string_buffer *buf) {
     }
 
     /// Next, print all child scopes.
-    foreach_ptr (scope_tree_node *, child, node->children) {
+    foreach_val (child, node->children) {
         /// Print the leading text.
         bool last_child = child_ptr == node->children.data + node->children.size - 1;
         fprint(file, "%31%S%s", as_span(*buf), last_child ? "└─" : "├─");
@@ -1112,18 +1112,17 @@ void ast_print_scope_tree(FILE *file, const AST *ast) {
     Vector(scope_tree_node) scope_tree = {0};
 
     /// Create a node for each scope.
-    foreach_ptr (Scope*, sc, ast->_scopes_) {
+    foreach_val (sc, ast->_scopes_) {
         scope_tree_node node = {0};
         node.scope = sc;
         vector_push(scope_tree, node);
     }
 
     /// Now, we need to build the tree.
-    foreach (scope_tree_node, node, scope_tree) {
+    foreach (node, scope_tree) {
         /// If this scope has a parent, add it to the parent's children.
         if (node->scope->parent) {
-            scope_tree_node *n = NULL;
-            vector_find_if(scope_tree, n, i, scope_tree.data[i].scope == node->scope->parent);
+            scope_tree_node *n = vector_find_if (sn, scope_tree, sn->scope == node->scope->parent);
             ASSERT(n);
             vector_push(n->children, node);
         }
@@ -1156,7 +1155,7 @@ static void ast_print_children(
   if (logical_parent->parent != logical_grandparent) return;
 
   /// Print the children.
-  foreach_ptr (Node*, node, *nodes) {
+  foreach_val (node, *nodes) {
     /// Print the indentation and continue any lines from parent nodes.
     fprint(file, "%31%S%s", as_span(*buf), node == vector_back(*nodes) ? "└─" : "├─");
 
@@ -1185,12 +1184,11 @@ size_t ast_intern_string(AST *ast, span str) {
 
 /// Replace a node with another node.
 void ast_replace_node(AST *ast, Node *old, Node *new) {
-#define REPLACE_IN_CHILDREN(children)                              \
-  do {                                                             \
-    Node **ptr = NULL;                                             \
-    vector_find_if((children), ptr, i, (children).data[i] == old); \
-    if (ptr) *ptr = new;                                           \
-  } while (0)
+#define REPLACE_IN_CHILDREN(children)                            \
+    do {                                                         \
+        Node **ptr = vector_find_if(_n, (children), *_n == old); \
+        if (ptr) *ptr = new;                                     \
+    } while (0)
 
   (void) ast;
 
