@@ -760,10 +760,6 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_RETURN: {
     codegen_expr(ctx, expr->return_.value);
     expr->ir = ir_return(ctx, expr->return_.value->ir);
-
-    IRBlock *new_block = ir_block_create();
-    ir_block_attach(ctx, new_block);
-
     return;
   }
 
@@ -776,14 +772,6 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 void codegen_function(CodegenContext *ctx, Node *node) {
   ctx->block = node->function.ir->blocks.first;
   ctx->function = node->function.ir;
-
-  /* I have no idea why we would need or want to do this. A static will always be at the same address...
-  /// Create new references to all already emitted
-  /// static variables.
-  foreach_ptr (IRStaticVariable *, s, ctx->static_vars)
-    if (s->decl)
-      s->decl->address = ir_static_reference(ctx, s);
-  */
 
   /// Next, emit all parameter declarations and store
   /// the initial parameter values in them.
@@ -809,9 +797,11 @@ void codegen_function(CodegenContext *ctx, Node *node) {
 
   /// If we can return from here, and this function doesn’t return void,
   /// then return the return value; otherwise, just return nothing.
-  if (!ir_is_closed(ctx->block) && !type_is_void(node->type->function.return_type))
-    ir_return(ctx, node->function.body->ir);
-  else ir_return(ctx, NULL);
+  if (!ir_is_closed(ctx->block)) {
+    ir_return(ctx, !type_is_void(node->type->function.return_type)
+        ? node->function.body->ir
+        : NULL);
+  }
 }
 
 /// ===========================================================================

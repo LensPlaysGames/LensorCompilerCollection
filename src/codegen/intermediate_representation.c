@@ -77,6 +77,16 @@ void ir_insert
  )
 {
   ASSERT(context->block != NULL, "Can not insert when context has NULL insertion block.");
+
+  /// Handle closed blocks.
+  if (ir_is_closed(context->block)) {
+    IRBlock *new_block = ir_block_create();
+    ir_block_attach(context, new_block);
+    context->block = new_block;
+    ir_insert(context, new_instruction);
+    return;
+  }
+
   ir_insert_into_block(context->block, new_instruction);
 }
 
