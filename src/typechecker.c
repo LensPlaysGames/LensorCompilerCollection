@@ -166,7 +166,7 @@ typedef Vector(Candidate) OverloadSet;
 static OverloadSet collect_overload_set(Node *func) {
   OverloadSet overload_set = {0};
   for (Scope *scope = func->funcref.scope; scope; scope = scope->parent) {
-    foreach_ptr(Symbol*, sym, scope->symbols) {
+    foreach_val (sym, scope->symbols) {
       if (sym->kind != SYM_FUNCTION) {
         continue;
       }
@@ -203,7 +203,7 @@ NODISCARD static bool resolve_overload(
   /// Determine the overloads that are still valid.
   Symbol *valid_overload = NULL;
   bool ambiguous = false;
-  foreach (Candidate, sym, *overload_set) {
+  foreach (sym, *overload_set) {
     if (sym->validity != candidate_valid) continue;
 
     /// If O(F) contains more than one element, then the program is
@@ -231,7 +231,7 @@ NODISCARD static bool resolve_overload(
     if (funcref->parent->kind == NODE_CALL) {
       eprint("\n    %B38Where%m\n");
       size_t index = 1;
-      foreach_ptr (Node*, arg, funcref->parent->call.arguments)
+      foreach_val (arg, funcref->parent->call.arguments)
         eprint("    %Z = %T\n", index++, arg->type);
     }
 
@@ -239,7 +239,7 @@ NODISCARD static bool resolve_overload(
     size_t index = 1;
     if (!ambiguous) eprint("\n    %B38Overload Set%m\n");
     else eprint("\n    %B38Candidates%m\n");
-    foreach (Candidate, c, *overload_set) {
+    foreach (c, *overload_set) {
       if (ambiguous && c->validity != candidate_valid) continue;
       u32 line;
       seek_location(as_span(ast->source), c->symbol->val.node->source_location, &line, NULL, NULL);
@@ -257,7 +257,7 @@ NODISCARD static bool resolve_overload(
     /// Explain why each one is invalid.
     eprint("\n    %B38Invalid Overloads%m\n");
     index = 1;
-    foreach (Candidate, c, *overload_set) {
+    foreach (c, *overload_set) {
       eprint("    %B38(%Z) %m", index++);
       switch (c->validity) {
         default: ICE("Unknown overload invalidation reason: %d", c->validity);
@@ -309,8 +309,7 @@ NODISCARD static bool resolve_overload(
           eprint("No overload of %32%S%m with type %T", arg->funcref.name, param->type);
 
           /// Mark that we need to print the overload set of this function too.
-          span *ptr;
-          vector_find_if(dependent_function_names, ptr, i, string_eq(dependent_function_names.data[i], arg->funcref.name));
+          span *ptr = vector_find_if(n, dependent_function_names, string_eq(*n, arg->funcref.name));
           if (!ptr) {
             vector_push(dependent_functions, arg);
             vector_push(dependent_function_names, as_span(arg->funcref.name));
@@ -323,11 +322,11 @@ NODISCARD static bool resolve_overload(
     /// Print the overload sets of all dependent functions.
     if (dependent_functions.size) {
       eprint("\n    %B38Dependent Overload Sets%m\n");
-      foreach_ptr (Node*, n, dependent_functions) {
+      foreach_val (n, dependent_functions) {
         eprint("        %B38Overloads of %B32%S%B38%m\n", n->funcref.name);
 
         OverloadSet o = collect_overload_set(n);
-        foreach (Candidate, c, o) {
+        foreach (c, o) {
           u32 line;
           seek_location(as_span(ast->source), c->symbol->val.node->source_location, &line, NULL, NULL);
           eprint("        %32%S %31: %T %m(%S:%u)\n",
@@ -351,12 +350,12 @@ void reduce_overload_set(OverloadSet *overload_set) {
   if (overload_set->size) {
     /// Determine the candidate with the least number of implicit conversions.
     usz min_score = overload_set->data[0].score;
-    foreach (Candidate, sym, *overload_set)
+    foreach (sym, *overload_set)
       if (sym->validity == candidate_valid && sym->score < min_score)
         min_score = sym->score;
 
     /// Remove all candidates with a more implicit conversions.
-    foreach (Candidate, sym, *overload_set)
+    foreach (sym, *overload_set)
       if (sym->validity == candidate_valid && sym->score > min_score)
         sym->validity = invalid_too_many_conversions;
   }
@@ -401,7 +400,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   // Extra validation step: ensure all functions within overload set
   // have matching return type.
   Type *return_type = NULL;
-  foreach (Candidate, candidate, overload_set) {
+  foreach (candidate, overload_set) {
     if (!return_type) {
       return_type = candidate->symbol->val.node->type->function.return_type;
       continue;
@@ -431,14 +430,14 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     /// 2a. Typecheck all arguments of the call that are not unresolved
     ///     function references themselves. Note: This takes care of
     ///     resolving nested calls.
-    foreach_ptr (Node*, arg, call->call.arguments)
+    foreach_val (arg, call->call.arguments)
       if (arg->kind != NODE_FUNCTION_REFERENCE)
         if (!typecheck_expression(ast, arg))
           goto err;
 
     /// 2b. Remove from O all functions that have a different number of
     ///     parameters than the call expression has arguments.
-    foreach (Candidate, sym, overload_set)
+    foreach (sym, overload_set)
       if (sym->symbol->val.node->type->function.parameters.size != call->call.arguments.size)
         sym->validity = invalid_parameter_count;
 
@@ -455,7 +454,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     /// TODO: Could optimise this by merging with above loop.
     typedef struct { usz index; OverloadSet overloads; } unresolved_func;
     Vector(unresolved_func) unresolved_functions = {0};
-    foreach (Candidate, candidate, overload_set) {
+    foreach (candidate, overload_set) {
       if (candidate->validity != candidate_valid) continue;
       foreach_index (i, call->call.arguments) {
         /// Note down the number of function references.
@@ -484,7 +483,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
     /// 2e. If there are unresolved function references.
     if (unresolved_functions.size) {
       /// 2eα. Collect their overload sets.
-      foreach (unresolved_func, uf, unresolved_functions) {
+      foreach (uf, unresolved_functions) {
         uf->overloads = collect_overload_set(call->call.arguments.data[uf->index]);
 
         /// Confidence check.
@@ -495,12 +494,12 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
 
         /// 2eβ. Remove from O all candidates C that do no accept any overload
         ///      of this argument as a parameter.
-        foreach (Candidate, candidate, overload_set) {
+        foreach (candidate, overload_set) {
           if (candidate->validity != candidate_valid) continue;
           Type *param_type = candidate->symbol->val.node->type->function.parameters.data[uf->index].type;
 
           bool found = false;
-          foreach (Candidate, arg_candidate, uf->overloads) {
+          foreach (arg_candidate, uf->overloads) {
             if (convertible_score(param_type, arg_candidate->symbol->val.node->type) == 0) {
               found = true;
               break;
@@ -524,8 +523,8 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// 2eε. For each argument, remove from its overload set all candidates
       /// that are not equivalent to the type of the corresponding parameter
       /// of the resolved function.
-      foreach (unresolved_func, uf, unresolved_functions) {
-        foreach (Candidate, candidate, uf->overloads) {
+      foreach (uf, unresolved_functions) {
+        foreach (candidate, uf->overloads) {
           if (candidate->validity != candidate_valid) continue;
           Type *param_type = func->type->function.parameters.data[uf->index].type;
           if (convertible_score(param_type, candidate->symbol->val.node->type) != 0) {
@@ -544,7 +543,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
 
       /// Cleanup so we don’t leak memory.
     cleanup_arg_overloads:
-      foreach (unresolved_func, uf, unresolved_functions)
+      foreach (uf, unresolved_functions)
         vector_delete(uf->overloads);
       vector_delete(unresolved_functions);
       goto err;
@@ -587,7 +586,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
 
       /// Otherwise, remove from O all functions that are not equivalent to the
       /// lvalue being assigned to.
-      foreach (Candidate, sym, overload_set)
+      foreach (sym, overload_set)
         if (sym->validity == candidate_valid && convertible_score(decl_type, sym->symbol->val.node->type) != 0)
           sym->validity = invalid_expected_type_mismatch;
     } break;
@@ -615,7 +614,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
 
       /// Otherwise, remove from O all functions that are not equivalent to
       /// the lvalue being assigned to.
-      foreach (Candidate, sym, overload_set)
+      foreach (sym, overload_set)
         if (sym->validity == candidate_valid && convertible_score(lvalue_type, sym->symbol->val.node->type) != 0)
           sym->validity = invalid_expected_type_mismatch;
     } break;
@@ -652,7 +651,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
       /// remove from O all functions that are not equivalent to that type.
       if ((cast_type->kind == TYPE_POINTER && cast_type->pointer.to->kind == TYPE_FUNCTION) ||
           (cast_type->kind == TYPE_FUNCTION)) {
-        foreach (Candidate, sym, overload_set)
+        foreach (sym, overload_set)
           if (sym->validity == candidate_valid && convertible_score(cast_type, sym->symbol->val.node->type) != 0)
             sym->validity = invalid_expected_type_mismatch;
       }
@@ -697,7 +696,7 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
 
   case TYPE_FUNCTION:
     if (!typecheck_type(ast, t->function.return_type)) return false;
-    foreach(Parameter, param, t->function.parameters) {
+    foreach (param, t->function.parameters) {
       if (!typecheck_type(ast, param->type)) return false;
       if (type_is_incomplete(param->type)) {
         ERR(param->source_location,
@@ -715,7 +714,7 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
     return true;
 
   case TYPE_STRUCT:
-    foreach(Member, member, t->structure.members) {
+    foreach (member, t->structure.members) {
       if (!typecheck_type(ast, member->type)) return false;
     }
 
@@ -723,7 +722,7 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
     // alignment of the struct to what it was set to, assuming that whoever
     // did it knows what they are doing.
     bool has_alignment = t->structure.alignment;
-    foreach(Member, member, t->structure.members) {
+    foreach (member, t->structure.members) {
       size_t alignment = type_alignof(member->type);
       if (!has_alignment && alignment > t->structure.alignment)
         t->structure.alignment = alignment;
@@ -766,7 +765,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
     /// Typecheck each child of the root.
     case NODE_ROOT:
-      foreach_ptr (Node *, node, expr->root.children) {
+    foreach_val (node, expr->root.children) {
         if (!typecheck_expression(ast, node))
           return false;
 
@@ -871,7 +870,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         else if (expr->declaration.init->type->kind == TYPE_ARRAY &&
                  expr->declaration.init->type->array.of == t_integer_literal) {
           expr->declaration.init->type->array.of = expr->type->array.of;
-          foreach_ptr (Node *, node, expr->declaration.init->literal.compound) {
+          foreach_val (node, expr->declaration.init->literal.compound) {
             node->type = expr->type->array.of;
           }
         }
@@ -932,7 +931,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// Typecheck all children and set the type of the block
     /// to the type of the last child. TODO: noreturn?
     case NODE_BLOCK: {
-      foreach_ptr (Node *, node, expr->block.children) {
+      foreach_val (node, expr->block.children) {
         if (!typecheck_expression(ast, node))
           return false;
 
@@ -985,7 +984,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
       }
 
       /// Typecheck all arguments.
-      foreach_ptr (Node *, param, expr->call.arguments)
+      foreach_val (param, expr->call.arguments)
         if (!typecheck_expression(ast, param))
           return false;
 
@@ -1249,7 +1248,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
               "An array literal must have elements within it, as a zero-sized array makes no sense!");
         }
         Type *type = NULL;
-        foreach_ptr (Node *, node, expr->literal.compound) {
+        foreach_val (node, expr->literal.compound) {
           if (!typecheck_expression(ast, node)) return false;
           if (type && !convertible(type, node->type)) {
             ERR(node->source_location,
@@ -1291,7 +1290,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         */
 
         AST *module = NULL;
-        foreach_ptr (AST *, m, ast->imports) {
+        foreach_val (m, ast->imports) {
           if (string_eq(m->module_name, expr->member_access.struct_->module_ref.ast->module_name)) {
             module = m;
             break;
@@ -1300,7 +1299,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         if (!module) ERR((loc){0}, "Attempt to reference module which has not been imported!");
 
         Node *found = NULL;
-        foreach_ptr (Node *, n, module->exports) {
+        foreach_val (n, module->exports) {
           // TODO: Look for more than just declarations...
           if (n->kind == NODE_DECLARATION) {
             if (string_eq(n->declaration.name, expr->member_access.ident)) {
@@ -1334,13 +1333,8 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           ERR(expr->member_access.struct_->source_location,
               "Cannot access member of type %T", struct_type);
 
-        Member *member;
-        vector_find_if(struct_type->structure.members, member, i,
-                       string_eq(
-                                 struct_type->structure.members.data[i].name,
-                                 expr->member_access.ident
-                                 )
-                       );
+        Member *member = vector_find_if(m, struct_type->structure.members,
+                         string_eq(m->name, expr->member_access.ident));
         if (!member)
           ERR(expr->source_location,
               "Cannot access member \"%S\" that does not exist in \"%S\", an instance of %T",

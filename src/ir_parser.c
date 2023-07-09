@@ -1150,7 +1150,7 @@ bool ir_parse(CodegenContext *context, const char *filename, string ir) {
   /// Remove all functions we added from the context.
   bool found = false;
   usz removed = 0;
-  foreach_ptr (IRFunction *, func, context->functions) {
+  foreach_val(IRFunction *, func, context->functions) {
     /// Do *not* delete anything before f!
     if (func == f) {
       found = true;

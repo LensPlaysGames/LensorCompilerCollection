@@ -499,7 +499,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
              (unsigned) module_cereal.data[0]);
 
       for (size_t i = 1; i < module_cereal.size; ++i)
-        fprint(context->code, ",%u", module_cereal.data[i]);
+        fprint(context->code, ",%u", (unsigned) module_cereal.data[i]);
 
       fprint(context->code, "\n");
     }
@@ -512,12 +512,12 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
            context->target == TARGET_GNU_ASM_INTEL ? ".intel_syntax noprefix\n" : "");
 
     fprint(context->code, "\n");
-    foreach_ptr (MIRFunction*, function, machine_instructions) {
+    foreach_val (function, machine_instructions) {
       if (!function->origin->attr_global) continue;
       fprint(context->code, ".global %S\n", function->name);
     }
   }
-  foreach_ptr (MIRFunction*, function, machine_instructions) {
+  foreach_val (function, machine_instructions) {
     // Generate function entry label if function has definition.
     if (function->origin->is_extern) continue;
 
@@ -526,7 +526,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
     // Calculate stack offsets, frame size
     isz frame_offset = 0;
     isz frame_size = 0;
-    foreach (MIRFrameObject, fo, function->frame_objects) {
+    foreach (fo, function->frame_objects) {
       frame_size += fo->size;
       frame_offset -= fo->size;
       fo->offset = frame_offset;
@@ -565,7 +565,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
       if (block->name.size)
         fprint(context->code, "%s:\n", block->name.data);
 
-      foreach_ptr (MIRInstruction*, instruction, block->instructions) {
+      foreach_val (instruction, block->instructions) {
         if (instruction->opcode < MX64_START) {
           eprint("\n\n%31UNLOWERED INSTRUCTION:%m\n");
           print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);

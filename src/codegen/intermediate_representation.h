@@ -14,7 +14,7 @@
   (name)->type = t_void
 
 #define FOREACH_INSTRUCTION_N(context, function, block, instruction) \
-  foreach_ptr (IRFunction *, function, context->functions)           \
+    foreach_val(function, context->functions)           \
     list_foreach (IRBlock *, block, function->blocks)                \
       list_foreach (IRInstruction *, instruction, block->instructions)
 

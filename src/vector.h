@@ -26,28 +26,23 @@
   } while (0)
 
 /// Iterate over a vector by reference.
-#define foreach(type, element, vector) \
-  for (type *element = (vector).data; element < (vector).data + (vector).size; element++)
+#define foreach(element, vector) \
+  for (__typeof__(*(vector).data) *element = (vector).data; element < (vector).data + (vector).size; element++)
 
 /// Iterate over a vector of pointers by value.
-#define foreach_ptr(type, element, vector)                                                                  \
-  for (type *element##_ptr = (vector).data, *element = NULL;                                                \
-       element##_ptr < (vector).data + (vector).size && (element = *element##_ptr, 1); /* "=", not "=="! */ \
+#define foreach_val(element, vector)                                                                           \
+  for (__typeof__(*(vector).data) *element##_ptr = (vector).data, element = NULL;                              \
+       element##_ptr < (vector).data + (vector).size && (element = *element##_ptr, true); /* "=", not "=="! */ \
        element##_ptr++)
 
-/// Iterate over a vector by value.
-#define foreach_value(type, element, vector)                                                       \
-    for (type element, *element##_ptr = (vector).data;                                             \
-         element##_ptr < (vector).data + (vector).size ? (element = *element##_ptr, true) : false; \
-         element##_ptr++)
+#define foreach_rev(element, vector) \
+  if ((vector).size)                 \
+    for (__typeof__(*(vector).data) *element = (vector).data + (vector).size - 1; element >= (vector).data; --element)
 
-#define foreach_rev(type, element, vector) \
-  if ((vector).size)                       \
-    for (type *element = (vector).data + (vector).size - 1; element >= (vector).data; --element)
-#define foreach_ptr_rev(type, element, vector)                                                 \
-  if ((vector).size)                                                                           \
-    for (type *element##_ptr = (vector).data + ((vector).size - 1), *element = NULL;           \
-         element##_ptr >= (vector).data && (element = *element##_ptr, 1); /* "=", not "=="! */ \
+#define foreach_ptr_rev(element, vector)                                                                  \
+  if ((vector).size)                                                                                      \
+    for (__typeof__(*(vector).data) *element##_ptr = (vector).data + ((vector).size - 1), element = NULL; \
+         element##_ptr >= (vector).data && (element = *element##_ptr, true); /* "=", not "=="! */         \
          element##_ptr--)
 
 /// Iterate over each index and element of a vector.
@@ -80,10 +75,7 @@
 #define vector_pop(vector) ((vector).data[--(vector).size])
 
 /// Remove an element from a vector by index. This may change the order of elements in the vector.
-#define vector_remove_unordered(vector, index)             \
-  do {                                                     \
-    (vector).data[index] = (vector).data[--(vector).size]; \
-  } while (0)
+#define vector_remove_unordered(vector, index) ((void)((vector).data[index] = (vector).data[--(vector).size]))
 
 /// Remove an element from a vector. This may change the order of elements in the vector.
 #define vector_remove_element_unordered(vector, element)                               \
@@ -108,13 +100,18 @@
 #define vector_clear(vector) ((void) ((vector).size = 0))
 
 /// Get the last element of a vector.
-/// TODO: Convert ASSERT() into an expression and insert an ASSERT() here.
-#define vector_back(vector)             ((vector).data[(vector).size - 1])
 #define vector_back_or(vector, default) ((vector).size ? vector_back(vector) : (default))
+#define vector_back(vector) (*({                                       \
+    ASSERT((vector).size > 0, "vector_back() called on empty vector"); \
+    &((vector).data[(vector).size - 1]);                               \
+}))
 
 /// Get the first element of a vector.
-#define vector_front(vector)             ((vector).data[0])
 #define vector_front_or(vector, default) ((vector).size ? vector_front(vector) : (default))
+#define vector_front(vector) (*({                                       \
+    ASSERT((vector).size > 0, "vector_front() called on empty vector"); \
+    &((vector).data[0]);                                                \
+}))
 
 /// Insert an element into a vector at before the given index.
 #define vector_insert(vector, pos, element)                     \
@@ -164,28 +161,30 @@
     (to).size += (from).size;                                           \
   } while (0)
 
-NODISCARD static inline bool vector_contains_impl(void *data, size_t size, size_t stride, void *elem) {
-  for (size_t i = 0; i < size; i++)
-    if (memcmp((char *) data + i * stride, elem, stride) == 0)
-      return true;
-  return false;
-}
+/// Check if a vector contains an element.
+#define vector_contains(vector, element) ({              \
+    bool _found = false;                                 \
+    foreach (_el, (vector)) {                            \
+        if (memcmp(_el, &(element), sizeof *_el) == 0) { \
+            _found = true;                               \
+            break;                                       \
+        }                                                \
+    }                                                    \
+    _found;                                              \
+})
 
-#define vector_contains(vector, element) (vector_contains_impl((vector).data, (vector).size, sizeof *(vector).data, &(element)))
-
-#define vector_find_if(vector, out, index, ...) \
-  do {                                          \
-    size_t index = 0;                           \
-    for (; index < (vector).size; index++) {    \
-      if (__VA_ARGS__) {                        \
-        (out) = (vector).data + index;          \
-        break;                                  \
-      }                                         \
+/// Find an element in a vector by predicate. Returns
+/// a pointer to the element or NULL if not found.
+#define vector_find_if(element, vector, ...) ({ \
+    __typeof__(*(vector).data) *_ptr = NULL;    \
+    foreach (element, (vector)) {               \
+        if (__VA_ARGS__) {                      \
+            _ptr = element;                     \
+            break;                              \
+        }                                       \
     }                                           \
-    if (index == (vector).size) {               \
-      (out) = NULL;                             \
-    }                                           \
-  } while (0)
+    _ptr;                                       \
+})
 
 #define list_node(type) \
   struct {              \
@@ -199,15 +198,15 @@ NODISCARD static inline bool vector_contains_impl(void *data, size_t size, size_
     type *last;    \
   }
 
-#define list_delete(type, list) \
-  do {                          \
-    type *node = (list).first;  \
-    while (node) {              \
-      type *next = node->next;  \
-      free(node);               \
-      node = next;              \
-    }                           \
-  } while (0)
+#define list_delete(list)                                 \
+    do {                                                  \
+        __typeof__(*(list).first) *node = (list).first;   \
+        while (node) {                                    \
+            __typeof__(*(list).first) *next = node->next; \
+            free(node);                                   \
+            node = next;                                  \
+        }                                                 \
+    } while (0)
 
 #define list_push_back(list, element) \
   do {                                \

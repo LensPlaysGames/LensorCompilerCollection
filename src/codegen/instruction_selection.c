@@ -1053,7 +1053,7 @@ bool isel_does_pattern_match(ISelPattern pattern, MIRInstructionVector instructi
 typedef Vector(usz) ISelRegisterValues;
 
 static void mark_defining_uses(ISelRegisterValues *regs_seen, MIRBlock *block) {
-  foreach_ptr (MIRInstruction*, inst, block->instructions) {
+  foreach_val (inst, block->instructions) {
     FOREACH_MIR_OPERAND(inst, op) {
       if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START) {
         if (!vector_contains(*regs_seen, op->value.reg.value)) {
@@ -1098,7 +1098,7 @@ static void calculate_defining_uses_for_block(ISelRegisterValues *regs_seen, MIR
   // To follow control flow, we sometimes have to come back to a
   // block after reaching the exit, as some blocks have multiple
   // successors. We use recursion for this.
-  foreach_ptr(MIRBlock*, successor, block->successors) {
+  foreach_val (successor, block->successors) {
     // Copy registers seen.
     ISelRegisterValues regs_seen_copy = {0};
     vector_append(regs_seen_copy, *regs_seen);
@@ -1150,10 +1150,10 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
   // Instructions currently being expanded/dealt with.
   MIRInstructionVector instructions = {0};
 
-  foreach_ptr (MIRFunction*, f, mir) {
+  foreach_val (f, mir) {
     if (f->origin->is_extern) continue;
 
-    foreach_ptr (MIRBlock*, bb, f->blocks) {
+    foreach_val (bb, f->blocks) {
       vector_clear(instructions);
       // Instructions that will be output.
       MIRInstructionVector new_instructions = {0};
@@ -1177,7 +1177,7 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
       }
 
       bool matched = false;
-      foreach (ISelPattern, pattern, patterns) {
+      foreach (pattern, patterns) {
         if (isel_does_pattern_match(*pattern, instructions)) {
           matched = true;
 
@@ -1288,7 +1288,7 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
   ISelRegisterValues vregs_seen = {0};
   MIRBlockVector visited = {0};
   MIRBlockVector doubly_visited = {0};
-  foreach_ptr (MIRFunction*, f, mir) {
+  foreach_val (f, mir) {
     if (f->origin->is_extern) continue;
 
     MIRBlock *entry = vector_front(f->blocks);
@@ -1307,7 +1307,7 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
 
 // Delete ISelPatterns.
 void isel_patterns_delete(ISelPatterns *patterns) {
-  foreach (ISelPattern, pattern, *patterns) {
+  foreach (pattern, *patterns) {
     isel_env_delete(&pattern->local);
   }
   vector_delete(*patterns);
@@ -1337,7 +1337,7 @@ void isel_print_mir_operand(MIROperand *operand) {
 
 void isel_print_pattern(ISelPattern *pattern, OpcodeMnemonicFunction opcode_mnemonic) {
   print("\nmatch\n");
-  foreach_ptr (MIRInstruction *, inst, pattern->input) {
+  foreach_val (inst, pattern->input) {
     print("%s(", opcode_mnemonic(inst->opcode));
     FOREACH_MIR_OPERAND(inst, op) {
       isel_print_mir_operand(op);
@@ -1346,7 +1346,7 @@ void isel_print_pattern(ISelPattern *pattern, OpcodeMnemonicFunction opcode_mnem
     print(")\n");
   }
   print("emit {\n");
-  foreach_ptr (MIRInstruction *, inst, pattern->output) {
+  foreach_val (inst, pattern->output) {
     print("  %s(", opcode_mnemonic(inst->opcode));
     FOREACH_MIR_OPERAND(inst, op) {
       isel_print_mir_operand(op);
@@ -1358,7 +1358,7 @@ void isel_print_pattern(ISelPattern *pattern, OpcodeMnemonicFunction opcode_mnem
 }
 
 void isel_print_patterns(ISelPatterns *patterns, OpcodeMnemonicFunction opcode_mnemonic) {
-  foreach (ISelPattern, pattern, *patterns) {
+  foreach (pattern, *patterns) {
     isel_print_pattern(pattern, opcode_mnemonic);
   }
 }

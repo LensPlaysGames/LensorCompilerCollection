@@ -524,7 +524,7 @@ int main(int argc, char **argv) {
         vector_append(search_path, dir_sep);
         vector_append(search_path, import->module_name);
         usz module_path_length_without_extension = search_path.size;
-        foreach (span, extension, extensions_to_try) {
+        foreach (extension, extensions_to_try) {
           search_path.size = module_path_length_without_extension;
           vector_append(search_path, *extension);
           //print("Looking for module %S at %S\n", as_span(import->module_name), as_span(search_path));

@@ -35,7 +35,7 @@ CodegenContext *debug_context = NULL;
 typedef Vector(VReg) VRegVector;
 
 static bool vreg_vector_contains(VRegVector *vregs, usz vreg_value) {
-  foreach (VReg, v, *vregs) {
+  foreach (v, *vregs) {
     if (v->value == vreg_value)
       return true;
   }
@@ -166,7 +166,7 @@ static void collect_interferences_from_block
   // their defining use, as these are our "live values".
 
   /// Collect interferences for instructions in this block.
-  foreach_ptr_rev (MIRInstruction*, inst, b->instructions) {
+  foreach_ptr_rev (inst, b->instructions) {
 
     /// If the defining use of a virtual register is an operand of this
     /// instruction, remove it from vector of live vals.
@@ -223,10 +223,10 @@ static void collect_interferences_from_block
     }
     /// Make all reg operands interfere with each other.
     if (reg_operands.size > 1) {
-      foreach (MIROperandPlusLiveValIndex, A, reg_operands) {
+      foreach (A, reg_operands) {
         if (A->op->value.reg.defining_use || A->op->value.reg.value < MIR_ARCH_START) continue;
         // Set interference with all other reg operands
-        foreach (MIROperandPlusLiveValIndex, B, reg_operands) {
+        foreach (B, reg_operands) {
           if (B->op->value.reg.defining_use || B->op->value.reg.value < MIR_ARCH_START) continue;
           if (B->live_idx == A->live_idx) continue;
 #ifdef DEBUG_RA
@@ -238,8 +238,8 @@ static void collect_interferences_from_block
       }
     }
     /// Make all reg operands interfere with all clobbers of this instruction
-    foreach (MIROperandPlusLiveValIndex, A, reg_operands) {
-      foreach (MIROperandRegister, clobbered, inst->clobbers) {
+    foreach (A, reg_operands) {
+      foreach (clobbered, inst->clobbers) {
         // Get index of clobbered register.
         usz clobbered_idx = (usz)-1;
         foreach_index (i, *vregs) {
@@ -255,8 +255,8 @@ static void collect_interferences_from_block
       }
     }
     // Make all reg operands interfere with all currently live values
-    foreach (MIROperandPlusLiveValIndex, A, reg_operands) {
-      foreach (VReg, live_val, *live_vals) {
+    foreach (A, reg_operands) {
+      foreach (live_val, *live_vals) {
         DEBUG("--%V (%Z) is live\n", (usz)inst->reg, A->live_idx);
 
         if (inst->reg == live_val->value) {
@@ -309,10 +309,10 @@ static void collect_interferences_from_block
   }
 #endif
 
-  foreach_ptr (MIRBlock*, parent, b->predecessors) {
+  foreach_val (parent, b->predecessors) {
     // Copy live vals
     VRegVector live_vals_copy = {0};
-    foreach (VReg, lv, *live_vals)
+    foreach (lv, *live_vals)
       vector_push(live_vals_copy, *lv);
 
     collect_interferences_from_block(desc, parent, &live_vals_copy, vregs, visited, doubly_visited, G);
@@ -336,7 +336,7 @@ static void collect_interferences_for_function
 {
   // Collect all blocks that exit from the function.
   MIRBlockVector exits = {0};
-  foreach_ptr (MIRBlock*, b, function->blocks) {
+  foreach_val (b, function->blocks) {
     if (b->is_exit) vector_push(exits, b);
   }
 
@@ -355,7 +355,7 @@ static void collect_interferences_for_function
 
   // From each exit block (collected above), follow control flow to the
   // root of the function (entry block), or to a block already visited.
-  foreach_ptr (MIRBlock*, b, exits) {
+  foreach_val (b, exits) {
     vector_clear(live_vals);
     vector_clear(visited);
     vector_clear(doubly_visited);
@@ -486,7 +486,7 @@ void build_adjacency_lists(VRegVector *vregs, AdjacencyGraph *G) {
   /// Free old lists. This could be more efficient, but we’ve
   /// had bugs where we were trying to use out-of-date lists,
   /// so we’re keeping this for now.
-  foreach_ptr (AdjacencyList*, list, G->lists) {
+  foreach_val (list, G->lists) {
     if (list) vector_delete(list->adjacencies);
     free(list);
   }
@@ -523,7 +523,7 @@ void build_adjacency_lists(VRegVector *vregs, AdjacencyGraph *G) {
 void print_adjacency_lists(AdjacencyLists *array) {
   print("[RA]: Adjacency lists\n"
         "id       idx\n");
-  foreach_ptr (AdjacencyList*, list, *array) {
+  foreach_val (list, *array) {
     if (list->vreg.value < MIR_ARCH_START)
       printf("r%-5u ", (unsigned)list->vreg.value);
     else printf("v%-5u ", (unsigned)(list->vreg.value - MIR_ARCH_START));
@@ -739,7 +739,7 @@ NumberStack build_coloring_stack(const MachineDescription *desc, AdjacencyGraph 
       usz min_cost = (usz) -1; /// (!)
       usz node_to_spill = 0;
 
-      foreach_ptr (AdjacencyList*, list, G->lists) {
+      foreach_val (list, G->lists) {
         if (list->vreg.value < MIR_ARCH_START || list->color || list->allocated) continue;
 
         list->spill_cost = list->degree ? (list->spill_cost / list->degree) : 0;
@@ -765,14 +765,14 @@ static void color(
   NumberStack *stack,
   AdjacencyGraph *g
 ) {
-  foreach (usz, i, *stack) {
+  foreach (i, *stack) {
     AdjacencyList *list = g->lists.data[*i];
     if (list->vreg.value < MIR_ARCH_START || list->color) continue;
 
     /// Each bit that is set refers to register in register list that
     /// must not be assigned to this.
     usz register_interferences = list->regmask;// | desc->instruction_register_interference(list->instruction);
-    foreach (usz, adj, list->adjacencies) {
+    foreach (adj, list->adjacencies) {
       AdjacencyList *adjacent = g->lists.data[*adj];
       //register_interferences |= desc->instruction_register_interference(adjacent->instruction);
       if (adjacent->color) register_interferences |= (usz)1 << (adjacent->color - 1);
@@ -816,8 +816,8 @@ static void color(
 // Keep track of what registers are used in each function.
 void track_registers(MIRFunction *f) {
   ASSERT(f->origin, "MIRFunction origin required to be set in order for shoddy register tracking");
-  foreach_ptr (MIRBlock*, bb, f->blocks) {
-    foreach_ptr (MIRInstruction*, inst, bb->instructions) {
+  foreach_val (bb, f->blocks) {
+    foreach_val (inst, bb->instructions) {
       if (inst->reg < MIR_ARCH_START) f->origin->registers_in_use |= (usz)1 << inst->reg;
       FOREACH_MIR_OPERAND(inst, op) {
         if (op->kind == MIR_OP_REGISTER && op->value.reg.value < MIR_ARCH_START) {
@@ -855,8 +855,8 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
     r.value = desc->registers[i];
     vector_push(vregs, r);
   }
-  foreach_ptr (MIRBlock*, bb, f->blocks) {
-    foreach_ptr (MIRInstruction*, inst, bb->instructions) {
+  foreach_val (bb, f->blocks) {
+    foreach_val (inst, bb->instructions) {
       FOREACH_MIR_OPERAND(inst, op) {
         if (op->kind == MIR_OP_REGISTER && op->value.reg.value >= MIR_ARCH_START) {
           // Only push if vector does not already contain the value.
@@ -908,14 +908,14 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
 
   color(desc, &stack, &G);
 
-  foreach_ptr (AdjacencyList*, list, G.lists) {
+  foreach_val (list, G.lists) {
     VReg vreg = list->vreg;
     if (vreg.value < MIR_ARCH_START) continue;
 
     Register color = list->color;
 
-    foreach_ptr (MIRBlock*, bb, f->blocks) {
-      foreach_ptr (MIRInstruction*, inst, bb->instructions) {
+    foreach_val (bb, f->blocks) {
+      foreach_val (inst, bb->instructions) {
         if (inst->reg == vreg.value) inst->reg = color;
         FOREACH_MIR_OPERAND(inst, op) {
           if (op->kind == MIR_OP_REGISTER && op->value.reg.value == vreg.value) {
@@ -941,7 +941,7 @@ void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
   //if (optimise) codegen_optimise_blocks(f->context);
 
   /// Free allocated resources.
-  foreach_ptr (AdjacencyList*, list, G.lists) {
+  foreach_val (list, G.lists) {
     vector_delete(list->adjacencies);
     free(list);
   }

@@ -325,15 +325,15 @@ static bool needs_register(IRInstruction *instruction) {
 /// things.
 static void remove_inlined(MIRFunction *function) {
   MIRInstructionVector instructions_to_remove = {0};
-  foreach_ptr (MIRBlock*, block, function->blocks) {
+  foreach_val (block, function->blocks) {
     // Gather immediate instructions to remove
     vector_clear(instructions_to_remove);
-    foreach_ptr (MIRInstruction*, instruction, block->instructions) {
+    foreach_val (instruction, block->instructions) {
       if (instruction->opcode != MIR_IMMEDIATE && instruction->opcode != MIR_FUNC_REF) continue;
       vector_push(instructions_to_remove, instruction);
     }
     // Remove gathered instructions
-    foreach_ptr(MIRInstruction*, to_remove, instructions_to_remove) {
+    foreach_val (to_remove, instructions_to_remove) {
       vector_remove_element(block->instructions, to_remove);
     }
   }
@@ -344,9 +344,9 @@ static void remove_inlined(MIRFunction *function) {
 static void phi2copy(MIRFunction *function) {
   IRBlock *last_block = NULL;
   MIRInstructionVector instructions_to_remove = {0};
-  foreach_ptr (MIRBlock*, block, function->blocks) {
+  foreach_val (block, function->blocks) {
     vector_clear(instructions_to_remove);
-    foreach_ptr (MIRInstruction*, instruction, block->instructions) {
+    foreach_val (instruction, block->instructions) {
       if (instruction->opcode != MIR_PHI) continue;
       IRInstruction *phi = instruction->origin;
       ASSERT(phi->parent_block != last_block,
@@ -364,7 +364,7 @@ static void phi2copy(MIRFunction *function) {
       /// For each of the PHI arguments, we basically insert a copy.
       /// Where we insert it depends on some complicated factors
       /// that have to do with control flow.
-      foreach_ptr (IRPhiArgument *, arg, phi->phi_args) {
+      foreach_val (arg, phi->phi_args) {
         STATIC_ASSERT(IR_COUNT == 38, "Handle all branch types");
         IRInstruction *branch = arg->block->instructions.last;
         switch (branch->kind) {
@@ -439,7 +439,7 @@ static void phi2copy(MIRFunction *function) {
         vector_push(instructions_to_remove, instruction);
       }
 
-      foreach_ptr(MIRInstruction*, to_remove, instructions_to_remove) {
+      foreach_val (to_remove, instructions_to_remove) {
         vector_remove_element(block->instructions, to_remove);
       }
     }
@@ -450,14 +450,14 @@ static void phi2copy(MIRFunction *function) {
 MIRFunctionVector mir_from_ir(CodegenContext *context) {
   MIRFunctionVector out = {0};
   // Forward function references require this.
-  foreach_ptr (IRFunction*, f, context->functions) {
+  foreach_val (f, context->functions) {
     MIRFunction *function = mir_function(f);
     // Forward block references require this.
     list_foreach (IRBlock*, bb, function->origin->blocks)
       (void)mir_block(function, bb);
     vector_push(out, function);
   }
-  foreach_ptr (MIRFunction*, function, out) {
+  foreach_val (function, out) {
     // NOTE for devs: function->origin == IRFunction*
     if (function->origin->is_extern) continue;
 
@@ -467,7 +467,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
     // that reordering optimisations may truly happen to any block.
     vector_front(function->blocks)->is_entry = true;
 
-    foreach_ptr (MIRBlock*, mir_bb, function->blocks) {
+    foreach_val (mir_bb, function->blocks) {
       IRBlock *bb = mir_bb->origin;
       ASSERT(bb, "Origin of general MIR block not set (what gives?)");
       list_foreach (IRInstruction*, inst, bb->instructions) {
@@ -509,7 +509,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           else mir_add_op(mir, mir_op_function(inst->call.callee_function->machine_func));
 
           // Call arguments
-          foreach_ptr (IRInstruction*, arg, inst->call.arguments) {
+          foreach_val (arg, inst->call.arguments) {
             mir_add_op(mir, mir_op_reference_ir(function, arg));
           }
 
@@ -818,7 +818,7 @@ void print_mir_instruction_with_function_with_mnemonic(MIRFunction *function, MI
   }
   if (mir->clobbers.size) {
     print(" clobbers ");
-    foreach (MIROperandRegister, clobbered, mir->clobbers) {
+    foreach (clobbered, mir->clobbers) {
       print("%V", (usz)clobbered->value);
       if ((usz)(clobbered - mir->clobbers.data) < mir->clobbers.size - 1) print("%37, ");
     }
@@ -848,14 +848,14 @@ void print_mir_block_with_mnemonic(MIRBlock *block, OpcodeMnemonicFunction opcod
   if (block->is_entry) print("ENTRY");
   if (block->is_exit) print("EXITS");
   print(" predecessors: { ");
-  foreach_ptr (MIRBlock*, predecessor, block->predecessors)
+  foreach_val (predecessor, block->predecessors)
     print("%S,", predecessor->name);
   print("\b }");
   print(" successors: { ");
-  foreach_ptr (MIRBlock*, succecessor, block->successors)
+  foreach_val (succecessor, block->successors)
     print("%S,", succecessor->name);
   print("\b }\n");
-  foreach_ptr (MIRInstruction*, inst, block->instructions)
+  foreach_val (inst, block->instructions)
     print_mir_instruction_with_mnemonic(inst, opcode_mnemonic);
 }
 void print_mir_block(MIRBlock *block) {
@@ -871,7 +871,7 @@ void print_mir_function_with_mnemonic(MIRFunction *function, OpcodeMnemonicFunct
     }
   }
   print("%S {\n", function->name);
-  foreach_ptr (MIRBlock*, block, function->blocks) {
+  foreach_val (block, function->blocks) {
     print_mir_block_with_mnemonic(block, opcode_mnemonic);
   }
   print("}\n");
@@ -925,8 +925,8 @@ MIRInstruction *mir_find_by_vreg(MIRFunction *f, size_t reg) {
   ASSERT(reg >= (size_t)MIR_ARCH_START, "Invalid MIR virtual register");
 
   // Bad linear lookup == sad times
-  foreach_ptr (MIRBlock*, block, f->blocks)
-    foreach_ptr (MIRInstruction*, inst, block->instructions)
+  foreach_val (block, f->blocks)
+      foreach_val (inst, block->instructions)
       if (inst->reg == reg) return inst;
 
   ICE("Could not find machine instruction in function \"%S\" with register %Z\n", f->name, reg);

@@ -24,7 +24,7 @@ void codegen_emit_ir_backend(CodegenContext *context) {
   disable_colours();
 
   ir_set_ids(context);
-  foreach_ptr (IRFunction*, f, context->functions) {
+  foreach_val(IRFunction*, f, context->functions) {
     ir_print_defun(context->code, f);
 
     /// Function body.
@@ -51,7 +51,7 @@ void codegen_emit_ir_backend(CodegenContext *context) {
 
             fputc('(', context->code);
             bool first = true;
-            foreach_ptr (IRInstruction*, arg, instruction->call.arguments) {
+            foreach_val(IRInstruction*, arg, instruction->call.arguments) {
               if (!first) fprint(context->code, ", ");
               else first = false;
               fprint(context->code, "%%%u", arg->id);
@@ -87,7 +87,7 @@ void codegen_emit_ir_backend(CodegenContext *context) {
           case IR_PHI: {
             fprint(context->code, "phi ");
             bool first = true;
-            foreach_ptr (IRPhiArgument*, arg, instruction->phi_args) {
+            foreach_val(IRPhiArgument*, arg, instruction->phi_args) {
               if (first) { first = false; }
               else { fprint(context->code, ", "); }
               fprint(context->code, "[bb%zu : %%%u]",

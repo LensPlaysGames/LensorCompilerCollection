@@ -48,7 +48,7 @@ static BlockVector collect_reachable_blocks(IRBlock *block, IRBlock *ignore) {
 }
 
 void free_dominator_info(DominatorInfo* info) {
-  foreach (DomTreeNode, n, info->nodes) {
+  foreach (n, info->nodes) {
     vector_delete(n->dominators);
     vector_delete(n->children);
   }
@@ -79,13 +79,13 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
     }
 
     /// Remove unreachable blocks and free vectors.
-    foreach_ptr (IRBlock*, b, blocks_to_remove) ir_remove_and_free_block(b);
+    foreach_val (b, blocks_to_remove) ir_remove_and_free_block(b);
     vector_delete(reachable);
     vector_delete(blocks_to_remove);
   }
 
   /// Free old dominator tree.
-  foreach (DomTreeNode, n, info->nodes) {
+  foreach (n, info->nodes) {
     vector_delete(n->dominators);
     vector_delete(n->children);
   }
@@ -116,7 +116,7 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
     BlockVector still_reachable = collect_reachable_blocks(f->blocks.first, dominator->block);
 
     /// Find all blocks that are no longer reachable.
-    foreach (DomTreeNode, d, info->nodes) {
+    foreach (d, info->nodes) {
       if (!vector_contains(still_reachable, d->block)) {
         /// Add the block to the dominators of the current node.
         vector_push(d->dominators, dominator);
@@ -139,12 +139,12 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
   /// For each node N, remove from N’s children any nodes that are
   /// also strictly dominated by another child of N.
   Vector(DomTreeNode*) to_remove = {0};
-  foreach (DomTreeNode, n, info->nodes) {
+  foreach (n, info->nodes) {
     vector_clear(to_remove);
 
     /// For each child of N, check if it is strictly dominated by another child.
-    foreach_ptr (DomTreeNode*, c, n->children) {
-      foreach_ptr (DomTreeNode*, c2, n->children) {
+    foreach_val (c, n->children) {
+      foreach_val (c2, n->children) {
         if (strictly_dominates(c, c2)) {
           vector_push(to_remove, c2);
           break;
@@ -153,7 +153,7 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
     }
 
     /// Remove the nodes.
-    foreach_ptr (DomTreeNode*, c, to_remove) {
+    foreach_val (c, to_remove) {
       vector_remove_element(n->children, c);
     }
   }

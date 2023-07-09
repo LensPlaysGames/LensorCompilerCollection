@@ -575,7 +575,7 @@ static void lower(CodegenContext *context) {
           } else ICE("SysV: Unhandled register class of parameter %d", (int)class);
         }
 
-        foreach_rev (usz, i, sixteen_bytes_that_need_split) {
+        foreach_rev (i, sixteen_bytes_that_need_split) {
           IRInstruction *argument = instruction->call.arguments.data[*i];
 
           // Load first eightbyte of the parameter.
@@ -673,7 +673,7 @@ static void lower(CodegenContext *context) {
         usz idx = 0;
 
         // Lower aggregates in possible-register arguments by allocating a copy of them on the stack.
-        foreach_ptr (IRInstruction *, argument, instruction->call.arguments) {
+        foreach_val (argument, instruction->call.arguments) {
           if (idx >= argument_register_count) break;
           Type *type = type_canonical(argument->type);
           if (type_sizeof(type) > 8) {
@@ -690,7 +690,7 @@ static void lower(CodegenContext *context) {
         // Lower all arguments not able to go in a register by allocating a copy of them on the stack.
         if (argcount >= argument_register_count) {
           usz i = instruction->call.arguments.size - 1;
-          foreach_ptr_rev (IRInstruction *, argument, instruction->call.arguments) {
+          foreach_ptr_rev (argument, instruction->call.arguments) {
             if (i < argument_register_count) break;
             if (type_sizeof(argument->type) > 8)
               instruction->call.arguments.data[i] = alloca_copy_of(context, argument, instruction);
@@ -737,7 +737,7 @@ static void lower(CodegenContext *context) {
             offset->imm += 16;
 
             usz i = instruction->parent_block->function->type->function.parameters.size - 1;
-            foreach_rev (Parameter, param, instruction->parent_block->function->type->function.parameters) {
+            foreach_rev (param, instruction->parent_block->function->type->function.parameters) {
               if (i <= parameter_index) break;
               offset->imm += type_sizeof(param->type);
               --i;
@@ -805,7 +805,7 @@ static void lower(CodegenContext *context) {
           offset->imm += 32 + 16; // 32 = shadow stack, 16 = stack frame
 
           usz i = instruction->parent_block->function->type->function.parameters.size - 1;
-          foreach_rev (Parameter, param, instruction->parent_block->function->type->function.parameters) {
+          foreach_rev (param, instruction->parent_block->function->type->function.parameters) {
             if (i <= parameter_index) break;
             offset->imm += 8;
             --i;
@@ -848,7 +848,7 @@ static size_t interfering_regs(IRInstruction *instruction) {
   // way of doing this, really.
   // Divisor of div/mod are not allowed to go in RAX/RDX; that's where
   // the dividend must go.
-  foreach_ptr (IRInstruction*, inst, instruction->users) {
+  foreach_val (inst, instruction->users) {
     if ((inst->kind == IR_DIV || inst->kind == IR_MOD) && inst->rhs == instruction) {
       mask |= ((usz)1 << REG_RAX);
       mask |= ((usz)1 << REG_RDX);
@@ -971,11 +971,11 @@ void codegen_emit_x86_64(CodegenContext *context) {
   /// Emit static variables.
   /// TODO: interning.
   bool have_data_section = false;
-  foreach_ptr (IRStaticVariable*, var, context->static_vars) {
+  foreach_val (var, context->static_vars) {
     /// Do not emit unused variables.
     if (optimise) {
       bool used = false;
-      foreach_ptr (IRInstruction*, ref, var->references) {
+      foreach_val (ref, var->references) {
         if (ref->users.size) {
           used = true;
           break;
@@ -1109,7 +1109,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   // Mangle function names, and assign block labels.
   usz block_cnt = 0;
-  foreach_ptr (IRFunction*, function, context->functions) {
+  foreach_val (function, context->functions) {
     mangle_function_name(function);
 
     list_foreach (IRBlock *, block, function->blocks) {
@@ -1172,14 +1172,14 @@ void codegen_emit_x86_64(CodegenContext *context) {
   if (debug_ir) {
     print("================ ISel ================\n"
           "Before:\n");
-    foreach_ptr (MIRFunction*, f, machine_instructions_from_ir)
+    foreach_val (f, machine_instructions_from_ir)
       print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
   }
 
   // ISel in code...
-  foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
+  foreach_val (function, machine_instructions_from_ir) {
     if (!function->origin || function->origin->is_extern) continue;
-    foreach_ptr (MIRBlock*, block, function->blocks) {
+    foreach_val (block, function->blocks) {
       MIRInstructionVector instructions_to_remove = {0};
       foreach_index (i, block->instructions) {
         MIRInstruction* instruction = block->instructions.data[i];
@@ -1228,7 +1228,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         }
       } // foreach (MIRInstruction)
 
-      foreach_ptr (MIRInstruction*, instruction, instructions_to_remove) {
+      foreach_val (instruction, instructions_to_remove) {
         mir_remove_instruction(instruction);
       }
       vector_delete(instructions_to_remove);
@@ -1241,7 +1241,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   if (debug_ir) {
     print("After:\n");
-    foreach_ptr (MIRFunction*, f, machine_instructions_from_ir)
+    foreach_val (f, machine_instructions_from_ir)
       print_mir_function_with_mnemonic(f, mir_x86_64_opcode_mnemonic);
   }
 
@@ -1251,7 +1251,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     print("================ RA ================\n");
 
   // RA -- Register Allocation
-  foreach_ptr (MIRFunction*, f, machine_instructions_from_ir) {
+  foreach_val (f, machine_instructions_from_ir) {
     allocate_registers(f, &desc);
   }
 
@@ -1260,12 +1260,12 @@ void codegen_emit_x86_64(CodegenContext *context) {
   /// Lowering of MIR_CALL, among other things (caller-saved registers)
   /// Remove register to register moves when value and size are equal.
   /// Saving/restoration of callee-saved registers used in function.
-  foreach_ptr (MIRFunction*, function, machine_instructions_from_ir) {
+  foreach_val (function, machine_instructions_from_ir) {
     if (!function->origin || function->origin->is_extern) continue;
 
     // Calculate stack offsets of frame objects
     isz offset = 0;
-    foreach (MIRFrameObject, fo, function->frame_objects) {
+    foreach (fo, function->frame_objects) {
       offset -= fo->size;
       fo->offset = offset;
     }
@@ -1571,7 +1571,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
       } // foreach (MIRInstruction*)
 
-      foreach_ptr (MIRInstruction*, instruction, instructions_to_remove) {
+      foreach_val (instruction, instructions_to_remove) {
         mir_remove_instruction(instruction);
       }
       vector_delete(instructions_to_remove);
