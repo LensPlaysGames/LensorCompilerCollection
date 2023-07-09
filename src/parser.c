@@ -1586,6 +1586,7 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
       sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, location, as_span(ident));
       funcref->funcref.resolved = sym;
+      funcref->type = type;
       return funcref;
     }
 
