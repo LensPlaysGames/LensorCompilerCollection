@@ -89,7 +89,7 @@ uint64_t serialise_type(string_buffer *out, Type *type, TypeCache *cache) {
     // then update the dummy value with the real one.
     uint64_t dummy_value = (uint64_t)0xdeadbeeff00dcafeULL;
     usz type_offset_offset = out->size;
-    write_bytes(out, (const char *)dummy_value, sizeof(dummy_value));
+    write_bytes(out, (const char *)&dummy_value, sizeof(dummy_value));
 
     usz type_offset = serialise_type(out, type->reference.to, cache);
     uint64_t *type_offset_offset_ptr = (uint64_t *)(out->data + type_offset_offset);
@@ -100,7 +100,7 @@ uint64_t serialise_type(string_buffer *out, Type *type, TypeCache *cache) {
     // Just like references
     uint64_t dummy_value = (uint64_t)0xdeadbeeff00dcafeULL;
     usz type_offset_offset = out->size;
-    write_bytes(out, (const char *)dummy_value, sizeof(dummy_value));
+    write_bytes(out, (const char *)&dummy_value, sizeof(dummy_value));
     usz type_offset = serialise_type(out, type->pointer.to, cache);
     uint64_t *type_offset_offset_ptr = (uint64_t *)(out->data + type_offset_offset);
     *type_offset_offset_ptr = type_offset;
