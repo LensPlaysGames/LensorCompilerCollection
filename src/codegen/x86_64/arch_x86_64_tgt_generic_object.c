@@ -2161,6 +2161,10 @@ static void mcode_none(CodegenContext *context, MIROpcodex86_64 inst) {
     mcode_2(context->object, rexw, op);
   } break;
 
+  case MX64_SYSCALL: {
+    mcode_2(context->object, 0x0F, 0x05);
+  } break;
+
   default:
     ICE("ERROR: mcode_none(): Unsupported instruction %d (%s)", inst, mir_x86_64_opcode_mnemonic(inst));
   }
@@ -2679,6 +2683,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
           }
         } break;
 
+        case MX64_SYSCALL: FALLTHROUGH;
         case MX64_CWD: FALLTHROUGH;
         case MX64_CDQ: FALLTHROUGH;
         case MX64_CQO: {

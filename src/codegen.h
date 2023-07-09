@@ -59,6 +59,10 @@ struct CodegenContext {
   CodegenTarget target;
   CodegenCallingConvention call_convention;
 
+  /// Whether there was an error during codegen.
+  /// TODO: Move target information up to Sema. Keep this here regardless tho.
+  bool has_err;
+
   /// FFI type sizes in BITS (!)
   struct {
     u8 cchar_size;

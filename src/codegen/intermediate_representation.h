@@ -55,6 +55,7 @@ typedef struct IRCall {
     IRInstruction *callee_instruction;
     IRFunction *callee_function;
   };
+  enum IntrinsicKind intrinsic; /// Only used by intrinsic calls.
   bool is_indirect : 1;
   bool tail_call : 1;
 } IRCall;
@@ -395,5 +396,12 @@ IRInstruction *ir_get_literal_string(CodegenContext *context, usz string_index);
 
 /// Get the function type of a call.
 Type* ir_call_get_callee_type(IRInstruction* inst);
+
+/// Create an intrinsic instruction.
+///
+/// Note: Prefer to lower intrinsics to other IR instructions. This
+/// is only for instructions that need to be lowered to special ASM
+/// instructions or depend on late compile-time constants.
+IRInstruction *ir_intrinsic(CodegenContext *context, Type *t, enum IntrinsicKind intrinsic);
 
 #endif /* INTERMEDIATE_REPRESENTATION_H */

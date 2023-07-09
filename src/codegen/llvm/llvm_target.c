@@ -125,7 +125,7 @@ static bool is_noop_bitcast(IRInstruction *inst) {
 /// values, whereas LLVM does not; furthermore, we it also considers
 /// immediates values, whereas LLVM always inlines them.
 static bool llvm_is_numbered_value(IRInstruction *inst) {
-    STATIC_ASSERT(IR_COUNT == 38, "Handle all IR instructions");
+    STATIC_ASSERT(IR_COUNT == 39, "Handle all IR instructions");
     switch (inst->kind) {
         case IR_COUNT: break;
         case IR_IMMEDIATE:   /// Inlined.
@@ -184,6 +184,16 @@ static bool llvm_is_numbered_value(IRInstruction *inst) {
         case IR_CALL:
             return !type_equals(ir_call_get_callee_type(inst)->function.return_type, t_void);
 
+        case IR_INTRINSIC: {
+            STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics");
+            switch (inst->call.intrinsic) {
+                case INTRINSIC_COUNT: UNREACHABLE();
+                case INTRINSIC_BUILTIN_SYSCALL: return true;
+            }
+
+            UNREACHABLE();
+        }
+
         /// If we encounter this one, then, er, idk, scream violently I guess.
         case IR_REGISTER: ICE("LLVM backend cannot emit IR_REGISTER instructions");
     }
@@ -220,7 +230,7 @@ void emit_string_data(LLVMContext *ctx, span s, bool print_type) {
 /// operands of instructions.
 static void emit_value(LLVMContext *ctx, IRInstruction *value, bool print_type) {
     string_buffer *out = &ctx->out;
-    STATIC_ASSERT(IR_COUNT == 38, "Handle all IR instructions");
+    STATIC_ASSERT(IR_COUNT == 39, "Handle all IR instructions");
 
     /// Emit the type if requested.
     if (print_type) {
@@ -283,6 +293,19 @@ static void emit_value(LLVMContext *ctx, IRInstruction *value, bool print_type) 
             if (value->index == NO_INDEX) emit_value(ctx, value->operand, false);
             else format_to(out, "%%%u", value->index);
             return;
+
+        case IR_INTRINSIC: {
+            STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics");
+            switch (value->call.intrinsic) {
+                case INTRINSIC_COUNT: UNREACHABLE();
+                case INTRINSIC_BUILTIN_SYSCALL:
+                    format_to(out, "%%%u", value->index);
+                    return;
+            }
+
+            UNREACHABLE();
+        }
+
 
         /// These all have values, so emit their indices.
         case IR_CALL:
@@ -412,7 +435,7 @@ static void emit_pointer_add(
 /// instructions in other places, see `emit_value`.
 static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
     string_buffer *out = &ctx->out;
-    STATIC_ASSERT(IR_COUNT == 38, "Handle all IR instructions");
+    STATIC_ASSERT(IR_COUNT == 39, "Handle all IR instructions");
     switch (inst->kind) {
         case IR_COUNT: UNREACHABLE();
 
@@ -428,6 +451,43 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
 
         case IR_REGISTER:
             ICE("LLVM backend cannot emit IR_REGISTER instructions");
+
+        case IR_INTRINSIC: {
+            STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics");
+            switch (inst->call.intrinsic) {
+                case INTRINSIC_COUNT: UNREACHABLE();
+
+                /// We need to emit inline assembly for this.
+                case INTRINSIC_BUILTIN_SYSCALL: {
+                    emit_instruction_index(ctx, inst);
+                    format_to(out, "call i64 asm sideeffect \"");
+                    if (inst->call.arguments.size >= 5) format_to(out, "movq $0, %%r10\\0A");
+                    if (inst->call.arguments.size >= 6) format_to(out, "movq $1, %%r8\\0A");
+                    if (inst->call.arguments.size >= 7) format_to(out, "movq $2, %%r9\\0A");
+                    format_to(out, "syscall\\0A\", \"={ax},{ax}");
+                    if (inst->call.arguments.size >= 2) format_to(out, ",{di}");
+                    if (inst->call.arguments.size >= 3) format_to(out, ",{si}");
+                    if (inst->call.arguments.size >= 4) format_to(out, ",{dx}");
+                    if (inst->call.arguments.size >= 5) format_to(out, ",~{r10}");
+                    if (inst->call.arguments.size >= 6) format_to(out, ",~{r8}");
+                    if (inst->call.arguments.size >= 7) format_to(out, ",~{r9}");
+                    for (usz i = 5; i <= inst->call.arguments.size; i++) format_to(out, ",r");
+                    format_to(out, ",~{memory},~{dirflag},~{fpsr},~{flags}\"(");
+
+                    bool first = true;
+                    foreach_val (arg, inst->call.arguments) {
+                        if (!first) format_to(out, ", ");
+                        else first = false;
+                        emit_value(ctx, arg, true);
+                    }
+
+                    format_to(out, ")\n");
+                    return;
+                }
+            }
+
+            UNREACHABLE();
+        }
 
         case IR_CALL: {
             emit_instruction_index(ctx, inst);

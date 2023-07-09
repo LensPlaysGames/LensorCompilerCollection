@@ -11,7 +11,7 @@
 #include <utils.h>
 
 const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {
-  STATIC_ASSERT(MX64_COUNT == 29, "Exhaustive handling of x86_64 opcodes (string conversion)");
+  STATIC_ASSERT(MX64_COUNT == 30, "Exhaustive handling of x86_64 opcodes (string conversion)");
   //ASSERT(opcode >= MIR_ARCH_START && opcode < MX64_END, "Opcode is not x86_64 opcode");
   switch ((MIROpcodex86_64)opcode) {
   case MX64_START: return "!start";
@@ -36,6 +36,7 @@ const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {
   case MX64_PUSH: return "push";
   case MX64_POP: return "pop";
   case MX64_CALL: return "call";
+  case MX64_SYSCALL: return "syscall";
   case MX64_JMP: return "jmp";
   case MX64_RET: return "ret";
   case MX64_JCC: return "jcc";
@@ -52,7 +53,7 @@ const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {
 
 static MIROpcodex86_64 gmir_binop_to_x64(MIROpcodeCommon opcode) {
   DBGASSERT(opcode < MIR_COUNT, "Argument is meant to be a general MIR instruction opcode.");
-  STATIC_ASSERT(MIR_COUNT == 38, "Exhaustive handling of binary operator machine instruction opcodes for x86_64 backend");
+  STATIC_ASSERT(MIR_COUNT == 39, "Exhaustive handling of binary operator machine instruction opcodes for x86_64 backend");
   switch (opcode) {
   case MIR_ADD: return MX64_ADD;
   case MIR_SUB: return MX64_SUB;
@@ -109,7 +110,7 @@ static void divmod(CodegenContext *context, IRInstruction *inst) {
 */
 
 static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
-  STATIC_ASSERT(IR_COUNT == 38, "Handle all IR instructions");
+  STATIC_ASSERT(IR_COUNT == 39, "Handle all IR instructions");
 
   if (annotate_code) {
     // TODO: Base comment syntax on dialect or smth.

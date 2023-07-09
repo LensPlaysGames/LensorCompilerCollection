@@ -34,6 +34,7 @@
   X(POP)                                        \
   /* Control flow */                            \
   X(CALL)                                       \
+  X(SYSCALL)                                    \
   X(JMP)                                        \
   X(RET)                                        \
   X(JCC)                                        \

@@ -114,7 +114,7 @@ typedef enum Clobbers {
 } Clobbers;
 
 Clobbers does_clobber(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 38, "Exhaustive handling of IR instruction types that correspond to two-address instructions in x86_64.");
+  STATIC_ASSERT(IR_COUNT == 39, "Exhaustive handling of IR instruction types that correspond to two-address instructions in x86_64.");
   switch (instruction->kind) {
   case IR_ADD:
   case IR_DIV:
@@ -1162,7 +1162,6 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   MIRFunctionVector machine_instructions_from_ir = mir_from_ir(context);
 
-
   // TODO: Either embed x86_64 isel or somehow make this path knowable (i.e. via install).
   const char isel_filepath[] = "src/codegen/x86_64/arch_x86_64.isel";
   ISelPatterns patterns =  isel_parse_file(isel_filepath);
@@ -1224,6 +1223,63 @@ void codegen_emit_x86_64(CodegenContext *context) {
           mir_add_op(and, mir_op_reference(instruction));
           mir_insert_instruction_with_reg(instruction->block, and, i++, instruction->reg);
         } break; // case MIR_TRUNCATE
+
+        /// Handle low-level intrinsics. The first operand
+        /// is the intrinsic kind.
+        case MIR_INTRINSIC: {
+          MIROperand *kind = mir_get_op(instruction, 0);
+          ASSERT(kind->kind == MIR_OP_IMMEDIATE, "Intrinsic kind must be an immediate");
+          switch (kind->value.imm) {
+            case INTRINSIC_COUNT: ICE("Unlowered intrinsic %d in codegen", kind->value.imm);
+
+            /// For syscalls, just emit a bunch of moves and the syscall.
+            case INTRINSIC_BUILTIN_SYSCALL: {
+              ASSERT(context->call_convention == CG_CALL_CONV_SYSV);
+              ASSERT(instruction->operand_count <= 7);
+
+              /// Syscall argument registers are slightly different from
+              /// the regular C calling convention. Note: The syscall number
+              /// is treated as the first argument by us.
+              static enum Registers_x86_64 syscall_arg_regs[7] = {
+                REG_RAX, REG_RDI, REG_RSI, REG_RDX, REG_R10, REG_R8, REG_R9
+              };
+
+              enum Registers_x86_64* arg_regs = syscall_arg_regs;
+              bool first = true;
+              FOREACH_MIR_OPERAND (instruction, op) {
+                /// Don’t emit the intrinsic kind.
+                if (first) {
+                  first = false;
+                  continue;
+                }
+
+                MIRInstruction *mov = mir_makenew(MIR_COPY);
+                mir_add_op(mov, *op);
+                mir_insert_instruction_with_reg(instruction->block, mov, i++, *arg_regs++);
+              }
+
+              /// Insert syscall.
+              MIRInstruction *sys = mir_makenew(MX64_SYSCALL);
+              mir_add_op(sys, mir_op_register(REG_RAX, r64, true));
+              mir_insert_instruction_with_reg(instruction->block, sys, i++, REG_RAX);
+
+              /// Syscalls clobber rcx as well as r8-r11.
+              static enum Registers_x86_64 syscall_clobbers[5] = {
+                REG_RCX, REG_R8, REG_R9, REG_R10, REG_R11
+              };
+
+              MIROperandRegister clobbered = {0};
+              clobbered.size = r64;
+              for (usz r = 0; r < sizeof syscall_clobbers / sizeof *syscall_clobbers; r++) {
+                clobbered.value = syscall_clobbers[r];
+                vector_push(sys->clobbers, clobbered);
+              }
+
+              /// Yeet intrinsic call.
+              vector_push(instructions_to_remove, instruction);
+            } break;
+          }
+        } break; // case MIR_INTRINSIC
 
         }
       } // foreach (MIRInstruction)

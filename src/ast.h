@@ -23,6 +23,7 @@ enum NodeKind {
   NODE_UNARY,
   NODE_LITERAL,
   NODE_FUNCTION_REFERENCE,
+  NODE_INTRINSIC_CALL,
   NODE_MODULE_REFERENCE,
   NODE_VARIABLE_REFERENCE,
   NODE_STRUCTURE_DECLARATION,
@@ -134,6 +135,12 @@ enum SymbolKind {
   SYM_FUNCTION,
   SYM_TYPE,
   SYM_COUNT
+};
+
+/// Intrinsic functions.
+enum IntrinsicKind {
+    INTRINSIC_BUILTIN_SYSCALL,
+    INTRINSIC_COUNT,
 };
 
 /// ===========================================================================
@@ -252,6 +259,7 @@ typedef struct NodeBlock {
 typedef struct NodeCall {
   Node *callee;
   Nodes arguments;
+  enum IntrinsicKind intrinsic; /// Only used by intrinsic calls.
 } NodeCall;
 
 /// Typecast.

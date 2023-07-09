@@ -110,6 +110,7 @@ enum ComparisonType {
 #define ALL_IR_INSTRUCTION_TYPES(F)                              \
   F(IMMEDIATE)                                                   \
   F(CALL)                                                        \
+  F(INTRINSIC)                                                   \
   F(LOAD)                                                        \
                                                                  \
   F(RETURN)                                                      \

@@ -753,6 +753,79 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
   UNREACHABLE();
 }
 
+/// Check if a call is an intrinsic.
+///
+/// \param callee The callee to check.
+/// \return The intrinsic number if it is an intrinsic, or I_BUILTIN_COUNT otherwise.
+NODISCARD static enum IntrinsicKind intrinsic_kind(Node *callee) {
+    STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics in sema");
+    if (callee->kind != NODE_FUNCTION_REFERENCE) return INTRINSIC_COUNT;
+    if (string_eq(callee->funcref.name, literal_span("__builtin_syscall"))) return INTRINSIC_BUILTIN_SYSCALL;
+    return INTRINSIC_COUNT;
+}
+
+/// This is how we handle intrinsics:
+///
+/// There is a `NODE_INTRINSIC_CALL` AST node that is only generated here; it
+/// is just like a call expression, but the ‘callee’ is an intrinsic and stored
+/// as an id.
+///
+/// That node is lowered during IR generation to either IR instructions or
+/// an `IR_INTRINSIC` instruction. The operands are the ‘call arguments’ and
+/// are stored just like the arguments to a call instruction; the intrinsic
+/// id is stored in a separate member.
+///
+/// Any `IR_INTRINSIC` instructions are lowered either to other MIR instructions
+/// or to a `MIR_INTRINSIC` instruction whose first operand is the intrinsic id
+/// (e.g. `INTRINSIC_BUILTIN_SYSCALL`) and whose other operands are the operands
+/// of the intrinsic.
+///
+/// Any `MIR_INTRINSIC` instruction are lowered either via the ISel table or
+/// manually in the backend.
+NODISCARD static bool typecheck_intrinsic(AST *ast, Node *expr) {
+    ASSERT(expr->kind = NODE_CALL);
+    ASSERT(expr->call.callee->kind == NODE_FUNCTION_REFERENCE);
+
+    STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics in sema");
+    switch (expr->call.intrinsic) {
+        case INTRINSIC_COUNT: UNREACHABLE();
+
+        /// This has 1-7 integer-sized arguments and returns an integer.
+        case INTRINSIC_BUILTIN_SYSCALL: {
+            if (expr->call.arguments.size < 1 || expr->call.arguments.size > 7)
+                ERR(expr->source_location, "__builtin_syscall() intrinsic takes 1 to 7 arguments");
+
+            foreach_index (i, expr->call.arguments) {
+                Node* arg = expr->call.arguments.data[i];
+                if (!typecheck_expression(ast, arg)) return false;
+                if (type_is_incomplete(arg->type))
+                    ERR(arg->source_location, "Argument of __builtin_syscall() may not be incomplete");
+
+                /// Make sure the argument fits in a register.
+                usz sz = type_sizeof(arg->type);
+                if (sz > type_sizeof(t_integer))
+                    ERR(arg->source_location, "Argument of __builtin_syscall() must be integer-sized or smaller");
+
+                /// Extend to register size if need be.
+                if (sz != type_sizeof(t_integer)) {
+                    Node* cast = ast_make_cast(ast, arg->source_location, t_integer, arg);
+                    if (!typecheck_expression(ast, cast)) return false;
+                    arg->parent = cast;
+                    expr->call.arguments.data[i] = cast;
+                }
+            }
+
+            /// Return value is integer.
+            expr->type = t_integer;
+            expr->kind = NODE_INTRINSIC_CALL;
+            expr->call.intrinsic = INTRINSIC_BUILTIN_SYSCALL;
+            return true;
+        }
+    }
+
+    UNREACHABLE();
+}
+
 NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
   /// Don’t typecheck the same expression twice.
   if (expr->type_checked) return true;
@@ -957,9 +1030,15 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     /// First, resolve the function. Then, typecheck all parameters
     /// and set the type to the return type of the callee.
     case NODE_CALL: {
-      Node *callee = expr->call.callee;
+      /// Builtins are handled separately.
+      expr->call.intrinsic = intrinsic_kind(expr->call.callee);
+      if (expr->call.intrinsic != INTRINSIC_COUNT) {
+        if (!typecheck_intrinsic(ast, expr)) return false;
+        break;
+      }
 
       /// Resolve the function if applicable.
+      Node *callee = expr->call.callee;
       if (!resolve_function(ast, callee)) return false;
 
       /// Typecheck the callee.

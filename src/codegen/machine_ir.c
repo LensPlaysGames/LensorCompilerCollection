@@ -287,13 +287,14 @@ MIRInstruction *mir_from_ir_copy(MIRFunction *function, IRInstruction *copy) {
 
 /// Return non-zero iff given instruction needs a register.
 static bool needs_register(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 38, "Exhaustively handle all instruction types");
+  STATIC_ASSERT(IR_COUNT == 39, "Exhaustively handle all instruction types");
   ASSERT(instruction);
   switch (instruction->kind) {
     case IR_LOAD:
     case IR_PHI:
     case IR_COPY:
     case IR_IMMEDIATE:
+    case IR_INTRINSIC:
     case IR_CALL:
     case IR_REGISTER:
     case IR_NOT:
@@ -365,7 +366,7 @@ static void phi2copy(MIRFunction *function) {
       /// Where we insert it depends on some complicated factors
       /// that have to do with control flow.
       foreach_val (arg, phi->phi_args) {
-        STATIC_ASSERT(IR_COUNT == 38, "Handle all branch types");
+        STATIC_ASSERT(IR_COUNT == 39, "Handle all branch types");
         IRInstruction *branch = arg->block->instructions.last;
         switch (branch->kind) {
         /// If the predecessor returns or is unreachable, then the PHI
@@ -470,6 +471,8 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
     foreach_val (mir_bb, function->blocks) {
       IRBlock *bb = mir_bb->origin;
       ASSERT(bb, "Origin of general MIR block not set (what gives?)");
+
+      STATIC_ASSERT(IR_COUNT == 39, "Handle all IR instructions");
       list_foreach (inst, bb->instructions) {
         switch (inst->kind) {
 
@@ -495,6 +498,21 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           MIRInstruction *mir = mir_makenew(MIR_PHI);
           mir->origin = inst;
           inst->machine_inst = mir;
+          mir_push_into_block(function, mir_bb, mir);
+        } break;
+
+        case IR_INTRINSIC: {
+          MIRInstruction *mir = mir_makenew(MIR_INTRINSIC);
+          mir->origin = inst;
+          inst->machine_inst = mir;
+
+          // Intrinsic kind
+          mir_add_op(mir, mir_op_immediate(inst->call.intrinsic));
+
+          // Call arguments
+          foreach_val (arg, inst->call.arguments)
+            mir_add_op(mir, mir_op_reference_ir(function, arg));
+
           mir_push_into_block(function, mir_bb, mir);
         } break;
 
@@ -696,9 +714,10 @@ const char *mir_operand_kind_string(MIROperandKind opkind) {
 }
 
 const char *mir_common_opcode_mnemonic(uint32_t opcode) {
-  STATIC_ASSERT(MIR_COUNT == 38, "Exhaustive handling of MIRCommonOpcodes (string conversion)");
+  STATIC_ASSERT(MIR_COUNT == 39, "Exhaustive handling of MIRCommonOpcodes (string conversion)");
   switch ((MIROpcodeCommon)opcode) {
   case MIR_IMMEDIATE: return "immediate";
+  case MIR_INTRINSIC: return "intrinsic";
   case MIR_CALL: return "call";
   case MIR_NOT: return "not";
   case MIR_ZERO_EXTEND: return "zero_extend";
