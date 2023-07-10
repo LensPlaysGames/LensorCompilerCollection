@@ -1060,7 +1060,7 @@ static bool is_right_associative(Parser *p, Token t) {
 ///  Attributes
 /// ===========================================================================
 
-STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of attributes");
+STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of attributes");
 
 static struct {
   span name;
@@ -1068,6 +1068,7 @@ static struct {
 } function_attributes[] = {
   {literal_span_raw("nomangle"), ATTR_NOMANGLE},
   {literal_span_raw("discardable"), ATTR_DISCARDABLE},
+  {literal_span_raw("inline"), ATTR_INLINE},
 };
 
 static struct {
@@ -1080,7 +1081,7 @@ static struct {
 /// Helper to apply each attribute within attribs to function. Calls ERR
 /// if a non-function attribute is present in the given attribute list.
 static void apply_function_attributes(Parser *p, Type *func, Attributes attribs) {
-  STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of function attribute types");
+  STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of function attribute types");
   foreach(attr, attribs) {
     switch (attr->kind) {
     case ATTR_NOMANGLE: {
@@ -1088,6 +1089,9 @@ static void apply_function_attributes(Parser *p, Type *func, Attributes attribs)
     } break;
     case ATTR_DISCARDABLE: {
       func->function.discardable = true;
+    } break;
+    case ATTR_INLINE: {
+      func->function.alwaysinline = true;
     } break;
     default: {
       // TODO: Actually print out the attribute string or something like that.
@@ -1098,7 +1102,7 @@ static void apply_function_attributes(Parser *p, Type *func, Attributes attribs)
 }
 
 static void apply_struct_type_attributes(Parser *p, Type *type, Attributes attribs) {
-  STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of type attributes");
+  STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of type attributes");
   foreach(attr, attribs) {
     switch (attr->kind) {
     case ATTR_ALIGNAS: {
@@ -1504,7 +1508,7 @@ static Type *parse_type(Parser *p) {
 
       // If the attribute requires an argument/data to go along with it,
       // parse that HERE!
-      STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of type attributes");
+      STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of type attributes");
       switch (new_attribute.kind) {
       case ATTR_ALIGNAS: {
         if (p->tok.type != TK_NUMBER)
@@ -1855,11 +1859,11 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
       // Yeet "return"
       next_token(p);
 
-      source_location.end = p->tok.source_location.end;
-
       Node *expr = NULL;
-      if (p->tok.type != TK_SEMICOLON)
+      if (p->tok.type != TK_SEMICOLON) {
         expr = parse_expr(p);
+        source_location.end = expr->source_location.end;
+      }
 
       if (p->tok.type != TK_SEMICOLON)
         ERR_AT(source_location, "`;` is required after return expression.");

@@ -1,21 +1,19 @@
-#include <codegen.h>
-
 #include <ast.h>
+#include <codegen.h>
 #include <codegen/codegen_forward.h>
 #include <codegen/intermediate_representation.h>
-#include <codegen/x86_64/arch_x86_64.h>
-#include <codegen/llvm/llvm_target.h>
 #include <codegen/ir/ir.h>
+#include <codegen/llvm/llvm_target.h>
+#include <codegen/opt/opt.h>
+#include <codegen/x86_64/arch_x86_64.h>
 #include <error.h>
 #include <ir_parser.h>
-#include <opt.h>
 #include <parser.h>
-#include <utils.h>
-#include <vector.h>
-
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <utils.h>
+#include <vector.h>
 
 #define DIAG(sev, loc, ...)                                                                                 \
   do {                                                                                                      \
@@ -758,8 +756,8 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   }
 
   case NODE_RETURN: {
-    codegen_expr(ctx, expr->return_.value);
-    expr->ir = ir_return(ctx, expr->return_.value->ir);
+    if (expr->return_.value) codegen_expr(ctx, expr->return_.value);
+    expr->ir = ir_return(ctx, expr->return_.value ? expr->return_.value->ir : NULL);
     return;
   }
 
@@ -908,14 +906,16 @@ bool codegen
       /// Create the remaining functions and set the address of each function.
       foreach_val (func, ast->functions) {
         func->function.ir = ir_function(context, as_span(func->function.name), func->type);
+        func->function.ir->source_location = func->source_location;
 
         /// Mark the function as extern if it is.
         if (!func->function.body) func->function.ir->is_extern = true;
 
         /// Handle attributes
-        STATIC_ASSERT(ATTR_COUNT == 3, "Exhaustive handling of function attributes");
+        STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of function attributes");
         func->function.ir->attr_global = func->type->function.global;
         func->function.ir->attr_nomangle = func->type->function.nomangle;
+        func->function.ir->attr_forceinline = func->type->function.alwaysinline;
         // TODO: Should we propagate "discardable" to the IR?
       }
 
@@ -946,8 +946,12 @@ bool codegen
   /// Don’t codegen a faulty program.
   if (context->has_err) return false;
 
-  if (debug_ir) {
+  /// Perform mandatory inlining.
+  if (!codegen_process_inline_calls(context)) return false;
+
+  if (debug_ir || print_ir2) {
     ir_femit(stdout, context);
+    if (print_ir2) exit(42);
   }
 
   if (optimise) {

@@ -1,0 +1,16 @@
+;; 42
+
+inline_me : integer (x: integer) inline {
+    return x + 10;
+}
+
+caller : integer () {
+    a :: 2
+    a := inline_me(a)
+    a := inline_me(a)
+    a := inline_me(a)
+    a := inline_me(a)
+    a
+}
+
+caller()

@@ -1,11 +1,11 @@
 #include <codegen.h>
-#include <codegen/dom.h>
 #include <codegen/codegen_forward.h>
+#include <codegen/dom.h>
 #include <codegen/intermediate_representation.h>
 #include <codegen/machine_ir.h>
+#include <codegen/opt/opt.h>
 #include <codegen/register_allocation.h>
 #include <error.h>
-#include <opt.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>

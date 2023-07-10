@@ -55,6 +55,7 @@ bool print_scopes = false;
 bool prefer_using_diagnostics_colours = true;
 bool colours_blink = false;
 bool annotate_code = false;
+bool print_ir2 = false;
 Vector(string) search_paths = {};
 
 static void print_acceptable_architectures() {
@@ -105,6 +106,8 @@ static int handle_command_line_arguments(int argc, char **argv) {
         || strcmp(argument, "--help") == 0) {
       print_usage(argv);
       exit(0);
+    } else if (strcmp(argument, "--print-ir2") == 0) {
+      print_ir2 = true; /// Print high-level IR only and exit w/o codegen w/ code 42.
     } else if (strcmp(argument, "--print-ir") == 0) {
       debug_ir = true;
     } else if (strcmp(argument, "--print-ast") == 0) {

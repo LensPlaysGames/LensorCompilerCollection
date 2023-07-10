@@ -149,6 +149,8 @@ typedef struct IRFunction {
 
   Vector(IRInstruction*) parameters;
 
+  loc source_location;
+
   /// Pointer to the context that owns this function.
   CodegenContext *context;
 
@@ -180,7 +182,13 @@ struct IR {
   Vector(IRFunction*) functions;
 };
 
+/// Set IDs for all instructions in a function.
+///
+/// \param f The function to set IDs for.
+/// \param include_params Whether to include IR_PARAMETER instructions.
+///        Pass true if you’re unsure.
 void ir_set_func_ids(IRFunction *f);
+
 void ir_set_ids(CodegenContext *context);
 
 bool ir_is_branch(IRInstruction*);

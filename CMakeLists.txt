@@ -52,7 +52,6 @@ add_executable(
   #src/ir_parser.c
   src/parser.c
   src/typechecker.c
-  src/opt.c
   src/utils.c
   src/platform.c
   src/module.c
@@ -61,6 +60,8 @@ add_executable(
   src/codegen/instruction_selection.c
   src/codegen/intermediate_representation.c
   src/codegen/register_allocation.c
+  src/codegen/opt/opt.c
+  src/codegen/opt/inline.c
   src/codegen/machine_ir.c
   #src/codegen/ir/ir.c
   src/codegen/llvm/llvm_target.c
@@ -255,6 +256,7 @@ if (BUILD_TESTING)
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
+      set_tests_properties(ASM_${test} PROPERTIES TIMEOUT 2)
     endif()
     if (BUILD_OBJ_TESTING)
       if (WIN32)
@@ -268,6 +270,7 @@ if (BUILD_TESTING)
           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
           COMMAND_EXPAND_LISTS
         )
+        set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 2)
       else()
         add_test(
           NAME OBJ_${test}
@@ -279,6 +282,7 @@ if (BUILD_TESTING)
           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
           COMMAND_EXPAND_LISTS
         )
+        set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 2)
       endif()
     endif()
     if (BUILD_OPT_TESTING)
@@ -293,6 +297,7 @@ if (BUILD_TESTING)
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
+      set_tests_properties(OPT_${test} PROPERTIES TIMEOUT 2)
     endif()
     if (BUILD_LLVM_TESTING)
       if (NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
@@ -309,6 +314,8 @@ if (BUILD_TESTING)
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
+
+      set_tests_properties(LLVM_${test} PROPERTIES TIMEOUT 2)
     endif()
   endforeach()
 endif()
