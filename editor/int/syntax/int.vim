@@ -40,6 +40,8 @@ syn match intNumber "\v<\d+>"
 
 syn keyword intStatement return
 
+syn keyword intBuiltinFunc __builtin_syscall
+
 syn keyword intImport import nextgroup=intModuleName skipwhite
 syn keyword intModule module nextgroup=intModuleName skipwhite
 syn keyword intExportSymbol export
@@ -65,5 +67,6 @@ hi def link intModule             Special
 hi def link intImport             Special
 hi def link intExportSymbol       Special
 hi def link intModuleName         Function
+hi def link intBuiltinFunc        Identifier
 
 let b:current_syntax = 'int'
