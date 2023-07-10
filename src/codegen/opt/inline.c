@@ -129,15 +129,14 @@ static bool ir_inline_call(
 
   /// Copy instructions from the callee into the caller, replacing
   /// any parameter references with the arguments to the call. Since
-  /// there may be forward references, we need to copy a skeleton of
-  /// the IR first, and then copy the instructions.
+  /// there may be forward references, we need to create a skeleton
+  /// of the IR first, and only then copy all the instruction data.
   ///
   /// This entails allocating as many blocks and IR instructions as
   /// there are in the callee, and then copying the instructions
-  /// one by one. This way, we effectively create a one-to-one,
-  /// and onto, mapping of instructions and blocks of the callee
-  /// to these instructions and blocks, which can then be inserted
-  /// into the caller.
+  /// one by one. This way, we effectively create a mapping of
+  /// instructions and blocks of the callee to these instructions
+  /// and blocks, which can then be inserted into the caller.
   usz block_count = list_size(callee->blocks);
   Vector(IRInstruction *) instructions = {0};
   Vector(IRBlock *) blocks = {0};
@@ -146,8 +145,8 @@ static bool ir_inline_call(
 
   /// Allocate instructions separately; this is unfortunately necessary
   /// since they will be freed separately later on. The same also applies
-  /// to the blocks, except that the first block is the parent of the call
-  /// in the caller.
+  /// to the blocks, except that the first block, i.e. the block into which
+  /// we start inserting, is mapped to the block containing the call.
   vector_push(blocks, call_block);
   for (usz i = 0; i < (usz) count; i++) vector_push(instructions, calloc(1, sizeof(IRInstruction)));
   for (usz i = 1; i < block_count; i++) {
@@ -467,19 +466,25 @@ again:
         /// If the callee is the caller, only allow inlining tail calls.
         if (f == callee) {
           if (!inst->call.tail_call) {
-            if (must_inline) {
+            /// If we must inline this call, try to check if it
+            /// could be a tail call at least once.
+            if (must_inline && !opt_try_convert_to_tail_call(inst)) {
+              /// We can’t inline this.
               if (!ictx->may_fail) issue_diagnostic(
                 DIAG_ERR,
                 ctx->ast->filename.data,
                 as_span(ctx->ast->source),
                 (loc){0},
-                "Cannot inline non-tail-recursive call"
+                "Sorry, could not inline non-tail-recursive call"
               );
               res.failed = true;
               vector_push(ictx->not_inlinable, inst);
             }
-            continue;
           }
+
+          /// Tail-recursion is better than inlining, so we
+          /// leave tail-recursive calls alone.
+          continue;
         }
 
         /// Inline it.

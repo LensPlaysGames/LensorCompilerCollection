@@ -58,6 +58,7 @@ typedef struct IRCall {
   enum IntrinsicKind intrinsic; /// Only used by intrinsic calls.
   bool is_indirect : 1;
   bool tail_call : 1;
+  bool tail_call_checked : 1;
 } IRCall;
 
 typedef struct IRBranchConditional {

@@ -2,10 +2,11 @@
 
 a :: 0
 
-foo: integer() {
+foo: void() {
   a := 69
   return;
   a := 42
 }
 
 foo()
+a

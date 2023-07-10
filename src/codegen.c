@@ -947,6 +947,7 @@ bool codegen
 
   if (optimise) {
     codegen_optimise(context);
+    print("After optimisation:\n");
     if (debug_ir || print_ir2)
       ir_femit(stdout, context);
   }

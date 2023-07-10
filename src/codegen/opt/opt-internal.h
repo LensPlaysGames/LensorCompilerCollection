@@ -16,4 +16,10 @@
 /// Inlining pass during optimisation.
 bool opt_inline(CodegenContext *ctx, isz threshold);
 
+/// Convert a call to a tail call if possible.
+///
+/// \param i The call to convert.
+/// \return Whether this was successful.
+bool opt_try_convert_to_tail_call(IRInstruction *i);
+
 #endif // INTERCEPT_CODEGEN_OPT_OPT_INTERNAL_H
