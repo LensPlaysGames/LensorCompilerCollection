@@ -28,7 +28,9 @@
 **/debug
 **/rls
 **/release
-*/*out*
+/out
+/.idea
+/tst/out.txt
 
 # Language Server
 **/compile_commands.json
