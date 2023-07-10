@@ -176,6 +176,7 @@ typedef struct IRFunction {
   bool attr_pure : 1;
   bool attr_nomangle : 1;
   bool is_extern : 1;
+  bool is_ever_referenced : 1;
 } IRFunction;
 
 struct IR {
@@ -369,13 +370,17 @@ void ir_remove(IRInstruction* instruction);
 void ir_remove_use(IRInstruction *usee, IRInstruction *user);
 void ir_remove_and_free_block(IRBlock *block);
 
+/// Free a function.
+void ir_free_function(IRFunction *f);
+
 /// Free memory used by an instruction. This is unsafe as
 /// it doesn’t check whether the instruction is used by other
 /// instructions, so use this only when freeing the entire IR.
 void ir_free_instruction_data(IRInstruction *instruction);
 
 /// Mark a block as ending w/ `unreachable` and remove it
-/// from PHIs.
+/// from PHIs. If its a return instruction, remove the use
+/// of the return value.
 void ir_mark_unreachable(IRBlock *block);
 
 /// Iterate over each child of an instruction.

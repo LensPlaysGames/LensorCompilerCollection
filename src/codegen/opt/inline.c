@@ -27,7 +27,7 @@ static isz instruction_count(IRFunction *f, bool include_parameters) {
 ///        this call.
 /// \param Whether this is allowed to fail; if it isn’t, we issue a
 ///        diagnostic on error.
-/// \return Whether the first call was inlined successfully.
+/// \return True if the call was inlined, false if there was an error.
 static bool ir_inline_call(
     CodegenContext *ctx,
     InlineStack *stack,
@@ -40,6 +40,7 @@ static bool ir_inline_call(
     IRInstruction *const call_next = call->next;
     IRFunction *const callee = call->call.callee_function;
     IRBlock *const call_block = call->parent_block;
+    const bool is_tail_call = call->call.tail_call;
 
     /// Handle the degenerate case of the callee being empty.
     isz count = instruction_count(callee, true);
@@ -219,10 +220,16 @@ static bool ir_inline_call(
                 /// instruction at the very end, in which case we can just inline
                 /// it.
                 case IR_RETURN: {
+                    /// If this is a tail call, just emit the return instruction.
+                    if (is_tail_call) {
+                        copy->operand = MAP(inst->operand);
+                        break;
+                    }
+
+                    /// Otherwise, if this is the last return instruction in
+                    /// the function, and it’s also the only one, just set
+                    /// the return value and discard it.
                     if (!return_block) {
-                        /// Otherwise, if this is the last return instruction in
-                        /// the function, and it’s also the only one, just set
-                        /// the return value and discard it.
                         if (block == callee->blocks.last && inst == block->instructions.last) {
                             if (inst->operand) {
                                 return_value = MAP(inst->operand);
@@ -290,11 +297,25 @@ static bool ir_inline_call(
     /// may be empty if the callee contains multiple returns
     /// but returns void, in which case we branch here but
     /// at the same time, there is no PHI.
+    ///
+    /// Note that if the call was a tail call, we just drop
+    /// everything after the call.
     IRBlock *last = vector_back(blocks);
     IRInstruction *last_in_last_block = last->instructions.last;
-    if (last_in_last_block) {
+    if (last_in_last_block && !is_tail_call) {
         last_in_last_block->next = call_next;
         if (call_next) call_next->prev = last_in_last_block;
+    }
+
+    /// Remove every instruction after the call.
+    if (call_next && is_tail_call) {
+        IRInstruction *next = call_next;
+        while (next) {
+            IRInstruction *next_next = next->next;
+            ir_unmark_usees(next);
+            ir_remove(next);
+            next = next_next;
+        }
     }
 
     /// Connect the last block to the previous successor of
@@ -305,8 +326,10 @@ static bool ir_inline_call(
 
         /// All instructions after the call need to be moved
         /// into this block.
-        for (IRInstruction *i = call_next; i; i = i->next)
-            i->parent_block = last;
+        if (!is_tail_call) {
+            for (IRInstruction *i = call_next; i; i = i->next)
+                i->parent_block = last;
+        }
     }
 
     /// Connect all new blocks.
@@ -314,7 +337,6 @@ static bool ir_inline_call(
         blocks.data[i - 1]->next = blocks.data[i];
         blocks.data[i]->prev = blocks.data[i - 1];
     }
-
 
     /// Free unused instructions.
     foreach_val (i, instructions)
@@ -331,9 +353,15 @@ static bool ir_inline_call(
 
 #undef REPLACE
 
-static bool inline_calls_in_function(CodegenContext *ctx, IRFunction *f, isz threshold, bool may_fail) {
+typedef struct {
+  bool changed;
+  bool failed;
+} inline_result;
+
+/// Returns 1 if changed, -1 on error, 0 otherwise.
+static inline_result inline_calls_in_function(CodegenContext *ctx, IRFunction *f, isz threshold, bool may_fail) {
     IRBlock *block = f->blocks.first;
-    bool ok = true;
+    inline_result res = {0};
 
 again:
     for (; block; block = block->next) {
@@ -346,7 +374,9 @@ again:
             /// Inline the call if requested.
             if (inst->call.callee_function->attr_forceinline || threshold == 0 || threshold >= instruction_count(f, false)) {
                 InlineStack stack = {0};
-                ok = ir_inline_call(ctx, &stack, inst, threshold, may_fail) && ok;
+                bool inlined = ir_inline_call(ctx, &stack, inst, threshold, may_fail);
+                if (inlined) res.changed = true;
+                else res.failed = true;
 
                 /// This may have added new blocks *after* this block,
                 /// so start over from the start of this block.
@@ -355,18 +385,24 @@ again:
         }
     }
 
-    return ok;
+    return res;
 }
 
 /// Run the inliner.
-static bool opt_inline(CodegenContext *ctx, isz threshold, bool may_fail) {
-    bool ok = true;
+static inline_result run_inliner(CodegenContext *ctx, isz threshold, bool may_fail) {
+    inline_result res = {0};
     foreach_val (f, ctx->functions) {
-        ok = inline_calls_in_function(ctx, f, threshold, may_fail) && ok;
+        inline_result r = inline_calls_in_function(ctx, f, threshold, may_fail);
+        if (r.failed) res.failed = true;
+        if (r.changed) res.changed = true;
     }
-    return ok;
+    return res;
+}
+
+bool opt_inline(CodegenContext *ctx, isz threshold) {
+    return run_inliner(ctx, threshold, true).changed;
 }
 
 bool codegen_process_inline_calls(CodegenContext *ctx) {
-    return opt_inline(ctx, -1, false);
+    return !run_inliner(ctx, -1, false).failed;
 }

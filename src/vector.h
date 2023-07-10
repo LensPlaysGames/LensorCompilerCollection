@@ -186,6 +186,26 @@
     _ptr;                                       \
 })
 
+/// Erase all elements from a vector that satisfy a
+/// predicate. The order of the elements is not preserved.
+#define vector_erase_if_unordered(name, vector, ...)         \
+  do {                                                       \
+    for (usz i = 0; i < (vector).size; i++) {                \
+      __typeof__(*(vector).data) *name = (vector).data + i;  \
+      if (__VA_ARGS__) vector_remove_unordered((vector), i); \
+    }                                                        \
+  } while (0)
+
+/// Erase all elements from a vector that satisfy a
+/// predicate. The order of the elements is not preserved.
+#define vector_erase_if_unordered_val(name, vector, ...)     \
+  do {                                                       \
+    for (usz i = 0; i < (vector).size; i++) {                \
+      __typeof__(*(vector).data) name = (vector).data[i];    \
+      if (__VA_ARGS__) vector_remove_unordered((vector), i); \
+    }                                                        \
+  } while (0)
+
 #define list_node(type) \
   struct {              \
     type *prev;         \

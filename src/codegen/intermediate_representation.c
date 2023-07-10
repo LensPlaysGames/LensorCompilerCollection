@@ -6,7 +6,7 @@
 
 #include <stdlib.h>
 
-//#define DEBUG_USES
+#define DEBUG_USES
 void mark_used(IRInstruction *usee, IRInstruction *user) {
   // Don't push duplicate users.
   foreach_val (i_user, usee->users) {
@@ -142,6 +142,26 @@ void ir_remove_and_free_block(IRBlock *block) {
   }
   list_remove(block->function->blocks, block);
   free(block);
+}
+
+void ir_free_function(IRFunction *f) {
+  /// Free each block.
+  list_foreach (b, f->blocks) {
+    /// Free each instruction.
+    list_foreach (i, b->instructions) ir_free_instruction_data(i);
+    list_delete(b->instructions);
+
+    /// Free the block name.
+    free(b->name.data);
+  }
+
+  /// Free the name, params, and block list.
+  free(f->name.data);
+  vector_delete(f->parameters);
+  list_delete(f->blocks);
+
+  /// Free the function itself.
+  free(f);
 }
 
 void ir_free_instruction_data(IRInstruction *i) {
@@ -1035,6 +1055,10 @@ void ir_mark_unreachable(IRBlock *block) {
         first = first->next;
       }
     } break;
+    case IR_UNREACHABLE: break;
+    case IR_RETURN:
+      ir_remove_use(i->operand, i);
+      break;
   }
   i->kind = IR_UNREACHABLE;
 }
