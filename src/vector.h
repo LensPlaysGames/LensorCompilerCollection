@@ -65,10 +65,10 @@
   } while (0)
 
 /// Push an element onto the vector.
-#define vector_push(vector, element)            \
-  do {                                          \
-    vector_reserve((vector), 1);                \
-    (vector).data[(vector).size++] = (element); \
+#define vector_push(vector, ...)                    \
+  do {                                              \
+    vector_reserve((vector), 1);                    \
+    (vector).data[(vector).size++] = (__VA_ARGS__); \
   } while (0)
 
 /// Pop an element from the vector.
