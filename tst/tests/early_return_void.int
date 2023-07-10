@@ -1,0 +1,11 @@
+;; 69
+
+a :: 0
+
+foo: integer() {
+  a := 69
+  return;
+  a := 42
+}
+
+foo()

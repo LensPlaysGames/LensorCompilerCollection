@@ -113,7 +113,8 @@ void ir_remove(IRInstruction* instruction) {
     ICE("Cannot remove used instruction.");
   }
 
-  list_remove(instruction->parent_block->instructions, instruction);
+  if (instruction->prev || instruction->next)
+    list_remove(instruction->parent_block->instructions, instruction);
   vector_delete(instruction->users);
   ir_unmark_usees(instruction);
 
@@ -392,7 +393,11 @@ void ir_femit_function
   ir_print_defun(file, function);
   if (!function->is_extern) {
     fprint(file, " %31{\n");
-    list_foreach (block, function->blocks) ir_femit_block(file, block);
+    Vector(IRBlock*) printed = {0};
+    list_foreach (block, function->blocks) {
+        ir_femit_block(file, block);
+        vector_push(printed, block);
+    }
     fprint(file, "%31}");
   }
   fprint(file, "%m\n");

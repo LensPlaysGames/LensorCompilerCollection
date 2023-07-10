@@ -126,6 +126,7 @@ typedef enum AttributeKind {
   ATTR_NOMANGLE,
   ATTR_DISCARDABLE,
   ATTR_ALIGNAS,
+  ATTR_INLINE, /// Always inline, not a hint like in C.
   ATTR_COUNT
 } AttributeKind;
 
@@ -356,6 +357,7 @@ typedef struct TypeFunction {
   bool global : 1;
   bool nomangle : 1;
   bool discardable : 1;
+  bool alwaysinline : 1;
 } TypeFunction;
 
 /// Struct type.

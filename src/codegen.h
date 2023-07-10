@@ -11,6 +11,7 @@
 #include <vector.h>
 
 extern bool debug_ir;
+extern bool print_ir2;
 extern bool codegen_only;
 extern bool annotate_code;
 

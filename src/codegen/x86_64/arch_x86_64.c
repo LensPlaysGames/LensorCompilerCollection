@@ -1,31 +1,29 @@
-#include <codegen/x86_64/arch_x86_64.h>
-
 #include <ast.h>
 #include <codegen.h>
+#include <codegen/codegen_forward.h>
+#include <codegen/instruction_selection.h>
+#include <codegen/intermediate_representation.h>
+#include <codegen/machine_ir.h>
+#include <codegen/opt/opt.h>
+#include <codegen/register_allocation.h>
+#include <codegen/x86_64/arch_x86_64.h>
 #include <codegen/x86_64/arch_x86_64_common.h>
 #include <codegen/x86_64/arch_x86_64_isel.h>
 #include <codegen/x86_64/arch_x86_64_tgt_assembly.h>
 #include <codegen/x86_64/arch_x86_64_tgt_generic_object.h>
-#include <codegen/codegen_forward.h>
-#include <codegen/intermediate_representation.h>
-#include <codegen/instruction_selection.h>
-#include <codegen/machine_ir.h>
-#include <codegen/register_allocation.h>
 #include <error.h>
 #include <inttypes.h>
 #include <module.h>
-#include <opt.h>
 #include <parser.h>
-#include <typechecker.h>
-#include <vector.h>
-#include <utils.h>
-
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <typechecker.h>
+#include <utils.h>
+#include <vector.h>
 
 #define X86_64_GENERATE_MACHINE_CODE
 

@@ -157,9 +157,9 @@ IndirectJumpType comparison_to_jump_type(enum ComparisonType comparison) {
 // Normally I don't like putting includes later on in a file, but most
 // of the above is freestanding and I'd like to keep it separate.
 
-#include <codegen/machine_ir.h>
 #include <codegen/intermediate_representation.h>
-#include <opt.h>
+#include <codegen/machine_ir.h>
+#include <codegen/opt/opt.h>
 
 StackFrameKind stack_frame_kind(MIRFunction *f) {
   ASSERT(f->origin, "Cannot get stack frame kind of MIRFunction with no IRFunction origin set");

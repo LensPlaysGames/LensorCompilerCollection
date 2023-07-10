@@ -230,6 +230,7 @@
     (list).first = (element);          \
   } while (0)
 
+/// NOTE: UB if the list does not contain the element.
 #define list_remove(list, element)             \
   do {                                         \
     if ((element)->prev) {                     \

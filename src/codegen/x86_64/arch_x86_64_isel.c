@@ -1,13 +1,12 @@
-#include <codegen/x86_64/arch_x86_64_isel.h>
-
 #include <codegen.h>
-#include <codegen/register_allocation.h>
-#include <codegen/intermediate_representation.h>
 #include <codegen/instruction_selection.h>
+#include <codegen/intermediate_representation.h>
 #include <codegen/machine_ir.h>
-#include <codegen/x86_64/arch_x86_64_common.h>
+#include <codegen/opt/opt.h>
+#include <codegen/register_allocation.h>
 #include <codegen/x86_64/arch_x86_64.h>
-#include <opt.h>
+#include <codegen/x86_64/arch_x86_64_common.h>
+#include <codegen/x86_64/arch_x86_64_isel.h>
 #include <utils.h>
 
 const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {

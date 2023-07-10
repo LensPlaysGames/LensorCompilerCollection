@@ -1,11 +1,4 @@
-#include <opt.h>
-#include <codegen.h>
-#include <codegen/dom.h>
-#include <codegen/intermediate_representation.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
-#include <vector.h>
+#include <codegen/opt/opt-internal.h>
 
 typedef Vector(IRBlock*) BlockVector;
 
