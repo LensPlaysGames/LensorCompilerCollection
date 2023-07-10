@@ -203,7 +203,9 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
   case NODE_VARIABLE_REFERENCE:
     ASSERT(lval->var->val.node->address,
            "Cannot reference variable that has not yet been emitted.");
-    lval->address = lval->var->val.node->address;
+    if (lval->var->val.node->address->kind == IR_STATIC_REF)
+      lval->address = ir_static_reference(ctx, lval->var->val.node->address->static_ref);
+    else lval->address = lval->var->val.node->address;
     break;
 
   case NODE_CAST: {
