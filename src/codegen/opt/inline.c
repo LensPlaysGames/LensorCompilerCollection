@@ -1,9 +1,17 @@
 #include <codegen/opt/opt-internal.h>
 
-/// Currently unused.
-typedef struct InlineStack {
-  int unused; /// Dummy, remove later.
-} InlineStack;
+#define ROOT_INLINE_ENTRY ((usz) -1)
+
+typedef struct InlineContext {
+  Vector(struct history_entry {
+    IRInstruction *call; /// May point to freed memory, don’t dereference.
+    IRFunction *callee;  /// The function called by this call.
+    usz inlined_via;     /// Index into this history. -1 if root entry.
+  }) history;
+  Vector(IRInstruction *) not_inlinable;
+  isz threshold;
+  bool may_fail;
+} InlineContext;
 
 /// Compute the number of instructions in a function.
 static isz instruction_count(IRFunction *f, bool include_parameters) {
@@ -30,10 +38,8 @@ static isz instruction_count(IRFunction *f, bool include_parameters) {
 /// \return True if the call was inlined, false if there was an error.
 static bool ir_inline_call(
   CodegenContext *ctx,
-  InlineStack *stack,
-  IRInstruction *call,
-  isz threshold,
-  bool may_fail
+  InlineContext *ictx,
+  IRInstruction *call
 ) {
   /// Save the instruction before and after the call.
   IRInstruction *const call_prev = call->prev;
@@ -41,6 +47,7 @@ static bool ir_inline_call(
   IRFunction *const callee = call->call.callee_function;
   IRBlock *const call_block = call->parent_block;
   const bool is_tail_call = call->call.tail_call;
+  usz call_history_index = 0;
 
   /// Handle the degenerate case of the callee being empty.
   isz count = instruction_count(callee, true);
@@ -48,6 +55,62 @@ static bool ir_inline_call(
     ASSERT(call->users.size == 0, "Call to empty function cannot possibly return a value");
     ir_remove(call);
     return true;
+  }
+
+  /// If the call does not yet exists in the history, add it. If it
+  /// does, check if one of its parents is itself.
+  {
+    struct history_entry *e = NULL;
+    foreach_index (i, ictx->history) {
+      if (ictx->history.data[i].call == call) {
+        e = ictx->history.data + i;
+        call_history_index = i;
+      }
+    }
+
+    /// Call exists.
+    if (e) {
+      ASSERT(e->inlined_via != ROOT_INLINE_ENTRY);
+      e = ictx->history.data + e->inlined_via;
+      for (;;) {
+        /// If the inlining of this call can be traced back to the inlining
+        /// of the same function, then we have an infinite loop.
+        if (e->callee == callee) {
+          if (!ictx->may_fail) {
+            issue_diagnostic(
+              DIAG_ERR,
+              ctx->ast->filename.data,
+              as_span(ctx->ast->source),
+              (loc){0},
+              "Failed to inline function %S into %S: Infinite loop detected",
+              callee->name,
+              call->parent_block->function->name
+            );
+          }
+
+          return false;
+        }
+
+        /// Go to our parent’s parent.
+        if (e->inlined_via == ROOT_INLINE_ENTRY) break;
+        e = ictx->history.data + e->inlined_via;
+      }
+    }
+
+    /// Call does not exist. Add it as a root to the history. This means
+    /// this call was already in the function and wasn’t inlined from
+    /// anywhere—at least not in this inlining pass.
+    else {
+      call_history_index = ictx->history.size;
+      vector_push(
+        ictx->history,
+        (struct history_entry){
+          .call = call,
+          .callee = callee,
+          .inlined_via = ROOT_INLINE_ENTRY,
+        }
+      );
+    }
   }
 
   /// Remove the call from the list and everything after it
@@ -152,14 +215,27 @@ static bool ir_inline_call(
         case IR_INTRINSIC:
           copy->call.intrinsic = inst->call.intrinsic;
           FALLTHROUGH;
-        case IR_CALL:
+
+        case IR_CALL: {
           copy->call.is_indirect = inst->call.is_indirect;
           copy->call.tail_call = inst->call.tail_call;
           if (inst->call.is_indirect) copy->call.callee_instruction = MAP(inst->call.callee_instruction);
           else copy->call.callee_function = inst->call.callee_function;
           foreach_val (arg, inst->call.arguments)
             vector_push(copy->call.arguments, MAP(arg));
-          break;
+
+          /// Record the origin of this call.
+          if (inst->kind == IR_CALL) {
+            vector_push(
+              ictx->history,
+              (struct history_entry){
+                .callee = inst->call.is_indirect ? NULL : inst->call.callee_function,
+                .call = copy,
+                .inlined_via = call_history_index,
+              }
+            );
+          }
+        } break;
 
         case IR_LOAD:
         case IR_COPY:
@@ -362,27 +438,57 @@ typedef struct {
 /// Returns 1 if changed, -1 on error, 0 otherwise.
 static inline_result inline_calls_in_function(
   CodegenContext *ctx,
-  IRFunction *f,
-  isz threshold,
-  bool may_fail
+  InlineContext *ictx,
+  IRFunction *f
 ) {
   IRBlock *block = f->blocks.first;
   inline_result res = {0};
+  vector_clear(ictx->history);
 
 again:
   for (; block; block = block->next) {
     list_foreach (inst, block->instructions) {
-      /// Skip non-calls, indirect calls, and calls to external functions.
+      /// Skip non-calls and indirect calls.
       if (inst->kind != IR_CALL) continue;
       if (inst->call.is_indirect) continue;
-      if (inst->call.callee_function->is_extern) continue;
+
+      /// Skip calls to external functions.
+      IRFunction *callee = inst->call.callee_function;
+      if (callee->is_extern) continue;
+
+      /// Skip calls that we’ve already determined are impossible to inline.
+      if (vector_contains(ictx->not_inlinable, inst)) continue;
+
+      /// Whether this has to be inlined.
+      bool must_inline = callee->attr_forceinline || ictx->threshold == 0;
 
       /// Inline the call if requested.
-      if (inst->call.callee_function->attr_forceinline || threshold == 0 || threshold >= instruction_count(f, false)) {
-        InlineStack stack = {0};
-        bool inlined = ir_inline_call(ctx, &stack, inst, threshold, may_fail);
+      if (must_inline || ictx->threshold >= instruction_count(callee, false)) {
+        /// If the callee is the caller, only allow inlining tail calls.
+        if (f == callee) {
+          if (!inst->call.tail_call) {
+            if (must_inline) {
+              if (!ictx->may_fail) issue_diagnostic(
+                DIAG_ERR,
+                ctx->ast->filename.data,
+                as_span(ctx->ast->source),
+                (loc){0},
+                "Cannot inline non-tail-recursive call"
+              );
+              res.failed = true;
+              vector_push(ictx->not_inlinable, inst);
+            }
+            continue;
+          }
+        }
+
+        /// Inline it.
+        bool inlined = ir_inline_call(ctx, ictx, inst);
         if (inlined) res.changed = true;
-        else res.failed = true;
+        else {
+          res.failed = true;
+          vector_push(ictx->not_inlinable, inst);
+        }
 
         /// This may have added new blocks *after* this block,
         /// so start over from the start of this block.
@@ -396,12 +502,24 @@ again:
 
 /// Run the inliner.
 static inline_result run_inliner(CodegenContext *ctx, isz threshold, bool may_fail) {
+  /// Disjoint-sets datastructure for Kruskal’s algorithm for cycle
+  /// detection to make sure we don’t fall into an infinite loop.
+  InlineContext ictx = {
+    .history = {0},
+    .not_inlinable = {0},
+    .threshold = threshold,
+    .may_fail = may_fail,
+  };
+
   inline_result res = {0};
   foreach_val (f, ctx->functions) {
-    inline_result r = inline_calls_in_function(ctx, f, threshold, may_fail);
+    inline_result r = inline_calls_in_function(ctx, &ictx, f);
     if (r.failed) res.failed = true;
     if (r.changed) res.changed = true;
   }
+
+  vector_delete(ictx.history);
+  vector_delete(ictx.not_inlinable);
   return res;
 }
 
