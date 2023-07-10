@@ -77,7 +77,10 @@ static bool has_side_effects(IRInstruction *i) {
 /// ===========================================================================
 ///  Instruction combination
 /// ===========================================================================
-static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
+/// Everything that merges instructions or performs strength reduction,
+/// folding, etc. etc. goes here. If you’re unsure where to put something,
+/// put it here.
+static bool opt_instcombine(IRFunction *f) {
   bool changed = false;
   list_foreach (b, f->blocks) {
     list_foreach (i, b->instructions) {
@@ -190,6 +193,30 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
           }
           break;
         default: break;
+
+        /// Simplify indirect calls to direct calls.
+        case IR_CALL: {
+          if (!i->call.is_indirect) break;
+          IRInstruction *callee = i->call.callee_instruction;
+          switch (callee->kind) {
+            default: break;
+
+            case IR_FUNC_REF:
+              i->call.is_indirect = false;
+              i->call.callee_function = callee->function_ref;
+              ir_remove_use(callee, i);
+              break;
+
+            case IR_BITCAST: {
+              if (callee->operand->kind == IR_FUNC_REF) {
+                i->call.is_indirect = false;
+                i->call.callee_function = callee->operand->function_ref;
+                ir_remove_use(callee->operand, callee);
+                ir_remove_use(callee, i);
+              }
+            } break;
+          }
+        }
       }
     }
   }
@@ -605,6 +632,7 @@ bool opt_check_noreturn(IRFunction *f) {
 
 /// Check if a function is referenced by this instruction.
 static void check_function_references(IRInstruction *inst) {
+  STATIC_ASSERT(IR_COUNT == 38, "Handle all instructions that can reference a function");
   switch (inst->kind) {
     default: break;
     case IR_FUNC_REF: inst->function_ref->is_ever_referenced = true; break;
@@ -617,6 +645,7 @@ static void check_function_references(IRInstruction *inst) {
 /// Analyse functions to determine whether they’re pure, leaf functions, etc.
 bool opt_analyse_functions(CodegenContext *ctx) {
   bool ever_changed = false, changed;
+  Vector(usz) removed = {0};
   do {
     changed = false;
 
@@ -633,8 +662,7 @@ bool opt_analyse_functions(CodegenContext *ctx) {
     ctx->entry->is_ever_referenced = true;
 
     /// Check if the functions are ever referenced.
-    FOREACH_INSTRUCTION(ctx)
-    check_function_references(instruction);
+    FOREACH_INSTRUCTION (ctx) check_function_references(instruction);
 
     /// Also check in global variables and exports.
     foreach_val (var, ctx->static_vars)
@@ -642,17 +670,22 @@ bool opt_analyse_functions(CodegenContext *ctx) {
         check_function_references(var->init);
 
     /// Free functions that are never referenced.
-    foreach_val (f, ctx->functions) {
+    vector_clear(removed);
+    foreach_index (i, ctx->functions) {
+      IRFunction *f = ctx->functions.data[i];
       if (f->is_ever_referenced) continue;
       changed = true;
       ir_free_function(f);
+      vector_push(removed, i);
     }
 
     /// And remove them.
-    vector_erase_if_unordered_val(f, ctx->functions, !f->is_ever_referenced);
+    foreach_rev (i, removed) vector_remove_index(ctx->functions, *i);
 
     if (changed) ever_changed = true;
   } while (changed);
+
+  vector_delete(removed);
   return ever_changed;
 }
 
@@ -835,7 +868,7 @@ void codegen_optimise(CodegenContext *ctx) {
         build_dominator_tree(f, &dom, true);
         opt_reorder_blocks(f, &dom);
       } while (
-        opt_const_folding_and_strengh_reduction(f) ||
+        opt_instcombine(f) ||
         opt_dce(f) ||
         opt_mem2reg(f) ||
         opt_jump_threading(f, &dom) ||
