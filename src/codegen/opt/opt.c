@@ -186,9 +186,11 @@ static bool opt_instcombine(IRFunction *f) {
           break;
         case IR_NOT:
           if (i->operand->kind == IR_IMMEDIATE) {
+            /// Note: operand and value share the same union field, so
+            /// be careful to remove uses before overwriting the union.
+            ir_remove_use(i->operand, i);
             i->kind = IR_IMMEDIATE;
             i->imm = ~i->operand->imm;
-            ir_remove_use(i->operand, i);
             changed = true;
           }
           break;
