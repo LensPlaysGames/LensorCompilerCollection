@@ -951,14 +951,15 @@ bool codegen
 
   if (debug_ir || print_ir2) {
     ir_femit(stdout, context);
-    if (print_ir2) exit(42);
   }
 
   if (optimise) {
     codegen_optimise(context);
-    if (debug_ir)
+    if (debug_ir || print_ir2)
       ir_femit(stdout, context);
   }
+
+  if (print_ir2) exit(42);
 
   /// No need to lower anything if we’re emitting LLVM IR.
   if (target != TARGET_LLVM) {

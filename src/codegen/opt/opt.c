@@ -1,22 +1,21 @@
 #include <codegen/opt/opt-internal.h>
 
-typedef Vector(IRBlock*) BlockVector;
-
+typedef Vector(IRBlock *) BlockVector;
 
 /// ===========================================================================
 ///  Helpers
 /// ===========================================================================
 #ifdef _MSC_VER
-#include <intrin.h>
+#  include <intrin.h>
 
 uint32_t ctzll(uint64_t value) {
   unsigned long zero = 0;
   return _BitScanForward64(&zero, value)
-    ? (uint32_t) zero
-    : 64;
+         ? (uint32_t) zero
+         : 64;
 }
 #else
-#define ctzll __builtin_ctzll
+#  define ctzll __builtin_ctzll
 #endif
 
 #define IR_REDUCE_BINARY(op)           \
@@ -64,7 +63,7 @@ static bool has_side_effects(IRInstruction *i) {
     case IR_SIGN_EXTEND:
     case IR_TRUNCATE:
     case IR_BITCAST:
-    ALL_BINARY_INSTRUCTION_CASES()
+      ALL_BINARY_INSTRUCTION_CASES()
       return false;
 
     case IR_CALL:
@@ -83,57 +82,56 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
   list_foreach (b, f->blocks) {
     list_foreach (i, b->instructions) {
       switch (i->kind) {
-      case IR_ADD:
-        IR_REDUCE_BINARY(+)
-        else {
-          // Adding zero to something == no-op
-          if (i->lhs->kind == IR_IMMEDIATE && imm_lhs(i) == 0) {
-            ir_remove_use(i->lhs, i);
-            ir_remove_use(i->rhs, i);
-            ir_replace_uses(i, i->rhs);
-          } else if (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 0) {
-            ir_remove_use(i->lhs, i);
-            ir_remove_use(i->rhs, i);
-            ir_replace_uses(i, i->lhs);
+        case IR_ADD:
+          IR_REDUCE_BINARY(+)
+          else {
+            // Adding zero to something == no-op
+            if (i->lhs->kind == IR_IMMEDIATE && imm_lhs(i) == 0) {
+              ir_remove_use(i->lhs, i);
+              ir_remove_use(i->rhs, i);
+              ir_replace_uses(i, i->rhs);
+            } else if (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 0) {
+              ir_remove_use(i->lhs, i);
+              ir_remove_use(i->rhs, i);
+              ir_replace_uses(i, i->lhs);
+            }
           }
-        }
-        break;
-      case IR_SUB:
-        IR_REDUCE_BINARY(-)
-        else {
-          // Subtracting zero from something == no-op
-          if (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 0) {
-            ir_remove_use(i->lhs, i);
-            ir_remove_use(i->rhs, i);
-            ir_replace_uses(i, i->lhs);
+          break;
+        case IR_SUB:
+          IR_REDUCE_BINARY(-)
+          else {
+            // Subtracting zero from something == no-op
+            if (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 0) {
+              ir_remove_use(i->lhs, i);
+              ir_remove_use(i->rhs, i);
+              ir_replace_uses(i, i->lhs);
+            }
           }
-        }
-        break;
-      case IR_MUL:
-        IR_REDUCE_BINARY(*)
-        else  {
-          // Multiplying by zero == zero
-          if ((i->lhs->kind == IR_IMMEDIATE && imm_lhs(i) == 0) ||
-              (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 0)) {
-            ir_remove_use(i->lhs, i);
-            ir_remove_use(i->rhs, i);
-            i->kind = IR_IMMEDIATE;
-            i->imm = 0;
+          break;
+        case IR_MUL:
+          IR_REDUCE_BINARY(*)
+          else {
+            // Multiplying by zero == zero
+            if ((i->lhs->kind == IR_IMMEDIATE && imm_lhs(i) == 0) || (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 0)) {
+              ir_remove_use(i->lhs, i);
+              ir_remove_use(i->rhs, i);
+              i->kind = IR_IMMEDIATE;
+              i->imm = 0;
+            }
+            // Multiplying 1 * rhs == rhs
+            else if (i->lhs->kind == IR_IMMEDIATE && imm_lhs(i) == 1) {
+              ir_remove_use(i->lhs, i);
+              ir_remove_use(i->rhs, i);
+              ir_replace_uses(i, i->rhs);
+            }
+            // Multiplying lhs * 1 == lhs
+            else if (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 1) {
+              ir_remove_use(i->lhs, i);
+              ir_remove_use(i->rhs, i);
+              ir_replace_uses(i, i->lhs);
+            }
           }
-          // Multiplying 1 * rhs == rhs
-          else if (i->lhs->kind == IR_IMMEDIATE && imm_lhs(i) == 1) {
-            ir_remove_use(i->lhs, i);
-            ir_remove_use(i->rhs, i);
-            ir_replace_uses(i, i->rhs);
-          }
-          // Multiplying lhs * 1 == lhs
-          else if (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 1) {
-            ir_remove_use(i->lhs, i);
-            ir_remove_use(i->rhs, i);
-            ir_replace_uses(i, i->lhs);
-          }
-        }
-        break;
+          break;
 
         case IR_DIV:
           IR_REDUCE_BINARY(/)
@@ -156,23 +154,33 @@ static bool opt_const_folding_and_strengh_reduction(IRFunction *f) {
             }
           }
           break;
-        case IR_MOD: IR_REDUCE_BINARY(%) break;
+        case IR_MOD:
+          IR_REDUCE_BINARY(%)
+          break;
 
-        case IR_SHL: IR_REDUCE_BINARY(<<) break;
-        case IR_SHR: IR_REDUCE_BINARY(>>) break;
+        case IR_SHL:
+          IR_REDUCE_BINARY(<<)
+          break;
+        case IR_SHR:
+          IR_REDUCE_BINARY(>>)
+          break;
         case IR_SAR:
           if (is_immediate_pair(i)) {
             IRInstruction *lhs = i->lhs;
             IRInstruction *rhs = i->rhs;
             i->kind = IR_IMMEDIATE;
-            i->imm = (u64) ((i64)imm_lhs(i) >> imm_rhs(i));
+            i->imm = (u64) ((i64) imm_lhs(i) >> imm_rhs(i));
             ir_remove_use(lhs, i);
             ir_remove_use(rhs, i);
             changed = true;
           }
           break;
-        case IR_AND: IR_REDUCE_BINARY(&) break;
-        case IR_OR: IR_REDUCE_BINARY(|) break;
+        case IR_AND:
+          IR_REDUCE_BINARY(&)
+          break;
+        case IR_OR:
+          IR_REDUCE_BINARY(|)
+          break;
         case IR_NOT:
           if (i->operand->kind == IR_IMMEDIATE) {
             i->kind = IR_IMMEDIATE;
@@ -239,7 +247,9 @@ static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
     /// is only possible if the return value is the call, or
     /// any of the PHIs.
     if (i->kind == IR_RETURN) {
-      foreach_val (a, tc->phis) { if (a == i->operand) { return true; } }
+      foreach_val (a, tc->phis) {
+        if (a == i->operand) { return true; }
+      }
       return i->operand == tc->call;
     }
 
@@ -402,10 +412,10 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
   /// Since loads from global variables before the first store
   /// are possible, we only check if the first store occurs
   /// before any loads and in main() for now.
-  IRFunction **main = vector_find_if (m, ctx->functions, string_eq((*m)->name, literal_span("main")));
+  IRFunction **main = vector_find_if(m, ctx->functions, string_eq((*m)->name, literal_span("main")));
   ASSERT(main, "No main() function!");
 
-  FOREACH_INSTRUCTION (ctx) {
+  FOREACH_INSTRUCTION(ctx) {
     switch (instruction->kind) {
       default: break;
 
@@ -477,12 +487,11 @@ bool opt_inline_global_vars(CodegenContext *ctx) {
   }
 
   /// Convert indirect calls to function references to direct calls.
-  FOREACH_INSTRUCTION (ctx) {
+  FOREACH_INSTRUCTION(ctx) {
     switch (instruction->kind) {
       default: break;
       case IR_CALL: {
-        if (instruction->call.is_indirect &&
-            instruction->call.callee_instruction->kind == IR_FUNC_REF) {
+        if (instruction->call.is_indirect && instruction->call.callee_instruction->kind == IR_FUNC_REF) {
           IRInstruction *func = instruction->call.callee_instruction;
           ir_remove_use(instruction->call.callee_instruction, instruction);
 
@@ -616,15 +625,15 @@ bool opt_analyse_functions(CodegenContext *ctx) {
 ///  Block reordering etc.
 /// ===========================================================================
 /// Rearrange the blocks in a function according to the dominator tree.
-static void opt_reorder_blocks(IRFunction *f, DominatorInfo* info) {
+static void opt_reorder_blocks(IRFunction *f, DominatorInfo *info) {
   /// Clear the block list.
   f->blocks.first = NULL;
   f->blocks.last = NULL;
 
   /// Perform a preorder traversal of the dominator tree
   /// and reorder the blocks so that we can avoid jumps.
-  Vector(DomTreeNode*) stack = {0};
-  Vector(DomTreeNode*) visited = {0};
+  Vector(DomTreeNode *) stack = {0};
+  Vector(DomTreeNode *) visited = {0};
   vector_push(stack, info->dominator_tree);
   while (stack.size) {
     DomTreeNode *node = vector_pop(stack);
@@ -726,6 +735,54 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
   return changed;
 }
 
+/// Foreach block, replace loads from a variable with the last value
+/// stored to that variable in that block, if any.
+static bool opt_store_forwarding(IRFunction *f) {
+  Vector(struct var {
+    IRInstruction *alloca;
+    IRInstruction *store;
+  }) vars = {0};
+  bool changed = false;
+
+  list_foreach (block, f->blocks) {
+    vector_clear(vars);
+    list_foreach (i, block->instructions) {
+      switch (i->kind) {
+        default: break;
+        case IR_STORE: {
+          if (i->store.addr->kind == IR_ALLOCA) {
+            struct var *v = vector_find_if(el, vars, el->alloca == i->store.addr);
+            if (v) {
+              /// Eliminate the previous store if the address is never used.
+              IRInstruction *ir = v->store->next;
+              for (; ir && ir != i; ir = ir->next)
+                if (vector_contains(v->alloca->users, ir))
+                  break;
+              if (ir == i) ir_remove(v->store);
+
+              /// Update the store.
+              v->store = i;
+            } else vector_push(vars, ((struct var){i->store.addr, i}));
+          }
+        } break;
+
+        case IR_LOAD: {
+          struct var *v = vector_find_if(el, vars, el->alloca == i->operand);
+          if (v) {
+            ir_remove_use(v->store, i);
+            ir_replace_uses(i, v->store->store.value);
+            ir_remove(i);
+            changed = true;
+          }
+        } break;
+      }
+    }
+  }
+
+  vector_delete(vars);
+  return changed;
+}
+
 /// ===========================================================================
 ///  Driver
 /// ===========================================================================
@@ -743,11 +800,12 @@ void codegen_optimise(CodegenContext *ctx) {
         build_dominator_tree(f, &dom, true);
         opt_reorder_blocks(f, &dom);
       } while (
-          opt_const_folding_and_strengh_reduction(f) ||
-          opt_dce(f) ||
-          opt_mem2reg(f) ||
-          opt_jump_threading(f, &dom) ||
-          opt_tail_call_elim(f)
+        opt_const_folding_and_strengh_reduction(f) ||
+        opt_dce(f) ||
+        opt_mem2reg(f) ||
+        opt_jump_threading(f, &dom) ||
+        opt_store_forwarding(f) ||
+        opt_tail_call_elim(f)
       );
       free_dominator_info(&dom);
     }

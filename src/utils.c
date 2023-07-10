@@ -103,7 +103,7 @@ static inline void vformat_to_impl(
     /// Handle ANSI escape codes.
     if (*fmt == '\033') {
       /// Find the end of the escape code.
-      const char *end = fmt + strcspn(fmt, "m") + 1;
+      const char *end = fmt + strspn(fmt, "0123456789;") + 1;
 
       /// Handle unterminated escape codes.
       if (*end == 0) ICE("Unterminated ANSI escape code in format string");
