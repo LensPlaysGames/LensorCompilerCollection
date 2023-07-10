@@ -1,0 +1,5 @@
+;; ERROR
+
+f : void() inline { }
+
+i : @(void()) = f
