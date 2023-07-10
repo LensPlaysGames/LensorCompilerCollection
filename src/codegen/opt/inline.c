@@ -209,10 +209,15 @@ static bool ir_inline_call(
         case IR_COUNT: UNREACHABLE();
 
         case IR_IMMEDIATE: copy->imm = inst->imm; break;
-        case IR_STATIC_REF: copy->static_ref = inst->static_ref; break;
         case IR_FUNC_REF: copy->function_ref = inst->function_ref; break;
         case IR_UNREACHABLE: break;
         case IR_ALLOCA: copy->alloca = inst->alloca; break;
+
+        /// Static refs need to be registered.
+        case IR_STATIC_REF:
+          copy->static_ref = inst->static_ref;
+          vector_push(inst->static_ref->references, copy);
+          break;
 
         case IR_INTRINSIC:
           copy->call.intrinsic = inst->call.intrinsic;
@@ -308,15 +313,19 @@ static bool ir_inline_call(
           /// Otherwise, if this is the last return instruction in
           /// the function, and it’s also the only one, just set
           /// the return value and discard it.
+          ///
+          /// This only works if the instruction has a return value;
+          /// otherwise, we need to emit a branch to the return block
+          /// anyway.
           if (!return_block) {
             if (block == callee->blocks.last && inst == block->instructions.last) {
               if (inst->operand) {
                 return_value = MAP(inst->operand);
                 MAP(inst) = call; /// See below.
-              }
 
-              /// Continue because we want to drop this instruction, not insert it.
-              continue;
+                /// Continue because we want to drop this instruction, not insert it.
+                continue;
+              }
             }
 
             /// If this is not the last return instruction, we need a
@@ -378,16 +387,11 @@ static bool ir_inline_call(
   /// at the same time, there is no PHI.
   ///
   /// Note that if the call was a tail call, we just drop
-  /// everything after the call.
+  /// everything after the call and return.
   IRBlock *last = vector_back(blocks);
-  IRInstruction *last_in_last_block = last->instructions.last;
-  if (last_in_last_block && !is_tail_call) {
-    last_in_last_block->next = call_next;
-    if (call_next) call_next->prev = last_in_last_block;
-  }
 
-  /// Remove every instruction after the call.
-  if (call_next && is_tail_call) {
+  /// Remove every instruction after a tail call.
+  if (is_tail_call) {
     IRInstruction *next = call_next;
     while (next) {
       IRInstruction *next_next = next->next;
@@ -396,6 +400,12 @@ static bool ir_inline_call(
       next = next_next;
     }
   }
+
+  /// Insert instructions after the call into the last block.
+  else {
+    ir_force_insert_into_block(last, call_next);
+  }
+
 
   /// Connect the last block to the previous successor of
   /// the block containing the call instruction.
@@ -412,7 +422,7 @@ static bool ir_inline_call(
   }
 
   /// Connect all new blocks.
-  for (usz i = 1; i < block_count; i++) {
+  for (usz i = 1; i < blocks.size; i++) {
     blocks.data[i - 1]->next = blocks.data[i];
     blocks.data[i]->prev = blocks.data[i - 1];
   }
