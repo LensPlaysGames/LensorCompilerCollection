@@ -135,7 +135,7 @@ static bool ir_inline_call(
             copy->backend_flags = inst->backend_flags;
 
             /// Copy instruction-specific data.
-            STATIC_ASSERT(IR_COUNT == 38, "Handle all instructions in inliner");
+            STATIC_ASSERT(IR_COUNT == 39, "Handle all instructions in inliner");
             switch (inst->kind) {
                 case IR_LIT_INTEGER:
                 case IR_LIT_STRING:
@@ -143,14 +143,15 @@ static bool ir_inline_call(
                 case IR_PARAMETER:
                 case IR_COUNT: UNREACHABLE();
 
-                /// These can just be shallow-copied.
                 case IR_IMMEDIATE: copy->imm = inst->imm; break;
                 case IR_STATIC_REF: copy->static_ref = inst->static_ref; break;
                 case IR_FUNC_REF: copy->function_ref = inst->function_ref; break;
                 case IR_UNREACHABLE: break;
                 case IR_ALLOCA: copy->alloca = inst->alloca; break;
 
-                /// These (may) have references to other instructions and blocks.
+                case IR_INTRINSIC:
+                  copy->call.intrinsic = inst->call.intrinsic;
+                  FALLTHROUGH;
                 case IR_CALL:
                     copy->call.is_indirect = inst->call.is_indirect;
                     copy->call.tail_call = inst->call.tail_call;
@@ -159,6 +160,7 @@ static bool ir_inline_call(
                     foreach_val (arg, inst->call.arguments)
                         vector_push(copy->call.arguments, MAP(arg));
                     break;
+
 
                 case IR_LOAD:
                 case IR_COPY:
