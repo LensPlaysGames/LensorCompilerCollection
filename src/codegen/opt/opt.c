@@ -22,10 +22,10 @@ uint32_t ctzll(uint64_t value) {
   if (is_immediate_pair(i)) {          \
     IRInstruction *lhs = i->lhs;       \
     IRInstruction *rhs = i->rhs;       \
-    i->kind = IR_IMMEDIATE;            \
-    i->imm = imm_lhs(i) op imm_rhs(i); \
     ir_remove_use(lhs, i);             \
     ir_remove_use(rhs, i);             \
+    i->kind = IR_IMMEDIATE;            \
+    i->imm = imm_lhs(i) op imm_rhs(i); \
     changed = true;                    \
   }
 
@@ -80,6 +80,10 @@ static bool has_side_effects(IRInstruction *i) {
 /// Everything that merges instructions or performs strength reduction,
 /// folding, etc. etc. goes here. If you’re unsure where to put something,
 /// put it here.
+///
+/// Note: Take care to remove uses etc. *before* overwriting the `imm` field
+/// as it is in a union together with whatever it is whose uses you want to
+/// remove.
 static bool opt_instcombine(IRFunction *f) {
   bool changed = false;
   list_foreach (b, f->blocks) {
@@ -171,10 +175,10 @@ static bool opt_instcombine(IRFunction *f) {
           if (is_immediate_pair(i)) {
             IRInstruction *lhs = i->lhs;
             IRInstruction *rhs = i->rhs;
-            i->kind = IR_IMMEDIATE;
-            i->imm = (u64) ((i64) imm_lhs(i) >> imm_rhs(i));
             ir_remove_use(lhs, i);
             ir_remove_use(rhs, i);
+            i->kind = IR_IMMEDIATE;
+            i->imm = (u64) ((i64) imm_lhs(i) >> imm_rhs(i));
             changed = true;
           }
           break;
