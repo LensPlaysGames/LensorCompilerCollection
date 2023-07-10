@@ -296,7 +296,8 @@ static bool tail_call_possible_iter(tail_call_info *tc, IRBlock *b) {
     /// relevant instruction before a return.
     return false;
   }
-  UNREACHABLE();
+
+  return false;
 }
 
 static bool tail_call_possible(IRInstruction *i) {

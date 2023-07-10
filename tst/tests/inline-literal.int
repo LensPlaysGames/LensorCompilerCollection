@@ -1,0 +1,5 @@
+;; 42
+
+foo : integer (x : integer) 42
+
+foo(1)

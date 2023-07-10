@@ -217,7 +217,12 @@ void ir_block_attach(CodegenContext *context, IRBlock *new_block);
 IRFunction *ir_function(CodegenContext *context, span name, Type *function_type);
 IRInstruction *ir_funcref(CodegenContext *context, IRFunction *function);
 
+/// Insert an instruction into a block without checking; this
+/// does not change the `next` pointer of `new_instruction`,
+/// which allows for inserting a chain of instructions, though
+/// the block pointers still need to be updated in that case.
 void ir_force_insert_into_block(IRBlock *block, IRInstruction *new_instruction);
+
 void ir_insert_into_block(IRBlock *block, IRInstruction *new_instruction);
 
 void ir_insert(CodegenContext *context, IRInstruction *new_instruction);

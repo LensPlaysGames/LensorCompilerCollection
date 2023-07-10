@@ -1,0 +1,11 @@
+;; 42
+
+a :: 0
+
+foo : void (x : integer) {
+    if x { a := 42 return; }
+    else { a := 69 return; }
+}
+
+foo(1)
+a
