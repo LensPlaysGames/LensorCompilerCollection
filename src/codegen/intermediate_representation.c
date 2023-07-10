@@ -113,8 +113,13 @@ void ir_remove(IRInstruction* instruction) {
     ICE("Cannot remove used instruction.");
   }
 
-  if (instruction->prev || instruction->next)
-    list_remove(instruction->parent_block->instructions, instruction);
+  /// Remove the instruction if it’s inserted in a block.
+  if (
+    instruction->prev ||
+    instruction->next ||
+    instruction->parent_block->instructions.first == instruction ||
+    instruction->parent_block->instructions.last == instruction
+  ) list_remove(instruction->parent_block->instructions, instruction);
   vector_delete(instruction->users);
   ir_unmark_usees(instruction);
 
