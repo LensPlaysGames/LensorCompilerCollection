@@ -231,8 +231,17 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   default: ICE("Unrecognized expression kind: %d", expr->kind);
 
   /// A function node yields its address.
+  ///
+  /// FIXME: Replacing function references with the functions they
+  /// point to discards location information, the result of which
+  /// is that errors now point to the function declaration rather
+  /// than the use that caused the problem; to fix this, we should
+  /// hold on to function references and emit IR function references
+  /// for them in here.
   case NODE_FUNCTION:
       expr->ir = ir_funcref(ctx, expr->function.ir);
+      if (expr->type->function.alwaysinline)
+        ERR("Cannot take address of inline function '%S'", expr->function.name);
       return;
 
   case NODE_MODULE_REFERENCE:

@@ -1002,6 +1002,7 @@ void ir_print_defun(FILE *file, IRFunction *f) {
   if (f->attr_leaf) fprint(file, " leaf");
   if (f->attr_noreturn) fprint(file, " noreturn");
   if (f->attr_pure) fprint(file, " pure");
+  if (f->attr_nomangle) fprint(file, " nomangle");
 }
 
 void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
