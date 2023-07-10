@@ -30,7 +30,7 @@ syn keyword intConditional
 syn keyword intMacro macro emits endmacro
 syn match intMacroArgs '\$[a-zA-Z_][a-zA-Z0-9_]*'
 
-syn keyword intFunctionAttributes discardable nomangle
+syn keyword intFunctionAttributes discardable nomangle inline
 
 syn keyword intTypeAttributes alignas
 
