@@ -1,0 +1,21 @@
+;; 42
+
+a :: 0
+
+f1 : void() {
+    a := a + 1
+    if a = 42 return; else f2()
+}
+
+f2 : void() {
+    a := a + 1
+    if a = 42 return; else f3()
+}
+
+f3 : void() {
+    a := a + 1
+    if a = 42 return; else f1()
+}
+
+f1()
+a
