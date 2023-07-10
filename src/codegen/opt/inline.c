@@ -268,12 +268,15 @@ static bool ir_inline_call(
     FOREACH_INSTRUCTION_IN_FUNCTION (callee) {
         IRInstruction *copy = MAP(instruction);
         foreach_val (user, instruction->users)
-            vector_push(copy->users, MAP(user));
+            mark_used(copy, MAP(user));
     }
 
     /// Fix up the return value by replacing all uses of the
     /// call with the return value.
-    if (return_value) ir_replace_uses(call, return_value);
+    if (return_value) {
+      ir_remove_use(return_value, call);
+      ir_replace_uses(call, return_value);
+    }
 
     /// Delete the call.
     ir_remove(call);

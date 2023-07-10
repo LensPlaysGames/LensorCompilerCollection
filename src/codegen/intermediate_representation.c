@@ -365,7 +365,7 @@ void ir_femit_instruction
 #ifdef DEBUG_USES
   /// Print users
   fprint(file, "%m\033[60GUsers: ");
-  foreach_ptr (IRInstruction*, user, inst->users) {
+  foreach_val (user, inst->users) {
     fprint(file, "%%%u, ", user->id);
   }
 #endif
@@ -424,8 +424,8 @@ void ir_set_func_ids(IRFunction *f) {
   list_foreach (block, f->blocks) {
     block->id = block_id++;
     list_foreach (instruction, block->instructions) {
-        if (instruction->kind == IR_PARAMETER || !ir_is_value(instruction)) continue;
-        instruction->id = instruction_id++;
+        if (instruction->kind == IR_PARAMETER || !ir_is_value(instruction)) instruction->id = 0;
+        else instruction->id = instruction_id++;
     }
   }
 }
@@ -857,7 +857,11 @@ static void ir_internal_replace_use(IRInstruction *user, IRInstruction **child, 
 #endif
 
   if (user == replace->replacement) return;
-  if (*child == replace->usee) *child = replace->replacement;
+  if (*child == replace->usee) {
+    *child = replace->replacement;
+    ir_remove_use(replace->usee, user);
+    mark_used(replace->replacement, user);
+  }
 }
 
 void ir_for_each_child(
@@ -990,8 +994,7 @@ void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
     ir_for_each_child(user, ir_internal_replace_use, &replace);
   }
 
-  vector_append(replacement->users, instruction->users);
-  vector_clear(instruction->users);
+  ASSERT(instruction->users.size == 0);
 }
 
 static void ir_internal_unmark_usee(IRInstruction *user, IRInstruction **child, void *_) {
