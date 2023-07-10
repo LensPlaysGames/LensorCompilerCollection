@@ -9,6 +9,8 @@ endif()
 # Export compilation database in JSON format.
 set(CMAKE_EXPORT_COMPILE_COMMANDS on)
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 project(Intercept C CXX)
 
@@ -239,9 +241,40 @@ else()
 endif()
 
 include(CTest)
+include(ExternalProject)
 if (BUILD_TESTING)
+  ExternalProject_Add(clopts
+    GIT_REPOSITORY git@github.com:Sirraide/clopts.git
+    GIT_TAG origin/master
+    PREFIX "${CMAKE_CURRENT_BINARY_DIR}/clopts"
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+    TEST_COMMAND ""
+    UPDATE_COMMAND ""
+  )
+
+  ExternalProject_Add(fmtlib
+    GIT_REPOSITORY git@github.com:fmtlib/fmt.git
+    GIT_TAG 10.0.0
+    PREFIX "${CMAKE_CURRENT_BINARY_DIR}/fmtlib"
+    INSTALL_COMMAND ""
+    TEST_COMMAND ""
+    UPDATE_COMMAND ""
+  )
+
   add_executable(test_instantiator tst/main.cpp)
-  set_property(TARGET test_instantiator PROPERTY CXX_STANDARD 20)
+  add_dependencies(test_instantiator clopts fmtlib)
+  target_include_directories(test_instantiator SYSTEM PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/clopts/src/clopts/include"
+    "${CMAKE_CURRENT_BINARY_DIR}/fmtlib/src/fmtlib/include"
+  )
+
+  add_library(fmt STATIC IMPORTED)
+  set_target_properties(fmt PROPERTIES
+      IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/fmtlib/src/fmtlib-build/${CMAKE_STATIC_LIBRARY_PREFIX}fmt${CMAKE_STATIC_LIBRARY_SUFFIX}"
+  )
+  target_link_libraries(test_instantiator PRIVATE fmt)
 
   file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
   foreach (test ${tests})
