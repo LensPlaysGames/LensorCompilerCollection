@@ -140,7 +140,7 @@ struct FormatCheckCallback : public match::MatchFinder::MatchCallback {
       /// Skip ANSI escape codes.
       if (fmt[0] == '\033') {
         /// Find the end of the escape code.
-        auto end = fmt.find('m');
+        auto end = fmt.find_first_not_of("0123456789;");
         bool found = end != std::string_view::npos;
         if (!found) {
           diags.Report(call->getBeginLoc(),

@@ -1,7 +1,8 @@
 # Build Artifacts
-**/*.S
-**/*.o
-**/*.exe
+*.S
+*.o
+*.exe
+*.ll
 # CCache
 .cache
 # CMake
