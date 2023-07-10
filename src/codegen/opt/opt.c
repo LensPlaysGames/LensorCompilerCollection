@@ -301,24 +301,28 @@ static bool tail_call_possible(IRInstruction *i) {
   return possible;
 }
 
+bool opt_try_convert_to_tail_call(IRInstruction *i) {
+  /// An instruction is a tail call iff there are no other instruction
+  /// between it and the next return instruction other than branches
+  /// and phis.
+  if (tail_call_possible(i)) {
+    /// The actual tail call optimisation takes place in the code generator.
+    i->call.tail_call = true;
+    ir_mark_unreachable(i->parent_block);
+    return true;
+  }
+
+  return false;
+}
+
 static bool opt_tail_call_elim(IRFunction *f) {
   bool changed = false;
   list_foreach (b, f->blocks) {
     list_foreach (i, b->instructions) {
       if (i->kind != IR_CALL) { continue; }
 
-      /// An instruction is a tail call iff there are no other instruction
-      /// between it and the next return instruction other than branches
-      /// and phis.
-      if (tail_call_possible(i)) {
-        /// The actual tail call optimisation takes place in the code generator.
-        i->call.tail_call = true;
-        ir_mark_unreachable(b);
-        changed = true;
-
-        /// We can’t have more than two tail calls in a single block.
-        goto next_block;
-      }
+      /// We can’t have more than two tail calls in a single block.
+      if (opt_try_convert_to_tail_call(i)) goto next_block;
     }
   next_block:;
   }
@@ -417,119 +421,6 @@ static bool opt_mem2reg(IRFunction *f) {
     ir_remove(a->alloca);
   }
 
-  vector_delete(vars);
-  return changed;
-}
-
-/// ===========================================================================
-///  Inline Globals
-/// ===========================================================================
-/// Keep track of stores to global variables, and if there is only
-/// one, inline the value if it is also global.
-bool opt_inline_global_vars(CodegenContext *ctx) {
-  /// A global variable.
-  typedef struct {
-    IRInstruction *var;
-    IRInstruction *store;
-    Vector(IRInstruction *) loads;
-    bool unoptimisable;
-  } global_var;
-  Vector(global_var) vars = {0};
-
-  /// Since loads from global variables before the first store
-  /// are possible, we only check if the first store occurs
-  /// before any loads and in main() for now.
-  IRFunction **main = vector_find_if(m, ctx->functions, string_eq((*m)->name, literal_span("main")));
-  ASSERT(main, "No main() function!");
-
-  FOREACH_INSTRUCTION(ctx) {
-    switch (instruction->kind) {
-      default: break;
-
-      /// Record the first store into a variable.
-      case IR_STORE: {
-        foreach (a, vars) {
-          if (!a->unoptimisable && a->store->store.addr == a->var) {
-            /// If there are multiple stores, mark the variable as unoptimisable.
-            if (a->store || function != *main) a->unoptimisable = true;
-            else a->store = instruction;
-            goto next_instruction;
-          }
-        }
-
-        /// Add a new variable.
-        global_var v = {0};
-        v.var = instruction->store.addr;
-        v.store = function == *main ? instruction : NULL;
-        v.unoptimisable = function != *main;
-        vector_push(vars, v);
-      } break;
-
-      /// Record all loads; also check for loads before the first store.
-      case IR_LOAD: {
-        foreach (a, vars) {
-          if (!a->unoptimisable && a->store->store.addr == a->var) {
-            /// Load before store.
-            if (!a->store) a->unoptimisable = true;
-            else vector_push(a->loads, instruction);
-            goto next_instruction;
-          }
-        }
-
-        /// Unoptimisable because the variable is loaded before it is stored to.
-        global_var v = {0};
-        v.var = instruction->store.addr;
-        v.unoptimisable = true;
-        vector_push(vars, v);
-      } break;
-    }
-  next_instruction:;
-  }
-
-  /// Optimise all optimisable variables.
-  bool changed = false;
-  foreach (a, vars) {
-    /// If the variable is unoptimisable, do nothing.
-    ///
-    /// Since we don’t have `addressof` instructions or anything like
-    /// that, check if the address is taken anywhere by checking if
-    /// there are any uses of the alloca excepting the store and loads.
-    if (a->unoptimisable || a->var->users.size != a->loads.size + 1) {
-      vector_delete(a->loads);
-      continue;
-    }
-
-    /// Replace all loads with the stored value.
-    changed = true;
-    foreach_val (i, a->loads) {
-      ir_replace_uses(i, a->store->store.value);
-      ir_remove(i);
-    }
-    vector_delete(a->loads);
-
-    /// Remove the store.
-    ASSERT(a->store->users.size <= 1);
-    vector_clear(a->store->users);
-    ir_remove(a->store);
-  }
-
-  /// Convert indirect calls to function references to direct calls.
-  FOREACH_INSTRUCTION(ctx) {
-    switch (instruction->kind) {
-      default: break;
-      case IR_CALL: {
-        if (instruction->call.is_indirect && instruction->call.callee_instruction->kind == IR_FUNC_REF) {
-          IRInstruction *func = instruction->call.callee_instruction;
-          ir_remove_use(instruction->call.callee_instruction, instruction);
-
-          instruction->call.is_indirect = false;
-          instruction->call.callee_function = func->function_ref;
-        }
-      } break;
-    }
-  }
-
-  /// Done.
   vector_delete(vars);
   return changed;
 }
@@ -855,7 +746,6 @@ static bool opt_store_forwarding(IRFunction *f) {
 ///  Driver
 /// ===========================================================================
 void codegen_optimise(CodegenContext *ctx) {
-  opt_inline_global_vars(ctx);
   opt_analyse_functions(ctx);
 
   /// Optimise each function individually.
@@ -880,7 +770,7 @@ void codegen_optimise(CodegenContext *ctx) {
   }
 
   /// Cross-function optimisations.
-  while (opt_inline_global_vars(ctx) || opt_inline(ctx, 20) || opt_analyse_functions(ctx));
+  while (opt_inline(ctx, 20) || opt_analyse_functions(ctx));
 }
 
 /// Called after RA.
