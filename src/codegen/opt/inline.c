@@ -50,12 +50,15 @@ static bool ir_inline_call(
   usz call_history_index = 0;
 
   /// Handle the degenerate case of the callee being empty.
-  isz count = instruction_count(callee, true);
+  isz count = instruction_count(callee, false);
   if (count == 0) {
     ASSERT(call->users.size == 0, "Call to empty function cannot possibly return a value");
     ir_remove(call);
     return true;
   }
+
+  /// Add number of parameters that the callee takes.
+  count += (isz) callee->parameters.size;
 
   /// If the call does not yet exists in the history, add it. If it
   /// does, check if one of its parents is itself.
