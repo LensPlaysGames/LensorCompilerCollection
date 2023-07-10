@@ -73,25 +73,7 @@ void codegen_context_free(CodegenContext *context) {
   STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen calling conventions.");
 
   /// Free all IR Functions.
-  foreach_val (f, context->functions) {
-    /// Free each block.
-    list_foreach (b, f->blocks) {
-      /// Free each instruction.
-      list_foreach (i, b->instructions) ir_free_instruction_data(i);
-      list_delete (b->instructions);
-
-      /// Free the block name.
-      free(b->name.data);
-    }
-
-    /// Free the name, params, and block list.
-    free(f->name.data);
-    vector_delete(f->parameters);
-    list_delete(f->blocks);
-
-    /// Free the function itself.
-    free(f);
-  }
+  foreach_val (f, context->functions) ir_free_function(f);
 
   /// Finally, delete the function vector.
   vector_delete(context->functions);
@@ -913,7 +895,8 @@ bool codegen
 
         /// Handle attributes
         STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of function attributes");
-        func->function.ir->attr_global = func->type->function.global;
+        /// TODO: Figure out what functions to export.
+        func->function.ir->attr_global = ast->is_module && func->type->function.global;
         func->function.ir->attr_nomangle = func->type->function.nomangle;
         func->function.ir->attr_forceinline = func->type->function.alwaysinline;
         // TODO: Should we propagate "discardable" to the IR?

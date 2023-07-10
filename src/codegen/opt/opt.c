@@ -67,7 +67,7 @@ static bool has_side_effects(IRInstruction *i) {
       return false;
 
     case IR_CALL:
-      return i->call.is_indirect || !i->call.callee_function->attr_pure;
+      return i->call.is_indirect || !i->call.callee_function->attr_pure || i->call.tail_call;
 
     default:
       return true;
@@ -603,18 +603,53 @@ bool opt_check_noreturn(IRFunction *f) {
   return true;
 }
 
+/// Check if a function is referenced by this instruction.
+static void check_function_references(IRInstruction *inst) {
+  switch (inst->kind) {
+    default: break;
+    case IR_FUNC_REF: inst->function_ref->is_ever_referenced = true; break;
+    case IR_CALL:
+      if (!inst->call.is_indirect) inst->call.callee_function->is_ever_referenced = true;
+      break;
+  }
+}
+
 /// Analyse functions to determine whether they’re pure, leaf functions, etc.
 bool opt_analyse_functions(CodegenContext *ctx) {
   bool ever_changed = false, changed;
   do {
     changed = false;
 
+    /// Check function attributes.
     foreach_val (f, ctx->functions) {
       if (f->is_extern) continue;
+      f->is_ever_referenced = false;
       changed |= opt_check_pure(f);
       changed |= opt_check_leaf(f);
       changed |= opt_check_noreturn(f);
     }
+
+    /// The entry point is always referenced.
+    ctx->entry->is_ever_referenced = true;
+
+    /// Check if the functions are ever referenced.
+    FOREACH_INSTRUCTION(ctx)
+    check_function_references(instruction);
+
+    /// Also check in global variables and exports.
+    foreach_val (var, ctx->static_vars)
+      if (var->init)
+        check_function_references(var->init);
+
+    /// Free functions that are never referenced.
+    foreach_val (f, ctx->functions) {
+      if (f->is_ever_referenced) continue;
+      changed = true;
+      ir_free_function(f);
+    }
+
+    /// And remove them.
+    vector_erase_if_unordered_val(f, ctx->functions, !f->is_ever_referenced);
 
     if (changed) ever_changed = true;
   } while (changed);
@@ -812,7 +847,7 @@ void codegen_optimise(CodegenContext *ctx) {
   }
 
   /// Cross-function optimisations.
-  while (opt_inline_global_vars(ctx) || opt_analyse_functions(ctx));
+  while (opt_inline_global_vars(ctx) || opt_inline(ctx, 20) || opt_analyse_functions(ctx));
 }
 
 /// Called after RA.

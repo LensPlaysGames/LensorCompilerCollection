@@ -13,4 +13,7 @@
 #include <string.h>
 #include <vector.h>
 
+/// Inlining pass during optimisation.
+bool opt_inline(CodegenContext *ctx, isz threshold);
+
 #endif // INTERCEPT_CODEGEN_OPT_OPT_INTERNAL_H
