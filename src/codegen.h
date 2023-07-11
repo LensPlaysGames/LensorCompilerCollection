@@ -60,6 +60,9 @@ struct CodegenContext {
   CodegenTarget target;
   CodegenCallingConvention call_convention;
 
+  /// Poison value.
+  IRInstruction *poison;
+
   /// Whether there was an error during codegen.
   /// TODO: Move target information up to Sema. Keep this here regardless tho.
   bool has_err;

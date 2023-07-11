@@ -57,6 +57,10 @@ CodegenContext *codegen_context_create
     default: UNREACHABLE();
   }
 
+  context->poison = calloc(1, sizeof(IRInstruction));
+  context->poison->kind = IR_POISON;
+  context->poison->ctx = context;
+
   context->arch = arch;
   context->target = target;
   context->call_convention = call_convention;

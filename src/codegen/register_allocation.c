@@ -53,7 +53,7 @@ static void vreg_vector_remove_element(VRegVector *vregs, usz vreg_value) {
 
 /// Return non-zero iff given instruction needs a register.
 static bool needs_register(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 39, "Exhaustively handle all instruction types");
+  STATIC_ASSERT(IR_COUNT == 40, "Exhaustively handle all instruction types");
   ASSERT(instruction);
   switch (instruction->kind) {
     case IR_LOAD:
@@ -70,6 +70,9 @@ static bool needs_register(IRInstruction *instruction) {
     case IR_BITCAST:
     ALL_BINARY_INSTRUCTION_CASES()
       return true;
+
+    case IR_POISON:
+     ICE("Refusing to allocate register for poison value");
 
     case IR_PARAMETER:
       ICE("Unlowered parameter instruction in register allocator");

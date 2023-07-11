@@ -64,6 +64,15 @@
     }                                                                                                          \
   } while (0)
 
+/// Resize the vector to the given size.
+#define vector_resize(vector, sz)                    \
+  do {                                               \
+    usz _sz = sz;                                    \
+    if (_sz > (vector).size)                         \
+      vector_reserve((vector), _sz - (vector).size); \
+    (vector).size = _sz;                             \
+  } while (0)
+
 /// Push an element onto the vector.
 #define vector_push(vector, ...)                    \
   do {                                              \

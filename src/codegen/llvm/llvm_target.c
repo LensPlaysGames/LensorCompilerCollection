@@ -125,7 +125,7 @@ static bool is_noop_bitcast(IRInstruction *inst) {
 /// values, whereas LLVM does not; furthermore, we it also considers
 /// immediates values, whereas LLVM always inlines them.
 static bool llvm_is_numbered_value(IRInstruction *inst) {
-    STATIC_ASSERT(IR_COUNT == 39, "Handle all IR instructions");
+    STATIC_ASSERT(IR_COUNT == 40, "Handle all IR instructions");
     switch (inst->kind) {
         case IR_COUNT: break;
         case IR_IMMEDIATE:   /// Inlined.
@@ -179,6 +179,7 @@ static bool llvm_is_numbered_value(IRInstruction *inst) {
         case IR_TRUNCATE:
         case IR_NOT:
         case IR_ALLOCA:
+        case IR_POISON:
             return true;
 
         case IR_CALL:
@@ -230,7 +231,7 @@ void emit_string_data(LLVMContext *ctx, span s, bool print_type) {
 /// operands of instructions.
 static void emit_value(LLVMContext *ctx, IRInstruction *value, bool print_type) {
     string_buffer *out = &ctx->out;
-    STATIC_ASSERT(IR_COUNT == 39, "Handle all IR instructions");
+    STATIC_ASSERT(IR_COUNT == 40, "Handle all IR instructions");
 
     /// Emit the type if requested.
     if (print_type) {
@@ -248,6 +249,10 @@ static void emit_value(LLVMContext *ctx, IRInstruction *value, bool print_type) 
     /// Emit the value.
     switch (value->kind) {
         case IR_COUNT: UNREACHABLE();
+
+        case IR_POISON:
+            format_to(out, "poison");
+            return;
 
         /// Immediates are always emitted in-line.
         case IR_IMMEDIATE:
@@ -435,12 +440,13 @@ static void emit_pointer_add(
 /// instructions in other places, see `emit_value`.
 static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
     string_buffer *out = &ctx->out;
-    STATIC_ASSERT(IR_COUNT == 39, "Handle all IR instructions");
+    STATIC_ASSERT(IR_COUNT == 40, "Handle all IR instructions");
     switch (inst->kind) {
         case IR_COUNT: UNREACHABLE();
 
         /// These are emitted in-line.
         case IR_IMMEDIATE:
+        case IR_POISON:
         case IR_COPY:
         case IR_STATIC_REF:
         case IR_FUNC_REF:

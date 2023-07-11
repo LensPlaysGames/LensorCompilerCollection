@@ -112,7 +112,7 @@ typedef enum Clobbers {
 } Clobbers;
 
 Clobbers does_clobber(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 39, "Exhaustive handling of IR instruction types that correspond to two-address instructions in x86_64.");
+  STATIC_ASSERT(IR_COUNT == 40, "Exhaustive handling of IR instruction types that correspond to two-address instructions in x86_64.");
   switch (instruction->kind) {
   case IR_ADD:
   case IR_DIV:
