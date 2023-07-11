@@ -200,6 +200,28 @@ static bool opt_instcombine(IRFunction *f) {
           break;
         default: break;
 
+        /// Simplify conditional branches with constant conditions.
+        case IR_BRANCH_CONDITIONAL: {
+          if (i->cond_br.condition->kind != IR_IMMEDIATE) break;
+
+          /// Remove use of condition.
+          i->kind = IR_BRANCH;
+          ir_remove_use(i->cond_br.condition, i);
+
+          /// Convert to unconditional branch.
+          i->destination_block = i->cond_br.condition->imm
+            ? i->cond_br.then
+            : i->cond_br.else_;
+        } break;
+
+        /// Simplify PHIs that contain only a single argument.
+        case IR_PHI: {
+          if (i->phi_args.size > 1) break;
+          ir_remove_use(i->phi_args.data[0]->value, i);
+          ir_replace_uses(i, i->phi_args.data[0]->value);
+          ir_remove(i);
+        } break;
+
         /// Simplify indirect calls to direct calls.
         case IR_CALL: {
           if (!i->call.is_indirect) break;

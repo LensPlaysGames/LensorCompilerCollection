@@ -135,11 +135,9 @@ void ir_remove(IRInstruction* instruction) {
 void ir_remove_and_free_block(IRBlock *block) {
   /// Remove all instructions from the block.
   while (block->instructions.last) {
-    /// Remove this instruction from PHIs.
-    if (block->instructions.last->kind == IR_PHI) {
-      foreach_val (user, block->instructions.first->users) {
-            if (user->kind == IR_PHI) ir_phi_remove_argument(user, block);
-        }
+    /// Remove this instruction from PHIs that use it.
+    foreach_val (user, block->instructions.last->users) {
+      if (user->kind == IR_PHI) ir_phi_remove_argument(user, block);
     }
 
     /// Remove it from the blocks.
