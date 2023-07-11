@@ -457,10 +457,10 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         foreach_val (arg, expr->call.arguments) {
           if (type_is_reference(arg->type)) {
             codegen_lvalue(ctx, arg);
-            vector_push(expr->ir->call.arguments, arg->address);
+            ir_add_function_call_argument(ctx, expr->ir, arg->address);
           } else {
             codegen_expr(ctx, arg);
-            vector_push(expr->ir->call.arguments, arg->ir);
+            ir_add_function_call_argument(ctx, expr->ir, arg->ir);
           }
         }
 
