@@ -71,6 +71,13 @@
     (vector).data[(vector).size++] = (__VA_ARGS__); \
   } while (0)
 
+/// Push an element onto a vector if it's not already in the vector.
+#define vector_push_unique(vector, element) \
+  do {                                      \
+    if (!vector_contains(vector, element))  \
+      vector_push(vector, element);         \
+  } while (0)
+
 /// Pop an element from the vector.
 #define vector_pop(vector) ((vector).data[--(vector).size])
 

@@ -74,6 +74,10 @@ typedef struct DominatorInfo {
   /// the entry block.
   Vector(DomTreeNode) nodes;
   DomTreeNode *dominator_tree;
+
+  /// Predecessor cache. This is invalidated if blocks
+  /// are removed or branches are changed.
+  Vector(IRBlockVector) predecessor_info;
 } DominatorInfo;
 
 /// Build the dominator tree for a function.

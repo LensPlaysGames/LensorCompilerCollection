@@ -653,58 +653,70 @@ static void opt_reorder_blocks(IRFunction *f, DominatorInfo *info) {
   vector_delete(stack);
 }
 
+/// Perform jump threading and similar optimisations.
 static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
   bool changed = false;
 
   /// Avoid iterator invalidation.
   BlockVector blocks_to_remove = {0};
+  Vector(IRInstruction *) phis_to_remove = {0};
 
   /// Remove blocks that consist of a single direct branch.
   ///
   /// Also simplify conditional branches whose true and false
   /// blocks are the same.
   list_foreach (b, f->blocks) {
+    if (vector_contains(blocks_to_remove, b)) continue;
     IRInstruction *last = b->instructions.last;
-    if (last == b->instructions.first && last->kind == IR_BRANCH) {
-      /// Update any blocks that branch to this to branch to our
-      /// target instead.
-      list_foreach (b2, f->blocks) {
-        if (b == b2) continue;
 
-        STATIC_ASSERT(IR_COUNT == 39, "Handle all branch instructions");
-        IRInstruction *branch = b2->instructions.last;
-        if (branch->kind == IR_BRANCH && branch->destination_block == b) {
-          branch->destination_block = last->destination_block;
-          changed = true;
-        } else if (branch->kind == IR_BRANCH_CONDITIONAL) {
-          if (branch->cond_br.then == b) {
-            branch->cond_br.then = last->destination_block;
-            changed = true;
-          }
-          if (branch->cond_br.else_ == b) {
-            branch->cond_br.else_ = last->destination_block;
-            changed = true;
-          }
-        }
+    /// Merge trivially connected blocks.
+    if (last->kind == IR_BRANCH) {
+      /// Ignore blocks with more than one predecessor.
+      if (info->predecessor_info.data[last->destination_block->id].size != 1) continue;
 
-        /// Also update PHIs.
-        list_foreach (i, b2->instructions) {
-          if (i->kind == IR_PHI) {
-            foreach_val (arg, i->phi_args) {
-              if (arg->block == b) {
-                arg->block = last->destination_block;
-                changed = true;
-              }
-            }
+      /// Eliminate the branch and move all instructions from the
+      /// destination block into this block.
+      vector_push(blocks_to_remove, last->destination_block);
+      IRBlock *successor = last->destination_block;
+      IRInstruction *first_new = last->destination_block->instructions.first;
+      ir_remove(last);
+      ir_force_insert_into_block(b, first_new);
+      b->instructions.last = successor->instructions.last;
+      changed = true;
+
+      /// Update the parent for all moved instructions. If the instruction is
+      /// a PHI, instead remove it and replace it with the incoming value.
+      vector_clear(phis_to_remove);
+      for (IRInstruction *inst = first_new; inst; inst = inst->next) {
+        inst->parent_block = b;
+        if (inst->kind == IR_PHI) {
+          ASSERT(inst->phi_args.size <= 1);
+          if (inst->phi_args.size == 1) {
+            ir_remove_use(inst->phi_args.data[0]->value, inst);
+            ir_replace_uses(inst, inst->phi_args.data[0]->value);
+            vector_push(phis_to_remove, inst);
           }
         }
       }
 
-      if (!vector_contains(blocks_to_remove, b)) vector_push(blocks_to_remove, b);
-      changed = true;
+      /// Remove the PHIs.
+      foreach_val (phi, phis_to_remove) ir_remove(phi);
+
+      /// Update all PHIs that have the destination block as an incoming
+      /// block to point to us instead.
+      FOREACH_INSTRUCTION_IN_FUNCTION(f) {
+        if (instruction->kind != IR_PHI) continue;
+        foreach_val (arg, instruction->phi_args)
+          if (arg->block == successor)
+            arg->block = b;
+      }
+
+      /// Clear the successor.
+      successor->instructions.first = NULL;
+      successor->instructions.last = NULL;
     }
 
-    /// Simplify branches.
+    /// Simplify conditional branches.
     else if (last->kind == IR_BRANCH_CONDITIONAL && last->cond_br.then == last->cond_br.else_) {
       last->kind = IR_BRANCH;
       ir_remove_use(last->cond_br.condition, last);
@@ -720,7 +732,22 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
 
   /// Done.
   vector_delete(blocks_to_remove);
+  vector_delete(phis_to_remove);
   return changed;
+}
+
+/// Simplify Control Flow Graph.
+static bool opt_simplify_cfg(IRFunction *f) {
+  DominatorInfo dom = {0};
+  bool ever_changed = false;
+  for (;;) {
+    build_dominator_tree(f, &dom, true);
+    bool changed = opt_jump_threading(f, &dom);
+    if (!changed) break;
+    else ever_changed = true;
+  }
+  free_dominator_info(&dom);
+  return ever_changed;
 }
 
 /// Foreach block, replace loads from a variable with the last value
@@ -729,9 +756,6 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
 /// Keep in mind that call instructions may modify locals, so if the
 /// address of a variable is ever taken, we can’t forward stores across
 /// calls.
-///
-/// This pass also does copy deletion since we’re already iterating over
-/// every block.
 static bool opt_store_forwarding(IRFunction *f) {
   Vector(struct var {
     IRInstruction *alloca;
@@ -759,7 +783,7 @@ static bool opt_store_forwarding(IRFunction *f) {
               /// Update the store.
               v->store = i;
             } else {
-              vector_push(vars, ((struct var){i->store.addr, i}));
+              vector_push(vars, ((struct var){i->store.addr, i, false, false}));
 
               /// Check if the address is ever used by any instruction other
               /// than a load or store; if it is, we can’t forward stores
@@ -803,44 +827,49 @@ static bool opt_store_forwarding(IRFunction *f) {
 /// ===========================================================================
 ///  Driver
 /// ===========================================================================
+PRAGMA_STR(GCC diagnostic push)
+PRAGMA_STR(GCC diagnostic ignored "-Wbitwise-instead-of-logical")
+
 void codegen_optimise(CodegenContext *ctx) {
   opt_analyse_functions(ctx);
 
   /// Optimise each function individually.
+  usz i = 0;
   do {
     foreach_val (f, ctx->functions) {
       if (f->is_extern) continue;
-
-      DominatorInfo dom = {0};
       do {
-        build_dominator_tree(f, &dom, true);
-        opt_reorder_blocks(f, &dom);
+/*        print("Optimising function %S\n", f->name);
+        ir_set_func_ids(f);
+        ir_femit_function(stdout, f);
+        if (++i == 2) __asm__ volatile ("int $3;");*/
       } while (
-        opt_instcombine(f) ||
-        opt_dce(f) ||
-        opt_mem2reg(f) ||
-        opt_jump_threading(f, &dom) ||
-        opt_store_forwarding(f) ||
+        opt_simplify_cfg(f) |
+        opt_instcombine(f) |
+        opt_dce(f) |
+        opt_mem2reg(f) |
+        opt_store_forwarding(f) |
         opt_tail_call_elim(f)
       );
-      free_dominator_info(&dom);
     }
   }
 
   /// Cross-function optimisations.
-  while (opt_inline(ctx, 20) || opt_analyse_functions(ctx));
+  while (opt_inline(ctx, 20) | opt_analyse_functions(ctx));
 }
 
 /// Called after RA.
 void codegen_optimise_blocks(CodegenContext *ctx) {
   foreach_val (f, ctx->functions) {
     if (f->is_extern) continue;
-
-    DominatorInfo dom = {0};
-    do {
-      build_dominator_tree(f, &dom, true);
-      opt_reorder_blocks(f, &dom);
-    } while (opt_jump_threading(f, &dom));
-    free_dominator_info(&dom);
+    opt_simplify_cfg(f);
   }
 }
+
+/// TODO(inlining):
+///  - Jump threading pass.
+///  - Self-inlining.
+///  - `flatten` attribute.
+///  - `__builtin_inline()`.
+///  - `__builtin_line()` etc.
+///  - `__builtin_(debug)trap()`.

@@ -14,6 +14,8 @@ typedef struct RegisterPool RegisterPool;
 typedef unsigned Register;
 typedef struct CodegenContext CodegenContext;
 
+typedef Vector(IRBlock *) IRBlockVector;
+
 // TODO: Reorganise codegen specification
 // CURRENTLY: Format + Assembly Dialect
 // PROPOSED: Architecture + Target [ + Target-specific Value ] or smth like this
