@@ -911,6 +911,8 @@ bool codegen
         /// Handle attributes
         STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of function attributes");
         /// TODO: Figure out what functions to export.
+        /// TODO: Also remember to mark exported global *variables* as such and to
+        ///       not remove stores to them in opt_remove_globals().
         func->function.ir->attr_global = ast->is_module && func->type->function.global;
         func->function.ir->attr_nomangle = func->type->function.nomangle;
         func->function.ir->attr_forceinline = func->type->function.alwaysinline;
