@@ -52,7 +52,7 @@ const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {
 
 static MIROpcodex86_64 gmir_binop_to_x64(MIROpcodeCommon opcode) {
   DBGASSERT(opcode < MIR_COUNT, "Argument is meant to be a general MIR instruction opcode.");
-  STATIC_ASSERT(MIR_COUNT == 39, "Exhaustive handling of binary operator machine instruction opcodes for x86_64 backend");
+  STATIC_ASSERT(MIR_COUNT == 40, "Exhaustive handling of binary operator machine instruction opcodes for x86_64 backend");
   switch (opcode) {
   case MIR_ADD: return MX64_ADD;
   case MIR_SUB: return MX64_SUB;
@@ -109,7 +109,7 @@ static void divmod(CodegenContext *context, IRInstruction *inst) {
 */
 
 static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
-  STATIC_ASSERT(IR_COUNT == 39, "Handle all IR instructions");
+  STATIC_ASSERT(IR_COUNT == 40, "Handle all IR instructions");
 
   if (annotate_code) {
     // TODO: Base comment syntax on dialect or smth.

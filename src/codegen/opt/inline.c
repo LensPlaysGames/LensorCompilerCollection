@@ -200,12 +200,13 @@ static bool ir_inline_call(
       copy->backend_flags = inst->backend_flags;
 
       /// Copy instruction-specific data.
-      STATIC_ASSERT(IR_COUNT == 39, "Handle all instructions in inliner");
+      STATIC_ASSERT(IR_COUNT == 40, "Handle all instructions in inliner");
       switch (inst->kind) {
         case IR_LIT_INTEGER:
         case IR_LIT_STRING:
         case IR_REGISTER:
         case IR_PARAMETER:
+        case IR_POISON:
         case IR_COUNT: UNREACHABLE();
 
         case IR_IMMEDIATE: copy->imm = inst->imm; break;

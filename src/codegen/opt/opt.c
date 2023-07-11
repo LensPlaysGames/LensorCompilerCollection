@@ -47,7 +47,7 @@ static bool power_of_two(u64 value) {
 }
 
 static bool has_side_effects(IRInstruction *i) {
-  STATIC_ASSERT(IR_COUNT == 39, "Handle all instructions");
+  STATIC_ASSERT(IR_COUNT == 40, "Handle all instructions");
   switch (i->kind) {
     /// These do NOT have side effects.
     case IR_IMMEDIATE:
@@ -63,6 +63,7 @@ static bool has_side_effects(IRInstruction *i) {
     case IR_SIGN_EXTEND:
     case IR_TRUNCATE:
     case IR_BITCAST:
+    case IR_POISON:
       ALL_BINARY_INSTRUCTION_CASES()
       return false;
 
@@ -637,7 +638,7 @@ bool opt_check_noreturn(IRFunction *f) {
 
 /// Check if a function is referenced by this instruction.
 static void check_function_references(IRInstruction *inst) {
-  STATIC_ASSERT(IR_COUNT == 39, "Handle all instructions that can reference a function");
+  STATIC_ASSERT(IR_COUNT == 40, "Handle all instructions that can reference a function");
   switch (inst->kind) {
     default: break;
     case IR_FUNC_REF: inst->function_ref->is_ever_referenced = true; break;

@@ -153,7 +153,10 @@ enum ComparisonType {
    * between frontend and backend)                               \
    */                                                            \
   F(LIT_INTEGER)                                                 \
-  F(LIT_STRING)
+  F(LIT_STRING)                                                  \
+                                                                 \
+  /** Invalid value. This is used to facilitate deletion.**/     \
+  F(POISON)
 
 typedef struct IRStaticVariable IRStaticVariable;
 typedef struct IRStackAllocation IRStackAllocation;

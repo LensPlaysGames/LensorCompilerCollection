@@ -287,7 +287,7 @@ MIRInstruction *mir_from_ir_copy(MIRFunction *function, IRInstruction *copy) {
 
 /// Return non-zero iff given instruction needs a register.
 static bool needs_register(IRInstruction *instruction) {
-  STATIC_ASSERT(IR_COUNT == 39, "Exhaustively handle all instruction types");
+  STATIC_ASSERT(IR_COUNT == 40, "Exhaustively handle all instruction types");
   ASSERT(instruction);
   switch (instruction->kind) {
     case IR_LOAD:
@@ -304,6 +304,9 @@ static bool needs_register(IRInstruction *instruction) {
     case IR_BITCAST:
     ALL_BINARY_INSTRUCTION_CASES()
       return true;
+
+    case IR_POISON:
+      ICE("Refusing to codegen poison value");
 
     case IR_PARAMETER:
       ICE("Unlowered parameter instruction in register allocator");
@@ -366,7 +369,7 @@ static void phi2copy(MIRFunction *function) {
       /// Where we insert it depends on some complicated factors
       /// that have to do with control flow.
       foreach_val (arg, phi->phi_args) {
-        STATIC_ASSERT(IR_COUNT == 39, "Handle all branch types");
+        STATIC_ASSERT(IR_COUNT == 40, "Handle all branch types");
         IRInstruction *branch = arg->block->instructions.last;
         switch (branch->kind) {
         /// If the predecessor returns or is unreachable, then the PHI
@@ -472,9 +475,11 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
       IRBlock *bb = mir_bb->origin;
       ASSERT(bb, "Origin of general MIR block not set (what gives?)");
 
-      STATIC_ASSERT(IR_COUNT == 39, "Handle all IR instructions");
+      STATIC_ASSERT(IR_COUNT == 40, "Handle all IR instructions");
       list_foreach (inst, bb->instructions) {
         switch (inst->kind) {
+
+        case IR_POISON: ICE("Refusing to codegen poison value");
 
         case IR_IMMEDIATE: {
           MIRInstruction *mir = mir_makenew(MIR_IMMEDIATE);
@@ -714,8 +719,9 @@ const char *mir_operand_kind_string(MIROperandKind opkind) {
 }
 
 const char *mir_common_opcode_mnemonic(uint32_t opcode) {
-  STATIC_ASSERT(MIR_COUNT == 39, "Exhaustive handling of MIRCommonOpcodes (string conversion)");
+  STATIC_ASSERT(MIR_COUNT == 40, "Exhaustive handling of MIRCommonOpcodes (string conversion)");
   switch ((MIROpcodeCommon)opcode) {
+  case MIR_POISON: return "poison";
   case MIR_IMMEDIATE: return "immediate";
   case MIR_INTRINSIC: return "intrinsic";
   case MIR_CALL: return "call";

@@ -18,7 +18,7 @@ static BlockVector collect_reachable_blocks(IRBlock *block, IRBlock *ignore) {
     IRBlock *b = vector_pop(dfs_stack);
     if (b == ignore) continue;
 
-    STATIC_ASSERT(IR_COUNT == 39, "Handle all branch types");
+    STATIC_ASSERT(IR_COUNT == 40, "Handle all branch types");
     IRInstruction *i = b->instructions.last;
     switch (i->kind) {
       default: break;
@@ -169,7 +169,7 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
   vector_reserve(info->predecessor_info, list_size(f->blocks));
   list_foreach (b, f->blocks) {
     IRInstruction *term = b->instructions.last;
-    STATIC_ASSERT(IR_COUNT == 39, "Handle all branch types");
+    STATIC_ASSERT(IR_COUNT == 40, "Handle all branch types");
     switch (term->kind) {
       default: break;
       case IR_BRANCH:

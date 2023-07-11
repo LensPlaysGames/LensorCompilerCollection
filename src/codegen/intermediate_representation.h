@@ -113,6 +113,7 @@ typedef struct IRInstruction {
     IRStaticVariable* static_ref;
     IRFunction *function_ref;
     IRStackAllocation alloca;
+    CodegenContext *ctx; /// Used by IR_POISON.
     struct {
       string str;
       usz string_index;
@@ -375,6 +376,10 @@ void ir_unmark_usees(IRInstruction *instruction);
 void ir_remove(IRInstruction* instruction);
 void ir_remove_use(IRInstruction *usee, IRInstruction *user);
 void ir_remove_and_free_block(IRBlock *block);
+
+/// Remove an instruction and replace all uses of it with a
+/// poison value.
+void ir_force_remove(CodegenContext *ctx, IRInstruction *instruction);
 
 /// Free a function.
 void ir_free_function(IRFunction *f);
