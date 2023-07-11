@@ -725,10 +725,16 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
 
 /// Foreach block, replace loads from a variable with the last value
 /// stored to that variable in that block, if any.
+///
+/// Keep in mind that call instructions may modify locals, so if the
+/// address of a variable is ever taken, we can’t forward stores across
+/// calls.
 static bool opt_store_forwarding(IRFunction *f) {
   Vector(struct var {
     IRInstruction *alloca;
     IRInstruction *store;
+    bool escaped; /// Variable may be modified by a call etc.
+    bool reload_required; /// Variable may have been modified since the previous store.
   }) vars = {0};
   bool changed = false;
 
@@ -742,26 +748,43 @@ static bool opt_store_forwarding(IRFunction *f) {
             struct var *v = vector_find_if(el, vars, el->alloca == i->store.addr);
             if (v) {
               /// Eliminate the previous store if the address is never used.
-              IRInstruction *ir = v->store->next;
-              for (; ir && ir != i; ir = ir->next)
-                if (vector_contains(v->alloca->users, ir))
-                  break;
-              if (ir == i) ir_remove(v->store);
+              if (!v->escaped || !v->reload_required) ir_remove(v->store);
 
               /// Update the store.
               v->store = i;
-            } else vector_push(vars, ((struct var){i->store.addr, i}));
+            } else {
+              vector_push(vars, ((struct var){i->store.addr, i}));
+
+              /// Check if the address is ever used by any instruction other
+              /// than a load or store; if it is, we can’t forward stores
+              /// across calls, intrinsics, or other instructions that may
+              /// modify memory.
+              foreach_val (user, i->store.addr->users) {
+                if (user->kind != IR_LOAD && user->kind != IR_STORE) {
+                  vector_back(vars).escaped = true;
+                  break;
+                }
+              }
+            }
           }
         } break;
 
         case IR_LOAD: {
           struct var *v = vector_find_if(el, vars, el->alloca == i->operand);
-          if (v) {
+          if (v && (!v->escaped || !v->reload_required)) {
             ir_remove_use(v->store, i);
             ir_replace_uses(i, v->store->store.value);
             ir_remove(i);
             changed = true;
           }
+        } break;
+
+        /// Instructions that may clobber memory.
+        case IR_CALL:
+        case IR_INTRINSIC: {
+          foreach (var, vars)
+            if (var->escaped)
+              var->reload_required = true;
         } break;
       }
     }
