@@ -750,6 +750,19 @@ static bool opt_simplify_cfg(IRFunction *f) {
   return ever_changed;
 }
 
+/// Check if two instructions refer to the same in-memory object.
+static bool same_memory_object(IRInstruction *a, IRInstruction *b) {
+  if (a == b) return true;
+
+  /// Two static refs that refer to the same variable
+  /// are the same object.
+  if (a->kind == b->kind && a->kind == IR_STATIC_REF) {
+    return a->static_ref == b->static_ref;
+  }
+
+  return false;
+}
+
 /// Foreach block, replace loads from a variable with the last value
 /// stored to that variable in that block, if any.
 ///
@@ -758,7 +771,7 @@ static bool opt_simplify_cfg(IRFunction *f) {
 /// calls.
 static bool opt_store_forwarding(IRFunction *f) {
   Vector(struct var {
-    IRInstruction *alloca;
+    IRInstruction *addr;
     IRInstruction *store;
     bool escaped; /// Variable may be modified by a call etc.
     bool reload_required; /// Variable may have been modified since the previous store.
@@ -771,24 +784,24 @@ static bool opt_store_forwarding(IRFunction *f) {
       switch (i->kind) {
         default: break;
         case IR_STORE: {
-          if (i->store.addr->kind == IR_ALLOCA) {
-            struct var *v = vector_find_if(el, vars, el->alloca == i->store.addr);
-            if (v) {
-              /// Eliminate the previous store if the address is never used.
-              if (!v->escaped || !v->reload_required) {
-                ir_remove(v->store);
-                changed = true;
-              }
+          struct var *v = vector_find_if(el, vars, same_memory_object(el->addr, i->store.addr));
+          if (v) {
+            /// Eliminate the previous store if the address is never used.
+            if (!v->escaped || !v->reload_required) {
+              ir_remove(v->store);
+              changed = true;
+            }
 
-              /// Update the store.
-              v->store = i;
-            } else {
-              vector_push(vars, ((struct var){i->store.addr, i, false, false}));
+            /// Update the store.
+            v->store = i;
+          } else {
+            vector_push(vars, ((struct var){i->store.addr, i, false, false}));
 
-              /// Check if the address is ever used by any instruction other
-              /// than a load or store; if it is, we can’t forward stores
-              /// across calls, intrinsics, or other instructions that may
-              /// modify memory.
+            /// Check if the address is ever used by any instruction other
+            /// than a load or store; if it is, we can’t forward stores
+            /// across calls, intrinsics, or other instructions that may
+            /// modify memory.
+            if (i->store.addr->kind == IR_ALLOCA) {
               foreach_val (user, i->store.addr->users) {
                 if (user->kind != IR_LOAD && user->kind != IR_STORE) {
                   vector_back(vars).escaped = true;
@@ -796,11 +809,16 @@ static bool opt_store_forwarding(IRFunction *f) {
                 }
               }
             }
+
+            /// Anything that isn’t an alloca always escapes.
+            else {
+              vector_back(vars).escaped = true;
+            }
           }
         } break;
 
         case IR_LOAD: {
-          struct var *v = vector_find_if(el, vars, el->alloca == i->operand);
+          struct var *v = vector_find_if(el, vars, same_memory_object(el->addr, i->operand));
           if (v && (!v->escaped || !v->reload_required)) {
             ir_remove_use(v->store, i);
             ir_replace_uses(i, v->store->store.value);
@@ -834,7 +852,7 @@ void codegen_optimise(CodegenContext *ctx) {
   opt_analyse_functions(ctx);
 
   /// Optimise each function individually.
-  usz i = 0;
+  /*usz i = 0;*/
   do {
     foreach_val (f, ctx->functions) {
       if (f->is_extern) continue;
@@ -867,9 +885,9 @@ void codegen_optimise_blocks(CodegenContext *ctx) {
 }
 
 /// TODO(inlining):
-///  - Jump threading pass.
 ///  - Self-inlining.
 ///  - `flatten` attribute.
 ///  - `__builtin_inline()`.
 ///  - `__builtin_line()` etc.
 ///  - `__builtin_(debug)trap()`.
+///  - `__builtin_sign_extend()`/`__builtin_zero_extend()`/`__builtin_truncate()`. < So we can e.g. sign-extend an unsigned value.
