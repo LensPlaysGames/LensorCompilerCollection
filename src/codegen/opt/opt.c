@@ -729,6 +729,9 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
 /// Keep in mind that call instructions may modify locals, so if the
 /// address of a variable is ever taken, we can’t forward stores across
 /// calls.
+///
+/// This pass also does copy deletion since we’re already iterating over
+/// every block.
 static bool opt_store_forwarding(IRFunction *f) {
   Vector(struct var {
     IRInstruction *alloca;
@@ -748,7 +751,10 @@ static bool opt_store_forwarding(IRFunction *f) {
             struct var *v = vector_find_if(el, vars, el->alloca == i->store.addr);
             if (v) {
               /// Eliminate the previous store if the address is never used.
-              if (!v->escaped || !v->reload_required) ir_remove(v->store);
+              if (!v->escaped || !v->reload_required) {
+                ir_remove(v->store);
+                changed = true;
+              }
 
               /// Update the store.
               v->store = i;

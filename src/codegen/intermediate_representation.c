@@ -1013,12 +1013,10 @@ void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
 #ifdef DEBUG_USES
   eprint("[Use] Replacing uses of %%%u with %%%u\n", instruction->id, replacement->id);
 #endif
-  foreach_val (user, instruction->users) {
+  while (instruction->users.size) {
     ir_internal_replace_use_t replace = { instruction, replacement };
-    ir_for_each_child(user, ir_internal_replace_use, &replace);
+    ir_for_each_child(instruction->users.data[0], ir_internal_replace_use, &replace);
   }
-
-  ASSERT(instruction->users.size == 0);
 }
 
 static void ir_internal_unmark_usee(IRInstruction *user, IRInstruction **child, void *_) {
