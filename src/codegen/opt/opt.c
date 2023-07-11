@@ -75,6 +75,21 @@ static bool has_side_effects(IRInstruction *i) {
   }
 }
 
+/// Check if this instruction may clobber memory.
+static bool clobbers_memory(IRInstruction *inst){
+  STATIC_ASSERT(IR_COUNT == 40, "Handle all instructions");
+  switch (inst->kind) {
+    case IR_COUNT: UNREACHABLE();
+
+    case IR_CALL:
+    case IR_INTRINSIC:
+    case IR_STORE:
+      return true;
+
+    default: return false;
+  }
+}
+
 /// Truncate a value.
 static bool perform_truncation(u64 *out_value, u64 value, usz dest_size) {
   switch (dest_size) {
@@ -695,6 +710,42 @@ bool opt_analyse_functions(CodegenContext *ctx) {
   return ever_changed;
 }
 
+/// Remove stores and references to global variables that are
+/// not exported and never loaded from or passed to an instruction
+/// that clobbers memory.
+static bool opt_remove_globals(CodegenContext *ctx) {
+  /// If a variable is only ever used by stores and variable references,
+  /// then we can remove it.
+  foreach_val (var, ctx->static_vars) {
+    var->referenced = false;
+    foreach_val (ref, var->references) {
+      foreach_val (user, ref->users) {
+        if (user->kind != IR_STORE || user->store.value == ref) {
+          var->referenced = true;
+          goto next;
+        }
+      }
+    }
+
+    next:;
+  }
+
+  /// Remove all stores to such variables.
+  bool changed = false;
+  foreach_val (var, ctx->static_vars) {
+    if (var->referenced) continue;
+    foreach_val (ref, var->references) {
+      foreach_val (user, ref->users) {
+        ASSERT(user->kind == IR_STORE);
+        ir_remove(user);
+        changed = true;
+      }
+    }
+  }
+
+  return changed;
+}
+
 /// ===========================================================================
 ///  Block reordering etc.
 /// ===========================================================================
@@ -871,7 +922,6 @@ static bool opt_store_forwarding(IRFunction *f) {
     vector_clear(vars);
     list_foreach (i, block->instructions) {
       switch (i->kind) {
-        default: break;
         case IR_STORE: {
           struct var *v = vector_find_if(el, vars, same_memory_object(el->addr, i->store.addr));
           if (v) {
@@ -962,6 +1012,10 @@ static bool opt_store_forwarding(IRFunction *f) {
             if (var->escaped)
               var->reload_required = true;
         } break;
+
+        default:
+          ASSERT(!clobbers_memory(i), "Handle instruction that clobbers memory correctly");
+          break;
       }
     }
   }
@@ -1001,7 +1055,7 @@ void codegen_optimise(CodegenContext *ctx) {
   }
 
   /// Cross-function optimisations.
-  while (opt_inline(ctx, 20) | opt_analyse_functions(ctx));
+  while (opt_inline(ctx, 20) | opt_analyse_functions(ctx) | opt_remove_globals(ctx));
 }
 
 /// Called after RA.

@@ -36,6 +36,9 @@ typedef struct IRStaticVariable {
   /// - IR_LIT_INTEGER
   /// - IR_LIT_STRING
   IRInstruction *init;
+
+  /// Used by the optimiser.
+  bool referenced;
 } IRStaticVariable;
 
 struct CodegenContext {
