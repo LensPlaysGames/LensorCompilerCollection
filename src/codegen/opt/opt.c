@@ -74,6 +74,32 @@ static bool has_side_effects(IRInstruction *i) {
   }
 }
 
+/// Truncate a value.
+static bool perform_truncation(u64 *out_value, u64 value, usz dest_size) {
+  switch (dest_size) {
+    case 1: *out_value = (u8) value; return true;
+    case 2: *out_value = (u16) value; return true;
+    case 4: *out_value = (u32) value; return true;
+    case 8: *out_value = (u64) value; return true;
+    default: return false;
+  }
+}
+
+/// Sign-extend a value.
+static bool perform_sign_extension(u64 *out_value, u64 value, usz dest_size, usz src_size) {
+  /// Sign-extend from source size to destination size.
+  switch (src_size) {
+    case 1: value = (u64) (i64) (i8) value; break;
+    case 2: value = (u64) (i64) (i16) value; break;
+    case 4: value = (u64) (i64) (i32) value; break;
+    case 8: value = (u64) (i64) (i64) value; break;
+    default: return false;
+  }
+
+  /// Truncate to destination size.
+  return perform_truncation(out_value, value, dest_size);
+}
+
 /// ===========================================================================
 ///  Instruction combination
 /// ===========================================================================
@@ -199,6 +225,65 @@ static bool opt_instcombine(IRFunction *f) {
           }
           break;
         default: break;
+
+        case IR_LT: IR_REDUCE_BINARY(<) break;
+        case IR_LE: IR_REDUCE_BINARY(<=) break;
+        case IR_GT: IR_REDUCE_BINARY(>) break;
+        case IR_GE: IR_REDUCE_BINARY(>=) break;
+        case IR_NE:
+          IR_REDUCE_BINARY(!=)
+          else if (i->lhs == i->rhs) {
+            ir_remove_use(i->lhs, i);
+            ir_remove_use(i->rhs, i);
+            i->kind = IR_IMMEDIATE;
+            i->imm = 0;
+            changed = true;
+          }
+          break;
+
+        case IR_EQ:
+          IR_REDUCE_BINARY(==)
+          else if (i->lhs == i->rhs) {
+            ir_remove_use(i->lhs, i);
+            ir_remove_use(i->rhs, i);
+            i->kind = IR_IMMEDIATE;
+            i->imm = 1;
+            changed = true;
+          }
+          break;
+
+        case IR_ZERO_EXTEND: {
+          if (i->operand->kind == IR_IMMEDIATE) {
+            ir_remove_use(i->operand, i);
+            i->kind = IR_IMMEDIATE;
+            i->imm = i->operand->imm;
+            changed = true;
+          }
+        } break;
+
+        case IR_SIGN_EXTEND: {
+          if (i->operand->kind == IR_IMMEDIATE) {
+            u64 value = 0;
+            if (perform_sign_extension(&value, i->operand->imm, type_sizeof(i->type), type_sizeof(i->operand->type))) {
+              ir_remove_use(i->operand, i);
+              i->kind = IR_IMMEDIATE;
+              i->imm = value;
+              changed = true;
+            }
+          }
+        } break;
+
+        case IR_TRUNCATE: {
+          if (i->operand->kind == IR_IMMEDIATE) {
+            u64 value = 0;
+            if (perform_truncation(&value, i->operand->imm, type_sizeof(i->type))) {
+              ir_remove_use(i->operand, i);
+              i->kind = IR_IMMEDIATE;
+              i->imm = value;
+              changed = true;
+            }
+          }
+        }  break;
 
         /// Simplify conditional branches with constant conditions.
         case IR_BRANCH_CONDITIONAL: {
@@ -755,9 +840,11 @@ static bool same_memory_object(IRInstruction *a, IRInstruction *b) {
   if (a == b) return true;
 
   /// Two static refs that refer to the same variable
-  /// are the same object.
+  /// are the same object, unless they have different
+  /// types; this can happen because of how references
+  /// work.
   if (a->kind == b->kind && a->kind == IR_STATIC_REF) {
-    return a->static_ref == b->static_ref;
+    return a->static_ref == b->static_ref && type_equals(a->type, b->type);
   }
 
   return false;
