@@ -89,13 +89,19 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
     vector_delete(n->dominators);
     vector_delete(n->children);
   }
+  foreach (p, info->predecessor_info) {
+    vector_delete(*p);
+  }
   vector_clear(info->nodes);
+  vector_clear(info->predecessor_info);
 
   /// Add a node for each block.
+  usz index = 0;
   ASSERT(f->blocks.first);
   list_foreach (b, f->blocks) {
     DomTreeNode node = {0};
     node.block = b;
+    b->id = index++;
     vector_push(info->nodes, node);
   }
 
@@ -158,4 +164,22 @@ void build_dominator_tree(IRFunction *f, DominatorInfo* info, bool prune) {
     }
   }
   vector_delete(to_remove);
+
+  /// Finally compute the predecessors of each block.
+  vector_reserve(info->predecessor_info, list_size(f->blocks));
+  list_foreach (b, f->blocks) {
+    IRInstruction *term = b->instructions.last;
+    STATIC_ASSERT(IR_COUNT == 39, "Handle all branch types");
+    switch (term->kind) {
+      default: break;
+      case IR_BRANCH:
+        vector_push_unique(info->predecessor_info.data[term->destination_block->id], b);
+        break;
+
+      case IR_BRANCH_CONDITIONAL:
+        vector_push_unique(info->predecessor_info.data[term->cond_br.then->id], b);
+        vector_push_unique(info->predecessor_info.data[term->cond_br.else_->id], b);
+        break;
+    }
+  }
 }

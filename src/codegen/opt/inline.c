@@ -378,7 +378,10 @@ static bool ir_inline_call(
 
   /// To simplify connecting blocks, if we have a return block,
   /// insert it after the last block.
-  if (return_block) vector_push(blocks, return_block);
+  if (return_block) {
+    return_block->function = call_block->function;
+    vector_push(blocks, return_block);
+  }
 
   /// Connect the last inserted instruction with the first
   /// instruction after the call, if any. The last block

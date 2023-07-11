@@ -6,7 +6,7 @@
 
 #include <stdlib.h>
 
-#define DEBUG_USES
+//#define DEBUG_USES
 void mark_used(IRInstruction *usee, IRInstruction *user) {
   // Don't push duplicate users.
   foreach_val (i_user, usee->users) {
