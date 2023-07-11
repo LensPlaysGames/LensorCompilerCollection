@@ -1129,12 +1129,10 @@ void codegen_emit_x86_64(CodegenContext *context) {
                 break;
               case IR_BRANCH_CONDITIONAL:
                 if (i->cond_br.then == block) {
-                  if (i->cond_br.then == i->parent_block->next) continue;
                   referenced = true;
                   goto done;
                 }
                 if (i->cond_br.else_ == block) {
-                  if (i->cond_br.else_ == i->parent_block->next) continue;
                   referenced = true;
                   goto done;
                 }
