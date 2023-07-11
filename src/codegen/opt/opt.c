@@ -860,6 +860,7 @@ static bool opt_store_forwarding(IRFunction *f) {
   Vector(struct var {
     IRInstruction *addr;
     IRInstruction *store;
+    IRInstruction *last_value;
     bool escaped; /// Variable may be modified by a call etc.
     bool reload_required; /// Variable may have been modified since the previous store.
   }) vars = {0};
@@ -873,16 +874,34 @@ static bool opt_store_forwarding(IRFunction *f) {
         case IR_STORE: {
           struct var *v = vector_find_if(el, vars, same_memory_object(el->addr, i->store.addr));
           if (v) {
+            /// Update the stored value.
+            v->last_value = i->store.value;
+
             /// Eliminate the previous store if the address is never used.
-            if (!v->escaped || !v->reload_required) {
+            if (v->store && (!v->escaped || !v->reload_required)) {
               ir_remove(v->store);
               changed = true;
             }
 
             /// Update the store.
+            v->reload_required = false;
             v->store = i;
+
+            /// Also clobber all other escaped values because of aliasing.
+            foreach (var, vars)
+              if (var != v && var->escaped)
+                var->reload_required = true;
           } else {
-            vector_push(vars, ((struct var){i->store.addr, i, false, false}));
+            vector_push(
+              vars,
+              (struct var){
+                .addr = i->store.addr,
+                .store = i,
+                .last_value = i->store.value,
+                .escaped = false,
+                .reload_required = false,
+              }
+            );
 
             /// Check if the address is ever used by any instruction other
             /// than a load or store; if it is, we can’t forward stores
@@ -907,10 +926,31 @@ static bool opt_store_forwarding(IRFunction *f) {
         case IR_LOAD: {
           struct var *v = vector_find_if(el, vars, same_memory_object(el->addr, i->operand));
           if (v && (!v->escaped || !v->reload_required)) {
-            ir_remove_use(v->store, i);
-            ir_replace_uses(i, v->store->store.value);
+            ir_remove_use(i->operand, i);
+            ir_replace_uses(i, v->last_value);
             ir_remove(i);
             changed = true;
+          }
+
+          /// If the load is not replaced, then we at least no
+          /// longer need to reload it.
+          else if (v) {
+            v->reload_required = false;
+            v->last_value = i;
+          }
+
+          /// If the variable hasn’t been encountered yet, add it.
+          else {
+            vector_push(
+              vars,
+              (struct var){
+                .addr = i->operand,
+                .store = NULL,
+                .last_value = i,
+                .escaped = true, /// Certainly escaped since we don’t know where it came from.
+                .reload_required = false,
+              }
+            );
           }
         } break;
 
