@@ -445,11 +445,15 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// Intrinsic.
   case NODE_INTRINSIC_CALL: {
     ASSERT(expr->call.callee->kind = NODE_FUNCTION_REFERENCE);
-    STATIC_ASSERT(INTRIN_COUNT == 3, "Handle all intrinsics in codegen");
+    STATIC_ASSERT(INTRIN_COUNT == 5, "Handle all intrinsics in codegen");
     switch (expr->call.intrinsic) {
       case INTRIN_COUNT:
       case INTRIN_BACKEND_COUNT:
         ICE("Call is not an intrinsic");
+
+      case INTRIN_BUILTIN_LINE:
+      case INTRIN_BUILTIN_FILENAME:
+        UNREACHABLE();
 
       /// System call.
       case INTRIN_BUILTIN_SYSCALL: {
