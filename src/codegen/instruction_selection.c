@@ -715,8 +715,7 @@ static MIROpcodeCommon isel_parse_opcode(ISelParser *p) {
   string_buf_zterm(&p->tok.text); // just to make sure
   ISelEnvironmentEntry *entry = isel_env_entry(&p->global, p->tok.text.data);
 
-  // FIXME: Should be an ERR, but for dev I want to keep going.
-  if (!entry->key.data) WARN("Unknown opcode \"%s\"\n", p->tok.text.data);
+  if (!entry->key.data) ERR("Unknown opcode \"%s\"\n", p->tok.text.data);
 
   // Yeet general opcode identifier
   isel_next_tok(p);

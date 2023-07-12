@@ -36,8 +36,9 @@
   X(CALL)                                       \
   X(SYSCALL)                                    \
   X(JMP)                                        \
-  X(RET)                                        \
   X(JCC)                                        \
+  X(RET)                                        \
+  X(UD2)                                        \
   /* Memory stuff */                            \
   X(MOV)                                        \
   X(LEA)                                        \

@@ -21,7 +21,7 @@ static const char *setcc_suffixes_x86_64[COMPARE_COUNT] = {
 };
 
 static const char *instruction_mnemonic(CodegenContext *context, MIROpcodex86_64 instruction) {
-  STATIC_ASSERT(MX64_COUNT == 30, "ERROR: instruction_mnemonic() must exhaustively handle all instructions.");
+  STATIC_ASSERT(MX64_COUNT == 31, "ERROR: instruction_mnemonic() must exhaustively handle all instructions.");
   // x86_64 instructions that aren't different across syntaxes can go here!
   switch (instruction) {
   default: break;
@@ -43,6 +43,7 @@ static const char *instruction_mnemonic(CodegenContext *context, MIROpcodex86_64
   case MX64_CMP: return "cmp";
   case MX64_CALL: return "call";
   case MX64_SYSCALL: return "syscall";
+  case MX64_UD2: return "ud2";
   case MX64_JMP: return "jmp";
   case MX64_RET: return "ret";
   case MX64_MOV: return "mov";
@@ -471,6 +472,7 @@ static void femit_none(CodegenContext *context, MIROpcodex86_64 instruction) {
   switch (instruction) {
     case MX64_RET:
     case MX64_SYSCALL:
+    case MX64_UD2:
     case MX64_CWD:
     case MX64_CDQ:
     case MX64_CQO: {
@@ -980,6 +982,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
         } break;
 
         case MX64_SYSCALL: FALLTHROUGH;
+        case MX64_UD2: FALLTHROUGH;
         case MX64_CWD: FALLTHROUGH;
         case MX64_CDQ: FALLTHROUGH;
         case MX64_CQO: {
