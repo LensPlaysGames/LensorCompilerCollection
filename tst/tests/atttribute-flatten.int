@@ -1,0 +1,22 @@
+;; 42
+;;
+
+;; Copied from the jump threading test.
+foo : integer (x : integer)  {
+    a : integer
+    if      x = 0  a := 1
+    else if x = 1  a := 2
+    else if x = 2  a := 3
+    else if x = 3  a := 4
+    else if x = 4  a := 5
+    else if x = 5  a := 6
+    else a := 7
+    a
+}
+
+bar : integer() flatten {
+    foo(0) + foo(1) + foo(2) + foo(3) + foo(4) + foo(5) +
+    foo(5) + foo(4) + foo(3) + foo(2) + foo(1) + foo(0)
+}
+
+bar()

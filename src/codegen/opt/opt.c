@@ -1121,7 +1121,5 @@ void codegen_optimise_blocks(CodegenContext *ctx) {
 }
 
 /// TODO(inlining):
-///  - `flatten` attribute.
 ///  - `const` attribute (function does not read from or write to memory, except for its own local variables), intended for use by the optimiser.
-///  - `__builtin_(debug)trap()`.
 ///  - `__builtin_sign_extend()`/`__builtin_zero_extend()`/`__builtin_truncate()`. < So we can e.g. sign-extend an unsigned value.
