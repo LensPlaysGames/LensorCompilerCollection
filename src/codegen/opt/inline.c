@@ -240,6 +240,7 @@ static inline_result ir_inline_call(
           vector_push(inst->static_ref->references, copy);
           break;
 
+        STATIC_ASSERT(INTRIN_BACKEND_COUNT == 2, "Handle all backend intrinsics in inliner");
         case IR_INTRINSIC:
           copy->call.intrinsic = inst->call.intrinsic;
           FALLTHROUGH;

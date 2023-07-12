@@ -1234,7 +1234,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
         case MIR_INTRINSIC: {
           MIROperand *kind = mir_get_op(instruction, 0);
           ASSERT(kind->kind == MIR_OP_IMMEDIATE, "Intrinsic kind must be an immediate");
-          STATIC_ASSERT(INTRIN_BACKEND_COUNT == 1, "Handle backend intrinsics in codegen");
+          STATIC_ASSERT(INTRIN_BACKEND_COUNT == 2, "Handle backend intrinsics in codegen");
           switch (kind->value.imm) {
             IGNORE_FRONTEND_INTRINSICS();
 
@@ -1282,6 +1282,13 @@ void codegen_emit_x86_64(CodegenContext *context) {
               }
 
               /// Yeet intrinsic call.
+              vector_push(instructions_to_remove, instruction);
+            } break;
+
+            /// For a debug trap, emit an int 3.
+            case INTRIN_BUILTIN_DEBUGTRAP: {
+              MIRInstruction *int3 = mir_makenew(MX64_INT3);
+              mir_insert_instruction(instruction->block, int3, i++);
               vector_push(instructions_to_remove, instruction);
             } break;
           }

@@ -10,6 +10,9 @@
 typedef struct LLVMContext {
     CodegenContext *cg;
     string_buffer out;
+
+    /// Used intrinsics.
+    bool llvm_debugtrap_used;
 } LLVMContext;
 
 /// Forward decl because mutual recursion.
@@ -186,10 +189,11 @@ static bool llvm_is_numbered_value(IRInstruction *inst) {
             return !type_equals(ir_call_get_callee_type(inst)->function.return_type, t_void);
 
         case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 1, "Handle all intrinsics");
+            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 2, "Handle all intrinsics");
             switch (inst->call.intrinsic) {
                 IGNORE_FRONTEND_INTRINSICS()
                 case INTRIN_BUILTIN_SYSCALL: return true;
+                case INTRIN_BUILTIN_DEBUGTRAP: return false;
             }
 
             UNREACHABLE();
@@ -300,17 +304,20 @@ static void emit_value(LLVMContext *ctx, IRInstruction *value, bool print_type) 
             return;
 
         case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 1, "Handle all intrinsics");
+            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 2, "Handle all intrinsics");
             switch (value->call.intrinsic) {
                 IGNORE_FRONTEND_INTRINSICS()
                 case INTRIN_BUILTIN_SYSCALL:
                     format_to(out, "%%%u", value->index);
                     return;
+
+                /// Not a value.
+                case INTRIN_BUILTIN_DEBUGTRAP:
+                    ICE("Refusing to emit non-value as value");
             }
 
             UNREACHABLE();
         }
-
 
         /// These all have values, so emit their indices.
         case IR_CALL:
@@ -459,7 +466,7 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
             ICE("LLVM backend cannot emit IR_REGISTER instructions");
 
         case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 1, "Handle all intrinsics");
+            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 2, "Handle all intrinsics");
             switch (inst->call.intrinsic) {
                 IGNORE_FRONTEND_INTRINSICS()
 
@@ -490,6 +497,13 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
                     format_to(out, ")\n");
                     return;
                 }
+
+                /// Just call the LLVM intrinsic for this.
+                case INTRIN_BUILTIN_DEBUGTRAP:
+                    emit_instruction_index(ctx, inst);
+                    format_to(out, "call void @llvm.debugtrap()\n");
+                    ctx->llvm_debugtrap_used = true;
+                    return;
             }
 
             UNREACHABLE();
@@ -805,6 +819,9 @@ void codegen_emit_llvm(CodegenContext *cg) {
 
     /// Emit each function.
     foreach_val (f, cg->functions) emit_function(&ctx, f);
+
+    /// Emit intrinsic declarations.
+    if (ctx.llvm_debugtrap_used) format_to(&ctx.out, "declare void @llvm.debugtrap()\n");
 
     /// Write to file.
     fprint(cg->code, "%S", as_span(ctx.out));

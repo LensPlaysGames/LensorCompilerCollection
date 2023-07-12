@@ -8,43 +8,44 @@
 #include <error.h>
 #include <utils.h>
 
-#define ALL_MX64_INSTRUCTIONS(X)                \
-  /* Arithmetic instructions. */                \
-  X(ADD)                                        \
-  X(SUB)                                        \
-  /* X(MUL) */                                  \
-  X(IMUL)                                       \
-  X(DIV)                                        \
-  X(IDIV)                                       \
-  X(XOR)                                        \
-  X(CMP)                                        \
-  X(TEST)                                       \
-  X(CWD)                                        \
-  X(CDQ)                                        \
-  X(CQO)                                        \
-  X(SETCC)                                      \
-  X(SAL)                                        \
-  X(SAR)                                        \
-  X(SHR)                                        \
-  X(AND)                                        \
-  X(OR)                                         \
-  X(NOT)                                        \
-  /* Stack instructions */                      \
-  X(PUSH)                                       \
-  X(POP)                                        \
-  /* Control flow */                            \
-  X(CALL)                                       \
-  X(SYSCALL)                                    \
-  X(JMP)                                        \
-  X(JCC)                                        \
-  X(RET)                                        \
-  X(UD2)                                        \
-  /* Memory stuff */                            \
-  X(MOV)                                        \
-  X(LEA)                                        \
-  X(MOVSX)                                      \
-  X(MOVZX)                                      \
-  /* Atomics */                                 \
+#define ALL_MX64_INSTRUCTIONS(X)                 \
+  /* Arithmetic instructions. */                 \
+  X(ADD)                                         \
+  X(SUB)                                         \
+  /* X(MUL) */                                   \
+  X(IMUL)                                        \
+  X(DIV)                                         \
+  X(IDIV)                                        \
+  X(XOR)                                         \
+  X(CMP)                                         \
+  X(TEST)                                        \
+  X(CWD)                                         \
+  X(CDQ)                                         \
+  X(CQO)                                         \
+  X(SETCC)                                       \
+  X(SAL)                                         \
+  X(SAR)                                         \
+  X(SHR)                                         \
+  X(AND)                                         \
+  X(OR)                                          \
+  X(NOT)                                         \
+  /* Stack instructions */                       \
+  X(PUSH)                                        \
+  X(POP)                                         \
+  /* Control flow */                             \
+  X(CALL)                                        \
+  X(SYSCALL)                                     \
+  X(INT3) /* Yes, the 3 is part of the opcode */ \
+  X(JMP)                                         \
+  X(JCC)                                         \
+  X(RET)                                         \
+  X(UD2)                                         \
+  /* Memory stuff */                             \
+  X(MOV)                                         \
+  X(LEA)                                         \
+  X(MOVSX)                                       \
+  X(MOVZX)                                       \
+  /* Atomics */                                  \
   X(XCHG)
 
 

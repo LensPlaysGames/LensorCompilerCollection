@@ -445,7 +445,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// Intrinsic.
   case NODE_INTRINSIC_CALL: {
     ASSERT(expr->call.callee->kind = NODE_FUNCTION_REFERENCE);
-    STATIC_ASSERT(INTRIN_COUNT == 5, "Handle all intrinsics in codegen");
+    STATIC_ASSERT(INTRIN_COUNT == 6, "Handle all intrinsics in codegen");
     switch (expr->call.intrinsic) {
       case INTRIN_COUNT:
       case INTRIN_BACKEND_COUNT:
@@ -484,6 +484,13 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         call->ir->call.force_inline = true;
         expr->ir = call->ir;
         expr->address = call->address;
+        return;
+      }
+
+      /// Debug trap.
+      case INTRIN_BUILTIN_DEBUGTRAP: {
+        expr->ir = ir_intrinsic(ctx, t_void, expr->call.intrinsic);
+        ir_insert(ctx, expr->ir);
         return;
       }
     }
