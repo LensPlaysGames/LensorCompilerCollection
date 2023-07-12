@@ -658,7 +658,9 @@ static void check_function_references(IRInstruction *inst) {
     default: break;
     case IR_FUNC_REF: inst->function_ref->is_ever_referenced = true; break;
     case IR_CALL:
-      if (!inst->call.is_indirect) inst->call.callee_function->is_ever_referenced = true;
+      /// Only non-recursive direct calls count as references.
+      if (!inst->call.is_indirect && inst->parent_block->function != inst->call.callee_function)
+        inst->call.callee_function->is_ever_referenced = true;
       break;
   }
 }
@@ -1055,6 +1057,12 @@ void codegen_optimise(CodegenContext *ctx) {
   }
 
   /// Cross-function optimisations.
+  ///
+  /// FIXME: Currently, the `opt_analyse_functions()` pass deletes a
+  /// lot of unused functions and thus hides backend errors that would
+  /// otherwise cause tests to fail when we try and emit those functions.
+  /// At some point, we should comment out this pass here and fix all
+  /// the backend errors that that will inevitably cause.
   while (opt_inline(ctx, 20) | opt_analyse_functions(ctx) | opt_remove_globals(ctx));
 }
 
@@ -1069,6 +1077,7 @@ void codegen_optimise_blocks(CodegenContext *ctx) {
 /// TODO(inlining):
 ///  - Self-inlining.
 ///  - `flatten` attribute.
+///  - `const` attribute (function does not read from or write to memory, except for its own local variables), intended for use by the optimiser.
 ///  - `__builtin_inline()`.
 ///  - `__builtin_line()` etc.
 ///  - `__builtin_(debug)trap()`.
