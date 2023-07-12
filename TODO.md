@@ -34,9 +34,9 @@
   - [ ] Pad string literals to ensure alignment of statics
 - [ ] Attributes
   - [x] Parsing  "[[noreturn]]" or "=[noreturn]" or "attr noreturn"
-  - [ ] noreturn
-  - [ ] discardable (kind of opposite of nodiscard, the default)
-    - [ ] Make "no discard" the default for all non-void returning functions.
+  - [x] noreturn
+  - [x] discardable (kind of opposite of nodiscard, the default)
+    - [x] Make "no discard" the default for all non-void returning functions.
   - [ ] maybe_unused
   - [ ] deprecated
   - [ ] deprecated("reason")
