@@ -1398,6 +1398,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
             mir_insert_instruction(instruction->block, jump, i++);
             // FIXME: I don't think this does anything; what was it for?
             if (instruction->origin->parent_block) instruction->origin->parent_block->done = true;
+
+            /// Don’t forget to remove the call instruction.
+            vector_push(instructions_to_remove, instruction);
             break;
           }
 
