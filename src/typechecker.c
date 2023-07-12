@@ -758,10 +758,12 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
 /// \param callee The callee to check.
 /// \return The intrinsic number if it is an intrinsic, or I_BUILTIN_COUNT otherwise.
 NODISCARD static enum IntrinsicKind intrinsic_kind(Node *callee) {
-    STATIC_ASSERT(INTRIN_COUNT == 3, "Handle all intrinsics in sema");
+    STATIC_ASSERT(INTRIN_COUNT == 5, "Handle all intrinsics in sema");
     if (callee->kind != NODE_FUNCTION_REFERENCE) return INTRIN_COUNT;
     if (string_eq(callee->funcref.name, literal_span("__builtin_syscall"))) return INTRIN_BUILTIN_SYSCALL;
     if (string_eq(callee->funcref.name, literal_span("__builtin_inline"))) return INTRIN_BUILTIN_INLINE;
+    if (string_eq(callee->funcref.name, literal_span("__builtin_line"))) return INTRIN_BUILTIN_LINE;
+    if (string_eq(callee->funcref.name, literal_span("__builtin_filename"))) return INTRIN_BUILTIN_FILENAME;
     return INTRIN_COUNT;
 }
 
@@ -786,9 +788,8 @@ NODISCARD static enum IntrinsicKind intrinsic_kind(Node *callee) {
 NODISCARD static bool typecheck_intrinsic(AST *ast, Node *expr) {
     ASSERT(expr->kind == NODE_CALL);
     ASSERT(expr->call.callee->kind == NODE_FUNCTION_REFERENCE);
-    expr->kind = NODE_INTRINSIC_CALL;
 
-    STATIC_ASSERT(INTRIN_COUNT == 3, "Handle all intrinsics in sema");
+    STATIC_ASSERT(INTRIN_COUNT == 5, "Handle all intrinsics in sema");
     switch (expr->call.intrinsic) {
         case INTRIN_COUNT:
         case INTRIN_BACKEND_COUNT:
@@ -819,7 +820,8 @@ NODISCARD static bool typecheck_intrinsic(AST *ast, Node *expr) {
                 }
             }
 
-            /// Return value is integer.
+            /// Return type is integer.
+            expr->kind = NODE_INTRINSIC_CALL;
             expr->type = t_integer;
             return true;
         }
@@ -834,7 +836,53 @@ NODISCARD static bool typecheck_intrinsic(AST *ast, Node *expr) {
             ERR(expr->source_location, "Argument of __builtin_inline() must be a call expression");
 
           /// Return type is the return type of the call.
+          expr->kind = NODE_INTRINSIC_CALL;
           expr->type = call->type;
+          return true;
+        }
+
+        /// This takes no arguments and returns an integer.
+        case INTRIN_BUILTIN_LINE: {
+          if (expr->call.arguments.size != 0)
+            ERR(expr->source_location, "__builtin_line() takes no arguments");
+
+          u32 line = 0;
+          seek_location(as_span(ast->source), expr->source_location, &line, NULL, NULL);
+
+          expr->type = t_integer_literal;
+          expr->kind = NODE_LITERAL;
+          expr->literal.type = TK_NUMBER;
+          expr->literal.integer = line;
+          return true;
+        }
+
+        /// This takes no arguments and returns a string.
+        case INTRIN_BUILTIN_FILENAME: {
+          if (expr->call.arguments.size != 0)
+            ERR(expr->source_location, "__builtin_filename() takes no arguments");
+
+          /// Remove everything up to the first path separator from the filename.
+          const char *end = ast->filename.data + ast->filename.size;
+          while (end > ast->filename.data && end[-1] != '/'
+#ifdef _WIN32
+                 && end[-1] != '\\'
+#endif
+          ) {
+            end--;
+          }
+
+          expr->kind = NODE_LITERAL;
+          expr->literal.type = TK_STRING;
+          expr->literal.string_index = ast_intern_string(
+            ast,
+            (span){
+              .data = end,
+              .size = (usz) (ast->filename.data + ast->filename.size - end),
+            }
+          );
+
+          string s = ast->strings.data[expr->literal.string_index];
+          expr->type = ast_make_type_array(ast, expr->source_location, t_byte, s.size + 1);
           return true;
         }
     }
@@ -869,9 +917,19 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           // TODO: We should ensure the function does *not* have a discardable
           // attribute. We will need to find the actual function node and not
           // just the function type; this means following funcrefs.
-          if (node->kind == NODE_CALL && node->call.callee->type->function.return_type != t_void) {
-            ERR(node->source_location,
-                "Discarding return value of function that was not declared with `discardable` attribute and does not return void.");
+          ///
+          /// This is currently only supported for direct calls.
+          if (
+            node->kind == NODE_CALL &&
+            node->call.callee->kind == NODE_FUNCTION &&
+            node->call.callee->type->function.return_type != t_void &&
+            !node->call.callee->type->function.attr_discardable
+          ) {
+            ERR(
+              node->source_location,
+              "Discarding return value of function `%S` that was not declared `discardable`.",
+              node->call.callee->function.name
+            );
           }
         }
       }

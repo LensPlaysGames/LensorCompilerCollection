@@ -151,7 +151,9 @@ enum SymbolKind {
 
 /// Intrinsics that need to be gone after IR generation.
 #define ALL_FRONTEND_INTRINSICS(F) \
-  F(BUILTIN_INLINE)
+  F(BUILTIN_INLINE)                \
+  F(BUILTIN_LINE)                  \
+  F(BUILTIN_FILENAME)
 
 /// Helpers to ignore intrinsics that should never exist
 /// in the backend.
