@@ -169,8 +169,9 @@ enum ComparisonType {
   F(PURE, pure)         /** This function has no side effects. **/
 
 /// Function attributes that are only used by the frontend.
-#define FRONTEND_FUNCTION_ATTRIBUTES(F) \
-  F(DISCARDABLE, discardable) /** Function result may be unused. **/
+#define FRONTEND_FUNCTION_ATTRIBUTES(F)                              \
+  F(DISCARDABLE, discardable) /** Function result may be unused. **/ \
+  F(USED, used)               /** This function is used; do not deleted it **/
 
 /// Function attributes that are only used by the backend.
 #define IR_FUNCTION_ATTRIBUTES(F) \

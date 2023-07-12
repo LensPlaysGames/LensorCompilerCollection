@@ -1,0 +1,8 @@
+;; 42
+
+;; This function must not be deleted
+foo : void() used {
+
+}
+
+42
