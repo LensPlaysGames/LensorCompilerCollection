@@ -817,17 +817,50 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
   /// Remove blocks that consist of a single direct branch.
   ///
   /// Also simplify conditional branches whose true and false
-  /// blocks are the same.
+  /// blocks are the same and fold chains of unconditional branches.
   list_foreach (b, f->blocks) {
     if (vector_contains(blocks_to_remove, b)) continue;
     IRInstruction *last = b->instructions.last;
 
     /// Merge trivially connected blocks.
     if (last->kind == IR_BRANCH) {
-      /// Ignore blocks with more than one predecessor.
-      if (info->predecessor_info.data[last->destination_block->id].size != 1) continue;
+      /// If the block has more than one predecessor, we can’t remove it, but
+      /// if it contains only a single branch instruction, we can replace this
+      /// branch with that instruction.
+      ///
+      /// Note that this also works for conditional branches. The reason is that
+      /// if the only instruction of a block is a conditional branch, then the
+      /// condition must be the same for all of its predecessors and thus dominate
+      /// all of its predecessors, otherwise, there would have to be a PHI. Thus,
+      /// the condition also dominates this block in such cases, and we are free
+      /// to copy the branch. The same is true for return instructions that return
+      /// a value.
+      if (info->predecessor_info.data[last->destination_block->id].size != 1) {
+        IRInstruction *first = last->destination_block->instructions.first;
+        STATIC_ASSERT(IR_COUNT == 40, "Handle all branch instructions");
+        switch (first->kind) {
+          default: continue;
+          case IR_BRANCH: last->destination_block = first->destination_block; break;
+          case IR_UNREACHABLE: last->kind = IR_UNREACHABLE; break;
 
-      /// Eliminate the branch and move all instructions from the
+          case IR_RETURN:
+            last->kind = IR_RETURN;
+            last->operand = first->operand;
+            if (last->operand) mark_used(last->operand, last);
+            break;
+
+          case IR_BRANCH_CONDITIONAL:
+            last->kind = IR_BRANCH_CONDITIONAL;
+            last->cond_br = first->cond_br;
+            mark_used(last->cond_br.condition, last);
+            break;
+        }
+
+        changed = true;
+        continue;
+      }
+
+      /// Otherwise, eliminate the branch and move all instructions from the
       /// destination block into this block.
       vector_push(blocks_to_remove, last->destination_block);
       IRBlock *successor = last->destination_block;
