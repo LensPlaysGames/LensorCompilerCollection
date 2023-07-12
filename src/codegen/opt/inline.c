@@ -9,7 +9,6 @@ typedef struct InlineContext {
     usz inlined_via;     /// Index into this history. -1 if root entry.
   }) history;
   Vector(IRInstruction *) not_inlinable;
-  isz threshold;
   bool may_fail;
 } InlineContext;
 
@@ -33,7 +32,7 @@ static isz instruction_count(IRFunction *f, bool include_parameters) {
 /// of the value of the inlining threshold.
 ///
 /// \param cg Codegen context.
-/// \param stack Inline stack.
+/// \param stack Inline context.
 /// \param call The call instruction to inline.
 /// \param threshold Inlining threshold in number of instructions for
 ///        nested calls. If 0, inline everything; if -1, inline only
@@ -44,7 +43,8 @@ static isz instruction_count(IRFunction *f, bool include_parameters) {
 static inline_result ir_inline_call(
   CodegenContext *ctx,
   InlineContext *ictx,
-  IRInstruction *call
+  IRInstruction *call,
+  isz threshold
 ) {
   /// Save the instruction before and after the call.
   IRInstruction *const call_prev = call->prev;
@@ -479,7 +479,8 @@ static inline_result ir_inline_call(
 static inline_result inline_calls_in_function(
   CodegenContext *ctx,
   InlineContext *ictx,
-  IRFunction *f
+  IRFunction *f,
+  isz threshold
 ) {
   IRBlock *block = f->blocks.first;
   inline_result res = {0};
@@ -507,10 +508,10 @@ again:
       bool may_fail = ictx->may_fail && !inst->call.force_inline;
 
       /// Whether this has to be inlined.
-      bool must_inline = inst->call.force_inline || callee->attr_inline || ictx->threshold == 0;
+      bool must_inline = inst->call.force_inline || callee->attr_inline || threshold == 0;
 
       /// Inline the call if requested.
-      if (must_inline || ictx->threshold >= instruction_count(callee, false)) {
+      if (must_inline || threshold >= instruction_count(callee, false)) {
         /// If the callee is the caller, only allow inlining tail calls.
         if (f == callee) {
           if (!inst->call.tail_call) {
@@ -536,7 +537,7 @@ again:
         }
 
         /// Inline it.
-        inline_result inlined = ir_inline_call(ctx, ictx, inst);
+        inline_result inlined = ir_inline_call(ctx, ictx, inst, threshold);
         if (inlined.changed) res.changed = true;
         if (inlined.failed) {
           res.failed = true;
@@ -560,13 +561,12 @@ static inline_result run_inliner(CodegenContext *ctx, isz threshold, bool may_fa
   InlineContext ictx = {
     .history = {0},
     .not_inlinable = {0},
-    .threshold = threshold,
     .may_fail = may_fail,
   };
 
   inline_result res = {0};
   foreach_val (f, ctx->functions) {
-    inline_result r = inline_calls_in_function(ctx, &ictx, f);
+    inline_result r = inline_calls_in_function(ctx, &ictx, f, f->attr_flatten ? 0 : threshold);
     if (r.failed) res.failed = true;
     if (r.changed) res.changed = true;
   }
