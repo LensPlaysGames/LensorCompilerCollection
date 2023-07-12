@@ -126,9 +126,9 @@ IndirectJumpType negate_jump(IndirectJumpType j);
 IndirectJumpType comparison_to_jump_type(enum ComparisonType comparison);
 
 typedef enum StackFrameKind {
-  FRAME_FULL,
-  FRAME_MINIMAL,
-  FRAME_NONE,
+  FRAME_FULL,    /// Push+restore rbp.
+  FRAME_MINIMAL, /// Align stack pointer.
+  FRAME_NONE,    /// Nothing.
   FRAME_COUNT
 } StackFrameKind;
 

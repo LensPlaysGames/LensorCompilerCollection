@@ -2271,9 +2271,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
     case FRAME_NONE: break;
 
     case FRAME_MINIMAL: {
-      // PUSH %RBP
-      mcode_reg(context, MX64_PUSH, REG_RBP, r64);
-      if (frame_size) mcode_imm_to_reg(context, MX64_SUB, ALIGN_TO(frame_size, 16), REG_RSP, r64);
+      mcode_imm_to_reg(context, MX64_SUB, ALIGN_TO(frame_size, 16) + 8, REG_RSP, r64);
     } break;
 
     case FRAME_FULL: {
@@ -2536,11 +2534,13 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
 
           case FRAME_FULL: {
             // MOV %RBP, %RSP
-            mcode_reg_to_reg(context, MX64_MOV, REG_RBP, r64, REG_RSP, r64);
-          } FALLTHROUGH;
-          case FRAME_MINIMAL: {
             // POP %RBP
+            mcode_reg_to_reg(context, MX64_MOV, REG_RBP, r64, REG_RSP, r64);
             mcode_reg(context, MX64_POP, REG_RBP, r64);
+          } break;
+
+          case FRAME_MINIMAL: {
+            mcode_imm_to_reg(context, MX64_ADD, ALIGN_TO(frame_size, 16) + 8, REG_RSP, r64);
           } break;
 
           case FRAME_COUNT: FALLTHROUGH;
