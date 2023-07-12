@@ -207,6 +207,9 @@ emit {
   MX64_RET()
 }
 
+match MIR_UNREACHABLE u()
+emit MX64_UD2()
+
 ;;;; ARITHMETIC
 
 match
