@@ -37,6 +37,8 @@ typedef struct IRStaticVariable {
   /// - IR_LIT_STRING
   IRInstruction *init;
 
+  SymbolLinkage linkage;
+
   /// Used by the optimiser.
   bool referenced;
 } IRStaticVariable;

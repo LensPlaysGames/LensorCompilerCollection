@@ -121,14 +121,20 @@ enum TokenType {
   TK_COUNT
 };
 
+/// Attributes.
+typedef enum FunctionAttribute {
+#define F(name, ...) FUNC_ATTR_##name,
+  SHARED_FUNCTION_ATTRIBUTES(F)
+  FRONTEND_FUNCTION_ATTRIBUTES(F)
+  IR_FUNCTION_ATTRIBUTES(F)
+#undef F
+} FunctionAttribute;
+
 /// Types of attributes
-typedef enum AttributeKind {
-  ATTR_NOMANGLE,
-  ATTR_DISCARDABLE,
+typedef enum VariableAttribute {
   ATTR_ALIGNAS,
-  ATTR_INLINE, /// Always inline, not a hint like in C.
   ATTR_COUNT
-} AttributeKind;
+} VariableAttribute;
 
 /// The type of a symbol in the symbol table.
 enum SymbolKind {
@@ -153,7 +159,6 @@ typedef struct Type Type;
 typedef struct Scope Scope;
 typedef Vector(Node *) Nodes;
 typedef Vector(Type *) Types;
-
 
 /// A function parameter.
 typedef struct Parameter {
@@ -206,7 +211,7 @@ struct Scope {
 ///  Attributes.
 /// ===========================================================================
 typedef struct Attribute {
-  AttributeKind kind;
+  int kind;
   union AttributeValue {
     usz integer;
   } value;
@@ -227,15 +232,14 @@ typedef struct NodeFunction {
   Node *body;
   string name;
   IRFunction *ir;
+  SymbolLinkage linkage;
 } NodeFunction;
 
 /// Variable declaration.
 typedef struct NodeDeclaration {
   Node *init;
   string name;
-  bool static_;
-  bool external; // don't emit, but act like we did
-  bool exported;
+  SymbolLinkage linkage;
 } NodeDeclaration;
 
 /// If expression.
@@ -354,10 +358,10 @@ typedef struct TypeArray {
 typedef struct TypeFunction {
   Parameters parameters;
   Type *return_type;
-  bool global : 1;
-  bool nomangle : 1;
-  bool discardable : 1;
-  bool alwaysinline : 1;
+#define F(_, name) bool attr_##name;
+  SHARED_FUNCTION_ATTRIBUTES(F)
+  FRONTEND_FUNCTION_ATTRIBUTES(F)
+#undef F
 } TypeFunction;
 
 /// Struct type.
@@ -512,6 +516,7 @@ Node *ast_make_function(
     AST *ast,
     loc source_location,
     Type *type,
+    SymbolLinkage linkage,
     Nodes param_decls,
     Node *body,
     span name
@@ -522,6 +527,7 @@ Node *ast_make_declaration(
     AST *ast,
     loc source_location,
     Type *type,
+    SymbolLinkage linkage, ///< Pass whatever for locals.
     span name,
     Node *init
 );

@@ -152,7 +152,7 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
 
   /// Variable declaration.
   case NODE_DECLARATION:
-    lval->address = lval->declaration.static_
+    lval->address = lval->declaration.linkage != LINKAGE_LOCALVAR
     ? ir_create_static(ctx, lval, lval->type, as_span(lval->declaration.name))
     : ir_stack_allocate(ctx, lval->type);
 
@@ -160,7 +160,7 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
     // TODO: TK_LBRACK aka array literals *may* be known at compile
     // time, if all of the elements are.
     if (lval->declaration.init) {
-      if (lval->declaration.static_ &&
+      if (lval->declaration.linkage != LINKAGE_LOCALVAR &&
           (lval->declaration.init->kind == NODE_LITERAL) &&
           (lval->declaration.init->literal.type != TK_LBRACK)) {
             if (lval->declaration.init->literal.type == TK_NUMBER) {
@@ -193,7 +193,6 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
 
   case NODE_IF:
     TODO("`if` as an lvalue is not yet supported, but it's in the plans bb");
-    break;
 
   case NODE_UNARY: {
     if (!lval->unary.postfix && lval->unary.op == TK_AT) {
@@ -202,7 +201,7 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
       lval->address = lval->unary.value->ir;
       return;
     } else ICE("Unary operator %s is not an lvalue", token_type_to_string(TK_AT));
-  } break;
+  }
 
   case NODE_VARIABLE_REFERENCE:
     ASSERT(lval->var->val.node->address,
@@ -246,7 +245,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// for them in here.
   case NODE_FUNCTION:
       expr->ir = ir_funcref(ctx, expr->function.ir);
-      if (expr->type->function.alwaysinline)
+      if (expr->type->function.attr_inline)
         ERR("Cannot take address of inline function '%S'", expr->function.name);
       return;
 
@@ -505,7 +504,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       return;
     }
     UNREACHABLE();
-  } break;
+  }
 
   /// Binary expression.
   case NODE_BINARY: {
@@ -765,6 +764,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
 /// Emit a function.
 void codegen_function(CodegenContext *ctx, Node *node) {
+  ASSERT(node->function.body);
   ctx->block = node->function.ir->blocks.first;
   ctx->function = node->function.ir;
 
@@ -882,41 +882,28 @@ bool codegen
         vector_push(main_params, argc);
         vector_push(main_params, argv);
         vector_push(main_params, envp);
-        // TODO: envp?
 
         /// FIXME: return type should be int as well, but that currently breaks the x86_64 backend.
         Type *main_type = ast_make_type_function(context->ast, (loc){0}, t_integer, main_params);
-        context->entry = ir_function(context, literal_span("main"), main_type);
-        context->entry->attr_global = true;
-        context->entry->attr_nomangle = true;
+        context->entry = ir_function(context, string_create("main"), main_type, LINKAGE_EXPORTED);
       } else {
         Parameters entry_params = {0};
         Type *entry_type = ast_make_type_function(context->ast, (loc){0}, t_void, entry_params);
-        string_buffer name = {0};
-        format_to(&name, "__module%S_entry", context->ast->module_name);
-        context->entry = ir_function(context, as_span(name), entry_type);
-        context->entry->attr_global = true;
-        context->entry->attr_nomangle = true;
-        vector_delete(name);
+        context->entry = ir_function(context, format("__module%S_entry", context->ast->module_name), entry_type, LINKAGE_EXPORTED);
       }
+
+      context->entry->attr_nomangle = true;
 
       /// Create the remaining functions and set the address of each function.
       foreach_val (func, ast->functions) {
-        func->function.ir = ir_function(context, as_span(func->function.name), func->type);
+        func->function.ir = ir_function(context, string_dup(func->function.name), func->type, func->function.linkage);
         func->function.ir->source_location = func->source_location;
 
-        /// Mark the function as extern if it is.
-        if (!func->function.body) func->function.ir->is_extern = true;
-
-        /// Handle attributes
-        STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of function attributes");
-        /// TODO: Figure out what functions to export.
-        /// TODO: Also remember to mark exported global *variables* as such and to
-        ///       not remove stores to them in opt_remove_globals().
-        func->function.ir->attr_global = ast->is_module && func->type->function.global;
-        func->function.ir->attr_nomangle = func->type->function.nomangle;
-        func->function.ir->attr_forceinline = func->type->function.alwaysinline;
+        /// Handle attributes.
         // TODO: Should we propagate "discardable" to the IR?
+#define F(_, x) func->function.ir->attr_##x = func->type->function.attr_##x;
+        SHARED_FUNCTION_ATTRIBUTES(F)
+#undef F
       }
 
       foreach_val (import, context->ast->imports) {
@@ -933,10 +920,9 @@ bool codegen
       codegen_expr(context, ast->root);
 
       /// Emit the remaining functions that aren’t extern.
-      foreach_val (func, ast->functions) {
-        if (!func->function.body) continue;
-        codegen_function(context, func);
-      }
+      foreach_val (func, ast->functions)
+        if (ir_function_is_definition(func->function.ir))
+          codegen_function(context, func);
     } break;
 
     /// Anything else is not supported.

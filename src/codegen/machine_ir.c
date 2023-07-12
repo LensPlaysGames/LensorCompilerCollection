@@ -463,7 +463,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
   }
   foreach_val (function, out) {
     // NOTE for devs: function->origin == IRFunction*
-    if (function->origin->is_extern) continue;
+    if (!ir_function_is_definition(function->origin)) continue;
 
     ASSERT(function->blocks.size, "Zero blocks in non-extern MIRFunction... what have you done?!");
     // NOTE: This assumes the first block of the function is the entry
@@ -769,7 +769,6 @@ const char *mir_common_opcode_mnemonic(uint32_t opcode) {
   case MPSEUDO_R2R: return "pseudo:r2r";
   case MPSEUDO_END: return "pseudo:end";
   case MPSEUDO_COUNT: return "pseudo:count";
-    break;
   }
   return "";
 }
@@ -823,7 +822,6 @@ void print_mir_operand(MIRFunction *function, MIROperand *op) {
   } break;
   case MIR_OP_COUNT:
   case MIR_OP_NONE: UNREACHABLE();
-    break;
   }
 }
 

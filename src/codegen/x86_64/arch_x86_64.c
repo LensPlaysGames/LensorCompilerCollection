@@ -989,7 +989,10 @@ void codegen_emit_x86_64(CodegenContext *context) {
         fprint(context->code, ".section .data\n");
     }
 
-    GObjSymbolType sym_type = var->decl->declaration.exported
+    const SymbolLinkage linkage = var->decl->declaration.linkage;
+    const bool exported = linkage == LINKAGE_EXPORTED || linkage == LINKAGE_REEXPORTED;
+    const bool imported = linkage == LINKAGE_IMPORTED || linkage == LINKAGE_REEXPORTED;
+    const GObjSymbolType sym_type = exported
                               ? GOBJ_SYMTYPE_EXPORT
                               : GOBJ_SYMTYPE_STATIC;
 
@@ -997,6 +1000,11 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
     if (var->init) {
       if (var->init->kind == IR_LIT_INTEGER) {
+        ASSERT(
+          !imported,
+          "Imported variables cannot have static initialisers"
+        );
+
         uint8_t *byte_repr = (uint8_t*)(&var->init->imm);
         STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of assembly targets");
         if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL) {
@@ -1004,7 +1012,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
           // `%u` and the `(unsigned)` cast is because variadic arguments
           // of integral types are always promoted to at least `int` or
           // `unsigned` in C.
-          if (var->decl->declaration.exported)
+          if (linkage == LINKAGE_EXPORTED)
             fprint(context->code, ".global %S\n", var->name);
           fprint(context->code, "%S: .byte %u", var->name, (unsigned) byte_repr[0]);
           for (usz i = 1; i < type_sizeof(var->type); ++i)
@@ -1031,7 +1039,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
       } else if (var->init->kind == IR_LIT_STRING) {
         STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of assembly targets");
         if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL) {
-          if (var->decl->declaration.exported)
+          if (var->decl->declaration.linkage == LINKAGE_EXPORTED)
             fprint(context->code, ".global %S\n", var->name);
           fprint(context->code, "%S: .byte ", var->name);
           if (var->init->str.size)
@@ -1067,8 +1075,9 @@ void codegen_emit_x86_64(CodegenContext *context) {
       usz sz = type_sizeof(var->type);
       STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of assembly targets");
       if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL) {
-        if (var->decl->declaration.exported)
+        if (linkage == LINKAGE_EXPORTED || linkage == LINKAGE_USED)
           fprint(context->code, ".global %S\n", var->name);
+        if (!imported)
         fprint(context->code,
                ".align %Z\n"
                "%S: .space %zu\n",
@@ -1078,7 +1087,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 #ifdef X86_64_GENERATE_MACHINE_CODE
       STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of object targets");
       if (context->target == TARGET_COFF_OBJECT || context->target == TARGET_ELF_OBJECT) {
-        if (var->decl->declaration.external) {
+        if (imported) {
           // Create symbol referencing external var->name
           GObjSymbol sym = {0};
           sym.type = GOBJ_SYMTYPE_EXTERNAL;
@@ -1173,7 +1182,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   // ISel in code...
   foreach_val (function, machine_instructions_from_ir) {
-    if (!function->origin || function->origin->is_extern) continue;
+    if (!function->origin || !ir_function_is_definition(function->origin)) continue;
     foreach_val (block, function->blocks) {
       MIRInstructionVector instructions_to_remove = {0};
       foreach_index (i, block->instructions) {
@@ -1313,7 +1322,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   /// Remove register to register moves when value and size are equal.
   /// Saving/restoration of callee-saved registers used in function.
   foreach_val (function, machine_instructions_from_ir) {
-    if (!function->origin || function->origin->is_extern) continue;
+    if (!function->origin || !ir_function_is_definition(function->origin)) continue;
 
     // Calculate stack offsets of frame objects
     isz offset = 0;

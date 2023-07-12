@@ -169,6 +169,7 @@ Node *ast_make_function(
     AST *ast,
     loc source_location,
     Type *type,
+    SymbolLinkage linkage,
     Nodes param_decls,
     Node *body,
     span name
@@ -176,6 +177,7 @@ Node *ast_make_function(
   Node *node = mknode(ast, NODE_FUNCTION, source_location);
   node->function.name = string_dup(name);
   node->type = type;
+  node->function.linkage = linkage;
   node->function.body = body;
   node->function.param_decls = param_decls;
   node->parent = ast->root;
@@ -190,11 +192,13 @@ Node *ast_make_declaration(
     AST *ast,
     loc source_location,
     Type *type,
+    SymbolLinkage linkage,
     span name,
     Node *init
 ) {
   Node *node = mknode(ast, NODE_DECLARATION, source_location);
   node->declaration.name = string_dup(name);
+  node->declaration.linkage = linkage;
   node->type = type;
   if (init) {
     node->declaration.init = init;
@@ -496,7 +500,6 @@ Type *ast_make_type_function(
   Type *type = mktype(ast, TYPE_FUNCTION, source_location);
   type->function.parameters = parameters;
   type->function.return_type = return_type;
-  type->function.global = true;
   return type;
 }
 
@@ -830,6 +833,19 @@ static void print_struct_members(FILE *file, Members *members, string_buffer *le
   }
 }
 
+/// Print linkage information.
+void print_linkage(FILE *file, SymbolLinkage linkage) {
+  fprint(file, "%31");
+  switch (linkage) {
+    case LINKAGE_LOCALVAR: fprint(file, "Local "); break;
+    case LINKAGE_USED: fprint(file, "Used "); break;
+    case LINKAGE_INTERNAL: fprint(file, "Internal "); break;
+    case LINKAGE_EXPORTED: fprint(file, "Exported "); break;
+    case LINKAGE_IMPORTED: fprint(file, "Imported "); break;
+    case LINKAGE_REEXPORTED: fprint(file, "Exported Imported "); break;
+  }
+}
+
 /// Print a node.
 void ast_print_node_internal(
   FILE *file,
@@ -851,8 +867,10 @@ void ast_print_node_internal(
     } break;
 
     case NODE_FUNCTION: {
+      print_linkage(file, node->function.linkage);
+
       /// Print the function name and type.
-      fprint(file, "%31Function %35<%u> %32%S %31: %T\n",
+      fprint(file, "Function %35<%u> %32%S %31: %T\n",
         node->source_location.start,
         node->function.name,
         node->type);
@@ -867,8 +885,10 @@ void ast_print_node_internal(
     } break;
 
     case NODE_DECLARATION: {
+      print_linkage(file, node->function.linkage);
+
       /// Print the declaration name and type.
-      fprint(file, "%31Declaration %35<%u> %38%S %31: %T\n",
+      fprint(file, "Variable Declaration %35<%u> %38%S %31: %T\n",
         node->source_location.start,
         node->declaration.name,
         node->type);

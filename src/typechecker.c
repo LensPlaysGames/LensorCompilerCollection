@@ -925,6 +925,15 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
             "Type '%T' of function body is not convertible to return type '%T'.",
             body, ret);
       }
+
+      /// Validate attributes.
+      TypeFunction *ftype = &expr->type->function;
+      if (ftype->attr_noreturn) {
+        if (ftype->attr_const) ERR(expr->source_location, "Noreturn function cannot be const");
+        if (ftype->attr_pure) ERR(expr->source_location, "Noreturn function cannot be pure");
+      }
+      if (ftype->attr_inline && ftype->attr_noinline)
+        ERR(expr->source_location, "Function cannot be both inline and noinline");
     } break;
 
     /// Typecheck declarations.
@@ -1017,7 +1026,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
           // If the function being called doesn't return void, it is being discarded.
           if (node->kind == NODE_CALL
-              && !node->call.callee->type->function.discardable
+              && !node->call.callee->type->function.attr_discardable
               && node->call.callee->type->function.return_type != t_void) {
             ERR(node->source_location,
                 "Discarding return value of function that does not return void.");

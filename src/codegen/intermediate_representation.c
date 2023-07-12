@@ -428,7 +428,7 @@ void ir_femit_function
  )
 {
   ir_print_defun(file, function);
-  if (!function->is_extern) {
+  if (function->blocks.first) {
     fprint(file, " %31{\n");
     Vector(IRBlock*) printed = {0};
     list_foreach (block, function->blocks) {
@@ -564,31 +564,34 @@ void ir_block_attach
   context->block = new_block;
 }
 
-IRFunction *ir_function(CodegenContext *context, span name, Type *function_type) {
+IRFunction *ir_function(CodegenContext *context, string name, Type *function_type, SymbolLinkage linkage) {
   ASSERT(function_type->kind == TYPE_FUNCTION, "Cannot create function of non-function type");
 
   IRFunction *function = calloc(1, sizeof(IRFunction));
-  function->name = string_dup(name);
+  function->name = name;
   function->type = function_type;
 
-  /// A function *must* contain at least one block, so we start new
-  /// functions out with an empty block.
-  IRBlock *block = ir_block_create();
-
-  /// Set the current function and add it to the list of functions.
-  context->function = function;
+  /// Add it to the list of functions.
   function->context = context;
-  ir_block_attach(context, block);
+  function->linkage = linkage;
   vector_push(context->functions, function);
 
-  /// Generate param refs.
-  for (u64 i = 1; i <= function_type->function.parameters.size; ++i) {
-    INSTRUCTION(param, IR_PARAMETER);
-    param->imm = i - 1;
-    param->id = (u32) i;
-    param->type = function_type->function.parameters.data[i - 1].type;
-    vector_push(function->parameters, param);
-    INSERT(param);
+  /// A function definition *must* contain at least one block, so we
+  /// start new functions out with an empty block.
+  if (linkage != LINKAGE_IMPORTED && linkage != LINKAGE_REEXPORTED) {
+    IRBlock *block = ir_block_create();
+    context->function = function;
+    ir_block_attach(context, block);
+
+    /// Generate param refs.
+    for (u64 i = 1; i <= function_type->function.parameters.size; ++i) {
+      INSTRUCTION(param, IR_PARAMETER);
+      param->imm = i - 1;
+      param->id = (u32) i;
+      param->type = function_type->function.parameters.data[i - 1].type;
+      vector_push(function->parameters, param);
+      INSERT(param);
+    }
   }
   return function;
 }
@@ -1001,7 +1004,12 @@ bool ir_is_value(IRInstruction *instruction) {
 
 void ir_print_defun(FILE *file, IRFunction *f) {
   /// Function signature.
-  fprint(file, "%31%s %32%S %31(", f->is_extern ? "declare" : "defun", f->name);
+  fprint(
+    file,
+    "%31%s %32%S %31(",
+    !ir_function_is_definition(f) ? "declare" : "defun",
+    f->name
+  );
 
   /// Parameters.
   bool first_param = true;
@@ -1015,13 +1023,10 @@ void ir_print_defun(FILE *file, IRFunction *f) {
   fprint(file, "%31)");
 
   /// Attributes, if any.
-  if (f->attr_consteval) fprint(file, " consteval");
-  if (f->attr_forceinline) fprint(file, " forceinline");
-  if (f->attr_global) fprint(file, " global");
-  if (f->attr_leaf) fprint(file, " leaf");
-  if (f->attr_noreturn) fprint(file, " noreturn");
-  if (f->attr_pure) fprint(file, " pure");
-  if (f->attr_nomangle) fprint(file, " nomangle");
+#define F(_, name) if (f->attr_##name) fprint(file, " " #name);
+  SHARED_FUNCTION_ATTRIBUTES(F)
+  IR_FUNCTION_ATTRIBUTES(F)
+#undef F
 }
 
 void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
@@ -1110,6 +1115,10 @@ IRInstruction *ir_intrinsic(CodegenContext *ctx, Type *t, enum IntrinsicKind int
     i->call.intrinsic = intrinsic;
     i->type = t;
     return i;
+}
+
+bool ir_function_is_definition(IRFunction *f) {
+  return f->blocks.first != NULL;
 }
 
 #undef INSERT

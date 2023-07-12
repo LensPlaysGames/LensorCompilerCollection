@@ -122,7 +122,7 @@ uint64_t serialise_type(string_buffer *out, Type *type, TypeCache *cache) {
     // [param_name_length : uint32_t, param_name]*
 
     uint32_t attr = 0;
-    attr |= (uint32_t)type->function.discardable << CEREAL_ATTR_DISCARDABLE;
+    attr |= (uint32_t)type->function.attr_discardable << CEREAL_ATTR_DISCARDABLE;
     write_bytes(out, (const char *)&attr, 4);
 
     uint32_t param_count = (uint32_t)type->function.parameters.size;
@@ -273,7 +273,7 @@ uint8_t *deserialise_type(uint8_t *from, Type *type, Type **types) {
 
     type->kind = TYPE_FUNCTION;
 
-    type->function.discardable = attributes & (1 << CEREAL_ATTR_DISCARDABLE);
+    type->function.attr_discardable = attributes & (1 << CEREAL_ATTR_DISCARDABLE);
 
     uint32_t param_count = *(uint32_t*)from_it;
     from_it += sizeof(uint32_t);
@@ -313,10 +313,6 @@ uint8_t *deserialise_type(uint8_t *from, Type *type, Type **types) {
       param_name.size = 0;
       param_name.capacity = 0;
     }
-
-    // FIXME: Is this correct?
-    type->function.global = true;
-
     return from_it;
   }
   case TYPE_STRUCT: {
@@ -397,9 +393,7 @@ AST *deserialise_module(span metadata) {
     case TYPE_ARRAY:
     case TYPE_STRUCT:
     case TYPE_INTEGER: {
-      node = ast_make_declaration(module, (loc){0}, type, as_span(name), NULL);
-      node->declaration.static_ = true;
-      node->declaration.external = true;
+      node = ast_make_declaration(module, (loc){0}, type, LINKAGE_IMPORTED, as_span(name), NULL);
     } break;
 
     case TYPE_COUNT:
