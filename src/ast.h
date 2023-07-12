@@ -144,10 +144,32 @@ enum SymbolKind {
   SYM_COUNT
 };
 
+/// Intrinsics that need to be handled by the backend,
+/// i.e. in MIR or later.
+#define ALL_BACKEND_INTRINSICS(F) \
+  F(BUILTIN_SYSCALL)
+
+/// Intrinsics that need to be gone after IR generation.
+#define ALL_FRONTEND_INTRINSICS(F) \
+  F(BUILTIN_INLINE)
+
+/// Helpers to ignore intrinsics that should never exist
+/// in the backend.
+#define IGNORE_FRONTEND_INTRINSIC(name) \
+  case INTRIN_##name:
+#define IGNORE_FRONTEND_INTRINSICS()                 \
+  ALL_FRONTEND_INTRINSICS(IGNORE_FRONTEND_INTRINSIC) \
+  case INTRIN_COUNT:                                 \
+  case INTRIN_BACKEND_COUNT: UNREACHABLE();
+
 /// Intrinsic functions.
 enum IntrinsicKind {
-    INTRINSIC_BUILTIN_SYSCALL,
-    INTRINSIC_COUNT,
+#define F(name) INTRIN_##name,
+  ALL_BACKEND_INTRINSICS(F)
+  INTRIN_BACKEND_COUNT,
+  ALL_FRONTEND_INTRINSICS(F)
+  INTRIN_COUNT,
+#undef F
 };
 
 /// ===========================================================================

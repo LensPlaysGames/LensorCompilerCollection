@@ -284,7 +284,7 @@ void ir_femit_instruction
   case IR_INTRINSIC: {
     switch (inst->call.intrinsic) {
       default: fprint(file, "%33intrinsic.%d ", inst->call.intrinsic); break;
-      case INTRINSIC_BUILTIN_SYSCALL: fprint(file, "%33intrinsic.syscall "); break;
+      case INTRIN_BUILTIN_SYSCALL: fprint(file, "%33intrinsic.syscall "); break;
     }
 
     fprint(file, "%31(");

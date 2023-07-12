@@ -411,7 +411,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   /// Function call.
   case NODE_CALL: {
-    ASSERT(expr->call.intrinsic == INTRINSIC_COUNT, "Refusing to codegen intrinsic as a regular call");
+    ASSERT(expr->call.intrinsic == INTRIN_COUNT, "Refusing to codegen intrinsic as a regular call");
     IRInstruction *call = NULL;
 
     /// Direct call.
@@ -445,12 +445,14 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// Intrinsic.
   case NODE_INTRINSIC_CALL: {
     ASSERT(expr->call.callee->kind = NODE_FUNCTION_REFERENCE);
-    STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics in codegen");
+    STATIC_ASSERT(INTRIN_COUNT == 3, "Handle all intrinsics in codegen");
     switch (expr->call.intrinsic) {
-      case INTRINSIC_COUNT: ICE("Call is not an intrinsic");
+      case INTRIN_COUNT:
+      case INTRIN_BACKEND_COUNT:
+        ICE("Call is not an intrinsic");
 
       /// System call.
-      case INTRINSIC_BUILTIN_SYSCALL: {
+      case INTRIN_BUILTIN_SYSCALL: {
         /// Syscalls are not a thing on Windows.
         if (ctx->call_convention == CG_CALL_CONV_MSWIN) {
           ERR("Sorry, syscalls are not supported on Windows.");
@@ -468,6 +470,16 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         }
 
         ir_insert(ctx, expr->ir);
+        return;
+      }
+
+      /// Inline call.
+      case INTRIN_BUILTIN_INLINE: {
+        Node *call = expr->call.arguments.data[0];
+        codegen_expr(ctx, call);
+        call->ir->call.force_inline = true;
+        expr->ir = call->ir;
+        expr->address = call->address;
         return;
       }
     }

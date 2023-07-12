@@ -1,0 +1,8 @@
+;; 42
+
+foo : integer() noinline {
+    return 42;
+}
+
+;; This forces inlining even in the presence of `noinline`.
+__builtin_inline(foo())
