@@ -1082,16 +1082,10 @@ void codegen_optimise(CodegenContext *ctx) {
   opt_analyse_functions(ctx);
 
   /// Optimise each function individually.
-  /*usz i = 0;*/
   do {
     foreach_val (f, ctx->functions) {
       if (!ir_function_is_definition(f) || f->attr___noopt__) continue;
-      do {
-/*        print("Optimising function %S\n", f->name);
-        ir_set_func_ids(f);
-        ir_femit_function(stdout, f);
-        if (++i == 2) __asm__ volatile ("int $3;");*/
-      } while (
+      do { } while (
         opt_simplify_cfg(f) |
         opt_instcombine(f) |
         opt_dce(f) |
