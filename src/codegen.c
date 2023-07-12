@@ -272,7 +272,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_MEMBER_ACCESS:
   case NODE_VARIABLE_REFERENCE:
     codegen_lvalue(ctx, expr);
-    expr->ir = ir_load(ctx, expr->address);
+    expr->ir = ir_load(ctx, type_get_element(expr->address->type), expr->address);
     return;
 
   case NODE_STRUCTURE_DECLARATION:
@@ -553,7 +553,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         IRInstruction *var_decl = lhs->var->val.node->address;
         if (var_decl->kind == IR_PARAMETER || var_decl->kind == IR_STATIC_REF || var_decl->kind == IR_ALLOCA)
           if (type_is_pointer(var_decl->type) && type_is_pointer(var_decl->type->pointer.to))
-            subs_lhs = ir_load(ctx, var_decl);
+            subs_lhs = ir_load(ctx, type_get_element(var_decl->type), var_decl);
           else subs_lhs = var_decl;
         else {
           ir_femit_instruction(stdout, var_decl);
@@ -659,7 +659,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         case TK_AT:
           if (expr->unary.value->type->kind == TYPE_POINTER && expr->unary.value->type->pointer.to->kind == TYPE_FUNCTION)
             expr->ir = expr->unary.value->ir;
-          else expr->ir = ir_load(ctx, expr->unary.value->ir);
+          else expr->ir = ir_load(ctx, type_get_element(expr->unary.value->ir->type), expr->unary.value->ir);
           return;
 
         /// One’s complement negation.
@@ -718,7 +718,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         address = ir_add(ctx, address, element_byte_size);
         ++index;
       }
-      expr->ir = ir_load(ctx, expr->ir);
+      expr->ir = ir_load(ctx, type_get_element(expr->ir->type) , expr->ir);
     } break;
 
     default:
@@ -830,6 +830,18 @@ void codegen_lower(CodegenContext *context) {
   switch (context->arch) {
     case ARCH_X86_64:
       codegen_lower_x86_64(context);
+      break;
+    default:
+      TODO("Handle %d code generation architecture.", context->arch);
+  }
+}
+
+void codegen_early_lowering(CodegenContext *context) {
+  STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures");
+  if (context->target == TARGET_LLVM) return;
+  switch (context->arch) {
+    case ARCH_X86_64:
+      codegen_lower_early_x86_64(context);
       break;
     default:
       TODO("Handle %d code generation architecture.", context->arch);
@@ -961,6 +973,9 @@ bool codegen
   if (debug_ir || print_ir2) {
     ir_femit(stdout, context);
   }
+
+  /// Early lowering before optimisation.
+  codegen_early_lowering(context);
 
   if (optimise) {
     codegen_optimise(context);

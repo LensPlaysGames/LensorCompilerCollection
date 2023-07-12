@@ -798,6 +798,8 @@ typedef struct IncompleteResult {
 /// `a` and `b` must be the last alias of their corresponding types.
 NODISCARD IncompleteResult compare_incomplete(Type *a, Type *b);
 
+/// Get the element type of a type.
+NODISCARD Type *type_get_element(Type *type);
 
 /** Same as type_is_incomplete() but must be given a canonical type.
  *

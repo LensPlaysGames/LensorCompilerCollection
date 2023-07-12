@@ -260,6 +260,28 @@ emit {
   MX64_LEA(object, i1)
   MX64_ADD(imm, i1)
 }
+match
+MIR_ADD i1(Static object, Register reg)
+emit {
+  MX64_LEA(object, reg, i1)
+}
+match
+MIR_ADD i1(Register reg, Static object)
+emit {
+  MX64_LEA(object, reg, i1)
+}
+match
+MIR_ADD i1(Local object, Register reg)
+emit {
+  MX64_LEA(object, i1)
+  MX64_ADD(reg, i1)
+}
+match
+MIR_ADD i1(Register reg, Local object)
+emit {
+  MX64_LEA(object, i1)
+  MX64_ADD(reg, i1)
+}
 
 match
 MIR_MUL i1(Immediate lhs, Immediate rhs)

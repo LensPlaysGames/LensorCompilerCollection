@@ -112,6 +112,8 @@ NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
 }
 
 /// Check if from is convertible to to.
+/// FIXME: This should both check if the conversion is possible
+/// and also perform if (unless it’s called during overload resolution).
 NODISCARD static bool convertible(Type *to_type, Type *from_type) {
   return convertible_score(to_type, from_type) != -1;
 }
@@ -1375,6 +1377,15 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
           /// Make sure the rhs is convertible to the lhs.
           if (!convertible(lhs->type, rhs->type))
             ERR_NOT_CONVERTIBLE(rhs->source_location, lhs->type, rhs->type);
+
+          /// Perform the conversion.
+          /// FIXME: convertible() should do this instead.
+          if (!type_equals(lhs->type, rhs->type)) {
+            Node *cast = ast_make_cast(ast, rhs->source_location, type_strip_references(lhs->type), rhs);
+            ASSERT(typecheck_expression(ast, cast));
+            expr->binary.rhs = cast;
+            cast->parent = expr;
+          }
 
           expr->type = t_void;
           break;

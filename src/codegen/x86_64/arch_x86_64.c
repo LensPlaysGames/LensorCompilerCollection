@@ -523,12 +523,8 @@ static void lower(CodegenContext *context) {
       }
     } break;
 
-    case IR_LOAD: {
-      lower_load(context, instruction);
-    } break;
-    case IR_STORE: {
-      lower_store(context, instruction);
-    } break;
+    case IR_LOAD: lower_load(context, instruction); break;
+    case IR_STORE: lower_store(context, instruction); break;
 
     case IR_ALLOCA: {
       // Worry about stack alignment
@@ -874,6 +870,16 @@ static size_t interfering_regs(IRInstruction *instruction) {
 }
 
 void codegen_lower_x86_64(CodegenContext *context) { lower(context); }
+
+void codegen_lower_early_x86_64(CodegenContext *context) {
+  FOREACH_INSTRUCTION (context) {
+    switch (instruction->kind) {
+      default: break;
+      case IR_LOAD: lower_load(context, instruction); break;
+      case IR_STORE: lower_store(context, instruction); break;
+    }
+  }
+}
 
 bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *function, usz parameter_index) {
   ASSERT(context->arch == ARCH_X86_64);
