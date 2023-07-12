@@ -1234,11 +1234,12 @@ void codegen_emit_x86_64(CodegenContext *context) {
         case MIR_INTRINSIC: {
           MIROperand *kind = mir_get_op(instruction, 0);
           ASSERT(kind->kind == MIR_OP_IMMEDIATE, "Intrinsic kind must be an immediate");
+          STATIC_ASSERT(INTRIN_BACKEND_COUNT == 1, "Handle backend intrinsics in codegen");
           switch (kind->value.imm) {
-            case INTRINSIC_COUNT: ICE("Unlowered intrinsic %d in codegen", kind->value.imm);
+            IGNORE_FRONTEND_INTRINSICS();
 
             /// For syscalls, just emit a bunch of moves and the syscall.
-            case INTRINSIC_BUILTIN_SYSCALL: {
+            case INTRIN_BUILTIN_SYSCALL: {
               ASSERT(context->call_convention == CG_CALL_CONV_SYSV);
               ASSERT(instruction->operand_count <= 7);
 

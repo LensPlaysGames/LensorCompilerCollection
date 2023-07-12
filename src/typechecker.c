@@ -702,11 +702,8 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
     if (!typecheck_type(ast, t->function.return_type)) return false;
     foreach (param, t->function.parameters) {
       if (!typecheck_type(ast, param->type)) return false;
-      if (type_is_incomplete(param->type)) {
-        ERR(param->source_location,
-            "Function parameter must not be of incomplete type");
-        return false;
-      }
+      if (type_is_incomplete(param->type))
+        ERR(param->source_location, "Function parameter must not be of incomplete type");
     }
     return true;
 
@@ -761,10 +758,11 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
 /// \param callee The callee to check.
 /// \return The intrinsic number if it is an intrinsic, or I_BUILTIN_COUNT otherwise.
 NODISCARD static enum IntrinsicKind intrinsic_kind(Node *callee) {
-    STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics in sema");
-    if (callee->kind != NODE_FUNCTION_REFERENCE) return INTRINSIC_COUNT;
-    if (string_eq(callee->funcref.name, literal_span("__builtin_syscall"))) return INTRINSIC_BUILTIN_SYSCALL;
-    return INTRINSIC_COUNT;
+    STATIC_ASSERT(INTRIN_COUNT == 3, "Handle all intrinsics in sema");
+    if (callee->kind != NODE_FUNCTION_REFERENCE) return INTRIN_COUNT;
+    if (string_eq(callee->funcref.name, literal_span("__builtin_syscall"))) return INTRIN_BUILTIN_SYSCALL;
+    if (string_eq(callee->funcref.name, literal_span("__builtin_inline"))) return INTRIN_BUILTIN_INLINE;
+    return INTRIN_COUNT;
 }
 
 /// This is how we handle intrinsics:
@@ -780,21 +778,24 @@ NODISCARD static enum IntrinsicKind intrinsic_kind(Node *callee) {
 ///
 /// Any `IR_INTRINSIC` instructions are lowered either to other MIR instructions
 /// or to a `MIR_INTRINSIC` instruction whose first operand is the intrinsic id
-/// (e.g. `INTRINSIC_BUILTIN_SYSCALL`) and whose other operands are the operands
+/// (e.g. `INTRIN_BUILTIN_SYSCALL`) and whose other operands are the operands
 /// of the intrinsic.
 ///
 /// Any `MIR_INTRINSIC` instruction are lowered either via the ISel table or
 /// manually in the backend.
 NODISCARD static bool typecheck_intrinsic(AST *ast, Node *expr) {
-    ASSERT(expr->kind = NODE_CALL);
+    ASSERT(expr->kind == NODE_CALL);
     ASSERT(expr->call.callee->kind == NODE_FUNCTION_REFERENCE);
+    expr->kind = NODE_INTRINSIC_CALL;
 
-    STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics in sema");
+    STATIC_ASSERT(INTRIN_COUNT == 3, "Handle all intrinsics in sema");
     switch (expr->call.intrinsic) {
-        case INTRINSIC_COUNT: UNREACHABLE();
+        case INTRIN_COUNT:
+        case INTRIN_BACKEND_COUNT:
+          UNREACHABLE();
 
         /// This has 1-7 integer-sized arguments and returns an integer.
-        case INTRINSIC_BUILTIN_SYSCALL: {
+        case INTRIN_BUILTIN_SYSCALL: {
             if (expr->call.arguments.size < 1 || expr->call.arguments.size > 7)
                 ERR(expr->source_location, "__builtin_syscall() intrinsic takes 1 to 7 arguments");
 
@@ -820,9 +821,21 @@ NODISCARD static bool typecheck_intrinsic(AST *ast, Node *expr) {
 
             /// Return value is integer.
             expr->type = t_integer;
-            expr->kind = NODE_INTRINSIC_CALL;
-            expr->call.intrinsic = INTRINSIC_BUILTIN_SYSCALL;
             return true;
+        }
+
+        /// This takes one argument, and it must be a call expression.
+        case INTRIN_BUILTIN_INLINE: {
+          if (expr->call.arguments.size != 1)
+            ERR(expr->source_location, "__builtin_inline() requires exactly one argument");
+          Node* call = expr->call.arguments.data[0];
+          if (!typecheck_expression(ast, call)) return false;
+          if (call->kind != NODE_CALL)
+            ERR(expr->source_location, "Argument of __builtin_inline() must be a call expression");
+
+          /// Return type is the return type of the call.
+          expr->type = call->type;
+          return true;
         }
     }
 
@@ -1044,7 +1057,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
     case NODE_CALL: {
       /// Builtins are handled separately.
       expr->call.intrinsic = intrinsic_kind(expr->call.callee);
-      if (expr->call.intrinsic != INTRINSIC_COUNT) {
+      if (expr->call.intrinsic != INTRIN_COUNT) {
         if (!typecheck_intrinsic(ast, expr)) return false;
         break;
       }

@@ -186,10 +186,10 @@ static bool llvm_is_numbered_value(IRInstruction *inst) {
             return !type_equals(ir_call_get_callee_type(inst)->function.return_type, t_void);
 
         case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics");
+            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 1, "Handle all intrinsics");
             switch (inst->call.intrinsic) {
-                case INTRINSIC_COUNT: UNREACHABLE();
-                case INTRINSIC_BUILTIN_SYSCALL: return true;
+                IGNORE_FRONTEND_INTRINSICS()
+                case INTRIN_BUILTIN_SYSCALL: return true;
             }
 
             UNREACHABLE();
@@ -300,10 +300,10 @@ static void emit_value(LLVMContext *ctx, IRInstruction *value, bool print_type) 
             return;
 
         case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics");
+            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 1, "Handle all intrinsics");
             switch (value->call.intrinsic) {
-                case INTRINSIC_COUNT: UNREACHABLE();
-                case INTRINSIC_BUILTIN_SYSCALL:
+                IGNORE_FRONTEND_INTRINSICS()
+                case INTRIN_BUILTIN_SYSCALL:
                     format_to(out, "%%%u", value->index);
                     return;
             }
@@ -459,12 +459,12 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
             ICE("LLVM backend cannot emit IR_REGISTER instructions");
 
         case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRINSIC_COUNT == 1, "Handle all intrinsics");
+            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 1, "Handle all intrinsics");
             switch (inst->call.intrinsic) {
-                case INTRINSIC_COUNT: UNREACHABLE();
+                IGNORE_FRONTEND_INTRINSICS()
 
                 /// We need to emit inline assembly for this.
-                case INTRINSIC_BUILTIN_SYSCALL: {
+                case INTRIN_BUILTIN_SYSCALL: {
                     emit_instruction_index(ctx, inst);
                     format_to(out, "call i64 asm sideeffect \"");
                     if (inst->call.arguments.size >= 5) format_to(out, "movq $0, %%r10\\0A");

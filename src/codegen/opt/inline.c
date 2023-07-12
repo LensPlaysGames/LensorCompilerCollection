@@ -48,6 +48,7 @@ static bool ir_inline_call(
   IRBlock *const call_block = call->parent_block;
   const bool is_tail_call = call->call.tail_call;
   usz call_history_index = 0;
+  bool may_fail = ictx->may_fail && !call->call.force_inline;
 
   /// Handle the degenerate case of the callee being empty.
   isz count = instruction_count(callee, false);
@@ -79,7 +80,7 @@ static bool ir_inline_call(
         /// If the inlining of this call can be traced back to the inlining
         /// of the same function, then we have an infinite loop.
         if (e->callee == callee) {
-          if (!ictx->may_fail) {
+          if (!may_fail) {
             issue_diagnostic(
               DIAG_ERR,
               ctx->ast->filename.data,
@@ -479,6 +480,9 @@ again:
       /// with __builtin_inline().
       if (callee->attr_noinline && !inst->call.force_inline) continue;
 
+      /// Whether failure is acceptable.
+      bool may_fail = ictx->may_fail && !inst->call.force_inline;
+
       /// Whether this has to be inlined.
       bool must_inline = inst->call.force_inline || callee->attr_inline || ictx->threshold == 0;
 
@@ -491,7 +495,7 @@ again:
             /// could be a tail call at least once.
             if (must_inline && !opt_try_convert_to_tail_call(inst)) {
               /// We can’t inline this.
-              if (!ictx->may_fail) issue_diagnostic(
+              if (may_fail) issue_diagnostic(
                 DIAG_ERR,
                 ctx->ast->filename.data,
                 as_span(ctx->ast->source),
