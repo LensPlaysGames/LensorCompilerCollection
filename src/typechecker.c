@@ -1031,6 +1031,10 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
         expr->function.linkage = LINKAGE_USED;
       }
 
+      /// Warn about functions returning void annotated as discardable.
+      if (ftype->attr_discardable && type_is_void(ftype->return_type))
+        DIAG(DIAG_WARN, expr->source_location, "`discardable` has no effect on functions returning void");
+
     } break;
 
     /// Typecheck declarations.

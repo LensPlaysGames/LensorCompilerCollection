@@ -429,7 +429,7 @@ void ir_femit_function
  )
 {
   ir_print_defun(file, function);
-  if (function->blocks.first) {
+  if (ir_function_is_definition(function)) {
     fprint(file, " %31{\n");
     Vector(IRBlock*) printed = {0};
     list_foreach (block, function->blocks) {
