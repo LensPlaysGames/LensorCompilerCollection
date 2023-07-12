@@ -13,6 +13,11 @@ typedef struct InlineContext {
   bool may_fail;
 } InlineContext;
 
+typedef struct {
+  bool changed;
+  bool failed;
+} inline_result;
+
 /// Compute the number of instructions in a function.
 static isz instruction_count(IRFunction *f, bool include_parameters) {
   isz i = 0;
@@ -35,8 +40,8 @@ static isz instruction_count(IRFunction *f, bool include_parameters) {
 ///        this call.
 /// \param Whether this is allowed to fail; if it isn’t, we issue a
 ///        diagnostic on error.
-/// \return True if the call was inlined, false if there was an error.
-static bool ir_inline_call(
+/// \return An inline_result describing what happened.
+static inline_result ir_inline_call(
   CodegenContext *ctx,
   InlineContext *ictx,
   IRInstruction *call
@@ -55,7 +60,10 @@ static bool ir_inline_call(
   if (count == 0) {
     ASSERT(call->users.size == 0, "Call to empty function cannot possibly return a value");
     ir_remove(call);
-    return true;
+    return (inline_result) {
+      .changed = false,
+      .failed = true,
+    };
   }
 
   /// Add number of parameters that the callee takes.
@@ -92,7 +100,10 @@ static bool ir_inline_call(
             );
           }
 
-          return false;
+          return (inline_result) {
+            .changed = false,
+            .failed = true,
+          };
         }
 
         /// Go to our parent’s parent.
@@ -187,6 +198,14 @@ static bool ir_inline_call(
   /// than one return instruction and returns a value.
   IRInstruction *return_value = NULL;
   IRBlock *return_block = NULL;
+
+  /// To prevent infinite loops without progress, we only consider
+  /// inlining to have ‘changed’ the program—i.e. made progress in
+  /// optimisation—if we end up inlining more than one instruction,
+  /// or a single instruction that is not a call.
+  ///
+  /// Control-flow instructions and PHIs do not count towards this.
+  usz inlined = 0;
 
   /// Copy the instructions.
   list_foreach (block, callee->blocks) {
@@ -297,6 +316,7 @@ static bool ir_inline_call(
             new->value = MAP(inst->phi_args.data[arg]->value);
             new->block = MAP_BLOCK(inst->phi_args.data[arg]->block);
             vector_push(copy->phi_args, new);
+            inlined--; /// This doesn’t count.
           }
           break;
 
@@ -357,6 +377,7 @@ static bool ir_inline_call(
       }
 
       /// Insert the instruction into the block.
+      if (!ir_is_branch(copy)) inlined++;
       ir_force_insert_into_block(MAP_BLOCK(block), copy);
     }
   }
@@ -432,6 +453,9 @@ static bool ir_inline_call(
     blocks.data[i]->prev = blocks.data[i - 1];
   }
 
+  /// Check if we were able to make progress.
+  bool changed = inlined != 1 || instructions.data[0]->kind != IR_CALL;
+
   /// Free unused instructions.
   foreach_val (i, instructions)
     if (!i->parent_block)
@@ -442,15 +466,13 @@ static bool ir_inline_call(
   vector_delete(blocks);
 
   /// Done!
-  return true;
+  return (inline_result) {
+    .changed = changed,
+    .failed = false,
+  };
 }
 
 #undef REPLACE
-
-typedef struct {
-  bool changed;
-  bool failed;
-} inline_result;
 
 /// Returns 1 if changed, -1 on error, 0 otherwise.
 static inline_result inline_calls_in_function(
@@ -513,9 +535,9 @@ again:
         }
 
         /// Inline it.
-        bool inlined = ir_inline_call(ctx, ictx, inst);
-        if (inlined) res.changed = true;
-        else {
+        inline_result inlined = ir_inline_call(ctx, ictx, inst);
+        if (inlined.changed) res.changed = true;
+        if (inlined.failed) {
           res.failed = true;
           vector_push(ictx->not_inlinable, inst);
         }

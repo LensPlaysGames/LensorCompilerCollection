@@ -3,10 +3,9 @@
 ;; Deliberately not `noreturn` so the call to f1() is not deleted.
 exit : ext void (code : integer);
 
-;; Mark as used so this doesn’t get deleted.
-f1 : integer() used = f2()
-f2 : integer() used = f3()
-f3 : integer() used = f1()
+f1 : integer() = f2()
+f2 : integer() = f3()
+f3 : integer() = f1()
 
-42
+exit(42)
 __builtin_inline(f1())
