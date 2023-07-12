@@ -680,12 +680,12 @@ bool opt_analyse_functions(CodegenContext *ctx) {
           continue;
 
         case LINKAGE_LOCALVAR:
-        case LINKAGE_USED:
         case LINKAGE_INTERNAL:
           f->is_ever_referenced = false;
           break;
 
         case LINKAGE_EXPORTED:
+        case LINKAGE_USED:
           f->is_ever_referenced = true;
           break;
       }

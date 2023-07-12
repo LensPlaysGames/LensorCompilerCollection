@@ -944,12 +944,24 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
 
       /// Validate attributes.
       TypeFunction *ftype = &expr->type->function;
+
+      /// Noreturn functions always have side effects.
       if (ftype->attr_noreturn) {
         if (ftype->attr_const) ERR(expr->source_location, "Noreturn function cannot be const");
         if (ftype->attr_pure) ERR(expr->source_location, "Noreturn function cannot be pure");
       }
+
+      /// This is obviously nonsense.
       if (ftype->attr_inline && ftype->attr_noinline)
         ERR(expr->source_location, "Function cannot be both inline and noinline");
+
+      /// Make sure `used` doesn’t override any other linkage type.
+      if (ftype->attr_used) {
+        if (expr->function.linkage != LINKAGE_INTERNAL)
+          ERR(expr->source_location, "Attribute `used` is not valid for this function");
+        expr->function.linkage = LINKAGE_USED;
+      }
+
     } break;
 
     /// Typecheck declarations.
