@@ -689,9 +689,8 @@ static void emit_function(LLVMContext *ctx, IRFunction *f) {
     if (f != *f->context->functions.data) format_to(out, "\n");
 
     /// Write function header.
-    format_to(out, "%s ", f->is_extern ? "declare" : "define");
-    if (!f->is_extern && !string_eq(f->name, literal_span("main")))
-        format_to(out, "private "); /// TODO: Make private only if not exported.
+    format_to(out, "%s ", ir_function_is_definition(f) ? "define" : "declare");
+    if (f->linkage == LINKAGE_INTERNAL) format_to(out, "private ");
     emit_type(ctx, f->type->function.return_type);
     format_to(out, " @%S(", f->name);
 
@@ -720,12 +719,13 @@ static void emit_function(LLVMContext *ctx, IRFunction *f) {
 
     /// Write attributes.
     format_to(out, ")");
-    if (f->attr_forceinline) format_to(out, " alwaysinline");
+    if (f->attr_inline) format_to(out, " alwaysinline");
+    if (f->attr_noinline) format_to(out, " noinline");
     if (f->attr_noreturn) format_to(out, " noreturn");
-    format_to(out, " nounwind%s\n", f->is_extern ? "" : " {");
+    format_to(out, " nounwind%s\n", ir_function_is_definition(f) ? " {" : "");
 
     /// Extern functions don’t have a body.
-    if (f->is_extern) return;
+    if (!ir_function_is_definition(f)) return;
 
     /// Assign indices to all instructions and blocks.
     u32 value_index = (u32) f->type->function.parameters.size;

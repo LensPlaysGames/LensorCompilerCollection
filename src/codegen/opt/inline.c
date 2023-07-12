@@ -470,13 +470,17 @@ again:
 
       /// Skip calls to external functions.
       IRFunction *callee = inst->call.callee_function;
-      if (callee->is_extern) continue;
+      if (!ir_function_is_definition(callee)) continue;
 
       /// Skip calls that we’ve already determined are impossible to inline.
       if (vector_contains(ictx->not_inlinable, inst)) continue;
 
+      /// Skip noinline functions unless the user has overriden this
+      /// with __builtin_inline().
+      if (callee->attr_noinline && !inst->call.force_inline) continue;
+
       /// Whether this has to be inlined.
-      bool must_inline = callee->attr_forceinline || ictx->threshold == 0;
+      bool must_inline = inst->call.force_inline || callee->attr_inline || ictx->threshold == 0;
 
       /// Inline the call if requested.
       if (must_inline || ictx->threshold >= instruction_count(callee, false)) {

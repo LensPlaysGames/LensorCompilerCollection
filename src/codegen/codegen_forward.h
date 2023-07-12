@@ -158,6 +158,75 @@ enum ComparisonType {
   /** Invalid value. This is used to facilitate deletion.**/     \
   F(POISON)
 
+/// Function attributes shared by the frontend and backend.
+#define SHARED_FUNCTION_ATTRIBUTES(F)                                    \
+  F(CONST, const)       /** Function does not read or write memory. **/  \
+  F(FLATTEN, flatten)   /** Inline all callees, if possible. **/         \
+  F(INLINE, inline)     /** Always inline, not a hint like in C. **/     \
+  F(NOINLINE, noinline) /** Never inline this function. **/              \
+  F(NOMANGLE, nomangle) /** Do not mangle the name of this function. **/ \
+  F(NORETURN, noreturn) /** This function does not return. **/           \
+  F(PURE, pure)         /** This function has no side effects. **/
+
+/// Function attributes that are only used by the frontend.
+#define FRONTEND_FUNCTION_ATTRIBUTES(F) \
+  F(DISCARDABLE, discardable) /** Function result may be unused. **/
+
+/// Function attributes that are only used by the backend.
+#define IR_FUNCTION_ATTRIBUTES(F) \
+  F(LEAF, leaf) /** Function does not call other functions. **/
+
+/// Linkage of a (global) symbol.
+typedef enum SymbolLinkage {
+  /// Local variable.
+  ///
+  /// This is just a dummy value that is used for local variables
+  /// only. In particular, a top-level declaration that is marked
+  /// as local is treated as a variable local to the top-level
+  /// function.
+  LINKAGE_LOCALVAR,
+
+  /// Not exported. Will be deleted if unused.
+  ///
+  /// This is used for variables and functions that are defined in
+  /// and local to this module. A variable or function marked with
+  /// this attribute will be *deleted* if it is not used anywhere
+  /// and will not be accessible to outside code.
+  LINKAGE_INTERNAL,
+
+  /// Like internal, but will not be deleted.
+  ///
+  /// This is for variables and functions that are not really exported
+  /// and behave just like internal variables and functions, except that
+  /// their name will be included in the object file’s symbol table.
+  LINKAGE_USED,
+
+  /// Exported. May be used by other modules.
+  ///
+  /// This is used for variables and functions that are defined in
+  /// this module and exported. Variables and functions marked with
+  /// this attribute will not be deleted even if they are not
+  /// referenced anywhere.
+  LINKAGE_EXPORTED,
+
+  /// Imported from another module or from C.
+  ///
+  /// This is used for variables and functions imported from outside
+  /// code, whether via importing an Intercept module or simply declaring
+  /// an external symbol. This linkage type means that the object is
+  /// not defined in this module and that it will be made accessible at
+  /// link time only. However, this module will not export the symbol.
+  LINKAGE_IMPORTED,
+
+  /// Imported *and* exported.
+  ///
+  /// This sort of combines exported and imported in that it means that
+  /// the symbol is exported from this module, which will make it accessible
+  /// to other *Intercept modules* that import this module, but unlike
+  /// regular exports, this module does not have a definition of the symbol.
+  LINKAGE_REEXPORTED
+} SymbolLinkage;
+
 typedef struct IRStaticVariable IRStaticVariable;
 typedef struct IRStackAllocation IRStackAllocation;
 

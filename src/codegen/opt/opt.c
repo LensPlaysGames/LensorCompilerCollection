@@ -674,8 +674,22 @@ bool opt_analyse_functions(CodegenContext *ctx) {
 
     /// Check function attributes.
     foreach_val (f, ctx->functions) {
-      if (f->is_extern) continue;
-      f->is_ever_referenced = false;
+      switch (f->linkage) {
+        case LINKAGE_IMPORTED:
+        case LINKAGE_REEXPORTED:
+          continue;
+
+        case LINKAGE_LOCALVAR:
+        case LINKAGE_USED:
+        case LINKAGE_INTERNAL:
+          f->is_ever_referenced = false;
+          break;
+
+        case LINKAGE_EXPORTED:
+          f->is_ever_referenced = true;
+          break;
+      }
+
       changed |= opt_check_pure(f);
       changed |= opt_check_leaf(f);
       changed |= opt_check_noreturn(f);
@@ -1029,8 +1043,7 @@ static bool opt_store_forwarding(IRFunction *f) {
 /// ===========================================================================
 ///  Driver
 /// ===========================================================================
-PRAGMA_STR(GCC diagnostic push)
-PRAGMA_STR(GCC diagnostic ignored "-Wbitwise-instead-of-logical")
+PUSH_IGNORE_WARNING("-Wbitwise-instead-of-logical")
 
 void codegen_optimise(CodegenContext *ctx) {
   opt_analyse_functions(ctx);
@@ -1039,7 +1052,7 @@ void codegen_optimise(CodegenContext *ctx) {
   /*usz i = 0;*/
   do {
     foreach_val (f, ctx->functions) {
-      if (f->is_extern) continue;
+      if (!ir_function_is_definition(f)) continue;
       do {
 /*        print("Optimising function %S\n", f->name);
         ir_set_func_ids(f);
@@ -1069,13 +1082,12 @@ void codegen_optimise(CodegenContext *ctx) {
 /// Called after RA.
 void codegen_optimise_blocks(CodegenContext *ctx) {
   foreach_val (f, ctx->functions) {
-    if (f->is_extern) continue;
+    if (!ir_function_is_definition(f)) continue;
     opt_simplify_cfg(f);
   }
 }
 
 /// TODO(inlining):
-///  - Self-inlining.
 ///  - `flatten` attribute.
 ///  - `const` attribute (function does not read from or write to memory, except for its own local variables), intended for use by the optimiser.
 ///  - `__builtin_inline()`.

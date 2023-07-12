@@ -2244,13 +2244,13 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
   foreach_val (function, machine_instructions) {
     { // Function symbol
       GObjSymbol sym = {0};
-      sym.type = function->origin->is_extern ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
+      sym.type = !ir_function_is_definition(function->origin) ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
       sym.name = strdup(function->name.data);
       sym.section_name = strdup(code_section(context->object)->name);
       sym.byte_offset = code_section(context->object)->data.bytes.size;
       vector_push(context->object->symbols, sym);
     }
-    if (function->origin && function->origin->is_extern) continue;
+    if (function->origin && !ir_function_is_definition(function->origin)) continue;
 
     // Calculate stack offsets, frame size
     isz frame_offset = 0;

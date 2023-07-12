@@ -58,7 +58,7 @@ typedef struct IRCall {
   enum IntrinsicKind intrinsic; /// Only used by intrinsic calls.
   bool is_indirect : 1;
   bool tail_call : 1;
-  bool tail_call_checked : 1;
+  bool force_inline : 1; /// Annotated with __builtin_inline().
 } IRCall;
 
 typedef struct IRBranchConditional {
@@ -170,14 +170,14 @@ typedef struct IRFunction {
 
   size_t registers_in_use;
 
-  bool attr_consteval : 1;
-  bool attr_forceinline : 1;
-  bool attr_global : 1;
-  bool attr_leaf : 1;
-  bool attr_noreturn : 1;
-  bool attr_pure : 1;
-  bool attr_nomangle : 1;
-  bool is_extern : 1;
+  SymbolLinkage linkage;
+
+#define def_function_attr(_, name) bool attr_##name : 1;
+    SHARED_FUNCTION_ATTRIBUTES(def_function_attr)
+    IR_FUNCTION_ATTRIBUTES(def_function_attr)
+#undef def_function_attr
+
+  /// For the optimiser.
   bool is_ever_referenced : 1;
 } IRFunction;
 
@@ -215,7 +215,7 @@ IRBlock *ir_block_create();
 void ir_block_attach_to_function(IRFunction *function, IRBlock *new_block);
 void ir_block_attach(CodegenContext *context, IRBlock *new_block);
 
-IRFunction *ir_function(CodegenContext *context, span name, Type *function_type);
+IRFunction *ir_function(CodegenContext *context, string name, Type *function_type, SymbolLinkage linkage);
 IRInstruction *ir_funcref(CodegenContext *context, IRFunction *function);
 
 /// Insert an instruction into a block without checking; this
@@ -427,5 +427,8 @@ Type* ir_call_get_callee_type(IRInstruction* inst);
 /// is only for instructions that need to be lowered to special ASM
 /// instructions or depend on late compile-time constants.
 IRInstruction *ir_intrinsic(CodegenContext *context, Type *t, enum IntrinsicKind intrinsic);
+
+/// Check if a function is a definition or declaration.
+bool ir_function_is_definition(IRFunction *f);
 
 #endif /* INTERMEDIATE_REPRESENTATION_H */

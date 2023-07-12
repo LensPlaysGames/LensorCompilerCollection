@@ -1151,7 +1151,7 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
   MIRInstructionVector instructions = {0};
 
   foreach_val (f, mir) {
-    if (f->origin->is_extern) continue;
+    if (!ir_function_is_definition(f->origin)) continue;
 
     foreach_val (bb, f->blocks) {
       vector_clear(instructions);
@@ -1289,7 +1289,7 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
   MIRBlockVector visited = {0};
   MIRBlockVector doubly_visited = {0};
   foreach_val (f, mir) {
-    if (f->origin->is_extern) continue;
+    if (!ir_function_is_definition(f->origin)) continue;
 
     MIRBlock *entry = vector_front(f->blocks);
     ASSERT(entry->is_entry, "First block within MIRFunction is not entry point; we should do more work to find the entry, sorry");

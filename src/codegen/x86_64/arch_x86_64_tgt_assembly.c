@@ -72,8 +72,8 @@ static const char *instruction_mnemonic(CodegenContext *context, MIROpcodex86_64
     case MX64_CDQ: return "cdq";
     case MX64_CQO: return "cqo";
     default: break;
-    } break;
-  } break;
+    }
+  }
 
   default: break;
   }
@@ -113,7 +113,6 @@ static void femit_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int6
       case r16: mnemonic_suffix = "w"; break;
       case r32: mnemonic_suffix = "l"; break;
       case r64: mnemonic_suffix = "q"; break;
-        break;
       }
       if (offset)
         fprint(context->code, "    %s%s $%D, %D(%%%s)\n",
@@ -129,7 +128,6 @@ static void femit_imm_to_mem(CodegenContext *context, MIROpcodex86_64 inst, int6
     case r16: memory_size = "WORD PTR "; break;
     case r32: memory_size = "DWORD PTR "; break;
     case r64: memory_size = "QWORD PTR "; break;
-      break;
     }
     if (offset)
       fprint(context->code, "    %s %s[%s + %D], %D\n",
@@ -153,7 +151,6 @@ static void femit_imm_to_offset_name(CodegenContext *context, MIROpcodex86_64 in
       case r16: mnemonic_suffix = "w"; break;
       case r32: mnemonic_suffix = "l"; break;
       case r64: mnemonic_suffix = "q"; break;
-        break;
       }
       if (offset)
         fprint(context->code, "    %s%s $%D, (%s + %D)(%%%s)\n",
@@ -169,7 +166,6 @@ static void femit_imm_to_offset_name(CodegenContext *context, MIROpcodex86_64 in
       case r16: memory_size = "WORD PTR "; break;
       case r32: memory_size = "DWORD PTR "; break;
       case r64: memory_size = "QWORD PTR "; break;
-        break;
       }
       if (offset)
         // mov QWORD PTR [foo + 32 + rip], 69
@@ -514,14 +510,13 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
            context->target == TARGET_GNU_ASM_INTEL ? ".intel_syntax noprefix\n" : "");
 
     fprint(context->code, "\n");
-    foreach_val (function, machine_instructions) {
-      if (!function->origin->attr_global) continue;
-      fprint(context->code, ".global %S\n", function->name);
-    }
+    foreach_val (function, machine_instructions)
+      if (function->origin->linkage == LINKAGE_EXPORTED || function->origin->linkage == LINKAGE_USED)
+        fprint(context->code, ".global %S\n", function->name);
   }
   foreach_val (function, machine_instructions) {
     // Generate function entry label if function has definition.
-    if (function->origin->is_extern) continue;
+    if (!ir_function_is_definition(function->origin)) continue;
 
     fprint(context->code, "\n%s:\n", function->name.data);
 
@@ -534,7 +529,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
       fo->offset = frame_offset;
     }
 
-    if (function->origin && function->origin->is_extern) continue;
+    if (function->origin && !ir_function_is_definition(function->origin)) continue;
 
     STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of x86_64 frame kinds");
     StackFrameKind frame_kind = stack_frame_kind(function);

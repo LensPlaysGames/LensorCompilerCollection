@@ -1060,20 +1060,20 @@ static bool is_right_associative(Parser *p, Token t) {
 ///  Attributes
 /// ===========================================================================
 
-STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of attributes");
-
 static struct {
   span name;
-  AttributeKind kind;
+  FunctionAttribute kind;
 } function_attributes[] = {
-  {literal_span_raw("nomangle"), ATTR_NOMANGLE},
-  {literal_span_raw("discardable"), ATTR_DISCARDABLE},
-  {literal_span_raw("inline"), ATTR_INLINE},
+#define F(name, str) {literal_span_raw(#str), FUNC_ATTR_##name},
+  SHARED_FUNCTION_ATTRIBUTES(F)
+  FRONTEND_FUNCTION_ATTRIBUTES(F)
+#undef F
 };
 
+STATIC_ASSERT(ATTR_COUNT == 1, "Exhaustive handling of attributes");
 static struct {
   span name;
-  AttributeKind kind;
+  VariableAttribute kind;
 } struct_type_attributes[] = {
   {literal_span_raw("alignas"), ATTR_ALIGNAS},
 };
@@ -1081,28 +1081,19 @@ static struct {
 /// Helper to apply each attribute within attribs to function. Calls ERR
 /// if a non-function attribute is present in the given attribute list.
 static void apply_function_attributes(Parser *p, Type *func, Attributes attribs) {
-  STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of function attribute types");
   foreach(attr, attribs) {
     switch (attr->kind) {
-    case ATTR_NOMANGLE: {
-      func->function.nomangle = true;
-    } break;
-    case ATTR_DISCARDABLE: {
-      func->function.discardable = true;
-    } break;
-    case ATTR_INLINE: {
-      func->function.alwaysinline = true;
-    } break;
-    default: {
-      // TODO: Actually print out the attribute string or something like that.
-      ERR_AT(func->source_location, "Attribute cannot be applied to function: %d\n", attr->kind);
-    }
+#define F(name, var_name) case FUNC_ATTR_##name: func->function.attr_##var_name = true; break;
+      SHARED_FUNCTION_ATTRIBUTES(F)
+      FRONTEND_FUNCTION_ATTRIBUTES(F)
+#undef F
+    default: UNREACHABLE();
     }
   }
 }
 
 static void apply_struct_type_attributes(Parser *p, Type *type, Attributes attribs) {
-  STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of type attributes");
+  STATIC_ASSERT(ATTR_COUNT == 1, "Exhaustive handling of type attributes");
   foreach(attr, attribs) {
     switch (attr->kind) {
     case ATTR_ALIGNAS: {
@@ -1205,17 +1196,17 @@ static Node *parse_call_expr(Parser *p, Node *callee) {
   return call;
 }
 
-/// Parse and collect attributes within the `attribs` out parameter.
-static void parse_attributes(Parser *p, Attributes *attribs) {
+/// Parse function attributes.
+static void parse_function_attributes(Parser *p, Attributes *attribs) {
   while (p->tok.type == TK_IDENT) {
-    AttributeKind attr_kind = ATTR_COUNT;
+    int attr_kind = ATTR_COUNT;
     for (size_t i = 0; i < sizeof function_attributes / sizeof *function_attributes; i++) {
       if (string_eq(function_attributes[i].name, p->tok.text)) {
-        // We found an attribute!
-        attr_kind = function_attributes[i].kind;
+        attr_kind = (int) function_attributes[i].kind;
         break;
       }
     }
+
     if (attr_kind == ATTR_COUNT) break;
 
     // Yeet the attribute identifier that gave us the attribute kind.
@@ -1258,7 +1249,7 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
   p->in_function = true;
 
   // Collect attributes and return them through an out parameter.
-  parse_attributes(p, attribs);
+  parse_function_attributes(p, attribs);
 
   /// Yeet "=" if found.
   if (p->tok.type == TK_EQ) next_token(p);
@@ -1269,7 +1260,7 @@ static Node *parse_function_body(Parser *p, Type *function_type, Nodes *param_de
 
   /// Create a declaration for each parameter.
   foreach (param, function_type->function.parameters) {
-    Node *var = ast_make_declaration(p->ast, param->source_location, param->type, as_span(param->name), NULL);
+    Node *var = ast_make_declaration(p->ast, param->source_location, param->type, LINKAGE_LOCALVAR, as_span(param->name), NULL);
     ensure_hygienic_declaration_if_within_macro(p, as_span(param->name), &param->source_location);
     if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(var->declaration.name), var))
       ERR_AT(var->source_location, "Redefinition of parameter '%S'", var->declaration.name);
@@ -1303,9 +1294,8 @@ static Node *parse_type_expr(Parser *p, Type *type) {
 
     /// Create a function for the lambda.
     string name = format("_XLambda_%Z", p->ast->counter++);
-    Node *func = ast_make_function(p->ast, type->source_location, type, params, body, as_span(name));
+    Node *func = ast_make_function(p->ast, type->source_location, type, LINKAGE_INTERNAL, params, body, as_span(name));
     free(name.data);
-    type->function.global = false;
     return func;
   }
 
@@ -1490,7 +1480,7 @@ static Type *parse_type(Parser *p) {
     // Collect attributes for this type!
     Attributes attribs = {0};
     while (p->tok.type == TK_IDENT) {
-      AttributeKind attr_kind = ATTR_COUNT;
+        VariableAttribute attr_kind = ATTR_COUNT;
       for (size_t i = 0; i < sizeof struct_type_attributes / sizeof *struct_type_attributes; i++) {
         if (string_eq(struct_type_attributes[i].name, p->tok.text)) {
           // We found an attribute!
@@ -1504,11 +1494,11 @@ static Type *parse_type(Parser *p) {
       // Yeet the attribute identifier that gave us the attribute kind.
       next_token(p);
 
-      Attribute new_attribute = { attr_kind, {0} };
+      Attribute new_attribute = { (int) attr_kind, {0} };
 
       // If the attribute requires an argument/data to go along with it,
       // parse that HERE!
-      STATIC_ASSERT(ATTR_COUNT == 4, "Exhaustive handling of type attributes");
+      STATIC_ASSERT(ATTR_COUNT == 1, "Exhaustive handling of type attributes");
       switch (new_attribute.kind) {
       case ATTR_ALIGNAS: {
         if (p->tok.type != TK_NUMBER)
@@ -1586,7 +1576,7 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
       apply_function_attributes(p, type, attribs);
       vector_delete(attribs);
 
-      Node *func = ast_make_function(p->ast, location, type, params, body, as_span(ident));
+      Node *func = ast_make_function(p->ast, location, type, LINKAGE_INTERNAL, params, body, as_span(ident));
       sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, location, as_span(ident));
       funcref->funcref.resolved = sym;
@@ -1603,14 +1593,13 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
 
       /// Parse the function's attributes, if any.
       Attributes attribs = {0};
-      parse_attributes(p, &attribs);
+      parse_function_attributes(p, &attribs);
       apply_function_attributes(p, type, attribs);
       vector_delete(attribs);
 
       /// Create the function.
-      Node *func = ast_make_function(p->ast, location, type, (Nodes){0}, NULL, as_span(ident));
-      // External functions should *not* be mangled
-      type->function.nomangle = true;
+      Node *func = ast_make_function(p->ast, location, type, LINKAGE_IMPORTED, (Nodes){0}, NULL, as_span(ident));
+      type->function.attr_nomangle = true;
       sym->val.node = func;
       Node *funcref = ast_make_function_reference(p->ast, location, as_span(ident));
       funcref->funcref.resolved = sym;
@@ -1620,11 +1609,9 @@ static Node *parse_decl_rest(Parser *p, string ident, loc location) {
   }
 
   /// Create the declaration.
-  Node *decl = ast_make_declaration(p->ast, location, type, as_span(ident), NULL);
+  SymbolLinkage linkage = p->ast->scope_stack.size == 1 ? LINKAGE_INTERNAL : LINKAGE_LOCALVAR;
+  Node *decl = ast_make_declaration(p->ast, location, type, linkage, as_span(ident), NULL);
   ensure_hygienic_declaration_if_within_macro(p, as_span(ident), &location);
-
-  /// Make the variable static if we’re at global scope.
-  decl->declaration.static_ = p->ast->scope_stack.size == 1;
 
   /// Add the declaration to the current scope.
   if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(ident), decl))
@@ -1679,11 +1666,9 @@ static Node *parse_declaration(Parser *p, string ident, loc location) {
 
   case TK_COLON_COLON: {
     /// Create the declaration.
-    Node *decl = ast_make_declaration(p->ast, location, NULL, as_span(ident), NULL);
+    SymbolLinkage linkage = p->ast->scope_stack.size == 1 ? LINKAGE_INTERNAL : LINKAGE_LOCALVAR;
+    Node *decl = ast_make_declaration(p->ast, location, NULL, linkage, as_span(ident), NULL);
     ensure_hygienic_declaration_if_within_macro(p, as_span(ident), &location);
-
-    /// Make the variable static if we’re at global scope.
-    decl->declaration.static_ = p->ast->scope_stack.size == 1;
 
     /// Add the declaration to the current scope.
     if (!scope_add_symbol(curr_scope(p), SYM_VARIABLE, as_span(ident), decl))
@@ -1823,7 +1808,9 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
 
       next_token(p);
       lhs = parse_declaration(p, ident, p->tok.source_location);
-      lhs->declaration.exported = true;
+      lhs->declaration.linkage = lhs->declaration.linkage == LINKAGE_IMPORTED
+        ? LINKAGE_REEXPORTED
+        : LINKAGE_EXPORTED;
 
       vector_push(p->ast->exports, lhs);
     } break;

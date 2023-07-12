@@ -552,7 +552,8 @@ int main(int argc, char **argv) {
         if (export->kind == NODE_FUNCTION_REFERENCE) {
           Scope *global_scope = vector_front(ast->scope_stack);
           Symbol *func_sym = scope_find_or_add_symbol(global_scope, SYM_FUNCTION, as_span(export->funcref.name), true);
-          func_sym->val.node = ast_make_function(ast, (loc){0}, export->type, (Nodes){0}, NULL, as_span(export->funcref.name));
+          /// FIXME: Should probably create function in imported module?
+          func_sym->val.node = ast_make_function(ast, (loc){0}, export->type, LINKAGE_IMPORTED, (Nodes){0}, NULL, as_span(export->funcref.name));
           export->funcref.scope = global_scope;
           export->funcref.resolved = func_sym;
         }
