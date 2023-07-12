@@ -197,7 +197,11 @@ static inline string_buffer as_string_buffer(string s) {
 /// Determine the width of a number.
 NODISCARD usz number_width(u64 n);
 
-#define ALIGN_TO(value, alignment) (value + ((alignment - (value % alignment)) % alignment))
+#define ALIGN_TO(value, alignment) ({                                                 \
+  isz _value = (isz) value;                                                           \
+  isz _alignment = (isz) alignment;                                                   \
+  (__typeof__(value)) (_value + ((_alignment - (_value % _alignment)) % _alignment)); \
+})
 
 /// Find *last* occurence of entire string TOKEN within INPUT string.
 char *strrstr(char *input, const char *token);
