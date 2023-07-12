@@ -160,6 +160,7 @@ enum ComparisonType {
 
 /// Function attributes shared by the frontend and backend.
 #define SHARED_FUNCTION_ATTRIBUTES(F)                                    \
+  F(NOOPT, __noopt__)   /** Do not optimise this function **/            \
   F(CONST, const)       /** Function does not read or write memory. **/  \
   F(FLATTEN, flatten)   /** Inline all callees, if possible. **/         \
   F(INLINE, inline)     /** Always inline, not a hint like in C. **/     \
