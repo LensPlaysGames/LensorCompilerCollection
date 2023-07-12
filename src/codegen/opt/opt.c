@@ -1052,7 +1052,7 @@ void codegen_optimise(CodegenContext *ctx) {
   /*usz i = 0;*/
   do {
     foreach_val (f, ctx->functions) {
-      if (!ir_function_is_definition(f)) continue;
+      if (!ir_function_is_definition(f) || f->attr___noopt__) continue;
       do {
 /*        print("Optimising function %S\n", f->name);
         ir_set_func_ids(f);
