@@ -398,6 +398,9 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   OverloadSet overload_set = collect_overload_set(func);
   OverloadSet arg_overload_set = {0};
 
+  /// Better error message in case we have an empty overload set.
+  if (overload_set.size == 0) ERR(func->source_location, "Unknown symbol");
+
   // Extra validation step: ensure all functions within overload set
   // have matching return type.
   Type *return_type = NULL;
