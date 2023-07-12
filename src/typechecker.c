@@ -758,12 +758,13 @@ NODISCARD static bool typecheck_type(AST *ast, Type *t) {
 /// \param callee The callee to check.
 /// \return The intrinsic number if it is an intrinsic, or I_BUILTIN_COUNT otherwise.
 NODISCARD static enum IntrinsicKind intrinsic_kind(Node *callee) {
-    STATIC_ASSERT(INTRIN_COUNT == 5, "Handle all intrinsics in sema");
+    STATIC_ASSERT(INTRIN_COUNT == 6, "Handle all intrinsics in sema");
     if (callee->kind != NODE_FUNCTION_REFERENCE) return INTRIN_COUNT;
     if (string_eq(callee->funcref.name, literal_span("__builtin_syscall"))) return INTRIN_BUILTIN_SYSCALL;
     if (string_eq(callee->funcref.name, literal_span("__builtin_inline"))) return INTRIN_BUILTIN_INLINE;
     if (string_eq(callee->funcref.name, literal_span("__builtin_line"))) return INTRIN_BUILTIN_LINE;
     if (string_eq(callee->funcref.name, literal_span("__builtin_filename"))) return INTRIN_BUILTIN_FILENAME;
+    if (string_eq(callee->funcref.name, literal_span("__builtin_debugtrap"))) return INTRIN_BUILTIN_DEBUGTRAP;
     return INTRIN_COUNT;
 }
 
@@ -789,7 +790,7 @@ NODISCARD static bool typecheck_intrinsic(AST *ast, Node *expr) {
     ASSERT(expr->kind == NODE_CALL);
     ASSERT(expr->call.callee->kind == NODE_FUNCTION_REFERENCE);
 
-    STATIC_ASSERT(INTRIN_COUNT == 5, "Handle all intrinsics in sema");
+    STATIC_ASSERT(INTRIN_COUNT == 6, "Handle all intrinsics in sema");
     switch (expr->call.intrinsic) {
         case INTRIN_COUNT:
         case INTRIN_BACKEND_COUNT:
@@ -883,6 +884,16 @@ NODISCARD static bool typecheck_intrinsic(AST *ast, Node *expr) {
 
           string s = ast->strings.data[expr->literal.string_index];
           expr->type = ast_make_type_array(ast, expr->source_location, t_byte, s.size + 1);
+          return true;
+        }
+
+        /// This is basically a breakpoint.
+        case INTRIN_BUILTIN_DEBUGTRAP: {
+          if (expr->call.arguments.size != 0)
+            ERR(expr->source_location, "__builtin_debugtrap() takes no arguments");
+
+          expr->kind = NODE_INTRINSIC_CALL;
+          expr->type = t_void;
           return true;
         }
     }

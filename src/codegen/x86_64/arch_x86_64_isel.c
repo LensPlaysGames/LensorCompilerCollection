@@ -10,7 +10,7 @@
 #include <utils.h>
 
 const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {
-  STATIC_ASSERT(MX64_COUNT == 31, "Exhaustive handling of x86_64 opcodes (string conversion)");
+  STATIC_ASSERT(MX64_COUNT == 32, "Exhaustive handling of x86_64 opcodes (string conversion)");
   //ASSERT(opcode >= MIR_ARCH_START && opcode < MX64_END, "Opcode is not x86_64 opcode");
   switch ((MIROpcodex86_64)opcode) {
   case MX64_START: return "!start";
@@ -37,6 +37,7 @@ const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {
   case MX64_CALL: return "call";
   case MX64_SYSCALL: return "syscall";
   case MX64_UD2: return "ud2";
+  case MX64_INT3: return "int3";
   case MX64_JMP: return "jmp";
   case MX64_RET: return "ret";
   case MX64_JCC: return "jcc";

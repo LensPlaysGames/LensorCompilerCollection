@@ -147,7 +147,8 @@ enum SymbolKind {
 /// Intrinsics that need to be handled by the backend,
 /// i.e. in MIR or later.
 #define ALL_BACKEND_INTRINSICS(F) \
-  F(BUILTIN_SYSCALL)
+  F(BUILTIN_SYSCALL)              \
+  F(BUILTIN_DEBUGTRAP)
 
 /// Intrinsics that need to be gone after IR generation.
 #define ALL_FRONTEND_INTRINSICS(F) \
