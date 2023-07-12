@@ -257,8 +257,12 @@ IRInstruction *ir_immediate
  Type *type,
  u64 immediate);
 
+/// Type needs to be passed in as a reminder that we don’t care
+/// about the type of the address so long as it’s a pointer or
+/// reference.
 IRInstruction *ir_load
 (CodegenContext *context,
+ Type *type,
  IRInstruction *address);
 
 IRInstruction *ir_store

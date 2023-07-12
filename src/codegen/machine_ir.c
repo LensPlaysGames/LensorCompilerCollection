@@ -548,7 +548,7 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir_add_op(mir, addr);
           // Size of load (if needed)
           if (addr.kind == MIR_OP_REGISTER) {
-            MIROperand size = mir_op_immediate((i64)type_sizeof(inst->operand->type));
+            MIROperand size = mir_op_immediate((i64)type_sizeof(inst->type));
             mir_add_op(mir, size);
           }
           inst->machine_inst = mir;
@@ -654,16 +654,8 @@ MIRFunctionVector mir_from_ir(CodegenContext *context) {
           mir_add_op(mir, value);
           mir_add_op(mir, addr);
           // Size of store (if needed)
-          if (addr.kind == MIR_OP_REGISTER && value.kind == MIR_OP_IMMEDIATE) {
-            if (type_is_reference(inst->store.addr->type)) {
-              MIROperand size = mir_op_immediate((i64)type_sizeof(inst->store.addr->type->reference.to));
-              mir_add_op(mir, size);
-            } else if (type_is_pointer(inst->store.addr->type)) {
-              Type *ptr_type = type_strip_references(inst->store.addr->type);
-              MIROperand size = mir_op_immediate((i64)type_sizeof(ptr_type->pointer.to));
-              mir_add_op(mir, size);
-            } else ICE("Cannot IR_STORE into a non-pointer/reference typed address");
-          }
+          if (addr.kind == MIR_OP_REGISTER && value.kind == MIR_OP_IMMEDIATE)
+            mir_add_op(mir, mir_op_immediate((i64)type_sizeof(inst->store.value->type)));
           inst->machine_inst = mir;
           mir_push_into_block(function, mir_bb, mir);
         } break;

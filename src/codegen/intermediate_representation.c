@@ -380,7 +380,7 @@ void ir_femit_instruction
     fprint(file, "%33load %34%%%u", inst->operand->id);
     break;
   case IR_STORE:
-    fprint(file, "%33store into %34%%%u%31, %34%%%u", inst->store.addr->id, inst->store.value->id);
+    fprint(file, "%33store into %34%%%u%31, %T %34%%%u", inst->store.addr->id, inst->store.value->type, inst->store.value->id);
     break;
   case IR_REGISTER:
     fprint(file, "%31.reg %34%%%u", inst->result);
@@ -620,6 +620,7 @@ IRInstruction *ir_immediate
 
 IRInstruction *ir_load
 (CodegenContext *context,
+ Type *type,
  IRInstruction *address
  )
 {
@@ -634,9 +635,7 @@ IRInstruction *ir_load
     if (t) ICE("Can not emit IR_LOAD from type %T as it is not a pointer", t);
     else ICE("Can not emit IR_LOAD to NULL canonical type!");
   }
-  if (type_is_pointer(t)) load->type = t->pointer.to;
-  else if (type_is_reference(t)) load->type = t->reference.to;
-  else load->type = t;
+  load->type = type;
 
   mark_used(address, load);
 

@@ -632,6 +632,17 @@ bool type_is_incomplete(Type *type) {
   return type_is_incomplete_canon(canon_type);
 }
 
+Type *type_get_element(Type *type) {
+  ASSERT(type);
+  switch (type->kind) {
+    default: ICE("Type %T does not have an element type!", type);
+    case TYPE_NAMED: return type_get_element(type->named->val.type);
+    case TYPE_POINTER: return type->pointer.to;
+    case TYPE_REFERENCE: return type->reference.to;
+    case TYPE_ARRAY: return type->array.of;
+  }
+}
+
 bool type_is_incomplete_canon(Type *type) {
   return !type || type == t_void;
 }

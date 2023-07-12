@@ -139,10 +139,12 @@ static bool opt_instcombine(IRFunction *f) {
               ir_remove_use(i->lhs, i);
               ir_remove_use(i->rhs, i);
               ir_replace_uses(i, i->rhs);
+              changed = true;
             } else if (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 0) {
               ir_remove_use(i->lhs, i);
               ir_remove_use(i->rhs, i);
               ir_replace_uses(i, i->lhs);
+              changed = true;
             }
           }
           break;
@@ -154,6 +156,7 @@ static bool opt_instcombine(IRFunction *f) {
               ir_remove_use(i->lhs, i);
               ir_remove_use(i->rhs, i);
               ir_replace_uses(i, i->lhs);
+              changed = true;
             }
           }
           break;
@@ -166,18 +169,21 @@ static bool opt_instcombine(IRFunction *f) {
               ir_remove_use(i->rhs, i);
               i->kind = IR_IMMEDIATE;
               i->imm = 0;
+              changed = true;
             }
             // Multiplying 1 * rhs == rhs
             else if (i->lhs->kind == IR_IMMEDIATE && imm_lhs(i) == 1) {
               ir_remove_use(i->lhs, i);
               ir_remove_use(i->rhs, i);
               ir_replace_uses(i, i->rhs);
+              changed = true;
             }
             // Multiplying lhs * 1 == lhs
             else if (i->rhs->kind == IR_IMMEDIATE && imm_rhs(i) == 1) {
               ir_remove_use(i->lhs, i);
               ir_remove_use(i->rhs, i);
               ir_replace_uses(i, i->lhs);
+              changed = true;
             }
           }
           break;
@@ -192,6 +198,7 @@ static bool opt_instcombine(IRFunction *f) {
                 ir_remove_use(i->lhs, i);
                 ir_remove_use(divisor, i);
                 ir_replace_uses(i, i->rhs);
+                changed = true;
               }
 
               /// Replace division by a power of two with a shift.
@@ -308,6 +315,7 @@ static bool opt_instcombine(IRFunction *f) {
           /// Remove use of condition.
           i->kind = IR_BRANCH;
           ir_remove_use(i->cond_br.condition, i);
+          changed = true;
 
           /// Convert to unconditional branch.
           i->destination_block = i->cond_br.condition->imm
@@ -321,6 +329,7 @@ static bool opt_instcombine(IRFunction *f) {
           ir_remove_use(i->phi_args.data[0]->value, i);
           ir_replace_uses(i, i->phi_args.data[0]->value);
           ir_remove(i);
+          changed = true;
         } break;
 
         /// Simplify indirect calls to direct calls.
@@ -334,6 +343,7 @@ static bool opt_instcombine(IRFunction *f) {
               i->call.is_indirect = false;
               i->call.callee_function = callee->function_ref;
               ir_remove_use(callee, i);
+              changed = true;
               break;
 
             case IR_BITCAST: {
@@ -342,10 +352,23 @@ static bool opt_instcombine(IRFunction *f) {
                 i->call.callee_function = callee->operand->function_ref;
                 ir_remove_use(callee->operand, callee);
                 ir_remove_use(callee, i);
+                changed = true;
               }
             } break;
           }
-        }
+        } break;
+
+        /// Collapse pointer copies.
+        case IR_COPY: {
+          /// FIXME: Enabling this optimisation breaks a bunch of stuff. Presumably,
+          /// this is due to the clobbering problem that we have in ISel atm.
+          /*if (type_is_pointer(i->type) && type_is_pointer(i->operand->type)) {
+            ir_remove_use(i->operand, i);
+            ir_replace_uses(i, i->operand);
+            ir_remove(i);
+            changed = true;
+          }*/
+        } break;
       }
     }
   }
