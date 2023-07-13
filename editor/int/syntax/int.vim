@@ -30,9 +30,9 @@ syn keyword intConditional
 syn keyword intMacro macro emits endmacro
 syn match intMacroArgs '\$[a-zA-Z_][a-zA-Z0-9_]*'
 
-syn keyword intFunctionAttributes discardable nomangle inline noinline noreturn __noopt__
+syn keyword intFunctionAttributes discardable nomangle inline noinline noreturn __noopt__ const pure used
 
-syn keyword intTypeAttributes alignas const pure used
+syn keyword intTypeAttributes alignas
 
 syn match intOperators "?\|+\|-\|\*\|:\|,\|<\|>\|&\||\|!\|\~\|%\|=\|\.\|/\(/\|*\)\@!"
 
