@@ -466,7 +466,7 @@ int main(int argc, char **argv) {
   /// The input is an Intercept file.
   else {
     /// Parse the file.
-    AST *ast = parse(as_span(s), infile);
+    Module *ast = parse(as_span(s), infile);
     if (!ast) exit(1);
 
     // If this is a module and the user did not provide output
@@ -514,7 +514,7 @@ int main(int argc, char **argv) {
 #endif
 
     foreach_index (i, ast->imports) {
-      AST *import = ast->imports.data[i];
+      Module *import = ast->imports.data[i];
 
       string module_object = {0};
       bool success = false;

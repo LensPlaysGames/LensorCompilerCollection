@@ -336,8 +336,8 @@ uint8_t *deserialise_type(uint8_t *from, Type *type, Type **types) {
   UNREACHABLE();
 }
 
-AST *deserialise_module(span metadata) {
-  AST *module = ast_create();
+Module *deserialise_module(span metadata) {
+  Module *module = ast_create();
   module->is_module = true;
 
   ModuleDescription *desc = (ModuleDescription*)metadata.data;
@@ -414,7 +414,7 @@ AST *deserialise_module(span metadata) {
   return module;
 }
 
-string serialise_module(CodegenContext *context, AST *module) {
+string serialise_module(CodegenContext *context, Module *module) {
   ASSERT(module->is_module, "To serialise an AST, it must be a module");
   ModuleDescription desc = make_description();
   string_buffer out = {0};

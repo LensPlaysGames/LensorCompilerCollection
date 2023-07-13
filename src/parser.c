@@ -134,7 +134,7 @@ typedef struct Parser {
   Token tok;
 
   /// The AST of the program.
-  AST *ast;
+  Module *ast;
 
   /// For error handling.
   jmp_buf error_buffer;
@@ -2020,7 +2020,7 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
 /// ===========================================================================
 ///  API
 /// ===========================================================================
-AST *parse(span source, const char *filename) {
+Module *parse(span source, const char *filename) {
   Parser p = {0};
   p.source = source;
   p.filename = filename;
@@ -2064,7 +2064,7 @@ AST *parse(span source, const char *filename) {
       ISSUE_FATAL_DIAGNOSTIC(DIAG_ERR, p.tok.source_location, (&p),
                              "Expected module name following \"import\"");
 
-    AST *module = calloc(1, sizeof(AST));
+    Module *module = calloc(1, sizeof(Module));
     module->module_name = string_dup(p.tok.text);
     vector_push(p.ast->imports, module);
 

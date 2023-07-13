@@ -11,9 +11,9 @@
 #define INTC_MODULE_MAG2 'T'
 #define INTC_MODULE_SECTION_NAME ".intercept_module_section"
 
-NODISCARD string serialise_module(CodegenContext *context, AST *module);
+NODISCARD string serialise_module(CodegenContext *context, Module *module);
 
-AST *deserialise_module(span metadata);
+Module *deserialise_module(span metadata);
 
 // ModuleDescription { ModuleDeclaration } <anything trailing>
 typedef struct ModuleDescription {

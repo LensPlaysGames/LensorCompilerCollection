@@ -196,7 +196,7 @@ static OverloadSet collect_overload_set(Node *func) {
 /// \param dependent_funcref (optional) The callee if this is a function argument.
 /// \return Whether overload resolution was successful.
 NODISCARD static bool resolve_overload(
-  AST *ast,
+  Module *ast,
   OverloadSet *overload_set,
   Node *funcref,
   OverloadSet *dependent_overload_set,
@@ -388,7 +388,7 @@ void reduce_overload_set(OverloadSet *overload_set) {
 /// To resolve an unresolved function reference, execute the following steps in
 /// order. The unresolved function reference in question is hereinafter referred
 /// to as ‘the function being resolved’.
-NODISCARD static bool resolve_function(AST *ast, Node *func) {
+NODISCARD static bool resolve_function(Module *ast, Node *func) {
   /// 0. Skip anything that is not a function reference, or any function
   ///    references previously resolved.
   if (func->kind != NODE_FUNCTION_REFERENCE || func->funcref.resolved)
@@ -685,7 +685,7 @@ NODISCARD static bool resolve_function(AST *ast, Node *func) {
   goto done;
 }
 
-NODISCARD static bool typecheck_type(AST *ast, Type *t) {
+NODISCARD static bool typecheck_type(Module *ast, Type *t) {
   if (t->type_checked) return true;
   t->type_checked = true;
   switch (t->kind) {
@@ -788,7 +788,7 @@ NODISCARD static enum IntrinsicKind intrinsic_kind(Node *callee) {
 ///
 /// Any `MIR_INTRINSIC` instruction are lowered either via the ISel table or
 /// manually in the backend.
-NODISCARD static bool typecheck_intrinsic(AST *ast, Node *expr) {
+NODISCARD static bool typecheck_intrinsic(Module *ast, Node *expr) {
     ASSERT(expr->kind == NODE_CALL);
     ASSERT(expr->call.callee->kind == NODE_FUNCTION_REFERENCE);
 
@@ -903,7 +903,7 @@ NODISCARD static bool typecheck_intrinsic(AST *ast, Node *expr) {
     UNREACHABLE();
 }
 
-NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
+NODISCARD bool typecheck_expression(Module *ast, Node *expr) {
   /// Don’t typecheck the same expression twice.
   if (expr->type_checked) return true;
   expr->type_checked = true;
@@ -1490,7 +1490,7 @@ NODISCARD bool typecheck_expression(AST *ast, Node *expr) {
               as_span(expr->member_access.struct_->module_ref.ast->module_name));
         */
 
-        AST *module = NULL;
+      Module *module = NULL;
         foreach_val (m, ast->imports) {
           if (string_eq(m->module_name, expr->member_access.struct_->module_ref.ast->module_name)) {
             module = m;

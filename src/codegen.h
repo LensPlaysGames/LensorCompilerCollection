@@ -18,7 +18,7 @@ extern bool annotate_code;
 typedef Vector(IRInstruction *) InstructionVector;
 
 CodegenContext *codegen_context_create
-(AST *ast,
+(Module *ast,
  CodegenArchitecture,
  CodegenTarget,
  CodegenCallingConvention call_convention,
@@ -54,7 +54,7 @@ struct CodegenContext {
   GenericObjectFile *object;
 
   /// (Used to construct IR)
-  AST *ast;
+  Module *ast;
   IRFunction *function;
   IRFunction *entry;
   IRBlock *block;
@@ -93,8 +93,7 @@ NODISCARD bool codegen
  CodegenTarget target,
  CodegenCallingConvention,
  const char *infile,
- const char *outfile,
- AST *ast,
+ const char *outfile, Module *ast,
  string ir);
 
 /// Mangle a function name.

@@ -13,6 +13,6 @@
 /// \param ast The AST of the expression.
 /// \param expr The expression to typecheck.
 /// \return Whether the expression is well-formed.
-NODISCARD bool typecheck_expression(AST *ast, Node *expr);
+NODISCARD bool typecheck_expression(Module *ast, Node *expr);
 
 #endif /* TYPECHECKER_H */

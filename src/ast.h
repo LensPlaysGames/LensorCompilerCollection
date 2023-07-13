@@ -341,7 +341,7 @@ typedef struct NodeMemberAccess {
 typedef Symbol *NodeVariableReference;
 
 typedef struct NodeModuleReference {
-  struct AST *ast;
+  struct Module *ast;
 } NodeModuleReference;
 
 typedef struct NodeFor {
@@ -474,14 +474,14 @@ struct Node {
 
 /// Data structure that stores an AST; a module.
 // TODO: Rename to "Module"
-typedef struct AST {
+typedef struct Module {
   /// The root node of the AST.
   Node *root;
 
   string module_name;
   bool is_module;
 
-  Vector(struct AST *) imports;
+  Vector(struct Module *) imports;
   Vector(Node *) exports;
 
   /// Filename of the source file and source code.
@@ -506,16 +506,16 @@ typedef struct AST {
 
   /// Functions.
   Vector(Node *) functions;
-} AST;
+} Module;
 
 /// ===========================================================================
 ///  Scope/symbol functions.
 /// ===========================================================================
 /// Push a new scope.
-void scope_push(AST *ast);
+void scope_push(Module *ast);
 
 /// Pop the current scope. This does *not* delete the scope.
-void scope_pop(AST *ast);
+void scope_pop(Module *ast);
 
 /// Add an empty symbol to a scope, no matter what.
 /// \return The symbol that was added.
@@ -538,7 +538,7 @@ Symbol *scope_find_or_add_symbol(Scope *scope, enum SymbolKind kind, span name, 
 /// ===========================================================================
 /// Create a new function node.
 Node *ast_make_function(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Type *type,
     SymbolLinkage linkage,
@@ -549,7 +549,7 @@ Node *ast_make_function(
 
 /// Create a new declaration node.
 Node *ast_make_declaration(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Type *type,
     SymbolLinkage linkage, ///< Pass whatever for locals.
@@ -559,7 +559,7 @@ Node *ast_make_declaration(
 
 /// Create a new if expression.
 Node *ast_make_if(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Node *condition,
     Node *then,
@@ -568,7 +568,7 @@ Node *ast_make_if(
 
 /// Create a new while expression.
 Node *ast_make_while(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Node *condition,
     Node *body
@@ -576,7 +576,7 @@ Node *ast_make_while(
 
 /// Create a new for expression.
 Node *ast_make_for(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Node *init,
     Node *condition,
@@ -586,21 +586,21 @@ Node *ast_make_for(
 
 /// Create a new return expression.
 Node *ast_make_return(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Node *value
 );
 
 /// Create a new block expression.
 Node *ast_make_block(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Nodes children
 );
 
 /// Create a new call expression.
 Node *ast_make_call(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Node *callee,
     Nodes arguments
@@ -608,7 +608,7 @@ Node *ast_make_call(
 
 /// Create a new cast expression.
 Node *ast_make_cast(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Type *to,
     Node *value
@@ -616,7 +616,7 @@ Node *ast_make_cast(
 
 /// Create a new binary expression.
 Node *ast_make_binary(
-    AST *ast,
+  Module *ast,
     loc source_location,
     enum TokenType op,
     Node *lhs,
@@ -625,7 +625,7 @@ Node *ast_make_binary(
 
 /// Create a new unary expression.
 Node *ast_make_unary(
-    AST *ast,
+  Module *ast,
     loc source_location,
     enum TokenType op,
     bool postfix,
@@ -634,21 +634,21 @@ Node *ast_make_unary(
 
 /// Create a new integer literal.
 Node *ast_make_integer_literal(
-    AST *ast,
+  Module *ast,
     loc source_location,
     u64 value
 );
 
 /// Create a new string literal.
 Node *ast_make_string_literal(
-    AST *ast,
+  Module *ast,
     loc source_location,
     span string
 );
 
 /// Create a new compound literal.
 Node *ast_make_compound_literal(
-    AST *ast,
+  Module *ast,
     loc source_location
 );
 /// Add a node to an existing compound literal.
@@ -659,33 +659,33 @@ void ast_add_to_compound_literal(
 
 /// Create a new variable reference.
 Node *ast_make_variable_reference(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Symbol *symbol
 );
 
 /// Create a new module reference.
 Node *ast_make_module_reference(
-    AST *ast,
+  Module *ast,
     loc source_location,
-    AST *module
+  Module *module
 );
 
 /// Create a new function reference.
 Node *ast_make_function_reference(
-    AST *ast,
+  Module *ast,
     loc source_location,
     span symbol
 );
 
 Node *ast_make_structure_declaration(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Symbol *symbol
 );
 
 Node *ast_make_member_access(
-    AST *ast,
+  Module *ast,
     loc source_location,
     span ident,
     Node *struct_
@@ -693,28 +693,28 @@ Node *ast_make_member_access(
 
 /// Create a new named type.
 Type *ast_make_type_named(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Symbol *symbol
 );
 
 /// Create a new pointer type.
 Type *ast_make_type_pointer(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Type *to
 );
 
 /// Create a new reference type.
 Type *ast_make_type_reference(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Type *to
 );
 
 /// Create a new array type.
 Type *ast_make_type_array(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Type *of,
     size_t size
@@ -722,7 +722,7 @@ Type *ast_make_type_array(
 
 /// Create a new function type.
 Type *ast_make_type_function(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Type *return_type,
     Parameters parameters
@@ -730,14 +730,14 @@ Type *ast_make_type_function(
 
 /// Create a new struct type.
 Type *ast_make_type_struct(
-    AST *ast,
+  Module *ast,
     loc source_location,
     Members members
 );
 
 /// Create a new integer type.
 Type *ast_make_type_integer(
-    AST *ast,
+  Module *ast,
     loc source_location,
     bool is_signed,
     usz bit_width
@@ -858,25 +858,25 @@ NODISCARD Type *type_strip_references(Type *type);
 ///  Miscellaneous AST functions.
 /// ===========================================================================
 /// Create a new AST.
-NODISCARD AST *ast_create();
+NODISCARD Module *ast_create();
 
 /// Free an AST.
-void ast_free(AST *ast);
+void ast_free(Module *ast);
 
 /// Print an AST.
-void ast_print(FILE *file, const AST *ast);
+void ast_print(FILE *file, const Module *ast);
 
 /// Print the scope tree of an AST.
-void ast_print_scope_tree(FILE *file, const AST *ast);
+void ast_print_scope_tree(FILE *file, const Module *ast);
 
 /// Print a node and all of it's children.
 void ast_print_node(const Node *node);
 
 /// Intern a string.
-size_t ast_intern_string(AST *ast, span string);
+size_t ast_intern_string(Module *ast, span string);
 
 /// Replace a node with another node.
-void ast_replace_node(AST *ast, Node *old, Node *new);
+void ast_replace_node(Module *ast, Node *old, Node *new);
 
 /// Check if the expression contained in the given AST Node can be an
 /// lvalue.
