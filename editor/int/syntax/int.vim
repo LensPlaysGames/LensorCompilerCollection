@@ -30,9 +30,9 @@ syn keyword intConditional
 syn keyword intMacro macro emits endmacro
 syn match intMacroArgs '\$[a-zA-Z_][a-zA-Z0-9_]*'
 
-syn keyword intFunctionAttributes discardable nomangle inline
+syn keyword intFunctionAttributes discardable nomangle inline noinline noreturn __noopt__
 
-syn keyword intTypeAttributes alignas
+syn keyword intTypeAttributes alignas const pure used
 
 syn match intOperators "?\|+\|-\|\*\|:\|,\|<\|>\|&\||\|!\|\~\|%\|=\|\.\|/\(/\|*\)\@!"
 
@@ -40,7 +40,7 @@ syn match intNumber "\v<\d+>"
 
 syn keyword intStatement return
 
-syn keyword intBuiltinFunc __builtin_syscall
+syn keyword intBuiltinFunc __builtin_syscall __builtin_line __builtin_filename __builtin_debugtrap __builtin_inline
 
 syn keyword intImport import nextgroup=intModuleName skipwhite
 syn keyword intModule module nextgroup=intModuleName skipwhite
