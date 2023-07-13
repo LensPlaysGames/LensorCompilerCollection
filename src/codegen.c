@@ -30,7 +30,7 @@ char codegen_verbose = 1;
 ///  Context creation.
 /// ===========================================================================
 CodegenContext *codegen_context_create
-(AST *ast,
+(Module *ast,
  CodegenArchitecture arch,
  CodegenTarget target,
  CodegenCallingConvention call_convention,
@@ -871,8 +871,7 @@ bool codegen
  CodegenTarget target,
  CodegenCallingConvention call_convention,
  const char *infile,
- const char *outfile,
- AST *ast,
+ const char *outfile, Module *ast,
  string ir
  )
 {
