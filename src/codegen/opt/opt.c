@@ -5,18 +5,7 @@ typedef Vector(IRBlock *) BlockVector;
 /// ===========================================================================
 ///  Helpers
 /// ===========================================================================
-#ifdef _MSC_VER
-#  include <intrin.h>
-
-uint32_t ctzll(uint64_t value) {
-  unsigned long zero = 0;
-  return _BitScanForward64(&zero, value)
-         ? (uint32_t) zero
-         : 64;
-}
-#else
-#  define ctzll __builtin_ctzll
-#endif
+#define ctzll __builtin_ctzll
 
 #define IR_REDUCE_BINARY(op)           \
   if (is_immediate_pair(i)) {          \

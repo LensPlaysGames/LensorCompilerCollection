@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.19)
+project(Intercept C CXX)
 
 # Use `ccache` if it is installed in system's PATH.
 find_program(CCACHE_PROGRAM ccache)
@@ -12,7 +13,8 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-project(Intercept C CXX)
+# Allow arbitrary characters in test names.
+cmake_policy(SET CMP0110 NEW)
 
 # User Option(s)
 set(
@@ -76,6 +78,11 @@ add_executable(
 target_include_directories(
   intc
   PUBLIC src/
+)
+
+## Hard-code ISel table locations for now so it works on Windows in VS.
+target_compile_definitions(intc PRIVATE
+    ISEL_TABLE_LOCATION_X86_64="${PROJECT_SOURCE_DIR}/src/codegen/x86_64/arch_x86_64.isel"
 )
 
 ## Build the format check plugin *now*, as CMake will complain otherwise when we
@@ -263,6 +270,11 @@ if (BUILD_TESTING)
     "${fmtlib_SOURCE_DIR}/include"
   )
 
+  ## User needs to specify a linker.
+  if (NOT DEFINED INTERCEPT_TEST_LINKER)
+    message (FATAL_ERROR "Please specify a linker for tests using -DINTERCEPT_TEST_LINKER=/path/to/linker. The path must be an absolute path and point to a version of gcc or clang (not clang-cl!)")
+  endif ()
+
   file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
   foreach (test ${tests})
     if (BUILD_NATIVE_TESTING)
@@ -270,9 +282,9 @@ if (BUILD_TESTING)
         NAME ASM_${test}
         COMMAND $<TARGET_FILE:test_instantiator>
         --target asm
-        --test ${test}
+        --test "${test}"
         --intc $<TARGET_FILE:intc>
-        --ld ${CMAKE_C_COMPILER}
+        --ld "${INTERCEPT_TEST_LINKER}"
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
@@ -284,9 +296,9 @@ if (BUILD_TESTING)
           NAME OBJ_${test}
           COMMAND $<TARGET_FILE:test_instantiator>
           --target coff_object
-          --test ${test}
+          --test "${test}"
           --intc $<TARGET_FILE:intc>
-          --ld ${CMAKE_C_COMPILER}
+          --ld "${INTERCEPT_TEST_LINKER}"
           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
           COMMAND_EXPAND_LISTS
         )
@@ -296,9 +308,9 @@ if (BUILD_TESTING)
           NAME OBJ_${test}
           COMMAND $<TARGET_FILE:test_instantiator>
           --target elf_object
-          --test ${test}
+          --test "${test}"
           --intc $<TARGET_FILE:intc>
-          --ld ${CMAKE_C_COMPILER}
+          --ld "${INTERCEPT_TEST_LINKER}"
           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
           COMMAND_EXPAND_LISTS
         )
@@ -310,9 +322,9 @@ if (BUILD_TESTING)
         NAME OPT_${test}
         COMMAND $<TARGET_FILE:test_instantiator>
         --target asm
-        --test ${test}
+        --test "${test}"
         --intc $<TARGET_FILE:intc>
-        --ld ${CMAKE_C_COMPILER}
+        --ld "${INTERCEPT_TEST_LINKER}"
         -O
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
@@ -320,17 +332,13 @@ if (BUILD_TESTING)
       set_tests_properties(OPT_${test} PROPERTIES TIMEOUT 2)
     endif()
     if (BUILD_LLVM_TESTING)
-      if (NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
-        message(FATAL_ERROR "LLVM testing requires clang")
-      endif()
-
       add_test(
         NAME LLVM_${test}
         COMMAND $<TARGET_FILE:test_instantiator>
         --target llvm
-        --test ${test}
+        --test "${test}"
         --intc $<TARGET_FILE:intc>
-        --ld ${CMAKE_C_COMPILER} # FIXME: should probably find_program(clang)
+        --ld "${INTERCEPT_TEST_LINKER}"
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
