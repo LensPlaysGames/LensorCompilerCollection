@@ -241,40 +241,26 @@ else()
 endif()
 
 include(CTest)
-include(ExternalProject)
+include(FetchContent)
 if (BUILD_TESTING)
-  ExternalProject_Add(clopts
+  FetchContent_Declare(clopts
     GIT_REPOSITORY git@github.com:Sirraide/clopts.git
     GIT_TAG origin/master
-    PREFIX "${CMAKE_CURRENT_BINARY_DIR}/clopts"
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND ""
-    INSTALL_COMMAND ""
-    TEST_COMMAND ""
-    UPDATE_COMMAND ""
   )
 
-  ExternalProject_Add(fmtlib
+  FetchContent_Declare(fmtlib
     GIT_REPOSITORY git@github.com:fmtlib/fmt.git
     GIT_TAG 10.0.0
-    PREFIX "${CMAKE_CURRENT_BINARY_DIR}/fmtlib"
-    INSTALL_COMMAND ""
-    TEST_COMMAND ""
-    UPDATE_COMMAND ""
   )
+
+  FetchContent_MakeAvailable(clopts fmtlib)
 
   add_executable(test_instantiator tst/main.cpp)
-  add_dependencies(test_instantiator clopts fmtlib)
-  target_include_directories(test_instantiator SYSTEM PRIVATE
-    "${CMAKE_CURRENT_BINARY_DIR}/clopts/src/clopts/include"
-    "${CMAKE_CURRENT_BINARY_DIR}/fmtlib/src/fmtlib/include"
-  )
-
-  add_library(fmt STATIC IMPORTED)
-  set_target_properties(fmt PROPERTIES
-      IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/fmtlib/src/fmtlib-build/${CMAKE_STATIC_LIBRARY_PREFIX}fmt${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  )
   target_link_libraries(test_instantiator PRIVATE fmt)
+  target_include_directories(test_instantiator SYSTEM PRIVATE
+    "${clopts_SOURCE_DIR}/include"
+    "${fmtlib_SOURCE_DIR}/include"
+  )
 
   file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
   foreach (test ${tests})
