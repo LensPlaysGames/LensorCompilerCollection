@@ -21,47 +21,26 @@ typedef ptrdiff_t isz;
 /// ===========================================================================
 ///  Attributes and platform-specific macros.
 /// ===========================================================================
-#ifndef _MSC_VER
-#  define NORETURN __attribute__((noreturn))
-#  define FALLTHROUGH __attribute__((fallthrough))
-#  define FORMAT(...) __attribute__((format(__VA_ARGS__)))
-#  define PRAGMA_STR(_Str) _Pragma(#_Str)
-#  define PUSH_IGNORE_WARNING(W)      \
+#define NORETURN __attribute__((noreturn))
+#define FALLTHROUGH __attribute__((fallthrough))
+#define FORMAT(...) __attribute__((format(__VA_ARGS__)))
+#define PRAGMA_STR(_Str) _Pragma(#_Str)
+#define PUSH_IGNORE_WARNING(W)      \
     _Pragma("GCC diagnostic push")    \
     PRAGMA_STR(GCC diagnostic ignored W)
-#  define POP_WARNINGS() _Pragma("GCC diagnostic pop")
-#  ifndef FORCEINLINE
-#    define FORCEINLINE __attribute__((always_inline)) inline
-#  endif
-#  define PRETTY_FUNCTION __PRETTY_FUNCTION__
-#  define NODISCARD __attribute__((warn_unused_result))
-#  define BUILTIN_UNREACHABLE() __builtin_unreachable()
-#  define THREAD_LOCAL __thread
-#else
-#  define NORETURN __declspec(noreturn)
-#  define FALLTHROUGH
-#  define FORMAT(...)
-#  define PRAGMA_STR(_Str) _Pragma(#_Str)
-#  define PUSH_IGNORE_WARNING(...)
-#  define POP_WARNINGS()
-#  ifndef FORCEINLINE
-#    define FORCEINLINE __forceinline inline
-#  endif
-#  define PRETTY_FUNCTION __FUNCSIG__
-#  define NODISCARD
-#  define BUILTIN_UNREACHABLE() __assume(0)
-#  define THREAD_LOCAL __declspec(thread)
+#define POP_WARNINGS() _Pragma("GCC diagnostic pop")
+#ifndef FORCEINLINE
+#  define FORCEINLINE __attribute__((always_inline)) inline
 #endif
+#define PRETTY_FUNCTION __PRETTY_FUNCTION__
+#define NODISCARD __attribute__((warn_unused_result))
+#define BUILTIN_UNREACHABLE() __builtin_unreachable()
+#define THREAD_LOCAL __thread
 
 /// PACKED **must** go inbetween the struct keyword and the struct
 /// name, or else it won't work.
-#if !defined(_MSC_VER) || defined(__clang__)
-#  define PACKED __attribute__((packed))
-#  define PACKED_DEFAULT
-#else
-#  define PACKED PRAGMA_STR("pack(1)")
-#  define PACKED_DEFAULT PRAGMA_STR("pack()")
-#endif
+#define PACKED __attribute__((packed))
+#define PACKED_DEFAULT
 
 #ifdef __EXT_FORMAT__
 #  define EXT_FORMAT(fmt, arg) __attribute__((ext_format(fmt, arg)))

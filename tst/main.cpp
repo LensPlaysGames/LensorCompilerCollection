@@ -34,11 +34,13 @@ namespace chr = std::chrono;
         if (not(cond)) fatal("" __VA_ARGS__); \
     } while (0)
 
-#define VERBOSE(...)                                       \
-    do {                                                   \
-        if (options::get<"-v">()) fmt::print(__VA_ARGS__); \
-        fmt::print("\n");                                  \
-        std::fflush(stdout);                               \
+#define VERBOSE(...)                 \
+    do {                             \
+        if (options::get<"-v">()) {  \
+            fmt::print(__VA_ARGS__); \
+            fmt::print("\n");        \
+            std::fflush(stdout);     \
+        }                            \
     } while (0)
 
 #define CAT_(x, y) x##y
@@ -123,9 +125,9 @@ void write_command_line_arg(std::string& to, std::string_view arg) {
         return;
     }
 
-    /// If the argument contains no spaces, backslashes, or double quotes,
+    /// If the argument contains no spaces or double quotes,
     /// we can just append it as-is.
-    if (arg.find_first_of(" \"\\") == std::string_view::npos) {
+    if (arg.find_first_of(" \"") == std::string_view::npos) {
         to += arg;
         return;
     }
@@ -134,7 +136,7 @@ void write_command_line_arg(std::string& to, std::string_view arg) {
     to += '\"';
     for (;;) {
         /// If there are no more escape characters, we’re done.
-        auto escape = arg.find_first_of("\"\\");
+        auto escape = arg.find_first_of("\"");
         if (escape == std::string_view::npos) {
             to += arg;
             break;
@@ -190,8 +192,17 @@ auto run_command(const fs::path& executable, auto&&...args) -> exit_status {
         /// Write the path segment up to the separator. Take care
         /// not to escape the first part of the path since that
         /// is invalid on Windows.
-        if (command_line.empty()) command_line += remaining;
-        else write_command_line_arg(command_line, remaining);
+        if (command_line.empty()) command_line += remaining.substr(0, sep);
+        else write_command_line_arg(command_line, remaining.substr(0, sep));
+
+        /// Remove the segment we just appended and skip the 
+        /// separator. Since this is a path, it cannot contain
+        /// slashes or backslashes, so no need to check for
+        /// that.
+        remaining = remaining.substr(sep + 1);
+
+        /// Done.
+        if (remaining.empty()) break;
 
         /// Add a path separator.
         command_line += '\\';
@@ -287,6 +298,8 @@ int main(int argc_, char **argv_) {
     VERBOSE("Found test file at {}", testpath);
     ASSERT(fs::exists(intcpath), "Sorry, but the intc compiler specified at \"{}\" does not exist", intcpath);
     VERBOSE("Using Intercept compiler at {}", intcpath);
+    ASSERT(fs::exists(ldpath), "Sorry, but the linker specified at \"{}\" does not exist", ldpath);
+    VERBOSE("Using linker at {}", ldpath);
 
     // Parse expected test results
     std::ifstream testfile(testpath);
@@ -378,7 +391,7 @@ int main(int argc_, char **argv_) {
         ASSERT(
             !intc_status.success,
             "FAILURE: Intercept compiler returned successful exit code but an error was expected\n"
-            "  intc_invocation: \"{}\"",
+            "  intc_invocation: {}",
             intc_status.escaped_command_line
         );
 
@@ -390,7 +403,7 @@ int main(int argc_, char **argv_) {
     ASSERT(
         intc_status.success,
         "FAILURE: intc did not exit successfully\n"
-        "  intc_invocation: \"{}\"\n"
+        "  intc_invocation:   {}\n"
         "  return status:     {}\n"
         "  output:\n{}",
         intc_status.escaped_command_line,
@@ -411,8 +424,8 @@ int main(int argc_, char **argv_) {
     ASSERT(
         ld_status.success,
         "FAILURE: Linker errored\n"
-        "  intc_invocation: \"{}\"\n"
-        "  ld_invocation:   \"{}\n"
+        "  intc_invocation:   {}\n"
+        "  ld_invocation:     {}\n"
         "  return status:     {}",
         intc_status.escaped_command_line,
         ld_status.escaped_command_line,
@@ -435,9 +448,9 @@ int main(int argc_, char **argv_) {
     ASSERT(
         test_status.exited,
         "FAILURE: Test was terminated by signal\n"
-        "  intc_invocation: \"{}\"\n"
-        "  ld_invocation:   \"{}\"\n"
-        "  test_invocation: \"{}\"\n"
+        "  intc_invocation:   {}\n"
+        "  ld_invocation:     {}\n"
+        "  test_invocation:   {}\n"
         "  signal:            {}",
         intc_status.escaped_command_line,
         ld_status.escaped_command_line,
@@ -450,9 +463,9 @@ int main(int argc_, char **argv_) {
     ASSERT(
         test_status.code == expected_status,
         "FAILURE: Test returned unexpected exit code\n"
-        "  intc_invocation: \"{}\"\n"
-        "  ld_invocation:   \"{}\"\n"
-        "  test_invocation: \"{}\"\n"
+        "  intc_invocation:   {}\n"
+        "  ld_invocation:     {}\n"
+        "  test_invocation:   {}\n"
         "  return code:       {}\n"
         "  expected:          {}\n",
         intc_status.escaped_command_line,
@@ -478,9 +491,9 @@ int main(int argc_, char **argv_) {
         "FAILURE: Test generated unexpected output\n"
         "  Output:          {:?}\n"
         "  Expected:        {:?}\n"
-        "  intc_invocation: \"{}\"\n"
-        "  ld_invocation:   \"{}\"\n"
-        "  test_invocation: \"{}\"",
+        "  intc_invocation: {}\n"
+        "  ld_invocation:   {}\n"
+        "  test_invocation: {}",
         output,
         expected_output,
         intc_status.escaped_command_line,

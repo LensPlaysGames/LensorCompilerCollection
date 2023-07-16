@@ -1174,8 +1174,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   MIRFunctionVector machine_instructions_from_ir = mir_from_ir(context);
 
   // TODO: Either embed x86_64 isel or somehow make this path knowable (i.e. via install).
-  const char isel_filepath[] = "src/codegen/x86_64/arch_x86_64.isel";
-  ISelPatterns patterns =  isel_parse_file(isel_filepath);
+  ISelPatterns patterns =  isel_parse_file(ISEL_TABLE_LOCATION_X86_64);
 
   //isel_print_patterns(&patterns, mir_x86_64_opcode_mnemonic);
 
