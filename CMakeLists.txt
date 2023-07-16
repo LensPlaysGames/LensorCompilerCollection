@@ -272,7 +272,7 @@ if (BUILD_TESTING)
         --target asm
         --test ${test}
         --intc $<TARGET_FILE:intc>
-        --cc ${CMAKE_C_COMPILER}
+        --ld ${CMAKE_C_COMPILER}
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
@@ -286,7 +286,7 @@ if (BUILD_TESTING)
           --target coff_object
           --test ${test}
           --intc $<TARGET_FILE:intc>
-          --cc ${CMAKE_C_COMPILER}
+          --ld ${CMAKE_C_COMPILER}
           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
           COMMAND_EXPAND_LISTS
         )
@@ -298,7 +298,7 @@ if (BUILD_TESTING)
           --target elf_object
           --test ${test}
           --intc $<TARGET_FILE:intc>
-          --cc ${CMAKE_C_COMPILER}
+          --ld ${CMAKE_C_COMPILER}
           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
           COMMAND_EXPAND_LISTS
         )
@@ -312,7 +312,7 @@ if (BUILD_TESTING)
         --target asm
         --test ${test}
         --intc $<TARGET_FILE:intc>
-        --cc ${CMAKE_C_COMPILER}
+        --ld ${CMAKE_C_COMPILER}
         -O
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
@@ -330,7 +330,7 @@ if (BUILD_TESTING)
         --target llvm
         --test ${test}
         --intc $<TARGET_FILE:intc>
-        --cc ${CMAKE_C_COMPILER} # FIXME: should probably find_program(clang)
+        --ld ${CMAKE_C_COMPILER} # FIXME: should probably find_program(clang)
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )

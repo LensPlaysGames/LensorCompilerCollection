@@ -26,6 +26,59 @@
 namespace fs = std::filesystem;
 namespace chr = std::chrono;
 
+#define ARG_NO_ESCAPE "\x01"
+#define ARG_NONE ARG_NO_ESCAPE
+
+#define ASSERT(cond, ...)                     \
+    do {                                      \
+        if (not(cond)) fatal("" __VA_ARGS__); \
+    } while (0)
+
+#define VERBOSE(...)                                       \
+    do {                                                   \
+        if (options::get<"-v">()) fmt::print(__VA_ARGS__); \
+        fmt::print("\n");                                  \
+        std::fflush(stdout);                               \
+    } while (0)
+
+#define CAT_(x, y) x##y
+#define CAT(x, y)  CAT_(x, y)
+
+#define defer auto CAT($$defer_instance_, __COUNTER__) = $$defer{} % [&]()
+
+template <typename callable>
+struct $$defer_type {
+    callable cb;
+    explicit $$defer_type(callable&& _cb)
+        : cb(std::forward<callable>(_cb)) {}
+    ~$$defer_type() { cb(); }
+};
+
+struct $$defer {
+    template <typename callable>
+    $$defer_type<callable> operator%(callable&& cb) {
+        return $$defer_type<callable>{std::forward<callable>(cb)};
+    }
+};
+
+/// The code returned by system() is *very* platform-specific. On Linux,
+/// you have to use a bunch of macros to get the actual exit code.
+struct exit_status {
+    std::string escaped_command_line;
+    std::uint8_t code{};
+    bool success{};
+    bool exited{};
+    int raw_code{};
+};
+
+/// Check a condition and exit if it isn’t true.
+template <typename... arguments>
+[[noreturn]] void fatal(fmt::format_string<arguments...> fmt, arguments&&...args) {
+    fmt::print(stderr, fmt, std::forward<arguments>(args)...);
+    fmt::print(stderr, "\n");
+    std::exit(127);
+}
+
 fs::path temppath(std::string_view extension) {
     std::mt19937 rd(std::random_device{}());
 
@@ -54,40 +107,112 @@ fs::path temppath(std::string_view extension) {
     return tmp_dir;
 }
 
-#define CAT_(x, y) x##y
-#define CAT(x, y)  CAT_(x, y)
+/// Append a command-line argument to a string.
+///
+/// This wraps the argument in double quotes and escapes any double quotes
+/// and backslashes in the argument.
+void write_command_line_arg(std::string& to, std::string_view arg) {
+    /// Append unescaped arguments.
+    if (arg.starts_with(ARG_NO_ESCAPE)) {
+        /// Skip empty arguments.
+        if (arg.empty()) return;
 
-#define defer auto CAT($$defer_instance_, __COUNTER__) = $$defer{} % [&]()
-
-template <typename callable>
-struct $$defer_type {
-    callable cb;
-    explicit $$defer_type(callable&& _cb)
-        : cb(std::forward<callable>(_cb)) {}
-    ~$$defer_type() { cb(); }
-};
-
-struct $$defer {
-    template <typename callable>
-    $$defer_type<callable> operator%(callable&& cb) {
-        return $$defer_type<callable>{std::forward<callable>(cb)};
+        /// Append the argument.
+        arg.remove_prefix(sizeof(ARG_NO_ESCAPE) - 1);
+        to += arg;
+        return;
     }
-};
 
-/// The code returned by system() is *very* platform-specific. On Linux,
-/// you have to use a bunch of macros to get the actual exit code.
-struct exit_status {
-    std::uint8_t code{};
-    bool success{};
-    bool exited{};
-    int raw_code{};
-};
+    /// If the argument contains no spaces, backslashes, or double quotes,
+    /// we can just append it as-is.
+    if (arg.find_first_of(" \"\\") == std::string_view::npos) {
+        to += arg;
+        return;
+    }
+
+    /// Append escaped arguments.
+    to += '\"';
+    for (;;) {
+        /// If there are no more escape characters, we’re done.
+        auto escape = arg.find_first_of("\"\\");
+        if (escape == std::string_view::npos) {
+            to += arg;
+            break;
+        }
+
+        /// Write string up to the escape character.
+        to += arg.substr(0, escape);
+
+        /// Write the escape character.
+        to += '\\';
+        to += arg[escape];
+
+        /// Skip the escape character.
+        arg = arg.substr(escape + 1);
+    }
+    to += '\"';
+}
 
 /// Use this instead of system().
-auto run_command(std::string_view command) -> exit_status {
-    auto code = std::system(command.data());
+///
+/// \param executable The path of the executable to run.
+/// \param args The command line arguments. These will be escaped and quoted,
+///        unless they start with ARG_NO_ESCAPE, in which case ARG_NO_ESCAPE
+///        is removed from the argument and it is added unquoted and unescaped.
+///        Any arguments that are equal to ARG_NONE are ignored.
+/// \return The exit status of the process.
+auto run_command(const fs::path& executable, auto&&...args) -> exit_status {
+    ASSERT(not executable.empty(), "run_command: executable cannot be empty");
+    std::string command_line;
+
+#ifndef _WIN32
+    /// On POSIX systems, escape the executable like a regular argument.
+    write_command_line_arg(command_line, executable.string());
+#else
+    /// On Windows, the executable name must be a valid path, which means
+    /// we need to escape the path segments. First, canonicalise the path.
+    std::error_code ec;
+    auto canonical = fs::canonical(executable, ec);
+    ASSERT(not ec);
+
+    /// Convert to a string.
+    auto path_str = canonical.string();
+    std::string_view remaining = path_str;
+    for (;;) {
+        /// Get the next path segment.
+        auto sep = remaining.find_first_of("/\\");
+        if (sep == std::string::npos) {
+            if (command_line.empty()) command_line += remaining;
+            else write_command_line_arg(command_line, remaining);
+            break;
+        }
+
+        /// Write the path segment up to the separator. Take care
+        /// not to escape the first part of the path since that
+        /// is invalid on Windows.
+        if (command_line.empty()) command_line += remaining;
+        else write_command_line_arg(command_line, remaining);
+
+        /// Add a path separator.
+        command_line += '\\';
+    }
+
+    /// Remove trailing path separators, if any.
+    if (command_line.ends_with('\\')) command_line.pop_back();
+    else if (command_line.ends_with("\\\"")) {
+        command_line.erase(command_line.size() - 2);
+        command_line += '\"';
+    }
+#endif
+
+    /// Append the command line arguments.
+    ((command_line += ' ', write_command_line_arg(command_line, args)), ...);
+
+    /// Run the command.
+    auto code = std::system(command_line.data());
     exit_status st;
     st.raw_code = code;
+    st.escaped_command_line = std::move(command_line);
 
 #ifndef _WIN32
     /// Process creation failed.
@@ -121,32 +246,11 @@ using options = clopts< // clang-format off
     option<"--target", "The target to pass to the Intercept compiler", std::string, true>,
     option<"--test", "The path to the test file", std::string, true>,
     option<"--intc", "The path to the Intercept compiler", std::string, true>,
-    option<"--cc", "The C compiler to use", std::string, true>,
+    option<"--ld", "The linker to use", std::string, true>,
     flag<"-O", "Whether to enable optimisations">,
     flag<"-v", "Enable verbose output">,
     help<>
 >; // clang-format on
-
-}
-
-#define ASSERT(cond, ...)                     \
-    do {                                      \
-        if (not(cond)) fatal("" __VA_ARGS__); \
-    } while (0)
-
-#define VERBOSE(...)                                       \
-    do {                                                   \
-        if (options::get<"-v">()) fmt::print(__VA_ARGS__); \
-        fmt::print("\n");                                  \
-        std::fflush(stdout);                               \
-    } while (0)
-
-/// Check a condition and exit if it isn’t true.
-template <typename... arguments>
-[[noreturn]] void fatal(fmt::format_string<arguments...> fmt, arguments&&...args) {
-    fmt::print(stderr, fmt, std::forward<arguments>(args)...);
-    fmt::print(stderr, "\n");
-    std::exit(127);
 }
 
 /// Get the contents of a file.
@@ -177,7 +281,7 @@ int main(int argc_, char **argv_) {
 
     fs::path testpath{*options::get<"--test">()};
     fs::path intcpath{*options::get<"--intc">()};
-    fs::path ccpath{*options::get<"--cc">()};
+    fs::path ldpath{*options::get<"--ld">()};
 
     ASSERT(fs::exists(testpath), "Sorry, but the test specified at \"{}\" does not exist", testpath);
     VERBOSE("Found test file at {}", testpath);
@@ -240,19 +344,22 @@ int main(int argc_, char **argv_) {
     fs::path intc_outpath{}, intc_logpath = temppath("log");
     if (options::get<"--target">()->starts_with("asm")) intc_outpath = temppath("s");
     else intc_outpath = temppath(*options::get<"--target">() == "llvm" ? "ll" : "o");
-    auto intc_invocation = fmt::format(
-        "{} -cc {} -t {} -o {} {}{} > {} 2>&1",
-        intcpath.string(),
+    auto intc_status = run_command(
+        intcpath,
+        "-cc",
         CALLING_CONVENTION,
+        "-t",
         *options::get<"--target">(),
+        "-o",
         intc_outpath.string(),
         testpath.string(),
-        options::get<"-O">() ? " -O" : "",
-        intc_logpath.string()
+        options::get<"-O">() ? "-O" : ARG_NONE,
+        ARG_NO_ESCAPE ">",
+        intc_logpath.string(),
+        ARG_NO_ESCAPE "2>&1"
     );
 
-    VERBOSE("Intercept command line is: {}", intc_invocation);
-    auto status = run_command(intc_invocation);
+    VERBOSE("Intercept compiler invocation: {}", intc_status.escaped_command_line);
     defer {
         delete_file(intc_outpath);
         delete_file(intc_logpath);
@@ -269,10 +376,10 @@ int main(int argc_, char **argv_) {
     /// If we were expecting an error, check for that.
     if (expected_error) {
         ASSERT(
-            !status.success,
+            !intc_status.success,
             "FAILURE: Intercept compiler returned successful exit code but an error was expected\n"
             "  intc_invocation: \"{}\"",
-            intc_invocation
+            intc_status.escaped_command_line
         );
 
         /// If unsuccessful and error was expected, we good.
@@ -281,82 +388,77 @@ int main(int argc_, char **argv_) {
 
     /// Otherwise, the compiler invocation should have succeeded.
     ASSERT(
-        status.success,
+        intc_status.success,
         "FAILURE: intc did not exit successfully\n"
         "  intc_invocation: \"{}\"\n"
         "  return status:     {}\n"
         "  output:\n{}",
-        intc_invocation,
-        status.raw_code,
+        intc_status.escaped_command_line,
+        intc_status.raw_code,
         log
     );
 
-    /// Construct C compiler invocation.
-    auto cc_outpath = temppath(PLATFORM_EXE_SUFFIX);
-    auto cc_invocation = fmt::format(
-        "{} -o {} {}",
-        ccpath.string(),
-        cc_outpath.string(),
+    /// Run linker.
+    auto ld_outpath = temppath(PLATFORM_EXE_SUFFIX);
+    auto ld_status = run_command(
+        ldpath.string(),
+        "-o",
+        ld_outpath.string(),
         intc_outpath.string()
     );
-
-    /// Run C compiler.
-    VERBOSE("Linker command line is: {}", cc_invocation);
-    status = run_command(cc_invocation);
-    defer { delete_file(cc_outpath); };
+    defer { delete_file(ld_outpath); };
+    VERBOSE("Linker command line is: {}", ld_status.escaped_command_line);
     ASSERT(
-        status.success,
-        "FAILURE: C compiler errored\n"
+        ld_status.success,
+        "FAILURE: Linker errored\n"
         "  intc_invocation: \"{}\"\n"
-        "  cc_invocation:   \"{}\n"
+        "  ld_invocation:   \"{}\n"
         "  return status:     {}",
-        intc_invocation,
-        cc_invocation,
-        status.raw_code
-    );
-
-    /// Output file for test.
-    fs::path outpath = temppath("txt");
-    auto test_invocation = fmt::format(
-        "{} > {} 2>&1", /// At least this works the same on both Linux and Windows.
-        cc_outpath.is_absolute() ? cc_outpath.string() : (fs::current_path() / cc_outpath).string(),
-        outpath.string()
+        intc_status.escaped_command_line,
+        ld_status.escaped_command_line,
+        ld_status.raw_code
     );
 
     /// Run the test.
-    VERBOSE("Running test executable: {}", test_invocation);
-    status = run_command(test_invocation);
+    fs::path outpath = temppath("txt");
+    auto test_status = run_command(
+        ld_outpath.is_absolute() ? ld_outpath : fs::current_path() / ld_outpath,
+        ARG_NO_ESCAPE ">",
+        outpath.string(),
+        ARG_NO_ESCAPE "2>&1"
+    );
+    VERBOSE("Running test executable: {}", test_status.escaped_command_line);
     defer { delete_file(outpath); };
 
 #ifdef __linux__
     /// Check for signals on Linux.
     ASSERT(
-        status.exited,
+        test_status.exited,
         "FAILURE: Test was terminated by signal\n"
         "  intc_invocation: \"{}\"\n"
-        "  cc_invocation:   \"{}\"\n"
+        "  ld_invocation:   \"{}\"\n"
         "  test_invocation: \"{}\"\n"
         "  signal:            {}",
-        intc_invocation,
-        cc_invocation,
-        test_invocation,
-        WTERMSIG(status.code)
+        intc_status.escaped_command_line,
+        ld_status.escaped_command_line,
+        test_status.escaped_command_line,
+        WTERMSIG(test_status.code)
     );
 #endif
 
     /// Check status code.
     ASSERT(
-        status.code == expected_status,
+        test_status.code == expected_status,
         "FAILURE: Test returned unexpected exit code\n"
         "  intc_invocation: \"{}\"\n"
-        "  cc_invocation:   \"{}\"\n"
+        "  ld_invocation:   \"{}\"\n"
         "  test_invocation: \"{}\"\n"
         "  return code:       {}\n"
         "  expected:          {}\n",
-        intc_invocation,
-        cc_invocation,
-        test_invocation,
-        status.code,
+        intc_status.escaped_command_line,
+        ld_status.escaped_command_line,
+        test_status.escaped_command_line,
+        test_status.code,
         expected_status
     );
 
@@ -377,12 +479,12 @@ int main(int argc_, char **argv_) {
         "  Output:          {:?}\n"
         "  Expected:        {:?}\n"
         "  intc_invocation: \"{}\"\n"
-        "  cc_invocation:   \"{}\"\n"
+        "  ld_invocation:   \"{}\"\n"
         "  test_invocation: \"{}\"",
         output,
         expected_output,
-        intc_invocation,
-        cc_invocation,
-        test_invocation
+        intc_status.escaped_command_line,
+        ld_status.escaped_command_line,
+        test_status.escaped_command_line
     );
 }
