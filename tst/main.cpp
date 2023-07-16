@@ -167,6 +167,11 @@ auto delete_file(const fs::path& path) {
 }
 
 int main(int argc_, char **argv_) {
+    /// Disable abort popup on Windows.
+#ifdef _WIN32
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
+
     using detail::options;
     options::parse(argc_, argv_);
 
@@ -237,13 +242,13 @@ int main(int argc_, char **argv_) {
     else intc_outpath = temppath(*options::get<"--target">() == "llvm" ? "ll" : "o");
     auto intc_invocation = fmt::format(
         "{} -cc {} -t {} -o {} {}{} > {} 2>&1",
-        intcpath,
+        intcpath.string(),
         CALLING_CONVENTION,
         *options::get<"--target">(),
-        intc_outpath,
-        testpath,
+        intc_outpath.string(),
+        testpath.string(),
         options::get<"-O">() ? " -O" : "",
-        intc_logpath
+        intc_logpath.string()
     );
 
     VERBOSE("Intercept command line is: {}", intc_invocation);
@@ -290,9 +295,9 @@ int main(int argc_, char **argv_) {
     auto cc_outpath = temppath(PLATFORM_EXE_SUFFIX);
     auto cc_invocation = fmt::format(
         "{} -o {} {}",
-        ccpath,
-        cc_outpath,
-        intc_outpath
+        ccpath.string(),
+        cc_outpath.string(),
+        intc_outpath.string()
     );
 
     /// Run C compiler.
@@ -315,7 +320,7 @@ int main(int argc_, char **argv_) {
     auto test_invocation = fmt::format(
         "{} > {} 2>&1", /// At least this works the same on both Linux and Windows.
         cc_outpath.is_absolute() ? cc_outpath.string() : (fs::current_path() / cc_outpath).string(),
-        outpath
+        outpath.string()
     );
 
     /// Run the test.

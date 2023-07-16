@@ -1035,6 +1035,14 @@ void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
   eprint("[Use] Replacing uses of %%%u with %%%u\n", instruction->id, replacement->id);
 #endif
   while (instruction->users.size) {
+    /// Handle the case of an instruction being replaced with an
+    /// instruction that uses it.
+    usz replacement_uses = 0;
+    foreach_val (user, instruction->users)
+      if (user == replacement)
+        replacement_uses++;
+    if (replacement_uses == instruction->users.size) break;
+
     ir_internal_replace_use_t replace = { instruction, replacement };
     ir_for_each_child(instruction->users.data[0], ir_internal_replace_use, &replace);
   }
