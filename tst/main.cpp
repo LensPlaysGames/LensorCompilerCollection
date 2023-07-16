@@ -10,9 +10,9 @@
 #include <fstream>
 #include <iterator>
 #include <random>
+#include <regex>
 #include <string>
 #include <thread>
-#include <regex>
 
 #ifdef _WIN32
 #    define PLATFORM_EXE_SUFFIX "exe"
@@ -123,6 +123,7 @@ using options = clopts< // clang-format off
     option<"--intc", "The path to the Intercept compiler", std::string, true>,
     option<"--cc", "The C compiler to use", std::string, true>,
     flag<"-O", "Whether to enable optimisations">,
+    flag<"-v", "Enable verbose output">,
     help<>
 >; // clang-format on
 
@@ -131,6 +132,13 @@ using options = clopts< // clang-format off
 #define ASSERT(cond, ...)                     \
     do {                                      \
         if (not(cond)) fatal("" __VA_ARGS__); \
+    } while (0)
+
+#define VERBOSE(...)                                       \
+    do {                                                   \
+        if (options::get<"-v">()) fmt::print(__VA_ARGS__); \
+        fmt::print("\n");                                  \
+        std::fflush(stdout);                               \
     } while (0)
 
 /// Check a condition and exit if it isn’t true.
@@ -167,7 +175,9 @@ int main(int argc_, char **argv_) {
     fs::path ccpath{*options::get<"--cc">()};
 
     ASSERT(fs::exists(testpath), "Sorry, but the test specified at \"{}\" does not exist", testpath);
+    VERBOSE("Found test file at {}", testpath);
     ASSERT(fs::exists(intcpath), "Sorry, but the intc compiler specified at \"{}\" does not exist", intcpath);
+    VERBOSE("Using Intercept compiler at {}", intcpath);
 
     // Parse expected test results
     std::ifstream testfile(testpath);
@@ -191,9 +201,15 @@ int main(int argc_, char **argv_) {
 
     bool expected_error{false};
     int expected_status{0};
-    if (line == ";; SKIP") return 0;
-    if (line == ";; ERROR") expected_error = true;
-    else {
+    if (line == ";; SKIP") {
+        VERBOSE("Skipping test {}", testpath);
+        return 0;
+    }
+
+    if (line == ";; ERROR") {
+        VERBOSE("Test should error");
+        expected_error = true;
+    } else {
         char *end;
         errno = 0;
         expected_status = (int) std::strtoull(line.c_str() + 3, &end, 10);
@@ -202,6 +218,7 @@ int main(int argc_, char **argv_) {
             "Expected exit code must be an integer, but was \"{}\"",
             std::string_view{line}.substr(3)
         );
+        VERBOSE("Expected exit code: {}", expected_status);
     }
 
     std::string expected_output{};
@@ -212,6 +229,7 @@ int main(int argc_, char **argv_) {
     }
 
     testfile.close();
+    VERBOSE("Expected output: {:?}", expected_output);
 
     /// Construct Intercept compiler invocation.
     fs::path intc_outpath{}, intc_logpath = temppath("log");
@@ -228,6 +246,7 @@ int main(int argc_, char **argv_) {
         intc_logpath
     );
 
+    VERBOSE("Intercept command line is: {}", intc_invocation);
     auto status = run_command(intc_invocation);
     defer {
         delete_file(intc_outpath);
@@ -277,6 +296,7 @@ int main(int argc_, char **argv_) {
     );
 
     /// Run C compiler.
+    VERBOSE("Linker command line is: {}", cc_invocation);
     status = run_command(cc_invocation);
     defer { delete_file(cc_outpath); };
     ASSERT(
@@ -299,6 +319,7 @@ int main(int argc_, char **argv_) {
     );
 
     /// Run the test.
+    VERBOSE("Running test executable: {}", test_invocation);
     status = run_command(test_invocation);
     defer { delete_file(outpath); };
 
