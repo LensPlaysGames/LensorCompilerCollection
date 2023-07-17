@@ -35,6 +35,7 @@ static void print_usage(char **argv) {
         "    `-a`, `--arch`     :: Set the output architecture to the one given.\n"
         "    `-t`, `--target`   :: Set the output target to the one given.\n"
         "    `-cc`, `--calling` :: Set the calling convention to the one given.\n"
+        "   `--dot-cfg <func>`  :: Print the control flow graph for a function in DOT format and exit.\n"
         "    `-L`               :: Check for modules within the given directory.\n"
         "    `--colours`        :: Set whether to use colours in diagnostics.\n"
         "Anything other arguments are treated as input filepaths (source code).\n");
@@ -56,6 +57,8 @@ bool prefer_using_diagnostics_colours = true;
 bool colours_blink = false;
 bool annotate_code = false;
 bool print_ir2 = false;
+bool print_dot_cfg = false;
+const char* print_dot_cfg_function = NULL;
 Vector(string) search_paths = {};
 
 static void print_acceptable_architectures() {
@@ -118,6 +121,11 @@ static int handle_command_line_arguments(int argc, char **argv) {
       syntax_only = true;
     } else if (strcmp(argument, "--annotate-code") == 0) {
       annotate_code = true;
+    } else if (strcmp(argument, "--dot-cfg") == 0) {
+      print_dot_cfg = true;
+      if (++i >= argc)
+        ICE("Expected target after command line argument %s", argument);
+      print_dot_cfg_function = i[argv]; /// Note: Copilot autocompleted this and I’m leaving it like that lol.
     } else if (strcmp(argument, "-O") == 0
                || strcmp(argument, "--optimise") == 0) {
       optimise = 1;

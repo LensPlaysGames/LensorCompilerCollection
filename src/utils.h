@@ -170,6 +170,9 @@ static inline string_buffer as_string_buffer(string s) {
   };
 }
 
+/// Replace all occurences of a span with another span.
+void sb_replace(string_buffer *buf, span from, span to);
+
 /// ===========================================================================
 ///  Other.
 /// ===========================================================================

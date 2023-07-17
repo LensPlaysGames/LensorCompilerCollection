@@ -978,11 +978,16 @@ bool codegen
 
   if (optimise) {
     codegen_optimise(context);
-    print("After optimisation:\n");
-    if (debug_ir || print_ir2)
+    if (debug_ir || print_ir2) {
+      print("After optimisation:\n");
       ir_femit(stdout, context);
+    }
   }
 
+  if (print_dot_cfg) {
+    ir_print_dot_cfg(context);
+    exit(42);
+  }
   if (print_ir2) exit(42);
 
   /// No need to lower anything if we’re emitting LLVM IR.

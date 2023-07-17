@@ -235,9 +235,10 @@ const char *ir_irtype_string(IRType t) {
 
 #define INSERT(instruction) ir_insert(context, (instruction))
 
-void ir_femit_instruction
-(FILE *file,
- IRInstruction *inst
+static void ir_emit_instruction
+(string_buffer *out,
+ IRInstruction *inst,
+ bool dot_format
  )
 {
   ASSERT(inst, "Can not emit NULL inst to file.");
@@ -245,170 +246,181 @@ void ir_femit_instruction
   const usz id_max_width = 7;
   if (inst->id) {
     const usz width = number_width(inst->id);
-    for (usz i = width; i < id_max_width; ++i) putc(' ', file);
-    fprint(file, "%34%%%u %31│ ", inst->id);
+    for (usz i = width; i < id_max_width; ++i) format_to(out, " ");
+    format_to(out, "%34%%%u %31%s ", inst->id, dot_format ? "=" : "│");
   }
   else {
-    for (usz i = 0; i < id_max_width; ++i) putc(' ', file);
-    fprint(file, "  %31│ ");
+    for (usz i = 0; i < id_max_width; ++i) format_to(out, " ");
+    format_to(out, "  %31│ ");
   }
 
   const usz result_max_width = 6;
   if (inst->result) {
     const usz result_length = number_width(inst->result);
-    for (usz i = result_length; i < result_max_width; ++i) putc(' ', file);
-    fprint(file, "%34r%u %31│ ", inst->result);
+    for (usz i = result_length; i < result_max_width; ++i) format_to(out, " ");
+    format_to(out, "%34r%u %31│ ", inst->result);
   } else {
-    for (usz i = 0; i < result_max_width; ++i) putc(' ', file);
-    fprint(file, "  %31│ ");
+    for (usz i = 0; i < result_max_width; ++i) format_to(out, " ");
+    format_to(out, "  %31│ ");
   }
 
   STATIC_ASSERT(IR_COUNT == 40, "Handle all instruction types.");
   switch (inst->kind) {
   case IR_POISON:
-    fprint(file, "%33poison");
+    format_to(out, "%33poison");
     break;
 
   case IR_IMMEDIATE:
-    fprint(file, "%33imm %35%U", inst->imm);
+    format_to(out, "%33imm %35%U", inst->imm);
     break;
 
   case IR_LIT_INTEGER:
-    fprint(file, "%33lit.int %35%U", inst->imm);
+    format_to(out, "%33lit.int %35%U", inst->imm);
     break;
 
   case IR_LIT_STRING:
-    fprint(file, "%33lit.str %35%S", inst->str);
+    format_to(out, "%33lit.str %35%S", inst->str);
     break;
 
   case IR_INTRINSIC: {
     switch (inst->call.intrinsic) {
-      default: fprint(file, "%33intrinsic.%d ", inst->call.intrinsic); break;
-      case INTRIN_BUILTIN_SYSCALL: fprint(file, "%33intrinsic.syscall "); break;
-      case INTRIN_BUILTIN_DEBUGTRAP: fprint(file, "%33intrinsic.debugtrap "); break;
+      default: format_to(out, "%33intrinsic.%d ", inst->call.intrinsic); break;
+      case INTRIN_BUILTIN_SYSCALL: format_to(out, "%33intrinsic.syscall "); break;
+      case INTRIN_BUILTIN_DEBUGTRAP: format_to(out, "%33intrinsic.debugtrap "); break;
     }
 
-    fprint(file, "%31(");
+    format_to(out, "%31(");
     bool first = true;
     foreach_val (i, inst->call.arguments) {
-      if (!first) { fprint(file, "%31, "); }
+      if (!first) { format_to(out, "%31, "); }
       else first = false;
-      fprint(file, "%34%%%u", i->id);
+      format_to(out, "%34%%%u", i->id);
     }
-    fprint(file, "%31)");
+    format_to(out, "%31)");
   } break;
 
   case IR_CALL: {
-    if (inst->call.tail_call) { fprint(file, "%33tail "); }
+    if (inst->call.tail_call) { format_to(out, "%33tail "); }
     if (!inst->call.is_indirect) {
       string name = inst->call.callee_function->name;
-      fprint(file, "%33call %32%S", name);
+      format_to(out, "%33call %32%S", name);
     } else {
-      fprint(file, "%33call %34%%%u", inst->call.callee_instruction->id);
+      format_to(out, "%33call %34%%%u", inst->call.callee_instruction->id);
     }
-    fprint(file, "%31(");
+    format_to(out, "%31(");
     bool first = true;
     foreach_val (i, inst->call.arguments) {
-      if (!first) { fprint(file, "%31, "); }
+      if (!first) { format_to(out, "%31, "); }
       else first = false;
-      fprint(file, "%34%%%u", i->id);
+      format_to(out, "%34%%%u", i->id);
     }
-    fprint(file, "%31)");
+    format_to(out, "%31)");
   } break;
   case IR_STATIC_REF:
-    fprint(file, "%33.ref %m%S", inst->static_ref->name);
+    format_to(out, "%33.ref %m%S", inst->static_ref->name);
     break;
   case IR_FUNC_REF:
-    fprint(file, "%31ref %32%S", inst->function_ref->name);
+    format_to(out, "%31ref %32%S", inst->function_ref->name);
     break;
 
 #define PRINT_BINARY_INSTRUCTION(enumerator, name) case IR_##enumerator: \
-    fprint(file, "%33" #name " %34%%%u%31, %34%%%u", inst->lhs->id, inst->rhs->id); break;
+    format_to(out, "%33" #name " %34%%%u%31, %34%%%u", inst->lhs->id, inst->rhs->id); break;
     ALL_BINARY_INSTRUCTION_TYPES(PRINT_BINARY_INSTRUCTION)
 #undef PRINT_BINARY_INSTRUCTION
 
   case IR_NOT:
-    fprint(file, "%33not %34%%%u", inst->operand->id);
+    format_to(out, "%33not %34%%%u", inst->operand->id);
     break;
 
   case IR_ZERO_EXTEND:
-    fprint(file, "%33z.ext %34%%%u", inst->operand->id);
+    format_to(out, "%33z.ext %34%%%u", inst->operand->id);
     break;
 
   case IR_SIGN_EXTEND:
-    fprint(file, "%33s.ext %34%%%u", inst->operand->id);
+    format_to(out, "%33s.ext %34%%%u", inst->operand->id);
     break;
 
   case IR_TRUNCATE:
-    fprint(file, "%33truncate %34%%%u", inst->operand->id);
+    format_to(out, "%33truncate %34%%%u", inst->operand->id);
     break;
 
   case IR_BITCAST:
-    fprint(file, "%33bitcast %34%%%u", inst->operand->id);
+    format_to(out, "%33bitcast %34%%%u", inst->operand->id);
     break;
 
   case IR_COPY:
-    fprint(file, "%33copy %34%%%u", inst->operand->id);
+    format_to(out, "%33copy %34%%%u", inst->operand->id);
     break;
 
   case IR_PARAMETER:
-    fprint(file, "%31.param %34%%%u", inst->id);
+    format_to(out, "%31.param %34%%%u", inst->id);
     break;
 
   case IR_RETURN:
-    if (inst->operand) fprint(file, "%33ret %34%%%u", inst->operand->id);
-    else fprint(file, "%33ret");
+    if (inst->operand) format_to(out, "%33ret %34%%%u", inst->operand->id);
+    else format_to(out, "%33ret");
     break;
   case IR_BRANCH:
-    fprint(file, "%33br bb%Z", inst->destination_block->id);
+    format_to(out, "%33br bb%Z", inst->destination_block->id);
     break;
   case IR_BRANCH_CONDITIONAL:
-    fprint(file, "%33br.cond %34%%%u%31, %33bb%Z%31, %33bb%Z",
+    format_to(out, "%33br.cond %34%%%u%31, %33bb%Z%31, %33bb%Z",
             inst->cond_br.condition->id, inst->cond_br.then->id, inst->cond_br.else_->id);
     break;
   case IR_PHI: {
-    fprint(file, "%33phi ");
+    format_to(out, "%33phi ");
     bool first = true;
     foreach_val (arg, inst->phi_args) {
       if (first) { first = false; }
-      else { fprint(file, "%31, "); }
-      fprint(file, "%31[%33bb%Z%31 : %34%%%u%31]", arg->block->id, arg->value->id);
+      else { format_to(out, "%31, "); }
+      format_to(out, "%31[%33bb%Z%31 : %34%%%u%31]", arg->block->id, arg->value->id);
     }
   } break;
 
   case IR_LOAD:
-    fprint(file, "%33load %34%%%u", inst->operand->id);
+    format_to(out, "%33load %34%%%u", inst->operand->id);
     break;
   case IR_STORE:
-    fprint(file, "%33store into %34%%%u%31, %T %34%%%u", inst->store.addr->id, inst->store.value->type, inst->store.value->id);
+    format_to(out, "%33store into %34%%%u%31, %T %34%%%u", inst->store.addr->id, inst->store.value->type, inst->store.value->id);
     break;
   case IR_REGISTER:
-    fprint(file, "%31.reg %34%%%u", inst->result);
+    format_to(out, "%31.reg %34%%%u", inst->result);
     break;
   case IR_ALLOCA:
-    fprint(file, "%33alloca %34%U", inst->imm);
+    format_to(out, "%33alloca %34%U", inst->imm);
     break;
 
   /// No-op
   case IR_UNREACHABLE:
-    fprint(file, "%33unreachable");
+    format_to(out, "%33unreachable");
     break;
   default:
     ICE("Invalid IRType %d\n", inst->kind);
   }
 
   // Print type of instruction.
-  if (inst->type) fprint(file, " %31| %T", inst->type);
+  if (inst->type && !type_is_void(inst->type))
+    format_to(out, " %31%s %T", dot_format ? "→" : "|", inst->type);
 
 #ifdef DEBUG_USES
   /// Print users
-  fprint(file, "%m\033[60GUsers: ");
+  format_to(out, "%m\033[60GUsers: ");
   foreach_val (user, inst->users) {
-    fprint(file, "%%%u, ", user->id);
+    format_to(out, "%%%u, ", user->id);
   }
 #endif
 
-  fprint(file, "%m\n");
+  format_to(out, "%m");
+}
+
+void ir_femit_instruction(
+  FILE *file,
+  IRInstruction *inst
+) {
+  string_buffer sb = {0};
+  ir_emit_instruction(&sb, inst, false);
+  fprint(file, "%S\n", as_span(sb));
+  vector_delete(sb);
 }
 
 void ir_femit_block
@@ -1131,3 +1143,80 @@ bool ir_function_is_definition(IRFunction *f) {
 
 #undef INSERT
 
+void ir_print_dot_cfg_function(IRFunction *f) {
+  thread_use_colours = false;
+  string_buffer sb = {0};
+  string name = format("%S.dot", f->name);
+  FILE *file = fopen(name.data, "w");
+  ASSERT(file);
+
+  ir_set_func_ids(f);
+  fprint(file, "digraph \"CFG for %S\" {\n", f->name);
+  fprint(file, "    label=\"CFG for %S\";\nlabelloc=\"t\"\n", f->name);
+  list_foreach (block, f->blocks) {
+    /// Print connections to other blocks.
+    bool is_term = true;
+    bool cond_br = false;
+    switch (block->instructions.last->kind) {
+      default: break;
+      case IR_BRANCH:
+        is_term = false;
+        fprint(file, "    Block%p -> Block%p;\n", block, block->instructions.last->destination_block);
+        break;
+      case IR_BRANCH_CONDITIONAL:
+        cond_br = true;
+        is_term = false;
+        fprint(file, "    Block%p -> Block%p;\n", block, block->instructions.last->cond_br.then);
+        fprint(file, "    Block%p -> Block%p;\n", block, block->instructions.last->cond_br.else_);
+        break;
+    }
+
+    /// Emit all instructions to a string.
+    vector_clear(sb);
+    list_foreach (i, block->instructions) {
+      ir_emit_instruction(&sb, i, true);
+      format_to(&sb, "\\l");
+    }
+
+    /// Remove all invalid chars.
+    sb_replace(&sb, literal_span("|"), literal_span(""));
+    sb_replace(&sb, literal_span("│"), literal_span(""));
+    sb_replace(&sb, literal_span("<"), literal_span(""));
+    sb_replace(&sb, literal_span(">"), literal_span(""));
+
+    /// Print instructions.
+    fprint(file, "    Block%p [label=\"{bb%Z|%S", block, block->id, as_span(sb));
+
+    /// Print branches.
+    if (cond_br) fprint(file, "|{<s0>Then|<s1>Else}");
+
+    /// Print rest of node.
+    fprint(file, "}\", shape=record, style=filled");
+
+    /// Print colour.
+    if (cond_br) fprint(file, ",color=\"#b70d28ff\",fillcolor=\"#b70d2870\"");
+    else if (is_term) fprint(file, ",color=\"#4287f5ff\",fillcolor=\"#4287f570\"");
+
+    fprint(file, "];\n");
+  }
+
+  fprint(file, "}\n");
+  vector_delete(sb);
+}
+
+extern const char *print_dot_cfg_function;
+void ir_print_dot_cfg(CodegenContext *ctx) {
+  ASSERT(print_dot_cfg_function);
+  span s = {
+    .data = print_dot_cfg_function,
+    .size = strlen(print_dot_cfg_function),
+  };
+
+  /// Find function.
+  foreach_val (f, ctx->functions) {
+    if (string_eq(f->name, s)) {
+      ir_print_dot_cfg_function(f);
+      return;
+    }
+  }
+}

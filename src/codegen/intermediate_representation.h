@@ -435,4 +435,7 @@ IRInstruction *ir_intrinsic(CodegenContext *context, Type *t, enum IntrinsicKind
 /// Check if a function is a definition or declaration.
 bool ir_function_is_definition(IRFunction *f);
 
+/// Print CFG for a function in DOT format.
+void ir_print_dot_cfg(CodegenContext *ctx);
+
 #endif /* INTERMEDIATE_REPRESENTATION_H */
