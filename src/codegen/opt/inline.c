@@ -459,7 +459,7 @@ static inline_result ir_inline_call(
 
   /// Free unused instructions.
   foreach_val (i, instructions)
-    if (!i->parent_block)
+    if (i != call && !i->parent_block)
       free(i);
 
   /// Delete vectors.

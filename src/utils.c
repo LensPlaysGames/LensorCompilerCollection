@@ -43,6 +43,29 @@ void string_buf_zterm(string_buffer *buf) {
   buf->size--;
 }
 
+void sb_replace(string_buffer *buf, span from, span to) {
+  string_buf_zterm(buf);
+  usz pos = 0;
+  while (pos < buf->size) {
+    {
+      char *next = strstr(buf->data + pos, from.data);
+      if (!next) break;
+      pos = (usz) (next - buf->data);
+      if (to.size > from.size)
+        vector_resize(*buf, buf->size + to.size - from.size);
+    }
+
+    if (to.size != from.size) {
+      memmove(buf->data + pos + to.size, buf->data + pos + from.size, buf->size - pos - from.size);
+      if (to.size < from.size) buf->size -= from.size - to.size;
+    }
+
+    memcpy(buf->data + pos, to.data, to.size);
+    pos += to.size;
+  }
+  string_buf_zterm(buf);
+}
+
 /// ===========================================================================
 ///  String formatting.
 /// ===========================================================================

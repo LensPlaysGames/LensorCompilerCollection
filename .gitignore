@@ -32,6 +32,7 @@
 /out
 /.idea
 /tst/out.txt
+*.dot
 
 # Language Server
 **/compile_commands.json
