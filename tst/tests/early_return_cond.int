@@ -1,0 +1,9 @@
+;; 69
+
+foo: integer(x : integer) {
+  if x = 1 return 42;
+  if x = 2 return 69;
+  31
+}
+
+foo(2)

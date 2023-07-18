@@ -5,13 +5,6 @@
 #include <stdbool.h>
 #include <vector.h>
 
-/// A node in the dominator tree.
-typedef struct DomTreeNode {
-  IRBlock *block;
-  Vector(struct DomTreeNode *) dominators;
-  Vector(struct DomTreeNode *) children;
-} DomTreeNode;
-
 /// Structure used to store dominator information such as the
 /// dominator tree and the list of dominators of each block.
 ///
@@ -68,35 +61,16 @@ typedef struct DomTreeNode {
 ///                B2      B6
 ///                |
 ///                B5
-typedef struct DominatorInfo {
-  /// Nodes that make up the dominator tree. The first
-  /// node is the root of the tree and corresponds to
-  /// the entry block.
-  Vector(DomTreeNode) nodes;
-  DomTreeNode *dominator_tree;
+/// Depth-first search tree.
+typedef struct DominatorTree {
+  /// Map from blocks to their immediate dominators.
+  IRBlockMap doms;
+} DominatorTree;
 
-  /// Predecessor cache. This is invalidated if blocks
-  /// are removed or branches are changed.
-  Vector(IRBlockVector) predecessor_info;
-} DominatorInfo;
-
-/// Build the dominator tree for a function.
-///
-/// \param f The function to build the dominator tree for.
-/// \param info Out parameter for the dominator info. This must be a valid
-///     DominatorInfo struct that has been used before or is initialised to {0}.
-/// \param prune Whether to remove unreachable blocks.
-///
-/// \see struct DominatorInfo
-void build_dominator_tree(IRFunction *f, DominatorInfo *info, bool prune);
+/// Build the dominator tree of a function.
+DominatorTree dom_tree_build(IRFunction *f);
 
 /// Free the memory used by the dominator tree.
-void free_dominator_info(DominatorInfo *info);
-
-/// Check if a node dominates another node.
-bool dominates(DomTreeNode *dominator, DomTreeNode *node);
-
-/// Check if a node strictly dominates another node.
-bool strictly_dominates(DomTreeNode *dominator, DomTreeNode *node);
+void dom_tree_free(DominatorTree *info);
 
 #endif // FUNCOMPILER_DOM_H

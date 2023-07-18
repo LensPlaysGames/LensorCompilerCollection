@@ -15,6 +15,7 @@ extern bool print_ir2;
 extern bool codegen_only;
 extern bool annotate_code;
 extern bool print_dot_cfg;
+extern bool print_dot_dj;
 
 typedef Vector(IRInstruction *) InstructionVector;
 

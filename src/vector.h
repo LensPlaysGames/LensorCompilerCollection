@@ -49,6 +49,17 @@
 #define foreach_index(index, vector) \
   for (size_t index = 0; index < (vector).size; index++)
 
+/// Iterate over each index and element of a vector, in reverse.
+///
+/// Note: The vector may be empty, and since we’re using unsigned
+/// indices, a check against < 0 will always fail, so we need to
+/// iterate in [size, 0) instead of [size - 1, 0] and create a
+/// second index that is exposed to the user.
+#define foreach_index_rev(index, vector)                                     \
+  for (size_t CAT(_it_, index) = (vector).size, index;                       \
+       CAT(_it_, index) != 0 ? (index = CAT(_it_, index) - 1, true) : false; \
+       CAT(_it_, index)--)
+
 /// Ensure that there is space for at least (vector->size + elements) many elements.
 #define vector_reserve(vector, elements)                                                                       \
   do {                                                                                                         \
@@ -313,5 +324,81 @@
 
 #define list_foreach_rev(it, list) \
   for (__typeof__(*(list).first) *it = (list).last; it; it = it->prev)
+
+/// Should eventually be a hash map implementation, but this is good enough for now.
+#define Map(key_t, value_t)      Vector(struct { key_t key; value_t value; })
+#define MultiMap(key_t, value_t) Vector(struct { key_t key; Vector(value_t) value; })
+
+/// Get the value type of a map.
+///
+/// Example:
+/// ```c
+/// MultiMap(IRBlock*, IRBlock*) map;
+/// MapValue(map) *entry = map_get(map, key);
+/// ```
+#define MapValue(map) __typeof__((map).data->value)
+
+/// Set an element in a map.
+#define map_set(map, _key_, _val_)                                                                                     \
+  do {                                                                                                                 \
+    __typeof__(_key_) _key = _key_;                                                                                    \
+    __typeof__(_val_) _val = _val_;                                                                                    \
+    __typeof__(*(map).data) *_element_ptr = vector_find_if(el, (map), memcmp(&el->key, &(_key), sizeof el->key) == 0); \
+    if (_element_ptr) _element_ptr->value = _val;                                                                      \
+    else vector_push((map), (__typeof__(*_element_ptr)){.key = _key, .value = _val});                                  \
+  } while (0)
+
+/// Get an element from a map.
+#define map_get(map, _key_) ({                                                                                       \
+  __typeof__(_key_) _key = _key_;                                                                                    \
+  __typeof__(*(map).data) *_element_ptr = vector_find_if(el, (map), memcmp(&el->key, &(_key), sizeof el->key) == 0); \
+  _element_ptr ? &_element_ptr->value : NULL;                                                                        \
+})
+
+/// Insert an element into a multimap.
+#define mmap_insert(map, _key_, _val_)                                                                                 \
+  do {                                                                                                                 \
+    __typeof__(_key_) _key = _key_;                                                                                    \
+    __typeof__(_val_) _val = _val_;                                                                                    \
+    __typeof__(*(map).data) *_element_ptr = vector_find_if(el, (map), memcmp(&el->key, &(_key), sizeof el->key) == 0); \
+    if (_element_ptr) vector_push(_element_ptr->value, _val);                                                          \
+    else {                                                                                                             \
+      vector_push((map), (__typeof__(*_element_ptr)){0});                                                              \
+      _element_ptr = &vector_back((map));                                                                              \
+      _element_ptr->key = _key;                                                                                        \
+      vector_push(_element_ptr->value, _val);                                                                          \
+    }                                                                                                                  \
+  } while (0)
+
+/// Get an element from a map or insert a zero-initialised element otherwise.
+#define map_get_default(map, _key_) ({                                                                               \
+  __typeof__(_key_) _key = _key_;                                                                                    \
+  __typeof__(*(map).data) *_element_ptr = vector_find_if(el, (map), memcmp(&el->key, &(_key), sizeof el->key) == 0); \
+  if (!_element_ptr) {                                                                                               \
+    vector_push((map), (__typeof__(*(map).data)){0});                                                                \
+    _element_ptr = &vector_back((map));                                                                              \
+  }                                                                                                                  \
+  _element_ptr ? &_element_ptr->value : NULL;                                                                        \
+})
+
+/// Clear a map.
+#define map_clear(map) vector_clear((map))
+
+/// Clear a multimap.
+#define mmap_clear(map)                             \
+  do {                                              \
+    foreach (vec, (map)) vector_delete(vec->value); \
+    map_clear(map);                                 \
+  } while (0)
+
+/// Free a map.
+#define map_delete(map) vector_delete((map))
+
+/// Free a multimap.
+#define mmap_delete(map)                            \
+  do {                                              \
+    foreach (vec, (map)) vector_delete(vec->value); \
+    map_delete(map);                                \
+  } while (0)
 
 #endif // VECTOR_H

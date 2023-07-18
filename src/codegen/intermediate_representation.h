@@ -438,4 +438,7 @@ bool ir_function_is_definition(IRFunction *f);
 /// Print CFG for a function in DOT format.
 void ir_print_dot_cfg(CodegenContext *ctx);
 
+/// Print DJ graph for a function in DOT format.
+void ir_print_dot_dj(CodegenContext *ctx);
+
 #endif /* INTERMEDIATE_REPRESENTATION_H */
