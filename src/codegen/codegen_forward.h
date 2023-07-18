@@ -15,6 +15,7 @@ typedef unsigned Register;
 typedef struct CodegenContext CodegenContext;
 
 typedef Vector(IRBlock *) IRBlockVector;
+typedef Map(IRBlock*, IRBlock*) IRBlockMap;
 
 // TODO: Reorganise codegen specification
 // CURRENTLY: Format + Assembly Dialect

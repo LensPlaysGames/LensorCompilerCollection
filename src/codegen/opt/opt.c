@@ -777,49 +777,54 @@ static bool opt_remove_globals(CodegenContext *ctx) {
 /// ===========================================================================
 ///  Block reordering etc.
 /// ===========================================================================
-/// Rearrange the blocks in a function according to the dominator tree.
-static void opt_reorder_blocks(IRFunction *f, DominatorInfo *info) {
-  /// Clear the block list.
-  f->blocks.first = NULL;
-  f->blocks.last = NULL;
+/// Map containing the predecessors of each block.
+typedef MultiMap(IRBlock*, IRBlock*) Predecessors;
 
-  /// Perform a preorder traversal of the dominator tree
-  /// and reorder the blocks so that we can avoid jumps.
-  Vector(DomTreeNode *) stack = {0};
-  Vector(DomTreeNode *) visited = {0};
-  vector_push(stack, info->dominator_tree);
-  while (stack.size) {
-    DomTreeNode *node = vector_pop(stack);
-    list_push_back(f->blocks, node->block);
+/// Collect the predecessors of each block and
+/// remove unreachable blocks.
+static bool collect_preds_and_prune(IRFunction *f, Predecessors *preds) {
+  BlockVector to_remove = {0};
+  bool changed = false;
 
-    /// If a block contains a direct branch or a conditional branch,
-    /// we want to put the target block at the top of the stack so
-    /// that it gets inserted directly after this block.
-    IRBlock *next = NULL;
-    IRInstruction *last = node->block->instructions.last;
-    DomTreeNode *next_node = NULL;
-    if (last->kind == IR_BRANCH) next = last->destination_block;
-    else if (last->kind == IR_BRANCH_CONDITIONAL) next = last->cond_br.then;
+  mmap_clear(*preds);
+  list_foreach (block, f->blocks) {
+    STATIC_ASSERT(IR_COUNT == 40, "Handle all branch instructions");
+    IRInstruction *br = block->instructions.last;
+    switch (br->kind) {
+      default: break;
+      case IR_BRANCH:
+        mmap_insert(*preds, br->destination_block, block);
+        break;
 
-    /// Insert all children except for the next node.
-    foreach_val (child, node->children) {
-      if (child->block == next) {
-        next_node = child;
-        continue;
-      }
-      if (!vector_contains(visited, child)) vector_push(stack, child);
-    }
-
-    /// Insert the next node if there is one.
-    if (next_node) {
-      if (!vector_contains(visited, next_node)) vector_push(stack, next_node);
+      case IR_BRANCH_CONDITIONAL:
+        mmap_insert(*preds, br->cond_br.then, block);
+        mmap_insert(*preds, br->cond_br.else_, block);
+        break;
     }
   }
-  vector_delete(stack);
+
+  /// Remove unreachable blocks.
+  list_foreach (block, f->blocks) {
+    /// Entry block is always reachable.
+    if (block == f->blocks.first) continue;
+
+    /// If the block has no predecessors, it’s unreachable.
+    if (!map_get(*preds, block)) {
+      vector_push(to_remove, block);
+      changed = true;
+    }
+  }
+
+  /// Remove unreachable blocks.
+  foreach_val (b, to_remove) ir_remove_and_free_block(b);
+
+  /// Cleanup.
+  vector_clear(to_remove);
+  return changed;
 }
 
 /// Perform jump threading and similar optimisations.
-static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
+static bool opt_jump_threading(IRFunction *f, Predecessors *preds) {
   bool changed = false;
 
   /// Avoid iterator invalidation.
@@ -847,7 +852,7 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
       /// the condition also dominates this block in such cases, and we are free
       /// to copy the branch. The same is true for return instructions that return
       /// a value.
-      if (info->predecessor_info.data[last->destination_block->id].size != 1) {
+      if (map_get(*preds, last->destination_block)->size != 1) {
         IRInstruction *first = last->destination_block->instructions.first;
         STATIC_ASSERT(IR_COUNT == 40, "Handle all branch instructions");
         switch (first->kind) {
@@ -936,15 +941,16 @@ static bool opt_jump_threading(IRFunction *f, DominatorInfo *info) {
 
 /// Simplify Control Flow Graph.
 static bool opt_simplify_cfg(IRFunction *f) {
-  DominatorInfo dom = {0};
+  /// Compute predecessors and delete unreachable blocks.
+  Predecessors preds = {0};
   bool ever_changed = false;
   for (;;) {
-    build_dominator_tree(f, &dom, true);
-    bool changed = opt_jump_threading(f, &dom);
+    collect_preds_and_prune(f, &preds);
+    bool changed = opt_jump_threading(f, &preds);
     if (!changed) break;
     else ever_changed = true;
   }
-  free_dominator_info(&dom);
+  mmap_delete(preds);
   return ever_changed;
 }
 

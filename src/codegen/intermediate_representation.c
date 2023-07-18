@@ -3,6 +3,7 @@
 #include <ast.h>
 #include <codegen/codegen_forward.h>
 #include <utils.h>
+#include <codegen/dom.h>
 
 #include <stdlib.h>
 
@@ -1143,80 +1144,112 @@ bool ir_function_is_definition(IRFunction *f) {
 
 #undef INSERT
 
-void ir_print_dot_cfg_function(IRFunction *f) {
-  thread_use_colours = false;
-  string_buffer sb = {0};
-  string name = format("%S.dot", f->name);
-  FILE *file = fopen(name.data, "w");
-  ASSERT(file);
+static void dot_print_block(FILE *file, IRBlock *block, string_buffer *sb) {
+  const bool cond_br = block->instructions.last->kind == IR_BRANCH_CONDITIONAL;
+  const bool is_term = block->instructions.last->kind != IR_BRANCH && !cond_br;
 
-  ir_set_func_ids(f);
+  /// Emit all instructions to a string.
+  vector_clear(*sb);
+  list_foreach (i, block->instructions) {
+    ir_emit_instruction(sb, i, true);
+    format_to(sb, "\\l");
+  }
+
+  /// Remove all invalid chars.
+  sb_replace(sb, literal_span("|"), literal_span(""));
+  sb_replace(sb, literal_span("│"), literal_span(""));
+  sb_replace(sb, literal_span("<"), literal_span(""));
+  sb_replace(sb, literal_span(">"), literal_span(""));
+
+  /// Print instructions.
+  fprint(file, "    Block%p [label=\"{bb%Z|%S", block, block->id, as_span(*sb));
+
+  /// Print branches.
+  if (cond_br) fprint(file, "|{<s0>Then|<s1>Else}");
+
+  /// Print rest of node.
+  fprint(file, "}\", shape=record, style=filled");
+
+  /// Print colour.
+  if (cond_br) fprint(file, ",color=\"#b70d28ff\",fillcolor=\"#b70d2870\"");
+  else if (is_term) fprint(file, ",color=\"#4287f5ff\",fillcolor=\"#4287f570\"");
+
+  fprint(file, "];\n");
+}
+
+void ir_print_dot_cfg_function(IRFunction *f, FILE* file) {
+  string_buffer sb = {0};
   fprint(file, "digraph \"CFG for %S\" {\n", f->name);
   fprint(file, "    label=\"CFG for %S\";\nlabelloc=\"t\"\n", f->name);
   list_foreach (block, f->blocks) {
     /// Print connections to other blocks.
-    bool is_term = true;
-    bool cond_br = false;
     switch (block->instructions.last->kind) {
       default: break;
       case IR_BRANCH:
-        is_term = false;
         fprint(file, "    Block%p -> Block%p;\n", block, block->instructions.last->destination_block);
         break;
       case IR_BRANCH_CONDITIONAL:
-        cond_br = true;
-        is_term = false;
         fprint(file, "    Block%p -> Block%p;\n", block, block->instructions.last->cond_br.then);
         fprint(file, "    Block%p -> Block%p;\n", block, block->instructions.last->cond_br.else_);
         break;
     }
 
-    /// Emit all instructions to a string.
-    vector_clear(sb);
-    list_foreach (i, block->instructions) {
-      ir_emit_instruction(&sb, i, true);
-      format_to(&sb, "\\l");
-    }
-
-    /// Remove all invalid chars.
-    sb_replace(&sb, literal_span("|"), literal_span(""));
-    sb_replace(&sb, literal_span("│"), literal_span(""));
-    sb_replace(&sb, literal_span("<"), literal_span(""));
-    sb_replace(&sb, literal_span(">"), literal_span(""));
-
-    /// Print instructions.
-    fprint(file, "    Block%p [label=\"{bb%Z|%S", block, block->id, as_span(sb));
-
-    /// Print branches.
-    if (cond_br) fprint(file, "|{<s0>Then|<s1>Else}");
-
-    /// Print rest of node.
-    fprint(file, "}\", shape=record, style=filled");
-
-    /// Print colour.
-    if (cond_br) fprint(file, ",color=\"#b70d28ff\",fillcolor=\"#b70d2870\"");
-    else if (is_term) fprint(file, ",color=\"#4287f5ff\",fillcolor=\"#4287f570\"");
-
-    fprint(file, "];\n");
+    dot_print_block(file, block, &sb);
   }
 
   fprint(file, "}\n");
   vector_delete(sb);
 }
 
-extern const char *print_dot_cfg_function;
-void ir_print_dot_cfg(CodegenContext *ctx) {
-  ASSERT(print_dot_cfg_function);
+void ir_print_dot_dj_function(IRFunction *f, FILE* file) {
+  string_buffer sb = {0};
+  fprint(file, "digraph \"DJ Graph for %S\" {\n", f->name);
+  fprint(file, "    label=\"DJ Graph for %S\";\nlabelloc=\"t\"\n", f->name);
+
+  DominatorTree dom = dom_tree_build(f);
+
+  ir_set_func_ids(f);
+  list_foreach (block, f->blocks)
+    fprint(file, "    Block%p [label=\"{bb%Z}\", shape=record, style=filled]\n", block, block->id);
+
+  /// We don’t have join edges yet, so just print the
+  /// dominator tree for now.
+  foreach (entry, dom.doms)
+    if (entry->value)
+      fprint(file, "    Block%p -> Block%p;\n", entry->value, entry->key);
+
+  fprint(file, "}\n");
+  vector_delete(sb);
+}
+
+extern const char *print_dot_function;
+static void print_dot_impl(CodegenContext *ctx, void print_dot (IRFunction *f, FILE* file)) {
+  ASSERT(print_dot_function);
   span s = {
-    .data = print_dot_cfg_function,
-    .size = strlen(print_dot_cfg_function),
+    .data = print_dot_function,
+    .size = strlen(print_dot_function),
   };
 
   /// Find function.
   foreach_val (f, ctx->functions) {
     if (string_eq(f->name, s)) {
-      ir_print_dot_cfg_function(f);
+      thread_use_colours = false;
+      string name = format("%S.dot", f->name);
+      FILE *file = fopen(name.data, "w");
+      ASSERT(file);
+
+      ir_set_func_ids(f);
+      print_dot(f, file);
+      fclose(file);
       return;
     }
   }
+}
+
+void ir_print_dot_cfg(CodegenContext *ctx) {
+  print_dot_impl(ctx, ir_print_dot_cfg_function);
+}
+
+void ir_print_dot_dj(CodegenContext *ctx) {
+  print_dot_impl(ctx, ir_print_dot_dj_function);
 }
