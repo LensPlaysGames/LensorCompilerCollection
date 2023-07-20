@@ -49,7 +49,8 @@ struct CodegenContext {
   /// The IR
   Vector(IRFunction *) functions;
   Vector(IRStaticVariable *) static_vars;
-  Vector(IRInstruction*) removed_instructions;
+  IRInstructionVector free_instructions;
+  IRBlockVector free_blocks;
 
   /// Code emission (targets)
   FILE *code;
@@ -59,7 +60,7 @@ struct CodegenContext {
   Module *ast;
   IRFunction *function;
   IRFunction *entry;
-  IRBlock *block;
+  IRBlock *insert_point;
 
   /// Options
   CodegenArchitecture arch;

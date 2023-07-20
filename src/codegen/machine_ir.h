@@ -11,7 +11,7 @@
 
 #define DEFINE_MIR_INSTRUCTION_TYPE(type, ...) CAT(MIR_, type),
 typedef enum MIROpcodeCommon {
-  ALL_IR_INSTRUCTION_TYPES(DEFINE_MIR_INSTRUCTION_TYPE)
+  ALL_SHARED_IR_AND_MIR_INSTRUCTION_TYPES(DEFINE_MIR_INSTRUCTION_TYPE)
   MIR_COUNT,
 
   MIR_ARCH_START = 0x420
@@ -174,6 +174,10 @@ typedef struct MIRFunction {
   /// stack type MIROperand.
   Vector(MIRFrameObject) frame_objects;
 
+  /// Used by certain backends.
+  /// FIXME: Actually set this.
+  size_t locals_total_size;
+
   MIRBlockVector blocks;
 
   IRFunction *origin;
@@ -216,7 +220,7 @@ MIROperand mir_op_function(MIRFunction *f);
 MIROperand mir_op_block(MIRBlock *block);
 MIROperand mir_op_local_ref(MIRFunction *function, usz size);
 MIROperand mir_op_local_ref_fo(MIRFunction *function, MIRFrameObject *fo);
-MIROperand mir_op_local_ref_ir(MIRFunction *function, IRStackAllocation *alloca);
+MIROperand mir_op_local_ref_ir(MIRFunction *function, IRInstruction *alloca);
 MIROperand mir_op_reference(MIRInstruction *inst);
 MIROperand mir_op_reference_ir(MIRFunction *function, IRInstruction *inst);
 MIROperand mir_op_immediate(int64_t imm);

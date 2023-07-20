@@ -15,6 +15,8 @@ typedef unsigned Register;
 typedef struct CodegenContext CodegenContext;
 
 typedef Vector(IRBlock *) IRBlockVector;
+typedef Vector(IRInstruction *) IRInstructionVector;
+typedef Vector(IRFunction *) IRFunctionVector;
 typedef Map(IRBlock*, IRBlock*) IRBlockMap;
 
 // TODO: Reorganise codegen specification
@@ -108,9 +110,9 @@ enum ComparisonType {
     ALL_BINARY_INSTRUCTION_TYPES_EXCEPT_COMPARISONS(F) \
     ALL_BINARY_COMPARISON_TYPES(F)
 
-/// Some of these are also used in the parser, and until C implements
-/// inheriting from enums (i.e. never), this is the best we can do.
-#define ALL_IR_INSTRUCTION_TYPES(F)                              \
+
+/// Instructions that are used in the IR and MIR.
+#define ALL_SHARED_IR_AND_MIR_INSTRUCTION_TYPES(F)               \
   F(IMMEDIATE)                                                   \
   F(CALL)                                                        \
   F(INTRINSIC)                                                   \
@@ -154,9 +156,12 @@ enum ComparisonType {
    * between frontend and backend)                               \
    */                                                            \
   F(LIT_INTEGER)                                                 \
-  F(LIT_STRING)                                                  \
-                                                                 \
-  /** Invalid value. This is used to facilitate deletion.**/     \
+  F(LIT_STRING)
+
+/// Instruction types used only in IR, but not MIR.
+#define ALL_IR_INSTRUCTION_TYPES(F)                          \
+  ALL_SHARED_IR_AND_MIR_INSTRUCTION_TYPES(F)                 \
+  /** Invalid value. This is used to facilitate deletion.**/ \
   F(POISON)
 
 /// Function attributes shared by the frontend and backend.
@@ -231,7 +236,6 @@ typedef enum SymbolLinkage {
 } SymbolLinkage;
 
 typedef struct IRStaticVariable IRStaticVariable;
-typedef struct IRStackAllocation IRStackAllocation;
 
 typedef struct MIROperandOpRef {
     unsigned int pattern_instruction_index;

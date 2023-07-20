@@ -1,9 +1,8 @@
-#include <ir_parser.h>
-
-#include <codegen/intermediate_representation.h>
 #include <ctype.h>
 #include <errno.h>
 #include <error.h>
+#include <ir/ir.h>
+#include <ir_parser.h>
 #include <math.h>
 #include <setjmp.h>
 #include <stdarg.h>

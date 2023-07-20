@@ -27,6 +27,10 @@
 #include <string.h>
 #include <locale.h>
 
+#if defined(ENABLE_ASAN) && defined(ASAN_IGNORE_LEAKS)
+const char* __asan_default_options() { return "detect_leaks=0"; }
+#endif
+
 /// ===========================================================================
 ///  Initialisation
 /// ===========================================================================

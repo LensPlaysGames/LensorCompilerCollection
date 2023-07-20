@@ -1,11 +1,11 @@
 #include <codegen.h>
 #include <codegen/codegen_forward.h>
-#include <codegen/dom.h>
-#include <codegen/intermediate_representation.h>
 #include <codegen/machine_ir.h>
 #include <codegen/opt/opt.h>
 #include <codegen/register_allocation.h>
 #include <error.h>
+#include <ir/dom.h>
+#include <ir/ir.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,7 +55,7 @@ static void vreg_vector_remove_element(VRegVector *vregs, usz vreg_value) {
 static bool needs_register(IRInstruction *instruction) {
   STATIC_ASSERT(IR_COUNT == 40, "Exhaustively handle all instruction types");
   ASSERT(instruction);
-  switch (instruction->kind) {
+  switch (ir_kind(instruction)) {
     case IR_LOAD:
     case IR_PHI:
     case IR_COPY:
@@ -81,7 +81,7 @@ static bool needs_register(IRInstruction *instruction) {
     case IR_ALLOCA:
     case IR_STATIC_REF:
     case IR_FUNC_REF:
-      return instruction->users.size;
+      return ir_use_count(instruction);
 
     default:
       return false;
@@ -554,7 +554,7 @@ void print_adjacency_lists(AdjacencyLists *array) {
 
 /// Determine whether an instruction interferes with a register.
 bool check_register_interference(usz regmask, IRInstruction *instruction) {
-  return (regmask & ((usz)1 << (instruction->result - 1))) != 0;
+  return (regmask & ((usz)1 << (ir_register(instruction) - 1))) != 0;
 }
 
 /*
@@ -820,23 +820,25 @@ static void color(
 // Keep track of what registers are used in each function.
 void track_registers(MIRFunction *f) {
   ASSERT(f->origin, "MIRFunction origin required to be set in order for shoddy register tracking");
+  usz regs_in_use = ir_func_regs_in_use(f->origin);
   foreach_val (bb, f->blocks) {
     foreach_val (inst, bb->instructions) {
-      if (inst->reg < MIR_ARCH_START) f->origin->registers_in_use |= (usz)1 << inst->reg;
+      if (inst->reg < MIR_ARCH_START) regs_in_use |= (usz)1 << inst->reg;
       FOREACH_MIR_OPERAND(inst, op) {
         if (op->kind == MIR_OP_REGISTER && op->value.reg.value < MIR_ARCH_START) {
-          f->origin->registers_in_use |= (usz)1 << op->value.reg.value;
+          regs_in_use |= (usz)1 << op->value.reg.value;
         }
       }
     }
   }
+  ir_func_regs_in_use(f->origin, regs_in_use);
 }
 
 void allocate_registers(MIRFunction *f, const MachineDescription *desc) {
   ASSERT(f, "Invalid argument");
   ASSERT(desc, "Invalid argument");
 
-  if (f->blocks.size == 0 || f->inst_count == 0 || (f->origin && !ir_function_is_definition(f->origin))) return;
+  if (f->blocks.size == 0 || f->inst_count == 0 || (f->origin && !ir_func_is_definition(f->origin))) return;
 
 #ifdef DEBUG_RA
   fprintf(stdout, "======================= MIR RA =======================\n");

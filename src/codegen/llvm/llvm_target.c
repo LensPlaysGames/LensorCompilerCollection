@@ -1,8 +1,12 @@
 #include <codegen.h>
-#include <codegen/intermediate_representation.h>
 #include <codegen/llvm/llvm_target.h>
 #include <ctype.h>
-#include <stdint.h>
+#include <ir/ir.h>
+
+/// FIXME: Should not include this. This is *fine*-ish since this
+/// does not modify the IR, but it should really only rely on the
+/// API in <ir/ir.h>.
+#include <ir/ir-impl.h>
 
 #define NO_INDEX (-1u) /// Index for valueless instructions.
 
@@ -12,7 +16,8 @@ typedef struct LLVMContext {
     string_buffer out;
 
     /// Used intrinsics.
-    bool llvm_debugtrap_used;
+    bool llvm_debugtrap_used : 1;
+    bool llvm_memcpy_used : 1;
 } LLVMContext;
 
 /// Forward decl because mutual recursion.
@@ -186,14 +191,15 @@ static bool llvm_is_numbered_value(IRInstruction *inst) {
             return true;
 
         case IR_CALL:
-            return !type_equals(ir_call_get_callee_type(inst)->function.return_type, t_void);
+            return !type_equals(ir_call_callee_type(inst)->function.return_type, t_void);
 
         case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 2, "Handle all intrinsics");
+            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle all intrinsics");
             switch (inst->call.intrinsic) {
                 IGNORE_FRONTEND_INTRINSICS()
                 case INTRIN_BUILTIN_SYSCALL: return true;
                 case INTRIN_BUILTIN_DEBUGTRAP: return false;
+                case INTRIN_BUILTIN_MEMCPY: return false;
             }
 
             UNREACHABLE();
@@ -304,7 +310,7 @@ static void emit_value(LLVMContext *ctx, IRInstruction *value, bool print_type) 
             return;
 
         case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 2, "Handle all intrinsics");
+            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle all intrinsics");
             switch (value->call.intrinsic) {
                 IGNORE_FRONTEND_INTRINSICS()
                 case INTRIN_BUILTIN_SYSCALL:
@@ -313,6 +319,7 @@ static void emit_value(LLVMContext *ctx, IRInstruction *value, bool print_type) 
 
                 /// Not a value.
                 case INTRIN_BUILTIN_DEBUGTRAP:
+                case INTRIN_BUILTIN_MEMCPY:
                     ICE("Refusing to emit non-value as value");
             }
 
@@ -466,7 +473,7 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
             ICE("LLVM backend cannot emit IR_REGISTER instructions");
 
         case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 2, "Handle all intrinsics");
+            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle all intrinsics");
             switch (inst->call.intrinsic) {
                 IGNORE_FRONTEND_INTRINSICS()
 
@@ -504,6 +511,19 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
                     format_to(out, "call void @llvm.debugtrap()\n");
                     ctx->llvm_debugtrap_used = true;
                     return;
+
+                /// Same thing.
+                case INTRIN_BUILTIN_MEMCPY:
+                    emit_instruction_index(ctx, inst);
+                    format_to(out, "call void @llvm.memcpy.p0.p0.i%Z(\n", type_sizeof(t_integer));
+                    emit_value(ctx, ir_call_arg(inst, 0), true);
+                    format_to(out, ", ");
+                    emit_value(ctx, ir_call_arg(inst, 1), true);
+                    format_to(out, ", ");
+                    emit_value(ctx, ir_call_arg(inst, 2), true);
+                    format_to(out, ", i1 0)\n"); /// Note: 0 = not volatile.
+                    ctx->llvm_memcpy_used = true;
+                    return;
             }
 
             UNREACHABLE();
@@ -511,7 +531,7 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
 
         case IR_CALL: {
             emit_instruction_index(ctx, inst);
-            Type *call_ty = ir_call_get_callee_type(inst);
+            Type *call_ty = ir_call_callee_type(inst);
             format_to(out, "call ");
             emit_type(ctx, call_ty->function.return_type);
 
@@ -571,8 +591,8 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
             format_to(out, "phi ");
             emit_type(ctx, inst->type);
             format_to(out, " ");
-            foreach_val (arg, inst->phi_args) {
-                if (arg != *inst->phi_args.data) format_to(out, ", ");
+            foreach (arg, inst->phi_args) {
+                if (arg != inst->phi_args.data) format_to(out, ", ");
                 format_to(out, "[ ");
                 emit_value(ctx, arg->value, false);
                 format_to(out, ", %%bb%Z ]", arg->block->id);
@@ -703,7 +723,7 @@ static void emit_function(LLVMContext *ctx, IRFunction *f) {
     if (f != *f->context->functions.data) format_to(out, "\n");
 
     /// Write function header.
-    format_to(out, "%s ", ir_function_is_definition(f) ? "define" : "declare");
+    format_to(out, "%s ", ir_func_is_definition(f) ? "define" : "declare");
     if (f->linkage == LINKAGE_INTERNAL) format_to(out, "private ");
     emit_type(ctx, f->type->function.return_type);
     format_to(out, " @%S(", f->name);
@@ -736,17 +756,17 @@ static void emit_function(LLVMContext *ctx, IRFunction *f) {
     if (f->attr_inline) format_to(out, " alwaysinline");
     if (f->attr_noinline) format_to(out, " noinline");
     if (f->attr_noreturn) format_to(out, " noreturn");
-    format_to(out, " nounwind%s\n", ir_function_is_definition(f) ? " {" : "");
+    format_to(out, " nounwind%s\n", ir_func_is_definition(f) ? " {" : "");
 
     /// Extern functions don’t have a body.
-    if (!ir_function_is_definition(f)) return;
+    if (!ir_func_is_definition(f)) return;
 
     /// Assign indices to all instructions and blocks.
     u32 value_index = (u32) f->type->function.parameters.size;
     usz block_index = 0;
-    list_foreach (block, f->blocks) {
+    foreach_val (block, f->blocks) {
         block->id = block_index++;
-        list_foreach (inst, block->instructions) {
+        foreach_val (inst, block->instructions) {
             /// Values are numbered.
             inst->index = llvm_is_numbered_value(inst)
                             ? value_index++
@@ -755,12 +775,12 @@ static void emit_function(LLVMContext *ctx, IRFunction *f) {
     }
 
     /// Emit the function body.
-    list_foreach (block, f->blocks) {
+    foreach_val (block, f->blocks) {
         if (block->id) format_to(out, "\n");
         format_to(out, "bb%Z:", block->id);
         if (block->name.size) format_to(out, " ; %S", block->name);
         format_to(out, "\n");
-        list_foreach (inst, block->instructions) {
+        foreach_val (inst, block->instructions) {
             emit_instruction(ctx, inst);
         }
     }
@@ -822,6 +842,7 @@ void codegen_emit_llvm(CodegenContext *cg) {
 
     /// Emit intrinsic declarations.
     if (ctx.llvm_debugtrap_used) format_to(&ctx.out, "declare void @llvm.debugtrap()\n");
+    if (ctx.llvm_memcpy_used) format_to(&ctx.out, "declare void @llvm.memcpy.p0.p0.i%Z(ptr, ptr, i64, i1)\n", type_sizeof(t_integer));
 
     /// Write to file.
     fprint(cg->code, "%S", as_span(ctx.out));

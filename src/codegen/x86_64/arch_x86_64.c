@@ -2,7 +2,6 @@
 #include <codegen.h>
 #include <codegen/codegen_forward.h>
 #include <codegen/instruction_selection.h>
-#include <codegen/intermediate_representation.h>
 #include <codegen/machine_ir.h>
 #include <codegen/opt/opt.h>
 #include <codegen/register_allocation.h>
@@ -13,6 +12,7 @@
 #include <codegen/x86_64/arch_x86_64_tgt_generic_object.h>
 #include <error.h>
 #include <inttypes.h>
+#include <ir/ir.h>
 #include <module.h>
 #include <parser.h>
 #include <stdarg.h>
@@ -27,9 +27,11 @@
 
 #define X86_64_GENERATE_MACHINE_CODE
 
+/// FIXME: JANK.
 Register *caller_saved_registers = NULL;
 size_t caller_saved_register_count = 0;
 
+/// FIXME: JANK.
 Register *argument_registers = NULL;
 size_t argument_register_count = 0;
 
@@ -113,7 +115,7 @@ typedef enum Clobbers {
 
 Clobbers does_clobber(IRInstruction *instruction) {
   STATIC_ASSERT(IR_COUNT == 40, "Exhaustive handling of IR instruction types that correspond to two-address instructions in x86_64.");
-  switch (instruction->kind) {
+  switch (ir_kind(instruction)) {
   case IR_ADD:
   case IR_DIV:
   case IR_MUL:
@@ -137,35 +139,34 @@ Clobbers does_clobber(IRInstruction *instruction) {
   return CLOBBERS_NEITHER;
 }
 
-static usz emit_memcpy_impl(CodegenContext *context, IRInstruction *to, IRInstruction *from, usz byte_size, usz iter_amount, IRInstruction *insert_before_this) {
+static usz emit_memcpy_impl(
+  CodegenContext *context,
+  IRInstruction *to,
+  IRInstruction *from,
+  usz byte_size,
+  usz iter_amount,
+  IRInstruction *insert_before_this
+) {
+  // Generate an immediate corresponding to the byte size of this member
+  IRInstruction *byte_size_immediate = ir_create_immediate(context, t_integer, iter_amount);
+  ir_insert_before(insert_before_this, byte_size_immediate);
+
   for (; byte_size >= iter_amount; byte_size -= iter_amount) {
+    Type *t = type_canonical(ir_typeof(from));
+    if (!(t && type_is_pointer(t))) {
+      //print("from type: %T\n", from->type);
+      ir_print_instruction(stdout, from);
+      if (t) ICE("Can not emit IR_LOAD from type %T as it is not a pointer", t);
+      else ICE("Can not emit IR_LOAD to NULL canonical type!");
+    }
+    if (type_is_pointer(t)) t = t->pointer.to;
+
     // Load iter_amount bytes from "from" address, and store iter_amount bytes into "to" address.
-    INSTRUCTION(load, IR_LOAD);
-    { // Generate load of element...
-      load->operand = from;
+    IRInstruction *load = ir_create_load(context, t, from);
+    ir_insert_before(insert_before_this, load);
 
-      Type *t = type_canonical(from->type);
-      if (!(t && type_is_pointer(t))) {
-        //print("from type: %T\n", from->type);
-        ir_femit_instruction(stdout, from);
-        if (t) ICE("Can not emit IR_LOAD from type %T as it is not a pointer", t);
-        else ICE("Can not emit IR_LOAD to NULL canonical type!");
-      }
-      if (type_is_pointer(t)) load->type = t->pointer.to;
-      else load->type = t;
-
-      mark_used(from, load);
-    }
-    insert_instruction_before(load, insert_before_this);
-
-    INSTRUCTION(store, IR_STORE);
-    { // Store loaded element into local stack array...
-      store->store.addr = to;
-      store->store.value = load;
-      mark_used(to, store);
-      mark_used(load, store);
-    }
-    insert_instruction_before(store, insert_before_this);
+    // Store loaded element into local stack array...
+    ir_insert_before(insert_before_this, ir_create_store(context, load, to));
 
     if (byte_size - iter_amount < iter_amount || byte_size - iter_amount > byte_size) {
       // Do this iteration, then break.
@@ -173,116 +174,46 @@ static usz emit_memcpy_impl(CodegenContext *context, IRInstruction *to, IRInstru
       break;
     }
 
-    { // Iterate "from" and "to" addresses by iter_amount bytes.
-
-      // Generate an immediate corresponding to the byte size of this member
-      INSTRUCTION(byte_size_immediate, IR_IMMEDIATE);
-      byte_size_immediate->type = t_integer_literal;
-      byte_size_immediate->imm = iter_amount;
-      insert_instruction_before(byte_size_immediate, insert_before_this);
-
-      INSTRUCTION(add, IR_ADD);
-      add->type = from->type;
-      set_pair_and_mark(add, from, byte_size_immediate);
-      insert_instruction_before(add, insert_before_this);
-      from = add;
-
-      INSTRUCTION(dest_add, IR_ADD);
-      dest_add->type = to->type;
-      set_pair_and_mark(dest_add, to, byte_size_immediate);
-      insert_instruction_before(dest_add, insert_before_this);
-      to = dest_add;
-    }
+    // Iterate "from" and "to" addresses by iter_amount bytes.
+    from = ir_create_add(context, from, byte_size_immediate);
+    to = ir_create_add(context, to, byte_size_immediate);
+    ir_insert_before(insert_before_this, from);
+    ir_insert_before(insert_before_this, to);
   }
   return byte_size;
 }
 
-static void emit_memcpy(CodegenContext *context, IRInstruction *to_, IRInstruction *from_, usz byte_size, IRInstruction *insert_before_this) {
+static void emit_memcpy(
+  CodegenContext *context,
+  IRInstruction *to_,
+  IRInstruction *from_,
+  usz byte_size,
+  IRInstruction *insert_before_this
+) {
   // Create two copies, one of each address: "from" and "to".
-  // Cache address we are loading from.
-  IRInstruction *from = ir_copy(context, from_);
-  insert_instruction_before(from, insert_before_this);
+  // Cache addresses.
+  IRInstruction *from = ir_create_copy(context, from_);
+  IRInstruction *to = ir_create_copy(context, to_);
+  ir_insert_before(insert_before_this, from);
+  ir_insert_before( insert_before_this, to);
+
   // Switch type to reflect loading 8 bytes.
-  from->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
-  // Cache address we are storing to.
-  IRInstruction *to = ir_copy(context, to_);
-  insert_instruction_before(to, insert_before_this);
-  // Switch type to reflect storing 8 bytes.
-  to->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
-  if ((byte_size = emit_memcpy_impl(context, to, from, byte_size, 8, insert_before_this))) {
+  Type* t_integer_ptr = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
+  ir_set_type(from, t_integer_ptr);
+  ir_set_type(to, t_integer_ptr);
+  if (byte_size = emit_memcpy_impl(context, to, from, byte_size, 8, insert_before_this), byte_size) {
     // Switch type to reflect storing 1 byte.
-    from->type = ast_make_type_pointer(context->ast, t_byte->source_location, t_byte);
-    to->type = ast_make_type_pointer(context->ast, t_byte->source_location, t_byte);
+    Type * t_byte_ptr = ast_make_type_pointer(context->ast, t_byte->source_location, t_byte);
+    ir_set_type(from, t_byte_ptr);
+    ir_set_type(to, t_byte_ptr);
     emit_memcpy_impl(context, to, from, byte_size, 1, insert_before_this);
   }
 }
 
-/// Given an `IR_LOAD` instruction, return true iff the load has been altered.
-/// Otherwise, return false.
-static bool lower_load(CodegenContext *context, IRInstruction *instruction) {
-  ASSERT(context, "x86_64: lower_load(): Context must not be NULL");
-  ASSERT(instruction, "x86_64: lower_load(): IRInstruction must not be NULL");
-  Type *type = type_canonical(instruction->type);
-  usz byte_size = type_sizeof(type);
-  if (byte_size > max_register_size) {
-    // TODO: Just copy the whole thing in one register if it is <= the max_register_size
-
-    // Create space for a copy on the stack.
-    INSTRUCTION(alloca, IR_ALLOCA);
-    // Replace `load` with `alloca`.
-    ir_replace_uses(instruction, alloca);
-
-    alloca->alloca.size = byte_size;
-    alloca->type = ast_make_type_pointer(context->ast, type->source_location, type);
-    ir_set_backend_flag(alloca, STORE_UNDERLYING);
-
-    insert_instruction_before(alloca, instruction);
-
-    emit_memcpy(context, alloca, instruction->operand, type_sizeof(instruction->type), instruction);
-
-    ir_remove(instruction);
-    return true;
-  }
-  return false;
-}
-
-/// Return true iff the given store instruction has been altered.
-/// Otherwise, return false.
-static bool lower_store(CodegenContext *context, IRInstruction *instruction) {
-  // If the value is an `alloca`, we are copying from a local
-  // variable to somewhere. This means we need to emit the equivalent
-  // of `memcpy(address, value, sizeof(*value));`
-  if (ir_get_backend_flag(instruction->store.value, STORE_UNDERLYING)) {
-    // `inst->store.value->result` register contains an address we should store from.
-    // `inst->store.addr->result` register contains an address we should store to.
-
-    ASSERT(instruction->store.value->type->kind == TYPE_POINTER,
-           "ALLOCA must be of pointer type to store it properly... What did you do?");
-    usz byte_size = type_sizeof(instruction->store.value->type->pointer.to);
-    emit_memcpy(context, instruction->store.addr, instruction->store.value, byte_size, instruction);
-
-    ir_remove(instruction);
-    return true;
-  }
-  return false;
-}
-
 static IRInstruction *alloca_copy_of(CodegenContext *context, IRInstruction *copy, IRInstruction *insert_before_this) {
-  INSTRUCTION(alloca, IR_ALLOCA);
-  alloca->alloca.size = type_sizeof(copy->type);
-  alloca->type = ast_make_type_pointer(context->ast, copy->type->source_location, copy->type);
-  insert_instruction_before(alloca, insert_before_this);
-
-  INSTRUCTION(store, IR_STORE);
-
-  store->store.addr = alloca;
-  mark_used(alloca, store);
-
-  store->store.value = copy;
-  mark_used(copy, store);
-
-  insert_instruction_before(store, insert_before_this);
-
+  IRInstruction *alloca = ir_create_alloca(context, ir_typeof(copy));
+  ir_insert_before(insert_before_this, alloca);
+  ir_insert_before(insert_before_this, ir_create_store(context, copy, alloca));
   return alloca;
 }
 
@@ -378,459 +309,547 @@ usz sysv_argument_register_index_x86_64(CodegenContext *context, Type *function,
 /// Insert instructions to load a parameter split across two registers
 /// in place of given `parameter` instruction.
 void sysv_load_two_register_parameter(CodegenContext *context, IRInstruction *parameter) {
-  usz size = type_sizeof(parameter->type);
-  ASSERT(size > 8, "%T is less than or equal to eight bytes, and should be passed in a single register, not two.", parameter->type);
+  Type *param_type = ir_typeof(parameter);
+  usz size = type_sizeof(param_type);
+  ASSERT(size > 8, "%T is less than or equal to eight bytes, and should be passed in a single register, not two.", param_type);
   ASSERT(size <= 16, "Can only pass things that are two-eightbytes or less in general purpose registers.");
 
-  INSTRUCTION(eightbyte1, IR_REGISTER);
-  usz argument_register_index = sysv_argument_register_index_x86_64(context, parameter->parent_block->function->type, parameter->imm);
-  ASSERT(argument_register_index + 1 < argument_register_count);
-  eightbyte1->result = argument_registers[argument_register_index];
-  eightbyte1->type = t_integer;
-  insert_instruction_before(eightbyte1, parameter);
+  Type *func_type = ir_typeof(ir_parent(ir_parent(parameter)));
+  usz ri = sysv_argument_register_index_x86_64(context, func_type, ir_imm(parameter));
+  ASSERT(ri + 1 < argument_register_count);
 
-  INSTRUCTION(eightbyte2, IR_REGISTER);
-  eightbyte2->result = argument_registers[argument_register_index + 1];
-  eightbyte2->type = t_integer;
-  insert_instruction_before(eightbyte2, parameter);
+  /// Get value in registers.
+  IRInstruction *eightbyte1 = ir_create_register(context, t_integer, argument_registers[ri]);
+  IRInstruction *eightbyte2 = ir_create_register(context, t_integer, argument_registers[ri + 1]);
+  ir_insert_before(parameter, eightbyte1);
+  ir_insert_before(parameter, eightbyte2);
 
-  INSTRUCTION(alloca, IR_ALLOCA);
-  // While it may be possible that this particular type is only 12
-  // bytes, we allocate 16 (the max) no matter what.
-  alloca->alloca.size = 16;
-  alloca->type = ast_make_type_pointer(context->ast, parameter->type->source_location, parameter->type);
-  insert_instruction_before(alloca, parameter);
+  /// Replace the parameter value.
+  for (usz i = 0; i < ir_use_count(parameter);) {
+    IRInstruction *user = ir_user_get(parameter, 0);
 
-  // Store first eight bytes from parameter register into
-  // newly allocated local variable.
-  INSTRUCTION(store1, IR_STORE);
-  store1->store.addr = alloca;
-  mark_used(alloca, store1);
-  store1->store.value = eightbyte1;
-  mark_used(eightbyte1, store1);
-  insert_instruction_before(store1, parameter);
+    /// Stores of the parameter value are inlined.
+    if (ir_kind(user) == IR_STORE && ir_store_value(user) == parameter) {
+      IRInstruction *addr1 = ir_store_addr(user);
+      IRInstruction *offset = ir_insert_after(addr1, ir_create_immediate(context, t_integer, 8));
+      IRInstruction *addr2 = ir_insert_after(offset, ir_create_add(context, addr1, offset));
+      ir_insert_after(addr2, ir_create_store(context, eightbyte2, addr2));
+      ir_insert_after(addr2, ir_create_store(context, eightbyte1, addr1));
 
-  // Increment address
-  INSTRUCTION(offset, IR_IMMEDIATE);
-  offset->type = t_integer;
-  offset->imm = 8;
-  insert_instruction_before(offset, parameter);
+      /// Remove the store.
+      ir_remove(user);
+      continue;
+    }
 
-  INSTRUCTION(address, IR_ADD);
-  address->lhs = alloca;
-  mark_used(alloca, address);
-  address->rhs = offset;
-  mark_used(offset, address);
-  address->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
-  insert_instruction_before(address, parameter);
+    /// Increment only if we need to skip the use.
+    i++;
+  }
 
-  // Store second eightbyte.
-  INSTRUCTION(store2, IR_STORE);
-  store2->kind = IR_STORE;
-  store2->store.addr = address;
-  mark_used(address, store2);
-  store2->store.value = eightbyte2;
-  mark_used(eightbyte2, store2);
-  insert_instruction_before(store2, parameter);
+  /// If the parameter has still uses, we’ve encountered something
+  /// that we don’t know how to handle, so create a temporary copy
+  /// on the stack and replace the parameter with a load.
+  if (ir_use_count(parameter)) {
+    IRInstruction *addr1 = ir_insert_before(parameter, ir_create_alloca_sized(context, param_type, 16));
+    IRInstruction *offset = ir_insert_before(parameter, ir_create_immediate(context, t_integer, 8));
+    IRInstruction *addr2 = ir_insert_before(parameter, ir_create_add(context, addr1, offset));
+    ir_insert_before(parameter, ir_create_store(context, eightbyte1, addr1));
+    ir_insert_before(parameter, ir_create_store(context, eightbyte2, addr2));
+    ir_replace(parameter, ir_create_load(context, param_type, addr1));
+  } else {
+    ir_remove(parameter);
+  }
+}
 
-  parameter->kind = IR_LOAD;
-  parameter->operand = alloca;
+static void lower_memory_parameter(
+  CodegenContext *ctx,
+  IRInstruction *param,
+  Type *addr_type,
+  usz offs_val
+) {
+  Type *type = ir_typeof(param);
+  IRInstruction *rbp = ir_insert_before(param, ir_create_register(ctx, t_integer, REG_RBP));
+  IRInstruction *offset = ir_insert_before(param, ir_create_immediate(ctx, t_integer, offs_val));
+  IRInstruction *addr = ir_insert_before(param, ir_create_add(ctx, rbp, offset));
+  ir_set_type(addr, addr_type);
 
-  lower_load(context, parameter);
+  /// Replace the parameter value.
+  for (usz i = 0; i < ir_use_count(param); ++i) {
+    IRInstruction *user = ir_user_get(param, 0);
+
+    /// Stores of the parameter value are converted to memcpy()s.
+    if (ir_kind(user) == IR_STORE && ir_store_value(user) == param) {
+      IRInstruction *cpy = ir_create_memcpy(
+        ctx,
+        ir_store_addr(user),
+        addr,
+        ir_insert_before(user, ir_create_immediate(ctx, t_integer, type_sizeof(type)))
+      );
+
+      ir_replace(user, cpy);
+    }
+
+    else {
+      ir_replace(user, ir_create_load(ctx, type, addr));
+    }
+  }
+
+  ir_remove(param);
+}
+
+static void lower_parameter(CodegenContext *context, IRInstruction *inst) {
+  switch (context->call_convention) {
+    case CG_CALL_CONV_SYSV: {
+      IRFunction *parent_func = ir_parent(ir_parent(inst));
+      if (parameter_is_in_register_x86_64(context, parent_func, ir_imm(inst))) {
+        // Classify argument into register class.
+        // NOTE: This has probably already been done, and we could
+        // cache it and use that computed value, if we have somewhere
+        // to store it.
+        Type *type = ir_typeof(inst);
+        SysVArgumentClass class = SYSV_REGCLASS_INVALID;
+        class = sysv_classify_argument(type);
+
+        ASSERT(class != SYSV_REGCLASS_INVALID, "Could not classify argument according to SYSV ABI, sorry");
+        switch (class) {
+          case SYSV_REGCLASS_INTEGER: {
+            if (type_sizeof(type) > 8) sysv_load_two_register_parameter(context, inst);
+            else ir_replace(inst, ir_create_register(context, type, argument_registers[ir_imm(inst)]));
+          } break;
+
+          case SYSV_REGCLASS_MEMORY: {
+            // FIXME: Tail calls, leaf functions, etc. may alter the size of the stack frame here.
+            // Skip pushed RBP and return addess.
+            usz parameter_index = ir_imm(inst);
+            usz offs_val = 16;
+            Type *ftype = ir_typeof(parent_func);
+            usz i = ftype->function.parameters.size - 1;
+            foreach_rev(param, ftype->function.parameters) {
+              if (i <= parameter_index) break;
+              offs_val += type_sizeof(param->type);
+              --i;
+            }
+
+            lower_memory_parameter(
+              context,
+              inst,
+              ast_make_type_pointer(context->ast, type->source_location, type),
+              offs_val
+            );
+          } break;
+          default:
+            TODO("Handle lowering of SYSV Register Classification: %d\n", class);
+        }
+      }
+    } break;
+
+    case CG_CALL_CONV_MSWIN: {
+      Type *type = type_canonical(ir_typeof(inst));
+      // NOTE: Arrays and strings in Intercept are passed like
+      // structs in C, so this doesn't apply to *Intercept*
+      // arrays/strings.
+      // __m128 types, arrays, and strings are never passed by immediate value.
+      // Structs and unions of size 8, 16, 32, or 64 bits, and __m64
+      // types, are passed as if they were integers of the same size.
+      usz idx = ir_imm(inst);
+      if (idx < argument_register_count) {
+        ir_replace(inst, ir_create_register(context, type, argument_registers[idx]));
+      } else {
+        // Calculate offset to caller-allocated stack memory for large parameters.
+        // FIXME: Tail calls, leaf functions, etc. may alter the size of the stack frame here.
+        // FIXME: Siraide and I have discussed; it seems like trying
+        // to get tail calls/minimal stack frames to work with stack-
+        // based parameter passing is just asking too much. We should
+        // disallow tail calls/emitting minimal stack frames when a
+        // function has stack based parameters.
+        // Skip pushed RBP and return address.
+        Type *func_type = ir_typeof(ir_parent(ir_parent(inst)));
+        usz offs_val = 32 + 16; // 32 = shadow stack, 16 = stack frame
+        usz i = func_type->function.parameters.size - 1;
+        foreach_rev(param, func_type->function.parameters) {
+          if (i <= idx) break;
+          offs_val += 8;
+          --i;
+        }
+
+        // Lower type to a pointer, because that's how the calls have
+        // been altered as well.
+        Type *ptr = type_sizeof(type) > 8
+                    ? ast_make_type_pointer(context->ast, type->source_location, type)
+                    : type;
+
+        lower_memory_parameter(
+          context,
+          inst,
+          ptr,
+          offs_val
+        );
+      }
+    } break;
+
+    default: ICE("Unhandled call convention for parameter lowering.");
+  }
+}
+
+/// Forward decl because mutual recursion.
+static void lower_instruction(CodegenContext *context, IRInstruction *inst);
+
+/// Lower a store instruction.
+static void lower_store(CodegenContext *ctx, IRInstruction *store) {
+  /// Ignore stores supported by the hardware.
+  IRInstruction *value = ir_store_value(store);
+  Type *value_type = ir_typeof(value);
+  if (type_sizeof(value_type) <= max_register_size) return;
+
+  /// Handle stores whose values are loads.
+  if (ir_kind(value) == IR_LOAD) {
+    /// Convert to memory copy.
+    IRInstruction *value_addr = ir_operand(value);
+    IRInstruction *cpy = ir_create_memcpy(
+      ctx,
+      ir_store_addr(store),
+      value_addr,
+      ir_insert_before(store, ir_create_immediate(ctx, t_integer, type_sizeof(value_type)))
+    );
+
+    ir_replace(store, cpy);
+    lower_instruction(ctx, cpy);
+    return;
+  }
+
+  /// Don’t know how to handle anything else.
+  ICE("Unsupported store of non-register-size value");
+}
+
+static void lower_instruction(CodegenContext *context, IRInstruction *inst) {
+  switch (ir_kind(inst)) {
+    default: UNREACHABLE();
+
+    case IR_RETURN: {
+      STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling convention return register during x86_64 lowering");
+      if (ir_operand(inst)) ASSERT(
+        type_sizeof(ir_typeof(ir_operand(inst))),
+        "Sorry, can only return integer-sized objects from functions at the moment"
+      );
+
+      // TODO: Use desc.result_register instead of REG_RAX.
+      switch (context->call_convention) {
+        case CG_CALL_CONV_MSWIN: {
+          // Cast returned value iff not equal. Probably not needed in
+          // all cases, but definitely needed in some (i.e. returning
+          // byte-typed variable from program).
+          IRInstruction *op = ir_operand(inst);
+          if (op && !type_equals(ir_typeof(inst), ir_typeof(op))) {
+            // Just like NODE_CAST handling in codegen.c
+            Type *t_to = ir_typeof(inst);
+            Type *t_from = ir_typeof(op);
+
+            usz to_sz = type_sizeof(t_to);
+            usz from_sz = type_sizeof(t_from);
+
+            bool from_signed = type_is_signed(t_from);
+
+            if (from_sz == to_sz) {
+              /// FIXME: This has been commented out for a while, do we need this?
+              // INSTRUCTION(bitcast, IR_BITCAST);
+              // bitcast->operand = instruction->operand;
+              // bitcast->type = t_to;
+              // mark_used(instruction->operand, bitcast);
+              // insert_instruction_before(bitcast, instruction);
+              // ir_remove_use(instruction->operand, instruction);
+              // instruction->operand = bitcast;
+            } else if (from_sz < to_sz) {
+              // smaller to larger: sign extend if needed, otherwise zero extend.
+              if (from_signed) {
+                IRInstruction *sext = ir_insert_before(inst, ir_create_sext(context, t_to, op));
+                ir_operand(inst, sext);
+              } else {
+                IRInstruction *zext = ir_insert_before(inst, ir_create_zext(context, t_to, op));
+                ir_operand(inst, zext);
+              }
+            } else if (from_sz > to_sz) {
+              IRInstruction *trunc = ir_insert_before(inst, ir_create_trunc(context, t_to, op));
+              ir_operand(inst, trunc);
+            }
+          }
+
+          /// Return value goes in rax.
+          ir_register(inst, REG_RAX);
+
+          /// FIXME: I don’t think the return itself needs a type? The
+          /// type of the operand should be enough.
+          ir_set_type(inst, t_integer);
+        } break;
+        case CG_CALL_CONV_SYSV: {
+          ir_register(inst, REG_RAX);
+          ir_set_type(inst, ir_operand(inst) ? ir_typeof(ir_operand(inst)) : t_integer);
+        } break;
+        default: UNREACHABLE();
+      }
+    } break;
+
+    case IR_STORE: lower_store(context, inst); break;
+
+    /// Handle intrinsics that require early lowering.
+    STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle backend intrinsics in codegen");
+    case IR_INTRINSIC: {
+      switch (ir_intrinsic_kind(inst)) {
+        IGNORE_FRONTEND_INTRINSICS()
+
+        /// These are very low level and will be handled later on.
+        case INTRIN_BUILTIN_DEBUGTRAP:
+        case INTRIN_BUILTIN_SYSCALL:
+          break;
+
+        /// Lower memory copies.
+        case INTRIN_BUILTIN_MEMCPY: {
+          /// If the size is known at compile time, we can inline it.
+          /// TODO: Should call libc `memcpy()` or our runtime’s
+          /// `__intercept_memcpy()` once we have something like that
+          /// if the size is too large.
+          IRInstruction *size = ir_call_arg(inst, 2);
+          if (ir_kind(size) == IR_IMMEDIATE) {
+            emit_memcpy(
+              context,
+              ir_call_arg(inst, 0),
+              ir_call_arg(inst, 1),
+              ir_imm(size),
+              inst
+            );
+
+            ir_remove(inst);
+            break;
+          }
+
+          /// Size must be known at compile time.
+          ICE("Sorry, Non-constant-sized memory copies not supported");
+        } break;
+      }
+    } break;
+
+    case IR_CALL: {
+      size_t argcount = ir_call_args_count(inst);
+
+      switch (context->call_convention) {
+        default: ICE("Unhandled calling convention in x86_64 lowering of calls");
+        case CG_CALL_CONV_SYSV: {
+          Type *ftype = ir_call_callee_type(inst);
+          ASSERT(
+            ftype->kind == TYPE_FUNCTION,
+            "Expected callee of IR_CALL to be a function, but got %T\n",
+            ftype
+          );
+
+          /// Determine Sys V argument classes.
+          usz regs_used = 0;
+          Vector(usz) two_register_args = {0};
+          foreach_index (i, ftype->function.parameters) {
+            Parameter *parameter = ftype->function.parameters.data + i;
+            SysVArgumentClass class = sysv_classify_argument(parameter->type);
+            if (class == SYSV_REGCLASS_INTEGER) {
+              if (regs_used + 2 <= argument_register_count && type_sizeof(parameter->type) > 8) {
+                vector_push(two_register_args, i);
+                regs_used += 2;
+              } else if (regs_used < argument_register_count) {
+                ASSERT(regs_used < argument_register_count, "Invalid argument register index");
+                IRInstruction *copy = ir_create_copy(context, ir_call_arg(inst, i));
+                ir_register(copy, argument_registers[regs_used++]);
+                ir_insert_before(inst, copy);
+                ir_call_arg(inst, i, copy);
+              } else {
+                TODO("SysV: All argument registers are used, we have to start spilling to stack.");
+              }
+            } else if (class == SYSV_REGCLASS_MEMORY) {
+              TODO("SysV: Handle memory class parameter");
+            } else ICE("SysV: Unhandled register class of parameter %d", (int) class);
+          }
+
+          foreach_rev(i, two_register_args) {
+            Type *t_integer_ptr = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
+            IRInstruction *argument = ir_call_arg(inst, *i);
+
+            usz ri = sysv_argument_register_index_x86_64(context, ftype, *i);
+            ASSERT(ri + 1 < argument_register_count);
+
+            // FIXME: Second eightbyte shouldn't have to be fully eight bytes.
+            ASSERT(
+              type_sizeof(ir_typeof(argument)) == 16,
+              "SysV ABI requires alignment of a multiple of 16 for aggregate types from (8 to 16]: %T",
+              ir_typeof(argument)
+            );
+
+            IRInstruction *load1, *load2;
+
+            /// If the argument is a load instruction, instead convert
+            /// it to two 8-byte loads instead.
+            if (ir_kind(argument) == IR_LOAD) {
+              IRInstruction *addr1 = ir_operand(argument);
+              IRInstruction *offset = ir_insert_before(inst, ir_create_immediate(context, t_integer, 8));
+              IRInstruction *addr2 = ir_insert_before(inst, ir_create_add(context, addr1, offset));
+              load1 = ir_insert_before(inst, ir_create_load(context, t_integer, addr1));
+              load2 = ir_insert_before(inst, ir_create_load(context, t_integer, addr2));
+            }
+
+            /// Otherwise, create a copy and load from that.
+            else {
+              /// FIXME: Is this case even possible?
+              // Load first eightbyte of the parameter.
+              IRInstruction *addr1 = ir_insert_before(inst, ir_create_copy(context, argument));
+              ir_set_type(addr1, t_integer_ptr); /// FIXME: Is this necessary?
+              load1 = ir_insert_before(inst, ir_create_load(context, t_integer, addr1));
+
+              IRInstruction *offset = ir_insert_before(inst, ir_create_immediate(context, t_integer, 8));
+
+              // Load second eightbyte of the parameter.
+              IRInstruction *addr2 = ir_insert_before(inst, ir_create_add(context, addr1, offset));
+              ir_set_type(addr2, t_integer_ptr); /// FIXME: Is this necessary?
+              load2 = ir_insert_before(inst, ir_create_load(context, t_integer, addr2));
+            }
+
+            ir_register(load1, argument_registers[ri]);
+            ir_register(load2, argument_registers[ri + 1]);
+
+            // Remove argument from call, and replace with two new arguments.
+            ir_call_replace_arg(inst, *i, load1);
+            ir_call_insert_arg(inst, *i + 1, load2);
+
+            /// If the old argument is now unused, delete it.
+            if (ir_use_count(argument) == 1) {
+              ASSERT(ir_user_get(argument, 0) == inst);
+            }
+          }
+        } break;
+
+        case CG_CALL_CONV_MSWIN: {
+          // TODO: desc.result_register, not REG_RAX
+          Type *ty = ir_typeof(inst);
+          if (!type_is_void(ty)) {
+            ir_register(inst, REG_RAX);
+            if (type_sizeof(ty) > max_register_size) {
+              Type *large_type = ty;
+
+              // Lower to pointer return type
+              ty = ast_make_type_pointer(context->ast, large_type->source_location, large_type);
+              ir_set_type(inst, ty);
+
+              // Insert extra argument (pointer to local allocation of return type)
+              IRInstruction *alloca = ir_insert_before(inst, ir_create_alloca(context, ty));
+              ir_call_insert_arg(inst, 0, alloca);
+
+              // Replace uses of the call result with a load from the return value on the stack.
+              IRInstruction *load = ir_insert_after(inst, ir_create_load(context, large_type, alloca));
+              ir_replace_uses(inst, load);
+            } else {
+              /// TODO: Can’t we just... set the call’s result register and be done w/ it?
+              // This is a bit scuffed. Firstly, *reasonably*, we set the call's
+              // result to the result register. But then in order to get
+              // future uses of the call's "virtual register" to properly be
+              // the virtual register that contains the result, we need to copy
+              // the result register into a virtual register and then replace
+              // all uses of the call result with that virtual register... As I
+              // said, a bit scuffed.
+              IRInstruction *copy = ir_insert_after(inst, ir_create_copy(context, inst));
+              ir_replace_uses(inst, copy);
+            }
+          }
+
+          usz idx = 0;
+          argcount = ir_call_args_count(inst);
+
+          // Lower aggregates in possible-register arguments by allocating a copy of them on the stack.
+          for (; idx < argument_register_count && idx < argcount; idx++) {
+            IRInstruction *arg = ir_call_arg(inst, idx);
+            Type *type = type_canonical(ir_typeof(arg));
+            if (type_sizeof(type) > 8) {
+              ir_call_arg(inst, idx, alloca_copy_of(context, arg, inst));
+            } else {
+              IRInstruction *copy = ir_insert_before(inst, ir_create_copy(context, arg));
+              ir_register(copy, argument_registers[idx]);
+              ir_call_arg(inst, idx, copy);
+            }
+          }
+
+          // Lower all arguments not able to go in a register by allocating a copy of them on the stack.
+          if (argcount >= argument_register_count) {
+            for (usz i = argcount - 1; i >= argument_register_count; i--) {
+              IRInstruction *arg = ir_call_arg(inst, i);
+              if (type_sizeof(ir_typeof(arg)) > 8)
+                ir_call_arg(inst, i, alloca_copy_of(context, arg, inst));
+            }
+          }
+        } break;
+      } // switch (calling convention)
+    } break;
+
+    case IR_BITCAST: {
+      IRInstruction *copy = ir_create_copy(context, ir_operand(inst));
+      ir_set_type(copy, ir_typeof(inst));
+      ir_replace(inst, copy);
+    } break;
+  }
 }
 
 static void lower(CodegenContext *context) {
   ASSERT(argument_registers, "arch_x86_64 backend can not lower IR when argument registers have not been initialized.");
+  Vector(IRInstruction *) worklist = {0};
 
-  FOREACH_INSTRUCTION (context) {
-    switch (instruction->kind) {
-    default:
-      break;
-
-    case IR_RETURN: {
-      STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling convention return register during x86_64 lowering");
-      // TODO: Use desc.result_register instead of REG_RAX.
-      switch (context->call_convention) {
-      case CG_CALL_CONV_MSWIN: {
-        instruction->result = REG_RAX;
-        instruction->type = t_integer;
-        // Cast returned value iff not equal. Probably not needed in
-        // all cases, but definitely needed in some (i.e. returning
-        // byte-typed variable from program).
-        if (instruction->operand && !type_equals(instruction->type, instruction->operand->type)) {
-          // Just like NODE_CAST handling in codegen.c
-          Type *t_to = instruction->type;
-          Type *t_from = instruction->operand->type;
-
-          usz to_sz = type_sizeof(t_to);
-          usz from_sz = type_sizeof(t_from);
-
-          bool from_signed = type_is_signed(t_from);
-
-          if (from_sz == to_sz) {
-            //INSTRUCTION(bitcast, IR_BITCAST);
-            //bitcast->operand = instruction->operand;
-            //bitcast->type = t_to;
-            //mark_used(instruction->operand, bitcast);
-            //insert_instruction_before(bitcast, instruction);
-            //ir_remove_use(instruction->operand, instruction);
-            //instruction->operand = bitcast;
-            break;
-          }
-          else if (from_sz < to_sz) {
-            // smaller to larger: sign extend if needed, otherwise zero extend.
-            if (from_signed) {
-              INSTRUCTION(sext, IR_SIGN_EXTEND);
-              sext->operand = instruction->operand;
-              sext->type = t_to;
-              mark_used(instruction->operand, sext);
-              insert_instruction_before(sext, instruction);
-              ir_remove_use(instruction->operand, instruction);
-              instruction->operand = sext;
-            }
-            else {
-              INSTRUCTION(zext, IR_ZERO_EXTEND);
-              zext->operand = instruction->operand;
-              zext->type = t_to;
-              mark_used(instruction->operand, zext);
-              insert_instruction_before(zext, instruction);
-              ir_remove_use(instruction->operand, instruction);
-              instruction->operand = zext;
-            }
-            break;
-          }
-          else if (from_sz > to_sz) {
-            // larger to smaller: truncate.
-            INSTRUCTION(trunc, IR_TRUNCATE);
-            trunc->operand = instruction->operand;
-            trunc->type = t_to;
-            mark_used(instruction->operand, trunc);
-            insert_instruction_before(trunc, instruction);
-            ir_remove_use(instruction->operand, instruction);
-            instruction->operand = trunc;
-            break;
-          }
-          UNREACHABLE();
-        }
-      } break;
-      case CG_CALL_CONV_SYSV: {
-        instruction->result = REG_RAX;
-        if (instruction->operand)
-          instruction->type = instruction->operand->type;
-        else instruction->type = t_integer;
-      } break;
-      default: UNREACHABLE();
-      }
-    } break;
-
-    case IR_LOAD: lower_load(context, instruction); break;
-    case IR_STORE: lower_store(context, instruction); break;
-
-    case IR_ALLOCA: {
-      // Worry about stack alignment
-      if (instruction->alloca.size < 8)
-        instruction->alloca.size = 8;
-    } break;
-
-    case IR_CALL: {
-      size_t argcount = instruction->call.arguments.size;
-
-      switch (context->call_convention) {
-      default: ICE("Unhandled calling convention in x86_64 lowering of calls");
-      case CG_CALL_CONV_SYSV: {
-        Type *function_type = NULL;
-        if (instruction->call.is_indirect) {
-          if (type_is_pointer(instruction->call.callee_instruction->type))
-            function_type = instruction->call.callee_instruction->type->pointer.to;
-          else function_type = instruction->call.callee_instruction->type;
-        } else function_type = instruction->call.callee_function->type;
-        ASSERT(function_type->kind == TYPE_FUNCTION, "Expected callee of IR_CALL to be a function, but got %T\n", function_type);
-
-        usz argument_registers_used = 0;
-        Vector(usz) sixteen_bytes_that_need_split = {0};
-        foreach_index (i, function_type->function.parameters) {
-          Parameter *parameter = function_type->function.parameters.data + i;
-          SysVArgumentClass class = sysv_classify_argument(parameter->type);
-          if (class == SYSV_REGCLASS_INTEGER) {
-            if (argument_registers_used + 2 <= argument_register_count && type_sizeof(parameter->type) > 8) {
-              vector_push(sixteen_bytes_that_need_split, i);
-              argument_registers_used += 2;
-            } else if (argument_registers_used < argument_register_count) {
-              IRInstruction *copy = ir_copy(context, instruction->call.arguments.data[i]);
-              ASSERT(argument_registers_used < argument_register_count, "Invalid argument register index");
-              copy->result = argument_registers[argument_registers_used++];
-              insert_instruction_before(copy, instruction);
-              instruction->call.arguments.data[i] = copy;
-            } else {
-              TODO("SysV: All argument registers are used, we have to start spilling to stack.");
-            }
-          } else if (class == SYSV_REGCLASS_MEMORY) {
-            TODO("SysV: Handle memory class parameter");
-          } else ICE("SysV: Unhandled register class of parameter %d", (int)class);
-        }
-
-        foreach_rev (i, sixteen_bytes_that_need_split) {
-          IRInstruction *argument = instruction->call.arguments.data[*i];
-
-          // Load first eightbyte of the parameter.
-          INSTRUCTION(first_eightbyte_addr, IR_COPY);
-          first_eightbyte_addr->operand = argument;
-          first_eightbyte_addr->type = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
-          insert_instruction_before(first_eightbyte_addr, instruction);
-
-          INSTRUCTION(load1, IR_LOAD);
-          load1->operand = first_eightbyte_addr;
-          load1->type = t_integer;
-          insert_instruction_before(load1, instruction);
-
-          // Load second eightbyte of the parameter.
-          // FIXME: Second eightbyte shouldn't have to be fully eight bytes.
-          ASSERT(type_sizeof(argument->type->pointer.to) == 16,
-                 "SysV ABI requires alignment of a multiple of 16 for aggregate types from (8 to 16]: %T",
-                 argument->type->pointer.to);
-          INSTRUCTION(offset, IR_IMMEDIATE);
-          offset->type = t_integer;
-          offset->imm = 8;
-          insert_instruction_before(offset, instruction);
-
-          INSTRUCTION(second_eightbyte_addr, IR_ADD);
-          second_eightbyte_addr->type = first_eightbyte_addr->type;
-          second_eightbyte_addr->lhs = first_eightbyte_addr;
-          mark_used(first_eightbyte_addr, second_eightbyte_addr);
-          second_eightbyte_addr->rhs = offset;
-          mark_used(offset, second_eightbyte_addr);
-          insert_instruction_before(second_eightbyte_addr, instruction);
-
-          INSTRUCTION(load2, IR_LOAD);
-          load2->operand = second_eightbyte_addr;
-          load2->type = t_integer;
-          insert_instruction_before(load2, instruction);
-
-          usz arg_reg_index = sysv_argument_register_index_x86_64(context, function_type, *i);
-          ASSERT(arg_reg_index + 1 < argument_register_count);
-          load1->result = argument_registers[arg_reg_index];
-          load2->result = argument_registers[arg_reg_index + 1];
-
-          // Remove argument from call, and replace with two new arguments.
-          ir_remove_use(argument, instruction);
-          vector_remove_index(instruction->call.arguments, *i);
-          vector_insert_after(instruction->call.arguments, load1, instruction->call.arguments.data + *i);
-          mark_used(load1, instruction);
-          vector_insert_after(instruction->call.arguments, load2, instruction->call.arguments.data + *i);
-          mark_used(load2, instruction);
-
-        }
-      } break;
-
-      case CG_CALL_CONV_MSWIN: {
-        // TODO: desc.result_register, not REG_RAX
-        if (!type_is_void(instruction->type)) {
-          instruction->result = REG_RAX;
-
-          if (type_sizeof(instruction->type) > max_register_size) {
-            Type *large_type = instruction->type;
-
-            // Lower to pointer return type
-            instruction->type = ast_make_type_pointer(context->ast, large_type->source_location, large_type);
-
-            // Insert extra argument (pointer to local allocation of return type)
-            INSTRUCTION(alloca, IR_ALLOCA);
-            alloca->type = instruction->type;
-            alloca->alloca.size = type_sizeof(large_type);
-            insert_instruction_before(alloca, instruction);
-            vector_insert(instruction->call.arguments, instruction->call.arguments.data, alloca);
-
-            // Replace uses of the call result with loads from the returned pointer.
-            INSTRUCTION(load, IR_LOAD);
-            ir_replace_uses(instruction, load);
-
-            load->type = large_type;
-            load->operand = instruction;
-            mark_used(instruction, load);
-            insert_instruction_after(load, instruction);
-            lower_load(context, load);
-          } else {
-            // This is a bit scuffed. Firstly, *reasonably*, we set the call's
-            // result to the result register. But then in order to get
-            // future uses of the call's "virtual register" to properly be
-            // the virtual register that contains the result, we need to copy
-            // the result register into a virtual register and then replace
-            // all uses of the call result with that virtual register... As I
-            // said, a bit scuffed.
-            IRInstruction *copy = ir_copy(context, instruction);
-            ir_replace_uses(instruction, copy);
-
-            insert_instruction_after(copy, instruction);
-          }
-        }
-
-        usz idx = 0;
-
-        // Lower aggregates in possible-register arguments by allocating a copy of them on the stack.
-        foreach_val (argument, instruction->call.arguments) {
-          if (idx >= argument_register_count) break;
-          Type *type = type_canonical(argument->type);
-          if (type_sizeof(type) > 8) {
-            instruction->call.arguments.data[idx] = alloca_copy_of(context, argument, instruction);
-          } else {
-            IRInstruction *copy = ir_copy(context, instruction->call.arguments.data[idx]);
-            copy->result = argument_registers[idx];
-            insert_instruction_before(copy, instruction);
-            instruction->call.arguments.data[idx] = copy;
-          }
-          ++idx;
-        }
-
-        // Lower all arguments not able to go in a register by allocating a copy of them on the stack.
-        if (argcount >= argument_register_count) {
-          usz i = instruction->call.arguments.size - 1;
-          foreach_ptr_rev (argument, instruction->call.arguments) {
-            if (i < argument_register_count) break;
-            if (type_sizeof(argument->type) > 8)
-              instruction->call.arguments.data[i] = alloca_copy_of(context, argument, instruction);
-            --i;
-          }
-        }
-      } break;
-      } // switch (calling convention)
-    } break;
-
-    case IR_PARAMETER: {
-      switch (context->call_convention) {
-
-      case CG_CALL_CONV_SYSV: {
-        if (parameter_is_in_register_x86_64(context, instruction->parent_block->function, instruction->imm)) {
-          // Classify argument into register class.
-          // NOTE: This has probably already been done, and we could
-          // cache it and use that computed value, if we have somewhere
-          // to store it.
-          SysVArgumentClass class = SYSV_REGCLASS_INVALID;
-          class = sysv_classify_argument(instruction->type);
-          ASSERT(class != SYSV_REGCLASS_INVALID, "Could not classify argument according to SYSV ABI, sorry");
-          switch(class) {
-          case SYSV_REGCLASS_INTEGER: {
-            if (type_sizeof(instruction->type) > 8) sysv_load_two_register_parameter(context, instruction);
-            else {
-              instruction->kind = IR_REGISTER;
-              instruction->result = argument_registers[instruction->imm];
-            }
-          } break;
-          case SYSV_REGCLASS_MEMORY: {
-            INSTRUCTION(rbp, IR_REGISTER);
-            rbp->result = REG_RBP;
-            rbp->type = t_integer;
-            insert_instruction_before(rbp, instruction);
-
-            usz parameter_index = instruction->imm;
-
-            INSTRUCTION(offset, IR_IMMEDIATE);
-            offset->type = t_integer;
-
-            // FIXME: Tail calls, leaf functions, etc. may alter the size of the stack frame here.
-            // Skip pushed RBP and return addess.
-            offset->imm += 16;
-
-            usz i = instruction->parent_block->function->type->function.parameters.size - 1;
-            foreach_rev (param, instruction->parent_block->function->type->function.parameters) {
-              if (i <= parameter_index) break;
-              offset->imm += type_sizeof(param->type);
-              --i;
-            }
-            insert_instruction_before(offset, instruction);
-
-            INSTRUCTION(address, IR_ADD);
-            address->lhs = rbp;
-            mark_used(rbp, address);
-            address->rhs = offset;
-            mark_used(offset, address);
-            address->type = ast_make_type_pointer(context->ast, instruction->type->source_location, instruction->type);
-            insert_instruction_before(address, instruction);
-
-            instruction->kind = IR_LOAD;
-            instruction->operand = address;
-            mark_used(address, instruction);
-
-            lower_load(context, instruction);
-
-          } break;
-          default:
-            TODO("Handle lowering of SYSV Register Classification: %d\n", class);
-          }
-        }
-      } break;
-
-      case CG_CALL_CONV_MSWIN: {
-        Type *type = type_canonical(instruction->type);
-        // NOTE: Arrays and strings in Intercept are passed like
-        // structs in C, so this doesn't apply to *Intercept*
-        // arrays/strings.
-        // __m128 types, arrays, and strings are never passed by immediate value.
-        // Structs and unions of size 8, 16, 32, or 64 bits, and __m64
-        // types, are passed as if they were integers of the same size.
-        if (instruction->imm < argument_register_count) {
-          instruction->kind = IR_REGISTER;
-          instruction->result = argument_registers[instruction->imm];
-        } else {
-
-          // Calculate offset to caller-allocated stack memory for large parameters.
-
-          // Lower type to a pointer, because that's how the calls have
-          // been altered as well.
-          INSTRUCTION(rbp, IR_REGISTER);
-          rbp->result = REG_RBP;
-          rbp->type = t_integer;
-          insert_instruction_before(rbp, instruction);
-
-          IRInstruction *copy_rbp = ir_copy(context, rbp);
-          insert_instruction_before(copy_rbp, instruction);
-
-          usz parameter_index = instruction->imm;
-
-          INSTRUCTION(offset, IR_IMMEDIATE);
-          offset->type = t_integer;
-
-          // FIXME: Tail calls, leaf functions, etc. may alter the size of the stack frame here.
-          // FIXME: Siraide and I have discussed; it seems like trying
-          // to get tail calls/minimal stack frames to work with stack-
-          // based parameter passing is just asking too much. We should
-          // disallow tail calls/emitting minimal stack frames when a
-          // function has stack based parameters.
-          // Skip pushed RBP and return addess.
-          offset->imm += 32 + 16; // 32 = shadow stack, 16 = stack frame
-
-          usz i = instruction->parent_block->function->type->function.parameters.size - 1;
-          foreach_rev (param, instruction->parent_block->function->type->function.parameters) {
-            if (i <= parameter_index) break;
-            offset->imm += 8;
-            --i;
-          }
-          insert_instruction_before(offset, instruction);
-
-          INSTRUCTION(address, IR_ADD);
-          address->lhs = copy_rbp;
-          mark_used(copy_rbp, address);
-          address->rhs = offset;
-          mark_used(offset, address);
-          if (type_sizeof(type) > 8)
-            address->type = ast_make_type_pointer(context->ast, instruction->type->source_location, instruction->type);
-          else address->type = instruction->type;
-          insert_instruction_before(address, instruction);
-
-          instruction->kind = IR_LOAD;
-          instruction->operand = address;
-          mark_used(address, instruction);
-        }
-      } break;
-
-      default: ICE("Unhandled call convention for parameter lowering.");
-      }
-    } break;
-
-    case IR_BITCAST: {
-      instruction->kind = IR_COPY;
-    } break;
+  /// Lower parameter references first as that can create more loads
+  /// and stores that may need to be lowered. Skip extern functions.
+  foreach_val (func, context->functions) {
+    if (!ir_func_is_definition(func)) continue;
+    Type *ty = ir_typeof(func);
+    for (usz i = 0; i < ty->function.parameters.size; i++) {
+      IRInstruction *param = ir_parameter(func, i);
+      if (ir_parent(param) == NULL) continue;
+      if (ir_use_count(param) == 0) ir_remove(param);
+      lower_parameter(context, param);
     }
   }
+
+  /// Collect all instructions for which lowering entails inserting other
+  /// instructions; we’ll have to lower those in reverse order to avoid
+  /// iterator invalidation bugs.
+  ///
+  /// Any instructions whose lowering doesn’t cause iterator invalidation
+  /// are lowered right away.
+  FOREACH_INSTRUCTION_IN_CONTEXT(inst, b, f, context) {
+    switch (ir_kind(inst)) {
+    default: break;
+    case IR_ALLOCA:
+      /// Worry about stack alignment
+      if (ir_alloca_size(inst) < 8) ir_alloca_size(inst, 8);
+      break;
+
+    /// Replacing a single instruction with a new instruction is fine.
+    case IR_BITCAST: {
+      IRInstruction *copy = ir_create_copy(context, ir_operand(inst));
+      ir_set_type(copy, ir_typeof(inst));
+      ir_replace(inst, copy);
+    } break;
+
+    case IR_RETURN:
+    case IR_CALL:
+    case IR_INTRINSIC:
+    case IR_STORE:
+      vector_push(worklist, inst);
+      break;
+    }
+  }
+
+  /// Lower all instructions that require inserting other instructions.
+  foreach_rev(inst, worklist) lower_instruction(context, *inst);
+
+  /// Finally, clean up loads that are no longer referenced.
+  /// Non-register-size loads are only allowed as the operands
+  /// of certain instructions; those instructions have already
+  /// retrieved the values they need in the lowering passes
+  /// above, which means we should now remove any unused loads
+  /// so the backend doesn’t complain about them.
+  vector_clear(worklist);
+  FOREACH_INSTRUCTION_IN_CONTEXT(inst, b, f, context)
+    if (ir_kind(inst) == IR_LOAD && ir_use_count(inst) == 0)
+      vector_push(worklist, inst);
+  foreach_rev(inst, worklist) ir_remove(*inst);
+  vector_delete(worklist);
 }
 
 static size_t interfering_regs(IRInstruction *instruction) {
@@ -842,14 +861,14 @@ static size_t interfering_regs(IRInstruction *instruction) {
   // way of doing this, really.
   // Divisor of div/mod are not allowed to go in RAX/RDX; that's where
   // the dividend must go.
-  foreach_val (inst, instruction->users) {
-    if ((inst->kind == IR_DIV || inst->kind == IR_MOD) && inst->rhs == instruction) {
+  FOREACH_USER(user, instruction) {
+    if ((ir_kind(user) == IR_DIV || ir_kind(user) == IR_MOD) && ir_rhs(user) == instruction) {
       mask |= ((usz)1 << REG_RAX);
       mask |= ((usz)1 << REG_RDX);
     }
   }
 
-  switch(instruction->kind) {
+  switch(ir_kind(instruction)) {
   case IR_SHL:
   case IR_SHR:
   case IR_SAR:
@@ -872,33 +891,42 @@ static size_t interfering_regs(IRInstruction *instruction) {
 void codegen_lower_x86_64(CodegenContext *context) { lower(context); }
 
 void codegen_lower_early_x86_64(CodegenContext *context) {
-  FOREACH_INSTRUCTION (context) {
-    switch (instruction->kind) {
+  IRInstructionVector to_lower = {0};
+  FOREACH_INSTRUCTION_IN_CONTEXT(instruction, b, f, context) {
+    switch (ir_kind(instruction)) {
       default: break;
-      case IR_LOAD: lower_load(context, instruction); break;
-      case IR_STORE: lower_store(context, instruction); break;
+
+      /// Only certain stores can be lowered at all.
+      case IR_STORE: {
+        IRInstruction *val = ir_store_value(instruction);
+        if (type_sizeof(ir_typeof(val)) <= max_register_size || ir_kind(val) == IR_LOAD)
+          vector_push(to_lower, instruction);
+      } break;
     }
   }
+
+  foreach_rev(instruction, to_lower) lower_instruction(context, *instruction);
+  vector_delete(to_lower);
 }
 
 bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *function, usz parameter_index) {
   ASSERT(context->arch == ARCH_X86_64);
 
-  if (parameter_index >= function->type->function.parameters.size)
+  Type *ftype = ir_typeof(function);
+  if (parameter_index >= ftype->function.parameters.size)
     ICE("Parameter index out of bounds");
 
-  IRInstruction *parameter = function->parameters.data[parameter_index];
+  Type *param_type = ftype->function.parameters.data[parameter_index].type;
 
   switch (context->call_convention) {
 
   case CG_CALL_CONV_MSWIN: {
     if (parameter_index >= 4) return false;
-    if (type_sizeof(parameter->type) > 8) return false;
+    if (type_sizeof(param_type) > 8) return false;
   } return true;
 
   case CG_CALL_CONV_SYSV: {
-    SysVArgumentClass class = SYSV_REGCLASS_INVALID;
-    class = sysv_classify_argument(parameter->type);
+    SysVArgumentClass class = sysv_classify_argument(param_type);
     ASSERT(class != SYSV_REGCLASS_INVALID, "Could not classify argument according to SYSV ABI, sorry");
     if (class == SYSV_REGCLASS_INTEGER) return true;
     if (class == SYSV_REGCLASS_MEMORY) return false;
@@ -908,7 +936,6 @@ bool parameter_is_in_register_x86_64(CodegenContext *context, IRFunction *functi
   default:
     ICE("Unhandled calling convention: %d\n", context->call_convention);
   }
-
 }
 
 static void mir_x86_64_function_exit_at(enum StackFrameKind frame_kind, MIRBlock *block, usz *index) {
@@ -980,7 +1007,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     if (optimise) {
       bool used = false;
       foreach_val (ref, var->references) {
-        if (ref->users.size) {
+        if (ir_use_count(ref)) {
           used = true;
           break;
         }
@@ -1005,13 +1032,14 @@ void codegen_emit_x86_64(CodegenContext *context) {
     // Do compile-time known static assignment.
 
     if (var->init) {
-      if (var->init->kind == IR_LIT_INTEGER) {
+      if (ir_kind(var->init) == IR_LIT_INTEGER) {
         ASSERT(
           !imported,
           "Imported variables cannot have static initialisers"
         );
 
-        uint8_t *byte_repr = (uint8_t*)(&var->init->imm);
+        usz imm = ir_imm(var->init);
+        uint8_t *byte_repr = (uint8_t *)&imm;
         STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of assembly targets");
         if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL) {
           // TODO: Endianness selection
@@ -1042,16 +1070,18 @@ void codegen_emit_x86_64(CodegenContext *context) {
         }
 #endif // x86_64_GENERATE_MACHINE_CODE
 
-      } else if (var->init->kind == IR_LIT_STRING) {
+      } else if (ir_kind(var->init) == IR_LIT_STRING) {
         STATIC_ASSERT(TARGET_COUNT == 6, "Exhaustive handling of assembly targets");
         if (context->target == TARGET_GNU_ASM_ATT || context->target == TARGET_GNU_ASM_INTEL) {
           if (var->decl->declaration.linkage == LINKAGE_EXPORTED)
             fprint(context->code, ".global %S\n", var->name);
           fprint(context->code, "%S: .byte ", var->name);
-          if (var->init->str.size)
-            fprint(context->code, "%u", (unsigned) var->init->str.data[0]);
-          for (usz i = 1; i < var->init->str.size; ++i)
-            fprint(context->code, ",%u", (unsigned) var->init->str.data[i]);
+
+          span s = ir_string_data(context, var->init);
+          foreach (c, s) {
+            if (c != s.data) fprint(context->code, ", ");
+            fprint(context->code, "%u", (unsigned) *c);
+          }
           fprint(context->code, ",0\n");
         }
 
@@ -1066,14 +1096,14 @@ void codegen_emit_x86_64(CodegenContext *context) {
           sym.byte_offset = sec_rodata->data.bytes.size;
           vector_push(object.symbols, sym);
           // Write string bytes to .rodata section
-          sec_write_n(sec_rodata, var->init->str.data, var->init->str.size);
+          span s = ir_string_data(context, var->init);
+          sec_write_n(sec_rodata, s.data, s.size);
           sec_write_1(sec_rodata, 0);
         }
 #endif // x86_64_GENERATE_MACHINE_CODE
 
-      }
-      else {
-        ir_femit_instruction(stdout, var->init);
+      } else {
+        ir_print_instruction(stdout, var->init);
         ICE("Unhandled literal IR type for static variable in x86_64 backend, sorry.");
       }
     } else {
@@ -1118,15 +1148,16 @@ void codegen_emit_x86_64(CodegenContext *context) {
     }
   }
 
-  if (debug_ir) ir_femit(stdout, context);
+  if (debug_ir) ir_print(stdout, context);
 
   // Mangle function names, and assign block labels.
   usz block_cnt = 0;
   foreach_val (function, context->functions) {
     mangle_function_name(function);
-
-    list_foreach (block, function->blocks) {
-      if (optimise) {
+    FOREACH_BLOCK (block, function) {
+        /// FIXME: This should be unnecessary now that we have
+        ///        proper optimisation passes:
+/*      if (optimise) {
         /// Determine whether this block is ever referenced anywhere.
         bool referenced = false;
         for (IRBlock *b = (function->blocks).first; b; b = b->next) {
@@ -1162,14 +1193,14 @@ void codegen_emit_x86_64(CodegenContext *context) {
           block->name = string_dup(unreferenced_block_name);
           continue;
         }
-      }
+      }*/
 
-      block->name = format(".L%U", block_cnt++);
+      ir_name(block, format(".L%U", block_cnt++));
     }
   }
 
   /*ir_set_ids(context);
-  ir_femit(stdout, context);*/
+  ir_print(stdout, context);*/
 
   MIRFunctionVector machine_instructions_from_ir = mir_from_ir(context);
 
@@ -1187,7 +1218,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
   // ISel in code...
   foreach_val (function, machine_instructions_from_ir) {
-    if (!function->origin || !ir_function_is_definition(function->origin)) continue;
+    if (!function->origin || !ir_func_is_definition(function->origin)) continue;
     foreach_val (block, function->blocks) {
       MIRInstructionVector instructions_to_remove = {0};
       foreach_index (i, block->instructions) {
@@ -1239,9 +1270,12 @@ void codegen_emit_x86_64(CodegenContext *context) {
         case MIR_INTRINSIC: {
           MIROperand *kind = mir_get_op(instruction, 0);
           ASSERT(kind->kind == MIR_OP_IMMEDIATE, "Intrinsic kind must be an immediate");
-          STATIC_ASSERT(INTRIN_BACKEND_COUNT == 2, "Handle backend intrinsics in codegen");
+          STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle backend intrinsics in codegen");
           switch (kind->value.imm) {
             IGNORE_FRONTEND_INTRINSICS();
+
+            /// Memcpy should already have been lowered.
+            case INTRIN_BUILTIN_MEMCPY: UNREACHABLE();
 
             /// For syscalls, just emit a bunch of moves and the syscall.
             case INTRIN_BUILTIN_SYSCALL: {
@@ -1335,7 +1369,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
   /// Remove register to register moves when value and size are equal.
   /// Saving/restoration of callee-saved registers used in function.
   foreach_val (function, machine_instructions_from_ir) {
-    if (!function->origin || !ir_function_is_definition(function->origin)) continue;
+    if (!function->origin || !ir_func_is_definition(function->origin)) continue;
 
     // Calculate stack offsets of frame objects
     isz offset = 0;
@@ -1346,7 +1380,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
     ASSERT(function->blocks.size, "Zero blocks within non-extern MIRFunction... How did you manage this?");
 
-    size_t func_regs = function->origin->registers_in_use;
+    size_t func_regs = ir_func_regs_in_use(function->origin);
 
     { // Save callee-saved registers used in this function
       MIRBlock *first_block = vector_front(function->blocks);
@@ -1402,14 +1436,12 @@ void codegen_emit_x86_64(CodegenContext *context) {
 
         case MIR_CALL: {
           // Tail call.
-          if (instruction->origin->call.tail_call) {
+          if (ir_call_tail(instruction->origin)) {
             // Restore the frame pointer if we have one.
             mir_x86_64_function_exit_at(stack_frame_kind(instruction->block->function), instruction->block, &i);
             MIRInstruction *jump = mir_makenew(MX64_JMP);
             mir_add_op(jump, *mir_get_op(instruction, 0));
             mir_insert_instruction(instruction->block, jump, i++);
-            // FIXME: I don't think this does anything; what was it for?
-            if (instruction->origin->parent_block) instruction->origin->parent_block->done = true;
 
             /// Don’t forget to remove the call instruction.
             vector_push(instructions_to_remove, instruction);

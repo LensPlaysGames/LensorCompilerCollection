@@ -47,7 +47,7 @@ void sec_write_4(Section *section, uint8_t value0, uint8_t value1, uint8_t value
   vector_push(section->data.bytes, value3);
 }
 /// Write n bytes of data from buffer to code.
-void sec_write_n(Section *section, void* buffer_, size_t n) {
+void sec_write_n(Section *section, const void* buffer_, size_t n) {
   // TODO: Test if this manual unrolling is actually any faster.
   uint8_t *buffer = (uint8_t*)buffer_;
   for (; n >= 4; n -= 4) {

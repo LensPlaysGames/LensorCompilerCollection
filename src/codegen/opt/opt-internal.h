@@ -5,9 +5,9 @@
 /// with optimisation.
 
 #include <codegen.h>
-#include <codegen/dom.h>
-#include <codegen/intermediate_representation.h>
 #include <codegen/opt/opt.h>
+#include <ir/dom.h>
+#include <ir/ir.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>

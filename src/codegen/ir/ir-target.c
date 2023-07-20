@@ -1,5 +1,5 @@
-#include <codegen/ir/ir.h>
-#include <codegen/intermediate_representation.h>
+#include <codegen/ir/ir-target.h>
+#include <ir/ir.h>
 
 CodegenContext *codegen_context_ir_create() {
   CodegenContext *cg_ctx = calloc(1, sizeof(CodegenContext));
