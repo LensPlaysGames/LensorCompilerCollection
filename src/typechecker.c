@@ -113,7 +113,12 @@ NODISCARD static isz convertible_score(Type *to_type, Type *from_type) {
 
 /// Check if from is convertible to to.
 /// FIXME: This should both check if the conversion is possible
-/// and also perform if (unless it’s called during overload resolution).
+///     and also perform if (unless it’s called during overload resolution).
+///     Note that whenever we attempt to convert a reference to something,
+///     we need to load the value. For that, we should insert something
+///     like an ‘lvalue-to-rvalue cast expression’. This should also
+///     let us eliminate all the type_is_reference checks we’re performing
+///     when we generate IR for call expressions etc.
 NODISCARD static bool convertible(Type *to_type, Type *from_type) {
   return convertible_score(to_type, from_type) != -1;
 }
@@ -760,13 +765,14 @@ NODISCARD static bool typecheck_type(Module *ast, Type *t) {
 /// \param callee The callee to check.
 /// \return The intrinsic number if it is an intrinsic, or I_BUILTIN_COUNT otherwise.
 NODISCARD static enum IntrinsicKind intrinsic_kind(Node *callee) {
-    STATIC_ASSERT(INTRIN_COUNT == 6, "Handle all intrinsics in sema");
+    STATIC_ASSERT(INTRIN_COUNT == 7, "Handle all intrinsics in sema");
     if (callee->kind != NODE_FUNCTION_REFERENCE) return INTRIN_COUNT;
     if (string_eq(callee->funcref.name, literal_span("__builtin_syscall"))) return INTRIN_BUILTIN_SYSCALL;
     if (string_eq(callee->funcref.name, literal_span("__builtin_inline"))) return INTRIN_BUILTIN_INLINE;
     if (string_eq(callee->funcref.name, literal_span("__builtin_line"))) return INTRIN_BUILTIN_LINE;
     if (string_eq(callee->funcref.name, literal_span("__builtin_filename"))) return INTRIN_BUILTIN_FILENAME;
     if (string_eq(callee->funcref.name, literal_span("__builtin_debugtrap"))) return INTRIN_BUILTIN_DEBUGTRAP;
+    if (string_eq(callee->funcref.name, literal_span("__builtin_memcpy"))) return INTRIN_BUILTIN_MEMCPY;
     return INTRIN_COUNT;
 }
 
@@ -792,7 +798,7 @@ NODISCARD static bool typecheck_intrinsic(Module *ast, Node *expr) {
     ASSERT(expr->kind == NODE_CALL);
     ASSERT(expr->call.callee->kind == NODE_FUNCTION_REFERENCE);
 
-    STATIC_ASSERT(INTRIN_COUNT == 6, "Handle all intrinsics in sema");
+    STATIC_ASSERT(INTRIN_COUNT == 7, "Handle all intrinsics in sema");
     switch (expr->call.intrinsic) {
         case INTRIN_COUNT:
         case INTRIN_BACKEND_COUNT:
@@ -897,6 +903,27 @@ NODISCARD static bool typecheck_intrinsic(Module *ast, Node *expr) {
           expr->kind = NODE_INTRINSIC_CALL;
           expr->type = t_void;
           return true;
+        }
+
+        /// Like C’s `memcpy()` function.
+        case INTRIN_BUILTIN_MEMCPY: {
+          if (expr->call.arguments.size != 3)
+            ERR(expr->source_location, "__builtin_memcpy() takes exactly three arguments");
+
+            if (!typecheck_expression(ast, expr->call.arguments.data[0])) return false;
+            if (!typecheck_expression(ast, expr->call.arguments.data[1])) return false;
+            if (!typecheck_expression(ast, expr->call.arguments.data[2])) return false;
+
+            if (!convertible(t_void_ptr, expr->call.arguments.data[0]->type))
+              ERR(expr->call.arguments.data[0]->source_location, "First argument of __builtin_memcpy() must be a pointer");
+            if (!convertible(t_void_ptr, expr->call.arguments.data[1]->type))
+              ERR(expr->call.arguments.data[1]->source_location, "Second argument of __builtin_memcpy() must be a pointer");
+            if (!convertible(t_integer, expr->call.arguments.data[2]->type))
+              ERR(expr->call.arguments.data[2]->source_location, "Third argument of __builtin_memcpy() must be an integer");
+
+            expr->kind = NODE_INTRINSIC_CALL;
+            expr->type = t_void;
+            return true;
         }
     }
 

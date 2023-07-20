@@ -1,12 +1,11 @@
-#include <codegen/x86_64/arch_x86_64_tgt_assembly.h>
-
 #include <codegen.h>
 #include <codegen/codegen_forward.h>
-#include <codegen/intermediate_representation.h>
 #include <codegen/machine_ir.h>
 #include <codegen/x86_64/arch_x86_64.h>
 #include <codegen/x86_64/arch_x86_64_common.h>
 #include <codegen/x86_64/arch_x86_64_isel.h>
+#include <codegen/x86_64/arch_x86_64_tgt_assembly.h>
+#include <ir/ir.h>
 #include <module.h>
 #include <utils.h>
 #include <vector.h>
@@ -515,12 +514,12 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
 
     fprint(context->code, "\n");
     foreach_val (function, machine_instructions)
-      if (function->origin->linkage == LINKAGE_EXPORTED || function->origin->linkage == LINKAGE_USED)
+      if (ir_linkage(function->origin) == LINKAGE_EXPORTED || ir_linkage(function->origin) == LINKAGE_USED)
         fprint(context->code, ".global %S\n", function->name);
   }
   foreach_val (function, machine_instructions) {
     // Generate function entry label if function has definition.
-    if (!ir_function_is_definition(function->origin)) continue;
+    if (!ir_func_is_definition(function->origin)) continue;
 
     fprint(context->code, "\n%s:\n", function->name.data);
 
@@ -533,7 +532,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
       fo->offset = frame_offset;
     }
 
-    if (function->origin && !ir_function_is_definition(function->origin)) continue;
+    if (function->origin && !ir_func_is_definition(function->origin)) continue;
 
     STATIC_ASSERT(FRAME_COUNT == 3, "Exhaustive handling of x86_64 frame kinds");
     StackFrameKind frame_kind = stack_frame_kind(function);
@@ -573,7 +572,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
         if (annotate_code && instruction->origin) {
           fprint(context->code, ";;#; ");
           thread_use_colours = false;
-          ir_femit_instruction(context->code, instruction->origin);
+          ir_print_instruction(context->code, instruction->origin);
           thread_use_colours = true;
         }
         switch ((MIROpcodex86_64)instruction->opcode) {
@@ -609,7 +608,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
             }
             if (reg->value.reg.size == r8 || reg->value.reg.size == r16)
               femit_imm_to_reg(context, MX64_MOV, 0, reg->value.reg.value, r32);
-            femit_name_to_reg(context, MX64_LEA, REG_RIP, object->value.static_ref->static_ref->name.data, reg->value.reg.value, reg->value.reg.size);
+            femit_name_to_reg(context, MX64_LEA, REG_RIP, ir_static_ref_var(object->value.static_ref)->name.data, reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_FUNCTION, MIR_OP_REGISTER)) {
             MIROperand *f = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);
@@ -677,8 +676,8 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *stc = mir_get_op(instruction, 1);
             femit_imm_to_offset_name(context, MX64_MOV,
-                                     imm->value.imm, (RegSize)type_sizeof(stc->value.static_ref->static_ref->type),
-                                     REG_RIP, stc->value.static_ref->static_ref->name.data, 0);
+                                     imm->value.imm, (RegSize)type_sizeof(ir_static_ref_var(stc->value.static_ref)->type),
+                                     REG_RIP, ir_static_ref_var(stc->value.static_ref)->name.data, 0);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
@@ -701,7 +700,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
             }
             if (dst->value.reg.size == r8 || dst->value.reg.size == r16)
               femit_imm_to_reg(context, MX64_MOV, 0, dst->value.reg.value, r32);
-            femit_name_to_reg(context, MX64_MOV, REG_RIP, src->value.static_ref->static_ref->name.data, dst->value.reg.value, dst->value.reg.size);
+            femit_name_to_reg(context, MX64_MOV, REG_RIP, ir_static_ref_var(src->value.static_ref)->name.data, dst->value.reg.value, dst->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_LOCAL_REF)) {
             // reg to mem (local) | src, local
             MIROperand *reg = mir_get_op(instruction, 0);
@@ -736,7 +735,7 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
               reg->value.reg.size = r64;
             }
             femit_reg_to_name(context, MX64_MOV, reg->value.reg.value, reg->value.reg.size,
-                              REG_RIP, stc->value.static_ref->static_ref->name.data);
+                              REG_RIP, ir_static_ref_var(stc->value.static_ref)->name.data);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_LOCAL_REF, MIR_OP_REGISTER)) {
             // mem (local) to reg | local, src
             MIROperand *local = mir_get_op(instruction, 0);

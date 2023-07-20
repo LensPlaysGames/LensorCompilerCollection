@@ -59,13 +59,13 @@ add_executable(
   src/utils.c
   src/platform.c
   src/module.c
-  src/codegen/dom.c
+  src/ir/dom.c
   src/codegen/generic_object.c
   src/codegen/instruction_selection.c
-  src/codegen/intermediate_representation.c
+  src/ir/ir.c
   src/codegen/register_allocation.c
   src/codegen/opt/opt.c
-  src/codegen/opt/inline.c
+  src/ir/inline.c
   src/codegen/machine_ir.c
   #src/codegen/ir/ir.c
   src/codegen/llvm/llvm_target.c
@@ -159,10 +159,19 @@ if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
 endif()
 
 # Enable asan if requested and possible.
-if (DEFINED ENABLE_ASAN AND NOT WIN32)
-  target_compile_options(intc PRIVATE -fsanitize=address)
-  target_link_options(intc PRIVATE -fsanitize=address)
-endif()
+if (NOT WIN32)
+  if (ENABLE_ASAN)
+    target_compile_options(intc PRIVATE -fsanitize=address)
+    target_compile_definitions(intc PRIVATE ENABLE_ASAN=1)
+    target_link_options(intc PRIVATE -fsanitize=address)
+
+    # Make address sanitiser ignore memory leaks. This is useful if there are
+    # more severe problems (e.g. use-after-free bugs) that need to be fixed.
+    if (ASAN_IGNORE_LEAKS)
+      target_compile_definitions(intc PRIVATE ASAN_IGNORE_LEAKS=1)
+    endif ()
+  endif()
+endif ()
 
 # Compile options.
 if (NOT MSVC)

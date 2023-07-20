@@ -1,14 +1,13 @@
-#include <codegen/x86_64/arch_x86_64_tgt_generic_object.h>
-
 #include <codegen/codegen_forward.h>
-#include <codegen/intermediate_representation.h>
-#include <codegen/machine_ir.h>
 #include <codegen/generic_object.h>
+#include <codegen/machine_ir.h>
 #include <codegen/x86_64/arch_x86_64_common.h>
 #include <codegen/x86_64/arch_x86_64_isel.h>
+#include <codegen/x86_64/arch_x86_64_tgt_generic_object.h>
+#include <ir/ir.h>
 #include <module.h>
-#include <vector.h>
 #include <utils.h>
+#include <vector.h>
 
 // NOTE: +rw indicates the lower three bits of the opcode byte are used
 // to indicate the 16-bit register operand.
@@ -2252,13 +2251,13 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
   foreach_val (function, machine_instructions) {
     { // Function symbol
       GObjSymbol sym = {0};
-      sym.type = !ir_function_is_definition(function->origin) ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
+      sym.type = !ir_func_is_definition(function->origin) ? GOBJ_SYMTYPE_EXTERNAL : GOBJ_SYMTYPE_FUNCTION;
       sym.name = strdup(function->name.data);
       sym.section_name = strdup(code_section(context->object)->name);
       sym.byte_offset = code_section(context->object)->data.bytes.size;
       vector_push(context->object->symbols, sym);
     }
-    if (function->origin && !ir_function_is_definition(function->origin)) continue;
+    if (function->origin && !ir_func_is_definition(function->origin)) continue;
 
     // Calculate stack offsets, frame size
     isz frame_offset = 0;
@@ -2411,8 +2410,8 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             MIROperand *imm = mir_get_op(instruction, 0);
             MIROperand *stc = mir_get_op(instruction, 1);
             mcode_imm_to_offset_name(context, MX64_MOV,
-                                     imm->value.imm, (RegSize)type_sizeof(stc->value.static_ref->static_ref->type),
-                                     REG_RIP, stc->value.static_ref->static_ref->name.data, 0);
+                                     imm->value.imm, (RegSize)type_sizeof(ir_static_ref_var(stc->value.static_ref)->type),
+                                     REG_RIP, ir_static_ref_var(stc->value.static_ref)->name.data, 0);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_REGISTER)) {
             // reg to reg | src, dst
             MIROperand *src = mir_get_op(instruction, 0);
@@ -2432,7 +2431,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
               reg->value.reg.size = r64;
             }
             mcode_reg_to_name(context, MX64_MOV, reg->value.reg.value, reg->value.reg.size,
-                              REG_RIP, stc->value.static_ref->static_ref->name.data);
+                              REG_RIP, ir_static_ref_var(stc->value.static_ref)->name.data);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_REGISTER, MIR_OP_LOCAL_REF)) {
             // reg to mem (local) | src, local
             MIROperand *reg = mir_get_op(instruction, 0);
@@ -2497,7 +2496,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             // mem (static) to reg | static, dst
             MIROperand *stc = mir_get_op(instruction, 0);
             MIROperand *dst = mir_get_op(instruction, 1);
-            mcode_name_to_reg(context, MX64_MOV, REG_RIP, stc->value.static_ref->static_ref->name.data, dst->value.reg.value, dst->value.reg.size);
+            mcode_name_to_reg(context, MX64_MOV, REG_RIP, ir_static_ref_var(stc->value.static_ref)->name.data, dst->value.reg.value, dst->value.reg.size);
           } else {
             print("\n\nUNHANDLED INSTRUCTION:\n");
             print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
@@ -2605,7 +2604,7 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
             }
             if (reg->value.reg.size == r8 || reg->value.reg.size == r16)
               mcode_imm_to_reg(context, MX64_MOV, 0, reg->value.reg.value, r32);
-            mcode_name_to_reg(context, MX64_LEA, REG_RIP, object->value.static_ref->static_ref->name.data, reg->value.reg.value, reg->value.reg.size);
+            mcode_name_to_reg(context, MX64_LEA, REG_RIP, ir_static_ref_var(object->value.static_ref)->name.data, reg->value.reg.value, reg->value.reg.size);
           } else if (mir_operand_kinds_match(instruction, 2, MIR_OP_FUNCTION, MIR_OP_REGISTER)) {
             MIROperand *f = mir_get_op(instruction, 0);
             MIROperand *reg = mir_get_op(instruction, 1);

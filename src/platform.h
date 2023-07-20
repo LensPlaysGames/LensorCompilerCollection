@@ -10,6 +10,15 @@
 #  define PLATFORM_PATH_SEPARATOR "\\"
 #endif
 
+#ifdef ENABLE_ASAN
+# include <sanitizer/asan_interface.h>
+# define ASAN_POISON(ptr, size) __asan_poison_memory_region(ptr, size)
+# define ASAN_UNPOISON(ptr, size) __asan_unpoison_memory_region(ptr, size)
+#else
+# define ASAN_POISON(ptr, size) ((void) 0)
+# define ASAN_UNPOISON(ptr, size) ((void) 0)
+#endif
+
 /// Initialise the program for the host platform.
 void platform_init(void);
 

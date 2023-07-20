@@ -16,7 +16,9 @@
     size_t capacity; \
   }
 
-/// Free the memory used by a vector, but not the vector itself if it's on the heap.
+/// Free the memory used by a vector, but not the vector
+/// itself if it's on the heap. The vector is left in an
+/// empty, but valid, state and can be reused.
 #define vector_delete(vector) \
   do {                        \
     free((vector).data);      \
@@ -140,26 +142,53 @@
     &((vector).data[0]);                                                \
 }))
 
-/// Insert an element into a vector at before the given index.
-#define vector_insert(vector, pos, element)                     \
-  do {                                                          \
-    if ((pos) >= (vector).data + (vector).size) {               \
-      vector_push(vector, element);                             \
-    } else {                                                    \
-      isz _diff = (pos) - (vector).data;                        \
-      ASSERT(_diff >= 0);                                       \
-      usz _index = (usz)_diff;                                  \
-      vector_reserve((vector), 1);                              \
-      memmove((vector).data + _index + 1,                       \
-              (vector).data + _index,                           \
-              ((vector).size - _index) * sizeof *(vector).data  \
-              );                                                \
-      (vector).data[_index] = element;                          \
-      (vector).size++;                                          \
-    }                                                           \
+/// Insert an element into a vector at before the given position.
+#define vector_insert(vector, pos, element)              \
+  do {                                                   \
+    if ((pos) >= (vector).data + (vector).size) {        \
+      vector_push(vector, element);                      \
+    } else {                                             \
+      isz _diff = (pos) - (vector).data;                 \
+      ASSERT(_diff >= 0);                                \
+      usz _index = (usz) _diff;                          \
+      vector_reserve((vector), 1);                       \
+      memmove(                                           \
+        (vector).data + _index + 1,                      \
+        (vector).data + _index,                          \
+        ((vector).size - _index) * sizeof *(vector).data \
+      );                                                 \
+      (vector).data[_index] = element;                   \
+      (vector).size++;                                   \
+    }                                                    \
   } while (0)
 
-#define vector_insert_after(vector, element, after) vector_insert(vector, (after + 1), element)
+/// Insert elements into a vector at the given position. The elements
+/// at that position and after are shifted to the right.
+#define vector_insert_all(vector, pos, elements)                                                \
+  do {                                                                                          \
+    if ((pos) >= (vector).data + (vector).size) {                                               \
+      vector_append(vector, elements);                                                          \
+    } else {                                                                                    \
+      isz _diff = (pos) - (vector).data;                                                        \
+      ASSERT(_diff >= 0);                                                                       \
+      usz _index = (usz) _diff;                                                                 \
+      vector_reserve((vector), (elements).size);                                                \
+      memmove(                                                                                  \
+        (vector).data + _index + (elements).size,                                               \
+        (vector).data + _index,                                                                 \
+        ((vector).size - _index) * sizeof *(vector).data                                        \
+      );                                                                                        \
+      memcpy((vector).data + _index, (elements).data, (elements).size * sizeof *(vector).data); \
+      (vector).size += (elements).size;                                                         \
+    }                                                                                           \
+  } while (0)
+
+/// Insert an element into a vector by index. The elements starting at
+/// and including that index are shifted to the right by one.
+#define vector_insert_index(vector, index, element) \
+  do {                                              \
+    vector_insert(vector, (vector).data + (index), element); \
+  } while (0)
 
 /// Remove an element from a vector by index.
 #define vector_remove_index(vector, index)                              \
@@ -212,6 +241,29 @@
     }                                           \
     _ptr;                                       \
 })
+
+/// Move all elements from a vector into another vector
+/// using memcpy, starting at a certain index.
+#define vector_move_to(to, from, _index)                                                         \
+  do {                                                                                           \
+    usz index = _index;                                                                          \
+    usz elements_to_move = (from).size - index;                                                  \
+    vector_reserve((to), elements_to_move);                                                      \
+    memcpy((to).data + (to).size, (from).data + index, elements_to_move * sizeof(*(from).data)); \
+    vector_resize((from), index);                                                                \
+    (to).size += elements_to_move;                                                               \
+  } while (0)
+
+/// Replace the first occurrence of an element in a vector.
+#define vector_replace_element(vector, element, replacement)    \
+  do {                                                          \
+    foreach (el, (vector)) {                                    \
+      if (memcmp(el, &(element), sizeof *(vector).data) == 0) { \
+        *el = replacement;                                      \
+        break;                                                  \
+      }                                                         \
+    }                                                           \
+  } while (0)
 
 #define list_node(type) \
   struct {              \

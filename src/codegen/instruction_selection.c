@@ -1,19 +1,17 @@
-#include <codegen/instruction_selection.h>
-
 #include <codegen.h>
 #include <codegen/codegen_forward.h>
-#include <codegen/intermediate_representation.h>
+#include <codegen/instruction_selection.h>
 #include <codegen/machine_ir.h>
+#include <ctype.h>
+#include <errno.h>
 #include <error.h>
 #include <inttypes.h>
+#include <ir/ir.h>
 #include <platform.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <utils.h>
 #include <vector.h>
-
-#include <ctype.h>
-#include <errno.h>
-#include <stdbool.h>
 
 #define ISSUE_DIAGNOSTIC(sev, loc, parser, ...)                         \
   do {                                                                  \
@@ -144,7 +142,7 @@ static usz sdbm(const unsigned char *str) {
 
 static void isel_env_init_common(ISelEnvironment *env) {
 #define ADD_OPCODE(opcode, ...) isel_env_add_opcode(env, STR(CAT(MIR_, opcode)), CAT(MIR_, opcode));
-  ALL_IR_INSTRUCTION_TYPES(ADD_OPCODE);
+  ALL_SHARED_IR_AND_MIR_INSTRUCTION_TYPES(ADD_OPCODE);
 #undef ADD_OPCODE
 
   STATIC_ASSERT(MPSEUDO_COUNT == 2, "Exhaustive handling of MIR pseudo-instructions in instruction selection global environment initialisation");
@@ -1150,7 +1148,7 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
   MIRInstructionVector instructions = {0};
 
   foreach_val (f, mir) {
-    if (!ir_function_is_definition(f->origin)) continue;
+    if (!ir_func_is_definition(f->origin)) continue;
 
     foreach_val (bb, f->blocks) {
       vector_clear(instructions);
@@ -1288,7 +1286,7 @@ void isel_do_selection(MIRFunctionVector mir, ISelPatterns patterns) {
   MIRBlockVector visited = {0};
   MIRBlockVector doubly_visited = {0};
   foreach_val (f, mir) {
-    if (!ir_function_is_definition(f->origin)) continue;
+    if (!ir_func_is_definition(f->origin)) continue;
 
     MIRBlock *entry = vector_front(f->blocks);
     ASSERT(entry->is_entry, "First block within MIRFunction is not entry point; we should do more work to find the entry, sorry");
@@ -1321,7 +1319,7 @@ void isel_print_mir_operand(MIROperand *operand) {
   case MIR_OP_BLOCK: break;//print(" %S", operand->value.block->name); break;
   case MIR_OP_FUNCTION: print(" %S", operand->value.function->name); break;
   case MIR_OP_NAME: print("%s", operand->value.name); break;
-  case MIR_OP_STATIC_REF: print(" %S", operand->value.static_ref->static_ref->name); break;
+  case MIR_OP_STATIC_REF: print(" %S", ir_static_ref_var(operand->value.static_ref)->name); break;
   case MIR_OP_LOCAL_REF: print(" %Z", operand->value.local_ref); break;
 
   case MIR_OP_OP_REF: print(" inst:%u op:%u", operand->value.op_ref.pattern_instruction_index, operand->value.op_ref.operand_index); break;

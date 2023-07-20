@@ -39,10 +39,6 @@ void codegen_lower_x86_64(CodegenContext *context);
 void codegen_lower_early_x86_64(CodegenContext *context);
 void codegen_emit_x86_64(CodegenContext *context);
 
-typedef enum x86_64BackendFlags {
-  STORE_UNDERLYING,
-} x86_64BackendFlags;
-
 /// Values only valid once codegen_context_x86_64_*_create() has been called and returned.
 extern Register *caller_saved_registers;
 extern size_t caller_saved_register_count;

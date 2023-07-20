@@ -80,7 +80,7 @@ void sec_write_3(Section *section, uint8_t value0, uint8_t value1, uint8_t value
 /// Write 4 bytes of data to section.
 void sec_write_4(Section *section, uint8_t value0, uint8_t value1, uint8_t value2, uint8_t value3);
 /// Write n bytes of data from buffer to section.
-void sec_write_n(Section *section, void* buffer, size_t n);
+void sec_write_n(Section *section, const void* buffer, size_t n);
 
 /// Get the code/text section (always at the 0th index of sections vector)
 Section *code_section(GenericObjectFile *object);

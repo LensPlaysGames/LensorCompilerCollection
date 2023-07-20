@@ -1,12 +1,12 @@
 #include <codegen.h>
 #include <codegen/instruction_selection.h>
-#include <codegen/intermediate_representation.h>
 #include <codegen/machine_ir.h>
 #include <codegen/opt/opt.h>
 #include <codegen/register_allocation.h>
 #include <codegen/x86_64/arch_x86_64.h>
 #include <codegen/x86_64/arch_x86_64_common.h>
 #include <codegen/x86_64/arch_x86_64_isel.h>
+#include <ir/ir.h>
 #include <utils.h>
 
 const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {
@@ -54,7 +54,7 @@ const char *mir_x86_64_opcode_mnemonic(uint32_t opcode) {
 
 static MIROpcodex86_64 gmir_binop_to_x64(MIROpcodeCommon opcode) {
   DBGASSERT(opcode < MIR_COUNT, "Argument is meant to be a general MIR instruction opcode.");
-  STATIC_ASSERT(MIR_COUNT == 40, "Exhaustive handling of binary operator machine instruction opcodes for x86_64 backend");
+  STATIC_ASSERT(MIR_COUNT == 39, "Exhaustive handling of binary operator machine instruction opcodes for x86_64 backend");
   switch (opcode) {
   case MIR_ADD: return MX64_ADD;
   case MIR_SUB: return MX64_SUB;
@@ -117,7 +117,7 @@ static void emit_instruction(CodegenContext *context, IRInstruction *inst) {
     // TODO: Base comment syntax on dialect or smth.
     fprint(context->code, ";;#;");
     thread_use_colours = false;
-    ir_femit_instruction(context->code, inst);
+    ir_print_instruction(context->code, inst);
     thread_use_colours = true;
   }
 

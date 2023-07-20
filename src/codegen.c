@@ -1,12 +1,12 @@
 #include <ast.h>
 #include <codegen.h>
 #include <codegen/codegen_forward.h>
-#include <codegen/intermediate_representation.h>
-#include <codegen/ir/ir.h>
+#include <codegen/ir/ir-target.h>
 #include <codegen/llvm/llvm_target.h>
 #include <codegen/opt/opt.h>
 #include <codegen/x86_64/arch_x86_64.h>
 #include <error.h>
+#include <ir/ir.h>
 #include <ir_parser.h>
 #include <parser.h>
 #include <stddef.h>
@@ -26,93 +26,6 @@
 
 char codegen_verbose = 1;
 
-/// ===========================================================================
-///  Context creation.
-/// ===========================================================================
-CodegenContext *codegen_context_create
-(Module *ast,
- CodegenArchitecture arch,
- CodegenTarget target,
- CodegenCallingConvention call_convention,
- FILE* code
- )
-{
-  CodegenContext *context;
-
-  STATIC_ASSERT(ARCH_COUNT == 2, "codegen_context_create() must exhaustively handle all codegen architectures.");
-  STATIC_ASSERT(TARGET_COUNT == 6, "codegen_context_create() must exhaustively handle all codegen targets.");
-  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_create() must exhaustively handle all codegen calling conventions.");
-
-  switch (arch) {
-    case ARCH_X86_64:
-      // Handle call_convention for creating codegen context!
-      if (call_convention == CG_CALL_CONV_MSWIN) {
-        context = codegen_context_x86_64_mswin_create();
-      } else if (call_convention == CG_CALL_CONV_SYSV) {
-        context = codegen_context_x86_64_linux_create();
-      } else {
-        ICE("Unrecognized calling convention!");
-      }
-      break;
-    default: UNREACHABLE();
-  }
-
-  context->poison = calloc(1, sizeof(IRInstruction));
-  context->poison->kind = IR_POISON;
-  context->poison->ctx = context;
-
-  context->arch = arch;
-  context->target = target;
-  context->call_convention = call_convention;
-
-  context->ast = ast;
-  context->code = code;
-
-  return context;
-}
-
-void codegen_context_free(CodegenContext *context) {
-  STATIC_ASSERT(ARCH_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen architectures.");
-  STATIC_ASSERT(TARGET_COUNT == 6, "codegen_context_free() must exhaustively handle all codegen targets.");
-  STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "codegen_context_free() must exhaustively handle all codegen calling conventions.");
-
-  /// Free all IR Functions.
-  foreach_val (f, context->functions) ir_free_function(f);
-
-  /// Finally, delete the function vector.
-  vector_delete(context->functions);
-
-  /// Free static variables.
-  foreach_val (var, context->static_vars) {
-    free(var->name.data);
-    free(var);
-  }
-  vector_delete(context->static_vars);
-
-  /// Free parameter instructions that were removed, but not freed.
-  foreach_val (i, context->removed_instructions) {
-    ir_free_instruction_data(i);
-    free(i);
-  }
-  vector_delete(context->removed_instructions);
-
-  /// Free backend-specific data.
-  STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures");
-  switch (context->arch) {
-    default: UNREACHABLE();
-
-    case ARCH_X86_64: {
-      STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling conventions");
-      if (context->call_convention == CG_CALL_CONV_MSWIN) codegen_context_x86_64_mswin_free(context);
-      else if (context->call_convention == CG_CALL_CONV_SYSV) codegen_context_x86_64_linux_free(context);
-      else ICE("Unrecognized calling convention!");
-    } break;
-  }
-
-  /// Free the context itself.
-  free(context);
-}
-
 bool parameter_is_in_register(CodegenContext *context, IRFunction *function, usz parameter_index) {
   STATIC_ASSERT(ARCH_COUNT == 2, "Exhaustive handling of architectures");
   switch (context->arch) {
@@ -124,16 +37,17 @@ bool parameter_is_in_register(CodegenContext *context, IRFunction *function, usz
 
 static bool parameter_is_passed_as_pointer(CodegenContext *context, IRFunction *function, usz parameter_index) {
   STATIC_ASSERT(CG_CALL_CONV_COUNT == 2, "Exhaustive handling of calling conventions");
+  Type *type = ir_typeof(function);
+
   switch (context->call_convention) {
+  default: ICE("Unrecognized calling convention %d!", context->call_convention);
 
   case CG_CALL_CONV_MSWIN:
-    return type_sizeof(function->parameters.data[parameter_index]->type) > 8;
+    return type_sizeof(type->function.parameters.data[parameter_index].type) > 8;
 
   case CG_CALL_CONV_SYSV:
     // FIXME: This is not how sysv works, nearly at all. But it's good enough for us right now.
-    return type_sizeof(function->parameters.data[parameter_index]->type) > 16;
-
-  default: ICE("Unrecognized calling convention %d!", context->call_convention);
+    return type_sizeof(type->function.parameters.data[parameter_index].type) > 16;
   }
   UNREACHABLE();
 }
@@ -141,7 +55,6 @@ static bool parameter_is_passed_as_pointer(CodegenContext *context, IRFunction *
 /// ===========================================================================
 ///  Code generation.
 /// ===========================================================================
-
 static void codegen_expr(CodegenContext *ctx, Node *expr);
 
 // Emit an lvalue.
@@ -152,29 +65,40 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
 
   /// Variable declaration.
   case NODE_DECLARATION:
-    lval->address = lval->declaration.linkage != LINKAGE_LOCALVAR
-    ? ir_create_static(ctx, lval, lval->type, as_span(lval->declaration.name))
-    : ir_stack_allocate(ctx, lval->type);
+    /// Create a static variable if need be.
+    if (lval->declaration.linkage != LINKAGE_LOCALVAR) {
+      IRStaticVariable *var = ir_create_static(
+        ctx,
+        lval,
+        lval->type,
+        string_dup(lval->declaration.name)
+      );
 
-    /// Emit the initialiser if there is one.
-    // TODO: TK_LBRACK aka array literals *may* be known at compile
-    // time, if all of the elements are.
-    if (lval->declaration.init) {
-      if (lval->declaration.linkage != LINKAGE_LOCALVAR &&
-          (lval->declaration.init->kind == NODE_LITERAL) &&
-          (lval->declaration.init->literal.type != TK_LBRACK)) {
-            if (lval->declaration.init->literal.type == TK_NUMBER) {
-              INSTRUCTION(i, IR_LIT_INTEGER);
-              i->imm = lval->declaration.init->literal.integer;
-              lval->address->static_ref->init = i;
-            } else if (lval->declaration.init->literal.type == TK_STRING) {
-              lval->address->static_ref->init = ir_get_literal_string(ctx, lval->declaration.init->literal.string_index);
-            } else ICE("Unhandled literal type for static variable initialisation.");
-          } else {
-            codegen_expr(ctx, lval->declaration.init);
-            ir_store(ctx, lval->declaration.init->ir, lval->address);
-          }
+      lval->address = ir_insert_static_ref(ctx, var);
+
+      /// Emit initialiser.
+      if (
+        lval->declaration.init &&
+        lval->declaration.init->kind == NODE_LITERAL &&
+        lval->declaration.init->literal.type != TK_LBRACK
+      ) {
+        if (lval->declaration.init->literal.type == TK_NUMBER) {
+          ir_static_var_init(var, ir_create_int_lit(ctx, lval->declaration.init->literal.integer));
+        } else if (lval->declaration.init->literal.type == TK_STRING) {
+          ir_static_var_init(var, ir_create_interned_str_lit(ctx, lval->declaration.init->literal.string_index));
+        } else ICE("Unhandled literal type for static variable initialisation.");
+        return;
+      }
+    } else {
+      lval->address = ir_insert_alloca(ctx, lval->type);
     }
+
+    /// Emit initialiser.
+    if (lval->declaration.init) {
+      codegen_expr(ctx, lval->declaration.init);
+      ir_insert_store(ctx, lval->declaration.init->ir, lval->address);
+    }
+
     return;
 
   case NODE_MEMBER_ACCESS: {
@@ -182,13 +106,15 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
     // When member has zero byte offset, we can just use the address of the
     // struct with a modified type.
     if (lval->member_access.member->byte_offset)
-      lval->address = ir_add(ctx, lval->member_access.struct_->address,
-                             ir_immediate(ctx, t_integer, lval->member_access.member->byte_offset));
+      lval->address = ir_insert_add(
+        ctx,
+        lval->member_access.struct_->address,
+        ir_insert_immediate(ctx, t_integer, lval->member_access.member->byte_offset)
+      );
     else {
-      lval->address = ir_copy(ctx, lval->member_access.struct_->address);
-      ir_insert(ctx, lval->address);
+      lval->address = ir_insert_copy(ctx, lval->member_access.struct_->address);
     }
-    lval->address->type = ast_make_type_pointer(ctx->ast, lval->source_location, lval->member_access.member->type);
+    ir_set_type(lval->address, ast_make_type_pointer(ctx->ast, lval->source_location, lval->member_access.member->type));
   } break;
 
   case NODE_IF:
@@ -206,8 +132,8 @@ static void codegen_lvalue(CodegenContext *ctx, Node *lval) {
   case NODE_VARIABLE_REFERENCE:
     ASSERT(lval->var->val.node->address,
            "Cannot reference variable that has not yet been emitted.");
-    if (lval->var->val.node->address->kind == IR_STATIC_REF)
-      lval->address = ir_static_reference(ctx, lval->var->val.node->address->static_ref);
+    if (ir_kind(lval->var->val.node->address) == IR_STATIC_REF)
+      lval->address = ir_insert_static_ref(ctx, ir_static_ref_var(lval->var->val.node->address));
     else lval->address = lval->var->val.node->address;
     break;
 
@@ -244,7 +170,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// hold on to function references and emit IR function references
   /// for them in here.
   case NODE_FUNCTION:
-      expr->ir = ir_funcref(ctx, expr->function.ir);
+      expr->ir = ir_insert_func_ref(ctx, expr->function.ir);
       if (expr->type->function.attr_inline)
         ERR("Cannot take address of inline function '%S'", expr->function.name);
       return;
@@ -261,7 +187,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     }
 
     /// If the last expression doesn’t return anything, return 0.
-    if (!ir_is_closed(ctx->block)) ir_return(ctx, vector_back(expr->root.children)->ir);
+    if (!ir_is_closed(ctx->insert_point)) ir_insert_return(ctx, vector_back(expr->root.children)->ir);
     return;
   }
 
@@ -272,7 +198,11 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   case NODE_MEMBER_ACCESS:
   case NODE_VARIABLE_REFERENCE:
     codegen_lvalue(ctx, expr);
-    expr->ir = ir_load(ctx, type_get_element(expr->address->type), expr->address);
+    expr->ir = ir_insert_load(
+      ctx,
+      type_get_element(ir_typeof(expr->address)),
+      expr->address
+    );
     return;
 
   case NODE_STRUCTURE_DECLARATION:
@@ -299,41 +229,41 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     /// Emit the condition.
     codegen_expr(ctx, expr->if_.condition);
 
-    IRBlock *then_block = ir_block_create();
+    IRBlock *then_block = ir_block(ctx);
     IRBlock *last_then_block = then_block;
-    IRBlock *else_block = ir_block_create();
+    IRBlock *else_block = ir_block(ctx);
     IRBlock *last_else_block = else_block;
-    IRBlock *join_block = ir_block_create();
+    IRBlock *join_block = ir_block(ctx);
 
     /// Generate the branch.
-    ir_branch_conditional(ctx, expr->if_.condition->ir, then_block, else_block);
+    ir_insert_cond_br(ctx, expr->if_.condition->ir, then_block, else_block);
 
     /// Emit the then block.
     ir_block_attach(ctx, then_block);
     codegen_expr(ctx, expr->if_.then);
 
     /// Branch to the join block to skip the else branch.
-    last_then_block = ctx->block;
-    if (!ir_is_closed(ctx->block)) ir_branch(ctx, join_block);
+    last_then_block = ctx->insert_point;
+    if (!ir_is_closed(ctx->insert_point)) ir_insert_br(ctx, join_block);
 
     /// Generate the else block if there is one.
     ir_block_attach(ctx, else_block);
     if (expr->if_.else_) {
       codegen_expr(ctx, expr->if_.else_);
-      last_else_block = ctx->block;
+      last_else_block = ctx->insert_point;
     }
 
     /// Branch to the join block from the else branch.
-    if (!ir_is_closed(ctx->block)) ir_branch(ctx, join_block);
+    if (!ir_is_closed(ctx->insert_point)) ir_insert_br(ctx, join_block);
 
     /// Attach the join block.
     ir_block_attach(ctx, join_block);
 
     /// Insert a phi node for the result of the if in the join block.
     if (!type_is_void(expr->type)) {
-      IRInstruction *phi = ir_phi(ctx, expr->type);
-      ir_phi_argument(phi, last_then_block, expr->if_.then->ir);
-      ir_phi_argument(phi, last_else_block, expr->if_.else_->ir);
+      IRInstruction *phi = ir_insert_phi(ctx, expr->type);
+      ir_phi_add_arg(phi, last_then_block, expr->if_.then->ir);
+      ir_phi_add_arg(phi, last_else_block, expr->if_.else_->ir);
       expr->ir = phi;
     }
     return;
@@ -360,11 +290,11 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   ///  | join     |
   ///  +----------+
   case NODE_WHILE: {
-    IRBlock *while_cond_block = ir_block_create();
-    IRBlock *join_block = ir_block_create();
+    IRBlock *while_cond_block = ir_block(ctx);
+    IRBlock *join_block = ir_block(ctx);
 
     /// Branch to the new condition block, then attach that as the current block.
-    ir_branch(ctx, while_cond_block);
+    ir_insert_br(ctx, while_cond_block);
     ir_block_attach(ctx, while_cond_block);
 
     // Emit condition
@@ -372,19 +302,19 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
     /// If while body is empty, don't use body block.
     if (expr->while_.body->block.children.size == 0) {
-      ir_branch_conditional(ctx, expr->while_.condition->ir, while_cond_block, join_block);
+      ir_insert_cond_br(ctx, expr->while_.condition->ir, while_cond_block, join_block);
       ir_block_attach(ctx, join_block);
       return;
     }
 
     /// Otherwise, emit the body of the while loop.
-    IRBlock *while_body_block = ir_block_create();
-    ir_branch_conditional(ctx, expr->while_.condition->ir, while_body_block, join_block);
+    IRBlock *while_body_block = ir_block(ctx);
+    ir_insert_cond_br(ctx, expr->while_.condition->ir, while_body_block, join_block);
     ir_block_attach(ctx, while_body_block);
     codegen_expr(ctx, expr->while_.body);
 
     /// Emit a branch to the join block and attach the join block.
-    if (!ir_is_closed(ctx->block)) ir_branch(ctx, while_cond_block);
+    if (!ir_is_closed(ctx->insert_point)) ir_insert_br(ctx, while_cond_block);
     ir_block_attach(ctx, join_block);
     return;
   }
@@ -416,24 +346,24 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
     /// Direct call.
     if (expr->call.callee->kind == NODE_FUNCTION) {
-      call = ir_direct_call(ctx, expr->call.callee->function.ir);
+      call = ir_create_call(ctx, expr->call.callee->function.ir);
     }
 
     /// Indirect call.
     else {
       codegen_expr(ctx, expr->call.callee);
-      call = ir_indirect_call(ctx, expr->call.callee->ir);
+      call = ir_create_call(ctx, expr->call.callee->ir);
     }
 
     /// Emit the arguments.
     foreach_val (arg, expr->call.arguments) {
       if (type_is_reference(arg->type)) {
         codegen_lvalue(ctx, arg);
-        ir_add_function_call_argument(ctx, call, arg->address);
+        ir_call_add_arg(call, arg->address);
       }
       else {
         codegen_expr(ctx, arg);
-        ir_add_function_call_argument(ctx, call, arg->ir);
+        ir_call_add_arg(call, arg->ir);
       }
     }
 
@@ -445,7 +375,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
   /// Intrinsic.
   case NODE_INTRINSIC_CALL: {
     ASSERT(expr->call.callee->kind = NODE_FUNCTION_REFERENCE);
-    STATIC_ASSERT(INTRIN_COUNT == 6, "Handle all intrinsics in codegen");
+    STATIC_ASSERT(INTRIN_COUNT == 7, "Handle all intrinsics in codegen");
     switch (expr->call.intrinsic) {
       case INTRIN_COUNT:
       case INTRIN_BACKEND_COUNT:
@@ -456,43 +386,52 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         UNREACHABLE();
 
       /// System call.
-      case INTRIN_BUILTIN_SYSCALL: {
+      case INTRIN_BUILTIN_SYSCALL:
         /// Syscalls are not a thing on Windows.
         if (ctx->call_convention == CG_CALL_CONV_MSWIN) {
           ERR("Sorry, syscalls are not supported on Windows.");
         }
 
-        expr->ir = ir_intrinsic(ctx, t_integer, expr->call.intrinsic);
+        expr->ir = ir_insert_intrinsic(ctx, t_integer, expr->call.intrinsic);
         foreach_val (arg, expr->call.arguments) {
           if (type_is_reference(arg->type)) {
             codegen_lvalue(ctx, arg);
-            ir_add_function_call_argument(ctx, expr->ir, arg->address);
+            ir_call_add_arg(expr->ir, arg->address);
           } else {
             codegen_expr(ctx, arg);
-            ir_add_function_call_argument(ctx, expr->ir, arg->ir);
+            ir_call_add_arg(expr->ir, arg->ir);
           }
         }
-
-        ir_insert(ctx, expr->ir);
         return;
-      }
 
       /// Inline call.
       case INTRIN_BUILTIN_INLINE: {
         Node *call = expr->call.arguments.data[0];
         codegen_expr(ctx, call);
-        call->ir->call.force_inline = true;
+        ir_call_force_inline(call->ir, true);
         expr->ir = call->ir;
         expr->address = call->address;
         return;
       }
 
       /// Debug trap.
-      case INTRIN_BUILTIN_DEBUGTRAP: {
-        expr->ir = ir_intrinsic(ctx, t_void, expr->call.intrinsic);
-        ir_insert(ctx, expr->ir);
+      case INTRIN_BUILTIN_DEBUGTRAP:
+        expr->ir = ir_insert_intrinsic(ctx, t_void, expr->call.intrinsic);
         return;
-      }
+
+      /// Memory copy.
+      case INTRIN_BUILTIN_MEMCPY:
+        expr->ir = ir_insert_intrinsic(ctx, t_void, expr->call.intrinsic);
+        foreach_val (arg, expr->call.arguments) {
+          if (type_is_reference(arg->type)) {
+            codegen_lvalue(ctx, arg);
+            ir_call_add_arg(expr->ir, arg->address);
+          } else {
+            codegen_expr(ctx, arg);
+            ir_call_add_arg(expr->ir, arg->ir);
+          }
+        }
+        return;
     }
 
     UNREACHABLE();
@@ -511,19 +450,19 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     codegen_expr(ctx, expr->cast.value);
 
     if (from_sz == to_sz) {
-      expr->ir = ir_bitcast(ctx, t_to, expr->cast.value->ir);
+      expr->ir = ir_insert_bitcast(ctx, t_to, expr->cast.value->ir);
       return;
     }
     else if (from_sz < to_sz) {
       // smaller to larger: sign extend if needed, otherwise zero extend.
       if (from_signed)
-        expr->ir = ir_sign_extend(ctx, t_to, expr->cast.value->ir);
-      else expr->ir = ir_zero_extend(ctx, t_to, expr->cast.value->ir);
+        expr->ir = ir_insert_sext(ctx, t_to, expr->cast.value->ir);
+      else expr->ir = ir_insert_zext(ctx, t_to, expr->cast.value->ir);
       return;
     }
     else if (from_sz > to_sz) {
       // larger to smaller: truncate.
-      expr->ir = ir_truncate(ctx, t_to, expr->cast.value->ir);
+      expr->ir = ir_insert_trunc(ctx, t_to, expr->cast.value->ir);
       return;
     }
     UNREACHABLE();
@@ -539,7 +478,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       /// Emit the RHS because we need that in any case.
       codegen_expr(ctx, rhs);
       codegen_lvalue(ctx, lhs);
-      expr->ir = ir_store(ctx, rhs->ir, lhs->address);
+      expr->ir = ir_insert_store(ctx, rhs->ir, lhs->address);
       return;
     }
 
@@ -551,13 +490,15 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
       if (lhs->kind == NODE_VARIABLE_REFERENCE) {
         IRInstruction *var_decl = lhs->var->val.node->address;
-        if (var_decl->kind == IR_PARAMETER || var_decl->kind == IR_STATIC_REF || var_decl->kind == IR_ALLOCA)
-          if (type_is_pointer(var_decl->type) && type_is_pointer(var_decl->type->pointer.to))
-            subs_lhs = ir_load(ctx, type_get_element(var_decl->type), var_decl);
+        IRType kind = ir_kind(var_decl);
+        Type *ty = ir_typeof(var_decl);
+        if (kind == IR_PARAMETER || kind == IR_STATIC_REF || kind == IR_ALLOCA)
+          if (type_is_pointer(ty) && type_is_pointer(ty->pointer.to))
+            subs_lhs = ir_insert_load(ctx, type_get_element(ty), var_decl);
           else subs_lhs = var_decl;
         else {
-          ir_femit_instruction(stdout, var_decl);
-          ERR("Unhandled variable reference IR instruction kind %i aka %s", (int) var_decl->kind, ir_irtype_string(var_decl->kind));
+          ir_print_instruction(stdout, var_decl);
+          ERR("Unhandled variable reference IR instruction kind %i aka %S", (int) kind, ir_kind_to_str(kind));
         }
       } else if (is_lvalue(lhs)) {
         codegen_lvalue(ctx, lhs);
@@ -570,7 +511,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
             ERR("Out of bounds: subscript %U too large for string literal.", rhs->literal.integer);
           }
           if (rhs->literal.integer)
-            expr->ir = ir_add(ctx, lhs->ir, ir_immediate(ctx, t_integer, rhs->literal.integer));
+            expr->ir = ir_insert_add(ctx, lhs->ir, ir_insert_immediate(ctx, t_integer, rhs->literal.integer));
           else expr->ir = lhs->ir;
           return;
         }
@@ -579,11 +520,16 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       else ERR("LHS of subscript operator has invalid kind %i", (int) lhs->kind);
 
       // Subscript of array should result in pointer to base type, not pointer to array type.
-      if ((type_is_pointer(subs_lhs->type) || type_is_reference(subs_lhs->type)) && type_is_array(subs_lhs->type->pointer.to)) {
-        subs_lhs = ir_copy(ctx, subs_lhs);
-        subs_lhs->type = ast_make_type_pointer(ctx->ast, subs_lhs->type->source_location,
-                                               subs_lhs->type->pointer.to->array.of);
-        ir_insert(ctx, subs_lhs);
+      {
+        Type *ty = ir_typeof(subs_lhs);
+        if ((type_is_pointer(ty) || type_is_reference(ty)) && type_is_array(ty->pointer.to)) {
+          Type *element_ptr = ast_make_type_pointer(
+            ctx->ast,
+            ty->source_location,
+            ty->pointer.to->array.of
+          );
+          subs_lhs = ir_insert_bitcast(ctx, element_ptr, subs_lhs);
+        }
       }
 
       if (rhs->kind == NODE_LITERAL && rhs->literal.type == TK_NUMBER && rhs->literal.integer == 0) {
@@ -596,15 +542,22 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       IRInstruction *scaled_rhs = NULL;
       // An array subscript needs multiplied by the sizeof the array's base type.
       if (type_is_array(reference_stripped_lhs_type)) {
-        IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(reference_stripped_lhs_type->array.of));
-        scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
+        IRInstruction *immediate = ir_insert_immediate(
+          ctx,
+          t_integer,
+          type_sizeof(reference_stripped_lhs_type->array.of)
+        );
+        scaled_rhs = ir_insert_mul(ctx, rhs->ir, immediate);
       }
       // A pointer subscript needs multiplied by the sizeof the pointer's base type.
       else if (type_is_pointer(reference_stripped_lhs_type)) {
-        IRInstruction *immediate = ir_immediate(ctx, t_integer, type_sizeof(reference_stripped_lhs_type->pointer.to));
-        scaled_rhs = ir_mul(ctx, rhs->ir, immediate);
-      }
-      expr->ir = ir_add(ctx, subs_lhs, scaled_rhs);
+        IRInstruction *immediate = ir_insert_immediate(
+          ctx,
+          t_integer,
+          type_sizeof(reference_stripped_lhs_type->pointer.to)
+        );
+        scaled_rhs = ir_insert_mul(ctx, rhs->ir, immediate);
+      } expr->ir = ir_insert_add(ctx, subs_lhs, scaled_rhs);
       return;
     }
 
@@ -616,21 +569,21 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     switch (expr->binary.op) {
       default: ICE("Cannot emit binary expression of type %d", expr->binary.op);
       case TK_LBRACK: UNREACHABLE();
-      case TK_LT: expr->ir = ir_lt(ctx, lhs->ir, rhs->ir); return;
-      case TK_LE: expr->ir = ir_le(ctx, lhs->ir, rhs->ir); return;
-      case TK_GT: expr->ir = ir_gt(ctx, lhs->ir, rhs->ir); return;
-      case TK_GE: expr->ir = ir_ge(ctx, lhs->ir, rhs->ir); return;
-      case TK_EQ: expr->ir = ir_eq(ctx, lhs->ir, rhs->ir); return;
-      case TK_NE: expr->ir = ir_ne(ctx, lhs->ir, rhs->ir); return;
-      case TK_PLUS: expr->ir = ir_add(ctx, lhs->ir, rhs->ir); return;
-      case TK_MINUS: expr->ir = ir_sub(ctx, lhs->ir, rhs->ir); return;
-      case TK_STAR: expr->ir = ir_mul(ctx, lhs->ir, rhs->ir); return;
-      case TK_SLASH: expr->ir = ir_div(ctx, lhs->ir, rhs->ir); return;
-      case TK_PERCENT: expr->ir = ir_mod(ctx, lhs->ir, rhs->ir); return;
-      case TK_SHL: expr->ir = ir_shl(ctx, lhs->ir, rhs->ir); return;
-      case TK_SHR: expr->ir = ir_sar(ctx, lhs->ir, rhs->ir); return;
-      case TK_AMPERSAND: expr->ir = ir_and(ctx, lhs->ir, rhs->ir); return;
-      case TK_PIPE: expr->ir = ir_or(ctx, lhs->ir, rhs->ir); return;
+      case TK_LT: expr->ir = ir_insert_lt(ctx, lhs->ir, rhs->ir); return;
+      case TK_LE: expr->ir = ir_insert_le(ctx, lhs->ir, rhs->ir); return;
+      case TK_GT: expr->ir = ir_insert_gt(ctx, lhs->ir, rhs->ir); return;
+      case TK_GE: expr->ir = ir_insert_ge(ctx, lhs->ir, rhs->ir); return;
+      case TK_EQ: expr->ir = ir_insert_eq(ctx, lhs->ir, rhs->ir); return;
+      case TK_NE: expr->ir = ir_insert_ne(ctx, lhs->ir, rhs->ir); return;
+      case TK_PLUS: expr->ir = ir_insert_add(ctx, lhs->ir, rhs->ir); return;
+      case TK_MINUS: expr->ir = ir_insert_sub(ctx, lhs->ir, rhs->ir); return;
+      case TK_STAR: expr->ir = ir_insert_mul(ctx, lhs->ir, rhs->ir); return;
+      case TK_SLASH: expr->ir = ir_insert_div(ctx, lhs->ir, rhs->ir); return;
+      case TK_PERCENT: expr->ir = ir_insert_mod(ctx, lhs->ir, rhs->ir); return;
+      case TK_SHL: expr->ir = ir_insert_shl(ctx, lhs->ir, rhs->ir); return;
+      case TK_SHR: expr->ir = ir_insert_sar(ctx, lhs->ir, rhs->ir); return;
+      case TK_AMPERSAND: expr->ir = ir_insert_and(ctx, lhs->ir, rhs->ir); return;
+      case TK_PIPE: expr->ir = ir_insert_or(ctx, lhs->ir, rhs->ir); return;
     }
   }
 
@@ -659,11 +612,11 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
         case TK_AT:
           if (expr->unary.value->type->kind == TYPE_POINTER && expr->unary.value->type->pointer.to->kind == TYPE_FUNCTION)
             expr->ir = expr->unary.value->ir;
-          else expr->ir = ir_load(ctx, type_get_element(expr->unary.value->ir->type), expr->unary.value->ir);
+          else expr->ir = ir_insert_load(ctx, type_get_element(ir_typeof(expr->unary.value->ir)), expr->unary.value->ir);
           return;
 
         /// One’s complement negation.
-        case TK_TILDE: expr->ir = ir_not(ctx, expr->unary.value->ir); return;
+        case TK_TILDE: expr->ir = ir_insert_not(ctx, expr->unary.value->ir); return;
       }
     }
 
@@ -680,7 +633,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
     switch (expr->literal.type) {
 
     case TK_NUMBER: {
-      expr->ir = ir_immediate(ctx, expr->type, expr->literal.integer);
+      expr->ir = ir_insert_immediate(ctx, expr->type, expr->literal.integer);
     } break;
 
     case TK_STRING: {
@@ -690,35 +643,31 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
       // should really have it so that the backend can gracefully
       // handle empty string for static names, and it will
       // automatically generate one (i.e. exactly what we do here).
-      char buf[48] = {0};
       static size_t string_literal_count = 0;
-      snprintf(buf, 48, "__str_lit%zu", string_literal_count++);
-
-      expr->ir = ir_create_static(ctx, expr, expr->type, as_span(string_create(buf)));
+      IRStaticVariable *var = ir_create_static(ctx, expr, expr->type, format("__str_lit%zu", string_literal_count++));
+      expr->ir = ir_insert_static_ref(ctx, var);
       // Set static initialiser so backend will properly fill in data from string literal.
-      expr->ir->static_ref->init = ir_get_literal_string(ctx, expr->literal.string_index);
-
+      ir_static_var_init(var, ir_create_interned_str_lit(ctx, expr->literal.string_index));
     } break;
 
     // Array
     case TK_LBRACK: {
-      expr->ir = ir_stack_allocate(ctx, expr->type);
+      expr->ir = ir_insert_alloca(ctx, expr->type);
 
       // Emit a store from each expression in the initialiser as an element in the array.
-      IRInstruction *address = ir_copy(ctx, expr->ir);
-      address->type = ast_make_type_pointer(ctx->ast, expr->source_location, expr->type->array.of);
-      ir_insert(ctx, address);
+      IRInstruction *address = ir_insert_copy(ctx, expr->ir);
+      ir_set_type(address, ast_make_type_pointer(ctx->ast, expr->source_location, expr->type->array.of));
       usz index = 0;
       foreach_val (node, expr->literal.compound) {
         codegen_expr(ctx, node);
-        ir_store(ctx, node->ir, address);
+        ir_insert_store(ctx, node->ir, address);
         if (index == expr->literal.compound.size - 1) break;
         // Iterate address
-        IRInstruction *element_byte_size = ir_immediate(ctx, t_integer, type_sizeof(expr->type->array.of));
-        address = ir_add(ctx, address, element_byte_size);
+        IRInstruction *element_byte_size = ir_insert_immediate(ctx, t_integer, type_sizeof(expr->type->array.of));
+        address = ir_insert_add(ctx, address, element_byte_size);
         ++index;
       }
-      expr->ir = ir_load(ctx, type_get_element(expr->ir->type) , expr->ir);
+      expr->ir = ir_insert_load(ctx, type_get_element(ir_typeof(expr->ir)) , expr->ir);
     } break;
 
     default:
@@ -753,21 +702,21 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
      *
      */
 
-    IRBlock *cond_block = ir_block_create();
-    IRBlock *body_block = ir_block_create();
-    IRBlock *join_block = ir_block_create();
+    IRBlock *cond_block = ir_block(ctx);
+    IRBlock *body_block = ir_block(ctx);
+    IRBlock *join_block = ir_block(ctx);
 
     codegen_expr(ctx, expr->for_.init);
-    ir_branch(ctx, cond_block);
+    ir_insert_br(ctx, cond_block);
 
     ir_block_attach(ctx, cond_block);
     codegen_expr(ctx, expr->for_.condition);
-    ir_branch_conditional(ctx, expr->for_.condition->ir, body_block, join_block);
+    ir_insert_cond_br(ctx, expr->for_.condition->ir, body_block, join_block);
 
     ir_block_attach(ctx, body_block);
     codegen_expr(ctx, expr->for_.body);
     codegen_expr(ctx, expr->for_.iterator);
-    ir_branch(ctx, cond_block);
+    ir_insert_br(ctx, cond_block);
 
     ir_block_attach(ctx, join_block);
 
@@ -776,7 +725,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
   case NODE_RETURN: {
     if (expr->return_.value) codegen_expr(ctx, expr->return_.value);
-    expr->ir = ir_return(ctx, expr->return_.value ? expr->return_.value->ir : NULL);
+    expr->ir = ir_insert_return(ctx, expr->return_.value ? expr->return_.value->ir : NULL);
     return;
   }
 
@@ -788,7 +737,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 /// Emit a function.
 void codegen_function(CodegenContext *ctx, Node *node) {
   ASSERT(node->function.body);
-  ctx->block = node->function.ir->blocks.first;
+  ctx->insert_point = ir_entry_block(node->function.ir);
   ctx->function = node->function.ir;
 
   /// Next, emit all parameter declarations and store
@@ -796,17 +745,18 @@ void codegen_function(CodegenContext *ctx, Node *node) {
   // TODO: Make this backend dependent?
   foreach_index(i, node->function.param_decls) {
     Node *decl = node->function.param_decls.data[i];
-    IRInstruction *p = ir_parameter(ctx, i);
+    IRInstruction *p = ir_parameter(ctx->function, i);
     if (type_is_reference(decl->type))
       decl->address = p;
     else if (parameter_is_passed_as_pointer(ctx, ctx->function, i)) {
-      p->type = ast_make_type_pointer(ctx->ast, p->type->source_location, p->type);
+      Type *ty = ir_typeof(p);
+      ir_set_type(p, ast_make_type_pointer(ctx->ast, ty->source_location, ty));
       decl->address = p;
     } else {
       /// Allocate a variable for the parameter.
       codegen_lvalue(ctx, decl);
       /// Store the parameter value in the variable.
-      ir_store(ctx, p, decl->address);
+      ir_insert_store(ctx, p, decl->address);
     }
   }
 
@@ -815,8 +765,8 @@ void codegen_function(CodegenContext *ctx, Node *node) {
 
   /// If we can return from here, and this function doesn’t return void,
   /// then return the return value; otherwise, just return nothing.
-  if (!ir_is_closed(ctx->block)) {
-    ir_return(ctx, !type_is_void(node->type->function.return_type)
+  if (!ir_is_closed(ctx->insert_point)) {
+    ir_insert_return(ctx, !type_is_void(node->type->function.return_type)
         ? node->function.body->ir
         : NULL);
   }
@@ -919,23 +869,23 @@ bool codegen
 
         /// FIXME: return type should be int as well, but that currently breaks the x86_64 backend.
         Type *main_type = ast_make_type_function(context->ast, (loc){0}, t_integer, main_params);
-        context->entry = ir_function(context, string_create("main"), main_type, LINKAGE_EXPORTED);
+        context->entry = ir_create_function(context, string_create("main"), main_type, LINKAGE_EXPORTED);
       } else {
         Parameters entry_params = {0};
         Type *entry_type = ast_make_type_function(context->ast, (loc){0}, t_void, entry_params);
-        context->entry = ir_function(context, format("__module%S_entry", context->ast->module_name), entry_type, LINKAGE_EXPORTED);
+        context->entry = ir_create_function(context, format("__module%S_entry", context->ast->module_name), entry_type, LINKAGE_EXPORTED);
       }
 
-      context->entry->attr_nomangle = true;
+      ir_attribute(context->entry, FUNC_ATTR_NOMANGLE, true);
 
       /// Create the remaining functions and set the address of each function.
       foreach_val (func, ast->functions) {
-        func->function.ir = ir_function(context, string_dup(func->function.name), func->type, func->function.linkage);
-        func->function.ir->source_location = func->source_location;
+        func->function.ir = ir_create_function(context, string_dup(func->function.name), func->type, func->function.linkage);
+        ir_location(func->function.ir, func->source_location);
 
         /// Handle attributes.
         // TODO: Should we propagate "discardable" to the IR?
-#define F(_, x) func->function.ir->attr_##x = func->type->function.attr_##x;
+#define F(name, var_name) ir_attribute(func->function.ir, FUNC_ATTR_##name, func->type->function.attr_##var_name);
         SHARED_FUNCTION_ATTRIBUTES(F)
 #undef F
       }
@@ -949,13 +899,13 @@ bool codegen
       }
 
       /// Emit the main function.
-      context->block = context->entry->blocks.first;
+      context->insert_point = ir_entry_block(context->entry);
       context->function = context->entry;
       codegen_expr(context, ast->root);
 
       /// Emit the remaining functions that aren’t extern.
       foreach_val (func, ast->functions)
-        if (ir_function_is_definition(func->function.ir))
+        if (ir_func_is_definition(func->function.ir))
           codegen_function(context, func);
     } break;
 
@@ -970,7 +920,7 @@ bool codegen
   if (!codegen_process_inline_calls(context)) return false;
 
   if (debug_ir || print_ir2) {
-    ir_femit(stdout, context);
+    ir_print(stdout, context);
   }
 
   /// Early lowering before optimisation.
@@ -980,7 +930,7 @@ bool codegen
     codegen_optimise(context);
     if (debug_ir || print_ir2) {
       print("After optimisation:\n");
-      ir_femit(stdout, context);
+      ir_print(stdout, context);
     }
   }
 
@@ -994,17 +944,17 @@ bool codegen
     exit(42);
   }
 
-  if (print_ir2) exit(42);
-
   /// No need to lower anything if we’re emitting LLVM IR.
   if (target != TARGET_LLVM) {
     codegen_lower(context);
 
-    if (debug_ir) {
+    if (debug_ir || print_ir2) {
       print("After lowering:\n");
-      ir_femit(stdout, context);
+      ir_print(stdout, context);
     }
   }
+
+  if (print_ir2) exit(42);
 
   codegen_emit(context);
 
@@ -1069,11 +1019,13 @@ static void mangle_type_to(string_buffer *buf, Type *t) {
 }
 
 void mangle_function_name(IRFunction *function) {
-  if (function->attr_nomangle) return;
+  if (ir_attribute(function, FUNC_ATTR_NOMANGLE)) return;
 
   string_buffer buf = {0};
-  format_to(&buf, "_XF%Z%S", function->name.size, function->name);
-  mangle_type_to(&buf, function->type);
-  free(function->name.data);
-  function->name = (string){buf.data, buf.size};
+  span name = ir_name(function);
+  format_to(&buf, "_XF%Z%S", name.size, name);
+  mangle_type_to(&buf, ir_typeof(function));
+
+  /// FIXME: Mangled name should not override original name.
+  ir_name(function, ((string){buf.data, buf.size}));
 }

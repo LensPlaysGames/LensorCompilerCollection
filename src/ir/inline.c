@@ -1,4 +1,5 @@
 #include <codegen/opt/opt-internal.h>
+#include <ir/ir-impl.h>
 
 #define ROOT_INLINE_ENTRY ((usz) -1)
 
@@ -19,11 +20,11 @@ typedef struct {
 
 /// Compute the number of instructions in a function.
 static isz instruction_count(IRFunction *f, bool include_parameters) {
-  isz i = 0;
-  FOREACH_INSTRUCTION_IN_FUNCTION (f)
-    if (include_parameters || (instruction->kind != IR_PARAMETER))
-      i++;
-  return i;
+  isz j = 0;
+  FOREACH_INSTRUCTION_IN_FUNCTION (i, b, f)
+    if (include_parameters || (ir_kind(i) != IR_PARAMETER))
+      j++;
+  return j;
 }
 
 /// Inline a call.
@@ -47,8 +48,6 @@ static inline_result ir_inline_call(
   isz threshold
 ) {
   /// Save the instruction before and after the call.
-  IRInstruction *const call_prev = call->prev;
-  IRInstruction *const call_next = call->next;
   IRFunction *const callee = call->call.callee_function;
   IRBlock *const call_block = call->parent_block;
   const bool is_tail_call = call->call.tail_call;
@@ -132,15 +131,8 @@ static inline_result ir_inline_call(
   /// from the block, but leave everything after it connected.
   /// Note that the call cannot be the last instruction in the
   /// block.
-  {
-    IRInstruction **first = &call_block->instructions.first;
-    IRInstruction **last = &call_block->instructions.last;
-    if (*first == call || *first == call_next) *first = NULL;
-    if (call_prev) call_prev->next = NULL;
-    if (call_next) call_next->prev = NULL;
-    call->prev = call->next = NULL;
-    *last = call_prev;
-  }
+  IRInstructionVector after_call = {0};
+  vector_move_to(after_call, call_block->instructions, index_in_block(call) + 1);
 
   /// Copy instructions from the callee into the caller, replacing
   /// any parameter references with the arguments to the call. Since
@@ -152,7 +144,7 @@ static inline_result ir_inline_call(
   /// one by one. This way, we effectively create a mapping of
   /// instructions and blocks of the callee to these instructions
   /// and blocks, which can then be inserted into the caller.
-  usz block_count = list_size(callee->blocks);
+  usz block_count = callee->blocks.size;
   Vector(IRInstruction *) instructions = {0};
   Vector(IRBlock *) blocks = {0};
   vector_reserve(instructions, (usz) count);
@@ -171,23 +163,29 @@ static inline_result ir_inline_call(
   }
 
   /// Enumerate instructions.
+  ///
+  /// Any parameter references are mapped to the last N instructions of
+  /// the instructions vector, which is where we are going to insert the
+  /// call arguments. That way, parameter references are automatically
+  /// replaced with the corresponding arguments.
   usz block_id = 0;
   u32 instruction_id = 0;
-  list_foreach (block, callee->blocks) {
+  foreach_val (block, callee->blocks) {
     block->id = block_id++;
-    list_foreach (inst, block->instructions) {
-      if (inst->kind == IR_PARAMETER) continue;
-      inst->id = instruction_id++;
+    foreach_val (inst, block->instructions) {
+      if (inst->kind == IR_PARAMETER) {
+        u32 mapped_index = (u32) ((usz) count - callee->parameters.size + inst->imm);
+        inst->id = mapped_index;
+      } else {
+        inst->id = instruction_id++;
+      }
     }
   }
 
-  /// Set the ids of any PARAMETER instructions to point to
-  /// the arguments of the call. The arguments are mapped
-  /// to the last N instructions in the instructions vector.
-  foreach_index (param, callee->parameters) {
-    u32 mapped_index = (u32) ((usz) count - callee->parameters.size + param);
-    callee->parameters.data[param]->id = mapped_index;
-    instructions.data[mapped_index] = call->call.arguments.data[param];
+  /// Put the arguments at the end of the instructions vector.
+  foreach_index (i, call->call.arguments) {
+    u32 mapped_index = (u32) ((usz) count - callee->parameters.size + i);
+    instructions.data[mapped_index] = call->call.arguments.data[i];
   }
 
   /// Map an instruction or block to its replacement.
@@ -208,8 +206,8 @@ static inline_result ir_inline_call(
   usz inlined = 0;
 
   /// Copy the instructions.
-  list_foreach (block, callee->blocks) {
-    list_foreach (inst, block->instructions) {
+  foreach_val (block, callee->blocks) {
+    foreach_val (inst, block->instructions) {
       /// Skip parameters.
       if (inst->kind == IR_PARAMETER) continue;
 
@@ -217,7 +215,6 @@ static inline_result ir_inline_call(
       IRInstruction *copy = MAP(inst);
       copy->kind = inst->kind;
       copy->type = inst->type;
-      copy->backend_flags = inst->backend_flags;
 
       /// Copy instruction-specific data.
       STATIC_ASSERT(IR_COUNT == 40, "Handle all instructions in inliner");
@@ -240,7 +237,7 @@ static inline_result ir_inline_call(
           vector_push(inst->static_ref->references, copy);
           break;
 
-        STATIC_ASSERT(INTRIN_BACKEND_COUNT == 2, "Handle all backend intrinsics in inliner");
+        STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle all backend intrinsics in inliner");
         case IR_INTRINSIC:
           copy->call.intrinsic = inst->call.intrinsic;
           FALLTHROUGH;
@@ -313,9 +310,10 @@ static inline_result ir_inline_call(
 
         case IR_PHI:
           foreach_index (arg, inst->phi_args) {
-            IRPhiArgument *new = calloc(1, sizeof(IRPhiArgument));
-            new->value = MAP(inst->phi_args.data[arg]->value);
-            new->block = MAP_BLOCK(inst->phi_args.data[arg]->block);
+            IRPhiArgument new = {
+              .value = MAP(inst->phi_args.data[arg].value),
+              .block = MAP_BLOCK(inst->phi_args.data[arg].block),
+            };
             vector_push(copy->phi_args, new);
             inlined--; /// This doesn’t count.
           }
@@ -336,28 +334,24 @@ static inline_result ir_inline_call(
           /// Otherwise, if this is the last return instruction in
           /// the function, and it’s also the only one, just set
           /// the return value and discard it.
-          ///
-          /// This only works if the instruction has a return value;
-          /// otherwise, we need to emit a branch to the return block
-          /// anyway.
           if (!return_block) {
-            if (block == callee->blocks.last && inst == block->instructions.last) {
+            if (block == vector_back(callee->blocks) && inst == vector_back(block->instructions)) {
               if (inst->operand) {
                 return_value = MAP(inst->operand);
                 MAP(inst) = call; /// See below.
-
-                /// Continue because we want to drop this instruction, not insert it.
-                continue;
               }
+
+              /// Continue because we want to drop this instruction, not insert it.
+              continue;
             }
 
             /// If this is not the last return instruction, we need a
             /// separate return block.
-            return_block = ir_block_create();
+            return_block = ir_block(ctx);
             if (inst->operand) {
               return_value = calloc(1, sizeof(IRInstruction));
               return_value->kind = IR_PHI;
-              ir_insert_into_block(return_block, return_value);
+              ir_insert_at_end(return_block, return_value);
             }
           }
 
@@ -365,9 +359,10 @@ static inline_result ir_inline_call(
           copy->kind = IR_BRANCH;
           copy->destination_block = return_block;
           if (inst->operand) {
-            IRPhiArgument *new = calloc(1, sizeof(IRPhiArgument));
-            new->block = block;
-            new->value = MAP(inst->operand);
+            IRPhiArgument new = {
+              .value = MAP(inst->operand),
+              .block = block,
+            };
             vector_push(return_value->phi_args, new);
 
             /// Replace ourselves with the call instruction in
@@ -379,12 +374,12 @@ static inline_result ir_inline_call(
 
       /// Insert the instruction into the block.
       if (!ir_is_branch(copy)) inlined++;
-      ir_force_insert_into_block(MAP_BLOCK(block), copy);
+      ir_insert_at_end(MAP_BLOCK(block), copy);
     }
   }
 
   /// Fix up uses.
-  FOREACH_INSTRUCTION_IN_FUNCTION (callee) {
+  FOREACH_INSTRUCTION_IN_FUNCTION (instruction, b, callee) {
     IRInstruction *copy = MAP(instruction);
     foreach_val (user, instruction->users)
       mark_used(copy, MAP(user));
@@ -393,66 +388,52 @@ static inline_result ir_inline_call(
   /// Fix up the return value by replacing all uses of the
   /// call with the return value.
   if (return_value) {
-    ir_remove_use(return_value, call);
+    remove_use(return_value, call);
     ir_replace_uses(call, return_value);
   }
 
   /// Delete the call.
   ir_remove(call);
 
-  /// To simplify connecting blocks, if we have a return block,
-  /// insert it after the last block.
+  /// If we have a return block, insert it after the last block
+  /// among the call block and the inlined blocks.
   if (return_block) {
     return_block->function = call_block->function;
     vector_push(blocks, return_block);
   }
 
-  /// Connect the last inserted instruction with the first
-  /// instruction after the call, if any. The last block
-  /// may be empty if the callee contains multiple returns
-  /// but returns void, in which case we branch here but
-  /// at the same time, there is no PHI.
-  ///
-  /// Note that if the call was a tail call, we just drop
+  /// Add any instructions after the call to the last block. Note
+  /// that if the call was a tail call, we just drop
   /// everything after the call and return.
   IRBlock *last = vector_back(blocks);
 
+  /// Skip the first block of the vector because that’s the
+  /// call block, which is already inserted.
+  struct {
+    IRBlock **data;
+    usz size;
+  } vector_span = {
+    .data = blocks.data + 1,
+    .size = blocks.size - 1,
+  };
+
+  /// Insert all blocks into the function after the call block.
+  vector_insert_all(
+    call_block->function->blocks,
+    vector_find_if(el, call_block->function->blocks, *el == call_block) + 1,
+    vector_span
+  );
+
   /// Remove every instruction after a tail call.
-  if (is_tail_call) {
-    IRInstruction *next = call_next;
-    while (next) {
-      IRInstruction *next_next = next->next;
-      ir_unmark_usees(next);
-      ir_remove(next);
-      next = next_next;
-    }
-  }
+  if (is_tail_call)
+    foreach_val (inst, after_call)
+      ir_remove(inst);
 
   /// Insert instructions after the call into the last block.
-  else {
-    ir_force_insert_into_block(last, call_next);
-  }
+  else
+    foreach_val (inst, after_call)
+      ir_force_insert_at_end(last, inst);
 
-
-  /// Connect the last block to the previous successor of
-  /// the block containing the call instruction.
-  if (last != call_block) {
-    last->next = call_block->next;
-    if (call_block->next) call_block->next->prev = last;
-
-    /// All instructions after the call need to be moved
-    /// into this block.
-    if (!is_tail_call) {
-      for (IRInstruction *i = call_next; i; i = i->next)
-        i->parent_block = last;
-    }
-  }
-
-  /// Connect all new blocks.
-  for (usz i = 1; i < blocks.size; i++) {
-    blocks.data[i - 1]->next = blocks.data[i];
-    blocks.data[i]->prev = blocks.data[i - 1];
-  }
 
   /// Check if we were able to make progress.
   bool changed = inlined != 1 || instructions.data[0]->kind != IR_CALL;
@@ -482,20 +463,19 @@ static inline_result inline_calls_in_function(
   IRFunction *f,
   isz threshold
 ) {
-  IRBlock *block = f->blocks.first;
   inline_result res = {0};
   vector_clear(ictx->history);
 
 again:
-  for (; block; block = block->next) {
-    list_foreach (inst, block->instructions) {
+  foreach_val (block, f->blocks) {
+    foreach_val (inst, block->instructions) {
       /// Skip non-calls and indirect calls.
       if (inst->kind != IR_CALL) continue;
       if (inst->call.is_indirect) continue;
 
       /// Skip calls to external functions.
       IRFunction *callee = inst->call.callee_function;
-      if (!ir_function_is_definition(callee)) continue;
+      if (!ir_func_is_definition(callee)) continue;
 
       /// Skip calls that we’ve already determined are impossible to inline.
       if (vector_contains(ictx->not_inlinable, inst)) continue;

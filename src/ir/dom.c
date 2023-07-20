@@ -1,11 +1,16 @@
-#include <codegen/dom.h>
-#include <codegen/intermediate_representation.h>
+#include <ir/dom.h>
+#include <ir/ir.h>
 
+/// TODO: This implementation is brand-new, but it is already a pile of
+///       jank. It will do for now, but it should be replaced with the
+///       algorithm that also computes the loop nesting forest.
 
 typedef Vector(int) IntVector;
 
 struct DomTreeComputeState {
   IRBlockVector verts_by_id;
+  Map(IRBlock*, usz) ids_by_vert;
+
   IRBlockVector label;
   IRBlockVector parent;
   IRBlockVector ancestor;
@@ -17,9 +22,14 @@ struct DomTreeComputeState {
   IRBlockVector idom;
   Vector(IRBlockVector) pred;
   Vector(IRBlockVector) bucket;
-  IRBlock aux; /// ‘zero block’.
+  IRBlock *aux; /// ‘zero block’.
   int n;
 };
+
+/// Get the ID of a block.
+usz block_to_id(struct DomTreeComputeState *st, IRBlock* b) {
+  return *map_get(st->ids_by_vert, b);
+}
 
 /// Map number or vertex to index.
 ///
@@ -37,7 +47,7 @@ struct DomTreeComputeState {
 #define AT(i) _Generic((i), \
   int: i,                   \
   usz: i,                   \
-  IRBlock *: (PUSH_IGNORE_WARNING("-Wint-to-pointer-cast")((IRBlock *) (i))->id POP_WARNINGS()) \
+  IRBlock *: (PUSH_IGNORE_WARNING("-Wint-to-pointer-cast")(block_to_id(st, (IRBlock *) (i))) POP_WARNINGS()) \
 )
 
 #define LABEL(v) (st->label.data[AT(v)])
@@ -53,7 +63,7 @@ struct DomTreeComputeState {
 #define COMPRESS(v) dom_compress(st, v)
 #define EVAL(v) dom_eval(st, v)
 #define LINK(v, w) dom_link(st, v, w)
-#define N0 (&st->aux)
+#define N0 (st->aux)
 #define N (st->n)
 
 static void dom_dfs(struct DomTreeComputeState *st, IRBlock *v) {
@@ -72,13 +82,13 @@ static void dom_dfs(struct DomTreeComputeState *st, IRBlock *v) {
   N++;
 
   STATIC_ASSERT(IR_COUNT == 40, "Handle all branch types");
-  IRInstruction *br = v->instructions.last;
-  switch (br->kind) {
+  IRInstruction *br = ir_terminator(v);
+  switch (ir_kind(br)) {
     default: break;
-    case IR_BRANCH: VISIT(br->destination_block); break;
+    case IR_BRANCH: VISIT(ir_dest(br)); break;
     case IR_BRANCH_CONDITIONAL:
-      VISIT(br->cond_br.then);
-      VISIT(br->cond_br.else_);
+      VISIT(ir_then(br));
+      VISIT(ir_else(br));
       break;
   }
 
@@ -131,15 +141,15 @@ static void dom_compute_preds(struct DomTreeComputeState *st, IRBlock *v) {
   /// Skip dummy vertex.
   if (v == N0) return;
   STATIC_ASSERT(IR_COUNT == 40, "Handle all branch types");
-  IRInstruction *br = v->instructions.last;
-  switch (br->kind) {
+  IRInstruction *br = ir_terminator(v);
+  switch (ir_kind(br)) {
     default: break;
     case IR_BRANCH:
-      vector_push(PRED(br->destination_block), v);
+      vector_push(PRED(ir_dest(br)), v);
       break;
     case IR_BRANCH_CONDITIONAL:
-      vector_push(PRED(br->cond_br.then), v);
-      vector_push(PRED(br->cond_br.else_), v);
+      vector_push(PRED(ir_then(br)), v);
+      vector_push(PRED(ir_else(br)), v);
       break;
   }
 }
@@ -159,26 +169,27 @@ DominatorTree dom_tree_build(IRFunction *f) {
   /// Set up state.
   struct DomTreeComputeState _st = {0};
   struct DomTreeComputeState *st = &_st;
+  IRBlock * const root = *ir_begin(f);
 
   /// Collect all vertices (except for the root) and
   /// number them. Also add in an auxiliary vertex.
-  vector_reserve(st->verts_by_id, list_size(f->blocks));
+  vector_reserve(st->verts_by_id, ir_count(f));
   vector_push(st->verts_by_id, N0);
-  list_foreach (v, f->blocks) {
+  FOREACH_BLOCK (v, f) {
     /// Skip the root.
-    if (v == f->blocks.first) {
-      v->id = 0;
+    if (v == root) {
+      map_set(st->ids_by_vert, v, (usz)0);
       continue;
     }
 
-    v->id = st->verts_by_id.size;
+    map_set(st->ids_by_vert, v, st->verts_by_id.size);
     vector_push(st->verts_by_id, v);
   }
 
   /// Compute predecessors.
   vector_resize(st->pred, st->verts_by_id.size);
   foreach_val (v, st->verts_by_id) dom_compute_preds(st, v);
-  dom_compute_preds(st, f->blocks.first);
+  dom_compute_preds(st, root);
 
   /// Initialise data structures.
   vector_resize(st->label, st->verts_by_id.size);
@@ -199,7 +210,7 @@ DominatorTree dom_tree_build(IRFunction *f) {
   foreach (v, st->idom) *v = N0;
 
   /// Perform DFS.
-  dom_dfs(st, f->blocks.first);
+  dom_dfs(st, root);
 
   /// Step 1.
   foreach_index_rev (i, st->verts_dfs) {
@@ -238,7 +249,7 @@ DominatorTree dom_tree_build(IRFunction *f) {
   /// all nodes for which it is still N0.
   foreach (v, st->idom) {
     if (v == st->idom.data) *v = NULL;
-    if (*v == N0) *v = f->blocks.first;
+    if (*v == N0) *v = root;
   }
 
   /// Create dominator tree.
