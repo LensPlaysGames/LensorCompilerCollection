@@ -44,10 +44,16 @@ usz block_to_id(struct DomTreeComputeState *st, IRBlock* b) {
 /// being int, since we’re casting an int to a pointer. Since C is too
 /// stupid to acknowledge that that branch will never be taken, we
 /// suppress the warning with a pragma.
-#define AT(i) _Generic((i), \
-  int: i,                   \
-  usz: i,                   \
-  IRBlock *: (PUSH_IGNORE_WARNING("-Wint-to-pointer-cast")(block_to_id(st, (IRBlock *) (i))) POP_WARNINGS()) \
+#define AT(i) _Generic((i),                          \
+  int: i,                                            \
+  usz: i,                                            \
+  IRBlock *: ({                                      \
+      PUSH_IGNORE_WARNING("-Wint-to-pointer-cast");  \
+      PRAGMA_STR(GCC diagnostic ignored "-Wshadow"); \
+      usz _id_ = (block_to_id(st, (IRBlock *) (i))); \
+      POP_WARNINGS();                                \
+      _id_;                                          \
+  })                                                 \
 )
 
 #define LABEL(v) (st->label.data[AT(v)])
