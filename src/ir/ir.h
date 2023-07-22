@@ -170,6 +170,18 @@ typedef union IRValue {
 /// Access the registers used by a function.
 #define ir_func_regs_in_use(func, ...) IR_PROPERTY(ir_func_regs_in_use, func, __VA_ARGS__)
 
+/// Access the ID of a block or instruction.
+#define ir_id(obj, ...)   _Generic((VA_FIRST(__VA_ARGS__ __VA_OPT__(,) ((struct no_generic_argument*)NULL))), \
+    struct no_generic_argument*: _Generic((obj), \
+      IRInstruction *: ir_id_i_impl_get,         \
+      IRBlock *: ir_id_b_impl_get                \
+    ),                                           \
+    default: _Generic((obj),                     \
+      IRInstruction *: ir_id_i_impl_set,         \
+      IRBlock *: ir_id_b_impl_set                \
+    )                                            \
+  )(obj __VA_OPT__(,) __VA_ARGS__)
+
 /// Access the immediate value of an instruction.
 #define ir_imm(inst, ...) IR_PROPERTY(ir_imm, inst, __VA_ARGS__)
 
@@ -273,7 +285,7 @@ typedef union IRValue {
 // clang-format on
 
 /// Get the nth block of a function.
-IRBlock *ir_block_get(IRFunction *function, usz n);
+NODISCARD IRBlock *ir_block_get(IRFunction *function, usz n);
 
 /// Add an argument to a call instruction.
 ///
@@ -282,10 +294,10 @@ IRBlock *ir_block_get(IRFunction *function, usz n);
 void ir_call_add_arg(IRInstruction *call, IRInstruction *value);
 
 /// Get the number of arguments of a call.
-usz ir_call_args_count(IRInstruction *call);
+NODISCARD usz ir_call_args_count(IRInstruction *call);
 
 /// Get the function type of the callee of a call.
-Type *ir_call_callee_type(IRInstruction *call);
+NODISCARD Type *ir_call_callee_type(IRInstruction *call);
 
 /// Insert an argument into a call.
 ///
@@ -295,7 +307,7 @@ Type *ir_call_callee_type(IRInstruction *call);
 void ir_call_insert_arg(IRInstruction *call, usz n, IRInstruction *value);
 
 /// Check if a call is a direct call.
-bool ir_call_is_direct(IRInstruction *call);
+NODISCARD bool ir_call_is_direct(IRInstruction *call);
 
 /// Remove an argument from a call.
 void ir_call_remove_arg(IRInstruction *call, usz n);
@@ -304,31 +316,31 @@ void ir_call_remove_arg(IRInstruction *call, usz n);
 void ir_call_replace_arg(IRInstruction *call, usz n, IRInstruction *value);
 
 /// Check if a basic block is closed.
-bool ir_is_closed(IRBlock *block);
+NODISCARD bool ir_is_closed(IRBlock *block);
 
 /// Get the entry block of a function.
-IRBlock *ir_entry_block(IRFunction *function);
+NODISCARD IRBlock *ir_entry_block(IRFunction *function);
 
 /// Check if a function is a definition.
-bool ir_func_is_definition(IRFunction *function);
+NODISCARD bool ir_func_is_definition(IRFunction *function);
 
 /// Get the referenced function from a func ref.
-IRFunction *ir_func_ref_func(IRInstruction *func_ref);
+NODISCARD IRFunction *ir_func_ref_func(IRInstruction *func_ref);
 
 /// Get the nth instruction of a block.
-IRInstruction *ir_inst_get(IRBlock *block, usz n);
+NODISCARD IRInstruction *ir_inst_get(IRBlock *block, usz n);
 
 /// Check if an instruction is a branch instruction.
-bool ir_is_branch(IRInstruction* i);
+NODISCARD bool ir_is_branch(IRInstruction* i);
 
 /// Get the kind of an instruction.
-IRType ir_kind(IRInstruction *i);
+NODISCARD IRType ir_kind(IRInstruction *i);
 
 /// Get a string representation of an IR kind.
-span ir_kind_to_str(IRType t);
+NODISCARD span ir_kind_to_str(IRType t);
 
 /// Get a reference to a function parameter value on entry.
-IRInstruction *ir_parameter(IRFunction *func, usz index);
+NODISCARD IRInstruction *ir_parameter(IRFunction *func, usz index);
 
 /// Add an argument to a PHI instruction.
 ///
@@ -341,10 +353,10 @@ IRInstruction *ir_parameter(IRFunction *func, usz index);
 void ir_phi_add_arg(IRInstruction *phi, IRBlock *from, IRInstruction *value);
 
 /// Get the nth argument of a PHI instruction.
-const IRPhiArgument *ir_phi_arg(IRInstruction *phi, usz n);
+NODISCARD const IRPhiArgument *ir_phi_arg(IRInstruction *phi, usz n);
 
 /// Get the number of arguments of a PHI instruction.
-usz ir_phi_args_count(IRInstruction *phi);
+NODISCARD usz ir_phi_args_count(IRInstruction *phi);
 
 /// Remove a PHI argument from a PHI instruction.
 ///
@@ -359,33 +371,33 @@ void ir_phi_remove_arg(IRInstruction *phi, IRBlock *block);
 void ir_set_type(IRInstruction *i, Type *type);
 
 /// Get the variable referenced by a static ref.
-IRStaticVariable *ir_static_ref_var(IRInstruction *ref);
+NODISCARD IRStaticVariable *ir_static_ref_var(IRInstruction *ref);
 
 /// Get the string data from an IR_LIT_STRING.
-span ir_string_data(CodegenContext *ctx, IRInstruction *lit);
+NODISCARD span ir_string_data(CodegenContext *ctx, IRInstruction *lit);
 
 /// Get the terminator instruction of a block.
 ///
 /// It is ill-formed to call this on an unfinished basic block
 /// during IR generation. After IR generation, all blocks should
 /// have a terminator instruction at all times.
-IRInstruction *ir_terminator(IRBlock *block);
+NODISCARD IRInstruction *ir_terminator(IRBlock *block);
 
 /// Get the use count of an instruction, i.e. how often an
 /// instruction is used by other instructions.
-usz ir_use_count(IRInstruction *i);
+NODISCARD usz ir_use_count(IRInstruction *i);
 
 /// Get the nth user of an instruction.
-IRInstruction *ir_user_get(IRInstruction *inst, usz n);
+NODISCARD IRInstruction *ir_user_get(IRInstruction *inst, usz n);
 
 /// ===========================================================================
 ///  Instruction Creation
 /// ===========================================================================
 /// Create a basic block.
-IRBlock *ir_block(CodegenContext *ctx);
+NODISCARD IRBlock *ir_block(CodegenContext *ctx);
 
 /// Create a function.
-IRFunction *ir_create_function(
+NODISCARD IRFunction *ir_create_function(
   CodegenContext *context,
   string name,
   Type *function_type,
@@ -393,21 +405,21 @@ IRFunction *ir_create_function(
 );
 
 /// Create an alloca instruction.
-IRInstruction *ir_create_alloca(CodegenContext *context, Type *type);
+NODISCARD IRInstruction *ir_create_alloca(CodegenContext *context, Type *type);
 
 /// Create an alloca instruction with a size.
 /// FIXME: JANK.
-IRInstruction *ir_create_alloca_sized(CodegenContext *context, Type *type, usz size);
+NODISCARD IRInstruction *ir_create_alloca_sized(CodegenContext *context, Type *type, usz size);
 
 /// Create a bitcast instruction.
-IRInstruction *ir_create_bitcast(
+NODISCARD IRInstruction *ir_create_bitcast(
   CodegenContext *context,
   Type *to_type,
   IRInstruction *value
 );
 
 /// Create an unconditional branch.
-IRInstruction *ir_create_br(
+NODISCARD IRInstruction *ir_create_br(
   CodegenContext *context,
   IRBlock *destination
 );
@@ -416,7 +428,7 @@ IRInstruction *ir_create_br(
 #define ir_create_call(ctx, callee) _Generic((callee), IRInstruction *: ir_create_call_impl_i, IRFunction *: ir_create_call_impl_f)(ctx, callee)
 
 /// Create a conditional branch.
-IRInstruction *ir_create_cond_br(
+NODISCARD IRInstruction *ir_create_cond_br(
   CodegenContext *context,
   IRInstruction *condition,
   IRBlock *then_block,
@@ -424,45 +436,45 @@ IRInstruction *ir_create_cond_br(
 );
 
 /// Create a copy of a value.
-IRInstruction *ir_create_copy(
+NODISCARD IRInstruction *ir_create_copy(
   CodegenContext *context,
   IRInstruction *source
 );
 
 /// Create a function reference.
-IRInstruction *ir_create_func_ref(CodegenContext *context, IRFunction *function);
+NODISCARD IRInstruction *ir_create_func_ref(CodegenContext *context, IRFunction *function);
 
 /// Create an immediate value.
-IRInstruction *ir_create_immediate(
+NODISCARD IRInstruction *ir_create_immediate(
   CodegenContext *context,
   Type *type,
   u64 immediate
 );
 
 /// Create an integer literal.
-IRInstruction *ir_create_int_lit(CodegenContext *ctx, usz value);
+NODISCARD IRInstruction *ir_create_int_lit(CodegenContext *ctx, usz value);
 
 /// Create a reference to an interned string literal.
-IRInstruction *ir_create_interned_str_lit(CodegenContext *context, usz string_index);
+NODISCARD IRInstruction *ir_create_interned_str_lit(CodegenContext *context, usz string_index);
 
 /// Create an intrinsic instruction.
 ///
 /// Note: Prefer to lower intrinsics to other IR instructions. This
 /// is only for instructions that need to be lowered to special ASM
 /// instructions or depend on late compile-time constants.
-IRInstruction *ir_create_intrinsic(CodegenContext *context, Type *t, enum IntrinsicKind intrinsic);
+NODISCARD IRInstruction *ir_create_intrinsic(CodegenContext *context, Type *t, enum IntrinsicKind intrinsic);
 
 /// Type needs to be passed in as a reminder that we don’t care
 /// about the type of the address so long as it’s a pointer or
 /// reference.
-IRInstruction *ir_create_load(
+NODISCARD IRInstruction *ir_create_load(
   CodegenContext *context,
   Type *type,
   IRInstruction *address
 );
 
 /// Create a call to the memcpy intrinsic.
-IRInstruction *ir_create_memcpy(
+NODISCARD IRInstruction *ir_create_memcpy(
   CodegenContext *context,
   IRInstruction *dest,
   IRInstruction *src,
@@ -470,31 +482,31 @@ IRInstruction *ir_create_memcpy(
 );
 
 /// Create a not instruction.
-IRInstruction *ir_create_not(
+NODISCARD IRInstruction *ir_create_not(
   CodegenContext *context,
   IRInstruction *source
 );
 
 /// Create a PHI instruction.
-IRInstruction *ir_create_phi(CodegenContext *context, Type *type);
+NODISCARD IRInstruction *ir_create_phi(CodegenContext *context, Type *type);
 
 /// Create a register instruction.
 ///
 /// This is intended for use by the backend.
-IRInstruction *ir_create_register(CodegenContext *context, Type *type, Register result);
+NODISCARD IRInstruction *ir_create_register(CodegenContext *context, Type *type, Register result);
 
 /// Create a return instruction.
 ///
 /// \param context The codegen context.
 /// \param ret The return value (may be NULL).
 /// \return The created instruction.
-IRInstruction *ir_create_return(
+NODISCARD IRInstruction *ir_create_return(
   CodegenContext *context,
   IRInstruction *ret
 );
 
 /// Create a sign extension instruction.
-IRInstruction *ir_create_sext(
+NODISCARD IRInstruction *ir_create_sext(
   CodegenContext *context,
   Type *result_type,
   IRInstruction *value
@@ -507,7 +519,7 @@ IRInstruction *ir_create_sext(
 /// \param type The type of the variable.
 /// \param name The name of the variable.
 /// \return An handle to the variable that can be used to create references.
-IRStaticVariable *ir_create_static(
+NODISCARD IRStaticVariable *ir_create_static(
   CodegenContext *context,
   Node *decl,
   Type *type,
@@ -515,7 +527,7 @@ IRStaticVariable *ir_create_static(
 );
 
 /// Create a reference to a variable with static storage duration.
-IRInstruction *ir_create_static_ref(CodegenContext *context, IRStaticVariable *var);
+NODISCARD IRInstruction *ir_create_static_ref(CodegenContext *context, IRStaticVariable *var);
 
 /// Create a store instruction.
 ///
@@ -523,24 +535,24 @@ IRInstruction *ir_create_static_ref(CodegenContext *context, IRStaticVariable *v
 /// \param data The data to store at the address.
 /// \param address The address to store the data at.
 /// \return The created instruction.
-IRInstruction *ir_create_store(
+NODISCARD IRInstruction *ir_create_store(
   CodegenContext *context,
   IRInstruction *data,
   IRInstruction *address
 );
 
 /// Create a truncate instruction.
-IRInstruction *ir_create_trunc(
+NODISCARD IRInstruction *ir_create_trunc(
   CodegenContext *context,
   Type *result_type,
   IRInstruction *value
 );
 
 /// Create an unreachable instruction.
-IRInstruction *ir_create_unreachable(CodegenContext *context);
+NODISCARD IRInstruction *ir_create_unreachable(CodegenContext *context);
 
 /// Create a zero extension instruction.
-IRInstruction *ir_create_zext(
+NODISCARD IRInstruction *ir_create_zext(
   CodegenContext *context,
   Type *result_type,
   IRInstruction *value
@@ -658,7 +670,7 @@ ALL_BINARY_INSTRUCTION_TYPES(F)
 ///  Operations on instructions.
 /// ===========================================================================
 /// Get the context from a function.
-CodegenContext *ir_context(IRFunction *func);
+NODISCARD CodegenContext *ir_context(IRFunction *func);
 
 /// Delete a block and all of its instructions from a function. If
 /// there are any PHI nodes referencing this block, the incoming
@@ -750,40 +762,44 @@ void ir_set_ids(CodegenContext *context);
 ///  Internal Functions
 /// ===========================================================================
 /// Do not call these directly.
-Type *ir_typeof_impl_i(IRInstruction *);
-Type *ir_typeof_impl_f(IRFunction *);
-IRInstruction *ir_create_call_impl_i(CodegenContext *, IRInstruction *);
-IRInstruction *ir_create_call_impl_f(CodegenContext *, IRFunction *);
+NODISCARD Type *ir_typeof_impl_i(IRInstruction *);
+NODISCARD Type *ir_typeof_impl_f(IRFunction *);
+NODISCARD IRInstruction *ir_create_call_impl_i(CodegenContext *, IRInstruction *);
+NODISCARD IRInstruction *ir_create_call_impl_f(CodegenContext *, IRFunction *);
 bool ir_attribute_impl_get(IRFunction *, enum FunctionAttribute);
 void ir_attribute_impl_set(IRFunction *, enum FunctionAttribute, bool);
-usz ir_func_regs_in_use_impl_get(IRFunction *);
+NODISCARD usz ir_func_regs_in_use_impl_get(IRFunction *);
 void ir_func_regs_in_use_impl_set(IRFunction *, usz);
-span ir_name_b_impl_get(IRBlock *);
+NODISCARD span ir_name_b_impl_get(IRBlock *);
 void ir_name_b_impl_set(IRBlock *, string);
-span ir_name_f_impl_get(IRFunction *);
+NODISCARD span ir_name_f_impl_get(IRFunction *);
 void ir_name_f_impl_set(IRFunction *, string);
-IRBlock **ir_blocks_begin_impl(IRFunction *);
-IRBlock **ir_blocks_end_impl(IRFunction *);
-IRInstruction **ir_instructions_begin_impl(IRBlock *);
-IRInstruction **ir_instructions_end_impl(IRBlock *);
-IRInstruction **ir_users_begin_impl(IRInstruction *);
-IRInstruction **ir_users_end_impl(IRInstruction *);
-IRBlock *ir_parent_impl_i(IRInstruction *);
-IRFunction *ir_parent_impl_b(IRBlock *);
-IRInstruction **ir_it_impl_i(IRInstruction *);
-IRBlock **ir_it_impl_b(IRBlock *);
-SymbolLinkage ir_linkage_impl_f(IRFunction *);
-SymbolLinkage ir_linkage_impl_v(IRStaticVariable *);
-usz ir_count_impl_b(IRBlock *);
-usz ir_count_impl_f(IRFunction *);
-IRInstruction *ir_call_arg_impl_get(IRInstruction *, usz);
+NODISCARD IRBlock **ir_blocks_begin_impl(IRFunction *);
+NODISCARD IRBlock **ir_blocks_end_impl(IRFunction *);
+NODISCARD IRInstruction **ir_instructions_begin_impl(IRBlock *);
+NODISCARD IRInstruction **ir_instructions_end_impl(IRBlock *);
+NODISCARD IRInstruction **ir_users_begin_impl(IRInstruction *);
+NODISCARD IRInstruction **ir_users_end_impl(IRInstruction *);
+NODISCARD IRBlock *ir_parent_impl_i(IRInstruction *);
+NODISCARD IRFunction *ir_parent_impl_b(IRBlock *);
+NODISCARD IRInstruction **ir_it_impl_i(IRInstruction *);
+NODISCARD IRBlock **ir_it_impl_b(IRBlock *);
+NODISCARD SymbolLinkage ir_linkage_impl_f(IRFunction *);
+NODISCARD SymbolLinkage ir_linkage_impl_v(IRStaticVariable *);
+NODISCARD usz ir_count_impl_b(IRBlock *);
+NODISCARD usz ir_count_impl_f(IRFunction *);
+NODISCARD IRInstruction *ir_call_arg_impl_get(IRInstruction *, usz);
 void ir_call_arg_impl_set(IRInstruction *, usz, IRInstruction *);
-IRValue ir_callee_impl_get(IRInstruction *);
+NODISCARD IRValue ir_callee_impl_get(IRInstruction *);
 void ir_callee_impl_set(IRInstruction *, IRValue, bool direct);
+NODISCARD u32 ir_id_i_impl_get(IRInstruction *);
+void ir_id_i_impl_set(IRInstruction *, u32);
+NODISCARD u32 ir_id_b_impl_get(IRBlock *);
+void ir_id_b_impl_set(IRBlock *, u32);
 void ir_debug_iterators_impl(const void*, const void *, const void *, const void *);
 
 #define DECLARE_ACCESSORS(name, obj_type, field_type) \
-  field_type name##_impl_get(obj_type);               \
+  NODISCARD field_type name##_impl_get(obj_type);     \
   void name##_impl_set(obj_type, field_type)
 
 DECLARE_ACCESSORS(ir_alloca_offset, IRInstruction *, usz);
