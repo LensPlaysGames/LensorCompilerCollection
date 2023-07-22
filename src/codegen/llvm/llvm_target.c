@@ -3,21 +3,16 @@
 #include <ctype.h>
 #include <ir/ir.h>
 
-/// FIXME: Should not include this. This is *fine*-ish since this
-/// does not modify the IR, but it should really only rely on the
-/// API in <ir/ir.h>.
-#include <ir/ir-impl.h>
-
 #define NO_INDEX (-1u) /// Index for valueless instructions.
 
 /// IR generation context.
 typedef struct LLVMContext {
-    CodegenContext *cg;
-    string_buffer out;
+  CodegenContext *cg;
+  string_buffer out;
 
-    /// Used intrinsics.
-    bool llvm_debugtrap_used : 1;
-    bool llvm_memcpy_used : 1;
+  /// Used intrinsics.
+  bool llvm_debugtrap_used : 1;
+  bool llvm_memcpy_used    : 1;
 } LLVMContext;
 
 /// Forward decl because mutual recursion.
@@ -25,98 +20,98 @@ static void emit_type(LLVMContext *ctx, Type *t);
 
 /// Emit struct members between braces.
 static void emit_struct_members(LLVMContext *ctx, Type *t) {
-    string_buffer *out = &ctx->out;
-    format_to(out, "{ ");
+  string_buffer *out = &ctx->out;
+  format_to(out, "{ ");
 
-    /// Add the struct members.
-    ///
-    /// FIXME: LLVM addresses struct fields by index, but it has no concept
-    /// of `alignas`, so we have to insert padding bytes manually into the
-    /// struct if a member is overaligned; this however, invalidates the
-    /// indices of the members after the padding, so actually, members also
-    /// need to store a `backend_index`, which is the *actual* index of the
-    /// member in the LLVM struct type.
-    Type *canon = type_canonical(t);
-    bool first = true;
-    foreach (m, canon->structure.members) {
-        if (first) first = false;
-        else format_to(out, ", ");
-        emit_type(ctx, m->type);
-    }
+  /// Add the struct members.
+  ///
+  /// FIXME: LLVM addresses struct fields by index, but it has no concept
+  /// of `alignas`, so we have to insert padding bytes manually into the
+  /// struct if a member is overaligned; this however, invalidates the
+  /// indices of the members after the padding, so actually, members also
+  /// need to store a `backend_index`, which is the *actual* index of the
+  /// member in the LLVM struct type.
+  Type *canon = type_canonical(t);
+  bool first = true;
+  foreach (m, canon->structure.members) {
+    if (first) first = false;
+    else format_to(out, ", ");
+    emit_type(ctx, m->type);
+  }
 
-    format_to(out, " }");
+  format_to(out, " }");
 }
 
 /// Emit an LLVM type.
 static void emit_type(LLVMContext *ctx, Type *t) {
-    /// Get canonical type or last reference.
-    string_buffer *out = &ctx->out;
-    Type *canon = type_canonical(t);
-    ASSERT(canon, "Cannot emit incomplete type in LLVM codegen: %T", t);
+  /// Get canonical type or last reference.
+  string_buffer *out = &ctx->out;
+  Type *canon = type_canonical(t);
+  ASSERT(canon, "Cannot emit incomplete type in LLVM codegen: %T", t);
 
-    STATIC_ASSERT(TYPE_COUNT == 8, "Handle all type kinds");
-    switch (canon->kind) {
-        case TYPE_COUNT: UNREACHABLE();
-        case TYPE_NAMED: UNREACHABLE();
-        case TYPE_PRIMITIVE:
-            if (canon == t_void) return format_to(out, "void");
-            if (canon == t_void_ptr) return format_to(out, "ptr");
-            if (canon == t_byte) return format_to(out, "i8");
-            if (canon == t_integer || canon == t_integer_literal)
-                return format_to(out, "i%u", ctx->cg->ffi.integer_size);
-            UNREACHABLE();
+  STATIC_ASSERT(TYPE_COUNT == 8, "Handle all type kinds");
+  switch (canon->kind) {
+    case TYPE_COUNT: UNREACHABLE();
+    case TYPE_NAMED: UNREACHABLE();
+    case TYPE_PRIMITIVE:
+      if (canon == t_void) return format_to(out, "void");
+      if (canon == t_void_ptr) return format_to(out, "ptr");
+      if (canon == t_byte) return format_to(out, "i8");
+      if (canon == t_integer || canon == t_integer_literal)
+        return format_to(out, "i%u", ctx->cg->ffi.integer_size);
+      UNREACHABLE();
 
-        /// All pointers are just 'ptr'.
-        case TYPE_POINTER: return format_to(out, "ptr");
+    /// All pointers are just 'ptr'.
+    case TYPE_POINTER: return format_to(out, "ptr");
 
-        /// References too. We add some attributes to them if they’re
-        /// parameters, but that doesn’t happen here.
-        case TYPE_REFERENCE: return format_to(out, "ptr");
+    /// References too. We add some attributes to them if they’re
+    /// parameters, but that doesn’t happen here.
+    case TYPE_REFERENCE: return format_to(out, "ptr");
 
-        /// This is the easy one.
-        case TYPE_INTEGER: return format_to(out, "i%Z", canon->integer.bit_width);
+    /// This is the easy one.
+    case TYPE_INTEGER: return format_to(out, "i%Z", canon->integer.bit_width);
 
-        /// Named structs are referred to by their name; anonymous structs
-        /// are always emitted in-line.
-        case TYPE_STRUCT: {
-            if (canon->structure.decl->struct_decl->name.data) {
-                format_to(out, "%%struct.%S", canon->structure.decl->struct_decl->name);
-                return;
-            }
+    /// Named structs are referred to by their name; anonymous structs
+    /// are always emitted in-line.
+    case TYPE_STRUCT: {
+      if (canon->structure.decl->struct_decl->name.data) {
+        format_to(out, "%%struct.%S", canon->structure.decl->struct_decl->name);
+        return;
+      }
 
-            emit_struct_members(ctx, canon);
-            return;
-        }
-
-        case TYPE_ARRAY:
-            format_to(out, "[%Z x ", canon->array.size);
-            emit_type(ctx, canon->array.of);
-            format_to(out, "]");
-            return;
-
-        /// Should never need this as function types are only used in calls and
-        /// declarations, where they need to be emitted manually anyway.
-        case TYPE_FUNCTION: UNREACHABLE();
+      emit_struct_members(ctx, canon);
+      return;
     }
+
+    case TYPE_ARRAY:
+      format_to(out, "[%Z x ", canon->array.size);
+      emit_type(ctx, canon->array.of);
+      format_to(out, "]");
+      return;
+
+    /// Should never need this as function types are only used in calls and
+    /// declarations, where they need to be emitted manually anyway.
+    case TYPE_FUNCTION: UNREACHABLE();
+  }
 }
 
 /// Check if a bitcast should be elided.
 static bool is_noop_bitcast(IRInstruction *inst) {
-    ASSERT(inst->kind == IR_BITCAST);
+  ASSERT(ir_kind(inst) == IR_BITCAST);
 
-    /// Types are the same.
-    Type *from = type_canonical(inst->operand->type);
-    Type *to = type_canonical(inst->type);
-    if (type_equals_canon(from, to)) return true;
+  /// Types are the same.
+  Type *from = type_canonical(ir_typeof(ir_operand(inst)));
+  Type *to = type_canonical(ir_typeof(inst));
+  if (type_equals_canon(from, to)) return true;
 
-    /// Either is a function pointer and the other is a function. No
-    /// need to check for the function type since Sema has already
-    /// verified that this conversion is valid.
-    if (from->kind == TYPE_POINTER && to->kind == TYPE_FUNCTION) return true;
-    if (from->kind == TYPE_FUNCTION && to->kind == TYPE_POINTER) return true;
+  /// Either is a function pointer and the other is a function. No
+  /// need to check for the function type since Sema has already
+  /// verified that this conversion is valid.
+  if (from->kind == TYPE_POINTER && to->kind == TYPE_FUNCTION) return true;
+  if (from->kind == TYPE_FUNCTION && to->kind == TYPE_POINTER) return true;
 
-    /// Not pointless (hopefully).
-    return false;
+  /// Not pointless (hopefully).
+  return false;
 }
 
 /// Check if an instruction is a value.
@@ -133,105 +128,105 @@ static bool is_noop_bitcast(IRInstruction *inst) {
 /// values, whereas LLVM does not; furthermore, we it also considers
 /// immediates values, whereas LLVM always inlines them.
 static bool llvm_is_numbered_value(IRInstruction *inst) {
-    STATIC_ASSERT(IR_COUNT == 40, "Handle all IR instructions");
-    switch (inst->kind) {
-        case IR_COUNT: break;
-        case IR_IMMEDIATE:   /// Inlined.
-        case IR_STATIC_REF:  /// Inlined.
-        case IR_FUNC_REF:    /// Inlined.
-        case IR_PARAMETER:   /// Inlined.
-        case IR_COPY:        /// Replaced with the operand.
-        case IR_LIT_INTEGER: /// Always global.
-        case IR_LIT_STRING:  /// Always global.
-        case IR_RETURN:
-        case IR_BRANCH:
-        case IR_UNREACHABLE:
-        case IR_STORE:
-            return false;
+  STATIC_ASSERT(IR_COUNT == 40, "Handle all IR instructions");
+  switch (ir_kind(inst)) {
+    case IR_COUNT: break;
+    case IR_IMMEDIATE:   /// Inlined.
+    case IR_STATIC_REF:  /// Inlined.
+    case IR_FUNC_REF:    /// Inlined.
+    case IR_PARAMETER:   /// Inlined.
+    case IR_COPY:        /// Replaced with the operand.
+    case IR_LIT_INTEGER: /// Always global.
+    case IR_LIT_STRING:  /// Always global.
+    case IR_RETURN:
+    case IR_BRANCH:
+    case IR_UNREACHABLE:
+    case IR_STORE:
+      return false;
 
-        /// Conditional branches are not values, but the conditions are,
-        /// and since we currently don’t have a bool type, we need to
-        /// allocate an extra number to narrow the condition to one.
-        ///
-        /// TODO: Remove this once we have bools in Intercept.
-        case IR_BRANCH_CONDITIONAL:
-            return true;
+    /// Conditional branches are not values, but the conditions are,
+    /// and since we currently don’t have a bool type, we need to
+    /// allocate an extra number to narrow the condition to one.
+    ///
+    /// TODO: Remove this once we have bools in Intercept.
+    case IR_BRANCH_CONDITIONAL:
+      return true;
 
-        /// The frontend uses this to convert between types that have the
-        /// same size; however, we can’t convert from a type to itself, and
-        /// we can especially not convert a function to a function pointer
-        /// like that; the latter conversion is implicit.
-        case IR_BITCAST:
-            return !is_noop_bitcast(inst);
+    /// The frontend uses this to convert between types that have the
+    /// same size; however, we can’t convert from a type to itself, and
+    /// we can especially not convert a function to a function pointer
+    /// like that; the latter conversion is implicit.
+    case IR_BITCAST:
+      return !is_noop_bitcast(inst);
 
-        case IR_LOAD:
-        case IR_PHI:
-        case IR_ADD:
-        case IR_SUB:
-        case IR_MUL:
-        case IR_DIV:
-        case IR_MOD:
-        case IR_SHL:
-        case IR_SAR:
-        case IR_SHR:
-        case IR_AND:
-        case IR_OR:
-        case IR_LT:
-        case IR_LE:
-        case IR_GT:
-        case IR_GE:
-        case IR_EQ:
-        case IR_NE:
-        case IR_ZERO_EXTEND:
-        case IR_SIGN_EXTEND:
-        case IR_TRUNCATE:
-        case IR_NOT:
-        case IR_ALLOCA:
-        case IR_POISON:
-            return true;
+    case IR_LOAD:
+    case IR_PHI:
+    case IR_ADD:
+    case IR_SUB:
+    case IR_MUL:
+    case IR_DIV:
+    case IR_MOD:
+    case IR_SHL:
+    case IR_SAR:
+    case IR_SHR:
+    case IR_AND:
+    case IR_OR:
+    case IR_LT:
+    case IR_LE:
+    case IR_GT:
+    case IR_GE:
+    case IR_EQ:
+    case IR_NE:
+    case IR_ZERO_EXTEND:
+    case IR_SIGN_EXTEND:
+    case IR_TRUNCATE:
+    case IR_NOT:
+    case IR_ALLOCA:
+    case IR_POISON:
+      return true;
 
-        case IR_CALL:
-            return !type_equals(ir_call_callee_type(inst)->function.return_type, t_void);
+    case IR_CALL:
+      return !type_equals(ir_call_callee_type(inst)->function.return_type, t_void);
 
-        case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle all intrinsics");
-            switch (inst->call.intrinsic) {
-                IGNORE_FRONTEND_INTRINSICS()
-                case INTRIN_BUILTIN_SYSCALL: return true;
-                case INTRIN_BUILTIN_DEBUGTRAP: return false;
-                case INTRIN_BUILTIN_MEMCPY: return false;
-            }
+    case IR_INTRINSIC: {
+      STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle all intrinsics");
+      switch (ir_intrinsic_kind(inst)) {
+        IGNORE_FRONTEND_INTRINSICS()
+        case INTRIN_BUILTIN_SYSCALL: return true;
+        case INTRIN_BUILTIN_DEBUGTRAP: return false;
+        case INTRIN_BUILTIN_MEMCPY: return false;
+      }
 
-            UNREACHABLE();
-        }
-
-        /// If we encounter this one, then, er, idk, scream violently I guess.
-        case IR_REGISTER: ICE("LLVM backend cannot emit IR_REGISTER instructions");
+      UNREACHABLE();
     }
 
-    UNREACHABLE();
+    /// If we encounter this one, then, er, idk, scream violently I guess.
+    case IR_REGISTER: ICE("LLVM backend cannot emit IR_REGISTER instructions");
+  }
+
+  UNREACHABLE();
 }
 
 /// Emit a string as an LLVM string value.
 void emit_string_data(LLVMContext *ctx, span s, bool print_type) {
-    string_buffer *out = &ctx->out;
-    if (print_type) format_to(out, "[%Z x i8] ", s.size + 1);
-    format_to(out, "c\"");
+  string_buffer *out = &ctx->out;
+  if (print_type) format_to(out, "[%Z x i8] ", s.size + 1);
+  format_to(out, "c\"");
 
-    /// Emit data.
-    foreach_index (i, s) {
-        char c = s.data[i];
-        if (isprint(c) && c != '"' && c != '\\' && c != '\n' && c != '\r' && c != '\t' && c != '\v' && c != '\f') {
-            format_to(out, "%c", c);
-        } else {
-            char arr[4] = {0};
-            snprintf(arr, sizeof(arr), "\\%02X", c);
-            vector_append(*out, literal_span(arr));
-        }
+  /// Emit data.
+  foreach_index (i, s) {
+    char c = s.data[i];
+    if (isprint(c) && c != '"' && c != '\\' && c != '\n' && c != '\r' && c != '\t' && c != '\v' && c != '\f') {
+      format_to(out, "%c", c);
+    } else {
+      char arr[4] = {0};
+      snprintf(arr, sizeof(arr), "\\%02X", c);
+      vector_append(*out, literal_span(arr));
     }
+  }
 
-    /// Emit null terminator and close string.
-    format_to(out, "\\00\"");
+  /// Emit null terminator and close string.
+  format_to(out, "\\00\"");
 }
 
 /// Emit an LLVM value.
@@ -240,212 +235,216 @@ void emit_string_data(LLVMContext *ctx, span s, bool print_type) {
 /// inline immediate etc. This is intended to be used when emitting
 /// operands of instructions.
 static void emit_value(LLVMContext *ctx, IRInstruction *value, bool print_type) {
-    string_buffer *out = &ctx->out;
-    STATIC_ASSERT(IR_COUNT == 40, "Handle all IR instructions");
+  string_buffer *out = &ctx->out;
+  STATIC_ASSERT(IR_COUNT == 40, "Handle all IR instructions");
 
-    /// Emit the type if requested.
-    if (print_type) {
-        /// If this is a function reference, then emit the
-        /// type as `ptr`. The function type is only used
-        /// by calls, and calls emit the type manually.
-        if (value->kind == IR_FUNC_REF) {
-            format_to(out, "ptr ");
-        } else {
-            emit_type(ctx, value->type);
-            format_to(out, " ");
-        }
+  /// Emit the type if requested.
+  if (print_type) {
+    /// If this is a function reference, then emit the
+    /// type as `ptr`. The function type is only used
+    /// by calls, and calls emit the type manually.
+    if (ir_kind(value) == IR_FUNC_REF) {
+      format_to(out, "ptr ");
+    } else {
+      emit_type(ctx, ir_typeof(value));
+      format_to(out, " ");
+    }
+  }
+
+  /// Emit the value.
+  switch (ir_kind(value)) {
+    case IR_COUNT: UNREACHABLE();
+
+    case IR_POISON:
+      format_to(out, "poison");
+      return;
+
+    /// Immediates are always emitted in-line.
+    case IR_IMMEDIATE:
+    case IR_LIT_INTEGER:
+      format_to(out, "%I", (i64) ir_imm(value));
+      return;
+
+    /// Copies just forward the copied value.
+    case IR_COPY:
+      emit_value(ctx, ir_operand(value), false);
+      return;
+
+    /// The first N temporaries are the parameters.
+    case IR_PARAMETER:
+      format_to(out, "%%%U", ir_imm(value));
+      return;
+
+    /// These are referenced by name.
+    case IR_STATIC_REF:
+      format_to(out, "@%S", ir_static_ref_var(value)->name);
+      return;
+
+    case IR_FUNC_REF:
+      format_to(out, "@%S", ir_name(ir_func_ref_func(value)));
+      return;
+
+    /// Strings are emitted in-line since the semantics of
+    /// string literals is different from C.
+    case IR_LIT_STRING:
+      emit_string_data(ctx, ir_string_data(ctx->cg, value), false);
+      return;
+
+    case IR_REGISTER:
+      ICE("LLVM backend cannot emit IR_REGISTER instructions");
+
+    case IR_RETURN:
+    case IR_BRANCH:
+    case IR_BRANCH_CONDITIONAL:
+    case IR_UNREACHABLE:
+    case IR_STORE:
+      ICE("Refusing to emit non-value as value");
+
+    case IR_BITCAST:
+      /// If this is a noop bitcast, just emit the operand. If
+      /// this is a real bitcast, emit the index.
+      if (ir_id(value) == NO_INDEX) emit_value(ctx, ir_operand(value), false);
+      else format_to(out, "%%%u", ir_id(value));
+      return;
+
+    case IR_INTRINSIC: {
+      STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle all intrinsics");
+      switch (ir_intrinsic_kind(value)) {
+        IGNORE_FRONTEND_INTRINSICS()
+        case INTRIN_BUILTIN_SYSCALL:
+          format_to(out, "%%%u", ir_id(value));
+          return;
+
+        /// Not a value.
+        case INTRIN_BUILTIN_DEBUGTRAP:
+        case INTRIN_BUILTIN_MEMCPY:
+          ICE("Refusing to emit non-value as value");
+      }
+
+      UNREACHABLE();
     }
 
-    /// Emit the value.
-    switch (value->kind) {
-        case IR_COUNT: UNREACHABLE();
-
-        case IR_POISON:
-            format_to(out, "poison");
-            return;
-
-        /// Immediates are always emitted in-line.
-        case IR_IMMEDIATE:
-        case IR_LIT_INTEGER:
-            format_to(out, "%I", (i64) value->imm);
-            return;
-
-        /// Copies just forward the copied value.
-        case IR_COPY:
-            emit_value(ctx, value->operand, false);
-            return;
-
-        /// The first N temporaries are the parameters.
-        case IR_PARAMETER:
-            format_to(out, "%%%U", value->imm);
-            return;
-
-        /// These are referenced by name.
-        case IR_STATIC_REF:
-        case IR_FUNC_REF:
-            format_to(out, "@%S", value->static_ref->name);
-            return;
-
-        /// Strings are emitted in-line since the semantics of
-        /// string literals is different from C.
-        case IR_LIT_STRING:
-            emit_string_data(ctx, as_span(value->str), false);
-            return;
-
-        case IR_REGISTER:
-            ICE("LLVM backend cannot emit IR_REGISTER instructions");
-
-        case IR_RETURN:
-        case IR_BRANCH:
-        case IR_BRANCH_CONDITIONAL:
-        case IR_UNREACHABLE:
-        case IR_STORE:
-            ICE("Refusing to emit non-value as value");
-
-        case IR_BITCAST:
-            /// If this is a noop bitcast, just emit the operand. If
-            /// this is a real bitcast, emit the index.
-            if (value->index == NO_INDEX) emit_value(ctx, value->operand, false);
-            else format_to(out, "%%%u", value->index);
-            return;
-
-        case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle all intrinsics");
-            switch (value->call.intrinsic) {
-                IGNORE_FRONTEND_INTRINSICS()
-                case INTRIN_BUILTIN_SYSCALL:
-                    format_to(out, "%%%u", value->index);
-                    return;
-
-                /// Not a value.
-                case INTRIN_BUILTIN_DEBUGTRAP:
-                case INTRIN_BUILTIN_MEMCPY:
-                    ICE("Refusing to emit non-value as value");
-            }
-
-            UNREACHABLE();
-        }
-
-        /// These all have values, so emit their indices.
-        case IR_CALL:
-        case IR_LOAD:
-        case IR_PHI:
-        case IR_ADD:
-        case IR_SUB:
-        case IR_MUL:
-        case IR_DIV:
-        case IR_MOD:
-        case IR_SHL:
-        case IR_SAR:
-        case IR_SHR:
-        case IR_AND:
-        case IR_OR:
-        case IR_LT:
-        case IR_LE:
-        case IR_GT:
-        case IR_GE:
-        case IR_EQ:
-        case IR_NE:
-        case IR_ZERO_EXTEND:
-        case IR_SIGN_EXTEND:
-        case IR_TRUNCATE:
-        case IR_NOT:
-        case IR_ALLOCA:
-            format_to(out, "%%%u", value->index);
-            return;
-    }
+    /// These all have values, so emit their indices.
+    case IR_CALL:
+    case IR_LOAD:
+    case IR_PHI:
+    case IR_ADD:
+    case IR_SUB:
+    case IR_MUL:
+    case IR_DIV:
+    case IR_MOD:
+    case IR_SHL:
+    case IR_SAR:
+    case IR_SHR:
+    case IR_AND:
+    case IR_OR:
+    case IR_LT:
+    case IR_LE:
+    case IR_GT:
+    case IR_GE:
+    case IR_EQ:
+    case IR_NE:
+    case IR_ZERO_EXTEND:
+    case IR_SIGN_EXTEND:
+    case IR_TRUNCATE:
+    case IR_NOT:
+    case IR_ALLOCA:
+      format_to(out, "%%%u", ir_id(value));
+      return;
+  }
 }
 
 /// Emit the index of an instruction, if any.
 static void emit_instruction_index(LLVMContext *ctx, IRInstruction *inst) {
-    string_buffer *out = &ctx->out;
-    if (inst->index != NO_INDEX) format_to(out, "    %%%u = ", inst->index);
-    else format_to(out, "    ");
+  string_buffer *out = &ctx->out;
+  if (ir_id(inst) != NO_INDEX) format_to(out, "    %%%u = ", ir_id(inst));
+  else format_to(out, "    ");
 }
 
 /// Emit a binary instruction.
 static void emit_binary(
-    LLVMContext *ctx,
-    const char *op,
-    IRInstruction *inst
+  LLVMContext *ctx,
+  const char *op,
+  IRInstruction *inst
 ) {
-    string_buffer *out = &ctx->out;
-    emit_instruction_index(ctx, inst);
-    format_to(out, "%s ", op);
-    emit_value(ctx, inst->lhs, true);
-    format_to(out, ", ");
-    emit_value(ctx, inst->rhs, false);
-    format_to(out, "\n");
+  string_buffer *out = &ctx->out;
+  emit_instruction_index(ctx, inst);
+  format_to(out, "%s ", op);
+  emit_value(ctx, ir_lhs(inst), true);
+  format_to(out, ", ");
+  emit_value(ctx, ir_rhs(inst), false);
+  format_to(out, "\n");
 }
 
 /// Emit a binary instruction that cares about signedness.
 static void emit_binary_signed(
-    LLVMContext *ctx,
-    const char *op_signed,
-    const char *op_unsigned,
-    IRInstruction *inst
+  LLVMContext *ctx,
+  const char *op_signed,
+  const char *op_unsigned,
+  IRInstruction *inst
 ) {
-    string_buffer *out = &ctx->out;
-    emit_instruction_index(ctx, inst);
-    format_to(out, "%s ", type_is_signed(inst->lhs->type) ? op_signed : op_unsigned);
-    emit_value(ctx, inst->lhs, true);
-    format_to(out, ", ");
-    emit_value(ctx, inst->rhs, false);
-    format_to(out, "\n");
+  string_buffer *out = &ctx->out;
+  emit_instruction_index(ctx, inst);
+  format_to(out, "%s ", type_is_signed(ir_typeof(ir_lhs(inst))) ? op_signed : op_unsigned);
+  emit_value(ctx, ir_lhs(inst), true);
+  format_to(out, ", ");
+  emit_value(ctx, ir_rhs(inst), false);
+  format_to(out, "\n");
 }
 
 /// Emit a conversion operation (`X ... to Y`).
 static void emit_conversion(
-    LLVMContext *ctx,
-    const char *op,
-    IRInstruction *inst
+  LLVMContext *ctx,
+  const char *op,
+  IRInstruction *inst
 ) {
-    string_buffer *out = &ctx->out;
-    emit_instruction_index(ctx, inst);
-    format_to(out, "%s ", op);
-    emit_value(ctx, inst->lhs, true);
-    format_to(out, " to ");
-    emit_type(ctx, inst->type);
-    format_to(out, "\n");
+  string_buffer *out = &ctx->out;
+  emit_instruction_index(ctx, inst);
+  format_to(out, "%s ", op);
+  emit_value(ctx, ir_operand(inst), true);
+  format_to(out, " to ");
+  emit_type(ctx, ir_typeof(inst));
+  format_to(out, "\n");
 }
 
 /// Emit an add of a pointer and an int.
 static void emit_pointer_add(
-    LLVMContext *ctx,
-    IRInstruction *inst,
-    IRInstruction *pointer,
-    IRInstruction *integer
+  LLVMContext *ctx,
+  IRInstruction *inst,
+  IRInstruction *pointer,
+  IRInstruction *integer
 ) {
-    string_buffer *out = &ctx->out;
+  string_buffer *out = &ctx->out;
 
-    /// If the displacement is known at compile time and a multiple of
-    /// the pointee size, convert it to a GEP and emit that instead.
-    if (integer->kind == IR_IMMEDIATE && integer->imm % type_sizeof(pointer->type->pointer.to) == 0) {
-        emit_instruction_index(ctx, inst);
-        format_to(out, "getelementptr ");
-        emit_type(ctx, pointer->type->pointer.to);
-        format_to(out, ", ");
-        emit_value(ctx, pointer, true);
-        format_to(out, ", i64 %Z\n", integer->imm / type_sizeof(pointer->type->pointer.to));
-        return;
-    }
-
-    /// Otherwise, convert the pointer to an int.
-    format_to(out, "    %%ptrtoint.%u = ptrtoint ", inst->index);
+  /// If the displacement is known at compile time and a multiple of
+  /// the pointee size, convert it to a GEP and emit that instead.
+  Type *ptr_type = ir_typeof(pointer);
+  if (ir_kind(integer) == IR_IMMEDIATE && ir_imm(integer) % type_sizeof(ptr_type->pointer.to) == 0) {
+    emit_instruction_index(ctx, inst);
+    format_to(out, "getelementptr ");
+    emit_type(ctx, ptr_type->pointer.to);
+    format_to(out, ", ");
     emit_value(ctx, pointer, true);
-    format_to(out, " to ");
-    emit_type(ctx, integer->type);
-    format_to(out, "\n");
+    format_to(out, ", i64 %Z\n", ir_imm(integer) / type_sizeof(ptr_type->pointer.to));
+    return;
+  }
 
-    /// Add them.
-    format_to(out, "    %%add.%u = add ", inst->index);
-    emit_value(ctx, integer, true);
-    format_to(out, ", %%ptrtoint.%u\n", inst->index);
+  /// Otherwise, convert the pointer to an int.
+  format_to(out, "    %%ptrtoint.%u = ptrtoint ", ir_id(inst));
+  emit_value(ctx, pointer, true);
+  format_to(out, " to ");
+  emit_type(ctx, ir_typeof(integer));
+  format_to(out, "\n");
 
-    /// Cast back to a pointer.
-    format_to(out, "    %%%u = inttoptr ", inst->index);
-    emit_type(ctx, integer->type);
-    format_to(out, " %%add.%u to ptr\n", inst->index);
+  /// Add them.
+  format_to(out, "    %%add.%u = add ", ir_id(inst));
+  emit_value(ctx, integer, true);
+  format_to(out, ", %%ptrtoint.%u\n", ir_id(inst));
+
+  /// Cast back to a pointer.
+  format_to(out, "    %%%u = inttoptr ", ir_id(inst));
+  emit_type(ctx, ir_typeof(integer));
+  format_to(out, " %%add.%u to ptr\n", ir_id(inst));
 }
 
 /// Emit an LLVM instruction.
@@ -453,272 +452,274 @@ static void emit_pointer_add(
 /// This emits an instruction as part of a function body. For emitting
 /// instructions in other places, see `emit_value`.
 static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
-    string_buffer *out = &ctx->out;
-    STATIC_ASSERT(IR_COUNT == 40, "Handle all IR instructions");
-    switch (inst->kind) {
-        case IR_COUNT: UNREACHABLE();
+  string_buffer *out = &ctx->out;
+  STATIC_ASSERT(IR_COUNT == 40, "Handle all IR instructions");
+  switch (ir_kind(inst)) {
+    case IR_COUNT: UNREACHABLE();
 
-        /// These are emitted in-line.
-        case IR_IMMEDIATE:
-        case IR_POISON:
-        case IR_COPY:
-        case IR_STATIC_REF:
-        case IR_FUNC_REF:
-        case IR_PARAMETER:
-        case IR_LIT_INTEGER:
-        case IR_LIT_STRING:
-            break;
+    /// These are emitted in-line.
+    case IR_IMMEDIATE:
+    case IR_POISON:
+    case IR_COPY:
+    case IR_STATIC_REF:
+    case IR_FUNC_REF:
+    case IR_PARAMETER:
+    case IR_LIT_INTEGER:
+    case IR_LIT_STRING:
+      break;
 
-        case IR_REGISTER:
-            ICE("LLVM backend cannot emit IR_REGISTER instructions");
+    case IR_REGISTER:
+      ICE("LLVM backend cannot emit IR_REGISTER instructions");
 
-        case IR_INTRINSIC: {
-            STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle all intrinsics");
-            switch (inst->call.intrinsic) {
-                IGNORE_FRONTEND_INTRINSICS()
+    case IR_INTRINSIC: {
+      STATIC_ASSERT(INTRIN_BACKEND_COUNT == 3, "Handle all intrinsics");
+      switch (ir_intrinsic_kind(inst)) {
+        IGNORE_FRONTEND_INTRINSICS()
 
-                /// We need to emit inline assembly for this.
-                case INTRIN_BUILTIN_SYSCALL: {
-                    emit_instruction_index(ctx, inst);
-                    format_to(out, "call i64 asm sideeffect \"");
-                    if (inst->call.arguments.size >= 5) format_to(out, "movq $0, %%r10\\0A");
-                    if (inst->call.arguments.size >= 6) format_to(out, "movq $1, %%r8\\0A");
-                    if (inst->call.arguments.size >= 7) format_to(out, "movq $2, %%r9\\0A");
-                    format_to(out, "syscall\\0A\", \"={ax},{ax}");
-                    if (inst->call.arguments.size >= 2) format_to(out, ",{di}");
-                    if (inst->call.arguments.size >= 3) format_to(out, ",{si}");
-                    if (inst->call.arguments.size >= 4) format_to(out, ",{dx}");
-                    if (inst->call.arguments.size >= 5) format_to(out, ",~{r10}");
-                    if (inst->call.arguments.size >= 6) format_to(out, ",~{r8}");
-                    if (inst->call.arguments.size >= 7) format_to(out, ",~{r9}");
-                    for (usz i = 5; i <= inst->call.arguments.size; i++) format_to(out, ",r");
-                    format_to(out, ",~{memory},~{dirflag},~{fpsr},~{flags}\"(");
+        /// We need to emit inline assembly for this.
+        case INTRIN_BUILTIN_SYSCALL: {
+          emit_instruction_index(ctx, inst);
+          format_to(out, "call i64 asm sideeffect \"");
 
-                    bool first = true;
-                    foreach_val (arg, inst->call.arguments) {
-                        if (!first) format_to(out, ", ");
-                        else first = false;
-                        emit_value(ctx, arg, true);
-                    }
+          usz args = ir_call_args_count(inst);
+          if (args >= 5) format_to(out, "movq $0, %%r10\\0A");
+          if (args >= 6) format_to(out, "movq $1, %%r8\\0A");
+          if (args >= 7) format_to(out, "movq $2, %%r9\\0A");
+          format_to(out, "syscall\\0A\", \"={ax},{ax}");
+          if (args >= 2) format_to(out, ",{di}");
+          if (args >= 3) format_to(out, ",{si}");
+          if (args >= 4) format_to(out, ",{dx}");
+          if (args >= 5) format_to(out, ",~{r10}");
+          if (args >= 6) format_to(out, ",~{r8}");
+          if (args >= 7) format_to(out, ",~{r9}");
+          for (usz i = 5; i <= args; i++) format_to(out, ",r");
+          format_to(out, ",~{memory},~{dirflag},~{fpsr},~{flags}\"(");
 
-                    format_to(out, ")\n");
-                    return;
-                }
+          bool first = true;
+          for (usz i = 0; i < args; i++) {
+            if (!first) format_to(out, ", ");
+            else first = false;
+            emit_value(ctx, ir_call_arg(inst, i), true);
+          }
 
-                /// Just call the LLVM intrinsic for this.
-                case INTRIN_BUILTIN_DEBUGTRAP:
-                    emit_instruction_index(ctx, inst);
-                    format_to(out, "call void @llvm.debugtrap()\n");
-                    ctx->llvm_debugtrap_used = true;
-                    return;
-
-                /// Same thing.
-                case INTRIN_BUILTIN_MEMCPY:
-                    emit_instruction_index(ctx, inst);
-                    format_to(out, "call void @llvm.memcpy.p0.p0.i%Z(\n", type_sizeof(t_integer));
-                    emit_value(ctx, ir_call_arg(inst, 0), true);
-                    format_to(out, ", ");
-                    emit_value(ctx, ir_call_arg(inst, 1), true);
-                    format_to(out, ", ");
-                    emit_value(ctx, ir_call_arg(inst, 2), true);
-                    format_to(out, ", i1 0)\n"); /// Note: 0 = not volatile.
-                    ctx->llvm_memcpy_used = true;
-                    return;
-            }
-
-            UNREACHABLE();
+          format_to(out, ")\n");
+          return;
         }
 
-        case IR_CALL: {
-            emit_instruction_index(ctx, inst);
-            Type *call_ty = ir_call_callee_type(inst);
-            format_to(out, "call ");
-            emit_type(ctx, call_ty->function.return_type);
+        /// Just call the LLVM intrinsic for this.
+        case INTRIN_BUILTIN_DEBUGTRAP:
+          emit_instruction_index(ctx, inst);
+          format_to(out, "call void @llvm.debugtrap()\n");
+          ctx->llvm_debugtrap_used = true;
+          return;
 
-            if (inst->call.is_indirect) emit_value(ctx, inst->call.callee_instruction, false);
-            else format_to(out, " @%S", inst->call.callee_function->name);
+        /// Same thing.
+        case INTRIN_BUILTIN_MEMCPY:
+          emit_instruction_index(ctx, inst);
+          format_to(out, "call void @llvm.memcpy.p0.p0.i%Z(\n", type_sizeof(t_integer));
+          emit_value(ctx, ir_call_arg(inst, 0), true);
+          format_to(out, ", ");
+          emit_value(ctx, ir_call_arg(inst, 1), true);
+          format_to(out, ", ");
+          emit_value(ctx, ir_call_arg(inst, 2), true);
+          format_to(out, ", i1 0)\n"); /// Note: 0 = not volatile.
+          ctx->llvm_memcpy_used = true;
+          return;
+      }
 
-            format_to(out, "(");
-            foreach_val (arg, inst->call.arguments) {
-                if (arg != *inst->call.arguments.data) format_to(out, ", ");
-                emit_value(ctx, arg, true);
-            }
-            format_to(out, ")\n");
-        } break;
-
-        case IR_LOAD:
-            emit_instruction_index(ctx, inst);
-            format_to(out, "load ");
-            emit_type(ctx, inst->type);
-            format_to(out, ", ");
-            emit_value(ctx, inst->operand, true);
-            format_to(out, "\n");
-            break;
-
-        case IR_RETURN:
-            format_to(out, "    ret ");
-            if (inst->operand) emit_value(ctx, inst->operand, true);
-            else format_to(out, "void");
-            format_to(out, "\n");
-            break;
-
-        case IR_BRANCH:
-            format_to(out, "    br label %%bb%Z\n", inst->destination_block->id);
-            break;
-
-        case IR_BRANCH_CONDITIONAL:
-            /// Narrow the condition to a bool.
-            format_to(out, "    %%%u = icmp ne ", inst->index);
-            emit_value(ctx, inst->cond_br.condition, true);
-            format_to(out, ", 0\n");
-
-            /// Emit the branch.
-            format_to(
-                out,
-                "    br i1 %%%u, label %%bb%Z, label %%bb%Z\n",
-                inst->index,
-                inst->cond_br.then->id,
-                inst->cond_br.else_->id
-            );
-            break;
-
-        case IR_UNREACHABLE:
-            format_to(out, "    unreachable\n");
-            break;
-
-        case IR_PHI:
-            emit_instruction_index(ctx, inst);
-            format_to(out, "phi ");
-            emit_type(ctx, inst->type);
-            format_to(out, " ");
-            foreach (arg, inst->phi_args) {
-                if (arg != inst->phi_args.data) format_to(out, ", ");
-                format_to(out, "[ ");
-                emit_value(ctx, arg->value, false);
-                format_to(out, ", %%bb%Z ]", arg->block->id);
-            }
-            format_to(out, "\n");
-            break;
-
-        /// In LLVM, comparisons return an i1. However, we don’t have
-        /// bools yet in intercept, so we need to convert the result
-        /// back to whatever type Intercept wants it to be.
-        ///
-        /// TODO: Simplify this once we have bools.
-        case IR_EQ:
-        case IR_NE:
-        case IR_LT:
-        case IR_LE:
-        case IR_GT:
-        case IR_GE: {
-            /// Emit the comparison with a temporary name.
-            format_to(out, "    %%i1.%u = icmp ", inst->index);
-            switch (inst->kind) {
-                default: UNREACHABLE();
-                case IR_EQ: format_to(out, "eq "); break;
-                case IR_NE: format_to(out, "ne "); break;
-                case IR_LT: format_to(out, "%s", type_is_signed(inst->lhs->type) ? "slt " : "ult "); break;
-                case IR_LE: format_to(out, "%s", type_is_signed(inst->lhs->type) ? "sle " : "ule "); break;
-                case IR_GT: format_to(out, "%s", type_is_signed(inst->lhs->type) ? "sgt " : "ugt "); break;
-                case IR_GE: format_to(out, "%s", type_is_signed(inst->lhs->type) ? "sge " : "uge "); break;
-            }
-            emit_value(ctx, inst->lhs, true);
-            format_to(out, ", ");
-            emit_value(ctx, inst->rhs, false);
-
-            /// ALWAYS zero-extend an i1, as sign-extending would broadcast the sign bit.
-            format_to(out, "\n    %%%u = zext i1 %%i1.%u to ", inst->index, inst->index);
-            emit_type(ctx, inst->type);
-            format_to(out, "\n");
-        } break;
-
-        /// The frontend lowers pointer arithmetic to adds, but
-        /// we need to emit a GEP for this since LLVM doesn’t
-        /// let us add ints to pointers.
-        case IR_ADD:
-            /// Pointer arithmetic.
-            if (type_is_pointer(inst->lhs->type) && !type_is_pointer(inst->rhs->type))
-                emit_pointer_add(ctx, inst, inst->lhs, inst->rhs);
-            else if (!type_is_pointer(inst->lhs->type) && type_is_pointer(inst->rhs->type))
-                emit_pointer_add(ctx, inst, inst->rhs, inst->lhs);
-            else
-                emit_binary(ctx, "add", inst);
-            break;
-
-        case IR_SUB: emit_binary(ctx, "sub", inst); break;
-        case IR_MUL: emit_binary(ctx, "mul", inst); break;
-        case IR_SHL: emit_binary(ctx, "shl", inst); break;
-        case IR_SAR: emit_binary(ctx, "ashr", inst); break;
-        case IR_SHR: emit_binary(ctx, "lshr", inst); break;
-        case IR_AND: emit_binary(ctx, "and", inst); break;
-        case IR_OR: emit_binary(ctx, "or", inst); break;
-        case IR_DIV: emit_binary_signed(ctx, "sdiv", "udiv", inst); break;
-        case IR_MOD: emit_binary_signed(ctx, "srem", "urem", inst); break;
-
-        case IR_ZERO_EXTEND: emit_conversion(ctx, "zext", inst); break;
-        case IR_SIGN_EXTEND: emit_conversion(ctx, "sext", inst); break;
-        case IR_TRUNCATE: emit_conversion(ctx, "trunc", inst); break;
-
-        case IR_BITCAST: {
-            if (inst->index == NO_INDEX) break;
-
-            /// LLVM doesn’t allow bitcasts between aggregates, so
-            /// we gotta do it the janky way.
-            Type *from = type_canonical(inst->operand->type);
-            Type *to = type_canonical(inst->type);
-            if (from->kind == TYPE_STRUCT || to->kind == TYPE_STRUCT ||
-                from->kind == TYPE_ARRAY || to->kind == TYPE_ARRAY) {
-                format_to(out, "    %%alloca.%u = alloca ", inst->index);
-                emit_type(ctx, to);
-                format_to(out, ", align %Z\n", type_alignof(to));
-                format_to(out, "    store ");
-                emit_value(ctx, inst->operand, true);
-                format_to(out, ", ptr %%alloca.%u\n", inst->index);
-                format_to(out, "    %%%u = load ", inst->index);
-                emit_type(ctx, inst->type);
-                format_to(out, ", ptr %%alloca.%u\n", inst->index);
-                break;
-            }
-
-            /// If we’re converting between ptr and integers, we need
-            /// to use inttoptr and ptrtoint. Otherwise, just emit a
-            /// normal bitcast.
-            if (from->kind == TYPE_POINTER && to->kind == TYPE_INTEGER)
-              emit_conversion(ctx, "ptrtoint", inst);
-            else if (from->kind == TYPE_INTEGER && to->kind == TYPE_POINTER)
-              emit_conversion(ctx, "inttoptr", inst);
-            else
-              emit_conversion(ctx, "bitcast", inst);
-        } break;
-
-        case IR_STORE:
-            format_to(out, "    store ");
-            emit_value(ctx, inst->store.value, true);
-            format_to(out, ", ");
-            emit_value(ctx, inst->store.addr, true);
-            format_to(out, "\n");
-            break;
-
-        /// There is no `not` instruction, so we emit a `xor` instead.
-        case IR_NOT:
-            emit_instruction_index(ctx, inst);
-            format_to(out, "xor ");
-            emit_value(ctx, inst->operand, true);
-            format_to(out, ", -1\n");
-            break;
-
-        case IR_ALLOCA: {
-            Type *t = type_canonical(inst->type);
-            ASSERT(type_is_pointer(t));
-            emit_instruction_index(ctx, inst);
-            format_to(out, "alloca ");
-            emit_type(ctx, t->pointer.to);
-
-            /// Specifying the alignment isn’t strictly necessary,
-            /// but it’s probably a good idea.
-            format_to(out, ", align %Z\n", type_alignof(inst->type));
-        } break;
+      UNREACHABLE();
     }
+
+    case IR_CALL: {
+      emit_instruction_index(ctx, inst);
+      Type *call_ty = ir_call_callee_type(inst);
+      format_to(out, "call ");
+      emit_type(ctx, call_ty->function.return_type);
+
+      if (!ir_call_is_direct(inst)) emit_value(ctx, ir_callee(inst).inst, false);
+      else format_to(out, " @%S", ir_name(ir_callee(inst).func));
+
+      format_to(out, "(");
+      for (usz i = 0; i < ir_call_args_count(inst); i++) {
+        if (i) format_to(out, ", ");
+        emit_value(ctx, ir_call_arg(inst, i), true);
+      }
+      format_to(out, ")\n");
+    } break;
+
+    case IR_LOAD:
+      emit_instruction_index(ctx, inst);
+      format_to(out, "load ");
+      emit_type(ctx, ir_typeof(inst));
+      format_to(out, ", ");
+      emit_value(ctx, ir_operand(inst), true);
+      format_to(out, "\n");
+      break;
+
+    case IR_RETURN:
+      format_to(out, "    ret ");
+      if (ir_operand(inst)) emit_value(ctx, ir_operand(inst), true);
+      else format_to(out, "void");
+      format_to(out, "\n");
+      break;
+
+    case IR_BRANCH:
+      format_to(out, "    br label %%bb%u\n", ir_id(ir_dest(inst)));
+      break;
+
+    case IR_BRANCH_CONDITIONAL:
+      /// Narrow the condition to a bool.
+      format_to(out, "    %%%u = icmp ne ", ir_id(inst));
+      emit_value(ctx, ir_cond(inst), true);
+      format_to(out, ", 0\n");
+
+      /// Emit the branch.
+      format_to(
+        out,
+        "    br i1 %%%u, label %%bb%u, label %%bb%u\n",
+        ir_id(inst),
+        ir_id(ir_then(inst)),
+        ir_id(ir_else(inst))
+      );
+      break;
+
+    case IR_UNREACHABLE:
+      format_to(out, "    unreachable\n");
+      break;
+
+    case IR_PHI:
+      emit_instruction_index(ctx, inst);
+      format_to(out, "phi ");
+      emit_type(ctx, ir_typeof(inst));
+      format_to(out, " ");
+      for (usz i = 0; i < ir_phi_args_count(inst); i++) {
+        if (i) format_to(out, ", ");
+        const IRPhiArgument *arg = ir_phi_arg(inst, i);
+        format_to(out, "[ ");
+        emit_value(ctx, arg->value, false);
+        format_to(out, ", %%bb%u ]", ir_id(arg->block));
+      }
+      format_to(out, "\n");
+      break;
+
+    /// In LLVM, comparisons return an i1. However, we don’t have
+    /// bools yet in intercept, so we need to convert the result
+    /// back to whatever type Intercept wants it to be.
+    ///
+    /// TODO: Simplify this once we have bools.
+    case IR_EQ:
+    case IR_NE:
+    case IR_LT:
+    case IR_LE:
+    case IR_GT:
+    case IR_GE: {
+      /// Emit the comparison with a temporary name.
+      format_to(out, "    %%i1.%u = icmp ", ir_id(inst));
+      switch (ir_kind(inst)) {
+        default: UNREACHABLE();
+        case IR_EQ: format_to(out, "eq "); break;
+        case IR_NE: format_to(out, "ne "); break;
+        case IR_LT: format_to(out, "%s", type_is_signed(ir_typeof(ir_lhs(inst))) ? "slt " : "ult "); break;
+        case IR_LE: format_to(out, "%s", type_is_signed(ir_typeof(ir_lhs(inst))) ? "sle " : "ule "); break;
+        case IR_GT: format_to(out, "%s", type_is_signed(ir_typeof(ir_lhs(inst))) ? "sgt " : "ugt "); break;
+        case IR_GE: format_to(out, "%s", type_is_signed(ir_typeof(ir_lhs(inst))) ? "sge " : "uge "); break;
+      }
+      emit_value(ctx, ir_lhs(inst), true);
+      format_to(out, ", ");
+      emit_value(ctx, ir_rhs(inst), false);
+
+      /// ALWAYS zero-extend an i1, as sign-extending would broadcast the sign bit.
+      format_to(out, "\n    %%%u = zext i1 %%i1.%u to ", ir_id(inst), ir_id(inst));
+      emit_type(ctx, ir_typeof(inst));
+      format_to(out, "\n");
+    } break;
+
+    /// The frontend lowers pointer arithmetic to adds, but
+    /// we need to emit a GEP for this since LLVM doesn’t
+    /// let us add ints to pointers.
+    case IR_ADD:
+      /// Pointer arithmetic.
+      if (type_is_pointer(ir_typeof(ir_lhs(inst))) && !type_is_pointer(ir_typeof(ir_rhs(inst))))
+        emit_pointer_add(ctx, inst, ir_lhs(inst), ir_rhs(inst));
+      else if (!type_is_pointer(ir_typeof(ir_lhs(inst))) && type_is_pointer(ir_typeof(ir_rhs(inst))))
+        emit_pointer_add(ctx, inst, ir_rhs(inst), ir_lhs(inst));
+      else
+        emit_binary(ctx, "add", inst);
+      break;
+
+    case IR_SUB: emit_binary(ctx, "sub", inst); break;
+    case IR_MUL: emit_binary(ctx, "mul", inst); break;
+    case IR_SHL: emit_binary(ctx, "shl", inst); break;
+    case IR_SAR: emit_binary(ctx, "ashr", inst); break;
+    case IR_SHR: emit_binary(ctx, "lshr", inst); break;
+    case IR_AND: emit_binary(ctx, "and", inst); break;
+    case IR_OR: emit_binary(ctx, "or", inst); break;
+    case IR_DIV: emit_binary_signed(ctx, "sdiv", "udiv", inst); break;
+    case IR_MOD: emit_binary_signed(ctx, "srem", "urem", inst); break;
+
+    case IR_ZERO_EXTEND: emit_conversion(ctx, "zext", inst); break;
+    case IR_SIGN_EXTEND: emit_conversion(ctx, "sext", inst); break;
+    case IR_TRUNCATE: emit_conversion(ctx, "trunc", inst); break;
+
+    case IR_BITCAST: {
+      if (ir_id(inst) == NO_INDEX) break;
+
+      /// LLVM doesn’t allow bitcasts between aggregates, so
+      /// we gotta do it the janky way.
+      Type *from = type_canonical(ir_typeof(ir_operand(inst)));
+      Type *to = type_canonical(ir_typeof(inst));
+      if (from->kind == TYPE_STRUCT || to->kind == TYPE_STRUCT || from->kind == TYPE_ARRAY || to->kind == TYPE_ARRAY) {
+        format_to(out, "    %%alloca.%u = alloca ", ir_id(inst));
+        emit_type(ctx, to);
+        format_to(out, ", align %Z\n", type_alignof(to));
+        format_to(out, "    store ");
+        emit_value(ctx, ir_operand(inst), true);
+        format_to(out, ", ptr %%alloca.%u\n", ir_id(inst));
+        format_to(out, "    %%%u = load ", ir_id(inst));
+        emit_type(ctx, ir_typeof(inst));
+        format_to(out, ", ptr %%alloca.%u\n", ir_id(inst));
+        break;
+      }
+
+      /// If we’re converting between ptr and integers, we need
+      /// to use inttoptr and ptrtoint. Otherwise, just emit a
+      /// normal bitcast.
+      if (from->kind == TYPE_POINTER && to->kind == TYPE_INTEGER)
+        emit_conversion(ctx, "ptrtoint", inst);
+      else if (from->kind == TYPE_INTEGER && to->kind == TYPE_POINTER)
+        emit_conversion(ctx, "inttoptr", inst);
+      else
+        emit_conversion(ctx, "bitcast", inst);
+    } break;
+
+    case IR_STORE:
+      format_to(out, "    store ");
+      emit_value(ctx, ir_store_value(inst), true);
+      format_to(out, ", ");
+      emit_value(ctx, ir_store_addr(inst), true);
+      format_to(out, "\n");
+      break;
+
+    /// There is no `not` instruction, so we emit a `xor` instead.
+    case IR_NOT:
+      emit_instruction_index(ctx, inst);
+      format_to(out, "xor ");
+      emit_value(ctx, ir_operand(inst), true);
+      format_to(out, ", -1\n");
+      break;
+
+    case IR_ALLOCA: {
+      Type *t = type_canonical(ir_typeof(inst));
+      ASSERT(type_is_pointer(t));
+      emit_instruction_index(ctx, inst);
+      format_to(out, "alloca ");
+      emit_type(ctx, t->pointer.to);
+
+      /// Specifying the alignment isn’t strictly necessary,
+      /// but it’s probably a good idea.
+      format_to(out, ", align %Z\n", type_alignof(ir_typeof(inst)));
+    } break;
+  }
 }
 
 /// Emit an LLVM function.
@@ -726,132 +727,132 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
 /// This declares external functions and defines
 /// defined functions.
 static void emit_function(LLVMContext *ctx, IRFunction *f) {
-    string_buffer *out = &ctx->out;
-    if (f != *f->context->functions.data) format_to(out, "\n");
+  string_buffer *out = &ctx->out;
+  if (f != *ctx->cg->functions.data) format_to(out, "\n");
 
-    /// Write function header.
-    format_to(out, "%s ", ir_func_is_definition(f) ? "define" : "declare");
-    if (f->linkage == LINKAGE_INTERNAL) format_to(out, "private ");
-    emit_type(ctx, f->type->function.return_type);
-    format_to(out, " @%S(", f->name);
+  /// Write function header.
+  Type *ftype = ir_typeof(f);
+  format_to(out, "%s ", ir_func_is_definition(f) ? "define" : "declare");
+  if (ir_linkage(f) == LINKAGE_INTERNAL) format_to(out, "private ");
+  emit_type(ctx, ftype->function.return_type);
+  format_to(out, " @%S(", ir_name(f));
 
-    /// Write the argument types.
-    foreach_index (i, f->type->function.parameters) {
-        Parameter *p = f->type->function.parameters.data + i;
-        format_to(out, "%s", i == 0 ? "" : ", ");
-        emit_type(ctx, p->type);
+  /// Write the argument types.
+  foreach_index (i, ftype->function.parameters) {
+    Parameter *p = ftype->function.parameters.data + i;
+    format_to(out, "%s", i == 0 ? "" : ", ");
+    emit_type(ctx, p->type);
 
-        /// Reference parameters get some optimisation hints. This
-        /// is also what Clang uses for C++ references.
-        Type *canon = type_canonical(p->type);
-        if (type_is_reference(canon)) {
-            usz element_size = type_sizeof(canon->reference.to);
-            format_to(
-                out,
-                " noundef nonnull align %Z dereferenceable(%Z)",
-                element_size,
-                element_size
-            );
-        }
-
-        /// Parameter name.
-        format_to(out, " %%%Z", i);
+    /// Reference parameters get some optimisation hints. This
+    /// is also what Clang uses for C++ references.
+    Type *canon = type_canonical(p->type);
+    if (type_is_reference(canon)) {
+      usz element_size = type_sizeof(canon->reference.to);
+      format_to(
+        out,
+        " noundef nonnull align %Z dereferenceable(%Z)",
+        element_size,
+        element_size
+      );
     }
 
-    /// Write attributes.
-    format_to(out, ")");
-    if (f->attr_inline) format_to(out, " alwaysinline");
-    if (f->attr_noinline) format_to(out, " noinline");
-    if (f->attr_noreturn) format_to(out, " noreturn");
-    format_to(out, " nounwind%s\n", ir_func_is_definition(f) ? " {" : "");
+    /// Parameter name.
+    format_to(out, " %%%Z", i);
+  }
 
-    /// Extern functions don’t have a body.
-    if (!ir_func_is_definition(f)) return;
+  /// Write attributes.
+  format_to(out, ")");
+  if (ir_attribute(f, FUNC_ATTR_INLINE)) format_to(out, " alwaysinline");
+  if (ir_attribute(f, FUNC_ATTR_NOINLINE)) format_to(out, " noinline");
+  if (ir_attribute(f, FUNC_ATTR_NORETURN)) format_to(out, " noreturn");
+  format_to(out, " nounwind%s\n", ir_func_is_definition(f) ? " {" : "");
 
-    /// Assign indices to all instructions and blocks.
-    u32 value_index = (u32) f->type->function.parameters.size;
-    usz block_index = 0;
-    foreach_val (block, f->blocks) {
-        block->id = block_index++;
-        foreach_val (inst, block->instructions) {
-            /// Values are numbered.
-            inst->index = llvm_is_numbered_value(inst)
-                            ? value_index++
-                            : NO_INDEX;
-        }
+  /// Extern functions don’t have a body.
+  if (!ir_func_is_definition(f)) return;
+
+  /// Assign indices to all instructions and blocks.
+  u32 value_index = (u32) ftype->function.parameters.size;
+  u32 block_index = 0;
+  FOREACH_BLOCK (block, f) {
+    ir_id(block, block_index++);
+    FOREACH_INSTRUCTION (inst, block) {
+      /// Values are numbered.
+      u32 id = llvm_is_numbered_value(inst) ? value_index++ : NO_INDEX;
+      ir_id(inst, id);
     }
+  }
 
-    /// Emit the function body.
-    foreach_val (block, f->blocks) {
-        if (block->id) format_to(out, "\n");
-        format_to(out, "bb%Z:", block->id);
-        if (block->name.size) format_to(out, " ; %S", block->name);
-        format_to(out, "\n");
-        foreach_val (inst, block->instructions) {
-            emit_instruction(ctx, inst);
-        }
+  /// Emit the function body.
+  FOREACH_BLOCK (block, f) {
+    if (ir_id(block)) format_to(out, "\n");
+    format_to(out, "bb%u:", ir_id(block));
+    if (ir_name(block).size) format_to(out, " ; %S", ir_name(block));
+    format_to(out, "\n");
+    FOREACH_INSTRUCTION (inst, block) {
+      emit_instruction(ctx, inst);
     }
+  }
 
-    /// Close the function.
-    format_to(out, "}\n");
+  /// Close the function.
+  format_to(out, "}\n");
 }
 
 void codegen_emit_llvm(CodegenContext *cg) {
-    LLVMContext ctx = {
-        .cg = cg,
-    };
+  LLVMContext ctx = {
+    .cg = cg,
+  };
 
-    /// We don’t want colours in our LLVM IR.
-    disable_colours();
+  /// We don’t want colours in our LLVM IR.
+  disable_colours();
 
-    /// Mangle all function names.
-    foreach_val (f, cg->functions) mangle_function_name(f);
+  /// Mangle all function names.
+  foreach_val (f, cg->functions) mangle_function_name(f);
 
-    /// Emit named types.
-    bool type_emitted = false;
-    foreach_val (t, cg->ast->_types_) {
-        if (t->kind != TYPE_STRUCT || t->structure.decl->struct_decl->name.size == 0) continue;
-        type_emitted = true;
-        format_to(&ctx.out, "%%struct.%S = type ", t->structure.decl->struct_decl->name);
-        emit_struct_members(&ctx, t);
-        format_to(&ctx.out, "\n");
+  /// Emit named types.
+  bool type_emitted = false;
+  foreach_val (t, cg->ast->_types_) {
+    if (t->kind != TYPE_STRUCT || t->structure.decl->struct_decl->name.size == 0) continue;
+    type_emitted = true;
+    format_to(&ctx.out, "%%struct.%S = type ", t->structure.decl->struct_decl->name);
+    emit_struct_members(&ctx, t);
+    format_to(&ctx.out, "\n");
+  }
+
+  /// Add a newline after the types.
+  if (type_emitted) format_to(&ctx.out, "\n");
+
+  /// Emit global variables.
+  foreach_val (var, cg->static_vars) {
+    format_to(&ctx.out, "@%S = private global ", var->name);
+    emit_type(&ctx, var->type);
+    format_to(&ctx.out, " ");
+    if (var->init) {
+      switch (ir_kind(var->init)) {
+        case IR_LIT_INTEGER: format_to(&ctx.out, "%U", ir_imm(var->init)); break;
+        case IR_LIT_STRING: emit_string_data(&ctx, ir_string_data(cg, var->init), false); break;
+        default: UNREACHABLE();
+      }
+    } else {
+      format_to(&ctx.out, "zeroinitializer");
     }
 
-    /// Add a newline after the types.
-    if (type_emitted) format_to(&ctx.out, "\n");
+    /// Globals must be aligned manually, else they are thought
+    /// to have an alignment of 1, which breaks default-aligned
+    /// loads and stores.
+    format_to(&ctx.out, ", align %Z\n", type_alignof(var->type));
+  }
 
-    /// Emit global variables.
-    foreach_val (var, cg->static_vars) {
-        format_to(&ctx.out, "@%S = private global ", var->name);
-        emit_type(&ctx, var->type);
-        format_to(&ctx.out, " ");
-        if (var->init) {
-            switch (var->init->kind) {
-                case IR_LIT_INTEGER: format_to(&ctx.out, "%U", var->init->imm); break;
-                case IR_LIT_STRING: emit_string_data(&ctx, as_span(var->init->str), false); break;
-                default: UNREACHABLE();
-            }
-        } else {
-            format_to(&ctx.out, "zeroinitializer");
-        }
+  /// Add a newline after the globals.
+  if (cg->static_vars.size) format_to(&ctx.out, "\n");
 
-        /// Globals must be aligned manually, else they are thought
-        /// to have an alignment of 1, which breaks default-aligned
-        /// loads and stores.
-        format_to(&ctx.out, ", align %Z\n", type_alignof(var->type));
-    }
+  /// Emit each function.
+  foreach_val (f, cg->functions) emit_function(&ctx, f);
 
-    /// Add a newline after the globals.
-    if (cg->static_vars.size) format_to(&ctx.out, "\n");
+  /// Emit intrinsic declarations.
+  if (ctx.llvm_debugtrap_used) format_to(&ctx.out, "declare void @llvm.debugtrap()\n");
+  if (ctx.llvm_memcpy_used) format_to(&ctx.out, "declare void @llvm.memcpy.p0.p0.i%Z(ptr, ptr, i64, i1)\n", type_sizeof(t_integer));
 
-    /// Emit each function.
-    foreach_val (f, cg->functions) emit_function(&ctx, f);
-
-    /// Emit intrinsic declarations.
-    if (ctx.llvm_debugtrap_used) format_to(&ctx.out, "declare void @llvm.debugtrap()\n");
-    if (ctx.llvm_memcpy_used) format_to(&ctx.out, "declare void @llvm.memcpy.p0.p0.i%Z(ptr, ptr, i64, i1)\n", type_sizeof(t_integer));
-
-    /// Write to file.
-    fprint(cg->code, "%S", as_span(ctx.out));
-    vector_delete(ctx.out);
+  /// Write to file.
+  fprint(cg->code, "%S", as_span(ctx.out));
+  vector_delete(ctx.out);
 }
