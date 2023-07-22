@@ -2263,8 +2263,8 @@ void emit_x86_64_generic_object(CodegenContext *context, MIRFunctionVector machi
     isz frame_offset = 0;
     isz frame_size = 0;
     foreach (fo, function->frame_objects) {
-      frame_size += fo->size;
-      frame_offset -= fo->size;
+      frame_size += (isz) fo->size;
+      frame_offset -= (isz) fo->size;
       fo->offset = frame_offset;
     }
 

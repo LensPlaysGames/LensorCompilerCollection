@@ -1364,7 +1364,7 @@ void codegen_emit_x86_64(CodegenContext *context) {
     // Calculate stack offsets of frame objects
     isz offset = 0;
     foreach (fo, function->frame_objects) {
-      offset -= fo->size;
+      offset -= (isz) fo->size;
       fo->offset = offset;
     }
 

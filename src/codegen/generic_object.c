@@ -470,9 +470,9 @@ void generic_object_as_coff_x86_64(GenericObjectFile *object, FILE *f) {
     else if (strcmp(s->name, ".rodata") == 0)
       shdr.s_flags |= COFF_SCN_CNT_INIT_DATA | COFF_SCN_MEM_READ;
     else if (strcmp(s->name, ".data") == 0)
-      shdr.s_flags |= COFF_SCN_CNT_INIT_DATA | COFF_SCN_MEM_READ | COFF_SCN_MEM_WRITE;
+      shdr.s_flags |= (int32_t)(COFF_SCN_CNT_INIT_DATA | COFF_SCN_MEM_READ | COFF_SCN_MEM_WRITE);
     else if (strcmp(s->name, ".bss") == 0)
-      shdr.s_flags |= COFF_SCN_CNT_UNINIT_DATA | COFF_SCN_MEM_READ | COFF_SCN_MEM_WRITE;
+      shdr.s_flags |= (int32_t)(COFF_SCN_CNT_UNINIT_DATA | COFF_SCN_MEM_READ | COFF_SCN_MEM_WRITE);
     else shdr.s_flags |= COFF_SCN_LNK_REMOVE | COFF_SCN_MEM_READ | COFF_SCN_MEM_DISCARDABLE;
 
     // Calculate number of relocations for this section.
