@@ -284,7 +284,7 @@ if (BUILD_TESTING)
   if (NOT DEFINED INTERCEPT_TEST_LINKER)
     message (FATAL_ERROR "Please specify a linker for tests using -DINTERCEPT_TEST_LINKER=/path/to/linker. The path must be an absolute path and point to a version of gcc or clang (not clang-cl!)")
   endif ()
-  message(STATUS "Using linker ${INTERCEPT_TEST_LINKER} for tests."
+  message(STATUS "Using linker ${INTERCEPT_TEST_LINKER} for tests.")
 
   file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
   foreach (test ${tests})
