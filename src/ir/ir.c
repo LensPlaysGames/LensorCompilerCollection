@@ -200,9 +200,10 @@ static void ir_emit_instruction(
 
   case IR_INTRINSIC: {
     switch (inst->call.intrinsic) {
-      default: format_to(out, "%33intrinsic.%d ", inst->call.intrinsic); break;
-      case INTRIN_BUILTIN_SYSCALL: format_to(out, "%33intrinsic.syscall "); break;
-      case INTRIN_BUILTIN_DEBUGTRAP: format_to(out, "%33intrinsic.debugtrap "); break;
+      default: format_to(out, "%33intrin.%d ", inst->call.intrinsic); break;
+      case INTRIN_BUILTIN_SYSCALL: format_to(out, "%33intrin.syscall "); break;
+      case INTRIN_BUILTIN_DEBUGTRAP: format_to(out, "%33intrin.debugtrap "); break;
+      case INTRIN_BUILTIN_MEMCPY: format_to(out, "%33intrin.memcpy "); break;
     }
 
     format_to(out, "%31(");

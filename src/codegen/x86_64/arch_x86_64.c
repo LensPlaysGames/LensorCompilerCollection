@@ -141,73 +141,61 @@ Clobbers does_clobber(IRInstruction *instruction) {
 
 static usz emit_memcpy_impl(
   CodegenContext *context,
-  IRInstruction *to,
-  IRInstruction *from,
+  Type *element_type,
+  IRInstruction **to,
+  IRInstruction **from,
   usz byte_size,
-  usz iter_amount,
-  IRInstruction *insert_before_this
+  IRInstruction *before
 ) {
-  // Generate an immediate corresponding to the byte size of this member
-  IRInstruction *byte_size_immediate = ir_create_immediate(context, t_integer, iter_amount);
-  ir_insert_before(insert_before_this, byte_size_immediate);
+  /// Increment that we’ll be adding to the pointers.
+  usz iter_amount = type_sizeof(element_type);
+  IRInstruction *increment = ir_create_immediate(context, t_integer, iter_amount);
+  ir_insert_before(before, increment);
 
-  for (; byte_size >= iter_amount; byte_size -= iter_amount) {
-    Type *t = type_canonical(ir_typeof(from));
-    if (!(t && type_is_pointer(t))) {
-      //print("from type: %T\n", from->type);
-      ir_print_instruction(stdout, from);
-      if (t) ICE("Can not emit IR_LOAD from type %T as it is not a pointer", t);
-      else ICE("Can not emit IR_LOAD to NULL canonical type!");
+  /// Unroll the memcpy() loop.
+  for (; iter_amount <= byte_size ; byte_size -= iter_amount) {
+    /// Load and store value.
+    IRInstruction *load = ir_insert_before(before, ir_create_load(context, element_type, *from));
+    ir_insert_before(before, ir_create_store(context, load, *to));
+
+    /// Increment pointers if we have more to copy.
+    if (byte_size - iter_amount) {
+      *from = ir_create_add(context, *from, increment);
+      *to = ir_create_add(context, *to, increment);
+      ir_insert_before(before, *from);
+      ir_insert_before(before, *to);
     }
-    if (type_is_pointer(t)) t = t->pointer.to;
-
-    // Load iter_amount bytes from "from" address, and store iter_amount bytes into "to" address.
-    IRInstruction *load = ir_create_load(context, t, from);
-    ir_insert_before(insert_before_this, load);
-
-    // Store loaded element into local stack array...
-    ir_insert_before(insert_before_this, ir_create_store(context, load, to));
-
-    if (byte_size - iter_amount < iter_amount || byte_size - iter_amount > byte_size) {
-      // Do this iteration, then break.
-      byte_size -= iter_amount;
-      break;
-    }
-
-    // Iterate "from" and "to" addresses by iter_amount bytes.
-    from = ir_create_add(context, from, byte_size_immediate);
-    to = ir_create_add(context, to, byte_size_immediate);
-    ir_insert_before(insert_before_this, from);
-    ir_insert_before(insert_before_this, to);
   }
+
   return byte_size;
 }
 
 static void emit_memcpy(
   CodegenContext *context,
-  IRInstruction *to_,
-  IRInstruction *from_,
-  usz byte_size,
+  IRInstruction *to,
+  IRInstruction *from,
+  usz bytes_to_copy,
   IRInstruction *insert_before_this
 ) {
-  // Create two copies, one of each address: "from" and "to".
-  // Cache addresses.
-  IRInstruction *from = ir_create_copy(context, from_);
-  IRInstruction *to = ir_create_copy(context, to_);
-  ir_insert_before(insert_before_this, from);
-  ir_insert_before( insert_before_this, to);
+  /// Copy in integer-sized blocks.
+  bytes_to_copy = emit_memcpy_impl(
+    context,
+    t_integer,
+    &to,
+    &from,
+    bytes_to_copy,
+    insert_before_this
+  );
 
-  // Switch type to reflect loading 8 bytes.
-  Type* t_integer_ptr = ast_make_type_pointer(context->ast, t_integer->source_location, t_integer);
-  ir_set_type(from, t_integer_ptr);
-  ir_set_type(to, t_integer_ptr);
-  if (byte_size = emit_memcpy_impl(context, to, from, byte_size, 8, insert_before_this), byte_size) {
-    // Switch type to reflect storing 1 byte.
-    Type * t_byte_ptr = ast_make_type_pointer(context->ast, t_byte->source_location, t_byte);
-    ir_set_type(from, t_byte_ptr);
-    ir_set_type(to, t_byte_ptr);
-    emit_memcpy_impl(context, to, from, byte_size, 1, insert_before_this);
-  }
+  /// Copy in byte-sized blocks if there’s more to copy.
+  if (bytes_to_copy) emit_memcpy_impl(
+    context,
+    t_byte,
+    &to,
+    &from,
+    bytes_to_copy,
+    insert_before_this
+  );
 }
 
 static IRInstruction *alloca_copy_of(CodegenContext *context, IRInstruction *copy, IRInstruction *insert_before_this) {
