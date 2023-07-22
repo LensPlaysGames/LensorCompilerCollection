@@ -538,6 +538,8 @@ static void lower_instruction(CodegenContext *context, IRInstruction *inst) {
 
             bool from_signed = type_is_signed(t_from);
 
+            /// FIXME: This should happen in sema and can be removed here once
+            ///     we handle implicit casts properly in sema.
             if (from_sz == to_sz) {
               /// FIXME: This has been commented out for a while, do we need this?
               // INSTRUCTION(bitcast, IR_BITCAST);
