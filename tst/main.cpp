@@ -283,7 +283,7 @@ auto delete_file(const fs::path& path) {
 
 int main(int argc_, char **argv_) {
     /// Disable abort popup on Windows.
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__MINGW32__)
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
 
@@ -296,9 +296,18 @@ int main(int argc_, char **argv_) {
 
     ASSERT(fs::exists(testpath), "Sorry, but the test specified at \"{}\" does not exist", testpath);
     VERBOSE("Found test file at {}", testpath);
-    ASSERT(fs::exists(intcpath), "Sorry, but the intc compiler specified at \"{}\" does not exist", intcpath);
+
+    /// Account for executable suffix stupidity.
+    const auto find_exe = [](fs::path& path) {
+        if (fs::exists(path)) return true;
+        if (path.extension() == PLATFORM_EXE_SUFFIX) return false;
+        path += PLATFORM_EXE_SUFFIX;
+        return fs::exists(path);
+    };
+
+    ASSERT(find_exe(intcpath), "Sorry, but the intc compiler specified at \"{}\" does not exist", intcpath);
     VERBOSE("Using Intercept compiler at {}", intcpath);
-    ASSERT(fs::exists(ldpath), "Sorry, but the linker specified at \"{}\" does not exist", ldpath);
+    ASSERT(find_exe(ldpath), "Sorry, but the linker specified at \"{}\" does not exist", ldpath);
     VERBOSE("Using linker at {}", ldpath);
 
     // Parse expected test results
