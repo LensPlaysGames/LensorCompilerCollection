@@ -1613,23 +1613,25 @@ IRInstruction *ir_replace(IRInstruction *old, IRInstruction *new) {
   return new;
 }
 
-void ir_replace_uses(IRInstruction *instruction, IRInstruction *replacement) {
-  if (instruction == replacement) { return; }
+void ir_replace_uses(IRInstruction *inst, IRInstruction *replacement) {
+  if (inst == replacement) { return; }
 #ifdef DEBUG_USES
-  eprint("[Use] Replacing uses of %%%u with %%%u\n", instruction->id, replacement->id);
+  eprint("[Use] Replacing uses of %%%u with %%%u\n", inst->id, replacement->id);
 #endif
-  while (instruction->users.size) {
-    /// Handle the case of an instruction being replaced with an
-    /// instruction that uses it.
-    usz i = 0;
-    foreach_val (user, instruction->users)
-      if (user == replacement)
-        i++;
-    if (i == instruction->users.size) break;
 
-    ir_internal_replace_use_t replace = { instruction, replacement };
-    ir_for_each_child(instruction->users.data[i], ir_internal_replace_use, &replace);
+  /// Note: We need to handle the case of an instruction being 
+  /// replaced with an instruction that uses it.
+  bool used_by_replacement = vector_contains(inst->users, replacement);
+  if (used_by_replacement) remove_use(inst, replacement);
+
+  /// Replace the remaining uses.
+  while (inst->users.size) {
+    ir_internal_replace_use_t replace = { inst, replacement };
+    ir_for_each_child(inst->users.data[0], ir_internal_replace_use, &replace);
   }
+
+  /// Add the use by the replacement back in.
+  if (used_by_replacement) mark_used(inst, replacement);
 }
 
 void ir_set_func_ids(IRFunction *f) {
