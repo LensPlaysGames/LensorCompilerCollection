@@ -910,20 +910,20 @@ NODISCARD static bool typecheck_intrinsic(Module *ast, Node *expr) {
           if (expr->call.arguments.size != 3)
             ERR(expr->source_location, "__builtin_memcpy() takes exactly three arguments");
 
-            if (!typecheck_expression(ast, expr->call.arguments.data[0])) return false;
-            if (!typecheck_expression(ast, expr->call.arguments.data[1])) return false;
-            if (!typecheck_expression(ast, expr->call.arguments.data[2])) return false;
+          if (!typecheck_expression(ast, expr->call.arguments.data[0])) return false;
+          if (!typecheck_expression(ast, expr->call.arguments.data[1])) return false;
+          if (!typecheck_expression(ast, expr->call.arguments.data[2])) return false;
 
-            if (expr->call.arguments.data[0]->type->kind != TYPE_POINTER)
-              ERR(expr->call.arguments.data[0]->source_location, "First argument of __builtin_memcpy() must be a pointer");
-            if (expr->call.arguments.data[1]->type->kind != TYPE_POINTER)
-              ERR(expr->call.arguments.data[1]->source_location, "Second argument of __builtin_memcpy() must be a pointer");
-            if (!convertible(t_integer, expr->call.arguments.data[2]->type))
-              ERR(expr->call.arguments.data[2]->source_location, "Third argument of __builtin_memcpy() must be an integer");
+          if (expr->call.arguments.data[0]->type->kind != TYPE_POINTER)
+            ERR(expr->call.arguments.data[0]->source_location, "First argument of __builtin_memcpy() must be a pointer");
+          if (expr->call.arguments.data[1]->type->kind != TYPE_POINTER)
+            ERR(expr->call.arguments.data[1]->source_location, "Second argument of __builtin_memcpy() must be a pointer");
+          if (!convertible(t_integer, expr->call.arguments.data[2]->type))
+            ERR(expr->call.arguments.data[2]->source_location, "Third argument of __builtin_memcpy() must be an integer");
 
-            expr->kind = NODE_INTRINSIC_CALL;
-            expr->type = t_void;
-            return true;
+          expr->kind = NODE_INTRINSIC_CALL;
+          expr->type = t_void;
+          return true;
         }
     }
 

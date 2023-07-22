@@ -1074,7 +1074,9 @@ static bool opt_store_forwarding(IRFunction *f) {
 /// ===========================================================================
 ///  Driver
 /// ===========================================================================
+#ifdef __clang__
 PUSH_IGNORE_WARNING("-Wbitwise-instead-of-logical")
+#endif
 
 void codegen_optimise(CodegenContext *ctx) {
   opt_analyse_functions(ctx);

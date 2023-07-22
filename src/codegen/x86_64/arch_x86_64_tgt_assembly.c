@@ -527,8 +527,8 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
     isz frame_offset = 0;
     isz frame_size = 0;
     foreach (fo, function->frame_objects) {
-      frame_size += fo->size;
-      frame_offset -= fo->size;
+      frame_size += (isz) fo->size;
+      frame_offset -= (isz) fo->size;
       fo->offset = frame_offset;
     }
 
