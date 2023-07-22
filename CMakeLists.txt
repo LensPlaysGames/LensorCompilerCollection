@@ -268,6 +268,7 @@ if (BUILD_TESTING)
   FetchContent_Declare(fmtlib
     GIT_REPOSITORY https://github.com/fmtlib/fmt.git
     GIT_TAG 10.0.0
+    SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
   )
 
   FetchContent_MakeAvailable(clopts fmtlib)
@@ -283,6 +284,7 @@ if (BUILD_TESTING)
   if (NOT DEFINED INTERCEPT_TEST_LINKER)
     message (FATAL_ERROR "Please specify a linker for tests using -DINTERCEPT_TEST_LINKER=/path/to/linker. The path must be an absolute path and point to a version of gcc or clang (not clang-cl!)")
   endif ()
+  message(STATUS "Using linker ${INTERCEPT_TEST_LINKER} for tests."
 
   file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
   foreach (test ${tests})
