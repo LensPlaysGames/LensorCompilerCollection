@@ -680,8 +680,15 @@ static void emit_instruction(LLVMContext *ctx, IRInstruction *inst) {
                 break;
             }
 
-            /// Otherwise, just emit a normal bitcast.
-            emit_conversion(ctx, "bitcast", inst);
+            /// If we’re converting between ptr and integers, we need
+            /// to use inttoptr and ptrtoint. Otherwise, just emit a
+            /// normal bitcast.
+            if (from->kind == TYPE_POINTER && to->kind == TYPE_INTEGER)
+              emit_conversion(ctx, "ptrtoint", inst);
+            else if (from->kind == TYPE_INTEGER && to->kind == TYPE_POINTER)
+              emit_conversion(ctx, "inttoptr", inst);
+            else
+              emit_conversion(ctx, "bitcast", inst);
         } break;
 
         case IR_STORE:
