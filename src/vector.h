@@ -265,7 +265,8 @@
     }                                                           \
   } while (0)
 
-#define list_node(type) \
+/// These are deprecated and should be removed in the future.
+/*#define list_node(type) \
   struct {              \
     type *prev;         \
     type *next;         \
@@ -307,7 +308,7 @@
       (element)->next = (list).first;  \
     }                                  \
     (list).first = (element);          \
-  } while (0)
+  } while (0)*/
 
 /// NOTE: UB if the list does not contain the element.
 #define list_remove(list, element)             \

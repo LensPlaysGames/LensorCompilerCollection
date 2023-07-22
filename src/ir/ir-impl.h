@@ -42,6 +42,7 @@ typedef struct IRInstruction {
   Type *type;
 
   u32 id;
+  u32 padding : 32; /// Add flags etc. here.
 
   /// List of instructions using this instruction.
   InstructionVector users;
