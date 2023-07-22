@@ -261,12 +261,12 @@ include(FetchContent)
 if (BUILD_TESTING)
   message(STATUS "Downloading dependencies for test runner. This may take a while.")
   FetchContent_Declare(clopts
-    GIT_REPOSITORY git@github.com:Sirraide/clopts.git
+    GIT_REPOSITORY https://github.com/Sirraide/clopts.git
     GIT_TAG origin/master
   )
 
   FetchContent_Declare(fmtlib
-    GIT_REPOSITORY git@github.com:fmtlib/fmt.git
+    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
     GIT_TAG 10.0.0
   )
 
