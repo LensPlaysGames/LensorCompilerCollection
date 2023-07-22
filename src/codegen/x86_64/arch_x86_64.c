@@ -528,7 +528,7 @@ static void lower_instruction(CodegenContext *context, IRInstruction *inst) {
           IRInstruction *op = ir_operand(inst);
           if (op && !type_equals(ir_typeof(inst), ir_typeof(op))) {
             // Just like NODE_CAST handling in codegen.c
-            Type *t_to = ir_typeof(inst);
+            Type *t_to = ir_typeof(ir_parent(ir_parent(inst)))->function.return_type;
             Type *t_from = ir_typeof(op);
 
             usz to_sz = type_sizeof(t_to);
