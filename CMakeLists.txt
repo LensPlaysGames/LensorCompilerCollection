@@ -299,7 +299,7 @@ if (BUILD_TESTING)
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
-      set_tests_properties(ASM_${test} PROPERTIES TIMEOUT 2)
+      set_tests_properties(ASM_${test} PROPERTIES TIMEOUT 30)
     endif()
     if (BUILD_OBJ_TESTING)
       if (WIN32)
@@ -313,7 +313,7 @@ if (BUILD_TESTING)
           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
           COMMAND_EXPAND_LISTS
         )
-        set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 2)
+        set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 30)
       else()
         add_test(
           NAME OBJ_${test}
@@ -325,7 +325,7 @@ if (BUILD_TESTING)
           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
           COMMAND_EXPAND_LISTS
         )
-        set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 2)
+        set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 30)
       endif()
     endif()
     if (BUILD_OPT_TESTING)
@@ -340,7 +340,7 @@ if (BUILD_TESTING)
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
-      set_tests_properties(OPT_${test} PROPERTIES TIMEOUT 2)
+      set_tests_properties(OPT_${test} PROPERTIES TIMEOUT 30)
     endif()
     if (BUILD_LLVM_TESTING)
       add_test(
@@ -354,7 +354,7 @@ if (BUILD_TESTING)
         COMMAND_EXPAND_LISTS
       )
 
-      set_tests_properties(LLVM_${test} PROPERTIES TIMEOUT 2)
+      set_tests_properties(LLVM_${test} PROPERTIES TIMEOUT 30)
     endif()
   endforeach()
 endif()

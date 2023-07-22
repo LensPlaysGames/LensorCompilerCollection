@@ -301,7 +301,7 @@ int main(int argc_, char **argv_) {
     const auto find_exe = [](fs::path& path) {
         if (fs::exists(path)) return true;
         if (path.extension() == PLATFORM_EXE_SUFFIX) return false;
-        path += PLATFORM_EXE_SUFFIX;
+        path.replace_extension(PLATFORM_EXE_SUFFIX);
         return fs::exists(path);
     };
 
