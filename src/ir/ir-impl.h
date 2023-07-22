@@ -91,7 +91,7 @@ typedef struct IRBlock {
   IRFunction *function;
 
   // Unique ID (among blocks)
-  size_t id;
+  u32 id;
 
   // MIRBlock that was created to represent this IRBlock.
   MIRBlock *machine_block;

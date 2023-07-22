@@ -168,7 +168,7 @@ static inline_result ir_inline_call(
   /// the instructions vector, which is where we are going to insert the
   /// call arguments. That way, parameter references are automatically
   /// replaced with the corresponding arguments.
-  usz block_id = 0;
+  u32 block_id = 0;
   u32 instruction_id = 0;
   foreach_val (block, callee->blocks) {
     block->id = block_id++;

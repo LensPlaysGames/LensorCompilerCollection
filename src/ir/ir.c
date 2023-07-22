@@ -278,10 +278,10 @@ static void ir_emit_instruction(
     else format_to(out, "%33ret");
     break;
   case IR_BRANCH:
-    format_to(out, "%33br bb%Z", inst->destination_block->id);
+    format_to(out, "%33br bb%u", inst->destination_block->id);
     break;
   case IR_BRANCH_CONDITIONAL:
-    format_to(out, "%33br.cond %34%%%u%31, %33bb%Z%31, %33bb%Z",
+    format_to(out, "%33br.cond %34%%%u%31, %33bb%u%31, %33bb%u",
             inst->cond_br.condition->id, inst->cond_br.then->id, inst->cond_br.else_->id);
     break;
   case IR_PHI: {
@@ -290,7 +290,7 @@ static void ir_emit_instruction(
     foreach (arg, inst->phi_args) {
       if (first) { first = false; }
       else { format_to(out, "%31, "); }
-      format_to(out, "%31[%33bb%Z%31 : %34%%%u%31]", arg->block->id, arg->value->id);
+      format_to(out, "%31[%33bb%u%31 : %34%%%u%31]", arg->block->id, arg->value->id);
     }
   } break;
 
@@ -568,7 +568,7 @@ static void dot_print_block(FILE *file, IRBlock *block, string_buffer *sb) {
   sb_replace(sb, literal_span(">"), literal_span(""));
 
   /// Print instructions.
-  fprint(file, "    Block%p [label=\"{bb%Z|%S", block, block->id, as_span(*sb));
+  fprint(file, "    Block%p [label=\"{bb%u|%S", block, block->id, as_span(*sb));
 
   /// Print branches.
   if (cond_br) fprint(file, "|{<s0>Then|<s1>Else}");
@@ -617,7 +617,7 @@ static void ir_print_dot_dj_function(IRFunction *f, FILE* file) {
 
   ir_set_func_ids(f);
   foreach_val (block, f->blocks)
-    fprint(file, "    Block%p [label=\"{bb%Z}\", shape=record, style=filled]\n", block, block->id);
+    fprint(file, "    Block%p [label=\"{bb%u}\", shape=record, style=filled]\n", block, block->id);
 
   /// We don’t have join edges yet, so just print the
   /// dominator tree for now.
@@ -1530,7 +1530,7 @@ void ir_print_block(
   FILE *file,
   IRBlock *block
 ) {
-  fprint(file, "%33bb%Z%31:\n", block->id);
+  fprint(file, "%33bb%u%31:\n", block->id);
   foreach_val(i, block->instructions) ir_print_instruction(file, i);
   fprint(file, "%m");
 }
@@ -1636,7 +1636,7 @@ void ir_replace_uses(IRInstruction *inst, IRInstruction *replacement) {
 
 void ir_set_func_ids(IRFunction *f) {
   /// We start counting at 1 so that 0 can indicate an invalid/removed element.
-  usz block_id = 1;
+  u32 block_id = 1;
   u32 instruction_id = (u32) f->parameters.size + 1;
 
   foreach_val (block, f->blocks) {
@@ -1908,6 +1908,11 @@ void ir_else_impl_set(Inst *obj, Block *val) {
   ASSERT(obj->kind == IR_BRANCH_CONDITIONAL);
   obj->cond_br.else_ = val;
 };
+
+u32 ir_id_i_impl_get(Inst *i) { return i->id; }
+void ir_id_i_impl_set(Inst *i, u32 v) { i->id = v; }
+u32 ir_id_b_impl_get(Block *b) { return b->id; }
+void ir_id_b_impl_set(Block *b, u32 i) { b->id = i; }
 
 usz ir_imm_impl_get(Inst *obj) {
   assert_has_imm(obj);
