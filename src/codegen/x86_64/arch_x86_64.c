@@ -198,13 +198,6 @@ static void emit_memcpy(
   );
 }
 
-static IRInstruction *alloca_copy_of(CodegenContext *context, IRInstruction *copy, IRInstruction *insert_before_this) {
-  IRInstruction *alloca = ir_create_alloca(context, ir_typeof(copy));
-  ir_insert_before(insert_before_this, alloca);
-  ir_insert_before(insert_before_this, ir_create_store(context, copy, alloca));
-  return alloca;
-}
-
 typedef enum SysVArgumentClass {
   SYSV_REGCLASS_INVALID,
   SYSV_REGCLASS_INTEGER,
@@ -506,6 +499,15 @@ static void lower_store(CodegenContext *ctx, IRInstruction *store) {
 
   /// Don’t know how to handle anything else.
   ICE("Unsupported store of non-register-size value");
+}
+
+static IRInstruction *alloca_copy_of(CodegenContext *context, IRInstruction *copy, IRInstruction *insert_before_this) {
+  IRInstruction *alloca = ir_create_alloca(context, ir_typeof(copy));
+  IRInstruction *store = ir_create_store(context, copy, alloca);
+  ir_insert_before(insert_before_this, alloca);
+  ir_insert_before(insert_before_this, store);
+  lower_store(context, store);
+  return alloca;
 }
 
 static void lower_instruction(CodegenContext *context, IRInstruction *inst) {
