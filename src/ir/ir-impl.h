@@ -41,9 +41,7 @@ typedef struct IRInstruction {
 
   Type *type;
 
-  /// TODO: do we really need both of these?
   u32 id;
-  u32 index;
 
   /// List of instructions using this instruction.
   InstructionVector users;
