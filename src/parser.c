@@ -2023,7 +2023,9 @@ static Node *parse_expr_with_precedence(Parser *p, isz current_precedence) {
 /// Silence bogus warning about clobbered variables. We
 /// return immediately in case of an error, so we never
 /// actually use any of the local vars after the setjmp.
+#ifndef __clang__
 PUSH_IGNORE_WARNING("-Wclobbered");
+#endif
 Module *parse(span source, const char *filename) {
   Parser p = {0};
   p.source = source;
@@ -2091,7 +2093,9 @@ Module *parse(span source, const char *filename) {
   return p.ast;
 }
 
+#ifndef __clang__
 POP_WARNINGS();
+#endif
 
 NODISCARD const char *token_type_to_string(enum TokenType type) {
   STATIC_ASSERT(TK_COUNT == 54, "Exhaustive handling of token types in token type to string conversion");
