@@ -78,16 +78,8 @@ void codegen_context_free(CodegenContext *context) {
   vector_delete(context->static_vars);
 
   /// Free free lists.
-  foreach_val (b, context->free_blocks) {
-    ASAN_UNPOISON(b, sizeof(Block));
-    free(b);
-  }
-
-  foreach_val (i, context->free_instructions) {
-    ASAN_UNPOISON(i, sizeof(Inst));
-    free(i);
-  }
-
+  foreach_val (b, context->free_blocks) free(b);
+  foreach_val (i, context->free_instructions) free(i);
   vector_delete(context->free_blocks);
   vector_delete(context->free_instructions);
 
@@ -492,7 +484,6 @@ static void clean_free_list(CodegenContext *ctx) {
   if (ctx->free_blocks.size > 1000) {
     for (usz i = 0; i < 500; i++) {
       Block *b = vector_pop(ctx->free_blocks);
-      ASAN_UNPOISON(b, sizeof(Block));
       free(b);
     }
   }
@@ -501,7 +492,6 @@ static void clean_free_list(CodegenContext *ctx) {
   if (ctx->free_instructions.size > 10000) {
     for (usz i = 0; i < 5000; i++) {
       Inst *inst = vector_pop(ctx->free_instructions);
-      ASAN_UNPOISON(inst, sizeof(Inst));
       free(inst);
     }
   }
