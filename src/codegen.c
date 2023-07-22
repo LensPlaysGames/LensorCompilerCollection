@@ -392,7 +392,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
           ERR("Sorry, syscalls are not supported on Windows.");
         }
 
-        expr->ir = ir_insert_intrinsic(ctx, t_integer, expr->call.intrinsic);
+        expr->ir = ir_create_intrinsic(ctx, t_integer, expr->call.intrinsic);
         foreach_val (arg, expr->call.arguments) {
           if (type_is_reference(arg->type)) {
             codegen_lvalue(ctx, arg);
@@ -402,6 +402,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
             ir_call_add_arg(expr->ir, arg->ir);
           }
         }
+        ir_insert(ctx, expr->ir);
         return;
 
       /// Inline call.
@@ -421,7 +422,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
 
       /// Memory copy.
       case INTRIN_BUILTIN_MEMCPY:
-        expr->ir = ir_insert_intrinsic(ctx, t_void, expr->call.intrinsic);
+        expr->ir = ir_create_intrinsic(ctx, t_void, expr->call.intrinsic);
         foreach_val (arg, expr->call.arguments) {
           if (type_is_reference(arg->type)) {
             codegen_lvalue(ctx, arg);
@@ -431,6 +432,7 @@ static void codegen_expr(CodegenContext *ctx, Node *expr) {
             ir_call_add_arg(expr->ir, arg->ir);
           }
         }
+        ir_insert(ctx, expr->ir);
         return;
     }
 

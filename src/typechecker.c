@@ -914,9 +914,9 @@ NODISCARD static bool typecheck_intrinsic(Module *ast, Node *expr) {
             if (!typecheck_expression(ast, expr->call.arguments.data[1])) return false;
             if (!typecheck_expression(ast, expr->call.arguments.data[2])) return false;
 
-            if (!convertible(t_void_ptr, expr->call.arguments.data[0]->type))
+            if (expr->call.arguments.data[0]->type->kind != TYPE_POINTER)
               ERR(expr->call.arguments.data[0]->source_location, "First argument of __builtin_memcpy() must be a pointer");
-            if (!convertible(t_void_ptr, expr->call.arguments.data[1]->type))
+            if (expr->call.arguments.data[1]->type->kind != TYPE_POINTER)
               ERR(expr->call.arguments.data[1]->source_location, "Second argument of __builtin_memcpy() must be a pointer");
             if (!convertible(t_integer, expr->call.arguments.data[2]->type))
               ERR(expr->call.arguments.data[2]->source_location, "Third argument of __builtin_memcpy() must be an integer");
