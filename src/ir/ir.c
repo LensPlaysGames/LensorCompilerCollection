@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <utils.h>
 
-#define DEBUG_USES
+//#define DEBUG_USES
 
 typedef IRInstruction Inst;
 typedef IRBlock Block;
