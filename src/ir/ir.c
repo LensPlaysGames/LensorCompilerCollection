@@ -548,14 +548,14 @@ static void ir_remove_impl(CodegenContext *ctx, IRInstruction *i) {
   if (i->kind == IR_PARAMETER) return;
 
   /// Free the instruction.
-  /*if (ctx) {
+  if (ctx) {
     i->kind = IR_COUNT;
     ASAN_POISON(i, sizeof(Inst));
     vector_push(ctx->free_instructions, i);
     clean_free_list(ctx);
-  } else {*/
+  } else {
     free(i);
-  //}
+  }
 }
 
 static void dot_print_block(FILE *file, IRBlock *block, string_buffer *sb) {
@@ -1419,9 +1419,8 @@ void ir_delete_function(IRFunction *f) {
       Inst *i = vector_pop(b->instructions);
       if (i->kind == IR_PARAMETER) continue;
       ir_free_instruction_data(i);
-      free(i);
-      //ASAN_POISON(i, sizeof(Inst));
-      //vector_push(ctx->free_instructions, i);
+      ASAN_POISON(i, sizeof(Inst));
+      vector_push(ctx->free_instructions, i);
     }
 
     /// Free the block name.
@@ -1434,9 +1433,8 @@ void ir_delete_function(IRFunction *f) {
   while (f->parameters.size) {
     Inst *i = vector_pop(f->parameters);
     ir_free_instruction_data(i);
-    free(i);
-    //ASAN_POISON(i, sizeof(Inst));
-    //vector_push(ctx->free_instructions, i);
+    ASAN_POISON(i, sizeof(Inst));
+    vector_push(ctx->free_instructions, i);
   }
 
   /// Free the name, params, and block list.
