@@ -352,7 +352,7 @@ int main(int argc_, char **argv_) {
 
     ASSERT(find_exe(intcpath), "Sorry, but the intc compiler specified at \"{}\" does not exist", intcpath);
     //VERBOSE("Using Intercept compiler at {}", intcpath);
-    if (fs::exists(ldpath)) ASSERT(find_exe(ldpath), "Sorry, but the linker specified at \"{}\" does not exist", ldpath);
+    ASSERT(find_exe(ldpath), "Sorry, but the linker specified at \"{}\" does not exist", ldpath);
     //VERBOSE("Using linker at {}", ldpath);
 
     // Parse expected test results
