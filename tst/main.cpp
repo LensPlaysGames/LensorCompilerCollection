@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <clopts.hh>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -17,14 +16,29 @@
 #ifdef _WIN32
 #    define PLATFORM_EXE_SUFFIX "exe"
 #    define CALLING_CONVENTION  "MSWIN"
+#    include <fstream>
 #else
+#    include <fcntl.h>
+#    include <sys/mman.h>
+#    include <sys/stat.h>
+#    include <unistd.h>
 #    include <sys/wait.h>
 #    define PLATFORM_EXE_SUFFIX ""
 #    define CALLING_CONVENTION  "LINUX"
 #endif
 
+#ifndef CLOPTS_USE_MMAP
+#    ifdef __linux__
+#        define CLOPTS_USE_MMAP 1
+#    else
+#        define CLOPTS_USE_MMAP 0
+#    endif
+#endif
+
 namespace fs = std::filesystem;
 namespace chr = std::chrono;
+
+using namespace std::literals;
 
 #define ARG_NO_ESCAPE "\x01"
 #define ARG_NONE ARG_NO_ESCAPE
@@ -33,7 +47,7 @@ namespace chr = std::chrono;
     do {                                      \
         if (not(cond)) fatal("" __VA_ARGS__); \
     } while (0)
-
+/*
 #define VERBOSE(...)                 \
     do {                             \
         if (options::get<"-v">()) {  \
@@ -41,7 +55,7 @@ namespace chr = std::chrono;
             fmt::print("\n");        \
             std::fflush(stdout);     \
         }                            \
-    } while (0)
+    } while (0)*/
 
 #define CAT_(x, y) x##y
 #define CAT(x, y)  CAT_(x, y)
@@ -62,6 +76,9 @@ struct $$defer {
         return $$defer_type<callable>{std::forward<callable>(cb)};
     }
 };
+
+template <typename t>
+concept always_false = false;
 
 /// The code returned by system() is *very* platform-specific. On Linux,
 /// you have to use a bunch of macros to get the actual exit code.
@@ -251,29 +268,53 @@ auto run_command(const fs::path& executable, auto&&...args) -> exit_status {
 #    pragma GCC poison system
 #endif
 
-namespace detail {
-using namespace command_line_options;
-using options = clopts< // clang-format off
-    option<"--target", "The target to pass to the Intercept compiler", std::string, true>,
-    option<"--test", "The path to the test file", std::string, true>,
-    option<"--intc", "The path to the Intercept compiler", std::string, true>,
-    option<"--ld", "The linker to use", std::string, true>,
-    flag<"-O", "Whether to enable optimisations">,
-    flag<"-v", "Enable verbose output">,
-    help<>
->; // clang-format on
-}
+[[noreturn]] void report_file_error (std::string_view p) {
+    fatal("Could not read file \"{}\": {}\n", p, ::strerror(errno));
+};
 
-/// Get the contents of a file.
-///
-/// This uses an internal function, but I wrote it so I
-/// know how it’s supposed to be used.
-auto map_file(const fs::path& path) -> std::string {
-    namespace cmd = command_line_options;
-    return cmd::detail::map_file<cmd::file_data>(path.string(), [&](std::string&& msg) {
-               fatal("Failed to open output file '{}': {}", path, msg);
-           })
-        .contents;
+static std::string map_file(std::string_view path) {
+#ifdef __linux__
+    int fd = ::open(path.data(), O_RDONLY);
+    if (fd < 0) report_file_error(path);
+
+    struct stat s {};
+    if (::fstat(fd, &s)) report_file_error(path);
+    auto sz = size_t(s.st_size);
+    if (sz == 0) return {};
+
+    auto* mem = (char*) ::mmap(nullptr, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    if (mem == MAP_FAILED) report_file_error(path);
+    ::close(fd);
+
+    /// Construct the file contents.
+    std::string ret{std::string_view{mem, sz}};
+    ::munmap(mem, sz);
+
+#else
+    /// Read the file manually.
+    std::unique_ptr<FILE, decltype(&std::fclose)> f{std::fopen(path.data(), "rb"), std::fclose};
+    if (not f) report_file_error(path);
+
+    /// Get the file size.
+    std::fseek(f.get(), 0, SEEK_END);
+    auto sz = std::size_t(std::ftell(f.get()));
+    std::fseek(f.get(), 0, SEEK_SET);
+
+    /// Read the file.
+    std::string ret;
+    ret.resize(sz);
+    std::size_t n_read = 0;
+    while (n_read < sz) {
+        errno = 0;
+        auto n = std::fread(ret.data() + n_read, 1, sz - n_read, f.get());
+        if (errno) report_file_error(path);
+        if (n == 0) break;
+        n_read += n;
+    }
+#endif
+
+    /// Construct the file data.
+    return ret;
 }
 
 /// Delete a file if it exists.
@@ -287,15 +328,19 @@ int main(int argc_, char **argv_) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
 
-    using detail::options;
-    options::parse(argc_, argv_);
+    if (argc_ < 5) fatal("Usage: test_instantiator <target> <test> <intc> <ld> [-O]");
+    std::string target = argv_[1];
+    std::string test = argv_[2];
+    std::string intc = argv_[3];
+    std::string ld = argv_[4];
+    bool optimise = argc_ >= 6 and argv_[5] == "-O"sv;
 
-    fs::path testpath{*options::get<"--test">()};
-    fs::path intcpath{*options::get<"--intc">()};
-    fs::path ldpath{*options::get<"--ld">()};
+    fs::path testpath{test};
+    fs::path intcpath{intc};
+    fs::path ldpath{ld};
 
     ASSERT(fs::exists(testpath), "Sorry, but the test specified at \"{}\" does not exist", testpath);
-    VERBOSE("Found test file at {}", testpath);
+    //VERBOSE("Found test file at {}", testpath);
 
     /// Account for executable suffix stupidity.
     const auto find_exe = [](fs::path& path) {
@@ -306,9 +351,9 @@ int main(int argc_, char **argv_) {
     };
 
     ASSERT(find_exe(intcpath), "Sorry, but the intc compiler specified at \"{}\" does not exist", intcpath);
-    VERBOSE("Using Intercept compiler at {}", intcpath);
+    //VERBOSE("Using Intercept compiler at {}", intcpath);
     ASSERT(find_exe(ldpath), "Sorry, but the linker specified at \"{}\" does not exist", ldpath);
-    VERBOSE("Using linker at {}", ldpath);
+    //VERBOSE("Using linker at {}", ldpath);
 
     // Parse expected test results
     std::ifstream testfile(testpath);
@@ -333,12 +378,12 @@ int main(int argc_, char **argv_) {
     bool expected_error{false};
     int expected_status{0};
     if (line == ";; SKIP") {
-        VERBOSE("Skipping test {}", testpath);
+        //VERBOSE("Skipping test {}", testpath);
         return 0;
     }
 
     if (line == ";; ERROR") {
-        VERBOSE("Test should error");
+        //VERBOSE("Test should error");
         expected_error = true;
     } else {
         char *end;
@@ -349,7 +394,7 @@ int main(int argc_, char **argv_) {
             "Expected exit code must be an integer, but was \"{}\"",
             std::string_view{line}.substr(3)
         );
-        VERBOSE("Expected exit code: {}", expected_status);
+        //VERBOSE("Expected exit code: {}", expected_status);
     }
 
     std::string expected_output{};
@@ -360,35 +405,35 @@ int main(int argc_, char **argv_) {
     }
 
     testfile.close();
-    VERBOSE("Expected output: {:?}", expected_output);
+    //VERBOSE("Expected output: {:?}", expected_output);
 
     /// Construct Intercept compiler invocation.
     fs::path intc_outpath{}, intc_logpath = temppath("log");
-    if (options::get<"--target">()->starts_with("asm")) intc_outpath = temppath("s");
-    else intc_outpath = temppath(*options::get<"--target">() == "llvm" ? "ll" : "o");
+    if (target.starts_with("asm")) intc_outpath = temppath("s");
+    else intc_outpath = temppath(target == "llvm" ? "ll" : "o");
     auto intc_status = run_command(
         intcpath,
         "-cc",
         CALLING_CONVENTION,
         "-t",
-        *options::get<"--target">(),
+        target,
         "-o",
         intc_outpath.string(),
         testpath.string(),
-        options::get<"-O">() ? "-O" : ARG_NONE,
+        optimise ? "-O" : ARG_NONE,
         ARG_NO_ESCAPE ">",
         intc_logpath.string(),
         ARG_NO_ESCAPE "2>&1"
     );
 
-    VERBOSE("Intercept compiler invocation: {}", intc_status.escaped_command_line);
+    //VERBOSE("Intercept compiler invocation: {}", intc_status.escaped_command_line);
     defer {
         delete_file(intc_outpath);
         delete_file(intc_logpath);
     };
 
     /// Check for ICEs.
-    std::string log = map_file(intc_logpath);
+    std::string log = map_file(intc_logpath.string());
     ASSERT(
         log.find("Internal Compiler Error") == std::string::npos,
         "Intercept compiler suffered Internal Compiler Error: {}",
@@ -429,7 +474,7 @@ int main(int argc_, char **argv_) {
         intc_outpath.string()
     );
     defer { delete_file(ld_outpath); };
-    VERBOSE("Linker command line is: {}", ld_status.escaped_command_line);
+    //VERBOSE("Linker command line is: {}", ld_status.escaped_command_line);
     ASSERT(
         ld_status.success,
         "FAILURE: Linker errored\n"
@@ -449,7 +494,7 @@ int main(int argc_, char **argv_) {
         outpath.string(),
         ARG_NO_ESCAPE "2>&1"
     );
-    VERBOSE("Running test executable: {}", test_status.escaped_command_line);
+    //VERBOSE("Running test executable: {}", test_status.escaped_command_line);
     defer { delete_file(outpath); };
 
 #ifdef __linux__
@@ -485,7 +530,7 @@ int main(int argc_, char **argv_) {
     );
 
     /// Get test output.
-    std::string output = map_file(outpath);
+    std::string output = map_file(outpath.string());
 
     /// Convert \r\n to \n.
     output = std::regex_replace(output, std::regex{"\r\n"}, "\n");
