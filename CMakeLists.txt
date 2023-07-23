@@ -260,18 +260,13 @@ include(CTest)
 include(FetchContent)
 if (BUILD_TESTING)
   message(STATUS "Downloading dependencies for test runner. This may take a while.")
-  FetchContent_Declare(clopts
-    GIT_REPOSITORY https://github.com/Sirraide/clopts.git
-    GIT_TAG origin/master
-  )
-
   FetchContent_Declare(fmtlib
     GIT_REPOSITORY https://github.com/fmtlib/fmt.git
     GIT_TAG 10.0.0
     SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
   )
 
-  FetchContent_MakeAvailable(clopts fmtlib)
+  FetchContent_MakeAvailable(fmtlib)
 
   add_executable(test_instantiator tst/main.cpp)
   target_link_libraries(test_instantiator PRIVATE fmt)
@@ -292,10 +287,10 @@ if (BUILD_TESTING)
       add_test(
         NAME ASM_${test}
         COMMAND $<TARGET_FILE:test_instantiator>
-        --target asm
-        --test "${test}"
-        --intc $<TARGET_FILE:intc>
-        --ld "${INTERCEPT_TEST_LINKER}"
+        asm
+        "${test}"
+        $<TARGET_FILE:intc>
+        "${INTERCEPT_TEST_LINKER}"
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
@@ -306,10 +301,10 @@ if (BUILD_TESTING)
         add_test(
           NAME OBJ_${test}
           COMMAND $<TARGET_FILE:test_instantiator>
-          --target coff_object
-          --test "${test}"
-          --intc $<TARGET_FILE:intc>
-          --ld "${INTERCEPT_TEST_LINKER}"
+          coff_object
+          "${test}"
+          $<TARGET_FILE:intc>
+          "${INTERCEPT_TEST_LINKER}"
           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
           COMMAND_EXPAND_LISTS
         )
@@ -318,10 +313,10 @@ if (BUILD_TESTING)
         add_test(
           NAME OBJ_${test}
           COMMAND $<TARGET_FILE:test_instantiator>
-          --target elf_object
-          --test "${test}"
-          --intc $<TARGET_FILE:intc>
-          --ld "${INTERCEPT_TEST_LINKER}"
+          elf_object
+          "${test}"
+          $<TARGET_FILE:intc>
+          "${INTERCEPT_TEST_LINKER}"
           WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
           COMMAND_EXPAND_LISTS
         )
@@ -332,10 +327,10 @@ if (BUILD_TESTING)
       add_test(
         NAME OPT_${test}
         COMMAND $<TARGET_FILE:test_instantiator>
-        --target asm
-        --test "${test}"
-        --intc $<TARGET_FILE:intc>
-        --ld "${INTERCEPT_TEST_LINKER}"
+        asm
+        "${test}"
+        $<TARGET_FILE:intc>
+        "${INTERCEPT_TEST_LINKER}"
         -O
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
@@ -346,10 +341,10 @@ if (BUILD_TESTING)
       add_test(
         NAME LLVM_${test}
         COMMAND $<TARGET_FILE:test_instantiator>
-        --target llvm
-        --test "${test}"
-        --intc $<TARGET_FILE:intc>
-        --ld "${INTERCEPT_TEST_LINKER}"
+        llvm
+        "${test}"
+        $<TARGET_FILE:intc>
+        "${INTERCEPT_TEST_LINKER}"
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         COMMAND_EXPAND_LISTS
       )
