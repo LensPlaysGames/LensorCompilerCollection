@@ -931,7 +931,7 @@ bool codegen
   if (optimise) {
     codegen_optimise(context);
     if (debug_ir || print_ir2) {
-      print("After optimisation:\n");
+      print("\n====== Optimised ====== \n");
       ir_print(stdout, context);
     }
   }
@@ -953,7 +953,7 @@ bool codegen
     codegen_lower(context);
 
     if (debug_ir) {
-      print("After lowering:\n");
+      print("\n====== Lowered ====== \n");
       ir_print(stdout, context);
     }
   }
