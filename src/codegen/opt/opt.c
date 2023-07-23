@@ -1081,18 +1081,20 @@ PUSH_IGNORE_WARNING("-Wbitwise-instead-of-logical")
 void codegen_optimise(CodegenContext *ctx) {
   opt_analyse_functions(ctx);
 
-  print("====== After Function Analysis ======\n");
-  ir_set_ids(ctx);
-  ir_print(stdout, ctx);
+  /// Uncomment this to debug the function analysis pass.
+  /// print("====== After Function Analysis ======\n");
+  /// ir_set_ids(ctx);
+  /// ir_print(stdout, ctx);
 
   /// Optimise each function individually.
   do {
     foreach_val (f, ctx->functions) {
       if (!ir_func_is_definition(f) || ir_attribute(f, FUNC_ATTR_NOOPT)) continue;
       do {
-        print("====== OPTIMISATION PASS over %S ======\n", ir_name(f));
-        ir_set_func_ids(f);
-        ir_print_function(stdout, f);
+        /// Uncomment this to debug optimisation passes.
+        /// print("====== OPTIMISATION PASS over %S ======\n", ir_name(f));
+        /// ir_set_func_ids(f);
+        /// ir_print_function(stdout, f);
       } while (
         opt_simplify_cfg(ctx, f) |
         opt_instcombine(ctx, f) |
@@ -1121,7 +1123,3 @@ void codegen_optimise_blocks(CodegenContext *ctx) {
     opt_simplify_cfg(ctx, f);
   }
 }
-
-/// TODO(inlining):
-///  - `const` attribute (function does not read from or write to memory, except for its own local variables), intended for use by the optimiser.
-///  - `__builtin_sign_extend()`/`__builtin_zero_extend()`/`__builtin_truncate()`. < So we can e.g. sign-extend an unsigned value.
