@@ -946,17 +946,17 @@ bool codegen
     exit(42);
   }
 
+  if (print_ir2) exit(42);
+
   /// No need to lower anything if we’re emitting LLVM IR.
   if (target != TARGET_LLVM) {
     codegen_lower(context);
 
-    if (debug_ir || print_ir2) {
+    if (debug_ir) {
       print("After lowering:\n");
       ir_print(stdout, context);
     }
   }
-
-  if (print_ir2) exit(42);
 
   codegen_emit(context);
 
