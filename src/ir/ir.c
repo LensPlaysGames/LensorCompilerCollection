@@ -270,7 +270,7 @@ static void ir_emit_instruction(
     break;
 
   case IR_PARAMETER:
-    format_to(out, "%31.param %34%%%u", inst->id);
+    format_to(out, "%31.param %35%Z", inst->imm);
     break;
 
   case IR_RETURN:
