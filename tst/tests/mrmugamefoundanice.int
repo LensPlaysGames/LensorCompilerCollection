@@ -1,0 +1,9 @@
+Foo:> type {
+    a: @byte
+    b: u8
+}
+
+bar : Foo
+bar.a := "Hello World!"[0]
+
+bar.b
