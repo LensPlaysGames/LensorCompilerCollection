@@ -274,6 +274,7 @@ if (BUILD_TESTING)
     "${clopts_SOURCE_DIR}/include"
     "${fmtlib_SOURCE_DIR}/include"
   )
+  target_compile_options(test_instantiator PUBLIC -fconcepts)
 
   ## User needs to specify a linker.
   if (NOT DEFINED INTERCEPT_TEST_LINKER)
