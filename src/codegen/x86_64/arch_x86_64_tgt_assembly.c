@@ -771,7 +771,21 @@ void emit_x86_64_assembly(CodegenContext *context, MIRFunctionVector machine_ins
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_REGISTER, MIR_OP_IMMEDIATE)) {
             // reg to mem | src, addr, offset
             MIROperand *reg_source = mir_get_op(instruction, 0);
+            if (!reg_source->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg_source->value.reg.size = r64;
+            }
             MIROperand *reg_address = mir_get_op(instruction, 1);
+            if (!reg_address->value.reg.size) {
+              putchar('\n');
+              print_mir_instruction_with_mnemonic(instruction, mir_x86_64_opcode_mnemonic);
+              print("%35WARNING%m: Zero sized register, assuming 64-bit...\n");
+              putchar('\n');
+              reg_address->value.reg.size = r64;
+            }
             MIROperand *offset = mir_get_op(instruction, 2);
             femit_reg_to_mem(context, MX64_MOV, reg_source->value.reg.value, reg_source->value.reg.size, reg_address->value.reg.value, offset->value.imm);
           } else if (mir_operand_kinds_match(instruction, 3, MIR_OP_REGISTER, MIR_OP_IMMEDIATE, MIR_OP_REGISTER)) {
