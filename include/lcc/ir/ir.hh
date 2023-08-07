@@ -19,12 +19,54 @@ public:
     enum struct Kind {
         Block,
         Function,
+        IntegerConstant,
+        ArrayConstant,
+        Poison,
 
         /// Instructions.
         Alloca,
-        Branch,
         Call,
+        Copy,
+        Intrinsic,
+        Load,
+        Parameter,
+        Phi,
+        Store,
+
+        /// Terminators.
+        Branch,
         CondBranch,
+        Return,
+        Unreachable,
+
+        /// Unary instructions.
+        ZExt,
+        SExt,
+        Trunc,
+        Bitcast,
+        Neg,
+
+        /// Binary instructions.
+        Add,
+        Sub,
+        Mul,
+        SDiv,
+        UDiv,
+        SRem,
+        URem,
+        Shl,
+        Sar,
+        Shr,
+        And,
+        Or,
+
+        /// Compare instructions.
+        Eq,
+        Ne,
+        Lt,
+        Le,
+        Gt,
+        Ge,
     };
 
 private:
@@ -101,7 +143,7 @@ public:
     auto users() const -> const std::vector<Inst*>& { return user_list; }
 
     /// RTTI.
-    static bool classof(Value* v) { static_assert(false, "TODO"); }
+    static bool classof(Value* v) { return +v->kind() >= +Kind::Alloca; }
 };
 
 /// A basic block.
@@ -127,11 +169,9 @@ public:
           block_name(std::move(n)) {}
 
     /// Get an iterator to the first instruction in this block.
-    auto begin() -> Iterator { return {inst_list, inst_list.begin()}; }
     auto begin() const -> ConstIterator { return {inst_list, inst_list.begin()}; }
 
     /// Get an iterator to the last instruction in this block.
-    auto end() -> Iterator { return {inst_list, inst_list.end()}; }
     auto end() const -> ConstIterator { return {inst_list, inst_list.end()}; }
 
     /// Get the parent function.
@@ -213,7 +253,6 @@ public:
     );
 
     /// Get an iterator to the first block in this function.
-    auto begin() { return block_list.begin(); }
     auto begin() const { return block_list.begin(); }
 
     /// Get the blocks in this function.
@@ -229,7 +268,6 @@ public:
     auto context() const -> Context* { return ctx; }
 
     /// Get an iterator to the end of the block list.
-    auto end() { return block_list.end(); }
     auto end() const { return block_list.end(); }
 
     /// Get the linkage of this function.
@@ -268,6 +306,19 @@ public:
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Function; }
+};
+
+/// ============================================================================
+///  Instructions
+/// ============================================================================
+/// A stack allocation.
+class AllocaInst : public Inst {
+public:
+    AllocaInst(Type* ty, Location loc = {})
+        : Inst(Kind::Alloca, ty, loc) {}
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Alloca; }
 };
 
 /// A call instruction.
@@ -329,6 +380,169 @@ public:
     static bool classof(Value* v) { return v->kind() == Kind::Call; }
 };
 
+/// Backend intrinsic.
+class IntrinsicInst : public Inst {
+    /// The intrinsic ID.
+    IntrinsicKind intrinsic;
+
+    /// The operands of the intrinsic.
+    std::vector<Value*> operand_list;
+
+public:
+    IntrinsicInst(
+        IntrinsicKind intrinsic,
+        std::vector<Value*> operands,
+        Location loc = {}
+    ) : Inst(Kind::Intrinsic, Type::UnknownTy, loc),
+        intrinsic(intrinsic), operand_list(std::move(operands)) {}
+
+    /// Get the intrinsic ID.
+    auto intrinsic_kind() const -> IntrinsicKind { return intrinsic; }
+
+    /// Get the operands.
+    auto operands() const -> const std::vector<Value*>& { return operand_list; }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Intrinsic; }
+};
+
+/// A load instruction.
+class LoadInst : public Inst {
+    /// The pointer to load from.
+    Value* pointer;
+
+public:
+    LoadInst(Type* ty, Value* ptr, Location loc = {})
+        : Inst(Kind::Load, ty, loc), pointer(ptr) {
+        LCC_ASSERT(ptr->type() == Type::PtrTy, "LoadInst can only load from pointers");
+    }
+
+    /// Get the pointer to load from.
+    auto ptr() const -> Value* { return pointer; }
+
+    /// Replace the pointer.
+    void ptr(Value* v);
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Load; }
+};
+
+/// A store instruction.
+class StoreInst : public Inst {
+    /// The value to store.
+    Value* value;
+
+    /// The pointer to store to.
+    Value* pointer;
+
+public:
+    StoreInst(Value* val, Value* ptr, Location loc = {})
+        : Inst(Kind::Store, Type::VoidTy, loc), value(val), pointer(ptr) {
+        LCC_ASSERT(ptr->type() == Type::PtrTy, "StoreInst can only store to pointers");
+    }
+
+    /// Get the value to store.
+    auto val() const -> Value* { return value; }
+
+    /// Replace the value.
+    void val(Value* v);
+
+    /// Get the pointer to store to.
+    auto ptr() const -> Value* { return pointer; }
+
+    /// Replace the pointer.
+    void ptr(Value* v);
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Store; }
+};
+
+/// PHI instruction.
+class PhiInst : public Inst {
+    /// An incoming value.
+    struct IncomingValue {
+        /// The value.
+        Value* value;
+
+        /// The block it comes from.
+        Block* block;
+    };
+
+    /// Iterators.
+    using Iterator = utils::VectorIterator<IncomingValue>;
+    using ConstIterator = utils::VectorConstIterator<IncomingValue>;
+
+    /// The incoming values.
+    std::vector<IncomingValue> incoming{};
+
+public:
+    PhiInst(Type* ty, Location loc = {})
+        : Inst(Kind::Phi, ty, loc) {}
+
+    /// Get an iterator to the start of the incoming values.
+    auto begin() const -> ConstIterator { return {incoming, incoming.begin()}; }
+
+    /// Remove stale incoming values.
+    ///
+    /// This function removes any incoming values that are registered
+    /// from blocks that are not predecessors of the block containing
+    /// the PHI. If the PHI is not inserted in a block, this is a no-op.
+    void drop_stale_operands();
+
+    /// Get an iterator to the end of the incoming values.
+    auto end() const -> ConstIterator { return {incoming, incoming.end()}; }
+
+    /// Get the incoming values.
+    auto operands() const -> const std::vector<IncomingValue>& { return incoming; }
+
+    /// Remove an incoming value for a block.
+    ///
+    /// If there is an entry for the block in question in the
+    /// operand list of this PHI, the corresponding value is
+    /// removed.
+    ///
+    /// \param block The block to remove the value for.
+    void remove_incoming(Block* block);
+
+    /// Register an incoming value from a block.
+    ///
+    /// If the source block ends with an unreachable or return
+    /// instruction, this is a no-op. If this PHI already has
+    /// a value coming from that block, the value is replaced
+    /// with the new value.
+    ///
+    /// \param value The value to add.
+    /// \param block The block it comes from.
+    void set_incoming(Value* value, Block* block);
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Phi; }
+};
+
+/// A parameter reference.
+///
+/// These should never be created manually.
+class ParamInst : public Inst {
+    friend class Function;
+
+    /// The parameter index.
+    u32 i;
+
+    /// Only used by the Function constructor.
+    ParamInst(Type* ty, u32 idx, Location loc = {})
+        : Inst(Kind::Parameter, ty, loc), i(idx) {}
+public:
+
+    /// Get the parameter index.
+    auto index() const -> u32 { return i; }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Parameter; }
+};
+
+/// ============================================================================
+///  Terminators
+/// ============================================================================
 /// Unconditional branch instruction.
 class BranchInst : public Inst {
     /// The block to branch to.
@@ -390,16 +604,41 @@ public:
     static bool classof(Value* v) { return v->kind() == Kind::CondBranch; }
 };
 
-/// A stack allocation.
-class AllocaInst : public Inst {
+/// Return instruction.
+class ReturnInst : public Inst {
+    /// The value to return.
+    Value* value;
+
 public:
-    AllocaInst(Type* ty, Location loc = {})
-        : Inst(Kind::Alloca, ty, loc) {}
+    ReturnInst(Value* val, Location loc = {})
+        : Inst(Kind::Return, Type::VoidTy, loc), value(val) {}
+
+    /// Check if this instruction returns a value.
+    auto has_value() const -> bool { return value != nullptr; }
+
+    /// Get the value to return. This may be null if this is a void return.
+    auto val() const -> Value* { return value; }
+
+    /// Replace the value.
+    void val(Value* v);
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Alloca; }
+    static bool classof(Value* v) { return v->kind() == Kind::Return; }
 };
 
+/// Unreachable instruction.
+class UnreachableInst : public Inst {
+public:
+    UnreachableInst(Location loc = {})
+        : Inst(Kind::Unreachable, Type::VoidTy, loc) {}
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Unreachable; }
+};
+
+/// ============================================================================
+///  Binary Instructions and Casts
+/// ============================================================================
 /// Base class for binary instructions.
 class BinaryInst : public Inst {
     /// The left operand.
@@ -408,9 +647,19 @@ class BinaryInst : public Inst {
     /// The right operand.
     Value* right;
 
+protected:
+    /// Assert that two operands have the same type.
+    void AssertSameType(Value* l, Value* r) {
+        LCC_ASSERT(
+            l->type() == r->type(),
+            "Operands of `add` instruction must have the same type, but was {} and {}",
+            *l->type(), *r->type()
+        );
+    }
+
 public:
-    BinaryInst(Kind k, Value* l, Value* r, Location loc = {})
-        : Inst(k, l->type(), loc), left(l), right(r) {}
+    BinaryInst(Kind k, Value* l, Value* r, Type* ty, Location loc = {})
+        : Inst(k, ty, loc), left(l), right(r) {}
 
     /// Get the left operand.
     auto lhs() const -> Value* { return left; }
@@ -423,7 +672,359 @@ public:
 
     /// Replace the right operand.
     void rhs(Value* v);
+
+    /// RTTI.
+    static bool classof(Value* v) { return +v->kind() >= +Kind::Add; }
 };
+
+/// An add instruction.
+class AddInst : public BinaryInst {
+public:
+    AddInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::Add, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Add; }
+};
+
+/// A subtract instruction.
+class SubInst : public BinaryInst {
+public:
+    SubInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::Sub, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Sub; }
+};
+
+/// A multiply instruction.
+class MulInst : public BinaryInst {
+public:
+    MulInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::Mul, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Mul; }
+};
+
+/// A signed divide instruction.
+class SDivInst : public BinaryInst {
+public:
+    SDivInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::SDiv, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::SDiv; }
+};
+
+/// A signed remainder instruction.
+class SRemInst : public BinaryInst {
+public:
+    SRemInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::SRem, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::SRem; }
+};
+
+/// An unsigned divide instruction.
+class UDivInst : public BinaryInst {
+public:
+    UDivInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::UDiv, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::UDiv; }
+};
+
+/// An unsigned remainder instruction.
+class URemInst : public BinaryInst {
+public:
+    URemInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::URem, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::URem; }
+};
+
+/// A left shift instruction.
+class ShlInst : public BinaryInst {
+public:
+    ShlInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::Shl, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Shl; }
+};
+
+/// An arithmetic right shift.
+class SarInst : public BinaryInst {
+public:
+    SarInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::Sar, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Sar; }
+};
+
+/// A logical right shift.
+class ShrInst : public BinaryInst {
+public:
+    ShrInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::Shr, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Shr; }
+};
+
+/// A bitwise and instruction.
+class AndInst : public BinaryInst {
+public:
+    AndInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::And, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::And; }
+};
+
+/// A bitwise or instruction.
+class OrInst : public BinaryInst {
+public:
+    OrInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::Or, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Or; }
+};
+
+/// Base class for comparison instructions; this is just so we
+/// can do is<CompareInst> and because the type is always i1.
+class CompareInst : public BinaryInst {
+protected:
+    CompareInst(Kind k, Value* l, Value* r, Location loc = {})
+        : BinaryInst(k, l, r, Type::I1Ty, loc) {}
+
+public:
+
+    /// RTTI.
+    static bool classof(Value* v) { return +v->kind() >= +Kind::Eq; }
+};
+
+/// Instruction that compares two values for equality.
+class EqInst : public CompareInst {
+public:
+    EqInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::Eq, l, r, loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Eq; }
+};
+
+/// Instruction that compares two values for inequality.
+class NeInst : public CompareInst {
+public:
+    NeInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::Ne, l, r, loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Ne; }
+};
+
+/// Instruction that compares two values for less-than.
+class LtInst : public CompareInst {
+public:
+    LtInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::Lt, l, r, loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Lt; }
+};
+
+/// Instruction that compares two values for less-than-or-equal.
+class LeInst : public CompareInst {
+public:
+    LeInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::Le, l, r, loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Le; }
+};
+
+/// Instruction that compares two values for greater-than.
+class GtInst : public CompareInst {
+public:
+    GtInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::Gt, l, r, loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Gt; }
+};
+
+/// Instruction that compares two values for greater-than-or-equal.
+class GeInst : public CompareInst {
+public:
+    GeInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::Ge, l, r, loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Ge; }
+};
+
+/// Unary instructions.
+class UnaryInstBase : public Inst {
+    Value* op;
+
+protected:
+    UnaryInstBase(Kind k, Value* v, Type* ty, Location loc = {})
+        : Inst(k, ty, loc), op(v) { }
+
+public:
+    /// Get the operand.
+    Value* operand() const { return op; }
+
+    /// Set the operand.
+    void operand(Value* v) { op = v; }
+};
+
+/// Zero-extend an integer value.
+class ZExtInst : public UnaryInstBase {
+public:
+    ZExtInst(Value* v, Type* ty, Location loc = {})
+        : UnaryInstBase(Kind::ZExt, v, ty, loc) { }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::ZExt; }
+};
+
+/// Sign-extend an integer value.
+class SExtInst : public UnaryInstBase {
+public:
+    SExtInst(Value* v, Type* ty, Location loc = {})
+        : UnaryInstBase(Kind::SExt, v, ty, loc) { }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::SExt; }
+};
+
+/// Truncate an integer value.
+class TruncInst : public UnaryInstBase {
+public:
+    TruncInst(Value* v, Type* ty, Location loc = {})
+        : UnaryInstBase(Kind::Trunc, v, ty, loc) { }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Trunc; }
+};
+
+/// Bitcast a value to another type.
+class BitcastInst : public UnaryInstBase {
+public:
+    BitcastInst(Value* v, Type* ty, Location loc = {})
+        : UnaryInstBase(Kind::Bitcast, v, ty, loc) {
+        /// Type we’re casting to must have the same size or
+        /// be smaller than the type we’re casting from.
+        LCC_ASSERT(ty->size() <= v->type()->size(), "Cannot bitcast to larger type");
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Bitcast; }
+};
+
+/// Negate an integer value.
+class NegInst : public UnaryInstBase {
+public:
+    NegInst(Value* v, Location loc = {})
+        : UnaryInstBase(Kind::Neg, v, v->type(), loc) { }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Neg; }
+};
+
+/// ============================================================================
+///  Constants
+/// ============================================================================
+/// Immediate value.
+class IntegerConstant : public Value {
+    uint64_t _value;
+
+public:
+    IntegerConstant(Type* ty, uint64_t value)
+        : Value(Kind::IntegerConstant, ty), _value(value) {}
+
+    /// Get the value.
+    uint64_t value() const { return _value; }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::IntegerConstant; }
+};
+
+/// Packed array.
+///
+/// This is used for constant arrays that are known at compile time,
+/// such as strings or constant array literals.
+class ArrayConstant : public Value {
+    std::vector<char> _data;
+
+public:
+    ArrayConstant(Type* ty, std::vector<char> _data)
+        : Value(Kind::ArrayConstant, ty), _data(std::move(_data)) {}
+
+    /// Get the data.
+    auto data() const -> const char* { return _data.data(); }
+
+    /// Get the size.
+    auto size() const -> size_t { return _data.size(); }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::ArrayConstant; }
+};
+
+/// Poison value.
+class PoisonValue : public Value {
+public:
+    PoisonValue(Type* ty)
+        : Value(Kind::Poison, ty) {}
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Poison; }
+};
+
 
 } // namespace lcc
 

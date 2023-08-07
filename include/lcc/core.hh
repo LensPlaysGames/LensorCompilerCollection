@@ -4,7 +4,8 @@
 #define LCC_INTRINSICS(X) \
     X(SysCall) \
     X(DebugTrap) \
-    X(MemCpy)
+    X(MemCpy) \
+    X(MemSet)
 
 #define LCC_FUNC_ATTR(X) \
     X(NoOptimize, no_opt) \
