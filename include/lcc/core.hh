@@ -1,6 +1,11 @@
 #ifndef LCC_CORE_HH
 #define LCC_CORE_HH
 
+#define LCC_INTRINSICS(X) \
+    X(SysCall) \
+    X(DebugTrap) \
+    X(MemCpy)
+
 namespace lcc {
 enum struct Linkage {
     /// Local variable.
@@ -50,6 +55,13 @@ enum struct Linkage {
     /// to other *Intercept modules* that import this module, but unlike
     /// regular exports, this module does not have a definition of the symbol.
     Reexported,
+};
+
+enum struct IntrinsicKind
+{
+#define X(I) I,
+LCC_INTRINSICS(X)
+#undef X
 };
 }
 
