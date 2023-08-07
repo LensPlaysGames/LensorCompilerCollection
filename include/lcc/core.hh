@@ -67,6 +67,17 @@ enum struct Linkage {
     Reexported,
 };
 
+enum struct CallConv {
+    /// C calling convention.
+    C,
+
+    /// Laye default calling convention.
+    Laye,
+
+    /// Intercept internal calling convention.
+    Intercept,
+};
+
 enum struct IntrinsicKind
 {
 #define X(I) I,
