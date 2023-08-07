@@ -63,6 +63,13 @@ using f64 = double;
 
 template <typename>
 concept always_false = false;
+
+/// Helper to cast an enum to its underlying type.
+template <typename t>
+requires std::is_enum_v<t>
+constexpr std::underlying_type_t<t> operator+(t e) {
+    return static_cast<std::underlying_type_t<t>>(e);
+}
 } // namespace lcc
 
 /// Forward decls.
@@ -107,13 +114,6 @@ void ReplaceAll(
     std::string_view from,
     std::string_view to
 );
-
-/// Helper to cast an enum to its underlying type.
-template <typename t>
-requires std::is_enum_v<t>
-constexpr std::underlying_type_t<t> operator+(t e) {
-    return static_cast<std::underlying_type_t<t>>(e);
-}
 } // namespace lcc::utils
 
 #endif // LCC_UTILS_HH
