@@ -1,4 +1,5 @@
 #include <lcc/utils.hh>
+#include <lcc/diags.hh>
 #include <clopts.hh>
 
 namespace detail {
@@ -11,5 +12,5 @@ using detail::options;
 
 int main(int argc, char** argv) {
     options::parse(argc, argv);
-    lcc::fatal("Driver not implemented");
+    lcc::Diag::Fatal("Driver not implemented");
 }

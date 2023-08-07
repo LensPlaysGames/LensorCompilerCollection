@@ -129,8 +129,7 @@ BinPackParameters: false
 BitFieldColonSpacing: Both
 
 ## Leave line breaks around attributes alone.
-## Note: Only supported by clang-format 16 and later.
-#BreakAfterAttributes: Leave
+BreakAfterAttributes: Leave
 
 ## Break *after*, and not before operators.
 BreakBeforeBinaryOperators: None
@@ -142,8 +141,7 @@ BreakBeforeBraces: Attach
 BreakBeforeConceptDeclarations: Allowed
 
 ## Put the colons of multiline inline ASM on new lines.
-## Note: Only supported by clang-format 16 and later.
-#BreakBeforeInlineASMColon: OnlyMultiline
+BreakBeforeInlineASMColon: OnlyMultiline
 
 ## Format ternaries like so:
 ##
@@ -157,7 +155,7 @@ BreakBeforeTernaryOperators: true
 ##     Constructor()
 ##         : bar(42)
 ##         , baz(23)
-BreakConstructorInitializers: BeforeComma
+#BreakConstructorInitializers: BeforeComma
 
 ## Same thing, but for class declarations.
 BreakInheritanceList: BeforeComma
@@ -261,16 +259,14 @@ InsertBraces: false
 
 ## I keep forgetting about this, and I’d prefer to be consistent
 ## about it, so, therefore:
-## Note: Only supported by clang-format 16 and later.
-#InsertNewlineAtEOF: true
+InsertNewlineAtEOF: true
 
 ## Format integer literals:
-## Note: Only supported by clang-format 16 and later.
 #IntegerLiteralSeparator:
 #  Binary: 4
 #  Decimal: 3
 #  Hex: 4
-  
+
 ## This one is pretty self-explanatory.
 KeepEmptyLinesAtTheStartOfBlocks: false
 
@@ -279,8 +275,7 @@ KeepEmptyLinesAtTheStartOfBlocks: false
 LambdaBodyIndentation: OuterScope
 
 ## Use LF, never CRLF.
-## Note: Only supported by clang-format 16 and later.
-#LineEnding: LF
+LineEnding: LF
 
 ## Don’t allow multiple consecutive empty lines.
 MaxEmptyLinesToKeep: 1
@@ -294,7 +289,7 @@ PPIndentWidth: -1
 
 ## Format ctor initialisers sensibly. Put all of them on the same line if
 ## they fit, and put them on separate lines if they don’t.
-PackConstructorInitializers: CurrentLine
+#PackConstructorInitializers: CurrentLine
 
 ## We don’t want this to happen. Ever.
 PenaltyReturnTypeOnItsOwnLine: 4294967295
@@ -322,8 +317,7 @@ RequiresClausePosition: OwnLine
 ## Thank goodness they finally added this. The default formatting used to be
 ## absolutely atrocious, because no, I don’t want all of my concept declarations
 ## to be indented 10 spaces or whatnot.
-## Note: Only supported by clang-format 16 and later.
-#RequiresExpressionIndentation: OuterScope
+RequiresExpressionIndentation: OuterScope
 
 ## I know better when to separate stuff than clang-format.
 SeparateDefinitionBlocks: Leave
