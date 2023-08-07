@@ -245,6 +245,7 @@ file(GLOB_RECURSE library-sources
 
 ## Add the main lcc library
 add_library(liblcc STATIC ${library-sources})
+set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
 
 ## Add the driver.
 add_executable(lcc "${PROJECT_SOURCE_DIR}/src/lcc.cc")
