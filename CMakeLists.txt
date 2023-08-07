@@ -42,6 +42,9 @@ add_library(options INTERFACE)
 ## Flags for Clang and GCC.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(options INTERFACE
+        ## Disable RTTI.
+        -fno-rtti
+
         ## Warnings.
         -Wall -Wextra     # Enable ‘all’ warnings.
         -Wundef           # Invalid #undef or undefined macro in #if.
@@ -178,9 +181,8 @@ endif ()
 ## ============================================================================
 ## Find libfmt.
 include(FetchContent)
-find_package(fmt CONFIG)
+message(STATUS "Downloading fmtlib ...")
 if (NOT DEFINED fmt_FOUND)
-	message(STATUS "Fmtlib not found, downloading ...")
 	FetchContent_Declare(fmtlib
 		GIT_REPOSITORY https://github.com/fmtlib/fmt.git
 		GIT_TAG 10.0.0
@@ -298,7 +300,7 @@ include(CTest)
 if (BUILD_TESTING)
     add_executable(test_instantiator tst/main.cc)
     target_link_libraries(test_instantiator PRIVATE fmt options)
-    target_compile_options(test_instantiator PRIVATE -fconcepts)
+    target_compile_options(test_instantiator PRIVATE)
 
     ## User needs to specify a linker.
     if (NOT DEFINED INTERCEPT_TEST_LINKER)
