@@ -2,29 +2,12 @@
 #define INTERCEPT_PARSER_HH
 
 #include <intercept/ast.hh>
+#include <intercept/lexer.hh>
 #include <lcc/context.hh>
 #include <lcc/syntax/lexer.hh>
 #include <lcc/utils.hh>
 
 namespace lcc::intercept {
-class Lexer : public syntax::Lexer<InterceptToken> {
-    void NextIdentifier();
-    void HandleIdentifier();
-    void NextString();
-    void ParseNumber(int base);
-    void NextNumber();
-    void NextMacro();
-    void ExpandMacro(Macro* m);
-
-protected:
-    InterceptToken current_token{};
-
-    Lexer(File* file)
-        : syntax::Lexer<InterceptToken>(file) { NextToken(); }
-
-    void NextToken();
-};
-
 class Parser : public Lexer {
     std::vector<Scope*> scope_stack{};
 
@@ -32,8 +15,8 @@ public:
     static Module* Parse(Context* context, File& file);
 
 private:
-    Parser(File* file)
-        : Lexer(file) {}
+    Parser(Context* context, File* file)
+        : Lexer(context, file) {}
 
     auto CurrScope() const { return scope_stack.back(); }
 

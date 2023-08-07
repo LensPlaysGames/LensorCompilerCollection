@@ -3,6 +3,7 @@
 
 #include <lcc/file.hh>
 #include <lcc/utils.hh>
+#include <lcc/diags.hh>
 
 namespace lcc::syntax {
 template <typename TToken>
@@ -13,12 +14,20 @@ class Lexer {
     const char* end{};
 
 protected:
+    TToken current_token{};
+    Context* context{};
     char lastc = ' ';
 
-    Lexer(File* file)
-        : file(file), curr(file->data()), end(file->data() + file->size()) { NextChar(); }
+    Lexer(Context* context, File* file)
+        : context(context), file(file), curr(file->data()), end(file->data() + file->size()) { NextChar(); }
 
     void NextChar();
+    auto CurrentOffset() const -> u32 { return curr - file->data() - 1; }
+
+    template <typename... Args>
+    Diag Error(fmt::format_string<Args...> fmt, Args&&... args) { return Diag::Error(context, current_token.location, fmt, std::forward<Args...>(args...)); }
+
+    static bool IsSpace(char c) { return c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == '\f' or c == '\v'; }
 };
 } // namespace lcc::syntax
 

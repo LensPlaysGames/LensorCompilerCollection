@@ -11,7 +11,11 @@ void Lexer<TToken>::NextChar() {
 
     lastc = *curr++;
     if (lastc == 0) {
-        Diag::Fatal("Lexer encountered NUL byte within source file.");
+        Diag::Error(
+            context,
+            Location{CurrentOffset(), 1},
+            "Lexer encountered NUL byte within source file."
+        );
     }
 
     if (lastc == '\r' || lastc == '\n') {

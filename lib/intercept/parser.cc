@@ -5,11 +5,8 @@ Module* Parser::Parse(Context* context, File& file) {
     auto result = new Module;
     result->file = &file;
 
-    Parser parser(&file);
+    Parser parser(context, &file);
 
     return result;
-}
-
-void Lexer::NextToken() {
 }
 } // namespace lcc::intercept
