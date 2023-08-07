@@ -177,9 +177,9 @@ endif ()
 ##  Submodules and include dirs.
 ## ============================================================================
 ## Find libfmt.
+include(FetchContent)
 find_package(fmt CONFIG)
 if (NOT DEFINED fmt_FOUND)
-    include(FetchContent)
 	message(STATUS "Fmtlib not found, downloading ...")
 	FetchContent_Declare(fmtlib
 		GIT_REPOSITORY https://github.com/fmtlib/fmt.git
@@ -187,7 +187,17 @@ if (NOT DEFINED fmt_FOUND)
 		SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
     )
 	FetchContent_MakeAvailable(fmtlib)
+	target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
 endif()
+
+## Add libclopts.
+FetchContent_Declare(clopts
+    GIT_REPOSITORY https://github.com/Sirraide/clopts.git
+    GIT_TAG master
+    SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/clopts"
+)
+FetchContent_MakeAvailable(clopts)
+target_include_directories(options INTERFACE ${clopts_SOURCE_DIR}/include)
 
 ## Link against libfmt.
 target_link_libraries(options INTERFACE fmt)
@@ -238,7 +248,7 @@ file(GLOB_RECURSE library-sources
 add_library(lcc STATIC ${library-sources})
 
 ## Add the driver.
-add_executable(intc "${PROJECT_SOURCE_DIR}/src/intc.cc")
+add_executable(intc "${PROJECT_SOURCE_DIR}/src/lcc.cc")
 
 ## Set public include dir for lcc.
 target_include_directories(lcc PUBLIC "${PROJECT_SOURCE_DIR}/include")
