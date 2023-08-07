@@ -98,11 +98,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         -Werror=missing-requires
         -Werror=return-local-addr
     )
-
-    # Keep internal symbol names in debug mode if possible. See below for clang.
-    if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(options INTERFACE $<$<CONFIG:DEBUG>:-rdynamic>)
-    endif()
 endif()
 
 ## Additional flags for Clang.
@@ -111,8 +106,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         -Werror=dangling
         -Werror=return-stack-address
     )
-
-    target_link_options(options INTERFACE $<$<CONFIG:DEBUG>:-Wl,-export-dynamic>)
 endif()
 
 ## Flags for MSVC/clang-cl.
