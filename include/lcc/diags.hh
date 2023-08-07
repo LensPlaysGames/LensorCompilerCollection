@@ -89,53 +89,53 @@ public:
 
     /// Emit a note.
     template <typename... Args>
-    [[noreturn]] static void Note(fmt::format_string<Args...> fmt, Args&&... args) {
-        Diag{Kind::Note, fmt::format(fmt, std::forward<Args>(args)...)};
+    static Diag Note(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag{Kind::Note, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Emit a note.
     template <typename... Args>
-    [[noreturn]] static void Note(
+    static Diag Note(
         const Context* ctx,
         Location where,
         fmt::format_string<Args...> fmt,
         Args&&... args
     ) {
-        Diag{ctx, Kind::Note, where, fmt::format(fmt, std::forward<Args>(args)...)};
+        return Diag{ctx, Kind::Note, where, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Emit a warning.
     template <typename... Args>
-    [[noreturn]] static void Warning(fmt::format_string<Args...> fmt, Args&&... args) {
-        Diag{Kind::Warning, fmt::format(fmt, std::forward<Args>(args)...)};
+    static Diag Warning(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag{Kind::Warning, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Emit a warning.
     template <typename... Args>
-    [[noreturn]] static void Warning(
+    static Diag Warning(
         const Context* ctx,
         Location where,
         fmt::format_string<Args...> fmt,
         Args&&... args
     ) {
-        Diag{ctx, Kind::Warning, where, fmt::format(fmt, std::forward<Args>(args)...)};
+        return Diag{ctx, Kind::Warning, where, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Emit an error.
     template <typename... Args>
-    [[noreturn]] static void Error(fmt::format_string<Args...> fmt, Args&&... args) {
-        Diag{Kind::Error, fmt::format(fmt, std::forward<Args>(args)...)};
+    static Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag{Kind::Error, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Emit an error.
     template <typename... Args>
-    [[noreturn]] static void Error(
+    static Diag Error(
         const Context* ctx,
         Location where,
         fmt::format_string<Args...> fmt,
         Args&&... args
     ) {
-        Diag{ctx, Kind::Error, where, fmt::format(fmt, std::forward<Args>(args)...)};
+        return Diag{ctx, Kind::Error, where, fmt::format(fmt, std::forward<Args>(args)...)};
     }
 
     /// Raise an internal compiler error and exit.
