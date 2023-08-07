@@ -247,13 +247,13 @@ auto run_command(const fs::path& executable, auto&&...args) -> exit_status {
     if (code == -1) {
         st.success = false;
         st.exited = false;
-        st.code = -1;
+        st.code = std::uint8_t(-1);
         return st;
     }
 
     st.exited = WIFEXITED(code);
     st.success = not WIFSIGNALED(code) and WEXITSTATUS(code) == 0;
-    st.code = WEXITSTATUS(code);
+    st.code = std::uint8_t(WEXITSTATUS(code));
 #else
     st.exited = true;
     st.success = code == 0;
