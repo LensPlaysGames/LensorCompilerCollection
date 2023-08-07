@@ -176,7 +176,7 @@ bool lcc::Diag::Seekable() const {
     auto& files = ctx->files();
     if (where.file_id >= files.size()) return false;
     const auto* f = files[where.file_id].get();
-    return where.pos + where.len <= f->size() and where.len;
+    return where.pos + where.len <= f->size() and where.is_valid();
 }
 
 /// Seek to a source location. The location must be valid.

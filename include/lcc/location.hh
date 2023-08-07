@@ -9,6 +9,8 @@ struct Location {
     u32 pos;
     u16 len;
     u16 file_id;
+
+    bool is_valid() const { return len != 0; }
 };
 
 /// A decoded source location.
