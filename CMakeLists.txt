@@ -244,17 +244,17 @@ file(GLOB_RECURSE library-sources
 )
 
 ## Add the main lcc library
-add_library(lcc STATIC ${library-sources})
+add_library(liblcc STATIC ${library-sources})
 
 ## Add the driver.
-add_executable(intc "${PROJECT_SOURCE_DIR}/src/lcc.cc")
+add_executable(lcc "${PROJECT_SOURCE_DIR}/src/lcc.cc")
 
 ## Set public include dir for lcc.
-target_include_directories(lcc PUBLIC "${PROJECT_SOURCE_DIR}/include")
+target_include_directories(liblcc PUBLIC "${PROJECT_SOURCE_DIR}/include")
 
 ## Apply our options.
-target_link_libraries(lcc PRIVATE options)
-target_link_libraries(intc PRIVATE options lcc)
+target_link_libraries(liblcc PRIVATE options)
+target_link_libraries(lcc PRIVATE options liblcc)
 
 ## ============================================================================
 ##  Tests
@@ -314,7 +314,7 @@ if (BUILD_TESTING)
                 COMMAND $<TARGET_FILE:test_instantiator>
                 asm
                 "${test}"
-                $<TARGET_FILE:intc>
+                $<TARGET_FILE:lcc>
                 "${INTERCEPT_TEST_LINKER}"
                 WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
                 COMMAND_EXPAND_LISTS
@@ -328,7 +328,7 @@ if (BUILD_TESTING)
                     COMMAND $<TARGET_FILE:test_instantiator>
                     coff_object
                     "${test}"
-                    $<TARGET_FILE:intc>
+                    $<TARGET_FILE:lcc>
                     "${INTERCEPT_TEST_LINKER}"
                     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
                     COMMAND_EXPAND_LISTS
@@ -340,7 +340,7 @@ if (BUILD_TESTING)
                     COMMAND $<TARGET_FILE:test_instantiator>
                     elf_object
                     "${test}"
-                    $<TARGET_FILE:intc>
+                    $<TARGET_FILE:lcc>
                     "${INTERCEPT_TEST_LINKER}"
                     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
                     COMMAND_EXPAND_LISTS
@@ -354,7 +354,7 @@ if (BUILD_TESTING)
                 COMMAND $<TARGET_FILE:test_instantiator>
                 asm
                 "${test}"
-                $<TARGET_FILE:intc>
+                $<TARGET_FILE:lcc>
                 "${INTERCEPT_TEST_LINKER}"
                 -O
                 WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
@@ -368,7 +368,7 @@ if (BUILD_TESTING)
                 COMMAND $<TARGET_FILE:test_instantiator>
                 llvm
                 "${test}"
-                $<TARGET_FILE:intc>
+                $<TARGET_FILE:lcc>
                 "${INTERCEPT_TEST_LINKER}"
                 WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
                 COMMAND_EXPAND_LISTS
