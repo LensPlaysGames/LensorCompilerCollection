@@ -21,6 +21,7 @@ protected:
     Lexer(Context* context, File* file)
         : context(context), file(file), curr(file->data()), end(file->data() + file->size()) { NextChar(); }
 
+    auto FileId() const { return file->file_id(); }
     void NextChar();
     auto CurrentOffset() const -> u32 { return curr - file->data() - 1; }
 

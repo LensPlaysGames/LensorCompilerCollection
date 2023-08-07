@@ -9,14 +9,21 @@
 
 namespace lcc::laye {
 class ModuleHeader;
+class Statement;
 class Decl;
+class Expr;
 
-class Module {
-    std::vector<ModuleHeader*> _headers;
-    std::vector<Decl*> _topLevelDecls;
+struct Module {
+    std::vector<ModuleHeader*> headers;
+    std::vector<Decl*> topLevelDecls;
+
+private:
+    std::vector<Statement*> _statements_;
+    std::vector<Expr*> _exprs_;
 };
 
 enum struct TokenKind {
+    Invalid,
 };
 
 using LayeToken = syntax::Token<TokenKind>;

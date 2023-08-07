@@ -45,6 +45,9 @@ public:
     /// Get an iterator to the end of the file.
     [[nodiscard]] auto end() const { return contents.end(); }
 
+    /// Get the id of this file.
+    [[nodiscard]] auto file_id() const { return id; }
+
     /// Get the file path.
     [[nodiscard]] auto path() const -> const fs::path& { return file_path; }
 
