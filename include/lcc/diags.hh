@@ -9,7 +9,7 @@ namespace lcc {
 /// A diagnostic. The diagnostic is issued when the destructor is called.
 struct Diag {
     /// Diagnostic severity.
-    enum Kind {
+    enum struct Kind {
         None,    ///< Not an error. Do not emit this diagnostic.
         Note,    ///< Informational note.
         Warning, ///< Warning, but no hard error.
@@ -48,7 +48,7 @@ public:
           kind(other.kind),
           where(other.where),
           msg(std::move(other.msg)) {
-        other.kind = None;
+        other.kind = Kind::None;
     }
 
     Diag& operator=(Diag&& other) {
@@ -57,7 +57,7 @@ public:
         kind = other.kind;
         where = other.where;
         msg = std::move(other.msg);
-        other.kind = None;
+        other.kind = Kind::None;
         return *this;
     }
 
@@ -87,10 +87,61 @@ public:
     Diag(Kind kind, fmt::format_string<Args...> fmt, Args&&... args)
         : Diag{kind, fmt::format(fmt, std::forward<Args>(args)...)} {}
 
+    /// Emit a note.
+    template <typename... Args>
+    [[noreturn]] static void Note(fmt::format_string<Args...> fmt, Args&&... args) {
+        Diag{Kind::Note, fmt::format(fmt, std::forward<Args>(args)...)};
+    }
+
+    /// Emit a note.
+    template <typename... Args>
+    [[noreturn]] static void Note(
+        const Context* ctx,
+        Location where,
+        fmt::format_string<Args...> fmt,
+        Args&&... args
+    ) {
+        Diag{ctx, Kind::Note, where, fmt::format(fmt, std::forward<Args>(args)...)};
+    }
+
+    /// Emit a warning.
+    template <typename... Args>
+    [[noreturn]] static void Warning(fmt::format_string<Args...> fmt, Args&&... args) {
+        Diag{Kind::Warning, fmt::format(fmt, std::forward<Args>(args)...)};
+    }
+
+    /// Emit a warning.
+    template <typename... Args>
+    [[noreturn]] static void Warning(
+        const Context* ctx,
+        Location where,
+        fmt::format_string<Args...> fmt,
+        Args&&... args
+    ) {
+        Diag{ctx, Kind::Warning, where, fmt::format(fmt, std::forward<Args>(args)...)};
+    }
+
+    /// Emit an error.
+    template <typename... Args>
+    [[noreturn]] static void Error(fmt::format_string<Args...> fmt, Args&&... args) {
+        Diag{Kind::Error, fmt::format(fmt, std::forward<Args>(args)...)};
+    }
+
+    /// Emit an error.
+    template <typename... Args>
+    [[noreturn]] static void Error(
+        const Context* ctx,
+        Location where,
+        fmt::format_string<Args...> fmt,
+        Args&&... args
+    ) {
+        Diag{ctx, Kind::Error, where, fmt::format(fmt, std::forward<Args>(args)...)};
+    }
+
     /// Raise an internal compiler error and exit.
     template <typename... Args>
     [[noreturn]] static void ICE(fmt::format_string<Args...> fmt, Args&&... args) {
-        Diag{ICError, fmt::format(fmt, std::forward<Args>(args)...)};
+        Diag{Kind::ICError, fmt::format(fmt, std::forward<Args>(args)...)};
         std::terminate(); /// Should never be reached.
     }
 
@@ -102,7 +153,7 @@ public:
         fmt::format_string<Args...> fmt,
         Args&&... args
     ) {
-        Diag{ctx, ICError, where, fmt::format(fmt, std::forward<Args>(args)...)};
+        Diag{ctx, Kind::ICError, where, fmt::format(fmt, std::forward<Args>(args)...)};
         std::terminate(); /// Should never be reached.
     }
 
@@ -113,7 +164,7 @@ public:
     /// isn’t accessible to the user.
     template <typename... Args>
     [[noreturn]] static void Fatal(fmt::format_string<Args...> fmt, Args&&... args) {
-        Diag{FError, fmt::format(fmt, std::forward<Args>(args)...)};
+        Diag{Kind::FError, fmt::format(fmt, std::forward<Args>(args)...)};
         std::terminate(); /// Should never be reached.
     }
 };
