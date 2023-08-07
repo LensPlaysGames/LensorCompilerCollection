@@ -1,124 +1,115 @@
 #ifndef LAYE_AST_HH
 #define LAYE_AST_HH
 
-#include "lcc/utils.hh"
+#include <lcc/utils.hh>
 
-namespace laye
-{
-    /// @brief Base class for file header nodes.
-    class FileHeader
-    {
-    public:
-        enum
-        {
-            Import,
-            ForeignImport,
-        };
-
-        void* operator new(size_t) = delete;
+namespace lcc::laye {
+/// @brief Base class for file header nodes.
+class FileHeader {
+public:
+    enum {
+        Import,
+        ForeignImport,
     };
 
-    /// @brief Base class for statement syntax nodes.
-    class Statement
-    {
-    public:
-        enum
-        {
-            // Declarations
-            DeclBinding,
-            DeclFunction,
-            DeclStruct,
-            DeclEnum,
-            DeclAlias,
+    void* operator new(size_t) = delete;
+};
 
-            // Simple Statements
-            Block,
-            Assign,
-            Expr,
+/// @brief Base class for statement syntax nodes.
+class Statement {
+public:
+    enum {
+        // Declarations
+        DeclBinding,
+        DeclFunction,
+        DeclStruct,
+        DeclEnum,
+        DeclAlias,
 
-            // Control Flow
-            If,
-            For,
-            While,
-            Switch,
-            Return,
-            Break,
-            Continue,
-            Yield,
-        };
+        // Simple Statements
+        Block,
+        Assign,
+        Expr,
 
-        void* operator new(size_t) = delete;
+        // Control Flow
+        If,
+        For,
+        While,
+        Switch,
+        Return,
+        Break,
+        Continue,
+        Yield,
     };
-    
-    /// @brief Base class for expression syntax nodes.
-    class Expression
-    {
-    public:
-        enum
-        {
-            Unary,
-            Binary,
 
-            LookupName,
-            LookupPath,
-            FieldIndex,
-            ValueIndex,
-            Slice,
-            Invoke,
-            Ctor,
+    void* operator new(size_t) = delete;
+};
 
-            Cast,
-            New,
-            Try,
-            Catch,
+/// @brief Base class for expression syntax nodes.
+class Expression {
+public:
+    enum {
+        Unary,
+        Binary,
 
-            LitNil,
-            LitBool,
-            LitString,
-            LitInt,
-            LitFloat,
-        };
+        LookupName,
+        LookupPath,
+        FieldIndex,
+        ValueIndex,
+        Slice,
+        Invoke,
+        Ctor,
 
-        void* operator new(size_t) = delete;
+        Cast,
+        New,
+        Try,
+        Catch,
+
+        LitNil,
+        LitBool,
+        LitString,
+        LitInt,
+        LitFloat,
     };
-    
-    /// @brief Base class for type syntax nodes.
-    class Type
-    {
-    public:
-        enum struct TypeKind
-        {
-            Infer,
-            
-            Named,
-            ErrUnion,
 
-            Array,
-            Slice,
-            Pointer,
-            Buffer,
+    void* operator new(size_t) = delete;
+};
 
-            Func,
+/// @brief Base class for type syntax nodes.
+class Type {
+public:
+    enum struct TypeKind {
+        Infer,
 
-            LitBool,
-            LitString,
-            LitInt,
-            LitFloat,
+        Named,
+        ErrUnion,
 
-            Noreturn,
-            Rawptr,
-            Void,
-            String,
-            Rune,
-            Bool,
-            Int,
-            Float,
+        Array,
+        Slice,
+        Pointer,
+        Buffer,
 
-            C,
-        };
+        Func,
 
-        void* operator new(size_t) = delete;
+        LitBool,
+        LitString,
+        LitInt,
+        LitFloat,
+
+        Noreturn,
+        Rawptr,
+        Void,
+        String,
+        Rune,
+        Bool,
+        Int,
+        Float,
+
+        C,
     };
-}
+
+    void* operator new(size_t) = delete;
+};
+} // namespace laye
 
 #endif // LAYE_AST_HH
