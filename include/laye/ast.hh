@@ -1,9 +1,11 @@
 #ifndef LAYE_AST_HH
 #define LAYE_AST_HH
 
-#include "lcc/location.hh"
-
+#include <lcc/core.hh>
+#include <lcc/diags.hh>
+#include <lcc/syntax/token.hh>
 #include <lcc/utils.hh>
+#include <span>
 
 namespace lcc::laye {
 class ModuleHeader;
@@ -14,26 +16,10 @@ class Module {
     std::vector<Decl*> _topLevelDecls;
 };
 
-class Token {
-public:
-    enum struct Kind {
-    };
-
-private:
-    Kind _kind;
-    lcc::Location _location;
-
-protected:
-    Token(Kind kind, lcc::Location location)
-        : _kind(kind), _location(location) {}
-
-public:
-    void* operator new(size_t) = delete;
-    void* operator new(size_t, Module*);
-
-    auto kind() const { return _kind; }
-    auto location() const { return _location; }
+enum struct TokenKind {
 };
+
+using LayeToken = syntax::Token<TokenKind>;
 
 /// @brief Base class for statement syntax nodes.
 class Statement {
@@ -69,10 +55,10 @@ public:
 private:
     const Kind _kind;
 
-    lcc::Location _location;
+    Location _location;
 
 protected:
-    Statement(Kind kind, lcc::Location location)
+    Statement(Kind kind, Location location)
         : _kind(kind), _location(location) {}
 
 public:
@@ -85,7 +71,7 @@ public:
 
 class Decl : public Statement {
 protected:
-    Decl(Kind kind, lcc::Location location)
+    Decl(Kind kind, Location location)
         : Statement(kind, location) {}
 
 public:
@@ -96,7 +82,7 @@ class NamedDecl : public Decl {
     std::string _name;
 
 protected:
-    NamedDecl(Kind kind, lcc::Location location, std::string name)
+    NamedDecl(Kind kind, Location location, std::string name)
         : Decl(kind, location), _name(std::move(name)) {}
 
 public:
@@ -107,7 +93,7 @@ public:
 
 class BindingDecl : public NamedDecl {
 public:
-    BindingDecl(lcc::Location location, std::string name)
+    BindingDecl(Location location, std::string name)
         : NamedDecl(Kind::DeclBinding, location, name) {}
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclBinding; }
@@ -115,7 +101,7 @@ public:
 
 class FunctionDecl : public NamedDecl {
 public:
-    FunctionDecl(lcc::Location location, std::string name)
+    FunctionDecl(Location location, std::string name)
         : NamedDecl(Kind::DeclFunction, location, name) {}
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclFunction; }
@@ -123,7 +109,7 @@ public:
 
 class StructDecl : public NamedDecl {
 public:
-    StructDecl(lcc::Location location, std::string name)
+    StructDecl(Location location, std::string name)
         : NamedDecl(Kind::DeclStruct, location, name) {}
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclStruct; }
@@ -131,7 +117,7 @@ public:
 
 class EnumDecl : public NamedDecl {
 public:
-    EnumDecl(lcc::Location location, std::string name)
+    EnumDecl(Location location, std::string name)
         : NamedDecl(Kind::DeclEnum, location, name) {}
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclEnum; }
@@ -139,7 +125,7 @@ public:
 
 class AliasDecl : public NamedDecl {
 public:
-    AliasDecl(lcc::Location location, std::string name)
+    AliasDecl(Location location, std::string name)
         : NamedDecl(Kind::DeclAlias, location, name) {}
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclAlias; }
@@ -148,7 +134,7 @@ public:
 /// @brief Base class for file header nodes.
 class ModuleHeader : public Decl {
 protected:
-    ModuleHeader(Kind kind, lcc::Location location)
+    ModuleHeader(Kind kind, Location location)
         : Decl(kind, location) {}
 
 public:
@@ -157,7 +143,7 @@ public:
 
 class ImportHeader : public ModuleHeader {
 public:
-    ImportHeader(lcc::Location location)
+    ImportHeader(Location location)
         : ModuleHeader(Kind::DeclImport, location) {}
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclImport; }
@@ -165,7 +151,7 @@ public:
 
 class ForeignImportHeader : public ModuleHeader {
 public:
-    ForeignImportHeader(lcc::Location location)
+    ForeignImportHeader(Location location)
         : ModuleHeader(Kind::DeclForeignImport, location) {}
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclForeignImport; }
@@ -226,10 +212,10 @@ public:
 private:
     const Kind _kind;
 
-    lcc::Location _location;
+    Location _location;
 
 protected:
-    Expr(Kind kind, lcc::Location location)
+    Expr(Kind kind, Location location)
         : _kind(kind), _location(location) {}
 
 public:
@@ -244,7 +230,7 @@ class Unary : public Expr {
     Expr* _value;
 
 public:
-    Unary(lcc::Location location, Expr* value)
+    Unary(Location location, Expr* value)
         : Expr(Kind::Unary, location), _value(value) {}
 
     auto value() const { return _value; }
@@ -255,7 +241,7 @@ public:
 /// @brief Base class for type syntax nodes (which we're trying to make also Exprs.)
 class Type : public Expr {
 protected:
-    Type(Kind kind, lcc::Location location)
+    Type(Kind kind, Location location)
         : Expr(kind, location) {}
 
     static bool classof(Expr* expr) { return +expr->kind() >= +Kind::TypeInfer && +expr->kind() <= +Kind::TypeC; }

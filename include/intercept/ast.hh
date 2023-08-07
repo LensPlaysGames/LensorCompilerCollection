@@ -2,6 +2,8 @@
 #define INTERCEPT_AST_HH
 
 #include <lcc/core.hh>
+#include <lcc/diags.hh>
+#include <lcc/syntax/token.hh>
 #include <lcc/utils.hh>
 #include <span>
 
@@ -32,9 +34,105 @@ enum struct FuncAttr {
 };
 // clang-format on
 
+enum struct TokenKind {
+    Invalid,
+    Eof,
+
+    LParen,
+    RParen,
+    LBrack,
+    RBrack,
+    LBrace,
+    RBrace,
+
+    Comma,
+    Colon,
+    SemiColon,
+    Dot,
+
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Percent,
+    Ampersand,
+    Pipe,
+    Caret,
+    Tilde,
+    Exclam,
+    At,
+    Hash,
+
+    Shl,
+    Shr,
+
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+
+    ColonEq,
+    ColonColon,
+    ColonGt,
+
+    Ident,
+    Number,
+    String,
+
+    If,
+    Else,
+    While,
+    Ext,
+    As,
+    Type,
+    Void,
+    Byte,
+    IntegerKw,
+    ArbitraryInt,
+    For,
+    Return,
+    Export,
+
+    Gensym,
+    MacroArg,
+
+    SyntaxNode,
+};
+
 class Symbol;
 class Expr;
 class Type;
+
+struct InterceptToken : public syntax::Token<TokenKind> {
+    Expr* syntaxNode;
+
+    InterceptToken(TokenKind kind, Location location)
+        : Token(kind, location) {}
+
+    InterceptToken(TokenKind kind, Location location, std::string textValue)
+        : Token(kind, location, textValue) {}
+
+    InterceptToken(TokenKind kind, Location location, u64 integerValue)
+        : Token(kind, location, integerValue) {}
+
+    InterceptToken(TokenKind kind, Location location, Expr* syntaxNode)
+        : Token(kind, location), syntaxNode(syntaxNode) {}
+};
+
+struct Macro {
+    std::string name;
+    std::vector<InterceptToken*> parameters;
+    std::vector<InterceptToken*> expansion;
+    Location location;
+    usz gensym_count;
+};
+
+class Attribute {
+    int kind;
+    isz integer_value;
+};
 
 class Scope {
     Scope* _parent;
@@ -125,9 +223,11 @@ public:
 private:
     const Kind _kind;
 
+    Location _location;
+
 protected:
-    Type(Kind kind)
-        : _kind(kind) {}
+    Type(Kind kind, Location location)
+        : _kind(kind), _location(location) {}
 
 public:
     virtual ~Type() = default;
@@ -135,6 +235,7 @@ public:
     void* operator new(size_t) = delete;
 
     auto kind() const { return _kind; }
+    auto location() const { return _location; }
 
     static Type* UnknownType;
     static Type* IntegerLiteralType;
@@ -142,16 +243,13 @@ public:
     static Type* BoolType;
 };
 
-class FuncTypeParam {
+struct FuncTypeParam {
+    Location location;
     std::string _name;
-    Type* _type;
+    Type* type;
 
-public:
-    FuncTypeParam(std::string name, Type* type)
-        : _name(std::move(name)), _type(type) {}
-
-    const std::string& name() const { return _name; }
-    auto type() const { return _type; }
+    FuncTypeParam(Location location, std::string name, Type* type)
+        : location(location), _name(std::move(name)), type(type) {}
 };
 
 class PrimitiveType : public Type {
@@ -161,11 +259,11 @@ class PrimitiveType : public Type {
     bool _is_signed;
 
 public:
-    PrimitiveType(usz size, usz alignment, std::string_view name, bool isSigned)
-        : Type(Kind::Primitive), _size(size), _alignment(alignment), _name(name), _is_signed(isSigned) {}
+    PrimitiveType(Location location, usz size, usz alignment, std::string_view name, bool isSigned)
+        : Type(Kind::Primitive, location), _size(size), _alignment(alignment), _name(name), _is_signed(isSigned) {}
 
-    usz  size() const { return _size; }
-    usz  alignment() const { return _alignment; }
+    usz size() const { return _size; }
+    usz alignment() const { return _alignment; }
     auto name() -> std::string_view const { return _name; }
     bool is_signed() const { return _is_signed; }
 
@@ -173,9 +271,13 @@ public:
 };
 
 class NamedType : public Type {
+    std::string _name;
+
 public:
-    NamedType()
-        : Type(Kind::Primitive) {}
+    NamedType(Location location, std::string name)
+        : Type(Kind::Primitive, location), _name(std::move(name)) {}
+
+    auto name() const -> const std::string& { return _name; }
 
     static bool classof(Type* type) { return type->kind() == Kind::Named; }
 };
@@ -184,8 +286,8 @@ class TypeWithOneElement : public Type {
     Type* _element_type;
 
 protected:
-    TypeWithOneElement(Kind kind, Type* elementType)
-        : Type(kind), _element_type(elementType) {}
+    TypeWithOneElement(Kind kind, Location location, Type* elementType)
+        : Type(kind, location), _element_type(elementType) {}
 
 public:
     auto element_type() const { return _element_type; }
@@ -193,16 +295,16 @@ public:
 
 class PointerType : public TypeWithOneElement {
 public:
-    PointerType(Type* elementType)
-        : TypeWithOneElement(Kind::Primitive, elementType) {}
+    PointerType(Location location, Type* elementType)
+        : TypeWithOneElement(Kind::Primitive, location, elementType) {}
 
     static bool classof(Type* type) { return type->kind() == Kind::Pointer; }
 };
 
 class ReferenceType : public TypeWithOneElement {
 public:
-    ReferenceType(Type* elementType)
-        : TypeWithOneElement(Kind::Reference, elementType) {}
+    ReferenceType(Location location, Type* elementType)
+        : TypeWithOneElement(Kind::Reference, location, elementType) {}
 
     static bool classof(Type* type) { return type->kind() == Kind::Reference; }
 };
@@ -211,8 +313,8 @@ class ArrayType : public TypeWithOneElement {
     usz _size;
 
 public:
-    ArrayType(Type* elementType, usz size)
-        : TypeWithOneElement(Kind::Array, elementType), _size(size) {}
+    ArrayType(Location location, Type* elementType, usz size)
+        : TypeWithOneElement(Kind::Array, location, elementType), _size(size) {}
 
     usz size() const { return _size; }
 
@@ -229,8 +331,8 @@ class FuncType : public Type {
 #undef X
 
 public:
-    FuncType(Type* returnType, std::vector<FuncTypeParam*> params)
-        : Type(Kind::Function), _return_type(returnType), _params(std::move(params)) {}
+    FuncType(Location location, Type* returnType, std::vector<FuncTypeParam*> params)
+        : Type(Kind::Function, location), _return_type(returnType), _params(std::move(params)) {}
 
     auto return_type() const { return _return_type; }
     auto params() -> std::span<FuncTypeParam* const> const { return _params; }
@@ -247,17 +349,14 @@ public:
 
 class StructDecl;
 
-class StructMember {
-    Type* _type;
-    std::string _name;
-    usz _byte_offset;
+struct StructMember {
+    Location location;
+    Type* type;
+    std::string name;
+    usz byte_offset;
 
-public:
-    StructMember(Type* type, std::string name, usz byteOffset) : _type(type), _name(std::move(name)), _byte_offset(byteOffset) {}
-
-    auto type() const { return _type; }
-    auto name() const -> const std::string& { return _name; }
-    usz  byte_offset() const { return _byte_offset; }
+    StructMember(Location location, Type* type, std::string name, usz byteOffset)
+        : location(location), type(type), name(std::move(name)), byte_offset(byteOffset) {}
 };
 
 class StructType : public Type {
@@ -268,16 +367,16 @@ class StructType : public Type {
     usz _alignment;
 
 public:
-    StructType(StructDecl* structDecl, std::vector<StructMember*> members)
-        : Type(Kind::Struct), _structDecl(structDecl), _members(std::move(members)) {}
+    StructType(Location location, StructDecl* structDecl, std::vector<StructMember*> members)
+        : Type(Kind::Struct, location), _structDecl(structDecl), _members(std::move(members)) {}
 
     StructDecl* struct_decl() const { return _structDecl; }
     std::span<StructMember* const> members() { return _members; }
 
-    usz  byte_size() const { return _byte_size; }
+    usz byte_size() const { return _byte_size; }
     void byte_size(usz byteSize) { _byte_size = byteSize; }
 
-    usz  alignment() const { return _alignment; }
+    usz alignment() const { return _alignment; }
     void alignment(usz alignment) { _alignment = alignment; }
 
     static bool classof(Type* type) { return type->kind() == Kind::Struct; }
@@ -288,11 +387,11 @@ class IntegerType : public Type {
     usz _bit_width;
 
 public:
-    IntegerType(bool isSigned, usz bitWidth)
-        : Type(Kind::Integer), _is_signed(isSigned), _bit_width(bitWidth) {}
+    IntegerType(Location location, bool isSigned, usz bitWidth)
+        : Type(Kind::Integer, location), _is_signed(isSigned), _bit_width(bitWidth) {}
 
     bool is_signed() const { return _is_signed; }
-    usz  bit_width() const { return _bit_width; }
+    usz bit_width() const { return _bit_width; }
 
     static bool classof(Type* type) { return type->kind() == Kind::Integer; }
 };
@@ -303,7 +402,7 @@ public:
     enum struct Kind {
         Function,
         Struct,
-        Decl,
+        VarDecl,
 
         IntegerLiteral,
         FloatLiteral,
@@ -323,16 +422,18 @@ public:
         Unary,
         Binary,
 
-        Reference,
+        NamedRef,
         MemberAccess,
     };
 
 private:
     const Kind _kind;
 
+    Location _location;
+
 protected:
-    Expr(Kind kind)
-        : _kind(kind) {}
+    Expr(Kind kind, Location location)
+        : _kind(kind), _location(location) {}
 
 public:
     virtual ~Expr() = default;
@@ -342,48 +443,49 @@ public:
     auto type() const -> Type*;
 
     Kind kind() const { return _kind; }
+    auto location() const { return _location; }
 };
 
 class TypedExpr : public Expr {
     Type* _type;
 
 protected:
-    TypedExpr(Kind kind, Type* type = Type::UnknownType)
-        : Expr(kind), _type(type) {}
+    TypedExpr(Kind kind, Location location, Type* type = Type::UnknownType)
+        : Expr(kind, location), _type(type) {}
 
 public:
     void type(Type* type) { _type = type; }
 };
 
-class Decl : public TypedExpr {
+class VarDecl : public TypedExpr {
     Linkage _linkage;
     std::string _name;
     Expr* _init;
 
 public:
-    Decl(Linkage linkage, Type* type, std::string name, Expr* init)
-        : TypedExpr(Kind::Decl, type), _linkage(linkage), _name(std::move(name)), _init(init) {}
+    VarDecl(Location location, Linkage linkage, Type* type, std::string name, Expr* init)
+        : TypedExpr(Kind::VarDecl, location, type), _linkage(linkage), _name(std::move(name)), _init(init) {}
 
     auto linkage() const { return _linkage; }
     auto name() const -> const std::string& { return _name; }
     auto init() const { return _init; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Decl; }
+    static bool classof(Expr* expr) { return expr->kind() == Kind::VarDecl; }
 };
 
 class FuncDecl : public TypedExpr {
     Linkage _linkage;
     std::string _name;
-    std::vector<Decl*> _params;
+    std::vector<VarDecl*> _params;
     Expr* _body;
 
 public:
-    FuncDecl(Linkage linkage, Type* type, std::string name, std::vector<Decl*> params, Expr* body)
-        : TypedExpr(Kind::Function, type), _linkage(linkage), _name(std::move(name)), _params(std::move(params)), _body(body) {}
+    FuncDecl(Location location, Linkage linkage, Type* type, std::string name, std::vector<VarDecl*> params, Expr* body)
+        : TypedExpr(Kind::Function, location, type), _linkage(linkage), _name(std::move(name)), _params(std::move(params)), _body(body) {}
 
     auto linkage() const { return _linkage; }
     auto name() const -> const std::string& { return _name; }
-    auto params() const -> std::span<Decl* const> { return _params; }
+    auto params() const -> std::span<VarDecl* const> { return _params; }
     auto body() const { return _body; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::Function; }
@@ -393,7 +495,8 @@ class StructDecl : public TypedExpr {
     Symbol* _symbol;
 
 public:
-    StructDecl(Symbol* symbol) : TypedExpr(Kind::Struct), _symbol(symbol) {}
+    StructDecl(Location location, Symbol* symbol)
+        : TypedExpr(Kind::Struct, location), _symbol(symbol) {}
 
     auto symbol() const { return _symbol; }
 
@@ -404,8 +507,8 @@ class IntegerLiteral : public TypedExpr {
     u64 _value;
 
 public:
-    IntegerLiteral(u64 value, Type* type = Type::IntegerLiteralType)
-        : TypedExpr(Kind::IntegerLiteral, type), _value(value) {}
+    IntegerLiteral(Location location, u64 value, Type* type = Type::IntegerLiteralType)
+        : TypedExpr(Kind::IntegerLiteral, location, type), _value(value) {}
 
     u64 value() const { return _value; }
 
@@ -416,8 +519,8 @@ class FloatLiteral : public TypedExpr {
     double _value;
 
 public:
-    FloatLiteral(double value)
-        : TypedExpr(Kind::FloatLiteral, Type::FloatLiteralType), _value(value) {}
+    FloatLiteral(Location location, double value)
+        : TypedExpr(Kind::FloatLiteral, location, Type::FloatLiteralType), _value(value) {}
 
     auto value() const { return _value; }
 
@@ -428,8 +531,8 @@ class StringLiteral : public TypedExpr {
     usz _index;
 
 public:
-    StringLiteral(usz index, Type* type)
-        : TypedExpr(Kind::StringLiteral, type), _index(index) {}
+    StringLiteral(Location location, usz index, Type* type)
+        : TypedExpr(Kind::StringLiteral, location, type), _index(index) {}
 
     usz string_index() const { return _index; }
 
@@ -440,8 +543,8 @@ class CompoundLiteral : public TypedExpr {
     std::vector<Expr*> _values;
 
 public:
-    CompoundLiteral(std::vector<Expr*> values)
-        : TypedExpr(Kind::CompoundLiteral), _values(std::move(values)) {}
+    CompoundLiteral(Location location, std::vector<Expr*> values)
+        : TypedExpr(Kind::CompoundLiteral, location), _values(std::move(values)) {}
 
     auto values() const -> std::span<Expr* const> { return _values; }
 
@@ -454,8 +557,8 @@ class IfExpr : public TypedExpr {
     Expr* _else;
 
 public:
-    IfExpr(Expr* condition, Expr* then, Expr* else_)
-        : TypedExpr(Kind::If), _condition(condition), _then(then), _else(else_) {}
+    IfExpr(Location location, Expr* condition, Expr* then, Expr* else_)
+        : TypedExpr(Kind::If, location), _condition(condition), _then(then), _else(else_) {}
 
     auto condition() const { return _condition; }
     auto then() const { return _then; }
@@ -469,8 +572,8 @@ class WhileExpr : public Expr {
     Expr* _body;
 
 public:
-    WhileExpr(Expr* condition, Expr* body)
-        : Expr(Kind::While), _condition(condition), _body(body) {}
+    WhileExpr(Location location, Expr* condition, Expr* body)
+        : Expr(Kind::While, location), _condition(condition), _body(body) {}
 
     auto condition() const { return _condition; }
     auto body() const { return _body; }
@@ -485,8 +588,8 @@ class ForExpr : public Expr {
     Expr* _body;
 
 public:
-    ForExpr(Expr* init, Expr* condition, Expr* iterator, Expr* body)
-        : Expr(Kind::For), _init(init), _condition(condition), _iterator(iterator), _body(body) {}
+    ForExpr(Location location, Expr* init, Expr* condition, Expr* iterator, Expr* body)
+        : Expr(Kind::For, location), _init(init), _condition(condition), _iterator(iterator), _body(body) {}
 
     auto init() const { return _init; }
     auto condition() const { return _condition; }
@@ -500,8 +603,8 @@ class BlockExpr : public TypedExpr {
     std::vector<Expr*> _children;
 
 public:
-    BlockExpr(std::vector<Expr*> children)
-        : TypedExpr(Kind::Block), _children(std::move(children)) {}
+    BlockExpr(Location location, std::vector<Expr*> children)
+        : TypedExpr(Kind::Block, location), _children(std::move(children)) {}
 
     auto children() const -> std::span<Expr* const> { return _children; }
 
@@ -512,8 +615,8 @@ class ReturnExpr : public Expr {
     Expr* _value;
 
 public:
-    ReturnExpr(Expr* value)
-        : Expr(Kind::Return), _value(value) {}
+    ReturnExpr(Location location, Expr* value)
+        : Expr(Kind::Return, location), _value(value) {}
 
     auto value() const { return _value; }
 
@@ -525,8 +628,8 @@ class CallExpr : public TypedExpr {
     std::vector<Expr*> _args;
 
 public:
-    CallExpr(Expr* callee, std::vector<Expr*> args)
-        : TypedExpr(Kind::Call), _callee(callee), _args(std::move(args)) {}
+    CallExpr(Location location, Expr* callee, std::vector<Expr*> args)
+        : TypedExpr(Kind::Call, location), _callee(callee), _args(std::move(args)) {}
 
     auto callee() const { return _callee; }
     auto args() const -> std::span<Expr* const> { return _args; }
@@ -539,8 +642,8 @@ class IntrinsicCallExpr : public TypedExpr {
     std::vector<Expr*> _args;
 
 public:
-    IntrinsicCallExpr(IntrinsicKind kind, std::vector<Expr*> args)
-        : TypedExpr(Kind::IntrinsicCall), _kind(kind), _args(std::move(args)) {}
+    IntrinsicCallExpr(Location location, IntrinsicKind kind, std::vector<Expr*> args)
+        : TypedExpr(Kind::IntrinsicCall, location), _kind(kind), _args(std::move(args)) {}
 
     auto intrinsic_kind() const { return _kind; }
     auto args() const -> std::span<Expr* const> { return _args; }
@@ -550,41 +653,41 @@ public:
 
 class CastExpr : public TypedExpr {
 public:
-    CastExpr()
-        : TypedExpr(Kind::Cast) {}
+    CastExpr(Location location)
+        : TypedExpr(Kind::Cast, location) {}
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::Cast; }
 };
 
 class UnaryExpr : public TypedExpr {
 public:
-    UnaryExpr()
-        : TypedExpr(Kind::Unary) {}
+    UnaryExpr(Location location)
+        : TypedExpr(Kind::Unary, location) {}
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::Unary; }
 };
 
 class BinaryExpr : public TypedExpr {
 public:
-    BinaryExpr()
-        : TypedExpr(Kind::Binary) {}
+    BinaryExpr(Location location)
+        : TypedExpr(Kind::Binary, location) {}
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::Binary; }
 };
 
-class RefExpr : public TypedExpr {
+class NamedRefExpr : public TypedExpr {
     std::string _name;
     Expr* _target;
 
 public:
-    RefExpr(std::string name)
-        : TypedExpr(Kind::Reference), _name(std::move(name)) {}
+    NamedRefExpr(Location location, std::string name)
+        : TypedExpr(Kind::NamedRef, location), _name(std::move(name)) {}
 
     auto name() const -> const std::string& { return _name; }
     auto target() const { return _target; }
     void target(Expr* target) { _target = target; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Reference; }
+    static bool classof(Expr* expr) { return expr->kind() == Kind::NamedRef; }
 };
 
 class MemberAccessExpr : public TypedExpr {
@@ -593,8 +696,8 @@ class MemberAccessExpr : public TypedExpr {
     StructMember* _member;
 
 public:
-    MemberAccessExpr(Expr* target, std::string name)
-        : TypedExpr(Kind::MemberAccess), _target(target), _name(std::move(name)) {}
+    MemberAccessExpr(Location location, Expr* target, std::string name)
+        : TypedExpr(Kind::MemberAccess, location), _target(target), _name(std::move(name)) {}
 
     auto target() const { return _target; }
     auto name() const -> const std::string& { return _name; }
