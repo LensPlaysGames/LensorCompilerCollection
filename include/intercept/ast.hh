@@ -101,24 +101,33 @@ enum struct TokenKind {
     SyntaxNode,
 };
 
+class Scope;
 class Symbol;
 class Expr;
+class FuncDecl;
 class Type;
 
+struct Module {
+    std::string name{};
+    std::vector<Expr*> top_level_nodes{};
+    bool is_module;
+
+    FuncDecl* top_level_function;
+    std::vector<Module*> imports{};
+    std::vector<Expr*> exports{};
+
+    File* file;
+
+private:
+    std::vector<Expr*> nodes;
+    std::vector<Type*> types;
+    std::vector<Scope*> scopes;
+    std::vector<std::string> strings;
+    std::vector<FuncDecl*> functions;
+};
+
 struct InterceptToken : public syntax::Token<TokenKind> {
-    Expr* syntaxNode;
-
-    InterceptToken(TokenKind kind, Location location)
-        : Token(kind, location) {}
-
-    InterceptToken(TokenKind kind, Location location, std::string textValue)
-        : Token(kind, location, textValue) {}
-
-    InterceptToken(TokenKind kind, Location location, u64 integerValue)
-        : Token(kind, location, integerValue) {}
-
-    InterceptToken(TokenKind kind, Location location, Expr* syntaxNode)
-        : Token(kind, location), syntaxNode(syntaxNode) {}
+    Expr* syntaxNode{};
 };
 
 struct Macro {

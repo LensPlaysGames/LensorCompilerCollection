@@ -9,20 +9,11 @@ namespace lcc::syntax {
 template <typename TKind>
 requires std::is_enum_v<TKind>
 struct Token {
-    TKind kind;
-    Location location;
-    std::string text_value;
-    u64 integer_value;
+    TKind kind = TKind::Invalid;
+    Location location{};
+    std::string text_value{};
+    u64 integer_value{};
     bool artificial : 1 = false;
-
-    Token(TKind kind, Location location)
-        : kind(kind), location(location) { }
-
-    Token(TKind kind, Location location, std::string textValue)
-        : kind(kind), location(location), text_value(std::move(textValue)) { }
-
-    Token(TKind kind, Location location, u64 integerValue)
-        : kind(kind), location(location), integer_value(integerValue) { }
 };
 }
 
