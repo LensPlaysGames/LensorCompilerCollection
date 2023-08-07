@@ -6,6 +6,16 @@
     X(DebugTrap) \
     X(MemCpy)
 
+#define LCC_FUNC_ATTR(X) \
+    X(NoOptimize, no_opt) \
+    X(Const, const) \
+    X(Flatten, flatten) \
+    X(Inline, inline) \
+    X(NoInline, no_inline) \
+    X(NoMangle, no_mangle) \
+    X(NoReturn, no_return) \
+    X(Pure, pure) \
+
 namespace lcc {
 enum struct Linkage {
     /// Local variable.
@@ -61,6 +71,13 @@ enum struct IntrinsicKind
 {
 #define X(I) I,
 LCC_INTRINSICS(X)
+#undef X
+};
+
+enum struct FuncAttr
+{
+#define X(I, J) I,
+LCC_FUNC_ATTR(X)
 #undef X
 };
 }

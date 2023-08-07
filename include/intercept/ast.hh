@@ -10,11 +10,22 @@
     X(Line)                     \
     X(FileNam)
 
+#define INTERCEPT_FUNC_ATTR(X)  \
+    X(Discardable, discardable) \
+    X(Used, used)
+
 namespace lcc::intercept {
 enum struct IntrinsicKind {
 #define X(I) I,
     LCC_INTRINSICS(X)
         INTERCEPT_INTRINSICS(X)
+#undef X
+};
+
+enum struct FuncAttr {
+#define X(I, J) I,
+    LCC_FUNC_ATTR(X)
+        INTERCEPT_FUNC_ATTR(X)
 #undef X
 };
 
@@ -120,6 +131,161 @@ public:
     static Type* IntegerLiteralType;
     static Type* FloatLiteralType;
     static Type* BoolType;
+};
+
+class FuncTypeParam {
+    std::string _name;
+    Type* _type;
+
+public:
+    FuncTypeParam(std::string name, Type* type)
+        : _name(std::move(name)), _type(type) {}
+
+    const std::string& name() const { return _name; }
+    Type* type() const { return _type; }
+};
+
+class PrimitiveType : public Type {
+    usz _size;
+    usz _alignment;
+    std::string_view _name;
+    bool _is_signed;
+
+public:
+    PrimitiveType(usz size, usz alignment, std::string_view name, bool isSigned)
+        : Type(TypeKind::Primitive), _size(size), _alignment(alignment), _name(name), _is_signed(isSigned) { }
+
+    usz size() const { return _size; }
+    usz alignment() const { return _alignment; }
+    std::string_view name() const { return _name; }
+    bool is_signed() const { return _is_signed; }
+
+    static bool classof(Type* type) { return type->kind() == TypeKind::Primitive; }
+};
+
+class NamedType : public Type {
+public:
+    NamedType()
+        : Type(TypeKind::Primitive) { }
+
+    static bool classof(Type* type) { return type->kind() == TypeKind::Named; }
+};
+
+class TypeWithOneElement : public Type {
+    Type* _element_type;
+
+protected:
+    TypeWithOneElement(TypeKind kind, Type* elementType)
+        : Type(kind), _element_type(elementType) { }
+
+public:
+    Type* element_type() const { return _element_type; }
+};
+
+class PointerType : public TypeWithOneElement {
+public:
+    PointerType(Type* elementType)
+        : TypeWithOneElement(TypeKind::Primitive, elementType) { }
+
+    static bool classof(Type* type) { return type->kind() == TypeKind::Pointer; }
+};
+
+class ReferenceType : public TypeWithOneElement {
+public:
+    ReferenceType(Type* elementType)
+        : TypeWithOneElement(TypeKind::Reference, elementType) { }
+
+    static bool classof(Type* type) { return type->kind() == TypeKind::Reference; }
+};
+
+class ArrayType : public TypeWithOneElement {
+    usz _size;
+
+public:
+    ArrayType(Type* elementType, usz size)
+        : TypeWithOneElement(TypeKind::Array, elementType), _size(size) { }
+
+    usz size() const { return _size; }
+
+    static bool classof(Type* type) { return type->kind() == TypeKind::Array; }
+};
+
+class FuncType : public Type {
+    Type* _return_type;
+    std::vector<FuncTypeParam*> _params;
+
+#define X(I, J) bool _attr_##J : 1 = false;
+    LCC_FUNC_ATTR(X)
+    INTERCEPT_FUNC_ATTR(X)
+#undef X
+
+public:
+    FuncType(Type* returnType, std::vector<FuncTypeParam*> params)
+        : Type(TypeKind::Function), _return_type(returnType), _params(std::move(params)) {}
+
+    Type* return_type() const { return _return_type; }
+    std::span<FuncTypeParam* const> params() const { return _params; }
+
+#define X(I, J)                               \
+    bool is_##J() const { return _attr_##J; } \
+    void set_##J(bool value) { _attr_##J = value; }
+    LCC_FUNC_ATTR(X)
+    INTERCEPT_FUNC_ATTR(X)
+#undef X
+
+    static bool classof(Type* type) { return type->kind() == TypeKind::Function; }
+};
+
+class StructDecl;
+
+class StructMember {
+    Type* _type;
+    std::string _name;
+    usz _byte_offset;
+
+public:
+    StructMember(Type* type, std::string name, usz byteOffset) : _type(type), _name(std::move(name)), _byte_offset(byteOffset) {}
+
+    Type* type() const { return _type; }
+    const std::string& name() const { return _name; }
+    usz byte_offset() const { return _byte_offset; }
+};
+
+class StructType : public Type {
+    StructDecl* _structDecl;
+    std::vector<StructMember*> _members;
+
+    usz _byte_size;
+    usz _alignment;
+
+public:
+    StructType(StructDecl* structDecl, std::vector<StructMember*> members)
+        : Type(TypeKind::Struct), _structDecl(structDecl), _members(std::move(members)) { }
+
+    StructDecl* struct_decl() const { return _structDecl; }
+    std::span<StructMember* const> members() { return _members; }
+
+    usz byte_size() const { return _byte_size; }
+    void byte_size(usz byteSize) { _byte_size = byteSize; }
+
+    usz alignment() const { return _alignment; }
+    void alignment(usz alignment) { _alignment = alignment; }
+
+    static bool classof(Type* type) { return type->kind() == TypeKind::Struct; }
+};
+
+class IntegerType : public Type {
+    bool _is_signed;
+    usz _bit_width;
+
+public:
+    IntegerType(bool isSigned, usz bitWidth)
+        : Type(TypeKind::Integer), _is_signed(isSigned), _bit_width(bitWidth) { }
+
+    bool is_signed() const { return _is_signed; }
+    usz bit_width() const { return _bit_width; }
+
+    static bool classof(Type* type) { return type->kind() == TypeKind::Integer; }
 };
 
 /// @brief Base class for expression syntax nodes.
@@ -409,19 +575,6 @@ public:
     void target(Expr* target) { _target = target; }
 
     static bool classof(Expr* expr) { return expr->kind() == ExprKind::Reference; }
-};
-
-class StructMember {
-    Type* _type;
-    std::string _name;
-    usz _byte_offset;
-
-public:
-    StructMember(Type* type, std::string name, usz byteOffset) : _type(type), _name(std::move(name)), _byte_offset(byteOffset) {}
-
-    Type* type() const { return _type; }
-    const std::string& name() const { return _name; }
-    usz byte_offset() const { return _byte_offset; }
 };
 
 class MemberAccessExpr : public TypedExpr {
