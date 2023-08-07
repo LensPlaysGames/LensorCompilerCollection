@@ -61,6 +61,13 @@ public:
         return *this;
     }
 
+    /// Create an empty diagnostic.
+    explicit Diag() : ctx(nullptr), kind(Kind::None), where(), msg() {}
+
+    /// Disallow copying.
+    Diag(const Diag&) = delete;
+    Diag& operator=(const Diag&) = delete;
+
     /// The destructor prints the diagnostic, if it hasn’t been moved from.
     ~Diag();
 
