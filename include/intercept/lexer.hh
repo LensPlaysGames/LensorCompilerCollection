@@ -1,5 +1,5 @@
-#ifndef INTERCEPT_PARSER_HH
-#define INTERCEPT_PARSER_HH
+#ifndef INTERCEPT_LEXER_HH
+#define INTERCEPT_LEXER_HH
 
 #include <intercept/ast.hh>
 #include <lcc/context.hh>
@@ -55,4 +55,4 @@ protected:
 };
 } // namespace lcc::intercept
 
-#endif // INTERCEPT_PARSER_HH
+#endif // INTERCEPT_LEXER_HH
