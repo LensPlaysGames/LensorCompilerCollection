@@ -22,9 +22,7 @@ public:
         : data(ValueType{}) {}
 
     /// Prohibit construction from nullptr unless explicitly allowed.
-    Result(std::nullptr_t)
-    requires allow_construction_from_nullptr
-        : data(nullptr) {}
+    Result(std::nullptr_t) requires (not allow_construction_from_nullptr) = delete;
 
     /// Create a result that holds a value.
     Result(ValueType value)
