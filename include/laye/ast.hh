@@ -12,14 +12,22 @@ class ModuleHeader;
 class Statement;
 class Decl;
 class Expr;
+class Type;
+class Symbol;
+class Scope;
 
 struct Module {
     std::vector<ModuleHeader*> headers;
     std::vector<Decl*> topLevelDecls;
 
 private:
-    std::vector<Statement*> _statements_;
-    std::vector<Expr*> _exprs_;
+    std::vector<Statement*> statements;
+    std::vector<Expr*> exprs;
+    std::vector<Scope*> scopes;
+
+    friend Statement;
+    friend Expr;
+    friend Scope;
 };
 
 enum struct TokenKind {
@@ -27,6 +35,86 @@ enum struct TokenKind {
 };
 
 using LayeToken = syntax::Token<TokenKind>;
+
+class Symbol {
+public:
+    enum struct Kind {
+        Function,
+        Binding,
+        Type,
+    };
+
+private:
+    const Kind _kind;
+
+    std::string _name;
+    Scope* _scope;
+
+protected:
+    Symbol(Kind kind, std::string name, Scope* scope)
+        : _kind(kind), _name(std::move(name)), _scope(scope) {}
+
+public:
+    Kind kind() const { return _kind; }
+
+    auto name() const -> const std::string& { return _name; }
+    auto scope() const { return _scope; }
+};
+
+class BindingSymbol : public Symbol {
+    Expr* _value;
+
+public:
+    BindingSymbol(std::string name, Scope* scope, Expr* value)
+        : Symbol(Kind::Binding, name, scope), _value(value) {}
+
+    auto value() const { return _value; }
+
+    static bool classof(Symbol* symbol) { return symbol->kind() == Kind::Binding; }
+};
+
+class FunctionSymbol : public Symbol {
+    Expr* _value;
+
+public:
+    FunctionSymbol(std::string name, Scope* scope, Expr* value)
+        : Symbol(Kind::Function, name, scope), _value(value) {}
+
+    auto value() const { return _value; }
+
+    static bool classof(Symbol* symbol) { return symbol->kind() == Kind::Function; }
+};
+
+class TypeSymbol : public Symbol {
+    Type* _type;
+
+public:
+    TypeSymbol(std::string name, Scope* scope, Type* type)
+        : Symbol(Kind::Type, name, scope), _type(type) {}
+
+    auto type() const { return _type; }
+
+    static bool classof(Symbol* symbol) { return symbol->kind() == Kind::Type; }
+};
+
+class Scope {
+    Scope* _parent;
+    std::vector<Symbol*> _symbols;
+
+public:
+    Scope(Scope* parent)
+        : _parent(parent) {}
+
+    /// Disallow creating scopes without a module reference.
+    void* operator new(size_t) = delete;
+    void* operator new(size_t sz, Module& mod) {
+        auto ptr = ::operator new(sz);
+        mod.scopes.push_back(static_cast<Scope*>(ptr));
+        return ptr;
+    }
+
+    auto parent() const { return _parent; }
+};
 
 /// @brief Base class for statement syntax nodes.
 class Statement {
@@ -70,7 +158,11 @@ protected:
 
 public:
     void* operator new(size_t) = delete;
-    void* operator new(size_t, Module*);
+    void* operator new(size_t sz, Module& mod) {
+        auto ptr = ::operator new(sz);
+        mod.statements.push_back(static_cast<Statement*>(ptr));
+        return ptr;
+    }
 
     auto kind() const { return _kind; }
     auto location() const { return _location; }
@@ -99,33 +191,81 @@ public:
 };
 
 class BindingDecl : public NamedDecl {
+    Type* _type;
+    Expr* _init;
+
 public:
-    BindingDecl(Location location, std::string name)
-        : NamedDecl(Kind::DeclBinding, location, name) {}
+    BindingDecl(Location location, Type* type, std::string name, Expr* init)
+        : NamedDecl(Kind::DeclBinding, location, name), _type(type), _init(init) {}
+
+    auto type() const { return _type; }
+    auto init() const { return _init; }
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclBinding; }
 };
 
+struct FunctionParam {
+    Type* type;
+    std::string name;
+    Expr* init;
+};
+
 class FunctionDecl : public NamedDecl {
+    Type* _returnType;
+    std::vector<FunctionParam> _params;
+    Statement* _body;
+
 public:
-    FunctionDecl(Location location, std::string name)
-        : NamedDecl(Kind::DeclFunction, location, name) {}
+    FunctionDecl(Location location, Type* returnType, std::vector<FunctionParam> params, std::string name, Statement* body)
+        : NamedDecl(Kind::DeclFunction, location, name), _returnType(returnType), _params(std::move(params)), _body(body) {}
+
+    auto return_type() const { return _returnType; }
+    auto params() const -> std::span<FunctionParam const> { return _params; }
+    auto body() const { return _body; }
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclFunction; }
 };
 
+struct StructField {
+    Type* type;
+    std::string name;
+    Expr* init;
+};
+
+struct StructVariant {
+    std::string name;
+    std::vector<StructField> fields;
+};
+
 class StructDecl : public NamedDecl {
+    std::vector<StructField> _fields;
+    std::vector<StructVariant> _variants;
+
 public:
-    StructDecl(Location location, std::string name)
-        : NamedDecl(Kind::DeclStruct, location, name) {}
+    StructDecl(Location location, std::string name, std::vector<StructField> fields, std::vector<StructVariant> variants)
+        : NamedDecl(Kind::DeclStruct, location, name), _fields(std::move(fields)), _variants(std::move(variants)) {}
+
+    auto fields() const -> std::span<StructField const> { return _fields; }
+    auto variants() const -> std::span<StructVariant const> { return _variants; }
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclStruct; }
 };
 
+struct EnumVariant {
+    std::string name;
+    Expr* init;
+};
+
 class EnumDecl : public NamedDecl {
+    Type* _underlyingType;
+    std::vector<EnumVariant> _variants;
+
 public:
-    EnumDecl(Location location, std::string name)
-        : NamedDecl(Kind::DeclEnum, location, name) {}
+    EnumDecl(Location location, std::string name, Type* underlyingType, std::vector<EnumVariant> variants)
+        : NamedDecl(Kind::DeclEnum, location, name), _underlyingType(underlyingType), _variants(std::move(variants)) {}
+
+    auto underlying_type() const { return _underlyingType; }
+    auto variants() const -> std::span<EnumVariant const> { return _variants; }
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclEnum; }
 };
@@ -227,7 +367,11 @@ protected:
 
 public:
     void* operator new(size_t) = delete;
-    void* operator new(size_t, Module*);
+    void* operator new(size_t sz, Module& mod) {
+        auto ptr = ::operator new(sz);
+        mod.exprs.push_back(static_cast<Expr*>(ptr));
+        return ptr;
+    }
 
     auto kind() const { return _kind; }
     auto location() const { return _location; }
