@@ -67,6 +67,11 @@ public:
     /// Check if this has a value.
     explicit operator bool() { return is_value(); }
 
+    /// Access the underlying value.
+    [[nodiscard]] auto operator->() -> ValueType
+    requires std::is_pointer_v<ValueType>
+    { return value(); }
+
     /// Create an empty pointer result.
     ///
     /// This is an unsafe operation as there aren’t ever supposed
