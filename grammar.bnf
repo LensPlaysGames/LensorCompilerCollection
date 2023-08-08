@@ -3,8 +3,8 @@
 
 <preamble> ::= [ <module-declaration> ] { <import-declaration> | ";" }
 
-<module-declaration> ::= MODULE IDENTIFIER
-<import-declaration> ::= IMPORT IDENTIFIER
+<module-declaration> ::= "module" IDENTIFIER
+<import-declaration> ::= "import" IDENTIFIER
 
 /// Expression.
 <expression>     ::= <expr-decl>
@@ -49,11 +49,11 @@
 <type-struct>    ::= TYPE <struct-body>
 <type-derived>   ::= <type-array> | <type-function>
 <type-array>     ::= <type> "[" <expression> "]"
-<type-function>  ::= <type> "(" { <param-decl> [ "," ]  } ")"
+<type-function>  ::= <type> "(" { <param-decl> [ "," ]  } ")" <function-attrs>
 <param-decl>     ::= <decl-start> <type>
 <struct-body>    ::= "{" { <param-decl> } "}"
 
 /// Miscellaneous.
-<function-body>  ::= [ "=" ] <expression>
+<function-body>  ::= "=" <expression> | <expr-block>
 <binary>         ::= /// All binary operators
 <prefix>         ::= /// All unary prefix operators

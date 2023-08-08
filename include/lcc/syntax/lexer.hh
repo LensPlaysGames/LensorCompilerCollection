@@ -14,7 +14,7 @@ class Lexer {
     const char* end{};
 
 protected:
-    TToken current_token{};
+    TToken tok{};
     Context* context{};
     char lastc = ' ';
 
@@ -27,7 +27,7 @@ protected:
 
     template <typename... Args>
     Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Error(context, current_token.location, fmt, std::forward<Args>(args)...);
+        return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
     }
 
     static bool IsSpace(char c) { return c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == '\f' or c == '\v'; }

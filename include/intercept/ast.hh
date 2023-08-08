@@ -47,7 +47,7 @@ enum struct TokenKind {
 
     Comma,
     Colon,
-    SemiColon,
+    Semicolon,
     Dot,
 
     Plus,
@@ -84,7 +84,7 @@ enum struct TokenKind {
     If,
     Else,
     While,
-    Ext,
+    Extern,
     As,
     Type,
     Void,
@@ -98,8 +98,11 @@ enum struct TokenKind {
     Gensym,
     MacroArg,
 
-    SyntaxNode,
+    Expression,
 };
+
+/// Convert a token kind to a string representation.
+auto ToString(TokenKind kind) -> std::string_view;
 
 class Scope;
 class Symbol;
@@ -107,27 +110,52 @@ class Expr;
 class FuncDecl;
 class Type;
 
-struct Module {
+class Module {
     std::string name{};
-    std::vector<Expr*> top_level_nodes{};
+
+    FuncDecl* top_level_function{};
     bool is_module;
-
-    FuncDecl* top_level_function;
-    std::vector<Module*> imports{};
-    std::vector<Expr*> exports{};
-
     File* file;
 
-private:
+    std::vector<Expr*> top_level_nodes;
+    std::vector<std::pair<std::string, Module*>> imports;
+    std::vector<Expr*> exports;
+    std::vector<FuncDecl*> functions;
+
+public:
+    Module(File* file)
+        : file(file) {}
+
+    ~Module();
+
+    /// Add an import.
+    void add_import(std::string module_name) {
+        imports.emplace_back(std::move(module_name), nullptr);
+    }
+
+    /// Add a top-level expression.
+    void add_top_level_expr(Expr* node) {
+        top_level_nodes.push_back(node);
+    }
+
+    /// Mark this as a module.
+    void set_logical_module(std::string module_name) {
+        is_module = true;
+        name = std::move(module_name);
+    }
+
     std::vector<Expr*> nodes;
     std::vector<Type*> types;
     std::vector<Scope*> scopes;
     std::vector<std::string> strings;
-    std::vector<FuncDecl*> functions;
 };
 
 struct InterceptToken : public syntax::Token<TokenKind> {
-    Expr* syntaxNode{};
+    Expr* expression{};
+
+    /// Whether the expression bound by this token should
+    /// only be evaluated once.
+    bool eval_once : 1 = true;
 };
 
 struct Macro {
@@ -146,11 +174,17 @@ class Attribute {
 class Scope {
     Scope* _parent;
     std::vector<Symbol*> _symbols;
-    std::vector<Scope*> _children;
 
 public:
-    Scope(Scope* parent = NULL)
-        : _parent(parent) {}
+    Scope(Scope* parent) : _parent(parent) {}
+
+    /// Disallow creating scopes without a module reference.
+    void* operator new(size_t) = delete;
+    void* operator new(size_t sz, Module& mod) {
+        auto ptr = ::operator new (sz);
+        mod.scopes.push_back(static_cast<Scope*>(ptr));
+        return ptr;
+    }
 
     auto parent() const { return _parent; }
 };
@@ -448,11 +482,19 @@ public:
     virtual ~Expr() = default;
 
     void* operator new(size_t) = delete;
+    void* operator new(size_t sz, Module& mod) {
+        auto ptr = ::operator new(sz);
+        mod.nodes.push_back(static_cast<Expr*>(ptr));
+        return ptr;
+    }
 
     auto type() const -> Type*;
 
     Kind kind() const { return _kind; }
     auto location() const { return _location; }
+
+    /// Deep-copy an expression.
+    static Expr* Clone(Module& mod, Expr* expr);
 };
 
 class TypedExpr : public Expr {
@@ -566,7 +608,7 @@ class IfExpr : public TypedExpr {
     Expr* _else;
 
 public:
-    IfExpr(Location location, Expr* condition, Expr* then, Expr* else_)
+    IfExpr(Expr* condition, Expr* then, Expr* else_, Location location)
         : TypedExpr(Kind::If, location), _condition(condition), _then(then), _else(else_) {}
 
     auto condition() const { return _condition; }
@@ -581,7 +623,7 @@ class WhileExpr : public Expr {
     Expr* _body;
 
 public:
-    WhileExpr(Location location, Expr* condition, Expr* body)
+    WhileExpr(Expr* condition, Expr* body, Location location)
         : Expr(Kind::While, location), _condition(condition), _body(body) {}
 
     auto condition() const { return _condition; }
@@ -597,7 +639,7 @@ class ForExpr : public Expr {
     Expr* _body;
 
 public:
-    ForExpr(Location location, Expr* init, Expr* condition, Expr* iterator, Expr* body)
+    ForExpr(Expr* init, Expr* condition, Expr* iterator, Expr* body, Location location)
         : Expr(Kind::For, location), _init(init), _condition(condition), _iterator(iterator), _body(body) {}
 
     auto init() const { return _init; }
@@ -612,7 +654,7 @@ class BlockExpr : public TypedExpr {
     std::vector<Expr*> _children;
 
 public:
-    BlockExpr(Location location, std::vector<Expr*> children)
+    BlockExpr(std::vector<Expr*> children, Location location)
         : TypedExpr(Kind::Block, location), _children(std::move(children)) {}
 
     auto children() const -> std::span<Expr* const> { return _children; }
@@ -624,7 +666,7 @@ class ReturnExpr : public Expr {
     Expr* _value;
 
 public:
-    ReturnExpr(Location location, Expr* value)
+    ReturnExpr(Expr* value, Location location)
         : Expr(Kind::Return, location), _value(value) {}
 
     auto value() const { return _value; }
@@ -637,7 +679,7 @@ class CallExpr : public TypedExpr {
     std::vector<Expr*> _args;
 
 public:
-    CallExpr(Location location, Expr* callee, std::vector<Expr*> args)
+    CallExpr(Expr* callee, std::vector<Expr*> args, Location location)
         : TypedExpr(Kind::Call, location), _callee(callee), _args(std::move(args)) {}
 
     auto callee() const { return _callee; }

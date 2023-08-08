@@ -11,7 +11,7 @@ requires std::is_enum_v<TKind>
 struct Token {
     TKind kind = TKind::Invalid;
     Location location{};
-    std::string text_value{};
+    std::string text{};
     u64 integer_value{};
     bool artificial : 1 = false;
 };

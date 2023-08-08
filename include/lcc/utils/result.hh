@@ -16,13 +16,21 @@ class [[nodiscard]] Result {
     using ValueType = std::conditional_t<std::is_void_v<Type>, std::monostate, Type>;
     std::variant<ValueType, Diag> data;
 
+    /// Construct a null result.
+    struct NullConstructTag {};
+    Result(NullConstructTag)
+    requires std::is_pointer_v<ValueType>
+        : data(nullptr) {}
+
 public:
     Result()
-    requires std::is_default_constructible_v<ValueType>
+    requires (std::is_default_constructible_v<ValueType> and allow_construction_from_nullptr)
         : data(ValueType{}) {}
 
     /// Prohibit construction from nullptr unless explicitly allowed.
-    Result(std::nullptr_t) requires (not allow_construction_from_nullptr) = delete;
+    Result(std::nullptr_t)
+    requires (not allow_construction_from_nullptr)
+    = delete;
 
     /// Create a result that holds a value.
     Result(ValueType value)
@@ -41,7 +49,9 @@ public:
     }
 
     /// Get the diagnostic.
-    [[nodiscard]] auto diag() -> Diag& { return std::get<Diag>(data); }
+    ///
+    /// This returns a && to simplify the `return res.diag()` pattern.
+    [[nodiscard]] auto diag() -> Diag&& { return std::move(std::get<Diag>(data)); }
 
     /// Check if the result holds a diagnostic.
     [[nodiscard]] bool is_diag() { return std::holds_alternative<Diag>(data); }
@@ -56,7 +66,21 @@ public:
 
     /// Check if this has a value.
     explicit operator bool() { return is_value(); }
+
+    /// Create an empty pointer result.
+    ///
+    /// This is an unsafe operation as there aren’t ever supposed
+    /// to be empty results. Be careful when using this.
+    static Result Null()
+    requires std::is_pointer_v<ValueType>
+    { return Result(NullConstructTag{}); }
 };
+
+/// Return true if any of the provided results are errors.
+template <typename... ValueTypes>
+bool IsError(Result<ValueTypes>&... results) {
+    return (results.is_diag() or ...);
+}
 
 } // namespace lcc
 

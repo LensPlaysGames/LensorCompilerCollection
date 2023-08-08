@@ -29,7 +29,7 @@ static const char* TokenKindToString(TokenKind kind) {
         case TokenKind::RBrace: return "\"}\"";
         case TokenKind::Comma: return "\",\"";
         case TokenKind::Colon: return "\":\"";
-        case TokenKind::SemiColon: return "\";\"";
+        case TokenKind::Semicolon: return "\";\"";
         case TokenKind::Dot: return "\".\"";
         case TokenKind::Plus: return "\"+\"";
         case TokenKind::Minus: return "\"-\"";
@@ -56,7 +56,7 @@ static const char* TokenKindToString(TokenKind kind) {
         case TokenKind::ColonGt: return "\":>\"";
         case TokenKind::Gensym: return "gensym";
         case TokenKind::MacroArg: return "macro_arg";
-        case TokenKind::SyntaxNode: return "ast_node";
+        case TokenKind::Expression: return "ast_node";
     }
 }
 
@@ -80,51 +80,51 @@ void Lexer::NextToken() {
             LCC_ASSERT(
                 expansion->bound_arguments.size(),
                 "Macro argument \"{}\" encountered, but none are defined for this macro",
-                macro_expansion_token->text_value
+                macro_expansion_token->text
             );
             // Get it from bound arguments
             auto found = rgs::find_if(
                 expansion->bound_arguments,
-                [&](auto&& t) { return t.name == macro_expansion_token->text_value; }
+                [&](auto&& t) { return t.name == macro_expansion_token->text; }
             );
             LCC_ASSERT(
                 found != expansion->bound_arguments.end(),
                 "Macro argument \"{}\" does not exist (lexer screwed up!)",
-                macro_expansion_token->text_value
+                macro_expansion_token->text
             );
-            current_token = found->token;
-        } else current_token = *macro_expansion_token;
+            tok = found->token;
+        } else tok = *macro_expansion_token;
         ++expansion->expansion_index;
 
         // Set artificial to false, because, for example, if we are inserting
         // "endmacro", then we want the inserted identifier to *not* be
         // artificial and be treated *seriously*.
-        current_token.artificial = false;
+        tok.artificial = false;
         // macros within macros within macros within ...
-        if (current_token.kind == TokenKind::Ident && current_token.text_value == "macro")
+        if (tok.kind == TokenKind::Ident && tok.text == "macro")
             NextMacro();
 
         return;
     }
 
-    current_token.artificial = false;
+    tok.artificial = false;
 
     if (!lastc) {
-        current_token.kind = TokenKind::Eof;
+        tok.kind = TokenKind::Eof;
         return;
     }
 
-    current_token.kind = TokenKind::Invalid;
+    tok.kind = TokenKind::Invalid;
 
     /// Skip whitespace.
     while (IsSpace(lastc)) NextChar();
 
-    current_token.location.pos = CurrentOffset();
+    tok.location.pos = CurrentOffset();
 
     switch (lastc) {
         /// EOF.
         case 0: {
-            current_token.kind = TokenKind::Eof;
+            tok.kind = TokenKind::Eof;
         } break;
 
         /// EOF.
@@ -136,31 +136,31 @@ void Lexer::NextToken() {
             raw_mode = true;
             NextToken();
             raw_mode = in_raw_mode;
-            if (current_token.kind != TokenKind::Ident) {
-                switch (current_token.kind) {
+            if (tok.kind != TokenKind::Ident) {
+                switch (tok.kind) {
                     case TokenKind::MacroArg: {
                         // Prepend dollar sign.
-                        current_token.text_value = fmt::format("${}", current_token.text_value);
+                        tok.text = fmt::format("${}", tok.text);
                     } break;
                     case TokenKind::String: {
                         // Wrap in double quotes.
-                        current_token.text_value = fmt::format("\"{}\"", current_token.text_value);
+                        tok.text = fmt::format("\"{}\"", tok.text);
                     } break;
                     case TokenKind::Number: {
                         // Convert number to string
-                        current_token.text_value = fmt::format("{}", current_token.integer_value);
+                        tok.text = fmt::format("{}", tok.integer_value);
                     } break;
                     case TokenKind::ArbitraryInt: {
-                        current_token.text_value = fmt::format("{}{}", current_token.text_value[0], current_token.integer_value);
+                        tok.text = fmt::format("{}{}", tok.text[0], tok.integer_value);
                     } break;
                     default: {
-                        current_token.text_value = TokenKindToString(current_token.kind);
+                        tok.text = TokenKindToString(tok.kind);
                     } break;
                 }
             }
 
-            current_token.kind = TokenKind::Ident;
-            current_token.artificial = true;
+            tok.kind = TokenKind::Ident;
+            tok.artificial = true;
         } break;
 
         case '$': {
@@ -170,11 +170,11 @@ void Lexer::NextToken() {
                 // Get name of macro argument (identifier)
                 NextToken();
 
-                if (current_token.kind != TokenKind::Ident) {
+                if (tok.kind != TokenKind::Ident) {
                     Error("Expected identifier following '$' to name macro argument");
                 }
 
-                std::string name = current_token.text_value;
+                std::string name = tok.text;
 
                 // Parse token category term or whatever (sets integer token member)
                 if (lastc == ':') {
@@ -182,24 +182,24 @@ void Lexer::NextToken() {
                     NextChar();
                     // Get selector identifier.
                     NextToken();
-                    if (current_token.kind != TokenKind::Ident) {
+                    if (tok.kind != TokenKind::Ident) {
                         Error("Expected identifier following ':' in named macro argument");
                     }
 
                     auto selector = MacroArgumentSelector::Token;
-                    if (current_token.text_value == "expr")
+                    if (tok.text == "expr")
                         selector = MacroArgumentSelector::Expr;
-                    else if (current_token.text_value == "expr_once")
+                    else if (tok.text == "expr_once")
                         selector = MacroArgumentSelector::ExprOnce;
-                    else if (current_token.text_value == "token")
+                    else if (tok.text == "token")
                         ;
                     else Error("Unrecognised macro argument selector identifier");
 
-                    current_token.integer_value = (u64) selector;
+                    tok.integer_value = (u64) selector;
                 }
 
-                current_token.text_value = std::move(name);
-                current_token.kind = TokenKind::MacroArg;
+                tok.text = std::move(name);
+                tok.kind = TokenKind::MacroArg;
             } else {
                 NextIdentifier();
                 HandleIdentifier();
@@ -207,58 +207,58 @@ void Lexer::NextToken() {
         } break;
 
         case '(': {
-            current_token.kind = TokenKind::LParen;
+            tok.kind = TokenKind::LParen;
             NextChar();
         } break;
 
         case ')': {
-            current_token.kind = TokenKind::RParen;
+            tok.kind = TokenKind::RParen;
             NextChar();
         } break;
 
         case '[': {
-            current_token.kind = TokenKind::LBrack;
+            tok.kind = TokenKind::LBrack;
             NextChar();
         } break;
 
         case ']': {
-            current_token.kind = TokenKind::RBrack;
+            tok.kind = TokenKind::RBrack;
             NextChar();
         } break;
 
         case '{': {
-            current_token.kind = TokenKind::LBrace;
+            tok.kind = TokenKind::LBrace;
             NextChar();
         } break;
 
         case '}': {
-            current_token.kind = TokenKind::RBrace;
+            tok.kind = TokenKind::RBrace;
             NextChar();
         } break;
 
         case ',': {
-            current_token.kind = TokenKind::Comma;
+            tok.kind = TokenKind::Comma;
             NextChar();
         } break;
 
         case '@': {
-            current_token.kind = TokenKind::At;
+            tok.kind = TokenKind::At;
             NextChar();
         } break;
 
         case ':': {
             NextChar();
             if (lastc == '=') {
-                current_token.kind = TokenKind::ColonEq;
+                tok.kind = TokenKind::ColonEq;
                 NextChar();
             } else if (lastc == ':') {
-                current_token.kind = TokenKind::ColonColon;
+                tok.kind = TokenKind::ColonColon;
                 NextChar();
             } else if (lastc == '>') {
-                current_token.kind = TokenKind::ColonGt;
+                tok.kind = TokenKind::ColonGt;
                 NextChar();
             } else {
-                current_token.kind = TokenKind::Colon;
+                tok.kind = TokenKind::Colon;
             }
         } break;
     }

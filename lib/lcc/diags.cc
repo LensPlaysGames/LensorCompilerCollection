@@ -8,16 +8,18 @@
 /// ===========================================================================
 ///  Diagnostics.
 /// ===========================================================================
+using Kind = lcc::Diag::Kind;
+
 namespace {
 /// Get the colour of a diagnostic.
 static constexpr auto Colour(lcc::Diag::Kind kind) {
     switch (kind) {
-        case lcc::Diag::ICError: return fmt::fg(fmt::terminal_color::magenta) | fmt::emphasis::bold;
-        case lcc::Diag::Warning: return fmt::fg(fmt::terminal_color::yellow) | fmt::emphasis::bold;
-        case lcc::Diag::Note: return fmt::fg(fmt::terminal_color::green) | fmt::emphasis::bold;
+        case Kind::ICError: return fmt::fg(fmt::terminal_color::magenta) | fmt::emphasis::bold;
+        case Kind::Warning: return fmt::fg(fmt::terminal_color::yellow) | fmt::emphasis::bold;
+        case Kind::Note: return fmt::fg(fmt::terminal_color::green) | fmt::emphasis::bold;
 
-        case lcc::Diag::FError:
-        case lcc::Diag::Error:
+        case Kind::FError:
+        case Kind::Error:
             return fmt::fg(fmt::terminal_color::red) | fmt::emphasis::bold;
 
         default:
@@ -28,11 +30,11 @@ static constexpr auto Colour(lcc::Diag::Kind kind) {
 /// Get the name of a diagnostic.
 static constexpr std::string_view Name(lcc::Diag::Kind kind) {
     switch (kind) {
-        case lcc::Diag::ICError: return "Internal Compiler Error";
-        case lcc::Diag::FError: return "Fatal Error";
-        case lcc::Diag::Error: return "Error";
-        case lcc::Diag::Warning: return "Warning";
-        case lcc::Diag::Note: return "Note";
+        case Kind::ICError: return "Internal Compiler Error";
+        case Kind::FError: return "Fatal Error";
+        case Kind::Error: return "Error";
+        case Kind::Warning: return "Warning";
+        case Kind::Note: return "Note";
         default: return "Diagnostic";
     }
 }
@@ -76,13 +78,13 @@ void PrintBacktrace() {
 
 void lcc::Diag::HandleFatalErrors() {
     /// Abort on ICE.
-    if (kind == ICError) {
+    if (kind == Kind::ICError) {
         PrintBacktrace();
         std::exit(ICE_EXIT_CODE);
     }
 
     /// Exit on a fatal error.
-    if (kind == FError) std::exit(FATAL_EXIT_CODE);
+    if (kind == Kind::FError) std::exit(FATAL_EXIT_CODE);
 }
 
 /// Print a diagnostic with no (valid) location info.
@@ -99,10 +101,10 @@ lcc::Diag::~Diag() {
     using enum fmt::terminal_color;
 
     /// If this diagnostic is suppressed, do nothing.
-    if (kind == None) return;
+    if (kind == Kind::None) return;
 
     /// If the diagnostic is an error, set the error flag.
-    if (kind == Error and ctx) ctx->set_error();
+    if (kind == Kind::Error and ctx) ctx->set_error();
 
     /// If there is no context, then there is also no location info.
     if (not ctx) {

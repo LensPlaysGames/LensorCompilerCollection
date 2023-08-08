@@ -1,8 +1,8 @@
 #include <intercept/ast.hh>
 
-namespace lcc::intercept {
-Type* Expr::type() const {
-    // TODO(local): Actually implement Expr::type()
-    return NULL;
-}
+lcc::intercept::Module::~Module() {
+    for (auto* node : nodes) delete node;
+    for (auto* type : types) delete type;
+    for (auto* scope : scopes) delete scope;
+    for (auto& [_, i] : imports) delete i;
 }

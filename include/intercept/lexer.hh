@@ -44,7 +44,13 @@ class Lexer : public syntax::Lexer<InterceptToken> {
     void NextString();
     void ParseNumber(int base);
     void NextNumber();
+
+    /// Note(Sirraide): The gensym handling is janky. Gensym names should
+    /// be generated when the macro is created, not later.
     void NextMacro();
+
+    /// TODO: Lexer *MUST* convert Gensym tokens to Ident tokens when
+    /// expanding macros and generating tokens from the expansion.
     void ExpandMacro(Macro* m);
 
 protected:
