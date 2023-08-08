@@ -26,7 +26,9 @@ protected:
     auto CurrentOffset() const -> u32 { return curr - file->data() - 1; }
 
     template <typename... Args>
-    Diag Error(fmt::format_string<Args...> fmt, Args&&... args) { return Diag::Error(context, current_token.location, fmt, std::forward<Args...>(args...)); }
+    Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Error(context, current_token.location, fmt, std::forward<Args>(args)...);
+    }
 
     static bool IsSpace(char c) { return c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == '\f' or c == '\v'; }
 };
