@@ -10,27 +10,36 @@ namespace lcc {
 ///
 /// If the result contains a diagnostic, the diagnostic is
 /// issued in the destructor, as it usually would be.
-template <typename ValueType>
-requires (not std::is_reference_v<ValueType>)
-class Result {
+template <typename Type, bool allow_construction_from_nullptr = not std::is_pointer_v<Type>>
+requires (not std::is_reference_v<Type>)
+class [[nodiscard]] Result {
+    using ValueType = std::conditional_t<std::is_void_v<Type>, std::monostate, Type>;
     std::variant<ValueType, Diag> data;
 
 public:
-    /// Prohibit construction from nullptr.
-    Result(std::nullptr_t) = delete;
+    Result()
+    requires std::is_default_constructible_v<ValueType>
+        : data(ValueType{}) {}
+
+    /// Prohibit construction from nullptr unless explicitly allowed.
+    Result(std::nullptr_t)
+    requires allow_construction_from_nullptr
+        : data(nullptr) {}
 
     /// Create a result that holds a value.
-    Result(ValueType value) : data(std::move(value)) {}
+    Result(ValueType value)
+    requires (not std::is_void_v<Type>)
+        : data(std::move(value)) {}
 
     /// Create a result that holds a diagnostic.
     Result(Diag diag) : data(std::move(diag)) {}
 
-    /// Create a result and upcast the value.
-    template <std::derived_from<std::remove_pointer_t<ValueType>> T>
-    requires std::is_pointer_v<ValueType>
-    Result(Result<T*>&& other) {
+    /// Create a result from another result.
+    template <typename T>
+    requires (not std::is_void_v<Type> and std::convertible_to<T, ValueType>)
+    Result(Result<T>&& other) {
         if (other.is_diag()) data = std::move(other.diag());
-        else data = other.value();
+        else data = std::move(other.value());
     }
 
     /// Get the diagnostic.
@@ -43,10 +52,12 @@ public:
     [[nodiscard]] bool is_value() { return std::holds_alternative<ValueType>(data); }
 
     /// Get the value.
-    [[nodiscard]] auto value() -> ValueType& { return std::get<ValueType>(data); }
+    [[nodiscard]] auto value() -> ValueType&
+    requires (not std::is_void_v<Type>)
+    { return std::get<ValueType>(data); }
 
-    /// Same as `is_diag()`
-    explicit operator bool() { return is_diag(); }
+    /// Check if this has a value.
+    explicit operator bool() { return is_value(); }
 };
 
 } // namespace lcc
