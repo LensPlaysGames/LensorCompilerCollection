@@ -231,7 +231,7 @@ class FunctionSymbol : public Symbol {
 
 public:
     FunctionSymbol(std::string name, Scope* scope, Expr* value)
-        : Symbol(Kind::Variable, name, scope), _value(value) {}
+        : Symbol(Kind::Function, name, scope), _value(value) {}
 
     auto value() const { return _value; }
 
@@ -243,7 +243,7 @@ class TypeSymbol : public Symbol {
 
 public:
     TypeSymbol(std::string name, Scope* scope, Type* type)
-        : Symbol(Kind::Variable, name, scope), _type(type) {}
+        : Symbol(Kind::Type, name, scope), _type(type) {}
 
     auto type() const { return _type; }
 
