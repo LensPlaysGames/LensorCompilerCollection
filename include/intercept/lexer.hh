@@ -58,6 +58,8 @@ protected:
         : syntax::Lexer<InterceptToken>(context, file) { NextToken(); }
 
     void NextToken();
+
+    static bool IsIdentStart(char c) { return IsAlpha(c) or c == '_'; }
 };
 } // namespace lcc::intercept
 
