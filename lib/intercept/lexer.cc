@@ -261,6 +261,146 @@ void Lexer::NextToken() {
                 tok.kind = TokenKind::Colon;
             }
         } break;
+
+        case ';': {
+            // Yeet ';'
+            NextChar();
+            // Line comments begin with `;;`
+            if (lastc == ';') {
+                while (lastc && lastc != '\n') NextChar();
+                return NextToken();
+            }
+
+            tok.kind = TokenKind::Semicolon;
+        } break;
+
+        case '#': {
+            tok.kind = TokenKind::Hash;
+            NextChar();
+        } break;
+
+        case '.': {
+            tok.kind = TokenKind::Dot;
+            NextChar();
+        } break;
+
+        case '+': {
+            tok.kind = TokenKind::Plus;
+            NextChar();
+        } break;
+
+        case '-': {
+            NextChar();
+            if (IsDigit(lastc)) {
+                NextNumber();
+                tok.integer_value = -tok.integer_value;
+
+                /// The character after a number must be a whitespace or delimiter.
+                if (IsAlpha(lastc))
+                    Error("Invalid integer literal");
+            } else {
+                tok.kind = TokenKind::Minus;
+            }
+        } break;
+
+        case '*': {
+            tok.kind = TokenKind::Star;
+            NextChar();
+        } break;
+
+        case '/': {
+            tok.kind = TokenKind::Slash;
+            NextChar();
+        } break;
+
+        case '%': {
+            tok.kind = TokenKind::Percent;
+            NextChar();
+        } break;
+
+        case '&': {
+            tok.kind = TokenKind::Ampersand;
+            NextChar();
+        } break;
+
+        case '|': {
+            tok.kind = TokenKind::Pipe;
+            NextChar();
+        } break;
+
+        case '^': {
+            tok.kind = TokenKind::Caret;
+            NextChar();
+        } break;
+
+        case '~': {
+            tok.kind = TokenKind::Tilde;
+            NextChar();
+        } break;
+
+        case '!': {
+            NextChar();
+            if (lastc == '=') {
+                NextChar();
+                tok.kind = TokenKind::Ne;
+            } else tok.kind = TokenKind::Exclam;
+        } break;
+
+        case '=': {
+            tok.kind = TokenKind::Eq;
+            NextChar();
+        } break;
+
+        case '<': {
+            NextChar();
+            if (lastc == '=') {
+                NextChar();
+                tok.kind = TokenKind::Le;
+            } else if (lastc == '<') {
+                NextChar();
+                tok.kind = TokenKind::Shl;
+            } else {
+                tok.kind = TokenKind::Lt;
+            }
+        } break;
+
+        case '>': {
+            NextChar();
+            if (lastc == '=') {
+                NextChar();
+                tok.kind = TokenKind::Ge;
+            } else if (lastc == '>') {
+                NextChar();
+                tok.kind = TokenKind::Shr;
+            } else {
+                tok.kind = TokenKind::Gt;
+            }
+        } break;
+
+        case '"':
+        case '\'': {
+            NextString();
+        } break;
+
+        default: {
+            if (IsIdentStart(lastc)) {
+                NextIdentifier();
+                HandleIdentifier();
+                break;
+            }
+
+            if (IsDigit(lastc)) {
+                NextNumber();
+                /// The character after a number must be a whitespace or delimiter.
+                if (IsAlpha(lastc))
+                    Error("Invalid integer literal");
+                break;
+            }
+
+            Error("Invalid token");
+        } break;
     }
+
+    tok.location.len = (u16)(CurrentOffset() - tok.location.pos);
 }
 } // namespace lcc::intercept
