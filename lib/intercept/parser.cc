@@ -1,4 +1,16 @@
 #include <intercept/parser.hh>
+#include <lcc/utils/macros.hh>
+#include <lcc/utils/rtti.hh>
+
+/// Cute trick for monad binding.
+#define bind *this->*&Parser::
+namespace {
+auto operator->*(lcc::intercept::Parser& p, auto member_function) {
+    return [p = std::addressof(p), member_function](auto&&... args) {
+        return std::invoke(member_function, p, std::forward<decltype(args)>(args)...);
+    };
+}
+}
 
 auto lcc::intercept::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
     Parser parser(context, &file);

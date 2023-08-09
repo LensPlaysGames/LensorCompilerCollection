@@ -6,6 +6,7 @@
 #include <variant>
 
 namespace lcc {
+
 /// Result type that can hold either a value or a diagnostic.
 ///
 /// If the result contains a diagnostic, the diagnostic is
@@ -15,6 +16,15 @@ requires (not std::is_reference_v<Type>)
 class [[nodiscard]] Result {
     using ValueType = std::conditional_t<std::is_void_v<Type>, std::monostate, Type>;
     std::variant<ValueType, Diag> data;
+
+    template <typename T>
+    struct make_result { using type = Result<T>; };
+
+    template <typename T>
+    struct make_result<Result<T>> { using type = Result<T>; };
+
+    template <typename T>
+    using make_result_t = typename make_result<T>::type;
 
     /// Construct a null result.
     struct NullConstructTag {};
@@ -68,9 +78,51 @@ public:
     explicit operator bool() { return is_value(); }
 
     /// Access the underlying value.
+    [[nodiscard]] auto operator*() -> ValueType& { return value(); }
+
+    /// Access the underlying value.
     [[nodiscard]] auto operator->() -> ValueType
     requires std::is_pointer_v<ValueType>
     { return value(); }
+
+    /// \brief Monad bind operator for results.
+    ///
+    /// If you know Haskell, then you already know what this does. If
+    /// you know JavaScript, then this is like the \c .then() method
+    /// on \c Promise. If you don’t know either, what this does is,
+    /// if this holds a diagnostic, it just returns that diagnostic;
+    /// otherwise, it passes the value to \c cb and returns the result
+    /// of that call.
+    ///
+    /// You can use this to avoid writing code like this
+    /// \code{.cpp}
+    ///     auto expr = ParseExpr();
+    ///     if (not expr) return expr.diag();
+    ///
+    ///     auto foo = Bar(expr.value());
+    ///     if (not foo) return foo.diag();
+    ///
+    ///     return Baz(foo.value());
+    /// \endcode
+    ///
+    /// and turn it into this instead
+    /// \code{.cpp}
+    ///     return ParseExpr() >>= Bar >>= Baz;
+    /// \endcode
+    ///
+    /// Note that if e.g. \c ParseExpr in this example is a member function, then
+    /// this won’t work because you need to bind it to the \c this pointer first,
+    /// but you can check \c <intercept/parser.cc> for an example of how to get
+    /// around that with a macro. Just search for \c >>= \c bind in that file.
+    ///
+    /// \param cb A callable that takes in a \c ValueType& and returns a \c Result.
+    /// \return A diagnostic if this holds a diagnostic, and the result of invoking
+    ///     \c cb with the value otherwise.
+    template <typename Callable>
+    [[nodiscard]] auto operator>>=(Callable&& cb) -> make_result_t<std::invoke_result_t<Callable, ValueType&>> {
+        if (is_diag()) return diag();
+        return std::invoke(std::forward<Callable>(cb), value());
+    }
 
     /// Create an empty pointer result.
     ///
