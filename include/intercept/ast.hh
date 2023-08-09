@@ -89,6 +89,7 @@ enum struct TokenKind {
     Type,
     Void,
     Byte,
+    Bool,
     IntegerKw,
     ArbitraryInt,
     For,
@@ -109,6 +110,7 @@ class Symbol;
 class Expr;
 class FuncDecl;
 class Type;
+class ObjectDecl;
 
 class Module {
     std::string name{};
@@ -119,14 +121,16 @@ class Module {
 
     std::vector<Expr*> top_level_nodes;
     std::vector<std::pair<std::string, Module*>> imports;
-    std::vector<Expr*> exports;
+    std::vector<ObjectDecl*> exports;
     std::vector<FuncDecl*> functions;
 
 public:
-    Module(File* file)
-        : file(file) {}
+    Module(File* file, std::string module_name, bool is_logical_module);
 
     ~Module();
+
+    /// Add an export.
+    void add_export(ObjectDecl* decl) { exports.push_back(decl); }
 
     /// Add an import.
     void add_import(std::string module_name) {
@@ -134,15 +138,13 @@ public:
     }
 
     /// Add a top-level expression.
-    void add_top_level_expr(Expr* node) {
-        top_level_nodes.push_back(node);
-    }
+    void add_top_level_expr(Expr* node) { top_level_nodes.push_back(node); }
 
-    /// Mark this as a module.
-    void set_logical_module(std::string module_name) {
-        is_module = true;
-        name = std::move(module_name);
-    }
+    /// Intern a string and return its index.
+    usz intern(std::string_view str);
+
+    /// Get the top-level function.
+    auto top_level_func() const -> FuncDecl* { return top_level_function; }
 
     std::vector<Expr*> nodes;
     std::vector<Type*> types;
@@ -181,7 +183,7 @@ public:
     /// Disallow creating scopes without a module reference.
     void* operator new(size_t) = delete;
     void* operator new(size_t sz, Module& mod) {
-        auto ptr = ::operator new (sz);
+        auto ptr = ::operator new(sz);
         mod.scopes.push_back(static_cast<Scope*>(ptr));
         return ptr;
     }
@@ -276,23 +278,27 @@ public:
     virtual ~Type() = default;
 
     void* operator new(size_t) = delete;
+    void* operator new(size_t, Module&);
 
     auto kind() const { return _kind; }
     auto location() const { return _location; }
 
     static Type* UnknownType;
-    static Type* IntegerLiteralType;
-    static Type* FloatLiteralType;
+    static Type* VoidType;
     static Type* BoolType;
+    static Type* ByteType;
+    static Type* IntegerType;
+    static Type* CCharType;
+    static Type* CIntType;
 };
 
 struct FuncTypeParam {
-    Location location;
-    std::string _name;
+    std::string name;
     Type* type;
+    Location location;
 
-    FuncTypeParam(Location location, std::string name, Type* type)
-        : location(location), _name(std::move(name)), type(type) {}
+    FuncTypeParam(std::string name, Type* type, Location location)
+        : name(std::move(name)), type(type), location(location) {}
 };
 
 class PrimitiveType : public Type {
@@ -338,7 +344,7 @@ public:
 
 class PointerType : public TypeWithOneElement {
 public:
-    PointerType(Location location, Type* elementType)
+    PointerType(Type* elementType, Location location = {})
         : TypeWithOneElement(Kind::Primitive, location, elementType) {}
 
     static bool classof(Type* type) { return type->kind() == Kind::Pointer; }
@@ -356,7 +362,7 @@ class ArrayType : public TypeWithOneElement {
     usz _size;
 
 public:
-    ArrayType(Location location, Type* elementType, usz size)
+    ArrayType(Type* elementType, usz size, Location location = {})
         : TypeWithOneElement(Kind::Array, location, elementType), _size(size) {}
 
     usz size() const { return _size; }
@@ -366,7 +372,7 @@ public:
 
 class FuncType : public Type {
     Type* _return_type;
-    std::vector<FuncTypeParam*> _params;
+    std::vector<FuncTypeParam> _params;
 
 #define X(I, J) bool _attr_##J : 1 = false;
     LCC_FUNC_ATTR(X)
@@ -374,11 +380,11 @@ class FuncType : public Type {
 #undef X
 
 public:
-    FuncType(Location location, Type* returnType, std::vector<FuncTypeParam*> params)
+    FuncType(std::vector<FuncTypeParam> params, Type* returnType, Location location)
         : Type(Kind::Function, location), _return_type(returnType), _params(std::move(params)) {}
 
     auto return_type() const { return _return_type; }
-    auto params() -> std::span<FuncTypeParam* const> const { return _params; }
+    auto params() -> std::span<FuncTypeParam const> const { return _params; }
 
 #define X(I, J)                               \
     bool is_##J() const { return _attr_##J; } \
@@ -443,12 +449,11 @@ public:
 class Expr {
 public:
     enum struct Kind {
-        Function,
         Struct,
         VarDecl,
+        Function,
 
         IntegerLiteral,
-        FloatLiteral,
         StringLiteral,
         CompoundLiteral,
 
@@ -508,34 +513,71 @@ public:
     void type(Type* type) { _type = type; }
 };
 
-class VarDecl : public TypedExpr {
-    Linkage _linkage;
+/// A declaration that has linkage.
+class ObjectDecl : public TypedExpr {
     std::string _name;
+    Linkage _linkage;
+
+protected:
+    ObjectDecl(Kind kind, Type* type, std::string name, Linkage linkage, Location location)
+        : TypedExpr(kind, location, type), _name(std::move(name)), _linkage(linkage) {}
+
+
+public:
+    /// Get the mangled name of this declaration.
+    auto mangled_name() const -> std::string;
+
+    /// Get the unmangled name of this declaration, as declared
+    /// in code.
+    auto name() const -> const std::string& { return _name; }
+
+    /// Get the linkage of this declaration.
+    auto linkage() const { return _linkage; }
+
+    /// Set the linkage of this declaration.
+    void linkage(Linkage linkage) { _linkage = linkage; }
+
+    /// RTTI.
+    static bool classof(Expr* expr) {
+        return expr->kind() >= Kind::VarDecl and expr->kind() <= Kind::Function;
+    }
+};
+
+class VarDecl : public ObjectDecl {
     Expr* _init;
 
 public:
-    VarDecl(Location location, Linkage linkage, Type* type, std::string name, Expr* init)
-        : TypedExpr(Kind::VarDecl, location, type), _linkage(linkage), _name(std::move(name)), _init(init) {}
+    VarDecl(
+        std::string name,
+        Type* type,
+        Expr* init,
+        Linkage linkage,
+        Location location
+    ) : ObjectDecl(Kind::VarDecl, type, std::move(name), linkage, location),
+        _init(init) {}
 
-    auto linkage() const { return _linkage; }
-    auto name() const -> const std::string& { return _name; }
     auto init() const { return _init; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::VarDecl; }
 };
 
-class FuncDecl : public TypedExpr {
-    Linkage _linkage;
-    std::string _name;
-    std::vector<VarDecl*> _params;
+class FuncDecl : public ObjectDecl {
     Expr* _body;
 
-public:
-    FuncDecl(Location location, Linkage linkage, Type* type, std::string name, std::vector<VarDecl*> params, Expr* body)
-        : TypedExpr(Kind::Function, location, type), _linkage(linkage), _name(std::move(name)), _params(std::move(params)), _body(body) {}
+    /// Only present if this is not an imported function. Sema
+    /// fills these in.
+    std::vector<VarDecl*> _params;
 
-    auto linkage() const { return _linkage; }
-    auto name() const -> const std::string& { return _name; }
+public:
+    FuncDecl(
+        std::string name,
+        Type* type,
+        Expr* body,
+        Linkage linkage,
+        Location location
+    ) : ObjectDecl(Kind::Function, type, std::move(name), linkage, location),
+        _body(body) {}
+
     auto params() const -> std::span<VarDecl* const> { return _params; }
     auto body() const { return _body; }
 
@@ -558,32 +600,20 @@ class IntegerLiteral : public TypedExpr {
     u64 _value;
 
 public:
-    IntegerLiteral(Location location, u64 value, Type* type = Type::IntegerLiteralType)
-        : TypedExpr(Kind::IntegerLiteral, location, type), _value(value) {}
+    IntegerLiteral(u64 value, Location location, Type* ty = Type::IntegerType)
+        : TypedExpr(Kind::IntegerLiteral, location, ty), _value(value) {}
 
     u64 value() const { return _value; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::IntegerLiteral; }
 };
 
-class FloatLiteral : public TypedExpr {
-    double _value;
-
-public:
-    FloatLiteral(Location location, double value)
-        : TypedExpr(Kind::FloatLiteral, location, Type::FloatLiteralType), _value(value) {}
-
-    auto value() const { return _value; }
-
-    static bool classof(Expr* expr) { return expr->kind() == Kind::FloatLiteral; }
-};
-
 class StringLiteral : public TypedExpr {
     usz _index;
 
 public:
-    StringLiteral(Location location, usz index, Type* type)
-        : TypedExpr(Kind::StringLiteral, location, type), _index(index) {}
+    /// Intern the given string and create a string literal for it.
+    StringLiteral(Module& mod, std::string_view value, Location location);
 
     usz string_index() const { return _index; }
 
@@ -594,7 +624,7 @@ class CompoundLiteral : public TypedExpr {
     std::vector<Expr*> _values;
 
 public:
-    CompoundLiteral(Location location, std::vector<Expr*> values)
+    CompoundLiteral(std::vector<Expr*> values, Location location)
         : TypedExpr(Kind::CompoundLiteral, location), _values(std::move(values)) {}
 
     auto values() const -> std::span<Expr* const> { return _values; }

@@ -16,6 +16,9 @@ class Parser : public Lexer {
     std::vector<Scope*> scope_stack{};
     std::unique_ptr<Module> mod{};
 
+    /// The function we’re currently inside of.
+    FuncDecl* curr_func;
+
 public:
     static std::unique_ptr<Module> Parse(Context* context, File& file);
 
@@ -53,10 +56,7 @@ private:
         }
     };
 
-    Parser(Context* context, File* file)
-        : Lexer(context, file) {
-        mod = std::make_unique<Module>(file);
-    }
+    Parser(Context* context, File* file) : Lexer(context, file) { }
 
     /// Check if we’re at one of a set of tokens.
     [[nodiscard]] auto At(auto... tks) { return ((tok.kind == tks) or ...); }
@@ -90,21 +90,25 @@ private:
     /// Issue an error at the location of the current token.
     using Lexer::Error;
 
+    /// Get the global scope.
+    auto GlobalScope() -> Scope* { return scope_stack.front(); }
+
     /// Check if a token kind may start an expression.
     bool MayStartAnExpression(Tk kind);
 
     auto ParseBlock() -> Result<BlockExpr*>;
     auto ParseCallExpr(Expr* callee) -> Result<CallExpr*>;
-    auto ParseDecl(std::string ident, Location location) -> ExprResult;
+    auto ParseDecl() -> Result<ObjectDecl*>;
     auto ParseDeclRest(std::string ident, Location location) -> ExprResult;
     auto ParseExpr(isz current_precedence = 0) -> ExprResult;
     auto ParseExprInNewScope() -> ExprResult;
+    auto ParseForExpr() -> Result<ForExpr*>;
     auto ParseFunctionAttributes() -> Result<std::vector<Attribute>>;
     auto ParseFunctionBody(Type* function_type, std::vector<VarDecl*>& param_decls, std::span<Attribute> attribs) -> Result<BlockExpr*>;
     auto ParseIdentExpr() -> Result<NamedRefExpr*>;
     auto ParseIfExpr() -> Result<IfExpr*>;
     auto ParseParamDecl() -> Result<FuncTypeParam>;
-    auto ParsePreamble() -> Result<void>;
+    auto ParsePreamble(File& f) -> Result<void>;
     auto ParseStructMember() -> Result<StructMember>;
     void ParseTopLevel();
     auto ParseType() -> Result<Type*>;

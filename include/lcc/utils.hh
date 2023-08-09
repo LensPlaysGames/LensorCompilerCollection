@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fmt/color.h>
 #include <fmt/format.h>
+#include <functional>
 #include <memory>
 #include <numeric>
 #include <optional>

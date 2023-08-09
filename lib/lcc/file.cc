@@ -1,5 +1,5 @@
 #include <lcc/context.hh>
-#include <lcc/detail/defer.hh>
+#include <lcc/utils/macros.hh>
 #include <lcc/file.hh>
 #include <lcc/diags.hh>
 #include <random>

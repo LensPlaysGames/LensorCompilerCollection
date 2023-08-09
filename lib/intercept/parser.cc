@@ -16,7 +16,7 @@ auto lcc::intercept::Parser::Parse(Context* context, File& file) -> std::unique_
     Parser parser(context, &file);
 
     /// Parse preamble. This also creates the module.
-    if (not parser.ParsePreamble()) return {};
+    if (not parser.ParsePreamble(file)) return {};
 
     /// Parse file.
     parser.ParseTopLevel();
@@ -25,7 +25,7 @@ auto lcc::intercept::Parser::Parse(Context* context, File& file) -> std::unique_
     return context->has_error() ? std::unique_ptr<Module>{} : std::move(parser.mod);
 }
 
-/// <expr-block> ::= "{" { <expression> } "}"
+/// <expr-block> ::= "{" { <expr> } "}"
 auto lcc::intercept::Parser::ParseBlock() -> Result<BlockExpr*> {
     ScopeRAII sc{this};
     auto loc = tok.location;
@@ -44,7 +44,7 @@ auto lcc::intercept::Parser::ParseBlock() -> Result<BlockExpr*> {
     return new (*mod) BlockExpr(std::move(exprs), loc);
 }
 
-/// <expr-call> ::= <expression> "(" { <expression> [ "," ] } ")"
+/// <expr-call> ::= <expr> "(" { <expr> [ "," ] } ")"
 auto lcc::intercept::Parser::ParseCallExpr(Expr* callee) -> Result<CallExpr*> {
     /// Yeet "(".
     auto loc = tok.location;
@@ -64,9 +64,16 @@ auto lcc::intercept::Parser::ParseCallExpr(Expr* callee) -> Result<CallExpr*> {
 }
 
 /// See grammar.bnf for a list of productions handled by this rule.
-/// <expression> ::= ...
+/// <expr> ::= ...
 auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
     auto lhs = ExprResult::Null();
+
+    /// Export a declaration.
+    const auto Export = [&](ObjectDecl* decl) -> Result<ObjectDecl*> {
+        decl->linkage(decl->linkage() == Linkage::Imported ? Linkage::Reexported : Linkage::Exported);
+        mod->add_export(decl);
+        return decl;
+    };
 
     /// See below.
     const auto start_token = tok.kind;
@@ -83,7 +90,115 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             NextToken();
             break;
 
-        /// TODO(Sirraide): Left off here.
+        /// Exported declaration.
+        case Tk::Export: {
+            if (CurrScope() != GlobalScope())
+                return Error("Exported declarations are only allowed at the top level");
+
+            /// Parse and create the decl.
+            NextToken();
+            lhs = ParseDecl() >>= Export;
+        } break;
+
+        /// Expression that starts with an identifier.
+        case Tk::Ident: lhs = ParseIdentExpr(); break;
+
+        /// Builtin types.
+        case Tk::ArbitraryInt:
+        case Tk::Bool:
+        case Tk::Byte:
+        case Tk::IntegerKw:
+        case Tk::Void:
+            lhs = ParseType() >>= bind ParseTypeExpression;
+            break;
+
+        /// Better error message for this.
+        case Tk::Else: return Error("Unexpected 'else'. Did you forget an 'if' somewhere?");
+
+        /// Control expressions.
+        case Tk::If: lhs = ParseIfExpr(); break;
+        case Tk::For: lhs = ParseForExpr(); break;
+        case Tk::While: lhs = ParseWhileExpr(); break;
+
+        /// Return expression.
+        case Tk::Return: {
+            auto loc = tok.location;
+            NextToken();
+
+            /// If there is an expression, parse it; otherwise,
+            /// this return expression has no operand.
+            auto value = ExprResult::Null();
+            if (AtStartOfExpression()) {
+                value = ParseExpr();
+                if (not value) return value.diag();
+                loc = {loc, value.value()->location()};
+            }
+
+            lhs = new (*mod) ReturnExpr(value.value(), loc);
+        } break;
+
+        /// Block expression.
+        case Tk::LBrace: lhs = ParseBlock(); break;
+
+        /// Integer literal.
+        case Tk::Number:
+            lhs = new (*mod) IntegerLiteral(tok.integer_value, tok.location);
+            NextToken();
+            break;
+
+        /// String literal.
+        case Tk::String:
+            lhs = new (*mod) StringLiteral(*mod, tok.text, tok.location);
+            NextToken();
+            break;
+
+        /// Compound literal.
+        case Tk::LBrack: {
+            std::vector<Expr*> elements;
+            NextToken(); /// Yeet "[".
+
+            /// Parse the elements.
+            while (not At(Tk::RBrack, Tk::Eof)) {
+                auto element = ParseExpr();
+                if (not element) return element.diag();
+                elements.push_back(element.value());
+                Consume(Tk::Comma);
+            }
+
+            /// Yeet "]".
+            if (not Consume(Tk::RBrack)) return Error("Expected ]");
+            lhs = new (*mod) CompoundLiteral(std::move(elements), tok.location);
+        } break;
+
+        /// Parenthesised expression or type.
+        ///
+        /// FIXME: We should allow types in parentheses if that is at
+        ///        all possible. Come back to this once we know how to
+        ///        handle the Tk::At case.
+        case Tk::LParen: {
+            NextToken();
+            lhs = ParseExpr();
+            if (not lhs) return lhs.diag();
+            if (not Consume(Tk::RParen)) return Error("Expected )");
+        } break;
+
+        /// Ambiguous situation:
+        ///  a := @foo()
+        ///        ^
+        /// Possible productions:
+        ///   1. foo is a type, this is a lambda
+        ///   2. foo is a function; this is a call+dereference.
+        ///
+        /// Parentheses do not help:
+        ///  a := @(foo())
+        ///         ^
+        /// Possible productions:
+        ///   1. foo is a type, this is a function pointer type.
+        ///   2. foo is a function, this is a call+parens+dereference.
+        ///
+        /// TODO: Revisit this case once we know what expressions can
+        ///       start with types.
+        case Tk::At: LCC_ASSERT(false, "TODO");
     }
 
     /// Some places in the grammar are ambiguous and require us to
@@ -97,6 +212,16 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         "Add {} to lcc::intercept::Parser::MayStartAnExpression()",
         ToString(start_token)
     );
+
+    /// If the LHS is a diag, return.
+    if (not lhs) return lhs.diag();
+
+    /// LHS must not be null if we get here.
+    LCC_ASSERT(
+        lhs.value(),
+        "Someone forgot to assign to `lhs` when parsing expr starting with {}",
+        ToString(start_token)
+    );
 }
 
 auto lcc::intercept::Parser::ParseExprInNewScope() -> ExprResult {
@@ -104,7 +229,26 @@ auto lcc::intercept::Parser::ParseExprInNewScope() -> ExprResult {
     return ParseExpr();
 }
 
-/// <expr-if> ::= IF <expression> <expression> [ ELSE <expression> ]
+/// <expr-for> ::= FOR <expr> [ "," ] <expr> [ "," ] <expr> <expr>
+auto lcc::intercept::Parser::ParseForExpr() -> Result<ForExpr*> {
+    auto loc = tok.location;
+    LCC_ASSERT(Consume(Tk::For), "ParseForExpr called while not at 'for'");
+
+    /// Parse init, cond, increment, and body.
+    ScopeRAII sc{this};
+    auto init = ParseExpr();
+    Consume(Tk::Comma);
+    auto cond = ParseExpr();
+    Consume(Tk::Comma);
+    auto increment = ParseExpr();
+    auto body = ParseExpr();
+
+    /// Check for errors and create the expression.
+    if (IsError(init, cond, increment, body)) return Diag();
+    return new (*mod) ForExpr(*init, *cond, *increment, *body, loc);
+}
+
+/// <expr-if> ::= IF <expr> <expr> [ ELSE <expr> ]
 auto lcc::intercept::Parser::ParseIfExpr() -> Result<IfExpr*> {
     /// Yeet "if".
     auto loc = tok.location;
@@ -114,19 +258,24 @@ auto lcc::intercept::Parser::ParseIfExpr() -> Result<IfExpr*> {
     auto cond = ParseExpr();
     auto then = ParseExprInNewScope();
     auto else_ = ExprResult::Null();
-    if (Consume(Tk::Else)) else_ = ParseIfExpr();
+    if (Consume(Tk::Else)) else_ = ParseExpr();
     if (IsError(cond, then, else_)) return Diag();
     return new (*mod) IfExpr(cond.value(), then.value(), else_.value(), loc);
 }
 
 /// <preamble> ::= [ <module-declaration> ] { <import-declaration> | ";" }
-auto lcc::intercept::Parser::ParsePreamble() -> Result<void> {
-    /// Parse module name.
+auto lcc::intercept::Parser::ParsePreamble(File& f) -> Result<void> {
+    /// Parse module name and create the module.
     if (At(Tk::Ident) and tok.text == "module" and not tok.artificial) {
         NextToken(); /// Yeet "module".
         if (not At(Tk::Ident)) return Error("Expected module name");
-        mod->set_logical_module(tok.text);
+        mod = std::make_unique<Module>(&f, tok.text, true);
         NextToken(); /// Yeet module name.
+    }
+
+    /// Create an executable module instead.
+    else {
+        mod = std::make_unique<Module>(&f, "", false);
     }
 
     DiscardSemicolons();
@@ -145,8 +294,13 @@ auto lcc::intercept::Parser::ParsePreamble() -> Result<void> {
     return {};
 }
 
-/// <file> ::= <preamble> { <expression> | ";" }
+/// <file> ::= <preamble> { <expr> | ";" }
 void lcc::intercept::Parser::ParseTopLevel() {
+    /// Set up the rest of the parser state.
+    curr_func = mod->top_level_func();
+    scope_stack.push_back(new (*mod) Scope(nullptr));
+
+    /// Parse the file.
     for (;;) {
         DiscardSemicolons();
 
@@ -155,14 +309,14 @@ void lcc::intercept::Parser::ParseTopLevel() {
 
         /// Parse a top-level expression.
         auto expr = ParseExpr();
-        if (expr) mod->add_top_level_expr(expr);
+        if (expr) mod->add_top_level_expr(expr.value());
 
         /// Synchronise on semicolons and braces in case of an error.
         else Synchronise();
     }
 }
 
-/// <expr-while> ::= WHILE <expression> <expression>
+/// <expr-while> ::= WHILE <expr> <expr>
 auto lcc::intercept::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
     /// Yeet "while".
     auto loc = tok.location;

@@ -1,5 +1,5 @@
 /// Top-level rule.
-<file> ::= <preamble> { <expression> | ";" }
+<file> ::= <preamble> { <expr> | ";" }
 
 <preamble> ::= [ <module-declaration> ] { <import-declaration> | ";" }
 
@@ -7,53 +7,58 @@
 <import-declaration> ::= "import" IDENTIFIER
 
 /// Expression.
-<expression>     ::= <expr-decl>
-                   | <expr-if>
-                   | <expr-for>
-                   | <expr-while>
-                   | <expr-block>
-                   | <expr-lambda>
-                   | <expr-call>
-                   | <expr-cast>
-                   | <expr-subs>
-                   | <expr-paren>
-                   | <expr-prefix>
-                   | <expr-binary>
-                   | <expr-primary>
+<expr>     ::= <expr-decl>
+             | <expr-if>
+             | <expr-for>
+             | <expr-while>
+             | <expr-block>
+             | <expr-lambda>
+             | <expr-call>
+             | <expr-cast>
+             | <expr-subs>
+             | <expr-paren>
+             | <expr-return>
+             | <expr-literal>
+             | <expr-binary>
+             | <expr-prefix>
+             | <expr-primary>
+             | EXPR
 
 /// Declarations.
 <expr-decl>      ::= <decl-start> <decl-rest>
 <decl-start>     ::= [ EXPORT ] IDENTIFIER ":"
 <decl-rest>      ::= <type-function> <function-body>
-                   | <type> [ "=" <expression> ]
+                   | <type> [ "=" <expr> ]
                    | EXT <type-function>
 
 /// Other expressions.
-<expr-if>        ::= IF <expression> <expression> [ ELSE <expression> ]
-<expr-while>     ::= WHILE <expression> <expression>
-<expr-for>       ::= FOR <expression> [ "," ] <expression> [ "," ] <expression> <expression>
-<expr-block>     ::= "{" { <expression> } "}"
+<expr-if>        ::= IF <expr> <expr> [ ELSE <expr> ]
+<expr-while>     ::= WHILE <expr> <expr>
+<expr-for>       ::= FOR <expr> [ "," ] <expr> [ "," ] <expr> <expr>
+<expr-block>     ::= "{" { <expr> } "}"
 <expr-lambda>    ::= <type-function> <function-body>
-<expr-call>      ::= <expression> "(" { <expression> [ "," ] } ")"
-<expr-cast>      ::= <expression> AS <type>
-<expr-subs>      ::= <expression> "[" <expression> "]"
-<expr-paren>     ::= "(" <expression> ")"
-<expr-prefix>    ::= <prefix> <expression>
-<expr-binary>    ::= <expression> <binary> <expression>
+<expr-call>      ::= <expr> "(" { <expr> [ "," ] } ")"
+<expr-cast>      ::= <expr> AS <type>
+<expr-subs>      ::= <expr> "[" <expr> "]"
+<expr-paren>     ::= "(" <expr> ")"
+<expr-return>    ::= RETURN [ <expr> ]
+<expr-literal>   ::= "[" { <expr> [ "," ] } "]"
+<expr-prefix>    ::= <prefix> <expr>
+<expr-binary>    ::= <expr> <binary> <expr>
 <expr-primary>   ::= NUMBER | IDENTIFIER
 
 /// Types.
 <type>           ::= <type-base> | <type-pointer> | <type-derived> | <type-struct>
 <type-pointer>   ::= "@" { "@" } ( IDENTIFIER | "(" <type> ")" )
-<type-base>      ::= IDENTIFIER | INTEGER | BYTE | VOID | ARBITRARY_INT
+<type-base>      ::= IDENTIFIER | INTEGER | BYTE | BOOL | VOID | ARBITRARY_INT
 <type-struct>    ::= TYPE <struct-body>
 <type-derived>   ::= <type-array> | <type-function>
-<type-array>     ::= <type> "[" <expression> "]"
+<type-array>     ::= <type> "[" <expr> "]"
 <type-function>  ::= <type> "(" { <param-decl> [ "," ]  } ")" <function-attrs>
 <param-decl>     ::= <decl-start> <type>
 <struct-body>    ::= "{" { <param-decl> } "}"
 
 /// Miscellaneous.
-<function-body>  ::= "=" <expression> | <expr-block>
+<function-body>  ::= "=" <expr> | <expr-block>
 <binary>         ::= /// All binary operators
 <prefix>         ::= /// All unary prefix operators

@@ -6,9 +6,19 @@
 namespace lcc {
 /// A source range in a file.
 struct Location {
-    u32 pos;
-    u16 len;
-    u16 file_id;
+    u32 pos{};
+    u16 len{};
+    u16 file_id{};
+
+    Location() = default;
+
+    /// Create a new location that spans two locations.
+    Location(Location a, Location b) {
+        if (a.file_id != b.file_id) return;
+        if (not a.is_valid() or not b.is_valid()) return;
+        pos = std::min<u32>(a.pos, b.pos);
+        len = u16(std::max<u32>(a.pos + a.len, b.pos + b.len) - pos);
+    }
 
     bool is_valid() const { return len != 0; }
 };
