@@ -11,7 +11,7 @@ static const char* TokenKindToString(TokenKind kind) {
         case TokenKind::If: return "if";
         case TokenKind::Else: return "else";
         case TokenKind::While: return "while";
-        case TokenKind::Ext: return "ext";
+        case TokenKind::Extern: return "ext";
         case TokenKind::As: return "as";
         case TokenKind::Export: return "export";
         case TokenKind::Type: return "type";
