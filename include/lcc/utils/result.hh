@@ -18,10 +18,14 @@ class [[nodiscard]] Result {
     std::variant<ValueType, Diag> data;
 
     template <typename T>
-    struct make_result { using type = Result<T>; };
+    struct make_result {
+        using type = Result<T>;
+    };
 
     template <typename T>
-    struct make_result<Result<T>> { using type = Result<T>; };
+    struct make_result<Result<T>> {
+        using type = Result<T>;
+    };
 
     template <typename T>
     using make_result_t = typename make_result<T>::type;
@@ -112,16 +116,17 @@ public:
     ///
     /// Note that if e.g. \c ParseExpr in this example is a member function, then
     /// this won’t work because you need to bind it to the \c this pointer first,
-    /// but you can check \c <intercept/parser.cc> for an example of how to get
-    /// around that with a macro. Just search for \c >>= \c bind in that file.
+    /// but you can use the `LCC_BIND` macro for that. See also the definition of
+    /// that macro for more information.
     ///
     /// \param cb A callable that takes in a \c ValueType& and returns a \c Result.
     /// \return A diagnostic if this holds a diagnostic, and the result of invoking
     ///     \c cb with the value otherwise.
     template <typename Callable>
     [[nodiscard]] auto operator>>=(Callable&& cb) -> make_result_t<std::invoke_result_t<Callable, ValueType&>> {
+        using ResultType = make_result_t<std::invoke_result_t<Callable, ValueType&>>;
         if (is_diag()) return diag();
-        return std::invoke(std::forward<Callable>(cb), value());
+        return ResultType{std::invoke(std::forward<Callable>(cb), value())};
     }
 
     /// Create an empty pointer result.
@@ -140,5 +145,24 @@ bool IsError(Result<ValueTypes>&... results) {
 }
 
 } // namespace lcc
+
+/// Macro for binding a member function to the \c this pointer.
+///
+/// See the documentation for \c Result::operator>>= for more information.
+///
+/// It is recommended to put `#define bind LCC_BIND` at the top of any
+/// implementation files to reduce visual clutter. However, do NOT put that
+/// in header files because `bind` is too common of a word and could easily
+/// break something.
+///
+/// Cute trick for monad binding.
+#define LCC_BIND *this->*&
+template <typename ClassType>
+requires std::is_class_v<ClassType>
+auto operator->*(ClassType& p, auto member_function) {
+    return [p = std::addressof(p), member_function](auto&&... args) {
+        return std::invoke(member_function, p, std::forward<decltype(args)>(args)...);
+    };
+}
 
 #endif // LCC_RESULT_HH
