@@ -124,6 +124,9 @@ auto as(auto&& value) { return detail::cast_impl<true, Target>(value); }
 /// \param value The value to check.
 /// \return \c true if the dynamic type of \c value is one of the
 ///         types in \c Types, \c false otherwise.
+///
+/// \see as()
+/// \see cast()
 template <typename... Types>
 bool is(auto&& value) { return (bool(detail::cast_impl<false, Types>(value)) or ...); }
 } // namespace lcc
