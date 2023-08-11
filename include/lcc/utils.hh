@@ -2,6 +2,7 @@
 #define LCC_UTILS_HH
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <deque>
@@ -10,10 +11,12 @@
 #include <fmt/format.h>
 #include <functional>
 #include <memory>
+#include <new>
 #include <numeric>
 #include <optional>
 #include <ranges>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -73,10 +76,44 @@ constexpr std::underlying_type_t<t> operator+(t e) {
 }
 } // namespace lcc
 
-/// Forward decls.
+/// Internal stuff.
 namespace lcc::detail {
 [[noreturn]] void AssertFail(std::string&& msg);
+
+/// Hash for string maps.
+struct StringHash {
+    using is_transparent = void;
+
+    [[nodiscard]] usz operator()(std::string_view txt) const { return std::hash<std::string_view>{}(txt); }
+    [[nodiscard]] usz operator()(const std::string& txt) const { return std::hash<std::string>{}(txt); }
+
+    template <typename Type>
+    requires requires (const Type& t) {
+        { t.size() } -> std::convertible_to<usz>;
+        { t.data() } -> std::convertible_to<const char*>;
+    }
+    [[nodiscard]] usz operator()(const Type& txt) const {
+        return std::hash<std::string_view>{}(std::string_view{txt.data(), txt.size()});
+    }
+};
 } // namespace lcc::detail
+
+namespace lcc {
+/// Map with heterogeneous lookup.
+///
+/// Use this whenever you need a \c std::unordered_map from strings
+/// to some other type. The reason for this is that, by default,
+/// \c std::unordered_map will require you to create a \c std::string
+/// to look up a value; this is annoying if you only have a
+/// \c std::string_view, because you have to create a copy just to
+/// search for something.
+///
+/// There is an API to fix that, but it’s not exactly obvious, so this
+/// takes care of that. This map type allows you to use pretty much
+/// anything that supports \c data() and \c size() accessors as a key.
+template <typename Type>
+using StringMap = std::unordered_map<std::string, Type, detail::StringHash, std::equal_to<>>;
+}
 
 /// More rarely used functions go here so as to not pollute the lcc namespace too much.
 namespace lcc::utils {
