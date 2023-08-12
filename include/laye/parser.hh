@@ -15,6 +15,9 @@ class Parser {
     std::vector<LayeToken> look_ahead{};
     std::vector<Scope*> scope_stack{};
 
+    int speculative_parse_stack = 0;
+    usz speculative_look_ahead = 0;
+
 public:
     static std::unique_ptr<Module> Parse(Context* context, File* file);
 
@@ -27,7 +30,7 @@ private:
         Scope* scope;
 
         ScopeRAII(Parser* parser)
-            : parser(parser), scope(new(*parser->module) Scope(parser->CurrScope())) {
+            : parser(parser), scope(new(*parser) Scope(parser->CurrScope())) {
             parser->scope_stack.push_back(scope);
         }
 
@@ -52,44 +55,51 @@ private:
         }
     };
 
-    // NOTE(local): could maybe implement infinite speculative parsing
-    //  through something like the following?
-    //
-    // bool is_speculative = false;
-    // usz speculative_peek_index = 0;
-    //
-    // where we could even remove `is_speculative` in favor of just checking
-    //  if `speculative_peek_index != 0`.
-    // In speculative parsing mode, whenever a new token is requested, instead
-    //  `PeekToken` is called with a successive value for `speculative_peek_index`
-    //  each time, and the speculative parse must be committed to clear the peek queue
-    //  and return to normal parsing.
-    // This would allow us to *try* to parse something and roll it back if it fails
-    //  without having to actually implement roll-back at a lexer level or by
-    //  altering the lexer state manually.
-    //
-    // Usage could look like the following
-    //
-    // EnterSpeculativeMode(); // asserts that we aren't already in speculative mode
-    // auto maybeTypeResult = ParseType();
-    // if (maybeTypeResult /* and At(TokenKind::Ident) */) {
-    //   CommittSpeculativeMode(); // flushes all peeked tokens, sets the parser to the
-    //                            //  next real token
-    //   // continue parsing from here
-    // } else {
-    //   RollbackSpeculativeParse();
-    //   // continue parsing from somewhere else
-    // }
-    //
-    // where that API can be wrapped in RAII type to enable easy scoping if desired.
-    //
-    // The downside to this is still that allocated types need to be freed properly,
-    //  if memory bloat is a concern at least. Sytax types are allocated and stored
-    //  within the syntax module to be disposed of at a later time, but this would
-    //  require us to think about ahead-of-time freeing of teh syntax tree.
-    //
-    // So basically I don't think this is worth doing unless I absolutely can't
-    //  manage to get unambiguous syntax nodes resolve in sema to work.
+    /// RAII helper for pushing and popping speculative parse states.
+    struct SpeculativeRAII {
+        Parser* parser;
+        bool active;
+        LayeToken tok{};
+
+        SpeculativeRAII(Parser* parser)
+            : parser(parser), active(true) {
+            if (parser->speculative_parse_stack == 0)
+                tok = parser->tok;
+            parser->speculative_parse_stack++;
+        }
+
+        SpeculativeRAII(const SpeculativeRAII&) = delete;
+        SpeculativeRAII operator=(const SpeculativeRAII&) = delete;
+
+        SpeculativeRAII(SpeculativeRAII&& other) noexcept
+            : parser(other.parser), active(other.active), tok(other.tok) {
+            other.active = false;
+        }
+
+        SpeculativeRAII& operator=(SpeculativeRAII&& other) noexcept {
+            if (this == &other) return *this;
+            parser = other.parser;
+            active = other.active;
+            tok = other.tok;
+            other.active = false;
+            return *this;
+        }
+
+        ~SpeculativeRAII() {
+            if (active) {
+                LCC_ASSERT(parser->speculative_parse_stack > 0);
+                parser->speculative_parse_stack--;
+                if (parser->speculative_parse_stack <= 0) {
+                    LCC_ASSERT(tok.kind != TokenKind::Invalid);
+                    parser->tok = tok;
+                    parser->speculative_look_ahead = 0;
+                }
+            }
+        }
+    };
+
+    auto EnterScope() { return ScopeRAII(this); }
+    auto EnterSpeculativeParse() { return SpeculativeRAII(this); }
 
     Parser(Context* context, File* file, Module* module)
         : lexer(Lexer{context, file}), context(context), module(module) {}
@@ -97,14 +107,42 @@ private:
     /// Get the current scope.
     auto CurrScope() -> Scope* { return scope_stack.back(); }
 
+    /// True if any speculative parse state is enabled, false otherwise.
+    bool IsInSpeculativeParse() const { return speculative_parse_stack > 0; }
+
+    auto PeekToken(usz ahead = 1) {
+        LCC_ASSERT(ahead >= 1, "Peek look-ahead indexing starts at 1.");
+        while (look_ahead.size() < ahead) {
+            LayeToken aheadToken{};
+            lexer.ReadToken(aheadToken);
+            look_ahead.push_back(aheadToken);
+        }
+
+        return look_ahead[ahead - 1];
+    }
+
     /// Read the next token into tok.
     auto NextToken() {
+        if (IsInSpeculativeParse()) {
+            speculative_look_ahead++;
+            return PeekToken(speculative_look_ahead);
+        }
+
         if (not look_ahead.empty()) {
             tok = look_ahead[0];
             // pop from the front of the vector
             look_ahead.erase(look_ahead.begin());
         } else lexer.ReadToken(tok);
         return tok;
+    }
+
+    bool IsAtEof() const {
+        if (IsInSpeculativeParse()) {
+            LCC_ASSERT(speculative_look_ahead <= look_ahead.size());
+            return look_ahead[speculative_look_ahead - 1].kind == TokenKind::Eof;
+        }
+
+        return tok.kind == TokenKind::Eof;
     }
 
     /// Check if we’re at one of a set of tokens.
@@ -117,17 +155,6 @@ private:
             return true;
         }
         return false;
-    }
-
-    auto PeekToken(usz ahead = 1) {
-        LCC_ASSERT(ahead >= 1, "Peek look-ahead indexing starts at 1.");
-        while (look_ahead.size() < ahead) {
-            LayeToken aheadToken{};
-            lexer.ReadToken(aheadToken);
-            look_ahead.push_back(aheadToken);
-        }
-
-        return look_ahead[ahead - 1];
     }
 
     /// Synchronise on semicolons and braces.
@@ -151,7 +178,15 @@ private:
         return Diag::Error(context, where, fmt, std::forward<Args>(args)...);
     }
 
+    Type* TryParseType(bool allocate);
+    bool SpeculativeParseType() { return TryParseType(false); }
+    Type* ParseType() { return TryParseType(true); }
+
     static isz BinaryOperatorPrecedence(TokenKind tokenKind);
+
+    friend Scope;
+    friend Statement;
+    friend Expr;
 };
 } // namespace lcc::laye
 
