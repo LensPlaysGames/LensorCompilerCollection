@@ -30,6 +30,11 @@ protected:
         return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
     }
 
+    std::string GetSubstring(u32 startOffset, u32 endOffset) {
+        u32 count = endOffset - startOffset;
+        return std::string(file->data() + startOffset, count);
+    }
+
     static bool IsSpace(char c) { return c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == '\f' or c == '\v'; }
     static bool IsAlpha(char c) { return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z'); }
     static bool IsDigit(char c) { return c >= '0' and c <= '9'; }

@@ -13,6 +13,15 @@ public:
         : syntax::Lexer<LayeToken>(context, file) { }
     
     void ReadToken(LayeToken& token);
+
+    /// Issue an error.
+    template <typename... Args>
+    Diag Error(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Error(context, where, fmt, std::forward<Args>(args)...);
+    }
+
+    static bool IsIdentStart(char c) { return IsAlphaNumeric(c) or c == '_'; }
+    static bool IsIdentContinue(char c) { return IsAlphaNumeric(c) or c == '_'; }
 };
 }
 
