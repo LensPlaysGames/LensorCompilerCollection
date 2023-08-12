@@ -60,6 +60,7 @@ protected:
     void NextToken();
 
     static bool IsIdentStart(char c) { return IsAlpha(c) or c == '_'; }
+    static bool IsIdentContinue(char c) { return IsAlphaNumeric(c) or c == '_'; }
 };
 } // namespace lcc::intercept
 

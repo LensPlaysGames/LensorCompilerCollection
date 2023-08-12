@@ -1,6 +1,27 @@
+#include "intercept/parser.hh"
+
+#include <cstdlib>
 #include <intercept/lexer.hh>
 
 namespace lcc::intercept {
+/// All keywords.
+const struct {
+    std::string kw;
+    TokenKind kind;
+} keywords[12] = {
+    {"if", TokenKind::If},
+    {"else", TokenKind::Else},
+    {"while", TokenKind::While},
+    {"ext", TokenKind::Extern},
+    {"as", TokenKind::As},
+    {"type", TokenKind::Type},
+    {"void", TokenKind::Void},
+    {"byte", TokenKind::Byte},
+    {"integer", TokenKind::IntegerKw},
+    {"for", TokenKind::For},
+    {"return", TokenKind::Return},
+    {"export", TokenKind::Export}};
+
 static const char* TokenKindToString(TokenKind kind) {
     switch (kind) {
         default: return "invalid";
@@ -401,6 +422,128 @@ void Lexer::NextToken() {
         } break;
     }
 
-    tok.location.len = (u16)(CurrentOffset() - tok.location.pos);
+    tok.location.len = (u16) (CurrentOffset() - tok.location.pos);
+}
+
+void Lexer::NextIdentifier() {
+    auto startOffset = CurrentOffset();
+
+    NextChar();
+    while (IsIdentContinue(lastc))
+        NextChar();
+
+    tok.kind = TokenKind::Ident;
+    tok.text = GetSubstring(startOffset, CurrentOffset());
+}
+
+void Lexer::HandleIdentifier() {
+    if (!raw_mode && !tok.artificial && tok.text == "macro") {
+        NextMacro();
+        return;
+    }
+
+    auto found_macro = std::find_if(
+        macros.begin(),
+        macros.end(),
+        [&](const auto& m) { return m.name == tok.text; }
+    );
+
+    if (found_macro != macros.end()) {
+        ExpandMacro(&*found_macro);
+        return;
+    }
+
+    for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
+        if (keywords[i].kw == tok.text) {
+            tok.kind = keywords[i].kind;
+            return;
+        }
+    }
+
+    // Try and parse a number just after encountering `s` or `u` at the
+    // beginning of an identifier.
+    if (tok.text.size() > 1 && (tok.text[0] == 's' || tok.text[0] == 'i' || tok.text[0] == 'u') && IsDigit(tok.text[1])) {
+        const char* cstr = tok.text.c_str();
+
+        /// Convert the number.
+        char* end;
+        errno = 0;
+        tok.integer_value = (u64) std::strtoull(cstr + 1, &end, 10);
+        if (errno == ERANGE) Error("Bit width of integer is too large.");
+        // If the identifier is something like `s64iam`, it's simply an identifier.
+        if (end != cstr + tok.text.size()) return;
+
+        tok.kind = TokenKind::ArbitraryInt;
+    }
+}
+
+void Lexer::ExpandMacro(Macro* m) {
+    MacroExpansion expansion = {
+        (usz) (m - macros.data()),
+    };
+    expansion.location.pos = tok.location.pos;
+
+    raw_mode = true;
+
+    for (const auto& param_tok : m->parameters) {
+        NextToken();
+
+        if (param_tok.kind == TokenKind::MacroArg) {
+            switch ((MacroArgumentSelector) param_tok.integer_value) {
+                case MacroArgumentSelector::Token: {
+                    NamedToken bound_arg = {
+                        param_tok.text,
+                        tok,
+                    };
+                    expansion.bound_arguments.push_back(bound_arg);
+                } break;
+
+                case MacroArgumentSelector::ExprOnce:
+                case MacroArgumentSelector::Expr: {
+                    u32 beg = tok.location.pos;
+
+                    auto parser = static_cast<Parser*>(this);
+                    auto expr = parser->ParseExpr();
+                    if (!expr) break;
+
+                    Location location;
+                    location.pos = beg;
+                    location.len = tok.location.len;
+                    location.file_id = tok.location.file_id;
+
+                    InterceptToken expr_token;
+                    expr_token.kind = TokenKind::Expression;
+                    expr_token.location = location;
+                    expr_token.expression = *expr;
+                    expr_token.eval_once = (MacroArgumentSelector) param_tok.integer_value == MacroArgumentSelector::ExprOnce;
+
+                    NamedToken bound_arg = {
+                        param_tok.text,
+                        expr_token,
+                    };
+
+                    expansion.bound_arguments.push_back(bound_arg);
+                } break;
+
+                default: Diag::ICE("Unhandled macro argument selector kind");
+            }
+
+            continue;
+        }
+
+        // if (!token_equals(&p->tok, param_tok))
+        //     ERR("Ill-formed macro invocation");
+    }
+
+    auto end_pos = tok.location.pos + tok.location.len;
+    expansion.location.len = (u16) (end_pos - expansion.location.pos);
+
+    for (usz i = 0; i < m->gensym_count; ++i)
+        expansion.gensyms.push_back(gensym(gensym_counter++));
+
+    macro_expansion_stack.push_back(expansion);
+    raw_mode = false;
+    
+    NextToken();
 }
 } // namespace lcc::intercept

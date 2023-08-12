@@ -126,6 +126,8 @@ private:
 
     static void ApplyFunctionAttributes(Type* func, std::span<Attribute> attribs);
     static void ApplyStructAttributes(Type* func, std::span<Attribute> attribs);
+
+    friend Lexer;
 };
 } // namespace lcc::intercept
 
