@@ -23,6 +23,8 @@ public:
     static std::unique_ptr<Module> Parse(Context* context, File& file);
 
 private:
+    static constexpr usz PrefixOperatorPrecedence = 10000;
+
     friend struct ScopeRAII;
 
     /// RAII helper for pushing and popping scopes.
@@ -65,8 +67,8 @@ private:
     bool AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
 
     /// Like At(), but consume the token if it matches.
-    bool Consume(TokenKind tk) {
-        if (At(tk)) {
+    bool Consume(auto ...tks) {
+        if (At(tks...)) {
             NextToken();
             return true;
         }
@@ -97,21 +99,23 @@ private:
     bool MayStartAnExpression(Tk kind);
 
     auto ParseBlock() -> Result<BlockExpr*>;
+    auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;
     auto ParseCallExpr(Expr* callee) -> Result<CallExpr*>;
     auto ParseDecl() -> Result<ObjectDecl*>;
-    auto ParseDeclRest(std::string ident, Location location) -> ExprResult;
+    auto ParseObjectDeclRest(std::string ident, Location location, bool is_extern) -> Result<ObjectDecl*>;
     auto ParseExpr(isz current_precedence = 0) -> ExprResult;
     auto ParseExprInNewScope() -> ExprResult;
     auto ParseForExpr() -> Result<ForExpr*>;
-    auto ParseFunctionAttributes() -> Result<std::vector<Attribute>>;
-    auto ParseFunctionBody(Type* function_type, std::vector<VarDecl*>& param_decls, std::span<Attribute> attribs) -> Result<BlockExpr*>;
-    auto ParseIdentExpr() -> Result<NamedRefExpr*>;
+    auto ParseFunctionAttributes() -> Result<FuncType::Attributes>;
+    auto ParseFunctionBody(bool is_extern) -> Result<Expr*>;
+    auto ParseFunctionSignature(Type* return_type) -> Result<FuncType*>;
+    auto ParseIdentExpr() -> Result<Expr*>;
     auto ParseIfExpr() -> Result<IfExpr*>;
-    auto ParseParamDecl() -> Result<FuncTypeParam>;
+    auto ParseParamDecl() -> Result<FuncTypeParam*>;
     auto ParsePreamble(File& f) -> Result<void>;
-    auto ParseStructMember() -> Result<StructMember>;
+    auto ParseStructType() -> Result<StructType*>;
     void ParseTopLevel();
-    auto ParseType() -> Result<Type*>;
+    auto ParseType(isz current_precedence = 0) -> Result<Type*>;
     auto ParseTypeDerived(Type* baseType) -> Result<Type*>;
     auto ParseTypeExpression(Type* type) -> ExprResult;
     auto ParseWhileExpr() -> Result<WhileExpr*>;
@@ -120,12 +124,6 @@ private:
     void Synchronise();
 
     void EnsureHygenicDeclarationIfWithinMacro(std::string_view ident, Location location);
-
-    static isz BinaryOperatorPrecedence(TokenKind tokenKind);
-    static isz IsRightAssociative(TokenKind tokenKind);
-
-    static void ApplyFunctionAttributes(Type* func, std::span<Attribute> attribs);
-    static void ApplyStructAttributes(Type* func, std::span<Attribute> attribs);
 };
 } // namespace lcc::intercept
 
