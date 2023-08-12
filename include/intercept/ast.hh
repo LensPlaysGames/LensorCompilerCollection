@@ -5,34 +5,33 @@
 #include <lcc/diags.hh>
 #include <lcc/syntax/token.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/result.hh>
 #include <span>
 
-#define INTERCEPT_INTRINSICS(X) \
-    X(Inline)                   \
-    X(Line)                     \
-    X(FileNam)
-
-#define INTERCEPT_FUNC_ATTR(X)  \
-    X(Discardable, discardable) \
-    X(Used, used)
-
-// clang-format off
-// the macros in here get formatted weird with it on
 namespace lcc::intercept {
 enum struct IntrinsicKind {
-#define X(I) I,
-    LCC_INTRINSICS(X)
-    INTERCEPT_INTRINSICS(X)
-#undef X
+    BuiltinDebugtrap,
+    BuiltinFilename,
+    BuiltinInline,
+    BuiltinLine,
+    BuiltinMemCopy,
+    BuiltinMemSet,
+    BuiltinSyscall,
 };
 
 enum struct FuncAttr {
-#define X(I, J) I,
-    LCC_FUNC_ATTR(X)
-    INTERCEPT_FUNC_ATTR(X)
-#undef X
+    Const,
+    Discardable,
+    Flatten,
+    Inline,
+    NoInline,
+    NoMangle,
+    NoOpt,
+    NoReturn,
+    Pure,
+    ReturnsTwice,
+    Used,
 };
-// clang-format on
 
 enum struct TokenKind {
     Invalid,
@@ -106,7 +105,6 @@ enum struct TokenKind {
 auto ToString(TokenKind kind) -> std::string_view;
 
 class Scope;
-class Symbol;
 class Expr;
 class FuncDecl;
 class Type;
@@ -168,14 +166,10 @@ struct Macro {
     usz gensym_count;
 };
 
-class Attribute {
-    int kind;
-    isz integer_value;
-};
-
 class Scope {
     Scope* _parent;
-    std::vector<Symbol*> _symbols;
+    StringMap<Expr*> _symbols;
+    bool is_function_scope = false;
 
 public:
     Scope(Scope* parent) : _parent(parent) {}
@@ -188,74 +182,36 @@ public:
         return ptr;
     }
 
+    /// Declare a symbol in this scope.
+    ///
+    /// If the name doesn’t already exist in this scope, it is
+    /// added. If the name already exists, and the expression
+    /// it is bound to is a function declaration or overload set
+    /// and the \c expr parameter is a function declaration as well,
+    /// the two are merged into one overload set. Otherwise, this
+    /// returns a diagnostic.
+    ///
+    /// \param ctx The LCC context.
+    /// \param name The name of the declared symbol.
+    /// \param expr The expression to bind to the symbol.
+    /// \return The same expression, or an error.
+    auto declare(
+        const Context* ctx,
+        std::string&& name,
+        Expr* expr
+    ) -> Result<Expr*>;
+
+    /// Get the parent scope.
     auto parent() const { return _parent; }
-};
 
-class Symbol {
-public:
-    enum struct Kind {
-        Variable,
-        Function,
-        Type,
-    };
-
-private:
-    const Kind _kind;
-
-    std::string _name;
-    Scope* _scope;
-
-protected:
-    Symbol(Kind kind, std::string name, Scope* scope)
-        : _kind(kind), _name(std::move(name)), _scope(scope) {}
-
-public:
-    Kind kind() const { return _kind; }
-
-    auto name() const -> const std::string& { return _name; }
-    auto scope() const { return _scope; }
-};
-
-class VariableSymbol : public Symbol {
-    Expr* _value;
-
-public:
-    VariableSymbol(std::string name, Scope* scope, Expr* value)
-        : Symbol(Kind::Variable, name, scope), _value(value) {}
-
-    auto value() const { return _value; }
-
-    static bool classof(Symbol* symbol) { return symbol->kind() == Kind::Variable; }
-};
-
-class FunctionSymbol : public Symbol {
-    Expr* _value;
-
-public:
-    FunctionSymbol(std::string name, Scope* scope, Expr* value)
-        : Symbol(Kind::Function, name, scope), _value(value) {}
-
-    auto value() const { return _value; }
-
-    static bool classof(Symbol* symbol) { return symbol->kind() == Kind::Function; }
-};
-
-class TypeSymbol : public Symbol {
-    Type* _type;
-
-public:
-    TypeSymbol(std::string name, Scope* scope, Type* type)
-        : Symbol(Kind::Type, name, scope), _type(type) {}
-
-    auto type() const { return _type; }
-
-    static bool classof(Symbol* symbol) { return symbol->kind() == Kind::Type; }
+    /// Mark this scope as a function scope.
+    void set_function_scope() { is_function_scope = true; }
 };
 
 class Type {
 public:
     enum struct Kind {
-        Primitive,
+        Builtin,
         Named,
         Pointer,
         Reference,
@@ -283,13 +239,12 @@ public:
     auto kind() const { return _kind; }
     auto location() const { return _location; }
 
-    static Type* UnknownType;
-    static Type* VoidType;
-    static Type* BoolType;
-    static Type* ByteType;
-    static Type* IntegerType;
-    static Type* CCharType;
-    static Type* CIntType;
+    /// Use these only if there is no location information
+    /// available (e.g. for default initialisers etc.). In
+    /// any other case, prefer to create an instance of a
+    /// BuiltinType instead.
+    static Type* Unknown;
+    static Type* Integer;
 };
 
 struct FuncTypeParam {
@@ -301,30 +256,64 @@ struct FuncTypeParam {
         : name(std::move(name)), type(type), location(location) {}
 };
 
-class PrimitiveType : public Type {
-    usz _size;
-    usz _alignment;
-    std::string_view _name;
-    bool _is_signed;
+/// This only holds a kind.
+///
+/// Builtin types are not singletons because they need to carry
+/// location information. However, the size, alignment, etc of a
+/// primitive type all depend on the target, and there is no point
+/// in storing their names in each of them, so an instance of one
+/// only ever stores its primitive type kind.
+class BuiltinType : public Type {
+public:
+    enum struct BuiltinKind {
+        Bool,
+        Byte,
+        CChar,
+        CInt,
+        Integer,
+        Unknown,
+        Void,
+    };
+
+private:
+    /// Shorten long signatures w/ this.
+    using K = BuiltinKind;
+
+    const BuiltinKind _kind;
+
+    static auto Create(Module* mod, K k, Location l) -> BuiltinType* {
+        return new (*mod) BuiltinType(k, l);
+    }
+
+    BuiltinType(K k, Location location)
+        : Type(Kind::Builtin, location), _kind(k) {}
 
 public:
-    PrimitiveType(Location location, usz size, usz alignment, std::string_view name, bool isSigned)
-        : Type(Kind::Primitive, location), _size(size), _alignment(alignment), _name(name), _is_signed(isSigned) {}
 
-    usz size() const { return _size; }
-    usz alignment() const { return _alignment; }
-    auto name() -> std::string_view const { return _name; }
-    bool is_signed() const { return _is_signed; }
+    /// Get the kind of this builtin.
+    auto builtin_kind() -> BuiltinKind { return _kind; }
 
-    static bool classof(Type* type) { return type->kind() == Kind::Primitive; }
+    bool operator==(const BuiltinType& other) const { return _kind == other._kind; }
+    bool operator==(BuiltinKind k) const { return _kind == k; }
+
+    /// Get instances of primitive types.
+    static auto Bool(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Bool, l); }
+    static auto Byte(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Byte, l); }
+    static auto CChar(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::CChar, l); }
+    static auto CInt(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::CInt, l); }
+    static auto Integer(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Integer, l); }
+    static auto Unknown(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Unknown, l); }
+    static auto Void(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Void, l); }
+
+    static bool classof(Type* type) { return type->kind() == Kind::Builtin; }
 };
 
 class NamedType : public Type {
     std::string _name;
 
 public:
-    NamedType(Location location, std::string name)
-        : Type(Kind::Primitive, location), _name(std::move(name)) {}
+    NamedType(std::string name, Location location)
+        : Type(Kind::Named, location), _name(std::move(name)) {}
 
     auto name() const -> const std::string& { return _name; }
 
@@ -335,8 +324,8 @@ class TypeWithOneElement : public Type {
     Type* _element_type;
 
 protected:
-    TypeWithOneElement(Kind kind, Location location, Type* elementType)
-        : Type(kind, location), _element_type(elementType) {}
+    TypeWithOneElement(Kind kind, Location location, Type* element_type)
+        : Type(kind, location), _element_type(element_type) {}
 
 public:
     auto element_type() const { return _element_type; }
@@ -344,54 +333,68 @@ public:
 
 class PointerType : public TypeWithOneElement {
 public:
-    PointerType(Type* elementType, Location location = {})
-        : TypeWithOneElement(Kind::Primitive, location, elementType) {}
+    PointerType(Type* element_type, Location location = {})
+        : TypeWithOneElement(Kind::Pointer, location, element_type) {}
 
     static bool classof(Type* type) { return type->kind() == Kind::Pointer; }
 };
 
 class ReferenceType : public TypeWithOneElement {
 public:
-    ReferenceType(Location location, Type* elementType)
-        : TypeWithOneElement(Kind::Reference, location, elementType) {}
+    ReferenceType(Type* element_type, Location location)
+        : TypeWithOneElement(Kind::Reference, location, element_type) {}
 
     static bool classof(Type* type) { return type->kind() == Kind::Reference; }
 };
 
 class ArrayType : public TypeWithOneElement {
-    usz _size;
+    Expr* _size;
 
 public:
-    ArrayType(Type* elementType, usz size, Location location = {})
-        : TypeWithOneElement(Kind::Array, location, elementType), _size(size) {}
+    ArrayType(Type* element_type, Expr* size, Location location = {})
+        : TypeWithOneElement(Kind::Array, location, element_type), _size(size) {}
 
-    usz size() const { return _size; }
+    Expr* size() const { return _size; }
 
     static bool classof(Type* type) { return type->kind() == Kind::Array; }
 };
 
 class FuncType : public Type {
+public:
+    /// This should allow us to easily support attributes that
+    /// take arguments once we need those.
+    using Attributes = std::unordered_map<FuncAttr, bool>;
+
+private:
     Type* _return_type;
     std::vector<FuncTypeParam> _params;
-
-#define X(I, J) bool _attr_##J : 1 = false;
-    LCC_FUNC_ATTR(X)
-    INTERCEPT_FUNC_ATTR(X)
-#undef X
+    Attributes _attributes;
 
 public:
-    FuncType(std::vector<FuncTypeParam> params, Type* returnType, Location location)
-        : Type(Kind::Function, location), _return_type(returnType), _params(std::move(params)) {}
+    FuncType(
+        std::vector<FuncTypeParam> params,
+        Type* returnType,
+        Attributes attrs,
+        Location location
+    ) : Type(Kind::Function, location),
+        _return_type(returnType),
+        _params(std::move(params)),
+        _attributes(std::move(attrs)) {}
 
-    auto return_type() const { return _return_type; }
+    /// Query whether this function has an attribute.
+    bool has_attr(FuncAttr attr) const { return _attributes.contains(attr); }
+
+    /// Get the parameters of this function.
     auto params() -> std::span<FuncTypeParam const> const { return _params; }
 
-#define X(I, J)                               \
-    bool is_##J() const { return _attr_##J; } \
-    void set_##J(bool value) { _attr_##J = value; }
-    LCC_FUNC_ATTR(X)
-    INTERCEPT_FUNC_ATTR(X)
-#undef X
+    /// Remove an attribute from this function.
+    void remove_attr(FuncAttr attr) { _attributes.erase(attr); }
+
+    /// Get the return type of this function.
+    auto return_type() const { return _return_type; }
+
+    /// Set an attribute on this function.
+    void set_attr(FuncAttr attr) { _attributes[attr] = true; }
 
     static bool classof(Type* type) { return type->kind() == Kind::Function; }
 };
@@ -409,35 +412,45 @@ struct StructMember {
 };
 
 class StructType : public Type {
-    StructDecl* _structDecl;
+    StructDecl* _struct_decl{};
     std::vector<StructMember*> _members;
 
-    usz _byte_size;
-    usz _alignment;
+    usz _byte_size{};
+    usz _alignment{};
 
 public:
-    StructType(Location location, StructDecl* structDecl, std::vector<StructMember*> members)
-        : Type(Kind::Struct, location), _structDecl(structDecl), _members(std::move(members)) {}
+    StructType(Location location, std::vector<StructMember*> members)
+        : Type(Kind::Struct, location), _members(std::move(members)) {}
 
-    StructDecl* struct_decl() const { return _structDecl; }
-    std::span<StructMember* const> members() { return _members; }
+    usz alignment() const { return _alignment; }
+    void alignment(usz alignment) { _alignment = alignment; }
+
+    /// Associate this type with a declaration.
+    void associate_with_decl(StructDecl* decl) {
+        LCC_ASSERT(not _struct_decl, "Cannot associate a struct type with two struct decls");
+        _struct_decl = decl;
+    }
 
     usz byte_size() const { return _byte_size; }
     void byte_size(usz byteSize) { _byte_size = byteSize; }
 
-    usz alignment() const { return _alignment; }
-    void alignment(usz alignment) { _alignment = alignment; }
+    /// Get the declaration of this type.
+    ///
+    /// If this is an anonymous type, this returns null.
+    auto decl() const -> StructDecl* { return _struct_decl; }
+
+    std::span<StructMember* const> members() { return _members; }
 
     static bool classof(Type* type) { return type->kind() == Kind::Struct; }
 };
 
 class IntegerType : public Type {
-    bool _is_signed;
     usz _bit_width;
+    bool _is_signed;
 
 public:
-    IntegerType(Location location, bool isSigned, usz bitWidth)
-        : Type(Kind::Integer, location), _is_signed(isSigned), _bit_width(bitWidth) {}
+    IntegerType(usz bitWidth, bool isSigned, Location location)
+        : Type(Kind::Integer, location), _bit_width(bitWidth), _is_signed(isSigned) {}
 
     bool is_signed() const { return _is_signed; }
     usz bit_width() const { return _bit_width; }
@@ -445,11 +458,12 @@ public:
     static bool classof(Type* type) { return type->kind() == Kind::Integer; }
 };
 
-/// @brief Base class for expression syntax nodes.
+/// \brief Base class for expression syntax nodes.
 class Expr {
 public:
     enum struct Kind {
-        Struct,
+        OverloadSet,
+        StructDecl,
         VarDecl,
         Function,
 
@@ -470,7 +484,7 @@ public:
         Unary,
         Binary,
 
-        NamedRef,
+        NameRef,
         MemberAccess,
     };
 
@@ -506,7 +520,7 @@ class TypedExpr : public Expr {
     Type* _type;
 
 protected:
-    TypedExpr(Kind kind, Location location, Type* type = Type::UnknownType)
+    TypedExpr(Kind kind, Location location, Type* type = Type::Unknown)
         : Expr(kind, location), _type(type) {}
 
 public:
@@ -515,17 +529,29 @@ public:
 
 /// A declaration that has linkage.
 class ObjectDecl : public TypedExpr {
+    Module* _mod;
     std::string _name;
     Linkage _linkage;
 
 protected:
-    ObjectDecl(Kind kind, Type* type, std::string name, Linkage linkage, Location location)
-        : TypedExpr(kind, location, type), _name(std::move(name)), _linkage(linkage) {}
-
+    ObjectDecl(
+        Kind kind,
+        Type* type,
+        std::string name,
+        Module* mod,
+        Linkage linkage,
+        Location location
+    ) : TypedExpr(kind, location, type),
+        _mod(mod),
+        _name(std::move(name)),
+        _linkage(linkage) {}
 
 public:
     /// Get the mangled name of this declaration.
     auto mangled_name() const -> std::string;
+
+    /// Get the module this declaration is in.
+    auto module() const -> Module* { return _mod; }
 
     /// Get the unmangled name of this declaration, as declared
     /// in code.
@@ -551,9 +577,10 @@ public:
         std::string name,
         Type* type,
         Expr* init,
+        Module* mod,
         Linkage linkage,
         Location location
-    ) : ObjectDecl(Kind::VarDecl, type, std::move(name), linkage, location),
+    ) : ObjectDecl(Kind::VarDecl, type, std::move(name), mod, linkage, location),
         _init(init) {}
 
     auto init() const { return _init; }
@@ -571,11 +598,12 @@ class FuncDecl : public ObjectDecl {
 public:
     FuncDecl(
         std::string name,
-        Type* type,
+        FuncType* type,
         Expr* body,
+        Module* mod,
         Linkage linkage,
         Location location
-    ) : ObjectDecl(Kind::Function, type, std::move(name), linkage, location),
+    ) : ObjectDecl(Kind::Function, type, std::move(name), mod, linkage, location),
         _body(body) {}
 
     auto params() const -> std::span<VarDecl* const> { return _params; }
@@ -584,23 +612,50 @@ public:
     static bool classof(Expr* expr) { return expr->kind() == Kind::Function; }
 };
 
-class StructDecl : public TypedExpr {
-    Symbol* _symbol;
+/// Set of function declarations. Only used for scopes.
+class OverloadSet : public Expr {
+    std::vector<FuncDecl*> _overloads;
 
 public:
-    StructDecl(Location location, Symbol* symbol)
-        : TypedExpr(Kind::Struct, location), _symbol(symbol) {}
+    OverloadSet(Location location) : Expr(Kind::OverloadSet, location) {}
 
-    auto symbol() const { return _symbol; }
+    /// Add a function declaration to this set.
+    void add(FuncDecl* decl) { _overloads.push_back(decl); }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Struct; }
+    /// Get the overloads in this set.
+    auto overloads() const -> std::span<FuncDecl* const> { return _overloads; }
+
+    static bool classof(Expr* expr) { return expr->kind() == Kind::OverloadSet; }
+};
+
+class StructDecl : public TypedExpr {
+    std::string _name;
+
+    /// The module this struct is declared in.
+    Module* _module;
+
+public:
+    StructDecl(Module* mod, std::string name, StructType* declared_type, Location location)
+        : TypedExpr(Kind::StructDecl, location, declared_type),
+          _name(std::move(name)),
+          _module(mod) {
+        declared_type->associate_with_decl(this);
+    }
+
+    /// Get the module this struct is declared in.
+    auto module() const -> Module* { return _module; }
+
+    /// Get the name of this struct.
+    auto name() const -> const std::string& { return _name; }
+
+    static bool classof(Expr* expr) { return expr->kind() == Kind::StructDecl; }
 };
 
 class IntegerLiteral : public TypedExpr {
     u64 _value;
 
 public:
-    IntegerLiteral(u64 value, Location location, Type* ty = Type::IntegerType)
+    IntegerLiteral(u64 value, Location location, Type* ty = Type::Integer)
         : TypedExpr(Kind::IntegerLiteral, location, ty), _value(value) {}
 
     u64 value() const { return _value; }
@@ -733,57 +788,88 @@ public:
 };
 
 class CastExpr : public TypedExpr {
+    Expr* _value;
+
 public:
-    CastExpr(Location location)
-        : TypedExpr(Kind::Cast, location) {}
+    CastExpr(Expr* value, Type* ty, Location location)
+        : TypedExpr(Kind::Cast, location, ty), _value(value) {}
+
+    /// Get the operand of this expression.
+    auto operand() const { return _value; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::Cast; }
 };
 
 class UnaryExpr : public TypedExpr {
+    Expr* _operand;
+    TokenKind _op;
+    bool _postfix;
+
 public:
-    UnaryExpr(Location location)
-        : TypedExpr(Kind::Unary, location) {}
+    UnaryExpr(TokenKind op, Expr* operand, bool is_postfix, Location location)
+        : TypedExpr(Kind::Unary, location), _operand(operand), _op(op), _postfix(is_postfix) {}
+
+    /// Check if this is a postfix unary expression.
+    bool is_postfix() const { return _postfix; }
+
+    /// Get the operand of this expression.
+    auto operand() const { return _operand; }
+
+    /// Get the unary operator.
+    auto op() const { return _op; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::Unary; }
 };
 
 class BinaryExpr : public TypedExpr {
+    Expr* _lhs;
+    Expr* _rhs;
+    TokenKind _op;
+
 public:
-    BinaryExpr(Location location)
-        : TypedExpr(Kind::Binary, location) {}
+    BinaryExpr(TokenKind op, Expr* lhs, Expr* rhs, Location location)
+        : TypedExpr(Kind::Binary, location), _lhs(lhs), _rhs(rhs), _op(op) {}
+
+    /// Get the left-hand side of this expression.
+    auto lhs() const { return _lhs; }
+
+    /// Get the right-hand side of this expression.
+    auto rhs() const { return _rhs; }
+
+    /// Get the binary operator.
+    auto op() const { return _op; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::Binary; }
 };
 
-class NamedRefExpr : public TypedExpr {
+class NameRefExpr : public TypedExpr {
     std::string _name;
     Expr* _target;
 
 public:
-    NamedRefExpr(Location location, std::string name)
-        : TypedExpr(Kind::NamedRef, location), _name(std::move(name)) {}
+    NameRefExpr(std::string name, Location location)
+        : TypedExpr(Kind::NameRef, location), _name(std::move(name)) {}
 
     auto name() const -> const std::string& { return _name; }
     auto target() const { return _target; }
     void target(Expr* target) { _target = target; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::NamedRef; }
+    static bool classof(Expr* expr) { return expr->kind() == Kind::NameRef; }
 };
 
 class MemberAccessExpr : public TypedExpr {
-    Expr* _target;
+    Expr* _object;
     std::string _name;
     StructMember* _member;
 
 public:
-    MemberAccessExpr(Location location, Expr* target, std::string name)
-        : TypedExpr(Kind::MemberAccess, location), _target(target), _name(std::move(name)) {}
+    MemberAccessExpr(Expr* object, std::string name, Location location)
+        : TypedExpr(Kind::MemberAccess, location), _object(object), _name(std::move(name)) {}
 
-    auto target() const { return _target; }
     auto name() const -> const std::string& { return _name; }
     auto member() const { return _member; }
     void member(StructMember* member) { _member = member; }
+    auto object() const { return _object; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::MemberAccess; }
 };

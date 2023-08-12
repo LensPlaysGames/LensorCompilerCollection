@@ -1,24 +1,28 @@
 #include <intercept/ast.hh>
+#include <lcc/utils/rtti.hh>
 
 lcc::intercept::Module::Module(
     File* file,
     std::string module_name,
     bool is_logical_module
 ) : name{std::move(module_name)}, is_module{is_logical_module}, file{file} {
-    Type* ty;
+    FuncType* ty{};
 
     /// Create the type of the top-level function.
     if (is_logical_module) {
-        ty = new (*this) FuncType({}, Type::VoidType, {});
+        ty = new (*this) FuncType({}, BuiltinType::Void(this), {}, {});
     } else {
-        auto char_ptr = new (*this) PointerType{new (*this) PointerType{Type::CCharType}};
+        auto cchar_ty = BuiltinType::CChar(this);
+        auto cint_ty = BuiltinType::CInt(this);
+        auto char_ptr = new (*this) PointerType{new (*this) PointerType{cchar_ty}};
         ty = new (*this) FuncType{
             {
-                FuncTypeParam{"__argc__", Type::CIntType, {}},
+                FuncTypeParam{"__argc__", cint_ty, {}},
                 FuncTypeParam{"__argv__", char_ptr, {}},
                 FuncTypeParam{"__envp__", char_ptr, {}},
             },
-            Type::CIntType,
+            cint_ty,
+            {},
             {},
         };
     }
@@ -28,6 +32,7 @@ lcc::intercept::Module::Module(
         is_logical_module ? fmt::format(".init.{}", name) : "main",
         ty,
         nullptr,
+        this,
         Linkage::Exported,
         {},
     };
@@ -54,7 +59,43 @@ lcc::intercept::StringLiteral::StringLiteral(
 ) : TypedExpr{
         Kind::StringLiteral,
         location,
-        new(mod) ArrayType(Type::ByteType, value.size(), location),
+        new(mod) ArrayType(
+            BuiltinType::Byte(&mod),
+            new(mod) IntegerLiteral(value.size(), location, Type::Integer),
+            location
+        ),
     },
     _index{mod.intern(value)} {
+}
+
+/// Declare a symbol in this scope.
+auto lcc::intercept::Scope::declare(
+    const Context* ctx,
+    std::string&& name,
+    Expr* expr
+) -> Result<Expr*> {
+    /// Try to insert the symbol into the map.
+    auto [it, inserted] = _symbols.insert_or_assign(name, expr);
+    if (inserted) return expr;
+
+    /// If the symbol already exists, and it is a function
+    /// declaration or overload set, and the new symbol is
+    /// also a function declaration, merge the two into one
+    /// overload set.
+    if (is<FuncDecl>(expr) and is<FuncDecl, OverloadSet>(it->second)) {
+        if (not is<OverloadSet>(it->second)) {
+            auto func = as<FuncDecl>(it->second);
+            auto mod = func->module();
+            auto os = new (*mod) OverloadSet(func->location());
+            os->add(func);
+            it->second = os;
+        }
+
+        auto os = as<OverloadSet>(it->second);
+        os->add(as<FuncDecl>(expr));
+        return expr;
+    }
+
+    /// Any other case is an error.
+    return Diag::Error(ctx, expr->location(), "Redeclaration of '{}'", name);
 }

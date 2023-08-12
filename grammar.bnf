@@ -25,11 +25,12 @@
              | EXPR
 
 /// Declarations.
-<expr-decl>      ::= <decl-start> <decl-rest>
-<decl-start>     ::= [ EXPORT ] IDENTIFIER ":"
-<decl-rest>      ::= <type-function> <function-body>
-                   | <type> [ "=" <expr> ]
-                   | EXT <type-function>
+<expr-decl>      ::= [ EXPORT ] [ EXTERN ] IDENTIFIER <decl-rest>
+<decl-rest>      ::= <decl-object> | <decl-type>
+<decl-object>    ::= ":" <decl-typed> | "::" <expr>
+<decl-type>      ::= ":>" <type>
+<decl-typed>     ::= <type> [ "=" <expr> ]
+                   | <type-function> [ <function-body> ]
 
 /// Other expressions.
 <expr-if>        ::= IF <expr> <expr> [ ELSE <expr> ]
@@ -48,17 +49,25 @@
 <expr-primary>   ::= NUMBER | IDENTIFIER
 
 /// Types.
-<type>           ::= <type-base> | <type-pointer> | <type-derived> | <type-struct>
-<type-pointer>   ::= "@" { "@" } ( IDENTIFIER | "(" <type> ")" )
-<type-base>      ::= IDENTIFIER | INTEGER | BYTE | BOOL | VOID | ARBITRARY_INT
+///
+/// Note that this grammar is technically incorrect as it doesn’t
+/// take precedence into account at all. For more information on
+/// type precedence, see the comment in ParseType().
+<type>           ::= <type-quals> <type-base> <type-rest> | "(" <type> ")"
+<type-quals>     ::= { "@" | "&" }
+<type-base>      ::= <type-struct> | <type-builtin> | IDENTIFIER | INT_TYPE
 <type-struct>    ::= TYPE <struct-body>
-<type-derived>   ::= <type-array> | <type-function>
-<type-array>     ::= <type> "[" <expr> "]"
-<type-function>  ::= <type> "(" { <param-decl> [ "," ]  } ")" <function-attrs>
-<param-decl>     ::= <decl-start> <type>
-<struct-body>    ::= "{" { <param-decl> } "}"
+<type-builtin>   ::= INTEGER | BYTE | BOOL | VOID
+<type-rest>      ::= { <type-arr-sz> | <type-signature>  }
+<type-arr-sz>    ::= "[" <expr> "]"
+<type-signature> ::= "(" <param-decls> ")" <func-attrs>
+<param-decls>    ::= { <param-decl> [ "," ]  }
+<param-decl>     ::= [ IDENTIFIER ] ":" <type>
+<func-attrs>     ::= /// All function attributes
 
 /// Miscellaneous.
+<type-function>  ::= <type-base> <type-signature>
 <function-body>  ::= "=" <expr> | <expr-block>
+<struct-body>    ::= "{" { <param-decl> } "}"
 <binary>         ::= /// All binary operators
 <prefix>         ::= /// All unary prefix operators

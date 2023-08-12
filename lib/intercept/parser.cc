@@ -2,15 +2,143 @@
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
 
-/// Cute trick for monad binding.
-#define bind *this->*&Parser::
+#define bind LCC_BIND
+
 namespace {
-auto operator->*(lcc::intercept::Parser& p, auto member_function) {
-    return [p = std::addressof(p), member_function](auto&&... args) {
-        return std::invoke(member_function, p, std::forward<decltype(args)>(args)...);
-    };
+/// Get the binary precedence of a token.
+/// TODO: User-defined operators.
+constexpr auto BinaryOrPostfixPrecedence(lcc::intercept::TokenKind t) -> lcc::isz {
+    using Tk = lcc::intercept::TokenKind;
+    switch (t) {
+        case Tk::Dot:
+            return 1'000'000'000;
+
+        /// Call and subscript have higher precedence than unary operators.
+        /// Note: Unary operator precedence is 10'000.
+        case Tk::LParen:
+        case Tk::LBrack:
+            return 100'000;
+
+        case Tk::As:
+            return 1'000;
+
+        case Tk::Star:
+        case Tk::Slash:
+        case Tk::Percent:
+            return 600;
+
+        case Tk::Plus:
+        case Tk::Minus:
+            return 500;
+
+        case Tk::Shl:
+        case Tk::Shr:
+            return 400;
+
+        case Tk::Ampersand:
+        case Tk::Pipe:
+        case Tk::Caret:
+            return 300;
+
+        case Tk::Eq:
+        case Tk::Ne:
+        case Tk::Lt:
+        case Tk::Gt:
+        case Tk::Le:
+        case Tk::Ge:
+            return 200;
+
+        case Tk::ColonEq:
+        case Tk::ColonColon:
+            return 100;
+
+        /// Not an operator.
+        default: return -1;
+    }
 }
+
+/// Check if an operator is right-associative.
+/// TODO: User-defined operators.
+constexpr bool IsRightAssociative(lcc::intercept::TokenKind t) {
+    using Tk = lcc::intercept::TokenKind;
+    switch (t) {
+        case Tk::Star:
+        case Tk::Slash:
+        case Tk::Percent:
+        case Tk::Plus:
+        case Tk::Minus:
+        case Tk::Shl:
+        case Tk::Shr:
+        case Tk::Ampersand:
+        case Tk::Pipe:
+        case Tk::Caret:
+        case Tk::Eq:
+        case Tk::Ne:
+        case Tk::Lt:
+        case Tk::Gt:
+        case Tk::Le:
+        case Tk::Ge:
+            return false;
+
+        case Tk::ColonEq:
+        case Tk::ColonColon:
+            return true;
+
+        /// Not an operator.
+        default: return false;
+    }
 }
+
+/// \brief Get the precedence level of a type qualifier.
+///
+/// The precedence levels for type qualifiers are (higher
+/// precedence binds more tightly):
+///
+///    Function < Reference < Array < Pointer
+///
+/// The reason is that this avoids the most parentheses
+/// because, that way, the most common use cases don’t
+/// need them.
+///
+/// Arrays of references are invalid, so &i32[10] can only
+/// really be a reference to an array. This means that arrays
+/// should bind more tightly than references.
+///
+/// Arrays of pointers, however, are common. Pointers to arrays
+/// should not be too common as one can just use a reference
+/// instead in most cases. Thus, pointers should bind more
+/// tightly than arrays.
+///
+/// Furthermore, function pointers and references are *very*
+/// uncommon, but functions frequently return pointers and
+/// references, and even arrays, so functions should have the
+/// lowest precedence.
+///
+/// Putting these all together yields the precedence hierarchy
+/// described above.
+///
+/// Examples:
+/// \code
+///     @i32[10]  === (@i32)[10]    ;; Array of pointers.
+///     &i32[10]  === &(i32[10])    ;; Reference to array.
+///     @i32()    === (@i32)()      ;; Function returning pointer.
+///     &i32()    === (&i32)()      ;; Function returning reference.
+///
+///     ;; Uncommon, but useful for illustration purposes.
+///     @&i32[10] === @(&i32)[10]   ;; Array of pointers to references.
+///     &@i32[10] === &((@i32)[10]) ;; Reference to array of pointers.
+/// \endcode
+constexpr lcc::isz TypeQualifierPrecedence(lcc::intercept::TokenKind t) {
+    using Tk = lcc::intercept::TokenKind;
+    switch (t) {
+        case Tk::At: return 400;
+        case Tk::LBrack: return 300;
+        case Tk::Ampersand: return 200;
+        case Tk::LParen: return 100;
+        default: return -1;
+    }
+}
+} // namespace
 
 auto lcc::intercept::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
     Parser parser(context, &file);
@@ -25,9 +153,17 @@ auto lcc::intercept::Parser::Parse(Context* context, File& file) -> std::unique_
     return context->has_error() ? std::unique_ptr<Module>{} : std::move(parser.mod);
 }
 
-/// <expr-block> ::= "{" { <expr> } "}"
+/// Creates a new scope and parses a block in that scope.
 auto lcc::intercept::Parser::ParseBlock() -> Result<BlockExpr*> {
-    ScopeRAII sc{this};
+    return ParseBlock({this});
+}
+
+/// <expr-block> ::= "{" { <expr> } "}"
+auto lcc::intercept::Parser::ParseBlock(
+    /// The only purpose of this parameter is to open a new scope
+    /// for this block. Do NOT remove it, even if it appears unused.
+    [[maybe_unused]] ScopeRAII sc
+) -> Result<BlockExpr*> {
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::LBrace), "ParseBlock called while not at '{{'");
 
@@ -61,6 +197,106 @@ auto lcc::intercept::Parser::ParseCallExpr(Expr* callee) -> Result<CallExpr*> {
     /// Yeet ")".
     if (not Consume(Tk::RParen)) return Error("Expected )");
     return new (*mod) CallExpr(callee, std::move(args), loc);
+}
+
+/// Parse an object or type declaration.
+auto lcc::intercept::Parser::ParseDecl() -> Result<ObjectDecl*> {
+    auto loc = tok.location;
+    auto text = tok.text;
+    auto is_extern = Consume(Tk::Extern);
+    if (not Consume(Tk::Ident)) return Error("Expected declaration");
+    return ParseObjectDeclRest(text, loc, is_extern);
+}
+
+/// Parse everything after the identifier in an object declaration.
+///
+/// <decl-object>    ::= ":" <decl-typed> | "::" <expr>
+/// <decl-typed>     ::= <type> [ "=" <expr> ]
+///                    | <type-function> [ <function-body> ]
+auto lcc::intercept::Parser::ParseObjectDeclRest(
+    std::string ident,
+    lcc::Location location,
+    bool is_extern
+) -> Result<ObjectDecl*> {
+    /// Dispatch based on the declaration kind.
+    switch (tok.kind) {
+        default: return Error("Expected :, ::, or :> after identifier in declaration");
+
+        /// Regular declaration. It must be followed by a type.
+        case Tk::Colon: {
+            NextToken();
+            auto ty = ParseType();
+            if (not ty) return ty.diag();
+
+            /// If the type is a function type, then this is
+            /// a function declaration.
+            if (auto type = cast<FuncType>(*ty)) {
+                /// Parse attributes and the function body.
+                auto body = ParseFunctionBody(is_extern);
+                if (not body) return Diag();
+
+                /// Create the function.
+                auto func = new (*mod) FuncDecl(
+                    ident,
+                    type,
+                    *body,
+                    mod.get(),
+                    is_extern ? Linkage::Imported : Linkage::Internal,
+                    location
+                );
+
+                /// Add it to the current scope and return it.
+                return as<ObjectDecl>(CurrScope()->declare(context, std::move(ident), func));
+            }
+
+            /// Otherwise, it is a variable declaration. Parse
+            /// the initialiser if there is one.
+            auto init = ExprResult::Null();
+            if (Consume(Tk::Eq)) {
+                init = ParseExpr();
+                if (not init) return init.diag();
+
+                /// This declaration is syntactically well formed, so
+                /// no need to synchronise. Keep parsing.
+                if (is_extern) Error(location, "Extern declarations may not have an initialiser");
+            }
+
+            /// Create the variable.
+            auto var = new (*mod) VarDecl(
+                ident,
+                *ty,
+                *init,
+                mod.get(),
+                is_extern ? Linkage::Imported : Linkage::Internal,
+                location
+            );
+
+            /// Add it to the current scope and return it.
+            return as<ObjectDecl>(CurrScope()->declare(context, std::move(ident), var));
+        }
+
+        /// Variable declaration with type inference.
+        case Tk::ColonColon: {
+            auto cc_loc = tok.location;
+            NextToken();
+            auto expr = ParseExpr();
+            if (not expr) return expr.diag();
+
+            /// Create the variable.
+            auto var = new (*mod) VarDecl(
+                ident,
+                Type::Unknown,
+                *expr,
+                mod.get(),
+                Linkage::Internal,
+                location
+            );
+
+            /// Declarations that use type inference cannot be external.
+            if (is_extern) Error(cc_loc, "Extern declarations must specify a type");
+            return as<ObjectDecl>(CurrScope()->declare(context, std::move(ident), var));
+        }
+    }
 }
 
 /// See grammar.bnf for a list of productions handled by this rule.
@@ -109,7 +345,7 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         case Tk::Byte:
         case Tk::IntegerKw:
         case Tk::Void:
-            lhs = ParseType() >>= bind ParseTypeExpression;
+            lhs = ParseType() >>= bind Parser::ParseTypeExpression;
             break;
 
         /// Better error message for this.
@@ -199,6 +435,20 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         /// TODO: Revisit this case once we know what expressions can
         ///       start with types.
         case Tk::At: LCC_ASSERT(false, "TODO");
+
+        /// Unary operators.
+        case Tk::Minus:
+        case Tk::Ampersand:
+        case Tk::Tilde:
+        case Tk::Exclam:
+        case Tk::Star: {
+            auto loc = tok.location;
+            auto op = tok.kind;
+            NextToken();
+            lhs = ParseExpr(PrefixOperatorPrecedence) >>= [&](Expr* operand) {
+                return new (*mod) UnaryExpr(op, operand, false, loc);
+            };
+        } break;
     }
 
     /// Some places in the grammar are ambiguous and require us to
@@ -218,10 +468,79 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
 
     /// LHS must not be null if we get here.
     LCC_ASSERT(
-        lhs.value(),
+        lhs.value(), /// Not `is_value()` because we create a null value above.
         "Someone forgot to assign to `lhs` when parsing expr starting with {}",
         ToString(start_token)
     );
+
+    /// The rules for operator precedence parsing are as follows:
+    ///   - unary prefix operators are unambiguously handled up above;
+    ///
+    ///   - if the current token is a binary or postfix operator whose precedence is
+    ///     higher than the current precedence, or higher than or equal to
+    ///     the current precedence if the operator is right-associative, then
+    ///     the current LHS is the LHS of that operator;
+    ///
+    ///   - otherwise, return the current LHS as its own expression.
+    const auto ShouldKeepParsingOperators = [&] {
+        if (lhs.is_diag()) return false;
+        const auto prec = BinaryOrPostfixPrecedence(tok.kind);
+        if (prec > current_precedence) return true;
+        if (prec == current_precedence) return IsRightAssociative(tok.kind);
+        return false;
+    };
+
+    /// Binary operator parse loop.
+    while (ShouldKeepParsingOperators()) {
+        /// Handle ‘operators’ that require special parsing.
+        switch (tok.kind) {
+            default: break;
+
+            /// Call expression.
+            case Tk::LParen:
+                lhs = ParseCallExpr(*lhs);
+                continue;
+
+            /// Subscript expression.
+            case Tk::LBrack: {
+                NextToken();
+                auto index = ParseExpr();
+                if (not index) return index.diag();
+                lhs = new (*mod) BinaryExpr(Tk::LBrack, *lhs, *index, {lhs->location(), tok.location});
+                if (not Consume(Tk::RBrack)) return Error("Expected ]");
+                continue;
+            }
+
+            /// Cast operator. The RHS is a type.
+            case Tk::As: {
+                NextToken();
+                auto ty = ParseType();
+                if (not ty) return ty.diag();
+                lhs = new (*mod) CastExpr(*lhs, *ty, {lhs->location(), tok.location});
+                continue;
+            }
+
+            /// The member access operator must be followed by an identifier.
+            case Tk::Dot: {
+                NextToken();
+                if (not At(Tk::Ident)) return Error("Expected identifier after .");
+                auto member = tok.text;
+                auto loc = tok.location;
+                NextToken();
+                lhs = new (*mod) MemberAccessExpr(*lhs, std::move(member), loc);
+                continue;
+            }
+        }
+
+        /// Regular binary expression.
+        auto op = tok.kind;
+        NextToken();
+        auto rhs = ParseExpr(BinaryOrPostfixPrecedence(op));
+        if (not rhs) return rhs.diag();
+        lhs = new (*mod) BinaryExpr(op, *lhs, *rhs, {lhs->location(), rhs->location()});
+    }
+
+    return lhs;
 }
 
 auto lcc::intercept::Parser::ParseExprInNewScope() -> ExprResult {
@@ -246,6 +565,106 @@ auto lcc::intercept::Parser::ParseForExpr() -> Result<ForExpr*> {
     /// Check for errors and create the expression.
     if (IsError(init, cond, increment, body)) return Diag();
     return new (*mod) ForExpr(*init, *cond, *increment, *body, loc);
+}
+
+auto lcc::intercept::Parser::ParseFunctionAttributes() -> Result<FuncType::Attributes> {
+    static const StringMap<FuncAttr> attrs_map{
+        {"const", FuncAttr::Const},
+        {"discardable", FuncAttr::Discardable},
+        {"flatten", FuncAttr::Flatten},
+        {"inline", FuncAttr::Inline},
+        {"noinline", FuncAttr::NoInline},
+        {"nomangle", FuncAttr::NoMangle},
+        {"noreturn", FuncAttr::NoReturn},
+        {"pure", FuncAttr::Pure},
+        {"returns_twice", FuncAttr::ReturnsTwice},
+        {"used", FuncAttr::Used},
+        {"__noopt__", FuncAttr::NoOpt},
+    };
+
+    /// Parse attributes while we’re at an identifier.
+    FuncType::Attributes attrs;
+    for (;;) {
+        if (not At(Tk::Ident)) return attrs;
+        auto it = attrs_map.find(tok.text);
+        if (it == attrs_map.end()) return attrs;
+        if (attrs[it->second]) Diag::Warning(context, tok.location, "Duplicate attribute ignored");
+        attrs[it->second] = true;
+        NextToken();
+    }
+}
+
+/// <function-body>  ::= "=" <expr> | <expr-block>
+auto lcc::intercept::Parser::ParseFunctionBody(bool is_extern) -> Result<Expr*> {
+    /// If the declaration is external, but there still seems to be
+    /// a function body, warn the the user that they might be trying
+    /// to do something that doesn’t make sense.
+    if (is_extern) {
+        /// Equals sign is a hard error because it would have
+        /// to be parsed as a declaration.
+        if (At(Tk::Eq)) {
+            return Error(
+                tok.location,
+                "External functions cannot have a body."
+            );
+        }
+
+        /// Lbrace may just be a missing semicolon or weirdly
+        /// placed block expression.
+        if (At(Tk::LBrace)) {
+            return Diag::Warning(
+                context,
+                tok.location,
+                "External functions cannot have a body. If this '{{' is not "
+                "supposed to start a function body, consider adding a ';' after "
+                "the function type"
+            );
+        }
+
+        /// Do not parse a body. This is one of the few places
+        /// in the parser where we actually return a null result.
+        ///
+        /// Note that you should normally not do this. In this
+        /// case, the caller is aware of this case, and function
+        /// bodies are allowed to be null for extern functions,
+        /// so it’s not a problem.
+        return ExprResult::Null();
+    }
+
+    /// Function body is in a new scope.
+    ScopeRAII sc{this};
+    sc.scope->set_function_scope();
+
+    /// The body must either be a block expression or an equals sign
+    /// followed by an expression.
+    if (Consume(Tk::Eq)) return ParseExpr();
+    return ParseBlock(std::move(sc));
+}
+
+auto lcc::intercept::Parser::ParseIdentExpr() -> Result<Expr*> {
+    auto loc = tok.location;
+    auto text = tok.text;
+    LCC_ASSERT(Consume(Tk::Ident), "ParseIdentExpr called while not at identifier");
+
+    /// If this is followed by `:` or `::`, then this is a
+    /// variable or function declaration.
+    const bool is_extern = Consume(Tk::Extern);
+    if (At(Tk::Colon, Tk::ColonColon)) return ParseObjectDeclRest(text, loc, is_extern);
+
+    /// Otherwise, this is a type declaration.
+    if (not Consume(Tk::ColonGt)) return Error("Expected :, ::, or :> in declaration");
+    if (is_extern) return Error("Type declarations cannot be declared extern");
+
+    /// Parse the type.
+    auto decl = ParseType();
+    if (not decl) return decl.diag();
+
+    /// If the type is a struct type, then this is a struct decl.
+    if (auto s = cast<StructType>(*decl))
+        return new (*mod) StructDecl(mod.get(), std::move(text), s, loc);
+
+    /// TODO: Otherwise, we could parse it as a type alias decl.
+    return Error("Expected struct type after :>");
 }
 
 /// <expr-if> ::= IF <expr> <expr> [ ELSE <expr> ]
@@ -314,6 +733,122 @@ void lcc::intercept::Parser::ParseTopLevel() {
         /// Synchronise on semicolons and braces in case of an error.
         else Synchronise();
     }
+}
+
+/// Parse a type where a type is expected.
+///
+/// <type>           ::= <type-quals> <type-base> <type-rest> | "(" <type> ")"
+/// <type-quals>     ::= { "@" | "&" }
+/// <type-base>      ::= <type-struct> | <type-builtin> | IDENTIFIER | INT_TYPE
+/// <type-struct>    ::= TYPE <struct-body>
+/// <type-builtin>   ::= INTEGER | BYTE | BOOL | VOID
+/// <type-rest>      ::= { <type-arr-sz> | <type-signature>  }
+/// <type-arr-sz>    ::= "[" <expr> "]"
+/// <type-signature> ::= "(" <param-decls> ")" <func-attrs>
+/// <param-decls>    ::= { <param-decl> [ "," ]  }
+/// <param-decl>     ::= [ IDENTIFIER ] ":" <type>
+/// <func-attrs>     ::= /// All function attributes
+auto lcc::intercept::Parser::ParseType(isz current_precedence) -> Result<Type*> {
+    /// Parse the base type.
+    Type* ty{};
+    switch (tok.kind) {
+        default: return Error("Expected type");
+
+        /// Builtin types.
+        case Tk::IntegerKw:
+            ty = BuiltinType::Integer(mod.get(), tok.location);
+            NextToken();
+            break;
+
+        case Tk::Byte:
+            ty = BuiltinType::Byte(mod.get(), tok.location);
+            NextToken();
+            break;
+
+        case Tk::Bool:
+            ty = BuiltinType::Bool(mod.get(), tok.location);
+            NextToken();
+            break;
+
+        case Tk::Void:
+            ty = BuiltinType::Void(mod.get(), tok.location);
+            NextToken();
+            break;
+
+        /// Named type.
+        case Tk::Ident:
+            ty = new (*mod) NamedType(tok.text, tok.location);
+            NextToken();
+            break;
+
+        /// Parenthesised type.
+        case Tk::LParen:
+            NextToken();
+            if (auto type = ParseType(); not type) return type.diag();
+            else ty = *type;
+            if (not Consume(Tk::RParen)) return Error("Expected )");
+            break;
+
+        /// Integer type.
+        case Tk::ArbitraryInt:
+            ty = new (*mod) IntegerType(
+                tok.integer_value,
+                tok.text[0] == 'i',
+                tok.location
+            );
+
+            NextToken();
+            break;
+
+        /// Structure type.
+        case Tk::Type:
+            if (auto type = ParseStructType(); not type) return type.diag();
+            else ty = *type;
+            break;
+
+        /// Pointer type.
+        case Tk::At: {
+            NextToken();
+            auto type = ParseType(TypeQualifierPrecedence(Tk::At));
+            if (not type) return type.diag();
+            ty = new (*mod) PointerType(*type, tok.location);
+        } break;
+
+        /// Reference type.
+        case Tk::Ampersand: {
+            NextToken();
+            auto type = ParseType(TypeQualifierPrecedence(Tk::Ampersand));
+            if (not type) return type.diag();
+            ty = new (*mod) ReferenceType(*type, tok.location);
+        } break;
+    }
+
+    /// Parse trailing type qualifiers. These are obviously
+    /// all left associative.
+    while (TypeQualifierPrecedence(tok.kind) > current_precedence) {
+        switch (tok.kind) {
+            default: LCC_ASSERT(false, "Unhandled trailing type qualifier");
+
+            /// Function type.
+            case Tk::LParen: {
+                auto type = ParseFunctionSignature(ty);
+                if (not type) return type.diag();
+                ty = *type;
+            } break;
+
+            /// Array type.
+            case Tk::LBrack: {
+                NextToken();
+                auto size = ParseExpr();
+                if (not size) return size.diag();
+                if (not Consume(Tk::RBrack)) return Error("Expected ]");
+                ty = new (*mod) ArrayType(ty, *size, tok.location);
+            } break;
+        }
+    }
+
+    /// Return the finished type.
+    return ty;
 }
 
 /// <expr-while> ::= WHILE <expr> <expr>

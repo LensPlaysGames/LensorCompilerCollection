@@ -1,22 +1,6 @@
 #ifndef LCC_CORE_HH
 #define LCC_CORE_HH
 
-#define LCC_INTRINSICS(X) \
-    X(SysCall) \
-    X(DebugTrap) \
-    X(MemCpy) \
-    X(MemSet)
-
-#define LCC_FUNC_ATTR(X) \
-    X(NoOptimize, no_opt) \
-    X(Const, const) \
-    X(Flatten, flatten) \
-    X(Inline, inline) \
-    X(NoInline, no_inline) \
-    X(NoMangle, no_mangle) \
-    X(NoReturn, no_return) \
-    X(Pure, pure) \
-
 namespace lcc {
 enum struct Linkage {
     /// Local variable.
@@ -79,19 +63,71 @@ enum struct CallConv {
     Intercept,
 };
 
-enum struct IntrinsicKind
-{
-#define X(I) I,
-LCC_INTRINSICS(X)
-#undef X
+enum struct IntrinsicKind {
+    /// Issue a software breakpoint.
+    DebugTrap,
+
+    /// Copy memory; similar to C `memmove()`.
+    MemCopy,
+
+    /// Fill memory; similar to C `memset()`.
+    MemSet,
+
+    /// Perform a system call.
+    SystemCall,
 };
 
-enum struct FuncAttr
-{
-#define X(I, J) I,
-LCC_FUNC_ATTR(X)
-#undef X
+enum struct FuncAttr {
+    /// This function, in addition to being pure, always
+    /// returns the same value when passed the same arguments
+    /// (so long as the memory pointed to by any pointer arguments
+    /// has not changed).
+    ///
+    /// The intent of this attribute is to facilitate common
+    /// subexpression elimination and store forwarding across
+    /// calls, which is otherwise impossible. To this end, a
+    /// const function additionally may not read from or write
+    /// to memory, except that it may access memory that it
+    /// itself allocates—though it must free it before returning—
+    /// as well as read from, but not write to, any pointers passed
+    /// to it.
+    ///
+    /// This is similar to, but not quite the same as, GCC’s
+    /// or const attribute. In the LLVM backend, this is implemented
+    /// as `nofree nosync memory(argmem: read, inaccessiblemem: readwrite)`.
+    Const,
+
+    /// Inline all callees except recursive tail calls.
+    Flatten,
+
+    /// Always inline this function.
+    ///
+    /// Unlike `always_inline` in GCC or LLVM, this causes
+    /// a hard error if a function cannot be inlined.
+    Inline,
+
+    /// Never inline this function.
+    NoInline,
+
+    /// Do not optimise this function.
+    NoOpt,
+
+    /// This function never returns.
+    NoReturn,
+
+    /// This function has no side effects and that calls to
+    /// it can be removed if the return value is never used.
+    ///
+    /// Note that this does not mean that duplicate calls to
+    /// this function always have the same effect, even if the
+    /// functions’ arguments are the same.
+    Pure,
+
+    /// Annotate any functions that may return twice with this
+    /// (e.g. \c setjmp()). The behaviour is undefined if a
+    /// function not annotated with this attribute returns twice.
+    ReturnsTwice,
 };
-}
+} // namespace lcc
 
 #endif // LCC_CORE_HH

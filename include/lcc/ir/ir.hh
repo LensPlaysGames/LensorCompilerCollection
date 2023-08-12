@@ -163,6 +163,9 @@ class Block : public Value {
     /// The name of this block.
     std::string block_name;
 
+    /// TODO: Blocks and functions should also keep track of their users
+    /// to simplify dead code elimination and computing predecessors.
+
 public:
     Block(std::string n = "")
         : Value(Kind::Block),

@@ -3,10 +3,10 @@
 
 #include <lcc/diags.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/rtti.hh>
 #include <variant>
 
 namespace lcc {
-
 /// Result type that can hold either a value or a diagnostic.
 ///
 /// If the result contains a diagnostic, the diagnostic is
@@ -20,15 +20,20 @@ class [[nodiscard]] Result {
     template <typename T>
     struct make_result {
         using type = Result<T>;
+        static constexpr bool value = false;
     };
 
     template <typename T>
     struct make_result<Result<T>> {
         using type = Result<T>;
+        static constexpr bool value = true;
     };
 
     template <typename T>
     using make_result_t = typename make_result<T>::type;
+
+    template <typename T>
+    static constexpr bool is_result_v = make_result<T>::value;
 
     /// Construct a null result.
     struct NullConstructTag {};
@@ -60,6 +65,21 @@ public:
     Result(Result<T>&& other) {
         if (other.is_diag()) data = std::move(other.diag());
         else data = std::move(other.value());
+    }
+
+    /// Checked cast for results.
+    ///
+    /// Note: \c is() and \c cast() seem to have confusing semantics in
+    /// conjunction with results, so we only provide this one for now:
+    /// it’s unclear what \c is() should return if the result holds a
+    /// diagnostic, and \c cast() is just a bad idea because it would
+    /// just fill our results with null pointers, which is something
+    /// we’re actively trying to prevent.
+    template <typename To, typename From>
+    requires is_result_v<From>
+    friend auto as(From&& result) -> Result<To*> {
+        if (result.is_diag()) return std::forward<decltype(result)>(result).diag();
+        else return Result<To*>{lcc::as<To>(std::forward<decltype(result)>(result).value())};
     }
 
     /// Get the diagnostic.
@@ -143,7 +163,6 @@ template <typename... ValueTypes>
 bool IsError(Result<ValueTypes>&... results) {
     return (results.is_diag() or ...);
 }
-
 } // namespace lcc
 
 /// Macro for binding a member function to the \c this pointer.
