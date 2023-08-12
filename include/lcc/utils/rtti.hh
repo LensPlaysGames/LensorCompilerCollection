@@ -4,6 +4,12 @@
 #include <lcc/utils.hh>
 
 namespace lcc::detail {
+/// Check that an object is a pointer to a class type.
+template <typename Type>
+concept ClassPointer =
+    std::is_pointer_v<std::remove_reference_t<Type>> and
+    std::is_class_v<std::remove_pointer_t<std::remove_reference_t<Type>>>;
+
 /// Return const To if either From or To is const.
 template <typename From, typename To>
 using merge_const = std::conditional_t<
@@ -97,8 +103,8 @@ namespace lcc {
 ///
 /// \see as()
 /// \see is()
-template <typename Target>
-auto cast(auto&& value) { return detail::cast_impl<false, Target>(value); }
+template <typename Target, detail::ClassPointer Object>
+auto cast(Object&& value) { return detail::cast_impl<false, Target>(value); }
 
 /// \brief Perform a checked cast to a target type.
 ///
@@ -111,8 +117,8 @@ auto cast(auto&& value) { return detail::cast_impl<false, Target>(value); }
 ///
 /// \see cast()
 /// \see is()
-template <typename Target>
-auto as(auto&& value) { return detail::cast_impl<true, Target>(value); }
+template <typename Target, detail::ClassPointer Object>
+auto as(Object&& value) { return detail::cast_impl<true, Target>(value); }
 
 /// \brief Check if the dynamic type of a value is one of a set of types.
 ///
@@ -127,8 +133,8 @@ auto as(auto&& value) { return detail::cast_impl<true, Target>(value); }
 ///
 /// \see as()
 /// \see cast()
-template <typename... Types>
-bool is(auto&& value) { return (bool(detail::cast_impl<false, Types>(value)) or ...); }
+template <typename... Types, detail::ClassPointer Object>
+bool is(Object&& value) { return (bool(detail::cast_impl<false, Types>(value)) or ...); }
 } // namespace lcc
 
 #endif // LCC_RTTI_HH
