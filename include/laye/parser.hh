@@ -106,6 +106,7 @@ private:
 
     /// Get the current scope.
     auto CurrScope() -> Scope* { return scope_stack.back(); }
+    auto CurrLocation() { return tok.location; }
 
     /// True if any speculative parse state is enabled, false otherwise.
     bool IsInSpeculativeParse() const { return speculative_parse_stack > 0; }
@@ -125,10 +126,9 @@ private:
     auto NextToken() {
         if (IsInSpeculativeParse()) {
             speculative_look_ahead++;
-            return PeekToken(speculative_look_ahead);
+            tok = PeekToken(speculative_look_ahead);
         }
-
-        if (not look_ahead.empty()) {
+        else if (not look_ahead.empty()) {
             tok = look_ahead[0];
             // pop from the front of the vector
             look_ahead.erase(look_ahead.begin());
@@ -136,17 +136,9 @@ private:
         return tok;
     }
 
-    bool IsAtEof() const {
-        if (IsInSpeculativeParse()) {
-            LCC_ASSERT(speculative_look_ahead <= look_ahead.size());
-            return look_ahead[speculative_look_ahead - 1].kind == TokenKind::Eof;
-        }
-
-        return tok.kind == TokenKind::Eof;
-    }
-
     /// Check if we’re at one of a set of tokens.
     [[nodiscard]] auto At(auto... tks) { return ((tok.kind == tks) or ...); }
+    [[nodiscard]] auto PeekAt( usz ahead, auto... tks) { return ((PeekToken(ahead).kind == tks) or ...); }
 
     /// Like At(), but consume the token if it matches.
     bool Consume(auto... tks) {
@@ -156,9 +148,6 @@ private:
         }
         return false;
     }
-
-    /// Synchronise on semicolons and braces.
-    void Synchronise();
 
     /// Issue a note.
     template <typename... Args>
@@ -178,11 +167,43 @@ private:
         return Diag::Error(context, where, fmt, std::forward<Args>(args)...);
     }
 
-    Type* TryParseType(bool allocate);
-    bool SpeculativeParseType() { return TryParseType(false); }
-    Type* ParseType() { return TryParseType(true); }
+    /// Issue an error.
+    template <typename... Args>
+    Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Error(context, CurrLocation(), fmt, std::forward<Args>(args)...);
+    }
+
+    void ExpectSemiColon() {
+        if (not Consume(TokenKind::SemiColon)) {
+            Error(CurrLocation(), "Expected ';'");
+        }
+    }
+
+    /// Synchronise on semicolons and braces.
+    void Synchronise();
+
+    auto ParseTopLevel() -> Result<Decl*>;
+
+    auto TryParseDecl() -> Result<Decl*>;
+    auto ParseDecl() -> Result<Decl*>;
+    auto ParseDeclOrStatement() -> Result<std::variant<Statement*, Decl*>>;
+    
+    auto TryParseTemplateParams(bool allocate) -> Result<std::vector<TemplateParam>>;
+    bool SpeculativeParseTemplateParams() { LCC_ASSERT(IsInSpeculativeParse()); return TryParseTemplateParams(false).is_value(); }
+    auto MaybeParseTemplateParams() { LCC_ASSERT(not IsInSpeculativeParse()); return TryParseTemplateParams(true); }
+
+    auto ParseImportDecl(bool is_export) -> Result<ImportHeader*>;
+
+    auto TryParseType(bool allocate) -> Result<Type*>;
+    bool SpeculativeParseType() { LCC_ASSERT(IsInSpeculativeParse()); return TryParseType(false).is_value(); }
+    auto ParseType() { LCC_ASSERT(not IsInSpeculativeParse()); return TryParseType(true); }
+
+    auto ParseExpr() -> Result<Expr*>;
 
     static isz BinaryOperatorPrecedence(TokenKind tokenKind);
+    
+    static OperatorKind UnaryOperatorKind(TokenKind tokenKind);
+    static OperatorKind BinaryOperatorKind(TokenKind tokenKind);
 
     friend Scope;
     friend Statement;

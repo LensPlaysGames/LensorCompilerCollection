@@ -22,7 +22,7 @@ class Parser;
 
 struct Module {
     std::vector<ModuleHeader*> headers;
-    std::vector<Decl*> topLevelDecls;
+    std::vector<Decl*> top_level_decls;
 
 private:
     std::vector<Statement*> statements;
@@ -119,6 +119,8 @@ enum struct TokenKind {
     // Test,
     Import,
     Export,
+    From,
+    As,
     Operator,
     Readonly,
     Writeonly,
@@ -209,9 +211,9 @@ enum struct OperatorKind {
 };
 
 struct DeclModifier {
-    TokenKind decl_kind{};
+    TokenKind decl_kind;
     std::string string_value{};
-    Expr* expr_value{};
+    CallConv call_conv{};
 };
 
 struct TemplateParam {
@@ -1077,11 +1079,11 @@ public:
 //
 // Do notation could mirror Haskell?
 //
-// T? operator return <T>(T t) => t; // what would this be called?
-// B? operator >>= <A, B>(A? a, B?(A) f) // or just `bind`
+// T? ret<T>(T t) => t;
+// B? bind<A, B>(A? a, B?(A) f)
 // {
 //     if a is nil then return nil;
-//     return f(a!); // note that a! is only required if we don't have good flow logic
+//     return f(a!);
 // }
 //
 // User? get_user(string userId);
@@ -1092,6 +1094,8 @@ public:
 //     user = get_user(id)
 //     addr = get_user_address(user)
 //     get_street_address(addr);
+//
+// // becomes ->  bind(bind(get_user(id), get_user_address), get_street_address);
 //
 // error unions may also be monadic, and have special semantics, but the explicit use of
 //  try/catch should probably probably encouraged.

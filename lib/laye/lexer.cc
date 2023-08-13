@@ -33,6 +33,8 @@ static struct {
     //{Tk::Test, "test"},
     {Tk::Import, "import"},
     {Tk::Export, "export"},
+    {Tk::From, "from"},
+    {Tk::As, "as"},
     {Tk::Operator, "operator"},
     {Tk::Readonly, "readonly"},
     {Tk::Writeonly, "writeonly"},
