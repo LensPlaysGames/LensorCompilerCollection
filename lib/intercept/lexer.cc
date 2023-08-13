@@ -125,7 +125,7 @@ void Lexer::NextToken() {
         // artificial and be treated *seriously*.
         tok.artificial = false;
         // macros within macros within macros within ...
-        if (tok.kind == TokenKind::Ident && tok.text == "macro")
+        if (tok.kind == TokenKind::Ident and tok.text == "macro")
             NextMacro();
 
         return;
@@ -291,7 +291,7 @@ void Lexer::NextToken() {
             NextChar();
             // Line comments begin with `;;`
             if (lastc == ';') {
-                while (lastc && lastc != '\n') NextChar();
+                while (lastc and lastc != '\n') NextChar();
                 return NextToken();
             }
 
@@ -440,7 +440,7 @@ void Lexer::NextIdentifier() {
 }
 
 void Lexer::HandleIdentifier() {
-    if (!raw_mode && !tok.artificial && tok.text == "macro") {
+    if (!raw_mode and !tok.artificial and tok.text == "macro") {
         NextMacro();
         return;
     }
@@ -465,7 +465,7 @@ void Lexer::HandleIdentifier() {
 
     // Try and parse a number just after encountering `s` or `u` at the
     // beginning of an identifier.
-    if (tok.text.size() > 1 && (tok.text[0] == 's' || tok.text[0] == 'i' || tok.text[0] == 'u') && IsDigit(tok.text[1])) {
+    if (tok.text.size() > 1 and (tok.text[0] == 's' or tok.text[0] == 'i' or tok.text[0] == 'u') and IsDigit(tok.text[1])) {
         const char* cstr = tok.text.c_str();
 
         /// Convert the number.
@@ -551,11 +551,125 @@ void Lexer::ExpandMacro(Macro* m) {
 }
 
 void lcc::intercept::Lexer::NextString() {
+    char delim = lastc;
+    NextChar();
+
+    tok.text = {};
+
+    if (delim == '\'') {
+        while (lastc != delim) {
+            if (lastc == 0)
+                Error("Unterminated string literal");
+            tok.text += lastc;
+            NextChar();
+        }
+    } else {
+        LCC_ASSERT(delim == '"');
+        while (lastc != delim) {
+            if (lastc == 0)
+                Error("Unterminated string literal");
+
+            if (lastc == '\\') {
+                NextChar();
+                switch (lastc) {
+                    case 'n': tok.text += '\n'; break;
+                    case 'r': tok.text += '\r'; break;
+                    case 't': tok.text += '\t'; break;
+                    case 'f': tok.text += '\f'; break;
+                    case 'v': tok.text += '\v'; break;
+                    case 'a': tok.text += '\a'; break;
+                    case 'b': tok.text += '\b'; break;
+                    case 'e': tok.text += '\033'; break;
+                    case '0': tok.text += '\0'; break;
+                    case '\'': tok.text += '\''; break;
+                    case '\"': tok.text += '\"'; break;
+                    case '\\': tok.text += '\\'; break;
+                    default: Error("Invalid escape sequence");
+                }
+            } else {
+                tok.text += lastc;
+            }
+            NextChar();
+        }
+    }
+
+    if (lastc != delim)
+        Error("Unterminated string literal");
+
+    tok.kind = TokenKind::String;
+    NextChar();
 }
 
 void lcc::intercept::Lexer::ParseNumber(int base) {
+    const char* cstr = tok.text.c_str();
+
+    /// Convert the number.
+    char* end;
+    errno = 0;
+    tok.integer_value = (u64) std::strtoull(cstr, &end, base);
+    if (errno == ERANGE) Error("Bit width of integer is too large.");
+    // If the identifier is something like `s64iam`, it's simply an identifier.
+    if (end != cstr + tok.text.size()) Error("Invalid integer literal");
 }
 
 void lcc::intercept::Lexer::NextNumber() {
+    /// Record the start of the number.
+    tok.text = {};
+
+    tok.integer_value = 0;
+    tok.kind = TokenKind::Number;
+
+    /// At least one leading zero.
+    if (lastc == '0') {
+        /// Discard the zero.
+        NextChar();
+
+        /// Another zero is an error.
+        if (lastc == '0') Error("Leading zeroes are not allowed in decimal literals. Use 0o/0O for octal literals.");
+
+#define DO_PARSE_NUMBER(name, chars, condition, base)                            \
+    /** Read all chars that are part of the literal. **/                         \
+    if (lastc == chars[0] || lastc == chars[1]) {                                \
+        /** Yeet the prefix. **/                                                 \
+        NextChar();                                                              \
+                                                                                 \
+        /** Lex the digits. **/                                                  \
+        while (condition) {                                                      \
+            tok.text += lastc;                                                   \
+            NextChar();                                                          \
+        }                                                                        \
+                                                                                 \
+        /** We need at least one digit. **/                                      \
+        tok.location.len = (u16) (CurrentOffset() - tok.location.pos);           \
+        if (tok.text.size() == 0) Error("Expected at least one " name " digit"); \
+                                                                                 \
+        /** Actually parse the number. **/                                       \
+        return ParseNumber(base);                                                \
+    }
+
+        DO_PARSE_NUMBER("binary", "bB", lastc == '0' || lastc == '1', 2)
+        DO_PARSE_NUMBER("octal", "oO", IsDigit(lastc) or lastc < '8', 8)
+        DO_PARSE_NUMBER("hexadecimal", "xX", IsHexDigit(lastc), 16)
+
+#undef DO_PARSE_NUMBER
+
+        /// If the next character is a space or delimiter, then this is a literal 0.
+        if (IsSpace(lastc) or !IsAlpha(lastc)) return;
+
+        /// Anything else is an error.
+        Error("Invalid integer literal");
+    }
+
+    /// Any other digit means we have a decimal number.
+    if (IsDigit(lastc)) {
+        do {
+            tok.text += lastc;
+            NextChar();
+        } while (IsDigit(lastc));
+        return ParseNumber(10);
+    }
+
+    /// Anything else is an error.
+    Error("Invalid integer literal");
 }
 } // namespace lcc::intercept
