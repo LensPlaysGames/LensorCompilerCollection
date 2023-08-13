@@ -58,16 +58,17 @@ private:
         }
     };
 
-    Parser(Context* context, File* file) : Lexer(context, file) { }
+    Parser(Context* context, File* file) : Lexer(context, file) {}
 
     /// Check if we’re at one of a set of tokens.
-    [[nodiscard]] auto At(auto... tks) { return ((tok.kind == tks) or ...); }
+    [[nodiscard]] static bool Is(InterceptToken* tk, auto... tks) { return ((tk->kind == tks) or ...); }
+    [[nodiscard]] bool At(auto... tks) { return Is(&tok, tks...); }
 
     /// Check if we’re at the start of an expression.
     bool AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
 
     /// Like At(), but consume the token if it matches.
-    bool Consume(auto ...tks) {
+    bool Consume(auto... tks) {
         if (At(tks...)) {
             NextToken();
             return true;
@@ -101,23 +102,21 @@ private:
     auto ParseBlock() -> Result<BlockExpr*>;
     auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;
     auto ParseCallExpr(Expr* callee) -> Result<CallExpr*>;
-    auto ParseDecl() -> Result<ObjectDecl*>;
-    auto ParseObjectDeclRest(std::string ident, Location location, bool is_extern) -> Result<ObjectDecl*>;
+    auto ParseDecl() -> Result<Decl*>;
+    auto ParseDeclRest(std::string ident, Location location, bool is_extern) -> Result<Decl*>;
     auto ParseExpr(isz current_precedence = 0) -> ExprResult;
     auto ParseExprInNewScope() -> ExprResult;
     auto ParseForExpr() -> Result<ForExpr*>;
-    auto ParseFunctionAttributes() -> Result<FuncType::Attributes>;
-    auto ParseFunctionBody(bool is_extern) -> Result<Expr*>;
-    auto ParseFunctionSignature(Type* return_type) -> Result<FuncType*>;
+    auto ParseFuncAttrs() -> Result<FuncType::Attributes>;
+    auto ParseFuncBody(bool is_extern) -> Result<Expr*>;
+    auto ParseFuncDecl(std::string name, FuncType* type, bool is_extern) -> Result<FuncDecl*>;
+    auto ParseFuncSig(Type* return_type) -> Result<FuncType*>;
     auto ParseIdentExpr() -> Result<Expr*>;
     auto ParseIfExpr() -> Result<IfExpr*>;
-    auto ParseParamDecl() -> Result<FuncTypeParam*>;
     auto ParsePreamble(File& f) -> Result<void>;
     auto ParseStructType() -> Result<StructType*>;
     void ParseTopLevel();
     auto ParseType(isz current_precedence = 0) -> Result<Type*>;
-    auto ParseTypeDerived(Type* baseType) -> Result<Type*>;
-    auto ParseTypeExpression(Type* type) -> ExprResult;
     auto ParseWhileExpr() -> Result<WhileExpr*>;
 
     /// Synchronise on semicolons and braces.

@@ -200,54 +200,83 @@ auto lcc::intercept::Parser::ParseCallExpr(Expr* callee) -> Result<CallExpr*> {
 }
 
 /// Parse an object or type declaration.
-auto lcc::intercept::Parser::ParseDecl() -> Result<ObjectDecl*> {
+auto lcc::intercept::Parser::ParseDecl() -> Result<Decl*> {
     auto loc = tok.location;
     auto text = tok.text;
     auto is_extern = Consume(Tk::Extern);
     if (not Consume(Tk::Ident)) return Error("Expected declaration");
-    return ParseObjectDeclRest(text, loc, is_extern);
+    return ParseDeclRest(text, loc, is_extern);
 }
 
 /// Parse everything after the identifier in an object declaration.
 ///
-/// <decl-object>    ::= ":" <decl-typed> | "::" <expr>
-/// <decl-typed>     ::= <type> [ "=" <expr> ]
-///                    | <type-function> [ <function-body> ]
-auto lcc::intercept::Parser::ParseObjectDeclRest(
+/// <decl-function> ::= ":" <type-function> [ <function-body> ]
+/// <decl-var>      ::= ":" <type> [ "=" <expr> ] | "::" <expr>
+auto lcc::intercept::Parser::ParseDeclRest(
     std::string ident,
     lcc::Location location,
     bool is_extern
-) -> Result<ObjectDecl*> {
+) -> Result<Decl*> {
     /// Dispatch based on the declaration kind.
     switch (tok.kind) {
         default: return Error("Expected :, ::, or :> after identifier in declaration");
 
-        /// Regular declaration. It must be followed by a type.
+        /// Type or variable declaration.
         case Tk::Colon: {
             NextToken();
+
+            /// If the next token is 'type' or 'struct', then this
+            /// is a type declaration.
+            if (At(Tk::Struct, Tk::Type)) {
+                if (is_extern) Error("Type declarations cannot be extern");
+                auto decl_name = ident; /// Copy required below.
+
+                /// Struct declaration.
+                if (At(Tk::Struct)) {
+                    /// Parse the type.
+                    auto decl = ParseType();
+                    if (not decl) return decl.diag();
+
+                    /// Type must be a struct type.
+                    if (auto s = cast<StructType>(*decl)) {
+                        return CurrScope()->declare(
+                            context,
+                            std::move(decl_name),
+                            new (*mod) StructDecl(mod.get(), std::move(ident), s, location)
+                        );
+                    } else {
+                        return Error("Declared type must be an unqualified struct type");
+                    }
+                }
+
+                /// Type alias declaration.
+                LCC_ASSERT(Consume(Tk::Type));
+
+                /// Parse the type.
+                if (not Consume(Tk::Eq)) return Error("Type alias declarations must have an initialiser");
+                auto type = ParseType();
+                if (not type) return type.diag();
+
+                /// Create the type alias.
+                return CurrScope()->declare(
+                    context,
+                    std::move(decl_name),
+                    new (*mod) TypeAliasDecl(
+                        std::move(ident),
+                        *type,
+                        Location{location, type->location()}
+                    )
+                );
+            }
+
+            /// Otherwise, this is a variable or function declaration.
             auto ty = ParseType();
             if (not ty) return ty.diag();
 
             /// If the type is a function type, then this is
             /// a function declaration.
-            if (auto type = cast<FuncType>(*ty)) {
-                /// Parse attributes and the function body.
-                auto body = ParseFunctionBody(is_extern);
-                if (not body) return Diag();
-
-                /// Create the function.
-                auto func = new (*mod) FuncDecl(
-                    ident,
-                    type,
-                    *body,
-                    mod.get(),
-                    is_extern ? Linkage::Imported : Linkage::Internal,
-                    location
-                );
-
-                /// Add it to the current scope and return it.
-                return as<ObjectDecl>(CurrScope()->declare(context, std::move(ident), func));
-            }
+            if (auto type = cast<FuncType>(*ty))
+                return ParseFuncDecl(std::move(ident), type, is_extern);
 
             /// Otherwise, it is a variable declaration. Parse
             /// the initialiser if there is one.
@@ -272,7 +301,7 @@ auto lcc::intercept::Parser::ParseObjectDeclRest(
             );
 
             /// Add it to the current scope and return it.
-            return as<ObjectDecl>(CurrScope()->declare(context, std::move(ident), var));
+            return CurrScope()->declare(context, std::move(ident), var);
         }
 
         /// Variable declaration with type inference.
@@ -294,7 +323,7 @@ auto lcc::intercept::Parser::ParseObjectDeclRest(
 
             /// Declarations that use type inference cannot be external.
             if (is_extern) Error(cc_loc, "Extern declarations must specify a type");
-            return as<ObjectDecl>(CurrScope()->declare(context, std::move(ident), var));
+            return CurrScope()->declare(context, std::move(ident), var);
         }
     }
 }
@@ -305,8 +334,12 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
     auto lhs = ExprResult::Null();
 
     /// Export a declaration.
-    const auto Export = [&](ObjectDecl* decl) -> Result<ObjectDecl*> {
-        decl->linkage(decl->linkage() == Linkage::Imported ? Linkage::Reexported : Linkage::Exported);
+    const auto Export = [&](Decl* decl) -> Result<Decl*> {
+        /// Set linkage to exported if this has linkage.
+        if (auto obj = cast<ObjectDecl>(decl))
+            obj->linkage(obj->linkage() == Linkage::Imported ? Linkage::Reexported : Linkage::Exported);
+
+        /// Add the declaration to the module’s export list.
         mod->add_export(decl);
         return decl;
     };
@@ -339,17 +372,19 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         /// Expression that starts with an identifier.
         case Tk::Ident: lhs = ParseIdentExpr(); break;
 
-        /// Builtin types.
+        /// Because of parsing problems, expressions must not start with a type.
         case Tk::ArbitraryInt:
         case Tk::Bool:
         case Tk::Byte:
-        case Tk::IntegerKw:
+        case Tk::IntKw:
         case Tk::Void:
-            lhs = ParseType() >>= bind Parser::ParseTypeExpression;
-            break;
+        case Tk::Struct:
+        case Tk::Type:
+            return Error("Types are not allowed here. Did you forget a ':' or 'lambda'?");
 
         /// Better error message for this.
-        case Tk::Else: return Error("Unexpected 'else'. Did you forget an 'if' somewhere?");
+        case Tk::Else:
+            return Error("Unexpected 'else'. Did you forget an 'if' somewhere?");
 
         /// Control expressions.
         case Tk::If: lhs = ParseIfExpr(); break;
@@ -406,11 +441,10 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             lhs = new (*mod) CompoundLiteral(std::move(elements), tok.location);
         } break;
 
-        /// Parenthesised expression or type.
+        /// Parenthesised expression.
         ///
-        /// FIXME: We should allow types in parentheses if that is at
-        ///        all possible. Come back to this once we know how to
-        ///        handle the Tk::At case.
+        /// Note that parens around types are possible, but only in a
+        /// context where we definitely expect a type.
         case Tk::LParen: {
             NextToken();
             lhs = ParseExpr();
@@ -418,27 +452,10 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             if (not Consume(Tk::RParen)) return Error("Expected )");
         } break;
 
-        /// Ambiguous situation:
-        ///  a := @foo()
-        ///        ^
-        /// Possible productions:
-        ///   1. foo is a type, this is a lambda
-        ///   2. foo is a function; this is a call+dereference.
-        ///
-        /// Parentheses do not help:
-        ///  a := @(foo())
-        ///         ^
-        /// Possible productions:
-        ///   1. foo is a type, this is a function pointer type.
-        ///   2. foo is a function, this is a call+parens+dereference.
-        ///
-        /// TODO: Revisit this case once we know what expressions can
-        ///       start with types.
-        case Tk::At: LCC_ASSERT(false, "TODO");
-
         /// Unary operators.
-        case Tk::Minus:
         case Tk::Ampersand:
+        case Tk::At:
+        case Tk::Minus:
         case Tk::Tilde:
         case Tk::Exclam:
         case Tk::Star: {
@@ -448,6 +465,17 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
             lhs = ParseExpr(PrefixOperatorPrecedence) >>= [&](Expr* operand) {
                 return new (*mod) UnaryExpr(op, operand, false, loc);
             };
+        } break;
+
+        /// Lambda expression.
+        case Tk::Lambda: {
+            auto loc = tok.location;
+            NextToken();
+            auto ty = ParseType();
+            if (ty or not is<FuncType>(*ty)) return Error("Type of lambda must be a function type");
+            auto func_ty = cast<FuncType>(ty.value());
+            lhs = ParseFuncDecl("", func_ty, false);
+            lhs->location({loc, lhs->location()});
         } break;
     }
 
@@ -567,7 +595,7 @@ auto lcc::intercept::Parser::ParseForExpr() -> Result<ForExpr*> {
     return new (*mod) ForExpr(*init, *cond, *increment, *body, loc);
 }
 
-auto lcc::intercept::Parser::ParseFunctionAttributes() -> Result<FuncType::Attributes> {
+auto lcc::intercept::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
     static const StringMap<FuncAttr> attrs_map{
         {"const", FuncAttr::Const},
         {"discardable", FuncAttr::Discardable},
@@ -595,7 +623,7 @@ auto lcc::intercept::Parser::ParseFunctionAttributes() -> Result<FuncType::Attri
 }
 
 /// <function-body>  ::= "=" <expr> | <expr-block>
-auto lcc::intercept::Parser::ParseFunctionBody(bool is_extern) -> Result<Expr*> {
+auto lcc::intercept::Parser::ParseFuncBody(bool is_extern) -> Result<Expr*> {
     /// If the declaration is external, but there still seems to be
     /// a function body, warn the the user that they might be trying
     /// to do something that doesn’t make sense.
@@ -641,30 +669,57 @@ auto lcc::intercept::Parser::ParseFunctionBody(bool is_extern) -> Result<Expr*> 
     return ParseBlock(std::move(sc));
 }
 
+/// <type-signature> ::= "(" <param-decls> ")" <func-attrs>
+/// <param-decls>    ::= { <param-decl> [ "," ]  }
+/// <param-decl>     ::= [ IDENTIFIER ] ":" <type>
+auto lcc::intercept::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
+    LCC_ASSERT(Consume(Tk::LParen), "ParseFunctionSignature called while not at '('");
+
+    /// Parse the parameter declarations.
+    std::vector<FuncType::Param> parameters;
+    while (not At(Tk::RParen)) {
+        /// Parse the parameter name.
+        auto loc = tok.location;
+        auto name = At(Tk::Ident) ? tok.text : "";
+        Consume(Tk::Ident);
+
+        /// Parse the parameter type.
+        if (not Consume(Tk::Colon)) return Error("Expected ':' in parameter declaration");
+        auto type = ParseType();
+        if (not type) return type.diag();
+
+        /// Add the parameter to the list.
+        parameters.emplace_back(std::move(name), *type, Location{loc, type->location()});
+        Consume(Tk::Comma);
+    }
+
+    /// Yeet ')'.
+    if (not Consume(Tk::RParen)) return Error("Expected ')' in function signature");
+
+    /// Parse attributes.
+    auto attrs = ParseFuncAttrs();
+    if (not attrs) return attrs.diag();
+
+    /// Create the function type.
+    return new (*mod) FuncType(
+        std::move(parameters),
+        return_type,
+        std::move(*attrs),
+        Location{tok.location, tok.location}
+    );
+}
+
 auto lcc::intercept::Parser::ParseIdentExpr() -> Result<Expr*> {
     auto loc = tok.location;
     auto text = tok.text;
     LCC_ASSERT(Consume(Tk::Ident), "ParseIdentExpr called while not at identifier");
-
-    /// If this is followed by `:` or `::`, then this is a
-    /// variable or function declaration.
     const bool is_extern = Consume(Tk::Extern);
-    if (At(Tk::Colon, Tk::ColonColon)) return ParseObjectDeclRest(text, loc, is_extern);
 
-    /// Otherwise, this is a type declaration.
-    if (not Consume(Tk::ColonGt)) return Error("Expected :, ::, or :> in declaration");
-    if (is_extern) return Error("Type declarations cannot be declared extern");
+    /// If the next token is ':' or '::', then this is a declaration.
+    if (At(Tk::Colon, Tk::ColonColon)) return ParseDeclRest(std::move(text), loc, is_extern);
 
-    /// Parse the type.
-    auto decl = ParseType();
-    if (not decl) return decl.diag();
-
-    /// If the type is a struct type, then this is a struct decl.
-    if (auto s = cast<StructType>(*decl))
-        return new (*mod) StructDecl(mod.get(), std::move(text), s, loc);
-
-    /// TODO: Otherwise, we could parse it as a type alias decl.
-    return Error("Expected struct type after :>");
+    /// Otherwise, it’s just a name.
+    return new (*mod) NameRefExpr(std::move(text), loc);
 }
 
 /// <expr-if> ::= IF <expr> <expr> [ ELSE <expr> ]
@@ -713,6 +768,39 @@ auto lcc::intercept::Parser::ParsePreamble(File& f) -> Result<void> {
     return {};
 }
 
+/// <type-struct> ::= TYPE <struct-body>
+/// <struct-body> ::= "{" { <member-decl> } "}"
+/// <member-decl> ::= IDENTIFIER ":" <type> [ ";" ]
+auto lcc::intercept::Parser::ParseStructType() -> Result<StructType*> {
+    auto loc = tok.location;
+    LCC_ASSERT(Consume(Tk::Struct), "ParseStructType called while not at 'type'");
+    if (not Consume(Tk::LBrace)) return Error("Expected '{{' after 'type' in struct declaration");
+
+    /// Parse the struct body.
+    std::vector<StructType::Member> members;
+    while (not At(Tk::RBrace)) {
+        /// Name.
+        auto name = tok.text;
+        auto start = tok.location;
+        if (not Consume(Tk::Ident)) return Error("Expected member name in struct declaration");
+
+        /// Type.
+        if (not Consume(Tk::Colon)) return Error("Expected ':' in struct declaration");
+        auto type = ParseType();
+        if (not type) return type.diag();
+
+        /// Add the member to the list.
+        members.emplace_back(std::move(name), *type, Location{start, type->location()});
+        Consume(Tk::Semicolon);
+    }
+
+    /// Yeet '}'.
+    if (not Consume(Tk::RBrace)) return Error("Expected '}}' in struct declaration");
+
+    /// Create the struct type.
+    return new (*mod) StructType(std::move(members), Location{loc, tok.location});
+}
+
 /// <file> ::= <preamble> { <expr> | ";" }
 void lcc::intercept::Parser::ParseTopLevel() {
     /// Set up the rest of the parser state.
@@ -755,7 +843,7 @@ auto lcc::intercept::Parser::ParseType(isz current_precedence) -> Result<Type*> 
         default: return Error("Expected type");
 
         /// Builtin types.
-        case Tk::IntegerKw:
+        case Tk::IntKw:
             ty = BuiltinType::Integer(mod.get(), tok.location);
             NextToken();
             break;
@@ -801,7 +889,7 @@ auto lcc::intercept::Parser::ParseType(isz current_precedence) -> Result<Type*> 
             break;
 
         /// Structure type.
-        case Tk::Type:
+        case Tk::Struct:
             if (auto type = ParseStructType(); not type) return type.diag();
             else ty = *type;
             break;
@@ -831,7 +919,7 @@ auto lcc::intercept::Parser::ParseType(isz current_precedence) -> Result<Type*> 
 
             /// Function type.
             case Tk::LParen: {
-                auto type = ParseFunctionSignature(ty);
+                auto type = ParseFuncSig(ty);
                 if (not type) return type.diag();
                 ty = *type;
             } break;
@@ -867,4 +955,36 @@ auto lcc::intercept::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
 void lcc::intercept::Parser::Synchronise() {
     while (not At(Tk::Semicolon, Tk::LBrace, Tk::RBrace, Tk::Eof)) NextToken();
     NextToken();
+}
+
+/// Parse a function declaration.
+///
+/// \param name Function name. If empty, this is an anonymous function.
+/// \param type The type of the function.
+/// \param is_extern Whether this is an external function.
+/// \return The decl or an error.
+auto lcc::intercept::Parser::ParseFuncDecl(
+    std::string name,
+    FuncType* type,
+    bool is_extern
+) -> Result<FuncDecl*> {
+    /// Parse attributes and the function body.
+    auto body = ParseFuncBody(is_extern);
+    if (not body) return Diag();
+
+    /// Create the function.
+    auto func = new (*mod) FuncDecl(
+        name,
+        type,
+        *body,
+        mod.get(),
+        is_extern ? Linkage::Imported : Linkage::Internal,
+        type->location()
+    );
+
+    /// If the function is anonymous, then this is a lambda.
+    if (name.empty()) return func;
+
+    /// Add it to the current scope and return it.
+    return as<FuncDecl>(CurrScope()->declare(context, std::move(name), func));
 }

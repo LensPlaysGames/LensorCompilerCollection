@@ -35,6 +35,7 @@ class Lexer : public syntax::Lexer<InterceptToken> {
         std::vector<std::string> gensyms{};
     };
 
+    std::vector<InterceptToken> lookahead_tokens{};
     std::vector<Macro> macros{};
     std::vector<MacroExpansion> macro_expansion_stack{};
     bool raw_mode = false;
@@ -57,6 +58,14 @@ class Lexer : public syntax::Lexer<InterceptToken> {
 protected:
     Lexer(Context* context, File* file)
         : syntax::Lexer<InterceptToken>(context, file) { NextToken(); }
+
+    /// Note: Calling LookAhead() invalidates the addresses of
+    /// previous lookaheads, if this requires more tokens to be
+    /// parsed.
+    ///
+    /// Lookahead tokens are 1-based. LookAhead(0) returns the
+    /// current token.
+    auto LookAhead(usz n) -> InterceptToken*;
 
     void NextToken();
 
