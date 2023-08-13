@@ -251,7 +251,7 @@ enum struct TypeAccess {
 
 class Scope {
     Scope* _parent;
-    StringMap<Expr*> _symbols;
+    StringMap<Statement*> _symbols;
 
 public:
     Scope(Scope* parent)
@@ -262,10 +262,10 @@ public:
     void* operator new(size_t sz, Parser& parser);
 
     auto declare(
-        const Context* ctx,
+        Parser* parser,
         std::string&& name,
-        Expr* expr
-    ) -> Result<Expr*>;
+        Statement* expr
+    ) -> Result<Statement*>;
 
     auto parent() const { return _parent; }
 };
@@ -274,6 +274,8 @@ public:
 class Statement {
 public:
     enum struct Kind {
+        OverloadSet,
+
         // Declarations
         DeclBinding,
         DeclFunction,
@@ -459,6 +461,19 @@ public:
     auto body() const { return _body; }
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::DeclFunction; }
+};
+
+class OverloadSet : public Statement {
+    std::vector<FunctionDecl*> _overloads{};
+
+public:
+    OverloadSet(Location location)
+        : Statement(Kind::OverloadSet, location) {}
+
+    void add(FunctionDecl* overload) { _overloads.push_back(overload); }
+    auto overloads() const -> std::span<FunctionDecl* const> { return _overloads; }
+
+    static bool classof(Statement* statement) { return statement->kind() == Kind::OverloadSet; }
 };
 
 class StructDecl : public NamedDecl {
