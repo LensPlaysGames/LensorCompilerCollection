@@ -11,6 +11,7 @@
 #    include <sys/stat.h>
 #    include <sys/wait.h>
 #    include <unistd.h>
+#    include <wchar.h>
 #endif
 
 auto lcc::File::TempPath(std::string_view extension) -> fs::path {
@@ -103,7 +104,7 @@ auto lcc::File::LoadFileData(const fs::path& path) -> std::vector<char> {
 
 #else
     /// Read the file manually.
-    std::unique_ptr<FILE, decltype(&std::fclose)> f{std::fopen(path.c_str(), "rb"), std::fclose};
+    std::unique_ptr<FILE, decltype(&std::fclose)> f{_wfopen(path.c_str(), L"rb"), std::fclose};
     if (not f) Diag::Fatal("Could not open file \"{}\": {}", path.string(), strerror(errno));
 
     /// Get the file size.
