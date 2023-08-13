@@ -1,6 +1,6 @@
 ;; 69
 
-foo: void(baz: &(integer[4])) {
+foo: void(baz: &(int[4])) {
   @baz[2] := 69
 }
 

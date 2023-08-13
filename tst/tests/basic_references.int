@@ -1,8 +1,8 @@
 ;; 42
 
-a : integer = 69
+a : int = 69
 
-foo : void(x : &integer) {
+foo : void(x : &int) {
   x := 42
 }
 

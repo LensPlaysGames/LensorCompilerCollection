@@ -1,6 +1,6 @@
 ;; 42
 
-f : integer (x: integer) {
+f : int (x: int) {
     return x + 10;
 }
 

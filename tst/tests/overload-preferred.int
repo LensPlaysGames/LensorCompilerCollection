@@ -1,8 +1,8 @@
 ;; LABELS overloading
 ;; 42
 
-foo : integer (x : byte, y : byte) 42
-foo : integer (x : byte, y : integer) 69
+foo : int (x : byte, y : byte) 42
+foo : int (x : byte, y : int) 69
 
 a: byte = 1
 b: byte = 2

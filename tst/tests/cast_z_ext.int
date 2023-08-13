@@ -1,6 +1,6 @@
 ;; 69
 
 a : byte = 69
-b : integer = 0xffffffff
-b := a as integer
+b : int = 0xffffffff
+b := a as int
 b

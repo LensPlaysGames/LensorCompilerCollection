@@ -3,7 +3,7 @@
 ;; This just tests that this is parsed correctly. This attribute
 ;; is supposed to disable optimisations, but we can’t test for that
 ;; at the moment.
-foo : integer() __noopt__ {
+foo : int() __noopt__ {
     a :: 21
     21 + a
 }

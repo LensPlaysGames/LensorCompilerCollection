@@ -1,8 +1,8 @@
 ;; 69
 
-foo: integer(n : integer) = n
-bar: integer() {
-  x: integer = 69
+foo: int(n : int) = n
+bar: int() {
+  x: int = 69
   foo(x)
 }
 bar()

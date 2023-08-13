@@ -1,6 +1,6 @@
 ;; 42
 
-foo : integer() noinline {
+foo : int() noinline {
     return 42;
 }
 

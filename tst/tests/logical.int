@@ -1,17 +1,17 @@
 ;; 0
 ;; 110001
 
-putchar : ext void(c : integer)
+putchar : ext void(c : int)
 
-lhs : integer = 34
-rhs : integer = 35
+lhs : int = 34
+rhs : int = 35
 
-lt : integer = lhs <  rhs
-le : integer = lhs <= rhs
-gt : integer = lhs >  rhs
-ge : integer = lhs >= rhs
-eq : integer = lhs =  rhs
-ne : integer = ~(lhs = rhs) & 1
+lt : int = lhs <  rhs
+le : int = lhs <= rhs
+gt : int = lhs >  rhs
+ge : int = lhs >= rhs
+eq : int = lhs =  rhs
+ne : int = ~(lhs = rhs) & 1
 
 putchar(48 + lt)
 putchar(48 + le)

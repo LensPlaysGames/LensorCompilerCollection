@@ -4,6 +4,6 @@
 ;; It SHOULD trigger an error for a top-level comparison, and present a
 ;; "did ya mean this" prompt.
 
-a: integer[2] = [34 34]
+a: int[2] = [34 34]
 @a[1] = @a[1] + 1
 @a[0] + @a[1]

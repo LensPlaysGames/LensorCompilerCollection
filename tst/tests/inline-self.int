@@ -1,6 +1,6 @@
 ;; 42
 
-foo : integer(x : integer) {
+foo : int(x : int) {
     if x = 42 return x;
     foo(x + 1)
 }

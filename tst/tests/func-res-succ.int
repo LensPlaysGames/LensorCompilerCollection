@@ -1,13 +1,13 @@
 ;; 69
 
-b : integer = foo()
+b : int = foo()
 
-foo : integer() {
-    a : integer = bar() + baz()
-    baz : integer() 35
+foo : int() {
+    a : int = bar() + baz()
+    baz : int() 35
     a
 }
 
-bar : integer() 34
+bar : int() 34
 
 b

@@ -1,10 +1,10 @@
 ;; LABELS overloading
 ;; 42
 
-bar : integer (x : byte, y: integer) 20
-bar : integer (x : integer, y : @integer) 69
+bar : int (x : byte, y: int) 20
+bar : int (x : int, y : @int) 69
 
-foo : integer (x : byte, func : integer (q : byte, r: integer)) x + func(1, 2)
-foo : integer (x : integer, func : integer (q : byte, r: integer)) x + func(1, 2)
+foo : int (x : byte, func : int (q : byte, r: int)) x + func(1, 2)
+foo : int (x : int, func : int (q : byte, r: int)) x + func(1, 2)
 
 foo(22, bar)

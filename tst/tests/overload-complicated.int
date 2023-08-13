@@ -19,13 +19,13 @@
 ;; Here, overload f3 must be selected.
 
 a: void() {}
-a: void(x : integer) {}
-a: integer(x : @integer) 0
+a: void(x : int) {}
+a: int(x : @int) 0
 
-f: integer(a : void(),                b : @integer(),            c : @integer()) 1
-f: integer(a : void(x : integer),     b : void(),                c : @integer()) 2
-f: integer(a : integer(x : @integer), b : void(x : integer),     c : void()) 3
-f: integer(a : @integer(),            b : integer(x : @integer), c : void(x : integer)) 4
-f: integer(a : @integer(),            b : @integer(),            c : integer(x : @integer)) 5
+f: int(a : void(),                b : @int(),            c : @int()) 1
+f: int(a : void(x : int),     b : void(),                c : @int()) 2
+f: int(a : int(x : @int), b : void(x : int),     c : void()) 3
+f: int(a : @int(),            b : int(x : @int), c : void(x : int)) 4
+f: int(a : @int(),            b : @int(),            c : int(x : @int)) 5
 
 f(a, a, a)

@@ -3,7 +3,7 @@
 
 puts : ext void(s : @byte)
 
-x : integer = 21
+x : int = 21
 
 str : @byte = "Lorem ipsum dolor sit amet consectetuer"[x]
 

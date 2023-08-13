@@ -1,5 +1,5 @@
 ;; 42
 
-foo: integer = 69;
+foo: int = 69;
 foo;
 (42);

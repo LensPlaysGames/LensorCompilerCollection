@@ -1,7 +1,7 @@
 ;; 68
 
 variable :: 0
-foo : integer() {
+foo : int() {
   variable := variable + 1
   33 + variable
 }
