@@ -451,7 +451,7 @@ class FunctionDecl : public NamedDecl {
     Statement* _body;
 
 public:
-    FunctionDecl(Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam>& template_params, std::vector<FunctionParam> params, Statement* body)
+    FunctionDecl(Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<FunctionParam> params, Statement* body)
         : NamedDecl(Kind::DeclFunction, location, mods, name, template_params), _returnType(returnType), _params(std::move(params)), _body(body) {}
 
     auto return_type() const { return _returnType; }
@@ -466,7 +466,7 @@ class StructDecl : public NamedDecl {
     std::vector<StructVariant> _variants;
 
 public:
-    StructDecl(Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam>& template_params, std::vector<StructField> fields, std::vector<StructVariant> variants)
+    StructDecl(Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params, std::vector<StructField> fields, std::vector<StructVariant> variants)
         : NamedDecl(Kind::DeclStruct, location, mods, name, template_params), _fields(std::move(fields)), _variants(std::move(variants)) {}
 
     auto fields() const -> std::span<StructField const> { return _fields; }
