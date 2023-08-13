@@ -3,6 +3,7 @@
 
 #include <lcc/utils.hh>
 #include <lcc/forward.hh>
+#include <vector>
 
 namespace lcc {
 /// Base class of all IR types.
@@ -12,7 +13,10 @@ namespace lcc {
 class Type {
 public:
     enum struct Kind {
+        Array,
         Function,
+        Integer,
+        Struct,
     };
 
     const Kind kind;
@@ -41,6 +45,31 @@ public:
     auto string() const -> std::string;
 };
 
+class ArrayType : public Type {
+    friend class Context;
+
+    usz _length;
+    Type* _element_type;
+
+private:
+    ArrayType(usz length, Type* element_type) : Type(Kind::Array), _length(length), _element_type(element_type) {}
+
+public:
+    static auto Get(Context& ctx, usz length, Type* element_type) -> ArrayType*;
+
+    /// Return the element count.
+    usz length() const { return _length; }
+
+    // Return the element type.
+    Type* element_type() const { return _element_type; }
+
+    /// Get a string representation of this type.
+    auto string() const -> std::string;
+
+    /// RTTI.
+    static bool classof(const Type* t) { return t->kind == Kind::Array; }
+};
+
 /// A function type.
 class FunctionType : public Type {
     friend class Context;
@@ -59,7 +88,7 @@ private:
 
 public:
     /// Get or create a function type.
-    auto Get(Context& ctx, Type* ret, std::vector<Type*> params) -> FunctionType*;
+    static auto Get(Context& ctx, Type* ret, std::vector<Type*> params) -> FunctionType*;
 
     /// Get the return type of this function.
     Type* ret() const { return return_type; }
@@ -69,6 +98,48 @@ public:
 
     /// RTTI.
     static bool classof(const Type* t) { return t->kind == Kind::Function; }
+};
+
+class IntegerType : public Type {
+    friend class Context;
+
+    usz _width;
+
+private:
+    IntegerType(usz width) : Type(Kind::Integer), _width(width) {}
+
+public:
+    static auto Get(Context& ctx, usz width) -> IntegerType*;
+
+    usz bitwidth() const {
+        return _width;
+    }
+
+    /// RTTI.
+    static bool classof(const Type* t) { return t->kind == Kind::Integer; }
+};
+
+class StructType : public Type {
+    friend class Context;
+
+    std::vector<Type*> _members;
+
+private:
+    StructType(std::vector<Type*> members) : Type(Kind::Array), _members(std::move(members)) {}
+
+public:
+    static auto Get(Context& ctx, usz length, Type* element_type) -> StructType*;
+
+    /// Return the element count.
+    usz member_count() const { return _members.size(); }
+
+    /// Return the types of the members of the struct
+    auto members() const -> const std::vector<Type*>& { return _members; }
+
+    auto string() const -> std::string;
+
+    /// RTTI.
+    static bool classof(const Type* t) { return t->kind == Kind::Struct; }
 };
 
 } // namespace lcc
