@@ -1,9 +1,9 @@
 ;; 2
 
-a : integer = 2
+a : int = 2
 
 if 1 {
-    a : integer
+    a : int
     a := 3
 }
 

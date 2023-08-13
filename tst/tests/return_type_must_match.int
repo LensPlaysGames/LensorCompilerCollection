@@ -1,10 +1,10 @@
 ;; ERROR
 
 barbaz :> type {
-  x: integer
+  x: int
 }
 
-foo: integer() {
+foo: int() {
   bar: barbaz
   bar.x := 42
   bar

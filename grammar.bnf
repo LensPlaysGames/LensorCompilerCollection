@@ -26,18 +26,17 @@
 
 /// Declarations.
 <expr-decl>      ::= [ EXPORT ] [ EXTERN ] IDENTIFIER <decl-rest>
-<decl-rest>      ::= <decl-object> | <decl-type>
-<decl-object>    ::= ":" <decl-typed> | "::" <expr>
-<decl-type>      ::= ":>" <type>
-<decl-typed>     ::= <type> [ "=" <expr> ]
-                   | <type-function> [ <function-body> ]
+<decl-rest>      ::= <decl-var> | <decl-function> | <decl-type>
+<decl-var>       ::= ":" <type> [ "=" <expr> ] | "::" <expr>
+<decl-function>  ::= ":" <type-function> [ <function-body> ]
+<decl-type>      ::= ":" <type-struct> | ":" TYPE "=" <type>
 
 /// Other expressions.
 <expr-if>        ::= IF <expr> <expr> [ ELSE <expr> ]
 <expr-while>     ::= WHILE <expr> <expr>
 <expr-for>       ::= FOR <expr> [ "," ] <expr> [ "," ] <expr> <expr>
 <expr-block>     ::= "{" { <expr> } "}"
-<expr-lambda>    ::= <type-function> <function-body>
+<expr-lambda>    ::= LAMBDA <type-function> <function-body>
 <expr-call>      ::= <expr> "(" { <expr> [ "," ] } ")"
 <expr-cast>      ::= <expr> AS <type>
 <expr-subs>      ::= <expr> "[" <expr> "]"
@@ -56,8 +55,8 @@
 <type>           ::= <type-quals> <type-base> <type-rest> | "(" <type> ")"
 <type-quals>     ::= { "@" | "&" }
 <type-base>      ::= <type-struct> | <type-builtin> | IDENTIFIER | INT_TYPE
-<type-struct>    ::= TYPE <struct-body>
-<type-builtin>   ::= INTEGER | BYTE | BOOL | VOID
+<type-struct>    ::= STRUCT <struct-body>
+<type-builtin>   ::= INT | BYTE | BOOL | VOID
 <type-rest>      ::= { <type-arr-sz> | <type-signature>  }
 <type-arr-sz>    ::= "[" <expr> "]"
 <type-signature> ::= "(" <param-decls> ")" <func-attrs>
@@ -68,6 +67,7 @@
 /// Miscellaneous.
 <type-function>  ::= <type-base> <type-signature>
 <function-body>  ::= "=" <expr> | <expr-block>
-<struct-body>    ::= "{" { <param-decl> } "}"
+<struct-body>    ::= "{" { <member-decl> } "}"
+<member-decl>    ::= IDENTIFIER ":" <type> [ ";" ]
 <binary>         ::= /// All binary operators
 <prefix>         ::= /// All unary prefix operators

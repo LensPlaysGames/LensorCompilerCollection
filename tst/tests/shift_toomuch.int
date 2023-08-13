@@ -1,4 +1,4 @@
 ;; ERROR
 
-a : integer = 1
+a : int = 1
 a << 80

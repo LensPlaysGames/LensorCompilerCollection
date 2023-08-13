@@ -2,7 +2,7 @@
 
 a :: 0
 
-foo : void (x : integer) {
+foo : void (x : int) {
     if x { a := 42 return; }
     else { a := 69 return; }
 }

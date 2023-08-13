@@ -1,7 +1,7 @@
 ;; 5
 
 ;; Calculate nth term of fibonacci sequence using recursion.
-fib : integer(n : integer) {
+fib : int(n : int) {
   if n <= 1
     n
   else fib(n - 1) + fib(n - 2)

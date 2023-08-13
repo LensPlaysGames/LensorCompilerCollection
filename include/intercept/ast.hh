@@ -74,7 +74,6 @@ enum struct TokenKind {
 
     ColonEq,
     ColonColon,
-    ColonGt,
 
     Ident,
     Number,
@@ -89,11 +88,13 @@ enum struct TokenKind {
     Void,
     Byte,
     Bool,
-    IntegerKw,
+    IntKw,
     ArbitraryInt,
     For,
     Return,
     Export,
+    Struct,
+    Lambda,
 
     Gensym,
     MacroArg,
@@ -106,6 +107,7 @@ auto ToString(TokenKind kind) -> std::string_view;
 
 class Scope;
 class Expr;
+class Decl;
 class FuncDecl;
 class Type;
 class ObjectDecl;
@@ -119,7 +121,7 @@ class Module {
 
     std::vector<Expr*> top_level_nodes;
     std::vector<std::pair<std::string, Module*>> imports;
-    std::vector<ObjectDecl*> exports;
+    std::vector<Decl*> exports;
     std::vector<FuncDecl*> functions;
 
 public:
@@ -128,7 +130,7 @@ public:
     ~Module();
 
     /// Add an export.
-    void add_export(ObjectDecl* decl) { exports.push_back(decl); }
+    void add_export(Decl* decl) { exports.push_back(decl); }
 
     /// Add an import.
     void add_import(std::string module_name) {
@@ -157,7 +159,7 @@ struct InterceptToken : public syntax::Token<TokenKind> {
     /// only be evaluated once.
     bool eval_once : 1 = true;
 
-    bool operator ==(const InterceptToken& rhs) const {
+    bool operator==(const InterceptToken& rhs) const {
         // TODO(local): implement this properly
         LCC_ASSERT(false);
     }
@@ -173,7 +175,7 @@ struct Macro {
 
 class Scope {
     Scope* _parent;
-    StringMap<Expr*> _symbols;
+    std::unordered_multimap<std::string, Decl*, detail::StringHash, std::equal_to<>> symbols;
     bool is_function_scope = false;
 
 public:
@@ -190,21 +192,18 @@ public:
     /// Declare a symbol in this scope.
     ///
     /// If the name doesn’t already exist in this scope, it is
-    /// added. If the name already exists, and the expression
-    /// it is bound to is a function declaration or overload set
-    /// and the \c expr parameter is a function declaration as well,
-    /// the two are merged into one overload set. Otherwise, this
-    /// returns a diagnostic.
+    /// added. If the name already exists, and the declaration
+    /// is not a function declaration, this returns a diagnostic.
     ///
     /// \param ctx The LCC context.
     /// \param name The name of the declared symbol.
-    /// \param expr The expression to bind to the symbol.
-    /// \return The same expression, or an error.
+    /// \param decl The declaration to bind to the symbol.
+    /// \return The same declaration, or an error.
     auto declare(
         const Context* ctx,
         std::string&& name,
-        Expr* expr
-    ) -> Result<Expr*>;
+        Decl* decl
+    ) -> Result<Decl*>;
 
     /// Get the parent scope.
     auto parent() const { return _parent; }
@@ -244,21 +243,15 @@ public:
     auto kind() const { return _kind; }
     auto location() const { return _location; }
 
+    /// Return this type stripped of any aliases.
+    auto strip_aliases() -> Type*;
+
     /// Use these only if there is no location information
     /// available (e.g. for default initialisers etc.). In
     /// any other case, prefer to create an instance of a
     /// BuiltinType instead.
     static Type* Unknown;
     static Type* Integer;
-};
-
-struct FuncTypeParam {
-    std::string name;
-    Type* type;
-    Location location;
-
-    FuncTypeParam(std::string name, Type* type, Location location)
-        : name(std::move(name)), type(type), location(location) {}
 };
 
 /// This only holds a kind.
@@ -294,7 +287,6 @@ private:
         : Type(Kind::Builtin, location), _kind(k) {}
 
 public:
-
     /// Get the kind of this builtin.
     auto builtin_kind() -> BuiltinKind { return _kind; }
 
@@ -370,19 +362,28 @@ public:
     /// take arguments once we need those.
     using Attributes = std::unordered_map<FuncAttr, bool>;
 
+    struct Param {
+        std::string name;
+        Type* type;
+        Location location;
+
+        Param(std::string name, Type* type, Location location)
+            : name(std::move(name)), type(type), location(location) {}
+    };
+
 private:
     Type* _return_type;
-    std::vector<FuncTypeParam> _params;
+    std::vector<Param> _params;
     Attributes _attributes;
 
 public:
     FuncType(
-        std::vector<FuncTypeParam> params,
-        Type* returnType,
+        std::vector<Param> params,
+        Type* return_type,
         Attributes attrs,
         Location location
     ) : Type(Kind::Function, location),
-        _return_type(returnType),
+        _return_type(return_type),
         _params(std::move(params)),
         _attributes(std::move(attrs)) {}
 
@@ -390,7 +391,7 @@ public:
     bool has_attr(FuncAttr attr) const { return _attributes.contains(attr); }
 
     /// Get the parameters of this function.
-    auto params() -> std::span<FuncTypeParam const> const { return _params; }
+    auto params() -> std::span<Param const> const { return _params; }
 
     /// Remove an attribute from this function.
     void remove_attr(FuncAttr attr) { _attributes.erase(attr); }
@@ -406,25 +407,27 @@ public:
 
 class StructDecl;
 
-struct StructMember {
-    Location location;
-    Type* type;
-    std::string name;
-    usz byte_offset;
-
-    StructMember(Location location, Type* type, std::string name, usz byteOffset)
-        : location(location), type(type), name(std::move(name)), byte_offset(byteOffset) {}
-};
-
 class StructType : public Type {
+public:
+    struct Member {
+        Type* type;
+        std::string name;
+        Location location;
+        usz byte_offset{};
+
+        Member(std::string name, Type* type, Location location)
+            : type(type), name(std::move(name)), location(location) {}
+    };
+
+private:
     StructDecl* _struct_decl{};
-    std::vector<StructMember*> _members;
+    std::vector<Member> _members;
 
     usz _byte_size{};
     usz _alignment{};
 
 public:
-    StructType(Location location, std::vector<StructMember*> members)
+    StructType(std::vector<Member> members, Location location)
         : Type(Kind::Struct, location), _members(std::move(members)) {}
 
     usz alignment() const { return _alignment; }
@@ -444,7 +447,7 @@ public:
     /// If this is an anonymous type, this returns null.
     auto decl() const -> StructDecl* { return _struct_decl; }
 
-    std::span<StructMember* const> members() { return _members; }
+    std::span<Member const> members() { return _members; }
 
     static bool classof(Type* type) { return type->kind() == Kind::Struct; }
 };
@@ -466,11 +469,12 @@ public:
 /// \brief Base class for expression syntax nodes.
 class Expr {
 public:
+    /// Do NOT reorder these!
     enum struct Kind {
-        OverloadSet,
         StructDecl,
+        TypeAliasDecl,
         VarDecl,
-        Function,
+        FuncDecl,
 
         IntegerLiteral,
         StringLiteral,
@@ -515,7 +519,11 @@ public:
     auto type() const -> Type*;
 
     Kind kind() const { return _kind; }
+
+    /// Access the location of this expression.
     auto location() const { return _location; }
+    auto location(Location location) { _location = location; }
+
 
     /// Deep-copy an expression.
     static Expr* Clone(Module& mod, Expr* expr);
@@ -532,10 +540,25 @@ public:
     void type(Type* type) { _type = type; }
 };
 
-/// A declaration that has linkage.
-class ObjectDecl : public TypedExpr {
-    Module* _mod;
+/// Base class for declarations. Declarations have a name.
+class Decl : public TypedExpr {
     std::string _name;
+
+protected:
+    Decl(Kind kind, std::string name, Type* type, Location location)
+        : TypedExpr(kind, location, type), _name(std::move(name)) {}
+
+public:
+    auto name() const -> const std::string& { return _name; }
+
+    static bool classof(Expr* expr) {
+        return expr->kind() >= Kind::StructDecl and expr->kind() <= Kind::FuncDecl;
+    }
+};
+
+/// A declaration that has linkage.
+class ObjectDecl : public Decl {
+    Module* _mod;
     Linkage _linkage;
 
 protected:
@@ -546,9 +569,8 @@ protected:
         Module* mod,
         Linkage linkage,
         Location location
-    ) : TypedExpr(kind, location, type),
+    ) : Decl(kind, std::move(name), type, location),
         _mod(mod),
-        _name(std::move(name)),
         _linkage(linkage) {}
 
 public:
@@ -558,10 +580,6 @@ public:
     /// Get the module this declaration is in.
     auto module() const -> Module* { return _mod; }
 
-    /// Get the unmangled name of this declaration, as declared
-    /// in code.
-    auto name() const -> const std::string& { return _name; }
-
     /// Get the linkage of this declaration.
     auto linkage() const { return _linkage; }
 
@@ -570,7 +588,7 @@ public:
 
     /// RTTI.
     static bool classof(Expr* expr) {
-        return expr->kind() >= Kind::VarDecl and expr->kind() <= Kind::Function;
+        return expr->kind() >= Kind::VarDecl and expr->kind() <= Kind::FuncDecl;
     }
 };
 
@@ -608,52 +626,37 @@ public:
         Module* mod,
         Linkage linkage,
         Location location
-    ) : ObjectDecl(Kind::Function, type, std::move(name), mod, linkage, location),
+    ) : ObjectDecl(Kind::FuncDecl, type, std::move(name), mod, linkage, location),
         _body(body) {}
 
     auto params() const -> std::span<VarDecl* const> { return _params; }
     auto body() const { return _body; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Function; }
+    static bool classof(Expr* expr) { return expr->kind() == Kind::FuncDecl; }
 };
 
-/// Set of function declarations. Only used for scopes.
-class OverloadSet : public Expr {
-    std::vector<FuncDecl*> _overloads;
-
-public:
-    OverloadSet(Location location) : Expr(Kind::OverloadSet, location) {}
-
-    /// Add a function declaration to this set.
-    void add(FuncDecl* decl) { _overloads.push_back(decl); }
-
-    /// Get the overloads in this set.
-    auto overloads() const -> std::span<FuncDecl* const> { return _overloads; }
-
-    static bool classof(Expr* expr) { return expr->kind() == Kind::OverloadSet; }
-};
-
-class StructDecl : public TypedExpr {
-    std::string _name;
-
+class StructDecl : public Decl {
     /// The module this struct is declared in.
     Module* _module;
 
 public:
     StructDecl(Module* mod, std::string name, StructType* declared_type, Location location)
-        : TypedExpr(Kind::StructDecl, location, declared_type),
-          _name(std::move(name)),
-          _module(mod) {
+        : Decl(Kind::StructDecl, std::move(name), declared_type, location), _module(mod) {
         declared_type->associate_with_decl(this);
     }
 
     /// Get the module this struct is declared in.
     auto module() const -> Module* { return _module; }
 
-    /// Get the name of this struct.
-    auto name() const -> const std::string& { return _name; }
-
     static bool classof(Expr* expr) { return expr->kind() == Kind::StructDecl; }
+};
+
+class TypeAliasDecl : public Decl {
+public:
+    TypeAliasDecl(std::string name, Type* aliased_type, Location location)
+        : Decl(Kind::TypeAliasDecl, std::move(name), aliased_type, location) {}
+
+    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeAliasDecl; }
 };
 
 class IntegerLiteral : public TypedExpr {
@@ -865,7 +868,7 @@ public:
 class MemberAccessExpr : public TypedExpr {
     Expr* _object;
     std::string _name;
-    StructMember* _member;
+    StructType::Member* _member;
 
 public:
     MemberAccessExpr(Expr* object, std::string name, Location location)
@@ -873,7 +876,7 @@ public:
 
     auto name() const -> const std::string& { return _name; }
     auto member() const { return _member; }
-    void member(StructMember* member) { _member = member; }
+    void member(StructType::Member* member) { _member = member; }
     auto object() const { return _object; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::MemberAccess; }

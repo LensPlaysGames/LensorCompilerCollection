@@ -1,8 +1,8 @@
 ;; 69
 
-foo: integer() {
-  a: integer = 69
-  b: @integer = &a
+foo: int() {
+  a: int = 69
+  b: @int = &a
   @b
 }
 

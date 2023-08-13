@@ -1,10 +1,10 @@
 ;; LABELS overloading
 ;; 42
 
-bar : integer () 42
-bar : integer (x : integer) 69
+bar : int () 42
+bar : int (x : int) 69
 
-foo : @(integer ()) () {
+foo : @(int ()) () {
     { { bar } }
 }
 

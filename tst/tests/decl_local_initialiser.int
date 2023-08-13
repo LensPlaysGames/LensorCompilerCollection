@@ -1,7 +1,7 @@
 ;; 69
 
-foo: integer() {
-  a : integer = 69
+foo: int() {
+  a : int = 69
   a
 }
 

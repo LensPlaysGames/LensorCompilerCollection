@@ -5,7 +5,7 @@
 ;; assignment.
 
 {
-  a: integer = 69
-  b: integer = 42
+  a: int = 69
+  b: int = 42
   a = b
 }

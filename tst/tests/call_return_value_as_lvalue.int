@@ -1,7 +1,7 @@
 ;; 69
 
-foo : integer[2]() {
-  out : integer[2]
+foo : int[2]() {
+  out : int[2]
   @out[0] := 42
   @out[1] := 69
   out

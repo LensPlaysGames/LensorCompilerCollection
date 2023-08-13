@@ -1,6 +1,6 @@
 ;; 8
 
-gcd_euclid : integer (a:integer b:integer) {
+gcd_euclid : int (a:int b:int) {
   if a = b      a
   else if a < b gcd_euclid(a, b - a)
   else          gcd_euclid(a - b, b)

@@ -4,10 +4,7 @@
 
 namespace lcc::intercept {
 /// All keywords.
-const struct {
-    std::string kw;
-    TokenKind kind;
-} keywords[12] = {
+StringMap<TokenKind> keywords {
     {"if", TokenKind::If},
     {"else", TokenKind::Else},
     {"while", TokenKind::While},
@@ -16,10 +13,13 @@ const struct {
     {"type", TokenKind::Type},
     {"void", TokenKind::Void},
     {"byte", TokenKind::Byte},
-    {"integer", TokenKind::IntegerKw},
+    {"int", TokenKind::IntKw},
     {"for", TokenKind::For},
     {"return", TokenKind::Return},
-    {"export", TokenKind::Export}};
+    {"export", TokenKind::Export},
+    {"struct", TokenKind::Struct},
+    {"lambda", TokenKind::Lambda},
+};
 
 static const char* TokenKindToString(TokenKind kind) {
     switch (kind) {
@@ -37,7 +37,7 @@ static const char* TokenKindToString(TokenKind kind) {
         case TokenKind::Type: return "type";
         case TokenKind::Void: return "void";
         case TokenKind::Byte: return "byte";
-        case TokenKind::IntegerKw: return "integer";
+        case TokenKind::IntKw: return "int";
         case TokenKind::ArbitraryInt: return "arbitrary_integer";
         case TokenKind::For: return "for";
         case TokenKind::Return: return "return";
@@ -73,7 +73,6 @@ static const char* TokenKindToString(TokenKind kind) {
         case TokenKind::Ge: return "\">=\"";
         case TokenKind::ColonEq: return "\":=\"";
         case TokenKind::ColonColon: return "\"::\"";
-        case TokenKind::ColonGt: return "\":>\"";
         case TokenKind::Gensym: return "gensym";
         case TokenKind::MacroArg: return "macro_arg";
         case TokenKind::Expression: return "ast_node";
@@ -82,6 +81,26 @@ static const char* TokenKindToString(TokenKind kind) {
 
 static std::string GenSym(usz number) {
     return fmt::format("_G_xX_{}Z_Xx_G_", number);
+}
+
+auto Lexer::LookAhead(usz n) -> InterceptToken* {
+    if (n == 0) return &tok;
+
+    /// If we already have enough tokens, just return the nth token.
+    const auto idx = n - 1;
+    if (idx < lookahead_tokens.size()) return lookahead_tokens.data() + idx;
+
+    /// Otherwise, lex enough tokens.
+    auto current = std::move(tok);
+    for (usz i = lookahead_tokens.size(); i < n; i++) {
+        tok = {};
+        NextToken();
+        lookahead_tokens.push_back(std::move(tok));
+    }
+    tok = std::move(current);
+
+    /// Return the nth token.
+    return lookahead_tokens.data() + idx;
 }
 
 void Lexer::NextToken() {
@@ -278,9 +297,6 @@ void Lexer::NextToken() {
             } else if (lastc == ':') {
                 tok.kind = TokenKind::ColonColon;
                 NextChar();
-            } else if (lastc == '>') {
-                tok.kind = TokenKind::ColonGt;
-                NextChar();
             } else {
                 tok.kind = TokenKind::Colon;
             }
@@ -456,11 +472,9 @@ void Lexer::HandleIdentifier() {
         return;
     }
 
-    for (size_t i = 0; i < sizeof keywords / sizeof *keywords; i++) {
-        if (keywords[i].kw == tok.text) {
-            tok.kind = keywords[i].kind;
-            return;
-        }
+    if (auto kw = keywords.find(tok.text); kw != keywords.end()) {
+        tok.kind = kw->second;
+        return;
     }
 
     // Try and parse a number just after encountering `s` or `u` at the

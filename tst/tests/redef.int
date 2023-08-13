@@ -1,4 +1,4 @@
 ;; ERROR
 
-a : integer
-a : integer
+a : int
+a : int

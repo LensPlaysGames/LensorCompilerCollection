@@ -1,7 +1,7 @@
 ;; LABELS overloading
 ;; ERROR
 
-foo : void (x : integer) {}
-foo : integer (x: integer) 42
+foo : void (x : int) {}
+foo : int (x: int) 42
 
 foo(420)

@@ -1,5 +1,5 @@
 ;; ERROR
 
-bar : integer(n : integer) { 42 }
-foo : integer(b : integer) { 69 }
+bar : int(n : int) { 42 }
+foo : int(b : int) { 69 }
 foo := bar

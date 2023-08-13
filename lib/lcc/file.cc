@@ -11,7 +11,6 @@
 #    include <sys/stat.h>
 #    include <sys/wait.h>
 #    include <unistd.h>
-#    include <wchar.h>
 #endif
 
 auto lcc::File::TempPath(std::string_view extension) -> fs::path {

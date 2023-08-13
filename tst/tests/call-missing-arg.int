@@ -2,4 +2,4 @@
 
 bar()
 
-bar : void (x : integer()) x
+bar : void (x : int()) x

@@ -17,9 +17,9 @@ lcc::intercept::Module::Module(
         auto char_ptr = new (*this) PointerType{new (*this) PointerType{cchar_ty}};
         ty = new (*this) FuncType{
             {
-                FuncTypeParam{"__argc__", cint_ty, {}},
-                FuncTypeParam{"__argv__", char_ptr, {}},
-                FuncTypeParam{"__envp__", char_ptr, {}},
+                {"__argc__", cint_ty, {}},
+                {"__argv__", char_ptr, {}},
+                {"__envp__", char_ptr, {}},
             },
             cint_ty,
             {},
@@ -72,30 +72,19 @@ lcc::intercept::StringLiteral::StringLiteral(
 auto lcc::intercept::Scope::declare(
     const Context* ctx,
     std::string&& name,
-    Expr* expr
-) -> Result<Expr*> {
-    /// Try to insert the symbol into the map.
-    auto [it, inserted] = _symbols.insert_or_assign(name, expr);
-    if (inserted) return expr;
+    Decl* decl
+) -> Result<Decl*> {
+    /// If the symbol already exists, then this is an error, unless
+    /// that symbol is a function declaration, and this is also a
+    /// function declaration.
+    if (
+        auto it = symbols.find(name);
+        it != symbols.end() and
+        not is<FuncDecl>(it->second) and
+        not is<FuncDecl>(decl)
+    ) return Diag::Error(ctx, decl->location(), "Redeclaration of '{}'", name);
 
-    /// If the symbol already exists, and it is a function
-    /// declaration or overload set, and the new symbol is
-    /// also a function declaration, merge the two into one
-    /// overload set.
-    if (is<FuncDecl>(expr) and is<FuncDecl, OverloadSet>(it->second)) {
-        if (not is<OverloadSet>(it->second)) {
-            auto func = as<FuncDecl>(it->second);
-            auto mod = func->module();
-            auto os = new (*mod) OverloadSet(func->location());
-            os->add(func);
-            it->second = os;
-        }
-
-        auto os = as<OverloadSet>(it->second);
-        os->add(as<FuncDecl>(expr));
-        return expr;
-    }
-
-    /// Any other case is an error.
-    return Diag::Error(ctx, expr->location(), "Redeclaration of '{}'", name);
+    /// Otherwise, add the symbol.
+    symbols.emplace(std::move(name), decl);
+    return decl;
 }

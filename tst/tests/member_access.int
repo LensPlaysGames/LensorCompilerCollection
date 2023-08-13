@@ -1,8 +1,8 @@
 ;; 69
 
 vec2 :> type {
-  x : integer
-  y : integer
+  x : int
+  y : int
 }
 
 my_vec2 : vec2

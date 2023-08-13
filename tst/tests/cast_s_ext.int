@@ -1,3 +1,3 @@
 ;; SKIP
 
-;; TODO: We don't have signed numbers other than integer to cast from!
+;; TODO: We don't have signed numbers other than int to cast from!

@@ -1,6 +1,6 @@
 ;; 3
 
-a : integer = 0
+a : int = 0
 
 ;; True
 a := a + (1 = 1)

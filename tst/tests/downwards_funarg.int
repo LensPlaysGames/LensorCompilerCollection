@@ -1,7 +1,7 @@
 ;; 69
 
-sixty_nine : integer() 69
+sixty_nine : int() 69
 
-foo : integer(getter : integer()) getter()
+foo : int(getter : int()) getter()
 
 foo(sixty_nine)

@@ -1,5 +1,5 @@
 ;; 42
 
-foo : integer (x : integer) 42
+foo : int (x : int) 42
 
 foo(1)

@@ -1,7 +1,7 @@
 ;; LABELS overloading
 ;; 42
 
-foo : integer (x : integer) 42
-foo : integer (x : @integer) 69
+foo : int (x : int) 42
+foo : int (x : @int) 69
 
 foo(3)

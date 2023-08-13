@@ -1,5 +1,5 @@
 ;; ERROR
 
-a : integer
+a : int
 b := a
-b : integer
+b : int
