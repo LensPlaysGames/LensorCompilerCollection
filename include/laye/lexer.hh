@@ -27,9 +27,12 @@ private:
         return Diag::Error(context, where, fmt, std::forward<Args>(args)...);
     }
 
-    void NextIdentifierOrNumber();
-    void NextString();
-    void NextRune();
+    void ReadIdentifierOrNumber(LayeToken& token);
+    void ReadIntegerInBase(LayeToken& token, int base);
+    void ReadFloatInBase(LayeToken& token, int base);
+    void ReadString(LayeToken& token);
+    void ReadRune(LayeToken& token);
+    void ReadEscapeSequence(LayeToken& token);
 
     static bool IsIdentStart(char c) { return IsAlphaNumeric(c) or c == '_'; }
     static bool IsIdentContinue(char c) { return IsAlphaNumeric(c) or c == '_'; }

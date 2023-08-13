@@ -64,7 +64,7 @@ enum struct TokenKind {
     LitInt,
     LitFloat,
     LitString,
-    LitChar,
+    LitRune,
 
     LessLess,
     GreaterGreater,
