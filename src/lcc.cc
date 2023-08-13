@@ -2,6 +2,8 @@
 #include <lcc/diags.hh>
 #include <clopts.hh>
 
+#include <string>
+
 namespace detail {
 void aluminium_handler() {
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
@@ -35,8 +37,34 @@ int main(int argc, char** argv) {
 
     // Print out input files
     fmt::print("Input files:\n");
-    for (const auto& input_filepath : input_files)
-        fmt::print("- {}\n", input_filepath);
+    for (const auto& input_filepath : input_files) {
+
+        // Intercept
+        if (input_filepath.ends_with(".int")) {
+
+            // TODO: Parse, typecheck, and codegen an Intercept file
+            fmt::print("- Intercept: {}\n", input_filepath);
+
+        }
+
+        // Laye
+        else if (input_filepath.ends_with(".laye")) {
+
+            // TODO: Parse, typecheck, and codegen a Laye file
+            fmt::print("- Laye: {}\n", input_filepath);
+
+        }
+
+        // Intermediate Representation (textual)
+        else if (input_filepath.ends_with(".ir")) {
+
+            // TODO: Parse textual IR
+            fmt::print("- Laye: {}\n", input_filepath);
+
+        }
+
+        else lcc::Diag::Fatal("Unrecognised input filepath");
+    }
 
     lcc::Diag::Fatal("Driver not fully implemented");
 }
