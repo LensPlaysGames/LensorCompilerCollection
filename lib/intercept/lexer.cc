@@ -614,7 +614,7 @@ void lcc::intercept::Lexer::ParseNumber(int base) {
 
 void lcc::intercept::Lexer::NextNumber() {
     /// Record the start of the number.
-    tok.text = {};
+    tok.text.clear();
 
     tok.integer_value = 0;
     tok.kind = TokenKind::Number;
