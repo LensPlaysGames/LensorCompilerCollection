@@ -34,9 +34,9 @@ int main(int argc, char** argv) {
     std::vector<std::string> input_files = *detail::options::get<"filepath">();
 
     // Print out input files
-    fmt::print("Input files:\n")
+    fmt::print("Input files:\n");
     for (const auto& input_filepath : input_files)
         fmt::print("- {}\n", input_filepath);
 
-    lcc::Diag::Fatal("Driver not implemented");
+    lcc::Diag::Fatal("Driver not fully implemented");
 }
