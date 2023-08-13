@@ -156,6 +156,17 @@ struct InterceptToken : public syntax::Token<TokenKind> {
     /// Whether the expression bound by this token should
     /// only be evaluated once.
     bool eval_once : 1 = true;
+
+    bool operator ==(const InterceptToken& rhs) const {
+        if (this == &rhs) return true;
+        if (kind != rhs.kind) return false;
+        if (text != rhs.text) return false;
+        if (integer_value != rhs.integer_value) return false;
+        if (artificial != rhs.artificial) return false;
+        if (expression != rhs.expression) return false;
+        if (eval_once != rhs.eval_once) return false;
+        return true;
+    }
 };
 
 struct Macro {

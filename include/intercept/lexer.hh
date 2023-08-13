@@ -38,6 +38,7 @@ class Lexer : public syntax::Lexer<InterceptToken> {
     std::vector<Macro> macros{};
     std::vector<MacroExpansion> macro_expansion_stack{};
     bool raw_mode = false;
+    usz gensym_counter = 0;
 
     void NextIdentifier();
     void HandleIdentifier();

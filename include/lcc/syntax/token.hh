@@ -14,6 +14,15 @@ struct Token {
     std::string text{};
     u64 integer_value{};
     bool artificial : 1 = false;
+
+    bool operator ==(const Token<TKind>& rhs) const {
+        if (this == &rhs) return true;
+        if (kind != rhs.kind) return false;
+        if (text != rhs.text) return false;
+        if (integer_value != rhs.integer_value) return false;
+        if (artificial != rhs.artificial) return false;
+        return true;
+    }
 };
 }
 

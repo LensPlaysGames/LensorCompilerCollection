@@ -126,10 +126,10 @@ private:
     void EnsureHygenicDeclarationIfWithinMacro(std::string_view ident, Location location);
 
     static isz BinaryOperatorPrecedence(TokenKind tokenKind);
-    static isz IsRightAssociative(TokenKind tokenKind);
+    static bool IsRightAssociative(TokenKind tokenKind);
 
-    static void ApplyFunctionAttributes(Type* func, std::span<Attribute> attribs);
-    static void ApplyStructAttributes(Type* func, std::span<Attribute> attribs);
+    static void ApplyFunctionAttributes(Type* func, std::span<FuncType::Attributes> attribs);
+    static void ApplyStructAttributes(Type* func, std::span<FuncType::Attributes> attribs);
 
     friend Lexer;
 };

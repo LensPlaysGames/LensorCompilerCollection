@@ -1,7 +1,6 @@
-#include "intercept/parser.hh"
-
 #include <cstdlib>
 #include <intercept/lexer.hh>
+#include <intercept/parser.hh>
 
 namespace lcc::intercept {
 /// All keywords.
@@ -79,6 +78,10 @@ static const char* TokenKindToString(TokenKind kind) {
         case TokenKind::MacroArg: return "macro_arg";
         case TokenKind::Expression: return "ast_node";
     }
+}
+
+static std::string GenSym(usz number) {
+    return fmt::format("_G_xX_{}Z_Xx_G_", number);
 }
 
 void Lexer::NextToken() {
@@ -531,19 +534,28 @@ void Lexer::ExpandMacro(Macro* m) {
             continue;
         }
 
-        // if (!token_equals(&p->tok, param_tok))
-        //     ERR("Ill-formed macro invocation");
+        if (tok != param_tok)
+            Error("Ill-formed macro invocation");
     }
 
     auto end_pos = tok.location.pos + tok.location.len;
     expansion.location.len = (u16) (end_pos - expansion.location.pos);
 
     for (usz i = 0; i < m->gensym_count; ++i)
-        expansion.gensyms.push_back(gensym(gensym_counter++));
+        expansion.gensyms.push_back(GenSym(gensym_counter++));
 
     macro_expansion_stack.push_back(expansion);
     raw_mode = false;
-    
+
     NextToken();
+}
+
+void lcc::intercept::Lexer::NextString() {
+}
+
+void lcc::intercept::Lexer::ParseNumber(int base) {
+}
+
+void lcc::intercept::Lexer::NextNumber() {
 }
 } // namespace lcc::intercept
