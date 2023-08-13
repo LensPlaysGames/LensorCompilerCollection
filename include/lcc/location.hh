@@ -11,6 +11,8 @@ struct Location {
     u16 file_id{};
 
     Location() = default;
+    Location(u32 pos, u16 len, u16 file_id)
+        : pos(pos), len(len), file_id(file_id) {}
 
     /// Create a new location that spans two locations.
     Location(Location a, Location b) {

@@ -149,8 +149,8 @@ private:
     [[nodiscard]] auto At(auto... tks) { return ((tok.kind == tks) or ...); }
 
     /// Like At(), but consume the token if it matches.
-    bool Consume(TokenKind tk) {
-        if (At(tk)) {
+    bool Consume(auto... tks) {
+        if (At(tks...)) {
             NextToken();
             return true;
         }

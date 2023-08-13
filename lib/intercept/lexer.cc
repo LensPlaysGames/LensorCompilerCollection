@@ -554,7 +554,7 @@ void lcc::intercept::Lexer::NextString() {
     char delim = lastc;
     NextChar();
 
-    tok.text = {};
+    tok.text.clear();
 
     if (delim == '\'') {
         while (lastc != delim) {

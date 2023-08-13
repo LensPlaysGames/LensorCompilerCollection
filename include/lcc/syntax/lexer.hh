@@ -25,6 +25,10 @@ protected:
     void NextChar();
     auto CurrentOffset() const -> u32 { return curr - file->data() - 1; }
 
+    auto CurrentLocation() const {
+        return Location{CurrentOffset(), (u16) 1, (u16) file->file_id()};
+    }
+
     template <typename... Args>
     Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
         return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
