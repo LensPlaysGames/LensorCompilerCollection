@@ -204,7 +204,7 @@ enum struct OperatorKind {
     LshEqual,
     RshEqual,
 
-    // Invoke,
+    // Call,
     Index,
 };
 
