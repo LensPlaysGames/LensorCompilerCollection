@@ -108,7 +108,7 @@ class Inst : public Value {
 
 protected:
     Inst(Kind k, Type* t, Location l = {})
-        : Value(k), minst(nullptr), parent(nullptr), loc(l) {}
+        : Value(k, t), minst(nullptr), parent(nullptr), loc(l) {}
 
     /// Remove a use by an instruction.
     static void RemoveUse(Inst* of, Value* by) {
