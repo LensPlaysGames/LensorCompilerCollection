@@ -2,7 +2,7 @@
 
 namespace {
 using Tk = lcc::laye::TokenKind;
-lcc::StringMap<Tk> keyword_infos {
+lcc::StringMap<Tk> keyword_infos{
     {"bool", Tk::Bool},
     {"int", Tk::Int},
     {"uint", Tk::UInt},
@@ -383,7 +383,7 @@ continue_identifier:
         NextChar();
     } while (IsIdentContinue(lastc));
 
-    if (auto kw  = keyword_infos.find(token.text); kw != keyword_infos.end()) {
+    if (auto kw = keyword_infos.find(token.text); kw != keyword_infos.end()) {
         token.kind = kw->second;
         return;
     }
