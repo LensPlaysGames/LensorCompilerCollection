@@ -36,6 +36,117 @@ enum struct TokenKind {
     Invalid,
     Eof,
 
+    Tilde,
+    Bang,
+    Percent,
+    Ambersand,
+    Star,
+    OpenParen,
+    CloseParen,
+    Minus,
+    Equal,
+    Plus,
+    OpenBracket,
+    CloseBracket,
+    OpenBrace,
+    CloseBrace,
+    Pipe,
+    SemiColon,
+    Colon,
+    Comma,
+    Less,
+    Greater,
+    Dot,
+    Slash,
+    Question,
+
+    Ident,
+    LitInt,
+    LitFloat,
+    LitString,
+    LitChar,
+
+    LessLess,
+    GreaterGreater,
+    EqualEqual,
+    BangEqual,
+    PlusEqual,
+    MinusEqual,
+    SlashEqual,
+    StarEqual,
+    PercentEqual,
+    LessEqual,
+    GreaterEqual,
+    AmbersandEqual,
+    PipeEqual,
+    TildeEqual,
+    LessLessEqual,
+    GreaterGreaterEqual,
+    EqualGreater,
+    ColonColon,
+
+    Bool,
+    Int,
+    UInt,
+    Float,
+
+    // Context,
+
+    True,
+    False,
+    Nil,
+    Global,
+
+    If,
+    Then,
+    Else,
+    For,
+    Do,
+    Switch,
+    Case,
+    Default,
+    Return,
+    Break,
+    Continue,
+    Goto,
+
+    Struct,
+    Variant,
+    Enum,
+    Alias,
+    //Test,
+    Import,
+    Export,
+    Operator,
+    Readonly,
+    Writeonly,
+
+    New,
+    Delete,
+    Cast,
+    Try,
+    Catch,
+    //Discard,
+    Sizeof,
+    Alignof,
+    Offsetof,
+    Not,
+    And,
+    Or,
+    Xor,
+    Varargs,
+    Const,
+    Foreign,
+    Inline,
+    Callconv,
+    //Impure,
+
+    Void,
+    Var,
+    Noreturn,
+    Rawptr,
+    String,
+
     CChar,
     CSChar,
     CUChar,
@@ -66,6 +177,11 @@ enum struct OperatorKind {
     Div,
     Mod,
 
+    Greater,
+    Less,
+    Equal,
+    NotEqual,
+
     Compl,
     And,
     Or,
@@ -73,7 +189,21 @@ enum struct OperatorKind {
     Lsh,
     Rsh,
 
-    New,
+    AddEqual,
+    SubEqual,
+    DivEqual,
+    MulEqual,
+    ModEqual,
+    LessEqual,
+    GreaterEqual,
+    AndEqual,
+    OrEqual,
+    XorEqual,
+    LshEqual,
+    RshEqual,
+
+    //Invoke,
+    Index,
 };
 
 struct DeclModifier {
@@ -210,6 +340,7 @@ public:
         // Simple Statements
         Block,
         Assign,
+        Delete,
         Expr,
 
         // Control Flow
@@ -223,6 +354,7 @@ public:
         Continue,
         Fallthrough,
         Defer,
+        Goto,
     };
 
 private:
@@ -270,6 +402,9 @@ public:
         Try,
         Catch,
         Do,
+        Sizeof,
+        Offsetof,
+        Alignof,
 
         // Literals
         LitNil,
@@ -483,6 +618,18 @@ public:
     static bool classof(Statement* statement) { return statement->kind() == Kind::Assign; }
 };
 
+class DeleteStatement : public Statement {
+    Expr* _expr;
+
+public:
+    DeleteStatement(Expr* expr)
+        : Statement(Kind::Delete, expr->location()), _expr(expr) {}
+
+    auto expr() const { return _expr; }
+
+    static bool classof(Statement* statement) { return statement->kind() == Kind::Delete; }
+};
+
 class ExprStatement : public Statement {
     Expr* _expr;
 
@@ -680,6 +827,18 @@ public:
     auto statement() const { return _statement; }
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::Defer; }
+};
+
+class GotoStatement : public Statement {
+    std::string _target{};
+
+public:
+    GotoStatement(Location location, std::string& target)
+        : Statement(Kind::Continue, location), _target(std::move(target)) {}
+
+    auto target() const -> std::string_view { return _target; }
+
+    static bool classof(Statement* statement) { return statement->kind() == Kind::Goto; }
 };
 
 class UnaryExpr : public Expr {
@@ -990,6 +1149,46 @@ public:
     auto statements() const -> std::span<Statement* const> { return _statements; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::Do; }
+};
+
+class SizeofExpr : public Expr {
+    Type* _type;
+
+public:
+    SizeofExpr(Location location, Type* type)
+        : Expr(Kind::Sizeof, location), _type(type) {}
+
+    auto type() const { return _type; }
+
+    static bool classof(Expr* expr) { return expr->kind() == Kind::Sizeof; }
+};
+
+class OffsetofExpr : public Expr {
+    Type* _type;
+    std::string _field_name;
+
+public:
+    OffsetofExpr(Location location, Type* type, std::string& field_name)
+        : Expr(Kind::Offsetof, location), _type(type), _field_name(std::move(field_name)) {}
+
+    auto type() const { return _type; }
+    auto field_name() const -> const std::string& { return _field_name; }
+
+    static bool classof(Expr* expr) { return expr->kind() == Kind::Offsetof; }
+};
+
+class AlignofExpr : public Expr {
+    Type* _type;
+    std::string _field_name;
+
+public:
+    AlignofExpr(Location location, Type* type, std::string& field_name)
+        : Expr(Kind::Alignof, location), _type(type), _field_name(std::move(field_name)) {}
+
+    auto type() const { return _type; }
+    auto field_name() const -> const std::string& { return _field_name; }
+
+    static bool classof(Expr* expr) { return expr->kind() == Kind::Alignof; }
 };
 
 class LitNilExpr : public Expr {
