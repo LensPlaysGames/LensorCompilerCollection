@@ -104,7 +104,7 @@ auto lcc::File::LoadFileData(const fs::path& path) -> std::vector<char> {
 
 #else
     /// Read the file manually.
-    std::unique_ptr<FILE, decltype(&std::fclose)> f{_wfopen(path.c_str(), L"rb"), std::fclose};
+    std::unique_ptr<FILE, decltype(&std::fclose)> f{std::fopen(path.string().c_str(), "rb"), std::fclose};
     if (not f) Diag::Fatal("Could not open file \"{}\": {}", path.string(), strerror(errno));
 
     /// Get the file size.
