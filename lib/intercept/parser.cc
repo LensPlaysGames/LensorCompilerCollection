@@ -671,25 +671,40 @@ auto lcc::intercept::Parser::ParseFuncBody(bool is_extern) -> Result<Expr*> {
 
 /// <type-signature> ::= "(" <param-decls> ")" <func-attrs>
 /// <param-decls>    ::= { <param-decl> [ "," ]  }
-/// <param-decl>     ::= [ IDENTIFIER ] ":" <type>
+/// <param-decl>     ::= [ IDENTIFIER { [ "," ] IDENTIFIER } ] ":" <type>
 auto lcc::intercept::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
     LCC_ASSERT(Consume(Tk::LParen), "ParseFunctionSignature called while not at '('");
 
     /// Parse the parameter declarations.
     std::vector<FuncType::Param> parameters;
     while (not At(Tk::RParen)) {
-        /// Parse the parameter name.
-        auto loc = tok.location;
-        auto name = At(Tk::Ident) ? tok.text : "";
-        Consume(Tk::Ident);
+        /// If we’re at a colon, this parameter is unnamed.
+        if (Consume(Tk::Colon)) {
+            auto type = ParseType();
+            if (not type) return type.diag();
+            parameters.emplace_back("", *type, type->location());
 
-        /// Parse the parameter type.
-        if (not Consume(Tk::Colon)) return Error("Expected ':' in parameter declaration");
-        auto type = ParseType();
-        if (not type) return type.diag();
+        }
 
-        /// Add the parameter to the list.
-        parameters.emplace_back(std::move(name), *type, Location{loc, type->location()});
+        /// Otherwise, we have a comma-separated list of names.
+        else {
+            usz idx = parameters.size();
+            do {
+                if (not At(Tk::Ident)) return Error("Expected identifier or ':' in parameter declaration");
+                parameters.emplace_back(tok.text, nullptr, tok.location);
+                NextToken();
+            } while(Consume(Tk::Comma));
+
+            /// Parse the parameter type.
+            if (not Consume(Tk::Colon)) return Error("Expected ':' in parameter declaration");
+            auto type = ParseType();
+            if (not type) return type.diag();
+
+            /// Set the name for all the parameters.
+            for (; idx < parameters.size(); ++idx) parameters[idx].type = *type;
+        }
+
+        /// Discard trailing comma.
         Consume(Tk::Comma);
     }
 

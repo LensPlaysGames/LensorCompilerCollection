@@ -61,7 +61,7 @@
 <type-arr-sz>    ::= "[" <expr> "]"
 <type-signature> ::= "(" <param-decls> ")" <func-attrs>
 <param-decls>    ::= { <param-decl> [ "," ]  }
-<param-decl>     ::= [ IDENTIFIER ] ":" <type>
+<param-decl>     ::= [ IDENTIFIER { [ "," ] IDENTIFIER } ] ":" <type>
 <func-attrs>     ::= /// All function attributes
 
 /// Miscellaneous.
