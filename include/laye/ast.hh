@@ -601,7 +601,7 @@ public:
         : Statement(Kind::If, location), _condition(condition), _pass(pass), _fail(fail) {}
 
     bool has_label() const { return not _label.empty(); }
-    auto label() const -> std::string_view { return _label; }
+    auto label() const -> const std::string& { return _label; }
     void set_label(std::string label) { _label = std::move(label); }
 
     auto condition() const { return _condition; }
@@ -629,7 +629,7 @@ public:
         : Statement(Kind::For, location), _init(init), _condition(condition), _increment(increment), _pass(pass), _fail(fail) {}
 
     bool has_label() const { return not _label.empty(); }
-    auto label() const -> std::string_view { return _label; }
+    auto label() const -> const std::string& { return _label; }
     void set_label(std::string label) { _label = std::move(label); }
 
     auto init() const { return _init; }
@@ -657,11 +657,11 @@ public:
         : Statement(Kind::ForEach, location), _type(type), _name(name), _sequence(sequence), _pass(pass), _fail(fail) {}
 
     bool has_label() const { return not _label.empty(); }
-    auto label() const -> std::string_view { return _label; }
+    auto label() const -> const std::string& { return _label; }
     void set_label(std::string label) { _label = std::move(label); }
 
     auto type() const { return _type; }
-    auto name() const -> std::string_view { return _name; }
+    auto name() const -> const std::string& { return _name; }
     auto sequence() const { return _sequence; }
 
     auto pass() const { return _pass; }
@@ -681,7 +681,7 @@ public:
         : Statement(Kind::DoFor, location), _condition(condition), _body(body) {}
 
     bool has_label() const { return not _label.empty(); }
-    auto label() const -> std::string_view { return _label; }
+    auto label() const -> const std::string& { return _label; }
     void set_label(std::string label) { _label = std::move(label); }
 
     auto condition() const { return _condition; }
@@ -743,7 +743,7 @@ public:
         : Statement(Kind::Continue, location), _target(std::move(target)) {}
 
     bool has_target() const { return not _target.empty(); }
-    auto target() const -> std::string_view { return _target; }
+    auto target() const -> const std::string& { return _target; }
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::Break; }
 };
@@ -759,7 +759,7 @@ public:
         : Statement(Kind::Continue, location), _target(std::move(target)) {}
 
     bool has_target() const { return not _target.empty(); }
-    auto target() const -> std::string_view { return _target; }
+    auto target() const -> const std::string& { return _target; }
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::Continue; }
 };
@@ -783,7 +783,7 @@ public:
     GotoStatement(Location location, std::string target)
         : Statement(Kind::Continue, location), _target(std::move(target)) {}
 
-    auto target() const -> std::string_view { return _target; }
+    auto target() const -> const std::string& { return _target; }
 
     static bool classof(Statement* statement) { return statement->kind() == Kind::Goto; }
 };
@@ -879,7 +879,7 @@ public:
     NameExpr(Location location, std::string name)
         : Expr(Kind::LookupName, location), _name(std::move(name)) {}
 
-    auto name() const -> std::string_view { return _name; }
+    auto name() const -> const std::string& { return _name; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::LookupName; }
 };
@@ -907,7 +907,7 @@ public:
         : Expr(Kind::FieldIndex, location), _target(target), _field_name(field_name) {}
 
     auto target() const { return _target; }
-    auto field_name() const -> std::string_view { return _field_name; }
+    auto field_name() const -> const std::string& { return _field_name; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::FieldIndex; }
 };
@@ -1044,7 +1044,7 @@ public:
         : Expr(Kind::Catch, location), _value(value), _error_name(std::move(error_name)), _body(body) {}
 
     auto value() const { return _value; }
-    auto error_name() const -> std::string_view { return _error_name; }
+    auto error_name() const -> const std::string& { return _error_name; }
     auto body() const { return _body; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::Catch; }
@@ -1165,7 +1165,7 @@ public:
     LitStringExpr(Location location, std::string value)
         : Expr(Kind::LitString, location), _value(std::move(value)) {}
 
-    auto value() const -> std::string_view { return _value; }
+    auto value() const -> const std::string& { return _value; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::LitString; }
 };
