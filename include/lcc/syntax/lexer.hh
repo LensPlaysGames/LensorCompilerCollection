@@ -19,7 +19,10 @@ protected:
     char lastc = ' ';
 
     Lexer(Context* context, File* file)
-        : context(context), file(file), curr(file->data()), end(file->data() + file->size()) { NextChar(); }
+        : file(file),
+          curr(file->data()),
+          end(file->data() + file->size()),
+          context(context) { NextChar(); }
 
     auto FileId() const { return file->file_id(); }
 
