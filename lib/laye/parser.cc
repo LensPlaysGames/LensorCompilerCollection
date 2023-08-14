@@ -444,6 +444,8 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         return TryParseTypeContinue(static_cast<Type*>(*id_type), allocate);
     }
 
+    LCC_ASSERT(false, "TODO(local): finish type parsing (including nilable!!!)");
+
 return_null_type:;
     LCC_ASSERT(not allocate, "Can only return a nullptr value for the result type if we are not allowed to allocate data (read: we are in a speculative parse mode)");
     return Result<Type*>::Null();
