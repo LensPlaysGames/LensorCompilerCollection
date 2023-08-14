@@ -53,7 +53,7 @@ intc::Module::~Module() {
     for (auto* node : nodes) delete node;
     for (auto* type : types) delete type;
     for (auto* scope : scopes) delete scope;
-    for (auto& [_, i] : imports) delete i;
+    for (auto& [_, i] : _imports) delete i;
 }
 
 auto intc::Module::intern(std::string_view str) -> usz {
@@ -108,6 +108,12 @@ auto intc::Scope::declare(
 auto intc::Expr::type() const -> Type* {
     if (auto e = cast<TypedExpr>(this)) return e->type();
     return Type::Void;
+}
+
+bool intc::Type::is_void() const {
+    auto builtin = cast<BuiltinType>(this);
+    if (not builtin) return false;
+    return builtin->builtin_kind() == BuiltinType::BuiltinKind::Void;
 }
 
 auto intc::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
@@ -228,10 +234,10 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
         switch (e->kind()) {
             case K::FuncDecl: {
                 auto f = as<intc::FuncDecl>(e);
-                if (auto block = cast<intc::BlockExpr>(f->body())) {
+                if (auto block = cast<intc::BlockExpr>(const_cast<intc::FuncDecl*>(f)->body())) {
                     PrintChildren(block->children(), leading_text);
                 } else {
-                    intc::Expr* children[] = {f->body()};
+                    intc::Expr* children[] = {const_cast<intc::FuncDecl*>(f)->body()};
                     PrintChildren(children, leading_text);
                 }
             } break;

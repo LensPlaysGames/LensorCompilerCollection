@@ -114,6 +114,14 @@ class ObjectDecl;
 class Parser;
 
 class Module {
+public:
+    struct Ref {
+        std::string name;
+        mutable Module* module;
+        Ref(std::string name, Module* module) : name(std::move(name)), module(module) {}
+    };
+
+private:
     std::string name{};
 
     FuncDecl* top_level_function{};
@@ -121,9 +129,11 @@ class Module {
     File* file;
 
     std::vector<Expr*> top_level_nodes;
-    std::vector<std::pair<std::string, Module*>> imports;
+    std::vector<Ref> _imports;
     std::vector<Decl*> exports;
-    std::vector<FuncDecl*> functions;
+    std::vector<FuncDecl*> _functions;
+
+    usz lambda_counter = 0;
 
 public:
     Module(File* file, std::string module_name, bool is_logical_module);
@@ -133,13 +143,22 @@ public:
     /// Add an export.
     void add_export(Decl* decl) { exports.push_back(decl); }
 
+    /// Add a function to this module.
+    void add_function(FuncDecl* func) { _functions.push_back(func); }
+
     /// Add an import.
     void add_import(std::string module_name) {
-        imports.emplace_back(std::move(module_name), nullptr);
+        _imports.emplace_back(std::move(module_name), nullptr);
     }
 
     /// Add a top-level expression.
     void add_top_level_expr(Expr* node) { top_level_nodes.push_back(node); }
+
+    /// Get the functions that are part of this module.
+    auto functions() -> std::vector<FuncDecl*>& { return _functions; }
+
+    /// Get the module imports.
+    auto imports() -> std::vector<Ref>& { return _imports; }
 
     /// Intern a string and return its index.
     usz intern(std::string_view str);
@@ -149,6 +168,9 @@ public:
 
     /// Get the top-level function.
     auto top_level_func() const -> FuncDecl* { return top_level_function; }
+
+    /// Get a unique function name.
+    auto unique_function_name() -> std::string { return fmt::format("_XInt__lambda_{}", lambda_counter++); }
 
     std::vector<Expr*> nodes;
     std::vector<Type*> types;
@@ -233,6 +255,8 @@ private:
 
     Location _location;
 
+    bool _type_checked = false;
+
 protected:
     Type(Kind kind, Location location)
         : _kind(kind), _location(location) {}
@@ -248,6 +272,18 @@ public:
     }
 
     auto kind() const { return _kind; }
+
+    /// Check the kind of this type.
+    bool is_array() const { return _kind == Kind::Array; }
+    bool is_builtin() const { return _kind == Kind::Builtin; }
+    bool is_function() const { return _kind == Kind::Function; }
+    bool is_named() const { return _kind == Kind::Named; }
+    bool is_pointer() const { return _kind == Kind::Pointer; }
+    bool is_reference() const { return _kind == Kind::Reference; }
+    bool is_sized_integer() const { return _kind == Kind::Integer; }
+    bool is_struct() const { return _kind == Kind::Struct; }
+    bool is_void() const;
+
     auto location() const { return _location; }
 
     /// Get a string representation of this type.
@@ -256,10 +292,21 @@ public:
     /// Return this type stripped of any aliases.
     auto strip_aliases() -> Type*;
 
+    /// Return this type stripped of any references.
+    auto strip_references() -> Type*;
+
+    /// Check if this type has been type-checked.
+    bool type_checked() const { return _type_checked; }
+
+    /// Mark this type as type-checked.
+    void set_type_checked() { _type_checked = true; }
+
     /// Use these only if there is no location information
     /// available (e.g. for default initialisers etc.). In
     /// any other case, prefer to create an instance of a
     /// BuiltinType instead.
+    ///
+    /// Do NOT compare against these w/ `==`!
     ///
     /// When adding a type here, don’t forget to initialise
     /// it in Context::InitialiseLCCData().
@@ -518,6 +565,8 @@ private:
 
     Location _location;
 
+    bool _type_checked = false;
+
 protected:
     Expr(Kind kind, Location location)
         : _kind(kind), _location(location) {}
@@ -532,13 +581,19 @@ public:
         return ptr;
     }
 
-    auto type() const -> Type*;
-
     Kind kind() const { return _kind; }
 
     /// Access the location of this expression.
     auto location() const { return _location; }
     auto location(Location location) { _location = location; }
+
+    auto type() const -> Type*;
+
+    /// Check if this expression has been type-checked.
+    bool type_checked() const { return _type_checked; }
+
+    /// Mark this expression as type-checked.
+    void set_type_checked() { _type_checked = true; }
 
     /// Deep-copy an expression.
     static Expr* Clone(Module& mod, Expr* expr);
@@ -555,6 +610,9 @@ public:
     auto type() const -> Type* { return _type; }
     void type(Type* type) { _type = type; }
 
+    /// Get a reference to the type of this expression.
+    auto type_ref() -> Type** { return &_type; }
+
     static bool classof(const Expr* expr) {
         return expr->kind() >= Kind::StructDecl and expr->kind() <= Kind::MemberAccess;
     }
@@ -570,6 +628,7 @@ protected:
 
 public:
     auto name() const -> const std::string& { return _name; }
+    auto name(std::string name) { _name = std::move(name); }
 
     static bool classof(const Expr* expr) {
         return expr->kind() >= Kind::StructDecl and expr->kind() <= Kind::FuncDecl;
@@ -647,10 +706,12 @@ public:
         Linkage linkage,
         Location location
     ) : ObjectDecl(Kind::FuncDecl, type, std::move(name), mod, linkage, location),
-        _body(body) {}
+        _body(body) {
+        mod->add_function(this);
+    }
 
     auto params() const -> std::span<VarDecl* const> { return _params; }
-    auto body() const { return _body; }
+    auto body() -> Expr*& { return _body; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::FuncDecl; }
 };

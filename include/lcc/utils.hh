@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <coroutine>
 #include <cstdio>
 #include <deque>
 #include <filesystem>
