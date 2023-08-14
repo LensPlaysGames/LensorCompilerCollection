@@ -117,8 +117,10 @@ private:
     /// True if any speculative parse state is enabled, false otherwise.
     bool IsInSpeculativeParse() const { return speculative_parse_stack > 0; }
 
-    auto PeekToken(usz ahead = 1) {
+    auto PeekToken(usz ahead = 1, bool include_spec = true) {
         LCC_ASSERT(ahead >= 1, "Peek look-ahead indexing starts at 1.");
+        if (include_spec) ahead += speculative_look_ahead;
+        
         while (look_ahead.size() < ahead) {
             LayeToken aheadToken{};
             lexer.ReadToken(aheadToken);
@@ -132,7 +134,7 @@ private:
     auto NextToken() {
         if (IsInSpeculativeParse()) {
             speculative_look_ahead++;
-            tok = PeekToken(speculative_look_ahead);
+            tok = PeekToken(speculative_look_ahead, false);
         } else if (not look_ahead.empty()) {
             tok = look_ahead[0];
             // pop from the front of the vector

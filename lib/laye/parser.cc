@@ -7,6 +7,7 @@ std::unique_ptr<Module> Parser::Parse(Context* context, File& file) {
     auto result = new Module;
 
     Parser parser{context, &file, result};
+    parser.NextToken();
 
     while (not parser.At(Tk::Eof)) {
         bool is_export = false;
@@ -105,10 +106,12 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         auto discard_modifiers = GetModifiers(false);
 
         if (not At(Tk::Struct, Tk::Enum)) {
+            auto before_type_offset = tok.location.pos;
             if (not SpeculativeParseType()) {
                 return Result<Decl*>::Null();
             }
 
+            LCC_ASSERT(tok.location.pos != before_type_offset);
             if (not At(Tk::Ident) or not PeekAt(1, Tk::SemiColon, Tk::OpenParen, Tk::Equal)) {
                 return Result<Decl*>::Null();
             }
@@ -323,7 +326,8 @@ auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
 }
 
 auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allowFunctions) -> Result<Type*> {
-    LCC_ASSERT(false, "TODO: implement TryParseTypeContinue in Laye parser");
+    LCC_ASSERT((not allocate) == IsInSpeculativeParse(), "TryParseTypeContinue requires that the allocate parameter be the opposite of the result of IsInSpeculativeParse(). If allocations are enabled, then no speculative parse stack should exist. If allocations are disabled, then it is required that a specilative parse stack exists.");
+    return type;
 }
 
 auto Parser::TryParseNameOrPath(
@@ -355,7 +359,6 @@ auto Parser::TryParseNameOrPath(
             auto name_text = tok.text;
             auto name_location = tok.location;
 
-            NextToken();
             if (not Consume(Tk::ColonColon)) {
                 if (allocate) {
                     return name_ctor(name_location, name_text);

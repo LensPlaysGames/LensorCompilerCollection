@@ -90,6 +90,15 @@ void lcc::laye::Lexer::ReadToken(LayeToken& token) {
     token.location.file_id = (u16) FileId();
     token.artificial = false;
 
+    while (IsSpace(lastc)) {
+        NextChar();
+    }
+
+    if (lastc == 0) {
+        token.kind = TokenKind::Eof;
+        return;
+    }
+
     char currc = lastc;
     switch (lastc) {
         case '+': {
@@ -318,7 +327,11 @@ void lcc::laye::Lexer::ReadToken(LayeToken& token) {
         } break;
     }
 
+    LCC_ASSERT(token.kind != TokenKind::Invalid);
+
     token.location.len = (u16) (CurrentOffset() - token.location.pos);
+
+    //fmt::print(stderr, "LayeToken {{ text = {} }}\n", token.text);
 }
 
 void lcc::laye::Lexer::ReadIdentifierOrNumber(LayeToken& token) {
@@ -389,7 +402,7 @@ continue_identifier:
     }
 
     char c = token.text[0];
-    if (c == 'b' or c == 'i' or c == 'u' or c == 'f') {
+    if (token.text.size() >= 2 and (c == 'b' or c == 'i' or c == 'u' or c == 'f')) {
         u64 integer_value = 0;
         bool is_int_too_large = false;
 
