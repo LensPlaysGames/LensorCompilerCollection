@@ -451,7 +451,7 @@ return_null_type:;
     return Result<Type*>::Null();
 }
 
-auto ParseExpr() -> Result<Expr*>
+auto Parser::ParseExpr() -> Result<Expr*>
 {
     LCC_ASSERT(false, "TODO(local): finish expr parsing");
 }

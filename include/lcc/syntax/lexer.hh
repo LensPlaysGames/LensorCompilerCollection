@@ -38,7 +38,7 @@ protected:
         u32 count = endOffset - startOffset;
         return std::string(file->data() + startOffset, count);
     }
-    
+
     void NextChar() {
         if (curr >= end) {
             lastc = 0;
@@ -49,7 +49,7 @@ protected:
         if (lastc == 0) {
             Diag::Error(
                 context,
-                Location{CurrentOffset(), 1},
+                Location{(u32) CurrentOffset(), (u16) 1, (u16) file->file_id()},
                 "Lexer encountered NUL byte within source file."
             );
         }
