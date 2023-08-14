@@ -372,6 +372,7 @@ public:
 
         // Types
         TypeInfer,
+        TypeNilable,
         TypeErrUnion,
 
         TypeLookupName,
@@ -1295,7 +1296,15 @@ public:
 
     auto elem_type() const { return _elem_type; }
 
-    static bool classof(Expr* expr) { return +expr->kind() >= +Kind::TypeArray and +expr->kind() <= +Kind::TypeBuffer; }
+    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeNilable or +expr->kind() >= +Kind::TypeArray and +expr->kind() <= +Kind::TypeBuffer; }
+};
+
+class NilableType : public SingleElementType {
+public:
+    NilableType(Type* elementType)
+        : SingleElementType(Kind::TypeNilable, elementType->location(), elementType) {}
+
+    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeNilable; }
 };
 
 class ArrayType : public SingleElementType {
