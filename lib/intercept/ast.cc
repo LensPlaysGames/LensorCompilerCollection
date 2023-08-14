@@ -1,10 +1,8 @@
 #include <intercept/ast.hh>
 #include <intercept/parser.hh>
-#include <lcc/utils/display.hh>
 #include <lcc/utils/rtti.hh>
 
 namespace intc = lcc::intercept;
-namespace ast = lcc::utils::ast;
 
 intc::Type* intc::Type::Unknown;
 intc::Type* intc::Type::Integer;
