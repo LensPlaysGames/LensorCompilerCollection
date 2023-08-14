@@ -167,9 +167,17 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         }
 
         auto body = Result<Statement*>::Null();
+        if (At(Tk::OpenBrace)) {
+            body = ParseBlockStatement();
+        } else {
+            if (Consume(Tk::EqualGreater)) {
+                auto expr = ParseExpr();
+                if (expr) body = new (*this) ExprStatement{*expr};
+            }
 
-        if (not Consume(Tk::SemiColon)) {
-            Error("Expected ';'");
+            if (not Consume(Tk::SemiColon)) {
+                Error("Expected ';'");
+            }
         }
 
         return new (*this) FunctionDecl{location, modifiers, *type, name, *template_params, params, *body};
@@ -201,14 +209,49 @@ auto Parser::ParseDecl() -> Result<Decl*> {
     return diag;
 }
 
-auto Parser::ParseDeclOrStatement() -> Result<std::variant<Statement*, Decl*>> {
+auto Parser::ParseDeclOrStatement() -> Result<Statement*> {
+    LCC_ASSERT(not IsInSpeculativeParse());
+
     auto decl_result = TryParseDecl();
     if (not decl_result) return decl_result.diag();
 
-    auto diag = *decl_result;
-    if (diag) return std::variant<Statement*, Decl*>(diag);
+    auto decl = *decl_result;
+    if (decl) return decl;
 
-    LCC_ASSERT(false, "TODO");
+    auto location = CurrLocation();
+    auto expr = ParseExpr();
+
+    if (not Consume(Tk::SemiColon)) {
+        Error("Expected ';'");
+    }
+
+    if (not expr) {
+        return new (*this) EmptyStatement{location};
+    }
+
+    auto expr_statement = new (*this) ExprStatement{*expr};
+    return expr_statement;
+}
+
+auto Parser::ParseBlockStatement() -> Result<BlockStatement*> {
+    LCC_ASSERT(not IsInSpeculativeParse());
+
+    auto start_location = CurrLocation();
+    LCC_ASSERT(Consume(Tk::OpenBrace));
+
+    std::vector<Statement*> children{};
+
+    while (not At(Tk::Eof, Tk::CloseBrace)) {
+        auto child = ParseDeclOrStatement();
+        if (child) children.push_back(*child);
+    }
+
+    if (not Consume(Tk::CloseBrace)) {
+        Error("Expected '}}'");
+    }
+
+    auto end_location = CurrLocation();
+    return new (*this) BlockStatement{Location{start_location, end_location}, children};
 }
 
 auto Parser::TryParseTemplateParams(bool allocate) -> Result<std::vector<TemplateParam>> {
@@ -449,6 +492,62 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         // since the TryParseNameOrPath function works for the expression case, too, we have to
         //  explicitly cast back to a Type* to continue type parsing.
         return TryParseTypeContinue(static_cast<Type*>(*id_type), allocate);
+    }
+
+    if (At(Tk::Bool)) {
+        if (type_access != TypeAccess::Default) {
+            if (allocate) Error("Access modifiers do not apply to bool types");
+        }
+
+        auto location = tok.location;
+        int bit_width = (int) tok.integer_value;
+
+        NextToken();
+
+        auto float_type = Result<Type*>::Null();
+        if (allocate) {
+            float_type = new (*this) BoolType{location, bit_width};
+        }
+
+        return TryParseTypeContinue(*float_type, allocate);
+    }
+
+    if (At(Tk::Int, Tk::UInt)) {
+        auto kw_kind = tok.kind;
+
+        if (type_access != TypeAccess::Default) {
+            if (allocate) Error("Access modifiers do not apply to integer types");
+        }
+
+        auto location = tok.location;
+        int bit_width = (int) tok.integer_value;
+
+        NextToken();
+
+        auto int_type = Result<Type*>::Null();
+        if (allocate) {
+            int_type = new (*this) IntType{location, kw_kind == Tk::Int, bit_width};
+        }
+
+        return TryParseTypeContinue(*int_type, allocate);
+    }
+
+    if (At(Tk::Float)) {
+        if (type_access != TypeAccess::Default) {
+            if (allocate) Error("Access modifiers do not apply to float types");
+        }
+
+        auto location = tok.location;
+        int bit_width = (int) tok.integer_value;
+
+        NextToken();
+
+        auto float_type = Result<Type*>::Null();
+        if (allocate) {
+            float_type = new (*this) FloatType{location, bit_width};
+        }
+
+        return TryParseTypeContinue(*float_type, allocate);
     }
 
     LCC_ASSERT(false, "TODO(local): finish type parsing (including nilable!!!)");

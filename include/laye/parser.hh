@@ -120,7 +120,7 @@ private:
     auto PeekToken(usz ahead = 1, bool include_spec = true) {
         LCC_ASSERT(ahead >= 1, "Peek look-ahead indexing starts at 1.");
         if (include_spec) ahead += speculative_look_ahead;
-        
+
         while (look_ahead.size() < ahead) {
             LayeToken aheadToken{};
             lexer.ReadToken(aheadToken);
@@ -199,7 +199,8 @@ private:
 
     auto TryParseDecl() -> Result<Decl*>;
     auto ParseDecl() -> Result<Decl*>;
-    auto ParseDeclOrStatement() -> Result<std::variant<Statement*, Decl*>>;
+    auto ParseDeclOrStatement() -> Result<Statement*>;
+    auto ParseBlockStatement() -> Result<BlockStatement*>;
 
     auto TryParseTemplateParams(bool allocate) -> Result<std::vector<TemplateParam>>;
     bool SpeculativeParseTemplateParams() {

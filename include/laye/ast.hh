@@ -299,6 +299,7 @@ public:
         Assign,
         Delete,
         Expr,
+        Empty,
 
         // Control Flow
         If,
@@ -610,7 +611,15 @@ public:
 
     auto expr() const { return _expr; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Assign; }
+    static bool classof(Statement* statement) { return statement->kind() == Kind::Expr; }
+};
+
+class EmptyStatement : public Statement {
+public:
+    EmptyStatement(Location location)
+        : Statement(Kind::Expr, location) {}
+
+    static bool classof(Statement* statement) { return statement->kind() == Kind::Empty; }
 };
 
 class IfStatement : public Statement {

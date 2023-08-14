@@ -411,7 +411,7 @@ continue_identifier:
             if (not IsDigit(token.text[i])) {
                 are_rest_digits = false;
             } else {
-                u64 digit_value = (u64) (lastc - '0');
+                u64 digit_value = (u64) (token.text[i] - '0');
                 if ((std::numeric_limits<u64>::max() - digit_value) / 10 < integer_value)
                     is_int_too_large = true;
 
