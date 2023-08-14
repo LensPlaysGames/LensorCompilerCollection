@@ -168,6 +168,10 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
 
         auto body = Result<Statement*>::Null();
 
+        if (not Consume(Tk::SemiColon)) {
+            Error("Expected ';'");
+        }
+
         return new (*this) FunctionDecl{location, modifiers, *type, name, *template_params, params, *body};
     }
 
@@ -454,8 +458,7 @@ return_null_type:;
     return Result<Type*>::Null();
 }
 
-auto Parser::ParseExpr() -> Result<Expr*>
-{
+auto Parser::ParseExpr() -> Result<Expr*> {
     LCC_ASSERT(false, "TODO(local): finish expr parsing");
 }
 } // namespace lcc::laye
