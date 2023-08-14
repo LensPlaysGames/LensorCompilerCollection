@@ -50,7 +50,8 @@ public:
         : ctx(other.ctx),
           kind(other.kind),
           where(other.where),
-          msg(std::move(other.msg)) {
+          msg(std::move(other.msg)),
+          attached(std::move(other.attached)) {
         other.kind = Kind::None;
     }
 
@@ -60,6 +61,7 @@ public:
         kind = other.kind;
         where = other.where;
         msg = std::move(other.msg);
+        attached = std::move(other.attached);
         other.kind = Kind::None;
         return *this;
     }
