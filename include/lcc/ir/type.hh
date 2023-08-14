@@ -11,8 +11,13 @@ namespace lcc {
 /// Note: IR types are immutable and cached and uniqued in the
 /// context. Two IR types are equal, iff their pointers are equal.
 class Type {
+    friend class lcc::Context;
+
 public:
     enum struct Kind {
+        Unknown,
+        Pointer,
+        Void,
         Array,
         Function,
         Integer,
@@ -27,10 +32,13 @@ protected:
 
 public:
     /// Builtin and cached types.
+    ///
+    /// When adding a type here, don’t forget to initialise
+    /// it in Context::InitialiseLCCData().
     static Type* UnknownTy; ///< Used because we don’t want null types, ever.
-    static Type* I1Ty;      ///< Just an integer type. Used for bools.
     static Type* PtrTy;     ///< Opaque pointer type.
     static Type* VoidTy;    ///< Void type.
+    static Type* I1Ty;      ///< Just an integer type. Used for bools.
 
     /// Disallow allocating these directly.
     void* operator new(size_t) = delete;
@@ -46,7 +54,7 @@ public:
 };
 
 class ArrayType : public Type {
-    friend class Context;
+    friend class lcc::Context;
 
     usz _length;
     Type* _element_type;
@@ -69,7 +77,7 @@ public:
 
 /// A function type.
 class FunctionType : public Type {
-    friend class Context;
+    friend class lcc::Context;
 
     /// The return type of this function.
     Type* return_type;
@@ -98,7 +106,7 @@ public:
 };
 
 class IntegerType : public Type {
-    friend class Context;
+    friend class lcc::Context;
 
     usz _width;
 
@@ -117,7 +125,7 @@ public:
 };
 
 class StructType : public Type {
-    friend class Context;
+    friend class lcc::Context;
 
     std::vector<Type*> _members;
 

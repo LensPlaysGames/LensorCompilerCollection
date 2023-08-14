@@ -1,5 +1,9 @@
 #include <intercept/ast.hh>
+#include <intercept/parser.hh>
 #include <lcc/utils/rtti.hh>
+
+lcc::intercept::Type* lcc::intercept::Type::Unknown;
+lcc::intercept::Type* lcc::intercept::Type::Integer;
 
 lcc::intercept::Module::Module(
     File* file,
@@ -70,7 +74,7 @@ lcc::intercept::StringLiteral::StringLiteral(
 
 /// Declare a symbol in this scope.
 auto lcc::intercept::Scope::declare(
-    const Context* ctx,
+    Parser* p,
     std::string&& name,
     Decl* decl
 ) -> Result<Decl*> {
@@ -82,9 +86,15 @@ auto lcc::intercept::Scope::declare(
         it != symbols.end() and
         not is<FuncDecl>(it->second) and
         not is<FuncDecl>(decl)
-    ) return Diag::Error(ctx, decl->location(), "Redeclaration of '{}'", name);
+    ) return Diag::Error(p->context, decl->location(), "Redeclaration of '{}'", name);
+
+    /// TODO: Check that this declaration is hygienic if it’s part of a macro.
 
     /// Otherwise, add the symbol.
     symbols.emplace(std::move(name), decl);
     return decl;
+}
+
+auto lcc::intercept::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
+    LCC_ASSERT(false, "TODO: Clone expressions");
 }

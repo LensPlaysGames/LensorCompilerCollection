@@ -526,7 +526,7 @@ public:
 ///
 /// These should never be created manually.
 class ParamInst : public Inst {
-    friend class Function;
+    friend Function;
 
     /// The parameter index.
     u32 i;

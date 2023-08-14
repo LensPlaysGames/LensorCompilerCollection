@@ -1,4 +1,23 @@
 #include <lcc/context.hh>
+#include <lcc/ir/type.hh>
+#include <mutex>
+
+lcc::Context::Context() {
+    static std::once_flag once;
+    std::call_once(once, InitialiseLCCData);
+
+    /// Initialise type caches.
+    integer_types[1] = Type::I1Ty;
+}
+
+lcc::Context::~Context() {
+    for (auto type : array_types) delete type;
+    for (auto type : function_types) delete type;
+    for (auto type : struct_types) delete type;
+    for (auto [_, type] : integer_types)
+        if (type != Type::I1Ty)
+            delete type;
+}
 
 auto lcc::Context::get_or_load_file(fs::path path) -> File& {
     auto f = rgs::find_if(owned_files, [&](const auto& e) { return e->path() == path; });

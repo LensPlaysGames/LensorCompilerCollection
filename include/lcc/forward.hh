@@ -12,6 +12,7 @@ class Function;
 class MInst;
 class MBlock;
 class MFunction;
+class Type;
 }
 
 #endif // LCC_FORWARD_HH

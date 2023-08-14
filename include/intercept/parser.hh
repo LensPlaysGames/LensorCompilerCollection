@@ -25,8 +25,6 @@ public:
 private:
     static constexpr usz PrefixOperatorPrecedence = 10000;
 
-    friend struct ScopeRAII;
-
     /// RAII helper for pushing and popping scopes.
     struct ScopeRAII {
         Parser* parser;
@@ -65,7 +63,7 @@ private:
     [[nodiscard]] bool At(auto... tks) { return Is(&tok, tks...); }
 
     /// Check if we’re at the start of an expression.
-    bool AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
+    bool AtStartOfExpression();
 
     /// Like At(), but consume the token if it matches.
     bool Consume(auto... tks) {
@@ -96,9 +94,6 @@ private:
     /// Get the global scope.
     auto GlobalScope() -> Scope* { return scope_stack.front(); }
 
-    /// Check if a token kind may start an expression.
-    bool MayStartAnExpression(Tk kind);
-
     auto ParseBlock() -> Result<BlockExpr*>;
     auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;
     auto ParseCallExpr(Expr* callee) -> Result<CallExpr*>;
@@ -122,14 +117,8 @@ private:
     /// Synchronise on semicolons and braces.
     void Synchronise();
 
-    void EnsureHygenicDeclarationIfWithinMacro(std::string_view ident, Location location);
-
-    static isz BinaryOperatorPrecedence(TokenKind tokenKind);
-    static bool IsRightAssociative(TokenKind tokenKind);
-
-    static void ApplyFunctionAttributes(Type* func, std::span<FuncType::Attributes> attribs);
-    static void ApplyStructAttributes(Type* func, std::span<FuncType::Attributes> attribs);
-
+    friend Scope;
+    friend ScopeRAII;
     friend Lexer;
 };
 } // namespace lcc::intercept

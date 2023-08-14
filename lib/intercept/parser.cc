@@ -89,6 +89,73 @@ constexpr bool IsRightAssociative(lcc::intercept::TokenKind t) {
     }
 }
 
+constexpr bool MayStartAnExpression(lcc::intercept::TokenKind kind) {
+    using Tk = lcc::intercept::TokenKind;
+    switch (kind) {
+        case Tk::LParen:
+        case Tk::LBrack:
+        case Tk::LBrace:
+        case Tk::Plus:
+        case Tk::Minus:
+        case Tk::Ampersand:
+        case Tk::Tilde:
+        case Tk::Exclam:
+        case Tk::At:
+        case Tk::Ident:
+        case Tk::Number:
+        case Tk::String:
+        case Tk::If:
+        case Tk::While:
+        case Tk::Extern:
+        case Tk::For:
+        case Tk::Return:
+        case Tk::Export:
+        case Tk::Struct:
+        case Tk::Lambda:
+        case Tk::Expression:
+            return true;
+
+        case Tk::Invalid:
+        case Tk::Eof:
+        case Tk::RParen:
+        case Tk::RBrack:
+        case Tk::RBrace:
+        case Tk::Comma:
+        case Tk::Colon:
+        case Tk::Semicolon:
+        case Tk::Dot:
+        case Tk::Star:
+        case Tk::Slash:
+        case Tk::Percent:
+        case Tk::Pipe:
+        case Tk::Caret:
+        case Tk::Hash:
+        case Tk::Shl:
+        case Tk::Shr:
+        case Tk::Eq:
+        case Tk::Ne:
+        case Tk::Lt:
+        case Tk::Gt:
+        case Tk::Le:
+        case Tk::Ge:
+        case Tk::ColonEq:
+        case Tk::ColonColon:
+        case Tk::Else:
+        case Tk::As:
+        case Tk::Type:
+        case Tk::Void:
+        case Tk::Byte:
+        case Tk::Bool:
+        case Tk::IntKw:
+        case Tk::ArbitraryInt:
+        case Tk::Gensym:
+        case Tk::MacroArg:
+            return false;
+    }
+
+    LCC_UNREACHABLE();
+}
+
 /// \brief Get the precedence level of a type qualifier.
 ///
 /// The precedence levels for type qualifiers are (higher
@@ -139,6 +206,8 @@ constexpr lcc::isz TypeQualifierPrecedence(lcc::intercept::TokenKind t) {
     }
 }
 } // namespace
+
+bool lcc::intercept::Parser::AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
 
 auto lcc::intercept::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
     Parser parser(context, &file);
@@ -240,7 +309,7 @@ auto lcc::intercept::Parser::ParseDeclRest(
                     /// Type must be a struct type.
                     if (auto s = cast<StructType>(*decl)) {
                         return CurrScope()->declare(
-                            context,
+                            this,
                             std::move(decl_name),
                             new (*mod) StructDecl(mod.get(), std::move(ident), s, location)
                         );
@@ -259,7 +328,7 @@ auto lcc::intercept::Parser::ParseDeclRest(
 
                 /// Create the type alias.
                 return CurrScope()->declare(
-                    context,
+                    this,
                     std::move(decl_name),
                     new (*mod) TypeAliasDecl(
                         std::move(ident),
@@ -301,7 +370,7 @@ auto lcc::intercept::Parser::ParseDeclRest(
             );
 
             /// Add it to the current scope and return it.
-            return CurrScope()->declare(context, std::move(ident), var);
+            return CurrScope()->declare(this, std::move(ident), var);
         }
 
         /// Variable declaration with type inference.
@@ -323,7 +392,7 @@ auto lcc::intercept::Parser::ParseDeclRest(
 
             /// Declarations that use type inference cannot be external.
             if (is_extern) Error(cc_loc, "Extern declarations must specify a type");
-            return CurrScope()->declare(context, std::move(ident), var);
+            return CurrScope()->declare(this, std::move(ident), var);
         }
     }
 }
@@ -487,7 +556,7 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
     /// of an expression.
     LCC_ASSERT(
         MayStartAnExpression(start_token),
-        "Add {} to lcc::intercept::Parser::MayStartAnExpression()",
+        "Add {} to MayStartAnExpression() in lib/intercept/parser.cc",
         ToString(start_token)
     );
 
@@ -693,7 +762,7 @@ auto lcc::intercept::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*
                 if (not At(Tk::Ident)) return Error("Expected identifier or ':' in parameter declaration");
                 parameters.emplace_back(tok.text, nullptr, tok.location);
                 NextToken();
-            } while(Consume(Tk::Comma));
+            } while (Consume(Tk::Comma));
 
             /// Parse the parameter type.
             if (not Consume(Tk::Colon)) return Error("Expected ':' in parameter declaration");
@@ -1001,5 +1070,5 @@ auto lcc::intercept::Parser::ParseFuncDecl(
     if (name.empty()) return func;
 
     /// Add it to the current scope and return it.
-    return as<FuncDecl>(CurrScope()->declare(context, std::move(name), func));
+    return as<FuncDecl>(CurrScope()->declare(this, std::move(name), func));
 }

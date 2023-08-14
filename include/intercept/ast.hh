@@ -111,6 +111,7 @@ class Decl;
 class FuncDecl;
 class Type;
 class ObjectDecl;
+class Parser;
 
 class Module {
     std::string name{};
@@ -192,12 +193,12 @@ public:
     /// added. If the name already exists, and the declaration
     /// is not a function declaration, this returns a diagnostic.
     ///
-    /// \param ctx The LCC context.
+    /// \param parser The Intercept parser.
     /// \param name The name of the declared symbol.
     /// \param decl The declaration to bind to the symbol.
     /// \return The same declaration, or an error.
     auto declare(
-        const Context* ctx,
+        Parser* ctx,
         std::string&& name,
         Decl* decl
     ) -> Result<Decl*>;
@@ -210,6 +211,8 @@ public:
 };
 
 class Type {
+    friend class lcc::Context;
+
 public:
     enum struct Kind {
         Builtin,
@@ -247,6 +250,9 @@ public:
     /// available (e.g. for default initialisers etc.). In
     /// any other case, prefer to create an instance of a
     /// BuiltinType instead.
+    ///
+    /// When adding a type here, don’t forget to initialise
+    /// it in Context::InitialiseLCCData().
     static Type* Unknown;
     static Type* Integer;
 };
@@ -520,7 +526,6 @@ public:
     /// Access the location of this expression.
     auto location() const { return _location; }
     auto location(Location location) { _location = location; }
-
 
     /// Deep-copy an expression.
     static Expr* Clone(Module& mod, Expr* expr);

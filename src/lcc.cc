@@ -24,9 +24,9 @@ using namespace command_line_options;
 using options = clopts< // clang-format off
     help<>,
     option<"-o", "Path to the output filepath where target code will be stored">,
-    option<"--output", "Path to the output filepath where target code will be stored">,
+    flag<"-v", "Enable verbose output">,
     func<"--aluminium", "That special something to spice up your compilation", aluminium_handler>,
-    multiple<positional<"filepath", "Path to files that should be compiled", file<std::vector<char>>>>
+    multiple<positional<"filepath", "Path to files that should be compiled", file<std::vector<char>>, true>>
 >; // clang-format on
 } // namespace detail
 using detail::options;
@@ -34,45 +34,34 @@ using detail::options;
 int main(int argc, char** argv) {
     options::parse(argc, argv);
 
-    lcc::Context context{};
-
-    // Get input files
-    auto input_files = options::get<"filepath">();
-    fmt::print("Input files:\n");
-    for (const auto& input_file : *input_files) {
-        auto& file = context.create_file(input_file.path, input_file.contents);
-
-        // TODO: This could all be moved into something like lcc::handle_input_file
-
-        // Intercept
-        if (input_file.path.string().ends_with(".int")) {
-            // Parsing (syntactic analysis)
-            // std::unique_ptr<lcc::intercept::Module> parsed = lcc::intercept::Parser::Parse(&context, file);
-
-            // TODO: Typechecking (semantic analysis)
-
-            // TODO: IR Generation (frontend codegen)
-        }
-
-        // Laye
-        else if (input_file.path.string().ends_with(".laye")) {
-            // Parsing (syntactic analysis)
-            auto file_module = lcc::laye::Parser::Parse(&context, file);
-
-            // TODO: Typechecking (semantic analysis)
-
-            // TODO: IR Generation (frontend codegen)
-        }
-
-        // Intermediate Representation (textual)
-        else if (input_file.path.string().ends_with(".ir")) {
-            // TODO: Parse textual IR
-            fmt::print("- Laye: {}\n", input_file.path.string());
-
-        }
-
-        else lcc::Diag::Fatal("Unrecognised input filepath");
+    /// Get input files
+    auto& input_files = *options::get<"filepath">();
+    if (options::get<"-v">()) {
+        fmt::print("Input files:\n");
+        for (const auto& input_file : input_files)
+            fmt::print("- {}\n", input_file.path.string());
     }
 
-    lcc::Diag::Fatal("Driver not fully implemented");
+    /// TODO: Handle multiple files.
+    if (input_files.empty() or input_files.size() > 1)
+        lcc::Diag::Fatal("Expected exactly one input file");
+
+    /// Compile the file.
+    lcc::Context context{};
+    auto path_str = input_files[0].path.string();
+    auto& file = context.create_file(input_files[0].path, input_files[0].contents);
+
+    /// Intercept.
+    if (path_str.ends_with(".int")) {
+        auto mod = lcc::intercept::Parser::Parse(&context, file);
+        return 42;
+    }
+
+    /// Laye.
+    if (path_str.ends_with(".laye")) {
+        LCC_ASSERT(false, "TODO");
+    }
+
+    /// Unknown.
+    lcc::Diag::Fatal("Unrecognised input file type");
 }

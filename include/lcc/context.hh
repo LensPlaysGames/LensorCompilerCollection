@@ -14,9 +14,18 @@ class Context {
     /// Error flag. This is set-only.
     mutable bool error_flag = false;
 
+    /// Called once the first time a context is created.
+    static void InitialiseLCCData();
+
+    /// IR type caches.
+    std::unordered_map<usz, Type*> integer_types;
+    std::vector<Type*> array_types;
+    std::vector<Type*> function_types;
+    std::vector<Type*> struct_types;
+
 public:
     /// Create a new context.
-    explicit Context() = default;
+    explicit Context();
 
     /// Do not allow copying or moving the context.
     Context(const Context&) = delete;
@@ -24,8 +33,8 @@ public:
     Context& operator=(const Context&) = delete;
     Context& operator=(Context&&) = delete;
 
-    /// Currently this doesn’t do anything special.
-    ~Context() = default;
+    /// Delete all files and IR types.
+    ~Context();
 
     /// Create a new file from a name and contents.
     template <typename Buffer>
