@@ -171,16 +171,16 @@ endif ()
 ## ============================================================================
 ## Find libfmt.
 include(FetchContent)
-message(STATUS "Downloading fmtlib ...")
-if (NOT DEFINED fmt_FOUND)
-	FetchContent_Declare(fmtlib
-		GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-		GIT_TAG 10.0.0
-		SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
-    )
-	FetchContent_MakeAvailable(fmtlib)
-	target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
-endif()
+set(FETCHCONTENT_QUIET OFF)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+message(STATUS "Checking dependencies ...")
+FetchContent_Declare(fmtlib
+    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+    GIT_TAG 10.0.0
+    SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
+)
+FetchContent_MakeAvailable(fmtlib)
+target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
 
 ## Add libclopts.
 FetchContent_Declare(clopts
