@@ -3,6 +3,9 @@
 #include <clopts.hh>
 
 #include <string>
+#include <lcc/context.hh>
+
+#include <intercept/parser.hh>
 
 namespace detail {
 void aluminium_handler() {
@@ -24,7 +27,7 @@ using options = clopts< // clang-format off
     option<"-o", "Path to the output filepath where target code will be stored">,
     option<"--output", "Path to the output filepath where target code will be stored">,
     func<"--aluminium", "That special something to spice up your compilation", aluminium_handler>,
-    multiple<positional<"filepath", "Path to files that should be compiled">>
+    multiple<positional<"filepath", "Path to files that should be compiled", file<std::vector<char>>>>
 >; // clang-format on
 }
 using detail::options;
@@ -32,34 +35,40 @@ using detail::options;
 int main(int argc, char** argv) {
     options::parse(argc, argv);
 
-    // Get input files
-    std::vector<std::string> input_files = *detail::options::get<"filepath">();
+    lcc::Context context{};
 
-    // Print out input files
+    // Get input files
+    auto input_files = options::get<"filepath">();
     fmt::print("Input files:\n");
-    for (const auto& input_filepath : input_files) {
+    for (const auto& input_file : *input_files) {
+
+        auto& file = context.create_file(input_file.path, input_file.contents);
+
+        // TODO: This could all be moved into something like lcc::handle_input_file
 
         // Intercept
-        if (input_filepath.ends_with(".int")) {
+        if (input_file.path.string().ends_with(".int")) {
+            // Parsing (syntactic analysis)
+            //std::unique_ptr<lcc::intercept::Module> parsed = lcc::intercept::Parser::Parse(&context, file);
 
-            // TODO: Parse, typecheck, and codegen an Intercept file
-            fmt::print("- Intercept: {}\n", input_filepath);
+            // TODO: Typechecking (semantic analysis)
 
+            // TODO: IR Generation (frontend codegen)
         }
 
         // Laye
-        else if (input_filepath.ends_with(".laye")) {
+        else if (input_file.path.string().ends_with(".laye")) {
 
             // TODO: Parse, typecheck, and codegen a Laye file
-            fmt::print("- Laye: {}\n", input_filepath);
+            fmt::print("- Laye: {}\n", input_file.path.string());
 
         }
 
         // Intermediate Representation (textual)
-        else if (input_filepath.ends_with(".ir")) {
+        else if (input_file.path.string().ends_with(".ir")) {
 
             // TODO: Parse textual IR
-            fmt::print("- Laye: {}\n", input_filepath);
+            fmt::print("- Laye: {}\n", input_file.path.string());
 
         }
 
