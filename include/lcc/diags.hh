@@ -94,6 +94,9 @@ public:
     Diag(Kind kind, fmt::format_string<Args...> fmt, Args&&... args)
         : Diag{kind, fmt::format(fmt, std::forward<Args>(args)...)} {}
 
+    /// Supress this diagnostic (it will not be printed)
+    auto suppress() { kind = Kind::None; }
+
     /// Emit a note.
     template <typename... Args>
     static Diag Note(fmt::format_string<Args...> fmt, Args&&... args) {
