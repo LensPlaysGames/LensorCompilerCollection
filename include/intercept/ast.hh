@@ -238,7 +238,11 @@ public:
     virtual ~Type() = default;
 
     void* operator new(size_t) = delete;
-    void* operator new(size_t, Module&);
+    void* operator new(size_t sz, Module& mod) {
+        auto ptr = ::operator new(sz);
+        mod.types.push_back(static_cast<Type*>(ptr));
+        return ptr;
+    }
 
     auto kind() const { return _kind; }
     auto location() const { return _location; }

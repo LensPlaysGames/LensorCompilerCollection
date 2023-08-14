@@ -23,69 +23,6 @@ lcc::StringMap<Tk> keywords{
     {"struct", Tk::Struct},
     {"lambda", Tk::Lambda},
 };
-
-constexpr std::string_view TokenKindToString(Tk kind) {
-    switch (kind) {
-        case Tk::Invalid: return "invalid";
-        case Tk::Eof: return "EOF";
-        case Tk::Ident: return "identifier";
-        case Tk::Number: return "number";
-        case Tk::String: return "string";
-        case Tk::If: return "if";
-        case Tk::Else: return "else";
-        case Tk::While: return "while";
-        case Tk::Extern: return "ext";
-        case Tk::As: return "as";
-        case Tk::Export: return "export";
-        case Tk::Type: return "type";
-        case Tk::Void: return "void";
-        case Tk::Byte: return "byte";
-        case Tk::IntKw: return "int";
-        case Tk::ArbitraryInt: return "arbitrary_integer";
-        case Tk::For: return "for";
-        case Tk::Return: return "return";
-        case Tk::LParen: return "\"(\"";
-        case Tk::RParen: return "\")\"";
-        case Tk::LBrack: return "\"[\"";
-        case Tk::RBrack: return "\"]\"";
-        case Tk::LBrace: return "\"{\"";
-        case Tk::RBrace: return "\"}\"";
-        case Tk::Comma: return "\",\"";
-        case Tk::Colon: return "\":\"";
-        case Tk::Semicolon: return "\";\"";
-        case Tk::Dot: return "\".\"";
-        case Tk::Plus: return "\"+\"";
-        case Tk::Minus: return "\"-\"";
-        case Tk::Star: return "\"*\"";
-        case Tk::Slash: return "\"/\"";
-        case Tk::Percent: return "\"%\"";
-        case Tk::Ampersand: return "\"&\"";
-        case Tk::Pipe: return "\"|\"";
-        case Tk::Caret: return "\"^\"";
-        case Tk::Tilde: return "\"~\"";
-        case Tk::Exclam: return "\"!\"";
-        case Tk::At: return "\"@\"";
-        case Tk::Hash: return "\"#\"";
-        case Tk::Shl: return "\"<<\"";
-        case Tk::Shr: return "\">>\"";
-        case Tk::Eq: return "\"=\"";
-        case Tk::Ne: return "\"!=\"";
-        case Tk::Lt: return "\"<\"";
-        case Tk::Gt: return "\">\"";
-        case Tk::Le: return "\"<=\"";
-        case Tk::Ge: return "\">=\"";
-        case Tk::ColonEq: return "\":=\"";
-        case Tk::ColonColon: return "\"::\"";
-        case Tk::Gensym: return "gensym";
-        case Tk::MacroArg: return "macro_arg";
-        case Tk::Expression: return "ast_node";
-        case Tk::Bool: return "bool";
-        case Tk::Struct: return "struct";
-        case Tk::Lambda: return "lambda";
-    }
-
-    return "<unknown>";
-}
 } // namespace
 
 auto lcc::intercept::Lexer::LookAhead(usz n) -> Token* {
@@ -174,7 +111,7 @@ void lcc::intercept::Lexer::NextToken() {
                         tok.text = fmt::format("{}{}", tok.text[0], tok.integer_value);
                     } break;
                     default: {
-                        tok.text = TokenKindToString(tok.kind);
+                        tok.text = ToString(tok.kind);
                     } break;
                 }
             }
@@ -520,7 +457,7 @@ void lcc::intercept::Lexer::NextNumber() {
     /// Helper that actually parses the number.
     const auto ParseNumber = [&](std::string_view name, auto&& IsValidDigit, int base) {
         /// Yeet prefix.
-        NextChar();
+        if (base != 10) NextChar();
 
         /// Lex digits.
         while (IsValidDigit(lastc)) {
@@ -858,4 +795,67 @@ bool lcc::intercept::InterceptToken::operator==(const InterceptToken& rhs) const
     }
 
     LCC_UNREACHABLE();
+}
+
+std::string_view lcc::intercept::ToString(Tk kind) {
+    switch (kind) {
+        case Tk::Invalid: return "invalid";
+        case Tk::Eof: return "EOF";
+        case Tk::Ident: return "identifier";
+        case Tk::Number: return "number";
+        case Tk::String: return "string";
+        case Tk::If: return "if";
+        case Tk::Else: return "else";
+        case Tk::While: return "while";
+        case Tk::Extern: return "ext";
+        case Tk::As: return "as";
+        case Tk::Export: return "export";
+        case Tk::Type: return "type";
+        case Tk::Void: return "void";
+        case Tk::Byte: return "byte";
+        case Tk::IntKw: return "int";
+        case Tk::ArbitraryInt: return "arbitrary_integer";
+        case Tk::For: return "for";
+        case Tk::Return: return "return";
+        case Tk::LParen: return "\"(\"";
+        case Tk::RParen: return "\")\"";
+        case Tk::LBrack: return "\"[\"";
+        case Tk::RBrack: return "\"]\"";
+        case Tk::LBrace: return "\"{\"";
+        case Tk::RBrace: return "\"}\"";
+        case Tk::Comma: return "\",\"";
+        case Tk::Colon: return "\":\"";
+        case Tk::Semicolon: return "\";\"";
+        case Tk::Dot: return "\".\"";
+        case Tk::Plus: return "\"+\"";
+        case Tk::Minus: return "\"-\"";
+        case Tk::Star: return "\"*\"";
+        case Tk::Slash: return "\"/\"";
+        case Tk::Percent: return "\"%\"";
+        case Tk::Ampersand: return "\"&\"";
+        case Tk::Pipe: return "\"|\"";
+        case Tk::Caret: return "\"^\"";
+        case Tk::Tilde: return "\"~\"";
+        case Tk::Exclam: return "\"!\"";
+        case Tk::At: return "\"@\"";
+        case Tk::Hash: return "\"#\"";
+        case Tk::Shl: return "\"<<\"";
+        case Tk::Shr: return "\">>\"";
+        case Tk::Eq: return "\"=\"";
+        case Tk::Ne: return "\"!=\"";
+        case Tk::Lt: return "\"<\"";
+        case Tk::Gt: return "\">\"";
+        case Tk::Le: return "\"<=\"";
+        case Tk::Ge: return "\">=\"";
+        case Tk::ColonEq: return "\":=\"";
+        case Tk::ColonColon: return "\"::\"";
+        case Tk::Gensym: return "gensym";
+        case Tk::MacroArg: return "macro_arg";
+        case Tk::Expression: return "ast_node";
+        case Tk::Bool: return "bool";
+        case Tk::Struct: return "struct";
+        case Tk::Lambda: return "lambda";
+    }
+
+    return "<unknown>";
 }
