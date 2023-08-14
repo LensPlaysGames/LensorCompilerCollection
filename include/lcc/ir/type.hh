@@ -63,9 +63,6 @@ public:
     // Return the element type.
     Type* element_type() const { return _element_type; }
 
-    /// Get a string representation of this type.
-    auto string() const -> std::string;
-
     /// RTTI.
     static bool classof(const Type* t) { return t->kind == Kind::Array; }
 };
@@ -135,8 +132,6 @@ public:
 
     /// Return the types of the members of the struct
     auto members() const -> const std::vector<Type*>& { return _members; }
-
-    auto string() const -> std::string;
 
     /// RTTI.
     static bool classof(const Type* t) { return t->kind == Kind::Struct; }
