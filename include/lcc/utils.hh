@@ -65,6 +65,8 @@ using f64 = double;
 )
 // clang-format on
 
+#define LCC_UNREACHABLE() LCC_ASSERT(false, "Unreachable")
+
 template <typename>
 concept always_false = false;
 
