@@ -15,11 +15,13 @@ void lcc::Context::InitialiseLCCData() {
     Type::I1Ty = &ir_i1_ty;
 
     /// Initialise default instances of builtin Intercept types.
-    static intercept::Type default_type_instances[2]{
-        intercept::Type{intercept::Type::Kind::Builtin, {}},
-        intercept::Type{intercept::Type::Kind::Builtin, {}},
+    static intercept::BuiltinType default_type_instances[]{
+        {intercept::BuiltinType::BuiltinKind::Unknown, {}},
+        {intercept::BuiltinType::BuiltinKind::Integer, {}},
+        {intercept::BuiltinType::BuiltinKind::Void, {}},
     };
 
     intercept::Type::Unknown = default_type_instances;
     intercept::Type::Integer = default_type_instances + 1;
+    intercept::Type::Void = default_type_instances + 2;
 }

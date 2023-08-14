@@ -1001,6 +1001,11 @@ auto lcc::intercept::Parser::ParseType(isz current_precedence) -> Result<Type*> 
         switch (tok.kind) {
             default: LCC_ASSERT(false, "Unhandled trailing type qualifier");
 
+            /// An at sign or ampersand here are no longer part of the type.
+            case Tk::At:
+            case Tk::Ampersand:
+                return ty;
+
             /// Function type.
             case Tk::LParen: {
                 auto type = ParseFuncSig(ty);

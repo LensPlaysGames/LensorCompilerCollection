@@ -14,7 +14,7 @@ concept PrintableWithChildren = requires (const NodeType* n, std::string& out) {
     n->print_header(out, /** Use colours **/ true);
 
     /// Returns a span of pointers to the children of this node.
-    { n->children() } -> std::same_as<std::span<NodeType* const>>;
+    { n->display_children() } -> std::same_as<std::span<NodeType* const>>;
 };
 
 /// A node that has trailing data.
@@ -112,7 +112,7 @@ void PrintImpl(std::string& out, const NodeType* node, std::string leading_text,
         out += "\033[m\n";
 
         /// Print the children if there are any.
-        auto children = node->children();
+        auto children = node->display_children();
         for (usz i = 0; i < children.size(); i++) {
             const bool last = i == children.size() - 1;
 

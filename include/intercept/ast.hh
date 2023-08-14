@@ -144,6 +144,9 @@ public:
     /// Intern a string and return its index.
     usz intern(std::string_view str);
 
+    /// Print the AST of this module.
+    void print();
+
     /// Get the top-level function.
     auto top_level_func() const -> FuncDecl* { return top_level_function; }
 
@@ -247,6 +250,9 @@ public:
     auto kind() const { return _kind; }
     auto location() const { return _location; }
 
+    /// Get a string representation of this type.
+    auto string(bool use_colours = false) const -> std::string;
+
     /// Return this type stripped of any aliases.
     auto strip_aliases() -> Type*;
 
@@ -259,6 +265,7 @@ public:
     /// it in Context::InitialiseLCCData().
     static Type* Unknown;
     static Type* Integer;
+    static Type* Void;
 };
 
 /// This only holds a kind.
@@ -269,6 +276,8 @@ public:
 /// in storing their names in each of them, so an instance of one
 /// only ever stores its primitive type kind.
 class BuiltinType : public Type {
+    friend lcc::Context;
+
 public:
     enum struct BuiltinKind {
         Bool,
@@ -295,7 +304,7 @@ private:
 
 public:
     /// Get the kind of this builtin.
-    auto builtin_kind() -> BuiltinKind { return _kind; }
+    auto builtin_kind() const -> BuiltinKind { return _kind; }
 
     bool operator==(const BuiltinType& other) const { return _kind == other._kind; }
     bool operator==(BuiltinKind k) const { return _kind == k; }
@@ -309,7 +318,7 @@ public:
     static auto Unknown(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Unknown, l); }
     static auto Void(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Void, l); }
 
-    static bool classof(Type* type) { return type->kind() == Kind::Builtin; }
+    static bool classof(const Type* type) { return type->kind() == Kind::Builtin; }
 };
 
 class NamedType : public Type {
@@ -321,7 +330,7 @@ public:
 
     auto name() const -> const std::string& { return _name; }
 
-    static bool classof(Type* type) { return type->kind() == Kind::Named; }
+    static bool classof(const Type* type) { return type->kind() == Kind::Named; }
 };
 
 class TypeWithOneElement : public Type {
@@ -340,7 +349,7 @@ public:
     PointerType(Type* element_type, Location location = {})
         : TypeWithOneElement(Kind::Pointer, location, element_type) {}
 
-    static bool classof(Type* type) { return type->kind() == Kind::Pointer; }
+    static bool classof(const Type* type) { return type->kind() == Kind::Pointer; }
 };
 
 class ReferenceType : public TypeWithOneElement {
@@ -348,7 +357,7 @@ public:
     ReferenceType(Type* element_type, Location location)
         : TypeWithOneElement(Kind::Reference, location, element_type) {}
 
-    static bool classof(Type* type) { return type->kind() == Kind::Reference; }
+    static bool classof(const Type* type) { return type->kind() == Kind::Reference; }
 };
 
 class ArrayType : public TypeWithOneElement {
@@ -360,7 +369,7 @@ public:
 
     Expr* size() const { return _size; }
 
-    static bool classof(Type* type) { return type->kind() == Kind::Array; }
+    static bool classof(const Type* type) { return type->kind() == Kind::Array; }
 };
 
 class FuncType : public Type {
@@ -398,7 +407,7 @@ public:
     bool has_attr(FuncAttr attr) const { return _attributes.contains(attr); }
 
     /// Get the parameters of this function.
-    auto params() -> std::span<Param const> const { return _params; }
+    auto params() const -> const std::vector<Param>& { return _params; }
 
     /// Remove an attribute from this function.
     void remove_attr(FuncAttr attr) { _attributes.erase(attr); }
@@ -409,7 +418,7 @@ public:
     /// Set an attribute on this function.
     void set_attr(FuncAttr attr) { _attributes[attr] = true; }
 
-    static bool classof(Type* type) { return type->kind() == Kind::Function; }
+    static bool classof(const Type* type) { return type->kind() == Kind::Function; }
 };
 
 class StructDecl;
@@ -456,7 +465,7 @@ public:
 
     std::span<Member const> members() { return _members; }
 
-    static bool classof(Type* type) { return type->kind() == Kind::Struct; }
+    static bool classof(const Type* type) { return type->kind() == Kind::Struct; }
 };
 
 class IntegerType : public Type {
@@ -470,7 +479,7 @@ public:
     bool is_signed() const { return _is_signed; }
     usz bit_width() const { return _bit_width; }
 
-    static bool classof(Type* type) { return type->kind() == Kind::Integer; }
+    static bool classof(const Type* type) { return type->kind() == Kind::Integer; }
 };
 
 /// \brief Base class for expression syntax nodes.
@@ -478,6 +487,10 @@ class Expr {
 public:
     /// Do NOT reorder these!
     enum struct Kind {
+        While,
+        For,
+        Return,
+
         StructDecl,
         TypeAliasDecl,
         VarDecl,
@@ -488,11 +501,7 @@ public:
         CompoundLiteral,
 
         If,
-        While,
-        For,
-
         Block,
-        Return,
 
         Call,
         IntrinsicCall,
@@ -543,7 +552,12 @@ protected:
         : Expr(kind, location), _type(type) {}
 
 public:
+    auto type() const -> Type* { return _type; }
     void type(Type* type) { _type = type; }
+
+    static bool classof(const Expr* expr) {
+        return expr->kind() >= Kind::StructDecl and expr->kind() <= Kind::MemberAccess;
+    }
 };
 
 /// Base class for declarations. Declarations have a name.
@@ -557,14 +571,14 @@ protected:
 public:
     auto name() const -> const std::string& { return _name; }
 
-    static bool classof(Expr* expr) {
+    static bool classof(const Expr* expr) {
         return expr->kind() >= Kind::StructDecl and expr->kind() <= Kind::FuncDecl;
     }
 };
 
 /// A declaration that has linkage.
 class ObjectDecl : public Decl {
-    Module* _mod;
+    Module* _mod{};
     Linkage _linkage;
 
 protected:
@@ -593,13 +607,13 @@ public:
     void linkage(Linkage linkage) { _linkage = linkage; }
 
     /// RTTI.
-    static bool classof(Expr* expr) {
+    static bool classof(const Expr* expr) {
         return expr->kind() >= Kind::VarDecl and expr->kind() <= Kind::FuncDecl;
     }
 };
 
 class VarDecl : public ObjectDecl {
-    Expr* _init;
+    Expr* _init{};
 
 public:
     VarDecl(
@@ -614,11 +628,11 @@ public:
 
     auto init() const { return _init; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::VarDecl; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::VarDecl; }
 };
 
 class FuncDecl : public ObjectDecl {
-    Expr* _body;
+    Expr* _body{};
 
     /// Only present if this is not an imported function. Sema
     /// fills these in.
@@ -638,12 +652,12 @@ public:
     auto params() const -> std::span<VarDecl* const> { return _params; }
     auto body() const { return _body; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::FuncDecl; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::FuncDecl; }
 };
 
 class StructDecl : public Decl {
     /// The module this struct is declared in.
-    Module* _module;
+    Module* _module{};
 
 public:
     StructDecl(Module* mod, std::string name, StructType* declared_type, Location location)
@@ -654,7 +668,7 @@ public:
     /// Get the module this struct is declared in.
     auto module() const -> Module* { return _module; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::StructDecl; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::StructDecl; }
 };
 
 class TypeAliasDecl : public Decl {
@@ -662,7 +676,7 @@ public:
     TypeAliasDecl(std::string name, Type* aliased_type, Location location)
         : Decl(Kind::TypeAliasDecl, std::move(name), aliased_type, location) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeAliasDecl; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeAliasDecl; }
 };
 
 class IntegerLiteral : public TypedExpr {
@@ -674,7 +688,7 @@ public:
 
     u64 value() const { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::IntegerLiteral; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::IntegerLiteral; }
 };
 
 class StringLiteral : public TypedExpr {
@@ -686,7 +700,7 @@ public:
 
     usz string_index() const { return _index; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::StringLiteral; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::StringLiteral; }
 };
 
 class CompoundLiteral : public TypedExpr {
@@ -698,13 +712,13 @@ public:
 
     auto values() const -> std::span<Expr* const> { return _values; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::CompoundLiteral; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::CompoundLiteral; }
 };
 
 class IfExpr : public TypedExpr {
     Expr* _condition;
     Expr* _then;
-    Expr* _else;
+    Expr* _else{};
 
 public:
     IfExpr(Expr* condition, Expr* then, Expr* else_, Location location)
@@ -714,7 +728,7 @@ public:
     auto then() const { return _then; }
     auto else_() const { return _else; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::If; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::If; }
 };
 
 class WhileExpr : public Expr {
@@ -728,14 +742,14 @@ public:
     auto condition() const { return _condition; }
     auto body() const { return _body; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::While; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::While; }
 };
 
 class ForExpr : public Expr {
-    Expr* _init;
-    Expr* _condition;
-    Expr* _iterator;
-    Expr* _body;
+    Expr* _init{};
+    Expr* _condition{};
+    Expr* _iterator{};
+    Expr* _body{};
 
 public:
     ForExpr(Expr* init, Expr* condition, Expr* iterator, Expr* body, Location location)
@@ -746,7 +760,7 @@ public:
     auto iterator() const { return _iterator; }
     auto body() const { return _body; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::For; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::For; }
 };
 
 class BlockExpr : public TypedExpr {
@@ -756,13 +770,13 @@ public:
     BlockExpr(std::vector<Expr*> children, Location location)
         : TypedExpr(Kind::Block, location), _children(std::move(children)) {}
 
-    auto children() const -> std::span<Expr* const> { return _children; }
+    auto children() const -> const std::vector<Expr*>& { return _children; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Block; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Block; }
 };
 
 class ReturnExpr : public Expr {
-    Expr* _value;
+    Expr* _value{};
 
 public:
     ReturnExpr(Expr* value, Location location)
@@ -770,7 +784,7 @@ public:
 
     auto value() const { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Return; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Return; }
 };
 
 class CallExpr : public TypedExpr {
@@ -784,7 +798,7 @@ public:
     auto callee() const { return _callee; }
     auto args() const -> std::span<Expr* const> { return _args; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Call; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Call; }
 };
 
 class IntrinsicCallExpr : public TypedExpr {
@@ -798,7 +812,7 @@ public:
     auto intrinsic_kind() const { return _kind; }
     auto args() const -> std::span<Expr* const> { return _args; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::IntrinsicCall; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::IntrinsicCall; }
 };
 
 class CastExpr : public TypedExpr {
@@ -811,7 +825,7 @@ public:
     /// Get the operand of this expression.
     auto operand() const { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Cast; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Cast; }
 };
 
 class UnaryExpr : public TypedExpr {
@@ -832,7 +846,7 @@ public:
     /// Get the unary operator.
     auto op() const { return _op; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Unary; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Unary; }
 };
 
 class BinaryExpr : public TypedExpr {
@@ -853,12 +867,12 @@ public:
     /// Get the binary operator.
     auto op() const { return _op; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Binary; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Binary; }
 };
 
 class NameRefExpr : public TypedExpr {
     std::string _name;
-    Expr* _target;
+    Expr* _target{};
 
 public:
     NameRefExpr(std::string name, Location location)
@@ -868,13 +882,13 @@ public:
     auto target() const { return _target; }
     void target(Expr* target) { _target = target; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::NameRef; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::NameRef; }
 };
 
 class MemberAccessExpr : public TypedExpr {
     Expr* _object;
     std::string _name;
-    StructType::Member* _member;
+    StructType::Member* _member{};
 
 public:
     MemberAccessExpr(Expr* object, std::string name, Location location)
@@ -885,7 +899,7 @@ public:
     void member(StructType::Member* member) { _member = member; }
     auto object() const { return _object; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::MemberAccess; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::MemberAccess; }
 };
 } // namespace lcc::intercept
 

@@ -5,6 +5,7 @@
 #include <lcc/diags.hh>
 #include <lcc/utils.hh>
 #include <string>
+#include <intercept/ast.hh>
 
 namespace detail {
 void aluminium_handler() {
@@ -25,6 +26,8 @@ using options = clopts< // clang-format off
     help<>,
     option<"-o", "Path to the output filepath where target code will be stored">,
     flag<"-v", "Enable verbose output">,
+    flag<"--ast", "Print the AST and exit without generating code">,
+    flag<"--syntax-only", "Do not perform semantic analysis">,
     func<"--aluminium", "That special something to spice up your compilation", aluminium_handler>,
     multiple<positional<"filepath", "Path to files that should be compiled", file<std::vector<char>>, true>>
 >; // clang-format on
@@ -54,6 +57,11 @@ int main(int argc, char** argv) {
     /// Intercept.
     if (path_str.ends_with(".int")) {
         auto mod = lcc::intercept::Parser::Parse(&context, file);
+        if (options::get<"--syntax-only">()) {
+            if (options::get<"--ast">()) mod->print();
+            std::exit(0);
+        }
+
         return 42;
     }
 

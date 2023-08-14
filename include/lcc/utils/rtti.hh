@@ -48,7 +48,7 @@ auto cast_impl(Value&& value) {
     );
 
     /// Result type is a (const) pointer to Target.
-    using ResultType = merge_const<Value, Target>*;
+    using ResultType = merge_const<ClassType, Target>*;
 
     /// If the types are the same, or if Target is a base class of the
     /// value class, just cast to the target type.
