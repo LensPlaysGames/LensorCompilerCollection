@@ -3,10 +3,10 @@
 namespace lcc::laye {
 using Tk = TokenKind;
 
-std::unique_ptr<Module> Parser::Parse(Context* context, File* file) {
+std::unique_ptr<Module> Parser::Parse(Context* context, File& file) {
     auto result = new Module;
 
-    Parser parser{context, file, result};
+    Parser parser{context, &file, result};
 
     while (not parser.At(Tk::Eof)) {
         bool is_export = false;

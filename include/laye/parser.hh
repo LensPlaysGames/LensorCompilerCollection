@@ -20,7 +20,7 @@ class Parser {
     usz speculative_look_ahead = 0;
 
 public:
-    static std::unique_ptr<Module> Parse(Context* context, File* file);
+    static std::unique_ptr<Module> Parse(Context* context, File& file);
 
 private:
     friend struct ScopeRAII;
