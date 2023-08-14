@@ -159,10 +159,7 @@ struct InterceptToken : public syntax::Token<TokenKind> {
     /// only be evaluated once.
     bool eval_once : 1 = true;
 
-    bool operator==(const InterceptToken& rhs) const {
-        // TODO(local): implement this properly
-        LCC_ASSERT(false);
-    }
+    bool operator==(const InterceptToken& rhs) const;
 };
 
 struct Macro {

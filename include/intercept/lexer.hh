@@ -8,35 +8,41 @@
 
 namespace lcc::intercept {
 class Lexer : public syntax::Lexer<InterceptToken> {
+    using Token = InterceptToken;
+
     enum struct MacroArgumentSelector {
         Token,
         Expr,
         ExprOnce,
     };
 
-    struct NamedToken {
-        std::string_view name{};
-        InterceptToken token{};
-    };
-
     struct Macro {
         std::string name{};
-        std::vector<InterceptToken> parameters{};
-        std::vector<InterceptToken> expansion{};
+        std::vector<std::string> definitions{};
+        std::vector<Token> expansion{};
+        std::vector<Token> parameters{};
         Location location{};
-        usz gensym_count = 0;
     };
 
-    struct MacroExpansion {
-        usz macro_index = 0;
-        usz expansion_index = 0;
-        std::vector<NamedToken> bound_arguments{};
+    class MacroExpansion {
+        Macro* m;
+        decltype(m->expansion.begin()) it;
+        StringMap<Token> bound_arguments{};
         Location location{};
         std::vector<std::string> gensyms{};
+
+    public:
+        MacroExpansion(Lexer& l, Macro& m, StringMap<Token> args, Location loc);
+
+        /// Check if the macro is done expanding.
+        bool done() const { return it == m->expansion.end(); }
+
+        /// Get the next token from the expansion.
+        auto operator++() -> Token;
     };
 
-    std::vector<InterceptToken> lookahead_tokens{};
-    std::vector<Macro> macros{};
+    std::vector<Token> lookahead_tokens{};
+    std::deque<Macro> macros{};
     std::vector<MacroExpansion> macro_expansion_stack{};
     bool raw_mode = false;
     usz gensym_counter = 0;
@@ -44,20 +50,14 @@ class Lexer : public syntax::Lexer<InterceptToken> {
     void NextIdentifier();
     void HandleIdentifier();
     void NextString();
-    void ParseNumber(int base);
     void NextNumber();
 
-    /// Note(Sirraide): The gensym handling is janky. Gensym names should
-    /// be generated when the macro is created, not later.
-    void NextMacro();
-
-    /// TODO: Lexer *MUST* convert Gensym tokens to Ident tokens when
-    /// expanding macros and generating tokens from the expansion.
-    void ExpandMacro(Macro* m);
+    void ExpandMacro(Macro& m);
+    void HandleMacroDefinition();
 
 protected:
     Lexer(Context* context, File* file)
-        : syntax::Lexer<InterceptToken>(context, file) { NextToken(); }
+        : syntax::Lexer<Token>(context, file) { NextToken(); }
 
     /// Note: Calling LookAhead() invalidates the addresses of
     /// previous lookaheads, if this requires more tokens to be
@@ -65,7 +65,7 @@ protected:
     ///
     /// Lookahead tokens are 1-based. LookAhead(0) returns the
     /// current token.
-    auto LookAhead(usz n) -> InterceptToken*;
+    auto LookAhead(usz n) -> Token*;
 
     void NextToken();
 

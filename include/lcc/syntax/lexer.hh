@@ -23,7 +23,7 @@ protected:
 
     auto FileId() const { return file->file_id(); }
 
-    auto CurrentOffset() const -> u32 { return curr - file->data() - 1; }
+    auto CurrentOffset() const -> u32 { return u32(curr - file->data()) - 1; }
 
     auto CurrentLocation() const {
         return Location{CurrentOffset(), (u16) 1, (u16) file->file_id()};

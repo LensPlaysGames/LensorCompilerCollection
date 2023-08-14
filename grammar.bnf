@@ -6,6 +6,9 @@
 <module-declaration> ::= "module" IDENTIFIER
 <import-declaration> ::= "import" IDENTIFIER
 
+
+/// TODO: Make parens optional in function call
+
 /// Expression.
 <expr>     ::= <expr-decl>
              | <expr-if>
