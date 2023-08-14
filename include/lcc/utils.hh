@@ -119,6 +119,47 @@ using StringMap = std::unordered_map<std::string, Type, detail::StringHash, std:
 
 /// More rarely used functions go here so as to not pollute the lcc namespace too much.
 namespace lcc::utils {
+/// ANSI Terminal colours.
+enum struct Colour {
+    Reset = 0,
+    Red = 31,
+    Green = 32,
+    Yellow = 33,
+    Blue = 34,
+    Magenta = 35,
+    Cyan = 36,
+    White = 37,
+};
+
+/// RAII helper to toggle colours when printing.
+///
+/// Example:
+/// \code{.cpp}
+///     using enum Colour;
+///     Colours C{true};
+///     out += C(Red);
+///     out += fmt::format("{}foo{}", C(Green), C(Reset));
+/// \endcode
+struct Colours {
+    bool use_colours;
+    Colours(bool use_colours) : use_colours{use_colours} {}
+
+    auto operator()(Colour c) -> std::string_view {
+        if (not use_colours) return "";
+        switch (c) {
+            case Colour::Reset: return "\033[m";
+            case Colour::Red: return "\033[31m";
+            case Colour::Green: return "\033[32m";
+            case Colour::Yellow: return "\033[33m";
+            case Colour::Blue: return "\033[34m";
+            case Colour::Magenta: return "\033[35m";
+            case Colour::Cyan: return "\033[36m";
+            case Colour::White: return "\033[37m";
+        }
+        return "";
+    }
+};
+
 /// Align a value to a given alignment.
 template <typename T = usz>
 constexpr T AlignTo(T value, T align) {

@@ -1,6 +1,7 @@
 #include <intercept/ast.hh>
 #include <intercept/parser.hh>
 #include <lcc/utils/rtti.hh>
+#include <lcc/utils/ast_printer.hh>
 
 namespace intc = lcc::intercept;
 
@@ -121,94 +122,14 @@ using lcc::as;
 using lcc::cast;
 using lcc::is;
 
-enum struct Colour {
-    Reset = 0,
-    Red = 31,
-    Green = 32,
-    Yellow = 33,
-    Blue = 34,
-    Magenta = 35,
-    Cyan = 36,
-    White = 37,
-};
-
-struct Colours {
-    bool use_colours;
-    Colours(bool use_colours) : use_colours{use_colours} {}
-
-    auto operator()(Colour c) -> std::string_view {
-        if (not use_colours) return "";
-        switch (c) {
-            case Colour::Reset: return "\033[m";
-            case Colour::Red: return "\033[31m";
-            case Colour::Green: return "\033[32m";
-            case Colour::Yellow: return "\033[33m";
-            case Colour::Blue: return "\033[34m";
-            case Colour::Magenta: return "\033[35m";
-            case Colour::Cyan: return "\033[36m";
-            case Colour::White: return "\033[37m";
-        }
-        return "";
-    }
-};
-
-struct ASTPrinter {
-    using enum Colour;
-
-    std::string out;
-    bool use_colour = true;
-    Colours C{use_colour};
-
-    ASTPrinter() = default;
-    ~ASTPrinter() { fmt::print("{}", out); }
-
-    /// Print basic information about an AST node.
-    void PrintBasicNode(
-        std::string_view node_name,
-        const intc::Expr* node,
-        const intc::Type* type
-    ) {
-        PrintBasicHeader(node_name, node);
-
-        /// Print the type if there is one.
-        if (type) out += fmt::format(" {}", type->string(use_colour));
-        out += fmt::format("{}\n", C(Reset));
-    }
-
-    /// Print the start of the header of an AST node.
-    void PrintBasicHeader(std::string_view node_name, const intc::Expr* node) {
-        out += fmt::format(
-            "{}{} {}{} {}<{}>",
-            C(Red),
-            node_name,
-            C(Blue),
-            fmt::ptr(node),
-            C(Magenta),
-            node->location().pos
-        );
-    }
-
-    /// Print the linkage of a node.
-    void PrintLinkage(const intc::ObjectDecl* d) {
-        out += C(Red);
-        switch (d->linkage()) {
-            case lcc::Linkage::LocalVar: out += "Local "; return;
-            case lcc::Linkage::Internal: out += "Internal "; return;
-            case lcc::Linkage::Used: out += "Used "; return;
-            case lcc::Linkage::Exported: out += "Exported "; return;
-            case lcc::Linkage::Imported: out += "Imported "; return;
-            case lcc::Linkage::Reexported: out += "Reexported "; return;
-        }
-        LCC_UNREACHABLE();
-    }
-
+struct ASTPrinter : lcc::utils::ASTPrinter<intc::Expr, intc::Type> {
     /// Print the header (name + location + type) of a node.
     void PrintHeader(const intc::Expr* e) {
         using K = intc::Expr::Kind;
         switch (e->kind()) {
             case K::FuncDecl: {
                 auto f = as<intc::FuncDecl>(e);
-                PrintLinkage(f);
+                PrintLinkage(f->linkage());
                 PrintBasicHeader("FuncDecl", e);
                 out += fmt::format(
                     " {}{} {}\n",
@@ -221,7 +142,7 @@ struct ASTPrinter {
 
             case K::VarDecl: {
                 auto v = as<intc::VarDecl>(e);
-                PrintLinkage(v);
+                PrintLinkage(v->linkage());
                 PrintBasicHeader("VarDecl", e);
                 out += fmt::format(
                     " {}{} {}\n",
@@ -382,8 +303,8 @@ struct ASTPrinter {
 } // namespace
 
 auto intc::Type::string(bool use_colours) const -> std::string {
-    Colours C{use_colours};
-    using enum Colour;
+    lcc::utils::Colours C{use_colours};
+    using enum lcc::utils::Colour;
 
     switch (kind()) {
         case Kind::Named: return as<NamedType>(this)->name();
@@ -471,6 +392,6 @@ auto intc::Type::string(bool use_colours) const -> std::string {
 }
 
 void intc::Module::print() {
-    ASTPrinter p;
+    ASTPrinter p{true};
     for (auto* node : top_level_nodes) p(node);
 }
