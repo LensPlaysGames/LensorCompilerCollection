@@ -191,10 +191,13 @@ private:
 
     auto ParseTopLevel() -> Result<Decl*>;
 
+    auto SpeculateCouldBeValidTemplateArgumentList() -> bool;
+    auto ParseTemplateArguments() -> std::vector<Expr*>;
+
     auto TryParseNameOrPath(
         bool allocate,
-        std::function<Expr*(Location location, std::string name)> name_ctor,
-        std::function<Expr*(PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations)> path_ctor
+        std::function<Expr*(Location location, std::string name, std::vector<Expr*> template_args)> name_ctor,
+        std::function<Expr*(PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args)> path_ctor
     ) -> Result<Expr*>;
 
     auto TryParseDecl() -> Result<Decl*>;
@@ -225,6 +228,8 @@ private:
         return TryParseType(true);
     }
 
+    auto ParsePrimaryExpr() -> Result<Expr*>;
+    auto ParseBinaryExpr(Expr* lhs, int precedence = 0) -> Result<Expr*>;
     auto ParseExpr() -> Result<Expr*>;
 
     static isz BinaryOperatorPrecedence(TokenKind tokenKind);

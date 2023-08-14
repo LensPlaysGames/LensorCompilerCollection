@@ -907,12 +907,17 @@ public:
 
 class NameExpr : public Expr {
     std::string _name{};
+    std::vector<Expr*> _template_args{};
 
 public:
     NameExpr(Location location, std::string name)
         : Expr(Kind::LookupName, location), _name(std::move(name)) {}
+        
+    NameExpr(Location location, std::string name, std::vector<Expr*> template_args)
+        : Expr(Kind::LookupName, location), _name(std::move(name)), _template_args(std::move(template_args)) {}
 
     auto name() const -> const std::string& { return _name; }
+    auto template_args() const -> std::span<Expr* const> { return _template_args; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::LookupName; }
 };
@@ -921,14 +926,19 @@ class PathExpr : public Expr {
     PathKind _path_kind;
     std::vector<std::string> _names;
     std::vector<Location> _locations;
+    std::vector<Expr*> _template_args{};
 
 public:
     PathExpr(PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations)
         : Expr(Kind::LookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _names(std::move(names)), _locations(std::move(locations)) {}
+        
+    PathExpr(PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args)
+        : Expr(Kind::LookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _names(std::move(names)), _locations(std::move(locations)), _template_args(std::move(template_args)) {}
 
     auto path_kind() const { return _path_kind; }
     auto names() const -> std::span<std::string const> { return _names; }
     auto locations() const -> std::span<Location const> { return _locations; }
+    auto template_args() const -> std::span<Expr* const> { return _template_args; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::LookupPath; }
 };
@@ -1267,13 +1277,18 @@ public:
 class NameType : public Type {
     TypeAccess _access;
     std::string _name;
+    std::vector<Expr*> _template_args{};
 
 public:
     NameType(Location location, TypeAccess access, std::string name)
         : Type(Kind::TypeLookupName, location), _access(access), _name(std::move(name)) {}
 
+    NameType(Location location, TypeAccess access, std::string name, std::vector<Expr*> template_args)
+        : Type(Kind::TypeLookupName, location), _access(access), _name(std::move(name)), _template_args(std::move(template_args)) {}
+
     auto access() const { return _access; }
     auto name() const -> const std::string& { return _name; }
+    auto template_args() const -> std::span<Expr* const> { return _template_args; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::TypeLookupName; }
 };
@@ -1283,15 +1298,20 @@ class PathType : public Type {
     TypeAccess _access;
     std::vector<std::string> _names;
     std::vector<Location> _locations;
+    std::vector<Expr*> _template_args{};
 
 public:
     PathType(PathKind path_kind, TypeAccess access, std::vector<std::string> names, std::vector<Location> locations)
         : Type(Kind::TypeLookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _access(access), _names(std::move(names)), _locations(std::move(locations)) {}
+        
+    PathType(PathKind path_kind, TypeAccess access, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args)
+        : Type(Kind::TypeLookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _access(access), _names(std::move(names)), _locations(std::move(locations)), _template_args(std::move(template_args)) {}
 
     auto path_kind() const { return _path_kind; }
     auto access() const { return _access; }
     auto names() const -> std::span<std::string const> { return _names; }
     auto locations() const -> std::span<Location const> { return _locations; }
+    auto template_args() const -> std::span<Expr* const> { return _template_args; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::TypeLookupPath; }
 };

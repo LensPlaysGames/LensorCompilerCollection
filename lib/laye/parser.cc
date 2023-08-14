@@ -41,6 +41,8 @@ void Parser::Synchronise() {
 }
 
 auto Parser::ParseTopLevel() -> Result<Decl*> {
+    LCC_ASSERT(not IsInSpeculativeParse());
+
     auto decl = ParseDecl();
     // TODO(local): any additional error checking for top level decls?
     return decl;
@@ -200,6 +202,8 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
 }
 
 auto Parser::ParseDecl() -> Result<Decl*> {
+    LCC_ASSERT(not IsInSpeculativeParse());
+
     auto decl_result = TryParseDecl();
     if (not decl_result) return decl_result.diag();
 
@@ -267,6 +271,8 @@ auto Parser::TryParseTemplateParams(bool allocate) -> Result<std::vector<Templat
 // import foo, bar from "file";
 // import "file" as file;
 auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
+    LCC_ASSERT(not IsInSpeculativeParse());
+
     auto start_location = CurrLocation();
 
     if (not Consume(Tk::Import)) {
@@ -377,10 +383,27 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allowFunctions
     return type;
 }
 
+auto Parser::SpeculateCouldBeValidTemplateArgumentList() -> bool {
+    LCC_ASSERT(IsInSpeculativeParse());
+    LCC_ASSERT(At(Tk::Less));
+
+    return false;
+}
+
+auto Parser::ParseTemplateArguments() -> std::vector<Expr*> {
+    LCC_ASSERT(not IsInSpeculativeParse());
+
+    std::vector<Expr*> template_args{};
+    if (not SpeculateCouldBeValidTemplateArgumentList())
+        return template_args;
+
+    return template_args;
+}
+
 auto Parser::TryParseNameOrPath(
     bool allocate,
-    std::function<Expr*(Location location, std::string name)> name_ctor,
-    std::function<Expr*(PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations)> path_ctor
+    std::function<Expr*(Location location, std::string name, std::vector<Expr*> template_args)> name_ctor,
+    std::function<Expr*(PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args)> path_ctor
 ) -> Result<Expr*> {
     LCC_ASSERT((not allocate) == IsInSpeculativeParse(), "TryParseNameOrPath requires that the allocate parameter be the opposite of the result of IsInSpeculativeParse(). If allocations are enabled, then no speculative parse stack should exist. If allocations are disabled, then it is required that a specilative parse stack exists.");
     LCC_ASSERT(At(Tk::Ident, Tk::ColonColon, Tk::Global), "TryParseNameOrPath requires that the current parser state be at 'global', '::' or an identifier");
@@ -389,6 +412,7 @@ auto Parser::TryParseNameOrPath(
 
     std::vector<std::string> path_names{};
     std::vector<Location> path_locations{};
+    std::vector<Expr*> template_args{};
 
     if (Consume(Tk::Global)) {
         path_kind = PathKind::Global;
@@ -407,9 +431,16 @@ auto Parser::TryParseNameOrPath(
             auto name_location = tok.location;
 
             if (not Consume(Tk::ColonColon)) {
+                if (At(Tk::Less)) {
+                    auto spec = EnterSpeculativeParse();
+                    bool could_be_templates = SpeculateCouldBeValidTemplateArgumentList();
+                }
+                
                 if (allocate) {
-                    return name_ctor(name_location, name_text);
-                } else goto return_null_type;
+                    return name_ctor(name_location, name_text, template_args);
+                } else {
+                    goto return_null_type;
+                }
             }
 
             path_names.push_back(name_text);
@@ -430,9 +461,12 @@ auto Parser::TryParseNameOrPath(
             path_locations.push_back(name_location);
         } while (Consume(Tk::ColonColon));
 
+        // TODO(local): (try) parse template arguments
         if (allocate) {
-            return path_ctor(path_kind, path_names, path_locations);
-        } else goto return_null_type;
+            return path_ctor(path_kind, path_names, path_locations, template_args);
+        } else {
+            goto return_null_type;
+        }
     }
 
 return_null_type:;
@@ -480,12 +514,12 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
     if (At(Tk::Ident, Tk::ColonColon, Tk::Global)) {
         // these constructors are already wrapped in `if (allocate)` in the TryparseNameOrPath function,
         //  so we don't have to do that explicitly.
-        auto NameCtor = [&](Location location, std::string name) -> Expr* {
-            return new (*this) NameType{location, type_access, name};
+        auto NameCtor = [&](Location location, std::string name, std::vector<Expr*> template_args) -> Expr* {
+            return new (*this) NameType{location, type_access, name, template_args};
         };
 
-        auto PathCtor = [&](PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations) -> Expr* {
-            return new (*this) PathType{path_kind, type_access, names, locations};
+        auto PathCtor = [&](PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args) -> Expr* {
+            return new (*this) PathType{path_kind, type_access, names, locations, template_args};
         };
 
         auto id_type = TryParseNameOrPath(allocate, NameCtor, PathCtor);
@@ -557,7 +591,36 @@ return_null_type:;
     return Result<Type*>::Null();
 }
 
-auto Parser::ParseExpr() -> Result<Expr*> {
+auto Parser::ParsePrimaryExpr() -> Result<Expr*> {
+    LCC_ASSERT(not IsInSpeculativeParse());
+
+    if (At(Tk::Ident, Tk::ColonColon, Tk::Global)) {
+        auto NameCtor = [&](Location location, std::string name, std::vector<Expr*> template_args) -> Expr* {
+            return new (*this) NameExpr{location, name, template_args};
+        };
+
+        auto PathCtor = [&](PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args) -> Expr* {
+            return new (*this) PathExpr{path_kind, names, locations, template_args};
+        };
+
+        auto id_expr = TryParseNameOrPath(true, NameCtor, PathCtor);
+        return id_expr;
+    }
+
     LCC_ASSERT(false, "TODO(local): finish expr parsing");
+}
+
+auto Parser::ParseBinaryExpr(Expr* lhs, int precedence) -> Result<Expr*> {
+    LCC_ASSERT(not IsInSpeculativeParse());
+
+    return lhs;
+}
+
+auto Parser::ParseExpr() -> Result<Expr*> {
+    LCC_ASSERT(not IsInSpeculativeParse());
+
+    auto primary = ParsePrimaryExpr();
+    if (not primary) return primary.diag();
+    return ParseBinaryExpr(*primary);
 }
 } // namespace lcc::laye
