@@ -251,6 +251,12 @@ enum struct TypeAccess {
     WriteOnly,
 };
 
+enum struct PathKind {
+    Default,
+    Global,
+    Headless,
+};
+
 class Scope {
     Scope* _parent;
     StringMap<Statement*> _symbols;
@@ -902,15 +908,17 @@ public:
 };
 
 class PathExpr : public Expr {
-    bool _is_headless;
+    PathKind _path_kind;
     std::vector<std::string> _names;
+    std::vector<Location> _locations;
 
 public:
-    PathExpr(Location location, bool is_headless, std::vector<std::string> names)
-        : Expr(Kind::LookupPath, location), _is_headless(is_headless), _names(std::move(names)) {}
+    PathExpr(PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations)
+        : Expr(Kind::LookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _names(std::move(names)), _locations(std::move(locations)) {}
 
-    bool is_headless() const { return _is_headless; }
-    auto name() const -> std::span<std::string const> { return _names; }
+    auto path_kind() const { return _path_kind; }
+    auto names() const -> std::span<std::string const> { return _names; }
+    auto locations() const -> std::span<Location const> { return _locations; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::LookupPath; }
 };
@@ -1247,27 +1255,33 @@ public:
 };
 
 class NameType : public Type {
+    TypeAccess _access;
     std::string _name;
 
 public:
-    NameType(Location location, std::string name)
-        : Type(Kind::TypeLookupName, location), _name(std::move(name)) {}
+    NameType(Location location, TypeAccess access, std::string name)
+        : Type(Kind::TypeLookupName, location), _access(access), _name(std::move(name)) {}
 
+    auto access() const { return _access; }
     auto name() const -> const std::string& { return _name; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::TypeLookupName; }
 };
 
 class PathType : public Type {
-    bool _is_headless;
-    std::vector<std::string> _path;
+    PathKind _path_kind;
+    TypeAccess _access;
+    std::vector<std::string> _names;
+    std::vector<Location> _locations;
 
 public:
-    PathType(Location location, bool is_headless, std::vector<std::string> path)
-        : Type(Kind::TypeLookupPath, location), _is_headless(is_headless), _path(std::move(path)) {}
+    PathType(PathKind path_kind, TypeAccess access, std::vector<std::string> names, std::vector<Location> locations)
+        : Type(Kind::TypeLookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _access(access), _names(std::move(names)), _locations(std::move(locations)) {}
 
-    auto is_headless() const { return _is_headless; }
-    auto path() const -> const std::span<std::string const> { return _path; }
+    auto path_kind() const { return _path_kind; }
+    auto access() const { return _access; }
+    auto names() const -> std::span<std::string const> { return _names; }
+    auto locations() const -> std::span<Location const> { return _locations; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::TypeLookupPath; }
 };

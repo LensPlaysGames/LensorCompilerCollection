@@ -8,6 +8,7 @@
 namespace lcc::laye {
 class Parser {
     Lexer lexer;
+    File* file;
     Context* context;
     Module* module;
 
@@ -102,11 +103,16 @@ private:
     auto EnterSpeculativeParse() { return SpeculativeRAII(this); }
 
     Parser(Context* context, File* file, Module* module)
-        : lexer(Lexer{context, file}), context(context), module(module) {}
+        : lexer(Lexer{context, file}), file(file), context(context), module(module) {}
 
     /// Get the current scope.
     auto CurrScope() -> Scope* { return scope_stack.back(); }
     auto CurrLocation() { return tok.location; }
+    auto GetLocation(u32 start) const { return Location{
+        start,
+        (u16) (tok.location.pos - start),
+        (u16) file->file_id()};
+    }
 
     /// True if any speculative parse state is enabled, false otherwise.
     bool IsInSpeculativeParse() const { return speculative_parse_stack > 0; }
@@ -127,8 +133,7 @@ private:
         if (IsInSpeculativeParse()) {
             speculative_look_ahead++;
             tok = PeekToken(speculative_look_ahead);
-        }
-        else if (not look_ahead.empty()) {
+        } else if (not look_ahead.empty()) {
             tok = look_ahead[0];
             // pop from the front of the vector
             look_ahead.erase(look_ahead.begin());
@@ -138,7 +143,7 @@ private:
 
     /// Check if we’re at one of a set of tokens.
     [[nodiscard]] auto At(auto... tks) { return ((tok.kind == tks) or ...); }
-    [[nodiscard]] auto PeekAt( usz ahead, auto... tks) { return ((PeekToken(ahead).kind == tks) or ...); }
+    [[nodiscard]] auto PeekAt(usz ahead, auto... tks) { return ((PeekToken(ahead).kind == tks) or ...); }
 
     /// Like At(), but consume the token if it matches.
     bool Consume(auto... tks) {
@@ -184,24 +189,43 @@ private:
 
     auto ParseTopLevel() -> Result<Decl*>;
 
+    auto TryParseNameOrPath(
+        bool allocate,
+        std::function<Expr*(Location location, std::string name)> name_ctor,
+        std::function<Expr*(PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations)> path_ctor
+    ) -> Result<Expr*>;
+
     auto TryParseDecl() -> Result<Decl*>;
     auto ParseDecl() -> Result<Decl*>;
     auto ParseDeclOrStatement() -> Result<std::variant<Statement*, Decl*>>;
-    
+
     auto TryParseTemplateParams(bool allocate) -> Result<std::vector<TemplateParam>>;
-    bool SpeculativeParseTemplateParams() { LCC_ASSERT(IsInSpeculativeParse()); return TryParseTemplateParams(false).is_value(); }
-    auto MaybeParseTemplateParams() { LCC_ASSERT(not IsInSpeculativeParse()); return TryParseTemplateParams(true); }
+    bool SpeculativeParseTemplateParams() {
+        LCC_ASSERT(IsInSpeculativeParse());
+        return TryParseTemplateParams(false).is_value();
+    }
+    auto MaybeParseTemplateParams() {
+        LCC_ASSERT(not IsInSpeculativeParse());
+        return TryParseTemplateParams(true);
+    }
 
     auto ParseImportDecl(bool is_export) -> Result<ImportHeader*>;
 
-    auto TryParseType(bool allocate) -> Result<Type*>;
-    bool SpeculativeParseType() { LCC_ASSERT(IsInSpeculativeParse()); return TryParseType(false).is_value(); }
-    auto ParseType() { LCC_ASSERT(not IsInSpeculativeParse()); return TryParseType(true); }
+    auto TryParseTypeContinue(Type* type, bool allocate, bool allowFunctions = true) -> Result<Type*>;
+    auto TryParseType(bool allocate, bool allowFunctions = true) -> Result<Type*>;
+    bool SpeculativeParseType() {
+        LCC_ASSERT(IsInSpeculativeParse());
+        return TryParseType(false).is_value();
+    }
+    auto ParseType() {
+        LCC_ASSERT(not IsInSpeculativeParse());
+        return TryParseType(true);
+    }
 
     auto ParseExpr() -> Result<Expr*>;
 
     static isz BinaryOperatorPrecedence(TokenKind tokenKind);
-    
+
     static OperatorKind UnaryOperatorKind(TokenKind tokenKind);
     static OperatorKind BinaryOperatorKind(TokenKind tokenKind);
 

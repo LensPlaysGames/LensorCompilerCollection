@@ -60,7 +60,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
                 NextToken();
 
                 if (At(Tk::String)) {
-                    modifiers.push_back(DeclModifier{Tk::Foreign, std::move(tok.text)});
+                    modifiers.push_back(DeclModifier{Tk::Foreign, tok.text});
                     NextToken();
                 } else {
                     modifiers.push_back(DeclModifier{Tk::Foreign});
@@ -122,13 +122,13 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         LCC_ASSERT(false, "TODO");
     } else if (Consume(Tk::Enum)) {
         LCC_ASSERT(false, "TODO");
-    } 
+    }
 
     auto type = ParseType();
 
     LCC_ASSERT(At(Tk::Ident));
     auto location = tok.location;
-    auto name = std::move(tok.text);
+    auto name = tok.text;
     NextToken();
 
     auto template_params = MaybeParseTemplateParams();
@@ -164,11 +164,11 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         }
 
         auto body = Result<Statement*>::Null();
-        
-        return new (*this) FunctionDecl{location, modifiers, *type, name, *template_params, params, *body};
-    } 
 
-    if (template_params.is_value() and not (*template_params).empty()) {
+        return new (*this) FunctionDecl{location, modifiers, *type, name, *template_params, params, *body};
+    }
+
+    if (template_params.is_value() and not(*template_params).empty()) {
         Error("Binding declarations cannot have template parameters");
     }
 
@@ -197,7 +197,7 @@ auto Parser::ParseDecl() -> Result<Decl*> {
 auto Parser::ParseDeclOrStatement() -> Result<std::variant<Statement*, Decl*>> {
     auto decl_result = TryParseDecl();
     if (not decl_result) return decl_result.diag();
-    
+
     auto diag = *decl_result;
     if (diag) return std::variant<Statement*, Decl*>(diag);
 
@@ -235,7 +235,7 @@ auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
         if (not Consume(Tk::Ident, Tk::String)) {
             Error(alias_token.location, "Expected string literal or identifier as import alias name");
         } else {
-            alias = std::move(alias_token.text);
+            alias = alias_token.text;
         }
     };
 
@@ -260,16 +260,16 @@ auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
             );
         }
 
-        import_name = std::move(tok.text);
+        import_name = tok.text;
         HandleImportAlias();
         ExpectSemiColon();
 
         return new (*this) ImportHeader(
             start_location,
             is_export,
-            std::move(import_name),
+            import_name,
             true,
-            std::move(alias)
+            alias
         );
     }
 
@@ -278,7 +278,7 @@ auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
     if (At(Tk::Ident) and PeekAt(1, Tk::Comma, Tk::From)) {
         // TODO(local): special case parse handle wildcard and error?
         while (At(Tk::Ident)) {
-            import_names.push_back(std::move(tok.text));
+            import_names.push_back(tok.text);
             NextToken();
 
             if (not Consume(Tk::Comma)) break;
@@ -308,7 +308,7 @@ auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
         );
     }
 
-    import_name = std::move(tok.text);
+    import_name = tok.text;
     HandleImportAlias();
     ExpectSemiColon();
 
@@ -316,15 +316,136 @@ auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
     return new (*this) ImportHeader(
         import_locaiton,
         is_export,
-        std::move(import_name),
+        import_name,
         std::move(import_names),
-        std::move(alias)
+        alias
     );
 }
 
-auto Parser::TryParseType(bool allocate) -> Result<Type*> {
+auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allowFunctions) -> Result<Type*> {
+    LCC_ASSERT(false, "TODO: implement TryParseTypeContinue in Laye parser");
+}
+
+auto Parser::TryParseNameOrPath(
+    bool allocate,
+    std::function<Expr*(Location location, std::string name)> name_ctor,
+    std::function<Expr*(PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations)> path_ctor
+) -> Result<Expr*> {
+    LCC_ASSERT((not allocate) == IsInSpeculativeParse(), "TryParseNameOrPath requires that the allocate parameter be the opposite of the result of IsInSpeculativeParse(). If allocations are enabled, then no speculative parse stack should exist. If allocations are disabled, then it is required that a specilative parse stack exists.");
+    LCC_ASSERT(At(Tk::Ident, Tk::ColonColon, Tk::Global), "TryParseNameOrPath requires that the current parser state be at 'global', '::' or an identifier");
+
+    auto path_kind = PathKind::Default;
+
+    std::vector<std::string> path_names{};
+    std::vector<Location> path_locations{};
+
+    if (Consume(Tk::Global)) {
+        path_kind = PathKind::Global;
+        if (not Consume(Tk::ColonColon)) {
+            if (allocate) return Error("Expected '::");
+            else goto return_null_type;
+        }
+
+        goto start_path_resolution_parse;
+    } else if (Consume(Tk::ColonColon)) {
+        path_kind = PathKind::Headless;
+        goto start_path_resolution_parse;
+    } else if (Consume(Tk::Ident)) {
+        { // so we can goto correctly without moving these two declarations
+            auto name_text = tok.text;
+            auto name_location = tok.location;
+
+            NextToken();
+            if (not Consume(Tk::ColonColon)) {
+                if (allocate) {
+                    return name_ctor(name_location, name_text);
+                } else goto return_null_type;
+            }
+
+            path_names.push_back(name_text);
+            path_locations.push_back(name_location);
+        }
+
+    start_path_resolution_parse:;
+        do {
+            auto name_text = tok.text;
+            auto name_location = tok.location;
+
+            if (not Consume(Tk::Ident)) {
+                if (allocate) return Error("Expected identifier");
+                else goto return_null_type;
+            }
+
+            path_names.push_back(name_text);
+            path_locations.push_back(name_location);
+        } while (Consume(Tk::ColonColon));
+
+        if (allocate) {
+            return path_ctor(path_kind, path_names, path_locations);
+        } else goto return_null_type;
+    }
+
+return_null_type:;
+    LCC_ASSERT(not allocate, "Can only return a nullptr value for the result type if we are not allowed to allocate data (read: we are in a speculative parse mode)");
+    return Result<Expr*>::Null();
+}
+
+auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
     LCC_ASSERT((not allocate) == IsInSpeculativeParse(), "TryParseType requires that the allocate parameter be the opposite of the result of IsInSpeculativeParse(). If allocations are enabled, then no speculative parse stack should exist. If allocations are disabled, then it is required that a specilative parse stack exists.");
 
-    LCC_ASSERT(false, "TODO: implement TryParseType in Laye parser");
+    u32 start = tok.location.pos;
+
+    auto type_access = TypeAccess::Default;
+    bool has_errored_for_access = false;
+
+    while (At(Tk::Readonly, Tk::Writeonly)) {
+        if (type_access != TypeAccess::Default && not has_errored_for_access) {
+            if (allocate) Error("Only one of 'readonly' or 'writeonly' may be specified for type access modifiers");
+            has_errored_for_access = true;
+        }
+
+        if (Consume(Tk::Readonly)) {
+            type_access = TypeAccess::ReadOnly;
+        } else if (Consume(Tk::Writeonly)) {
+            type_access = TypeAccess::WriteOnly;
+        } else {
+            LCC_ASSERT(false, "Somehow unhandled case of type access modifiers");
+        }
+    }
+
+    if (Consume(Tk::Bang)) {
+        if (type_access != TypeAccess::Default) {
+            if (allocate) Error("Error-union types cannot have access modifiers");
+        }
+
+        auto value_type = TryParseType(allocate, false);
+        Type* error_union_type = nullptr;
+        if (allocate) {
+            error_union_type = new (*this) ErrUnionType{GetLocation(start), "", *value_type};
+        }
+
+        return TryParseTypeContinue(error_union_type, allocate, false);
+    }
+
+    if (At(Tk::Ident, Tk::ColonColon, Tk::Global)) {
+        // these constructors are already wrapped in `if (allocate)` in the TryparseNameOrPath function,
+        //  so we don't have to do that explicitly.
+        auto NameCtor = [&](Location location, std::string name) -> Expr* {
+            return new (*this) NameType{location, type_access, name};
+        };
+
+        auto PathCtor = [&](PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations) -> Expr* {
+            return new (*this) PathType{path_kind, type_access, names, locations};
+        };
+
+        auto id_type = TryParseNameOrPath(allocate, NameCtor, PathCtor);
+        // since the TryParseNameOrPath function works for the expression case, too, we have to
+        //  explicitly cast back to a Type* to continue type parsing.
+        return TryParseTypeContinue(static_cast<Type*>(*id_type), allocate);
+    }
+
+return_null_type:;
+    LCC_ASSERT(not allocate, "Can only return a nullptr value for the result type if we are not allowed to allocate data (read: we are in a speculative parse mode)");
+    return Result<Type*>::Null();
 }
 } // namespace lcc::laye
