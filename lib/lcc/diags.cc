@@ -1,5 +1,6 @@
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
+#include <lcc/utils/macros.hh>
 
 #ifdef __linux__
 #    include <execinfo.h>
@@ -95,13 +96,101 @@ void lcc::Diag::PrintDiagWithoutLocation() {
     HandleFatalErrors();
 }
 
-lcc::Diag::~Diag() {
+lcc::Diag::~Diag() { print(); }
+
+bool lcc::Diag::Seekable() const {
+    auto& files = ctx->files();
+    if (where.file_id >= files.size()) return false;
+    const auto* f = files[where.file_id].get();
+    return where.pos + where.len <= f->size() and where.is_valid();
+}
+
+/// Seek to a source location. The location must be valid.
+auto lcc::Diag::Seek() const -> LocInfo {
+    LocInfo info{};
+
+    /// Get the file that the location is in.
+    auto& files = ctx->files();
+    const auto* f = files.at(where.file_id).get();
+
+    /// Seek back to the start of the line.
+    const char* const data = f->data();
+    info.line_start = data + where.pos;
+    while (info.line_start > data and *info.line_start != '\n') info.line_start--;
+    if (*info.line_start == '\n') info.line_start++;
+
+    /// Seek forward to the end of the line.
+    const char* const end = data + f->size();
+    info.line_end = data + where.pos + where.len;
+    while (info.line_end < end and *info.line_end != '\n') info.line_end++;
+
+    /// Determine the line and column number.
+    info.line = 1;
+    for (const char* d = data; d < data + where.pos; d++) {
+        if (*d == '\n') {
+            info.line++;
+            info.col = 0;
+        } else {
+            info.col++;
+        }
+    }
+
+    /// Done!
+    return info;
+}
+
+/// TODO: Lexer should create map that counts where in a file the lines start so
+/// we can do binary search on that instead of iterating over the entire file.
+auto lcc::Diag::SeekLineColumn() const -> LocInfoShort {
+    LocInfoShort info{};
+
+    /// Get the file that the location is in.
+    auto& files = ctx->files();
+    const auto* f = files.at(where.file_id).get();
+
+    /// Seek back to the start of the line.
+    const char* const data = f->data();
+
+    /// Determine the line and column number.
+    info.line = 1;
+    for (const char* d = data; d < data + where.pos; d++) {
+        if (*d == '\n') {
+            info.line++;
+            info.col = 0;
+        } else {
+            info.col++;
+        }
+    }
+
+    /// Done!
+    return info;
+}
+
+void lcc::Diag::print() {
     using fmt::fg;
     using enum fmt::emphasis;
     using enum fmt::terminal_color;
 
     /// If this diagnostic is suppressed, do nothing.
     if (kind == Kind::None) return;
+
+    /// Don’t print the same diagnostic twice.
+    defer { kind = Kind::None; };
+
+    /// Print attached diagnostics to be printed before this one.
+    for (auto& [diag, print_before] : attached)
+        if (print_before)
+            diag.print();
+
+    /// Diagnostics to be printed after this one will be printed later.
+    defer {
+        for (auto& [diag, print_before] : attached)
+            if (not print_before)
+                diag.print();
+
+        /// Not necessary but it may help conserve storage.
+        attached.clear();
+    };
 
     /// If the diagnostic is an error, set the error flag.
     if (kind == Kind::Error and ctx) ctx->set_error();
@@ -174,70 +263,14 @@ lcc::Diag::~Diag() {
     HandleFatalErrors();
 }
 
-bool lcc::Diag::Seekable() const {
-    auto& files = ctx->files();
-    if (where.file_id >= files.size()) return false;
-    const auto* f = files[where.file_id].get();
-    return where.pos + where.len <= f->size() and where.is_valid();
-}
+void lcc::Diag::print_attached() {
+    for (auto& [diag, print_before] : attached)
+        if (print_before)
+            diag.print();
 
-/// Seek to a source location. The location must be valid.
-auto lcc::Diag::Seek() const -> LocInfo {
-    LocInfo info{};
+    for (auto& [diag, print_before] : attached)
+        if (not print_before)
+            diag.print();
 
-    /// Get the file that the location is in.
-    auto& files = ctx->files();
-    const auto* f = files.at(where.file_id).get();
-
-    /// Seek back to the start of the line.
-    const char* const data = f->data();
-    info.line_start = data + where.pos;
-    while (info.line_start > data and *info.line_start != '\n') info.line_start--;
-    if (*info.line_start == '\n') info.line_start++;
-
-    /// Seek forward to the end of the line.
-    const char* const end = data + f->size();
-    info.line_end = data + where.pos + where.len;
-    while (info.line_end < end and *info.line_end != '\n') info.line_end++;
-
-    /// Determine the line and column number.
-    info.line = 1;
-    for (const char* d = data; d < data + where.pos; d++) {
-        if (*d == '\n') {
-            info.line++;
-            info.col = 0;
-        } else {
-            info.col++;
-        }
-    }
-
-    /// Done!
-    return info;
-}
-
-/// TODO: Lexer should create map that counts where in a file the lines start so
-/// we can do binary search on that instead of iterating over the entire file.
-auto lcc::Diag::SeekLineColumn() const -> LocInfoShort {
-    LocInfoShort info{};
-
-    /// Get the file that the location is in.
-    auto& files = ctx->files();
-    const auto* f = files.at(where.file_id).get();
-
-    /// Seek back to the start of the line.
-    const char* const data = f->data();
-
-    /// Determine the line and column number.
-    info.line = 1;
-    for (const char* d = data; d < data + where.pos; d++) {
-        if (*d == '\n') {
-            info.line++;
-            info.col = 0;
-        } else {
-            info.col++;
-        }
-    }
-
-    /// Done!
-    return info;
+    attached.clear();
 }

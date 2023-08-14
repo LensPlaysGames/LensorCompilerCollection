@@ -24,6 +24,9 @@ private:
     Location where;
     std::string msg;
 
+    /// Attached diagnostics.
+    std::vector<std::pair<Diag, bool>> attached;
+
     /// Handle fatal error codes.
     void HandleFatalErrors();
 
@@ -94,8 +97,32 @@ public:
     Diag(Kind kind, fmt::format_string<Args...> fmt, Args&&... args)
         : Diag{kind, fmt::format(fmt, std::forward<Args>(args)...)} {}
 
-    /// Supress this diagnostic (it will not be printed)
-    auto suppress() { kind = Kind::None; }
+    /// Attach another diagnostic to this one.
+    ///
+    /// \param print_before If true, the diagnostic will be printed
+    ///     before this one. Otherwise, it will be printed after this
+    ///     one.
+    /// \param diag The diagnostic to attach.
+    void attach(bool print_before, Diag&& diag) {
+        attached.emplace_back(std::move(diag), print_before);
+    }
+
+    /// Print this diagnostic now. This resets the diagnostic.
+    void print();
+
+    /// Print all attached diagnostics now.
+    ///
+    /// All diagnostics for which \c print_before was \c true will be
+    /// printed first, all other diagnostics will be printed afterward.
+    ///
+    /// This removes any attached diagnostics.
+    void print_attached();
+
+    /// Suppress this and all attached diagnostics (it will not be printed).
+    void suppress(bool issue_attached_diagnostics = false) {
+        if (issue_attached_diagnostics) print_attached();
+        kind = Kind::None;
+    }
 
     /// Emit a note.
     template <typename... Args>
