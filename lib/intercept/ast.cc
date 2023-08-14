@@ -122,7 +122,7 @@ using lcc::as;
 using lcc::cast;
 using lcc::is;
 
-struct ASTPrinter : lcc::utils::ASTPrinter<intc::Expr, intc::Type> {
+struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
     /// Print the header (name + location + type) of a node.
     void PrintHeader(const intc::Expr* e) {
         using K = intc::Expr::Kind;
@@ -217,19 +217,6 @@ struct ASTPrinter : lcc::utils::ASTPrinter<intc::Expr, intc::Type> {
         }
 
         PrintBasicNode(R"(<???>)", e, e->type());
-    }
-
-    /// Print the children of a node.
-    void PrintChildren(std::span<intc::Expr* const> exprs, std::string leading_text = "") {
-        for (lcc::usz i = 0; i < exprs.size(); i++) {
-            const bool last = i == exprs.size() - 1;
-
-            /// Print the leading text.
-            out += fmt::format("{}{}{}", C(Red), leading_text, last ? "└─" : "├─");
-
-            /// Print the child.
-            operator()(exprs[i], leading_text + (last ? "  " : "│ "));
-        }
     }
 
     /// Print a node.

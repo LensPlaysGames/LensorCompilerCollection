@@ -5,7 +5,7 @@
 #include <lcc/utils.hh>
 
 namespace lcc::utils {
-template <typename NodeTy, typename TypeTy>
+template <typename Derived, typename NodeTy, typename TypeTy>
 struct ASTPrinter {
     using enum Colour;
     using NodeType = NodeTy;
@@ -59,6 +59,20 @@ struct ASTPrinter {
             case lcc::Linkage::Reexported: out += "Reexported "; return;
         }
         LCC_UNREACHABLE();
+    }
+
+
+    /// Print the children of a node.
+    void PrintChildren(std::span<NodeType* const> exprs, std::string leading_text = "") {
+        for (lcc::usz i = 0; i < exprs.size(); i++) {
+            const bool last = i == exprs.size() - 1;
+
+            /// Print the leading text.
+            out += fmt::format("{}{}{}", C(Red), leading_text, last ? "└─" : "├─");
+
+            /// Print the child.
+            static_cast<Derived*>(this)->operator()(exprs[i], leading_text + (last ? "  " : "│ "));
+        }
     }
 };
 
