@@ -1,9 +1,9 @@
 #ifndef LCC_SYNTAX_LEXER_HH
 #define LCC_SYNTAX_LEXER_HH
 
+#include <lcc/diags.hh>
 #include <lcc/file.hh>
 #include <lcc/utils.hh>
-#include <lcc/diags.hh>
 
 namespace lcc::syntax {
 template <typename TToken>
@@ -22,7 +22,7 @@ protected:
         : context(context), file(file), curr(file->data()), end(file->data() + file->size()) { NextChar(); }
 
     auto FileId() const { return file->file_id(); }
-    void NextChar();
+
     auto CurrentOffset() const -> u32 { return curr - file->data() - 1; }
 
     auto CurrentLocation() const {
@@ -37,6 +37,38 @@ protected:
     std::string GetSubstring(u32 startOffset, u32 endOffset) {
         u32 count = endOffset - startOffset;
         return std::string(file->data() + startOffset, count);
+    }
+    
+    void NextChar() {
+        if (curr >= end) {
+            lastc = 0;
+            return;
+        }
+
+        lastc = *curr++;
+        if (lastc == 0) {
+            Diag::Error(
+                context,
+                Location{CurrentOffset(), 1},
+                "Lexer encountered NUL byte within source file."
+            );
+        }
+
+        if (lastc == '\r' || lastc == '\n') {
+            if (curr != end && (*curr == '\r' || *curr == '\n')) {
+                bool same = lastc == *curr;
+                lastc = '\n';
+
+                /// CRCR or LFLF
+                if (same) return;
+
+                /// CRLF or LFCR
+                curr++;
+            }
+
+            /// Either CR or LF followed by something else.
+            lastc = '\n';
+        }
     }
 
     static bool IsSpace(char c) { return c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == '\f' or c == '\v'; }

@@ -450,4 +450,9 @@ return_null_type:;
     LCC_ASSERT(not allocate, "Can only return a nullptr value for the result type if we are not allowed to allocate data (read: we are in a speculative parse mode)");
     return Result<Type*>::Null();
 }
+
+auto ParseExpr() -> Result<Expr*>
+{
+    LCC_ASSERT(false, "TODO(local): finish expr parsing");
+}
 } // namespace lcc::laye
