@@ -175,6 +175,8 @@ enum struct TokenKind {
 using LayeToken = syntax::Token<TokenKind>;
 
 enum struct OperatorKind {
+    Invalid,
+
     Add,
     Sub,
     Mul,
@@ -917,7 +919,7 @@ public:
         : Expr(Kind::LookupName, location), _name(std::move(name)), _template_args(std::move(template_args)) {}
 
     auto name() const -> const std::string& { return _name; }
-    auto template_args() const -> std::span<Expr* const> { return _template_args; }
+    auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::LookupName; }
 };
@@ -936,9 +938,9 @@ public:
         : Expr(Kind::LookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _names(std::move(names)), _locations(std::move(locations)), _template_args(std::move(template_args)) {}
 
     auto path_kind() const { return _path_kind; }
-    auto names() const -> std::span<std::string const> { return _names; }
-    auto locations() const -> std::span<Location const> { return _locations; }
-    auto template_args() const -> std::span<Expr* const> { return _template_args; }
+    auto names() const -> const std::vector<std::string>& { return _names; }
+    auto locations() const -> const std::vector<Location>& { return _locations; }
+    auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
 
     static bool classof(Expr* expr) { return expr->kind() == Kind::LookupPath; }
 };
@@ -1218,10 +1220,10 @@ public:
 };
 
 class LitIntExpr : public Expr {
-    i64 _value;
+    u64 _value;
 
 public:
-    LitIntExpr(Location location, i64 value)
+    LitIntExpr(Location location, u64 value)
         : Expr(Kind::LitInt, location), _value(value) {}
 
     auto value() const { return _value; }

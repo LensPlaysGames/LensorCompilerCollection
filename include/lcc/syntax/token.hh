@@ -13,6 +13,7 @@ struct Token {
     Location location{};
     std::string text{};
     u64 integer_value{};
+    long double float_value{};
     bool artificial : 1 = false;
 };
 }

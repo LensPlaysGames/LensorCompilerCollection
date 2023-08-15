@@ -13,6 +13,7 @@ class Parser {
     Module* module;
 
     LayeToken tok{};
+    Location last_location{};
     std::vector<LayeToken> look_ahead{};
     std::vector<Scope*> scope_stack{};
 
@@ -100,6 +101,34 @@ private:
     };
 
     auto EnterScope() { return ScopeRAII(this); }
+
+    ///
+    /// Notes on properly implementing speculative parsing routines:
+    ///
+    /// The simplest way to implement a speculative parsing routine is with
+    /// three separate functions: One which takes in the flag of whether or
+    /// not speculative parsing is requested, one which calls that routine with
+    /// speculative parsing set to true, and one which calls that routine with
+    /// speculative parsing set to false. The latter two functions are merely for
+    /// convenience. The actual parsing routine should return a Result<T*>, where T*
+    /// is the type that should be parsed by this routine when speculative parsing
+    /// is not enabled.
+    ///     The semantics of these speculative parsing routines that should be obeyed
+    /// are as follows:
+    ///     - In the event of a fatal error during speculative parsing, one in which
+    ///       it is reasonably assumed that the parse would outright fail (and is not
+    ///       a trivially ignored error), then that error should be returned to the caller
+    ///       through the Result<T*> type.
+    ///     - In the event of a non-fatal error during speculative parsing, that error
+    ///       should simply not be generated (or be suppressed, these are semantically
+    ///       similar cases) and the parse should continue. Only when a speculative parse
+    ///       has completed or failed fatally should the routine return. When completing
+    ///       without fatal errors, a `Result<T*>:Null()` result should be returned to indicate
+    ///       the lack of fatal errors and indicate that a full parse is acceptable.
+    ///     - When parsing without a speculative parse mode enabled, parsing should continue
+    ///       routinely as any other parsing routine would.
+    ///
+
     auto EnterSpeculativeParse() { return SpeculativeRAII(this); }
 
     Parser(Context* context, File* file, Module* module)
@@ -108,11 +137,7 @@ private:
     /// Get the current scope.
     auto CurrScope() -> Scope* { return scope_stack.back(); }
     auto CurrLocation() { return tok.location; }
-    auto GetLocation(u32 start) const { return Location{
-        start,
-        (u16) (tok.location.pos - start),
-        (u16) file->file_id()};
-    }
+    auto GetLocation(Location start) const { return Location{start, last_location}; }
 
     /// True if any speculative parse state is enabled, false otherwise.
     bool IsInSpeculativeParse() const { return speculative_parse_stack > 0; }
@@ -132,6 +157,7 @@ private:
 
     /// Read the next token into tok.
     auto NextToken() {
+        last_location = tok.location;
         if (IsInSpeculativeParse()) {
             speculative_look_ahead++;
             tok = PeekToken(speculative_look_ahead, false);
@@ -191,8 +217,19 @@ private:
 
     auto ParseTopLevel() -> Result<Decl*>;
 
-    auto SpeculateCouldBeValidTemplateArgumentList() -> bool;
-    auto ParseTemplateArguments() -> std::vector<Expr*>;
+    auto TryParseTemplateArguments(bool allocate) -> Result<std::vector<Expr*>>;
+    auto SpeculativeParseTemplateArguments() -> bool {
+        LCC_ASSERT(IsInSpeculativeParse());
+        auto result = TryParseTemplateArguments(false);
+        if (result) return true;
+        auto diag = result.diag();
+        diag.suppress();
+        return false;
+    }
+    auto ParseTemplateArguments() {
+        LCC_ASSERT(not IsInSpeculativeParse());
+        return TryParseTemplateArguments(true);
+    }
 
     auto TryParseNameOrPath(
         bool allocate,
@@ -203,12 +240,17 @@ private:
     auto TryParseDecl() -> Result<Decl*>;
     auto ParseDecl() -> Result<Decl*>;
     auto ParseDeclOrStatement() -> Result<Statement*>;
+    auto ParseStatement(bool consumeSemi = true) -> Result<Statement*>;
     auto ParseBlockStatement() -> Result<BlockStatement*>;
 
     auto TryParseTemplateParams(bool allocate) -> Result<std::vector<TemplateParam>>;
     bool SpeculativeParseTemplateParams() {
         LCC_ASSERT(IsInSpeculativeParse());
-        return TryParseTemplateParams(false).is_value();
+        auto result = TryParseTemplateParams(false);
+        if (result) return true;
+        auto diag = result.diag();
+        diag.suppress();
+        return false;
     }
     auto MaybeParseTemplateParams() {
         LCC_ASSERT(not IsInSpeculativeParse());
@@ -221,20 +263,26 @@ private:
     auto TryParseType(bool allocate, bool allowFunctions = true) -> Result<Type*>;
     bool SpeculativeParseType() {
         LCC_ASSERT(IsInSpeculativeParse());
-        return TryParseType(false).is_value();
+        auto result = TryParseType(false);
+        if (result) return true;
+        auto diag = result.diag();
+        diag.suppress();
+        return false;
     }
     auto ParseType() {
         LCC_ASSERT(not IsInSpeculativeParse());
         return TryParseType(true);
     }
 
+    auto ParseConstructorBody() -> Result<std::vector<CtorFieldInit>>;
+    auto ParsePrimaryExprContinue(Expr* expr) -> Result<Expr*>;
+    auto ParsePrimaryIdentExprContinue(Expr* expr) -> Result<Expr*>;
     auto ParsePrimaryExpr() -> Result<Expr*>;
     auto ParseBinaryExpr(Expr* lhs, int precedence = 0) -> Result<Expr*>;
     auto ParseExpr() -> Result<Expr*>;
 
-    static isz BinaryOperatorPrecedence(TokenKind tokenKind);
+    bool IsBinaryOperatorWithPrecedence(int precedence, int& next_precedence);
 
-    static OperatorKind UnaryOperatorKind(TokenKind tokenKind);
     static OperatorKind BinaryOperatorKind(TokenKind tokenKind);
 
     friend Scope;
