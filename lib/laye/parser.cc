@@ -291,16 +291,25 @@ auto Parser::ParseDecl() -> Result<Decl*> {
 auto Parser::ParseDeclOrStatement() -> Result<Statement*> {
     LCC_ASSERT(not IsInSpeculativeParse());
 
+    auto start_location = CurrLocation();
+    auto start_kind = tok.kind;
+
     auto decl_result = TryParseDecl();
     if (not decl_result) return decl_result.diag();
 
     auto decl = *decl_result;
     if (decl) return decl;
 
+    LCC_ASSERT(CurrLocation().pos == start_location.pos);
+    LCC_ASSERT(tok.kind == start_kind);
     return ParseStatement();
 }
 
 auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
+    if (At(Tk::OpenBrace)) {
+        return ParseBlockStatement();
+    }
+
     auto expr = ParseExpr();
 
     if (consumeSemi and not Consume(Tk::SemiColon)) {
@@ -461,7 +470,7 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allowFunctions
 
 auto Parser::TryParseTemplateArguments(bool allocate) -> Result<std::vector<Expr*>> {
     LCC_ASSERT((not allocate) == IsInSpeculativeParse());
-    
+
     std::vector<Expr*> args{};
     if (not At(Tk::Less)) {
         // regardless of `allocate`, we already have the args. return them instead of nullptr
@@ -662,7 +671,7 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         return TryParseTypeContinue(*float_type, allocate);
     }
 
-    LCC_ASSERT(false, "TODO(local): finish type parsing (including nilable!!!)");
+    return Error("Unexpected token when parsing type");
 
 return_null_type:;
     LCC_ASSERT(not allocate, "Can only return a nullptr value for the result type if we are not allowed to allocate data (read: we are in a speculative parse mode)");
@@ -712,11 +721,13 @@ auto Parser::ParsePrimaryExprContinue(Expr* expr) -> Result<Expr*> {
     if (Consume(Tk::OpenParen)) {
         std::vector<Expr*> args{};
 
-        while (not At(Tk::Eof)) {
-            auto arg = ParseExpr();
-            if (arg) args.push_back(*arg);
+        if (not At(Tk::CloseParen)) {
+            while (not At(Tk::Eof)) {
+                auto arg = ParseExpr();
+                if (arg) args.push_back(*arg);
 
-            if (not Consume(Tk::Comma) or At(Tk::CloseParen)) break;
+                if (not Consume(Tk::Comma) or At(Tk::CloseParen)) break;
+            }
         }
 
         if (not Consume(Tk::CloseParen)) {
@@ -791,6 +802,8 @@ auto Parser::ParsePrimaryExprContinue(Expr* expr) -> Result<Expr*> {
         }
 
         auto body = ParseStatement(false);
+        if (not body) return body.diag();
+
         return new (*this) CatchExpr{GetLocation(expr->location()), expr, capture_name, *body};
     }
 
@@ -817,7 +830,7 @@ auto Parser::ParsePrimaryIdentExprContinue(Expr* expr) -> Result<Expr*> {
         return new (*this) CtorExpr{location, type, *body};
     }
 
-    return expr;
+    return ParsePrimaryExprContinue(expr);
 }
 
 auto Parser::ParsePrimaryExpr() -> Result<Expr*> {
