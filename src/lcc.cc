@@ -1,11 +1,11 @@
 #include <clopts.hh>
+#include <intercept/ast.hh>
 #include <intercept/parser.hh>
 #include <laye/parser.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/utils.hh>
 #include <string>
-#include <intercept/ast.hh>
 
 namespace detail {
 void aluminium_handler() {
@@ -67,7 +67,8 @@ int main(int argc, char** argv) {
 
     /// Laye.
     if (path_str.ends_with(".laye")) {
-        LCC_ASSERT(false, "TODO");
+        auto mod = lcc::laye::Parser::Parse(&context, file);
+        return 69;
     }
 
     /// Unknown.

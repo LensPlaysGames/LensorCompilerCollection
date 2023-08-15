@@ -460,12 +460,15 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allowFunctions
 }
 
 auto Parser::TryParseTemplateArguments(bool allocate) -> Result<std::vector<Expr*>> {
-    LCC_ASSERT(IsInSpeculativeParse());
-    LCC_ASSERT(At(Tk::Less));
+    LCC_ASSERT((not allocate) == IsInSpeculativeParse());
+    
+    std::vector<Expr*> args{};
+    if (not At(Tk::Less)) {
+        // regardless of `allocate`, we already have the args. return them instead of nullptr
+        return args;
+    }
 
     LCC_ASSERT(false, "TODO");
-
-    std::vector<Expr*> args{};
     return args;
 }
 

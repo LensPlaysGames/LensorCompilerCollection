@@ -1,4 +1,5 @@
 int main()
 {
     foo bar;
+    baz(1, "two", true);
 }
