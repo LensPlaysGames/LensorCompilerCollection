@@ -63,7 +63,7 @@ struct ASTPrinter {
 
 
     /// Print the children of a node.
-    void PrintChildren(std::span<NodeType* const> exprs, std::string leading_text = "") {
+    void PrintChildren(std::span<NodeType* const> exprs, std::string leading_text) {
         for (lcc::usz i = 0; i < exprs.size(); i++) {
             const bool last = i == exprs.size() - 1;
 
