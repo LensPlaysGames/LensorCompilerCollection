@@ -118,7 +118,7 @@ enum struct TokenKind {
     Variant,
     Enum,
     Alias,
-     Test,
+    Test,
     Import,
     Export,
     From,

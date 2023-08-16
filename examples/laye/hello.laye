@@ -1,4 +1,4 @@
-int main()
+i32 main(i32 argc, readonly c_string argv)
 {
     foo bar;
     try baz(1, "two", true);

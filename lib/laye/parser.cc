@@ -672,6 +672,44 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         return TryParseTypeContinue(*float_type, allocate);
     }
 
+    if (At(
+            Tk::CChar,
+            Tk::CSChar,
+            Tk::CUChar,
+            Tk::CString,
+            Tk::CShort,
+            Tk::CUShort,
+            Tk::CInt,
+            Tk::CUInt,
+            Tk::CLong,
+            Tk::CULong,
+            Tk::CLongLong,
+            Tk::CULongLong,
+            Tk::CSizeT,
+            Tk::CISizeT,
+            Tk::CPtrDiffT,
+            Tk::CFloat,
+            Tk::CDouble,
+            Tk::CLongDouble,
+            Tk::CBool
+        )) {
+        if (not At(Tk::CString) and type_access != TypeAccess::Default) {
+            if (allocate) Error("Access modifiers do not apply to non-string C types");
+        }
+
+        auto location = tok.location;
+        auto type_kind = tok.kind;
+
+        NextToken();
+
+        auto c_type = Result<Type*>::Null();
+        if (allocate) {
+            c_type = new (*this) CType{location, type_kind, type_access};
+        }
+
+        return TryParseTypeContinue(*c_type, allocate);
+    }
+
     return Error("Unexpected token when parsing type");
 
 return_null_type:;

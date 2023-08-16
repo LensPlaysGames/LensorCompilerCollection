@@ -285,15 +285,27 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 out += fmt::format(" {}{}\n", C(Magenta), +s->kind());
             } break;
 
+            case K::DeclBinding: {
+                auto n = cast<layec::BindingDecl>(s);
+                PrintLinkage(n->linkage());
+                PrintBasicHeader("BindingDecl", n);
+                out += fmt::format(
+                    " {} {}{}\n",
+                    n->type()->string(use_colour),
+                    C(Green),
+                    n->name()
+                );
+            } break;
+
             case K::DeclFunction: {
                 auto n = cast<layec::FunctionDecl>(s);
                 PrintLinkage(n->linkage());
                 PrintBasicHeader("FunctionDecl", n);
                 out += fmt::format(
-                    " {}{} {}{}(",
+                    " {} {}{}{}(",
+                    n->return_type()->string(use_colour),
                     C(Green),
                     n->name(),
-                    n->return_type()->string(use_colour),
                     C(White)
                 );
                 auto params = n->params();
@@ -304,16 +316,28 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 out += fmt::format("{})\n", C(White));
             } break;
 
-            case K::DeclBinding: {
-                auto n = cast<layec::BindingDecl>(s);
-                PrintLinkage(n->linkage());
-                PrintBasicHeader("BindingDecl", n);
-                out += fmt::format(
-                    " {}{} {}\n",
-                    C(Green),
-                    n->name(),
-                    n->type()->string(use_colour)
-                );
+            case K::DeclStruct: {
+                auto n = cast<layec::StructDecl>(s);
+                PrintBasicHeader("StructDecl", n);
+                out += "\n";
+            } break;
+
+            case K::DeclEnum: {
+                auto n = cast<layec::EnumDecl>(s);
+                PrintBasicHeader("EnumDecl", n);
+                out += "\n";
+            } break;
+
+            case K::DeclAlias: {
+                auto n = cast<layec::AliasDecl>(s);
+                PrintBasicHeader("AliasDecl", n);
+                out += "\n";
+            } break;
+
+            case K::DeclImport: {
+                auto n = cast<layec::ImportHeader>(s);
+                PrintBasicHeader("ImportHeader", n);
+                out += "\n";
             } break;
 
             case K::Block: {
@@ -322,9 +346,93 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 out += "\n";
             } break;
 
+            case K::Assign: {
+                auto n = cast<layec::AssignStatement>(s);
+                PrintBasicHeader("AssignStatement", n);
+                out += "\n";
+            } break;
+
+            case K::Delete: {
+                auto n = cast<layec::DeleteStatement>(s);
+                PrintBasicHeader("DeleteStatement", n);
+                out += "\n";
+            } break;
+
             case K::Expr: {
                 auto n = cast<layec::ExprStatement>(s);
                 PrintExprHeader(n->expr());
+            } break;
+
+            case K::Empty: {
+                auto n = cast<layec::EmptyStatement>(s);
+                PrintBasicHeader("EmptyStatement", n);
+                out += "\n";
+            } break;
+
+            case K::If: {
+                auto n = cast<layec::IfStatement>(s);
+                PrintBasicHeader("IfStatement", n);
+                out += "\n";
+            } break;
+
+            case K::For: {
+                auto n = cast<layec::ForStatement>(s);
+                PrintBasicHeader("ForStatement", n);
+                out += "\n";
+            } break;
+
+            case K::ForEach: {
+                auto n = cast<layec::ForEachStatement>(s);
+                PrintBasicHeader("ForEachStatement", n);
+                out += "\n";
+            } break;
+
+            case K::DoFor: {
+                auto n = cast<layec::DoForStatement>(s);
+                PrintBasicHeader("DoForStatement", n);
+                out += "\n";
+            } break;
+
+            case K::Switch: {
+                auto n = cast<layec::SwitchStatement>(s);
+                PrintBasicHeader("SwitchStatement", n);
+                out += "\n";
+            } break;
+
+            case K::Return: {
+                auto n = cast<layec::ReturnStatement>(s);
+                PrintBasicHeader("ReturnStatement", n);
+                out += "\n";
+            } break;
+
+            case K::Break: {
+                auto n = cast<layec::BreakStatement>(s);
+                PrintBasicHeader("BreakStatement", n);
+                out += "\n";
+            } break;
+
+            case K::Continue: {
+                auto n = cast<layec::ContinueStatement>(s);
+                PrintBasicHeader("ContinueStatement", n);
+                out += "\n";
+            } break;
+
+            case K::Fallthrough: {
+                auto n = cast<layec::FallthroughStatement>(s);
+                PrintBasicHeader("FallthroughStatement", n);
+                out += "\n";
+            } break;
+
+            case K::Defer: {
+                auto n = cast<layec::DeferStatement>(s);
+                PrintBasicHeader("DeferStatement", n);
+                out += "\n";
+            } break;
+
+            case K::Goto: {
+                auto n = cast<layec::GotoStatement>(s);
+                PrintBasicHeader("GotoStatement", n);
+                out += "\n";
             } break;
         }
     }
@@ -335,6 +443,42 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
             default: {
                 PrintBasicHeader(R"(<??? Expr>)", e);
                 out += fmt::format(" {}{}\n", C(Magenta), +e->kind());
+            } break;
+
+            case K::Unary: {
+                auto n = cast<layec::UnaryExpr>(e);
+                PrintBasicHeader("UnaryExpr", n);
+                out += "\n";
+            } break;
+
+            case K::Binary: {
+                auto n = cast<layec::BinaryExpr>(e);
+                PrintBasicHeader("BinaryExpr", n);
+                out += "\n";
+            } break;
+
+            case K::And: {
+                auto n = cast<layec::AndExpr>(e);
+                PrintBasicHeader("AndExpr", n);
+                out += "\n";
+            } break;
+
+            case K::Or: {
+                auto n = cast<layec::OrExpr>(e);
+                PrintBasicHeader("OrExpr", n);
+                out += "\n";
+            } break;
+
+            case K::Xor: {
+                auto n = cast<layec::XorExpr>(e);
+                PrintBasicHeader("XorExpr", n);
+                out += "\n";
+            } break;
+
+            case K::UnwrapNilable: {
+                auto n = cast<layec::UnwrapNilableExpr>(e);
+                PrintBasicHeader("UnwrapNilableExpr", n);
+                out += "\n";
             } break;
 
             case K::LookupName: {
@@ -354,6 +498,54 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 out += "\n";
             } break;
 
+            case K::FieldIndex: {
+                auto n = cast<layec::FieldIndexExpr>(e);
+                PrintBasicHeader("FieldIndexExpr", n);
+                out += "\n";
+            } break;
+
+            case K::ValueIndex: {
+                auto n = cast<layec::ValueIndexExpr>(e);
+                PrintBasicHeader("ValueIndexExpr", n);
+                out += "\n";
+            } break;
+
+            case K::Slice: {
+                auto n = cast<layec::SliceExpr>(e);
+                PrintBasicHeader("SliceExpr", n);
+                out += "\n";
+            } break;
+
+            case K::Call: {
+                auto n = cast<layec::CallExpr>(e);
+                PrintBasicHeader("CallExpr", n);
+                out += "\n";
+            } break;
+
+            case K::Ctor: {
+                auto n = cast<layec::CtorExpr>(e);
+                PrintBasicHeader("CtorExpr", n);
+                out += "\n";
+            } break;
+
+            case K::Not: {
+                auto n = cast<layec::NotExpr>(e);
+                PrintBasicHeader("NotExpr", n);
+                out += "\n";
+            } break;
+
+            case K::Cast: {
+                auto n = cast<layec::CastExpr>(e);
+                PrintBasicHeader("CastExpr", n);
+                out += "\n";
+            } break;
+
+            case K::New: {
+                auto n = cast<layec::NewExpr>(e);
+                PrintBasicHeader("NewExpr", n);
+                out += "\n";
+            } break;
+
             case K::Try: {
                 auto n = cast<layec::TryExpr>(e);
                 PrintBasicHeader("TryExpr", n);
@@ -367,9 +559,32 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                     out += fmt::format(" {}{}\n", C(Green), n->error_name());
             } break;
 
-            case K::Call: {
-                auto n = cast<layec::CallExpr>(e);
-                PrintBasicHeader("CallExpr", n);
+            case K::Do: {
+                auto n = cast<layec::DoExpr>(e);
+                PrintBasicHeader("DoExpr", n);
+                out += "\n";
+            } break;
+
+            case K::Sizeof: {
+                auto n = cast<layec::SizeofExpr>(e);
+                PrintBasicHeader("SizeofExpr", n);
+                out += "\n";
+            } break;
+
+            case K::Offsetof: {
+                auto n = cast<layec::OffsetofExpr>(e);
+                PrintBasicHeader("OffsetofExpr", n);
+                out += "\n";
+            } break;
+
+            case K::Alignof: {
+                auto n = cast<layec::AlignofExpr>(e);
+                PrintBasicHeader("AlignofExpr", n);
+                out += "\n";
+            } break;
+
+            case K::LitNil: {
+                PrintBasicHeader("LitNilExpr", e);
                 out += "\n";
             } break;
 
@@ -409,6 +624,15 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
         using K = layec::Statement::Kind;
         switch (s->kind()) {
             default: break;
+
+            case K::DeclBinding: {
+                auto n = as<layec::BindingDecl>(s);
+                if (n->init()) {
+                    layec::Expr* children[] = {n->init()};
+                    PrintChildren(children, leading_text);
+                }
+            } break;
+            
             case K::DeclFunction: {
                 auto n = as<layec::FunctionDecl>(s);
                 if (auto block = cast<layec::BlockStatement>(n->body())) {
@@ -419,14 +643,86 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 }
             } break;
 
+            case K::DeclStruct: {
+                auto n = as<layec::StructDecl>(s);
+            } break;
+
+            case K::DeclEnum: {
+                auto n = as<layec::EnumDecl>(s);
+            } break;
+
+            case K::DeclAlias: {
+                auto n = as<layec::AliasDecl>(s);
+            } break;
+
+            case K::DeclImport: {
+                auto n = as<layec::ImportHeader>(s);
+            } break;
+
             case K::Block: {
                 auto n = cast<layec::BlockStatement>(s);
                 PrintChildren(n->children(), leading_text);
             } break;
 
+            case K::Assign: {
+                auto n = as<layec::AssignStatement>(s);
+            } break;
+
+            case K::Delete: {
+                auto n = as<layec::DeleteStatement>(s);
+            } break;
+
             case K::Expr: {
                 auto n = cast<layec::ExprStatement>(s);
                 PrintExpr(n->expr(), leading_text);
+            } break;
+
+            case K::Empty: {
+                auto n = as<layec::EmptyStatement>(s);
+            } break;
+
+            case K::If: {
+                auto n = as<layec::IfStatement>(s);
+            } break;
+
+            case K::For: {
+                auto n = as<layec::ForStatement>(s);
+            } break;
+
+            case K::ForEach: {
+                auto n = as<layec::ForEachStatement>(s);
+            } break;
+
+            case K::DoFor: {
+                auto n = as<layec::DoForStatement>(s);
+            } break;
+
+            case K::Switch: {
+                auto n = as<layec::SwitchStatement>(s);
+            } break;
+
+            case K::Return: {
+                auto n = as<layec::ReturnStatement>(s);
+            } break;
+
+            case K::Break: {
+                auto n = as<layec::BreakStatement>(s);
+            } break;
+
+            case K::Continue: {
+                auto n = as<layec::ContinueStatement>(s);
+            } break;
+
+            case K::Fallthrough: {
+                auto n = as<layec::FallthroughStatement>(s);
+            } break;
+
+            case K::Defer: {
+                auto n = as<layec::DeferStatement>(s);
+            } break;
+
+            case K::Goto: {
+                auto n = as<layec::GotoStatement>(s);
             } break;
         }
     }
@@ -435,6 +731,51 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
         using K = layec::Expr::Kind;
         switch (e->kind()) {
             default: break;
+
+            case K::Unary: {
+                auto n = as<layec::UnaryExpr>(e);
+            } break;
+
+            case K::Binary: {
+                auto n = as<layec::BinaryExpr>(e);
+            } break;
+
+            case K::And: {
+                auto n = as<layec::AndExpr>(e);
+            } break;
+
+            case K::Or: {
+                auto n = as<layec::OrExpr>(e);
+            } break;
+
+            case K::Xor: {
+                auto n = as<layec::XorExpr>(e);
+            } break;
+
+            case K::UnwrapNilable: {
+                auto n = as<layec::UnwrapNilableExpr>(e);
+            } break;
+
+            case K::LookupName: {
+                auto n = as<layec::NameExpr>(e);
+            } break;
+
+            case K::LookupPath: {
+                auto n = as<layec::PathExpr>(e);
+            } break;
+
+            case K::FieldIndex: {
+                auto n = as<layec::FieldIndexExpr>(e);
+            } break;
+
+            case K::ValueIndex: {
+                auto n = as<layec::ValueIndexExpr>(e);
+            } break;
+
+            case K::Slice: {
+                auto n = as<layec::SliceExpr>(e);
+            } break;
+
             case K::Call: {
                 auto n = as<layec::CallExpr>(e);
                 auto args = n->args();
@@ -449,10 +790,20 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 }
             } break;
 
-            case K::LookupName: {
+            case K::Ctor: {
+                auto n = as<layec::CtorExpr>(e);
             } break;
 
-            case K::LookupPath: {
+            case K::Not: {
+                auto n = as<layec::NotExpr>(e);
+            } break;
+
+            case K::Cast: {
+                auto n = as<layec::CastExpr>(e);
+            } break;
+
+            case K::New: {
+                auto n = as<layec::NewExpr>(e);
             } break;
 
             case K::Try: {
@@ -465,6 +816,22 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 auto n = as<layec::CatchExpr>(e);
                 layec::BaseNode* children[] = {n->value(), n->body()};
                 PrintChildren(children, leading_text);
+            } break;
+
+            case K::Do: {
+                auto n = as<layec::DoExpr>(e);
+            } break;
+
+            case K::Sizeof: {
+                auto n = as<layec::SizeofExpr>(e);
+            } break;
+
+            case K::Offsetof: {
+                auto n = as<layec::OffsetofExpr>(e);
+            } break;
+
+            case K::Alignof: {
+                auto n = as<layec::AlignofExpr>(e);
             } break;
         }
     }
