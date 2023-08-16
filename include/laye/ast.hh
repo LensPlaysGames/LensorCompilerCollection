@@ -132,7 +132,7 @@ enum struct TokenKind {
     Cast,
     Try,
     Catch,
-    // Discard,
+    Discard,
     Sizeof,
     Alignof,
     Offsetof,
@@ -328,6 +328,7 @@ public:
         Block,
         Assign,
         Delete,
+        Discard,
         Expr,
         Empty,
 
@@ -343,6 +344,9 @@ public:
         Fallthrough,
         Defer,
         Goto,
+
+        // Other
+        Test,
     };
 
 private:
@@ -633,6 +637,18 @@ public:
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Delete; }
 };
 
+class DiscardStatement : public Statement {
+    Expr* _expr;
+
+public:
+    DiscardStatement(Expr* expr)
+        : Statement(Kind::Discard, expr->location()), _expr(expr) {}
+
+    auto expr() const { return _expr; }
+
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Discard; }
+};
+
 class ExprStatement : public Statement {
     Expr* _expr;
 
@@ -804,7 +820,7 @@ public:
         : Statement(Kind::Break, location) {}
 
     BreakStatement(Location location, std::string target)
-        : Statement(Kind::Continue, location), _target(std::move(target)) {}
+        : Statement(Kind::Break, location), _target(std::move(target)) {}
 
     bool has_target() const { return not _target.empty(); }
     auto target() const -> const std::string& { return _target; }
@@ -845,11 +861,25 @@ class GotoStatement : public Statement {
 
 public:
     GotoStatement(Location location, std::string target)
-        : Statement(Kind::Continue, location), _target(std::move(target)) {}
+        : Statement(Kind::Goto, location), _target(std::move(target)) {}
 
     auto target() const -> const std::string& { return _target; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Goto; }
+};
+
+class TestStatement : public Statement {
+    std::string _name;
+    std::vector<Statement*> _children;
+
+public:
+    TestStatement(Location location, std::string name, std::vector<Statement*> children)
+        : Statement(Kind::Test, location), _name(std::move(name)), _children(std::move(children)) {}
+
+    auto name() const -> const std::string& { return _name; }
+    auto children() const -> std::span<Statement* const> { return _children; }
+
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Test; }
 };
 
 class UnaryExpr : public Expr {
