@@ -1,16 +1,7 @@
-struct foo
-{
-    i32 bar;
-    
-    variant baz
-    {
-        string name;
-    }
-}
+foreign callconv(cdecl)
+i32 puts(readonly c_string s);
 
 i32 main(i32 argc, readonly c_string argv)
 {
-    foo bar;
-    try baz(1, "two", true);
-    qux(bar) catch (err) {};
+    puts("Hello, hunter!");
 }

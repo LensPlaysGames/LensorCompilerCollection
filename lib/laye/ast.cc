@@ -642,6 +642,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::DeclFunction: {
                 auto n = as<layec::FunctionDecl>(s);
+                if (not n->body()) break;
                 if (auto block = cast<layec::BlockStatement>(n->body())) {
                     PrintChildren(block->children(), leading_text);
                 } else {
