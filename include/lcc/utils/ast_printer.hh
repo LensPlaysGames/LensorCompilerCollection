@@ -61,7 +61,6 @@ struct ASTPrinter {
         LCC_UNREACHABLE();
     }
 
-
     /// Print the children of a node.
     template <typename TypeToPrint = NodeType>
     void PrintChildren(std::span<TypeToPrint* const> exprs, std::string leading_text) {
@@ -74,6 +73,16 @@ struct ASTPrinter {
             /// Print the child.
             static_cast<Derived*>(this)->operator()(exprs[i], leading_text + (last ? "  " : "│ "));
         }
+    }
+
+    template <typename TypeToPrint = NodeType, usz n>
+    void PrintChildren(TypeToPrint* (&exprs)[n], std::string leading_text) {
+        PrintChildren(std::span{exprs, n}, std::move(leading_text));
+    }
+
+    template <typename TypeToPrint = NodeType>
+    void PrintChildren(const std::vector<TypeToPrint*>& vec, std::string leading_text) {
+        PrintChildren(std::span<TypeToPrint* const>{vec}, std::move(leading_text));
     }
 };
 
