@@ -102,7 +102,6 @@ enum struct TokenKind {
     Global,
 
     If,
-    Then,
     Else,
     For,
     Do,
@@ -112,6 +111,7 @@ enum struct TokenKind {
     Return,
     Break,
     Continue,
+    Defer,
     Goto,
 
     Struct,
@@ -233,17 +233,6 @@ struct FunctionParam {
     Type* type;
     std::string name;
     Expr* init;
-};
-
-struct StructField {
-    Type* type;
-    std::string name;
-    Expr* init;
-};
-
-struct StructVariant {
-    std::string name;
-    std::vector<StructField> fields;
 };
 
 struct EnumVariant {
@@ -528,15 +517,15 @@ public:
 };
 
 class StructDecl : public NamedDecl {
-    std::vector<StructField> _fields;
-    std::vector<StructVariant> _variants;
+    std::vector<BindingDecl*> _fields;
+    std::vector<StructDecl*> _variants;
 
 public:
-    StructDecl(Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params, std::vector<StructField> fields, std::vector<StructVariant> variants)
+    StructDecl(Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params, std::vector<BindingDecl*> fields, std::vector<StructDecl*> variants)
         : NamedDecl(Kind::DeclStruct, location, mods, name, template_params), _fields(std::move(fields)), _variants(std::move(variants)) {}
 
-    auto fields() const -> std::span<StructField const> { return _fields; }
-    auto variants() const -> std::span<StructVariant const> { return _variants; }
+    auto fields() const -> std::span<BindingDecl* const> { return _fields; }
+    auto variants() const -> std::span<StructDecl* const> { return _variants; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclStruct; }
 };
@@ -813,6 +802,7 @@ public:
     ReturnStatement(Location location, Expr* value)
         : Statement(Kind::Return, location), _value(value) {}
 
+    bool is_void_return() const { return _value == nullptr; }
     auto value() const { return _value; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Return; }
@@ -822,10 +812,7 @@ class BreakStatement : public Statement {
     std::string _target{};
 
 public:
-    BreakStatement(Location location)
-        : Statement(Kind::Break, location) {}
-
-    BreakStatement(Location location, std::string target)
+    BreakStatement(Location location, std::string target = "")
         : Statement(Kind::Break, location), _target(std::move(target)) {}
 
     bool has_target() const { return not _target.empty(); }
@@ -838,10 +825,7 @@ class ContinueStatement : public Statement {
     std::string _target{};
 
 public:
-    ContinueStatement(Location location)
-        : Statement(Kind::Continue, location) {}
-
-    ContinueStatement(Location location, std::string target)
+    ContinueStatement(Location location, std::string target = "")
         : Statement(Kind::Continue, location), _target(std::move(target)) {}
 
     bool has_target() const { return not _target.empty(); }

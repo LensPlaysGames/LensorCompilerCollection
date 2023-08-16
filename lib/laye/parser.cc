@@ -137,7 +137,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
             } else if (At(Tk::Foreign)) {
                 NextToken();
 
-                if (At(Tk::String)) {
+                if (At(Tk::LitString)) {
                     modifiers.push_back(DeclModifier{Tk::Foreign, tok.text});
                     NextToken();
                 } else {
@@ -198,10 +198,10 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
     LCC_ASSERT(not IsInSpeculativeParse());
     auto modifiers = GetModifiers(true);
 
-    if (Consume(Tk::Struct)) {
-        LCC_ASSERT(false, "TODO");
+    if (At(Tk::Struct)) {
+        return ParseStruct(std::move(modifiers));
     } else if (Consume(Tk::Enum)) {
-        LCC_ASSERT(false, "TODO");
+        LCC_ASSERT(false, "TODO enum");
     }
 
     auto type = ParseType();
@@ -277,6 +277,76 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
     return new (*this) BindingDecl{location, modifiers, *type, name, *init};
 }
 
+auto Parser::ParseStruct(std::vector<DeclModifier> mods) -> Result<StructDecl*> {
+    LCC_ASSERT(not IsInSpeculativeParse());
+
+    auto start = tok.location;
+    LCC_ASSERT(Consume(Tk::Struct, Tk::Variant));
+
+    std::string struct_name{};
+    if (At(Tk::Ident)) {
+        struct_name = tok.text;
+        NextToken();
+    } else Error("Expected identifier");
+
+    auto template_params = MaybeParseTemplateParams();
+    if (not template_params) return template_params.diag();
+
+    if (not Consume(Tk::OpenBrace)) {
+        return Error("Expected '{{'");
+    }
+
+    std::vector<BindingDecl*> fields{};
+    std::vector<StructDecl*> variants{};
+
+    while (not At(Tk::CloseBrace)) {
+        if (At(Tk::Variant)) {
+            auto variant = ParseStruct();
+            if (not variant) return variant.diag();
+            variants.push_back(*variant);
+        } else {
+            auto field_start = CurrLocation();
+
+            // TODO(local): struct field modifiers
+            std::vector<DeclModifier> mods{};
+
+            Type* field_type = nullptr;
+            {
+                auto field_type_result = ParseType();
+                if (field_type_result) field_type = *field_type_result;
+                else {
+                    Synchronise();
+                    continue;
+                }
+            }
+
+            std::string field_name{};
+            if (At(Tk::Ident)) {
+                field_name = tok.text;
+                NextToken();
+            } else Error("Expected identifier");
+
+            Expr* init = nullptr;
+            if (Consume(Tk::Equal)) {
+                auto init_result = ParseExpr();
+                if (init_result) init = *init_result;
+            }
+            
+            if (not Consume(Tk::SemiColon)) {
+                Error("Expected ';'");
+            }
+
+            fields.push_back(new (*this) BindingDecl{GetLocation(field_start), mods, field_type, field_name, init});
+        }
+    }
+
+    if (not Consume(Tk::CloseBrace)) {
+        Error("Expected '}}'");
+    }
+
+    return new (*this) StructDecl{GetLocation(start), mods, struct_name, *template_params, fields, variants};
+}
+
 auto Parser::ParseDecl() -> Result<Decl*> {
     LCC_ASSERT(not IsInSpeculativeParse());
 
@@ -307,8 +377,119 @@ auto Parser::ParseDeclOrStatement() -> Result<Statement*> {
 }
 
 auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
+    LCC_ASSERT(not IsInSpeculativeParse());
+
+    auto start = CurrLocation();
+
     if (At(Tk::OpenBrace)) {
         return ParseBlockStatement();
+    } else if (Consume(Tk::Return)) {
+        auto return_value = Result<Expr*>::Null();
+        if (not At(Tk::SemiColon)) {
+            return_value = ParseExpr();
+            if (not return_value) return return_value.diag();
+        }
+
+        if (consumeSemi and not Consume(Tk::SemiColon)) {
+            Error("Expected ';'");
+        }
+
+        return new (*this) ReturnStatement{GetLocation(start), *return_value};
+    } else if (Consume(Tk::Break)) {
+        std::string target{};
+        if (At(Tk::Ident)) {
+            target = tok.text;
+            NextToken();
+        }
+
+        if (consumeSemi and not Consume(Tk::SemiColon)) {
+            Error("Expected ';'");
+        }
+
+        return new (*this) BreakStatement{GetLocation(start), target};
+    } else if (Consume(Tk::Continue)) {
+        std::string target{};
+        if (At(Tk::Ident)) {
+            target = tok.text;
+            NextToken();
+        }
+
+        if (consumeSemi and not Consume(Tk::SemiColon)) {
+            Error("Expected ';'");
+        }
+
+        return new (*this) ContinueStatement{GetLocation(start), target};
+    } else if (Consume(Tk::Defer)) {
+        auto statement_result = ParseStatement(false);
+        if (not statement_result) return statement_result.diag();
+
+        if (consumeSemi and not Consume(Tk::SemiColon)) {
+            Error("Expected ';'");
+        }
+
+        return new (*this) DeferStatement{GetLocation(start), *statement_result};
+    } else if (Consume(Tk::Goto)) {
+        std::string target{};
+        if (At(Tk::Ident)) {
+            target = tok.text;
+            NextToken();
+        } else Error("Expected identifier");
+
+        if (consumeSemi and not Consume(Tk::SemiColon)) {
+            Error("Expected ';'");
+        }
+
+        return new (*this) GotoStatement{GetLocation(start), target};
+    } else if (Consume(Tk::If)) {
+        if (not Consume(Tk::OpenParen)) {
+            Error("Expected '('");
+        }
+
+        auto condition_result = ParseExpr();
+        if (not condition_result) return condition_result.diag();
+
+        if (not Consume(Tk::CloseParen)) {
+            Error("Expected )");
+        }
+
+        auto pass_body = ParseStatement();
+        if (not pass_body) return pass_body.diag();
+
+        auto fail_body = Result<Statement*>::Null();
+        if (Consume(Tk::Else)) {
+            fail_body = ParseStatement();
+            if (not fail_body) return fail_body.diag();
+        }
+
+        return new (*this) IfStatement{GetLocation(start), *condition_result, *pass_body, *fail_body};
+    } else if (Consume(Tk::For)) {
+        LCC_ASSERT(false, "TODO for");
+    } else if (At(Tk::Do) and PeekAt(1, Tk::OpenBrace)) {
+        NextToken();
+
+        auto body = ParseBlockStatement();
+        if (not body) return body.diag();
+
+        if (not Consume(Tk::For)) {
+            return Error("Expected 'for'");
+        }
+
+        if (not Consume(Tk::OpenParen)) {
+            Error("Expected '('");
+        }
+
+        auto condition_result = ParseExpr();
+        if (not condition_result) return condition_result.diag();
+
+        if (not Consume(Tk::CloseParen)) {
+            Error("Expected )");
+        }
+
+        if (consumeSemi and not Consume(Tk::SemiColon)) {
+            Error("Expected ';'");
+        }
+
+        return new (*this) DoForStatement{GetLocation(start), *condition_result, *body};
     }
 
     auto expr = ParseExpr();
@@ -374,7 +555,7 @@ auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
         }
 
         auto alias_token = tok;
-        if (not Consume(Tk::Ident, Tk::String)) {
+        if (not Consume(Tk::Ident, Tk::LitString)) {
             Error(alias_token.location, "Expected string literal or identifier as import alias name");
         } else {
             alias = alias_token.text;
@@ -391,7 +572,7 @@ auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
         }
 
         auto import_name_token = tok;
-        if (not Consume(Tk::Ident, Tk::String)) {
+        if (not Consume(Tk::Ident, Tk::LitString)) {
             Error(import_name_token.location, "Expected string literal or identifier as import file/package name");
             Synchronise(); // we give up parsing this, sync
             return new (*this) ImportHeader(
@@ -439,7 +620,7 @@ auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
     }
 
     auto import_name_token = tok;
-    if (not Consume(Tk::Ident, Tk::String)) {
+    if (not Consume(Tk::Ident, Tk::LitString)) {
         Error(import_name_token.location, "Expected string literal or identifier as import file/package name");
         Synchronise(); // we give up parsing this, sync
         return new (*this) ImportHeader(
@@ -507,7 +688,7 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allow_function
         } else if (At(Tk::Star) and PeekAt(1, Tk::CloseBracket)) {
             NextToken();
             NextToken();
-            
+
             Type* buffer_type = nullptr;
             if (allocate) {
                 buffer_type = new (*this) BufferType{GetLocation(start), type_access, type};
@@ -526,7 +707,7 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allow_function
         if (not Consume(Tk::CloseBracket)) {
             Error("Expected ']'");
         }
-        
+
         Type* array_type = nullptr;
         if (allocate) {
             array_type = new (*this) ArrayType{GetLocation(start), type_access, type, rank_lengths};
@@ -544,7 +725,6 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allow_function
         return TryParseTypeContinue(nilable_type, allocate, allow_functions);
     } else if (allow_functions and Consume(Tk::OpenParen)) {
         // TODO(local): get a calling convention in here somewhere
-    parse_func_type:;
         if (type_access != TypeAccess::Default) {
             if (allocate) Error("Function types cannot have access modifiers");
         }
@@ -781,6 +961,19 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         return TryParseTypeContinue(*float_type, allocate);
     }
 
+    if (At(Tk::String)) {
+        auto location = tok.location;
+
+        NextToken();
+
+        auto string_type = Result<Type*>::Null();
+        if (allocate) {
+            string_type = new (*this) StringType{location, type_access};
+        }
+
+        return TryParseTypeContinue(*string_type, allocate);
+    }
+
     if (At(
             Tk::CChar,
             Tk::CSChar,
@@ -999,6 +1192,8 @@ auto Parser::ParsePrimaryExpr() -> Result<Expr*> {
         auto try_expr = ParsePrimaryExpr();
         if (not try_expr) return try_expr.diag();
         return new (*this) TryExpr{try_expr->location(), *try_expr};
+    } else if (Consume(Tk::Do)) {
+        LCC_ASSERT(false, "TODO do (expr)");
     } else if (Consume(Tk::New)) {
         Expr* allocator = nullptr;
         if (Consume(Tk::OpenParen)) {

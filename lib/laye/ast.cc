@@ -116,7 +116,6 @@ std::string layec::ToString(layec::TokenKind kind) {
         case TokenKind::Nil: return "nil";
         case TokenKind::Global: return "global";
         case TokenKind::If: return "if";
-        case TokenKind::Then: return "then";
         case TokenKind::Else: return "else";
         case TokenKind::For: return "for";
         case TokenKind::Do: return "do";
@@ -319,13 +318,21 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
             case K::DeclStruct: {
                 auto n = cast<layec::StructDecl>(s);
                 PrintBasicHeader("StructDecl", n);
-                out += "\n";
+                out += fmt::format(
+                    " {}{}\n",
+                    C(Green),
+                    n->name()
+                );
             } break;
 
             case K::DeclEnum: {
                 auto n = cast<layec::EnumDecl>(s);
                 PrintBasicHeader("EnumDecl", n);
-                out += "\n";
+                out += fmt::format(
+                    " {}{}\n",
+                    C(Green),
+                    n->name()
+                );
             } break;
 
             case K::DeclAlias: {
@@ -646,26 +653,12 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
             case K::DeclStruct: {
                 auto n = as<layec::StructDecl>(s);
                 auto fields = n->fields();
+                auto variants = n->variants();
 
-                for (lcc::usz i = 0; i < fields.size(); i++) {
-                    const bool last = i == fields.size() - 1;
-                    out += fmt::format("{}{}{}", C(Red), leading_text, last ? "└─" : "├─");
-
-                    auto field = fields[i];
-                    PrintBasicHeader("StructField", n);
-
-                    out += fmt::format(
-                        " {} {}{}\n",
-                        field.type->string(use_colour),
-                        C(Green),
-                        field.name
-                    );
-
-                    if (auto init = field.init) {
-                        layec::BaseNode* children[] = {init};
-                        PrintChildren(children, leading_text + (last ? "  " : "│ "));
-                    }
-                }
+                std::vector<layec::Decl*> children{};
+                children.insert(children.end(), fields.begin(), fields.end());
+                children.insert(children.end(), variants.begin(), variants.end());
+                PrintChildren(children, leading_text);
             } break;
 
             case K::DeclEnum: {

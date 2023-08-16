@@ -274,6 +274,8 @@ private:
         return TryParseType(true);
     }
 
+    auto ParseStruct(std::vector<DeclModifier> mods = {}) -> Result<StructDecl*>;
+
     auto ParseConstructorBody() -> Result<std::vector<CtorFieldInit>>;
     auto ParsePrimaryExprContinue(Expr* expr) -> Result<Expr*>;
     auto ParsePrimaryIdentExprContinue(Expr* expr) -> Result<Expr*>;

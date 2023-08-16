@@ -1,3 +1,13 @@
+struct foo
+{
+    i32 bar;
+    
+    variant baz
+    {
+        string name;
+    }
+}
+
 i32 main(i32 argc, readonly c_string argv)
 {
     foo bar;
