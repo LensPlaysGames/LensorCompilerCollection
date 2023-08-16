@@ -77,7 +77,7 @@ struct ASTPrinter {
 
     template <typename TypeToPrint = NodeType, usz n>
     void PrintChildren(TypeToPrint* (&exprs)[n], std::string leading_text) {
-        PrintChildren(std::span{exprs, n}, std::move(leading_text));
+        PrintChildren(std::span<TypeToPrint* const>{exprs, n}, std::move(leading_text));
     }
 
     template <typename TypeToPrint = NodeType>
