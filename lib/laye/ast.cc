@@ -632,7 +632,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                     PrintChildren(children, leading_text);
                 }
             } break;
-            
+
             case K::DeclFunction: {
                 auto n = as<layec::FunctionDecl>(s);
                 if (auto block = cast<layec::BlockStatement>(n->body())) {
@@ -645,18 +645,51 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::DeclStruct: {
                 auto n = as<layec::StructDecl>(s);
+                auto fields = n->fields();
+
+                for (lcc::usz i = 0; i < fields.size(); i++) {
+                    const bool last = i == fields.size() - 1;
+                    out += fmt::format("{}{}{}", C(Red), leading_text, last ? "└─" : "├─");
+
+                    auto field = fields[i];
+                    PrintBasicHeader("StructField", n);
+
+                    out += fmt::format(
+                        " {} {}{}\n",
+                        field.type->string(use_colour),
+                        C(Green),
+                        field.name
+                    );
+
+                    if (auto init = field.init) {
+                        layec::BaseNode* children[] = {init};
+                        PrintChildren(children, leading_text + (last ? "  " : "│ "));
+                    }
+                }
             } break;
 
             case K::DeclEnum: {
                 auto n = as<layec::EnumDecl>(s);
-            } break;
+                auto variants = n->variants();
 
-            case K::DeclAlias: {
-                auto n = as<layec::AliasDecl>(s);
-            } break;
+                for (lcc::usz i = 0; i < variants.size(); i++) {
+                    const bool last = i == variants.size() - 1;
+                    out += fmt::format("{}{}{}", C(Red), leading_text, last ? "└─" : "├─");
 
-            case K::DeclImport: {
-                auto n = as<layec::ImportHeader>(s);
+                    auto variant = variants[i];
+                    PrintBasicHeader("EnumVariant", n);
+
+                    out += fmt::format(
+                        " {}{}\n",
+                        C(Green),
+                        variant.name
+                    );
+
+                    if (auto init = variant.init) {
+                        layec::BaseNode* children[] = {init};
+                        PrintChildren(children, leading_text + (last ? "  " : "│ "));
+                    }
+                }
             } break;
 
             case K::Block: {
@@ -666,10 +699,14 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::Assign: {
                 auto n = as<layec::AssignStatement>(s);
+                layec::Expr* children[] = {n->target(), n->value()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::Delete: {
                 auto n = as<layec::DeleteStatement>(s);
+                layec::Expr* children[] = {n->expr()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::Expr: {
@@ -677,52 +714,69 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 PrintExpr(n->expr(), leading_text);
             } break;
 
-            case K::Empty: {
-                auto n = as<layec::EmptyStatement>(s);
-            } break;
-
             case K::If: {
                 auto n = as<layec::IfStatement>(s);
+                layec::BaseNode* children[] = {n->condition(), n->pass(), n->fail()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::For: {
                 auto n = as<layec::ForStatement>(s);
+                if (n->init()) {
+                    layec::BaseNode* children[] = {n->init(), n->condition(), n->increment(), n->pass(), n->fail()};
+                    PrintChildren(children, leading_text);
+                } else {
+                    layec::BaseNode* children[] = {n->condition(), n->pass(), n->fail()};
+                    PrintChildren(children, leading_text);
+                }
             } break;
 
             case K::ForEach: {
                 auto n = as<layec::ForEachStatement>(s);
+                layec::BaseNode* children[] = {n->sequence(), n->pass(), n->fail()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::DoFor: {
                 auto n = as<layec::DoForStatement>(s);
+                layec::BaseNode* children[] = {n->body(), n->condition()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::Switch: {
                 auto n = as<layec::SwitchStatement>(s);
+                auto cases = n->cases();
+
+                for (lcc::usz i = 0; i < cases.size(); i++) {
+                    const bool last = i == cases.size() - 1;
+                    out += fmt::format("{}{}{}", C(Red), leading_text, last ? "└─" : "├─");
+
+                    auto case_ = cases[i];
+
+                    if (case_.is_default()) {
+                        PrintBasicHeader("Default", n);
+                        layec::BaseNode* children[] = {case_.body};
+                        PrintChildren(children, leading_text + (last ? "  " : "│ "));
+                    } else {
+                        PrintBasicHeader("Case", n);
+                        layec::BaseNode* children[] = {case_.value, case_.body};
+                        PrintChildren(children, leading_text + (last ? "  " : "│ "));
+                    }
+                }
             } break;
 
             case K::Return: {
                 auto n = as<layec::ReturnStatement>(s);
-            } break;
-
-            case K::Break: {
-                auto n = as<layec::BreakStatement>(s);
-            } break;
-
-            case K::Continue: {
-                auto n = as<layec::ContinueStatement>(s);
-            } break;
-
-            case K::Fallthrough: {
-                auto n = as<layec::FallthroughStatement>(s);
+                if (n->value()) {
+                    layec::BaseNode* children[] = {n->value()};
+                    PrintChildren(children, leading_text);
+                }
             } break;
 
             case K::Defer: {
                 auto n = as<layec::DeferStatement>(s);
-            } break;
-
-            case K::Goto: {
-                auto n = as<layec::GotoStatement>(s);
+                layec::BaseNode* children[] = {n->statement()};
+                PrintChildren(children, leading_text);
             } break;
         }
     }
@@ -734,26 +788,38 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::Unary: {
                 auto n = as<layec::UnaryExpr>(e);
+                layec::BaseNode* children[] = {n->value()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::Binary: {
                 auto n = as<layec::BinaryExpr>(e);
+                layec::BaseNode* children[] = {n->lhs(), n->rhs()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::And: {
                 auto n = as<layec::AndExpr>(e);
+                layec::BaseNode* children[] = {n->lhs(), n->rhs()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::Or: {
                 auto n = as<layec::OrExpr>(e);
+                layec::BaseNode* children[] = {n->lhs(), n->rhs()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::Xor: {
                 auto n = as<layec::XorExpr>(e);
+                layec::BaseNode* children[] = {n->lhs(), n->rhs()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::UnwrapNilable: {
                 auto n = as<layec::UnwrapNilableExpr>(e);
+                layec::BaseNode* children[] = {n->value()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::LookupName: {
@@ -766,14 +832,31 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::FieldIndex: {
                 auto n = as<layec::FieldIndexExpr>(e);
+                layec::BaseNode* children[] = {n->target()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::ValueIndex: {
                 auto n = as<layec::ValueIndexExpr>(e);
+                auto indices = n->indices();
+                if (indices.empty()) {
+                    layec::Expr* children[] = {n->target()};
+                    PrintChildren(children, leading_text);
+                } else {
+                    std::vector<layec::Expr*> children{};
+                    children.push_back(n->target());
+                    children.insert(children.end(), indices.begin(), indices.end());
+                    PrintChildren(children, leading_text);
+                }
             } break;
 
             case K::Slice: {
                 auto n = as<layec::SliceExpr>(e);
+                std::vector<layec::Expr*> children{};
+                children.push_back(n->target());
+                if (n->offset()) children.push_back(n->offset());
+                if (n->length()) children.push_back(n->length());
+                PrintChildren(children, leading_text);
             } break;
 
             case K::Call: {
@@ -792,18 +875,46 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::Ctor: {
                 auto n = as<layec::CtorExpr>(e);
+                auto inits = n->inits();
+
+                for (lcc::usz i = 0; i < inits.size(); i++) {
+                    const bool last = i == inits.size() - 1;
+                    out += fmt::format("{}{}{}", C(Red), leading_text, last ? "└─" : "├─");
+
+                    auto init = inits[i];
+                    PrintBasicHeader("CtorFieldInit", n);
+
+                    layec::BaseNode* children[] = {init.value};
+                    PrintChildren(children, leading_text + (last ? "  " : "│ "));
+                }
             } break;
 
             case K::Not: {
                 auto n = as<layec::NotExpr>(e);
+                layec::BaseNode* children[] = {n->value()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::Cast: {
                 auto n = as<layec::CastExpr>(e);
+                layec::BaseNode* children[] = {n->value()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::New: {
                 auto n = as<layec::NewExpr>(e);
+                auto inits = n->inits();
+
+                for (lcc::usz i = 0; i < inits.size(); i++) {
+                    const bool last = i == inits.size() - 1;
+                    out += fmt::format("{}{}{}", C(Red), leading_text, last ? "└─" : "├─");
+
+                    auto init = inits[i];
+                    PrintBasicHeader("CtorFieldInit", n);
+
+                    layec::BaseNode* children[] = {init.value};
+                    PrintChildren(children, leading_text + (last ? "  " : "│ "));
+                }
             } break;
 
             case K::Try: {
@@ -820,22 +931,11 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::Do: {
                 auto n = as<layec::DoExpr>(e);
-            } break;
-
-            case K::Sizeof: {
-                auto n = as<layec::SizeofExpr>(e);
-            } break;
-
-            case K::Offsetof: {
-                auto n = as<layec::OffsetofExpr>(e);
-            } break;
-
-            case K::Alignof: {
-                auto n = as<layec::AlignofExpr>(e);
+                PrintChildren(n->statements(), leading_text);
             } break;
         }
     }
-    
+
     void operator()(const layec::BaseNode* b, std::string leading_text = "") {
         PrintHeader(b);
         if (b->is_statement())
