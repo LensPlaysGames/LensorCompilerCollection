@@ -45,7 +45,7 @@ intc::Module::Module(
     top_level_function = new (*this) FuncDecl{
         is_logical_module ? fmt::format(".init.{}", name) : "main",
         ty,
-        nullptr,
+        new (*this) BlockExpr{{}, {}},
         this,
         Linkage::Exported,
         {},
@@ -57,6 +57,10 @@ intc::Module::~Module() {
     for (auto* type : types) delete type;
     for (auto* scope : scopes) delete scope;
     for (auto& [_, i] : _imports) delete i;
+}
+
+void lcc::intercept::Module::add_top_level_expr(Expr* node) {
+    as<BlockExpr>(top_level_function->body())->add(node);
 }
 
 auto intc::Module::intern(std::string_view str) -> usz {
@@ -111,6 +115,12 @@ auto intc::Scope::declare(
 auto intc::Expr::type() const -> Type* {
     if (auto e = cast<TypedExpr>(this)) return e->type();
     return Type::Void;
+}
+
+bool intc::Type::is_unknown() const {
+    auto builtin = cast<BuiltinType>(this);
+    if (not builtin) return false;
+    return builtin->builtin_kind() == BuiltinType::BuiltinKind::Unknown;
 }
 
 bool intc::Type::is_void() const {
@@ -389,5 +399,6 @@ auto intc::Type::string(bool use_colours) const -> std::string {
 
 void intc::Module::print() {
     ASTPrinter p{true};
-    for (auto* node : top_level_nodes) p(node);
+    for (auto* node : as<BlockExpr>(top_level_function->body())->children())
+        p(node);
 }

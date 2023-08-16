@@ -1,6 +1,7 @@
 #ifndef INTERCEPT_AST_HH
 #define INTERCEPT_AST_HH
 
+#include <intercept/eval.hh>
 #include <lcc/core.hh>
 #include <lcc/diags.hh>
 #include <lcc/syntax/token.hh>
@@ -105,14 +106,6 @@ enum struct TokenKind {
 /// Convert a token kind to a string representation.
 auto ToString(TokenKind kind) -> std::string_view;
 
-class Scope;
-class Expr;
-class Decl;
-class FuncDecl;
-class Type;
-class ObjectDecl;
-class Parser;
-
 class Module {
 public:
     struct Ref {
@@ -128,7 +121,6 @@ private:
     bool is_module;
     File* file;
 
-    std::vector<Expr*> top_level_nodes;
     std::vector<Ref> _imports;
     std::vector<Decl*> exports;
     std::vector<FuncDecl*> _functions;
@@ -152,7 +144,7 @@ public:
     }
 
     /// Add a top-level expression.
-    void add_top_level_expr(Expr* node) { top_level_nodes.push_back(node); }
+    void add_top_level_expr(Expr* node);
 
     /// Get the functions that are part of this module.
     auto functions() -> std::vector<FuncDecl*>& { return _functions; }
@@ -235,7 +227,74 @@ public:
     void set_function_scope() { is_function_scope = true; }
 };
 
-class Type {
+/// Base class for nodes and types, i.e. for anything that
+/// can be analysed in sema.
+class SemaNode {
+public:
+    /// State of semantic analysis for an expression or type.
+    enum struct State {
+        /// Not yet analysed by sema. The type of this node is unspecified.
+        NotAnalysed,
+
+        /// Sema is currently in progress. This can be used to detect cycles.
+        InProgress,
+
+        /// There was an error analysing this expression. Any expression that
+        /// depends on the type of this expression should not check it, nor try
+        /// to convert it or issue an error about it.
+        Errored,
+
+        /// Sema is done with this expression, and there are no errors that could
+        /// affect surrounding code. Note that this does not mean that it contains
+        /// no errors at all! For instance, a while loop is never marked as \c Errored
+        /// even if e.g. its condition is invalid or if there is an error in its body,
+        /// simply because a while loop does not return a value and can thus never
+        /// affect the types of the surrounding code.
+        Done,
+    };
+
+private:
+    State _state = State::NotAnalysed;
+
+protected:
+    SemaNode() = default;
+
+public:
+    /// Check if this expression was successfully analysed by sema.
+    bool ok() const { return _state == State::Done; }
+
+    /// Get the state of semantic analysis for this node.
+    /// \see SemaNode::State
+    auto sema() const -> State { return _state; }
+
+    /// Check if sema has errored.
+    bool sema_errored() const { return _state == State::Errored; }
+
+    /// \see SemaNode::State
+    bool sema_done_or_errored() const {
+        return _state == State::Done or _state == State::Errored;
+    }
+
+    /// \see SemaNode::State
+    void set_sema_in_progress() {
+        LCC_ASSERT(_state == State::NotAnalysed);
+        _state = State::InProgress;
+    }
+
+    /// \see SemaNode::State
+    void set_sema_done() {
+        LCC_ASSERT(_state != State::Errored);
+        _state = State::Done;
+    }
+
+    /// \see SemaNode::State
+    void set_sema_errored() {
+        LCC_ASSERT(_state != State::Done);
+        _state = State::Errored;
+    }
+};
+
+class Type : public SemaNode {
     friend class lcc::Context;
 
 public:
@@ -255,8 +314,6 @@ private:
 
     Location _location;
 
-    bool _type_checked = false;
-
 protected:
     Type(Kind kind, Location location)
         : _kind(kind), _location(location) {}
@@ -271,7 +328,18 @@ public:
         return ptr;
     }
 
+    /// Get the alignment of this type. It may be target-dependent,
+    /// which is why this takes a context parameter.
+    ///
+    /// \param ctx The context to use.
+    /// \return The alignment of this type, in bits.
+    usz align(const Context* ctx) const;
+
     auto kind() const { return _kind; }
+
+    /// Returns true if this is a sized integer type, or
+    /// \c int or \c bool, if \c include_bool is true.
+    bool is_any_integer(bool include_bool = false) const;
 
     /// Check the kind of this type.
     bool is_array() const { return _kind == Kind::Array; }
@@ -282,9 +350,17 @@ public:
     bool is_reference() const { return _kind == Kind::Reference; }
     bool is_sized_integer() const { return _kind == Kind::Integer; }
     bool is_struct() const { return _kind == Kind::Struct; }
+    bool is_unknown() const;
     bool is_void() const;
 
     auto location() const { return _location; }
+
+    /// Get the size of this type. It may be target-dependent,
+    /// which is why this takes a context parameter.
+    ///
+    /// \param ctx The context to use.
+    /// \return The size of this type, in bits.
+    usz size(const Context* ctx) const;
 
     /// Get a string representation of this type.
     auto string(bool use_colours = false) const -> std::string;
@@ -294,12 +370,6 @@ public:
 
     /// Return this type stripped of any references.
     auto strip_references() -> Type*;
-
-    /// Check if this type has been type-checked.
-    bool type_checked() const { return _type_checked; }
-
-    /// Mark this type as type-checked.
-    void set_type_checked() { _type_checked = true; }
 
     /// Use these only if there is no location information
     /// available (e.g. for default initialisers etc.). In
@@ -533,7 +603,7 @@ public:
 };
 
 /// \brief Base class for expression syntax nodes.
-class Expr {
+class Expr : public SemaNode {
 public:
     /// Do NOT reorder these!
     enum struct Kind {
@@ -549,6 +619,7 @@ public:
         IntegerLiteral,
         StringLiteral,
         CompoundLiteral,
+        EvaluatedConstant,
 
         If,
         Block,
@@ -567,8 +638,6 @@ private:
     const Kind _kind;
 
     Location _location;
-
-    bool _type_checked = false;
 
 protected:
     Expr(Kind kind, Location location)
@@ -591,12 +660,6 @@ public:
     auto location(Location location) { _location = location; }
 
     auto type() const -> Type*;
-
-    /// Check if this expression has been type-checked.
-    bool type_checked() const { return _type_checked; }
-
-    /// Mark this expression as type-checked.
-    void set_type_checked() { _type_checked = true; }
 
     /// Deep-copy an expression.
     static Expr* Clone(Module& mod, Expr* expr);
@@ -688,6 +751,7 @@ public:
     ) : ObjectDecl(Kind::VarDecl, type, std::move(name), mod, linkage, location),
         _init(init) {}
 
+    auto init() -> Expr*& { return _init; }
     auto init() const { return _init; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::VarDecl; }
@@ -774,7 +838,8 @@ public:
     CompoundLiteral(std::vector<Expr*> values, Location location)
         : TypedExpr(Kind::CompoundLiteral, location), _values(std::move(values)) {}
 
-    auto values() const -> std::span<Expr* const> { return _values; }
+    auto values() -> std::vector<Expr*>& { return _values; }
+    auto values() const -> const std::vector<Expr*>& { return _values; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::CompoundLiteral; }
 };
@@ -788,41 +853,58 @@ public:
     IfExpr(Expr* condition, Expr* then, Expr* else_, Location location)
         : TypedExpr(Kind::If, location), _condition(condition), _then(then), _else(else_) {}
 
+    auto condition() -> Expr*& { return _condition; }
     auto condition() const { return _condition; }
+
+    auto then() -> Expr*& { return _then; }
     auto then() const { return _then; }
+
+    auto else_() -> Expr*& { return _else; }
     auto else_() const { return _else; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::If; }
 };
 
-class WhileExpr : public Expr {
-    Expr* _condition;
+class Loop : public Expr {
     Expr* _body;
+    Expr* _condition;
 
 public:
-    WhileExpr(Expr* condition, Expr* body, Location location)
-        : Expr(Kind::While, location), _condition(condition), _body(body) {}
+    Loop(Kind kind, Expr* condition, Expr* body, Location location)
+        : Expr(kind, location), _body(body), _condition(condition) {}
+
+    auto body() const { return _body; }
+    auto body() -> Expr*& { return _body; }
 
     auto condition() const { return _condition; }
-    auto body() const { return _body; }
+    auto condition() -> Expr*& { return _condition; }
+
+    static bool classof(const Expr* expr) {
+        return expr->kind() >= Kind::While and expr->kind() <= Kind::For;
+    }
+};
+
+class WhileExpr : public Loop {
+public:
+    WhileExpr(Expr* condition, Expr* body, Location location)
+        : Loop(Kind::While, condition, body, location) {}
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::While; }
 };
 
-class ForExpr : public Expr {
+class ForExpr : public Loop {
     Expr* _init{};
-    Expr* _condition{};
-    Expr* _iterator{};
-    Expr* _body{};
+    Expr* _increment{};
 
 public:
-    ForExpr(Expr* init, Expr* condition, Expr* iterator, Expr* body, Location location)
-        : Expr(Kind::For, location), _init(init), _condition(condition), _iterator(iterator), _body(body) {}
+    ForExpr(Expr* init, Expr* condition, Expr* increment, Expr* body, Location location)
+        : Loop(Kind::For, condition, body, location), _init(init), _increment(increment) {}
 
+    auto init() -> Expr*& { return _init; }
     auto init() const { return _init; }
-    auto condition() const { return _condition; }
-    auto iterator() const { return _iterator; }
-    auto body() const { return _body; }
+
+    auto increment() -> Expr*& { return _increment; }
+    auto increment() const { return _increment; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::For; }
 };
@@ -834,7 +916,10 @@ public:
     BlockExpr(std::vector<Expr*> children, Location location)
         : TypedExpr(Kind::Block, location), _children(std::move(children)) {}
 
-    auto children() const -> const std::vector<Expr*>& { return _children; }
+    /// Add an expression to this block.
+    void add(Expr* expr) { _children.push_back(expr); }
+
+    auto children() -> std::vector<Expr*>& { return _children; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Block; }
 };
@@ -846,9 +931,30 @@ public:
     ReturnExpr(Expr* value, Location location)
         : Expr(Kind::Return, location), _value(value) {}
 
+    auto value() -> Expr*& { return _value; }
     auto value() const { return _value; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Return; }
+};
+
+/// Expression that has been evaluated by sema, together w/ a cached value.
+class ConstantExpr : public TypedExpr {
+    EvalResult _value;
+    Expr* _expression;
+
+public:
+    ConstantExpr(Expr* expr, EvalResult value)
+        : TypedExpr(expr->kind(), expr->location(), expr->type()),
+          _value(std::move(value)),
+          _expression(expr) {
+        LCC_ASSERT(expr->ok());
+        expr->set_sema_done();
+    }
+
+    auto expr() const { return _expression; }
+    auto value() -> EvalResult& { return _value; }
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::EvaluatedConstant; }
 };
 
 class CallExpr : public TypedExpr {
@@ -870,23 +976,42 @@ class IntrinsicCallExpr : public TypedExpr {
     std::vector<Expr*> _args;
 
 public:
-    IntrinsicCallExpr(Location location, IntrinsicKind kind, std::vector<Expr*> args)
-        : TypedExpr(Kind::IntrinsicCall, location), _kind(kind), _args(std::move(args)) {}
+    IntrinsicCallExpr(IntrinsicKind kind, std::vector<Expr*> args)
+        : TypedExpr(Kind::IntrinsicCall, {}), _kind(kind), _args(std::move(args)) {}
+
+    auto args() -> std::vector<Expr*>& { return _args; }
+    auto args() const -> const std::vector<Expr*>& { return _args; }
 
     auto intrinsic_kind() const { return _kind; }
-    auto args() const -> std::span<Expr* const> { return _args; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::IntrinsicCall; }
 };
 
 class CastExpr : public TypedExpr {
+public:
+    enum class CastKind {
+        SoftCast,           ///< Explicit cast using \c as.
+        HardCast,           ///< Explicit cast using \c as!.
+        ImplicitCast,       ///< Implicit conversion.
+        LvalueToRvalueConv, ///< Lvalue-to-rvalue conversion.
+    };
+
+private:
     Expr* _value;
+    CastKind _cast_kind;
 
 public:
-    CastExpr(Expr* value, Type* ty, Location location)
-        : TypedExpr(Kind::Cast, location, ty), _value(value) {}
+    CastExpr(Expr* value, Type* ty, CastKind k, Location location)
+        : TypedExpr(Kind::Cast, location, ty), _value(value), _cast_kind(k) {}
+
+    /// Check cast kinds.
+    bool is_hard_cast() const { return _cast_kind == CastKind::HardCast; }
+    bool is_implicit_cast() const { return _cast_kind == CastKind::ImplicitCast; }
+    bool is_lvalue_to_rvalue() const { return _cast_kind == CastKind::LvalueToRvalueConv; }
+    bool is_soft_cast() const { return _cast_kind == CastKind::SoftCast; }
 
     /// Get the operand of this expression.
+    auto operand() -> Expr*& { return _value; }
     auto operand() const { return _value; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Cast; }

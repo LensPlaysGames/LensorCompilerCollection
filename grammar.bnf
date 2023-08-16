@@ -8,6 +8,7 @@
 
 
 /// TODO: Make parens optional in function call
+/// TODO: Multiple declaration syntax for parameters (e.g. `a, b, c : int`)
 
 /// Expression.
 <expr>     ::= <expr-decl>
