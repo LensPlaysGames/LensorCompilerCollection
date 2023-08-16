@@ -176,8 +176,6 @@ enum struct TokenKind {
 
 using LayeToken = syntax::Token<TokenKind>;
 
-std::string ToString(TokenKind kind);
-
 enum struct OperatorKind {
     Invalid,
 
@@ -215,6 +213,9 @@ enum struct OperatorKind {
     // Call,
     Index,
 };
+
+std::string ToString(TokenKind kind);
+std::string ToString(OperatorKind kind);
 
 struct DeclModifier {
     TokenKind decl_kind;

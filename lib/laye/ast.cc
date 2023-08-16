@@ -185,6 +185,41 @@ std::string layec::ToString(layec::TokenKind kind) {
     }
 }
 
+std::string layec::ToString(layec::OperatorKind kind) {
+    switch (kind) {
+        case OperatorKind::Invalid: return "<invalid>";
+        case OperatorKind::Add: return "+";
+        case OperatorKind::Sub: return "-";
+        case OperatorKind::Mul: return "*";
+        case OperatorKind::Div: return "/";
+        case OperatorKind::Mod: return "%";
+        case OperatorKind::Greater: return ">";
+        case OperatorKind::Less: return "<";
+        case OperatorKind::Equal: return "=";
+        case OperatorKind::NotEqual: return "!=";
+        case OperatorKind::Compl: return "~";
+        case OperatorKind::And: return "&";
+        case OperatorKind::Or: return "|";
+        case OperatorKind::Xor: return "~";
+        case OperatorKind::Lsh: return "<<";
+        case OperatorKind::Rsh: return ">>";
+        case OperatorKind::AddEqual: return "+=";
+        case OperatorKind::SubEqual: return "-=";
+        case OperatorKind::DivEqual: return "/=";
+        case OperatorKind::MulEqual: return "*/";
+        case OperatorKind::ModEqual: return "%=";
+        case OperatorKind::LessEqual: return "<=";
+        case OperatorKind::GreaterEqual: return ">=";
+        case OperatorKind::AndEqual: return "&=";
+        case OperatorKind::OrEqual: return "|=";
+        case OperatorKind::XorEqual: return "~=";
+        case OperatorKind::LshEqual: return "<<=";
+        case OperatorKind::RshEqual: return ">>=";
+        case OperatorKind::Index: return "[]";
+        default: return "<unknown>";
+    }
+}
+
 auto layec::Type::string(bool use_colours) const -> std::string {
     lcc::utils::Colours C{use_colours};
     using enum lcc::utils::Colour;
@@ -310,7 +345,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 auto params = n->params();
                 for (lcc::usz i = 0; i < params.size(); i++) {
                     if (i > 0) out += fmt::format("{}, ", C(White));
-                    out += fmt::format("{} {}", params[i].type->string(use_colour), params[i].name);
+                    out += fmt::format("{} {}{}", params[i].type->string(use_colour), C(White), params[i].name);
                 }
                 out += fmt::format("{})\n", C(White));
             } break;
@@ -461,7 +496,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
             case K::Binary: {
                 auto n = cast<layec::BinaryExpr>(e);
                 PrintBasicHeader("BinaryExpr", n);
-                out += "\n";
+                out += fmt::format(" {}{}\n", C(White), ToString(n->operator_kind()));
             } break;
 
             case K::And: {

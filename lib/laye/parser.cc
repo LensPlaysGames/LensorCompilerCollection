@@ -71,7 +71,7 @@ static std::unordered_map<Tk, OperatorKind> binary_operator_kinds{
 };
 
 OperatorKind Parser::BinaryOperatorKind(TokenKind tokenKind) {
-    if (auto result = assign_operator_kinds.find(tokenKind); result != assign_operator_kinds.end()) {
+    if (auto result = binary_operator_kinds.find(tokenKind); result != binary_operator_kinds.end()) {
         return result->second;
     }
 
@@ -766,7 +766,7 @@ auto Parser::TryParseTemplateArguments(bool allocate) -> Result<std::vector<Expr
         return args;
     }
 
-    LCC_ASSERT(false, "TODO");
+    //LCC_ASSERT(false, "TODO template args");
     return args;
 }
 
