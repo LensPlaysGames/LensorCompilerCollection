@@ -338,7 +338,7 @@ void lcc::laye::Lexer::ReadIdentifierOrNumber(LayeToken& token) {
     LCC_ASSERT(IsIdentStart(lastc));
 
     if (IsDigit(lastc)) {
-        u64 integer_value = (u64) (lastc - '0');
+        u64 integer_value = 0;
         bool is_int_too_large = false;
 
         bool is_lastc_underscore = false;
@@ -438,7 +438,7 @@ continue_identifier:
 }
 
 void lcc::laye::Lexer::ReadIntegerInBase(LayeToken& token, int base) {
-    u64 integer_value = (u64) (lastc - '0');
+    u64 integer_value = 0;
     bool is_int_too_large = false;
 
     bool is_lastc_underscore = false;
