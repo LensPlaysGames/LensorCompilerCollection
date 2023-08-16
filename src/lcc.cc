@@ -68,6 +68,11 @@ int main(int argc, char** argv) {
     /// Laye.
     if (path_str.ends_with(".laye")) {
         auto mod = lcc::laye::Parser::Parse(&context, file);
+        if (options::get<"--syntax-only">()) {
+            if (options::get<"--ast">()) mod->print();
+            std::exit(0);
+        }
+        
         return 69;
     }
 

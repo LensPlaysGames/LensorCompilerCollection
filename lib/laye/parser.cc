@@ -218,9 +218,9 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         while (not At(Tk::Eof, Tk::CloseParen)) {
             auto type = ParseType();
 
-            auto name = tok.text;
+            auto param_name = tok.text;
             if (not Consume(Tk::Ident)) {
-                name.clear();
+                param_name.clear();
                 Error("Expected identifier");
             }
 
@@ -229,7 +229,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
                 init = ParseExpr();
             }
 
-            params.push_back(FunctionParam{*type, name, *init});
+            params.push_back(FunctionParam{*type, param_name, *init});
 
             if (not Consume(Tk::Comma)) break;
 
@@ -505,10 +505,11 @@ auto Parser::TryParseNameOrPath(
     } else if (Consume(Tk::ColonColon)) {
         path_kind = PathKind::Headless;
         goto start_path_resolution_parse;
-    } else if (Consume(Tk::Ident)) {
+    } else if (At(Tk::Ident)) {
         { // so we can goto correctly without moving these two declarations
             auto name_text = tok.text;
             auto name_location = tok.location;
+            NextToken();
 
             if (not Consume(Tk::ColonColon)) {
                 auto template_args_result = TryParseTemplateArguments(allocate);

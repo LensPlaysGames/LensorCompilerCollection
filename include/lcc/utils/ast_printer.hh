@@ -17,7 +17,7 @@ struct ASTPrinter {
 
     ASTPrinter(bool use_colour) : use_colour{use_colour} {}
     ~ASTPrinter() {
-        if (not out.empty()) fmt::print("{}", out);
+        if (not out.empty()) fmt::print("{}{}", out, C(Reset));
     }
 
     /// Print basic information about an AST node.

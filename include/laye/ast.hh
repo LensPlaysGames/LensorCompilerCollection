@@ -24,6 +24,8 @@ struct Module {
     std::vector<ModuleHeader*> headers;
     std::vector<Decl*> top_level_decls;
 
+    void print();
+
 private:
     std::vector<Statement*> statements;
     std::vector<Expr*> exprs;
@@ -116,7 +118,7 @@ enum struct TokenKind {
     Variant,
     Enum,
     Alias,
-    // Test,
+     Test,
     Import,
     Export,
     From,
@@ -173,6 +175,8 @@ enum struct TokenKind {
 };
 
 using LayeToken = syntax::Token<TokenKind>;
+
+std::string ToString(TokenKind kind);
 
 enum struct OperatorKind {
     Invalid,
@@ -280,8 +284,32 @@ public:
     auto parent() const { return _parent; }
 };
 
+class BaseNode {
+public:
+    enum struct Kind {
+        Statement,
+        Expr,
+    };
+
+private:
+    const Kind _kind;
+
+    Location _location;
+
+protected:
+    BaseNode(Kind kind, Location location)
+        : _kind(kind), _location(location) {}
+
+public:
+
+    bool is_statement() const { return _kind == Kind::Statement; }
+    bool is_expr() const { return _kind == Kind::Expr; }
+
+    auto location() const { return _location; }
+};
+
 /// @brief Base class for statement syntax nodes.
-class Statement {
+class Statement : public BaseNode {
 public:
     enum struct Kind {
         OverloadSet,
@@ -320,22 +348,19 @@ public:
 private:
     const Kind _kind;
 
-    Location _location;
-
 protected:
     Statement(Kind kind, Location location)
-        : _kind(kind), _location(location) {}
+        : BaseNode(BaseNode::Kind::Statement, location), _kind(kind){}
 
 public:
     void* operator new(size_t) = delete;
     void* operator new(size_t sz, Parser& parser);
 
     auto kind() const { return _kind; }
-    auto location() const { return _location; }
 };
 
 /// @brief Base class for expression syntax nodes.
-class Expr {
+class Expr : public BaseNode {
 public:
     enum struct Kind {
         Unary,
@@ -402,18 +427,15 @@ public:
 private:
     const Kind _kind;
 
-    Location _location;
-
 protected:
     Expr(Kind kind, Location location)
-        : _kind(kind), _location(location) {}
+        : BaseNode(BaseNode::Kind::Expr, location), _kind(kind) {}
 
 public:
     void* operator new(size_t) = delete;
     void* operator new(size_t sz, Parser& parser);
 
     auto kind() const { return _kind; }
-    auto location() const { return _location; }
 };
 
 class Decl : public Statement {
@@ -422,7 +444,7 @@ protected:
         : Statement(kind, location) {}
 
 public:
-    static bool classof(Statement* statement) { return +statement->kind() >= +Kind::DeclBinding and +statement->kind() <= +Kind::DeclImport; }
+    static bool classof(const Statement* statement) { return +statement->kind() >= +Kind::DeclBinding and +statement->kind() <= +Kind::DeclImport; }
 };
 
 class NamedDecl : public Decl {
@@ -442,7 +464,14 @@ public:
     auto name() const -> const std::string& { return _name; }
     auto template_params() const -> std::span<TemplateParam const> { return _template_params; }
 
-    static bool classof(Statement* statement) { return +statement->kind() >= +Kind::DeclBinding and +statement->kind() <= +Kind::DeclAlias; }
+    auto linkage() const {
+        auto mod_list = mods();
+        if (auto e = std::find_if(mod_list.begin(), mod_list.end(), [](const auto& m) { return m.decl_kind == TokenKind::Export; }); e != mod_list.end())
+            return Linkage::Exported;
+        return Linkage::Internal;
+    }
+
+    static bool classof(const Statement* statement) { return +statement->kind() >= +Kind::DeclBinding and +statement->kind() <= +Kind::DeclAlias; }
 };
 
 class BindingDecl : public NamedDecl {
@@ -456,7 +485,7 @@ public:
     auto type() const { return _type; }
     auto init() const { return _init; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::DeclBinding; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclBinding; }
 };
 
 class FunctionDecl : public NamedDecl {
@@ -472,7 +501,7 @@ public:
     auto params() const -> std::span<FunctionParam const> { return _params; }
     auto body() const { return _body; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::DeclFunction; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclFunction; }
 };
 
 class OverloadSet : public Statement {
@@ -485,7 +514,7 @@ public:
     void add(FunctionDecl* overload) { _overloads.push_back(overload); }
     auto overloads() const -> std::span<FunctionDecl* const> { return _overloads; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::OverloadSet; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::OverloadSet; }
 };
 
 class StructDecl : public NamedDecl {
@@ -499,7 +528,7 @@ public:
     auto fields() const -> std::span<StructField const> { return _fields; }
     auto variants() const -> std::span<StructVariant const> { return _variants; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::DeclStruct; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclStruct; }
 };
 
 class EnumDecl : public NamedDecl {
@@ -513,7 +542,7 @@ public:
     auto underlying_type() const { return _underlying_type; }
     auto variants() const -> std::span<EnumVariant const> { return _variants; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::DeclEnum; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclEnum; }
 };
 
 class AliasDecl : public NamedDecl {
@@ -525,7 +554,7 @@ public:
 
     auto type() const { return _type; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::DeclAlias; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclAlias; }
 };
 
 /// @brief Base class for file header nodes.
@@ -535,7 +564,7 @@ protected:
         : Decl(kind, location) {}
 
 public:
-    static bool classof(Statement* statement) { return +statement->kind() >= +Kind::DeclImport and +statement->kind() <= +Kind::DeclImport; }
+    static bool classof(const Statement* statement) { return +statement->kind() >= +Kind::DeclImport and +statement->kind() <= +Kind::DeclImport; }
 };
 
 // import "file";
@@ -563,7 +592,7 @@ public:
     auto import_names() const -> std::span<std::string const> { return _import_names; }
     auto alias() const -> const std::string& { return _alias; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::DeclImport; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclImport; }
 };
 
 class BlockStatement : public Statement {
@@ -575,7 +604,7 @@ public:
 
     auto children() const -> std::span<Statement* const> { return _children; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Block; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Block; }
 };
 
 class AssignStatement : public Statement {
@@ -589,7 +618,7 @@ public:
     auto target() const { return _target; }
     auto value() const { return _value; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Assign; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Assign; }
 };
 
 class DeleteStatement : public Statement {
@@ -601,7 +630,7 @@ public:
 
     auto expr() const { return _expr; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Delete; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Delete; }
 };
 
 class ExprStatement : public Statement {
@@ -613,7 +642,7 @@ public:
 
     auto expr() const { return _expr; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Expr; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Expr; }
 };
 
 class EmptyStatement : public Statement {
@@ -621,7 +650,7 @@ public:
     EmptyStatement(Location location)
         : Statement(Kind::Expr, location) {}
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Empty; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Empty; }
 };
 
 class IfStatement : public Statement {
@@ -643,7 +672,7 @@ public:
     auto pass() const { return _pass; }
     auto fail() const { return _fail; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::If; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::If; }
 };
 
 class ForStatement : public Statement {
@@ -674,7 +703,7 @@ public:
     auto pass() const { return _pass; }
     auto fail() const { return _fail; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::For; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::For; }
 };
 
 class ForEachStatement : public Statement {
@@ -702,7 +731,7 @@ public:
     auto pass() const { return _pass; }
     auto fail() const { return _fail; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::ForEach; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::ForEach; }
 };
 
 class DoForStatement : public Statement {
@@ -722,7 +751,7 @@ public:
     auto condition() const { return _condition; }
     auto body() const { return _body; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::DoFor; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::DoFor; }
 };
 
 class FallthroughStatement : public Statement {
@@ -730,7 +759,7 @@ public:
     FallthroughStatement(Location location)
         : Statement(Kind::Fallthrough, location) {}
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Fallthrough; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Fallthrough; }
 };
 
 struct SwitchCase {
@@ -752,7 +781,7 @@ public:
     auto target() const { return _target; }
     auto cases() const -> std::span<SwitchCase const> { return _cases; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Switch; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Switch; }
 };
 
 class ReturnStatement : public Statement {
@@ -764,7 +793,7 @@ public:
 
     auto value() const { return _value; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Return; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Return; }
 };
 
 class BreakStatement : public Statement {
@@ -780,7 +809,7 @@ public:
     bool has_target() const { return not _target.empty(); }
     auto target() const -> const std::string& { return _target; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Break; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Break; }
 };
 
 class ContinueStatement : public Statement {
@@ -796,7 +825,7 @@ public:
     bool has_target() const { return not _target.empty(); }
     auto target() const -> const std::string& { return _target; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Continue; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Continue; }
 };
 
 class DeferStatement : public Statement {
@@ -808,7 +837,7 @@ public:
 
     auto statement() const { return _statement; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Defer; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Defer; }
 };
 
 class GotoStatement : public Statement {
@@ -820,7 +849,7 @@ public:
 
     auto target() const -> const std::string& { return _target; }
 
-    static bool classof(Statement* statement) { return statement->kind() == Kind::Goto; }
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Goto; }
 };
 
 class UnaryExpr : public Expr {
@@ -834,7 +863,7 @@ public:
     auto operator_kind() const { return _operator_kind; }
     auto value() const { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Unary; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Unary; }
 };
 
 class BinaryExpr : public Expr {
@@ -850,7 +879,7 @@ public:
     auto lhs() const { return _lhs; }
     auto rhs() const { return _rhs; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Binary; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Binary; }
 };
 
 class AndExpr : public Expr {
@@ -864,7 +893,7 @@ public:
     auto lhs() const { return _lhs; }
     auto rhs() const { return _rhs; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::And; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::And; }
 };
 
 class OrExpr : public Expr {
@@ -878,7 +907,7 @@ public:
     auto lhs() const { return _lhs; }
     auto rhs() const { return _rhs; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Or; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Or; }
 };
 
 class XorExpr : public Expr {
@@ -892,7 +921,7 @@ public:
     auto lhs() const { return _lhs; }
     auto rhs() const { return _rhs; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Xor; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Xor; }
 };
 
 class UnwrapNilableExpr : public Expr {
@@ -904,7 +933,7 @@ public:
 
     auto value() const { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::UnwrapNilable; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::UnwrapNilable; }
 };
 
 class NameExpr : public Expr {
@@ -921,7 +950,7 @@ public:
     auto name() const -> const std::string& { return _name; }
     auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::LookupName; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::LookupName; }
 };
 
 class PathExpr : public Expr {
@@ -942,7 +971,7 @@ public:
     auto locations() const -> const std::vector<Location>& { return _locations; }
     auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::LookupPath; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::LookupPath; }
 };
 
 class FieldIndexExpr : public Expr {
@@ -956,7 +985,7 @@ public:
     auto target() const { return _target; }
     auto field_name() const -> const std::string& { return _field_name; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::FieldIndex; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::FieldIndex; }
 };
 
 class ValueIndexExpr : public Expr {
@@ -970,7 +999,7 @@ public:
     auto target() const { return _target; }
     auto indices() const -> std::span<Expr* const> { return _indices; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::ValueIndex; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::ValueIndex; }
 };
 
 class SliceExpr : public Expr {
@@ -986,7 +1015,7 @@ public:
     auto offset() const { return _offset; }
     auto length() const { return _length; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Slice; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Slice; }
 };
 
 class CallExpr : public Expr {
@@ -1000,7 +1029,7 @@ public:
     auto target() const { return _target; }
     auto args() const { return _args; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Call; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Call; }
 };
 
 struct CtorFieldInit {
@@ -1020,7 +1049,7 @@ public:
     auto type() const { return _type; }
     auto inits() const -> std::span<CtorFieldInit const> { return _inits; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Ctor; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Ctor; }
 };
 
 class NotExpr : public Expr {
@@ -1032,7 +1061,7 @@ public:
 
     auto value() const { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Not; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Not; }
 };
 
 class CastExpr : public Expr {
@@ -1046,7 +1075,7 @@ public:
     auto type() const { return _type; }
     auto value() const { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Cast; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Cast; }
 };
 
 class NewExpr : public Expr {
@@ -1066,7 +1095,7 @@ public:
     auto type() const { return _type; }
     auto inits() const -> std::span<CtorFieldInit const> { return _inits; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::New; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::New; }
 };
 
 class TryExpr : public Expr {
@@ -1078,7 +1107,7 @@ public:
 
     auto value() const { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Try; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Try; }
 };
 
 class CatchExpr : public Expr {
@@ -1094,7 +1123,7 @@ public:
     auto error_name() const -> const std::string& { return _error_name; }
     auto body() const { return _body; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Catch; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Catch; }
 };
 
 //
@@ -1144,7 +1173,7 @@ public:
 
     auto statements() const -> std::span<Statement* const> { return _statements; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Do; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Do; }
 };
 
 class SizeofExpr : public Expr {
@@ -1156,7 +1185,7 @@ public:
 
     auto type() const { return _type; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Sizeof; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Sizeof; }
 };
 
 class OffsetofExpr : public Expr {
@@ -1170,7 +1199,7 @@ public:
     auto type() const { return _type; }
     auto field_name() const -> const std::string& { return _field_name; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Offsetof; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Offsetof; }
 };
 
 class AlignofExpr : public Expr {
@@ -1184,7 +1213,7 @@ public:
     auto type() const { return _type; }
     auto field_name() const -> const std::string& { return _field_name; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::Alignof; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Alignof; }
 };
 
 class LitNilExpr : public Expr {
@@ -1192,7 +1221,7 @@ public:
     LitNilExpr(Location location)
         : Expr(Kind::LitNil, location) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::LitNil; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::LitNil; }
 };
 
 class LitBoolExpr : public Expr {
@@ -1204,7 +1233,7 @@ public:
 
     auto value() const { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::LitBool; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::LitBool; }
 };
 
 class LitStringExpr : public Expr {
@@ -1216,7 +1245,7 @@ public:
 
     auto value() const -> const std::string& { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::LitString; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::LitString; }
 };
 
 class LitIntExpr : public Expr {
@@ -1228,7 +1257,7 @@ public:
 
     auto value() const { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::LitInt; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::LitInt; }
 };
 
 class LitFloatExpr : public Expr {
@@ -1240,7 +1269,7 @@ public:
 
     auto value() const { return _value; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::LitFloat; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::LitFloat; }
 };
 
 /// @brief Base class for type syntax nodes (which we're trying to make also Exprs.)
@@ -1249,7 +1278,10 @@ protected:
     Type(Kind kind, Location location)
         : Expr(kind, location) {}
 
-    static bool classof(Expr* expr) { return +expr->kind() >= +Kind::TypeInfer && +expr->kind() <= +Kind::TypeC; }
+public:
+    auto string(bool use_colours = false) const -> std::string;
+
+    static bool classof(const Expr* expr) { return +expr->kind() >= +Kind::TypeInfer && +expr->kind() <= +Kind::TypeC; }
 };
 
 class InferType : public Type {
@@ -1257,7 +1289,7 @@ public:
     InferType(Location location)
         : Type(Kind::TypeInfer, location) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeInfer; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeInfer; }
 };
 
 // ErrName!ValueType
@@ -1273,7 +1305,7 @@ public:
     auto error_name() const -> const std::string& { return _error_name; }
     auto value_type() const { return _value_type; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeErrUnion; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeErrUnion; }
 };
 
 class NameType : public Type {
@@ -1292,7 +1324,7 @@ public:
     auto name() const -> const std::string& { return _name; }
     auto template_args() const -> std::span<Expr* const> { return _template_args; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeLookupName; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeLookupName; }
 };
 
 class PathType : public Type {
@@ -1315,7 +1347,7 @@ public:
     auto locations() const -> std::span<Location const> { return _locations; }
     auto template_args() const -> std::span<Expr* const> { return _template_args; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeLookupPath; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeLookupPath; }
 };
 
 class SingleElementType : public Type {
@@ -1327,7 +1359,7 @@ public:
 
     auto elem_type() const { return _elem_type; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeNilable or (+expr->kind() >= +Kind::TypeArray and +expr->kind() <= +Kind::TypeBuffer); }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeNilable or (+expr->kind() >= +Kind::TypeArray and +expr->kind() <= +Kind::TypeBuffer); }
 };
 
 class NilableType : public SingleElementType {
@@ -1335,7 +1367,7 @@ public:
     NilableType(Type* elementType)
         : SingleElementType(Kind::TypeNilable, elementType->location(), elementType) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeNilable; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeNilable; }
 };
 
 class ArrayType : public SingleElementType {
@@ -1347,7 +1379,7 @@ public:
 
     auto rank_lengths() const -> std::span<Expr* const> { return _rank_lengths; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeArray; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeArray; }
 };
 
 class SliceType : public SingleElementType {
@@ -1355,7 +1387,7 @@ public:
     SliceType(Location location, Type* elem_type)
         : SingleElementType(Kind::TypeSlice, location, elem_type) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeSlice; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeSlice; }
 };
 
 class PointerType : public SingleElementType {
@@ -1363,7 +1395,7 @@ public:
     PointerType(Location location, Type* elem_type)
         : SingleElementType(Kind::TypePointer, location, elem_type) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypePointer; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypePointer; }
 };
 
 class BufferType : public SingleElementType {
@@ -1371,26 +1403,26 @@ public:
     BufferType(Location location, Type* elem_type)
         : SingleElementType(Kind::TypeBuffer, location, elem_type) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeBuffer; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeBuffer; }
 };
 
 class FuncType : public Type {
     Expr* _calling_convention{};
     Type* _return_type;
-    std::vector<Expr*> _param_types;
+    std::vector<Type*> _param_types;
 
 public:
-    FuncType(Location location, Type* return_type, std::vector<Expr*> param_types)
+    FuncType(Location location, Type* return_type, std::vector<Type*> param_types)
         : Type(Kind::TypeFunc, location), _return_type(return_type), _param_types(std::move(param_types)) {}
 
-    FuncType(Location location, Expr* calling_convention, Type* return_type, std::vector<Expr*> param_types)
+    FuncType(Location location, Expr* calling_convention, Type* return_type, std::vector<Type*> param_types)
         : Type(Kind::TypeFunc, location), _calling_convention(calling_convention), _return_type(return_type), _param_types(std::move(param_types)) {}
 
     auto calling_convention() const { return _calling_convention; }
     auto return_type() const { return _return_type; }
-    auto param_types() const -> std::span<Expr* const> { return _param_types; }
+    auto param_types() const -> std::span<Type* const> { return _param_types; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeFunc; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeFunc; }
 };
 
 class NoreturnType : public Type {
@@ -1398,7 +1430,7 @@ public:
     NoreturnType(Location location)
         : Type(Kind::TypeNoreturn, location) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeNoreturn; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeNoreturn; }
 };
 
 class RawptrType : public Type {
@@ -1406,7 +1438,7 @@ public:
     RawptrType(Location location)
         : Type(Kind::TypeRawptr, location) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeRawptr; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeRawptr; }
 };
 
 class VoidType : public Type {
@@ -1414,7 +1446,7 @@ public:
     VoidType(Location location)
         : Type(Kind::TypeVoid, location) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeVoid; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeVoid; }
 };
 
 class StringType : public Type {
@@ -1426,49 +1458,49 @@ public:
 
     auto access() const { return _access; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeString; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeString; }
 };
 
 class SizableType : public Type {
-    int _size;
+    int _bit_width;
 
 protected:
-    SizableType(Kind kind, Location location, int size)
-        : Type(kind, location), _size(size) {}
-
-    bool is_sized() const { return _size > 0; }
-    int size() const { return _size; }
+    SizableType(Kind kind, Location location, int bit_width)
+        : Type(kind, location), _bit_width(bit_width) {}
 
 public:
-    static bool classof(Expr* expr) { return +expr->kind() >= +Kind::TypeBool and +expr->kind() <= +Kind::TypeFloat; }
+    bool is_sized() const { return _bit_width > 0; }
+    int bit_width() const { return _bit_width; }
+
+    static bool classof(const Expr* expr) { return +expr->kind() >= +Kind::TypeBool and +expr->kind() <= +Kind::TypeFloat; }
 };
 
 class BoolType : public SizableType {
 public:
-    BoolType(Location location, int size = 0)
-        : SizableType(Kind::TypeBool, location, size) {}
+    BoolType(Location location, int bit_width = 0)
+        : SizableType(Kind::TypeBool, location, bit_width) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeBool; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeBool; }
 };
 
 class IntType : public SizableType {
     bool _is_signed;
 
 public:
-    IntType(Location location, bool is_signed, int size = 0)
-        : SizableType(Kind::TypeInt, location, size), _is_signed(is_signed) {}
+    IntType(Location location, bool is_signed, int bit_width = 0)
+        : SizableType(Kind::TypeInt, location, bit_width), _is_signed(is_signed) {}
 
     bool is_signed() const { return _is_signed; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeInt; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeInt; }
 };
 
 class FloatType : public SizableType {
 public:
-    FloatType(Location location, int size = 0)
-        : SizableType(Kind::TypeFloat, location, size) {}
+    FloatType(Location location, int bit_width = 0)
+        : SizableType(Kind::TypeFloat, location, bit_width) {}
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeFloat; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeFloat; }
 };
 
 class CType : public Type {
@@ -1489,7 +1521,7 @@ public:
     auto kind() const { return _kind; }
     auto access() const { return _access; }
 
-    static bool classof(Expr* expr) { return expr->kind() == Kind::TypeC; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeC; }
 };
 } // namespace lcc::laye
 
