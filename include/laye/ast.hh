@@ -263,6 +263,12 @@ enum struct PathKind {
     Headless,
 };
 
+enum struct VarargsKind {
+    None,
+    Laye,
+    C,
+};
+
 class Scope {
     Scope* _parent;
     StringMap<Statement*> _symbols;
@@ -1401,37 +1407,51 @@ public:
 };
 
 class ArrayType : public SingleElementType {
+    TypeAccess _access;
     std::vector<Expr*> _rank_lengths;
 
 public:
-    ArrayType(Location location, Type* elem_type, std::vector<Expr*> rank_lengths)
-        : SingleElementType(Kind::TypeArray, location, elem_type), _rank_lengths(std::move(rank_lengths)) {}
+    ArrayType(Location location, TypeAccess access, Type* elem_type, std::vector<Expr*> rank_lengths)
+        : SingleElementType(Kind::TypeArray, location, elem_type), _access(access), _rank_lengths(std::move(rank_lengths)) {}
 
+    auto access() const { return _access; }
     auto rank_lengths() const -> std::span<Expr* const> { return _rank_lengths; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeArray; }
 };
 
 class SliceType : public SingleElementType {
+    TypeAccess _access;
+
 public:
-    SliceType(Location location, Type* elem_type)
-        : SingleElementType(Kind::TypeSlice, location, elem_type) {}
+    SliceType(Location location, TypeAccess access, Type* elem_type)
+        : SingleElementType(Kind::TypeSlice, location, elem_type), _access(access) {}
+        
+    auto access() const { return _access; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeSlice; }
 };
 
 class PointerType : public SingleElementType {
+    TypeAccess _access;
+
 public:
-    PointerType(Location location, Type* elem_type)
-        : SingleElementType(Kind::TypePointer, location, elem_type) {}
+    PointerType(Location location, TypeAccess access, Type* elem_type)
+        : SingleElementType(Kind::TypePointer, location, elem_type), _access(access) {}
+        
+    auto access() const { return _access; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypePointer; }
 };
 
 class BufferType : public SingleElementType {
+    TypeAccess _access;
+
 public:
-    BufferType(Location location, Type* elem_type)
-        : SingleElementType(Kind::TypeBuffer, location, elem_type) {}
+    BufferType(Location location, TypeAccess access, Type* elem_type)
+        : SingleElementType(Kind::TypeBuffer, location, elem_type), _access(access) {}
+        
+    auto access() const { return _access; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeBuffer; }
 };

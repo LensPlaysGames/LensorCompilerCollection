@@ -214,6 +214,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
     auto template_params = MaybeParseTemplateParams();
 
     if (Consume(Tk::OpenParen)) {
+        // TODO(local): parse varargs in function decls
         std::vector<FunctionParam> params{};
         while (not At(Tk::Eof, Tk::CloseParen)) {
             auto type = ParseType();
@@ -463,9 +464,117 @@ auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
     );
 }
 
-auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allowFunctions) -> Result<Type*> {
+auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allow_functions) -> Result<Type*> {
     LCC_ASSERT((not allocate) == IsInSpeculativeParse(), "TryParseTypeContinue requires that the allocate parameter be the opposite of the result of IsInSpeculativeParse(). If allocations are enabled, then no speculative parse stack should exist. If allocations are disabled, then it is required that a specilative parse stack exists.");
-    return type;
+    if (not allocate) LCC_ASSERT(type == nullptr);
+
+    if (At(Tk::Eof)) return type;
+
+    auto start = CurrLocation();
+    if (type) start = type->location();
+
+    auto type_access = TypeAccess::Default;
+    bool has_errored_for_access = false;
+
+    while (At(Tk::Readonly, Tk::Writeonly)) {
+        if (type_access != TypeAccess::Default && not has_errored_for_access) {
+            if (allocate) Error("Only one of 'readonly' or 'writeonly' may be specified for type access modifiers");
+            has_errored_for_access = true;
+        }
+
+        if (Consume(Tk::Readonly)) {
+            type_access = TypeAccess::ReadOnly;
+        } else if (Consume(Tk::Writeonly)) {
+            type_access = TypeAccess::WriteOnly;
+        } else {
+            LCC_ASSERT(false, "Somehow unhandled case of type access modifiers");
+        }
+    }
+
+    if (Consume(Tk::Star)) {
+        Type* pointer_type = nullptr;
+        if (allocate) {
+            pointer_type = new (*this) PointerType{GetLocation(start), type_access, type};
+        }
+        return TryParseTypeContinue(pointer_type, allocate, allow_functions);
+    } else if (Consume(Tk::OpenBracket)) {
+        if (Consume(Tk::CloseBracket)) {
+            Type* slice_type = nullptr;
+            if (allocate) {
+                slice_type = new (*this) SliceType{GetLocation(start), type_access, type};
+            }
+            return TryParseTypeContinue(slice_type, allocate, allow_functions);
+        } else if (At(Tk::Star) and PeekAt(1, Tk::CloseBracket)) {
+            NextToken();
+            NextToken();
+            
+            Type* buffer_type = nullptr;
+            if (allocate) {
+                buffer_type = new (*this) BufferType{GetLocation(start), type_access, type};
+            }
+            return TryParseTypeContinue(buffer_type, allocate, allow_functions);
+        }
+
+        std::vector<Expr*> rank_lengths{};
+        while (not At(Tk::Eof)) {
+            auto len = ParseExpr();
+            if (not len) return len.diag();
+            if (allocate) rank_lengths.push_back(*len);
+            if (not Consume(Tk::Comma) or At(Tk::CloseBracket)) break;
+        }
+
+        if (not Consume(Tk::CloseBracket)) {
+            Error("Expected ']'");
+        }
+        
+        Type* array_type = nullptr;
+        if (allocate) {
+            array_type = new (*this) ArrayType{GetLocation(start), type_access, type, rank_lengths};
+        }
+        return TryParseTypeContinue(array_type, allocate, allow_functions);
+    } else if (Consume(Tk::Question)) {
+        if (type_access != TypeAccess::Default) {
+            if (allocate) Error("Nilable types cannot have access modifiers");
+        }
+
+        Type* nilable_type = nullptr;
+        if (allocate) {
+            nilable_type = new (*this) NilableType{type};
+        }
+        return TryParseTypeContinue(nilable_type, allocate, allow_functions);
+    } else if (allow_functions and Consume(Tk::OpenParen)) {
+        // TODO(local): get a calling convention in here somewhere
+    parse_func_type:;
+        if (type_access != TypeAccess::Default) {
+            if (allocate) Error("Function types cannot have access modifiers");
+        }
+
+        // TODO(local): parse varargs in function types
+        std::vector<Type*> param_types{};
+        while (not At(Tk::Eof)) {
+            auto param_type = TryParseType(allocate);
+            if (not param_type) return param_type.diag();
+            if (allocate) param_types.push_back(*param_type);
+            if (not Consume(Tk::Comma) or At(Tk::CloseParen)) break;
+        }
+
+        if (not Consume(Tk::CloseParen)) {
+            Error("Expected ')'");
+        }
+
+        Type* function_type = nullptr;
+        if (allocate) {
+            function_type = new (*this) FuncType{GetLocation(start), type, param_types};
+        }
+        return TryParseTypeContinue(function_type, allocate, allow_functions);
+    } else {
+        if (type_access != TypeAccess::Default) {
+            if (allocate) Error("Expected '*' or '[' to construct a container type");
+        }
+        return type;
+    }
+
+    LCC_ASSERT(false, "unreachable");
 }
 
 auto Parser::TryParseTemplateArguments(bool allocate) -> Result<std::vector<Expr*>> {
@@ -498,7 +607,7 @@ auto Parser::TryParseNameOrPath(
         path_kind = PathKind::Global;
         if (not Consume(Tk::ColonColon)) {
             if (allocate) return Error("Expected '::");
-            else goto return_null_type;
+            else goto return_null_expr;
         }
 
         goto start_path_resolution_parse;
@@ -521,7 +630,7 @@ auto Parser::TryParseNameOrPath(
                 if (allocate) {
                     return name_ctor(name_location, name_text, *template_args_result);
                 } else {
-                    goto return_null_type;
+                    goto return_null_expr;
                 }
             }
 
@@ -536,7 +645,7 @@ auto Parser::TryParseNameOrPath(
 
             if (not Consume(Tk::Ident)) {
                 if (allocate) return Error("Expected identifier");
-                else goto return_null_type;
+                else goto return_null_expr;
             }
 
             path_names.push_back(name_text);
@@ -549,15 +658,14 @@ auto Parser::TryParseNameOrPath(
             return template_args_result.diag();
         }
 
-        // TODO(local): (try) parse template arguments
         if (allocate) {
             return path_ctor(path_kind, path_names, path_locations, *template_args_result);
         } else {
-            goto return_null_type;
+            goto return_null_expr;
         }
     }
 
-return_null_type:;
+return_null_expr:;
     LCC_ASSERT(not allocate, "Can only return a nullptr value for the result type if we are not allowed to allocate data (read: we are in a speculative parse mode)");
     return Result<Expr*>::Null();
 }
@@ -611,6 +719,7 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         };
 
         auto id_type = TryParseNameOrPath(allocate, NameCtor, PathCtor);
+        if (not id_type) return id_type.diag();
         // since the TryParseNameOrPath function works for the expression case, too, we have to
         //  explicitly cast back to a Type* to continue type parsing.
         return TryParseTypeContinue(static_cast<Type*>(*id_type), allocate);
@@ -711,10 +820,6 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
     }
 
     return Error("Unexpected token when parsing type");
-
-return_null_type:;
-    LCC_ASSERT(not allocate, "Can only return a nullptr value for the result type if we are not allowed to allocate data (read: we are in a speculative parse mode)");
-    return Result<Type*>::Null();
 }
 
 auto Parser::ParseConstructorBody() -> Result<std::vector<CtorFieldInit>> {

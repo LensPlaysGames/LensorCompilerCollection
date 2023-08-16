@@ -259,8 +259,8 @@ private:
 
     auto ParseImportDecl(bool is_export) -> Result<ImportHeader*>;
 
-    auto TryParseTypeContinue(Type* type, bool allocate, bool allowFunctions = true) -> Result<Type*>;
-    auto TryParseType(bool allocate, bool allowFunctions = true) -> Result<Type*>;
+    auto TryParseTypeContinue(Type* type, bool allocate, bool allow_functions = true) -> Result<Type*>;
+    auto TryParseType(bool allocate, bool allow_functions = true) -> Result<Type*>;
     bool SpeculativeParseType() {
         LCC_ASSERT(IsInSpeculativeParse());
         auto result = TryParseType(false);
