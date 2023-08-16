@@ -1,13 +1,16 @@
 #include <intercept/ast.hh>
 #include <intercept/parser.hh>
-#include <lcc/utils/rtti.hh>
 #include <lcc/utils/ast_printer.hh>
+#include <lcc/utils/rtti.hh>
 
 namespace intc = lcc::intercept;
 
-intc::Type* intc::Type::Unknown;
+intc::Type* intc::Type::Bool;
+intc::Type* intc::Type::Byte;
 intc::Type* intc::Type::Integer;
+intc::Type* intc::Type::Unknown;
 intc::Type* intc::Type::Void;
+intc::Type* intc::Type::VoidPtr;
 
 /// ===========================================================================
 ///  Module
@@ -272,7 +275,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
 
             case K::Call: {
                 auto c = as<intc::CallExpr>(e);
-                std::vector<intc::Expr*> children {c->callee()};
+                std::vector<intc::Expr*> children{c->callee()};
                 children.insert(children.end(), c->args().begin(), c->args().end());
                 PrintChildren(children, leading_text);
             } break;

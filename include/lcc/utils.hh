@@ -16,6 +16,7 @@
 #include <numeric>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
 #include <type_traits>
 #include <unordered_map>

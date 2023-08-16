@@ -310,9 +310,12 @@ public:
     ///
     /// When adding a type here, don’t forget to initialise
     /// it in Context::InitialiseLCCData().
-    static Type* Unknown;
+    static Type* Bool;
+    static Type* Byte;
     static Type* Integer;
+    static Type* Unknown;
     static Type* Void;
+    static Type* VoidPtr;
 };
 
 /// This only holds a kind.

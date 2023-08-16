@@ -98,74 +98,6 @@ void lcc::Diag::PrintDiagWithoutLocation() {
 
 lcc::Diag::~Diag() { print(); }
 
-bool lcc::Diag::Seekable() const {
-    auto& files = ctx->files();
-    if (where.file_id >= files.size()) return false;
-    const auto* f = files[where.file_id].get();
-    return where.pos + where.len <= f->size() and where.is_valid();
-}
-
-/// Seek to a source location. The location must be valid.
-auto lcc::Diag::Seek() const -> LocInfo {
-    LocInfo info{};
-
-    /// Get the file that the location is in.
-    auto& files = ctx->files();
-    const auto* f = files.at(where.file_id).get();
-
-    /// Seek back to the start of the line.
-    const char* const data = f->data();
-    info.line_start = data + where.pos;
-    while (info.line_start > data and *info.line_start != '\n') info.line_start--;
-    if (*info.line_start == '\n') info.line_start++;
-
-    /// Seek forward to the end of the line.
-    const char* const end = data + f->size();
-    info.line_end = data + where.pos + where.len;
-    while (info.line_end < end and *info.line_end != '\n') info.line_end++;
-
-    /// Determine the line and column number.
-    info.line = 1;
-    for (const char* d = data; d < data + where.pos; d++) {
-        if (*d == '\n') {
-            info.line++;
-            info.col = 0;
-        } else {
-            info.col++;
-        }
-    }
-
-    /// Done!
-    return info;
-}
-
-/// TODO: Lexer should create map that counts where in a file the lines start so
-/// we can do binary search on that instead of iterating over the entire file.
-auto lcc::Diag::SeekLineColumn() const -> LocInfoShort {
-    LocInfoShort info{};
-
-    /// Get the file that the location is in.
-    auto& files = ctx->files();
-    const auto* f = files.at(where.file_id).get();
-
-    /// Seek back to the start of the line.
-    const char* const data = f->data();
-
-    /// Determine the line and column number.
-    info.line = 1;
-    for (const char* d = data; d < data + where.pos; d++) {
-        if (*d == '\n') {
-            info.line++;
-            info.col = 0;
-        } else {
-            info.col++;
-        }
-    }
-
-    /// Done!
-    return info;
-}
-
 void lcc::Diag::print() {
     using fmt::fg;
     using enum fmt::emphasis;
@@ -205,7 +137,7 @@ void lcc::Diag::print() {
     /// exists, its position is out of bounds or 0, or its length is 0, then we
     /// skip printing the location.
     const auto& fs = ctx->files();
-    if (not Seekable()) {
+    if (not where.seekable(ctx)) {
         /// Even if the location is invalid, print the file name if we can.
         if (where.file_id < fs.size()) {
             const auto& file = *fs[where.file_id].get();
@@ -218,7 +150,7 @@ void lcc::Diag::print() {
     }
 
     /// If the location is valid, get the line, line number, and column number.
-    const auto [line, col, line_start, line_end] = Seek();
+    const auto [line, col, line_start, line_end] = where.seek(ctx);
 
     /// Split the line into everything before the range, the range itself,
     /// and everything after.

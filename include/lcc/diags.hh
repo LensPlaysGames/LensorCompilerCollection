@@ -33,15 +33,6 @@ private:
     /// Print a diagnostic with no (valid) location info.
     void PrintDiagWithoutLocation();
 
-    /// Seek to a source location.
-    [[nodiscard]] auto Seek() const -> LocInfo;
-
-    /// Seek to a source location, but only return the line and column.
-    [[nodiscard]] auto SeekLineColumn() const -> LocInfoShort;
-
-    /// Check if the source location is seekable.
-    [[nodiscard]] bool Seekable() const;
-
 public:
     static constexpr u8 ICE_EXIT_CODE = 17;
     static constexpr u8 FATAL_EXIT_CODE = 18;

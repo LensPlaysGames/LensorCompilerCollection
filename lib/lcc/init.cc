@@ -15,13 +15,17 @@ void lcc::Context::InitialiseLCCData() {
     Type::I1Ty = &ir_i1_ty;
 
     /// Initialise default instances of builtin Intercept types.
-    static intercept::BuiltinType default_type_instances[]{
-        {intercept::BuiltinType::BuiltinKind::Unknown, {}},
-        {intercept::BuiltinType::BuiltinKind::Integer, {}},
-        {intercept::BuiltinType::BuiltinKind::Void, {}},
-    };
+    static intercept::BuiltinType int_ty_bool = {intercept::BuiltinType::BuiltinKind::Bool, {}};
+    static intercept::BuiltinType int_ty_byte = {intercept::BuiltinType::BuiltinKind::Byte, {}};
+    static intercept::BuiltinType int_ty_int = {intercept::BuiltinType::BuiltinKind::Integer, {}};
+    static intercept::BuiltinType int_ty_unknown = {intercept::BuiltinType::BuiltinKind::Unknown, {}};
+    static intercept::BuiltinType int_ty_void = {intercept::BuiltinType::BuiltinKind::Void, {}};
+    static intercept::PointerType int_ty_void_ptr = {&int_ty_void, {}};
 
-    intercept::Type::Unknown = default_type_instances;
-    intercept::Type::Integer = default_type_instances + 1;
-    intercept::Type::Void = default_type_instances + 2;
+    intercept::Type::Bool = &int_ty_bool;
+    intercept::Type::Byte = &int_ty_byte;
+    intercept::Type::Integer = &int_ty_int;
+    intercept::Type::Unknown = &int_ty_unknown;
+    intercept::Type::Void = &int_ty_void;
+    intercept::Type::VoidPtr = &int_ty_void_ptr;
 }

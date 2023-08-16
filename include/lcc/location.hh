@@ -4,6 +4,22 @@
 #include <lcc/utils.hh>
 
 namespace lcc {
+class Context;
+
+/// A decoded source location.
+struct LocInfo {
+    usz line;
+    usz col;
+    const char* line_start;
+    const char* line_end;
+};
+
+/// A short decoded source location.
+struct LocInfoShort {
+    usz line;
+    usz col;
+};
+
 /// A source range in a file.
 struct Location {
     u32 pos{};
@@ -22,21 +38,16 @@ struct Location {
         len = u16(std::max<u32>(a.pos + a.len, b.pos + b.len) - pos);
     }
 
+    /// Seek to a source location.
+    [[nodiscard]] auto seek(const Context* ctx) const -> LocInfo;
+
+    /// Seek to a source location, but only return the line and column.
+    [[nodiscard]] auto seek_line_column(const Context* ctx) const -> LocInfoShort;
+
+    /// Check if the source location is seekable.
+    [[nodiscard]] bool seekable(const Context* ctx) const;
+
     bool is_valid() const { return len != 0; }
-};
-
-/// A decoded source location.
-struct LocInfo {
-    usz line;
-    usz col;
-    const char* line_start;
-    const char* line_end;
-};
-
-/// A short decoded source location.
-struct LocInfoShort {
-    usz line;
-    usz col;
 };
 } // namespace lcc
 
