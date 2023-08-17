@@ -14,19 +14,50 @@ void intc::Sema::AnalyseModule() {
     /// TODO(Sirraide): Load imported modules.
     LCC_ASSERT(mod.imports().empty(), "Importing modules is not yet supported.");
 
-    /// Analyse the top-level function.
-    AnalyseFunction(mod.top_level_func());
+    /// Analyse the signatures of all functions. This must be done
+    /// before analysing bodies since, in order to perform overload
+    /// resolution properly, we first need to apply decltype decay
+    /// to all parameters (e.g. convert parameters of function type
+    /// to function pointers etc.).
+    for (auto& func : mod.functions()) AnalyseFunctionSignature(func);
 
-    /// Analyse all other functions.
-    for (auto& func : mod.functions()) {
-        if (func == mod.top_level_func()) continue;
-        AnalyseFunction(func);
+    /// Analyse function bodies.
+    for (auto& func : mod.functions()) AnalyseFunctionBody(func);
+}
+
+void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
+    tempset curr_func = decl;
+    auto ty = as<FuncType>(decl->type());
+
+    /// Typecheck the function body. If the function has no body, then we’re done.
+    if (decl->body()) Analyse(&decl->body(), ty->return_type());
+    else return;
+
+    /// The last expression in a function must be a return expression or convertible
+    /// to the return type of the function. If it is a return expression, then it has
+    /// already been checked for that, so ignore that case.
+    ///
+    /// Note that the body may be a block, in which case we should check the last
+    /// expression of the block rather than just the block itself.
+    if (not ty->return_type()->is_void()) {
+        Expr** last{};
+        if (auto block = cast<BlockExpr>(decl->body())) {
+            if (block->children().empty() and not ty->return_type()->is_void()) {
+                Error(decl->location(), "Non-void function must return a value");
+                return;
+            }
+
+            last = &block->children().back();
+        } else {
+            last = &decl->body();
+        }
+
+        if (is<ReturnExpr>(*last)) return;
+        Convert(last, ty->return_type());
     }
 }
 
-void intc::Sema::AnalyseFunction(FuncDecl* decl) {
-    tempset curr_func = decl;
-
+void intc::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
     /// Set a name for the decl if it’s empty.
     if (decl->name().empty()) decl->name(mod.unique_function_name());
 
@@ -59,33 +90,6 @@ void intc::Sema::AnalyseFunction(FuncDecl* decl) {
         } else {
             decl->linkage(Linkage::Used);
         }
-    }
-
-    /// Typecheck the function body. If the function has no body, then we’re done.
-    if (decl->body()) Analyse(&decl->body(), ty->return_type());
-    else return;
-
-    /// The last expression in a function must be a return expression or convertible
-    /// to the return type of the function. If it is a return expression, then it has
-    /// already been checked for that, so ignore that case.
-    ///
-    /// Note that the body may be a block, in which case we should check the last
-    /// expression of the block rather than just the block itself.
-    if (not ty->return_type()->is_void()) {
-        Expr** last{};
-        if (auto block = cast<BlockExpr>(decl->body())) {
-            if (block->children().empty() and not ty->return_type()->is_void()) {
-                Error(decl->location(), "Non-void function must return a value");
-                return;
-            }
-
-            last = &block->children().back();
-        } else {
-            last = &decl->body();
-        }
-
-        if (is<ReturnExpr>(*last)) return;
-        Convert(last, ty->return_type());
     }
 }
 
@@ -274,7 +278,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 break;
             }
 
-            /// TODO: Modules.
+            /// TODO(Sirraide): Accessing ‘members’ of modules.
 
             /// Type must be a struct type.
             auto struct_type = cast<StructType>(m->object()->type()->strip_pointers_and_references());
@@ -336,23 +340,61 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             AnalyseBinary(as<BinaryExpr>(expr));
             break;
 
+        /// Reference to a declared entity.
+        case Expr::Kind::NameRef:
+            AnalyseNameRef(as<NameRefExpr>(expr));
+            break;
+
         /// Functions are analysed separately.
         case Expr::Kind::FuncDecl:
             LCC_ASSERT(expr->type()->is_function());
             break;
 
         /// The actual work here is analysing the type, so this is a no-op.
-        case Expr::Kind::StructDecl: break;
-        case Expr::Kind::TypeAliasDecl: break;
+        case Expr::Kind::StructDecl:
+        case Expr::Kind::TypeAliasDecl:
+            break;
 
         /// There isn’t really a way these could be malformed.
-        case Expr::Kind::IntegerLiteral: break;
-        case Expr::Kind::StringLiteral: break;
+        case Expr::Kind::IntegerLiteral:
+        case Expr::Kind::StringLiteral:
+            break;
 
         /// These should only be created by sema and are thus no-ops.
         case Expr::Kind::EvaluatedConstant: break;
 
-        case Expr::Kind::NameRef: break;
+        /// Validate overload sets.
+        case Expr::Kind::OverloadSet: {
+            auto& os = as<OverloadSet>(expr)->overloads();
+
+            /// An overload set must not contain two overloads with the
+            /// same parameter types. All function signatures have already
+            /// been analysed, so we just need to compare them.
+            for (usz i = 0; i < os.size(); i++) {
+                auto oi = os[i];
+                auto oi_params = oi->param_types();
+                for (usz j = i + 1; j < os.size(); j++) {
+                    auto oj = os[j];
+                    auto oj_params = oj->param_types();
+
+                    /// Different number of parameters means these two can’t be the same.
+                    if (oi_params.size() != oj_params.size()) continue;
+
+                    /// Compare the parameters.
+                    usz k = 0;
+                    for (; k < oi_params.size(); k++)
+                        if (not Type::Equal(oi_params[isz(k)], oj_params[isz(k)]))
+                            break;
+
+                    /// If all of them are equal, then we have a problem.
+                    if (k != oi_params.size()) {
+                        Error(oi->location(), "Overload set contains two overloads with the same parameter types");
+                        Diag::Note(context, oj->location(), "Conflicting overload is here");
+                        expr->set_sema_errored();
+                    }
+                }
+            }
+        } break;
     }
 
     /// Do *not* use `expr` here, as it may have been replaced by something else.
@@ -450,7 +492,8 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
                 ConvertToCommonType(&b->lhs(), &b->rhs(), true);
 
             /// Bool can only be compared with bool.
-            else if (lhs->is_bool() and rhs->is_bool()) {}
+            else if (lhs->is_bool() and rhs->is_bool()) {
+            }
 
             /// If both operands are pointers, they must be the same type.
             else if (lhs->is_pointer() and rhs->is_pointer()) {
@@ -488,6 +531,79 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             Convert(&b->rhs(), b->lhs()->type()->strip_references());
         } break;
     }
+}
+
+void intc::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
+    /// If the callee is a name ref, check for builtins first.
+    if (auto name = cast<NameRefExpr>(expr->callee())) {
+        static const StringMap<IntrinsicKind> builtin_names{
+            {"__builtin_debugtrap", IntrinsicKind::BuiltinDebugtrap},
+            {"__builtin_filename", IntrinsicKind::BuiltinFilename},
+            {"__builtin_inline", IntrinsicKind::BuiltinInline},
+            {"__builtin_line", IntrinsicKind::BuiltinLine},
+            {"__builtin_memcpy", IntrinsicKind::BuiltinMemCopy},
+            {"__builtin_memset", IntrinsicKind::BuiltinMemSet},
+            {"__builtin_syscall", IntrinsicKind::BuiltinSyscall},
+        };
+
+        /// Check if this is the name of a builtin.
+        auto n = name->name();
+        if (auto kind = builtin_names.find(n); kind != builtin_names.end()) {
+            /// We copy the arguments and leave the original expression unchanged
+            /// since this node may be references in multiple places, all of which
+            /// may need to be patched, and there is no good way of doing that
+            /// without copying each use individually.
+            auto intrinsic = new (mod) IntrinsicCallExpr(
+                kind->second,
+                expr->args()
+            );
+
+            /// Make sure to actually analyse this intrinsic, as it will otherwise
+            /// just be marked as done without actually being analysed.
+            ReplaceWithNewNode(expr_ptr, intrinsic);
+            Analyse(expr_ptr);
+            return;
+        }
+    }
+
+    /// Analyse the callee and the arguments.
+    for (auto*& arg : expr->args()) Analyse(&arg);
+
+    /// If analysing the callee fails, we can’t do anything else.
+    if (not Analyse(&expr->callee())) {
+        expr->set_sema_errored();
+        return;
+    }
+
+    /// If the callee is an overload set, perform overload resolution.
+    if (is<OverloadSet>(expr->callee())) {
+        /// If any of the arguments errored, we can’t resolve this.
+        if (rgs::any_of(expr->args(), &Expr::sema_errored)) {
+            expr->set_sema_errored();
+            return;
+        }
+
+        /// TODO(Sirraide): Overload resolution.
+        Diag::ICE("Sorry, overload resolution is currently not implemented");
+    }
+
+    /// The type of the call is the return type of the function.
+    auto func_type = cast<FuncType>(expr->callee()->type());
+    expr->type(func_type->return_type());
+
+    /// Check that there are as many arguments as parameters.
+    if (expr->args().size() != func_type->params().size()) {
+        Error(
+            expr->location(),
+            "Incorrect number of arguments for function. Expected {} instead of {}",
+            func_type->params().size(),
+            expr->args().size()
+        );
+    }
+
+    /// Check that the arguments are convertible to the parameter types.
+    for (usz i = 0, end = std::min(expr->args().size(), func_type->params().size()); i < end; i++)
+        Convert(expr->args().data() + i, func_type->params()[i].type);
 }
 
 void intc::Sema::AnalyseCast(CastExpr* c) {
@@ -639,6 +755,71 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
             expr->type(Type::Integer);
         } break;
     }
+}
+
+void intc::Sema::AnalyseNameRef(NameRefExpr* expr) {
+    /// Look up the thing in its scope, if there is no definition of the
+    /// symbol in its scope, search its parent scopes until we find one.
+    auto scope = expr->scope();
+    decltype(scope->find(expr->name())) syms;
+    while (scope) {
+        syms = scope->find(expr->name());
+        scope = scope->parent();
+        if (syms.first != syms.second) break;
+    }
+
+    /// If we’re at the global scope and there still is no symbol, then
+    /// this symbol is apparently not declared.
+    /// TODO(Sirraide): Search imported modules here.
+    if (syms.first == syms.second) {
+        Error(expr->location(), "Unknown symbol '{}'", expr->name());
+        expr->set_sema_errored();
+        return;
+    }
+
+    /// Either there is exactly one node that is not a function, or, there
+    /// may be one or more nodes with that name that are functions. In the
+    /// former case, resolve the reference to that node.
+    if (not is<FuncDecl>(syms.first->second)) {
+        Expr* e = syms.first->second;
+        Analyse(&e);
+        LCC_ASSERT(syms.first->second == e);
+        expr->target(syms.first->second);
+        expr->type(Ref(syms.first->second->type()));
+        return;
+    }
+
+    /// Helper to append iterator ranges to an overload set.
+    std::vector<FuncDecl*> overloads;
+    auto Append = [&overloads](auto&& range) {
+        for (auto it = range.first; it != range.second; it++)
+            overloads.push_back(as<FuncDecl>(it->second));
+    };
+
+    /// In the other case, collect all functions with that name as well as
+    /// all functions with that name in parent scopes and create an overload
+    /// set for them.
+    Append(syms);
+    for (; scope; scope = scope->parent()) Append(scope->find(expr->name()));
+
+    /// If there is only one function, resolve it directly to that function.
+    if (overloads.size() == 1) {
+        expr->target(overloads[0]);
+        expr->type(overloads[0]->type());
+        return;
+    }
+
+    /// Create a new overload set and analyse it. This will make sure there are
+    /// no redeclarations etc.
+    Expr* os = new (mod) OverloadSet(overloads, expr->location());
+    Analyse(&os);
+    if (os->sema_errored()) expr->set_sema_errored();
+
+    /// The type of an overload set is special because its actual type will depend
+    /// on the context. Roughly, the `OverloadSet` type is convertible to (a pointer
+    /// to) any of the function types in the set.
+    expr->target(os);
+    expr->type(Type::OverloadSet);
 }
 
 void intc::Sema::AnalyseUnary(UnaryExpr* u) {

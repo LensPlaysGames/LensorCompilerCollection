@@ -52,9 +52,11 @@ private:
     void AnalyseBinary(BinaryExpr* expr);
     void AnalyseCall(Expr** expr_ptr, CallExpr* expr);
     void AnalyseCast(CastExpr* expr);
-    void AnalyseFunction(FuncDecl* decl);
+    void AnalyseFunctionBody(FuncDecl* decl);
+    void AnalyseFunctionSignature(FuncDecl* decl);
     void AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr);
     void AnalyseModule();
+    void AnalyseNameRef(NameRefExpr* expr);
     void AnalyseUnary(UnaryExpr* expr);
 
     /// Attempt to convert an expression to a given type.
@@ -70,7 +72,7 @@ private:
     /// \param type The type to convert to.
     /// \return Whether the conversion succeeded.
     /// \see TryConvert().
-    bool Convert(Expr** expr, Type* type);
+    bool Convert(Expr** expr, const Type* type);
 
     /// Like Convert(), but converts expressions to their *common type* instead.
     ///
@@ -136,9 +138,10 @@ private:
 
     /// Replace a node with a new node.
     ///
-    /// The expression \c expr_ptr points to will be replaced with
-    /// \c replacement, and the location of \c replacement will be
-    /// set to the location of the original expression.
+    /// The expression \c expr_ptr points to is replaced with
+    /// \c replacement, and, iff the location of \c replacement
+    /// is invalid, it is set to the location of the original
+    /// expression.
     void ReplaceWithNewNode(Expr** expr_ptr, Expr* replacement);
 
     /// Create a (type-checked) reference to a type.

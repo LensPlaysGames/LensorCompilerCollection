@@ -220,6 +220,9 @@ public:
         Decl* decl
     ) -> Result<Decl*>;
 
+    /// Look up a symbol in this scope.
+    auto find(std::string_view name) { return symbols.equal_range(name); }
+
     /// Get the parent scope.
     auto parent() const { return _parent; }
 
@@ -398,6 +401,9 @@ public:
     static Type* Unknown;
     static Type* Void;
     static Type* VoidPtr;
+
+    /// The type of an unresolved overload set.
+    static Type* OverloadSet;
 };
 
 /// This only holds a kind.
@@ -419,6 +425,7 @@ public:
         Integer,
         Unknown,
         Void,
+        OverloadSet,
     };
 
 private:
@@ -635,6 +642,7 @@ public:
         IntegerLiteral,
         StringLiteral,
         CompoundLiteral,
+        OverloadSet,
         EvaluatedConstant,
 
         If,
@@ -801,9 +809,18 @@ public:
     ) : ObjectDecl(Kind::FuncDecl, type, std::move(name), mod, linkage, location),
         _body(body) {
         mod->add_function(this);
+
+        /// Functions receive special handling in sema and their types are
+        /// always known when we actually start analysing code.
+        set_sema_done();
     }
 
-    auto params() const -> std::span<VarDecl* const> { return _params; }
+    auto param_types() const {
+        return as<FuncType>(type())->params() |
+               std::views::transform([](auto& p) { return p.type; });
+    }
+
+    auto param_decls() const -> const std::vector<VarDecl*>& { return _params; }
     auto body() -> Expr*& { return _body; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::FuncDecl; }
@@ -868,6 +885,19 @@ public:
     auto values() const -> const std::vector<Expr*>& { return _values; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::CompoundLiteral; }
+};
+
+/// A set of function overloads.
+class OverloadSet : public TypedExpr {
+    std::vector<FuncDecl*> _overloads;
+
+public:
+    OverloadSet(std::vector<FuncDecl*> overloads, Location location)
+        : TypedExpr(Kind::OverloadSet, location), _overloads(std::move(overloads)) {}
+
+    auto overloads() const -> const std::vector<FuncDecl*>& { return _overloads; }
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::OverloadSet; }
 };
 
 class IfExpr : public TypedExpr {
@@ -991,8 +1021,11 @@ public:
     CallExpr(Expr* callee, std::vector<Expr*> args, Location location)
         : TypedExpr(Kind::Call, location), _callee(callee), _args(std::move(args)) {}
 
+    auto callee() -> Expr*& { return _callee; }
     auto callee() const { return _callee; }
-    auto args() const -> std::span<Expr* const> { return _args; }
+
+    auto args() -> std::vector<Expr*>& { return _args; }
+    auto args() const -> const std::vector<Expr*>& { return _args; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Call; }
 };
@@ -1090,14 +1123,16 @@ public:
 
 class NameRefExpr : public TypedExpr {
     std::string _name;
+    Scope* _scope;
     Expr* _target{};
 
 public:
-    NameRefExpr(std::string name, Location location)
-        : TypedExpr(Kind::NameRef, location), _name(std::move(name)) {}
+    NameRefExpr(std::string name, Scope* name_scope, Location location)
+        : TypedExpr(Kind::NameRef, location), _name(std::move(name)), _scope(name_scope) {}
 
     auto name() const -> const std::string& { return _name; }
-    auto target() const { return _target; }
+    auto scope() const -> Scope* { return _scope; }
+    auto target() const -> Expr* { return _target; }
     void target(Expr* target) { _target = target; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::NameRef; }

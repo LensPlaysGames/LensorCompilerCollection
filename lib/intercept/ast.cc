@@ -11,6 +11,7 @@ intc::Type* intc::Type::Integer;
 intc::Type* intc::Type::Unknown;
 intc::Type* intc::Type::Void;
 intc::Type* intc::Type::VoidPtr;
+intc::Type* intc::Type::OverloadSet;
 
 /// ===========================================================================
 ///  Module
@@ -380,6 +381,7 @@ auto intc::Type::string(bool use_colours) const -> std::string {
                 case K::Integer: return fmt::format("{}int", C(Cyan));
                 case K::Unknown: return fmt::format("{}<?>", C(Cyan));
                 case K::Void: return fmt::format("{}void", C(Cyan));
+                case K::OverloadSet: return fmt::format("{}<overload set>", C(Cyan));
             }
             LCC_UNREACHABLE();
 

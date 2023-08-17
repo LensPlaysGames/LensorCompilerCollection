@@ -612,7 +612,7 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 NextToken();
                 auto ty = ParseType();
                 if (not ty) return ty.diag();
-                lhs = new (*mod) CastExpr(*lhs, *ty, {lhs->location(), tok.location});
+                lhs = new (*mod) CastExpr(*lhs, *ty, CastExpr::CastKind::SoftCast, {lhs->location(), tok.location});
                 continue;
             }
 
@@ -802,7 +802,7 @@ auto lcc::intercept::Parser::ParseIdentExpr() -> Result<Expr*> {
     if (At(Tk::Colon, Tk::ColonColon)) return ParseDeclRest(std::move(text), loc, is_extern);
 
     /// Otherwise, it’s just a name.
-    return new (*mod) NameRefExpr(std::move(text), loc);
+    return new (*mod) NameRefExpr(std::move(text), CurrScope(), loc);
 }
 
 /// <expr-if> ::= IF <expr> <expr> [ ELSE <expr> ]
