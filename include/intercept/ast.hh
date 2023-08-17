@@ -420,12 +420,12 @@ public:
     enum struct BuiltinKind {
         Bool,
         Byte,
-        CChar,
-        CInt,
         Integer,
         Unknown,
         Void,
         OverloadSet,
+        CChar,
+        CInt,
     };
 
 private:
@@ -439,7 +439,9 @@ private:
     }
 
     BuiltinType(K k, Location location)
-        : Type(Kind::Builtin, location), _kind(k) {}
+        : Type(Kind::Builtin, location), _kind(k) {
+        set_sema_done();
+    }
 
 public:
     /// Get the kind of this builtin.
@@ -462,12 +464,15 @@ public:
 
 class NamedType : public Type {
     std::string _name;
+    Scope* _scope;
 
 public:
-    NamedType(std::string name, Location location)
-        : Type(Kind::Named, location), _name(std::move(name)) {}
+    NamedType(std::string name, Scope* name_scope, Location location)
+        : Type(Kind::Named, location), _name(std::move(name)), _scope(name_scope) {}
 
     auto name() const -> const std::string& { return _name; }
+
+    auto scope() const -> Scope* { return _scope; }
 
     static bool classof(const Type* type) { return type->kind() == Kind::Named; }
 };
@@ -480,7 +485,9 @@ protected:
         : Type(kind, location), _element_type(element_type) {}
 
 public:
-    auto element_type() const { return _element_type; }
+    auto element_type() -> Type*& { return _element_type; }
+    auto element_type() const -> Type* { return _element_type; }
+    void element_type(Type* ty) { _element_type = ty; }
 
     static bool classof(const Type* type) {
         return type->kind() >= Kind::Pointer and type->kind() <= Kind::Array;
@@ -550,12 +557,14 @@ public:
     bool has_attr(FuncAttr attr) const { return _attributes.contains(attr); }
 
     /// Get the parameters of this function.
+    auto params() -> std::vector<Param>& { return _params; }
     auto params() const -> const std::vector<Param>& { return _params; }
 
     /// Remove an attribute from this function.
     void remove_attr(FuncAttr attr) { _attributes.erase(attr); }
 
     /// Get the return type of this function.
+    auto return_type() -> Type*& { return _return_type; }
     auto return_type() const { return _return_type; }
 
     /// Set an attribute on this function.
@@ -606,6 +615,7 @@ public:
     /// If this is an anonymous type, this returns null.
     auto decl() const -> StructDecl* { return _struct_decl; }
 
+    auto members() -> std::vector<Member>& { return _members; }
     auto members() const -> const std::vector<Member>& { return _members; }
 
     static bool classof(const Type* type) { return type->kind() == Kind::Struct; }

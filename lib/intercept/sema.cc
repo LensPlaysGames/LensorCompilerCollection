@@ -64,26 +64,10 @@ void intc::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
     /// Typecheck the function type.
     Analyse(decl->type_ref());
 
-    /// If the function returns void, it must not be discardable.
-    auto ty = as<FuncType>(decl->type());
-    if (ty->return_type()->is_void()) {
-        if (ty->has_attr(FuncAttr::Discardable))
-            Error(decl->location(), "Function returning void cannot be 'discardable'");
-    }
-
-    /// Noreturn functions always have side effects.
-    if (ty->has_attr(FuncAttr::NoReturn)) {
-        if (ty->has_attr(FuncAttr::Const)) Error(decl->location(), "'noreturn' function cannot be 'const'");
-        if (ty->has_attr(FuncAttr::Pure)) Error(decl->location(), "'noreturn' function cannot be 'pure'");
-    }
-
-    /// Check for conflicting inline/noinline attributes.
-    if (ty->has_attr(FuncAttr::Inline) and ty->has_attr(FuncAttr::NoInline))
-        Error(decl->location(), "Function cannot be both 'inline' and 'noinline'");
-
     /// Used attribute is ignored on functions that aren’t internal. If
     /// the function is internal, then set the linkage to used so it isn’t
     /// deleted by the optimiser.
+    auto ty = as<FuncType>(decl->type());
     if (ty->has_attr(FuncAttr::Used)) {
         if (decl->linkage() != Linkage::Internal) {
             Diag::Warning(context, decl->location(), "'used' has no effect on this function");
@@ -93,6 +77,9 @@ void intc::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
     }
 }
 
+/// ===========================================================================
+///  Analysing Expressions
+/// ===========================================================================
 /// Invariants:
 ///
 ///   - If an expression is marked as `Done` or `Errored`, it will
@@ -914,4 +901,176 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
             u->type(Type::Bool);
         } break;
     }
+}
+
+/// ===========================================================================
+///  Analysing Types
+/// ===========================================================================
+bool intc::Sema::Analyse(Type** type_ptr) {
+    auto type = *type_ptr;
+
+    /// Don’t analyse the same type twice.
+    if (type->sema_done_or_errored()) return type->ok();
+    type->set_sema_in_progress();
+
+    switch (type->kind()) {
+        /// These are marked as done in the constructor.
+        case Type::Kind::Builtin: LCC_UNREACHABLE();
+
+        /// Named types need to be resolved to a type.
+        case Type::Kind::Named: {
+            auto n = as<NamedType>(type);
+
+            /// This code is similar to name resolution for expressions,
+            /// except that we don’t need to worry about overloads.
+            Type* ty{};
+            for (auto scope = n->scope(); scope; scope = scope->parent()) {
+                auto syms = scope->find(n->name());
+                if (syms.first == syms.second) continue;
+                if (auto s = cast<StructDecl>(syms.first->second)) {
+                    Expr* e = s;
+                    Analyse(&e);
+                    ty = s->type();
+                    break;
+                }
+
+                if (auto a = cast<TypeAliasDecl>(syms.first->second)) {
+                    Expr* e = a;
+                    Analyse(&e);
+                    ty = a->type();
+                    break;
+                }
+
+                Error(n->location(), "'{}' is not a type", n->name());
+                Diag::Note(
+                    context,
+                    syms.first->second->location(),
+                    "Because of declaration of '{}' here",
+                    n->name()
+                );
+
+                n->set_sema_errored();
+                break;
+            }
+
+            if (not ty) {
+                Error(n->location(), "'{}' does not name a type", n->name());
+                n->set_sema_errored();
+            } else {
+                *type_ptr = ty;
+            }
+        } break;
+
+        /// Pointers to any non-reference types are fine.
+        case Type::Kind::Pointer: {
+            auto p = as<PointerType>(type);
+            Analyse(&p->element_type());
+
+            auto elem = p->element_type();
+            if (is<ReferenceType>(elem)) {
+                if (elem->ok()) Error(p->location(), "Cannot create pointer to reference type {}", elem);
+                p->set_sema_errored();
+            }
+        } break;
+
+        /// References to references are collapsed to a single reference.
+        case Type::Kind::Reference: {
+            auto r = as<ReferenceType>(type);
+            Analyse(&r->element_type());
+
+            /// Collapse refs.
+            while (is<ReferenceType>(r->element_type()))
+                r->element_type(cast<ReferenceType>(r->element_type()));
+        } break;
+
+        /// Apply decltype decay to the element type and prohibit
+        /// arrays of references.
+        case Type::Kind::Array: {
+            auto a = as<ArrayType>(type);
+            Analyse(&a->element_type());
+            a->element_type(DeclTypeDecay(a->element_type()));
+
+            auto elem = a->element_type();
+            if (is<ReferenceType>(elem)) {
+                if (elem->ok()) Error(a->location(), "Cannot create array of reference type {}", elem);
+                a->set_sema_errored();
+            }
+        } break;
+
+        /// Analyse the parameters, the return type, and attributes.
+        case Type::Kind::Function: {
+            auto ty = as<FuncType>(type);
+            Analyse(&ty->return_type());
+            for (auto& param : ty->params()) Analyse(&param.type);
+
+            /// If the function returns void, it must not be discardable.
+            if (ty->return_type()->ok() and ty->return_type()->is_void()) {
+                if (ty->has_attr(FuncAttr::Discardable))
+                    Error(type->location(), "Function returning void cannot be 'discardable'");
+            }
+
+            /// Noreturn functions always have side effects.
+            if (ty->has_attr(FuncAttr::NoReturn)) {
+                if (ty->has_attr(FuncAttr::Const)) Error(
+                    type->location(),
+                    "'noreturn' function cannot be 'const'"
+                );
+
+                if (ty->has_attr(FuncAttr::Pure)) Error(
+                    type->location(),
+                    "'noreturn' function cannot be 'pure'"
+                );
+            }
+
+            /// Check for conflicting inline/noinline attributes.
+            if (ty->has_attr(FuncAttr::Inline) and ty->has_attr(FuncAttr::NoInline))
+                Error(type->location(), "Function cannot be both 'inline' and 'noinline'");
+        } break;
+
+        /// Bit width may not be 0.
+        case Type::Kind::Integer: {
+            if (as<IntegerType>(type)->bit_width() == 0) {
+                Error(type->location(), "Bit width of integer type cannot be 0");
+                type->set_sema_errored();
+            }
+        } break;
+
+        /// Calculate size, alignment, and member offsets.
+        case Type::Kind::Struct: {
+            /// TODO(Sirraide): Packed structs should probably be a separate
+            ///     type altogether and for those, we’ll have to perform all
+            ///     these calculations below in bits instead.
+            auto s = as<StructType>(type);
+            usz byte_size = 0;
+            usz alignment = 1;
+
+            /// Finalise all members.
+            for (auto& member : s->members()) {
+                /// Analyse the member type.
+                Analyse(&member.type);
+                member.type = DeclTypeDecay(member.type);
+                if (member.type->sema_errored()) {
+                    type->set_sema_errored();
+                    continue;
+                }
+
+                /// Align the member to its alignment.
+                auto msize = member.type->size(context) / 8;
+                auto malign = member.type->align(context) / 8;
+                member.byte_offset = utils::AlignTo(byte_size, malign);
+                byte_size = member.byte_offset + msize;
+                alignment = std::max(alignment, malign);
+            }
+
+            /// Align the struct to its alignment.
+            /// TODO(Sirraide): Should empty structs have a size of 1 or 0?
+            ///     Currently, it’s 0.
+            s->alignment(alignment);
+            s->byte_size(byte_size ? utils::AlignTo(byte_size, alignment) : 0);
+        } break;
+    }
+
+    /// Do *not* use `type` here, as it may have been replaced by something else.
+    if (not(*type_ptr)->sema_done_or_errored()) (*type_ptr)->set_sema_done();
+    return (*type_ptr)->ok();
 }
