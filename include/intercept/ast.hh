@@ -103,6 +103,14 @@ enum struct TokenKind {
     Expression,
 };
 
+enum class CastKind {
+    SoftCast,           ///< Explicit cast using \c as.
+    HardCast,           ///< Explicit cast using \c as!.
+    ImplicitCast,       ///< Implicit conversion.
+    LValueToRValueConv, ///< Lvalue-to-rvalue conversion.
+};
+
+
 /// Convert a token kind to a string representation.
 auto ToString(TokenKind kind) -> std::string_view;
 
@@ -509,14 +517,13 @@ private:
     using K = FFIKind;
 
     const K kind;
-    FFIType(K k, Location loc): Type(Kind::FFIType, loc), kind(k) {}
+    FFIType(K k, Location loc) : Type(Kind::FFIType, loc), kind(k) {}
 
     static auto Make(Module& mod, K k, Location l) -> FFIType* {
         return new (mod) FFIType(k, l);
     }
 
 public:
-
     /// Get the kind of this C FFI type.
     auto ffi_kind() const -> FFIKind { return kind; }
 
@@ -905,13 +912,13 @@ public:
         set_sema_done();
     }
 
+    auto body() -> Expr*& { return _body; }
+
     auto param_types() const {
-        return as<FuncType>(type())->params() |
-               std::views::transform([](auto& p) { return p.type; });
+        return as<FuncType>(type())->params() | vws::transform([](auto& p) { return p.type; });
     }
 
     auto param_decls() const -> const std::vector<VarDecl*>& { return _params; }
-    auto body() -> Expr*& { return _body; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::FuncDecl; }
 };
@@ -944,8 +951,11 @@ class IntegerLiteral : public TypedExpr {
     u64 _value;
 
 public:
-    IntegerLiteral(u64 value, Location location, Type* ty = Type::Integer)
-        : TypedExpr(Kind::IntegerLiteral, location, ty), _value(value) {}
+    IntegerLiteral(u64 value, Location location)
+        : TypedExpr(Kind::IntegerLiteral, location, Type::Integer), _value(value) {
+        /// For now, there should be no way that the value could be out of range.
+        set_sema_done();
+    }
 
     u64 value() const { return _value; }
 
@@ -1137,15 +1147,6 @@ public:
 };
 
 class CastExpr : public TypedExpr {
-public:
-    enum class CastKind {
-        SoftCast,           ///< Explicit cast using \c as.
-        HardCast,           ///< Explicit cast using \c as!.
-        ImplicitCast,       ///< Implicit conversion.
-        LvalueToRvalueConv, ///< Lvalue-to-rvalue conversion.
-    };
-
-private:
     Expr* _value;
     CastKind _cast_kind;
 
@@ -1156,7 +1157,7 @@ public:
     /// Check cast kinds.
     bool is_hard_cast() const { return _cast_kind == CastKind::HardCast; }
     bool is_implicit_cast() const { return _cast_kind == CastKind::ImplicitCast; }
-    bool is_lvalue_to_rvalue() const { return _cast_kind == CastKind::LvalueToRvalueConv; }
+    bool is_lvalue_to_rvalue() const { return _cast_kind == CastKind::LValueToRValueConv; }
     bool is_soft_cast() const { return _cast_kind == CastKind::SoftCast; }
 
     /// Get the operand of this expression.

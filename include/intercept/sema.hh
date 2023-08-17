@@ -83,29 +83,13 @@ private:
     /// conversion other than ‘type X must be convertible to type Y’.
     void ConvertOrError(Expr** expr, Type* to);
 
-    /// Like Convert(), but converts expressions to their *common type* instead.
+    /// Like Convert(), but tries converting a to b and b to a.
     ///
-    /// \param exprs The first expressions to convert.
-    /// \param conversion_required Whether the conversion is required, i.e. whether
-    ///     to error if the conversion fails.
-    /// \return Whether the conversion succeeded, i.e. whether there is a common type.
-    /// \see Convert()
-    bool ConvertToCommonType(std::span<Expr*> exprs, bool conversion_required);
-
-    /// Like ConvertToCommonType(), but for two types.
-    ///
-    /// \param a The first type.
-    /// \param b The second type.
-    /// \param conversion_required Whether the conversion is required.
+    /// \param a The first expression.
+    /// \param b The second expression.
     /// \return Whether the conversion succeeded.
     /// \see ConvertToCommonType()
-    bool ConvertToCommonType(Expr** a, Expr** b, bool conversion_required) {
-        Expr* exprs[] = {*a, *b};
-        auto ok = ConvertToCommonType(exprs, conversion_required);
-        *a = exprs[0];
-        *b = exprs[1];
-        return ok;
-    }
+    [[nodiscard]] bool ConvertToCommonType(Expr** a, Expr** b);
 
     /// Convert a type to a type that is legal in a declaration.
     auto DeclTypeDecay(Type* type) -> Type*;
@@ -145,20 +129,12 @@ private:
 
     /// Convert lvalues to rvalues and leave rvalues unchanged.
     ///
-    /// This inserts an implicit cast expression.
+    /// This may insert a cast expression.
     /// \return The type of the rvalue.
-    auto LvalueToRvalue(Expr** expr) -> Type*;
+    auto LValueToRValue(Expr** expr) -> Type*;
 
     /// Create a (type-checked) pointer to a type.
     auto Ptr(Type* type) -> PointerType*;
-
-    /// Replace a node with a new node.
-    ///
-    /// The expression \c expr_ptr points to is replaced with
-    /// \c replacement, and, iff the location of \c replacement
-    /// is invalid, it is set to the location of the original
-    /// expression.
-    void ReplaceWithNewNode(Expr** expr_ptr, Expr* replacement);
 
     /// Create a (type-checked) reference to a type.
     auto Ref(Type* type) -> ReferenceType*;
@@ -183,6 +159,13 @@ private:
     /// \return A number greater than 0 that indicates how ‘bad’ the conversion is.
     /// \see Convert().
     [[nodiscard]] int TryConvert(Expr** expr, Type* type);
+
+    /// Wrap an expression with a cast.
+    ///
+    /// This replaces an expression with a cast expression to
+    /// the designated type. The location of the cast is set
+    /// to the location of the expression.
+    void WrapWithCast(Expr** expr, Type* type, CastKind kind);
 };
 } // namespace lcc::intercept
 

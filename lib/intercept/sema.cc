@@ -6,6 +6,11 @@ namespace intc = lcc::intercept;
 /// ===========================================================================
 ///  Helpers
 /// ===========================================================================
+bool intc::Sema::Convert(Expr** expr, Type* type) {
+    if ((*expr)->sema_errored()) return true;
+    return ConvertImpl<true>(expr, type) >= 0;
+}
+
 /// For an explanation of the return value of this function, see
 /// the comment on the declaration of TryConvert().
 template <bool PerformConversion>
@@ -53,7 +58,7 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
     /// Any conversions after this require lvalue-to-rvalue conversion
     /// first if the expression is an lvalue.
     requires_lvalue_to_rvalue_conversion = (*expr_ptr)->is_lvalue();
-    if constexpr (PerformConversion) from = LvalueToRvalue(expr_ptr);
+    if constexpr (PerformConversion) from = LValueToRValue(expr_ptr);
     else from = from->strip_references();
 
     /// Now check if the types are equal. In many cases, lvalue-to-rvalue
@@ -78,13 +83,7 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
 
     /// Function types can be converted to their corresponding function types.
     if (from->is_function() and to->is_pointer() and Type::Equal(to->elem(), from)) {
-        if constexpr (PerformConversion) {
-            ReplaceWithNewNode(
-                expr_ptr,
-                new (mod) UnaryExpr(TokenKind::At, *expr_ptr, false, (*expr_ptr)->location())
-            );
-        }
-
+        if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
         return NoOp;
     }
 
@@ -114,7 +113,7 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
             /// will always fit.
             auto bits = to->size(context);
             if (bits < 64 and u64(val) > u64(utils::MaxBitValue(bits))) return ConversionImpossible;
-            if constexpr (PerformConversion) ReplaceWithNewNode(expr_ptr, new (mod) ConstantExpr(*expr_ptr, res));
+            if constexpr (PerformConversion) *expr_ptr = new (mod) ConstantExpr(*expr_ptr, res);
             return Score(1);
         }
 
@@ -132,13 +131,71 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
     return ConversionImpossible;
 }
 
-bool intc::Sema::Convert(Expr** expr, Type* type) {
-    if ((*expr)->sema_errored()) return true;
-    return ConvertImpl<true>(expr, type) >= 0;
+void intc::Sema::ConvertOrError(Expr** expr, Type* to) {
+    if (not Convert(expr, to)) Error(
+        (*expr)->location(),
+        "Expression is not convertible to type {}",
+        to
+    );
+}
+
+bool intc::Sema::ConvertToCommonType(Expr** a, Expr** b) {
+    return Convert(a, (*b)->type()) or Convert(b, (*a)->type());
+}
+
+auto intc::Sema::DeclTypeDecay(Type* type) -> Type* {
+    return type->is_function() ? Ptr(type) : type;
+}
+
+void intc::Sema::InsertImplicitCast(Expr** expr_ptr, Type* ty) {
+    WrapWithCast(expr_ptr, ty, CastKind::ImplicitCast);
+}
+
+void intc::Sema::InsertPointerToIntegerCast(Expr** operand) {
+    if ((*operand)->type()->is_pointer())
+        InsertImplicitCast(operand, Type::Integer);
+}
+
+auto intc::Sema::LValueToRValue(Expr** expr) -> Type* {
+    /// Functions are cast to function pointers.
+    if ((*expr)->type()->is_function()) {
+        auto ty = Ptr((*expr)->type());
+        WrapWithCast(expr, ty, CastKind::LValueToRValueConv);
+        return ty;
+    }
+
+    /// Otherwise, remove references and cast to that.
+    auto ty = (*expr)->type()->strip_references();
+    WrapWithCast(expr, ty, CastKind::LValueToRValueConv);
+    return ty;
+}
+
+auto intc::Sema::Ptr(Type* ty) -> PointerType* {
+    Type* ptr = new (mod) PointerType(ty, ty->location());
+    Analyse(&ptr);
+    return as<PointerType>(ptr);
+}
+
+auto intc::Sema::Ref(Type* ty) -> ReferenceType* {
+    Type* ref = new (mod) ReferenceType(ty, ty->location());
+    Analyse(&ref);
+    return as<ReferenceType>(ref);
 }
 
 int intc::Sema::TryConvert(Expr** expr, Type* type) {
     return ConvertImpl<false>(expr, type);
+}
+
+void intc::Sema::WrapWithCast(Expr** expr_ptr, Type* type, CastKind kind) {
+    Expr* expr = new (mod) CastExpr(
+        *expr_ptr,
+        type,
+        kind,
+        (*expr_ptr)->location()
+    );
+
+    Analyse(&expr);
+    *expr_ptr = expr;
 }
 
 /// ===========================================================================
@@ -313,7 +370,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             /// If the branches are both void, then the type of the if statement
             /// is void. Otherwise, it is the common type of the two branches.
             if (i->then()->ok() and (not i->else_() or i->else_()->ok())) {
-                if (not i->else_() or not ConvertToCommonType(&i->then(), &i->else_(), false)) i->type(Type::Void);
+                if (not i->else_() or not ConvertToCommonType(&i->then(), &i->else_())) i->type(Type::Void);
                 else i->type(i->then()->type());
             } else {
                 i->set_sema_errored();
@@ -405,12 +462,31 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             auto c = as<CompoundLiteral>(expr);
 
             /// Analyse all subexpressions.
-            for (auto*& child : c->values())
-                if (not Analyse(&child))
-                    c->set_sema_errored();
+            for (auto*& child : c->values()) {
+                if (Analyse(&child)) LValueToRValue(&child);
+                else c->set_sema_errored();
+            }
 
-            /// If there wasn’t an error, convert to the common type.
-            if (not c->sema_errored()) ConvertToCommonType(c->values(), true);
+            /// If there wasn’t an error, then make sure all subexpressions
+            /// have the same type.
+            if (not c->sema_errored()) {
+                auto ty = c->values().front()->type();
+                for (auto*& child : c->values() | vws::drop(1)) {
+                    if (not Convert(&child, ty)) Error(
+                        child->location(),
+                        "Type of compound literal element is not convertible to type {}",
+                        ty
+                    );
+                }
+            }
+
+            /// Type is an array type for now.
+            c->type(new (mod) ArrayType(
+                c->values().front()->type(),
+                new (mod) IntegerLiteral(c->values().size(), {})
+            ));
+
+            LCC_ASSERT(Analyse(c->type_ref()));
         } break;
 
         /// LHS must be a (pointer to a) struct, and the identifier must
@@ -462,7 +538,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                     if (ref->element_type()->is_struct()) break;
 
                     /// Otherwise, load the pointer.
-                    LvalueToRvalue(&obj);
+                    LValueToRValue(&obj);
                 }
 
                 /// If the object is a pointer, then we need to dereference it.
@@ -572,7 +648,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             b->type(is<PointerType>(ty) ? ty : Ptr(as<ArrayType>(ty)->element_type()));
 
             /// The RHS must be an integer.
-            LvalueToRvalue(&b->rhs());
+            LValueToRValue(&b->rhs());
             if (not Convert(&b->rhs(), Type::Integer)) {
                 Error(b->rhs()->location(), "RHS of subscript must be an integer");
                 return;
@@ -586,7 +662,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
                         Error(b->location(), "Array subscript out of bounds");
 
                     /// Since we already have the result, store it for later.
-                    ReplaceWithNewNode(&b->rhs(), new (mod) ConstantExpr(b->rhs(), res));
+                    b->rhs() = new (mod) ConstantExpr(b->rhs(), res);
                 }
             }
         } break;
@@ -603,8 +679,8 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
         case TokenKind::Ampersand:
         case TokenKind::Pipe:
         case TokenKind::Caret: {
-            LvalueToRvalue(&b->lhs());
-            LvalueToRvalue(&b->rhs());
+            LValueToRValue(&b->lhs());
+            LValueToRValue(&b->rhs());
             auto lhs = b->lhs()->type();
             auto rhs = b->rhs()->type();
 
@@ -616,7 +692,8 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             }
 
             /// Convert both operands to their common type.
-            if (not ConvertToCommonType(&b->lhs(), &b->rhs(), true)) {
+            if (not ConvertToCommonType(&b->lhs(), &b->rhs())) {
+                Error(b->location(), "Cannot perform arithmetic on {} and {}", lhs, rhs);
                 b->set_sema_errored();
                 return;
             }
@@ -632,17 +709,20 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
         case TokenKind::Gt:
         case TokenKind::Le:
         case TokenKind::Ge: {
-            LvalueToRvalue(&b->lhs());
-            LvalueToRvalue(&b->rhs());
+            LValueToRValue(&b->lhs());
+            LValueToRValue(&b->rhs());
             auto lhs = b->lhs()->type();
             auto rhs = b->rhs()->type();
 
             /// If both operands are integers, convert them to their common type.
-            if (lhs->is_integer() and rhs->is_integer())
-                ConvertToCommonType(&b->lhs(), &b->rhs(), true);
+            if (lhs->is_integer() and rhs->is_integer() and not ConvertToCommonType(&b->lhs(), &b->rhs())) {
+                Error(b->location(), "Cannot compare {} and {}", lhs, rhs);
+                b->set_sema_errored();
+                return;
+            }
 
             /// Bool can only be compared with bool.
-            else if (lhs->is_bool() and rhs->is_bool()) {
+            else if (lhs->is_bool() and rhs->is_bool()) { /** No-op **/
             }
 
             /// If both operands are pointers, they must be the same type.
@@ -664,7 +744,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
 
         /// Assignment.
         case TokenKind::ColonEq: {
-            LvalueToRvalue(&b->rhs());
+            LValueToRValue(&b->rhs());
             if (not b->lhs()->is_assignable_lvalue()) {
                 Error(b->location(), "LHS of assignment must be an (assignable) lvalue");
                 b->set_sema_errored();
@@ -719,7 +799,7 @@ void intc::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 
             /// Make sure to actually analyse this intrinsic, as it will otherwise
             /// just be marked as done without actually being analysed.
-            ReplaceWithNewNode(expr_ptr, intrinsic);
+            *expr_ptr = intrinsic;
             Analyse(expr_ptr);
             return;
         }
@@ -744,6 +824,17 @@ void intc::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 
         /// TODO(Sirraide): Overload resolution.
         Diag::ICE("Sorry, overload resolution is currently not implemented");
+    }
+
+    /// If the callee is a function pointer, dereference it.
+    if (auto ty = expr->callee()->type(); ty->is_pointer() and ty->elem()->is_function())
+        InsertImplicitCast(&expr->callee(), ty->elem());
+
+    /// Otherwise, if the type is not already a function type, we can’t call this.
+    else if (not ty->is_function()) {
+        Error(expr->callee()->location(), "Cannot call non-function(-pointer) type {}", ty);
+        expr->set_sema_errored();
+        return;
     }
 
     /// The type of the call is the return type of the function.
@@ -786,7 +877,7 @@ void intc::Sema::AnalyseCast(CastExpr* c) {
     if (TryConvert(&c->operand(), c->type())) return;
 
     /// Remove references from the operand.
-    LvalueToRvalue(&c->operand());
+    LValueToRValue(&c->operand());
 
     /// All conversions that rely on references have already been
     /// taken care of by TryConvert(), so we don’t care about
@@ -843,7 +934,7 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
             auto* str = new (mod) StringLiteral(mod, filename, expr->location());
             expr->type(str->type());
             expr->set_sema_done();
-            ReplaceWithNewNode(expr_ptr, new (mod) ConstantExpr(expr, str));
+            *expr_ptr = new (mod) ConstantExpr(expr, str);
         } break;
 
         case IntrinsicKind::BuiltinInline: {
@@ -871,7 +962,7 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
             /// If possible, seek to the location, if not we just insert 0.
             i64 line = 0;
             if (expr->location().seekable(context)) line = i64(expr->location().seek_line_column(context).line);
-            ReplaceWithNewNode(expr_ptr, new (mod) ConstantExpr(expr, line));
+            *expr_ptr = new (mod) ConstantExpr(expr, line);
         } break;
 
         case IntrinsicKind::BuiltinMemCopy: {
@@ -1018,7 +1109,7 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
         /// Convert a pointer to an lvalue.
         case TokenKind::At: {
             /// The pointer itself must be an rvalue.
-            auto ty = LvalueToRvalue(&u->operand());
+            auto ty = LValueToRValue(&u->operand());
             if (not is<PointerType>(ty)) {
                 Error(u->location(), "Cannot dereference non-pointer type {}", ty);
                 u->set_sema_errored();
@@ -1030,7 +1121,7 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
 
         /// Negate an integer.
         case TokenKind::Minus: {
-            auto ty = LvalueToRvalue(&u->operand());
+            auto ty = LValueToRValue(&u->operand());
             if (not ty->is_integer()) {
                 Error(
                     u->location(),
@@ -1046,7 +1137,7 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
 
         /// Bitwise-not an integer.
         case TokenKind::Tilde: {
-            auto ty = LvalueToRvalue(&u->operand());
+            auto ty = LValueToRValue(&u->operand());
             if (not ty->is_integer()) {
                 Error(
                     u->location(),
@@ -1062,7 +1153,7 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
 
         /// Negate a bool, integer, or pointer.
         case TokenKind::Exclam: {
-            auto ty = LvalueToRvalue(&u->operand());
+            auto ty = LValueToRValue(&u->operand());
             if (not is<PointerType>(ty) and not ty->is_integer(true)) {
                 Error(
                     u->location(),
