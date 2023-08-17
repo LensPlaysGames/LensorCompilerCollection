@@ -3,6 +3,7 @@
 #include <intercept/parser.hh>
 #include <intercept/sema.hh>
 #include <laye/parser.hh>
+#include <laye/sema.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/target.hh>
@@ -90,13 +91,20 @@ int main(int argc, char** argv) {
     /// Laye.
     if (path_str.ends_with(".laye")) {
         auto laye_context = new lcc::laye::LayeContext{&context};
+
+        /// Parse the file.
         auto mod = laye_context->parse_laye_file(file);
-        
+        (void)mod; // temp so I don't get a warning here, I may want this module later
+
         if (options::get<"--syntax-only">()) {
             if (options::get<"--ast">()) laye_context->print_modules();
             std::exit(0);
         }
 
+        /// Perform semantic analysis.
+        lcc::laye::Sema::Analyse(laye_context, true);
+
+        /// Nice.
         return 69;
     }
 
