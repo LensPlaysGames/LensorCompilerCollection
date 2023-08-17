@@ -262,15 +262,79 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             if (not c->sema_errored()) ConvertToCommonType(c->values(), true);
         } break;
 
+        /// LHS must be a (pointer to a) struct, and the identifier must
+        /// exist in the struct.
+        case Expr::Kind::MemberAccess: {
+            auto m = as<MemberAccessExpr>(expr);
+
+            /// If there is an error analysing the object, we don’t know
+            /// its type an can thus not continue checking this.
+            if (not Analyse(&m->object())) {
+                m->set_sema_errored();
+                break;
+            }
+
+            /// TODO: Modules.
+
+            /// Type must be a struct type.
+            auto struct_type = cast<StructType>(m->object()->type()->strip_pointers_and_references());
+            if (struct_type) {
+                Error(
+                    m->location(),
+                    "LHS of member access must be a (pointer or reference to) struct, but was {}",
+                    m->object()->type()
+                );
+
+                m->set_sema_errored();
+                break;
+            }
+
+            /// The struct type must contain the member.
+            auto& members = struct_type->members();
+            auto it = rgs::find_if(members, [&](auto& member) { return member.name == m->name(); });
+            if (it == members.end()) {
+                Error(m->location(), "Struct {} has no member named '{}'", struct_type, m->name());
+                m->set_sema_errored();
+                break;
+            }
+
+            /// Set the struct and member index.
+            m->finalise(struct_type, usz(std::distance(members.begin(), it)));
+
+            /// If the object is a pointer or reference, we need to dereference it
+            /// until only an lvalue is left.
+            auto obj = m->object();
+            for (;;) {
+                /// If the object is a reference, then its object type must be
+                /// a pointer type or the struct. If it’s the struct, we’re done.
+                if (auto ref = cast<ReferenceType>(obj->type())) {
+                    if (ref->element_type()->is_struct()) break;
+
+                    /// Otherwise, load the pointer.
+                    LvalueToRvalue(&obj);
+                }
+
+                /// If the object is a pointer, then we need to dereference it.
+                if (is<PointerType>(obj->type())) {
+                    obj = new (mod) UnaryExpr(TokenKind::At, obj, false, obj->location());
+                    LCC_ASSERT(Analyse(&obj));
+                }
+            }
+
+            /// A member access is an lvalue iff the object is an lvalue.
+            m->object(obj);
+            m->type(m->is_lvalue() ? Ref(it->type) : it->type);
+        } break;
+
+        /// Unary prefix and postfix expressions.
+        case Expr::Kind::Unary:
+            AnalyseUnary(as<UnaryExpr>(expr));
+            break;
+
         /// Functions are analysed separately.
         case Expr::Kind::FuncDecl:
             LCC_ASSERT(expr->type()->is_function());
             break;
-
-        /// LHS must be a struct, and the identifier must exist in the struct.
-        case Expr::Kind::MemberAccess: {
-
-        } break;
 
         /// The actual work here is analysing the type, so this is a no-op.
         case Expr::Kind::StructDecl: break;
@@ -283,7 +347,6 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
         /// These should only be created by sema and are thus no-ops.
         case Expr::Kind::EvaluatedConstant: break;
 
-        case Expr::Kind::Unary: break;
         case Expr::Kind::Binary: break;
         case Expr::Kind::NameRef: break;
     }
@@ -440,6 +503,96 @@ void lcc::intercept::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallEx
 
             /// Syscalls all return integer.
             expr->type(Type::Integer);
+        } break;
+    }
+}
+
+void intc::Sema::AnalyseUnary(UnaryExpr* u) {
+    Analyse(&u->operand());
+
+    /// Postfix operators.
+    if (u->is_postfix()) {
+        /// We currently don’t have postfix operators.
+        LCC_UNREACHABLE();
+    }
+
+    /// Prefix operators.
+    switch (u->op()) {
+        default: LCC_ASSERT(false, "Invalid prefix operator '{}'", ToString(u->op()));
+
+        /// Get the address of an lvalue or function.
+        case TokenKind::Ampersand: {
+            if (not u->operand()->is_lvalue()) {
+                Error(u->location(), "Cannot take address of rvalue");
+                u->set_sema_errored();
+                break;
+            }
+
+            u->type(Ptr(as<ReferenceType>(u->operand()->type())->element_type()));
+        } break;
+
+        /// Convert a pointer to an lvalue.
+        case TokenKind::At: {
+            /// The pointer itself must be an rvalue.
+            auto ty = LvalueToRvalue(&u->operand());
+            if (not is<PointerType>(ty)) {
+                Error(u->location(), "Cannot dereference non-pointer type {}", ty);
+                u->set_sema_errored();
+                break;
+            }
+
+            u->type(Ref(as<PointerType>(ty)->element_type()));
+        } break;
+
+        /// Negate an integer.
+        case TokenKind::Minus: {
+            auto ty = LvalueToRvalue(&u->operand());
+            if (not ty->is_any_integer()) {
+                Error(
+                    u->location(),
+                    "Operand of operator '-' must be an integer type, but was {}",
+                    ty
+                );
+                u->set_sema_errored();
+                break;
+            }
+
+            u->type(ty);
+        } break;
+
+        /// Bitwise-not an integer.
+        case TokenKind::Tilde: {
+            auto ty = LvalueToRvalue(&u->operand());
+            if (not ty->is_any_integer()) {
+                Error(
+                    u->location(),
+                    "Operand of operator '~' must be an integer type, but was {}",
+                    ty
+                );
+                u->set_sema_errored();
+                break;
+            }
+
+            u->type(ty);
+        } break;
+
+        /// Negate a bool, integer, or pointer.
+        case TokenKind::Exclam: {
+            auto ty = LvalueToRvalue(&u->operand());
+            if (not is<PointerType>(ty) and not ty->is_any_integer(true)) {
+                Error(
+                    u->location(),
+                    "Operand of operator '!' must be a bool, integer, or pointer type, but was {}",
+                    ty
+                );
+
+                /// No need to mark this as errored because the
+                /// result type is always bool.
+                break;
+            }
+
+            /// The result of '!' is always a bool.
+            u->type(Type::Bool);
         } break;
     }
 }

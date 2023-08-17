@@ -9,6 +9,8 @@
 
 /// TODO: Make parens optional in function call
 /// TODO: Multiple declaration syntax for parameters (e.g. `a, b, c : int`)
+/// TODO: `as!` vs `as`
+/// TODO: `global` top-level decls (also within a function for statics).
 
 /// Expression.
 <expr>     ::= <expr-decl>

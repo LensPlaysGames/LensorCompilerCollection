@@ -39,7 +39,7 @@ private:
     };
 
     template <typename Ty>
-    requires std::is_same_v<std::remove_cvref_t<Ty>, Type*>
+    requires requires (Ty ty) { cast<Type>(ty); }
     struct format_type<Ty> {
         using type = std::string;
     };
@@ -51,9 +51,10 @@ private:
     bool Analyse(Expr** expr, Type* expected_type = nullptr);
     void AnalyseCall(Expr** expr_ptr, CallExpr* expr);
     void AnalyseCast(CastExpr* expr);
+    void AnalyseFunction(FuncDecl* decl);
     void AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr);
     void AnalyseModule();
-    void AnalyseFunction(FuncDecl* decl);
+    void AnalyseUnary(UnaryExpr* expr);
 
     /// Attempt to convert an expression to a given type.
     ///
@@ -105,12 +106,12 @@ private:
 
     /// Format a type.
     template <typename Ty>
-    requires std::is_same_v<std::remove_cvref_t<Ty>, Type*>
+    requires requires (Ty ty) { cast<Type>(ty); }
     auto Format(Ty ty) -> std::string { return ty->string(use_colours); }
 
     /// Formatting anything else just passes it through unchanged.
     template <typename Ty>
-    requires (not std::is_same_v<std::remove_cvref_t<Ty>, Type*>)
+    requires (not requires (Ty ty) { cast<Type>(ty); })
     auto Format(Ty&& t) -> decltype(std::forward<Ty>(t)) {
         return std::forward<Ty>(t);
     }
@@ -125,7 +126,11 @@ private:
     /// Convert lvalues to rvalues and leave rvalues unchanged.
     ///
     /// This inserts an implicit cast expression.
-    void LvalueToRvalue(Expr** expr);
+    /// \return The type of the rvalue.
+    auto LvalueToRvalue(Expr** expr) -> Type*;
+
+    /// Create a (type-checked) pointer to a type.
+    auto Ptr(Type* type) -> PointerType*;
 
     /// Replace a node with a new node.
     ///
@@ -133,6 +138,9 @@ private:
     /// \c replacement, and the location of \c replacement will be
     /// set to the location of the original expression.
     void ReplaceWithNewNode(Expr** expr_ptr, Expr* replacement);
+
+    /// Create a (type-checked) reference to a type.
+    auto Ref(Type* type) -> ReferenceType*;
 
     /// Attempt to convert an expression to a given type.
     ///

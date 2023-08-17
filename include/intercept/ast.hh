@@ -335,6 +335,7 @@ public:
     /// \return The alignment of this type, in bits.
     usz align(const Context* ctx) const;
 
+    /// Get the kind of this type.
     auto kind() const { return _kind; }
 
     /// Returns true if this is a sized integer type, or
@@ -367,6 +368,9 @@ public:
 
     /// Return this type stripped of any aliases.
     auto strip_aliases() -> Type*;
+
+    /// Return this type stripped of any pointers and references.
+    auto strip_pointers_and_references() -> Type*;
 
     /// Return this type stripped of any references.
     auto strip_references() -> Type*;
@@ -583,7 +587,7 @@ public:
     /// If this is an anonymous type, this returns null.
     auto decl() const -> StructDecl* { return _struct_decl; }
 
-    std::span<Member const> members() { return _members; }
+    auto members() const -> const std::vector<Member>& { return _members; }
 
     static bool classof(const Type* type) { return type->kind() == Kind::Struct; }
 };
@@ -654,6 +658,9 @@ public:
     }
 
     Kind kind() const { return _kind; }
+
+    /// Check if this is an lvalue.
+    bool is_lvalue() const;
 
     /// Access the location of this expression.
     auto location() const { return _location; }
@@ -1030,6 +1037,7 @@ public:
     bool is_postfix() const { return _postfix; }
 
     /// Get the operand of this expression.
+    auto operand() -> Expr*& { return _operand; }
     auto operand() const { return _operand; }
 
     /// Get the unary operator.
@@ -1077,16 +1085,27 @@ public:
 class MemberAccessExpr : public TypedExpr {
     Expr* _object;
     std::string _name;
-    StructType::Member* _member{};
+    StructType* _struct{};
+    usz _member_index{};
 
 public:
     MemberAccessExpr(Expr* object, std::string name, Location location)
         : TypedExpr(Kind::MemberAccess, location), _object(object), _name(std::move(name)) {}
 
+    void finalise(StructType* type, usz member_index) {
+        _member_index = member_index;
+        _struct = type;
+    }
+
+    usz member() const { return _member_index; }
+
     auto name() const -> const std::string& { return _name; }
-    auto member() const { return _member; }
-    void member(StructType::Member* member) { _member = member; }
+
+    auto object() -> Expr*& { return _object; }
     auto object() const { return _object; }
+    auto object(Expr* object) { _object = object; }
+
+    auto struct_type() const { return _struct; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::MemberAccess; }
 };

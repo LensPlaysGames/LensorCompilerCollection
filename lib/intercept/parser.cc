@@ -526,8 +526,7 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         case Tk::At:
         case Tk::Minus:
         case Tk::Tilde:
-        case Tk::Exclam:
-        case Tk::Star: {
+        case Tk::Exclam: {
             auto loc = tok.location;
             auto op = tok.kind;
             NextToken();

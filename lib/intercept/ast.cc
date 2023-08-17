@@ -112,6 +112,10 @@ auto intc::Scope::declare(
     return decl;
 }
 
+bool intc::Expr::is_lvalue() const {
+    return is<ReferenceType>(type());
+}
+
 auto intc::Expr::type() const -> Type* {
     if (auto e = cast<TypedExpr>(this)) return e->type();
     return Type::Void;
