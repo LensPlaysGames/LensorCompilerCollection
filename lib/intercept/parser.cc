@@ -4,11 +4,13 @@
 
 #define bind LCC_BIND
 
+namespace intc = lcc::intercept;
+
 namespace {
 /// Get the binary precedence of a token.
 /// TODO: User-defined operators.
-constexpr auto BinaryOrPostfixPrecedence(lcc::intercept::TokenKind t) -> lcc::isz {
-    using Tk = lcc::intercept::TokenKind;
+constexpr auto BinaryOrPostfixPrecedence(intc::TokenKind t) -> lcc::isz {
+    using Tk = intc::TokenKind;
     switch (t) {
         case Tk::Dot:
             return 1'000'000'000;
@@ -59,8 +61,8 @@ constexpr auto BinaryOrPostfixPrecedence(lcc::intercept::TokenKind t) -> lcc::is
 
 /// Check if an operator is right-associative.
 /// TODO: User-defined operators.
-constexpr bool IsRightAssociative(lcc::intercept::TokenKind t) {
-    using Tk = lcc::intercept::TokenKind;
+constexpr bool IsRightAssociative(intc::TokenKind t) {
+    using Tk = intc::TokenKind;
     switch (t) {
         case Tk::Star:
         case Tk::Slash:
@@ -89,8 +91,8 @@ constexpr bool IsRightAssociative(lcc::intercept::TokenKind t) {
     }
 }
 
-constexpr bool MayStartAnExpression(lcc::intercept::TokenKind kind) {
-    using Tk = lcc::intercept::TokenKind;
+constexpr bool MayStartAnExpression(intc::TokenKind kind) {
+    using Tk = intc::TokenKind;
     switch (kind) {
         case Tk::LParen:
         case Tk::LBrack:
@@ -195,8 +197,8 @@ constexpr bool MayStartAnExpression(lcc::intercept::TokenKind kind) {
 ///     @&i32[10] === @(&i32)[10]   ;; Array of pointers to references.
 ///     &@i32[10] === &((@i32)[10]) ;; Reference to array of pointers.
 /// \endcode
-constexpr lcc::isz TypeQualifierPrecedence(lcc::intercept::TokenKind t) {
-    using Tk = lcc::intercept::TokenKind;
+constexpr lcc::isz TypeQualifierPrecedence(intc::TokenKind t) {
+    using Tk = intc::TokenKind;
     switch (t) {
         case Tk::At: return 400;
         case Tk::LBrack: return 300;
@@ -207,9 +209,9 @@ constexpr lcc::isz TypeQualifierPrecedence(lcc::intercept::TokenKind t) {
 }
 } // namespace
 
-bool lcc::intercept::Parser::AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
+bool intc::Parser::AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
 
-auto lcc::intercept::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
+auto intc::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
     Parser parser(context, &file);
 
     /// Parse preamble. This also creates the module.
@@ -223,12 +225,12 @@ auto lcc::intercept::Parser::Parse(Context* context, File& file) -> std::unique_
 }
 
 /// Creates a new scope and parses a block in that scope.
-auto lcc::intercept::Parser::ParseBlock() -> Result<BlockExpr*> {
+auto intc::Parser::ParseBlock() -> Result<BlockExpr*> {
     return ParseBlock({this});
 }
 
 /// <expr-block> ::= "{" { <expr> } "}"
-auto lcc::intercept::Parser::ParseBlock(
+auto intc::Parser::ParseBlock(
     /// The only purpose of this parameter is to open a new scope
     /// for this block. Do NOT remove it, even if it appears unused.
     [[maybe_unused]] ScopeRAII sc
@@ -250,7 +252,7 @@ auto lcc::intercept::Parser::ParseBlock(
 }
 
 /// <expr-call> ::= <expr> "(" { <expr> [ "," ] } ")"
-auto lcc::intercept::Parser::ParseCallExpr(Expr* callee) -> Result<CallExpr*> {
+auto intc::Parser::ParseCallExpr(Expr* callee) -> Result<CallExpr*> {
     /// Yeet "(".
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::LParen), "ParseCallExpr called while not at '('");
@@ -269,7 +271,7 @@ auto lcc::intercept::Parser::ParseCallExpr(Expr* callee) -> Result<CallExpr*> {
 }
 
 /// Parse an object or type declaration.
-auto lcc::intercept::Parser::ParseDecl() -> Result<Decl*> {
+auto intc::Parser::ParseDecl() -> Result<Decl*> {
     auto loc = tok.location;
     auto text = tok.text;
     auto is_extern = Consume(Tk::Extern);
@@ -281,7 +283,7 @@ auto lcc::intercept::Parser::ParseDecl() -> Result<Decl*> {
 ///
 /// <decl-function> ::= ":" <type-function> [ <function-body> ]
 /// <decl-var>      ::= ":" <type> [ "=" <expr> ] | "::" <expr>
-auto lcc::intercept::Parser::ParseDeclRest(
+auto intc::Parser::ParseDeclRest(
     std::string ident,
     lcc::Location location,
     bool is_extern
@@ -399,7 +401,7 @@ auto lcc::intercept::Parser::ParseDeclRest(
 
 /// See grammar.bnf for a list of productions handled by this rule.
 /// <expr> ::= ...
-auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
+auto intc::Parser::ParseExpr(isz current_precedence) -> ExprResult {
     auto lhs = ExprResult::Null();
 
     /// Export a declaration.
@@ -639,13 +641,13 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
     return lhs;
 }
 
-auto lcc::intercept::Parser::ParseExprInNewScope() -> ExprResult {
+auto intc::Parser::ParseExprInNewScope() -> ExprResult {
     ScopeRAII sc{this};
     return ParseExpr();
 }
 
 /// <expr-for> ::= FOR <expr> [ "," ] <expr> [ "," ] <expr> <expr>
-auto lcc::intercept::Parser::ParseForExpr() -> Result<ForExpr*> {
+auto intc::Parser::ParseForExpr() -> Result<ForExpr*> {
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::For), "ParseForExpr called while not at 'for'");
 
@@ -663,7 +665,7 @@ auto lcc::intercept::Parser::ParseForExpr() -> Result<ForExpr*> {
     return new (*mod) ForExpr(*init, *cond, *increment, *body, loc);
 }
 
-auto lcc::intercept::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
+auto intc::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
     static const StringMap<FuncAttr> attrs_map{
         {"const", FuncAttr::Const},
         {"discardable", FuncAttr::Discardable},
@@ -691,7 +693,7 @@ auto lcc::intercept::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
 }
 
 /// <function-body>  ::= "=" <expr> | <expr-block>
-auto lcc::intercept::Parser::ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scope*>> {
+auto intc::Parser::ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scope*>> {
     /// If the declaration is external, but there still seems to be
     /// a function body, warn the the user that they might be trying
     /// to do something that doesn’t make sense.
@@ -742,7 +744,7 @@ auto lcc::intercept::Parser::ParseFuncBody(bool is_extern) -> Result<std::pair<E
 /// <type-signature> ::= "(" <param-decls> ")" <func-attrs>
 /// <param-decls>    ::= { <param-decl> [ "," ]  }
 /// <param-decl>     ::= [ IDENTIFIER { [ "," ] IDENTIFIER } ] ":" <type>
-auto lcc::intercept::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
+auto intc::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
     LCC_ASSERT(Consume(Tk::LParen), "ParseFunctionSignature called while not at '('");
 
     /// Parse the parameter declarations.
@@ -794,7 +796,7 @@ auto lcc::intercept::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*
     );
 }
 
-auto lcc::intercept::Parser::ParseIdentExpr() -> Result<Expr*> {
+auto intc::Parser::ParseIdentExpr() -> Result<Expr*> {
     auto loc = tok.location;
     auto text = tok.text;
     LCC_ASSERT(Consume(Tk::Ident), "ParseIdentExpr called while not at identifier");
@@ -808,7 +810,7 @@ auto lcc::intercept::Parser::ParseIdentExpr() -> Result<Expr*> {
 }
 
 /// <expr-if> ::= IF <expr> <expr> [ ELSE <expr> ]
-auto lcc::intercept::Parser::ParseIfExpr() -> Result<IfExpr*> {
+auto intc::Parser::ParseIfExpr() -> Result<IfExpr*> {
     /// Yeet "if".
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::If), "ParseIf called while not at 'if'");
@@ -823,7 +825,7 @@ auto lcc::intercept::Parser::ParseIfExpr() -> Result<IfExpr*> {
 }
 
 /// <preamble> ::= [ <module-declaration> ] { <import-declaration> | ";" }
-auto lcc::intercept::Parser::ParsePreamble(File& f) -> Result<void> {
+auto intc::Parser::ParsePreamble(File& f) -> Result<void> {
     /// Parse module name and create the module.
     if (At(Tk::Ident) and tok.text == "module" and not tok.artificial) {
         NextToken(); /// Yeet "module".
@@ -856,7 +858,7 @@ auto lcc::intercept::Parser::ParsePreamble(File& f) -> Result<void> {
 /// <type-struct> ::= TYPE <struct-body>
 /// <struct-body> ::= "{" { <member-decl> } "}"
 /// <member-decl> ::= IDENTIFIER ":" <type> [ ";" ]
-auto lcc::intercept::Parser::ParseStructType() -> Result<StructType*> {
+auto intc::Parser::ParseStructType() -> Result<StructType*> {
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::Struct), "ParseStructType called while not at 'type'");
     if (not Consume(Tk::LBrace)) return Error("Expected '{{' after 'type' in struct declaration");
@@ -887,7 +889,7 @@ auto lcc::intercept::Parser::ParseStructType() -> Result<StructType*> {
 }
 
 /// <file> ::= <preamble> { <expr> | ";" }
-void lcc::intercept::Parser::ParseTopLevel() {
+void intc::Parser::ParseTopLevel() {
     /// Set up the rest of the parser state.
     curr_func = mod->top_level_func();
     scope_stack.push_back(new (*mod) Scope(nullptr));
@@ -922,7 +924,7 @@ void lcc::intercept::Parser::ParseTopLevel() {
 /// <param-decls>    ::= { <param-decl> [ "," ]  }
 /// <param-decl>     ::= [ IDENTIFIER ] ":" <type>
 /// <func-attrs>     ::= /// All function attributes
-auto lcc::intercept::Parser::ParseType(isz current_precedence) -> Result<Type*> {
+auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
     /// Parse the base type.
     Type* ty{};
     switch (tok.kind) {
@@ -1031,7 +1033,7 @@ auto lcc::intercept::Parser::ParseType(isz current_precedence) -> Result<Type*> 
 }
 
 /// <expr-while> ::= WHILE <expr> <expr>
-auto lcc::intercept::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
+auto intc::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
     /// Yeet "while".
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::While), "ParseWhile called while not at 'while'");
@@ -1043,7 +1045,7 @@ auto lcc::intercept::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
     return new (*mod) WhileExpr(cond.value(), body.value(), loc);
 }
 
-void lcc::intercept::Parser::Synchronise() {
+void intc::Parser::Synchronise() {
     while (not At(Tk::Semicolon, Tk::LBrace, Tk::RBrace, Tk::Eof)) NextToken();
     NextToken();
 }
@@ -1054,7 +1056,7 @@ void lcc::intercept::Parser::Synchronise() {
 /// \param type The type of the function.
 /// \param is_extern Whether this is an external function.
 /// \return The decl or an error.
-auto lcc::intercept::Parser::ParseFuncDecl(
+auto intc::Parser::ParseFuncDecl(
     std::string name,
     FuncType* type,
     bool is_extern
