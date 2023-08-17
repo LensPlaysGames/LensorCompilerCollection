@@ -104,7 +104,7 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
         /// would make sense if the value is known at compile time to not
         /// be in range for the target type.
         EvalResult res;
-        if ((*expr_ptr)->evaluate(res, false)) {
+        if ((*expr_ptr)->evaluate(context, res, false)) {
             auto val = res.as_i64();
             if (val < 0 and to->is_unsigned_int(context)) return ConversionImpossible;
 
@@ -660,7 +660,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             /// If it is an integer, try to evaluate it for bounds checking.
             if (auto arr = as<ArrayType>(ty); arr and arr->size()->ok()) {
                 EvalResult res;
-                if (b->rhs()->evaluate(res, false)) {
+                if (b->rhs()->evaluate(context, res, false)) {
                     if (res.as_i64() < 0 or res.as_i64() >= as<ConstantExpr>(arr->size())->value().as_i64())
                         Error(b->location(), "Array subscript out of bounds");
 
@@ -1275,7 +1275,7 @@ bool intc::Sema::Analyse(Type** type_ptr) {
             Analyse(&a->size());
             EvalResult res;
             usz size = 1;
-            if (a->size()->ok() and a->size()->evaluate(res, false)) {
+            if (a->size()->ok() and a->size()->evaluate(context, res, false)) {
                 if (res.as_i64() < 1) {
                     Error(a->location(), "Array size must be greater than 0");
                     a->set_sema_errored();

@@ -600,6 +600,9 @@ public:
     ArrayType(Type* element_type, Expr* size, Location location = {})
         : TypeWithOneElement(Kind::Array, location, element_type), _size(size) {}
 
+    /// Get the dimension of this array.
+    auto dimension() const -> usz;
+
     auto size() -> Expr*& { return _size; }
     Expr* size() const { return _size; }
 
@@ -773,10 +776,11 @@ public:
 
     /// Try to evaluate this expression.
     ///
+    /// \param ctx The context to use.
     /// \param out Outparameter for the result of the evaluation.
     /// \param required Whether to error if evaluation fails.
     /// \return Whether evaluation succeeded.
-    bool evaluate(EvalResult& out, bool required);
+    bool evaluate(const Context* ctx, EvalResult& out, bool required);
 
     Kind kind() const { return _kind; }
 

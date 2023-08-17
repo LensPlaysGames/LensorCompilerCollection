@@ -330,12 +330,8 @@ auto intc::Type::size(const lcc::Context* ctx) const -> usz {
         case Kind::Reference:
             return ctx->target()->size_of_pointer;
 
-        case Kind::Array: {
-            EvalResult res;
-            LCC_ASSERT(as<ArrayType>(this)->size()->evaluate(res, true), "Ill-formed array type");
-            auto size = res.as_i64();
-            return usz(size) * elem()->size(ctx);
-        }
+        case Kind::Array:
+            return as<ArrayType>(this)->dimension() * elem()->size(ctx);
 
         case Kind::Struct: return as<StructType>(this)->byte_size() * 8;
         case Kind::Integer: return as<IntegerType>(this)->bit_width();
@@ -379,13 +375,9 @@ bool intc::Type::Equal(const Type* a, const Type* b) {
             return Type::Equal(a->elem(), b->elem());
 
         case Kind::Array: {
-            EvalResult a_sz, b_sz;
-            LCC_ASSERT(
-                as<ArrayType>(a)->size()->evaluate(a_sz, true) and
-                    as<ArrayType>(b)->size()->evaluate(b_sz, true),
-                "Ill-formed array types"
-            );
-            return a_sz.as_i64() == b_sz.as_i64() and Type::Equal(a->elem(), b->elem());
+            auto aa = as<ArrayType>(a);
+            auto ab = as<ArrayType>(b);
+            return aa->dimension() == ab->dimension() and Type::Equal(a->elem(), b->elem());
         }
 
         case Kind::Function: {
@@ -415,7 +407,7 @@ bool intc::Type::Equal(const Type* a, const Type* b) {
                 if (not Type::Equal(sa->members()[i].type, sb->members()[i].type))
                     return false;
             return true;
-        } break;
+        }
 
         case Kind::Integer: {
             auto ia = as<IntegerType>(a);
@@ -425,6 +417,11 @@ bool intc::Type::Equal(const Type* a, const Type* b) {
     }
 
     LCC_UNREACHABLE();
+}
+
+auto intc::ArrayType::dimension() const -> usz {
+    LCC_ASSERT(ok(), "Can only call dimension() if type has been type checked successfully");
+    return usz(as<ConstantExpr>(size())->value().as_i64());
 }
 
 auto intc::Expr::Clone(Module& mod, Expr* expr) -> Expr* {

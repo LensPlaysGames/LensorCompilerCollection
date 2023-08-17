@@ -14,24 +14,27 @@ class Parser;
 class StringLiteral;
 
 class EvalResult {
-    std::variant<i64, bool, std::nullptr_t, StringLiteral*, std::monostate> data;
+    std::variant< // clang-format off
+        i64,
+        std::nullptr_t,
+        StringLiteral*,
+        std::monostate
+    > data; // clang-format on
 public:
     EvalResult() : data(std::monostate()) {}
     EvalResult(i64 data) : data(data) {}
-    EvalResult(bool data) : data(data) {}
+    EvalResult(bool data) : data(i64(1)) {}
     EvalResult(std::nullptr_t) : data(nullptr) {}
     EvalResult(StringLiteral* data) : data(data) {}
 
     bool is_i64() const { return std::holds_alternative<i64>(data); }
-    bool is_bool() const { return std::holds_alternative<bool>(data); }
     bool is_null() const { return std::holds_alternative<std::nullptr_t>(data); }
     bool is_string() const { return std::holds_alternative<StringLiteral*>(data); }
 
     i64 as_i64() const { return std::get<i64>(data); }
-    bool as_bool() const { return std::get<bool>(data); }
     StringLiteral* as_string() const { return std::get<StringLiteral*>(data); }
 };
 
-}
+} // namespace lcc::intercept
 
 #endif // LCC_EVAL_HH
