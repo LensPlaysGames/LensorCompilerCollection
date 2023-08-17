@@ -89,7 +89,9 @@ int main(int argc, char** argv) {
 
     /// Laye.
     if (path_str.ends_with(".laye")) {
-        auto mod = lcc::laye::Parser::Parse(&context, file);
+        auto laye_context = new lcc::laye::LayeContext{&context};
+        auto mod = laye_context->parse_laye_file(file);
+        
         if (options::get<"--syntax-only">()) {
             if (options::get<"--ast">()) mod->print();
             std::exit(0);

@@ -10,6 +10,7 @@ class Parser {
     Lexer lexer;
     File* file;
     Context* context;
+    LayeContext* laye_context;
     Module* module;
 
     LayeToken tok{};
@@ -22,7 +23,7 @@ class Parser {
     usz speculative_look_ahead = 0;
 
 public:
-    static std::unique_ptr<Module> Parse(Context* context, File& file);
+    static auto Parse(LayeContext* laye_context, File& file) -> Module*;
 
 private:
     friend struct ScopeRAII;
@@ -134,10 +135,8 @@ private:
 
     auto EnterSpeculativeParse() { return SpeculativeRAII(this); }
 
-    Parser(Context* context, File* file, Module* module)
-        : lexer(Lexer{context, file}), file(file), context(context), module(module) {
-        
-    }
+    Parser(LayeContext* laye_context, File* file, Module* module)
+        : lexer(Lexer{laye_context->context(), file}), file(file), context(laye_context->context()), laye_context(laye_context), module(module) {}
 
     /// Get the current scope.
     auto CurrScope() -> Scope* { return scope_stack.back(); }

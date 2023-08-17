@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <laye/ast.hh>
 #include <laye/parser.hh>
 #include <lcc/utils/ast_printer.hh>
@@ -24,6 +25,15 @@ void* layec::Expr::operator new(size_t sz, Parser& parser) {
     auto ptr = ::operator new(sz);
     parser.module->exprs.push_back(static_cast<Expr*>(ptr));
     return ptr;
+}
+
+auto layec::LayeContext::parse_laye_file(File& file) -> Module* {
+    auto lookup_path = fs::absolute(file.path()).string();
+    if (not lookup_module(lookup_path)) {
+        auto mod = lcc::laye::Parser::Parse(this, file);
+        add_module(fs::absolute(file.path()).string(), mod);
+        return mod;
+    } else return nullptr;
 }
 
 auto layec::Scope::declare(
@@ -966,5 +976,11 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
 void layec::Module::print() {
     ASTPrinter p{true};
-    for (auto* node : top_level_decls) p(node);
+    p.out += fmt::format("{};; Laye module -- {}\n", p.C(ASTPrinter::White), file()->path().string());
+
+    for (auto* node : _top_level_decls) p(node);
+    for (auto& ref : _imports) {
+        p.out += "\n";
+        ref.module->print();
+    }
 }

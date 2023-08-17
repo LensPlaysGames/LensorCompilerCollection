@@ -12,24 +12,87 @@
 
 namespace lcc::laye {
 class ModuleHeader;
+class Module;
 class Statement;
 class Decl;
+class NamedDecl;
 class Expr;
 class Type;
 class Symbol;
 class Scope;
 class Parser;
 
-struct Module {
-    std::vector<ModuleHeader*> headers;
-    std::vector<Decl*> top_level_decls;
+class LayeContext {
+    Context* _context;
 
-    void print();
+    StringMap<Module*> _modules{};
+
+public:
+    LayeContext(Context* context)
+        : _context(context) {}
+
+    void add_module(std::string abs_name, Module* module) { _modules.emplace(std::move(abs_name), module); }
+    
+    auto context() const { return _context; }
+    auto lookup_module(std::string abs_name) -> Module* {
+        if (auto it = _modules.find(abs_name); it != _modules.end()) {
+            return it->second;
+        }
+
+        return nullptr;
+    }
+
+    auto parse_laye_file(File& file) -> Module*;
+};
+
+class Module {
+public:
+    struct Ref {
+        std::string name;
+        Module* module;
+
+        Ref(std::string name, Module* module)
+            : name(std::move(name)), module(module) {}
+    };
 
 private:
-    std::vector<Statement*> statements;
-    std::vector<Expr*> exprs;
-    std::vector<Scope*> scopes;
+    File* _file;
+
+    usz unique_name_counter = 0;
+
+    std::vector<ModuleHeader*> _headers{};
+
+    std::vector<Ref> _imports{};
+    std::vector<NamedDecl*> _exports{};
+
+    std::vector<Decl*> _top_level_decls{};
+
+    std::vector<Statement*> statements{};
+    std::vector<Expr*> exprs{};
+    std::vector<Scope*> scopes{};
+
+public:
+    Module(File* file)
+        : _file(file) {}
+
+    auto file() const { return _file; }
+
+    auto add_header(ModuleHeader* header) { _headers.push_back(header); }
+    auto add_import(std::string name, Module* module) { _imports.push_back(Ref{std::move(name), module}); }
+    auto add_export(NamedDecl* decl) { _exports.push_back(decl); }
+    auto add_top_level_decl(Decl* decl) { _top_level_decls.push_back(decl); }
+
+    auto imports() -> std::vector<Ref>& { return _imports; }
+    auto exports() -> std::vector<NamedDecl*>& { return _exports; }
+    auto top_level_decls() -> std::vector<Decl*>& { return _top_level_decls; }
+
+    /// Intern a string and return its index.
+    usz intern(std::string_view str);
+
+    /// Get a unique function name.
+    auto unique_function_name() -> std::string { return fmt::format("_XLaye__func_{}", unique_name_counter++); }
+
+    void print();
 
     friend Statement;
     friend Expr;
@@ -595,6 +658,7 @@ public:
     bool is_wildcard() const { return _is_wildcard; }
     bool has_import_names() const { return not _import_names.empty(); }
     auto import_names() const -> std::span<std::string const> { return _import_names; }
+    bool has_alias() const { return not _alias.empty(); }
     auto alias() const -> const std::string& { return _alias; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclImport; }

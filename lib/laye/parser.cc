@@ -78,10 +78,10 @@ OperatorKind Parser::BinaryOperatorKind(TokenKind tokenKind) {
     return OperatorKind::Invalid;
 }
 
-std::unique_ptr<Module> Parser::Parse(Context* context, File& file) {
-    auto result = new Module;
+auto Parser::Parse(LayeContext* laye_context, File& file) -> Module* {
+    auto result = new Module{&file};
 
-    Parser parser{context, &file, result};
+    Parser parser{laye_context, &file, result};
     parser.NextToken();
 
     parser.scope_stack.push_back(new (parser) Scope{nullptr});
@@ -97,7 +97,26 @@ std::unique_ptr<Module> Parser::Parse(Context* context, File& file) {
         if (parser.At(Tk::Import)) {
         parse_import:;
             auto import_header = parser.ParseImportDecl(is_export);
-            if (import_header) result->headers.push_back(*import_header);
+            if (import_header) {
+                auto import = *import_header;
+                result->add_header(import);
+
+                std::string import_name = import->import_name();
+
+                auto file_dir = file.path().parent_path();
+                auto import_file_path = file_dir / import_name;
+
+                if (import->has_alias()) {
+                    import_name = import->alias();
+                } else {
+                    // TODO(local): this should turn `import_name` into a valid Laye identifier if it isn't already
+                }
+                
+                auto& import_file = laye_context->context()->get_or_load_file(import_file_path);
+                if (auto import_module = laye_context->parse_laye_file(import_file)) {
+                    result->add_import(import_name, import_module);
+                }
+            }
         } else {
             break;
         }
@@ -105,10 +124,10 @@ std::unique_ptr<Module> Parser::Parse(Context* context, File& file) {
 
     while (not parser.At(Tk::Eof)) {
         auto top_level = parser.ParseTopLevel();
-        if (top_level) result->top_level_decls.push_back(*top_level);
+        if (top_level) result->add_top_level_decl(*top_level);
     }
 
-    return std::unique_ptr<Module>(result);
+    return result;
 }
 
 void Parser::Synchronise() {
@@ -642,7 +661,7 @@ auto Parser::ParseImportDecl(bool is_export) -> Result<ImportHeader*> {
         );
     }
 
-    import_name = tok.text;
+    import_name = import_name_token.text;
     HandleImportAlias();
     ExpectSemiColon();
 

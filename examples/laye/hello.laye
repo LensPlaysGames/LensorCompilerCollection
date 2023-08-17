@@ -1,3 +1,5 @@
+import "gcd.laye";
+
 foreign callconv(cdecl)
 i32 puts(readonly c_string s);
 

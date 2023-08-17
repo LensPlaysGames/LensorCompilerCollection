@@ -1,4 +1,4 @@
-int gcd(int a, int b)
+export int gcd(int a, int b)
 {
     if (a == b)
         return a;
