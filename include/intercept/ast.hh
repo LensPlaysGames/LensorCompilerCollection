@@ -303,6 +303,7 @@ class Type : public SemaNode {
 public:
     enum struct Kind {
         Builtin,
+        FFIType,
         Named,
         Pointer,
         Reference,
@@ -338,26 +339,55 @@ public:
     /// \return The alignment of this type, in bits.
     usz align(const Context* ctx) const;
 
+    /// Get the element type of this type. This will assert if this
+    /// type does not have an element type.
+    auto elem() const -> Type*;
+
     /// Get the kind of this type.
     auto kind() const { return _kind; }
 
-    /// Returns true if this is a sized integer type, or
-    /// \c int or \c bool, if \c include_bool is true.
-    bool is_any_integer(bool include_bool = false) const;
-
-    /// Check the kind of this type.
+    /// Check if this is an array type.
     bool is_array() const { return _kind == Kind::Array; }
+
+    /// Check if this is the builtin \c bool type.
     bool is_bool() const;
+
+    /// Check if this is a builtin type.
     bool is_builtin() const { return _kind == Kind::Builtin; }
+
+    /// Check if this is a function type.
     bool is_function() const { return _kind == Kind::Function; }
-    bool is_named() const { return _kind == Kind::Named; }
+
+    /// Returns true if this is a sized integer type, a C
+    /// FFI integer type, \c int, or \c byte, or \c bool, if
+    /// \c include_bool is true.
+    bool is_integer(bool include_bool = false) const;
+
+    /// Check if this is a pointer type.
     bool is_pointer() const { return _kind == Kind::Pointer; }
+
+    /// Check if this is a reference type.
     bool is_reference() const { return _kind == Kind::Reference; }
+
+    /// Check if this is a signed integer type.
+    bool is_signed() const;
+
+    /// Check if this is a sized integer type.
     bool is_sized_integer() const { return _kind == Kind::Integer; }
+
+    /// Check if this is a struct type.
     bool is_struct() const { return _kind == Kind::Struct; }
+
+    /// Check if this is the uninitialised type.
     bool is_unknown() const;
+
+    /// Check if this is an unsigned integer type.
+    bool is_unsigned() const;
+
+    /// Check if this is the builtin \c void type.
     bool is_void() const;
 
+    /// Get the location of this type.
     auto location() const { return _location; }
 
     /// Get the size of this type. It may be target-dependent,
@@ -424,8 +454,6 @@ public:
         Unknown,
         Void,
         OverloadSet,
-        CChar,
-        CInt,
     };
 
 private:
@@ -434,8 +462,8 @@ private:
 
     const BuiltinKind _kind;
 
-    static auto Create(Module* mod, K k, Location l) -> BuiltinType* {
-        return new (*mod) BuiltinType(k, l);
+    static auto Make(Module& mod, K k, Location l) -> BuiltinType* {
+        return new (mod) BuiltinType(k, l);
     }
 
     BuiltinType(K k, Location location)
@@ -447,19 +475,67 @@ public:
     /// Get the kind of this builtin.
     auto builtin_kind() const -> BuiltinKind { return _kind; }
 
-    bool operator==(const BuiltinType& other) const { return _kind == other._kind; }
     bool operator==(BuiltinKind k) const { return _kind == k; }
 
     /// Get instances of primitive types.
-    static auto Bool(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Bool, l); }
-    static auto Byte(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Byte, l); }
-    static auto CChar(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::CChar, l); }
-    static auto CInt(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::CInt, l); }
-    static auto Integer(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Integer, l); }
-    static auto Unknown(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Unknown, l); }
-    static auto Void(Module* mod, Location l = {}) -> BuiltinType* { return Create(mod, K::Void, l); }
+    static auto Bool(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Bool, l); }
+    static auto Byte(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Byte, l); }
+    static auto Integer(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Integer, l); }
+    static auto Unknown(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Unknown, l); }
+    static auto Void(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Void, l); }
 
     static bool classof(const Type* type) { return type->kind() == Kind::Builtin; }
+};
+
+/// C FFI integer type.
+class FFIType : public Type {
+public:
+    enum struct FFIKind {
+        CChar,
+        CSChar,
+        CUChar,
+        CShort,
+        CUShort,
+        CInt,
+        CUInt,
+        CLong,
+        CULong,
+        CLongLong,
+        CULongLong,
+    };
+
+private:
+    /// Shorten long signatures w/ this.
+    using K = FFIKind;
+
+    const K kind;
+    FFIType(K k, Location loc): Type(Kind::FFIType, loc), kind(k) {}
+
+    static auto Make(Module& mod, K k, Location l) -> FFIType* {
+        return new (mod) FFIType(k, l);
+    }
+
+public:
+
+    /// Get the kind of this C FFI type.
+    auto ffi_kind() const -> FFIKind { return kind; }
+
+    bool operator==(FFIKind k) const { return kind == k; }
+
+    /// Get instances of C FFI types.
+    static auto CChar(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CChar, l); }
+    static auto CSChar(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CSChar, l); }
+    static auto CUChar(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CUChar, l); }
+    static auto CShort(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CShort, l); }
+    static auto CUShort(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CUShort, l); }
+    static auto CInt(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CInt, l); }
+    static auto CUInt(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CUInt, l); }
+    static auto CLong(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CLong, l); }
+    static auto CULong(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CULong, l); }
+    static auto CLongLong(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CLongLong, l); }
+    static auto CULongLong(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CULongLong, l); }
+
+    static bool classof(const Type* type) { return type->kind() == Kind::FFIType; }
 };
 
 class NamedType : public Type {
@@ -696,7 +772,11 @@ public:
 
     Kind kind() const { return _kind; }
 
-    /// Check if this is an lvalue.
+    /// Check if this is an lvalue that can be assigned to.
+    bool is_assignable_lvalue() const;
+
+    /// Check if this is an lvalue. Only lvalues can have their
+    /// address taken or be converted to references.
     bool is_lvalue() const;
 
     /// Access the location of this expression.

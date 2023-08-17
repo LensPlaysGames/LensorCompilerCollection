@@ -114,7 +114,17 @@ auto intc::Scope::declare(
 }
 
 bool intc::Expr::is_lvalue() const {
-    return is<ReferenceType>(type());
+    return is<ReferenceType>(type()) or is<VarDecl, FuncDecl>(this);
+}
+
+bool intc::Expr::is_assignable_lvalue() const {
+    /// References to anything other than functions are
+    /// assignable lvalues.
+    if (auto ref = cast<ReferenceType>(type()))
+        return not is<FuncType>(ref->element_type());
+
+    /// Variable declarations are assignable lvalues.
+    return is<VarDecl>(this);
 }
 
 auto intc::Expr::type() const -> Type* {

@@ -927,28 +927,28 @@ auto lcc::intercept::Parser::ParseType(isz current_precedence) -> Result<Type*> 
 
         /// Builtin types.
         case Tk::IntKw:
-            ty = BuiltinType::Integer(mod.get(), tok.location);
+            ty = BuiltinType::Integer(*mod, tok.location);
             NextToken();
             break;
 
         case Tk::Byte:
-            ty = BuiltinType::Byte(mod.get(), tok.location);
+            ty = BuiltinType::Byte(*mod, tok.location);
             NextToken();
             break;
 
         case Tk::Bool:
-            ty = BuiltinType::Bool(mod.get(), tok.location);
+            ty = BuiltinType::Bool(*mod, tok.location);
             NextToken();
             break;
 
         case Tk::Void:
-            ty = BuiltinType::Void(mod.get(), tok.location);
+            ty = BuiltinType::Void(*mod, tok.location);
             NextToken();
             break;
 
         /// Named type.
         case Tk::Ident:
-            ty = new (*mod) NamedType(tok.text, tok.location);
+            ty = new (*mod) NamedType(tok.text, CurrScope(), tok.location);
             NextToken();
             break;
 

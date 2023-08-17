@@ -61,18 +61,27 @@ private:
 
     /// Attempt to convert an expression to a given type.
     ///
-    /// This may replace the expression with a cast and will issue
-    /// and error if the conversion fails for whatever reason.
-    ///
-    /// Note that the expression to be converted must be marked as
-    /// either done or errored by sema. If marked as errored, this
-    /// always returns true and does nothing so.
+    /// This may replace the expression with a cast Note that the
+    /// expression to be converted must be marked as either done
+    /// or errored by sema. If marked as errored, this always
+    /// returns true and does nothing so.
     ///
     /// \param expr A pointer to the expression to convert.
     /// \param type The type to convert to.
     /// \return Whether the conversion succeeded.
     /// \see TryConvert().
-    bool Convert(Expr** expr, const Type* type);
+    [[nodiscard]] bool Convert(Expr** expr, Type* type);
+
+    /// Do not call this directly. Call \c Convert() or \c TryConvert() instead.
+    template <bool PerformConversion>
+    int ConvertImpl(Expr** expr_ptr, Type* to);
+
+    /// Like Convert(), but issue an error if the conversion fails.
+    ///
+    /// Prefer using Convert() and issuing an error manually as that is usually
+    /// more informative. Use this only when there really are no semantics to the
+    /// conversion other than ‘type X must be convertible to type Y’.
+    void ConvertOrError(Expr** expr, Type* to);
 
     /// Like Convert(), but converts expressions to their *common type* instead.
     ///
@@ -99,7 +108,7 @@ private:
     }
 
     /// Convert a type to a type that is legal in a declaration.
-    auto DeclTypeDecay(const Type* type) -> Type*;
+    auto DeclTypeDecay(Type* type) -> Type*;
 
     /// Wrapper that stringifies any types that are passed in and passes
     /// everything to \c Diag::Error.
@@ -119,6 +128,13 @@ private:
     auto Format(Ty&& t) -> decltype(std::forward<Ty>(t)) {
         return std::forward<Ty>(t);
     }
+
+    /// Insert an implicit cast of an expression to a type.
+    ///
+    /// This creates a new cast expression and replaces the expression
+    /// pointed to by \c expr_ptr with a cast to \c to. The location of
+    /// the cast expression is set to the location of the old expression.
+    void InsertImplicitCast(Expr** expr_ptr, Type* ty);
 
     /// If the type of an expression is a pointer type—not a reference
     /// type—convert the expression to \c integer instead by inserting
@@ -166,7 +182,7 @@ private:
     /// \return 0 if the conversion is (logically) a no-op.
     /// \return A number greater than 0 that indicates how ‘bad’ the conversion is.
     /// \see Convert().
-    int TryConvert(Expr** expr, Type* type);
+    [[nodiscard]] int TryConvert(Expr** expr, Type* type);
 };
 } // namespace lcc::intercept
 

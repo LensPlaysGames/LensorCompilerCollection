@@ -3,7 +3,147 @@
 #include <lcc/utils/macros.hh>
 
 namespace intc = lcc::intercept;
+/// ===========================================================================
+///  Helpers
+/// ===========================================================================
+/// For an explanation of the return value of this function, see
+/// the comment on the declaration of TryConvert().
+template <bool PerformConversion>
+int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
+    enum : int {
+        TypesContainErrors = -2,
+        ConversionImpossible = -1,
+        NoOp = 0,
+    };
 
+    /// If the types contain errors, return -2.
+    auto from = (*expr_ptr)->type();
+    if (from->sema_errored() or to->sema_errored()) return TypesContainErrors;
+
+    /// This is so we don’t forget that we’ve applied lvalue-to-rvalue
+    /// conversion and raised the score by one.
+    bool requires_lvalue_to_rvalue_conversion = false;
+    auto Score = [&](int i) {
+        LCC_ASSERT(i, "Score must be 1 or greater. Use the enum constants above for values <= 0");
+        return i + int(requires_lvalue_to_rvalue_conversion);
+    };
+
+    /// Any type can be converted to void.
+    if (to->is_void()) return NoOp;
+
+    /// Get reference-to-reference conversions out of the way early.
+    if (from->is_reference() and to->is_reference()) {
+        /// A reference can be converted to the same reference.
+        if (Type::Equal(from, to)) return NoOp;
+
+        /// References to arrays can be converted to references to
+        /// the first element.
+        auto arr = cast<ArrayType>(from->elem());
+        if (arr and Type::Equal(arr->element_type(), to->elem())) {
+            if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
+            return Score(1);
+        }
+
+        return ConversionImpossible;
+    }
+
+    /// Lvalues and are convertible to references.
+    if (to->is_reference()) return (*expr_ptr)->is_lvalue() ? NoOp : ConversionImpossible;
+
+    /// Any conversions after this require lvalue-to-rvalue conversion
+    /// first if the expression is an lvalue.
+    requires_lvalue_to_rvalue_conversion = (*expr_ptr)->is_lvalue();
+    if constexpr (PerformConversion) from = LvalueToRvalue(expr_ptr);
+    else from = from->strip_references();
+
+    /// Now check if the types are equal. In many cases, lvalue-to-rvalue
+    /// conversion is all we need.
+    if (Type::Equal(from, to)) return NoOp;
+
+    /// Pointer to pointer conversions.
+    if (from->is_pointer() and to->is_pointer()) {
+        /// Pointers to arrays are convertible to pointers to the first element.
+        auto arr = cast<ArrayType>(from->elem());
+        if (arr and Type::Equal(arr->element_type(), to->elem())) {
+            if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
+            return Score(1);
+        }
+
+        /// Any pointer is convertible to `@void`.
+        if (Type::Equal(to, Type::VoidPtr)) {
+            if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
+            return Score(1);
+        }
+    }
+
+    /// Function types can be converted to their corresponding function types.
+    if (from->is_function() and to->is_pointer() and Type::Equal(to->elem(), from)) {
+        if constexpr (PerformConversion) {
+            ReplaceWithNewNode(
+                expr_ptr,
+                new (mod) UnaryExpr(TokenKind::At, *expr_ptr, false, (*expr_ptr)->location())
+            );
+        }
+
+        return NoOp;
+    }
+
+    /// Integer to integer conversions.
+    ///
+    /// For portability, we would ideally not make any assumptions about
+    /// the size of `int`, but the issue with that is that it would make
+    /// most code rather cumbersome to write as you’d have to, e.g., cast
+    /// an `i16` to `int` manually. Moreover, integer literals are of type
+    /// `int`, so that would also cause problems. C FFI types suffer from
+    /// similar problems, so we just use their width on the target.
+    if (from->is_integer() and to->is_integer()) {
+        /// Integer types (but not bool) are convertible to each other if
+        /// the value is known at compile time and in range for the type
+        /// it is being converted to.
+        ///
+        /// Note that there shouldn’t really be a way that the conversion
+        /// would make sense if the value is known at compile time to not
+        /// be in range for the target type.
+        EvalResult res;
+        if ((*expr_ptr)->evaluate(res, false)) {
+            auto val = res.as_i64();
+            if (val < 0 and to->is_unsigned()) return ConversionImpossible;
+
+            /// Note: We currently don’t support integer constants larger than 64
+            /// bits internally, so if the type has a bit width larger than 64, it
+            /// will always fit.
+            auto bits = to->size(context);
+            if (bits < 64 and u64(val) > u64(utils::MaxBitValue(bits))) return ConversionImpossible;
+            if constexpr (PerformConversion) ReplaceWithNewNode(expr_ptr, new (mod) ConstantExpr(*expr_ptr, res));
+            return Score(1);
+        }
+
+        /// Furthermore, smaller sized integer types are convertible to larger sized
+        /// integer types, so long as we’re not converting from a signed to an unsigned
+        /// type.
+        if (from->size(context) <= to->size(context) and (from->is_unsigned() or to->is_signed())) {
+            if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
+            return Score(1);
+        }
+
+        return ConversionImpossible;
+    }
+
+    return ConversionImpossible;
+}
+
+bool intc::Sema::Convert(Expr** expr, Type* type) {
+    if ((*expr)->sema_errored()) return true;
+    return ConvertImpl<true>(expr, type) >= 0;
+}
+
+int intc::Sema::TryConvert(Expr** expr, Type* type) {
+    return ConvertImpl<false>(expr, type);
+}
+
+/// ===========================================================================
+///  Core
+/// ===========================================================================
 void intc::Sema::Analyse(Context* ctx, Module& m, bool use_colours) {
     if (ctx->has_error()) return;
     Sema s{ctx, m, use_colours};
@@ -53,7 +193,11 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         }
 
         if (is<ReturnExpr>(*last)) return;
-        Convert(last, ty->return_type());
+        if (not Convert(last, ty->return_type())) Error(
+            decl->location(),
+            "Type of last expression is not convertible to return type {}",
+            ty->return_type()
+        );
     }
 }
 
@@ -116,9 +260,13 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
         }
 
         case Expr::Kind::While: {
-            auto w = as<Loop>(expr);
-            Analyse(&w->condition());
-            Convert(&w->condition(), Type::Bool);
+            auto l = as<Loop>(expr);
+            Analyse(&l->condition());
+            if (not Convert(&l->condition(), Type::Bool)) Error(
+                l->location(),
+                "Invalid type for loop condition: {}",
+                l->condition()->type()
+            );
         } break;
 
         /// For return expressions, make sure that the type of the
@@ -139,7 +287,11 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                     Error(r->location(), "Function returning void must not return a value");
             } else {
                 if (not r->value()) Error(r->location(), "Non-void function must return a value");
-                else Convert(&r->value(), ret_type);
+                else if (not Convert(&r->value(), ret_type)) Error(
+                    r->location(),
+                    "Type of return expression is not convertible to return type {}",
+                    ret_type
+                );
             }
         } break;
 
@@ -148,7 +300,11 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
         case Expr::Kind::If: {
             auto i = as<IfExpr>(expr);
             Analyse(&i->condition());
-            Convert(&i->condition(), Type::Bool);
+            if (not Convert(&i->condition(), Type::Bool)) Error(
+                i->condition()->location(),
+                "Invalid type for if condition: {}",
+                i->condition()->type()
+            );
 
             /// Analyse the branches.
             Analyse(&i->then());
@@ -236,7 +392,11 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             /// that, if this fails, we do not mark this node as errored as
             /// its type is well-formed; it’s just the initialiser that has
             /// a problem.
-            if (v->init()) Convert(&v->init(), v->type());
+            if (v->init() and not Convert(&v->init(), v->type())) Error(
+                v->init()->location(),
+                "Type of initialiser is not convertible to variable type {}",
+                v->type()
+            );
         } break;
 
         /// Currently, each expression of a compound literal must be
@@ -413,7 +573,10 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
 
             /// The RHS must be an integer.
             LvalueToRvalue(&b->rhs());
-            if (not Convert(&b->rhs(), Type::Integer)) return;
+            if (not Convert(&b->rhs(), Type::Integer)) {
+                Error(b->rhs()->location(), "RHS of subscript must be an integer");
+                return;
+            }
 
             /// If it is an integer, try to evaluate it for bounds checking.
             if (auto arr = as<ArrayType>(ty); arr and arr->size()->ok()) {
@@ -446,7 +609,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             auto rhs = b->rhs()->type();
 
             /// Both types must be integers.
-            if (not lhs->is_any_integer() or not rhs->is_any_integer()) {
+            if (not lhs->is_integer() or not rhs->is_integer()) {
                 Error(b->location(), "Cannot perform arithmetic on {} and {}", lhs, rhs);
                 b->set_sema_errored();
                 return;
@@ -475,7 +638,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             auto rhs = b->rhs()->type();
 
             /// If both operands are integers, convert them to their common type.
-            if (lhs->is_any_integer() and rhs->is_any_integer())
+            if (lhs->is_integer() and rhs->is_integer())
                 ConvertToCommonType(&b->lhs(), &b->rhs(), true);
 
             /// Bool can only be compared with bool.
@@ -502,8 +665,8 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
         /// Assignment.
         case TokenKind::ColonEq: {
             LvalueToRvalue(&b->rhs());
-            if (not b->lhs()->is_lvalue()) {
-                Error(b->location(), "LHS of assignment must be an lvalue");
+            if (not b->lhs()->is_assignable_lvalue()) {
+                Error(b->location(), "LHS of assignment must be an (assignable) lvalue");
                 b->set_sema_errored();
                 return;
             }
@@ -512,10 +675,19 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             /// the lhs is indeed an lvalue, we don’t ever mark this as errored
             /// because we know what its type is going to be, irrespective of
             /// whether the assignment if valid or not.
-            b->type(b->lhs()->type());
+            b->type(Ref(b->lhs()->type()));
 
             /// The RHS must be assignable to the LHS.
-            Convert(&b->rhs(), b->lhs()->type()->strip_references());
+            auto var_type = b->lhs()->type()->strip_references();
+            if (not Convert(&b->rhs(), var_type)) {
+                Error(
+                    b->location(),
+                    "Type of expression {} is not convertible to variable type {}",
+                    b->rhs()->type(),
+                    var_type
+                );
+                return;
+            }
         } break;
     }
 }
@@ -589,8 +761,14 @@ void intc::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     }
 
     /// Check that the arguments are convertible to the parameter types.
-    for (usz i = 0, end = std::min(expr->args().size(), func_type->params().size()); i < end; i++)
-        Convert(expr->args().data() + i, func_type->params()[i].type);
+    for (usz i = 0, end = std::min(expr->args().size(), func_type->params().size()); i < end; i++) {
+        if (not Convert(expr->args().data() + i, func_type->params()[i].type)) Error(
+            expr->args()[i]->location(),
+            "Type of argument {} is not convertible to parameter type {}",
+            expr->args()[i]->type(),
+            func_type->params()[i].type
+        );
+    }
 }
 
 void intc::Sema::AnalyseCast(CastExpr* c) {
@@ -623,10 +801,10 @@ void intc::Sema::AnalyseCast(CastExpr* c) {
     }
 
     /// Casting from pointers to integers is allowed.
-    if (from->is_pointer() and to->is_any_integer(true)) return;
+    if (from->is_pointer() and to->is_integer(true)) return;
 
     /// Hard casts between pointers and from pointers to integers are allowed.
-    if (from->is_pointer() and (to->is_pointer() or to->is_any_integer(true))) {
+    if (from->is_pointer() and (to->is_pointer() or to->is_integer(true))) {
         if (c->is_hard_cast()) return;
         Error(
             c->location(),
@@ -703,9 +881,9 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
 
             /// Analyse the arguments.
             for (auto*& arg : expr->args()) Analyse(&arg);
-            Convert(&expr->args()[0], Type::VoidPtr);
-            Convert(&expr->args()[1], Type::VoidPtr);
-            Convert(&expr->args()[2], Type::Integer);
+            ConvertOrError(&expr->args()[0], Type::VoidPtr);
+            ConvertOrError(&expr->args()[1], Type::VoidPtr);
+            ConvertOrError(&expr->args()[2], Type::Integer);
 
             /// Unlike C’s memcpy()/memmove(), this returns nothing.
             expr->type(Type::Void);
@@ -718,9 +896,9 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
 
             /// Analyse the arguments.
             for (auto*& arg : expr->args()) Analyse(&arg);
-            Convert(&expr->args()[0], Type::VoidPtr);
-            Convert(&expr->args()[1], Type::Byte);
-            Convert(&expr->args()[2], Type::Integer);
+            ConvertOrError(&expr->args()[0], Type::VoidPtr);
+            ConvertOrError(&expr->args()[1], Type::Byte);
+            ConvertOrError(&expr->args()[2], Type::Integer);
 
             /// Unlike C’s memset(), this returns nothing.
             expr->type(Type::Void);
@@ -735,7 +913,7 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
             for (auto*& arg : expr->args()) {
                 Analyse(&arg);
                 InsertPointerToIntegerCast(&arg);
-                Convert(&arg, Type::Integer);
+                ConvertOrError(&arg, Type::Integer);
             }
 
             /// Syscalls all return integer.
@@ -853,7 +1031,7 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
         /// Negate an integer.
         case TokenKind::Minus: {
             auto ty = LvalueToRvalue(&u->operand());
-            if (not ty->is_any_integer()) {
+            if (not ty->is_integer()) {
                 Error(
                     u->location(),
                     "Operand of operator '-' must be an integer type, but was {}",
@@ -869,7 +1047,7 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
         /// Bitwise-not an integer.
         case TokenKind::Tilde: {
             auto ty = LvalueToRvalue(&u->operand());
-            if (not ty->is_any_integer()) {
+            if (not ty->is_integer()) {
                 Error(
                     u->location(),
                     "Operand of operator '~' must be an integer type, but was {}",
@@ -885,7 +1063,7 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
         /// Negate a bool, integer, or pointer.
         case TokenKind::Exclam: {
             auto ty = LvalueToRvalue(&u->operand());
-            if (not is<PointerType>(ty) and not ty->is_any_integer(true)) {
+            if (not is<PointerType>(ty) and not ty->is_integer(true)) {
                 Error(
                     u->location(),
                     "Operand of operator '!' must be a bool, integer, or pointer type, but was {}",
@@ -916,6 +1094,9 @@ bool intc::Sema::Analyse(Type** type_ptr) {
     switch (type->kind()) {
         /// These are marked as done in the constructor.
         case Type::Kind::Builtin: LCC_UNREACHABLE();
+
+        /// These are no-ops.
+        case Type::Kind::FFIType: break;
 
         /// Named types need to be resolved to a type.
         case Type::Kind::Named: {
