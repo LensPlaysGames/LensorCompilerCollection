@@ -261,7 +261,8 @@ enum struct VarargsKind {
 
 class Scope {
     Scope* _parent;
-    StringMap<Statement*> _symbols;
+    std::unordered_multimap<std::string, Decl*, detail::StringHash, std::equal_to<>> symbols;
+    bool _is_function_scope = false;
 
 public:
     Scope(Scope* parent)
@@ -273,11 +274,16 @@ public:
 
     auto declare(
         Parser* parser,
-        std::string&& name,
-        Statement* expr
-    ) -> Result<Statement*>;
+        std::string name,
+        Decl* expr
+    ) -> Result<Decl*>;
 
     auto parent() const { return _parent; }
+
+    /// Mark this scope as a function scope.
+    void set_function_scope() { _is_function_scope = true; }
+
+    bool is_function_scope() const { return _is_function_scope; }
 };
 
 class BaseNode {
@@ -297,7 +303,6 @@ protected:
         : _kind(kind), _location(location) {}
 
 public:
-
     bool is_statement() const { return _kind == Kind::Statement; }
     bool is_expr() const { return _kind == Kind::Expr; }
 
@@ -350,7 +355,7 @@ private:
 
 protected:
     Statement(Kind kind, Location location)
-        : BaseNode(BaseNode::Kind::Statement, location), _kind(kind){}
+        : BaseNode(BaseNode::Kind::Statement, location), _kind(kind) {}
 
 public:
     void* operator new(size_t) = delete;
@@ -958,16 +963,18 @@ public:
 };
 
 class NameExpr : public Expr {
+    Scope* _scope;
     std::string _name{};
     std::vector<Expr*> _template_args{};
 
 public:
-    NameExpr(Location location, std::string name)
-        : Expr(Kind::LookupName, location), _name(std::move(name)) {}
-        
-    NameExpr(Location location, std::string name, std::vector<Expr*> template_args)
-        : Expr(Kind::LookupName, location), _name(std::move(name)), _template_args(std::move(template_args)) {}
+    NameExpr(Location location, Scope* scope, std::string name)
+        : Expr(Kind::LookupName, location), _scope(scope), _name(std::move(name)) {}
 
+    NameExpr(Location location, Scope* scope, std::string name, std::vector<Expr*> template_args)
+        : Expr(Kind::LookupName, location), _scope(scope), _name(std::move(name)), _template_args(std::move(template_args)) {}
+
+    auto scope() const { return _scope; }
     auto name() const -> const std::string& { return _name; }
     auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
 
@@ -976,18 +983,20 @@ public:
 
 class PathExpr : public Expr {
     PathKind _path_kind;
+    Scope* _scope;
     std::vector<std::string> _names;
     std::vector<Location> _locations;
     std::vector<Expr*> _template_args{};
 
 public:
-    PathExpr(PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations)
-        : Expr(Kind::LookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _names(std::move(names)), _locations(std::move(locations)) {}
-        
-    PathExpr(PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args)
-        : Expr(Kind::LookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _names(std::move(names)), _locations(std::move(locations)), _template_args(std::move(template_args)) {}
+    PathExpr(PathKind path_kind, Scope* scope, std::vector<std::string> names, std::vector<Location> locations)
+        : Expr(Kind::LookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _scope(scope), _names(std::move(names)), _locations(std::move(locations)) {}
+
+    PathExpr(PathKind path_kind, Scope* scope, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args)
+        : Expr(Kind::LookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _scope(scope), _names(std::move(names)), _locations(std::move(locations)), _template_args(std::move(template_args)) {}
 
     auto path_kind() const { return _path_kind; }
+    auto scope() const { return _scope; }
     auto names() const -> const std::vector<std::string>& { return _names; }
     auto locations() const -> const std::vector<Location>& { return _locations; }
     auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
@@ -1331,17 +1340,19 @@ public:
 
 class NameType : public Type {
     TypeAccess _access;
+    Scope* _scope;
     std::string _name;
     std::vector<Expr*> _template_args{};
 
 public:
-    NameType(Location location, TypeAccess access, std::string name)
-        : Type(Kind::TypeLookupName, location), _access(access), _name(std::move(name)) {}
+    NameType(Location location, TypeAccess access, Scope* scope, std::string name)
+        : Type(Kind::TypeLookupName, location), _access(access), _scope(scope), _name(std::move(name)) {}
 
-    NameType(Location location, TypeAccess access, std::string name, std::vector<Expr*> template_args)
-        : Type(Kind::TypeLookupName, location), _access(access), _name(std::move(name)), _template_args(std::move(template_args)) {}
+    NameType(Location location, TypeAccess access, Scope* scope, std::string name, std::vector<Expr*> template_args)
+        : Type(Kind::TypeLookupName, location), _access(access), _scope(scope), _name(std::move(name)), _template_args(std::move(template_args)) {}
 
     auto access() const { return _access; }
+    auto scope() const { return _scope; }
     auto name() const -> const std::string& { return _name; }
     auto template_args() const -> std::span<Expr* const> { return _template_args; }
 
@@ -1351,19 +1362,21 @@ public:
 class PathType : public Type {
     PathKind _path_kind;
     TypeAccess _access;
+    Scope* _scope;
     std::vector<std::string> _names;
     std::vector<Location> _locations;
     std::vector<Expr*> _template_args{};
 
 public:
-    PathType(PathKind path_kind, TypeAccess access, std::vector<std::string> names, std::vector<Location> locations)
-        : Type(Kind::TypeLookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _access(access), _names(std::move(names)), _locations(std::move(locations)) {}
-        
-    PathType(PathKind path_kind, TypeAccess access, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args)
-        : Type(Kind::TypeLookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _access(access), _names(std::move(names)), _locations(std::move(locations)), _template_args(std::move(template_args)) {}
+    PathType(PathKind path_kind, TypeAccess access, Scope* scope, std::vector<std::string> names, std::vector<Location> locations)
+        : Type(Kind::TypeLookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _access(access), _scope(scope), _names(std::move(names)), _locations(std::move(locations)) {}
+
+    PathType(PathKind path_kind, TypeAccess access, Scope* scope, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args)
+        : Type(Kind::TypeLookupPath, Location{locations[0], locations.back()}), _path_kind(path_kind), _access(access), _scope(scope), _names(std::move(names)), _locations(std::move(locations)), _template_args(std::move(template_args)) {}
 
     auto path_kind() const { return _path_kind; }
     auto access() const { return _access; }
+    auto scope() const { return _scope; }
     auto names() const -> std::span<std::string const> { return _names; }
     auto locations() const -> std::span<Location const> { return _locations; }
     auto template_args() const -> std::span<Expr* const> { return _template_args; }
@@ -1411,7 +1424,7 @@ class SliceType : public SingleElementType {
 public:
     SliceType(Location location, TypeAccess access, Type* elem_type)
         : SingleElementType(Kind::TypeSlice, location, elem_type), _access(access) {}
-        
+
     auto access() const { return _access; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeSlice; }
@@ -1423,7 +1436,7 @@ class PointerType : public SingleElementType {
 public:
     PointerType(Location location, TypeAccess access, Type* elem_type)
         : SingleElementType(Kind::TypePointer, location, elem_type), _access(access) {}
-        
+
     auto access() const { return _access; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypePointer; }
@@ -1435,7 +1448,7 @@ class BufferType : public SingleElementType {
 public:
     BufferType(Location location, TypeAccess access, Type* elem_type)
         : SingleElementType(Kind::TypeBuffer, location, elem_type), _access(access) {}
-        
+
     auto access() const { return _access; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeBuffer; }

@@ -132,7 +132,9 @@ private:
     auto EnterSpeculativeParse() { return SpeculativeRAII(this); }
 
     Parser(Context* context, File* file, Module* module)
-        : lexer(Lexer{context, file}), file(file), context(context), module(module) {}
+        : lexer(Lexer{context, file}), file(file), context(context), module(module) {
+        
+    }
 
     /// Get the current scope.
     auto CurrScope() -> Scope* { return scope_stack.back(); }
@@ -241,7 +243,7 @@ private:
     auto ParseDecl() -> Result<Decl*>;
     auto ParseDeclOrStatement() -> Result<Statement*>;
     auto ParseStatement(bool consumeSemi = true) -> Result<Statement*>;
-    auto ParseBlockStatement() -> Result<BlockStatement*>;
+    auto ParseBlockStatement(ScopeRAII sc) -> Result<BlockStatement*>;
 
     auto TryParseTemplateParams(bool allocate) -> Result<std::vector<TemplateParam>>;
     bool SpeculativeParseTemplateParams() {

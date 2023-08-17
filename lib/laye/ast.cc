@@ -28,32 +28,22 @@ void* layec::Expr::operator new(size_t sz, Parser& parser) {
 
 auto layec::Scope::declare(
     Parser* parser,
-    std::string&& name,
-    Statement* expr
-) -> Result<Statement*> {
-    /// Try to insert the symbol into the map.
-    auto [it, inserted] = _symbols.insert_or_assign(name, expr);
-    if (inserted) return expr;
+    std::string name,
+    Decl* decl
+) -> Result<Decl*> {
+    /// If the symbol already exists, then this is an error, unless
+    /// that symbol is a function declaration, and this is also a
+    /// function declaration.
+    if (
+        auto it = symbols.find(name);
+        it != symbols.end() and
+        not is<FunctionDecl>(it->second) and
+        not is<FunctionDecl>(decl)
+    ) return Diag::Error(parser->context, decl->location(), "Redeclaration of '{}'", name);
 
-    /// If the symbol already exists, and it is a function
-    /// declaration or overload set, and the new symbol is
-    /// also a function declaration, merge the two into one
-    /// overload set.
-    if (is<FunctionDecl>(expr) and is<FunctionDecl, OverloadSet>(it->second)) {
-        if (not is<OverloadSet>(it->second)) {
-            auto func = as<FunctionDecl>(it->second);
-            auto os = new (*parser) OverloadSet(func->location());
-            os->add(func);
-            it->second = os;
-        }
-
-        auto os = as<OverloadSet>(it->second);
-        os->add(as<FunctionDecl>(expr));
-        return expr;
-    }
-
-    /// Any other case is an error.
-    return Diag::Error(parser->context, expr->location(), "Redeclaration of '{}'", name);
+    /// Otherwise, add the symbol.
+    symbols.emplace(std::move(name), decl);
+    return decl;
 }
 
 std::string layec::ToString(layec::TokenKind kind) {

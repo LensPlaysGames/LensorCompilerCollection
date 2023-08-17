@@ -84,6 +84,8 @@ std::unique_ptr<Module> Parser::Parse(Context* context, File& file) {
     Parser parser{context, &file, result};
     parser.NextToken();
 
+    parser.scope_stack.push_back(new (parser) Scope{nullptr});
+
     while (not parser.At(Tk::Eof)) {
         bool is_export = false;
         if (parser.At(Tk::Export) and parser.PeekAt(1, Tk::Import)) {
@@ -199,7 +201,9 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
     auto modifiers = GetModifiers(true);
 
     if (At(Tk::Struct)) {
-        return ParseStruct(std::move(modifiers));
+        auto struct_result = ParseStruct(std::move(modifiers));
+        if (not struct_result) return struct_result.diag();
+        return CurrScope()->declare(this, struct_result->name(), *struct_result);
     } else if (Consume(Tk::Enum)) {
         LCC_ASSERT(false, "TODO enum");
     }
@@ -244,9 +248,12 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
             Error("Expected ')'");
         }
 
+        auto func_scope = EnterScope();
+        func_scope.scope->set_function_scope();
+
         auto body = Result<Statement*>::Null();
         if (At(Tk::OpenBrace)) {
-            body = ParseBlockStatement();
+            body = ParseBlockStatement(std::move(func_scope));
         } else {
             if (Consume(Tk::EqualGreater)) {
                 auto expr = ParseExpr();
@@ -258,7 +265,8 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
             }
         }
 
-        return new (*this) FunctionDecl{location, modifiers, *type, name, *template_params, params, *body};
+        auto func_decl = new (*this) FunctionDecl{location, modifiers, *type, name, *template_params, params, *body};
+        return CurrScope()->declare(this, func_decl->name(), func_decl);
     }
 
     if (template_params.is_value() and not(*template_params).empty()) {
@@ -274,7 +282,8 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         Error("Expected ';'");
     }
 
-    return new (*this) BindingDecl{location, modifiers, *type, name, *init};
+    auto binding_decl = new (*this) BindingDecl{location, modifiers, *type, name, *init};
+    return CurrScope()->declare(this, binding_decl->name(), binding_decl);
 }
 
 auto Parser::ParseStruct(std::vector<DeclModifier> mods) -> Result<StructDecl*> {
@@ -382,7 +391,8 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
     auto start = CurrLocation();
 
     if (At(Tk::OpenBrace)) {
-        return ParseBlockStatement();
+        auto block_scope = EnterScope();
+        return ParseBlockStatement(std::move(block_scope));
     } else if (Consume(Tk::Return)) {
         auto return_value = Result<Expr*>::Null();
         if (not At(Tk::SemiColon)) {
@@ -467,7 +477,8 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
     } else if (At(Tk::Do) and PeekAt(1, Tk::OpenBrace)) {
         NextToken();
 
-        auto body = ParseBlockStatement();
+        auto block_scope = EnterScope();
+        auto body = ParseBlockStatement(std::move(block_scope));
         if (not body) return body.diag();
 
         if (not Consume(Tk::For)) {
@@ -504,7 +515,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
     return expr_statement;
 }
 
-auto Parser::ParseBlockStatement() -> Result<BlockStatement*> {
+auto Parser::ParseBlockStatement([[maybe_unused]] ScopeRAII sc) -> Result<BlockStatement*> {
     LCC_ASSERT(not IsInSpeculativeParse());
 
     auto start_location = CurrLocation();
@@ -891,11 +902,11 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         // these constructors are already wrapped in `if (allocate)` in the TryparseNameOrPath function,
         //  so we don't have to do that explicitly.
         auto NameCtor = [&](Location location, std::string name, std::vector<Expr*> template_args) -> Expr* {
-            return new (*this) NameType{location, type_access, name, template_args};
+            return new (*this) NameType{location, type_access, CurrScope(), name, template_args};
         };
 
         auto PathCtor = [&](PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args) -> Expr* {
-            return new (*this) PathType{path_kind, type_access, names, locations, template_args};
+            return new (*this) PathType{path_kind, type_access, CurrScope(), names, locations, template_args};
         };
 
         auto id_type = TryParseNameOrPath(allocate, NameCtor, PathCtor);
@@ -1157,9 +1168,9 @@ auto Parser::ParsePrimaryIdentExprContinue(Expr* expr) -> Result<Expr*> {
 
         Type* type = nullptr;
         if (auto name_expr = cast<NameExpr>(expr)) {
-            type = new (*this) NameType{name_expr->location(), TypeAccess::Default, name_expr->name(), name_expr->template_args()};
+            type = new (*this) NameType{name_expr->location(), TypeAccess::Default, name_expr->scope(), name_expr->name(), name_expr->template_args()};
         } else if (auto path_expr = cast<PathExpr>(expr)) {
-            type = new (*this) PathType{path_expr->path_kind(), TypeAccess::Default, path_expr->names(), path_expr->locations(), path_expr->template_args()};
+            type = new (*this) PathType{path_expr->path_kind(), TypeAccess::Default, path_expr->scope(), path_expr->names(), path_expr->locations(), path_expr->template_args()};
         } else {
             LCC_ASSERT(false, "How did we get here?");
         }
@@ -1177,11 +1188,11 @@ auto Parser::ParsePrimaryExpr() -> Result<Expr*> {
 
     if (At(Tk::Ident, Tk::ColonColon, Tk::Global)) {
         auto NameCtor = [&](Location location, std::string name, std::vector<Expr*> template_args) -> Expr* {
-            return new (*this) NameExpr{location, name, template_args};
+            return new (*this) NameExpr{location, CurrScope(), name, template_args};
         };
 
         auto PathCtor = [&](PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args) -> Expr* {
-            return new (*this) PathExpr{path_kind, names, locations, template_args};
+            return new (*this) PathExpr{path_kind, CurrScope(), names, locations, template_args};
         };
 
         auto id_expr = TryParseNameOrPath(true, NameCtor, PathCtor);
