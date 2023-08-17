@@ -22,6 +22,13 @@ void lcc::Context::InitialiseLCCData() {
     static intercept::BuiltinType int_ty_void = {intercept::BuiltinType::BuiltinKind::Void, {}};
     static intercept::PointerType int_ty_void_ptr = {&int_ty_void, {}};
 
+    int_ty_bool.set_sema_done();
+    int_ty_byte.set_sema_done();
+    int_ty_int.set_sema_done();
+    int_ty_unknown.set_sema_done();
+    int_ty_void.set_sema_done();
+    int_ty_void_ptr.set_sema_done();
+
     intercept::Type::Bool = &int_ty_bool;
     intercept::Type::Byte = &int_ty_byte;
     intercept::Type::Integer = &int_ty_int;
