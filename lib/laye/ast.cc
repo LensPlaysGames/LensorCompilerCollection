@@ -977,10 +977,11 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 void layec::Module::print() {
     ASTPrinter p{true};
     p.out += fmt::format("{};; Laye module -- {}\n", p.C(ASTPrinter::White), file()->path().string());
-
     for (auto* node : _top_level_decls) p(node);
-    for (auto& ref : _imports) {
-        p.out += "\n";
-        ref.module->print();
+}
+
+void layec::LayeContext::print_modules() {
+    for (auto module : _modules) {
+        module.second->print();
     }
 }

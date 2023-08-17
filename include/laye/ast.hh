@@ -43,6 +43,8 @@ public:
     }
 
     auto parse_laye_file(File& file) -> Module*;
+
+    void print_modules();
 };
 
 class Module {

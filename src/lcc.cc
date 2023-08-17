@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
         auto mod = laye_context->parse_laye_file(file);
         
         if (options::get<"--syntax-only">()) {
-            if (options::get<"--ast">()) mod->print();
+            if (options::get<"--ast">()) laye_context->print_modules();
             std::exit(0);
         }
 
