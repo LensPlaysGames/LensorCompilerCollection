@@ -14,6 +14,7 @@ class Parser {
 
     LayeToken tok{};
     Location last_location{};
+
     std::vector<LayeToken> look_ahead{};
     std::vector<Scope*> scope_stack{};
 
@@ -61,12 +62,13 @@ private:
     struct SpeculativeRAII {
         Parser* parser;
         bool active;
-        LayeToken tok{};
+
+        LayeToken tok;
+        Location last_location;
+        usz speculative_look_ahead;
 
         SpeculativeRAII(Parser* parser)
-            : parser(parser), active(true) {
-            if (parser->speculative_parse_stack == 0)
-                tok = parser->tok;
+            : parser(parser), active(true), tok(parser->tok), last_location(parser->last_location), speculative_look_ahead(parser->speculative_look_ahead) {
             parser->speculative_parse_stack++;
         }
 
@@ -74,7 +76,7 @@ private:
         SpeculativeRAII operator=(const SpeculativeRAII&) = delete;
 
         SpeculativeRAII(SpeculativeRAII&& other) noexcept
-            : parser(other.parser), active(other.active), tok(other.tok) {
+            : parser(other.parser), active(other.active), tok(other.tok), last_location(other.last_location), speculative_look_ahead(other.speculative_look_ahead) {
             other.active = false;
         }
 
@@ -83,6 +85,8 @@ private:
             parser = other.parser;
             active = other.active;
             tok = other.tok;
+            last_location = other.last_location;
+            speculative_look_ahead = other.speculative_look_ahead;
             other.active = false;
             return *this;
         }
@@ -91,11 +95,10 @@ private:
             if (active) {
                 LCC_ASSERT(parser->speculative_parse_stack > 0);
                 parser->speculative_parse_stack--;
-                if (parser->speculative_parse_stack <= 0) {
-                    LCC_ASSERT(tok.kind != TokenKind::Invalid);
-                    parser->tok = tok;
-                    parser->speculative_look_ahead = 0;
-                }
+
+                LCC_ASSERT(tok.kind != TokenKind::Invalid);
+                parser->tok = tok;
+                parser->speculative_look_ahead = speculative_look_ahead;
             }
         }
     };
