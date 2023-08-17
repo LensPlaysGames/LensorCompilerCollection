@@ -30,7 +30,11 @@ intc::Module::Module(
                 {"__argv__", char_ptr, {}},
                 {"__envp__", char_ptr, {}},
             },
-            cint_ty,
+
+            /// We currently set main() to return `int` since that’s natural for
+            /// most programs. In the future, our runtime should define main() and
+            /// this function should be something that’s called by it.
+            Type::Int,
             {},
             {},
         };
@@ -208,7 +212,7 @@ auto intc::Type::elem() const -> Type* {
 
 namespace {
 bool is_builtin(const intc::Type* t, intc::BuiltinType::BuiltinKind k) {
-    if (auto b = lcc::as<intc::BuiltinType>(t)) return b->builtin_kind() == k;
+    if (auto b = lcc::cast<intc::BuiltinType>(t)) return b->builtin_kind() == k;
     return false;
 }
 } // namespace
@@ -616,52 +620,57 @@ auto intc::Type::string(bool use_colours) const -> std::string {
         case Kind::Named: return as<NamedType>(this)->name();
         case Kind::Pointer:
             return fmt::format(
-                "{}@{}{}",
+                "{}@{}{}{}",
                 C(Red),
                 C(Cyan),
-                as<PointerType>(this)->element_type()->string(use_colours)
+                as<PointerType>(this)->element_type()->string(use_colours),
+                C(Reset)
             );
         case Kind::Reference:
             return fmt::format(
-                "{}&{}{}",
+                "{}&{}{}{}",
                 C(Red),
                 C(Cyan),
-                as<ReferenceType>(this)->element_type()->string(use_colours)
+                as<ReferenceType>(this)->element_type()->string(use_colours),
+                C(Reset)
             );
 
         case Kind::Integer: {
             auto i = as<IntegerType>(this);
-            return fmt::format("{}{}{}", C(Cyan), i->is_signed() ? "i" : "u", i->bit_width());
+            return fmt::format("{}{}{}{}", C(Cyan), i->is_signed() ? "i" : "u", i->bit_width(), C(Reset));
         }
 
         case Kind::Struct: {
             auto decl = as<StructType>(this)->decl();
             return fmt::format(
-                "{}struct {}{}",
+                "{}struct {}{}{}",
                 C(Red),
                 C(Cyan),
-                decl->name().empty() ? "<anonymous>" : decl->name()
+                decl->name().empty() ? "<anonymous>" : decl->name(),
+                C(Reset)
             );
         }
 
         case Kind::Array: {
             auto arr = as<ArrayType>(this);
-            if (auto sz = cast<IntegerLiteral>(arr->size())) {
+            if (auto sz = cast<ConstantExpr>(arr->size())) {
                 return fmt::format(
-                    "{}{}[{}{}{}]",
+                    "{}{}[{}{}{}]{}",
                     arr->element_type()->string(use_colours),
                     C(Red),
                     C(Magenta),
-                    sz->value(),
-                    C(Red)
+                    sz->value().as_i64(),
+                    C(Red),
+                    C(Reset)
                 );
             } else {
                 return fmt::format(
-                    "{}{}[{}?{}]",
+                    "{}{}[{}?{}]{}",
                     arr->element_type()->string(use_colours),
                     C(Red),
                     C(Magenta),
-                    C(Red)
+                    C(Red),
+                    C(Reset)
                 );
             }
         }
@@ -669,29 +678,29 @@ auto intc::Type::string(bool use_colours) const -> std::string {
         case Kind::Builtin:
             switch (as<BuiltinType>(this)->builtin_kind()) {
                 using K = BuiltinType::BuiltinKind;
-                case K::Bool: return fmt::format("{}bool", C(Cyan));
-                case K::Byte: return fmt::format("{}byte", C(Cyan));
-                case K::Int: return fmt::format("{}int", C(Cyan));
-                case K::Unknown: return fmt::format("{}<?>", C(Cyan));
-                case K::Void: return fmt::format("{}void", C(Cyan));
-                case K::OverloadSet: return fmt::format("{}<overload set>", C(Cyan));
+                case K::Bool: return fmt::format("{}bool{}", C(Cyan), C(Reset));
+                case K::Byte: return fmt::format("{}byte{}", C(Cyan), C(Reset));
+                case K::Int: return fmt::format("{}int{}", C(Cyan), C(Reset));
+                case K::Unknown: return fmt::format("{}<?>{}", C(Cyan), C(Reset));
+                case K::Void: return fmt::format("{}void{}", C(Cyan), C(Reset));
+                case K::OverloadSet: return fmt::format("{}<overload set>{}", C(Cyan), C(Reset));
             }
             LCC_UNREACHABLE();
 
         case Kind::FFIType:
             switch (as<FFIType>(this)->ffi_kind()) {
                 using K = FFIType::FFIKind;
-                case K::CChar: return fmt::format("__c_char", C(Cyan));
-                case K::CSChar: return fmt::format("__c_schar", C(Cyan));
-                case K::CUChar: return fmt::format("__c_uchar", C(Cyan));
-                case K::CShort: return fmt::format("__c_short", C(Cyan));
-                case K::CUShort: return fmt::format("__c_ushort", C(Cyan));
-                case K::CInt: return fmt::format("__c_int", C(Cyan));
-                case K::CUInt: return fmt::format("__c_uint", C(Cyan));
-                case K::CLong: return fmt::format("__c_long", C(Cyan));
-                case K::CULong: return fmt::format("__c_ulong", C(Cyan));
-                case K::CLongLong: return fmt::format("__c_longlong", C(Cyan));
-                case K::CULongLong: return fmt::format("__c_ulonglong", C(Cyan));
+                case K::CChar: return fmt::format("__c_char{}", C(Cyan), C(Reset));
+                case K::CSChar: return fmt::format("__c_schar{}", C(Cyan), C(Reset));
+                case K::CUChar: return fmt::format("__c_uchar{}", C(Cyan), C(Reset));
+                case K::CShort: return fmt::format("__c_short{}", C(Cyan), C(Reset));
+                case K::CUShort: return fmt::format("__c_ushort{}", C(Cyan), C(Reset));
+                case K::CInt: return fmt::format("__c_int{}", C(Cyan), C(Reset));
+                case K::CUInt: return fmt::format("__c_uint{}", C(Cyan), C(Reset));
+                case K::CLong: return fmt::format("__c_long{}", C(Cyan), C(Reset));
+                case K::CULong: return fmt::format("__c_ulong{}", C(Cyan), C(Reset));
+                case K::CLongLong: return fmt::format("__c_longlong{}", C(Cyan), C(Reset));
+                case K::CULongLong: return fmt::format("__c_ulonglong{}", C(Cyan), C(Reset));
             }
             LCC_UNREACHABLE();
 
@@ -705,7 +714,7 @@ auto intc::Type::string(bool use_colours) const -> std::string {
                 else out += ":";
                 out += arg.type->string(use_colours);
             }
-            out += fmt::format("{})", C(Red));
+            out += fmt::format("{}){}", C(Red), C(Reset));
             return out;
         }
     }

@@ -18,7 +18,7 @@ lcc::Type* lcc::Type::I1Ty;
 
 intc::Type* intc::Type::Bool;
 intc::Type* intc::Type::Byte;
-intc::Type* intc::Type::Integer;
+intc::Type* intc::Type::Int;
 intc::Type* intc::Type::Unknown;
 intc::Type* intc::Type::Void;
 intc::Type* intc::Type::VoidPtr;
@@ -51,7 +51,7 @@ void lcc::Context::InitialiseLCCData() {
 
     intc::Type::Bool = &int_ty_bool;
     intc::Type::Byte = &int_ty_byte;
-    intc::Type::Integer = &int_ty_int;
+    intc::Type::Int = &int_ty_int;
     intc::Type::Unknown = &int_ty_unknown;
     intc::Type::Void = &int_ty_void;
     intc::Type::OverloadSet = &int_ty_os;

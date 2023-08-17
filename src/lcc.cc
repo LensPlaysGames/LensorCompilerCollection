@@ -77,7 +77,7 @@ int main(int argc, char** argv) {
         }
 
         /// Perform semantic analysis.
-        lcc::intercept::Sema::Analyse(&context, *mod);
+        lcc::intercept::Sema::Analyse(&context, *mod, true);
         if (options::get<"--ast">()) {
             if (context.has_error()) std::exit(1);
             mod->print();

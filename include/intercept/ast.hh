@@ -435,7 +435,7 @@ public:
     /// it in Context::InitialiseLCCData().
     static Type* Bool;
     static Type* Byte;
-    static Type* Integer;
+    static Type* Int;
     static Type* Unknown;
     static Type* Void;
     static Type* VoidPtr;
@@ -957,7 +957,7 @@ class IntegerLiteral : public TypedExpr {
 
 public:
     IntegerLiteral(u64 value, Location location)
-        : TypedExpr(Kind::IntegerLiteral, location, Type::Integer), _value(value) {
+        : TypedExpr(Kind::IntegerLiteral, location, Type::Int), _value(value) {
         /// For now, there should be no way that the value could be out of range.
         set_sema_done();
     }
@@ -1105,7 +1105,7 @@ class ConstantExpr : public TypedExpr {
 
 public:
     ConstantExpr(Expr* expr, EvalResult value)
-        : TypedExpr(expr->kind(), expr->location(), expr->type()),
+        : TypedExpr(Kind::EvaluatedConstant, expr->location(), expr->type()),
           _value(std::move(value)),
           _expression(expr) {
         LCC_ASSERT(expr->ok());

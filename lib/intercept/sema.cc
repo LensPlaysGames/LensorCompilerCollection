@@ -156,7 +156,7 @@ void intc::Sema::InsertImplicitCast(Expr** expr_ptr, Type* ty) {
 
 void intc::Sema::InsertPointerToIntegerCast(Expr** operand) {
     if ((*operand)->type()->is_pointer())
-        InsertImplicitCast(operand, Type::Integer);
+        InsertImplicitCast(operand, Type::Int);
 }
 
 auto intc::Sema::LValueToRValue(Expr** expr) -> Type* {
@@ -254,8 +254,9 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
 
         if (is<ReturnExpr>(*last)) return;
         if (not Convert(last, ty->return_type())) Error(
-            decl->location(),
-            "Type of last expression is not convertible to return type {}",
+            (*last)->location(),
+            "Type of last expression {} is not convertible to return type {}",
+            (*last)->type(),
             ty->return_type()
         );
     }
@@ -652,7 +653,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
 
             /// The RHS must be an integer.
             LValueToRValue(&b->rhs());
-            if (not Convert(&b->rhs(), Type::Integer)) {
+            if (not Convert(&b->rhs(), Type::Int)) {
                 Error(b->rhs()->location(), "RHS of subscript must be an integer");
                 return;
             }
@@ -959,7 +960,7 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
 
         case IntrinsicKind::BuiltinLine: {
             if (not expr->args().empty()) Error(expr->location(), "__builtin_line() takes no arguments");
-            expr->type(Type::Integer);
+            expr->type(Type::Int);
             expr->set_sema_done();
 
             /// If possible, seek to the location, if not we just insert 0.
@@ -977,7 +978,7 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
             for (auto*& arg : expr->args()) Analyse(&arg);
             ConvertOrError(&expr->args()[0], Type::VoidPtr);
             ConvertOrError(&expr->args()[1], Type::VoidPtr);
-            ConvertOrError(&expr->args()[2], Type::Integer);
+            ConvertOrError(&expr->args()[2], Type::Int);
 
             /// Unlike C’s memcpy()/memmove(), this returns nothing.
             expr->type(Type::Void);
@@ -992,7 +993,7 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
             for (auto*& arg : expr->args()) Analyse(&arg);
             ConvertOrError(&expr->args()[0], Type::VoidPtr);
             ConvertOrError(&expr->args()[1], Type::Byte);
-            ConvertOrError(&expr->args()[2], Type::Integer);
+            ConvertOrError(&expr->args()[2], Type::Int);
 
             /// Unlike C’s memset(), this returns nothing.
             expr->type(Type::Void);
@@ -1007,11 +1008,11 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
             for (auto*& arg : expr->args()) {
                 Analyse(&arg);
                 InsertPointerToIntegerCast(&arg);
-                ConvertOrError(&arg, Type::Integer);
+                ConvertOrError(&arg, Type::Int);
             }
 
             /// Syscalls all return integer.
-            expr->type(Type::Integer);
+            expr->type(Type::Int);
         } break;
     }
 }
@@ -1255,7 +1256,7 @@ bool intc::Sema::Analyse(Type** type_ptr) {
 
             /// Collapse refs.
             while (is<ReferenceType>(r->element_type()))
-                r->element_type(cast<ReferenceType>(r->element_type()));
+                r->element_type(r->element_type()->elem());
         } break;
 
         /// Apply decltype decay to the element type and prohibit
