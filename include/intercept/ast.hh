@@ -268,7 +268,7 @@ private:
     State _state = State::NotAnalysed;
 
 protected:
-    SemaNode() = default;
+    constexpr SemaNode() = default;
 
 public:
     /// Check if this expression was successfully analysed by sema.
@@ -293,7 +293,7 @@ public:
     }
 
     /// \see SemaNode::State
-    void set_sema_done() {
+    constexpr void set_sema_done() {
         LCC_ASSERT(_state != State::Errored);
         _state = State::Done;
     }
@@ -327,7 +327,7 @@ private:
     Location _location;
 
 protected:
-    Type(Kind kind, Location location)
+    constexpr Type(Kind kind, Location location)
         : _kind(kind), _location(location) {}
 
 public:
@@ -360,6 +360,9 @@ public:
     /// Check if this is the builtin \c bool type.
     bool is_bool() const;
 
+    /// Check if this is the builtin \c byte type.
+    bool is_byte() const;
+
     /// Check if this is a builtin type.
     bool is_builtin() const { return _kind == Kind::Builtin; }
 
@@ -378,7 +381,7 @@ public:
     bool is_reference() const { return _kind == Kind::Reference; }
 
     /// Check if this is a signed integer type.
-    bool is_signed() const;
+    bool is_signed_int(const Context* ctx) const;
 
     /// Check if this is a sized integer type.
     bool is_sized_integer() const { return _kind == Kind::Integer; }
@@ -390,7 +393,7 @@ public:
     bool is_unknown() const;
 
     /// Check if this is an unsigned integer type.
-    bool is_unsigned() const;
+    bool is_unsigned_int(const Context* ctx) const;
 
     /// Check if this is the builtin \c void type.
     bool is_void() const;
@@ -407,9 +410,6 @@ public:
 
     /// Get a string representation of this type.
     auto string(bool use_colours = false) const -> std::string;
-
-    /// Return this type stripped of any aliases.
-    auto strip_aliases() -> Type*;
 
     /// Return this type stripped of any pointers and references.
     auto strip_pointers_and_references() -> Type*;
@@ -458,7 +458,7 @@ public:
     enum struct BuiltinKind {
         Bool,
         Byte,
-        Integer,
+        Int,
         Unknown,
         Void,
         OverloadSet,
@@ -474,7 +474,7 @@ private:
         return new (mod) BuiltinType(k, l);
     }
 
-    BuiltinType(K k, Location location)
+    constexpr BuiltinType(K k, Location location)
         : Type(Kind::Builtin, location), _kind(k) {
         set_sema_done();
     }
@@ -488,7 +488,7 @@ public:
     /// Get instances of primitive types.
     static auto Bool(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Bool, l); }
     static auto Byte(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Byte, l); }
-    static auto Integer(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Integer, l); }
+    static auto Integer(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Int, l); }
     static auto Unknown(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Unknown, l); }
     static auto Void(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Void, l); }
 
@@ -564,7 +564,7 @@ class TypeWithOneElement : public Type {
     Type* _element_type;
 
 protected:
-    TypeWithOneElement(Kind kind, Location location, Type* element_type)
+    constexpr TypeWithOneElement(Kind kind, Location location, Type* element_type)
         : Type(kind, location), _element_type(element_type) {}
 
 public:
@@ -579,7 +579,7 @@ public:
 
 class PointerType : public TypeWithOneElement {
 public:
-    PointerType(Type* element_type, Location location = {})
+    constexpr PointerType(Type* element_type, Location location = {})
         : TypeWithOneElement(Kind::Pointer, location, element_type) {}
 
     static bool classof(const Type* type) { return type->kind() == Kind::Pointer; }
@@ -600,6 +600,7 @@ public:
     ArrayType(Type* element_type, Expr* size, Location location = {})
         : TypeWithOneElement(Kind::Array, location, element_type), _size(size) {}
 
+    auto size() -> Expr*& { return _size; }
     Expr* size() const { return _size; }
 
     static bool classof(const Type* type) { return type->kind() == Kind::Array; }

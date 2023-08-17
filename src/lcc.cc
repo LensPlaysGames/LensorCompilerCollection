@@ -1,6 +1,7 @@
 #include <clopts.hh>
 #include <intercept/ast.hh>
 #include <intercept/parser.hh>
+#include <intercept/sema.hh>
 #include <laye/parser.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
@@ -67,9 +68,19 @@ int main(int argc, char** argv) {
 
     /// Intercept.
     if (path_str.ends_with(".int")) {
+        /// Parse the file.
         auto mod = lcc::intercept::Parser::Parse(&context, file);
         if (options::get<"--syntax-only">()) {
+            if (context.has_error()) std::exit(1);
             if (options::get<"--ast">()) mod->print();
+            std::exit(0);
+        }
+
+        /// Perform semantic analysis.
+        lcc::intercept::Sema::Analyse(&context, *mod);
+        if (options::get<"--ast">()) {
+            if (context.has_error()) std::exit(1);
+            mod->print();
             std::exit(0);
         }
 
@@ -83,7 +94,7 @@ int main(int argc, char** argv) {
             if (options::get<"--ast">()) mod->print();
             std::exit(0);
         }
-        
+
         return 69;
     }
 

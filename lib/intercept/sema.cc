@@ -106,7 +106,7 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
         EvalResult res;
         if ((*expr_ptr)->evaluate(res, false)) {
             auto val = res.as_i64();
-            if (val < 0 and to->is_unsigned()) return ConversionImpossible;
+            if (val < 0 and to->is_unsigned_int(context)) return ConversionImpossible;
 
             /// Note: We currently don’t support integer constants larger than 64
             /// bits internally, so if the type has a bit width larger than 64, it
@@ -120,7 +120,10 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
         /// Furthermore, smaller sized integer types are convertible to larger sized
         /// integer types, so long as we’re not converting from a signed to an unsigned
         /// type.
-        if (from->size(context) <= to->size(context) and (from->is_unsigned() or to->is_signed())) {
+        if (
+            from->size(context) <= to->size(context) and
+            (from->is_unsigned_int(context) or to->is_signed_int(context))
+        ) {
             if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
             return Score(1);
         }
@@ -1256,7 +1259,7 @@ bool intc::Sema::Analyse(Type** type_ptr) {
         } break;
 
         /// Apply decltype decay to the element type and prohibit
-        /// arrays of references.
+        /// arrays of references. Also check the size.
         case Type::Kind::Array: {
             auto a = as<ArrayType>(type);
             Analyse(&a->element_type());
@@ -1267,6 +1270,27 @@ bool intc::Sema::Analyse(Type** type_ptr) {
                 if (elem->ok()) Error(a->location(), "Cannot create array of reference type {}", elem);
                 a->set_sema_errored();
             }
+
+            /// Array size must be known at compile time.
+            Analyse(&a->size());
+            EvalResult res;
+            usz size = 1;
+            if (a->size()->ok() and a->size()->evaluate(res, false)) {
+                if (res.as_i64() < 1) {
+                    Error(a->location(), "Array size must be greater than 0");
+                    a->set_sema_errored();
+                }
+
+                size = usz(res.as_i64());
+            } else {
+                if (a->size()->ok()) Error(a->location(), "Array size must be known at compile time");
+                a->set_sema_errored();
+            }
+
+            /// Always create a constant expression for the array size as
+            /// other parts of the program assume that array sizes are
+            /// constant.
+            a->size() = new (mod) ConstantExpr(a->size(), EvalResult{i64(size)});
         } break;
 
         /// Analyse the parameters, the return type, and attributes.

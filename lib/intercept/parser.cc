@@ -612,7 +612,7 @@ auto lcc::intercept::Parser::ParseExpr(isz current_precedence) -> ExprResult {
                 NextToken();
                 auto ty = ParseType();
                 if (not ty) return ty.diag();
-                lhs = new (*mod) CastExpr(*lhs, *ty, CastExpr::CastKind::SoftCast, {lhs->location(), tok.location});
+                lhs = new (*mod) CastExpr(*lhs, *ty, CastKind::SoftCast, {lhs->location(), tok.location});
                 continue;
             }
 

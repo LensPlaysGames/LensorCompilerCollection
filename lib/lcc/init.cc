@@ -1,6 +1,28 @@
 #include <intercept/ast.hh>
 #include <lcc/context.hh>
 #include <lcc/ir/type.hh>
+#include <lcc/target.hh>
+
+namespace intc = lcc::intercept;
+
+/// FIXME(Sirraide): We could probably just use `constinit` for all of this;
+///     that way, we wouldn’t even need to call an initialisation function.
+///     Note that `constexpr` probably wouldn’t work for types since we’re
+///     passing around `Type*`s instead of `const Type*`s in way too many
+///     places.
+
+lcc::Type* lcc::Type::UnknownTy;
+lcc::Type* lcc::Type::PtrTy;
+lcc::Type* lcc::Type::VoidTy;
+lcc::Type* lcc::Type::I1Ty;
+
+intc::Type* intc::Type::Bool;
+intc::Type* intc::Type::Byte;
+intc::Type* intc::Type::Integer;
+intc::Type* intc::Type::Unknown;
+intc::Type* intc::Type::Void;
+intc::Type* intc::Type::VoidPtr;
+intc::Type* intc::Type::OverloadSet;
 
 void lcc::Context::InitialiseLCCData() {
     /// Initialise builtin IR types.
@@ -15,21 +37,23 @@ void lcc::Context::InitialiseLCCData() {
     Type::I1Ty = &ir_i1_ty;
 
     /// Initialise default instances of builtin Intercept types.
-    static intercept::BuiltinType int_ty_bool = {intercept::BuiltinType::BuiltinKind::Bool, {}};
-    static intercept::BuiltinType int_ty_byte = {intercept::BuiltinType::BuiltinKind::Byte, {}};
-    static intercept::BuiltinType int_ty_int = {intercept::BuiltinType::BuiltinKind::Integer, {}};
-    static intercept::BuiltinType int_ty_unknown = {intercept::BuiltinType::BuiltinKind::Unknown, {}};
-    static intercept::BuiltinType int_ty_void = {intercept::BuiltinType::BuiltinKind::Void, {}};
-    static intercept::BuiltinType int_ty_os = {intercept::BuiltinType::BuiltinKind::OverloadSet, {}};
-    static intercept::PointerType int_ty_void_ptr = {&int_ty_void, {}};
+    static constinit intc::BuiltinType int_ty_bool = {intc::BuiltinType::BuiltinKind::Bool, {}};
+    static constinit intc::BuiltinType int_ty_byte = {intc::BuiltinType::BuiltinKind::Byte, {}};
+    static constinit intc::BuiltinType int_ty_int = {intc::BuiltinType::BuiltinKind::Int, {}};
+    static constinit intc::BuiltinType int_ty_unknown = {intc::BuiltinType::BuiltinKind::Unknown, {}};
+    static constinit intc::BuiltinType int_ty_void = {intc::BuiltinType::BuiltinKind::Void, {}};
+    static constinit intc::BuiltinType int_ty_os = {intc::BuiltinType::BuiltinKind::OverloadSet, {}};
+    static constinit intc::PointerType int_ty_void_ptr = [] {
+        intc::PointerType ty = {&int_ty_void, {}};
+        ty.set_sema_done();
+        return ty;
+    }();
 
-    int_ty_void_ptr.set_sema_done();
-
-    intercept::Type::Bool = &int_ty_bool;
-    intercept::Type::Byte = &int_ty_byte;
-    intercept::Type::Integer = &int_ty_int;
-    intercept::Type::Unknown = &int_ty_unknown;
-    intercept::Type::Void = &int_ty_void;
-    intercept::Type::OverloadSet = &int_ty_os;
-    intercept::Type::VoidPtr = &int_ty_void_ptr;
+    intc::Type::Bool = &int_ty_bool;
+    intc::Type::Byte = &int_ty_byte;
+    intc::Type::Integer = &int_ty_int;
+    intc::Type::Unknown = &int_ty_unknown;
+    intc::Type::Void = &int_ty_void;
+    intc::Type::OverloadSet = &int_ty_os;
+    intc::Type::VoidPtr = &int_ty_void_ptr;
 }
