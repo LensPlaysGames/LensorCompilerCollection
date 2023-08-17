@@ -344,6 +344,7 @@ public:
 
     /// Check the kind of this type.
     bool is_array() const { return _kind == Kind::Array; }
+    bool is_bool() const;
     bool is_builtin() const { return _kind == Kind::Builtin; }
     bool is_function() const { return _kind == Kind::Function; }
     bool is_named() const { return _kind == Kind::Named; }
@@ -374,6 +375,13 @@ public:
 
     /// Return this type stripped of any references.
     auto strip_references() -> Type*;
+
+    /// It’s way too easy to accidentally write `a == b` when
+    /// you really meant `*a == *b`, so we don’t allow this.
+    bool operator==(const Type& other) const = delete;
+
+    /// Check if types are equal to each other.
+    static bool Equal(const Type* a, const Type* b);
 
     /// Use these only if there is no location information
     /// available (e.g. for default initialisers etc.). In
@@ -466,6 +474,10 @@ protected:
 
 public:
     auto element_type() const { return _element_type; }
+
+    static bool classof(const Type* type) {
+        return type->kind() >= Kind::Pointer and type->kind() <= Kind::Array;
+    }
 };
 
 class PointerType : public TypeWithOneElement {
@@ -656,6 +668,13 @@ public:
         mod.nodes.push_back(static_cast<Expr*>(ptr));
         return ptr;
     }
+
+    /// Try to evaluate this expression.
+    ///
+    /// \param out Outparameter for the result of the evaluation.
+    /// \param required Whether to error if evaluation fails.
+    /// \return Whether evaluation succeeded.
+    bool evaluate(EvalResult& out, bool required);
 
     Kind kind() const { return _kind; }
 
@@ -1056,9 +1075,11 @@ public:
         : TypedExpr(Kind::Binary, location), _lhs(lhs), _rhs(rhs), _op(op) {}
 
     /// Get the left-hand side of this expression.
+    auto lhs() -> Expr*& { return _lhs; }
     auto lhs() const { return _lhs; }
 
     /// Get the right-hand side of this expression.
+    auto rhs() -> Expr*& { return _rhs; }
     auto rhs() const { return _rhs; }
 
     /// Get the binary operator.

@@ -49,6 +49,7 @@ private:
 
     bool Analyse(Type** type);
     bool Analyse(Expr** expr, Type* expected_type = nullptr);
+    void AnalyseBinary(BinaryExpr* expr);
     void AnalyseCall(Expr** expr_ptr, CallExpr* expr);
     void AnalyseCast(CastExpr* expr);
     void AnalyseFunction(FuncDecl* decl);
@@ -67,8 +68,9 @@ private:
     ///
     /// \param expr A pointer to the expression to convert.
     /// \param type The type to convert to.
+    /// \return Whether the conversion succeeded.
     /// \see TryConvert().
-    void Convert(Expr** expr, Type* type);
+    bool Convert(Expr** expr, Type* type);
 
     /// Like Convert(), but converts expressions to their *common type* instead.
     ///

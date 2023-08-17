@@ -331,6 +331,11 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             AnalyseUnary(as<UnaryExpr>(expr));
             break;
 
+        /// Binary expressions.
+        case Expr::Kind::Binary:
+            AnalyseBinary(as<BinaryExpr>(expr));
+            break;
+
         /// Functions are analysed separately.
         case Expr::Kind::FuncDecl:
             LCC_ASSERT(expr->type()->is_function());
@@ -347,7 +352,6 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
         /// These should only be created by sema and are thus no-ops.
         case Expr::Kind::EvaluatedConstant: break;
 
-        case Expr::Kind::Binary: break;
         case Expr::Kind::NameRef: break;
     }
 
@@ -356,7 +360,137 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
     return (*expr_ptr)->ok();
 }
 
-void lcc::intercept::Sema::AnalyseCast(CastExpr* c) {
+void intc::Sema::AnalyseBinary(BinaryExpr* b) {
+    /// Give up if there is an error in either operand.
+    if (not Analyse(&b->lhs()) or not Analyse(&b->rhs())) {
+        b->set_sema_errored();
+        return;
+    }
+
+    switch (b->op()) {
+        default: Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
+
+        /// Pointer or array subscript.
+        case TokenKind::LBrack: {
+            auto ty = b->lhs()->type()->strip_references();
+            if (not is<PointerType, ArrayType>(ty)) {
+                Error(b->location(), "LHS of subscript must be a pointer or array, but was {}", b->lhs()->type());
+                b->set_sema_errored();
+                return;
+            }
+
+            /// Result type is the pointer type or a pointer to the array element.
+            b->type(is<PointerType>(ty) ? ty : Ptr(as<ArrayType>(ty)->element_type()));
+
+            /// The RHS must be an integer.
+            LvalueToRvalue(&b->rhs());
+            if (not Convert(&b->rhs(), Type::Integer)) return;
+
+            /// If it is an integer, try to evaluate it for bounds checking.
+            if (auto arr = as<ArrayType>(ty); arr and arr->size()->ok()) {
+                EvalResult res;
+                if (b->rhs()->evaluate(res, false)) {
+                    if (res.as_i64() < 0 or res.as_i64() >= as<ConstantExpr>(arr->size())->value().as_i64())
+                        Error(b->location(), "Array subscript out of bounds");
+
+                    /// Since we already have the result, store it for later.
+                    ReplaceWithNewNode(&b->rhs(), new (mod) ConstantExpr(b->rhs(), res));
+                }
+            }
+        } break;
+
+        /// Pointer arithmetic is handled by the subscript operator,
+        /// so these are all just regular arithmetic.
+        case TokenKind::Star:
+        case TokenKind::Slash:
+        case TokenKind::Percent:
+        case TokenKind::Plus:
+        case TokenKind::Minus:
+        case TokenKind::Shl:
+        case TokenKind::Shr:
+        case TokenKind::Ampersand:
+        case TokenKind::Pipe:
+        case TokenKind::Caret: {
+            LvalueToRvalue(&b->lhs());
+            LvalueToRvalue(&b->rhs());
+            auto lhs = b->lhs()->type();
+            auto rhs = b->rhs()->type();
+
+            /// Both types must be integers.
+            if (not lhs->is_any_integer() or not rhs->is_any_integer()) {
+                Error(b->location(), "Cannot perform arithmetic on {} and {}", lhs, rhs);
+                b->set_sema_errored();
+                return;
+            }
+
+            /// Convert both operands to their common type.
+            if (not ConvertToCommonType(&b->lhs(), &b->rhs(), true)) {
+                b->set_sema_errored();
+                return;
+            }
+
+            /// The result type is the common type.
+            b->type(b->lhs()->type());
+        } break;
+
+        /// Comparisons are all handled the same.
+        case TokenKind::Eq:
+        case TokenKind::Ne:
+        case TokenKind::Lt:
+        case TokenKind::Gt:
+        case TokenKind::Le:
+        case TokenKind::Ge: {
+            LvalueToRvalue(&b->lhs());
+            LvalueToRvalue(&b->rhs());
+            auto lhs = b->lhs()->type();
+            auto rhs = b->rhs()->type();
+
+            /// If both operands are integers, convert them to their common type.
+            if (lhs->is_any_integer() and rhs->is_any_integer())
+                ConvertToCommonType(&b->lhs(), &b->rhs(), true);
+
+            /// Bool can only be compared with bool.
+            else if (lhs->is_bool() and rhs->is_bool()) {}
+
+            /// If both operands are pointers, they must be the same type.
+            else if (lhs->is_pointer() and rhs->is_pointer()) {
+                if (not Type::Equal(lhs, rhs)) Error(
+                    b->location(),
+                    "Cannot compare unrelated pointer types {} and {}",
+                    lhs,
+                    rhs
+                );
+            }
+
+            /// Other comparisons are not allowed.
+            else { Error(b->location(), "Cannot compare {} and {}", lhs, rhs); }
+
+            /// Comparisons return bool.
+            b->type(Type::Bool);
+        } break;
+
+        /// Assignment.
+        case TokenKind::ColonEq: {
+            LvalueToRvalue(&b->rhs());
+            if (not b->lhs()->is_lvalue()) {
+                Error(b->location(), "LHS of assignment must be an lvalue");
+                b->set_sema_errored();
+                return;
+            }
+
+            /// The type of the assignment is the same lvalue. Note that if
+            /// the lhs is indeed an lvalue, we don’t ever mark this as errored
+            /// because we know what its type is going to be, irrespective of
+            /// whether the assignment if valid or not.
+            b->type(b->lhs()->type());
+
+            /// The RHS must be assignable to the LHS.
+            Convert(&b->rhs(), b->lhs()->type()->strip_references());
+        } break;
+    }
+}
+
+void intc::Sema::AnalyseCast(CastExpr* c) {
     /// Implicit casts and lvalue-to-rvalue conversions are
     /// only ever created by sema, so we know they’re fine.
     if (c->is_implicit_cast() or c->is_lvalue_to_rvalue()) return;
@@ -407,7 +541,7 @@ void lcc::intercept::Sema::AnalyseCast(CastExpr* c) {
     Error(c->location(), "Invalid cast from {} to {}", from, to);
 }
 
-void lcc::intercept::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) {
+void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) {
     switch (expr->intrinsic_kind()) {
         case IntrinsicKind::BuiltinDebugtrap: {
             if (not expr->args().empty())
@@ -508,7 +642,11 @@ void lcc::intercept::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallEx
 }
 
 void intc::Sema::AnalyseUnary(UnaryExpr* u) {
-    Analyse(&u->operand());
+    /// Give up if there is an error in the operand.
+    if (not Analyse(&u->operand())) {
+        u->set_sema_errored();
+        return;
+    }
 
     /// Postfix operators.
     if (u->is_postfix()) {
@@ -518,7 +656,7 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
 
     /// Prefix operators.
     switch (u->op()) {
-        default: LCC_ASSERT(false, "Invalid prefix operator '{}'", ToString(u->op()));
+        default: Diag::ICE("Invalid prefix operator '{}'", ToString(u->op()));
 
         /// Get the address of an lvalue or function.
         case TokenKind::Ampersand: {
