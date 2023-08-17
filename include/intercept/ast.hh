@@ -110,7 +110,6 @@ enum class CastKind {
     LValueToRValueConv, ///< Lvalue-to-rvalue conversion.
 };
 
-
 /// Convert a token kind to a string representation.
 auto ToString(TokenKind kind) -> std::string_view;
 
@@ -218,12 +217,12 @@ public:
     /// added. If the name already exists, and the declaration
     /// is not a function declaration, this returns a diagnostic.
     ///
-    /// \param parser The Intercept parser.
+    /// \param ctx The LCC context
     /// \param name The name of the declared symbol.
     /// \param decl The declaration to bind to the symbol.
     /// \return The same declaration, or an error.
     auto declare(
-        Parser* ctx,
+        const Context* ctx,
         std::string&& name,
         Decl* decl
     ) -> Result<Decl*>;
@@ -895,9 +894,11 @@ public:
 
 class FuncDecl : public ObjectDecl {
     Expr* _body{};
+    Scope* _scope{};
 
     /// Only present if this is not an imported function. Sema
-    /// fills these in.
+    /// fills these in. Furthermore, parameters with empty names
+    /// do not get a decl.
     std::vector<VarDecl*> _params;
 
 public:
@@ -905,11 +906,12 @@ public:
         std::string name,
         FuncType* type,
         Expr* body,
+        Scope* scope,
         Module* mod,
         Linkage linkage,
         Location location
     ) : ObjectDecl(Kind::FuncDecl, type, std::move(name), mod, linkage, location),
-        _body(body) {
+        _body(body), _scope(scope) {
         mod->add_function(this);
 
         /// Functions receive special handling in sema and their types are
@@ -923,7 +925,11 @@ public:
         return as<FuncType>(type())->params() | vws::transform([](auto& p) { return p.type; });
     }
 
+    auto param_decls() -> std::vector<VarDecl*>& { return _params; }
     auto param_decls() const -> const std::vector<VarDecl*>& { return _params; }
+
+    auto scope(Scope* scope) { _scope = scope; }
+    auto scope() const -> Scope* { return _scope; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::FuncDecl; }
 };

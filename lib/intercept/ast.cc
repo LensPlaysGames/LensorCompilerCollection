@@ -46,6 +46,7 @@ intc::Module::Module(
         is_logical_module ? fmt::format(".init.{}", name) : "main",
         ty,
         new (*this) BlockExpr{{}, {}},
+        nullptr,
         this,
         Linkage::Exported,
         {},
@@ -91,7 +92,7 @@ intc::StringLiteral::StringLiteral(
 
 /// Declare a symbol in this scope.
 auto intc::Scope::declare(
-    Parser* p,
+    const Context* ctx,
     std::string&& name,
     Decl* decl
 ) -> Result<Decl*> {
@@ -103,7 +104,7 @@ auto intc::Scope::declare(
         it != symbols.end() and
         not is<FuncDecl>(it->second) and
         not is<FuncDecl>(decl)
-    ) return Diag::Error(p->context, decl->location(), "Redeclaration of '{}'", name);
+    ) return Diag::Error(ctx, decl->location(), "Redeclaration of '{}'", name);
 
     /// TODO: Check that this declaration is hygienic if it’s part of a macro.
 
@@ -606,6 +607,10 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                 PrintChildren(children, leading_text);
             } break;
 
+            case K::CompoundLiteral:
+                PrintChildren(as<intc::CompoundLiteral>(e)->values(), leading_text);
+                break;
+
             case K::OverloadSet:
             case K::EvaluatedConstant:
             case K::While:
@@ -615,7 +620,6 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
             case K::TypeAliasDecl:
             case K::IntegerLiteral:
             case K::StringLiteral:
-            case K::CompoundLiteral:
             case K::If:
             case K::Block:
             case K::IntrinsicCall:

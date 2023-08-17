@@ -309,7 +309,7 @@ auto lcc::intercept::Parser::ParseDeclRest(
                     /// Type must be a struct type.
                     if (auto s = cast<StructType>(*decl)) {
                         return CurrScope()->declare(
-                            this,
+                            context,
                             std::move(decl_name),
                             new (*mod) StructDecl(mod.get(), std::move(ident), s, location)
                         );
@@ -328,7 +328,7 @@ auto lcc::intercept::Parser::ParseDeclRest(
 
                 /// Create the type alias.
                 return CurrScope()->declare(
-                    this,
+                    context,
                     std::move(decl_name),
                     new (*mod) TypeAliasDecl(
                         std::move(ident),
@@ -370,7 +370,7 @@ auto lcc::intercept::Parser::ParseDeclRest(
             );
 
             /// Add it to the current scope and return it.
-            return CurrScope()->declare(this, std::move(ident), var);
+            return CurrScope()->declare(context, std::move(ident), var);
         }
 
         /// Variable declaration with type inference.
@@ -392,7 +392,7 @@ auto lcc::intercept::Parser::ParseDeclRest(
 
             /// Declarations that use type inference cannot be external.
             if (is_extern) Error(cc_loc, "Extern declarations must specify a type");
-            return CurrScope()->declare(this, std::move(ident), var);
+            return CurrScope()->declare(context, std::move(ident), var);
         }
     }
 }
@@ -691,7 +691,7 @@ auto lcc::intercept::Parser::ParseFuncAttrs() -> Result<FuncType::Attributes> {
 }
 
 /// <function-body>  ::= "=" <expr> | <expr-block>
-auto lcc::intercept::Parser::ParseFuncBody(bool is_extern) -> Result<Expr*> {
+auto lcc::intercept::Parser::ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scope*>> {
     /// If the declaration is external, but there still seems to be
     /// a function body, warn the the user that they might be trying
     /// to do something that doesn’t make sense.
@@ -724,7 +724,7 @@ auto lcc::intercept::Parser::ParseFuncBody(bool is_extern) -> Result<Expr*> {
         /// case, the caller is aware of this case, and function
         /// bodies are allowed to be null for extern functions,
         /// so it’s not a problem.
-        return ExprResult::Null();
+        return {};
     }
 
     /// Function body is in a new scope.
@@ -733,8 +733,10 @@ auto lcc::intercept::Parser::ParseFuncBody(bool is_extern) -> Result<Expr*> {
 
     /// The body must either be a block expression or an equals sign
     /// followed by an expression.
-    if (Consume(Tk::Eq)) return ParseExpr();
-    return ParseBlock(std::move(sc));
+    auto scope = sc.scope;
+    auto expr = Consume(Tk::Eq) ? ParseExpr() : ParseBlock(std::move(sc));
+    if (expr.is_diag()) return expr.diag();
+    return std::pair{*expr, scope};
 }
 
 /// <type-signature> ::= "(" <param-decls> ")" <func-attrs>
@@ -889,6 +891,7 @@ void lcc::intercept::Parser::ParseTopLevel() {
     /// Set up the rest of the parser state.
     curr_func = mod->top_level_func();
     scope_stack.push_back(new (*mod) Scope(nullptr));
+    curr_func->scope(scope_stack.front());
 
     /// Parse the file.
     for (;;) {
@@ -1064,7 +1067,8 @@ auto lcc::intercept::Parser::ParseFuncDecl(
     auto func = new (*mod) FuncDecl(
         name,
         type,
-        *body,
+        (*body).first,
+        (*body).second,
         mod.get(),
         is_extern ? Linkage::Imported : Linkage::Internal,
         type->location()
@@ -1074,5 +1078,5 @@ auto lcc::intercept::Parser::ParseFuncDecl(
     if (name.empty()) return func;
 
     /// Add it to the current scope and return it.
-    return as<FuncDecl>(CurrScope()->declare(this, std::move(name), func));
+    return as<FuncDecl>(CurrScope()->declare(context, std::move(name), func));
 }

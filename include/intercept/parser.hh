@@ -103,7 +103,7 @@ private:
     auto ParseExprInNewScope() -> ExprResult;
     auto ParseForExpr() -> Result<ForExpr*>;
     auto ParseFuncAttrs() -> Result<FuncType::Attributes>;
-    auto ParseFuncBody(bool is_extern) -> Result<Expr*>;
+    auto ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scope*>>;
     auto ParseFuncDecl(std::string name, FuncType* type, bool is_extern) -> Result<FuncDecl*>;
     auto ParseFuncSig(Type* return_type) -> Result<FuncType*>;
     auto ParseIdentExpr() -> Result<Expr*>;

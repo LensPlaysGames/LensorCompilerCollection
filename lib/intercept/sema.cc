@@ -230,9 +230,39 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
     tempset curr_func = decl;
     auto ty = as<FuncType>(decl->type());
 
-    /// Typecheck the function body. If the function has no body, then we’re done.
-    if (decl->body()) Analyse(&decl->body(), ty->return_type());
-    else return;
+    /// If the function has no body, then we’re done.
+    if (not decl->body()) return;
+
+    /// Create variable declarations for the parameters.
+    for (auto& param : ty->params()) {
+        if (param.name.empty()) continue;
+
+        /// Check that we don’t already have a declaration with that
+        /// name in the function scope.
+        auto decls = decl->scope()->find(param.name);
+        if (decls.first != decls.second) {
+            Error(decls.first->second->location(), "Declaration conflicts with parameter name");
+            Diag::Note(context, param.location, "Parameter declared here");
+            continue;
+        }
+
+        /// Declare the parameter.
+        Expr* d = new (mod) VarDecl(
+            param.name,
+            param.type,
+            {},
+            &mod,
+            Linkage::LocalVar,
+            param.location
+        );
+
+        LCC_ASSERT(decl->scope()->declare(context, auto(param.name), as<VarDecl>(d)).is_value());
+        Analyse(&d);
+        decl->param_decls().push_back(as<VarDecl>(d));
+    }
+
+    /// Analyse the body.
+    Analyse(&decl->body(), ty->return_type());
 
     /// The last expression in a function must be a return expression or convertible
     /// to the return type of the function. If it is a return expression, then it has
