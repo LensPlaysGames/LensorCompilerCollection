@@ -1,5 +1,6 @@
 #include <intercept/ast.hh>
 #include <intercept/parser.hh>
+#include <lcc/target.hh>
 #include <lcc/utils/ast_printer.hh>
 #include <lcc/utils/rtti.hh>
 

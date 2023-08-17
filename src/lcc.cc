@@ -4,12 +4,13 @@
 #include <laye/parser.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
+#include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <string>
 
 namespace detail {
 void aluminium_handler() {
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+#if defined(LCC_PLATFORM_WINDOWS)
     // Windows
     system("start https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #elif defined(__APPLE__)
@@ -20,6 +21,16 @@ void aluminium_handler() {
     system("xdg-open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #endif
 }
+
+/// Default target.
+const lcc::Target* default_target =
+#if defined(LCC_PLATFORM_WINDOWS)
+    lcc::Target::x86_64_windows;
+#elif defined(__APPLE__) or defined(__linux__)
+    lcc::Target::x86_64_linux;
+#else
+#    error "Unsupported target"
+#endif
 
 using namespace command_line_options;
 using options = clopts< // clang-format off
@@ -50,7 +61,7 @@ int main(int argc, char** argv) {
         lcc::Diag::Fatal("Expected exactly one input file");
 
     /// Compile the file.
-    lcc::Context context{};
+    lcc::Context context{detail::default_target};
     auto path_str = input_files[0].path.string();
     auto& file = context.create_file(input_files[0].path, input_files[0].contents);
 

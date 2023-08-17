@@ -6,7 +6,13 @@
 #include <lcc/location.hh>
 #include <lcc/utils.hh>
 
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+#define LCC_PLATFORM_WINDOWS 1
+#endif
+
 namespace lcc {
+class Target;
+
 class Context {
     /// The files owned by the context.
     std::vector<std::unique_ptr<File>> owned_files;
@@ -23,9 +29,11 @@ class Context {
     std::vector<Type*> function_types;
     std::vector<Type*> struct_types;
 
+    const Target* _target{};
+
 public:
     /// Create a new context.
-    explicit Context();
+    explicit Context(const Target* tgt);
 
     /// Do not allow copying or moving the context.
     Context(const Context&) = delete;
@@ -70,6 +78,9 @@ public:
         error_flag = true;
         return old;
     }
+
+    /// Get the target.
+    [[nodiscard]] auto target() const -> const Target* { return _target; }
 
 private:
     /// Register a file in the context.
