@@ -3,6 +3,7 @@
 #include <intercept/parser.hh>
 #include <lcc/target.hh>
 #include <lcc/utils/ast_printer.hh>
+#include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
 
 namespace intc = lcc::intercept;
@@ -441,6 +442,9 @@ using lcc::cast;
 using lcc::is;
 
 struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
+    std::unordered_set<const intc::FuncDecl*> printed_functions{};
+    bool print_children_of_children = true;
+
     /// Print the header (name + location + type) of a node.
     void PrintHeader(const intc::Expr* e) {
         using K = intc::Expr::Kind;
@@ -519,6 +523,20 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                 return;
             }
 
+            case K::Cast: {
+                auto c = as<intc::CastExpr>(e);
+                PrintBasicHeader("CastExpr", e);
+                switch (c->cast_kind()) {
+                    case intc::CastKind::SoftCast: out += fmt::format(" {}as ", C(Red)); break;
+                    case intc::CastKind::HardCast: out += fmt::format(" {}as! ", C(Red)); break;
+                    case intc::CastKind::ImplicitCast: out += fmt::format(" {}Implicit ", C(Red)); break;
+                    case intc::CastKind::LValueToRValueConv: out += fmt::format(" {}LValueToRValue ", C(Red)); break;
+                }
+                out += e->type()->string(use_colour);
+                out += '\n';
+                return;
+            }
+
             case K::OverloadSet: PrintBasicNode("OverloadSet", e, e->type()); return;
             case K::EvaluatedConstant: PrintBasicNode("ConstantExpr", e, e->type()); return;
             case K::StructDecl: PrintBasicNode("StructDecl", e, e->type()); return;
@@ -532,29 +550,20 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
             case K::Return: PrintBasicNode("ReturnExpr", e, nullptr); return;
             case K::Call: PrintBasicNode("CallExpr", e, e->type()); return;
             case K::IntrinsicCall: PrintBasicNode("IntrinsicCallExpr", e, e->type()); return;
-            case K::Cast: PrintBasicNode("CastExpr", e, e->type()); return;
             case K::MemberAccess: PrintBasicNode("MemberAccessExpr", e, e->type()); return;
         }
 
         PrintBasicNode(R"(<???>)", e, e->type());
     }
 
-    /// Print a node.
-    void operator()(const intc::Expr* e, std::string leading_text = "") {
-        PrintHeader(e);
+    void PrintNodeChildren(const intc::Expr* e, std::string leading_text = "") {
+        if (not print_children_of_children) return;
 
         /// Print the children of a node.
         using K = intc::Expr::Kind;
         switch (e->kind()) {
-            case K::FuncDecl: {
-                auto f = as<intc::FuncDecl>(e);
-                if (auto block = cast<intc::BlockExpr>(const_cast<intc::FuncDecl*>(f)->body())) {
-                    PrintChildren(block->children(), leading_text);
-                } else {
-                    intc::Expr* children[] = {const_cast<intc::FuncDecl*>(f)->body()};
-                    PrintChildren(children, leading_text);
-                }
-            } break;
+            /// We only print function bodies at the top level.
+            case K::FuncDecl: break;
 
             case K::Binary: {
                 auto b = as<intc::BinaryExpr>(e);
@@ -565,6 +574,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
             case K::NameRef: {
                 auto n = as<intc::NameRefExpr>(e);
                 if (n->target()) {
+                    tempset print_children_of_children = false;
                     intc::Expr* children[] = {n->target()};
                     PrintChildren(children, leading_text);
                 }
@@ -591,6 +601,11 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                 PrintChildren(children, leading_text);
             } break;
 
+            case K::Cast: {
+                intc::Expr* children[] = {as<intc::CastExpr>(e)->operand()};
+                PrintChildren(children, leading_text);
+            } break;
+
             case K::OverloadSet:
             case K::EvaluatedConstant:
             case K::While:
@@ -604,10 +619,41 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
             case K::If:
             case K::Block:
             case K::IntrinsicCall:
-            case K::Cast:
             case K::MemberAccess:
                 break;
         }
+    }
+
+    /// Print a top-level node.
+    void PrintTopLevelNode(const intc::Expr* e) {
+        PrintHeader(e);
+        if (auto f = cast<intc::FuncDecl>(e)) {
+            printed_functions.insert(f);
+            if (auto block = cast<intc::BlockExpr>(const_cast<intc::FuncDecl*>(f)->body())) {
+                PrintChildren(block->children(), "");
+            } else {
+                intc::Expr* children[] = {const_cast<intc::FuncDecl*>(f)->body()};
+                PrintChildren(children, "");
+            }
+        } else {
+            PrintNodeChildren(e);
+        }
+    }
+
+    /// Print a node.
+    void operator()(const intc::Expr* e, std::string leading_text = "") {
+        PrintHeader(e);
+        PrintNodeChildren(e, std::move(leading_text));
+    }
+
+    void print(intc::Module* mod) {
+        printed_functions.insert(mod->top_level_func());
+        for (auto* node : as<intc::BlockExpr>(mod->top_level_func()->body())->children())
+            PrintTopLevelNode(node);
+
+        for (auto* f : mod->functions())
+            if (not printed_functions.contains(f))
+                PrintTopLevelNode(f);
     }
 };
 } // namespace
@@ -723,7 +769,5 @@ auto intc::Type::string(bool use_colours) const -> std::string {
 }
 
 void intc::Module::print() {
-    ASTPrinter p{true};
-    for (auto* node : as<BlockExpr>(top_level_function->body())->children())
-        p(node);
+    ASTPrinter{true}.print(this);
 }

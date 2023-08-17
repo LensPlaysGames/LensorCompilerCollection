@@ -1159,6 +1159,8 @@ public:
     CastExpr(Expr* value, Type* ty, CastKind k, Location location)
         : TypedExpr(Kind::Cast, location, ty), _value(value), _cast_kind(k) {}
 
+    auto cast_kind() const { return _cast_kind; }
+
     /// Check cast kinds.
     bool is_hard_cast() const { return _cast_kind == CastKind::HardCast; }
     bool is_implicit_cast() const { return _cast_kind == CastKind::ImplicitCast; }

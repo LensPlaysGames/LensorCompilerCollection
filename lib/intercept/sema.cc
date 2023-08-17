@@ -169,7 +169,8 @@ auto intc::Sema::LValueToRValue(Expr** expr) -> Type* {
 
     /// Otherwise, remove references and cast to that.
     auto ty = (*expr)->type()->strip_references();
-    WrapWithCast(expr, ty, CastKind::LValueToRValueConv);
+    if (not Type::Equal(ty, (*expr)->type()))
+        WrapWithCast(expr, ty, CastKind::LValueToRValueConv);
     return ty;
 }
 
