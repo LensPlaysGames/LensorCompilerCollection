@@ -531,9 +531,9 @@ protected:
         : Decl(kind, location), _mods(std::move(mods)), _name(std::move(name)), _template_params(std::move(template_params)) {}
 
 public:
-    auto mods() const -> std::span<DeclModifier const> { return _mods; }
+    auto mods() const -> const std::vector<DeclModifier>& { return _mods; }
     auto name() const -> const std::string& { return _name; }
-    auto template_params() const -> std::span<TemplateParam const> { return _template_params; }
+    auto template_params() const -> const std::vector<TemplateParam>& { return _template_params; }
 
     auto linkage() const {
         auto mod_list = mods();
@@ -1423,7 +1423,7 @@ public:
     auto access() const { return _access; }
     auto scope() const { return _scope; }
     auto name() const -> const std::string& { return _name; }
-    auto template_args() const -> std::span<Expr* const> { return _template_args; }
+    auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeLookupName; }
 };
@@ -1446,9 +1446,9 @@ public:
     auto path_kind() const { return _path_kind; }
     auto access() const { return _access; }
     auto scope() const { return _scope; }
-    auto names() const -> std::span<std::string const> { return _names; }
-    auto locations() const -> std::span<Location const> { return _locations; }
-    auto template_args() const -> std::span<Expr* const> { return _template_args; }
+    auto names() const -> const std::vector<std::string>& { return _names; }
+    auto locations() const -> const std::vector<Location>& { return _locations; }
+    auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeLookupPath; }
 };

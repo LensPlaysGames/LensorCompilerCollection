@@ -21,6 +21,10 @@ class Parser {
 
     int speculative_parse_stack = 0;
     usz speculative_look_ahead = 0;
+    
+    usz template_parse_stack = 0;
+
+    bool will_attempt_to_parse_template_args = false;
 
 public:
     static auto Parse(LayeContext* laye_context, File& file) -> Module*;
@@ -104,6 +108,40 @@ private:
         }
     };
 
+    /// RAII helper for pushing and popping template parse states.
+    struct TemplateRAII {
+        Parser* parser;
+        bool active;
+
+        TemplateRAII(Parser* parser)
+            : parser(parser), active(true) {
+            parser->template_parse_stack++;
+        }
+
+        TemplateRAII(const TemplateRAII&) = delete;
+        TemplateRAII operator=(const TemplateRAII&) = delete;
+
+        TemplateRAII(TemplateRAII&& other) noexcept
+            : parser(other.parser), active(other.active) {
+            other.active = false;
+        }
+
+        TemplateRAII& operator=(TemplateRAII&& other) noexcept {
+            if (this == &other) return *this;
+            parser = other.parser;
+            active = other.active;
+            other.active = false;
+            return *this;
+        }
+
+        ~TemplateRAII() {
+            if (active) {
+                LCC_ASSERT(parser->template_parse_stack > 0);
+                parser->template_parse_stack--;
+            }
+        }
+    };
+
     auto EnterScope() { return ScopeRAII(this); }
 
     ///
@@ -134,6 +172,7 @@ private:
     ///
 
     auto EnterSpeculativeParse() { return SpeculativeRAII(this); }
+    auto EnterTemplateParse() { return TemplateRAII(this); }
 
     Parser(LayeContext* laye_context, File* file, Module* module)
         : lexer(Lexer{laye_context->context(), file}), file(file), context(laye_context->context()), laye_context(laye_context), module(module) {}
@@ -142,9 +181,11 @@ private:
     auto CurrScope() -> Scope* { return scope_stack.back(); }
     auto CurrLocation() { return tok.location; }
     auto GetLocation(Location start) const { return Location{start, last_location}; }
+    bool IsLocationImmediatelyFollowing() const { return tok.location.pos == last_location.pos + last_location.len; }
 
     /// True if any speculative parse state is enabled, false otherwise.
     bool IsInSpeculativeParse() const { return speculative_parse_stack > 0; }
+    bool IsInTemplateParse() const { return template_parse_stack > 0; }
 
     auto PeekToken(usz ahead = 1, bool include_spec = true) {
         LCC_ASSERT(ahead >= 1, "Peek look-ahead indexing starts at 1.");
@@ -184,6 +225,18 @@ private:
             return true;
         }
         return false;
+    }
+
+    bool ConsumeTemplateClose() {
+        LCC_ASSERT(IsInTemplateParse());
+
+        if (Consume(TokenKind::Greater)) return true;
+        if (not At(TokenKind::GreaterGreater)) return false;
+
+        tok.kind = TokenKind::Greater;
+        tok.location.pos++;
+        tok.location.len--;
+        return true;
     }
 
     /// Issue a note.

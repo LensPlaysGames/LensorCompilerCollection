@@ -225,6 +225,22 @@ auto layec::Type::string(bool use_colours) const -> std::string {
     lcc::utils::Colours C{use_colours};
     using enum lcc::utils::Colour;
 
+    auto TemplateArgsToString = [&](const std::vector<layec::Expr*>& template_args) {
+        std::string out{};
+        if (template_args.empty()) return out;
+        out += fmt::format("<{}", C(White));
+        for (lcc::usz i = 0; i < template_args.size(); i++) {
+            if (i > 0) out += fmt::format("{}, ", C(White));
+            if (auto type_arg = cast<layec::Type>(template_args[i])) {
+                out += type_arg->string(use_colours);
+            } else {
+                out += "(expr)";
+            }
+        }
+        out += fmt::format("{}>", C(White));
+        return out;
+    };
+
     switch (kind()) {
         default: LCC_ASSERT(false, "unhandled type in type->string()");
 
@@ -235,7 +251,15 @@ auto layec::Type::string(bool use_colours) const -> std::string {
             return fmt::format("{}!{}", e->error_name(), e->value_type()->string(use_colours));
         }
 
-        case Kind::TypeLookupName: return fmt::format("{}{}", C(White), as<NameType>(this)->name());
+        case Kind::TypeLookupName: {
+            return fmt::format(
+                "{}{}{}",
+                C(White),
+                as<NameType>(this)->name(),
+                TemplateArgsToString(as<NameType>(this)->template_args())
+            );
+        }
+
         case Kind::TypeLookupPath: {
             std::string path{};
             auto path_names = as<PathType>(this)->names();
@@ -243,7 +267,7 @@ auto layec::Type::string(bool use_colours) const -> std::string {
                 if (i > 0) path += fmt::format("{}::", C(White));
                 path += fmt::format("{}{}", C(White), path);
             }
-            return path;
+            return path + TemplateArgsToString(as<PathType>(this)->template_args());
         }
 
         case Kind::TypeArray: return fmt::format("{}[{} array]", as<ArrayType>(this)->elem_type()->string(use_colours), as<ArrayType>(this)->rank_lengths().size());
@@ -312,6 +336,34 @@ using lcc::is;
 using namespace lcc;
 
 struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::Type> {
+    void PrintTemplateParams(const std::vector<layec::TemplateParam>& template_params) {
+        if (template_params.empty()) return;
+        out += fmt::format("{}<", C(White));
+        for (lcc::usz i = 0; i < template_params.size(); i++) {
+            if (i > 0) out += fmt::format("{}, ", C(White));
+            auto param = template_params[i];
+            if (param.is_value_param()) {
+                out += fmt::format("{} ", param.value_type->string(use_colour));
+            }
+            out += fmt::format("{}{}", C(Green), param.name);
+        }
+        out += fmt::format("{}>", C(White));
+    }
+
+    void PrintTemplateArgs(const std::vector<layec::Expr*>& template_args) {
+        if (template_args.empty()) return;
+        out += fmt::format("{}<", C(White));
+        for (lcc::usz i = 0; i < template_args.size(); i++) {
+            if (i > 0) out += fmt::format("{}, ", C(White));
+            if (auto type_arg = cast<layec::Type>(template_args[i])) {
+                out += type_arg->string(use_colour);
+            } else {
+                out += "(expr)";
+            }
+        }
+        out += fmt::format("{}>", C(White));
+    }
+
     void PrintStatementHeader(const layec::Statement* s) {
         using K = layec::Statement::Kind;
         switch (s->kind()) {
@@ -325,11 +377,13 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 PrintLinkage(n->linkage());
                 PrintBasicHeader("BindingDecl", n);
                 out += fmt::format(
-                    " {} {}{}\n",
+                    " {} {}{}",
                     n->type()->string(use_colour),
                     C(Green),
                     n->name()
                 );
+                PrintTemplateParams(n->template_params());
+                out += "\n";
             } break;
 
             case K::DeclFunction: {
@@ -337,12 +391,13 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 PrintLinkage(n->linkage());
                 PrintBasicHeader("FunctionDecl", n);
                 out += fmt::format(
-                    " {} {}{}{}(",
+                    " {} {}{}",
                     n->return_type()->string(use_colour),
                     C(Green),
-                    n->name(),
-                    C(White)
+                    n->name()
                 );
+                PrintTemplateParams(n->template_params());
+                out += fmt::format("{}(", C(White));
                 auto params = n->params();
                 for (lcc::usz i = 0; i < params.size(); i++) {
                     if (i > 0) out += fmt::format("{}, ", C(White));
@@ -355,10 +410,12 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                 auto n = cast<layec::StructDecl>(s);
                 PrintBasicHeader("StructDecl", n);
                 out += fmt::format(
-                    " {}{}\n",
+                    " {}{}",
                     C(Green),
                     n->name()
                 );
+                PrintTemplateParams(n->template_params());
+                out += "\n";
             } break;
 
             case K::DeclEnum: {
@@ -374,6 +431,12 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
             case K::DeclAlias: {
                 auto n = cast<layec::AliasDecl>(s);
                 PrintBasicHeader("AliasDecl", n);
+                out += fmt::format(
+                    " {}{}",
+                    C(Green),
+                    n->name()
+                );
+                PrintTemplateParams(n->template_params());
                 out += "\n";
             } break;
 
@@ -532,7 +595,9 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
             case K::LookupName: {
                 auto n = cast<layec::NameExpr>(e);
                 PrintBasicHeader("NameExpr", e);
-                out += fmt::format(" {}{}\n", C(Green), n->name());
+                out += fmt::format(" {}{}", C(Green), n->name());
+                PrintTemplateArgs(n->template_args());
+                out += "\n";
             } break;
 
             case K::LookupPath: {
@@ -543,6 +608,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                     if (i > 0) out += "::";
                     out += fmt::format("{}{}", C(Green), n->names()[i]);
                 }
+                PrintTemplateArgs(n->template_args());
                 out += "\n";
             } break;
 

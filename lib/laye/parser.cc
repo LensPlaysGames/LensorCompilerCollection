@@ -135,6 +135,10 @@ auto Parser::Parse(LayeContext* laye_context, File& file) -> Module* {
     while (not parser.At(Tk::Eof)) {
         auto top_level = parser.ParseTopLevel();
         if (top_level) result->add_top_level_decl(*top_level);
+        else {
+            parser.NextToken();
+            parser.Synchronise();
+        }
     }
 
     return result;
@@ -144,6 +148,7 @@ void Parser::Synchronise() {
     LCC_ASSERT(not IsInSpeculativeParse(), "The Synchronise function is not intended to be called from within a speculative parse state since it is for recovering from nasty errors");
     while (not At(Tk::Eof, Tk::SemiColon, Tk::CloseBrace, Tk::CloseParen))
         NextToken();
+    NextToken();
 }
 
 auto Parser::ParseTopLevel() -> Result<Decl*> {
@@ -220,7 +225,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
             }
 
             LCC_ASSERT(tok.location.pos != before_type_offset);
-            if (not At(Tk::Ident) or not PeekAt(1, Tk::SemiColon, Tk::OpenParen, Tk::Equal)) {
+            if (not will_attempt_to_parse_template_args and (not At(Tk::Ident) or not PeekAt(1, Tk::SemiColon, Tk::OpenParen, Tk::Equal))) {
                 return Result<Decl*>::Null();
             }
         }
@@ -766,6 +771,45 @@ auto Parser::TryParseTemplateParams(bool allocate) -> Result<std::vector<Templat
     LCC_ASSERT((not allocate) == IsInSpeculativeParse(), "TryParseTemplateParams requires that the allocate parameter be the opposite of the result of IsInSpeculativeParse(). If allocations are enabled, then no speculative parse stack should exist. If allocations are disabled, then it is required that a specilative parse stack exists.");
 
     std::vector<TemplateParam> template_params{};
+    if (not allocate) {
+        return template_params;
+    }
+
+    if (Consume(Tk::Less)) {
+        auto t = EnterTemplateParse();
+
+        if (not At(Tk::Greater)) {
+            while (not At(Tk::Eof)) {
+                if (At(Tk::Ident) and PeekAt(1, Tk::Comma, Tk::Greater, Tk::GreaterGreater)) {
+                    std::string name = tok.text;
+                    NextToken();
+
+                    template_params.push_back(TemplateParam{std::move(name), nullptr});
+                } else {
+                    auto type = ParseType();
+                    if (not type) goto continue_template_list;
+
+                    std::string name = tok.text;
+                    if (not Consume(Tk::Ident)) {
+                        name.clear();
+                        Error("Expected identifier to name template parameter");
+                    }
+
+                    template_params.push_back(TemplateParam{std::move(name), *type});
+                }
+
+            continue_template_list:;
+                if (not Consume(Tk::Comma) or At(Tk::CloseParen)) break;
+            }
+        } else {
+            Error("Empty template parameter list");
+        }
+
+        if (not ConsumeTemplateClose()) {
+            Error("Expected '>' to close template parameter list");
+        }
+    }
+
     return template_params;
 }
 
@@ -997,14 +1041,48 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allow_function
 auto Parser::TryParseTemplateArguments(bool allocate) -> Result<std::vector<Expr*>> {
     LCC_ASSERT((not allocate) == IsInSpeculativeParse());
 
-    std::vector<Expr*> args{};
-    if (not At(Tk::Less)) {
+    std::vector<Expr*> template_args{};
+    if (not allocate or not At(Tk::Less) or not IsLocationImmediatelyFollowing()) {
         // regardless of `allocate`, we already have the args. return them instead of nullptr
-        return args;
+        return template_args;
     }
 
-    // LCC_ASSERT(false, "TODO template args");
-    return args;
+    LCC_ASSERT(allocate and At(Tk::Less) and IsLocationImmediatelyFollowing());
+
+    NextToken();
+    auto t = EnterTemplateParse();
+
+    if (not At(Tk::Greater)) {
+        while (not At(Tk::Eof)) {
+            {
+                auto spec = EnterSpeculativeParse();
+                if (SpeculativeParseType()) goto parse_type_arg;
+            }
+
+            {
+                auto arg = ParseExpr();
+                if (arg) template_args.push_back(*arg);
+            }
+
+        continue_parse_args:;
+            if (not Consume(Tk::Comma) or At(Tk::CloseParen)) break;
+            else continue;
+            
+        parse_type_arg:
+            auto arg = ParseType();
+            LCC_ASSERT(arg);
+            template_args.push_back(*arg);
+            goto continue_parse_args;
+        }
+    } else {
+        Error("Empty template argument list");
+    }
+
+    if (not ConsumeTemplateClose()) {
+        Error("Expected '>' to close template parameter list");
+    }
+
+    return template_args;
 }
 
 auto Parser::TryParseNameOrPath(
@@ -1047,6 +1125,8 @@ auto Parser::TryParseNameOrPath(
                 if (allocate) {
                     return name_ctor(name_location, name_text, *template_args_result);
                 } else {
+                    if (At(Tk::Less) and IsLocationImmediatelyFollowing())
+                        will_attempt_to_parse_template_args = true;
                     goto return_null_expr;
                 }
             }
@@ -1078,6 +1158,8 @@ auto Parser::TryParseNameOrPath(
         if (allocate) {
             return path_ctor(path_kind, path_names, path_locations, *template_args_result);
         } else {
+            if (At(Tk::Less) and IsLocationImmediatelyFollowing())
+                will_attempt_to_parse_template_args = true;
             goto return_null_expr;
         }
     }
@@ -1090,6 +1172,7 @@ return_null_expr:;
 auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
     LCC_ASSERT((not allocate) == IsInSpeculativeParse(), "TryParseType requires that the allocate parameter be the opposite of the result of IsInSpeculativeParse(). If allocations are enabled, then no speculative parse stack should exist. If allocations are disabled, then it is required that a specilative parse stack exists.");
 
+    will_attempt_to_parse_template_args = false;
     auto start = CurrLocation();
 
     auto type_access = TypeAccess::Default;
@@ -1535,6 +1618,9 @@ auto Parser::ParseBinaryExpr(Expr* lhs, int precedence) -> Result<Expr*> {
 
     int next_precedence = 0;
     while (IsBinaryOperatorWithPrecedence(precedence, next_precedence)) {
+        if (IsInTemplateParse() and At(Tk::Greater, Tk::GreaterGreater) and IsLocationImmediatelyFollowing())
+            break;
+
         auto op_token_kind = tok.kind;
         NextToken();
 
