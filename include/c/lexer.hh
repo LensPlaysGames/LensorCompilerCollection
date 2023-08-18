@@ -58,6 +58,7 @@ private:
     void HandleDefineDirective(const CToken& define_token);
     /// Continues advancing to the next character until a non-whitespace character is encountered.
     /// The result of a call to `CurrentChar()` will return this character.
+    /// If the lexer is in a preprocessing state, then '\n' will not be eaten.
     void EatWhitespace();
 
     /// Returns the current character after character-based preprocessing.

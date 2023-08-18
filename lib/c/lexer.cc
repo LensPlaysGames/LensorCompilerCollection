@@ -68,7 +68,23 @@ void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
 
     */
 
+    EatWhitespace();
     token.location.pos = CurrentOffset();
+
+    switch (CurrentChar()) {
+        case '\n': {
+            LCC_ASSERT(IsInPreprocessor());
+            AdvanceChar();
+            token.kind = TokenKind::EndOfLine;
+        } break;
+
+        default: {
+            Error("Invalid character in C source");
+            AdvanceChar();
+        } break;
+    }
+    
+    token.location.len = (u16)(CurrentOffset() - token.location.pos);
 }
 
 void cc::Lexer::ReadToken(CToken& token) {
@@ -205,6 +221,10 @@ void cc::Lexer::HandleDefineDirective(const CToken& define_token) {
 }
 
 void cc::Lexer::EatWhitespace() {
-    while (not IsAtEndOfFile() and not IsSpace(CurrentChar()))
+    while (not IsAtEndOfFile() and not IsSpace(CurrentChar())) {
+        if (IsInPreprocessor() and CurrentChar() == '\n')
+            break;
+        
         AdvanceChar();
+    }
 }
