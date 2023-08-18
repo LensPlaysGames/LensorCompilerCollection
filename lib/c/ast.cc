@@ -251,3 +251,6 @@ bool cc::Expr::is_lvalue() const {
         // TODO(local): check C standards for any more valid l-values
     }
 }
+
+void cc::TranslationUnit::print() {
+}
