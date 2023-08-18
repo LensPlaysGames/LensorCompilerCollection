@@ -211,7 +211,7 @@ std::string cc::ToString(OperatorKind kind) {
     }
 }
 
-void* cc::BaseNode::operator new(size_t sz, CompilationUnit& cu) {
+void* cc::BaseNode::operator new(size_t sz, TranslationUnit& cu) {
     auto ptr = ::operator new(sz);
     cu.all_nodes.push_back(static_cast<BaseNode*>(ptr));
     return ptr;

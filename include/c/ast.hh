@@ -13,7 +13,7 @@ namespace lcc::c {
 class BaseNode;
 class Decl;
 
-class CompilationUnit {
+class TranslationUnit {
     File* _file;
 
     std::vector<BaseNode*> all_nodes{};
@@ -21,7 +21,7 @@ class CompilationUnit {
     std::vector<Decl*> _top_level_decls{};
 
 public:
-    CompilationUnit(File* file)
+    TranslationUnit(File* file)
         : _file(file) {}
     
     auto file() const { return _file; }
@@ -309,7 +309,7 @@ protected:
 
 public:
     void* operator new(size_t) = delete;
-    void* operator new(size_t sz, CompilationUnit& cu);
+    void* operator new(size_t sz, TranslationUnit& cu);
 
     bool is_statement() const { return _kind == Kind::Statement; }
     bool is_expr() const { return _kind == Kind::Expr; }

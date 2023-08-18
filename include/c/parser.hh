@@ -13,7 +13,7 @@ class Parser {
     Lexer _lexer;
 
 public:
-    static CompilationUnit* Parse(Context* context, File& file);
+    static TranslationUnit* Parse(Context* context, File& file);
 
 private:
     Parser(Context* context, File& file)
