@@ -160,6 +160,7 @@ std::string cc::ToString(OperatorKind kind) {
         case OperatorKind::AddressOf: return "&";
         case OperatorKind::Dereference: return "*";
         case OperatorKind::Compl: return "~";
+        case OperatorKind::LogicalNot: return "!";
 
         // Binary Operators
 
@@ -191,7 +192,6 @@ std::string cc::ToString(OperatorKind kind) {
         case OperatorKind::Rsh: return ">>";
 
         // Boolean Operators
-        case OperatorKind::LogicalNot: return "!";
         case OperatorKind::LogicalAnd: return "&&";
         case OperatorKind::LogicalOr: return "||";
 
@@ -215,4 +215,39 @@ void* cc::BaseNode::operator new(size_t sz, CompilationUnit& cu) {
     auto ptr = ::operator new(sz);
     cu.all_nodes.push_back(static_cast<BaseNode*>(ptr));
     return ptr;
+}
+
+bool cc::Expr::is_lvalue() const {
+    // NOTE(local): MS extensions allow typecasts of l-values to also be l-values. Check compiler settings
+    switch (_kind) {
+        default:
+            return false;
+        
+        case Kind::Name:
+            // TODO(local): if we can get access to the type of this name, then we need to check that its type is a valid l-value (are any invalid?)
+            return true;
+        
+        case Kind::Subscript:
+            // TODO(local): so long as this does not evaluate to an array, it is an l-value. Get the type if we can
+            return true;
+        
+        case Kind::MemberSelect:
+            return true;
+        
+        case Kind::Unary: {
+            auto unary = as<UnaryExpr>(this);
+            if (unary->operator_kind() != OperatorKind::Dereference)
+                return false;
+            // TODO(local): so long as this does not evaluate to an array, it is an l-value. Get the type if we can
+            return true;
+        }
+
+        case Kind::Grouped: {
+            auto expr = as<GroupedExpr>(this)->expr();
+            return expr->is_lvalue();
+        }
+
+        // TODO(local): const object (nonmodifiable l-value)
+        // TODO(local): check C standards for any more valid l-values
+    }
 }

@@ -217,6 +217,7 @@ enum struct OperatorKind {
     AddressOf,
     Dereference,
     Compl,
+    LogicalNot,
 
     // Binary Operators
 
@@ -248,7 +249,6 @@ enum struct OperatorKind {
     Rsh,
 
     // Boolean Operators
-    LogicalNot,
     LogicalAnd,
     LogicalOr,
 
@@ -267,6 +267,26 @@ enum struct OperatorKind {
     MinusMinus,
 };
 
+enum struct IntegerKind {
+    Char,
+    SignedChar,
+    UnsignedChar,
+    Short,
+    UnsignedShort,
+    Int,
+    UnsignedInt,
+    Long,
+    UnsignedLong,
+    LongLong,
+    UnsignedLongLong,
+};
+
+enum struct FloatKind {
+    Float,
+    Double,
+    LongDouble,
+};
+
 std::string ToString(TokenKind kind);
 std::string ToString(OperatorKind kind);
 
@@ -275,6 +295,7 @@ public:
     enum struct Kind {
         Statement,
         Expr,
+        Type,
     };
 
 private:
@@ -321,8 +342,13 @@ public:
         Break,
         Continue,
 
-        Block,
+        Compound,
+        Expr,
         Empty,
+
+        // Microsoft extensions
+        TryExcept,
+        TryFinally,
     };
 
 private:
@@ -353,8 +379,8 @@ class Expr : public BaseNode {
 public:
     enum struct Kind {
         Name,
-        FieldIndex,
-        DynamicIndex,
+        MemberSelect,
+        Subscript,
 
         Unary,
         Binary,
@@ -365,6 +391,9 @@ public:
         // TODO(local): statically know different initializer kinds?
         Initializer,
         Call,
+        Assign,
+
+        GenericSelection,
 
         LitInt,
         LitFloat,
@@ -378,6 +407,60 @@ private:
 protected:
     Expr(Kind kind, Location location)
         : BaseNode(BaseNode::Kind::Expr, location), _kind(kind) {}
+
+public:
+    auto kind() const { return _kind; }
+
+    bool is_lvalue() const;
+};
+
+class UnaryExpr: public Expr {
+    OperatorKind _operator_kind;
+    Expr* _operand;
+
+public:
+    UnaryExpr(Location location, OperatorKind operator_kind, Expr* operand)
+        : Expr(Kind::Unary, location), _operator_kind(operator_kind), _operand(operand) {}
+    
+    auto operator_kind() const { return _operator_kind; }
+    auto operand() const { return _operand; }
+    
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Unary; }
+};
+
+class GroupedExpr : public Expr {
+    Expr* _expr;
+
+public:
+    GroupedExpr(Expr* expr)
+        : Expr(Kind::Grouped, expr->location()), _expr(expr) {}
+    
+    auto expr() const { return _expr; }
+    
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Grouped; }
+};
+
+class Type : public BaseNode {
+public:
+    enum struct Kind {
+        Integer,
+        Float,
+
+        Pointer,
+        Array,
+        Struct,
+        Union,
+        Enum,
+        Typedef,
+        Function,
+    };
+
+private:
+    Kind _kind;
+
+protected:
+    Type(Kind kind, Location location)
+        : BaseNode(BaseNode::Kind::Type, location), _kind(kind) {}
 
 public:
     auto kind() const { return _kind; }
