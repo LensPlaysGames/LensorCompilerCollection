@@ -70,7 +70,11 @@ protected:
     void NextToken();
 
     static bool IsIdentStart(char c) { return IsAlpha(c) or c == '_'; }
-    static bool IsIdentContinue(char c) { return IsAlphaNumeric(c) or c == '_'; }
+    static bool IsIdentContinue(char c) {
+        /// Note: '!' is *not* a start character so `!foo` still gets
+        /// parsed as `!` + `foo`, but `foo!` gets parsed as one token.
+        return IsAlphaNumeric(c) or c == '_' or c == '!';
+    }
 };
 } // namespace lcc::intercept
 

@@ -6,8 +6,7 @@
 <module-declaration> ::= "module" IDENTIFIER
 <import-declaration> ::= "import" IDENTIFIER
 
-
-/// TODO: `as!` vs `as`
+/// TODO: Deproceduring
 
 /// Expression.
 <expr>        ::= <expr-call> | <expr-single>
@@ -43,7 +42,7 @@
 <expr-block>     ::= "{" { <expr> ";" } "}"
 <expr-lambda>    ::= LAMBDA <type-function> <function-body>
 <expr-call>      ::= <expr> { <expr-single> }
-<expr-cast>      ::= <expr> AS <type>
+<expr-cast>      ::= <expr> ( AS | "as!" ) <type>
 <expr-subs>      ::= <expr> "[" <expr> "]"
 <expr-paren>     ::= "(" <expr> ")"
 <expr-return>    ::= RETURN [ <expr> ]

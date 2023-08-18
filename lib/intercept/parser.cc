@@ -22,6 +22,7 @@ constexpr auto BinaryOrPostfixPrecedence(intc::TokenKind t) -> lcc::isz {
             return CallPrecedence;
 
         case Tk::As:
+        case Tk::AsBang:
             return 1'000;
 
         case Tk::Star:
@@ -147,6 +148,7 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::Do:
         case Tk::Then:
         case Tk::As:
+        case Tk::AsBang:
         case Tk::Type:
         case Tk::Void:
         case Tk::Byte:
@@ -638,11 +640,13 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
             }
 
             /// Cast operator. The RHS is a type.
-            case Tk::As: {
+            case Tk::As:
+            case Tk::AsBang: {
+                const auto cast_kind = tok.kind == Tk::As ? CastKind::SoftCast : CastKind::HardCast;
                 NextToken();
                 auto ty = ParseType();
                 if (not ty) return ty.diag();
-                lhs = new (*mod) CastExpr(*lhs, *ty, CastKind::SoftCast, {lhs->location(), tok.location});
+                lhs = new (*mod) CastExpr(*lhs, *ty, cast_kind, {lhs->location(), tok.location});
                 continue;
             }
 

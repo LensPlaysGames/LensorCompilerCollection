@@ -912,15 +912,14 @@ void intc::Sema::AnalyseCast(CastExpr* c) {
     if (not Analyse(&c->operand(), c->type())) return;
 
     /// If the types are implicitly convertible, then the cast
-    /// is fine.
-    if (TryConvert(&c->operand(), c->type())) return;
-
-    /// Remove references from the operand.
-    LValueToRValue(&c->operand());
+    /// is fine. If this fails, it will still perform lvalue to
+    /// rvalue conversion on the operand, which is exactly what
+    /// we want.
+    if (Convert(&c->operand(), c->type())) return;
 
     /// All conversions that rely on references have already been
-    /// taken care of by TryConvert(), so we don’t care about
-    /// references anymore at this point.
+    /// taken care of by Convert(), so we don’t care about references
+    /// anymore at this point.
     ///
     /// Thus, the type we’re casting to must not be a reference type.
     auto from = c->operand()->type();
@@ -933,12 +932,15 @@ void intc::Sema::AnalyseCast(CastExpr* c) {
     /// Casting from pointers to integers is allowed.
     if (from->is_pointer() and to->is_integer(true)) return;
 
-    /// Hard casts between pointers and from pointers to integers are allowed.
-    if (from->is_pointer() and (to->is_pointer() or to->is_integer(true))) {
+    /// Hard casts between pointers and from pointers to integers are
+    /// allowed. Note that, if the pointers are compatible, the call to
+    /// Convert() above will have already taken care of this case, so we
+    /// don’t need to check for that here.
+    if (to->is_pointer() and (from->is_integer() or from->is_pointer())) {
         if (c->is_hard_cast()) return;
         Error(
             c->location(),
-            "Cast from {} to {} is unsafe. If the cast was really intended, try using 'as!' instead",
+            "Cast from {} to {} is unsafe. If this is intended, use 'as!' instead",
             from,
             to
         );

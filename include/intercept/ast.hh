@@ -88,6 +88,7 @@ enum struct TokenKind {
     Extern,
     Static,
     As,
+    AsBang,
     Type,
     Void,
     Byte,
