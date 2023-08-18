@@ -82,7 +82,7 @@ private:
     /// are also skipped and `CurrentChar()` will return a single space for them.
     /// Any relevant errors and warnings are issued during these processes.
     void AdvanceChar(bool allow_comments = true) {
-        auto ReadNextChar = [&]() {
+        auto ReadNextChar = [&]() -> char {
             if (IsAtEndOfFile()) return 0;
 
             /// If the char we're skipping naturally is a newline, then it wasn't eaten
