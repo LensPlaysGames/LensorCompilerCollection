@@ -1,0 +1,12 @@
+void loops()
+{
+    for { puts("Hello, hunter!"); }
+    for foo();
+    for (condition)
+    {
+        for (bar(baz * 2); a < b; foo()) {}
+        for (int init_decl; b > a; increment) {}
+        for (int init_decl = 69; b > a; increment) {}
+        for (string name : data.names) {}
+    }
+}

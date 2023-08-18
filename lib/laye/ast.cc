@@ -426,7 +426,12 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
             case K::ForEach: {
                 auto n = cast<layec::ForEachStatement>(s);
                 PrintBasicHeader("ForEachStatement", n);
-                out += "\n";
+                out += fmt::format(
+                    " {} {}{}\n",
+                    n->type()->string(use_colour),
+                    C(Green),
+                    n->name()
+                );
             } break;
 
             case K::DoFor: {
@@ -543,7 +548,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
             case K::FieldIndex: {
                 auto n = cast<layec::FieldIndexExpr>(e);
                 PrintBasicHeader("FieldIndexExpr", n);
-                out += "\n";
+                out += fmt::format("{}{}\n", C(Green), n->field_name());
             } break;
 
             case K::ValueIndex: {
@@ -751,18 +756,21 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::For: {
                 auto n = as<layec::ForStatement>(s);
-                if (n->init()) {
-                    layec::BaseNode* children[] = {n->init(), n->condition(), n->increment(), n->pass(), n->fail()};
-                    PrintChildren(children, leading_text);
-                } else {
-                    layec::BaseNode* children[] = {n->condition(), n->pass(), n->fail()};
-                    PrintChildren(children, leading_text);
-                }
+                std::vector<layec::BaseNode*> children{};
+                if (n->init()) children.push_back(n->init());
+                if (n->condition()) children.push_back(n->condition());
+                if (n->increment()) children.push_back(n->increment());
+                if (n->pass()) children.push_back(n->pass());
+                if (n->fail()) children.push_back(n->fail());
+                PrintChildren(children, leading_text);
             } break;
 
             case K::ForEach: {
                 auto n = as<layec::ForEachStatement>(s);
-                layec::BaseNode* children[] = {n->sequence(), n->pass(), n->fail()};
+                std::vector<layec::BaseNode*> children{};
+                if (n->sequence()) children.push_back(n->sequence());
+                if (n->pass()) children.push_back(n->pass());
+                if (n->fail()) children.push_back(n->fail());
                 PrintChildren(children, leading_text);
             } break;
 

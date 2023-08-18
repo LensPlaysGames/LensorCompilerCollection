@@ -85,7 +85,6 @@ void lcc::laye::Lexer::ReadToken(LayeToken& token) {
     token.kind = TokenKind::Invalid;
     token.text.clear();
     token.integer_value = 0;
-    token.location.pos = CurrentOffset();
     token.location.len = 0;
     token.location.file_id = (u16) FileId();
     token.artificial = false;
@@ -93,6 +92,8 @@ void lcc::laye::Lexer::ReadToken(LayeToken& token) {
     while (IsSpace(lastc)) {
         NextChar();
     }
+    
+    token.location.pos = CurrentOffset();
 
     if (lastc == 0) {
         token.kind = TokenKind::Eof;

@@ -111,7 +111,7 @@ auto Parser::Parse(LayeContext* laye_context, File& file) -> Module* {
                 } else {
                     // TODO(local): this should turn `import_name` into a valid Laye identifier if it isn't already
                 }
-                
+
                 auto& import_file = laye_context->context()->get_or_load_file(import_file_path);
                 if (auto import_module = laye_context->parse_laye_file(import_file)) {
                     result->add_import(import_name, import_module);
@@ -132,7 +132,7 @@ auto Parser::Parse(LayeContext* laye_context, File& file) -> Module* {
 
 void Parser::Synchronise() {
     LCC_ASSERT(not IsInSpeculativeParse(), "The Synchronise function is not intended to be called from within a speculative parse state since it is for recovering from nasty errors");
-    while (not At(Tk::Eof, Tk::SemiColon, Tk::CloseBrace))
+    while (not At(Tk::Eof, Tk::SemiColon, Tk::CloseBrace, Tk::CloseParen))
         NextToken();
 }
 
@@ -187,7 +187,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
                 }
 
                 if (had_open and not Consume(Tk::CloseParen)) {
-                    if (allocate) Error("Expected ')'");
+                    if (allocate) Error("Expected ')' to close calling convention specification");
                 }
 
                 modifiers.push_back(DeclModifier{Tk::Callconv, "", call_conv});
@@ -264,7 +264,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         }
 
         if (not Consume(Tk::CloseParen)) {
-            Error("Expected ')'");
+            Error("Expected ')' to close function parameter list");
         }
 
         auto func_scope = EnterScope();
@@ -359,7 +359,7 @@ auto Parser::ParseStruct(std::vector<DeclModifier> mods) -> Result<StructDecl*> 
                 auto init_result = ParseExpr();
                 if (init_result) init = *init_result;
             }
-            
+
             if (not Consume(Tk::SemiColon)) {
                 Error("Expected ';'");
             }
@@ -450,7 +450,10 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
         return new (*this) ContinueStatement{GetLocation(start), target};
     } else if (Consume(Tk::Defer)) {
         auto statement_result = ParseStatement(false);
-        if (not statement_result) return statement_result.diag();
+        if (not statement_result) {
+            Synchronise();
+            return statement_result.diag();
+        }
 
         if (consumeSemi and not Consume(Tk::SemiColon)) {
             Error("Expected ';'");
@@ -475,24 +478,187 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
         }
 
         auto condition_result = ParseExpr();
-        if (not condition_result) return condition_result.diag();
+        if (not condition_result) {
+            Synchronise();
+            return condition_result.diag();
+        }
 
         if (not Consume(Tk::CloseParen)) {
-            Error("Expected )");
+            Error("Expected ')' to close if condition");
         }
 
         auto pass_body = ParseStatement();
-        if (not pass_body) return pass_body.diag();
+        if (not pass_body) {
+            Synchronise();
+            return pass_body.diag();
+        }
 
         auto fail_body = Result<Statement*>::Null();
         if (Consume(Tk::Else)) {
             fail_body = ParseStatement();
-            if (not fail_body) return fail_body.diag();
+            if (not fail_body) {
+                Synchronise();
+                return fail_body.diag();
+            }
         }
 
         return new (*this) IfStatement{GetLocation(start), *condition_result, *pass_body, *fail_body};
     } else if (Consume(Tk::For)) {
-        LCC_ASSERT(false, "TODO for");
+        if (not Consume(Tk::OpenParen)) {
+            auto pass_body = ParseStatement();
+            if (not pass_body) {
+                Synchronise();
+                return pass_body.diag();
+            }
+
+            return new (*this) ForStatement{GetLocation(start), nullptr, *pass_body, nullptr};
+        }
+
+        auto first_start = CurrLocation();
+        bool starts_with_decl = false;
+        if (not At(Tk::SemiColon)) {
+            auto spec = EnterSpeculativeParse();
+            if (SpeculativeParseType() and At(Tk::Ident) and PeekAt(1, Tk::Equal, Tk::SemiColon, Tk::Colon)) {
+                starts_with_decl = true;
+            }
+        }
+
+        Statement* init = nullptr;
+        if (starts_with_decl or At(Tk::SemiColon)) {
+            if (not At(Tk::SemiColon)) {
+                auto init_type = *ParseType();
+                auto init_name = tok;
+                if (not Consume(Tk::Ident)) LCC_ASSERT(false, "should've been at an ident, what happened?");
+
+                Expr* init_value = nullptr;
+                if (Consume(Tk::Equal)) {
+                    auto init_value_result = ParseExpr();
+                    if (init_value_result) init_value = *init_value_result;
+                }
+
+                init = new (*this) BindingDecl{GetLocation(first_start), {}, init_type, init_name.text, init_value};
+            }
+
+            if (starts_with_decl and Consume(Tk::Colon)) {
+                LCC_ASSERT(init != nullptr);
+                auto init_binding = cast<BindingDecl>(init);
+
+                auto type = init_binding->type();
+                auto name = init_binding->name();
+                auto value = init_binding->init();
+
+                if (value) {
+                    Error("Cannot initialize a 'for' iterator value");
+                }
+
+                auto sequence = ParseExpr();
+                if (not sequence) {
+                    Synchronise();
+                    return sequence.diag();
+                }
+
+                if (not Consume(Tk::CloseParen)) {
+                    Error("Expected ')' to close 'for' statement specifier");
+                }
+
+                auto pass_body = ParseStatement();
+                if (not pass_body) {
+                    Synchronise();
+                    return pass_body.diag();
+                }
+
+                auto fail_body = Result<Statement*>::Null();
+                if (Consume(Tk::Else)) {
+                    fail_body = ParseStatement();
+                    if (not fail_body) {
+                        Synchronise();
+                        return fail_body.diag();
+                    }
+                }
+
+                return new (*this) ForEachStatement{GetLocation(start), type, name, *sequence, *pass_body, *fail_body};
+            }
+
+            if (not Consume(Tk::SemiColon)) {
+                Error("Expected ';' in 'for' statement specifier");
+            }
+
+        continue_c_style_for:;
+            auto condition = Result<Expr*>::Null();
+            if (not Consume(Tk::SemiColon)) {
+                condition = ParseExpr();
+                if (not condition) {
+                    Synchronise();
+                    return condition.diag();
+                }
+
+                if (not Consume(Tk::SemiColon)) {
+                    Error("Expected ';' in 'for' statement specifier");
+                }
+            }
+
+            auto increment = Result<Expr*>::Null();
+            if (not Consume(Tk::SemiColon)) {
+                increment = ParseExpr();
+                if (not increment) {
+                    Synchronise();
+                    return increment.diag();
+                }
+            }
+
+            if (not Consume(Tk::CloseParen)) {
+                Error("Expected ')' to close 'for' statement specifier");
+            }
+
+            auto pass_body = ParseStatement();
+            if (not pass_body) {
+                Synchronise();
+                return pass_body.diag();
+            }
+
+            auto fail_body = Result<Statement*>::Null();
+            if (Consume(Tk::Else)) {
+                fail_body = ParseStatement();
+                if (not fail_body) {
+                    Synchronise();
+                    return fail_body.diag();
+                }
+            }
+
+            return new (*this) ForStatement{GetLocation(start), init, *condition, *increment, *pass_body, *fail_body};
+        } else {
+            Expr* first_expr = nullptr;
+            {
+                if (auto first_expr_result = ParseExpr())
+                    first_expr = *first_expr_result;
+            }
+
+            if (Consume(Tk::SemiColon)) {
+                init = new (*this) ExprStatement{first_expr};
+                goto continue_c_style_for;
+            }
+
+            if (not Consume(Tk::CloseParen)) {
+                Error("Expected ')' to close 'for' statement specifier");
+            }
+
+            auto pass_body = ParseStatement();
+            if (not pass_body) {
+                Synchronise();
+                return pass_body.diag();
+            }
+
+            auto fail_body = Result<Statement*>::Null();
+            if (Consume(Tk::Else)) {
+                fail_body = ParseStatement();
+                if (not fail_body) {
+                    Synchronise();
+                    return fail_body.diag();
+                }
+            }
+
+            return new (*this) ForStatement{GetLocation(start), first_expr, *pass_body, *fail_body};
+        }
     } else if (At(Tk::Do) and PeekAt(1, Tk::OpenBrace)) {
         NextToken();
 
@@ -512,7 +678,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
         if (not condition_result) return condition_result.diag();
 
         if (not Consume(Tk::CloseParen)) {
-            Error("Expected )");
+            Error("Expected ')' to close do-for condition");
         }
 
         if (consumeSemi and not Consume(Tk::SemiColon)) {
@@ -538,7 +704,7 @@ auto Parser::ParseBlockStatement([[maybe_unused]] ScopeRAII sc) -> Result<BlockS
     LCC_ASSERT(not IsInSpeculativeParse());
 
     auto start_location = CurrLocation();
-    LCC_ASSERT(Consume(Tk::OpenBrace));
+    if (not Consume(Tk::OpenBrace)) LCC_ASSERT(false);
 
     std::vector<Statement*> children{};
 
@@ -769,7 +935,7 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allow_function
         }
 
         if (not Consume(Tk::CloseParen)) {
-            Error("Expected ')'");
+            if (allocate) Error("Expected ')' to close function type");
         }
 
         Type* function_type = nullptr;
@@ -796,7 +962,7 @@ auto Parser::TryParseTemplateArguments(bool allocate) -> Result<std::vector<Expr
         return args;
     }
 
-    //LCC_ASSERT(false, "TODO template args");
+    // LCC_ASSERT(false, "TODO template args");
     return args;
 }
 
@@ -935,6 +1101,67 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         return TryParseTypeContinue(static_cast<Type*>(*id_type), allocate);
     }
 
+    if (At(Tk::Noreturn)) {
+        if (type_access != TypeAccess::Default) {
+            if (allocate) Error("Access modifiers do not apply to the noreturn type");
+        }
+
+        auto location = tok.location;
+        NextToken();
+
+        auto noreturn_type = Result<Type*>::Null();
+        if (allocate) {
+            noreturn_type = new (*this) NoreturnType{location};
+        }
+
+        return TryParseTypeContinue(*noreturn_type, allocate);
+    }
+
+    if (At(Tk::Rawptr)) {
+        if (type_access != TypeAccess::Default) {
+            if (allocate) Error("Access modifiers do not apply to the rawptr type");
+        }
+
+        auto location = tok.location;
+        NextToken();
+
+        auto rawptr_type = Result<Type*>::Null();
+        if (allocate) {
+            rawptr_type = new (*this) RawptrType{location};
+        }
+
+        return TryParseTypeContinue(*rawptr_type, allocate);
+    }
+
+    if (At(Tk::Void)) {
+        if (type_access != TypeAccess::Default) {
+            if (allocate) Error("Access modifiers do not apply to the void type");
+        }
+
+        auto location = tok.location;
+        NextToken();
+
+        auto void_type = Result<Type*>::Null();
+        if (allocate) {
+            void_type = new (*this) VoidType{location};
+        }
+
+        return TryParseTypeContinue(*void_type, allocate);
+    }
+
+    if (At(Tk::String)) {
+        auto location = tok.location;
+
+        NextToken();
+
+        auto string_type = Result<Type*>::Null();
+        if (allocate) {
+            string_type = new (*this) StringType{location, type_access};
+        }
+
+        return TryParseTypeContinue(*string_type, allocate);
+    }
+
     if (At(Tk::Bool)) {
         if (type_access != TypeAccess::Default) {
             if (allocate) Error("Access modifiers do not apply to bool types");
@@ -989,19 +1216,6 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         }
 
         return TryParseTypeContinue(*float_type, allocate);
-    }
-
-    if (At(Tk::String)) {
-        auto location = tok.location;
-
-        NextToken();
-
-        auto string_type = Result<Type*>::Null();
-        if (allocate) {
-            string_type = new (*this) StringType{location, type_access};
-        }
-
-        return TryParseTypeContinue(*string_type, allocate);
     }
 
     if (At(
@@ -1098,7 +1312,7 @@ auto Parser::ParsePrimaryExprContinue(Expr* expr) -> Result<Expr*> {
         }
 
         if (not Consume(Tk::CloseParen)) {
-            Error("Expected ')'");
+            Error("Expected ')' to close call argument list");
         }
 
         return ParsePrimaryExprContinue(new (*this) CallExpr{GetLocation(expr->location()), expr, args});
@@ -1164,7 +1378,7 @@ auto Parser::ParsePrimaryExprContinue(Expr* expr) -> Result<Expr*> {
             } else Error("Expected identifier");
 
             if (not Consume(Tk::CloseParen)) {
-                Error("Expected ')'");
+                Error("Expected ')' to close catch capture");
             }
         }
 
@@ -1229,10 +1443,10 @@ auto Parser::ParsePrimaryExpr() -> Result<Expr*> {
         if (Consume(Tk::OpenParen)) {
             allocator = *ParseExpr();
             if (not Consume(Tk::CloseParen)) {
-                if (allocator) Error("Expected ')'");
+                if (allocator) Error("Expected ')' to close allocator specification");
                 else {
                     Synchronise();
-                    return Error("Expected ')'");
+                    return Error("Expected ')' to close allocator specification");
                 }
             }
         }
