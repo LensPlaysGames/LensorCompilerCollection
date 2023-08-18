@@ -83,6 +83,8 @@ enum struct TokenKind {
     If,
     Else,
     While,
+    Do,
+    Then,
     Extern,
     As,
     Type,

@@ -9,6 +9,7 @@ namespace intc = lcc::intercept;
 namespace {
 /// Get the binary precedence of a token.
 /// TODO: User-defined operators.
+constexpr inline lcc::isz CallPrecedence = 100'000;
 constexpr auto BinaryOrPostfixPrecedence(intc::TokenKind t) -> lcc::isz {
     using Tk = intc::TokenKind;
     switch (t) {
@@ -17,9 +18,8 @@ constexpr auto BinaryOrPostfixPrecedence(intc::TokenKind t) -> lcc::isz {
 
         /// Call and subscript have higher precedence than unary operators.
         /// Note: Unary operator precedence is 10'000.
-        case Tk::LParen:
         case Tk::LBrack:
-            return 100'000;
+            return CallPrecedence;
 
         case Tk::As:
             return 1'000;
@@ -143,6 +143,8 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::ColonEq:
         case Tk::ColonColon:
         case Tk::Else:
+        case Tk::Do:
+        case Tk::Then:
         case Tk::As:
         case Tk::Type:
         case Tk::Void:
@@ -229,7 +231,7 @@ auto intc::Parser::ParseBlock() -> Result<BlockExpr*> {
     return ParseBlock({this});
 }
 
-/// <expr-block> ::= "{" { <expr> } "}"
+/// <expr-block> ::= "{" { <expr> ";" } "}"
 auto intc::Parser::ParseBlock(
     /// The only purpose of this parameter is to open a new scope
     /// for this block. Do NOT remove it, even if it appears unused.
@@ -241,7 +243,9 @@ auto intc::Parser::ParseBlock(
     /// Parse expressions.
     std::vector<Expr*> exprs;
     while (not At(Tk::RBrace)) {
+        if (Consume(Tk::Semicolon)) continue;
         auto expr = ParseExpr();
+        if (not Consume(Tk::Semicolon)) Error("Expected ;");
         if (not expr) return expr.diag();
         exprs.push_back(expr.value());
     }
@@ -249,25 +253,6 @@ auto intc::Parser::ParseBlock(
     /// Yeet "}".
     if (not Consume(Tk::RBrace)) return Error("Expected }}");
     return new (*mod) BlockExpr(std::move(exprs), loc);
-}
-
-/// <expr-call> ::= <expr> "(" { <expr> [ "," ] } ")"
-auto intc::Parser::ParseCallExpr(Expr* callee) -> Result<CallExpr*> {
-    /// Yeet "(".
-    auto loc = tok.location;
-    LCC_ASSERT(Consume(Tk::LParen), "ParseCallExpr called while not at '('");
-
-    /// Parse args.
-    std::vector<Expr*> args;
-    while (not At(Tk::RParen)) {
-        if (auto arg = ParseExpr(); not arg) return arg.diag();
-        else args.push_back(arg.value());
-        Consume(Tk::Comma);
-    }
-
-    /// Yeet ")".
-    if (not Consume(Tk::RParen)) return Error("Expected )");
-    return new (*mod) CallExpr(callee, std::move(args), loc);
 }
 
 /// Parse an object or type declaration.
@@ -401,7 +386,7 @@ auto intc::Parser::ParseDeclRest(
 
 /// See grammar.bnf for a list of productions handled by this rule.
 /// <expr> ::= ...
-auto intc::Parser::ParseExpr(isz current_precedence) -> ExprResult {
+auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> ExprResult {
     auto lhs = ExprResult::Null();
 
     /// Export a declaration.
@@ -501,7 +486,7 @@ auto intc::Parser::ParseExpr(isz current_precedence) -> ExprResult {
 
             /// Parse the elements.
             while (not At(Tk::RBrack, Tk::Eof)) {
-                auto element = ParseExpr();
+                auto element = ParseExpr(0, true);
                 if (not element) return element.diag();
                 elements.push_back(element.value());
                 Consume(Tk::Comma);
@@ -594,11 +579,6 @@ auto intc::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         switch (tok.kind) {
             default: break;
 
-            /// Call expression.
-            case Tk::LParen:
-                lhs = ParseCallExpr(*lhs);
-                continue;
-
             /// Subscript expression.
             case Tk::LBrack: {
                 NextToken();
@@ -638,6 +618,28 @@ auto intc::Parser::ParseExpr(isz current_precedence) -> ExprResult {
         lhs = new (*mod) BinaryExpr(op, *lhs, *rhs, {lhs->location(), rhs->location()});
     }
 
+    /// While we’re at the start of an expression, if we’re not parsing
+    /// a single expression, parse call arguments.
+    if (not single_expression) {
+        std::vector<Expr*> args;
+
+        /// Ignore unary operators that could also be binary operators.
+        while (AtStartOfExpression() and not At(Tk::Minus, Tk::Plus, Tk::Ampersand)) {
+            auto expr = ParseExpr(CallPrecedence, true);
+            if (not expr) return expr.diag();
+            args.push_back(expr.value());
+        }
+
+        /// If there are arguments, create a call expression.
+        if (not args.empty()) {
+            lhs = new (*mod) CallExpr(
+                lhs.value(),
+                std::move(args),
+                {lhs->location(), tok.location}
+            );
+        }
+    }
+
     return lhs;
 }
 
@@ -654,10 +656,11 @@ auto intc::Parser::ParseForExpr() -> Result<ForExpr*> {
     /// Parse init, cond, increment, and body.
     ScopeRAII sc{this};
     auto init = ParseExpr();
-    Consume(Tk::Comma);
+    if (not Consume(Tk::Comma)) Error("Expected ','");
     auto cond = ParseExpr();
-    Consume(Tk::Comma);
+    if (not Consume(Tk::Comma)) Error("Expected ','");
     auto increment = ParseExpr();
+    if (not Consume(Tk::Do)) Error("Expected 'do'");
     auto body = ParseExpr();
 
     /// Check for errors and create the expression.
@@ -761,11 +764,12 @@ auto intc::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
         /// Otherwise, we have a comma-separated list of names.
         else {
             usz idx = parameters.size();
+            if (not At(Tk::Ident)) return Error("Expected identifier or ':' in parameter declaration");
             do {
-                if (not At(Tk::Ident)) return Error("Expected identifier or ':' in parameter declaration");
                 parameters.emplace_back(tok.text, nullptr, tok.location);
                 NextToken();
-            } while (Consume(Tk::Comma));
+                Consume(Tk::Comma);
+            } while (At(Tk::Ident));
 
             /// Parse the parameter type.
             if (not Consume(Tk::Colon)) return Error("Expected ':' in parameter declaration");
@@ -809,7 +813,7 @@ auto intc::Parser::ParseIdentExpr() -> Result<Expr*> {
     return new (*mod) NameRefExpr(std::move(text), CurrScope(), loc);
 }
 
-/// <expr-if> ::= IF <expr> <expr> [ ELSE <expr> ]
+/// <expr-if> ::= IF <expr> THEN <expr> [ ELSE <expr> ]
 auto intc::Parser::ParseIfExpr() -> Result<IfExpr*> {
     /// Yeet "if".
     auto loc = tok.location;
@@ -817,6 +821,7 @@ auto intc::Parser::ParseIfExpr() -> Result<IfExpr*> {
 
     /// Parse condition, then, and else.
     auto cond = ParseExpr();
+    if (not Consume(Tk::Then)) Error("Expected 'then' after condition of if expression");
     auto then = ParseExprInNewScope();
     auto else_ = ExprResult::Null();
     if (Consume(Tk::Else)) else_ = ParseExpr();
@@ -839,7 +844,7 @@ auto intc::Parser::ParsePreamble(File& f) -> Result<void> {
         mod = std::make_unique<Module>(&f, "", false);
     }
 
-    DiscardSemicolons();
+    while (At(Tk::Semicolon)) NextToken();
 
     /// Parse imports.
     while (At(Tk::Ident) and tok.text == "import" and not tok.artificial) {
@@ -849,7 +854,7 @@ auto intc::Parser::ParsePreamble(File& f) -> Result<void> {
         /// Add the module to be loaded later.
         mod->add_import(tok.text);
         NextToken(); /// Yeet module name.
-        DiscardSemicolons();
+        while (At(Tk::Semicolon)) NextToken();
     }
 
     return {};
@@ -888,7 +893,7 @@ auto intc::Parser::ParseStructType() -> Result<StructType*> {
     return new (*mod) StructType(std::move(members), Location{loc, tok.location});
 }
 
-/// <file> ::= <preamble> { <expr> | ";" }
+/// <file> ::= <preamble> { [ <expr> ] ";" }
 void intc::Parser::ParseTopLevel() {
     /// Set up the rest of the parser state.
     curr_func = mod->top_level_func();
@@ -897,13 +902,14 @@ void intc::Parser::ParseTopLevel() {
 
     /// Parse the file.
     for (;;) {
-        DiscardSemicolons();
+        if (Consume(Tk::Semicolon)) continue;
 
         /// Stop if we’re at end of file.
         if (At(Tk::Eof)) break;
 
         /// Parse a top-level expression.
         auto expr = ParseExpr();
+        if (not Consume(Tk::Semicolon)) Error("Expected ';'");
         if (expr) mod->add_top_level_expr(expr.value());
 
         /// Synchronise on semicolons and braces in case of an error.
@@ -1032,7 +1038,7 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
     return ty;
 }
 
-/// <expr-while> ::= WHILE <expr> <expr>
+/// <expr-while> ::= WHILE <expr> DO <expr>
 auto intc::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
     /// Yeet "while".
     auto loc = tok.location;
@@ -1040,6 +1046,7 @@ auto intc::Parser::ParseWhileExpr() -> Result<WhileExpr*> {
 
     /// Parse condition and body.
     auto cond = ParseExpr();
+    if (not Consume(Tk::Do)) Error("Expected 'do' after condition of while expression");
     auto body = ParseExprInNewScope();
     if (IsError(cond, body)) return Diag();
     return new (*mod) WhileExpr(cond.value(), body.value(), loc);

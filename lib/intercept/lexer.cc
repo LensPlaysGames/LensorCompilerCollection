@@ -11,6 +11,8 @@ lcc::StringMap<Tk> keywords{
     {"if", Tk::If},
     {"else", Tk::Else},
     {"while", Tk::While},
+    {"do", Tk::Do},
+    {"then", Tk::Then},
     {"ext", Tk::Extern},
     {"as", Tk::As},
     {"type", Tk::Type},
@@ -779,6 +781,8 @@ bool lcc::intercept::InterceptToken::operator==(const InterceptToken& rhs) const
         case TokenKind::If:
         case TokenKind::Else:
         case TokenKind::While:
+        case TokenKind::Do:
+        case TokenKind::Then:
         case TokenKind::Extern:
         case TokenKind::As:
         case TokenKind::Type:
@@ -807,6 +811,8 @@ std::string_view lcc::intercept::ToString(Tk kind) {
         case Tk::If: return "if";
         case Tk::Else: return "else";
         case Tk::While: return "while";
+        case Tk::Do: return "do";
+        case Tk::Then: return "then";
         case Tk::Extern: return "ext";
         case Tk::As: return "as";
         case Tk::Export: return "export";
@@ -814,7 +820,7 @@ std::string_view lcc::intercept::ToString(Tk kind) {
         case Tk::Void: return "void";
         case Tk::Byte: return "byte";
         case Tk::IntKw: return "int";
-        case Tk::ArbitraryInt: return "arbitrary_integer";
+        case Tk::ArbitraryInt: return "sized integer";
         case Tk::For: return "for";
         case Tk::Return: return "return";
         case Tk::LParen: return "(";
@@ -850,8 +856,8 @@ std::string_view lcc::intercept::ToString(Tk kind) {
         case Tk::ColonEq: return ":=";
         case Tk::ColonColon: return "::";
         case Tk::Gensym: return "gensym";
-        case Tk::MacroArg: return "macro_arg";
-        case Tk::Expression: return "ast_node";
+        case Tk::MacroArg: return "macro arg";
+        case Tk::Expression: return "expression";
         case Tk::Bool: return "bool";
         case Tk::Struct: return "struct";
         case Tk::Lambda: return "lambda";

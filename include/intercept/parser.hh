@@ -77,11 +77,6 @@ private:
     /// Get the current scope.
     auto CurrScope() -> Scope* { return scope_stack.back(); }
 
-    /// Discard semicolons until we reach a non-semicolon token.
-    void DiscardSemicolons() {
-        while (At(Tk::Semicolon)) NextToken();
-    }
-
     /// Issue an error.
     template <typename... Args>
     Diag Error(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
@@ -96,10 +91,9 @@ private:
 
     auto ParseBlock() -> Result<BlockExpr*>;
     auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;
-    auto ParseCallExpr(Expr* callee) -> Result<CallExpr*>;
     auto ParseDecl() -> Result<Decl*>;
     auto ParseDeclRest(std::string ident, Location location, bool is_extern) -> Result<Decl*>;
-    auto ParseExpr(isz current_precedence = 0) -> ExprResult;
+    auto ParseExpr(isz current_precedence = 0, bool single_expression = false) -> ExprResult;
     auto ParseExprInNewScope() -> ExprResult;
     auto ParseForExpr() -> Result<ForExpr*>;
     auto ParseFuncAttrs() -> Result<FuncType::Attributes>;
