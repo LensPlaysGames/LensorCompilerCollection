@@ -30,8 +30,8 @@ private:
         Parser* parser;
         Scope* scope;
 
-        ScopeRAII(Parser* parser)
-            : parser(parser), scope(new(*parser->mod) Scope(parser->CurrScope())) {
+        ScopeRAII(Parser* parser, Scope* parent = nullptr)
+            : parser(parser), scope(new(*parser->mod) Scope(parent ? parent : parser->CurrScope())) {
             parser->scope_stack.push_back(scope);
         }
 
@@ -77,6 +77,9 @@ private:
     /// Get the current scope.
     auto CurrScope() -> Scope* { return scope_stack.back(); }
 
+    /// Declare a variable or function in the appropriate scope.
+    auto Declare(std::string name, ObjectDecl* decl) -> Result<Decl*>;
+
     /// Issue an error.
     template <typename... Args>
     Diag Error(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
@@ -87,12 +90,12 @@ private:
     using Lexer::Error;
 
     /// Get the global scope.
-    auto GlobalScope() -> Scope* { return scope_stack.front(); }
+    auto GlobalScope() -> Scope* { return scope_stack[0]; }
 
     auto ParseBlock() -> Result<BlockExpr*>;
     auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;
     auto ParseDecl() -> Result<Decl*>;
-    auto ParseDeclRest(std::string ident, Location location, bool is_extern) -> Result<Decl*>;
+    auto ParseDeclRest(std::string ident, Location location, bool is_extern, bool is_static) -> Result<Decl*>;
     auto ParseExpr(isz current_precedence = 0, bool single_expression = false) -> ExprResult;
     auto ParseExprInNewScope() -> ExprResult;
     auto ParseForExpr() -> Result<ForExpr*>;
@@ -110,6 +113,10 @@ private:
 
     /// Synchronise on semicolons and braces.
     void Synchronise();
+
+    /// Get the scope for local top-level variables. This is different
+    /// from the global scope.
+    auto TopLevelScope() -> Scope* { return scope_stack[1]; }
 
     friend Scope;
     friend ScopeRAII;

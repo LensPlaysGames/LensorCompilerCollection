@@ -1068,6 +1068,19 @@ void intc::Sema::AnalyseNameRef(NameRefExpr* expr) {
     /// TODO(Sirraide): Search imported modules here.
     if (syms.first == syms.second) {
         Error(expr->location(), "Unknown symbol '{}'", expr->name());
+
+        /// If there is a declaration of this variable in the top-level
+        /// scope, tell the user that they may have forgotten to make it
+        /// static.
+        auto top_level = mod.top_level_scope()->find(expr->name());
+        if (top_level.first != top_level.second) {
+            Diag::Note(
+                context,
+                top_level.first->second->location(),
+                "A declaration exists at the top-level. Did you mean to make it 'static'?"
+            );
+        }
+
         expr->set_sema_errored();
         return;
     }

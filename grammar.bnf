@@ -8,7 +8,6 @@
 
 
 /// TODO: `as!` vs `as`
-/// TODO: `global` top-level decls (also within a function for statics).
 
 /// Expression.
 <expr>        ::= <expr-call> | <expr-single>
@@ -31,7 +30,7 @@
                 | EXPR
 
 /// Declarations.
-<expr-decl>      ::= [ EXPORT ] [ EXTERN ] IDENTIFIER <decl-rest>
+<expr-decl>      ::= <storage-specs> IDENTIFIER <decl-rest>
 <decl-rest>      ::= <decl-var> | <decl-function> | <decl-type>
 <decl-var>       ::= ":" <type> [ "=" <expr> ] | "::" <expr>
 <decl-function>  ::= ":" <type-function> [ <function-body> ]
@@ -71,6 +70,7 @@
 <func-attrs>     ::= /// All function attributes
 
 /// Miscellaneous.
+<storage-specs>  ::= [ EXPORT ] [ EXTERN ] [ STATIC ]
 <type-function>  ::= <type-base> <type-signature>
 <function-body>  ::= "=" <expr> | <expr-block>
 <struct-body>    ::= "{" { <member-decl> } "}"

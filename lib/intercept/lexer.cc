@@ -14,6 +14,7 @@ lcc::StringMap<Tk> keywords{
     {"do", Tk::Do},
     {"then", Tk::Then},
     {"extern", Tk::Extern},
+    {"static", Tk::Static},
     {"as", Tk::As},
     {"type", Tk::Type},
     {"void", Tk::Void},
@@ -784,6 +785,7 @@ bool lcc::intercept::InterceptToken::operator==(const InterceptToken& rhs) const
         case TokenKind::Do:
         case TokenKind::Then:
         case TokenKind::Extern:
+        case TokenKind::Static:
         case TokenKind::As:
         case TokenKind::Type:
         case TokenKind::Void:
@@ -814,6 +816,7 @@ std::string_view lcc::intercept::ToString(Tk kind) {
         case Tk::Do: return "do";
         case Tk::Then: return "then";
         case Tk::Extern: return "extern";
+        case Tk::Static: return "static";
         case Tk::As: return "as";
         case Tk::Export: return "export";
         case Tk::Type: return "type";

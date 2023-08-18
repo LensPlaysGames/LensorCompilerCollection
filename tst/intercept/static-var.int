@@ -1,0 +1,5 @@
+;; 42
+
+static x : int = 21;
+foo : int(y : int) = x + y;
+foo 21;

@@ -86,6 +86,7 @@ enum struct TokenKind {
     Do,
     Then,
     Extern,
+    Static,
     As,
     Type,
     Void,
@@ -158,6 +159,9 @@ public:
     /// Get the functions that are part of this module.
     auto functions() -> std::vector<FuncDecl*>& { return _functions; }
 
+    /// Get the global scope.
+    auto global_scope() const -> Scope* { return scopes[0]; }
+
     /// Get the module imports.
     auto imports() -> std::vector<Ref>& { return _imports; }
 
@@ -169,6 +173,9 @@ public:
 
     /// Get the top-level function.
     auto top_level_func() const -> FuncDecl* { return top_level_function; }
+
+    /// Get the top-level scope.
+    auto top_level_scope() const -> Scope* { return scopes[1]; }
 
     /// Get a unique function name.
     auto unique_function_name() -> std::string { return fmt::format("_XInt__lambda_{}", lambda_counter++); }

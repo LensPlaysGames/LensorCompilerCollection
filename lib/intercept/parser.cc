@@ -109,6 +109,7 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::If:
         case Tk::While:
         case Tk::Extern:
+        case Tk::Static:
         case Tk::For:
         case Tk::Return:
         case Tk::Export:
@@ -213,6 +214,17 @@ constexpr lcc::isz TypeQualifierPrecedence(intc::TokenKind t) {
 
 bool intc::Parser::AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
 
+auto intc::Parser::Declare(std::string name, ObjectDecl* decl) -> Result<Decl*> {
+    Scope* var_scope{};
+    if (decl->linkage() == Linkage::LocalVar) {
+        var_scope = CurrScope() == GlobalScope() ? TopLevelScope() : CurrScope();
+    } else {
+        var_scope = CurrScope() == TopLevelScope() ? GlobalScope() : CurrScope();
+    }
+
+    return var_scope->declare(context, std::move(name), decl);
+}
+
 auto intc::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
     Parser parser(context, &file);
 
@@ -256,12 +268,49 @@ auto intc::Parser::ParseBlock(
 }
 
 /// Parse an object or type declaration.
+///
+/// <expr-decl>     ::= <storage-specs> IDENTIFIER <decl-rest>
+/// <storage-specs> ::= [ EXPORT ] [ EXTERN ] [ STATIC ]
 auto intc::Parser::ParseDecl() -> Result<Decl*> {
+    auto is_export = Consume(Tk::Export);
+    auto is_extern = Consume(Tk::Extern);
+    auto is_static = Consume(Tk::Static);
     auto loc = tok.location;
     auto text = tok.text;
-    auto is_extern = Consume(Tk::Extern);
     if (not Consume(Tk::Ident)) return Error("Expected declaration");
-    return ParseDeclRest(text, loc, is_extern);
+    auto decl = ParseDeclRest(text, loc, is_extern, is_static);
+
+    /// Apply storage specifiers.
+    if (is_export) {
+        /// Export a declaration.
+        const auto Export = [&](Decl* decl) -> Result<Decl*> {
+            /// Set linkage to exported if this has linkage.
+            if (auto obj = cast<ObjectDecl>(decl)) {
+                obj->linkage(obj->linkage() == Linkage::Imported ? Linkage::Reexported : Linkage::Exported);
+
+                /// If static was also specified, issue a warning if extern wasn’t
+                /// also specified, in which case we will have already issued a
+                /// warning.
+                if (is_static and not is_extern) Diag::Warning(
+                    context,
+                    obj->location(),
+                    "Static specifier has no effect on this declaration"
+                );
+            }
+
+            /// Add the declaration to the module’s export list.
+            mod->add_export(decl);
+            return decl;
+        };
+
+        /// Exported declaration.
+        if (CurrScope() != GlobalScope())
+            Error("Exported declarations are only allowed at the top level");
+
+        decl = decl >>= Export;
+    }
+
+    return decl;
 }
 
 /// Parse everything after the identifier in an object declaration.
@@ -271,7 +320,8 @@ auto intc::Parser::ParseDecl() -> Result<Decl*> {
 auto intc::Parser::ParseDeclRest(
     std::string ident,
     lcc::Location location,
-    bool is_extern
+    bool is_extern,
+    bool is_static
 ) -> Result<Decl*> {
     /// Dispatch based on the declaration kind.
     switch (tok.kind) {
@@ -285,6 +335,7 @@ auto intc::Parser::ParseDeclRest(
             /// is a type declaration.
             if (At(Tk::Struct, Tk::Type)) {
                 if (is_extern) Error("Type declarations cannot be extern");
+                if (is_static) Error("Type declarations cannot be static");
                 auto decl_name = ident; /// Copy required below.
 
                 /// Struct declaration.
@@ -331,8 +382,10 @@ auto intc::Parser::ParseDeclRest(
 
             /// If the type is a function type, then this is
             /// a function declaration.
-            if (auto type = cast<FuncType>(*ty))
+            if (auto type = cast<FuncType>(*ty)) {
+                if (is_static) Error("Function declarations cannot be static");
                 return ParseFuncDecl(std::move(ident), type, is_extern);
+            }
 
             /// Otherwise, it is a variable declaration. Parse
             /// the initialiser if there is one.
@@ -352,12 +405,19 @@ auto intc::Parser::ParseDeclRest(
                 *ty,
                 *init,
                 mod.get(),
-                is_extern ? Linkage::Imported : Linkage::Internal,
+                is_extern ? Linkage::Imported : (is_static ? Linkage::Internal : Linkage::LocalVar),
                 location
             );
 
+            /// Static is redundant if extern is given.
+            if (is_static and is_extern) Diag::Warning(
+                context,
+                var->location(),
+                "Static specifier has no effect on this declaration"
+            );
+
             /// Add it to the current scope and return it.
-            return CurrScope()->declare(context, std::move(ident), var);
+            return Declare(std::move(ident), var);
         }
 
         /// Variable declaration with type inference.
@@ -373,13 +433,13 @@ auto intc::Parser::ParseDeclRest(
                 Type::Unknown,
                 *expr,
                 mod.get(),
-                Linkage::Internal,
+                is_static ? Linkage::Internal : Linkage::LocalVar,
                 location
             );
 
-            /// Declarations that use type inference cannot be external.
+            /// Declarations that use type inference cannot be external or static.
             if (is_extern) Error(cc_loc, "Extern declarations must specify a type");
-            return CurrScope()->declare(context, std::move(ident), var);
+            return Declare(std::move(ident), var);
         }
     }
 }
@@ -388,17 +448,6 @@ auto intc::Parser::ParseDeclRest(
 /// <expr> ::= ...
 auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> ExprResult {
     auto lhs = ExprResult::Null();
-
-    /// Export a declaration.
-    const auto Export = [&](Decl* decl) -> Result<Decl*> {
-        /// Set linkage to exported if this has linkage.
-        if (auto obj = cast<ObjectDecl>(decl))
-            obj->linkage(obj->linkage() == Linkage::Imported ? Linkage::Reexported : Linkage::Exported);
-
-        /// Add the declaration to the module’s export list.
-        mod->add_export(decl);
-        return decl;
-    };
 
     /// See below.
     const auto start_token = tok.kind;
@@ -415,18 +464,14 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
             NextToken();
             break;
 
-        /// Exported declaration.
-        case Tk::Export: {
-            if (CurrScope() != GlobalScope())
-                return Error("Exported declarations are only allowed at the top level");
-
-            /// Parse and create the decl.
-            NextToken();
-            lhs = ParseDecl() >>= Export;
-        } break;
+        /// Declaration.
+        case Tk::Export:
+        case Tk::Extern:
+        case Tk::Static:
+            lhs = ParseDecl();
+            break;
 
         /// Expression that starts with an identifier.
-        case Tk::Extern:
         case Tk::Ident:
             lhs = ParseIdentExpr();
             break;
@@ -735,8 +780,10 @@ auto intc::Parser::ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scop
         return {};
     }
 
-    /// Function body is in a new scope.
-    ScopeRAII sc{this};
+    /// Function body is in a new scope. Note that the scope of a function
+    /// is a child of the global scope if we’re at the top level rather than
+    /// of the global scope.
+    ScopeRAII sc{this, CurrScope() == TopLevelScope() ? GlobalScope() : CurrScope()};
     sc.scope->set_function_scope();
 
     /// The body must either be a block expression or an equals sign
@@ -804,13 +851,12 @@ auto intc::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
 }
 
 auto intc::Parser::ParseIdentExpr() -> Result<Expr*> {
-    const bool is_extern = Consume(Tk::Extern);
     auto loc = tok.location;
     auto text = tok.text;
     LCC_ASSERT(Consume(Tk::Ident), "ParseIdentExpr called while not at identifier");
 
     /// If the next token is ':' or '::', then this is a declaration.
-    if (At(Tk::Colon, Tk::ColonColon)) return ParseDeclRest(std::move(text), loc, is_extern);
+    if (At(Tk::Colon, Tk::ColonColon)) return ParseDeclRest(std::move(text), loc, false, false);
 
     /// Otherwise, it’s just a name.
     return new (*mod) NameRefExpr(std::move(text), CurrScope(), loc);
@@ -898,10 +944,18 @@ auto intc::Parser::ParseStructType() -> Result<StructType*> {
 
 /// <file> ::= <preamble> { [ <expr> ] ";" }
 void intc::Parser::ParseTopLevel() {
-    /// Set up the rest of the parser state.
     curr_func = mod->top_level_func();
-    scope_stack.push_back(new (*mod) Scope(nullptr));
-    curr_func->scope(scope_stack.front());
+
+    /// Create the global and top-level scope. The top-level scope is a bit of
+    /// a weird one because it only contains the local variables of the top-level
+    /// functions. Everything else at the top-level goes in the global scope.
+    auto global = new (*mod) Scope(nullptr);
+    auto top_level = new (*mod) Scope(global);
+
+    /// Set up the rest of the parser state.
+    scope_stack.push_back(global);
+    scope_stack.push_back(top_level);
+    curr_func->scope(TopLevelScope());
 
     /// Parse the file.
     for (;;) {
@@ -1090,5 +1144,5 @@ auto intc::Parser::ParseFuncDecl(
     if (name.empty()) return func;
 
     /// Add it to the current scope and return it.
-    return as<FuncDecl>(CurrScope()->declare(context, std::move(name), func));
+    return as<FuncDecl>(Declare(std::move(name), func));
 }

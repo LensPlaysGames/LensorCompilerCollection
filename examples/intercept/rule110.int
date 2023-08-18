@@ -1,10 +1,10 @@
 ;;; Main
 
-state : i64 = 1;
+;; NOTE: Must be less than bit width of "state" integer
+static colcount :: 32;
 
 rowcount :: 42;
-;; NOTE: Must be less than bit width of "state" integer
-colcount :: 32;
+state : i64 = 1;
 
 while rowcount != 0 do {
   display_state state;
