@@ -33,6 +33,8 @@ static std::unordered_map<Tk, int> operator_precedence{
 };
 
 static std::unordered_map<Tk, OperatorKind> assign_operator_kinds{
+    {Tk::Equal, OperatorKind::Assign},
+
     {Tk::AmpersandEqual, OperatorKind::AndEqual},
     {Tk::PipeEqual, OperatorKind::OrEqual},
     {Tk::TildeEqual, OperatorKind::XorEqual},
@@ -69,6 +71,14 @@ static std::unordered_map<Tk, OperatorKind> binary_operator_kinds{
     {Tk::Slash, OperatorKind::Div},
     {Tk::Percent, OperatorKind::Mod},
 };
+
+OperatorKind Parser::AssignOperatorKind(TokenKind tokenKind) {
+    if (auto result = assign_operator_kinds.find(tokenKind); result != assign_operator_kinds.end()) {
+        return result->second;
+    }
+
+    return OperatorKind::Invalid;
+}
 
 OperatorKind Parser::BinaryOperatorKind(TokenKind tokenKind) {
     if (auto result = binary_operator_kinds.find(tokenKind); result != binary_operator_kinds.end()) {
@@ -597,9 +607,9 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
                 }
             }
 
-            auto increment = Result<Expr*>::Null();
+            auto increment = Result<Statement*>::Null();
             if (not Consume(Tk::SemiColon)) {
-                increment = ParseExpr();
+                increment = ParseStatement(false);
                 if (not increment) {
                     Synchronise();
                     return increment.diag();
@@ -689,15 +699,46 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
     }
 
     auto expr = ParseExpr();
+    if (not expr) {
+        Synchronise();
+        return expr.diag();
+    }
+
+    auto maybe_eq_tok = tok;
+    if (Consume(
+            Tk::Equal,
+            Tk::PlusEqual,
+            Tk::MinusEqual,
+            Tk::SlashEqual,
+            Tk::StarEqual,
+            Tk::PercentEqual,
+            Tk::LessEqual,
+            Tk::GreaterEqual,
+            Tk::AmpersandEqual,
+            Tk::PipeEqual,
+            Tk::TildeEqual,
+            Tk::LessLessEqual,
+            Tk::GreaterGreaterEqual
+        )) {
+        auto rhs = ParseExpr();
+        if (not rhs) {
+            Synchronise();
+            return rhs.diag();
+        }
+
+        if (consumeSemi and not Consume(Tk::SemiColon)) {
+            Error("Expected ';'");
+        }
+
+        auto assign_op = AssignOperatorKind(maybe_eq_tok.kind);
+        return new (*this) AssignStatement{GetLocation(start), assign_op, *expr, *rhs};
+    }
 
     if (consumeSemi and not Consume(Tk::SemiColon)) {
         Error("Expected ';'");
     }
 
-    if (not expr) return expr.diag();
-
-    auto expr_statement = new (*this) ExprStatement{*expr};
-    return expr_statement;
+    return new (*this) ExprStatement{*expr};
 }
 
 auto Parser::ParseBlockStatement([[maybe_unused]] ScopeRAII sc) -> Result<BlockStatement*> {

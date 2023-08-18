@@ -203,6 +203,7 @@ std::string layec::ToString(layec::OperatorKind kind) {
         case OperatorKind::Xor: return "~";
         case OperatorKind::Lsh: return "<<";
         case OperatorKind::Rsh: return ">>";
+        case OperatorKind::Assign: return "=";
         case OperatorKind::AddEqual: return "+=";
         case OperatorKind::SubEqual: return "-=";
         case OperatorKind::DivEqual: return "/=";
@@ -391,7 +392,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
             case K::Assign: {
                 auto n = cast<layec::AssignStatement>(s);
                 PrintBasicHeader("AssignStatement", n);
-                out += "\n";
+                out += fmt::format(" {}{}\n", C(White), ToString(n->assign_op()));
             } break;
 
             case K::Delete: {

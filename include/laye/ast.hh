@@ -262,6 +262,7 @@ enum struct OperatorKind {
     Lsh,
     Rsh,
 
+    Assign,
     AddEqual,
     SubEqual,
     DivEqual,
@@ -679,13 +680,15 @@ public:
 };
 
 class AssignStatement : public Statement {
+    OperatorKind _assign_op;
     Expr* _target;
     Expr* _value;
 
 public:
-    AssignStatement(Location location, Expr* target, Expr* value)
-        : Statement(Kind::Assign, location), _target(target), _value(value) {}
+    AssignStatement(Location location, OperatorKind assign_op, Expr* target, Expr* value)
+        : Statement(Kind::Assign, location), _assign_op(assign_op), _target(target), _value(value) {}
 
+    auto assign_op() const { return _assign_op; }
     auto target() const { return _target; }
     auto value() const { return _value; }
 
@@ -763,7 +766,7 @@ class ForStatement : public Statement {
 
     Statement* _init;
     Expr* _condition;
-    Expr* _increment;
+    Statement* _increment;
 
     Statement* _pass;
     Statement* _fail;
@@ -772,7 +775,7 @@ public:
     ForStatement(Location location, Expr* condition, Statement* pass, Statement* fail)
         : Statement(Kind::For, location), _init(nullptr), _condition(condition), _increment(nullptr), _pass(pass), _fail(fail) {}
 
-    ForStatement(Location location, Statement* init, Expr* condition, Expr* increment, Statement* pass, Statement* fail)
+    ForStatement(Location location, Statement* init, Expr* condition, Statement* increment, Statement* pass, Statement* fail)
         : Statement(Kind::For, location), _init(init), _condition(condition), _increment(increment), _pass(pass), _fail(fail) {}
 
     bool has_label() const { return not _label.empty(); }

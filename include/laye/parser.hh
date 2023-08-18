@@ -289,6 +289,7 @@ private:
 
     bool IsBinaryOperatorWithPrecedence(int precedence, int& next_precedence);
 
+    static OperatorKind AssignOperatorKind(TokenKind tokenKind);
     static OperatorKind BinaryOperatorKind(TokenKind tokenKind);
 
     friend Scope;

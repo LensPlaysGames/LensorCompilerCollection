@@ -5,8 +5,8 @@ void loops()
     for (condition)
     {
         for (bar(baz * 2); a < b; foo()) {}
-        for (int init_decl; b > a; increment) {}
-        for (int init_decl = 69; b > a; increment) {}
+        for (int init_decl; init_decl < 10; init_decl = init_decl + 1) {}
+        for (int init_decl = 69; init_decl > 10; init_decl -= 10) {}
         for (string name : data.names) {}
     }
 }
