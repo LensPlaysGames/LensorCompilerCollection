@@ -335,11 +335,12 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
     auto expr = *expr_ptr;
 
     /// Don’t analyse the same expression twice.
-    if (expr->sema_done_or_errored()) return expr->ok();
+    if (expr->sema() != SemaNode::State::NotAnalysed) return expr->ok();
     expr->set_sema_in_progress();
 
     /// Analyse the type if there is one.
-    if (auto tc = cast<TypedExpr>(expr)) Analyse(tc->type_ref());
+    if (auto tc = cast<TypedExpr>(expr))
+        Analyse(tc->type_ref());
 
     /// Analyse the expression itself.
     switch (expr->kind()) {
@@ -359,6 +360,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 "Invalid type for loop condition: {}",
                 l->condition()->type()
             );
+            Analyse(&l->body());
         } break;
 
         /// For return expressions, make sure that the type of the
@@ -750,10 +752,12 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             auto rhs = b->rhs()->type();
 
             /// If both operands are integers, convert them to their common type.
-            if (lhs->is_integer() and rhs->is_integer() and not ConvertToCommonType(&b->lhs(), &b->rhs())) {
-                Error(b->location(), "Cannot compare {} and {}", lhs, rhs);
-                b->set_sema_errored();
-                return;
+            if (lhs->is_integer() and rhs->is_integer()) {
+                if (not ConvertToCommonType(&b->lhs(), &b->rhs())) {
+                    Error(b->location(), "Cannot compare {} and {}", lhs, rhs);
+                    b->set_sema_errored();
+                    return;
+                }
             }
 
             /// Bool can only be compared with bool.
@@ -1075,6 +1079,20 @@ void intc::Sema::AnalyseNameRef(NameRefExpr* expr) {
         Expr* e = syms.first->second;
         Analyse(&e);
         LCC_ASSERT(syms.first->second == e);
+        syms.first->second = as<Decl>(e);
+
+        /// If sema is still in progress for the declaration, then we’re in
+        /// its initialiser, which is illegal.
+        if (e->sema() == SemaNode::State::InProgress) {
+            Error(
+                expr->location(),
+                "Cannot use variable '{}' in its own initialiser",
+                expr->name()
+            );
+            expr->set_sema_errored();
+            return;
+        }
+
         expr->target(syms.first->second);
         expr->type(Ref(syms.first->second->type()));
         return;

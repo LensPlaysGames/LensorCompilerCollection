@@ -289,7 +289,7 @@ public:
 
     /// \see SemaNode::State
     void set_sema_in_progress() {
-        LCC_ASSERT(_state == State::NotAnalysed);
+        LCC_ASSERT(not sema_done_or_errored());
         _state = State::InProgress;
     }
 
@@ -1089,6 +1089,7 @@ public:
     void add(Expr* expr) { _children.push_back(expr); }
 
     auto children() -> std::vector<Expr*>& { return _children; }
+    auto children() const -> const std::vector<Expr*>& { return _children; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Block; }
 };

@@ -230,8 +230,8 @@ bool intc::Type::is_integer(bool include_bool) const {
 }
 
 bool intc::Type::is_signed_int(const Context* ctx) const {
-    if (auto i = lcc::as<IntegerType>(this)) return i->is_signed();
-    if (auto f = lcc::as<FFIType>(this)) {
+    if (auto i = lcc::cast<IntegerType>(this)) return i->is_signed();
+    if (auto f = lcc::cast<FFIType>(this)) {
         switch (f->ffi_kind()) {
             using K = FFIType::FFIKind;
             case K::CSChar:
@@ -258,8 +258,8 @@ bool intc::Type::is_signed_int(const Context* ctx) const {
 bool intc::Type::is_unknown() const { return ::is_builtin(this, BuiltinType::BuiltinKind::Unknown); }
 
 bool intc::Type::is_unsigned_int(const Context* ctx) const {
-    if (auto i = lcc::as<IntegerType>(this)) return not i->is_signed();
-    if (auto f = lcc::as<FFIType>(this)) {
+    if (auto i = lcc::cast<IntegerType>(this)) return not i->is_signed();
+    if (auto f = lcc::cast<FFIType>(this)) {
         switch (f->ffi_kind()) {
             using K = FFIType::FFIKind;
             case K::CSChar:
@@ -538,13 +538,18 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                 return;
             }
 
+            case K::If: {
+                PrintBasicHeader("IfExpr", e);
+                if (not e->type()->is_void()) out += fmt::format(" {}\n", e->type()->string(use_colour));
+                return;
+            }
+
             case K::OverloadSet: PrintBasicNode("OverloadSet", e, e->type()); return;
             case K::EvaluatedConstant: PrintBasicNode("ConstantExpr", e, e->type()); return;
             case K::StructDecl: PrintBasicNode("StructDecl", e, e->type()); return;
             case K::TypeAliasDecl: PrintBasicNode("TypeAliasDecl", e, e->type()); return;
             case K::StringLiteral: PrintBasicNode("StringLiteral", e, e->type()); return;
             case K::CompoundLiteral: PrintBasicNode("CompoundLiteral", e, e->type()); return;
-            case K::If: PrintBasicNode("IfExpr", e, e->type()); return;
             case K::While: PrintBasicNode("WhileExpr", e, nullptr); return;
             case K::For: PrintBasicNode("ForExpr", e, nullptr); return;
             case K::Block: PrintBasicNode("BlockExpr", e, e->type()); return;
@@ -611,17 +616,40 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                 PrintChildren(as<intc::CompoundLiteral>(e)->values(), leading_text);
                 break;
 
+            case K::While: {
+                auto w = as<intc::WhileExpr>(e);
+                intc::Expr* children[] = {w->condition(), w->body()};
+                PrintChildren(children, leading_text);
+            } break;
+
+            case K::For: {
+                auto f = as<intc::ForExpr>(e);
+                intc::Expr* children[] = {f->init(), f->condition(), f->increment(), f->body()};
+                PrintChildren(children, leading_text);
+            } break;
+
+            case K::If: {
+                auto i = as<intc::IfExpr>(e);
+                if (i->else_()) {
+                    intc::Expr* children[] = {i->condition(), i->then(), i->else_()};
+                    PrintChildren(children, leading_text);
+                } else {
+                    intc::Expr* children[] = {i->condition(), i->then()};
+                    PrintChildren(children, leading_text);
+                }
+            } break;
+
+            case K::Block:
+                PrintChildren(as<intc::BlockExpr>(e)->children(), leading_text);
+                break;
+
             case K::OverloadSet:
             case K::EvaluatedConstant:
-            case K::While:
-            case K::For:
             case K::Return:
             case K::StructDecl:
             case K::TypeAliasDecl:
             case K::IntegerLiteral:
             case K::StringLiteral:
-            case K::If:
-            case K::Block:
             case K::IntrinsicCall:
             case K::MemberAccess:
                 break;
@@ -633,11 +661,13 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
         PrintHeader(e);
         if (auto f = cast<intc::FuncDecl>(e)) {
             printed_functions.insert(f);
-            if (auto block = cast<intc::BlockExpr>(const_cast<intc::FuncDecl*>(f)->body())) {
-                PrintChildren(block->children(), "");
-            } else {
-                intc::Expr* children[] = {const_cast<intc::FuncDecl*>(f)->body()};
-                PrintChildren(children, "");
+            if (auto body = const_cast<intc::FuncDecl*>(f)->body()) {
+                if (auto block = cast<intc::BlockExpr>(body)) {
+                    PrintChildren(block->children(), "");
+                } else {
+                    intc::Expr* children[] = {const_cast<intc::FuncDecl*>(f)->body()};
+                    PrintChildren(children, "");
+                }
             }
         } else {
             PrintNodeChildren(e);
@@ -667,7 +697,7 @@ auto intc::Type::string(bool use_colours) const -> std::string {
     using enum lcc::utils::Colour;
 
     switch (kind()) {
-        case Kind::Named: return as<NamedType>(this)->name();
+        case Kind::Named: return fmt::format("{}{}", C(White), as<NamedType>(this)->name());
         case Kind::Pointer:
             return fmt::format(
                 "{}@{}{}{}",

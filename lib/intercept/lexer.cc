@@ -13,7 +13,7 @@ lcc::StringMap<Tk> keywords{
     {"while", Tk::While},
     {"do", Tk::Do},
     {"then", Tk::Then},
-    {"ext", Tk::Extern},
+    {"extern", Tk::Extern},
     {"as", Tk::As},
     {"type", Tk::Type},
     {"void", Tk::Void},
@@ -813,7 +813,7 @@ std::string_view lcc::intercept::ToString(Tk kind) {
         case Tk::While: return "while";
         case Tk::Do: return "do";
         case Tk::Then: return "then";
-        case Tk::Extern: return "ext";
+        case Tk::Extern: return "extern";
         case Tk::As: return "as";
         case Tk::Export: return "export";
         case Tk::Type: return "type";

@@ -426,7 +426,10 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
         } break;
 
         /// Expression that starts with an identifier.
-        case Tk::Ident: lhs = ParseIdentExpr(); break;
+        case Tk::Extern:
+        case Tk::Ident:
+            lhs = ParseIdentExpr();
+            break;
 
         /// Because of parsing problems, expressions must not start with a type.
         case Tk::ArbitraryInt:
@@ -801,10 +804,10 @@ auto intc::Parser::ParseFuncSig(Type* return_type) -> Result<FuncType*> {
 }
 
 auto intc::Parser::ParseIdentExpr() -> Result<Expr*> {
+    const bool is_extern = Consume(Tk::Extern);
     auto loc = tok.location;
     auto text = tok.text;
     LCC_ASSERT(Consume(Tk::Ident), "ParseIdentExpr called while not at identifier");
-    const bool is_extern = Consume(Tk::Extern);
 
     /// If the next token is ':' or '::', then this is a declaration.
     if (At(Tk::Colon, Tk::ColonColon)) return ParseDeclRest(std::move(text), loc, is_extern);
