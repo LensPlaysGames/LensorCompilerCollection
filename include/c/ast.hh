@@ -51,6 +51,7 @@ enum struct TokenKind {
     
     // Other Delimiters
     Dot,
+    TripleDot,
     Comma,
     Colon,
     SemiColon,

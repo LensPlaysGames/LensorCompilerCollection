@@ -78,13 +78,241 @@ void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
             token.kind = TokenKind::EndOfLine;
         } break;
 
-        default: {
-            Error("Invalid character in C source");
+        // Grouping Delimiters
+        case '(': {
             AdvanceChar();
+            token.kind = TokenKind::OpenParen;
+        } break;
+
+        case ')': {
+            AdvanceChar();
+            token.kind = TokenKind::CloseParen;
+        } break;
+
+        case '[': {
+            AdvanceChar();
+            token.kind = TokenKind::OpenBracket;
+        } break;
+
+        case ']': {
+            AdvanceChar();
+            token.kind = TokenKind::CloseBracket;
+        } break;
+
+        case '{': {
+            AdvanceChar();
+            token.kind = TokenKind::OpenBrace;
+        } break;
+
+        case '}': {
+            AdvanceChar();
+            token.kind = TokenKind::CloseBrace;
+        } break;
+
+        // Other Delimiters
+        case '.': {
+            AdvanceChar();
+            if (CurrentChar() == '.' and PeekCharNoProcess() == '.') {
+                AdvanceChar(); // the second dot
+                AdvanceChar(); // the third dot
+                token.kind = TokenKind::TripleDot;
+            } else token.kind = TokenKind::Dot;
+        } break;
+
+        case ',': {
+            AdvanceChar();
+            token.kind = TokenKind::Comma;
+        } break;
+
+        case ':': {
+            AdvanceChar();
+            token.kind = TokenKind::Colon;
+        } break;
+
+        case ';': {
+            AdvanceChar();
+            token.kind = TokenKind::SemiColon;
+        } break;
+
+        // Operators
+        case '=': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::EqualEqual;
+            } else token.kind = TokenKind::Equal;
+        } break;
+
+        case '+': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::PlusEqual;
+            } else if (CurrentChar() == '+') {
+                AdvanceChar();
+                token.kind = TokenKind::PlusPlus;
+            } else token.kind = TokenKind::Plus;
+        } break;
+
+        case '-': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::MinusEqual;
+            } else if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::MinusMinus;
+            } else if (CurrentChar() == '>') {
+                AdvanceChar();
+                token.kind = TokenKind::MinusGreater;
+            } else token.kind = TokenKind::Minus;
+        } break;
+
+        case '*': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::StarEqual;
+            } else token.kind = TokenKind::Star;
+        } break;
+
+        case '/': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::SlashEqual;
+            } else token.kind = TokenKind::Slash;
+        } break;
+
+        case '%': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::PercentEqual;
+            } else token.kind = TokenKind::Percent;
+        } break;
+
+        case '&': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::AmpersandEqual;
+            } else if (CurrentChar() == '&') {
+                AdvanceChar();
+                token.kind = TokenKind::AmpersandAmpersand;
+            } else token.kind = TokenKind::Ampersand;
+        } break;
+
+        case '|': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::PipeEqual;
+            } else if (CurrentChar() == '|') {
+                AdvanceChar();
+                token.kind = TokenKind::PipePipe;
+            } else token.kind = TokenKind::Pipe;
+        } break;
+
+        case '^': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::CaretEqual;
+            } else token.kind = TokenKind::Caret;
+        } break;
+
+        case '<': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::LessEqual;
+            } else if (CurrentChar() == '<') {
+                AdvanceChar();
+                if (CurrentChar() == '=') {
+                    AdvanceChar();
+                    token.kind = TokenKind::LessLessEqual;
+                } else token.kind = TokenKind::LessLess;
+            } else token.kind = TokenKind::Less;
+        } break;
+
+        case '>': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::GreaterEqual;
+            } else if (CurrentChar() == '>') {
+                AdvanceChar();
+                if (CurrentChar() == '=') {
+                    AdvanceChar();
+                    token.kind = TokenKind::GreaterGreaterEqual;
+                } else token.kind = TokenKind::GreaterGreater;
+            } else token.kind = TokenKind::Greater;
+        } break;
+
+        case '~': {
+            AdvanceChar();
+            token.kind = TokenKind::Tilde;
+        } break;
+
+        case '!': {
+            AdvanceChar();
+            if (CurrentChar() == '=') {
+                AdvanceChar();
+                token.kind = TokenKind::BangEqual;
+            } else token.kind = TokenKind::Bang;
+        } break;
+
+        case '?': {
+            AdvanceChar();
+            token.kind = TokenKind::Question;
+        } break;
+
+        case '"': {
+            LCC_ASSERT(false, "TODO C string literals");
+        } break;
+
+        case '\'': {
+            LCC_ASSERT(false, "TODO C character literals");
+        } break;
+
+        // clang-format off
+        case '0': case '1': case '2': case '3': case '4': 
+        case '5': case '6': case '7': case '8': case '9': { // clang-format on
+            LCC_ASSERT(false, "TODO C number literals");
+        } break;
+
+        // clang-format off
+        case 'a': case 'b': case 'c': case 'd': case 'e': 
+        case 'f': case 'g': case 'h': case 'i': case 'j': 
+        case 'k': case 'l': case 'm': case 'n': case 'o': 
+        case 'p': case 'q': case 'r': case 's': case 't': 
+        case 'u': case 'v': case 'w': case 'x': case 'y': 
+        case 'z':
+        
+        case 'A': case 'B': case 'C': case 'D': case 'E': 
+        case 'F': case 'G': case 'H': case 'I': case 'J': 
+        case 'K': case 'L': case 'M': case 'N': case 'O': 
+        case 'P': case 'Q': case 'R': case 'S': case 'T': 
+        case 'U': case 'V': case 'W': case 'X': case 'Y': 
+        case 'Z':
+
+        case '_': { // clang-format on
+            LCC_ASSERT(false, "TODO C identifiers and keywords");
+            // NOTE(local): we can have a fast path without unicode, and a slower path once we identify them
+        } break;
+
+        default: {
+            if (IsAtEndOfFile()) {
+                token.kind = TokenKind::EndOfFile;
+            } else {
+                Error("Invalid character in C source");
+                AdvanceChar();
+            }
         } break;
     }
-    
-    token.location.len = (u16)(CurrentOffset() - token.location.pos);
+
+    token.location.len = (u16) (CurrentOffset() - token.location.pos);
 }
 
 void cc::Lexer::ReadToken(CToken& token) {
@@ -94,6 +322,7 @@ void cc::Lexer::ReadToken(CToken& token) {
         LCC_ASSERT(not IsInPreprocessor());
     }
 
+    // TODO(local): handle macro expansions n stuff
     ReadTokenNoPreprocess(token);
 }
 
@@ -198,12 +427,12 @@ void cc::Lexer::HandleDefineDirective(const CToken& define_token) {
         ReadTokenNoPreprocess(token);
         if (token.kind == TokenKind::EndOfLine)
             break;
-        
+
         if (token.kind == TokenKind::Ident and macro_has_arguments) {
             LCC_ASSERT(token.macro_arg_index == -1);
             for (usz i = 0; i < macro_args.size(); i++) {
                 if (macro_args[i] == token.text) {
-                    token.macro_arg_index = (isz)i;
+                    token.macro_arg_index = (isz) i;
                     break;
                 }
             }
@@ -224,7 +453,7 @@ void cc::Lexer::EatWhitespace() {
     while (not IsAtEndOfFile() and not IsSpace(CurrentChar())) {
         if (IsInPreprocessor() and CurrentChar() == '\n')
             break;
-        
+
         AdvanceChar();
     }
 }
