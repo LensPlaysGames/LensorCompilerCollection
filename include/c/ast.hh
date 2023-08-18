@@ -36,6 +36,11 @@ public:
 };
 
 enum struct TokenKind {
+    Invalid,
+    
+    EndOfFile,
+    EndOfLine,
+
     // Grouping Delimiters
     OpenParen,
     CloseParen,
