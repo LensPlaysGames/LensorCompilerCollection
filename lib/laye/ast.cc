@@ -548,7 +548,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
             case K::FieldIndex: {
                 auto n = cast<layec::FieldIndexExpr>(e);
                 PrintBasicHeader("FieldIndexExpr", n);
-                out += fmt::format("{}{}\n", C(Green), n->field_name());
+                out += fmt::format(" {}{}\n", C(Green), n->field_name());
             } break;
 
             case K::ValueIndex: {
