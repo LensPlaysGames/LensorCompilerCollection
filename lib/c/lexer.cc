@@ -5,16 +5,17 @@ namespace cc = lcc::c;
 void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
     token.kind = TokenKind::Invalid;
     token.location.len = 0;
-    token.location.file_id = (u16)_file->file_id();
+    token.location.file_id = (u16) _file->file_id();
     token.text.clear();
     token.integer_value = 0;
     token.float_value = 0;
     token.artificial = false;
     token.integer_kind = LitIntegerKind::Int;
     token.float_kind = LitFloatKind::Double;
+    token.macro_arg_index = -1;
 
     /*
-    
+
     Things to be kept in mind when reading tokens:
 
     1.  Remove all comments as they are encountered:
@@ -37,7 +38,7 @@ void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
 
     3.  Expand pre-defined macro names with their expansions (when not within a string or character literal).
         This one is self explanatory and will probably just *happen* when we decide what an identifier is.
-    
+
     4.  Preprocessor directives need to be checked correctly.
         If a '#' is the first non-comment, non-whitespace character of a line, it must always start a
         preprocessor directive. The preprocessor directive name is never expanded and must be an identifier.
@@ -71,6 +72,139 @@ void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
 }
 
 void cc::Lexer::ReadToken(CToken& token) {
-    /// TODO(local): do preprocessor stuff here.
+    EatWhitespace();
+    if (IsAtStartOfLine() and CurrentChar() == '#') {
+        HandlePreprocessorDirective();
+        LCC_ASSERT(not IsInPreprocessor());
+    }
+
     ReadTokenNoPreprocess(token);
+}
+
+void cc::Lexer::HandlePreprocessorDirective() {
+    LCC_ASSERT(not IsInPreprocessor());
+    LCC_ASSERT(IsAtStartOfLine() and CurrentChar() == '#');
+
+    is_in_preprocessor = true;
+    AdvanceChar(); // skip '#'
+
+    CToken token;
+    ReadTokenNoPreprocess(token);
+
+    switch (token.kind) {
+        default: {
+        invalid_preprocessing_directive:;
+            Error(token.location, "Invalid preprocessing directive");
+            SkipToEndOfPreprocessorDirective(token);
+        } break;
+
+            // case TokenKind::LitInt: // line directive???
+
+        case TokenKind::Ident: {
+            goto invalid_preprocessing_directive;
+            std::string ident_value = token.text;
+
+            if (ident_value == "define")
+                HandleDefineDirective(token);
+            else goto invalid_preprocessing_directive;
+        } break;
+    }
+
+    LCC_ASSERT(IsInPreprocessor());
+    is_in_preprocessor = false;
+}
+
+void cc::Lexer::SkipToEndOfPreprocessorDirective(CToken current_token) {
+    LCC_ASSERT(IsInPreprocessor());
+    while (not IsAtEndOfFile() and current_token.kind != TokenKind::EndOfLine)
+        ReadTokenNoPreprocess(current_token);
+}
+
+void cc::Lexer::HandleDefineDirective(const CToken& define_token) {
+    LCC_ASSERT(IsInPreprocessor());
+    LCC_ASSERT(define_token.kind == TokenKind::Ident and define_token.text == "define");
+
+    CToken token;
+    ReadTokenNoPreprocess(token);
+
+    if (token.kind == TokenKind::EndOfLine) {
+        Error(token.location, "Macro name missing");
+        return; // we already hit the TokenKind::EndOfLine, nothing more to do
+    }
+
+    if (token.kind != TokenKind::Ident) {
+        Error(token.location, "Macro name must be an identifier");
+        SkipToEndOfPreprocessorDirective(token);
+        return;
+    }
+
+    LCC_ASSERT(token.kind == TokenKind::Ident);
+    std::string macro_name = token.text;
+
+    bool macro_has_arguments = false;
+    std::vector<std::string> macro_args{};
+    std::vector<CToken> macro_body{};
+
+    if (CurrentChar() == '(') {
+        /// This is a macro with arguments.
+        macro_has_arguments = true;
+        AdvanceChar(); // skip the '('
+
+        for (;;) {
+            ReadTokenNoPreprocess(token);
+            if (token.kind == TokenKind::EndOfLine or token.kind == TokenKind::EndOfFile) {
+                Error(token.location, "Expected ')' in macro parameter list");
+                SkipToEndOfPreprocessorDirective(token);
+                return;
+            }
+
+            if (token.kind != TokenKind::Ident) {
+                Error(token.location, "Invalid token in macro parameter list");
+                SkipToEndOfPreprocessorDirective(token);
+                return;
+            }
+
+            LCC_ASSERT(token.kind == TokenKind::Ident);
+            macro_args.push_back(token.text);
+
+            ReadTokenNoPreprocess(token);
+            if (token.kind == TokenKind::CloseParen)
+                break;
+            else if (token.kind != TokenKind::Comma) {
+                Error(token.location, "Expected comma in macro parameter list");
+                SkipToEndOfPreprocessorDirective(token);
+                return;
+            }
+        }
+    }
+
+    while (not IsAtEndOfFile()) {
+        ReadTokenNoPreprocess(token);
+        if (token.kind == TokenKind::EndOfLine)
+            break;
+        
+        if (token.kind == TokenKind::Ident and macro_has_arguments) {
+            LCC_ASSERT(token.macro_arg_index == -1);
+            for (usz i = 0; i < macro_args.size(); i++) {
+                if (macro_args[i] == token.text) {
+                    token.macro_arg_index = (isz)i;
+                    break;
+                }
+            }
+        }
+
+        macro_body.push_back(token);
+    }
+
+    MacroDef macro_def{
+        macro_name,
+        macro_has_arguments,
+        std::move(macro_args),
+        std::move(macro_body)};
+    macro_defs.emplace(macro_name, macro_def);
+}
+
+void cc::Lexer::EatWhitespace() {
+    while (not IsAtEndOfFile() and not IsSpace(CurrentChar()))
+        AdvanceChar();
 }

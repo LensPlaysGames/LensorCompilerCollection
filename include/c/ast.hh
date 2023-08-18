@@ -37,7 +37,7 @@ public:
 
 enum struct TokenKind {
     Invalid,
-    
+
     EndOfFile,
     EndOfLine,
 
@@ -204,6 +204,9 @@ enum struct LitFloatKind {
 struct CToken : public syntax::Token<TokenKind> {
     LitIntegerKind integer_kind;
     LitFloatKind float_kind;
+    /// If this token is an identifier and its name is a macro argument name,
+    /// then this is the index into the macro argument list of that argument.
+    isz macro_arg_index = -1;
 };
 
 enum StorageClass {

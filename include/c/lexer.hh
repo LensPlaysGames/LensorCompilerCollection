@@ -8,6 +8,23 @@
 
 namespace lcc::c {
 class Lexer {
+    struct MacroDef {
+        std::string name;
+
+        bool has_args = false;
+        std::vector<std::string> args{};
+        std::vector<CToken> body{};
+
+        MacroDef(std::string name, std::vector<CToken> body)
+            : name(std::move(name)), has_args(false), body(std::move(body)) {}
+
+        MacroDef(std::string name, std::vector<std::string> args, std::vector<CToken> body)
+            : name(std::move(name)), has_args(true), args(std::move(args)), body(std::move(body)) {}
+
+        MacroDef(std::string name, bool has_args, std::vector<std::string> args, std::vector<CToken> body)
+            : name(std::move(name)), has_args(has_args), args(std::move(args)), body(std::move(body)) {}
+    };
+
     Context* _context;
     File* _file;
 
@@ -16,6 +33,9 @@ class Lexer {
 
     char current_char = 0;
     bool is_at_start_of_line = true;
+    bool is_in_preprocessor = false;
+
+    StringMap<MacroDef> macro_defs{};
 
 public:
     Lexer(Context* context, File* file)
@@ -28,10 +48,20 @@ private:
     void ReadTokenNoPreprocess(CToken& token);
     /// Read the next token, with the preprocessor enabled, into `token`.
     void ReadToken(CToken& token);
+    /// Invoked when the preprocessor is enabled and a start-of-line '#' is encountered.
+    /// Responsible for parsing all preprocessor directives and doing any necessary work
+    /// that comes with it.
+    void HandlePreprocessorDirective();
+    /// Skips to the end of a preprocessor directive.
+    void SkipToEndOfPreprocessorDirective(CToken current_token);
+    /// Invoked when a preprocessor directive with the name 'define' is encountered.
+    void HandleDefineDirective(const CToken& define_token);
+    /// Continues advancing to the next character until a non-whitespace character is encountered.
+    /// The result of a call to `CurrentChar()` will return this character.
+    void EatWhitespace();
 
     /// Returns the current character after character-based preprocessing.
     char CurrentChar() const { return current_char; }
-
     /// Returns the character `ahead` bytes ahead of the current lexer position.
     /// This function is named as such because it does not do any of the fancy legwork
     /// that `AdvanceChar()` does, like handling Backslash+Newline or comments.
@@ -48,10 +78,13 @@ private:
     /// More technically, this currently does not return true for rogue NUL bytes in the file.
     /// This behavior may need to be changed to be standard compliant.
     bool IsAtEndOfFile() const { return curr >= end; }
-
     /// Returns true if the current character is the first non-space, non-comment character
     /// in this line.
     bool IsAtStartOfLine() const { return is_at_start_of_line; }
+    /// Returns true if the lexer is currently in a preprocessing state.
+    /// This enables preprocessor functionality, such as returning the EndOfLine token when
+    /// unprocessed newlines are encountered.
+    bool IsInPreprocessor() const { return is_in_preprocessor; }
 
     /// NOTE(local): here, if ever we want to support trigraphs, we need to check for them *before* we
     /// process Backslash+Newline.
@@ -93,7 +126,7 @@ private:
             /// a comment.
             if (CurrentChar() == '\n') {
                 is_at_start_of_line = true;
-            } else if (!IsSpace(CurrentChar())) {
+            } else if (not IsSpace(CurrentChar())) {
                 /// If I did this correctly, then this marks the second non-space, non-comment
                 /// character as not the start of line, but the first is left in tact.
                 is_at_start_of_line = true;
@@ -172,6 +205,11 @@ private:
     template <typename... Args>
     Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
         return Diag::Error(_context, CurrentLocation(), fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    Diag Error(Location location, fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Error(_context, location, fmt, std::forward<Args>(args)...);
     }
 
     std::string GetSubstring(u32 startOffset, u32 endOffset) {
