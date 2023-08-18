@@ -670,9 +670,23 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
         lhs = new (*mod) BinaryExpr(op, *lhs, *rhs, {lhs->location(), rhs->location()});
     }
 
+    /// As a special case, "()" after an expression is always a call, even
+    /// if we’re parsing single-expressions.
+    if (At(Tk::LParen) and Is(LookAhead(1), Tk::RParen)) {
+        lhs = new (*mod) CallExpr(
+            lhs.value(),
+            {},
+            {lhs->location(), LookAhead(1)->location}
+        );
+
+        /// Yeet "()".
+        NextToken();
+        NextToken();
+    }
+
     /// While we’re at the start of an expression, if we’re not parsing
-    /// a single expression, parse call arguments.
-    if (not single_expression) {
+    /// a single-expression, parse call arguments.
+    else if (not single_expression) {
         std::vector<Expr*> args;
 
         /// Ignore unary operators that could also be binary operators.

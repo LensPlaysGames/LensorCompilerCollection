@@ -41,7 +41,7 @@ class Lexer : public syntax::Lexer<InterceptToken> {
         auto operator++() -> Token;
     };
 
-    std::vector<Token> lookahead_tokens{};
+    std::deque<Token> lookahead_tokens{};
     std::deque<Macro> macros{};
     std::vector<MacroExpansion> macro_expansion_stack{};
     bool raw_mode = false;

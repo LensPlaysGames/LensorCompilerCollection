@@ -6,6 +6,12 @@ namespace intc = lcc::intercept;
 /// ===========================================================================
 ///  Helpers
 /// ===========================================================================
+bool intc::Sema::AnalyseAndDiscard(Expr** expr) {
+    if (not Analyse(expr)) return false;
+    Discard(expr);
+    return true;
+}
+
 bool intc::Sema::Convert(Expr** expr, Type* type) {
     if ((*expr)->sema_errored()) return true;
     return ConvertImpl<true>(expr, type) >= 0;
@@ -36,6 +42,9 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
     /// Any type can be converted to void.
     if (to->is_void()) return NoOp;
 
+    /// First, try deproceduring.
+    if (Deproceduring(expr_ptr)) return Score(1);
+
     /// Get reference-to-reference conversions out of the way early.
     if (from->is_reference() and to->is_reference()) {
         /// A reference can be converted to the same reference.
@@ -53,7 +62,7 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
     }
 
     /// Lvalues and are convertible to references.
-    if (to->is_reference()) return (*expr_ptr)->is_lvalue() ? NoOp : ConversionImpossible;
+    if (to->is_reference()) { return (*expr_ptr)->is_lvalue() ? NoOp : ConversionImpossible; }
 
     /// Any conversions after this require lvalue-to-rvalue conversion
     /// first if the expression is an lvalue.
@@ -131,6 +140,9 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
         return ConversionImpossible;
     }
 
+    /// Try deproceduring one last time.
+    if (Deproceduring(expr_ptr)) return Score(1);
+
     return ConversionImpossible;
 }
 
@@ -148,6 +160,142 @@ bool intc::Sema::ConvertToCommonType(Expr** a, Expr** b) {
 
 auto intc::Sema::DeclTypeDecay(Type* type) -> Type* {
     return type->is_function() ? Ptr(type) : type;
+}
+
+bool intc::Sema::Deproceduring(Expr** expr_ptr) {
+    /// This conversion only applies to functions and function pointers.
+    auto expr = *expr_ptr;
+    auto ty = expr->type();
+    if (
+        not ty->is_function() and
+        (not ty->is_pointer() or not ty->elem()->is_function())
+    ) return false;
+
+    /// Function declarations are never deprocedured automatically.
+    if (is<FuncDecl>(expr)) return false;
+
+    /// Functions that take arguments are not affected.
+    auto ftype = cast<FuncType>(ty->is_function() ? ty : ty->elem());
+    if (not ftype->params().empty()) return false;
+
+    /// Otherwise, insert a call.
+    *expr_ptr = new (mod) CallExpr(expr, {}, expr->location());
+    Analyse(expr_ptr);
+    return true;
+}
+
+void intc::Sema::Discard(Expr** expr_ptr) {
+    auto expr = *expr_ptr;
+
+    /// If the expression returns void, or has an error, ignore it.
+    if (not expr->ok() or expr->type()->is_void()) return;
+
+    /// If the expression is a call to a function not marked
+    /// as discardable, issue an error.
+    if (auto call = cast<CallExpr>(expr)) {
+        auto ftype = call->callee_type();
+        if (not ftype->has_attr(FuncAttr::Discardable)) Error(
+            call->location(),
+            "Discarding return value of function not marked as 'discardable'"
+        );
+    }
+
+    /// Otherwise, perform deproceduring. For now, we only apply
+    /// deproceduring exactly once. If you need more, you can always
+    /// use `()` to call the function.
+    if (Deproceduring(expr_ptr)) return;
+
+    /// Otherwise, issue a warning if this expression does not have
+    /// side effects.
+    if (not HasSideEffects(expr)) Diag::Warning(
+        context,
+        expr->location(),
+        "Expression result unused"
+    );
+}
+
+bool intc::Sema::HasSideEffects(Expr* expr) {
+    switch (expr->kind()) {
+        /// These always have side effects.
+        case Expr::Kind::While:
+        case Expr::Kind::For:
+        case Expr::Kind::Return:
+        case Expr::Kind::StructDecl:
+        case Expr::Kind::TypeAliasDecl:
+        case Expr::Kind::VarDecl:
+        case Expr::Kind::FuncDecl:
+            return true;
+
+        /// These never have side effects.
+        case Expr::Kind::IntegerLiteral:
+        case Expr::Kind::StringLiteral:
+        case Expr::Kind::OverloadSet:
+        case Expr::Kind::NameRef:
+            return false;
+
+        /// For these, it depends.
+        case Expr::Kind::EvaluatedConstant:
+            return HasSideEffects(as<ConstantExpr>(expr)->expr());
+
+        case Expr::Kind::Cast:
+            return HasSideEffects(as<CastExpr>(expr)->operand());
+
+        case Expr::Kind::Unary:
+            return HasSideEffects(as<UnaryExpr>(expr)->operand());
+
+        case Expr::Kind::MemberAccess:
+            return HasSideEffects(as<MemberAccessExpr>(expr)->object());
+
+        case Expr::Kind::CompoundLiteral:
+            return rgs::any_of(as<CompoundLiteral>(expr)->values(), HasSideEffects);
+
+        case Expr::Kind::Block:
+            return rgs::any_of(as<BlockExpr>(expr)->children(), HasSideEffects);
+
+        case Expr::Kind::Binary: {
+            auto b = as<BinaryExpr>(expr);
+            if (HasSideEffects(b->lhs()) or HasSideEffects(b->rhs())) return true;
+            return b->op() == TokenKind::ColonEq;
+        }
+
+        case Expr::Kind::If: {
+            auto i = as<IfExpr>(expr);
+            if (HasSideEffects(i->condition())) return true;
+            if (HasSideEffects(i->then())) return true;
+            return i->else_() and HasSideEffects(i->else_());
+        }
+
+        case Expr::Kind::Call: {
+            auto c = as<CallExpr>(expr);
+            auto f = c->callee_type();
+            if (HasSideEffects(c->callee())) return true;
+            if (rgs::any_of(c->args(), HasSideEffects)) return true;
+            return not f->has_attr(FuncAttr::Pure) and not f->has_attr(FuncAttr::Const);
+        }
+
+        case Expr::Kind::IntrinsicCall: {
+            auto c = as<IntrinsicCallExpr>(expr);
+            switch (c->intrinsic_kind()) {
+                case IntrinsicKind::BuiltinDebugtrap:
+                case IntrinsicKind::BuiltinMemCopy:
+                case IntrinsicKind::BuiltinMemSet:
+                case IntrinsicKind::BuiltinSyscall:
+                    return true;
+
+                case IntrinsicKind::BuiltinFilename:
+                case IntrinsicKind::BuiltinLine:
+                    return false;
+
+                case IntrinsicKind::BuiltinInline:
+                    if (c->sema_errored()) return true;
+                    return HasSideEffects(c->args()[0]);
+            }
+
+            LCC_UNREACHABLE();
+        }
+    }
+
+    LCC_UNREACHABLE();
 }
 
 void intc::Sema::InsertImplicitCast(Expr** expr_ptr, Type* ty) {
@@ -290,6 +438,8 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             (*last)->type(),
             ty->return_type()
         );
+    } else {
+        Discard(&decl->body());
     }
 }
 
@@ -347,8 +497,8 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
         /// The condition of a loop must be convertible to bool.
         case Expr::Kind::For: {
             auto f = as<ForExpr>(expr);
-            Analyse(&f->init());
-            Analyse(&f->increment());
+            AnalyseAndDiscard(&f->init());
+            AnalyseAndDiscard(&f->increment());
             [[fallthrough]];
         }
 
@@ -360,7 +510,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 "Invalid type for loop condition: {}",
                 l->condition()->type()
             );
-            Analyse(&l->body());
+            AnalyseAndDiscard(&l->body());
         } break;
 
         /// For return expressions, make sure that the type of the
@@ -412,6 +562,11 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             } else {
                 i->set_sema_errored();
             }
+
+            if (i->type()->is_void()) {
+                Discard(&i->then());
+                if (i->else_()) Discard(&i->else_());
+            }
         } break;
 
         /// The type of a block is the type of its last expression. Type
@@ -423,9 +578,11 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 break;
             }
 
-            for (auto*& child : b->children())
-                if (not Analyse(&child, &child == &b->children().back() ? expected_type : nullptr))
-                    b->set_sema_errored();
+            for (auto*& child : b->children()) {
+                const bool last = &child == &b->children().back();
+                if (not Analyse(&child, last ? expected_type : nullptr)) b->set_sema_errored();
+                if (not last and child->ok()) Discard(&child);
+            }
 
             if (not b->sema_errored()) b->type(b->children().back()->type());
         } break;

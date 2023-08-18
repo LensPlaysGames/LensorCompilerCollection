@@ -430,6 +430,13 @@ auto intc::ArrayType::dimension() const -> usz {
     return usz(as<ConstantExpr>(size())->value().as_i64());
 }
 
+auto intc::CallExpr::callee_type() const -> FuncType* {
+    auto ty = callee()->type();
+    while (is<PointerType, ReferenceType>(ty)) ty = ty->elem();
+    LCC_ASSERT(ty->is_function());
+    return as<FuncType>(ty);
+}
+
 auto intc::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
     LCC_ASSERT(false, "TODO: Clone expressions");
 }
@@ -698,22 +705,70 @@ auto intc::Type::string(bool use_colours) const -> std::string {
 
     switch (kind()) {
         case Kind::Named: return fmt::format("{}{}", C(White), as<NamedType>(this)->name());
-        case Kind::Pointer:
+        case Kind::Pointer: {
+            /// If the element type of this pointer contains an array or
+            /// function type, we need to use parentheses here to preserve
+            /// precedence.
+            bool has_arr_or_func = false;
+            auto el = elem();
+            for (;;) {
+                switch (el->kind()) {
+                    default: break;
+
+                    case Kind::Pointer:
+                    case Kind::Reference:
+                        el = el->elem();
+                        continue;
+
+                    case Kind::Array:
+                    case Kind::Function:
+                        has_arr_or_func = true;
+                        break;
+                }
+                break;
+            }
+
             return fmt::format(
-                "{}@{}{}{}",
+                "{}@{}{}{}{}{}{}",
                 C(Red),
+                has_arr_or_func ? "(" : "",
                 C(Cyan),
                 as<PointerType>(this)->element_type()->string(use_colours),
+                C(Red),
+                has_arr_or_func ? ")" : "",
                 C(Reset)
             );
-        case Kind::Reference:
+        }
+        case Kind::Reference: {
+            bool has_func = false;
+            auto el = elem();
+            for (;;) {
+                switch (el->kind()) {
+                    default: break;
+
+                    case Kind::Pointer:
+                    case Kind::Reference:
+                        el = el->elem();
+                        continue;
+
+                    case Kind::Function:
+                        has_func = true;
+                        break;
+                }
+                break;
+            }
+
             return fmt::format(
-                "{}&{}{}{}",
+                "{}&{}{}{}{}{}{}",
                 C(Red),
+                has_func ? "(" : "",
                 C(Cyan),
                 as<ReferenceType>(this)->element_type()->string(use_colours),
+                C(Red),
+                has_func ? ")" : "",
                 C(Reset)
             );
+        }
 
         case Kind::Integer: {
             auto i = as<IntegerType>(this);

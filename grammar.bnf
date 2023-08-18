@@ -6,8 +6,6 @@
 <module-declaration> ::= "module" IDENTIFIER
 <import-declaration> ::= "import" IDENTIFIER
 
-/// TODO: Deproceduring
-
 /// Expression.
 <expr>        ::= <expr-call> | <expr-single>
 
@@ -41,7 +39,7 @@
 <expr-for>       ::= FOR <expr> "," <expr> "," <expr> DO <expr>
 <expr-block>     ::= "{" { <expr> ";" } "}"
 <expr-lambda>    ::= LAMBDA <type-function> <function-body>
-<expr-call>      ::= <expr> { <expr-single> }
+<expr-call>      ::= <expr> { <expr-single> } | <expr> "(" ")"
 <expr-cast>      ::= <expr> ( AS | "as!" ) <type>
 <expr-subs>      ::= <expr> "[" <expr> "]"
 <expr-paren>     ::= "(" <expr> ")"

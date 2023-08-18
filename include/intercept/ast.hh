@@ -1143,11 +1143,14 @@ public:
     CallExpr(Expr* callee, std::vector<Expr*> args, Location location)
         : TypedExpr(Kind::Call, location), _callee(callee), _args(std::move(args)) {}
 
+    auto args() -> std::vector<Expr*>& { return _args; }
+    auto args() const -> const std::vector<Expr*>& { return _args; }
+
     auto callee() -> Expr*& { return _callee; }
     auto callee() const { return _callee; }
 
-    auto args() -> std::vector<Expr*>& { return _args; }
-    auto args() const -> const std::vector<Expr*>& { return _args; }
+    /// Get the function type of the callee.
+    auto callee_type() const -> FuncType*;
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Call; }
 };

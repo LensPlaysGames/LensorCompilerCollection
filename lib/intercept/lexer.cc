@@ -34,7 +34,7 @@ auto lcc::intercept::Lexer::LookAhead(usz n) -> Token* {
 
     /// If we already have enough tokens, just return the nth token.
     const auto idx = n - 1;
-    if (idx < lookahead_tokens.size()) return lookahead_tokens.data() + idx;
+    if (idx < lookahead_tokens.size()) return &lookahead_tokens[idx];
 
     /// Otherwise, lex enough tokens.
     auto current = std::move(tok);
@@ -46,10 +46,17 @@ auto lcc::intercept::Lexer::LookAhead(usz n) -> Token* {
     tok = std::move(current);
 
     /// Return the nth token.
-    return lookahead_tokens.data() + idx;
+    return &lookahead_tokens[idx];
 }
 
 void lcc::intercept::Lexer::NextToken() {
+    /// If we have lookahead tokens, use those first.
+    if (not lookahead_tokens.empty()) {
+        tok = std::move(lookahead_tokens.front());
+        lookahead_tokens.pop_front();
+        return;
+    }
+
     /// Pop empty macro expansions off the expansion stack.
     while (not macro_expansion_stack.empty())
         if (macro_expansion_stack.back().done())

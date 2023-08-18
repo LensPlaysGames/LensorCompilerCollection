@@ -59,6 +59,10 @@ private:
     void AnalyseNameRef(NameRefExpr* expr);
     void AnalyseUnary(UnaryExpr* expr);
 
+    /// Analyse an expression and discard it.
+    /// \see Discard.
+    bool AnalyseAndDiscard(Expr** expr);
+
     /// Attempt to convert an expression to a given type.
     ///
     /// This may replace the expression with a cast Note that the
@@ -94,6 +98,18 @@ private:
     /// Convert a type to a type that is legal in a declaration.
     auto DeclTypeDecay(Type* type) -> Type*;
 
+    /// Apply deproceduring conversion. This may insert a call.
+    /// \return Whether a call was inserted.
+    bool Deproceduring(Expr** expr);
+
+    /// Mark an expression as discarded. Depending on the expression, this
+    /// will do several things, such as deproceduring, checking unused results
+    /// and so on.
+    ///
+    /// This should be called on any expression that occurs in a context where
+    /// its value is not used, irrespective of what the type of the expression is.
+    void Discard(Expr** expr);
+
     /// Wrapper that stringifies any types that are passed in and passes
     /// everything to \c Diag::Error.
     template <typename... Args>
@@ -112,6 +128,9 @@ private:
     auto Format(Ty&& t) -> decltype(std::forward<Ty>(t)) {
         return std::forward<Ty>(t);
     }
+
+    /// Check if an expression has side effects.
+    static bool HasSideEffects(Expr* expr);
 
     /// Insert an implicit cast of an expression to a type.
     ///
