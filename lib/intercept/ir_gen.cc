@@ -12,7 +12,13 @@
 namespace lcc {
 
 auto intercept::IRGen::Generate(Context* context, intercept::Module& mod) -> std::unique_ptr<Module> {
-    // TODO: For each function in module, generate IR for it.
+    std::unique_ptr<lcc::Module> out(new lcc::Module(context));
+
+    for (auto f : mod.functions()) {
+        fmt::print("{}\n", f->name());
+        auto* expr = f->body();
+    }
+
     return {};
 }
 
