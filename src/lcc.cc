@@ -113,7 +113,8 @@ int main(int argc, char** argv) {
     /// C.
     if (path_str.ends_with(".c")) {
         /// Parse the file.
-        auto translation_unit = lcc::c::Parser::Parse(&context, file);
+        auto c_context = new lcc::c::CContext{&context};
+        auto translation_unit = lcc::c::Parser::Parse(c_context, file);
 
         if (options::get<"--syntax-only">()) {
             if (options::get<"--ast">()) translation_unit->print();

@@ -7,16 +7,16 @@
 
 namespace lcc::c {
 class Parser {
-    Context* _context;
+    CContext* _context;
     File* _file;
 
     Lexer _lexer;
 
 public:
-    static auto Parse(Context* context, File& file) -> TranslationUnit*;
+    static auto Parse(CContext* context, File& file) -> TranslationUnit*;
 
 private:
-    Parser(Context* context, File& file)
+    Parser(CContext* context, File& file)
         : _context(context), _file(&file), _lexer(Lexer{context, &file}) {}
 };
 }

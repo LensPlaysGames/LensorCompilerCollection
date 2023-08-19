@@ -2,6 +2,112 @@
 
 namespace cc = lcc::c;
 
+namespace {
+lcc::StringMap<cc::TokenKind> c89_keywords{
+    {"auto", cc::TokenKind::Auto},
+    {"break", cc::TokenKind::Break},
+    {"case", cc::TokenKind::Case},
+    {"char", cc::TokenKind::Char},
+    {"const", cc::TokenKind::Const},
+    {"continue", cc::TokenKind::Continue},
+    {"default", cc::TokenKind::Default},
+    {"do", cc::TokenKind::Do},
+    {"double", cc::TokenKind::Double},
+    {"else", cc::TokenKind::Else},
+    {"enum", cc::TokenKind::Enum},
+    {"extern", cc::TokenKind::Extern},
+    {"float", cc::TokenKind::Float},
+    {"for", cc::TokenKind::For},
+    {"goto", cc::TokenKind::Goto},
+    {"if", cc::TokenKind::If},
+    {"int", cc::TokenKind::Int},
+    {"long", cc::TokenKind::Long},
+    {"register", cc::TokenKind::Register},
+    {"return", cc::TokenKind::Return},
+    {"short", cc::TokenKind::Short},
+    {"signed", cc::TokenKind::Signed},
+    {"sizeof", cc::TokenKind::Sizeof},
+    {"static", cc::TokenKind::Static},
+    {"struct", cc::TokenKind::Struct},
+    {"switch", cc::TokenKind::Switch},
+    {"typedef", cc::TokenKind::Typedef},
+    {"union", cc::TokenKind::Union},
+    {"unsigned", cc::TokenKind::Unsigned},
+    {"void", cc::TokenKind::Void},
+    {"volatile", cc::TokenKind::Volatile},
+    {"while", cc::TokenKind::While},
+};
+
+lcc::StringMap<cc::TokenKind> c99_keywords{
+    {"_Bool", cc::TokenKind::Bool_},
+    {"_Complex", cc::TokenKind::Complex_},
+    {"_Imaginary", cc::TokenKind::Imaginary_},
+    {"inline", cc::TokenKind::Inline},
+    {"restrict", cc::TokenKind::Restrict},
+};
+
+lcc::StringMap<cc::TokenKind> c11_keywords{
+    {"_Alignas", cc::TokenKind::Alignas_},
+    {"_Alignof", cc::TokenKind::Alignof_},
+    {"_Atomic", cc::TokenKind::Atomic_},
+    {"_Generic", cc::TokenKind::Generic_},
+    {"_Noreturn", cc::TokenKind::Noreturn_},
+    {"_Static_assert", cc::TokenKind::StaticAssert_},
+    {"_Thread_local", cc::TokenKind::ThreadLocal_},
+};
+
+lcc::StringMap<cc::TokenKind> c23_keywords{
+    {"alignas", cc::TokenKind::Alignas},
+    {"alignof", cc::TokenKind::Alignof},
+    {"bool", cc::TokenKind::Bool},
+    {"constexpr", cc::TokenKind::Constexpr},
+    {"false", cc::TokenKind::False},
+    {"nullptr", cc::TokenKind::Nullptr},
+    {"static_assert", cc::TokenKind::StaticAssert},
+    {"thread_local", cc::TokenKind::ThreadLocal},
+    {"true", cc::TokenKind::True},
+    {"typeof", cc::TokenKind::Typeof},
+    {"typeof_unqual", cc::TokenKind::TypeofUnqual},
+    {"_Decimal128", cc::TokenKind::Decimal128_},
+    {"_Decimal32", cc::TokenKind::Decimal32_},
+    {"_Decimal64", cc::TokenKind::Decimal64_},
+};
+
+lcc::StringMap<cc::TokenKind> gnu_ext_keywords{
+    {"__alignof", cc::TokenKind::GNU__alignof},
+    {"__alignof__", cc::TokenKind::GNU__alignof__},
+    {"__asm", cc::TokenKind::GNU__asm},
+    {"__asm__", cc::TokenKind::GNU__asm__},
+    {"__attribute", cc::TokenKind::GNU__attribute},
+    {"__attribute__", cc::TokenKind::GNU__attribute__},
+    {"__builtin_offsetof", cc::TokenKind::GNU__builtin_offsetof},
+    {"__builtin_va_arg", cc::TokenKind::GNU__builtin_va_arg},
+    {"__complex", cc::TokenKind::GNU__complex},
+    {"__complex__", cc::TokenKind::GNU__complex__},
+    {"__const", cc::TokenKind::GNU__const},
+    {"__extension__", cc::TokenKind::GNU__extension__},
+    {"__func__", cc::TokenKind::GNU__func__},
+    {"__FUNCTION__", cc::TokenKind::GNU__FUNCTION__},
+    {"__imag", cc::TokenKind::GNU__imag},
+    {"__imag__", cc::TokenKind::GNU__imag__},
+    {"__inline", cc::TokenKind::GNU__inline},
+    {"__inline__", cc::TokenKind::GNU__inline__},
+    {"__label__", cc::TokenKind::GNU__label__},
+    {"__null", cc::TokenKind::GNU__null},
+    {"__PRETTY_FUNCTION__", cc::TokenKind::GNU__PRETTY_FUNCTION__},
+    {"__real", cc::TokenKind::GNU__real},
+    {"__real__", cc::TokenKind::GNU__real__},
+    {"__restrict", cc::TokenKind::GNU__restrict},
+    {"__restrict__", cc::TokenKind::GNU__restrict__},
+    {"__signed", cc::TokenKind::GNU__signed},
+    {"__signed__", cc::TokenKind::GNU__signed__},
+    {"__thread", cc::TokenKind::GNU__thread},
+    {"__typeof", cc::TokenKind::GNU__typeof},
+    {"__volatile", cc::TokenKind::GNU__volatile},
+    {"__volatile__", cc::TokenKind::GNU__volatile__},
+};
+};
+
 void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
     token.kind = TokenKind::Invalid;
     token.location.len = 0;
@@ -71,6 +177,8 @@ void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
     EatWhitespace();
     token.location.pos = CurrentOffset();
 
+    u64 integer_value = 0;
+
     switch (CurrentChar()) {
         case '\n': {
             LCC_ASSERT(IsInPreprocessor());
@@ -111,8 +219,12 @@ void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
 
         // Other Delimiters
         case '.': {
+            if (IsDigit(PeekCharSkipEscapedNewline())) {
+                goto lex_constant_real_at_dot;
+            }
+
             AdvanceChar();
-            if (CurrentChar() == '.' and PeekCharNoProcess() == '.') {
+            if (CurrentChar() == '.' and PeekCharSkipEscapedNewline() == '.') {
                 AdvanceChar(); // the second dot
                 AdvanceChar(); // the third dot
                 token.kind = TokenKind::TripleDot;
@@ -279,8 +391,72 @@ void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
         // clang-format off
         case '0': case '1': case '2': case '3': case '4': 
         case '5': case '6': case '7': case '8': case '9': { // clang-format on
-            LCC_ASSERT(false, "TODO C number literals");
+            {
+                int integer_radix = 10;
+                bool integer_too_large = false;
+
+                if (CurrentChar() == '0') {
+                    char peek_char = PeekCharSkipEscapedNewline();
+                    if (peek_char == 'x' or peek_char == 'X') {
+                        AdvanceChar(); // the zero
+                        AdvanceChar(); // the x
+                        integer_radix = 16;
+                    } else {
+                        integer_radix = 8;
+                    }
+                }
+
+                bool errored_on_digit = false;
+                while (IsDigit(CurrentChar()) and (integer_radix == 16 ? IsDigitInBase(CurrentChar(), integer_radix) : true)) {
+                    if (not IsDigitInBase(CurrentChar(), integer_radix)) {
+                        if (IsDigit(CurrentChar())) {
+                            if (not errored_on_digit) {
+                                LCC_ASSERT(integer_radix == 8);
+                                
+                                errored_on_digit = true;
+                                integer_value = 0;
+                                integer_too_large = false;
+
+                                Error("Invalid digit '{}' in octal literal", CurrentChar());
+                                continue;
+                            }
+                        } else break;
+                    }
+
+                    if (not errored_on_digit) {
+                        int digit_value = CurrentChar() - '0';
+                        if ((std::numeric_limits<u64>::max() - (u64) digit_value) / (u64) integer_radix < integer_value)
+                            integer_too_large = true;
+                        if (not integer_too_large)
+                            integer_value = integer_value * (u64) integer_radix + (u64) digit_value;
+                    }
+
+                    AdvanceChar();
+                }
+            }
+
+            if (CurrentChar() != '.') {
+                token.kind = TokenKind::LitInt;
+                token.integer_value = integer_value;
+
+                if (IsAlpha(CurrentChar())) {
+                    LCC_ASSERT(false, "TODO C integer literal suffixes");
+                }
+
+                break;
+            }
+
+        lex_constant_real_at_dot:;
+            LCC_ASSERT(false, "TODO C real literals");
         } break;
+
+        case '$': {
+            if (_context->opts.ext.gnu_idents) {
+                goto lex_identifier;
+            }
+
+            goto default_case;
+        }
 
         // clang-format off
         case 'a': case 'b': case 'c': case 'd': case 'e': 
@@ -298,11 +474,26 @@ void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
         case 'Z':
 
         case '_': { // clang-format on
-            LCC_ASSERT(false, "TODO C identifiers and keywords");
+        lex_identifier:;
+            std::string identifier_text{};
+
             // NOTE(local): we can have a fast path without unicode, and a slower path once we identify them
+            while (IsAlphaNumeric(CurrentChar()) or CurrentChar() == '_') {
+                identifier_text.push_back(CurrentChar());
+                AdvanceChar();
+            }
+
+            while (SkipBackslashWithNewline()) {}
+            if (CurrentChar() == '\\' and (PeekCharSkipEscapedNewline() == 'u' or PeekCharSkipEscapedNewline() == 'U')) {
+                LCC_ASSERT(false, "TODO fancy C identifiers");
+            }
+
+            token.kind = TokenKind::Ident;
+            token.text = std::move(identifier_text);
         } break;
 
         default: {
+        default_case:;
             if (IsAtEndOfFile()) {
                 token.kind = TokenKind::EndOfFile;
             } else {
@@ -322,8 +513,34 @@ void cc::Lexer::ReadToken(CToken& token) {
         LCC_ASSERT(not IsInPreprocessor());
     }
 
-    // TODO(local): handle macro expansions n stuff
     ReadTokenNoPreprocess(token);
+    // TODO(local): handle macro expansions n stuff
+
+    if (token.kind == TokenKind::Ident) {
+        /// If an identifier makes it this far, it didn't get eaten by the preprocessor.
+        /// Check if it's a keyword and transform it if so.
+
+        auto LookupKeyword = [](const std::string& image, const StringMap<TokenKind>& kw_map) {
+            if (auto it = kw_map.find(image); it != kw_map.end()) {
+                return it->second;
+            }
+            return TokenKind::Ident;
+        };
+
+        if (+_context->opts.std >= +StandardVersion::C89)
+            token.kind = LookupKeyword(token.text, c89_keywords);
+
+        if (token.kind == TokenKind::Ident and +_context->opts.std >= +StandardVersion::C99)
+            token.kind = LookupKeyword(token.text, c99_keywords);
+
+        if (token.kind == TokenKind::Ident and +_context->opts.std >= +StandardVersion::C11)
+            token.kind = LookupKeyword(token.text, c11_keywords);
+
+        if (token.kind == TokenKind::Ident and +_context->opts.std >= +StandardVersion::C23)
+            token.kind = LookupKeyword(token.text, c23_keywords);
+
+        // TODO(local): extension keywords
+    }
 }
 
 void cc::Lexer::HandlePreprocessorDirective() {

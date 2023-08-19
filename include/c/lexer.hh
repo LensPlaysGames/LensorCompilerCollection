@@ -25,7 +25,7 @@ class Lexer {
             : name(std::move(name)), has_args(has_args), args(std::move(args)), body(std::move(body)) {}
     };
 
-    Context* _context;
+    CContext* _context;
     File* _file;
 
     const char* curr{};
@@ -38,7 +38,7 @@ class Lexer {
     StringMap<MacroDef> macro_defs{};
 
 public:
-    Lexer(Context* context, File* file)
+    Lexer(CContext* context, File* file)
         : _context(context), _file(file), curr(file->data()), end(file->data() + file->size()) {
         AdvanceChar();
     }
@@ -73,6 +73,25 @@ private:
         if (peek >= end)
             return 0;
         return *peek;
+    }
+    /// Returns the character `ahead` bytes ahead of the current lexer position, taking into
+    /// account only Backslah+Newline deletion.
+    char PeekCharSkipEscapedNewline(int ahead = 1) {
+        const char* where = curr;
+        while (ahead > 0 and not IsAtEndOfFile()) {
+            while (SkipBackslashWithNewline()) {}
+            ahead--;
+        }
+
+        if (IsAtEndOfFile()) {
+            curr = where;
+            return 0;
+        }
+
+        char result = *curr;
+        curr = where;
+
+        return result;
     }
 
     /// Returns true if this lexer has reached the end of its file, false otherwise.
@@ -200,17 +219,17 @@ private:
 
     template <typename... Args>
     Diag Warning(fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Warning(_context, CurrentLocation(), fmt, std::forward<Args>(args)...);
+        return Diag::Warning(_context->lcc_context(), CurrentLocation(), fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
     Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Error(_context, CurrentLocation(), fmt, std::forward<Args>(args)...);
+        return Diag::Error(_context->lcc_context(), CurrentLocation(), fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
     Diag Error(Location location, fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Error(_context, location, fmt, std::forward<Args>(args)...);
+        return Diag::Error(_context->lcc_context(), location, fmt, std::forward<Args>(args)...);
     }
 
     std::string GetSubstring(u32 startOffset, u32 endOffset) {
@@ -218,11 +237,40 @@ private:
         return std::string(_file->data() + startOffset, count);
     }
 
+    bool IsIdentifierContinue(char c) {
+        if (c == '$' and _context->opts.ext.gnu_idents)
+            return true;
+
+        return IsAlphaNumeric(c) || c == '_';
+    }
+
     static bool IsSpace(char c) { return c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == '\f' or c == '\v'; }
     static bool IsAlpha(char c) { return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z'); }
     static bool IsDigit(char c) { return c >= '0' and c <= '9'; }
     static bool IsHexDigit(char c) { return (c >= '0' and c <= '9') or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F'); }
     static bool IsAlphaNumeric(char c) { return IsAlpha(c) or IsDigit(c); }
+
+    static int GetDigitValueInBase(char c, int base) {
+        if (c >= '0' and c <= '9') {
+            int valueInBase = c - '0';
+            if (valueInBase >= base) return -1;
+            return valueInBase;
+        }
+        else if (c >= 'a' and c <= 'z') {
+            int valueInBase = c - 'a' + 11;
+            if (valueInBase >= base) return -1;
+            return valueInBase;
+        }
+        else if (c >= 'A' and c <= 'Z') {
+            int valueInBase = c - 'A' + 11;
+            if (valueInBase >= base) return -1;
+            return valueInBase;
+        }
+
+        return -1;
+    }
+
+    static bool IsDigitInBase(char c, int base) { return GetDigitValueInBase(c, base) >= 0; }
 };
 } // namespace lcc::c
 

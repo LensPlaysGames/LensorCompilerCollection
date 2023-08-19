@@ -1,6 +1,7 @@
 #ifndef C_AST_HH
 #define C_AST_HH
 
+#include "c/opts.hh"
 #include "lcc/utils/result.hh"
 #include "lcc/utils/rtti.hh"
 
@@ -14,6 +15,7 @@ class BaseNode;
 class Decl;
 
 class TranslationUnit {
+    CContext* _context;
     File* _file;
 
     std::vector<BaseNode*> all_nodes{};
@@ -21,15 +23,17 @@ class TranslationUnit {
     std::vector<Decl*> _top_level_decls{};
 
 public:
-    TranslationUnit(File* file)
-        : _file(file) {}
-    
+    TranslationUnit(CContext* context, File* file)
+        : _context(context), _file(file) {}
+
+    auto c_context() const { return _context; }
+    auto lcc_context() const { return _context->lcc_context(); }
     auto file() const { return _file; }
-    
+
     auto add_top_level_decl(Decl* decl) { _top_level_decls.push_back(decl); }
-    
+
     auto top_level_decls() -> const std::vector<Decl*>& { return _top_level_decls; }
-    
+
     void print();
 
     friend BaseNode;
@@ -48,7 +52,7 @@ enum struct TokenKind {
     CloseBracket,
     OpenBrace,
     CloseBrace,
-    
+
     // Other Delimiters
     Dot,
     TripleDot,
@@ -185,6 +189,39 @@ enum struct TokenKind {
     Decimal128_,
     Decimal32_,
     Decimal64_,
+
+    // GNU extension keywords
+    GNU__alignof,
+    GNU__alignof__,
+    GNU__asm,
+    GNU__asm__,
+    GNU__attribute,
+    GNU__attribute__,
+    GNU__builtin_offsetof,
+    GNU__builtin_va_arg,
+    GNU__complex,
+    GNU__complex__,
+    GNU__const,
+    GNU__extension__,
+    GNU__func__,
+    GNU__FUNCTION__,
+    GNU__imag,
+    GNU__imag__,
+    GNU__inline,
+    GNU__inline__,
+    GNU__label__,
+    GNU__null,
+    GNU__PRETTY_FUNCTION__,
+    GNU__real,
+    GNU__real__,
+    GNU__restrict,
+    GNU__restrict__,
+    GNU__signed,
+    GNU__signed__,
+    GNU__thread,
+    GNU__typeof,
+    GNU__volatile,
+    GNU__volatile__,
 };
 
 enum struct LitIntegerKind {
@@ -380,7 +417,7 @@ protected:
 
 public:
     auto name() const -> const std::string& { return _name; }
-  
+
     static bool classof(const Statement* statement) { return +statement->kind() >= +Kind::DeclStart_ and +statement->kind() <= +Kind::DeclEnd_; }
 };
 
@@ -423,17 +460,17 @@ public:
     bool is_lvalue() const;
 };
 
-class UnaryExpr: public Expr {
+class UnaryExpr : public Expr {
     OperatorKind _operator_kind;
     Expr* _operand;
 
 public:
     UnaryExpr(Location location, OperatorKind operator_kind, Expr* operand)
         : Expr(Kind::Unary, location), _operator_kind(operator_kind), _operand(operand) {}
-    
+
     auto operator_kind() const { return _operator_kind; }
     auto operand() const { return _operand; }
-    
+
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Unary; }
 };
 
@@ -443,9 +480,9 @@ class GroupedExpr : public Expr {
 public:
     GroupedExpr(Expr* expr)
         : Expr(Kind::Grouped, expr->location()), _expr(expr) {}
-    
+
     auto expr() const { return _expr; }
-    
+
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Grouped; }
 };
 
@@ -474,6 +511,6 @@ protected:
 public:
     auto kind() const { return _kind; }
 };
-}
+} // namespace lcc::c
 
 #endif // C_AST_HH

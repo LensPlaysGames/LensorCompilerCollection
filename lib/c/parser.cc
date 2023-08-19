@@ -2,8 +2,8 @@
 
 namespace cc = lcc::c;
 
-auto cc::Parser::Parse(Context* context, File& file) -> TranslationUnit* {
-    auto translation_unit = new TranslationUnit{&file};
+auto cc::Parser::Parse(CContext* context, File& file) -> TranslationUnit* {
+    auto translation_unit = new TranslationUnit{context, &file};
     
     Parser parser{context, file};
     
