@@ -451,7 +451,7 @@ void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
         } break;
 
         case '$': {
-            if (_context->opts.ext.gnu_idents) {
+            if (c_context()->opts.ext.gnu_idents) {
                 goto lex_identifier;
             }
 
@@ -527,16 +527,16 @@ void cc::Lexer::ReadToken(CToken& token) {
             return TokenKind::Ident;
         };
 
-        if (+_context->opts.std >= +StandardVersion::C89)
+        if (+c_context()->opts.std >= +StandardVersion::C89)
             token.kind = LookupKeyword(token.text, c89_keywords);
 
-        if (token.kind == TokenKind::Ident and +_context->opts.std >= +StandardVersion::C99)
+        if (token.kind == TokenKind::Ident and +c_context()->opts.std >= +StandardVersion::C99)
             token.kind = LookupKeyword(token.text, c99_keywords);
 
-        if (token.kind == TokenKind::Ident and +_context->opts.std >= +StandardVersion::C11)
+        if (token.kind == TokenKind::Ident and +c_context()->opts.std >= +StandardVersion::C11)
             token.kind = LookupKeyword(token.text, c11_keywords);
 
-        if (token.kind == TokenKind::Ident and +_context->opts.std >= +StandardVersion::C23)
+        if (token.kind == TokenKind::Ident and +c_context()->opts.std >= +StandardVersion::C23)
             token.kind = LookupKeyword(token.text, c23_keywords);
 
         // TODO(local): extension keywords

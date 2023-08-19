@@ -511,6 +511,18 @@ protected:
 public:
     auto kind() const { return _kind; }
 };
+
+class IntType : public Type {
+    IntegerKind _int_kind;
+
+public:
+    IntType(Location location, IntegerKind int_kind)
+        : Type(Kind::Integer, location), _int_kind(int_kind) {}
+
+    auto int_kind() const { return _int_kind; }
+    
+    static bool classof(const Type* type) { return type->kind() == Kind::Integer; }
+};
 } // namespace lcc::c
 
 #endif // C_AST_HH

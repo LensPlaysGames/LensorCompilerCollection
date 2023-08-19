@@ -25,7 +25,7 @@ class Lexer {
             : name(std::move(name)), has_args(has_args), args(std::move(args)), body(std::move(body)) {}
     };
 
-    CContext* _context;
+    TranslationUnit* _tu;
     File* _file;
 
     const char* curr{};
@@ -38,16 +38,21 @@ class Lexer {
     StringMap<MacroDef> macro_defs{};
 
 public:
-    Lexer(CContext* context, File* file)
-        : _context(context), _file(file), curr(file->data()), end(file->data() + file->size()) {
+    Lexer(TranslationUnit* tu, File* file)
+        : _tu(tu), _file(file), curr(file->data()), end(file->data() + file->size()) {
         AdvanceChar();
     }
 
-private:
+    auto translation_unit() const { return _tu; }
+    auto c_context() const { return _tu->c_context(); }
+    auto lcc_context() const { return _tu->lcc_context(); }
+
     /// Read the next token, without the preprocessor enabled, into `token`.
     void ReadTokenNoPreprocess(CToken& token);
     /// Read the next token, with the preprocessor enabled, into `token`.
     void ReadToken(CToken& token);
+
+private:
     /// Invoked when the preprocessor is enabled and a start-of-line '#' is encountered.
     /// Responsible for parsing all preprocessor directives and doing any necessary work
     /// that comes with it.
@@ -219,17 +224,17 @@ private:
 
     template <typename... Args>
     Diag Warning(fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Warning(_context->lcc_context(), CurrentLocation(), fmt, std::forward<Args>(args)...);
+        return Diag::Warning(lcc_context(), CurrentLocation(), fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
     Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Error(_context->lcc_context(), CurrentLocation(), fmt, std::forward<Args>(args)...);
+        return Diag::Error(lcc_context(), CurrentLocation(), fmt, std::forward<Args>(args)...);
     }
 
     template <typename... Args>
     Diag Error(Location location, fmt::format_string<Args...> fmt, Args&&... args) {
-        return Diag::Error(_context->lcc_context(), location, fmt, std::forward<Args>(args)...);
+        return Diag::Error(lcc_context(), location, fmt, std::forward<Args>(args)...);
     }
 
     std::string GetSubstring(u32 startOffset, u32 endOffset) {
@@ -238,7 +243,7 @@ private:
     }
 
     bool IsIdentifierContinue(char c) {
-        if (c == '$' and _context->opts.ext.gnu_idents)
+        if (c == '$' and c_context()->opts.ext.gnu_idents)
             return true;
 
         return IsAlphaNumeric(c) || c == '_';
