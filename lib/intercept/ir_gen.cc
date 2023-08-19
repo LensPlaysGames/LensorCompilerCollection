@@ -11,7 +11,7 @@
 
 namespace lcc {
 
-auto InterceptIRGen::Generate(Context* context, intercept::Module& mod) -> std::unique_ptr<Module> {
+auto intercept::IRGen::Generate(Context* context, intercept::Module& mod) -> std::unique_ptr<Module> {
     // TODO: For each function in module, generate IR for it.
     return {};
 }

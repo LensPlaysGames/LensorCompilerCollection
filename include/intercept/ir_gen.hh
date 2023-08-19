@@ -6,15 +6,14 @@
 #include <lcc/ir/ir.hh>
 #include <lcc/utils/rtti.hh>
 #include <memory>
-#include <vector>
 
-namespace lcc {
+namespace lcc::intercept {
 
-class InterceptIRGen {
+class IRGen {
     Context *_ctx;
     intercept::Module& _mod;
 
-    InterceptIRGen(Context *c, intercept::Module& m) : _ctx(c), _mod(m) {}
+    IRGen(Context *c, intercept::Module& m) : _ctx(c), _mod(m) {}
 
 public:
     static auto Generate(Context* context, intercept::Module& mod) -> std::unique_ptr<Module>;

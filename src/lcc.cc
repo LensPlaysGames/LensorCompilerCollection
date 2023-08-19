@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
             std::exit(0);
         }
 
-        auto ir_module = lcc::InterceptIRGen::Generate(&context, *mod);
+        auto ir_module = lcc::intercept::IRGen::Generate(&context, *mod);
         (void)ir_module;
 
         return 42;
