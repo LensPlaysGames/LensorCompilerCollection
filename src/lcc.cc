@@ -86,7 +86,6 @@ int main(int argc, char** argv) {
         if (options::get<"--ast">()) {
             if (context.has_error()) std::exit(1);
             mod->print();
-            std::exit(0);
         }
 
         auto ir_module = lcc::intercept::IRGen::Generate(&context, *mod);
