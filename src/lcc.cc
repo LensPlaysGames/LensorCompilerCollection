@@ -4,6 +4,7 @@
 #include <intercept/ast.hh>
 #include <intercept/parser.hh>
 #include <intercept/sema.hh>
+#include <intercept/ir_gen.hh>
 #include <laye/parser.hh>
 #include <laye/sema.hh>
 #include <lcc/context.hh>
@@ -86,6 +87,9 @@ int main(int argc, char** argv) {
             mod->print();
             std::exit(0);
         }
+
+        auto ir = lcc::intercept::IRGen::Generate(&context, *mod);
+        (void)ir;
 
         return 42;
     }
