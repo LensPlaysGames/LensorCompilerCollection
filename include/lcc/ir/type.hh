@@ -42,6 +42,7 @@ public:
 
     /// Disallow allocating these directly.
     void* operator new(size_t) = delete;
+    void* operator new(size_t sz, Context&) { return ::operator new(sz); }
 
     /// Get the aligment of this type.
     usz align() const;

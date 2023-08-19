@@ -32,6 +32,9 @@ public:
     auto code() const -> std::vector<Function*> { return _code; }
     auto vars() -> std::vector<Value*>& { return _vars; }
     auto vars() const -> std::vector<Value*> { return _vars; }
+
+    void add_function(Function* func) { _code.push_back(func); }
+    void add_var(Value* var) { _vars.push_back(var); }
 };
 } // namespace lcc
 

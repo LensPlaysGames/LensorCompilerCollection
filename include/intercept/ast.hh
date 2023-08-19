@@ -865,7 +865,10 @@ protected:
 
 public:
     /// Get the mangled name of this declaration.
-    auto mangled_name() const -> std::string;
+    auto mangled_name() const -> std::string {
+        // FIXME: Mangle.
+        return name();
+    }
 
     /// Get the module this declaration is in.
     auto module() const -> Module* { return _mod; }
@@ -930,6 +933,10 @@ public:
     }
 
     auto body() -> Expr*& { return _body; }
+
+    auto return_type() const -> Type* {
+        return as<FuncType>(type())->return_type();
+    }
 
     auto param_types() const {
         return as<FuncType>(type())->params() | vws::transform([](auto& p) { return p.type; });

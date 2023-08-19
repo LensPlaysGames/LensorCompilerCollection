@@ -84,6 +84,9 @@ public:
 
     /// Disallow allocating these directly.
     void* operator new(size_t) = delete;
+    void* operator new(size_t sz, Module&) {
+        return ::operator new(sz);
+    }
 
     /// Get the kind of this value for RTTI.
     Kind kind() const { return value_kind; }
@@ -246,14 +249,18 @@ class Function : public Value {
     CallConv cc;
 
 public:
-    Function(
-        Context* ctx,
-        std::string mangled_name,
-        FunctionType* type,
-        Linkage linkage,
-        CallConv calling_convention,
-        Location loc = {}
-    );
+    Function(Context* ctx,
+             std::string mangled_name,
+             FunctionType* ty,
+             Linkage linkage,
+             CallConv calling_convention,
+             Location l = {}
+             ) : Value(Kind::Function, ty),
+                 func_name(mangled_name),
+                 loc(l),
+                 link(linkage),
+                 cc(calling_convention)
+    {}
 
     /// Get an iterator to the first block in this function.
     auto begin() const { return block_list.begin(); }
