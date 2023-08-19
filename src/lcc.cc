@@ -11,6 +11,7 @@
 #include <lcc/diags.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
+#include <lcc/ir/module.hh>
 #include <string>
 
 namespace detail {
@@ -88,8 +89,8 @@ int main(int argc, char** argv) {
             std::exit(0);
         }
 
-        auto ir = lcc::intercept::IRGen::Generate(&context, *mod);
-        (void)ir;
+        auto ir_module = lcc::InterceptIRGen::Generate(&context, *mod);
+        (void)ir_module;
 
         return 42;
     }
