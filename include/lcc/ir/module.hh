@@ -10,6 +10,9 @@ namespace lcc {
 class Module {
     Context* _ctx;
 
+    std::vector<Function*> _code;
+    std::vector<Value*> _vars;
+
     Module(Module&) = delete;
     Module(Module&&) = delete;
     Module& operator=(Module&) = delete;
@@ -24,6 +27,11 @@ public:
 
     /// Get the context that owns the module.
     auto context() const -> Context* { return _ctx; }
+
+    auto code() -> std::vector<Function*>& { return _code; }
+    auto code() const -> std::vector<Function*> { return _code; }
+    auto vars() -> std::vector<Value*>& { return _vars; }
+    auto vars() const -> std::vector<Value*> { return _vars; }
 };
 } // namespace lcc
 
