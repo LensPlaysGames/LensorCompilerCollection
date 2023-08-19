@@ -1,4 +1,4 @@
 ;; ERROR
 
-foo: s128
-foo
+foo: s128;
+foo;

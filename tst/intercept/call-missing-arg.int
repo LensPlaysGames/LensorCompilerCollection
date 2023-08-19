@@ -1,5 +1,5 @@
 ;; ERROR
 
-bar()
+bar;
 
-bar : void (x : int()) x
+bar : void (x : int()) = x;

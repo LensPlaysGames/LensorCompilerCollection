@@ -1,6 +1,6 @@
 ;; 0
 ;; 1
 
-putchar : ext void(c : int)
-putchar(48 + if ~0 1 else 0)
-0
+putchar : ext void(c : int);
+putchar(48 + if ~0 1 else 0);
+0;

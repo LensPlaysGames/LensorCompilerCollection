@@ -1,4 +1,4 @@
 ;; 42
 
-cond :: 0
-if cond = 0 42 else 69
+cond :: 0;
+if cond = 0 then 42 else 69;

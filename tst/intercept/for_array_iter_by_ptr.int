@@ -2,10 +2,10 @@
 ;; E0
 ;; y
 
-arr : int[4] = [ 69 48 10 121 ]
+arr : int[4] = [ 69 48 10 121 ];
 for ptr : @int = arr[0], ptr <= arr[3], ptr := ptr[1] {
-  putchar(@ptr)
-}
+  putchar(@ptr);
+};
 ;; for ptr in arr[0]..arr[3]  putchar(@ptr)
 
-putchar : ext s32(n : int) discardable
+putchar : ext s32(n : int) discardable;

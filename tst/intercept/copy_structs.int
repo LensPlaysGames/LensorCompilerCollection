@@ -3,12 +3,12 @@
 foo:> type {
   x: int
   y: int
-}
+};
 
-a : foo
-a.y := 69
+a : foo;
+a.y := 69;
 
-b : foo
-b := a
+b : foo;
+b := a;
 
-b.y
+b.y;

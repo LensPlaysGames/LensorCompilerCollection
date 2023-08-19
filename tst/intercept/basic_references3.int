@@ -4,6 +4,6 @@
 ;; This is currently broken due to convertible()
 ;; being a bit scuffed atm.
 
-a: byte = 69
-b: &byte = a
-b
+a: byte = 69;
+b: &byte = a;
+b;

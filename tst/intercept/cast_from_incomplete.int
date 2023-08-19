@@ -1,5 +1,5 @@
 ;; ERROR
 
-a : void
+a : void;
 
-a as byte
+a as byte;

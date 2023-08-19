@@ -3,9 +3,9 @@
 b : int = foo()
 
 foo : int() {
-    a : int = bar() + baz()
-    baz : int() 35
-    a
+    a : int = bar() + baz();
+    baz : int() 35;
+    a;
 }
 
 bar : int() 34
