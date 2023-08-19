@@ -255,13 +255,11 @@ private:
             int valueInBase = c - '0';
             if (valueInBase >= base) return -1;
             return valueInBase;
-        }
-        else if (c >= 'a' and c <= 'z') {
+        } else if (c >= 'a' and c <= 'z') {
             int valueInBase = c - 'a' + 11;
             if (valueInBase >= base) return -1;
             return valueInBase;
-        }
-        else if (c >= 'A' and c <= 'Z') {
+        } else if (c >= 'A' and c <= 'Z') {
             int valueInBase = c - 'A' + 11;
             if (valueInBase >= base) return -1;
             return valueInBase;
