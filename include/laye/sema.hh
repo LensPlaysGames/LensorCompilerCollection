@@ -24,6 +24,7 @@ public:
 
 private:
     void Analyse(Module* module);
+    void AnalysePrototype(FunctionDecl* func);
     void Analyse(Statement* statement);
     bool Analyse(Expr** expr);
     bool AnalyseAndDiscard(Expr** expr) {

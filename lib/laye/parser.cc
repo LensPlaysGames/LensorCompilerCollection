@@ -124,7 +124,7 @@ auto Parser::Parse(LayeContext* laye_context, File& file) -> Module* {
 
                 auto& import_file = laye_context->context()->get_or_load_file(import_file_path);
                 if (auto import_module = laye_context->parse_laye_file(import_file)) {
-                    result->add_import(import_name, import_module);
+                    result->add_import(import_name, import_header->location(), import_module);
                 }
             }
         } else {

@@ -22,6 +22,28 @@ class Symbol;
 class Scope;
 class Parser;
 
+/// State of semantic analysis for an expression or type.
+enum struct SemaState {
+    /// Not yet analysed by sema. The type of this node is unspecified.
+    NotAnalysed,
+
+    /// Sema is currently in progress. This can be used to detect cycles.
+    InProgress,
+
+    /// There was an error analysing this expression. Any expression that
+    /// depends on the type of this expression should not check it, nor try
+    /// to convert it or issue an error about it.
+    Errored,
+
+    /// Sema is done with this expression, and there are no errors that could
+    /// affect surrounding code. Note that this does not mean that it contains
+    /// no errors at all! For instance, a while loop is never marked as \c Errored
+    /// even if e.g. its condition is invalid or if there is an error in its body,
+    /// simply because a while loop does not return a value and can thus never
+    /// affect the types of the surrounding code.
+    Done,
+};
+
 class LayeContext {
     Context* _context;
 
@@ -32,7 +54,7 @@ public:
         : _context(context) {}
 
     void add_module(std::string abs_name, Module* module) { _modules.emplace(std::move(abs_name), module); }
-    
+
     auto context() const { return _context; }
     auto lookup_module(std::string abs_name) -> Module* {
         if (auto it = _modules.find(abs_name); it != _modules.end()) {
@@ -51,10 +73,11 @@ class Module {
 public:
     struct Ref {
         std::string name;
+        Location location;
         Module* module;
 
-        Ref(std::string name, Module* module)
-            : name(std::move(name)), module(module) {}
+        Ref(std::string name, Location location, Module* module)
+            : name(std::move(name)), location(location), module(module) {}
     };
 
 private:
@@ -73,6 +96,8 @@ private:
     std::vector<Expr*> exprs{};
     std::vector<Scope*> scopes{};
 
+    SemaState _state = SemaState::NotAnalysed;
+
 public:
     Module(File* file)
         : _file(file) {}
@@ -80,7 +105,7 @@ public:
     auto file() const { return _file; }
 
     auto add_header(ModuleHeader* header) { _headers.push_back(header); }
-    auto add_import(std::string name, Module* module) { _imports.push_back(Ref{std::move(name), module}); }
+    auto add_import(std::string name, Location location, Module* module) { _imports.push_back(Ref{std::move(name), location, module}); }
     auto add_export(NamedDecl* decl) { _exports.push_back(decl); }
     auto add_top_level_decl(Decl* decl) { _top_level_decls.push_back(decl); }
 
@@ -93,6 +118,34 @@ public:
 
     /// Get a unique function name.
     auto unique_function_name() -> std::string { return fmt::format("_XLaye__func_{}", unique_name_counter++); }
+
+    /// Get the state of semantic analysis for this node.
+    /// \see SemaNode::State
+    auto sema_state() const { return _state; }
+    /// Check if this expression was successfully analysed by sema.
+    bool sema_done() const { return _state == SemaState::Done; }
+    /// Check if sema has errored.
+    bool sema_errored() const { return _state == SemaState::Errored; }
+    /// \see SemaNode::State
+    bool sema_done_or_errored() const {
+        return _state == SemaState::Done or _state == SemaState::Errored;
+    }
+
+    /// \see SemaNode::State
+    void set_sema_in_progress() {
+        LCC_ASSERT(not sema_done_or_errored());
+        _state = SemaState::InProgress;
+    }
+    /// \see SemaNode::State
+    constexpr void set_sema_done() {
+        LCC_ASSERT(_state != SemaState::Errored);
+        _state = SemaState::Done;
+    }
+    /// \see SemaNode::State
+    void set_sema_errored() {
+        LCC_ASSERT(_state != SemaState::Done);
+        _state = SemaState::Errored;
+    }
 
     void print();
 
@@ -363,35 +416,13 @@ public:
         Expr,
     };
 
-    /// State of semantic analysis for an expression or type.
-    enum struct State {
-        /// Not yet analysed by sema. The type of this node is unspecified.
-        NotAnalysed,
-
-        /// Sema is currently in progress. This can be used to detect cycles.
-        InProgress,
-
-        /// There was an error analysing this expression. Any expression that
-        /// depends on the type of this expression should not check it, nor try
-        /// to convert it or issue an error about it.
-        Errored,
-
-        /// Sema is done with this expression, and there are no errors that could
-        /// affect surrounding code. Note that this does not mean that it contains
-        /// no errors at all! For instance, a while loop is never marked as \c Errored
-        /// even if e.g. its condition is invalid or if there is an error in its body,
-        /// simply because a while loop does not return a value and can thus never
-        /// affect the types of the surrounding code.
-        Done,
-    };
-
 private:
     const Kind _kind;
 
     Location _location;
-    
+
     /// sema fields
-    State _state = State::NotAnalysed;
+    SemaState _state = SemaState::NotAnalysed;
 
 protected:
     SemaNode(Kind kind, Location location)
@@ -405,30 +436,30 @@ public:
 
     /// Get the state of semantic analysis for this node.
     /// \see SemaNode::State
-    auto sema_state() const -> State { return _state; }
+    auto sema_state() const { return _state; }
     /// Check if this expression was successfully analysed by sema.
-    bool sema_ok() const { return _state == State::Done; }
+    bool sema_ok() const { return _state == SemaState::Done; }
     /// Check if sema has errored.
-    bool sema_errored() const { return _state == State::Errored; }
+    bool sema_errored() const { return _state == SemaState::Errored; }
     /// \see SemaNode::State
     bool sema_done_or_errored() const {
-        return _state == State::Done or _state == State::Errored;
+        return _state == SemaState::Done or _state == SemaState::Errored;
     }
 
     /// \see SemaNode::State
     void set_sema_in_progress() {
         LCC_ASSERT(not sema_done_or_errored());
-        _state = State::InProgress;
+        _state = SemaState::InProgress;
     }
     /// \see SemaNode::State
     constexpr void set_sema_done() {
-        LCC_ASSERT(_state != State::Errored);
-        _state = State::Done;
+        LCC_ASSERT(_state != SemaState::Errored);
+        _state = SemaState::Done;
     }
     /// \see SemaNode::State
     void set_sema_errored() {
-        LCC_ASSERT(_state != State::Done);
-        _state = State::Errored;
+        LCC_ASSERT(_state != SemaState::Done);
+        _state = SemaState::Errored;
     }
 };
 
@@ -1440,7 +1471,7 @@ protected:
 
 public:
     auto string(bool use_colours = false) const -> std::string;
-    
+
     /// Get the size of this type. It may be target-dependent,
     /// which is why this takes a context parameter.
     ///
@@ -1468,7 +1499,7 @@ public:
     bool is_buffer() const { return kind() == Kind::TypeBuffer; }
     /// Check if this is a function type.
     bool is_function() const { return kind() == Kind::TypeFunc; }
-    
+
     /// Check if types are equal to each other.
     static bool Equal(const Type* a, const Type* b);
 
