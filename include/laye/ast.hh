@@ -324,6 +324,10 @@ enum struct VarargsKind {
     Laye,
     C,
 };
+enum class CastKind {
+    HardCast,
+    ImplicitCast,
+};
 
 class Scope {
     Scope* _parent;
@@ -352,20 +356,45 @@ public:
     bool is_function_scope() const { return _is_function_scope; }
 };
 
-class BaseNode {
+class SemaNode {
 public:
     enum struct Kind {
         Statement,
         Expr,
     };
 
+    /// State of semantic analysis for an expression or type.
+    enum struct State {
+        /// Not yet analysed by sema. The type of this node is unspecified.
+        NotAnalysed,
+
+        /// Sema is currently in progress. This can be used to detect cycles.
+        InProgress,
+
+        /// There was an error analysing this expression. Any expression that
+        /// depends on the type of this expression should not check it, nor try
+        /// to convert it or issue an error about it.
+        Errored,
+
+        /// Sema is done with this expression, and there are no errors that could
+        /// affect surrounding code. Note that this does not mean that it contains
+        /// no errors at all! For instance, a while loop is never marked as \c Errored
+        /// even if e.g. its condition is invalid or if there is an error in its body,
+        /// simply because a while loop does not return a value and can thus never
+        /// affect the types of the surrounding code.
+        Done,
+    };
+
 private:
     const Kind _kind;
 
     Location _location;
+    
+    /// sema fields
+    State _state = State::NotAnalysed;
 
 protected:
-    BaseNode(Kind kind, Location location)
+    SemaNode(Kind kind, Location location)
         : _kind(kind), _location(location) {}
 
 public:
@@ -373,10 +402,38 @@ public:
     bool is_expr() const { return _kind == Kind::Expr; }
 
     auto location() const { return _location; }
+
+    /// Get the state of semantic analysis for this node.
+    /// \see SemaNode::State
+    auto sema_state() const -> State { return _state; }
+    /// Check if this expression was successfully analysed by sema.
+    bool sema_ok() const { return _state == State::Done; }
+    /// Check if sema has errored.
+    bool sema_errored() const { return _state == State::Errored; }
+    /// \see SemaNode::State
+    bool sema_done_or_errored() const {
+        return _state == State::Done or _state == State::Errored;
+    }
+
+    /// \see SemaNode::State
+    void set_sema_in_progress() {
+        LCC_ASSERT(not sema_done_or_errored());
+        _state = State::InProgress;
+    }
+    /// \see SemaNode::State
+    constexpr void set_sema_done() {
+        LCC_ASSERT(_state != State::Errored);
+        _state = State::Done;
+    }
+    /// \see SemaNode::State
+    void set_sema_errored() {
+        LCC_ASSERT(_state != State::Done);
+        _state = State::Errored;
+    }
 };
 
 /// @brief Base class for statement syntax nodes.
-class Statement : public BaseNode {
+class Statement : public SemaNode {
 public:
     enum struct Kind {
         OverloadSet,
@@ -421,7 +478,7 @@ private:
 
 protected:
     Statement(Kind kind, Location location)
-        : BaseNode(BaseNode::Kind::Statement, location), _kind(kind) {}
+        : SemaNode(SemaNode::Kind::Statement, location), _kind(kind) {}
 
 public:
     void* operator new(size_t) = delete;
@@ -431,7 +488,7 @@ public:
 };
 
 /// @brief Base class for expression syntax nodes.
-class Expr : public BaseNode {
+class Expr : public SemaNode {
 public:
     enum struct Kind {
         Unary,
@@ -498,15 +555,19 @@ public:
 private:
     const Kind _kind;
 
+    /// sema fields
+    Type* _type = nullptr;
+
 protected:
     Expr(Kind kind, Location location)
-        : BaseNode(BaseNode::Kind::Expr, location), _kind(kind) {}
+        : SemaNode(SemaNode::Kind::Expr, location), _kind(kind) {}
 
 public:
     void* operator new(size_t) = delete;
     void* operator new(size_t sz, Parser& parser);
 
     auto kind() const { return _kind; }
+    auto type() const { return _type; }
 };
 
 class Decl : public Statement {
@@ -1379,6 +1440,37 @@ protected:
 
 public:
     auto string(bool use_colours = false) const -> std::string;
+    
+    /// Get the size of this type. It may be target-dependent,
+    /// which is why this takes a context parameter.
+    ///
+    /// \param ctx The context to use.
+    /// \return The size of this type, in bits.
+    usz size(const Context* ctx) const;
+    /// Get the alignment of this type. It may be target-dependent,
+    /// which is why this takes a context parameter.
+    ///
+    /// \param ctx The context to use.
+    /// \return The alignment of this type, in bits.
+    usz align(const Context* ctx) const;
+
+    /// Check if this is the uninitialised type.
+    bool is_unknown() const;
+    /// Check if this is the builtin \c void type.
+    bool is_void() const;
+    /// Check if this is a slice type.
+    bool is_slice() const { return kind() == Kind::TypeSlice; }
+    /// Check if this is a array type.
+    bool is_array() const { return kind() == Kind::TypeArray; }
+    /// Check if this is a pointer type.
+    bool is_pointer() const { return kind() == Kind::TypePointer; }
+    /// Check if this is a buffer type.
+    bool is_buffer() const { return kind() == Kind::TypeBuffer; }
+    /// Check if this is a function type.
+    bool is_function() const { return kind() == Kind::TypeFunc; }
+    
+    /// Check if types are equal to each other.
+    static bool Equal(const Type* a, const Type* b);
 
     static bool classof(const Expr* expr) { return +expr->kind() >= +Kind::TypeInfer && +expr->kind() <= +Kind::TypeC; }
 };

@@ -335,7 +335,7 @@ using lcc::is;
 
 using namespace lcc;
 
-struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::Type> {
+struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::Type> {
     void PrintTemplateParams(const std::vector<layec::TemplateParam>& template_params) {
         if (template_params.empty()) return;
         out += fmt::format("{}<", C(White));
@@ -728,7 +728,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
         }
     }
 
-    void PrintHeader(const layec::BaseNode* b) {
+    void PrintHeader(const layec::SemaNode* b) {
         if (b->is_statement())
             PrintStatementHeader(static_cast<const layec::Statement*>(b));
         else PrintExprHeader(static_cast<const layec::Expr*>(b));
@@ -787,7 +787,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                     );
 
                     if (auto init = variant.init) {
-                        layec::BaseNode* children[] = {init};
+                        layec::SemaNode* children[] = {init};
                         PrintChildren(children, leading_text + (last ? "  " : "│ "));
                     }
                 }
@@ -817,13 +817,13 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::If: {
                 auto n = as<layec::IfStatement>(s);
-                layec::BaseNode* children[] = {n->condition(), n->pass(), n->fail()};
+                layec::SemaNode* children[] = {n->condition(), n->pass(), n->fail()};
                 PrintChildren(children, leading_text);
             } break;
 
             case K::For: {
                 auto n = as<layec::ForStatement>(s);
-                std::vector<layec::BaseNode*> children{};
+                std::vector<layec::SemaNode*> children{};
                 if (n->init()) children.push_back(n->init());
                 if (n->condition()) children.push_back(n->condition());
                 if (n->increment()) children.push_back(n->increment());
@@ -834,7 +834,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::ForEach: {
                 auto n = as<layec::ForEachStatement>(s);
-                std::vector<layec::BaseNode*> children{};
+                std::vector<layec::SemaNode*> children{};
                 if (n->sequence()) children.push_back(n->sequence());
                 if (n->pass()) children.push_back(n->pass());
                 if (n->fail()) children.push_back(n->fail());
@@ -843,7 +843,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::DoFor: {
                 auto n = as<layec::DoForStatement>(s);
-                layec::BaseNode* children[] = {n->body(), n->condition()};
+                layec::SemaNode* children[] = {n->body(), n->condition()};
                 PrintChildren(children, leading_text);
             } break;
 
@@ -859,11 +859,11 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
                     if (case_.is_default()) {
                         PrintBasicHeader("Default", n);
-                        layec::BaseNode* children[] = {case_.body};
+                        layec::SemaNode* children[] = {case_.body};
                         PrintChildren(children, leading_text + (last ? "  " : "│ "));
                     } else {
                         PrintBasicHeader("Case", n);
-                        layec::BaseNode* children[] = {case_.value, case_.body};
+                        layec::SemaNode* children[] = {case_.value, case_.body};
                         PrintChildren(children, leading_text + (last ? "  " : "│ "));
                     }
                 }
@@ -872,14 +872,14 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
             case K::Return: {
                 auto n = as<layec::ReturnStatement>(s);
                 if (n->value()) {
-                    layec::BaseNode* children[] = {n->value()};
+                    layec::SemaNode* children[] = {n->value()};
                     PrintChildren(children, leading_text);
                 }
             } break;
 
             case K::Defer: {
                 auto n = as<layec::DeferStatement>(s);
-                layec::BaseNode* children[] = {n->statement()};
+                layec::SemaNode* children[] = {n->statement()};
                 PrintChildren(children, leading_text);
             } break;
         }
@@ -892,37 +892,37 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::Unary: {
                 auto n = as<layec::UnaryExpr>(e);
-                layec::BaseNode* children[] = {n->value()};
+                layec::SemaNode* children[] = {n->value()};
                 PrintChildren(children, leading_text);
             } break;
 
             case K::Binary: {
                 auto n = as<layec::BinaryExpr>(e);
-                layec::BaseNode* children[] = {n->lhs(), n->rhs()};
+                layec::SemaNode* children[] = {n->lhs(), n->rhs()};
                 PrintChildren(children, leading_text);
             } break;
 
             case K::And: {
                 auto n = as<layec::AndExpr>(e);
-                layec::BaseNode* children[] = {n->lhs(), n->rhs()};
+                layec::SemaNode* children[] = {n->lhs(), n->rhs()};
                 PrintChildren(children, leading_text);
             } break;
 
             case K::Or: {
                 auto n = as<layec::OrExpr>(e);
-                layec::BaseNode* children[] = {n->lhs(), n->rhs()};
+                layec::SemaNode* children[] = {n->lhs(), n->rhs()};
                 PrintChildren(children, leading_text);
             } break;
 
             case K::Xor: {
                 auto n = as<layec::XorExpr>(e);
-                layec::BaseNode* children[] = {n->lhs(), n->rhs()};
+                layec::SemaNode* children[] = {n->lhs(), n->rhs()};
                 PrintChildren(children, leading_text);
             } break;
 
             case K::UnwrapNilable: {
                 auto n = as<layec::UnwrapNilableExpr>(e);
-                layec::BaseNode* children[] = {n->value()};
+                layec::SemaNode* children[] = {n->value()};
                 PrintChildren(children, leading_text);
             } break;
 
@@ -936,7 +936,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::FieldIndex: {
                 auto n = as<layec::FieldIndexExpr>(e);
-                layec::BaseNode* children[] = {n->target()};
+                layec::SemaNode* children[] = {n->target()};
                 PrintChildren(children, leading_text);
             } break;
 
@@ -988,20 +988,20 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                     auto init = inits[i];
                     PrintBasicHeader("CtorFieldInit", n);
 
-                    layec::BaseNode* children[] = {init.value};
+                    layec::SemaNode* children[] = {init.value};
                     PrintChildren(children, leading_text + (last ? "  " : "│ "));
                 }
             } break;
 
             case K::Not: {
                 auto n = as<layec::NotExpr>(e);
-                layec::BaseNode* children[] = {n->value()};
+                layec::SemaNode* children[] = {n->value()};
                 PrintChildren(children, leading_text);
             } break;
 
             case K::Cast: {
                 auto n = as<layec::CastExpr>(e);
-                layec::BaseNode* children[] = {n->value()};
+                layec::SemaNode* children[] = {n->value()};
                 PrintChildren(children, leading_text);
             } break;
 
@@ -1016,7 +1016,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
                     auto init = inits[i];
                     PrintBasicHeader("CtorFieldInit", n);
 
-                    layec::BaseNode* children[] = {init.value};
+                    layec::SemaNode* children[] = {init.value};
                     PrintChildren(children, leading_text + (last ? "  " : "│ "));
                 }
             } break;
@@ -1029,7 +1029,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
 
             case K::Catch: {
                 auto n = as<layec::CatchExpr>(e);
-                layec::BaseNode* children[] = {n->value(), n->body()};
+                layec::SemaNode* children[] = {n->value(), n->body()};
                 PrintChildren(children, leading_text);
             } break;
 
@@ -1040,7 +1040,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::BaseNode, layec::T
         }
     }
 
-    void operator()(const layec::BaseNode* b, std::string leading_text = "") {
+    void operator()(const layec::SemaNode* b, std::string leading_text = "") {
         PrintHeader(b);
         if (b->is_statement())
             PrintStatement(static_cast<const layec::Statement*>(b), leading_text);

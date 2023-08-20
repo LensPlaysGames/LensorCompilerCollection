@@ -100,7 +100,6 @@ int main(int argc, char** argv) {
 
         /// Parse the file.
         auto mod = laye_context->parse_laye_file(file);
-        (void) mod; // temp so I don't get a warning here, I may want this module later
 
         if (options::get<"--syntax-only">()) {
             if (options::get<"--ast">()) laye_context->print_modules();
@@ -108,7 +107,7 @@ int main(int argc, char** argv) {
         }
 
         /// Perform semantic analysis.
-        lcc::laye::Sema::Analyse(laye_context, true);
+        lcc::laye::Sema::Analyse(laye_context, mod, true);
 
         /// Nice.
         return 69;
