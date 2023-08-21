@@ -188,7 +188,7 @@ public:
     bool closed() const {
         // An empty block is never closed; otherwise, a block is closed iff the
         // last instruction is a block terminator.
-        return inst_list.size() && is_block_terminator(*end());
+        return inst_list.size() && is_block_terminator(inst_list.back());
     }
 
     /// Insert an instruction at the end of this block.
@@ -333,9 +333,13 @@ public:
 /// ============================================================================
 /// A stack allocation.
 class AllocaInst : public Inst {
+    Type* _allocated_type;
+
 public:
     AllocaInst(Type* ty, Location loc = {})
-        : Inst(Kind::Alloca, ty, loc) {}
+    : Inst(Kind::Alloca, Type::PtrTy, loc), _allocated_type(ty) {}
+
+    Type* allocated_type() { return _allocated_type; }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Alloca; }

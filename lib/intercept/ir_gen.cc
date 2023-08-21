@@ -12,6 +12,7 @@
 
 #include <memory>
 #include <vector>
+#include <unordered_map>
 
 namespace lcc {
 
@@ -95,8 +96,11 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             insert(alloca);
             if (auto* init_expr = decl->init()) {
                 generate_expression(init_expr);
-                // TODO: Store generated init_expr into above inserted declaration
+                // Store generated init_expr into above inserted declaration
+                auto* local_init = new (*module) StoreInst(generated_ir[init_expr], alloca);
+                insert(local_init);
             }
+            generated_ir[expr] = alloca;
         } break;
 
         default:
