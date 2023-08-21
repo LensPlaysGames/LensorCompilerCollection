@@ -149,6 +149,8 @@ public:
     static bool classof(Value* v) { return +v->kind() >= +Kind::Alloca; }
 };
 
+bool is_block_terminator(Inst* inst);
+
 /// A basic block.
 class Block : public Value {
     using Iterator = utils::VectorIterator<Inst*>;
@@ -182,6 +184,12 @@ public:
 
     /// Get the parent function.
     auto function() const -> Function* { return parent; }
+
+    bool closed() const {
+        // An empty block is never closed; otherwise, a block is closed iff the
+        // last instruction is a block terminator.
+        return inst_list.size() && is_block_terminator(*end());
+    }
 
     /// Insert an instruction at the end of this block.
     ///
@@ -264,6 +272,8 @@ public:
 
     /// Get an iterator to the first block in this function.
     auto begin() const { return block_list.begin(); }
+
+    void append_block(Block* b) { block_list.push_back(b); };
 
     /// Get the blocks in this function.
     auto blocks() const -> const std::vector<Block*>& { return block_list; }
@@ -553,6 +563,8 @@ public:
 /// ============================================================================
 ///  Terminators
 /// ============================================================================
+/// NOTE: If you add another one, be sure to update implementation of `is_block_terminator`.
+
 /// Unconditional branch instruction.
 class BranchInst : public Inst {
     /// The block to branch to.

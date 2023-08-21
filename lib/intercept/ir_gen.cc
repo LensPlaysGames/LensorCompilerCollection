@@ -15,26 +15,27 @@
 namespace lcc {
 
 namespace intercept {
+void IRGen::insert(lcc::Inst* inst) {
+    LCC_ASSERT(inst, "Invalid argument");
+    LCC_ASSERT(ctx, "Invalid context");
+    LCC_ASSERT(function && block, "Invalid insert point");
+    block->insert(inst);
+}
+
 lcc::Type* Convert(Context* ctx, Type* in) {
     switch (in->kind()) {
     case Type::Kind::Builtin: {
         switch ((as<BuiltinType>(in))->builtin_kind()) {
-        case BuiltinType::BuiltinKind::Bool: {
+        case BuiltinType::BuiltinKind::Bool:
             return lcc::Type::I1Ty;
-        } break;
-        case BuiltinType::BuiltinKind::Byte: {
+        case BuiltinType::BuiltinKind::Byte:
+        case BuiltinType::BuiltinKind::Int:
             return lcc::IntegerType::Get(ctx, in->size(ctx));
-        } break;
-        case BuiltinType::BuiltinKind::Int: {
-            return lcc::IntegerType::Get(ctx, in->size(ctx));
-        } break;
-        case BuiltinType::BuiltinKind::Void: {
+        case BuiltinType::BuiltinKind::Void:
             return lcc::Type::VoidTy;
-        } break;
         case BuiltinType::BuiltinKind::OverloadSet:
-        case BuiltinType::BuiltinKind::Unknown: {
+        case BuiltinType::BuiltinKind::Unknown:
             Diag::ICE("Invalid builtin kind present during IR generation");
-        } break;
         }
         LCC_UNREACHABLE();
     } break;
@@ -74,44 +75,57 @@ lcc::Type* Convert(Context* ctx, Type* in) {
     }
     LCC_UNREACHABLE();
 }
-}
 
-void intercept::IRGen::generate_expression(intercept::Expr* expr, Function& ir_function) {
+void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     switch (expr->kind()) {
     case intercept::Expr::Kind::Block: {
-        for (auto e : as<intercept::BlockExpr>(expr)->children()) generate_expression(e, ir_function);
+        for (auto e : as<intercept::BlockExpr>(expr)->children()) generate_expression(e);
     } break;
 
     case intercept::Expr::Kind::IntegerLiteral: {
-        auto int_literal = new (*module) IntegerConstant(Convert(ctx, expr->type()), (as<IntegerLiteral>(expr))->value());
+        insert((Inst*)(new (*module) IntegerConstant(Convert(ctx, expr->type()), (as<IntegerLiteral>(expr))->value())));
+    } break;
+
+    case intercept::Expr::Kind::Binary: {
+        const auto& binary_expr = as<BinaryExpr>(expr);
+        switch (binary_expr->op()) {
+        default: {
+            fmt::print("Unhandled IRGen of binary expression operator {}", (int)binary_expr->op());
+        } break;
+        }
     } break;
 
     default: {
         fmt::print("Unhandled IRGen of expression kind {}\n", (int)expr->kind());
-        //std::exit(3);
     } break;
     }
 }
 
-auto intercept::IRGen::Generate(Context* context, intercept::Module& mod) -> std::unique_ptr<Module> {
-    std::unique_ptr<lcc::Module> out(new lcc::Module(context));
+void IRGen::generate_function(intercept::FuncDecl* f) {
+    function = new (*module) lcc::Function
+        (ctx,
+         f->mangled_name(),
+         as<lcc::FunctionType>(Convert(ctx, f->type())),
+         f->linkage(),
+         lcc::CallConv::Intercept
+         );
 
-    IRGen ir_gen_stupid_instantiation(context, mod);
-
-    for (auto f : mod.functions()) {
-        fmt::print("{}\n", f->name());
-        ir_gen_stupid_instantiation.function = new (*out) lcc::Function
-            (context,
-             f->mangled_name(),
-             as<lcc::FunctionType>(Convert(context, f->type())),
-             f->linkage(),
-             lcc::CallConv::Intercept
-             );
-
-        if (auto* expr = f->body()) ir_gen_stupid_instantiation.generate_expression(expr, *ir_gen_stupid_instantiation.function);
+    // Hard to generate code for a function without a body.
+    if (auto* expr = f->body()) {
+        block = new (*module) lcc::Block("body");
+        function->append_block(block);
+        generate_expression(expr);
     }
 
-    return {};
 }
 
+auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Module* {
+    auto ir_gen = IRGen(context, int_mod);
+
+    for (auto f : int_mod.functions()) ir_gen.generate_function(f);
+
+    return ir_gen.mod();
+}
+
+}
 }

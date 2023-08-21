@@ -13,21 +13,28 @@ namespace lcc::intercept {
 class IRGen {
     Context *ctx;
     intercept::Module& int_module;
-    std::unique_ptr<lcc::Module> module;
+    lcc::Module* module;
 
     lcc::Function* function{nullptr};
     lcc::Block* block{nullptr};
 
     IRGen(Context *c, intercept::Module& m) : ctx(c), int_module(m) {
-        module = std::make_unique<lcc::Module>(ctx);
+        module = new lcc::Module(ctx);
     }
 
     void insert(lcc::Inst* inst);
 
-    void generate_expression(Expr* expr, lcc::Function& ir_function);
+    void generate_expression(intercept::Expr*);
+
+    void generate_function(intercept::FuncDecl*);
 
 public:
-    static auto Generate(Context* context, intercept::Module& mod) -> std::unique_ptr<Module>;
+    /// NOTE: I would name this module(), but C++ doesn't have properties.
+    auto mod() -> lcc::Module* {
+        return module;
+    }
+
+    static auto Generate(Context*, intercept::Module&) -> lcc::Module*;
 };
 
 }
