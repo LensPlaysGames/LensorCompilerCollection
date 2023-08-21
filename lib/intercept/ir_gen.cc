@@ -4,6 +4,7 @@
 #include <lcc/core.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/type.hh>
+#include <lcc/ir/printer.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/context.hh>
 #include <lcc/utils.hh>
@@ -117,6 +118,10 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
         generate_expression(expr);
     }
 
+    for (const auto& b : function->blocks()) {
+        for (const auto& i : b->instructions())
+            InstructionPrinter::print(i);
+    }
 }
 
 auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Module* {
