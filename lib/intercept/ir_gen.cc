@@ -86,6 +86,19 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     // Will be inlined anywhere it is used; a no-op for actual generation.
     case intercept::Expr::Kind::IntegerLiteral: break;
 
+    case intercept::Expr::Kind::VarDecl: {
+        const auto& decl = as<VarDecl>(expr);
+        switch (decl->linkage()) {
+        case Linkage::LocalVar:
+            insert(new (*module) AllocaInst(Convert(ctx, decl->type()), decl->location()));
+            break;
+
+        default:
+            fmt::print("Unhandled VarDecl linkage {}\n", (int)decl->linkage());
+            break;
+        }
+    } break;
+
     case intercept::Expr::Kind::Binary: {
         const auto& binary_expr = as<BinaryExpr>(expr);
         switch (binary_expr->op()) {
@@ -117,9 +130,10 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
         generate_expression(expr);
     }
 
+    usz n = 0;
     for (const auto& b : function->blocks())
         for (const auto& i : b->instructions())
-            ValuePrinter::print(i);
+            ValuePrinter::print(i, fmt::format("{:4} | ", n));
 }
 
 auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Module* {
