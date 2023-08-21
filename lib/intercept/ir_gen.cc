@@ -83,9 +83,8 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         for (auto e : as<intercept::BlockExpr>(expr)->children()) generate_expression(e);
     } break;
 
-    case intercept::Expr::Kind::IntegerLiteral: {
-        insert((Inst*)(new (*module) IntegerConstant(Convert(ctx, expr->type()), (as<IntegerLiteral>(expr))->value())));
-    } break;
+    // Will be inlined anywhere it is used; a no-op for actual generation.
+    case intercept::Expr::Kind::IntegerLiteral: break;
 
     case intercept::Expr::Kind::Binary: {
         const auto& binary_expr = as<BinaryExpr>(expr);
