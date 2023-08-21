@@ -11,149 +11,153 @@ namespace lcc {
 class ValuePrinter {
 public:
     static std::string value(Value* v) {
-        if (!v) return "(null)\n";
+        if (!v) return "(null)";
         switch (v->kind()) {
         case Value::Kind::Block: {
-            return "block\n";
+            return "block";
         } break;
         case Value::Kind::Function: {
-            return "function\n";
+            return "function";
         } break;
         case Value::Kind::IntegerConstant: {
-            return fmt::format("constant.integer {}\n", as<IntegerConstant>(v)->value());
+            return fmt::format("constant.integer {}", as<IntegerConstant>(v)->value());
         } break;
         case Value::Kind::ArrayConstant: {
-            return "constant.array\n";
+            return "constant.array";
         } break;
         case Value::Kind::Poison: {
-            return "poison\n";
+            return "poison";
         } break;
 
         /// Instructions.
         case Value::Kind::Alloca: {
-            return "stack.allocate\n";
+            return "stack.allocate";
         } break;
         case Value::Kind::Call: {
-            return "funcall\n";
+            return "funcall";
         } break;
         case Value::Kind::Copy: {
-            return "copy\n";
+            return "copy";
         } break;
         case Value::Kind::Intrinsic: {
-            return "intrinsic\n";
+            return "intrinsic";
         } break;
         case Value::Kind::Load: {
-            return "load\n";
+            return "load";
         } break;
         case Value::Kind::Parameter: {
-            return "parameter\n";
+            return "parameter";
         } break;
         case Value::Kind::Phi: {
-            return "phi\n";
+            return "phi";
         } break;
         case Value::Kind::Store: {
-            return "store\n";
+            return "store";
         } break;
 
         /// Terminators.
         case Value::Kind::Branch: {
-            return "branch\n";
+            return "branch";
         } break;
         case Value::Kind::CondBranch: {
-            return "branch.cond\n";
+            return "branch.cond";
         } break;
         case Value::Kind::Return: {
-            return "branch.return\n";
+            return "branch.return";
         } break;
         case Value::Kind::Unreachable: {
-            return "unreachable\n";
+            return "unreachable";
         } break;
 
         /// Unary instructions.
         case Value::Kind::ZExt: {
-            return "zero.extend\n";
+            return "zero.extend";
         } break;
         case Value::Kind::SExt: {
-            return "sign.extend\n";
+            return "sign.extend";
         } break;
         case Value::Kind::Trunc: {
-            return "truncate\n";
+            return "truncate";
         } break;
         case Value::Kind::Bitcast: {
-            return "bitcast\n";
+            return "bitcast";
         } break;
         case Value::Kind::Neg: {
-            return "negate\n";
+            return "negate";
         } break;
 
         /// Binary instructions.
         case Value::Kind::Add: {
-            return "add\n";
+            return "add";
         } break;
         case Value::Kind::Sub: {
-            return "sub\n";
+            return "sub";
         } break;
         case Value::Kind::Mul: {
-            return "mul\n";
+            return "mul";
         } break;
         case Value::Kind::SDiv: {
-            return "s.div\n";
+            return "s.div";
         } break;
         case Value::Kind::UDiv: {
-            return "u.div\n";
+            return "u.div";
         } break;
         case Value::Kind::SRem: {
-            return "s.mod\n";
+            return "s.mod";
         } break;
         case Value::Kind::URem: {
-            return "u.mod\n";
+            return "u.mod";
         } break;
         case Value::Kind::Shl: {
-            return "shl\n";
+            return "shl";
         } break;
         case Value::Kind::Sar: {
-            return "sar\n";
+            return "sar";
         } break;
         case Value::Kind::Shr: {
-            return "shr\n";
+            return "shr";
         } break;
         case Value::Kind::And: {
-            return "and\n";
+            return "and";
         } break;
         case Value::Kind::Or: {
-            return "or\n";
+            return "or";
         } break;
 
         /// Compare instructions.
         case Value::Kind::Eq: {
-            return "eq\n";
+            return "eq";
         } break;
         case Value::Kind::Ne: {
-            return "ne\n";
+            return "ne";
         } break;
         case Value::Kind::Lt: {
-            return "lt\n";
+            return "lt";
         } break;
         case Value::Kind::Le: {
-            return "le\n";
+            return "le";
         } break;
         case Value::Kind::Gt: {
-            return "gt\n";
+            return "gt";
         } break;
         case Value::Kind::Ge: {
-            return "ge\n";
+            return "ge";
         } break;
         }
 
         LCC_UNREACHABLE();
     }
 
-    static void print(Value* value, std::string_view prefix = "") {
-        fmt::print("{}{}", prefix, ValuePrinter::value(value));
+    static void _print(Value* value, std::string_view prefix, std::string_view suffix) {
+        fmt::print("{}{}{}", prefix, ValuePrinter::value(value), suffix);
     }
 
-    static void print(std::vector<Value*> values, std::string_view prefix = "") {
-        for (auto* v : values) fmt::print("{}{}", prefix, ValuePrinter::value(v));
+    static void print(Value* value, std::string_view prefix = "", std::string_view suffix = "\n") {
+        _print(value, prefix, suffix);
+    }
+
+    static void print(std::vector<Value*> values, std::string_view prefix = "", std::string_view suffix = "\n") {
+        for (auto* v : values) _print(v, prefix, suffix);
     }
 };
 

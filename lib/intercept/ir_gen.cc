@@ -77,6 +77,7 @@ lcc::Type* Convert(Context* ctx, Type* in) {
     LCC_UNREACHABLE();
 }
 
+// NOTE: If you `new` an instruction, you need to insert it (somewhere).
 void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     switch (expr->kind()) {
     case intercept::Expr::Kind::Block: {
@@ -139,7 +140,7 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
     usz n = 0;
     for (const auto& b : function->blocks())
         for (const auto& i : b->instructions())
-            ValuePrinter::print(i, fmt::format("{:4} | ", n));
+            ValuePrinter::print(i, fmt::format("{:4} | ", n++));
 }
 
 auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Module* {
