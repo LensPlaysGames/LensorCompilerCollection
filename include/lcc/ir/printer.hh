@@ -8,11 +8,11 @@
 
 namespace lcc {
 
-class InstructionPrinter {
+class ValuePrinter {
 public:
-    static std::string instruction(Inst* i) {
-        if (!i) return "(null)\n";
-        switch (i->kind()) {
+    static std::string value(Value* v) {
+        if (!v) return "(null)\n";
+        switch (v->kind()) {
         case Value::Kind::Block: {
             return "block\n";
         } break;
@@ -20,7 +20,7 @@ public:
             return "function\n";
         } break;
         case Value::Kind::IntegerConstant: {
-            return "constant.integer\n";
+            return fmt::format("constant.integer {}\n", as<IntegerConstant>(v)->value());
         } break;
         case Value::Kind::ArrayConstant: {
             return "constant.array\n";
@@ -148,12 +148,12 @@ public:
         LCC_UNREACHABLE();
     }
 
-    static void print(Inst* instruction, std::string_view prefix = "") {
-        fmt::print("{}{}", prefix, InstructionPrinter::instruction(instruction));
+    static void print(Value* value, std::string_view prefix = "") {
+        fmt::print("{}{}", prefix, ValuePrinter::value(value));
     }
 
-    static void print(std::vector<Inst*> instructions, std::string_view prefix = "") {
-        for (auto* i : instructions) fmt::print("{}{}", prefix, InstructionPrinter::instruction(i));
+    static void print(std::vector<Value*> values, std::string_view prefix = "") {
+        for (auto* v : values) fmt::print("{}{}", prefix, ValuePrinter::value(v));
     }
 };
 

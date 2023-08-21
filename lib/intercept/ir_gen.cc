@@ -117,10 +117,9 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
         generate_expression(expr);
     }
 
-    for (const auto& b : function->blocks()) {
+    for (const auto& b : function->blocks())
         for (const auto& i : b->instructions())
-            InstructionPrinter::print(i);
-    }
+            ValuePrinter::print(i);
 }
 
 auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Module* {
