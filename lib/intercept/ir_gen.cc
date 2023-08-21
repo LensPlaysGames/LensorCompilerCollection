@@ -89,14 +89,20 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     case intercept::Expr::Kind::VarDecl: {
         const auto& decl = as<VarDecl>(expr);
         switch (decl->linkage()) {
-        case Linkage::LocalVar:
-            insert(new (*module) AllocaInst(Convert(ctx, decl->type()), decl->location()));
-            break;
+        case Linkage::LocalVar: {
+            auto* alloca = new (*module) AllocaInst(Convert(ctx, decl->type()), decl->location());
+            insert(alloca);
+            if (auto* init_expr = decl->init()) {
+                generate_expression(init_expr);
+                // TODO: Store generated init_expr into above inserted declaration
+            }
+        } break;
 
         default:
-            fmt::print("Unhandled VarDecl linkage {}\n", (int)decl->linkage());
+            fmt::print("Unhandled VarDecl linkage {} (WIP)\n", (int)decl->linkage());
             break;
         }
+
     } break;
 
     case intercept::Expr::Kind::Binary: {
