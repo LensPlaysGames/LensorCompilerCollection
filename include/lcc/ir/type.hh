@@ -42,7 +42,7 @@ public:
 
     /// Disallow allocating these directly.
     void* operator new(size_t) = delete;
-    void* operator new(size_t sz, Context&) { return ::operator new(sz); }
+    void* operator new(size_t sz, Context*) { return ::operator new(sz); }
 
     /// Get the aligment of this type.
     usz align() const;
@@ -64,7 +64,7 @@ private:
     ArrayType(usz length, Type* element_type) : Type(Kind::Array), _length(length), _element_type(element_type) {}
 
 public:
-    static auto Get(Context& ctx, usz length, Type* element_type) -> ArrayType*;
+    static auto Get(Context* ctx, usz length, Type* element_type) -> ArrayType*;
 
     /// Return the element count.
     usz length() const { return _length; }
@@ -94,7 +94,7 @@ private:
 
 public:
     /// Get or create a function type.
-    static auto Get(Context& ctx, Type* ret, std::vector<Type*> params) -> FunctionType*;
+    static auto Get(Context* ctx, Type* ret, std::vector<Type*> params) -> FunctionType*;
 
     /// Get the return type of this function.
     Type* ret() const { return return_type; }
@@ -115,7 +115,7 @@ private:
     IntegerType(usz width) : Type(Kind::Integer), _width(width) {}
 
 public:
-    static auto Get(Context& ctx, usz width) -> IntegerType*;
+    static auto Get(Context* ctx, usz width) -> IntegerType*;
 
     usz bitwidth() const {
         return _width;
@@ -134,7 +134,7 @@ private:
     StructType(std::vector<Type*> members) : Type(Kind::Array), _members(std::move(members)) {}
 
 public:
-    static auto Get(Context& ctx, usz length, Type* element_type) -> StructType*;
+    static auto Get(Context* ctx, std::vector<Type*> member_types) -> StructType*;
 
     /// Return the element count.
     usz member_count() const { return _members.size(); }
