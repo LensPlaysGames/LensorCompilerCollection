@@ -3,8 +3,10 @@
 #include <intercept/ast.hh>
 #include <lcc/core.hh>
 #include <lcc/ir/ir.hh>
+#include <lcc/ir/type.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/context.hh>
+#include <lcc/utils.hh>
 #include <lcc/utils/rtti.hh>
 
 #include <memory>
@@ -13,22 +15,75 @@
 namespace lcc {
 
 namespace intercept {
-lcc::Type* Convert(intercept::Type* in) {
+lcc::Type* Convert(Context* ctx, Type* in) {
     switch (in->kind()) {
-    default: std::exit(72);
+    case Type::Kind::Builtin: {
+        switch ((as<BuiltinType>(in))->builtin_kind()) {
+        case BuiltinType::BuiltinKind::Bool: {
+            return lcc::Type::I1Ty;
+        } break;
+        case BuiltinType::BuiltinKind::Byte: {
+            return lcc::IntegerType::Get(ctx, in->size(ctx));
+        } break;
+        case BuiltinType::BuiltinKind::Int: {
+            return lcc::IntegerType::Get(ctx, in->size(ctx));
+        } break;
+        case BuiltinType::BuiltinKind::Void: {
+            return lcc::Type::VoidTy;
+        } break;
+        case BuiltinType::BuiltinKind::OverloadSet:
+        case BuiltinType::BuiltinKind::Unknown: {
+            Diag::ICE("Invalid builtin kind present during IR generation");
+        } break;
+        }
+        LCC_UNREACHABLE();
+    } break;
+    case Type::Kind::FFIType: {
+        return lcc::IntegerType::Get(ctx, in->size(ctx));
+    } break;
+    case Type::Kind::Named: {
+        Diag::ICE("Sema failed to resolve named type");
+    } break;
+    case Type::Kind::Pointer:
+    case Type::Kind::Reference: {
+        return lcc::Type::PtrTy;
+    } break;
+    case Type::Kind::Array: {
+        const auto& t_array = as<ArrayType>(in);
+        return lcc::ArrayType::Get(ctx, t_array->dimension(), Convert(ctx, t_array->element_type()));
+    } break;
+    case Type::Kind::Function: {
+        auto* t_return = Convert(ctx, as<FuncType>(in)->return_type());
+
+        std::vector<lcc::Type*> param_types{};
+        for (const auto& p : as<FuncType>(in)->params())
+            param_types.push_back(Convert(ctx, p.type));
+
+        return lcc::FunctionType::Get(ctx, t_return, std::move(param_types));
+    } break;
+    case Type::Kind::Struct: {
+        std::vector<lcc::Type*> member_types{};
+        for (const auto& m : as<StructType>(in)->members())
+            member_types.push_back(Convert(ctx, m.type));
+
+        return lcc::StructType::Get(ctx, std::move(member_types));
+    } break;
+    case Type::Kind::Integer: {
+        return lcc::IntegerType::Get(ctx, in->size(ctx));
+    } break;
     }
+    LCC_UNREACHABLE();
 }
 }
 
-
-void generate_expression(intercept::Module& mod, intercept::Expr* expr, Module& out) {
+void intercept::IRGen::generate_expression(intercept::Expr* expr, Function& ir_function) {
     switch (expr->kind()) {
     case intercept::Expr::Kind::Block: {
-        for (auto e : as<intercept::BlockExpr>(expr)->children()) generate_expression(mod, e, out);
+        for (auto e : as<intercept::BlockExpr>(expr)->children()) generate_expression(e, ir_function);
     } break;
 
     case intercept::Expr::Kind::IntegerLiteral: {
-        fmt::print("Integer Literal {}", as<intercept::IntegerLiteral>(expr)->value());
+        auto int_literal = new (*module) IntegerConstant(Convert(ctx, expr->type()), (as<IntegerLiteral>(expr))->value());
     } break;
 
     default: {
@@ -41,29 +96,19 @@ void generate_expression(intercept::Module& mod, intercept::Expr* expr, Module& 
 auto intercept::IRGen::Generate(Context* context, intercept::Module& mod) -> std::unique_ptr<Module> {
     std::unique_ptr<lcc::Module> out(new lcc::Module(context));
 
+    IRGen ir_gen_stupid_instantiation(context, mod);
+
     for (auto f : mod.functions()) {
         fmt::print("{}\n", f->name());
-
-        // Parameter Types
-        std::vector<lcc::Type*> ir_param_types{};
-        for (auto p_type : f->param_types()) ir_param_types.push_back(lcc::intercept::Convert(p_type));
-
-        // Return Type
-        lcc::Type* ir_return_type = lcc::intercept::Convert(f->return_type());
-
-        // Function Type (combine parameter + return)
-        lcc::FunctionType* ir_functype = lcc::FunctionType::Get(*context, ir_return_type, ir_param_types);
-
-        lcc::Function* ir_function = new (*out) lcc::Function
+        ir_gen_stupid_instantiation.function = new (*out) lcc::Function
             (context,
              f->mangled_name(),
-             ir_functype,
-             lcc::Linkage::Exported,
+             as<lcc::FunctionType>(Convert(context, f->type())),
+             f->linkage(),
              lcc::CallConv::Intercept
              );
 
-        auto* expr = f->body();
-        generate_expression(mod, expr, *out);
+        if (auto* expr = f->body()) ir_gen_stupid_instantiation.generate_expression(expr, *ir_gen_stupid_instantiation.function);
     }
 
     return {};

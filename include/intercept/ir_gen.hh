@@ -5,15 +5,26 @@
 #include <lcc/context.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/utils/rtti.hh>
+#include <lcc/ir/module.hh>
 #include <memory>
 
 namespace lcc::intercept {
 
 class IRGen {
-    Context *_ctx;
-    intercept::Module& _mod;
+    Context *ctx;
+    intercept::Module& int_module;
+    std::unique_ptr<lcc::Module> module;
 
-    IRGen(Context *c, intercept::Module& m) : _ctx(c), _mod(m) {}
+    lcc::Function* function{nullptr};
+    lcc::Block* block{nullptr};
+
+    IRGen(Context *c, intercept::Module& m) : ctx(c), int_module(m) {
+        module = std::make_unique<lcc::Module>(ctx);
+    }
+
+    void insert(lcc::Inst* inst);
+
+    void generate_expression(Expr* expr, lcc::Function& ir_function);
 
 public:
     static auto Generate(Context* context, intercept::Module& mod) -> std::unique_ptr<Module>;
