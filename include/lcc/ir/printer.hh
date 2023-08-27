@@ -9,9 +9,21 @@
 namespace lcc {
 
 class ValuePrinter {
+    static usz get_id(Value* v) {
+        static usz _id{0};
+        static std::unordered_map<Value*, usz> ids;
+
+        if (ids.find(v) == ids.end()) {
+            // value not seen before
+            ids[v] = ++_id;
+        }
+        return ids[v];
+    }
+
 public:
     static std::string value(Value* v) {
         if (!v) return "(null)";
+        (void)get_id(v); // just to register value with id.
         switch (v->kind()) {
         case Value::Kind::Block: {
             return "block";
@@ -28,6 +40,9 @@ public:
         case Value::Kind::Poison: {
             return "poison";
         } break;
+        case Value::Kind::GlobalVariable: {
+            return "global";
+        } break;
 
         /// Instructions.
         case Value::Kind::Alloca: {
@@ -37,7 +52,7 @@ public:
             return "funcall";
         } break;
         case Value::Kind::Copy: {
-            return "copy";
+            return "copy {}";
         } break;
         case Value::Kind::Intrinsic: {
             return "intrinsic";
@@ -52,7 +67,8 @@ public:
             return "phi";
         } break;
         case Value::Kind::Store: {
-            return "store";
+            const auto& store = as<StoreInst>(v);
+            return fmt::format("store {} into {}", get_id(store->val()), get_id(store->ptr()));
         } break;
 
         /// Terminators.

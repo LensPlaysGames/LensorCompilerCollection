@@ -22,6 +22,7 @@ public:
         IntegerConstant,
         ArrayConstant,
         Poison,
+        GlobalVariable,
 
         /// Instructions.
         Alloca,
@@ -93,6 +94,23 @@ public:
 
     /// Get the type of this value.
     Type* type() const { return value_type; }
+};
+
+class GlobalVariable : public Value {
+    std::string _name;
+    Linkage _linkage;
+    Value* _init;
+
+public:
+    GlobalVariable(Type* t, std::string name, Linkage linkage, Value* init)
+    : Value(Value::Kind::GlobalVariable, t), _name(name), _linkage(linkage), _init(init) {}
+
+    const std::string& name() { return _name; }
+    Linkage linkage() { return _linkage; }
+    Value* init() { return _init; }
+
+    /// RTTI.
+    static bool classof(Value* v) { return +v->kind() >= +Kind::GlobalVariable; }
 };
 
 /// IR instruction.

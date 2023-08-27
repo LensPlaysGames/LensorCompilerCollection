@@ -86,7 +86,10 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     } break;
 
     // Will be inlined anywhere it is used; a no-op for actual generation.
-    case intercept::Expr::Kind::IntegerLiteral: break;
+    case intercept::Expr::Kind::IntegerLiteral: {
+        auto* literal = new (*module) lcc::IntegerConstant(Convert(ctx, expr->type()), as<IntegerLiteral>(expr)->value());
+        generated_ir[expr] = literal;
+    } break;
 
     case intercept::Expr::Kind::VarDecl: {
         const auto& decl = as<VarDecl>(expr);
@@ -101,6 +104,20 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                 insert(local_init);
             }
             generated_ir[expr] = alloca;
+        } break;
+
+        case Linkage::Imported:
+        case Linkage::Reexported: {
+            auto* alloca = new (*module) AllocaInst(Convert(ctx, decl->type()), decl->location());
+            insert(alloca);
+            generated_ir[expr] = alloca;
+        } break;
+
+        case Linkage::Internal:
+        case Linkage::Used:
+        case Linkage::Exported: {
+            auto* global = new (*module) GlobalVariable(Convert(ctx, decl->type()), decl->name(), decl->linkage(), nullptr);
+            generated_ir[expr] = global;
         } break;
 
         default:

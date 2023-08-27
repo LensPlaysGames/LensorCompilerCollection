@@ -19,7 +19,7 @@ class IRGen {
     lcc::Function* function{nullptr};
     lcc::Block* block{nullptr};
 
-    std::unordered_map<intercept::Expr*, lcc::Inst*> generated_ir;
+    std::unordered_map<intercept::Expr*, lcc::Value*> generated_ir;
 
     IRGen(Context *c, intercept::Module& m) : ctx(c), int_module(m) {
         module = new lcc::Module(ctx);
