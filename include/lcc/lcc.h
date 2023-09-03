@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-typedef void* LccContextRef;
+typedef struct LccContext* LccContextRef;
 
 typedef struct LccStringView
 {
@@ -157,9 +157,9 @@ typedef enum LccCallingConvention
     INTERCEPT,
 } LccCallingConvention;
 
-typedef void* LccModuleRef;
-typedef void* LccValueRef;
-typedef void* LccTypeRef;
+typedef struct LccModule* LccModuleRef;
+typedef struct LccValue* LccValueRef;
+typedef struct LccType* LccTypeRef;
 
 // ==== Modules
 
