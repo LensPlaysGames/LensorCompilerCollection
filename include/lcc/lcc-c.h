@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 typedef struct LccContext* LccContextRef;
+typedef struct LccTarget* LccTargetRef;
 
 typedef struct LccStringView
 {
@@ -163,6 +164,13 @@ typedef struct LccType* LccTypeRef;
 
 // ==== Modules
 
+/// Gets the target info for 64 bit Linux.
+LccTargetRef lcc_x86_64_linux_target();
+/// Gets the target info for 64 bit Windows.
+LccTargetRef lcc_x86_64_windows_target();
+
+/// Create an LCC context.
+LccContextRef lcc_context_create(LccTargetRef target);
 /// Create an LCC module in the given context.
 LccModuleRef lcc_module_create(LccContextRef context);
 

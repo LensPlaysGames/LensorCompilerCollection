@@ -1,4 +1,4 @@
-#include <lcc/lcc.h>
+#include <lcc/lcc-c.h>
 
 #include <laye/ir_gen.h>
 

@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#include <lcc/lcc.h>
+#include <lcc/lcc-c.h>
 
 #include <layec/laye/ast.h>
 

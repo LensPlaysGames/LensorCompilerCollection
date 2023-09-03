@@ -9,7 +9,7 @@
 #include <laye/ir_gen.h>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
-#include <lcc/lcc.h>
+#include <lcc/lcc-c.h>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/ir/module.hh>
