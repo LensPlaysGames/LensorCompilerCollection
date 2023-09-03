@@ -5,21 +5,13 @@
 #include <intercept/parser.hh>
 #include <intercept/sema.hh>
 #include <intercept/ir_gen.hh>
-#include <laye/parser.hh>
-#include <laye/sema.hh>
+#include <laye/laye.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/ir/module.hh>
 #include <string>
-
-extern "C" {
-    #include "layec/context.h"
-    #include "layec/c/lexer.h"
-    #include "layec/laye/parser.h"
-    #undef vector
-}
 
 namespace detail {
 void aluminium_handler() {
