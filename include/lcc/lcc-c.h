@@ -165,9 +165,9 @@ typedef struct LccType* LccTypeRef;
 // ==== Modules
 
 /// Gets the target info for 64 bit Linux.
-LccTargetRef lcc_x86_64_linux_target();
+LccTargetRef lcc_target_x86_64_linux();
 /// Gets the target info for 64 bit Windows.
-LccTargetRef lcc_x86_64_windows_target();
+LccTargetRef lcc_target_x86_64_windows();
 
 /// Create an LCC context.
 LccContextRef lcc_context_create(LccTargetRef target);
