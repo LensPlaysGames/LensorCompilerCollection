@@ -46,6 +46,7 @@ public:
         Trunc,
         Bitcast,
         Neg,
+        Compl,
 
         /// Binary instructions.
         Add,
@@ -60,6 +61,7 @@ public:
         Shr,
         And,
         Or,
+        Xor,
 
         /// Compare instructions.
         Eq,
@@ -284,6 +286,7 @@ public:
              ) : Value(Kind::Function, ty),
                  func_name(mangled_name),
                  loc(l),
+                 ctx(ctx),
                  link(linkage),
                  cc(calling_convention)
     {}
@@ -865,6 +868,18 @@ public:
     static bool classof(Value* v) { return v->kind() == Kind::Or; }
 };
 
+/// A bitwise xor instruction.
+class XorInst : public BinaryInst {
+public:
+    XorInst(Value* l, Value* r, Location loc = {})
+        : BinaryInst(Kind::Or, l, r, l->type(), loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Xor; }
+};
+
 /// Base class for comparison instructions; this is just so we
 /// can do is<CompareInst> and because the type is always i1.
 class CompareInst : public BinaryInst {
@@ -1018,6 +1033,16 @@ public:
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Neg; }
+};
+
+/// Bitwise complement of an integer value.
+class ComplInst : public UnaryInstBase {
+public:
+    ComplInst(Value* v, Location loc = {})
+        : UnaryInstBase(Kind::Compl, v, v->type(), loc) { }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Compl; }
 };
 
 /// ============================================================================

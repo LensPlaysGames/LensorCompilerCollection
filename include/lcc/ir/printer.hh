@@ -101,6 +101,9 @@ public:
         case Value::Kind::Neg: {
             return "negate";
         } break;
+        case Value::Kind::Compl: {
+            return "compl";
+        } break;
 
         /// Binary instructions.
         case Value::Kind::Add: {
@@ -138,6 +141,9 @@ public:
         } break;
         case Value::Kind::Or: {
             return "or";
+        } break;
+        case Value::Kind::Xor: {
+            return "xor";
         } break;
 
         /// Compare instructions.
