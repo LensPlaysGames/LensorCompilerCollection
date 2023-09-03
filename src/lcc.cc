@@ -14,6 +14,13 @@
 #include <lcc/ir/module.hh>
 #include <string>
 
+extern "C" {
+    #include "layec/context.h"
+    #include "layec/c/lexer.h"
+    #include "layec/laye/parser.h"
+    #undef vector
+}
+
 namespace detail {
 void aluminium_handler() {
 #if defined(LCC_PLATFORM_WINDOWS)
@@ -96,6 +103,7 @@ int main(int argc, char** argv) {
 
     /// Laye.
     if (path_str.ends_with(".laye")) {
+        #if false
         auto laye_context = new lcc::laye::LayeContext{&context};
 
         /// Parse the file.
@@ -108,6 +116,21 @@ int main(int argc, char** argv) {
 
         /// Perform semantic analysis.
         lcc::laye::Sema::Analyse(laye_context, mod, true);
+        #endif
+        
+        auto context = layec_context_create();
+        context->print_ast = options::get<"--ast">();
+
+        auto file_name_view = (layec_string_view)
+        {
+            .data = path_str.c_str(),
+            .length = (long long)path_str.length(),
+        };
+
+        int source_id = layec_context_get_or_add_source_buffer_from_file(context, file_name_view);
+
+        auto module = layec_laye_parse(context, source_id);
+        layec_laye_module_destroy(module);
 
         /// Nice.
         return 69;
@@ -115,6 +138,7 @@ int main(int argc, char** argv) {
 
     /// C.
     if (path_str.ends_with(".c")) {
+        #if false
         /// Parse the file.
         auto c_context = new lcc::c::CContext{&context};
         auto translation_unit = lcc::c::Parser::Parse(c_context, file);
@@ -123,6 +147,24 @@ int main(int argc, char** argv) {
             if (options::get<"--ast">()) translation_unit->print();
             std::exit(0);
         }
+        #endif
+        
+        auto context = layec_context_create();
+        context->print_ast = options::get<"--ast">();
+
+        auto file_name_view = (layec_string_view)
+        {
+            .data = path_str.c_str(),
+            .length = (long long)path_str.length(),
+        };
+
+        int source_id = layec_context_get_or_add_source_buffer_from_file(context, file_name_view);
+        
+        layec_c_translation_unit* tu = (layec_c_translation_unit*)calloc(1, sizeof *tu);
+        auto token_buffer = layec_c_get_tokens(context, tu, source_id);
+
+        layec_c_token_buffer_destroy(&token_buffer);
+        layec_c_translation_unit_destroy(tu);
 
         return 89;
     }

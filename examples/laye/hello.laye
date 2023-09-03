@@ -1,9 +1,7 @@
-import "gcd.laye";
+import * from "stdio.h";
 
-foreign callconv(cdecl)
-i32 puts(readonly c_string s);
-
-i32 main(i32 argc, readonly c_string argv)
+i32 main(i32 argc, i8[*][*] argv)
 {
     puts("Hello, hunter!");
+    return 0;
 }
