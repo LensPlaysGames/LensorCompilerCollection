@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 typedef struct LccContext* LccContextRef;
-typedef struct LccTarget* LccTargetRef;
+typedef struct LccTarget const* LccTargetRef;
 
 typedef struct LccStringView
 {
