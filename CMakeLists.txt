@@ -203,8 +203,8 @@ target_include_directories(options INTERFACE ${laye_SOURCE_DIR}/include)
 ## Link against libfmt.
 target_link_libraries(options INTERFACE fmt)
 
-## Link against liblaye.
-target_link_libraries(options INTERFACE laye)
+## Link against liblayec.
+target_link_libraries(options INTERFACE layec)
 
 ## Add ‘include’ as an include dir.
 target_include_directories(options INTERFACE include)
