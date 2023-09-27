@@ -6,6 +6,8 @@
 
 #include <string>
 
+#include <fmt/format.h>
+
 namespace lcc {
 
 usz Type::size() const {
@@ -38,7 +40,10 @@ auto Type::string() const -> std::string {
     case Kind::Void: return "void";
     case Kind::Array: return "array"; // TODO: element type
     case Kind::Function: return "function"; // TODO: function parameter and return types
-    case Kind::Integer: return "integer"; // TODO: print bit width
+    case Kind::Integer: {
+        const auto& integer = as<IntegerType>(this);
+        return fmt::format("i{}", integer->bitwidth());
+    }
     case Kind::Struct: return "struct"; // TODO: name, if it has one? maybe size?
     }
     LCC_UNREACHABLE();
