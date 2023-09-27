@@ -136,6 +136,19 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         }
     } break;
 
+    case intercept::Expr::Kind::EvaluatedConstant: {
+        const auto& constant = as<ConstantExpr>(expr);
+        EvalResult result = constant->value();
+        if (result.is_null()) {
+            // Zero constant... I dunno
+            generated_ir[expr] = new (*module) IntegerConstant(Convert(ctx, constant->type()), 0);
+        } else if (result.is_i64()) {
+            generated_ir[expr] = new (*module) IntegerConstant(Convert(ctx, constant->type()), (uint64_t)result.as_i64());
+        } else if (result.is_string()) {
+            LCC_ASSERT(false, "TODO: IR generation of constant strings");
+        }
+    } break;
+
     default: {
         fmt::print("Unhandled IRGen of expression kind {} ({})\n", Expr::kind_string(expr->kind()), (int)expr->kind());
     } break;
