@@ -52,7 +52,7 @@ public:
             return "funcall";
         } break;
         case Value::Kind::Copy: {
-            return "copy {}";
+            LCC_ASSERT(false, "TODO IR CopyInst");
         } break;
         case Value::Kind::Intrinsic: {
             return "intrinsic";
@@ -68,7 +68,11 @@ public:
         } break;
         case Value::Kind::Store: {
             const auto& store = as<StoreInst>(v);
-            return fmt::format("store {} into {}", get_id(store->val()), get_id(store->ptr()));
+            LCC_ASSERT(store->val());
+            return fmt::format("store %{} as {} ({}B) into address %{}",
+                               get_id(store->val()),
+                               *store->val()->type(), store->val()->type()->size(),
+                               get_id(store->ptr()));
         } break;
 
         /// Terminators.
