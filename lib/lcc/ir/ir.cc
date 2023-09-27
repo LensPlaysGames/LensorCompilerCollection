@@ -2,8 +2,32 @@
 #include <lcc/ir/type.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
+#include <lcc/utils/rtti.hh>
 
 namespace lcc {
+
+usz Type::size() const {
+    switch (kind) {
+    case Kind::Unknown: return 0;
+    case Kind::Function: [[fallthrough]];
+    case Kind::Pointer: return 8; // FIXME: Target-dependent pointer size
+    case Kind::Void: return 0;
+    case Kind::Array: {
+        const auto& array = as<ArrayType>(this);
+        return array->element_type()->size() * array->length();
+    }
+    case Kind::Integer: return 8; // FIXME: Target-dependent integer size
+    case Kind::Struct: {
+        const auto& struct_ = as<StructType>(this);
+        const std::vector<Type*>& members = struct_->members();
+        usz sum = 0;
+        for (const auto& m : members)
+            sum += m->size();
+        return sum;
+    }
+    }
+    LCC_UNREACHABLE();
+}
 
 /// Get or create a function type.
 FunctionType* FunctionType::Get(Context* ctx, Type* ret, std::vector<Type*> params) {
