@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
         auto laye_module = layec_laye_parse(laye_context, source_id);
 
         auto lcc_module = (lcc::Module*)laye_generate_ir((LccContextRef)&context, laye_module);
-        
+
         layec_laye_module_destroy(laye_module);
 
         /// Nice.
@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
         };
 
         int source_id = layec_context_get_or_add_source_buffer_from_file(context, file_name_view);
-        
+
         layec_c_translation_unit* tu = (layec_c_translation_unit*)calloc(1, sizeof *tu);
         auto token_buffer = layec_c_get_tokens(context, tu, source_id);
 
