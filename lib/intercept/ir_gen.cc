@@ -137,7 +137,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     } break;
 
     default: {
-        fmt::print("Unhandled IRGen of expression kind {}\n", (int)expr->kind());
+        fmt::print("Unhandled IRGen of expression kind {} ({})\n", Expr::kind_string(expr->kind()), (int)expr->kind());
     } break;
     }
 }

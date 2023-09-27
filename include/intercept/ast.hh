@@ -735,6 +735,7 @@ public:
 class Expr : public SemaNode {
 public:
     /// Do NOT reorder these!
+    /// Search terms: ExprKind, Expr::Kind, ExpressionKind
     enum struct Kind {
         While,
         For,
@@ -805,6 +806,33 @@ public:
     auto location(Location location) { _location = location; }
 
     auto type() const -> Type*;
+
+    static auto kind_string(Kind k) -> std::string_view {
+        switch (k) {
+        case Kind::While: return "while";
+        case Kind::For: return "for";
+        case Kind::Return: return "return";
+        case Kind::StructDecl: return "decl.struct";
+        case Kind::TypeAliasDecl: return "decl.type_alias";
+        case Kind::VarDecl: return "decl.var";
+        case Kind::FuncDecl: return "decl.proc";
+        case Kind::IntegerLiteral: return "literal.int";
+        case Kind::StringLiteral: return "literal.string";
+        case Kind::CompoundLiteral: return "literal.compound";
+        case Kind::OverloadSet: return "overload_set";
+        case Kind::EvaluatedConstant: return "constant";
+        case Kind::If: return "if";
+        case Kind::Block: return "block";
+        case Kind::Call: return "call";
+        case Kind::IntrinsicCall: return "call.intrinsic";
+        case Kind::Cast: return "cast";
+        case Kind::Unary: return "op.binary";
+        case Kind::Binary: return "op.unary";
+        case Kind::NameRef: return "name_ref";
+        case Kind::MemberAccess: return "member_access";
+        }
+        LCC_UNREACHABLE();
+    }
 
     /// Deep-copy an expression.
     static Expr* Clone(Module& mod, Expr* expr);
