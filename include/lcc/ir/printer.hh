@@ -9,21 +9,36 @@
 namespace lcc {
 
 class ValuePrinter {
-    static usz get_id(Value* v) {
+    static std::unordered_map<Value*, usz> ids;
+
+    static void register_value(Value* v) {
         static usz _id{0};
-        static std::unordered_map<Value*, usz> ids;
 
         if (ids.find(v) == ids.end()) {
             // value not seen before
             ids[v] = ++_id;
         }
-        return ids[v];
+    }
+
+    static auto get_id(Value* v) -> std::string {
+        register_value(v);
+
+        // NOTE: ALL "INLINE" VALUES MUST GO HERE
+        if (v->kind() == Value::Kind::Block ||
+            v->kind() == Value::Kind::Function ||
+            v->kind() == Value::Kind::IntegerConstant ||
+            v->kind() == Value::Kind::ArrayConstant ||
+            v->kind() == Value::Kind::Poison ||
+            v->kind() == Value::Kind::GlobalVariable) {
+                return value(v);
+            }
+        else return fmt::format("%{}", ids[v]);
     }
 
 public:
     static std::string value(Value* v) {
         if (!v) return "(null)";
-        (void)get_id(v); // just to register value with id.
+        register_value(v);
         switch (v->kind()) {
         case Value::Kind::Block: {
             return "block";
@@ -69,7 +84,7 @@ public:
         case Value::Kind::Store: {
             const auto& store = as<StoreInst>(v);
             LCC_ASSERT(store->val());
-            return fmt::format("store %{} as {} ({}B) into address %{}",
+            return fmt::format("store {} as {} ({}B) into address {}",
                                get_id(store->val()),
                                *store->val()->type(), store->val()->type()->size(),
                                get_id(store->ptr()));
