@@ -129,7 +129,46 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
     case intercept::Expr::Kind::Binary: {
         const auto& binary_expr = as<BinaryExpr>(expr);
+
+        generate_expression(binary_expr->lhs());
+        generate_expression(binary_expr->rhs());
+
+        auto lhs = generated_ir[binary_expr->lhs()];
+        auto rhs = generated_ir[binary_expr->rhs()];
+
         switch (binary_expr->op()) {
+
+        case TokenKind::Plus: {
+            // Arithmetic Addition
+            generated_ir[expr] = new (*module) AddInst(lhs, rhs);
+        } break;
+
+        case TokenKind::Minus: {
+            // Arithmetic Subtraction
+            generated_ir[expr] = new (*module) SubInst(lhs, rhs);
+        } break;
+
+        case TokenKind::Star: {
+            // Arithmetic Multiplication
+            generated_ir[expr] = new (*module) MulInst(lhs, rhs);
+        } break;
+
+        case TokenKind::Slash: {
+            // Arithmetic Division
+            if (binary_expr->lhs()->type()->is_signed_int(ctx) ||
+                binary_expr->rhs()->type()->is_signed_int(ctx))
+                generated_ir[expr] = new (*module) SDivInst(lhs, rhs);
+            else generated_ir[expr] = new (*module) UDivInst(lhs, rhs);
+        } break;
+
+        case TokenKind::Percent: {
+            // Arithmetic Modulus (remainder)
+            if (binary_expr->lhs()->type()->is_signed_int(ctx) ||
+                binary_expr->rhs()->type()->is_signed_int(ctx))
+                generated_ir[expr] = new (*module) SRemInst(lhs, rhs);
+            else generated_ir[expr] = new (*module) URemInst(lhs, rhs);
+        } break;
+
         default: {
             LCC_ASSERT(false, "Unhandled IRGen of binary expression operator {}", (int)binary_expr->op());
         } break;
