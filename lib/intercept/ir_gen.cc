@@ -131,7 +131,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         const auto& binary_expr = as<BinaryExpr>(expr);
         switch (binary_expr->op()) {
         default: {
-            fmt::print("Unhandled IRGen of binary expression operator {}", (int)binary_expr->op());
+            LCC_ASSERT(false, "Unhandled IRGen of binary expression operator {}", (int)binary_expr->op());
         } break;
         }
     } break;
