@@ -4,6 +4,8 @@
 #include <lcc/diags.hh>
 #include <lcc/utils/rtti.hh>
 
+#include <string>
+
 namespace lcc {
 
 usz Type::size() const {
@@ -25,6 +27,19 @@ usz Type::size() const {
             sum += m->size();
         return sum;
     }
+    }
+    LCC_UNREACHABLE();
+}
+
+auto Type::string() const -> std::string {
+    switch (kind) {
+    case Kind::Unknown: return "<?>";
+    case Kind::Pointer: return "ptr";
+    case Kind::Void: return "void";
+    case Kind::Array: return "array"; // TODO: element type
+    case Kind::Function: return "function"; // TODO: function parameter and return types
+    case Kind::Integer: return "integer"; // TODO: print bit width
+    case Kind::Struct: return "struct"; // TODO: name, if it has one? maybe size?
     }
     LCC_UNREACHABLE();
 }
