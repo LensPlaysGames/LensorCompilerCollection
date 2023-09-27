@@ -136,6 +136,39 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         }
     } break;
 
+    case intercept::Expr::Kind::Cast: {
+        const auto& cast = as<CastExpr>(expr);
+
+        lcc::Type *t_to = Convert(ctx, cast->type());
+        lcc::Type *t_from = Convert(ctx, cast->operand()->type());
+
+        usz to_sz = t_to->size();
+        usz from_sz = t_from->size();
+
+        bool from_signed = cast->operand()->type()->is_signed_int(ctx);
+
+        generate_expression(cast->operand());
+
+        if (from_sz == to_sz) {
+            generated_ir[expr] = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+            return;
+        }
+        else if (from_sz < to_sz) {
+            // smaller to larger: sign extend if needed, otherwise zero extend.
+            if (from_signed)
+                generated_ir[expr] = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+            else generated_ir[expr] = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+            return;
+        }
+        else if (from_sz > to_sz) {
+            // larger to smaller: truncate.
+            generated_ir[expr] = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+            return;
+        }
+        LCC_UNREACHABLE();
+
+    } break;
+
     case intercept::Expr::Kind::EvaluatedConstant: {
         const auto& constant = as<ConstantExpr>(expr);
         EvalResult result = constant->value();
