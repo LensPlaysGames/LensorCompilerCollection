@@ -435,12 +435,18 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         }
 
         if (is<ReturnExpr>(*last)) return;
+
         if (not Convert(last, ty->return_type())) Error(
             (*last)->location(),
             "Type of last expression {} is not convertible to return type {}",
             (*last)->type(),
             ty->return_type()
         );
+
+        // Insert a `ReturnExpr` which returns `last`.
+        if (auto block = cast<BlockExpr>(decl->body()))
+            block->add(new (mod) ReturnExpr(*last, {}));
+        else decl->body() = new (mod) ReturnExpr(*last, {});
     } else {
         Discard(&decl->body());
     }
