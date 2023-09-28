@@ -129,7 +129,8 @@ public:
             return instruction_name(v->kind());
         } break;
         case Value::Kind::Load: {
-            return instruction_name(v->kind());
+            const auto& load = as<LoadInst>(v);
+            return fmt::format("{} {} ({}B) from {}", instruction_name(v->kind()), *load->type(), load->type()->size(), get_id(load->ptr()));
         } break;
         case Value::Kind::Parameter: {
             return instruction_name(v->kind());
