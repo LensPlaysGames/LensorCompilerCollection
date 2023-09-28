@@ -222,8 +222,14 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         }
     } break;
 
+    case intercept::Expr::Kind::NameRef: {
+        // TODO: Assert that target has already been ir genned, somehow.
+        const auto& name_ref = as<NameRefExpr>(expr);
+        generated_ir[expr] = generated_ir[name_ref->target()];
+    } break;
+
     default: {
-        fmt::print("Unhandled IRGen of expression kind {} ({})\n", Expr::kind_string(expr->kind()), (int)expr->kind());
+        LCC_ASSERT(false, "Unhandled IRGen of expression kind {} ({})\n", Expr::kind_string(expr->kind()), (int)expr->kind());
     } break;
     }
 }
