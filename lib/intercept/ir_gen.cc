@@ -169,6 +169,8 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             else generated_ir[expr] = new (*module) URemInst(lhs, rhs);
         } break;
 
+        // TODO: Binary bitwise operations
+
         default: {
             LCC_ASSERT(false, "Unhandled IRGen of binary expression operator {}", (int)binary_expr->op());
         } break;
@@ -179,10 +181,6 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     } break;
 
     case intercept::Expr::Kind::Cast: {
-        // TODO: This is the old codegen and the new cast node is entirely
-        // different and has like four different kinds of cast so yeah we need to
-        // fix this.
-
         const auto& cast = as<CastExpr>(expr);
 
         lcc::Type *t_to = Convert(ctx, cast->type());
@@ -195,32 +193,34 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         generate_expression(cast->operand());
 
-        if (from_sz == to_sz) {
-            auto bitcast = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
-            generated_ir[expr] = bitcast;
-            insert(bitcast);
-            return;
-        } else if (from_sz < to_sz) {
-            // smaller to larger: sign extend if needed, otherwise zero extend.
-            if (from_signed) {
-                auto sign_extend = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
-                generated_ir[expr] = sign_extend;
-                insert(sign_extend);
+        if (cast->is_lvalue_to_rvalue()) {
+            auto load = new (*module) LoadInst(t_to, generated_ir[cast->operand()]);
+            generated_ir[expr] = load;
+            insert(load);
+        } else {
+            if (from_sz == to_sz) {
+                auto bitcast = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+                generated_ir[expr] = bitcast;
+                insert(bitcast);
+            } else if (from_sz < to_sz) {
+                // smaller to larger: sign extend if needed, otherwise zero extend.
+                if (from_signed) {
+                    auto sign_extend = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+                    generated_ir[expr] = sign_extend;
+                    insert(sign_extend);
+                }
+                else {
+                    auto zero_extend = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+                    generated_ir[expr] = zero_extend;
+                    insert(zero_extend);
+                }
+            } else if (from_sz > to_sz) {
+                // larger to smaller: truncate.
+                auto truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+                generated_ir[expr] = truncate;
+                insert(truncate);
             }
-            else {
-                auto zero_extend = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
-                generated_ir[expr] = zero_extend;
-                insert(zero_extend);
-            }
-            return;
-        } else if (from_sz > to_sz) {
-            // larger to smaller: truncate.
-            auto truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
-            generated_ir[expr] = truncate;
-            insert(truncate);
-            return;
         }
-        LCC_UNREACHABLE();
 
     } break;
 
