@@ -23,15 +23,15 @@ class Context {
     /// Called once the first time a context is created.
     static void InitialiseLCCData();
 
+    const Target* _target{};
+
+public:
     /// IR type caches.
     std::unordered_map<usz, Type*> integer_types;
     std::vector<Type*> array_types;
     std::vector<Type*> function_types;
     std::vector<Type*> struct_types;
 
-    const Target* _target{};
-
-public:
     /// Create a new context.
     explicit Context(const Target* tgt);
 

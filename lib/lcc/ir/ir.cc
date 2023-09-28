@@ -4,6 +4,7 @@
 #include <lcc/diags.hh>
 #include <lcc/utils/rtti.hh>
 
+#include <algorithm>
 #include <string>
 
 #include <fmt/format.h>
@@ -51,21 +52,60 @@ auto Type::string() const -> std::string {
 
 /// Get or create a function type.
 FunctionType* FunctionType::Get(Context* ctx, Type* ret, std::vector<Type*> params) {
-    // TODO: Look in ctx type cache.
-    return new (ctx) FunctionType(ret, params);
+    // Look in ctx type cache.
+    const auto& found = rgs::find_if(ctx->function_types, [&](const Type* t) {
+        const FunctionType* f = as<FunctionType>(t);
+        return f->ret() == ret && rgs::equal(f->params(), params);
+    });
+    if (found != ctx->function_types.end())
+        return as<FunctionType>(*found);
+
+    FunctionType* out = new (ctx) FunctionType(ret, params);
+    ctx->function_types.push_back(out);
+    return out;
 }
 
 IntegerType* IntegerType::Get(Context* ctx, usz bitwidth) {
-    // TODO: Look in ctx type cache.
-    return new (ctx) IntegerType(bitwidth);
+    // Look in ctx type cache.
+    const auto& found = std::find_if(ctx->integer_types.begin(), ctx->integer_types.end(),
+                                     [&](const std::pair<usz, Type*>& pair) {
+                                         return pair.first == bitwidth;
+                                     });
+    if (found != ctx->integer_types.end())
+        return as<IntegerType>(found->second);
+
+    // Create new type and store in cache.
+    IntegerType* out = new (ctx) IntegerType(bitwidth);
+    ctx->integer_types[bitwidth] = out;
+    return out;
 }
 
 ArrayType* ArrayType::Get(Context* ctx, usz length, Type* element_type) {
-    return new (ctx) ArrayType(length, element_type);
+    // Look in ctx type cache.
+    const auto& found = rgs::find_if(ctx->array_types, [&](const Type* t) {
+        const ArrayType* a = as<ArrayType>(t);
+        return a->length() == length && a->element_type() == element_type;
+    });
+    if (found != ctx->array_types.end())
+        return as<ArrayType>(*found);
+
+    ArrayType* out = new (ctx) ArrayType(length, element_type);
+    ctx->array_types.push_back(out);
+    return out;
 }
 
 StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types) {
-    return new (ctx) StructType(member_types);
+    // Look in ctx type cache.
+    const auto& found = rgs::find_if(ctx->struct_types, [&](const Type* t) {
+        const StructType* s = as<StructType>(t);
+        return rgs::equal(s->members(), member_types);
+    });
+    if (found != ctx->struct_types.end())
+        return as<StructType>(*found);
+
+    StructType* out = new (ctx) StructType(member_types);
+    ctx->struct_types.push_back(out);
+    return out;
 }
 
 bool is_block_terminator(Inst* inst) {
