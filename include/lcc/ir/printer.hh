@@ -36,50 +36,101 @@ class ValuePrinter {
     }
 
 public:
+    static std::string instruction_name(Value::Kind k) {
+        switch (k) {
+        case Value::Kind::Block: return "block";
+        case Value::Kind::Function: return "function";
+        case Value::Kind::IntegerConstant: return "constant.integer";
+        case Value::Kind::ArrayConstant: return "constant.array";
+        case Value::Kind::Poison: return "poision";
+        case Value::Kind::GlobalVariable: return "global";
+        case Value::Kind::Alloca: return "local";
+        case Value::Kind::Call: return "call";
+        case Value::Kind::Copy: return "copy";
+        case Value::Kind::Intrinsic: return "intrinsic";
+        case Value::Kind::Load: return "load";
+        case Value::Kind::Parameter: return "parameter";
+        case Value::Kind::Phi: return "phi";
+        case Value::Kind::Store: return "store";
+        case Value::Kind::Branch: return "branch";
+        case Value::Kind::CondBranch: return "branch.cond";
+        case Value::Kind::Return: return "return";
+        case Value::Kind::Unreachable: return "unreachable";
+        case Value::Kind::ZExt: return "zero.extend";
+        case Value::Kind::SExt: return "sign.extend";
+        case Value::Kind::Trunc: return "truncate";
+        case Value::Kind::Bitcast: return "bitcast";
+        case Value::Kind::Neg: return "negate";
+        case Value::Kind::Compl: return "complement";
+        case Value::Kind::Add: return "+";
+        case Value::Kind::Sub: return "-";
+        case Value::Kind::Mul: return "*";
+        case Value::Kind::SDiv: return "s.div";
+        case Value::Kind::UDiv: return "u.div";
+        case Value::Kind::SRem: return "s.rem";
+        case Value::Kind::URem: return "u.rem";
+        case Value::Kind::Shl: return "shl";
+        case Value::Kind::Sar: return "sar";
+        case Value::Kind::Shr: return "shr";
+        case Value::Kind::And: return "&";
+        case Value::Kind::Or: return "|";
+        case Value::Kind::Xor: return "^";
+        case Value::Kind::Eq: return "=";
+        case Value::Kind::Ne: return "!=";
+        case Value::Kind::Lt: return "<";
+        case Value::Kind::Le: return "<=";
+        case Value::Kind::Gt: return ">";
+        case Value::Kind::Ge: return ">=";
+        }
+        LCC_UNREACHABLE();
+    }
+
     static std::string value(Value* v) {
         if (!v) return "(null)";
         register_value(v);
         switch (v->kind()) {
         case Value::Kind::Block: {
-            return "block";
+            const auto& block = as<Block>(v);
+            return fmt::format("block {}", block->name());
         } break;
         case Value::Kind::Function: {
-            return "function";
+            const auto& function = as<Function>(v);
+            return fmt::format("function {}", function->name());
         } break;
         case Value::Kind::IntegerConstant: {
             return fmt::format("constant.integer {}", as<IntegerConstant>(v)->value());
         } break;
         case Value::Kind::ArrayConstant: {
-            return "constant.array";
+            return "constant.array"; // TODO: value
         } break;
         case Value::Kind::Poison: {
-            return "poison";
+            return instruction_name(v->kind());
         } break;
         case Value::Kind::GlobalVariable: {
-            return "global";
+            return instruction_name(v->kind());
         } break;
 
         /// Instructions.
         case Value::Kind::Alloca: {
-            return "stack.allocate";
+            return instruction_name(v->kind());
         } break;
         case Value::Kind::Call: {
-            return "funcall";
+            return instruction_name(v->kind());
         } break;
         case Value::Kind::Copy: {
             LCC_ASSERT(false, "TODO IR CopyInst");
         } break;
         case Value::Kind::Intrinsic: {
-            return "intrinsic";
+            return instruction_name(v->kind());
         } break;
         case Value::Kind::Load: {
-            return "load";
+            return instruction_name(v->kind());
         } break;
         case Value::Kind::Parameter: {
-            return "parameter";
+            return instruction_name(v->kind());
         } break;
         case Value::Kind::Phi: {
-            return "phi";
+            return instruction_name(v->kind());
         } break;
         case Value::Kind::Store: {
             const auto& store = as<StoreInst>(v);
@@ -92,99 +143,55 @@ public:
 
         /// Terminators.
         case Value::Kind::Branch: {
-            return "branch";
+            return instruction_name(v->kind());
         } break;
         case Value::Kind::CondBranch: {
-            return "branch.cond";
+            return instruction_name(v->kind());
         } break;
         case Value::Kind::Return: {
-            return "branch.return";
+            return instruction_name(v->kind());
         } break;
         case Value::Kind::Unreachable: {
-            return "unreachable";
+            return instruction_name(v->kind());
         } break;
 
-        /// Unary instructions.
-        case Value::Kind::ZExt: {
-            return "zero.extend";
-        } break;
-        case Value::Kind::SExt: {
-            return "sign.extend";
-        } break;
-        case Value::Kind::Trunc: {
-            return "truncate";
-        } break;
-        case Value::Kind::Bitcast: {
-            return "bitcast";
-        } break;
-        case Value::Kind::Neg: {
-            return "negate";
-        } break;
+            /// Unary instructions.
+        case Value::Kind::ZExt:
+        case Value::Kind::SExt:
+        case Value::Kind::Trunc:
+        case Value::Kind::Bitcast:
+        case Value::Kind::Neg:
         case Value::Kind::Compl: {
-            return "compl";
+            const auto& unary = as<UnaryInstBase>(v);
+            return fmt::format("{} {}", instruction_name(v->kind()), get_id(unary->operand()));
         } break;
 
         /// Binary instructions.
-        case Value::Kind::Add: {
-            return "add";
-        } break;
-        case Value::Kind::Sub: {
-            return "sub";
-        } break;
-        case Value::Kind::Mul: {
-            return "mul";
-        } break;
-        case Value::Kind::SDiv: {
-            return "s.div";
-        } break;
-        case Value::Kind::UDiv: {
-            return "u.div";
-        } break;
-        case Value::Kind::SRem: {
-            return "s.mod";
-        } break;
-        case Value::Kind::URem: {
-            return "u.mod";
-        } break;
-        case Value::Kind::Shl: {
-            return "shl";
-        } break;
-        case Value::Kind::Sar: {
-            return "sar";
-        } break;
-        case Value::Kind::Shr: {
-            return "shr";
-        } break;
-        case Value::Kind::And: {
-            return "and";
-        } break;
-        case Value::Kind::Or: {
-            return "or";
-        } break;
-        case Value::Kind::Xor: {
-            return "xor";
-        } break;
-
+        case Value::Kind::Add:
+        case Value::Kind::Sub:
+        case Value::Kind::Mul:
+        case Value::Kind::SDiv:
+        case Value::Kind::UDiv:
+        case Value::Kind::SRem:
+        case Value::Kind::URem:
+        case Value::Kind::Shl:
+        case Value::Kind::Sar:
+        case Value::Kind::Shr:
+        case Value::Kind::And:
+        case Value::Kind::Or:
+        case Value::Kind::Xor:
         /// Compare instructions.
-        case Value::Kind::Eq: {
-            return "eq";
-        } break;
-        case Value::Kind::Ne: {
-            return "ne";
-        } break;
-        case Value::Kind::Lt: {
-            return "lt";
-        } break;
-        case Value::Kind::Le: {
-            return "le";
-        } break;
-        case Value::Kind::Gt: {
-            return "gt";
-        } break;
+        case Value::Kind::Eq:
+        case Value::Kind::Ne:
+        case Value::Kind::Lt:
+        case Value::Kind::Le:
+        case Value::Kind::Gt:
         case Value::Kind::Ge: {
-            return "ge";
+            const BinaryInst* binary = as<BinaryInst>(v);
+            return fmt::format("{} {} {}", instruction_name(v->kind()), get_id(binary->lhs()), get_id(binary->rhs()));
         } break;
         }
+
 
         LCC_UNREACHABLE();
     }
