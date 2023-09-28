@@ -37,6 +37,7 @@ auto lcc::intercept::Lexer::LookAhead(usz n) -> Token* {
     if (idx < lookahead_tokens.size()) return &lookahead_tokens[idx];
 
     /// Otherwise, lex enough tokens.
+    tempset looking_ahead = true;
     auto current = std::move(tok);
     for (usz i = lookahead_tokens.size(); i < n; i++) {
         tok = {};
@@ -50,8 +51,9 @@ auto lcc::intercept::Lexer::LookAhead(usz n) -> Token* {
 }
 
 void lcc::intercept::Lexer::NextToken() {
-    /// If we have lookahead tokens, use those first.
-    if (not lookahead_tokens.empty()) {
+    /// If we have lookahead tokens, and we’re not looking
+    /// ahead, use those first.
+    if (not looking_ahead and not lookahead_tokens.empty()) {
         tok = std::move(lookahead_tokens.front());
         lookahead_tokens.pop_front();
         return;
