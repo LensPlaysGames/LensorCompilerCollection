@@ -127,6 +127,21 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
     } break;
 
+    case Expr::Kind::Unary: {
+        const auto& unary_expr = as<UnaryExpr>(expr);
+
+        generate_expression(unary_expr->operand());
+
+        switch (unary_expr->op()) {
+        case TokenKind::Minus: {
+            generated_ir[expr] = new (*module) NegInst(generated_ir[unary_expr->operand()]);
+        } break;
+        default: LCC_ASSERT(false, "Sorry, but IRGen of unary operator {} has, apparently, not been implemented. Sorry about that.", ToString(unary_expr->op()));
+        }
+
+        insert(as<Inst>(generated_ir[expr]));
+    } break;
+
     case intercept::Expr::Kind::Binary: {
         const auto& binary_expr = as<BinaryExpr>(expr);
 
