@@ -122,7 +122,10 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
             /// will always fit.
             auto bits = to->size(context);
             if (bits < 64 and u64(val) > u64(utils::MaxBitValue(bits))) return ConversionImpossible;
-            if constexpr (PerformConversion) *expr_ptr = new (mod) ConstantExpr(*expr_ptr, res);
+            if constexpr (PerformConversion) {
+                InsertImplicitCast(expr_ptr, to);
+                *expr_ptr = new (mod) ConstantExpr(*expr_ptr, res);
+            }
             return Score(1);
         }
 
