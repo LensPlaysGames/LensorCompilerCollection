@@ -179,6 +179,10 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     } break;
 
     case intercept::Expr::Kind::Cast: {
+        // TODO: This is the old codegen and the new cast node is entirely
+        // different and has like four different kinds of cast so yeah we need to
+        // fix this.
+
         const auto& cast = as<CastExpr>(expr);
 
         lcc::Type *t_to = Convert(ctx, cast->type());
@@ -192,17 +196,28 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         generate_expression(cast->operand());
 
         if (from_sz == to_sz) {
-            generated_ir[expr] = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+            auto bitcast = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+            generated_ir[expr] = bitcast;
+            insert(bitcast);
             return;
         } else if (from_sz < to_sz) {
             // smaller to larger: sign extend if needed, otherwise zero extend.
-            if (from_signed)
-                generated_ir[expr] = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
-            else generated_ir[expr] = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+            if (from_signed) {
+                auto sign_extend = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+                generated_ir[expr] = sign_extend;
+                insert(sign_extend);
+            }
+            else {
+                auto zero_extend = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+                generated_ir[expr] = zero_extend;
+                insert(zero_extend);
+            }
             return;
         } else if (from_sz > to_sz) {
             // larger to smaller: truncate.
-            generated_ir[expr] = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+            auto truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+            generated_ir[expr] = truncate;
+            insert(truncate);
             return;
         }
         LCC_UNREACHABLE();
@@ -250,10 +265,9 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
         generate_expression(expr);
     }
 
-    usz n = 0;
     for (const auto& b : function->blocks())
         for (const auto& i : b->instructions())
-            ValuePrinter::print(i, fmt::format("{:4} | ", n++));
+            ValuePrinter::print(i, fmt::format("{:4} | ", ValuePrinter::get_id_raw(i)));
 }
 
 auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Module* {

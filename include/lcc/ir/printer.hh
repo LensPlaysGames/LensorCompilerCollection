@@ -11,6 +11,7 @@ namespace lcc {
 class ValuePrinter {
     static std::unordered_map<Value*, usz> ids;
 
+public:
     static void register_value(Value* v) {
         static usz _id{0};
 
@@ -18,6 +19,11 @@ class ValuePrinter {
             // value not seen before
             ids[v] = ++_id;
         }
+    }
+
+    static auto get_id_raw(Value* v) -> usz {
+        register_value(v);
+        return ids[v];
     }
 
     static auto get_id(Value* v) -> std::string {
@@ -35,7 +41,6 @@ class ValuePrinter {
         else return fmt::format("%{}", ids[v]);
     }
 
-public:
     static std::string instruction_name(Value::Kind k) {
         switch (k) {
         case Value::Kind::Block: return "block";
@@ -112,7 +117,7 @@ public:
 
         /// Instructions.
         case Value::Kind::Alloca: {
-            return instruction_name(v->kind());
+            return fmt::format("{} {} ({}B)", instruction_name(v->kind()), *v->type(), v->type()->size());
         } break;
         case Value::Kind::Call: {
             return instruction_name(v->kind());
@@ -156,10 +161,15 @@ public:
         } break;
 
             /// Unary instructions.
+        case Value::Kind::Bitcast: {
+            const auto& bitcast = as<BitcastInst>(v);
+            return fmt::format("{} {} as {}", instruction_name(v->kind()), get_id(bitcast->operand()), *bitcast->operand()->type());
+        }
+
+
         case Value::Kind::ZExt:
         case Value::Kind::SExt:
         case Value::Kind::Trunc:
-        case Value::Kind::Bitcast:
         case Value::Kind::Neg:
         case Value::Kind::Compl: {
             const auto& unary = as<UnaryInstBase>(v);
