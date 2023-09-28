@@ -173,6 +173,9 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             LCC_ASSERT(false, "Unhandled IRGen of binary expression operator {}", (int)binary_expr->op());
         } break;
         }
+
+        insert(as<Inst>(generated_ir[expr]));
+
     } break;
 
     case intercept::Expr::Kind::Cast: {
@@ -191,15 +194,13 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         if (from_sz == to_sz) {
             generated_ir[expr] = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
             return;
-        }
-        else if (from_sz < to_sz) {
+        } else if (from_sz < to_sz) {
             // smaller to larger: sign extend if needed, otherwise zero extend.
             if (from_signed)
                 generated_ir[expr] = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
             else generated_ir[expr] = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
             return;
-        }
-        else if (from_sz > to_sz) {
+        } else if (from_sz > to_sz) {
             // larger to smaller: truncate.
             generated_ir[expr] = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
             return;
