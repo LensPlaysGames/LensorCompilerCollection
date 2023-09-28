@@ -201,8 +201,8 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         lcc::Type *t_to = Convert(ctx, cast->type());
         lcc::Type *t_from = Convert(ctx, cast->operand()->type());
 
-        usz to_sz = t_to->size();
-        usz from_sz = t_from->size();
+        usz to_sz = t_to->bits();
+        usz from_sz = t_from->bits();
 
         bool from_signed = cast->operand()->type()->is_signed_int(ctx);
 

@@ -1018,7 +1018,7 @@ public:
         : UnaryInstBase(Kind::Bitcast, v, ty, loc) {
         /// Type we’re casting to must have the same size or
         /// be smaller than the type we’re casting from.
-        LCC_ASSERT(ty->size() <= v->type()->size(), "Cannot bitcast to larger type");
+        LCC_ASSERT(ty->bits() <= v->type()->bits(), "Cannot bitcast to larger type");
     }
 
     /// RTTI.

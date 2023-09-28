@@ -15,6 +15,7 @@ public:
     static void register_value(Value* v) {
         static usz _id{0};
 
+        LCC_ASSERT(v, "Cannot print Value with address of nullptr");
         if (ids.find(v) == ids.end()) {
             // value not seen before
             ids[v] = ++_id;
@@ -103,7 +104,7 @@ public:
             return fmt::format("function {}", function->name());
         } break;
         case Value::Kind::IntegerConstant: {
-            return fmt::format("constant.integer {}", as<IntegerConstant>(v)->value());
+            return fmt::format("{}", as<IntegerConstant>(v)->value());
         } break;
         case Value::Kind::ArrayConstant: {
             return "constant.array"; // TODO: value
@@ -117,7 +118,8 @@ public:
 
         /// Instructions.
         case Value::Kind::Alloca: {
-            return fmt::format("{} {} ({}B)", instruction_name(v->kind()), *v->type(), v->type()->size());
+            const auto& local = as<AllocaInst>(v);
+            return fmt::format("{} {} ({}B)", instruction_name(v->kind()), *local->allocated_type(), local->allocated_type()->bytes());
         } break;
         case Value::Kind::Call: {
             return instruction_name(v->kind());
@@ -130,7 +132,7 @@ public:
         } break;
         case Value::Kind::Load: {
             const auto& load = as<LoadInst>(v);
-            return fmt::format("{} {} ({}B) from {}", instruction_name(v->kind()), *load->type(), load->type()->size(), get_id(load->ptr()));
+            return fmt::format("{} {} ({}B) from {}", instruction_name(v->kind()), *load->type(), load->type()->bytes(), get_id(load->ptr()));
         } break;
         case Value::Kind::Parameter: {
             return instruction_name(v->kind());
@@ -143,7 +145,7 @@ public:
             LCC_ASSERT(store->val());
             return fmt::format("store {} as {} ({}B) into address {}",
                                get_id(store->val()),
-                               *store->val()->type(), store->val()->type()->size(),
+                               *store->val()->type(), store->val()->type()->bytes(),
                                get_id(store->ptr()));
         } break;
 
@@ -161,16 +163,19 @@ public:
             return instruction_name(v->kind());
         } break;
 
-            /// Unary instructions.
+        /// Unary instructions.
         case Value::Kind::Bitcast: {
             const auto& bitcast = as<BitcastInst>(v);
             return fmt::format("{} {} as {}", instruction_name(v->kind()), get_id(bitcast->operand()), *bitcast->operand()->type());
         }
 
-
         case Value::Kind::ZExt:
         case Value::Kind::SExt:
-        case Value::Kind::Trunc:
+        case Value::Kind::Trunc: {
+            const auto unary = as<UnaryInstBase>(v);
+            return fmt::format("{} {} to {}", instruction_name(v->kind()), get_id(unary->operand()), *unary->type());
+        } break;
+
         case Value::Kind::Neg:
         case Value::Kind::Compl: {
             const auto& unary = as<UnaryInstBase>(v);

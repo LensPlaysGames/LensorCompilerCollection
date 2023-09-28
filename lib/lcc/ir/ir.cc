@@ -11,27 +11,41 @@
 
 namespace lcc {
 
-usz Type::size() const {
+usz Type::bits() const {
     switch (kind) {
-    case Kind::Unknown: return 0;
-    case Kind::Function: [[fallthrough]];
-    case Kind::Pointer: return 8; // FIXME: Target-dependent pointer size
+
+    case Kind::Unknown:
     case Kind::Void: return 0;
+
+    case Kind::Function:
+    case Kind::Pointer: return 64; // FIXME: Target-dependent pointer size
+
+    case Kind::Integer: {
+        const auto& i = as<IntegerType>(this);
+        return i->bitwidth();
+    }
+
     case Kind::Array: {
         const auto& array = as<ArrayType>(this);
-        return array->element_type()->size() * array->length();
+        return array->element_type()->bits() * array->length();
     }
-    case Kind::Integer: return 8; // FIXME: Target-dependent integer size
+
     case Kind::Struct: {
         const auto& struct_ = as<StructType>(this);
         const std::vector<Type*>& members = struct_->members();
         usz sum = 0;
         for (const auto& m : members)
-            sum += m->size();
+            sum += m->bits();
         return sum;
     }
+
     }
     LCC_UNREACHABLE();
+}
+
+usz Type::bytes() const {
+    usz bitwidth = bits();
+    return bitwidth / 8 + (bitwidth % 8 ? 1 : 0);
 }
 
 auto Type::string() const -> std::string {

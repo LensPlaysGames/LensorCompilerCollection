@@ -47,8 +47,11 @@ public:
     /// Get the aligment of this type.
     usz align() const;
 
-    /// Get the size of this type.
-    usz size() const;
+    /// Get the amount of bits required to represent an instance of this type.
+    usz bits() const;
+
+    /// Get the minimum amount of bytes required to represent an instance of this type.
+    usz bytes() const;
 
     /// Get a string representation of this type.
     auto string() const -> std::string;
