@@ -258,6 +258,13 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         generated_ir[expr] = generated_ir[name_ref->target()];
     } break;
 
+    case Expr::Kind::Return: {
+        const auto& ret_expr = as<ReturnExpr>(expr);
+        const auto& ret = new (*module) ReturnInst(generated_ir[ret_expr->value()]);
+        generated_ir[expr] = ret;
+        insert(ret);
+    }
+
     default: {
         LCC_ASSERT(false, "Unhandled IRGen of expression kind {} ({})\n", Expr::kind_string(expr->kind()), (int)expr->kind());
     } break;

@@ -157,7 +157,8 @@ public:
             return instruction_name(v->kind());
         } break;
         case Value::Kind::Return: {
-            return instruction_name(v->kind());
+            const auto& ret = as<ReturnInst>(v);
+            return fmt::format("{} {}", instruction_name(v->kind()), get_id(ret->val()));
         } break;
         case Value::Kind::Unreachable: {
             return instruction_name(v->kind());
