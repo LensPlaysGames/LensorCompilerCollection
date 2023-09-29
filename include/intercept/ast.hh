@@ -417,6 +417,16 @@ public:
     /// \return The size of this type, in bits.
     usz size(const Context* ctx) const;
 
+    /// Get the minimum amount of bytes required to represent this type.
+    /// Implemented in terms of `size()`.
+    ///
+    /// \param ctx The context to use.
+    /// \return The minimum amount of bytes required to represent an
+    ///         instance of this type.
+    usz size_in_bytes(const Context* ctx) const {
+        return (size(ctx) / 8) + (size(ctx) % 8 ? 1 : 0);
+    }
+
     /// Get a string representation of this type.
     auto string(bool use_colours = false) const -> std::string;
 
