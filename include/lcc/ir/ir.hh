@@ -27,7 +27,7 @@ public:
         /// Instructions.
         Alloca,
         Call,
-        Copy,
+        //Copy,
         Intrinsic,
         Load,
         Parameter,

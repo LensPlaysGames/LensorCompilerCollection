@@ -52,7 +52,7 @@ public:
         case Value::Kind::GlobalVariable: return "global";
         case Value::Kind::Alloca: return "local";
         case Value::Kind::Call: return "call";
-        case Value::Kind::Copy: return "copy";
+        //case Value::Kind::Copy: return "copy";
         case Value::Kind::Intrinsic: return "intrinsic";
         case Value::Kind::Load: return "load";
         case Value::Kind::Parameter: return "parameter";
@@ -124,9 +124,9 @@ public:
         case Value::Kind::Call: {
             return instruction_name(v->kind());
         } break;
-        case Value::Kind::Copy: {
+        /*case Value::Kind::Copy: {
             LCC_ASSERT(false, "TODO IR CopyInst");
-        } break;
+        } break;*/
         case Value::Kind::Intrinsic: {
             return instruction_name(v->kind());
         } break;

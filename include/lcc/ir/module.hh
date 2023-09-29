@@ -28,6 +28,12 @@ public:
     /// Get the context that owns the module.
     auto context() const -> Context* { return _ctx; }
 
+    /// Emit the module as LLVM IR.
+    auto llvm() -> std::string;
+
+    /// Print the IR of this module.
+    void print_ir();
+
     auto code() -> std::vector<Function*>& { return _code; }
     auto code() const -> std::vector<Function*> { return _code; }
     auto vars() -> std::vector<Value*>& { return _vars; }

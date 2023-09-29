@@ -279,6 +279,7 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
          f->linkage(),
          lcc::CallConv::Intercept
          );
+     module->add_function(function);
 
     // Hard to generate code for a function without a body.
     if (auto* expr = f->body()) {
@@ -286,10 +287,6 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
         function->append_block(block);
         generate_expression(expr);
     }
-
-    for (const auto& b : function->blocks())
-        for (const auto& i : b->instructions())
-            ValuePrinter::print(i, fmt::format("{:4} | ", ValuePrinter::get_id_raw(i)));
 }
 
 auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Module* {
@@ -300,5 +297,13 @@ auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Modul
     return ir_gen.mod();
 }
 
+
 }
+}
+
+void lcc::Module::print_ir() {
+    for (auto function : code())
+        for (const auto& b : function->blocks())
+            for (const auto& i : b->instructions())
+                ValuePrinter::print(i, fmt::format("{:4} | ", ValuePrinter::get_id_raw(i)));
 }

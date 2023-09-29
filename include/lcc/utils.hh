@@ -69,6 +69,8 @@ using f64 = double;
 
 #define LCC_UNREACHABLE() LCC_ASSERT(false, "Unreachable")
 
+#define LCC_TODO() LCC_ASSERT(false, "Todo")
+
 template <typename>
 concept always_false = false;
 

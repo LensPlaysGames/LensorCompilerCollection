@@ -46,6 +46,8 @@ using options = clopts< // clang-format off
     flag<"-v", "Enable verbose output">,
     flag<"--ast", "Print the AST and exit without generating code">,
     flag<"--syntax-only", "Do not perform semantic analysis">,
+    flag<"--ir", "Emit IR and exit">,
+    flag<"--llvm", "Emit LLVM IR">,
     func<"--aluminium", "That special something to spice up your compilation", aluminium_handler>,
     multiple<positional<"filepath", "Path to files that should be compiled", file<std::vector<char>>, true>>
 >; // clang-format on
@@ -90,7 +92,15 @@ int main(int argc, char** argv) {
         }
 
         auto ir_module = lcc::intercept::IRGen::Generate(&context, *mod);
-        (void)ir_module;
+        if (options::get<"--ir">()) {
+            ir_module->print_ir();
+            std::exit(0);
+        }
+
+        if (options::get<"--llvm">()) {
+            fmt::print("{}", ir_module->llvm());
+            std::exit(0);
+        }
 
         return 42;
     }
