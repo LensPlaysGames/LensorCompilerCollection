@@ -96,7 +96,7 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
         return NoOp;
     }
 
-    /// Integer to integer conversions.
+    /// Integer to integer, integer to boolean implicit conversions.
     ///
     /// For portability, we would ideally not make any assumptions about
     /// the size of `int`, but the issue with that is that it would make
@@ -104,7 +104,7 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
     /// an `i16` to `int` manually. Moreover, integer literals are of type
     /// `int`, so that would also cause problems. C FFI types suffer from
     /// similar problems, so we just use their width on the target.
-    if (from->is_integer() and to->is_integer()) {
+    if (from->is_integer() and to->is_integer(/* include boolean */ true)) {
         /// Integer types (but not bool) are convertible to each other if
         /// the value is known at compile time and in range for the type
         /// it is being converted to.
@@ -1095,7 +1095,11 @@ void intc::Sema::AnalyseCast(CastExpr* c) {
         return;
     }
 
-    /// Casting from pointers to integers is allowed.
+    /// Explicitly casting from integers to integers and
+    /// integers to booleans and booleans to integers is allowed.
+    if (from->is_integer(true) and to->is_integer(true)) return;
+
+    /// Casting from pointers to integers and pointers to booleans is allowed.
     if (from->is_pointer() and to->is_integer(true)) return;
 
     /// Hard casts between pointers and from pointers to integers are
