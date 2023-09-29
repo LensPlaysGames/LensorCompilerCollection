@@ -19,6 +19,7 @@ lcc::StringMap<Tk> keywords{
     {"as!", Tk::AsBang},
     {"type", Tk::Type},
     {"void", Tk::Void},
+    {"bool", Tk::Bool},
     {"byte", Tk::Byte},
     {"int", Tk::IntKw},
     {"for", Tk::For},
