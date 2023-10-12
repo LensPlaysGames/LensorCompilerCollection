@@ -23,6 +23,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <variant>
 
 namespace lcc {
 using namespace std::literals;
