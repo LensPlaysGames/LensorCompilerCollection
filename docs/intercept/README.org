@@ -1,0 +1,87 @@
+#+created: <2022-08-01 Mon>
+
+* Intercept
+
+I didn't really have a plan, but I went ahead and started making this compiler from scratch in C anyways. Now we have a functioning compiler with a brand new language named ~Intercept~.
+
+** Usage
+
+Running the compiler executable with no arguments will display a usage message that contains compiler flags and options as well as command layout.
+
+For writing in Intercept in Emacs or Vim, there are helpful plugins in the =editor= subdirectory. For syntax highlighting in any editor that supports ~tree-sitter~, there is a tree-sitter parser that can be found [[https://github.com/LensPlaysGames/tree-sitter-int][here]]. It is /highly/ recommended to use tree-sitter if you can, as it provides much better syntax highlighting.
+
+** Building
+
+Dependencies:
+
+- [[https://cmake.org/][CMake >= 3.14]]
+
+- Any C Compiler (We like [[https://gcc.gnu.org/][GCC]])
+
+NOTE: If on Windows *and* using Visual Studio, see [[file:docs/VISUAL_STUDIO.org][this document]] instead.
+
+First, generate a build tree using CMake.
+#+begin_src shell
+  cmake -B bld
+#+end_src
+
+Finally, build an executable from the build tree.
+#+begin_src shell
+  cmake --build bld
+#+end_src
+
+*** To build generated x86_64 ASM
+
+GNU Binutils:
+#+begin_src shell
+  as code.S -o code.o
+  ld code.o -o code
+#+end_src
+
+GNU Compiler Collection
+#+begin_src shell
+  gcc code.S -o code
+#+end_src
+
+LLVM/Clang
+#+begin_src shell
+  clang code.S -o code --target=x86_64
+#+end_src
+
+To use external calls, link with appropriate libraries!
+
+** Language Reference
+
+Intercept is statically typed.
+Variables must be declared and type annotated before use.
+
+Whitespace is ignored and there are no required expression delimiters.
+That's right: no semi-colons and no forced indent!
+
+Functions are first-class citizens.
+
+A program in Intercept comes in the form of a file. The file may
+contain a series of expressions that will be executed in order, from
+top to bottom. There is no =main= function or other entry point;
+control flow starts at the very top of the file and makes it's way to
+the bottom of the file.
+
+Let's take a look at a basic program:
+#+begin_src int
+  fact : integer (n : integer) {
+    if n < 2 {
+      1
+    } else {
+      n * fact(n - 1)
+    }
+  }
+
+  fact(5)
+#+end_src
+
+This program will return 120 as a status code. The result of the last
+expression in the file is the return value. The same holds true for
+function bodies, and if/else bodies.
+
+Variables in a local scope shadow variables in a parent scope, and may
+share the same symbolic name.
