@@ -18,7 +18,7 @@ Dependencies:
 
 - [[https://cmake.org/][CMake >= 3.20]]
 
-- Any C Compiler (We like [[https://gcc.gnu.org/][GCC]])
+- Any C++ Compiler (We like [[https://gcc.gnu.org/][GCC]])
 
 NOTE: If on Windows *and* using Visual Studio, see [[file:docs/VISUAL_STUDIO.org][this document]] instead.
 
