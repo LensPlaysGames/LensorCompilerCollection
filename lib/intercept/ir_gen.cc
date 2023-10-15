@@ -389,6 +389,13 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         LCC_ASSERT(false, "Unhandled IRGen of expression kind {} ({})\n", Expr::kind_string(expr->kind()), (int)expr->kind());
     } break;
 
+    case Expr::Kind::StringLiteral: {
+        const auto& literal_string_expr = as<StringLiteral>(expr);
+        std::string& literal_string = int_module.strings.at(literal_string_expr->string_index());
+        std::vector<char> data(literal_string.begin(), literal_string.end());
+        generated_ir[expr] = new (*module) ArrayConstant(lcc::ArrayType::Get(ctx, literal_string.length(), lcc::IntegerType::Get(ctx, 8)), data);
+    } break;
+
     case Expr::Kind::Call: {
         const auto& call = as<CallExpr>(expr);
 
