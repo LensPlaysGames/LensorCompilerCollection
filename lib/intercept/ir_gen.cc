@@ -86,7 +86,32 @@ void intercept::IRGen::create_function(intercept::FuncDecl* f) {
                                               CallConv::Intercept);
 }
 
-// NOTE: If you `new` an /instruction/, you need to insert it (somewhere).
+void intercept::IRGen::generate_lvalue(intercept::Expr* expr) {
+    switch (expr->kind()) {
+    case Expr::Kind::Call: {
+        LCC_ASSERT(false, "TODO: Calls may be an lvalue depending on return type of callee; irgen is not done yet, sorry");
+    } break;
+
+    case Expr::Kind::If: {
+        LCC_ASSERT(false, "TODO: If expressions may be an lvalue depending on return type of callee; irgen is not done yet, sorry");
+    } break;
+
+    case Expr::Kind::StringLiteral: {
+        generate_expression(expr);
+    } break;
+
+    case Expr::Kind::NameRef: {
+        generated_ir[expr] = generated_ir[as<NameRefExpr>(expr)->target()];
+    } break;
+
+    // TODO: More lvalue things
+
+    default: LCC_ASSERT(false, "Unhandled expression kind in lvalue codegen, sorry");
+
+    }
+}
+
+/// NOTE: If you `new` an /instruction/ (of, or derived from, type `Inst`), you need to `insert()` it.
 void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     switch (expr->kind()) {
     case intercept::Expr::Kind::Block: {

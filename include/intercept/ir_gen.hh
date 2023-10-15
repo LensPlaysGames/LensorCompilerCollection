@@ -27,6 +27,8 @@ class IRGen {
 
     void insert(lcc::Inst* inst);
 
+    void generate_lvalue(intercept::Expr*);
+
     void generate_expression(intercept::Expr*);
 
     void create_function(intercept::FuncDecl* f);
