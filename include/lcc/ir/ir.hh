@@ -568,15 +568,12 @@ public:
 ///
 /// These should never be created manually.
 class ParamInst : public Inst {
-    friend Function;
-
     /// The parameter index.
     u32 i;
 
-    /// Only used by the Function constructor.
+public:
     ParamInst(Type* ty, u32 idx, Location loc = {})
         : Inst(Kind::Parameter, ty, loc), i(idx) {}
-public:
 
     /// Get the parameter index.
     auto index() const -> u32 { return i; }
