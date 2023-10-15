@@ -228,21 +228,26 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         }
 
         insert(as<Inst>(generated_ir[expr]));
-
     } break;
 
     case intercept::Expr::Kind::Cast: {
         const auto& cast = as<CastExpr>(expr);
 
+        generate_expression(cast->operand());
+
         lcc::Type *t_to = Convert(ctx, cast->type());
-        lcc::Type *t_from = Convert(ctx, cast->operand()->type());
+        lcc::Type *t_from = generated_ir[cast->operand()]->type();
+
+        // FIXME: Is this okay? Do we need to check is_lvalue_to_rvalue first?
+        if (t_to == t_from) {
+            generated_ir[expr] = generated_ir[cast->operand()];
+            return;
+        }
 
         usz to_sz = t_to->bits();
         usz from_sz = t_from->bits();
 
         bool from_signed = cast->operand()->type()->is_signed_int(ctx);
-
-        generate_expression(cast->operand());
 
         if (cast->is_lvalue_to_rvalue()) {
             auto load = new (*module) LoadInst(t_to, generated_ir[cast->operand()]);
@@ -435,7 +440,6 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     case Expr::Kind::Call: {
         const auto& call = as<CallExpr>(expr);
 
-        // Do we need to make sure this only happens once?
         generate_expression(call->callee());
 
         auto function_type = as<FunctionType>(Convert(ctx, call->callee_type()));
@@ -472,8 +476,8 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
         unsigned int i = 0;
         for (const auto& param : f->param_decls()) {
             const auto& param_ir = new (*module) ParamInst(Convert(ctx, param->type()), i++);
-            insert(param_ir);
             generated_ir[param] = param_ir;
+            insert(param_ir);
         }
 
         // generate body
