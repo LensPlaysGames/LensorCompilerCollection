@@ -268,6 +268,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
     case Expr::Kind::Return: {
         const auto& ret_expr = as<ReturnExpr>(expr);
+        if (ret_expr->value()) generate_expression(ret_expr->value());
         const auto& ret = new (*module) ReturnInst(generated_ir[ret_expr->value()]);
         generated_ir[expr] = ret;
         insert(ret);
