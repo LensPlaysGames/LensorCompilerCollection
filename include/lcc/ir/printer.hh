@@ -122,7 +122,16 @@ public:
             return fmt::format("{} {} ({}B)", instruction_name(v->kind()), *local->allocated_type(), local->allocated_type()->bytes());
         } break;
         case Value::Kind::Call: {
-            return instruction_name(v->kind());
+            const auto& call = as<CallInst>(v);
+            if (call->args().empty()) {
+                return fmt::format("{}()", get_id(call->callee()));
+            }
+            std::string out = "";
+            out += fmt::format("{}(", get_id(call->callee()));
+            for (const auto& arg : call->args())
+                out += get_id(arg) + " ";
+            out[out.length() - 1] = ')'; // replace last space, ' ', with close paren, ')'.
+            return out;
         } break;
         /*case Value::Kind::Copy: {
             LCC_ASSERT(false, "TODO IR CopyInst");
