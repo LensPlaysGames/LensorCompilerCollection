@@ -181,7 +181,7 @@ public:
         /// Unary instructions.
         case Value::Kind::Bitcast: {
             const auto& bitcast = as<BitcastInst>(v);
-            return fmt::format("{} {} as {}", instruction_name(v->kind()), get_id(bitcast->operand()), *bitcast->operand()->type());
+            return fmt::format("{} {} as {}", instruction_name(v->kind()), get_id(bitcast->operand()), *bitcast->type());
         }
 
         case Value::Kind::ZExt:
