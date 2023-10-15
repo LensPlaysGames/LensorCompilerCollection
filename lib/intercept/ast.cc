@@ -650,9 +650,13 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                 PrintChildren(as<intc::BlockExpr>(e)->children(), leading_text);
                 break;
 
+            case K::Return: {
+                auto ret = as<intc::ReturnExpr>(e);
+                if (ret->value()) PrintChildren({ret->value()}, leading_text);
+            } break;
+
             case K::OverloadSet:
             case K::EvaluatedConstant:
-            case K::Return:
             case K::StructDecl:
             case K::TypeAliasDecl:
             case K::IntegerLiteral:
