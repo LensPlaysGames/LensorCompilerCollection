@@ -123,13 +123,15 @@ public:
         } break;
         case Value::Kind::Call: {
             const auto& call = as<CallInst>(v);
-            if (call->args().empty()) {
+
+            if (call->args().empty())
                 return fmt::format("{}()", get_id(call->callee()));
-            }
+
             std::string out = "";
             out += fmt::format("{}(", get_id(call->callee()));
             for (const auto& arg : call->args())
                 out += get_id(arg) + " ";
+
             out[out.length() - 1] = ')'; // replace last space, ' ', with close paren, ')'.
             return out;
         } break;
@@ -167,7 +169,9 @@ public:
         } break;
         case Value::Kind::Return: {
             const auto& ret = as<ReturnInst>(v);
-            return fmt::format("{} {}", instruction_name(v->kind()), get_id(ret->val()));
+            if (ret->val())
+                return fmt::format("{} {}", instruction_name(v->kind()), get_id(ret->val()));
+            return instruction_name(v->kind());
         } break;
         case Value::Kind::Unreachable: {
             return instruction_name(v->kind());
