@@ -42,7 +42,16 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
     /// Any type can be converted to void.
     if (to->is_void()) return NoOp;
 
-    /// First, try deproceduring.
+    /// Any type can be converted to itself.
+    if (Type::Equal(from, to)) return NoOp;
+
+    /// Function types can be converted to their corresponding function types.
+    if (from->is_function() and to->is_pointer() and Type::Equal(to->elem(), from)) {
+        if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
+        return NoOp;
+    }
+
+    /// Try deproceduring.
     if (Deproceduring(expr_ptr)) return Score(1);
 
     /// Get reference-to-reference conversions out of the way early.
@@ -1532,7 +1541,10 @@ bool intc::Sema::Analyse(Type** type_ptr) {
         case Type::Kind::Function: {
             auto ty = as<FuncType>(type);
             Analyse(&ty->return_type());
-            for (auto& param : ty->params()) Analyse(&param.type);
+            for (auto& param : ty->params()) {
+                param.type = DeclTypeDecay(param.type);
+                Analyse(&param.type);
+            }
 
             /// If the function returns void, it must not be discardable.
             if (ty->return_type()->ok() and ty->return_type()->is_void()) {
