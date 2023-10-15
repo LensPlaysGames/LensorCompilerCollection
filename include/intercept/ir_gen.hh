@@ -29,6 +29,7 @@ class IRGen {
 
     void generate_expression(intercept::Expr*);
 
+    void create_function(intercept::FuncDecl* f);
     void generate_function(intercept::FuncDecl*);
 
 public:

@@ -56,13 +56,13 @@ lcc::Type* Convert(Context* ctx, Type* in) {
         return lcc::ArrayType::Get(ctx, t_array->dimension(), Convert(ctx, t_array->element_type()));
     } break;
     case Type::Kind::Function: {
-        auto* t_return = Convert(ctx, as<FuncType>(in)->return_type());
+        const auto& t_function = as<FuncType>(in);
 
         std::vector<lcc::Type*> param_types{};
-        for (const auto& p : as<FuncType>(in)->params())
+        for (const auto& p : t_function->params())
             param_types.push_back(Convert(ctx, p.type));
 
-        return lcc::FunctionType::Get(ctx, t_return, std::move(param_types));
+        return lcc::FunctionType::Get(ctx, Convert(ctx, t_function->return_type()), std::move(param_types));
     } break;
     case Type::Kind::Struct: {
         std::vector<lcc::Type*> member_types{};
@@ -78,12 +78,19 @@ lcc::Type* Convert(Context* ctx, Type* in) {
     LCC_UNREACHABLE();
 }
 
-// NOTE: If you `new` an instruction, you need to insert it (somewhere).
+void intercept::IRGen::create_function(intercept::FuncDecl* f) {
+    // FIXME: CallConv::Intercept shouldn't be hard-coded.
+    generated_ir[f] = new (*module) Function (ctx, f->mangled_name(),
+                                              as<FunctionType>(Convert(ctx, f->type())),
+                                              f->linkage(),
+                                              CallConv::Intercept);
+}
+
+// NOTE: If you `new` an /instruction/, you need to insert it (somewhere).
 void intercept::IRGen::generate_expression(intercept::Expr* expr) {
-    std::vector<Value*> args{};
     switch (expr->kind()) {
     case intercept::Expr::Kind::Block: {
-        for (auto e : as<intercept::BlockExpr>(expr)->children()) generate_expression(e);
+        for (auto e : as<BlockExpr>(expr)->children()) generate_expression(e);
     } break;
 
     // Will be inlined anywhere it is used; a no-op for actual generation.
@@ -254,8 +261,8 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     } break;
 
     case intercept::Expr::Kind::NameRef: {
-        // TODO: Assert that target has already been ir genned, somehow.
         const auto& name_ref = as<NameRefExpr>(expr);
+        LCC_ASSERT(generated_ir[name_ref->target()], "NameRef references non-IRGenned expression...");
         generated_ir[expr] = generated_ir[name_ref->target()];
     } break;
 
@@ -399,15 +406,18 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     case Expr::Kind::Call: {
         const auto& call = as<CallExpr>(expr);
 
+        // Do we need to make sure this only happens once?
+        generate_expression(call->callee());
+
         auto function_type = as<FunctionType>(Convert(ctx, call->callee_type()));
 
-        args.clear(); // FIXME: Is this needed?
+        std::vector<Value*> args{};
         for (const auto& arg : call->args()) {
             generate_expression(arg);
             args.push_back(generated_ir[arg]);
         }
 
-        auto ir_call = new (*module) CallInst(generated_ir[call->callee()], function_type, args);
+        auto ir_call = new (*module) CallInst(generated_ir[call->callee()], function_type, std::move(args));
 
         generated_ir[expr] = ir_call;
         insert(ir_call);
@@ -436,6 +446,10 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
 auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Module* {
     auto ir_gen = IRGen(context, int_mod);
 
+    // We must /create/ *all* functions first, before generating the IR for
+    // *any* of them. This is because a NameRef in one function may reference
+    // another function, and we want all functions to be resolveable.
+    for (auto f : int_mod.functions()) ir_gen.create_function(f);
     for (auto f : int_mod.functions()) ir_gen.generate_function(f);
 
     return ir_gen.mod();
