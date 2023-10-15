@@ -113,6 +113,9 @@ void intercept::IRGen::generate_lvalue(intercept::Expr* expr) {
 
 /// NOTE: If you `new` an /instruction/ (of, or derived from, type `Inst`), you need to `insert()` it.
 void intercept::IRGen::generate_expression(intercept::Expr* expr) {
+    // Already generated
+    if (generated_ir[expr]) return;
+
     switch (expr->kind()) {
     case intercept::Expr::Kind::Block: {
         for (auto e : as<BlockExpr>(expr)->children()) generate_expression(e);
