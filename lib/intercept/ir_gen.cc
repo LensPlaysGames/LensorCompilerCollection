@@ -80,6 +80,7 @@ lcc::Type* Convert(Context* ctx, Type* in) {
 
 // NOTE: If you `new` an instruction, you need to insert it (somewhere).
 void intercept::IRGen::generate_expression(intercept::Expr* expr) {
+    std::vector<Value*> args{};
     switch (expr->kind()) {
     case intercept::Expr::Kind::Block: {
         for (auto e : as<intercept::BlockExpr>(expr)->children()) generate_expression(e);
@@ -386,6 +387,23 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
     default: {
         LCC_ASSERT(false, "Unhandled IRGen of expression kind {} ({})\n", Expr::kind_string(expr->kind()), (int)expr->kind());
+    } break;
+
+    case Expr::Kind::Call: {
+        const auto& call = as<CallExpr>(expr);
+
+        auto function_type = as<FunctionType>(Convert(ctx, call->callee_type()));
+
+        args.clear(); // FIXME: Is this needed?
+        for (const auto& arg : call->args()) {
+            generate_expression(arg);
+            args.push_back(generated_ir[arg]);
+        }
+
+        auto ir_call = new (*module) CallInst(generated_ir[call->callee()], function_type, args);
+
+        generated_ir[expr] = ir_call;
+        insert(ir_call);
     } break;
     }
 }
