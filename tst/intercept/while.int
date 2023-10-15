@@ -10,11 +10,13 @@
 ;; 1
 ;; 0
 
-putchar : ext s32(c : int) discardable
+extern putchar : s32(c : int) discardable;
 
-cond : int = 10
-while cond {
-  cond := cond - 1
-  putchar(48 + cond)
-  putchar(10)
-}
+cond : int = 10;
+while cond do {
+  cond := cond - 1;
+  putchar(48 + cond);
+  putchar(10);
+};
+
+0;

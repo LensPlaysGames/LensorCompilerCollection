@@ -265,6 +265,125 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         insert(ret);
     } break;
 
+    case Expr::Kind::While: {
+        // +---------+
+        // | current |
+        // +---------+        ,---------+
+        //      |             |         |
+        // +--------------------+       |
+        // | compute condition  |       |
+        // | conditional branch |       |
+        // +--------------------+       |
+        //      |             |         |
+        //      |      +------------+   |
+        //      |      | body       |   |
+        //      |      +------------+   |
+        //      |             |         |
+        //      |            ...        |
+        //      |             |         |
+        //  +----------+      `---------+
+        //  | exit     |
+        //  +----------+
+
+        const auto& while_expr = as<WhileExpr>(expr);
+
+        // TODO: could number whiles to make this easier I guess, for any poor
+        // soul who has to debug the IR.
+
+        auto* body = new (*module) lcc::Block("while.body");
+        auto* conditional = new (*module) lcc::Block("while.conditional");
+        auto* exit = new (*module) lcc::Block("while.exit");
+
+        insert(new (*module) BranchInst(conditional));
+
+        function->append_block(conditional);
+        generate_expression(while_expr->condition());
+        insert(new (*module) CondBranchInst(generated_ir[while_expr->condition()], body, exit));
+
+        function->append_block(body);
+        generate_expression(while_expr->body());
+        insert(new (*module) BranchInst(conditional));
+
+        function->append_block(exit);
+
+    } break;
+
+    case Expr::Kind::For: {
+        // +------------------+
+        // | current          |
+        // | emit initialiser |
+        // +------------------+
+        //      |
+        //      |             ,-------------+
+        //      |             |             |
+        // +--------------------+           |
+        // | conditional branch |           |
+        // +--------------------+           |
+        //      |             |             |
+        //      |      +----------------+   |
+        //      |      | body           |   |
+        //      |      | emit iterator  |   |
+        //      |      +----------------+   |
+        //      |             |             |
+        //      |            ...            |
+        //      |             |             |
+        //  +----------+      `-------------+
+        //  | exit     |
+        //  +----------+
+        const auto& for_expr = as<ForExpr>(expr);
+
+        auto* conditional = new (*module) lcc::Block("for.conditional");
+        auto* body = new (*module) lcc::Block("for.body");
+        auto* exit = new (*module) lcc::Block("for.exit");
+
+        generate_expression(for_expr->init());
+        insert(new (*module) BranchInst(conditional));
+
+        function->append_block(conditional);
+        generate_expression(for_expr->condition());
+        insert(new (*module) CondBranchInst(generated_ir[for_expr->condition()], body, exit));
+
+        function->append_block(body);
+        generate_expression(for_expr->body());
+        generate_expression(for_expr->increment());
+        insert(new (*module) BranchInst(conditional));
+
+        function->append_block(exit);
+    } break;
+
+    case Expr::Kind::If: {
+        ///      +---------+
+        ///      | current |
+        ///      +---------+
+        ///     //         \\
+        /// +------+    +------+
+        /// | then |    | else |
+        /// +------+    +------+
+        ///        \\  //
+        ///       +------+
+        ///       | exit |
+        ///       +------+
+        ///
+        const auto& if_expr = as<IfExpr>(expr);
+
+        auto* then = new (*module) lcc::Block("if.then");
+        auto* else_ = new (*module) lcc::Block("if.else");
+        auto* exit = new (*module) lcc::Block("if.exit");
+
+        generate_expression(if_expr->condition());
+        insert(new (*module) CondBranchInst(generated_ir[if_expr->condition()], then, else_));
+
+        function->append_block(then);
+        generate_expression(if_expr->then());
+        insert(new (*module) BranchInst(exit));
+
+        function->append_block(else_);
+        generate_expression(if_expr->else_());
+        insert(new (*module) BranchInst(exit));
+
+        function->append_block(exit);
+    } break;
+
     default: {
         LCC_ASSERT(false, "Unhandled IRGen of expression kind {} ({})\n", Expr::kind_string(expr->kind()), (int)expr->kind());
     } break;
