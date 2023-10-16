@@ -594,6 +594,51 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         generated_ir[expr] = ir_call;
         insert(ir_call);
     } break;
+
+    case Expr::Kind::IntrinsicCall: {
+
+        LCC_ASSERT(false, "TODO: sorry, but IRGen of intrinsic calls isn't yet implemented.");
+
+        const auto& intrinsic = as<IntrinsicCallExpr>(expr);
+        switch (intrinsic->intrinsic_kind()) {
+        case IntrinsicKind::BuiltinDebugtrap: {
+            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Debug Trap Builtin");
+        } break;
+        case IntrinsicKind::BuiltinFilename: {
+            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Filename Builtin");
+        } break;
+        case IntrinsicKind::BuiltinLine: {
+            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to File Line Builtin");
+        } break;
+        case IntrinsicKind::BuiltinInline: {
+            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Inline Builtin");
+        } break;
+        case IntrinsicKind::BuiltinMemCopy: {
+            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Memory Copy Builtin");
+        } break;
+        case IntrinsicKind::BuiltinMemSet: {
+            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Memory Set Builtin");
+        } break;
+        case IntrinsicKind::BuiltinSyscall: {
+            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Syscall Builtin");
+        } break;
+        }
+    } break;
+
+    case Expr::Kind::MemberAccess: {
+        LCC_ASSERT(false, "TODO: sorry, but IRGen of member access isn't yet implemented. I'll get to it.");
+    } break;
+
+    case Expr::Kind::CompoundLiteral: {
+        // TODO: I need help with this. What IR does it make?
+        LCC_ASSERT(false, "TODO: I'm blanking on how to implement compound literal IRGen, so I'm going to wait until I can talk to somebody smarter than me.");
+    } break;
+
+    // no-op/handled elsewhere
+    case Expr::Kind::StructDecl: break;
+    case Expr::Kind::TypeAliasDecl: break;
+    case Expr::Kind::FuncDecl: break;
+    case Expr::Kind::OverloadSet: break;
     }
 }
 
