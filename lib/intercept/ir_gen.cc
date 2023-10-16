@@ -177,6 +177,64 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
     case intercept::Expr::Kind::Binary: {
         const auto& binary_expr = as<BinaryExpr>(expr);
+        const auto& lhs_expr = binary_expr->lhs();
+        const auto& rhs_expr = binary_expr->rhs();
+
+        // Assignment
+        if (binary_expr->op() == TokenKind::ColonEq) {
+            generate_lvalue(lhs_expr);
+            auto* lhs = generated_ir[lhs_expr];
+
+            generate_expression(rhs_expr);
+            auto* rhs = generated_ir[rhs_expr];
+
+            auto* store = new (*module) StoreInst(rhs, lhs, expr->location());
+
+            generated_ir[expr] = store;
+            insert(store);
+
+            break;
+        }
+
+        // Subscript
+        if (binary_expr->op() == TokenKind::LBrack) {
+            generate_lvalue(lhs_expr);
+            Value* lhs = generated_ir[lhs_expr];
+
+            if (!lhs) LCC_ASSERT(false, "lvalue codegen for lhs of subscript didn't go as expected; sorry");
+
+            if (rhs_expr->kind() == Expr::Kind::IntegerLiteral && as<IntegerLiteral>(rhs_expr)->value() == 0) {
+                generated_ir[expr] = lhs;
+                break;
+            }
+
+            generate_expression(rhs_expr);
+            auto rhs = generated_ir[rhs_expr];
+
+            // TODO: Should probably have a "get element ptr" sort of thing. But
+            // we don't yet. So this is what we get.
+
+            // TODO: Reference stripping, probably.
+            Type* type_to_scale_by = nullptr;
+            if (lhs_expr->type()->is_pointer()) {
+                // pointer subscript needs scaled by size of pointer base type
+            } else if (lhs_expr->type()->is_array()) {
+                // array subscript needs scaled by size of element type
+            } else LCC_ASSERT(false, "Sorry, but the rhs of the subscript has an unexpected type");
+
+            // FIXME: 64 bit fixed width here is a bit sketch, maybe.
+            auto scale_value =
+                new (*module) IntegerConstant(lcc::IntegerType::Get(ctx, 64),
+                                              type_to_scale_by->size_in_bytes(ctx));
+
+            lcc::Value* scaled_rhs = new (*module) MulInst(scale_value, rhs);
+            auto add = new (*module) AddInst(lhs, scaled_rhs);
+
+            generated_ir[expr] = add;
+            insert(add);
+
+            break;
+        }
 
         generate_expression(binary_expr->lhs());
         generate_expression(binary_expr->rhs());
@@ -217,11 +275,99 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             else generated_ir[expr] = new (*module) URemInst(lhs, rhs);
         } break;
 
-        // TODO: Binary bitwise operations
-
-        default: {
-            LCC_ASSERT(false, "Unhandled IRGen of binary expression operator {}", (int)binary_expr->op());
+        // Comparisons
+        case TokenKind::Eq: {
+            // Equality
+            generated_ir[expr] = new (*module) EqInst(lhs, rhs);
         } break;
+        case TokenKind::Ne: {
+            // NOT Equality
+            generated_ir[expr] = new (*module) NeInst(lhs, rhs);
+        } break;
+        case TokenKind::Lt: {
+            // Less Than
+            generated_ir[expr] = new (*module) LtInst(lhs, rhs);
+        } break;
+        case TokenKind::Gt: {
+            // Greater Than
+            generated_ir[expr] = new (*module) GtInst(lhs, rhs);
+        } break;
+        case TokenKind::Le: {
+            // Less Than or Equal To
+            generated_ir[expr] = new (*module) LeInst(lhs, rhs);
+        } break;
+        case TokenKind::Ge: {
+            // Greater Than or Equal To
+            generated_ir[expr] = new (*module) GeInst(lhs, rhs);
+        } break;
+
+        // Binary bitwise operations
+        case TokenKind::Ampersand: {
+            // Bitwise AND
+            generated_ir[expr] = new (*module) AndInst(lhs, rhs);
+        } break;
+        case TokenKind::Pipe: {
+            // Bitwise OR
+            generated_ir[expr] = new (*module) OrInst(lhs, rhs);
+        } break;
+        case TokenKind::Shl: {
+            // Bitwise Shift Left
+            generated_ir[expr] = new (*module) ShlInst(lhs, rhs);
+        } break;
+        case TokenKind::Shr: {
+            // Bitwise Shift Left
+            // FIXME: SAR or SHL?
+            generated_ir[expr] = new (*module) SarInst(lhs, rhs);
+        } break;
+
+        // NOT binary operator tokens.
+        case TokenKind::ArbitraryInt:
+        case TokenKind::As:
+        case TokenKind::AsBang:
+        case TokenKind::At:
+        case TokenKind::Bool:
+        case TokenKind::Byte:
+        case TokenKind::Caret:
+        case TokenKind::Colon:
+        case TokenKind::ColonColon:
+        case TokenKind::ColonEq: // handled above
+        case TokenKind::Comma:
+        case TokenKind::Do:
+        case TokenKind::Dot:
+        case TokenKind::Else:
+        case TokenKind::Eof:
+        case TokenKind::Exclam:
+        case TokenKind::Export:
+        case TokenKind::Extern:
+        case TokenKind::Expression:
+        case TokenKind::For:
+        case TokenKind::Gensym:
+        case TokenKind::Hash:
+        case TokenKind::Ident:
+        case TokenKind::If:
+        case TokenKind::IntKw:
+        case TokenKind::Invalid:
+        case TokenKind::LBrace:
+        case TokenKind::RBrace:
+        case TokenKind::LBrack: // handled above
+        case TokenKind::RBrack:
+        case TokenKind::LParen:
+        case TokenKind::RParen:
+        case TokenKind::Lambda:
+        case TokenKind::MacroArg:
+        case TokenKind::Number:
+        case TokenKind::Return:
+        case TokenKind::Static:
+        case TokenKind::String:
+        case TokenKind::Struct:
+        case TokenKind::Semicolon:
+        case TokenKind::Then:
+        case TokenKind::Tilde:
+        case TokenKind::Type:
+        case TokenKind::Void:
+        case TokenKind::While:
+            Diag(ctx, Diag::Kind::ICError, expr->location(), fmt::format("Unexpected operator {} in binary expression", ToString(binary_expr->op())));
+            break;
         }
 
         insert(as<Inst>(generated_ir[expr]));
@@ -421,10 +567,6 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         insert(new (*module) BranchInst(exit));
 
         function->append_block(exit);
-    } break;
-
-    default: {
-        LCC_ASSERT(false, "Unhandled IRGen of expression kind {} ({})\n", Expr::kind_string(expr->kind()), (int)expr->kind());
     } break;
 
     case Expr::Kind::StringLiteral: {
