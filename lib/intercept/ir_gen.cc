@@ -96,12 +96,9 @@ void intercept::IRGen::generate_lvalue(intercept::Expr* expr) {
         LCC_ASSERT(false, "TODO: If expressions may be an lvalue depending on return type of callee; irgen is not done yet, sorry");
     } break;
 
+    case Expr::Kind::NameRef:
     case Expr::Kind::StringLiteral: {
         generate_expression(expr);
-    } break;
-
-    case Expr::Kind::NameRef: {
-        generated_ir[expr] = generated_ir[as<NameRefExpr>(expr)->target()];
     } break;
 
     // TODO: More lvalue things
