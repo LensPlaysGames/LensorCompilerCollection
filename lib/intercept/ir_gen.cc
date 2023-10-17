@@ -203,7 +203,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
             if (!lhs) LCC_ASSERT(false, "lvalue codegen for lhs of subscript didn't go as expected; sorry");
 
-            if (rhs_expr->kind() == Expr::Kind::IntegerLiteral && as<IntegerLiteral>(rhs_expr)->value() == 0) {
+            if (/* TODO: ctx->optimise && */ rhs_expr->kind() == Expr::Kind::IntegerLiteral && as<IntegerLiteral>(rhs_expr)->value() == 0) {
                 generated_ir[expr] = lhs;
                 break;
             }
@@ -211,27 +211,25 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             generate_expression(rhs_expr);
             auto rhs = generated_ir[rhs_expr];
 
-            // TODO: Should probably have a "get element ptr" sort of thing. But
-            // we don't yet. So this is what we get.
-
-            // TODO: Reference stripping, probably.
-            Type* type_to_scale_by = nullptr;
-            if (lhs_expr->type()->is_pointer()) {
+            Type* lhs_type_stripped = lhs_expr->type()->strip_references();
+            if (lhs_type_stripped->is_pointer()) {
                 // pointer subscript needs scaled by size of pointer base type
-            } else if (lhs_expr->type()->is_array()) {
-                // array subscript needs scaled by size of element type
+                auto* type_to_scale_by = as<PointerType>(lhs_type_stripped)->element_type();
+                auto* gep = new (*module) GEPInst(Convert(ctx, type_to_scale_by), lhs, rhs);
+                generated_ir[expr] = gep;
+                insert(gep);
+            } else if (lhs_type_stripped->is_array()) {
+                // array literal subscript (cry)
+                auto* element_type = as<ArrayType>(lhs_type_stripped)->element_type();
+                auto* alloca = new (*module) AllocaInst(Convert(ctx, lhs_type_stripped));
+                auto* store = new (*module) StoreInst(lhs, alloca);
+                auto* gep = new (*module) GEPInst(Convert(ctx, element_type), alloca, rhs);
+                insert(alloca);
+                insert(store);
+                insert(gep);
+                generated_ir[expr] = gep;
             } else LCC_ASSERT(false, "Sorry, but the rhs of the subscript has an unexpected type");
 
-            // FIXME: 64 bit fixed width here is a bit sketch, maybe.
-            auto scale_value =
-                new (*module) IntegerConstant(lcc::IntegerType::Get(ctx, 64),
-                                              type_to_scale_by->size_in_bytes(ctx));
-
-            lcc::Value* scaled_rhs = new (*module) MulInst(scale_value, rhs);
-            auto add = new (*module) AddInst(lhs, scaled_rhs);
-
-            generated_ir[expr] = add;
-            insert(add);
 
             break;
         }
