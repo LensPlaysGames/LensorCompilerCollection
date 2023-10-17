@@ -44,7 +44,7 @@ public:
     void* operator new(size_t) = delete;
     void* operator new(size_t sz, Context*) { return ::operator new(sz); }
 
-    /// Get the aligment of this type.
+    /// Get the alignment of this type.
     usz align() const;
 
     /// Get the amount of bits required to represent an instance of this type.
@@ -52,6 +52,12 @@ public:
 
     /// Get the minimum amount of bytes required to represent an instance of this type.
     usz bytes() const;
+
+    /// Check if this is `ptr`.
+    bool is_ptr() const { return kind == Kind::Pointer; }
+
+    /// Check if this is `void`.
+    bool is_void() const { return kind == Kind::Void; }
 
     /// Get a string representation of this type.
     auto string() const -> std::string;
