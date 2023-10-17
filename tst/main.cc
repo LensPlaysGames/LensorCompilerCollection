@@ -212,7 +212,7 @@ auto run_command(const fs::path& executable, auto&&...args) -> exit_status {
         if (command_line.empty()) command_line += remaining.substr(0, sep);
         else write_command_line_arg(command_line, remaining.substr(0, sep));
 
-        /// Remove the segment we just appended and skip the 
+        /// Remove the segment we just appended and skip the
         /// separator. Since this is a path, it cannot contain
         /// slashes or backslashes, so no need to check for
         /// that.

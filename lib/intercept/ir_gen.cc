@@ -114,6 +114,14 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     // Already generated
     if (generated_ir[expr]) return;
 
+    // If we call `generate_expression` on an expression that hasn't already
+    // been generated, *and* the block we would be trying to insert to is
+    // closed, create a new block to insert into.
+    if (block->closed()) {
+        // TODO: Unique block name, or something.
+        update_block(new (*module) lcc::Block("body.more"));
+    }
+
     switch (expr->kind()) {
     case intercept::Expr::Kind::Block: {
         for (auto e : as<BlockExpr>(expr)->children()) generate_expression(e);
@@ -479,16 +487,15 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         insert(new (*module) BranchInst(conditional, expr->location()));
 
-        function->append_block(conditional);
+        update_block(conditional);
         generate_expression(while_expr->condition());
         insert(new (*module) CondBranchInst(generated_ir[while_expr->condition()], body, exit, expr->location()));
 
-        function->append_block(body);
+        update_block(body);
         generate_expression(while_expr->body());
         insert(new (*module) BranchInst(conditional, expr->location()));
 
-        function->append_block(exit);
-
+        update_block(exit);
     } break;
 
     case Expr::Kind::For: {
@@ -522,16 +529,16 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         generate_expression(for_expr->init());
         insert(new (*module) BranchInst(conditional, expr->location()));
 
-        function->append_block(conditional);
+        update_block(conditional);
         generate_expression(for_expr->condition());
         insert(new (*module) CondBranchInst(generated_ir[for_expr->condition()], body, exit, expr->location()));
 
-        function->append_block(body);
+        update_block(body);
         generate_expression(for_expr->body());
         generate_expression(for_expr->increment());
         insert(new (*module) BranchInst(conditional, expr->location()));
 
-        function->append_block(exit);
+        update_block(exit);
     } break;
 
     case Expr::Kind::If: {
@@ -556,15 +563,15 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         generate_expression(if_expr->condition());
         insert(new (*module) CondBranchInst(generated_ir[if_expr->condition()], then, else_, expr->location()));
 
-        function->append_block(then);
+        update_block(then);
         generate_expression(if_expr->then());
         insert(new (*module) BranchInst(exit, expr->location()));
 
-        function->append_block(else_);
+        update_block(else_);
         generate_expression(if_expr->else_());
         insert(new (*module) BranchInst(exit, expr->location()));
 
-        function->append_block(exit);
+        update_block(exit);
     } break;
 
     case Expr::Kind::StringLiteral: {
@@ -653,7 +660,7 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
     // Hard to generate code for a function without a body.
     if (auto* expr = f->body()) {
         block = new (*module) lcc::Block("body");
-        function->append_block(block);
+        update_block(block);
 
         unsigned int i = 0;
         for (const auto& param : f->param_decls()) {
