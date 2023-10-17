@@ -1,6 +1,7 @@
 #ifndef LCC_IR_IR_HH
 #define LCC_IR_IR_HH
 
+#include <algorithm>
 #include <lcc/core.hh>
 #include <lcc/forward.hh>
 #include <lcc/ir/type.hh>
@@ -585,7 +586,11 @@ public:
     /// removed.
     ///
     /// \param block The block to remove the value for.
-    void remove_incoming(Block* block);
+    void remove_incoming(Block* block) {
+        std::erase_if(incoming, [&](const IncomingValue& elem){
+            return elem.block == block;
+        });
+    }
 
     /// Register an incoming value from a block.
     ///
@@ -596,7 +601,14 @@ public:
     ///
     /// \param value The value to add.
     /// \param block The block it comes from.
-    void set_incoming(Value* value, Block* block);
+    void set_incoming(Value* value, Block* block) {
+        auto existing = std::find_if(incoming.begin(), incoming.end(), [&](const IncomingValue& elem){
+            return elem.block == block;
+        });
+        if (existing != incoming.end())
+            *existing = { value, block };
+        else incoming.push_back({ value, block });
+    }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Phi; }

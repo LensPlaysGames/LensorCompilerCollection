@@ -571,15 +571,21 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         generate_expression(if_expr->condition());
         insert(new (*module) CondBranchInst(generated_ir[if_expr->condition()], then, else_, expr->location()));
 
+        auto* phi = new (*module) PhiInst(Convert(ctx, if_expr->type()), expr->location());
+
         update_block(then);
         generate_expression(if_expr->then());
+        phi->set_incoming(generated_ir[if_expr->then()], then);
         insert(new (*module) BranchInst(exit, expr->location()));
 
         update_block(else_);
         generate_expression(if_expr->else_());
+        phi->set_incoming(generated_ir[if_expr->then()], then);
         insert(new (*module) BranchInst(exit, expr->location()));
 
         update_block(exit);
+        insert(phi);
+        generated_ir[expr] = phi;
     } break;
 
     case Expr::Kind::StringLiteral: {
