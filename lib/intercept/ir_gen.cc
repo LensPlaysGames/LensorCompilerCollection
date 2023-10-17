@@ -687,7 +687,7 @@ void lcc::Module::print_ir() {
     for (auto function : code()) {
         fmt::print("{}:\n", function->name());
         for (const auto& b : function->blocks()) {
-            //fmt::print("  {}:\n", b->name());
+            fmt::print("  {}:\n", b->name());
             for (const auto& i : b->instructions())
                 ValuePrinter::print(i, fmt::format("{:4} | ", ValuePrinter::get_id_raw(i)));
         }
