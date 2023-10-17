@@ -138,6 +138,7 @@ struct LLVMIRPrinter {
 
             case Value::Kind::Call:
             // case Value::Kind::Copy:
+            case Value::Kind::GetElementPtr:
             case Value::Kind::Intrinsic:
             case Value::Kind::Parameter:
             case Value::Kind::Phi:
@@ -189,6 +190,7 @@ struct LLVMIRPrinter {
 
             /// Instructions that always yield a value.
             case Value::Kind::Alloca:
+            case Value::Kind::GetElementPtr:
             case Value::Kind::Load:
             case Value::Kind::Phi:
             case Value::Kind::ZExt:
@@ -317,6 +319,7 @@ struct LLVMIRPrinter {
 
             /// These always yield a value.
             case Value::Kind::Alloca:
+            case Value::Kind::GetElementPtr:
             case Value::Kind::Parameter:
             case Value::Kind::Call:
             case Value::Kind::Load:

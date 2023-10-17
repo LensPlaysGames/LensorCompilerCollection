@@ -28,6 +28,7 @@ public:
         Alloca,
         Call,
         //Copy,
+        GetElementPtr,
         Intrinsic,
         Load,
         Parameter,
@@ -449,6 +450,36 @@ public:
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Intrinsic; }
+};
+
+/// A "get element pointer", or GEP, instruction.
+///
+/// For now, GEP stores the element type as it's type, then indexes it's
+/// base pointer based on that.
+///
+/// GEP(T, p, x) = p + (sizeof(T) * x)
+///
+class GEPInst : public Inst {
+    /// The base pointer to index from; "p" in the equation.
+    Value* pointer;
+
+    // The index to offset from the base pointer; "x" in the equation.
+    Value* index;
+
+public:
+    GEPInst(Type* elementType, Value* arrayPointer, Value* arrayIndex, Location loc = {})
+        : Inst(Kind::GetElementPtr, elementType, loc), pointer(arrayPointer), index(arrayIndex) {
+        LCC_ASSERT(pointer->type() == Type::PtrTy, "GEPInst may only operate on arrays or opaque pointers, which `{}` is not", *pointer->type());
+    }
+
+    /// Get the base pointer.
+    auto ptr() const -> Value* { return pointer; }
+
+    /// Get the index.
+    auto idx() const -> Value* { return index; }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::GetElementPtr; }
 };
 
 /// A load instruction.

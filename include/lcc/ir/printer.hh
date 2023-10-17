@@ -53,6 +53,7 @@ public:
         case Value::Kind::Alloca: return "local";
         case Value::Kind::Call: return "call";
         //case Value::Kind::Copy: return "copy";
+        case Value::Kind::GetElementPtr: return "gep";
         case Value::Kind::Intrinsic: return "intrinsic";
         case Value::Kind::Load: return "load";
         case Value::Kind::Parameter: return "parameter";
@@ -138,6 +139,14 @@ public:
         /*case Value::Kind::Copy: {
             LCC_ASSERT(false, "TODO IR CopyInst");
         } break;*/
+        case Value::Kind::GetElementPtr: {
+            const auto& gep = as<GEPInst>(v);
+            return fmt::format("{} {} {} ({}B ea) from {}",
+                               instruction_name(v->kind()),
+                               get_id(gep->idx()),
+                               *gep->type(), gep->type()->bytes(),
+                               get_id(gep->ptr()));
+        } break;
         case Value::Kind::Intrinsic: {
             return instruction_name(v->kind());
         } break;
