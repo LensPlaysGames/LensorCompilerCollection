@@ -108,7 +108,11 @@ public:
             return fmt::format("{}", as<IntegerConstant>(v)->value());
         } break;
         case Value::Kind::ArrayConstant: {
-            return "constant.array"; // TODO: value
+            const auto& array = as<ArrayConstant>(v);
+            return fmt::format("{} of {} {}",
+                               instruction_name(v->kind()),
+                               array->size(),
+                               *as<ArrayType>(array->type())->element_type());
         } break;
         case Value::Kind::Poison: {
             return instruction_name(v->kind());

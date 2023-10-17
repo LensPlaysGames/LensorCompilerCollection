@@ -53,7 +53,7 @@ auto Type::string() const -> std::string {
     case Kind::Unknown: return "<?>";
     case Kind::Pointer: return "ptr";
     case Kind::Void: return "void";
-    case Kind::Array: return "array"; // TODO: element type
+    case Kind::Array: return fmt::format("array of {}", as<ArrayType>(this)->element_type()->string());
     case Kind::Function: return "function"; // TODO: function parameter and return types
     case Kind::Integer: {
         const auto& integer = as<IntegerType>(this);
