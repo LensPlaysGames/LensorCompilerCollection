@@ -1050,7 +1050,7 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
         case Tk::ArbitraryInt:
             ty = new (*mod) IntegerType(
                 tok.integer_value,
-                tok.text[0] == 'i',
+                tok.text[0] == 'i' || tok.text[0] == 's',
                 tok.location
             );
 
