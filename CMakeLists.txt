@@ -191,20 +191,8 @@ FetchContent_Declare(clopts
 FetchContent_MakeAvailable(clopts)
 target_include_directories(options INTERFACE ${clopts_SOURCE_DIR}/include)
 
-## Add liblaye.
-FetchContent_Declare(laye
-    GIT_REPOSITORY https://github.com/laye-lang/laye.git
-    GIT_TAG main
-    SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/laye"
-)
-FetchContent_MakeAvailable(laye)
-target_include_directories(options INTERFACE ${laye_SOURCE_DIR}/include)
-
 ## Link against libfmt.
 target_link_libraries(options INTERFACE fmt)
-
-## Link against liblayec.
-target_link_libraries(options INTERFACE layec)
 
 ## Add ‘include’ as an include dir.
 target_include_directories(options INTERFACE include)
