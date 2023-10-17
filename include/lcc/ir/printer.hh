@@ -167,7 +167,11 @@ public:
             return fmt::format("{} {} ({}B)", instruction_name(v->kind()), *param->type(), param->type()->bytes());
         } break;
         case Value::Kind::Phi: {
-            return instruction_name(v->kind());
+            const auto& phi = as<PhiInst>(v);
+            auto out = instruction_name(v->kind());
+            for (const auto& operand : phi->operands())
+                out += fmt::format(" [{}, {}]", operand.block->name(), get_id(operand.value));
+            return out;
         } break;
         case Value::Kind::Store: {
             const auto& store = as<StoreInst>(v);
@@ -180,9 +184,14 @@ public:
 
         /// Terminators.
         case Value::Kind::Branch: {
-            return instruction_name(v->kind());
+            const auto& branch = as<BranchInst>(v);
+            return fmt::format("{} to {}", instruction_name(v->kind()), get_id(branch->target()));
         } break;
         case Value::Kind::CondBranch: {
+            const auto& branch = as<CondBranchInst>(v);
+            return fmt::format("{} if {} then {} otherwise {}", instruction_name(v->kind()),
+                               get_id(branch->cond()),
+                               get_id(branch->then_block()), get_id(branch->else_block()));
             return instruction_name(v->kind());
         } break;
         case Value::Kind::Return: {
