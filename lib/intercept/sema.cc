@@ -105,7 +105,12 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
         return NoOp;
     }
 
-    /// Integer to integer, integer to boolean implicit conversions.
+    /// Integer to boolean implicit conversions.
+    if (from->is_integer() and to->is_bool()) {
+        return Score(1);
+    }
+
+    /// Integer to integer
     ///
     /// For portability, we would ideally not make any assumptions about
     /// the size of `int`, but the issue with that is that it would make
@@ -113,7 +118,7 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
     /// an `i16` to `int` manually. Moreover, integer literals are of type
     /// `int`, so that would also cause problems. C FFI types suffer from
     /// similar problems, so we just use their width on the target.
-    if (from->is_integer() and to->is_integer(/* include boolean */ true)) {
+    if (from->is_integer() and to->is_integer()) {
         /// Integer types (but not bool) are convertible to each other if
         /// the value is known at compile time and in range for the type
         /// it is being converted to.
