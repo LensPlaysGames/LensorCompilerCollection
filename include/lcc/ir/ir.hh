@@ -17,6 +17,7 @@ namespace lcc {
 class Value {
 public:
     enum struct Kind {
+        // Values
         Block,
         Function,
         IntegerConstant,
@@ -24,7 +25,7 @@ public:
         Poison,
         GlobalVariable,
 
-        /// Instructions.
+        /// Instructions
         Alloca,
         Call,
         //Copy,
@@ -35,13 +36,13 @@ public:
         Phi,
         Store,
 
-        /// Terminators.
+        /// Terminators
         Branch,
         CondBranch,
         Return,
         Unreachable,
 
-        /// Unary instructions.
+        /// Unary instructions
         ZExt,
         SExt,
         Trunc,
@@ -49,7 +50,7 @@ public:
         Neg,
         Compl,
 
-        /// Binary instructions.
+        /// Binary instructions
         Add,
         Sub,
         Mul,
@@ -64,13 +65,19 @@ public:
         Or,
         Xor,
 
-        /// Compare instructions.
+        /// Comparison instructions
         Eq,
         Ne,
-        Lt,
-        Le,
-        Gt,
-        Ge,
+        // Signed comparisons
+        SLt,
+        SLe,
+        SGt,
+        SGe,
+        // Unsigned comparisons
+        ULt,
+        ULe,
+        UGt,
+        UGe,
     };
 
 private:
@@ -946,51 +953,93 @@ public:
 };
 
 /// Instruction that compares two values for less-than.
-class LtInst : public CompareInst {
+class SLtInst : public CompareInst {
 public:
-    LtInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::Lt, l, r, loc) {
+    SLtInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::ULt, l, r, loc) {
+        // TODO: Assert type of `Value* l` is signed
         AssertSameType(l, r);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Lt; }
+    static bool classof(Value* v) { return v->kind() == Kind::SLt; }
+};
+class ULtInst : public CompareInst {
+public:
+    ULtInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::SLt, l, r, loc) {
+        // TODO: Assert type of `Value* l` is unsigned
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::ULt; }
 };
 
 /// Instruction that compares two values for less-than-or-equal.
-class LeInst : public CompareInst {
+class SLeInst : public CompareInst {
 public:
-    LeInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::Le, l, r, loc) {
+    SLeInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::SLe, l, r, loc) {
         AssertSameType(l, r);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Le; }
+    static bool classof(Value* v) { return v->kind() == Kind::SLe; }
+};
+class ULeInst : public CompareInst {
+public:
+    ULeInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::ULe, l, r, loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::ULe; }
 };
 
 /// Instruction that compares two values for greater-than.
-class GtInst : public CompareInst {
+class SGtInst : public CompareInst {
 public:
-    GtInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::Gt, l, r, loc) {
+    SGtInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::SGt, l, r, loc) {
         AssertSameType(l, r);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Gt; }
+    static bool classof(Value* v) { return v->kind() == Kind::SGt; }
+};
+class UGtInst : public CompareInst {
+public:
+    UGtInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::UGt, l, r, loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::UGt; }
 };
 
 /// Instruction that compares two values for greater-than-or-equal.
-class GeInst : public CompareInst {
+class SGeInst : public CompareInst {
 public:
-    GeInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::Ge, l, r, loc) {
+    SGeInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::SGe, l, r, loc) {
         AssertSameType(l, r);
     }
 
     /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Ge; }
+    static bool classof(Value* v) { return v->kind() == Kind::SGe; }
+};
+class UGeInst : public CompareInst {
+public:
+    UGeInst(Value* l, Value* r, Location loc = {})
+        : CompareInst(Kind::UGe, l, r, loc) {
+        AssertSameType(l, r);
+    }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::UGe; }
 };
 
 /// Unary instructions.

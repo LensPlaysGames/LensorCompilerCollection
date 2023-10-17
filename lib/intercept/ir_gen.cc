@@ -292,19 +292,27 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         } break;
         case TokenKind::Lt: {
             // Less Than
-            generated_ir[expr] = new (*module) LtInst(lhs, rhs, expr->location());
+            if (lhs_expr->type()->is_signed_int(ctx) || rhs_expr->type()->is_signed_int(ctx))
+                generated_ir[expr] = new (*module) SLtInst(lhs, rhs, expr->location());
+            else generated_ir[expr] = new (*module) ULtInst(lhs, rhs, expr->location());
         } break;
         case TokenKind::Gt: {
             // Greater Than
-            generated_ir[expr] = new (*module) GtInst(lhs, rhs, expr->location());
+            if (lhs_expr->type()->is_signed_int(ctx) || rhs_expr->type()->is_signed_int(ctx))
+                generated_ir[expr] = new (*module) SGtInst(lhs, rhs, expr->location());
+            else generated_ir[expr] = new (*module) UGtInst(lhs, rhs, expr->location());
         } break;
         case TokenKind::Le: {
             // Less Than or Equal To
-            generated_ir[expr] = new (*module) LeInst(lhs, rhs, expr->location());
+            if (lhs_expr->type()->is_signed_int(ctx) || rhs_expr->type()->is_signed_int(ctx))
+                generated_ir[expr] = new (*module) SLeInst(lhs, rhs, expr->location());
+            else generated_ir[expr] = new (*module) ULeInst(lhs, rhs, expr->location());
         } break;
         case TokenKind::Ge: {
             // Greater Than or Equal To
-            generated_ir[expr] = new (*module) GeInst(lhs, rhs, expr->location());
+            if (lhs_expr->type()->is_signed_int(ctx) || rhs_expr->type()->is_signed_int(ctx))
+                generated_ir[expr] = new (*module) SGeInst(lhs, rhs, expr->location());
+            else generated_ir[expr] = new (*module) UGeInst(lhs, rhs, expr->location());
         } break;
 
         // Binary bitwise operations

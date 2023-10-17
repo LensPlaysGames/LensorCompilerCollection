@@ -84,10 +84,14 @@ public:
         case Value::Kind::Xor: return "^";
         case Value::Kind::Eq: return "=";
         case Value::Kind::Ne: return "!=";
-        case Value::Kind::Lt: return "<";
-        case Value::Kind::Le: return "<=";
-        case Value::Kind::Gt: return ">";
-        case Value::Kind::Ge: return ">=";
+        case Value::Kind::SLt: return "<";
+        case Value::Kind::SLe: return "s.<=";
+        case Value::Kind::SGt: return "s.>";
+        case Value::Kind::SGe: return "s.>=";
+        case Value::Kind::ULt: return "u.<";
+        case Value::Kind::ULe: return "u.<=";
+        case Value::Kind::UGt: return "u.>";
+        case Value::Kind::UGe: return "u.>=";
         }
         LCC_UNREACHABLE();
     }
@@ -227,10 +231,14 @@ public:
         /// Compare instructions.
         case Value::Kind::Eq:
         case Value::Kind::Ne:
-        case Value::Kind::Lt:
-        case Value::Kind::Le:
-        case Value::Kind::Gt:
-        case Value::Kind::Ge: {
+        case Value::Kind::SLt:
+        case Value::Kind::SLe:
+        case Value::Kind::SGt:
+        case Value::Kind::SGe:
+        case Value::Kind::ULt:
+        case Value::Kind::ULe:
+        case Value::Kind::UGt:
+        case Value::Kind::UGe: {
             const BinaryInst* binary = as<BinaryInst>(v);
             return fmt::format("{} {} {}", instruction_name(v->kind()), get_id(binary->lhs()), get_id(binary->rhs()));
         } break;

@@ -165,10 +165,14 @@ struct LLVMIRPrinter {
             case Value::Kind::Xor:
             case Value::Kind::Eq:
             case Value::Kind::Ne:
-            case Value::Kind::Lt:
-            case Value::Kind::Le:
-            case Value::Kind::Gt:
-            case Value::Kind::Ge:
+            case Value::Kind::SLt:
+            case Value::Kind::SLe:
+            case Value::Kind::SGt:
+            case Value::Kind::SGe:
+            case Value::Kind::ULt:
+            case Value::Kind::ULe:
+            case Value::Kind::UGt:
+            case Value::Kind::UGe:
                 LCC_TODO();
         }
 
@@ -214,10 +218,14 @@ struct LLVMIRPrinter {
             case Value::Kind::Xor:
             case Value::Kind::Eq:
             case Value::Kind::Ne:
-            case Value::Kind::Lt:
-            case Value::Kind::Le:
-            case Value::Kind::Gt:
-            case Value::Kind::Ge:
+            case Value::Kind::SLt:
+            case Value::Kind::SLe:
+            case Value::Kind::SGt:
+            case Value::Kind::SGe:
+            case Value::Kind::ULt:
+            case Value::Kind::ULe:
+            case Value::Kind::UGt:
+            case Value::Kind::UGe:
                 return true;
 
             /// Instructions that may yield a value.
@@ -345,10 +353,14 @@ struct LLVMIRPrinter {
             case Value::Kind::Xor:
             case Value::Kind::Eq:
             case Value::Kind::Ne:
-            case Value::Kind::Lt:
-            case Value::Kind::Le:
-            case Value::Kind::Gt:
-            case Value::Kind::Ge:
+            case Value::Kind::SLt:
+            case Value::Kind::SLe:
+            case Value::Kind::SGt:
+            case Value::Kind::SGe:
+            case Value::Kind::ULt:
+            case Value::Kind::ULe:
+            case Value::Kind::UGt:
+            case Value::Kind::UGe:
                 return Format("%{}", inst_indices[as<Inst>(v)]);
 
             /// These do not yield a value.
