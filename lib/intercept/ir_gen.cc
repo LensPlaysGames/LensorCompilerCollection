@@ -83,7 +83,8 @@ void intercept::IRGen::create_function(intercept::FuncDecl* f) {
     generated_ir[f] = new (*module) Function (ctx, f->mangled_name(),
                                               as<FunctionType>(Convert(ctx, f->type())),
                                               f->linkage(),
-                                              CallConv::Intercept);
+                                              CallConv::Intercept,
+                                              f->location());
 }
 
 void intercept::IRGen::generate_lvalue(intercept::Expr* expr) {
@@ -128,12 +129,12 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         const auto& decl = as<VarDecl>(expr);
         switch (decl->linkage()) {
         case Linkage::LocalVar: {
-            auto* alloca = new (*module) AllocaInst(Convert(ctx, decl->type()), decl->location());
+            auto* alloca = new (*module) AllocaInst(Convert(ctx, decl->type()), expr->location());
             insert(alloca);
             if (auto* init_expr = decl->init()) {
                 generate_expression(init_expr);
                 // Store generated init_expr into above inserted declaration
-                auto* local_init = new (*module) StoreInst(generated_ir[init_expr], alloca);
+                auto* local_init = new (*module) StoreInst(generated_ir[init_expr], alloca, expr->location());
                 insert(local_init);
             }
             generated_ir[expr] = alloca;
@@ -141,7 +142,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         case Linkage::Imported:
         case Linkage::Reexported: {
-            auto* alloca = new (*module) AllocaInst(Convert(ctx, decl->type()), decl->location());
+            auto* alloca = new (*module) AllocaInst(Convert(ctx, decl->type()), expr->location());
             insert(alloca);
             generated_ir[expr] = alloca;
         } break;
@@ -167,7 +168,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         switch (unary_expr->op()) {
         case TokenKind::Minus: {
-            generated_ir[expr] = new (*module) NegInst(generated_ir[unary_expr->operand()]);
+            generated_ir[expr] = new (*module) NegInst(generated_ir[unary_expr->operand()], expr->location());
         } break;
         default: LCC_ASSERT(false, "Sorry, but IRGen of unary operator {} has, apparently, not been implemented. Sorry about that.", ToString(unary_expr->op()));
         }
@@ -215,21 +216,20 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             if (lhs_type_stripped->is_pointer()) {
                 // pointer subscript needs scaled by size of pointer base type
                 auto* type_to_scale_by = as<PointerType>(lhs_type_stripped)->element_type();
-                auto* gep = new (*module) GEPInst(Convert(ctx, type_to_scale_by), lhs, rhs);
+                auto* gep = new (*module) GEPInst(Convert(ctx, type_to_scale_by), lhs, rhs, expr->location());
                 generated_ir[expr] = gep;
                 insert(gep);
             } else if (lhs_type_stripped->is_array()) {
                 // array literal subscript (cry)
                 auto* element_type = as<ArrayType>(lhs_type_stripped)->element_type();
-                auto* alloca = new (*module) AllocaInst(Convert(ctx, lhs_type_stripped));
-                auto* store = new (*module) StoreInst(lhs, alloca);
-                auto* gep = new (*module) GEPInst(Convert(ctx, element_type), alloca, rhs);
+                auto* alloca = new (*module) AllocaInst(Convert(ctx, lhs_type_stripped), expr->location());
+                auto* store = new (*module) StoreInst(lhs, alloca, expr->location());
+                auto* gep = new (*module) GEPInst(Convert(ctx, element_type), alloca, rhs, expr->location());
                 insert(alloca);
                 insert(store);
                 insert(gep);
                 generated_ir[expr] = gep;
             } else LCC_ASSERT(false, "Sorry, but the rhs of the subscript has an unexpected type");
-
 
             break;
         }
@@ -244,78 +244,78 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         case TokenKind::Plus: {
             // Arithmetic Addition
-            generated_ir[expr] = new (*module) AddInst(lhs, rhs);
+            generated_ir[expr] = new (*module) AddInst(lhs, rhs, expr->location());
         } break;
 
         case TokenKind::Minus: {
             // Arithmetic Subtraction
-            generated_ir[expr] = new (*module) SubInst(lhs, rhs);
+            generated_ir[expr] = new (*module) SubInst(lhs, rhs, expr->location());
         } break;
 
         case TokenKind::Star: {
             // Arithmetic Multiplication
-            generated_ir[expr] = new (*module) MulInst(lhs, rhs);
+            generated_ir[expr] = new (*module) MulInst(lhs, rhs, expr->location());
         } break;
 
         case TokenKind::Slash: {
             // Arithmetic Division
             if (binary_expr->lhs()->type()->is_signed_int(ctx) ||
                 binary_expr->rhs()->type()->is_signed_int(ctx))
-                generated_ir[expr] = new (*module) SDivInst(lhs, rhs);
-            else generated_ir[expr] = new (*module) UDivInst(lhs, rhs);
+                generated_ir[expr] = new (*module) SDivInst(lhs, rhs, expr->location());
+            else generated_ir[expr] = new (*module) UDivInst(lhs, rhs, expr->location());
         } break;
 
         case TokenKind::Percent: {
             // Arithmetic Modulus (remainder)
             if (binary_expr->lhs()->type()->is_signed_int(ctx) ||
                 binary_expr->rhs()->type()->is_signed_int(ctx))
-                generated_ir[expr] = new (*module) SRemInst(lhs, rhs);
-            else generated_ir[expr] = new (*module) URemInst(lhs, rhs);
+                generated_ir[expr] = new (*module) SRemInst(lhs, rhs, expr->location());
+            else generated_ir[expr] = new (*module) URemInst(lhs, rhs, expr->location());
         } break;
 
         // Comparisons
         case TokenKind::Eq: {
             // Equality
-            generated_ir[expr] = new (*module) EqInst(lhs, rhs);
+            generated_ir[expr] = new (*module) EqInst(lhs, rhs, expr->location());
         } break;
         case TokenKind::Ne: {
             // NOT Equality
-            generated_ir[expr] = new (*module) NeInst(lhs, rhs);
+            generated_ir[expr] = new (*module) NeInst(lhs, rhs, expr->location());
         } break;
         case TokenKind::Lt: {
             // Less Than
-            generated_ir[expr] = new (*module) LtInst(lhs, rhs);
+            generated_ir[expr] = new (*module) LtInst(lhs, rhs, expr->location());
         } break;
         case TokenKind::Gt: {
             // Greater Than
-            generated_ir[expr] = new (*module) GtInst(lhs, rhs);
+            generated_ir[expr] = new (*module) GtInst(lhs, rhs, expr->location());
         } break;
         case TokenKind::Le: {
             // Less Than or Equal To
-            generated_ir[expr] = new (*module) LeInst(lhs, rhs);
+            generated_ir[expr] = new (*module) LeInst(lhs, rhs, expr->location());
         } break;
         case TokenKind::Ge: {
             // Greater Than or Equal To
-            generated_ir[expr] = new (*module) GeInst(lhs, rhs);
+            generated_ir[expr] = new (*module) GeInst(lhs, rhs, expr->location());
         } break;
 
         // Binary bitwise operations
         case TokenKind::Ampersand: {
             // Bitwise AND
-            generated_ir[expr] = new (*module) AndInst(lhs, rhs);
+            generated_ir[expr] = new (*module) AndInst(lhs, rhs, expr->location());
         } break;
         case TokenKind::Pipe: {
             // Bitwise OR
-            generated_ir[expr] = new (*module) OrInst(lhs, rhs);
+            generated_ir[expr] = new (*module) OrInst(lhs, rhs, expr->location());
         } break;
         case TokenKind::Shl: {
             // Bitwise Shift Left
-            generated_ir[expr] = new (*module) ShlInst(lhs, rhs);
+            generated_ir[expr] = new (*module) ShlInst(lhs, rhs, expr->location());
         } break;
         case TokenKind::Shr: {
             // Bitwise Shift Left
             // FIXME: SAR or SHL?
-            generated_ir[expr] = new (*module) SarInst(lhs, rhs);
+            generated_ir[expr] = new (*module) SarInst(lhs, rhs, expr->location());
         } break;
 
         // NOT binary operator tokens.
@@ -391,29 +391,29 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         bool from_signed = cast->operand()->type()->is_signed_int(ctx);
 
         if (cast->is_lvalue_to_rvalue()) {
-            auto load = new (*module) LoadInst(t_to, generated_ir[cast->operand()]);
+            auto load = new (*module) LoadInst(t_to, generated_ir[cast->operand()], expr->location());
             generated_ir[expr] = load;
             insert(load);
         } else {
             if (from_sz == to_sz) {
-                auto bitcast = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+                auto bitcast = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
                 generated_ir[expr] = bitcast;
                 insert(bitcast);
             } else if (from_sz < to_sz) {
                 // smaller to larger: sign extend if needed, otherwise zero extend.
                 if (from_signed) {
-                    auto sign_extend = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+                    auto sign_extend = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
                     generated_ir[expr] = sign_extend;
                     insert(sign_extend);
                 }
                 else {
-                    auto zero_extend = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+                    auto zero_extend = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
                     generated_ir[expr] = zero_extend;
                     insert(zero_extend);
                 }
             } else if (from_sz > to_sz) {
                 // larger to smaller: truncate.
-                auto truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()));
+                auto truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
                 generated_ir[expr] = truncate;
                 insert(truncate);
             }
@@ -443,7 +443,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     case Expr::Kind::Return: {
         const auto& ret_expr = as<ReturnExpr>(expr);
         if (ret_expr->value()) generate_expression(ret_expr->value());
-        const auto& ret = new (*module) ReturnInst(generated_ir[ret_expr->value()]);
+        const auto& ret = new (*module) ReturnInst(generated_ir[ret_expr->value()], expr->location());
         generated_ir[expr] = ret;
         insert(ret);
     } break;
@@ -477,15 +477,15 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         auto* conditional = new (*module) lcc::Block("while.conditional");
         auto* exit = new (*module) lcc::Block("while.exit");
 
-        insert(new (*module) BranchInst(conditional));
+        insert(new (*module) BranchInst(conditional, expr->location()));
 
         function->append_block(conditional);
         generate_expression(while_expr->condition());
-        insert(new (*module) CondBranchInst(generated_ir[while_expr->condition()], body, exit));
+        insert(new (*module) CondBranchInst(generated_ir[while_expr->condition()], body, exit, expr->location()));
 
         function->append_block(body);
         generate_expression(while_expr->body());
-        insert(new (*module) BranchInst(conditional));
+        insert(new (*module) BranchInst(conditional, expr->location()));
 
         function->append_block(exit);
 
@@ -520,16 +520,16 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         auto* exit = new (*module) lcc::Block("for.exit");
 
         generate_expression(for_expr->init());
-        insert(new (*module) BranchInst(conditional));
+        insert(new (*module) BranchInst(conditional, expr->location()));
 
         function->append_block(conditional);
         generate_expression(for_expr->condition());
-        insert(new (*module) CondBranchInst(generated_ir[for_expr->condition()], body, exit));
+        insert(new (*module) CondBranchInst(generated_ir[for_expr->condition()], body, exit, expr->location()));
 
         function->append_block(body);
         generate_expression(for_expr->body());
         generate_expression(for_expr->increment());
-        insert(new (*module) BranchInst(conditional));
+        insert(new (*module) BranchInst(conditional, expr->location()));
 
         function->append_block(exit);
     } break;
@@ -554,15 +554,15 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         auto* exit = new (*module) lcc::Block("if.exit");
 
         generate_expression(if_expr->condition());
-        insert(new (*module) CondBranchInst(generated_ir[if_expr->condition()], then, else_));
+        insert(new (*module) CondBranchInst(generated_ir[if_expr->condition()], then, else_, expr->location()));
 
         function->append_block(then);
         generate_expression(if_expr->then());
-        insert(new (*module) BranchInst(exit));
+        insert(new (*module) BranchInst(exit, expr->location()));
 
         function->append_block(else_);
         generate_expression(if_expr->else_());
-        insert(new (*module) BranchInst(exit));
+        insert(new (*module) BranchInst(exit, expr->location()));
 
         function->append_block(exit);
     } break;
@@ -587,7 +587,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             args.push_back(generated_ir[arg]);
         }
 
-        auto ir_call = new (*module) CallInst(generated_ir[call->callee()], function_type, std::move(args));
+        auto ir_call = new (*module) CallInst(generated_ir[call->callee()], function_type, std::move(args), expr->location());
 
         generated_ir[expr] = ir_call;
         insert(ir_call);
@@ -657,7 +657,7 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
 
         unsigned int i = 0;
         for (const auto& param : f->param_decls()) {
-            const auto& param_ir = new (*module) ParamInst(Convert(ctx, param->type()), i++);
+            const auto& param_ir = new (*module) ParamInst(Convert(ctx, param->type()), i++, param->location());
             generated_ir[param] = param_ir;
             insert(param_ir);
         }
