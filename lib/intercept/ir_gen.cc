@@ -575,17 +575,22 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         update_block(then);
         generate_expression(if_expr->then());
-        phi->set_incoming(generated_ir[if_expr->then()], then);
         insert(new (*module) BranchInst(exit, expr->location()));
 
         update_block(else_);
         generate_expression(if_expr->else_());
-        phi->set_incoming(generated_ir[if_expr->then()], then);
         insert(new (*module) BranchInst(exit, expr->location()));
 
         update_block(exit);
-        insert(phi);
-        generated_ir[expr] = phi;
+        // If the type of an if isn't void, it must return a value, so generate
+        // Phi goodness.
+        if (!if_expr->type()->is_void()) {
+            phi->set_incoming(generated_ir[if_expr->then()], then);
+            phi->set_incoming(generated_ir[if_expr->else_()], else_);
+            insert(phi);
+            generated_ir[expr] = phi;
+        }
+
     } break;
 
     case Expr::Kind::StringLiteral: {
