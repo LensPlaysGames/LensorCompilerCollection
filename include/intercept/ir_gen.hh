@@ -19,9 +19,15 @@ class IRGen {
     lcc::Function* function{nullptr};
     lcc::Block* block{nullptr};
 
+    usz total_block = 0;
+    usz total_while = 0;
+    usz total_for = 0;
+    usz total_if = 0;
+
     void update_block(lcc::Block* new_block) {
         function->append_block(new_block);
         block = new_block;
+        total_block += 1;
     }
 
     std::unordered_map<intercept::Expr*, lcc::Value*> generated_ir;

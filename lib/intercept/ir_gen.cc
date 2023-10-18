@@ -117,9 +117,11 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     // If we call `generate_expression` on an expression that hasn't already
     // been generated, *and* the block we would be trying to insert to is
     // closed, create a new block to insert into.
+    // Possible FIXME: I think this is only ever used for early return. Maybe
+    // we could just handle early returns specifically and not have this?
     if (block->closed()) {
         // TODO: Unique block name, or something.
-        update_block(new (*module) lcc::Block("body.more"));
+        update_block(new (*module) lcc::Block(fmt::format("body.{}", total_block)));
     }
 
     switch (expr->kind()) {
@@ -489,9 +491,10 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         // TODO: could number whiles to make this easier I guess, for any poor
         // soul who has to debug the IR.
 
-        auto* body = new (*module) lcc::Block("while.body");
-        auto* conditional = new (*module) lcc::Block("while.conditional");
-        auto* exit = new (*module) lcc::Block("while.exit");
+        auto* body = new (*module) lcc::Block(fmt::format("while.body.{}", total_while));
+        auto* conditional = new (*module) lcc::Block(fmt::format("while.conditional.{}", total_while));
+        auto* exit = new (*module) lcc::Block(fmt::format("while.exit.{}", total_while));
+        total_while += 1;
 
         insert(new (*module) BranchInst(conditional, expr->location()));
 
@@ -530,9 +533,10 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         //  +----------+
         const auto& for_expr = as<ForExpr>(expr);
 
-        auto* conditional = new (*module) lcc::Block("for.conditional");
-        auto* body = new (*module) lcc::Block("for.body");
-        auto* exit = new (*module) lcc::Block("for.exit");
+        auto* conditional = new (*module) lcc::Block(fmt::format("for.conditional.{}", total_for));
+        auto* body = new (*module) lcc::Block(fmt::format("for.body.{}", total_for));
+        auto* exit = new (*module) lcc::Block(fmt::format("for.exit.{}", total_for));
+        total_for += 1;
 
         generate_expression(for_expr->init());
         insert(new (*module) BranchInst(conditional, expr->location()));
@@ -564,9 +568,10 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         ///
         const auto& if_expr = as<IfExpr>(expr);
 
-        auto* then = new (*module) lcc::Block("if.then");
-        auto* else_ = new (*module) lcc::Block("if.else");
-        auto* exit = new (*module) lcc::Block("if.exit");
+        auto* then = new (*module) lcc::Block(fmt::format("if.then.{}", total_if));
+        auto* else_ = new (*module) lcc::Block(fmt::format("if.else.{}", total_if));
+        auto* exit = new (*module) lcc::Block(fmt::format("if.exit.{}", total_if));
+        total_if += 1;
 
         generate_expression(if_expr->condition());
         insert(new (*module) CondBranchInst(generated_ir[if_expr->condition()], then, else_, expr->location()));
@@ -678,7 +683,7 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
 
     // Hard to generate code for a function without a body.
     if (auto* expr = f->body()) {
-        block = new (*module) lcc::Block("body");
+        block = new (*module) lcc::Block(fmt::format("body.{}", total_block));
         update_block(block);
 
         unsigned int i = 0;
