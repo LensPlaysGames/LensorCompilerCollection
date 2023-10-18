@@ -1,4 +1,4 @@
-import * from "stdio.h";
+i32 puts(i8[*] s);
 
 i32 main(i32 argc, i8[*][*] argv)
 {

@@ -5,8 +5,8 @@
 #include <intercept/parser.hh>
 #include <intercept/sema.hh>
 #include <intercept/ir_gen.hh>
-#include <laye/laye.hh>
-#include <laye/ir_gen.h>
+#include <laye/parser.hh>
+#include <laye/sema.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/lcc-c.h>
@@ -73,6 +73,7 @@ int main(int argc, char** argv) {
     lcc::Context context{detail::default_target};
     auto path_str = input_files[0].path.string();
     auto& file = context.create_file(input_files[0].path, input_files[0].contents);
+    fmt::print("{}\n", file.path().string());
 
     /// Intercept.
     if (path_str.ends_with(".int")) {
@@ -107,46 +108,30 @@ int main(int argc, char** argv) {
 
     /// Laye.
     if (path_str.ends_with(".laye")) {
-        auto laye_context = layec_context_create();
-        laye_context->print_ast = options::get<"--ast">();
+        auto laye_context = new lcc::laye::LayeContext{&context};
 
-        auto file_name_view = (layec_string_view)
-        {
-            .data = path_str.c_str(),
-            .length = (long long)path_str.length(),
-        };
+        /// Parse the file.
+        auto mod = laye_context->parse_laye_file(file);
 
-        int source_id = layec_context_get_or_add_source_buffer_from_file(laye_context, file_name_view);
-        auto laye_module = layec_laye_parse(laye_context, source_id);
+        if (options::get<"--syntax-only">()) {
+            if (options::get<"--ast">()) laye_context->print_modules();
+            std::exit(0);
+        }
 
-        auto lcc_module = (lcc::Module*)laye_generate_ir((LccContextRef)&context, laye_module);
-
-        layec_laye_module_destroy(laye_module);
-
-        /// Nice.
-        return 69;
+        /// Perform semantic analysis.
+        lcc::laye::Sema::Analyse(laye_context, mod, true);
     }
 
     /// C.
     if (path_str.ends_with(".c")) {
-        auto context = layec_context_create();
-        context->print_ast = options::get<"--ast">();
+        /// Parse the file.
+        auto c_context = new lcc::c::CContext{&context};
+        auto translation_unit = lcc::c::Parser::Parse(c_context, file);
 
-        auto file_name_view = (layec_string_view)
-        {
-            .data = path_str.c_str(),
-            .length = (long long)path_str.length(),
-        };
-
-        int source_id = layec_context_get_or_add_source_buffer_from_file(context, file_name_view);
-
-        layec_c_translation_unit* tu = (layec_c_translation_unit*)calloc(1, sizeof *tu);
-        auto token_buffer = layec_c_get_tokens(context, tu, source_id);
-
-        layec_c_token_buffer_destroy(&token_buffer);
-        layec_c_translation_unit_destroy(tu);
-
-        return 89;
+        if (options::get<"--syntax-only">()) {
+            if (options::get<"--ast">()) translation_unit->print();
+            std::exit(0);
+        }
     }
 
     /// Unknown.
