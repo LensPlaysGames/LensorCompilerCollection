@@ -185,7 +185,7 @@ target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
 ## Add libclopts.
 FetchContent_Declare(clopts
     GIT_REPOSITORY https://github.com/Sirraide/clopts.git
-    GIT_TAG master
+    GIT_TAG v1.0.0
     SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/clopts"
 )
 FetchContent_MakeAvailable(clopts)
