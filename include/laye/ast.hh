@@ -518,6 +518,8 @@ public:
     auto kind() const { return _kind; }
 };
 
+std::string ToString(Statement::Kind kind);
+
 /// @brief Base class for expression syntax nodes.
 class Expr : public SemaNode {
 public:
@@ -600,6 +602,8 @@ public:
     auto kind() const { return _kind; }
     auto type() const { return _type; }
 };
+
+std::string ToString(Expr::Kind kind);
 
 class Decl : public Statement {
 protected:

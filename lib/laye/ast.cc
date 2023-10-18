@@ -221,6 +221,88 @@ std::string layec::ToString(layec::OperatorKind kind) {
     }
 }
 
+std::string layec::ToString(Statement::Kind kind) {
+    switch (kind) {
+        case Statement::Kind::OverloadSet: return "OverloadSet";
+        case Statement::Kind::DeclBinding: return "DeclBinding";
+        case Statement::Kind::DeclFunction: return "DeclFunction";
+        case Statement::Kind::DeclStruct: return "DeclStruct";
+        case Statement::Kind::DeclEnum: return "DeclEnum";
+        case Statement::Kind::DeclAlias: return "DeclAlias";
+        case Statement::Kind::DeclImport: return "DeclImport";
+        case Statement::Kind::Block: return "Block";
+        case Statement::Kind::Assign: return "Assign";
+        case Statement::Kind::Delete: return "Delete";
+        case Statement::Kind::Discard: return "Discard";
+        case Statement::Kind::Expr: return "Expr";
+        case Statement::Kind::Empty: return "Empty";
+        case Statement::Kind::If: return "If";
+        case Statement::Kind::For: return "For";
+        case Statement::Kind::ForEach: return "ForEach";
+        case Statement::Kind::DoFor: return "DoFor";
+        case Statement::Kind::Switch: return "Switch";
+        case Statement::Kind::Return: return "Return";
+        case Statement::Kind::Break: return "Break";
+        case Statement::Kind::Continue: return "Continue";
+        case Statement::Kind::Fallthrough: return "Fallthrough";
+        case Statement::Kind::Defer: return "Defer";
+        case Statement::Kind::Goto: return "Goto";
+        case Statement::Kind::Test: return "Test";
+        default: return "<unknown>";
+    }
+}
+
+std::string layec::ToString(Expr::Kind kind) {
+    switch (kind) {
+        case Expr::Kind::Unary: return "Unary";
+        case Expr::Kind::Binary: return "Binary";
+        case Expr::Kind::And: return "And";
+        case Expr::Kind::Or: return "Or";
+        case Expr::Kind::Xor: return "Xor";
+        case Expr::Kind::UnwrapNilable: return "UnwrapNilable";
+        case Expr::Kind::LookupName: return "LookupName";
+        case Expr::Kind::LookupPath: return "LookupPath";
+        case Expr::Kind::FieldIndex: return "FieldIndex";
+        case Expr::Kind::ValueIndex: return "ValueIndex";
+        case Expr::Kind::Slice: return "Slice";
+        case Expr::Kind::Call: return "Call";
+        case Expr::Kind::Ctor: return "Ctor";
+        case Expr::Kind::Not: return "Not";
+        case Expr::Kind::Cast: return "Cast";
+        case Expr::Kind::New: return "New";
+        case Expr::Kind::Try: return "Try";
+        case Expr::Kind::Catch: return "Catch";
+        case Expr::Kind::Do: return "Do";
+        case Expr::Kind::Sizeof: return "Sizeof";
+        case Expr::Kind::Offsetof: return "Offsetof";
+        case Expr::Kind::Alignof: return "Alignof";
+        case Expr::Kind::LitNil: return "LitNil";
+        case Expr::Kind::LitBool: return "LitBool";
+        case Expr::Kind::LitString: return "LitString";
+        case Expr::Kind::LitInt: return "LitInt";
+        case Expr::Kind::LitFloat: return "LitFloat";
+        case Expr::Kind::TypeInfer: return "TypeInfer";
+        case Expr::Kind::TypeNilable: return "TypeNilable";
+        case Expr::Kind::TypeErrUnion: return "TypeErrUnion";
+        case Expr::Kind::TypeLookupName: return "TypeLookupName";
+        case Expr::Kind::TypeLookupPath: return "TypeLookupPath";
+        case Expr::Kind::TypeArray: return "TypeArray";
+        case Expr::Kind::TypeSlice: return "TypeSlice";
+        case Expr::Kind::TypePointer: return "TypePointer";
+        case Expr::Kind::TypeBuffer: return "TypeBuffer";
+        case Expr::Kind::TypeFunc: return "TypeFunc";
+        case Expr::Kind::TypeNoreturn: return "TypeNoreturn";
+        case Expr::Kind::TypeRawptr: return "TypeRawptr";
+        case Expr::Kind::TypeVoid: return "TypeVoid";
+        case Expr::Kind::TypeString: return "TypeString";
+        case Expr::Kind::TypeBool: return "TypeBool";
+        case Expr::Kind::TypeInt: return "TypeInt";
+        case Expr::Kind::TypeFloat: return "TypeFloat";
+        case Expr::Kind::TypeC: return "TypeC";
+        default: return "<unknown>";
+    }
+}
+
 auto layec::Type::string(bool use_colours) const -> std::string {
     lcc::utils::Colours C{use_colours};
     using enum lcc::utils::Colour;

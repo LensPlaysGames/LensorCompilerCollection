@@ -73,7 +73,6 @@ int main(int argc, char** argv) {
     lcc::Context context{detail::default_target};
     auto path_str = input_files[0].path.string();
     auto& file = context.create_file(input_files[0].path, input_files[0].contents);
-    fmt::print("{}\n", file.path().string());
 
     /// Intercept.
     if (path_str.ends_with(".int")) {
@@ -112,14 +111,20 @@ int main(int argc, char** argv) {
 
         /// Parse the file.
         auto mod = laye_context->parse_laye_file(file);
-
         if (options::get<"--syntax-only">()) {
+            if (context.has_error()) std::exit(1);
             if (options::get<"--ast">()) laye_context->print_modules();
             std::exit(0);
         }
 
         /// Perform semantic analysis.
         lcc::laye::Sema::Analyse(laye_context, mod, true);
+        if (options::get<"--ast">()) {
+            if (context.has_error()) std::exit(1);
+            laye_context->print_modules();
+        }
+
+        return 69;
     }
 
     /// C.
@@ -132,6 +137,8 @@ int main(int argc, char** argv) {
             if (options::get<"--ast">()) translation_unit->print();
             std::exit(0);
         }
+
+        return 99;
     }
 
     /// Unknown.

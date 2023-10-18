@@ -42,7 +42,7 @@ void layec::Sema::Analyse(Module* module) {
 
             attempted++;
 
-            Analyse(decl);
+            Analyse((Statement**)&decl);
             LCC_ASSERT(decl->sema_state() != SemaState::NotAnalysed);
 
             if (not decl->sema_done_or_errored())
@@ -76,7 +76,7 @@ void layec::Sema::Analyse(Module* module) {
         if (not is<FunctionDecl, BindingDecl>(decl)) continue;
 
         LCC_ASSERT(decl->sema_state() == SemaState::NotAnalysed);
-        Analyse(decl);
+        Analyse((Statement**)&decl);
         LCC_ASSERT(decl->sema_done_or_errored(), "should have finished function analysis");
     }
 
@@ -92,12 +92,14 @@ void layec::Sema::AnalysePrototype(FunctionDecl* func) {
     }
 }
 
-void layec::Sema::Analyse(Statement* statement) {
-    statement->set_sema_in_progress();
-    statement->set_sema_errored();
+void layec::Sema::Analyse(Statement** statement) {
+    Note((*statement)->location(), "Analyse Statement {}\n", ToString((*statement)->kind()));
+    (*statement)->set_sema_in_progress();
+    (*statement)->set_sema_errored();
 }
 
 bool layec::Sema::Analyse(Expr** expr) {
+    Note((*expr)->location(), "Analyse Expression {}\n", ToString((*expr)->kind()));
     (*expr)->set_sema_in_progress();
     (*expr)->set_sema_errored();
     return false;
