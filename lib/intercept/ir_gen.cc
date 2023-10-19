@@ -4,7 +4,6 @@
 #include <lcc/core.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/type.hh>
-#include <lcc/ir/printer.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/context.hh>
 #include <lcc/utils.hh>
@@ -80,11 +79,14 @@ lcc::Type* Convert(Context* ctx, Type* in) {
 
 void intercept::IRGen::create_function(intercept::FuncDecl* f) {
     // FIXME: CallConv::Intercept shouldn't be hard-coded.
-    generated_ir[f] = new (*module) Function (ctx, f->mangled_name(),
-                                              as<FunctionType>(Convert(ctx, f->type())),
-                                              f->linkage(),
-                                              CallConv::Intercept,
-                                              f->location());
+    generated_ir[f] = new (*module) Function(
+        module,
+        f->mangled_name(),
+        as<FunctionType>(Convert(ctx, f->type())),
+        f->linkage(),
+        CallConv::Intercept,
+        f->location()
+    );
 }
 
 void intercept::IRGen::generate_lvalue(intercept::Expr* expr) {
@@ -688,19 +690,19 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 }
 
 void IRGen::generate_function(intercept::FuncDecl* f) {
-    function = new (*module) lcc::Function
-        (ctx,
-         f->mangled_name(),
-         as<lcc::FunctionType>(Convert(ctx, f->type())),
-         f->linkage(),
-         lcc::CallConv::Intercept
-         );
-     module->add_function(function);
+    function = as<Function>(generated_ir[f]);
 
     // Hard to generate code for a function without a body.
     if (auto* expr = f->body()) {
         block = new (*module) lcc::Block(fmt::format("body.{}", total_block));
         update_block(block);
+
+        // Bind param instructions.
+        for (auto [i, param] : vws::enumerate(f->param_decls())) {
+            auto inst = function->param(usz(i));
+            generated_ir[param] = inst;
+        }
+
         generate_expression(expr);
     }
 }
@@ -719,15 +721,4 @@ auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Modul
 
 
 }
-}
-
-void lcc::Module::print_ir() {
-    for (auto function : code()) {
-        fmt::print("{}:\n", function->name());
-        for (const auto& b : function->blocks()) {
-            fmt::print("  {}:\n", b->name());
-            for (const auto& i : b->instructions())
-                ValuePrinter::print(i, fmt::format("{:4} | ", ValuePrinter::get_id_raw(i)));
-        }
-    }
 }

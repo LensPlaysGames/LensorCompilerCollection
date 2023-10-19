@@ -1,7 +1,6 @@
 #include <lcc/context.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
-#include <lcc/ir/printer.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/lcc-c.h>
 #include <lcc/target.hh>

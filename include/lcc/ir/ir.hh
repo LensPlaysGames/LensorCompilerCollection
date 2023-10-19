@@ -11,6 +11,8 @@
 #include <lcc/utils/rtti.hh>
 
 namespace lcc {
+class Parameter;
+
 /// An IR value.
 ///
 /// This may either be an instruction, a block, a function
@@ -280,13 +282,13 @@ class Function : public Value {
     /// The parameters of this function. Parameter instructions
     /// are never created manually; instead, they always reference
     /// one of the parameter instructions inserted here.
-    std::vector<Inst*> param_list{};
+    std::vector<Parameter*> param_list{};
 
     /// The source location of this function.
     Location loc;
 
-    /// The parent context of this function.
-    Context* ctx;
+    /// The parent module of this function.
+    Module* mod;
 
     /// The associated machine function.
     MFunction* mfunc{};
@@ -302,18 +304,13 @@ class Function : public Value {
 
 public:
     Function(
-        Context* ctx,
+        Module* mod,
         std::string mangled_name,
         FunctionType* ty,
         Linkage linkage,
         CallConv calling_convention,
         Location l = {}
-    ) : Value(Kind::Function, ty),
-        func_name(std::move(mangled_name)),
-        loc(l),
-        ctx(ctx),
-        link(linkage),
-        cc(calling_convention) {}
+    );
 
     /// Get an iterator to the first block in this function.
     auto begin() const { return block_list.begin(); }
@@ -328,9 +325,6 @@ public:
 
     /// Set the calling convention of this function.
     void call_conv(CallConv c) { cc = c; }
-
-    /// Get the parent context of this function.
-    auto context() const -> Context* { return ctx; }
 
     /// Get an iterator to the end of the block list.
     auto end() const { return block_list.end(); }
@@ -350,6 +344,9 @@ public:
     /// Set the associated machine function.
     void machine_function(MFunction* m) { mfunc = m; }
 
+    /// Get the parent module of this function.
+    auto module() const -> Module* { return mod; }
+
     /// Get the name of this function.
     auto name() const -> const std::string& { return func_name; }
 
@@ -361,7 +358,7 @@ public:
     /// \param i The index of the parameter.
     /// \return The parameter value of the i-th parameter upon
     ///     entry to this function.
-    auto param(usz i) const -> Value* {
+    auto param(usz i) const -> Parameter* {
         LCC_ASSERT(i < param_list.size(), "Parameter index out of bounds");
         return param_list[i];
     }

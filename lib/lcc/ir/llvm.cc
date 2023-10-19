@@ -1,46 +1,13 @@
 #include <lcc/ir/module.hh>
+#include <lcc/utils/ir_printer.hh>
 
 namespace lcc {
 namespace {
-struct LLVMIRPrinter {
-    Module* mod;
-    std::string s{};
-    usz tmp = 0;
-
-    /// Map from blocks and instructions to their indices.
-    std::unordered_map<Block*, usz> block_indices{};
-    std::unordered_map<Inst*, usz> inst_indices{};
-
-    LLVMIRPrinter(Module* m) : mod(m) {}
-
-    /// Entry.
-    auto print() -> std::string {
-        bool first = true;
-        for (auto f : mod->code()) {
-            if (first) first = false;
-            else s += '\n';
-            PrintFunction(f);
-        }
-
-        return std::move(s);
-    }
-
-    /// Get an insert iterator to the output string.
-    auto It() { return std::back_inserter(s); }
-    auto It(std::string& str) { return std::back_inserter(str); }
-
-    /// Emit a block and its containing instructions.
-    void PrintBlock(Block* b) {
-        fmt::format_to(It(), "bb{}:\n", block_indices[b]);
-        for (auto inst : b->instructions()) PrintInst(inst);
-    }
-
-    /// Emit a function definition or declaration as LLVM IR.
-    void PrintFunction(Function* f) {
-        tmp = 0;
+struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
+    /// Emit a function signature
+    void PrintFunctionHeader(Function* f) {
         auto ftype = as<FunctionType>(f->type());
-        fmt::format_to(
-            It(),
+        Print(
             "{} {} {} @\"{}\" (",
             f->blocks().empty() ? "declare" : "define",
             f->linkage() == Linkage::Internal ? "private" : "external",
@@ -49,36 +16,25 @@ struct LLVMIRPrinter {
         );
 
         bool first = true;
-        for (auto arg : ftype->params()) {
+        for (auto [i, arg] : vws::enumerate(ftype->params())) {
             if (first) first = false;
-            else s += ", ";
-            fmt::format_to(It(), "{} %{}", Ty(arg), tmp++);
+            else Print(", ");
+            Print("{} %{}", Ty(arg), i);
         }
 
-        s += ')';
-        if (f->blocks().empty()) {
-            s += '\n';
-            return;
-        }
-
-        s += " {\n";
-        for (auto [i, b] : vws::enumerate(f->blocks())) {
-            block_indices[b] = usz(i);
-            for (auto inst : b->instructions())
-                if (RequiresTemporary(inst))
-                    inst_indices[inst] = tmp++;
-        }
-        for (auto b : f->blocks()) PrintBlock(b);
-        s += "}\n";
+        Print(")");
     }
+
+    /// Print start/end of function body.
+    void EnterFunctionBody(Function*) { Print(" {{\n"); }
+    void ExitFunctionBody(Function*) { Print("}}\n"); }
 
     /// Print a binary instruction.
     void PrintBinary(Inst* i, std::string_view mnemonic) {
         auto b = as<BinaryInst>(i);
-        fmt::format_to(
-            It(),
-            "    %{} = {} {}, {}\n",
-            inst_indices[i],
+        Print(
+            "    %{} = {} {}, {}",
+            Index(i),
             mnemonic,
             Val(b->lhs(), true),
             Val(b->rhs(), false)
@@ -88,10 +44,9 @@ struct LLVMIRPrinter {
     /// Print a comparison.
     void PrintComparison(Inst* i, std::string_view mnemonic) {
         auto c = as<BinaryInst>(i);
-        fmt::format_to(
-            It(),
-            "    %{} = icmp {} {}, {}\n",
-            inst_indices[i],
+        Print(
+            "    %{} = icmp {} {}, {}",
+            Index(i),
             mnemonic,
             Val(c->lhs(), true),
             Val(c->rhs(), false)
@@ -101,10 +56,9 @@ struct LLVMIRPrinter {
     /// Print a cast instruction.
     void PrintCast(Inst* i, std::string_view mnemonic) {
         auto c = as<UnaryInstBase>(i);
-        fmt::format_to(
-            It(),
-            "    %{} = {} {} to {}\n",
-            inst_indices[i],
+        Print(
+            "    %{} = {} {} to {}",
+            Index(i),
             mnemonic,
             Val(c->operand(), true),
             Ty(c->type())
@@ -128,19 +82,17 @@ struct LLVMIRPrinter {
                 return;
 
             case Value::Kind::Alloca:
-                fmt::format_to(
-                    It(),
-                    "    %{} = alloca {}, i64 1\n",
-                    inst_indices[i],
+                Print(
+                    "    %{} = alloca {}, i64 1",
+                    Index(i),
                     Ty(as<AllocaInst>(i)->allocated_type())
                 );
                 return;
 
             case Value::Kind::Store: {
                 auto store = as<StoreInst>(i);
-                fmt::format_to(
-                    It(),
-                    "    store {}, {}\n",
+                Print(
+                    "    store {}, {}",
                     Val(store->val()),
                     Val(store->ptr())
                 );
@@ -149,10 +101,9 @@ struct LLVMIRPrinter {
 
             case Value::Kind::Load: {
                 auto load = as<LoadInst>(i);
-                fmt::format_to(
-                    It(),
-                    "    %{} = load {}, {}\n",
-                    inst_indices[i],
+                Print(
+                    "    %{} = load {}, {}",
+                    Index(i),
                     Ty(load->type()),
                     Val(load->ptr())
                 );
@@ -161,8 +112,8 @@ struct LLVMIRPrinter {
 
             case Value::Kind::Return: {
                 auto ret = as<ReturnInst>(i);
-                if (not ret->has_value()) s += "    ret void\n";
-                else fmt::format_to(It(), "    ret {}\n", Val(ret->val()));
+                if (not ret->has_value()) Print("    ret void");
+                else Print("    ret {}", Val(ret->val()));
                 return;
             }
 
@@ -222,10 +173,10 @@ struct LLVMIRPrinter {
 
                 /// Scuffed bitcast.
                 else {
-                    auto idx = inst_indices[i];
-                    fmt::format_to(It(), "    %.{}.alloca = alloca {}, i64 1\n", idx, Ty(from));
-                    fmt::format_to(It(), "    store {}, ptr %.{}.alloca\n", Val(c->operand()), idx);
-                    fmt::format_to(It(), "    %{} = load {}, ptr %.{}.alloca\n", idx, Ty(to), idx);
+                    auto idx = Index(i);
+                    Print("    %.{}.alloca = alloca {}, i64 1\n", idx, Ty(from));
+                    Print("    store {}, ptr %.{}.alloca\n", Val(c->operand()), idx);
+                    Print("    %{} = load {}, ptr %.{}.alloca", idx, Ty(to), idx);
                 }
 
                 return;
@@ -235,10 +186,10 @@ struct LLVMIRPrinter {
             case Value::Kind::Call: {
                 auto c = as<CallInst>(i);
                 auto callee_ty = as<FunctionType>(c->callee()->type());
-                fmt::format_to(
-                    It(),
-                    "    %{} = {}call {} {} (",
-                    inst_indices[i],
+                if (not callee_ty->ret()->is_void()) Print("    %{} = ", Index(i));
+                else Print("    ");
+                Print(
+                    "{}call {} {} (",
                     c->is_tail_call() ? "tail " : "",
                     Ty(callee_ty->ret()),
                     Val(c->callee(), false)
@@ -247,21 +198,20 @@ struct LLVMIRPrinter {
                 bool first = true;
                 for (auto arg : c->args()) {
                     if (first) first = false;
-                    else s += ", ";
-                    fmt::format_to(It(), "{}", Val(arg));
+                    else Print(", ");
+                    Print("{}", Val(arg));
                 }
 
-                s += ")\n";
+                Print(")");
                 return;
             }
 
             /// There is no negate instruction in LLVM.
             case Value::Kind::Neg: {
                 auto n = as<NegInst>(i);
-                fmt::format_to(
-                    It(),
-                    "    %{} = sub {} 0, {}\n",
-                    inst_indices[i],
+                Print(
+                    "    %{} = sub {} 0, {}",
+                    Index(i),
                     Ty(n->type()),
                     Val(n->operand(), false)
                 );
@@ -271,10 +221,9 @@ struct LLVMIRPrinter {
             /// There is no complement instruction in LLVM
             case Value::Kind::Compl: {
                 auto c = as<ComplInst>(i);
-                fmt::format_to(
-                    It(),
-                    "    %{} = xor {}, -1\n",
-                    inst_indices[i],
+                Print(
+                    "    %{} = xor {}, -1",
+                    Index(i),
                     Val(c->operand())
                 );
                 return;
@@ -282,9 +231,8 @@ struct LLVMIRPrinter {
 
             case Value::Kind::CondBranch: {
                 auto br = as<CondBranchInst>(i);
-                fmt::format_to(
-                    It(),
-                    "    br {}, {}, {}\n",
+                Print(
+                    "    br {}, {}, {}",
                     Val(br->cond()),
                     Val(br->then_block()),
                     Val(br->else_block())
@@ -294,9 +242,8 @@ struct LLVMIRPrinter {
 
             case Value::Kind::Branch: {
                 auto br = as<BranchInst>(i);
-                fmt::format_to(
-                    It(),
-                    "    br {}\n",
+                Print(
+                    "    br {}",
                     Val(br->target())
                 );
                 return;
@@ -306,10 +253,9 @@ struct LLVMIRPrinter {
             /// pointer arithmetic.
             case Value::Kind::GetElementPtr: {
                 auto gep = as<GEPInst>(i);
-                fmt::format_to(
-                    It(),
-                    "    %{} = getelementptr {}, {}, {}\n",
-                    inst_indices[i],
+                Print(
+                    "    %{} = getelementptr {}, {}, {}",
+                    Index(i),
                     Ty(gep->type()),
                     Val(gep->ptr()),
                     Val(gep->idx())
@@ -334,10 +280,9 @@ struct LLVMIRPrinter {
                     );
                 };
 
-                fmt::format_to(
-                    It(),
-                    "    %{} = phi {} {}\n",
-                    inst_indices[i],
+                Print(
+                    "    %{} = phi {} {}",
+                    Index(i),
                     Ty(phi->type()),
                     fmt::join(vws::transform(phi->operands(), FormatPHIVal), ", ")
                 );
@@ -345,7 +290,7 @@ struct LLVMIRPrinter {
             }
 
             case Value::Kind::Unreachable: {
-                s += "    unreachable\n";
+                Print("    unreachable");
                 return;
             }
 
@@ -473,7 +418,7 @@ struct LLVMIRPrinter {
                 return fmt::format(
                     "{}%bb{}",
                     include_type ? "label " : "",
-                    block_indices[as<Block>(v)]
+                    Index(as<Block>(v))
                 );
 
             /// A function name in the wild can only be a function pointer.
@@ -551,7 +496,7 @@ struct LLVMIRPrinter {
             case Value::Kind::ULe:
             case Value::Kind::UGt:
             case Value::Kind::UGe:
-                return Format("%{}", inst_indices[as<Inst>(v)]);
+                return Format("%{}", Index(as<Inst>(v)));
 
             /// These do not yield a value.
             case Value::Kind::Store:
@@ -569,5 +514,5 @@ struct LLVMIRPrinter {
 } // namespace lcc
 
 auto lcc::Module::llvm() -> std::string {
-    return LLVMIRPrinter{this}.print();
+    return LLVMIRPrinter{}.Print(this);
 }
