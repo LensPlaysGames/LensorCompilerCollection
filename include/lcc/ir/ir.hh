@@ -20,22 +20,21 @@ class Parameter;
 class Value {
 public:
     enum struct Kind {
-        // Values
+        /// Values
         Block,
         Function,
         IntegerConstant,
         ArrayConstant,
         Poison,
         GlobalVariable,
+        Parameter,
 
         /// Instructions
         Alloca,
         Call,
-        // Copy,
         GetElementPtr,
         Intrinsic,
         Load,
-        Parameter,
         Phi,
         Store,
 

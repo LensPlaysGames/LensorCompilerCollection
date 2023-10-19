@@ -5,6 +5,7 @@
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
+#include <lcc/utils/ir_printer.hh>
 #include <lcc/utils/rtti.hh>
 #include <string>
 
@@ -72,12 +73,26 @@ auto Type::string() const -> std::string {
         case Kind::Unknown: return "<?>";
         case Kind::Pointer: return "ptr";
         case Kind::Void: return "void";
-        case Kind::Array: return fmt::format("array of {}", as<ArrayType>(this)->element_type()->string());
-        case Kind::Function: return "function"; // TODO: function parameter and return types
+
+        case Kind::Array: {
+            auto arr = as<ArrayType>(this);
+            return fmt::format("{}[{}]", arr->element_type()->string(), arr->length());
+        }
+
         case Kind::Integer: {
-            const auto& integer = as<IntegerType>(this);
+            auto integer = as<IntegerType>(this);
             return fmt::format("i{}", integer->bitwidth());
         }
+
+        case Kind::Function: {
+            auto f = as<FunctionType>(this);
+            return fmt::format(
+                "{}({})",
+                f->ret()->string(),
+                fmt::join(vws::transform(f->params(), &Type::string), ", ")
+            );
+        }
+
         case Kind::Struct: return "struct"; // TODO: name, if it has one? maybe size?
     }
     LCC_UNREACHABLE();
@@ -169,208 +184,298 @@ bool Block::has_predecessor(Block* block) const {
 }
 
 namespace {
-class ValuePrinter {
-    std::unordered_map<Value*, usz> ids;
+struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
+    /// Print the function signature.
+    void PrintFunctionHeader(Function* f) {
+        auto ftype = as<FunctionType>(f->type());
+        Print("{} {}(", *ftype->ret(), f->name());
 
-public:
-    void register_value(Value* v) {
-        usz _id{0};
-
-        LCC_ASSERT(v, "Cannot print Value with address of nullptr");
-        if (ids.find(v) == ids.end()) {
-            // value not seen before
-            ids[v] = ++_id;
+        bool first = true;
+        for (auto [i, arg] : vws::enumerate(ftype->params())) {
+            if (first) first = false;
+            else Print(", ");
+            Print("{} %{}", arg->string(), i);
         }
+
+        Print(")");
+        if (f->linkage() == Linkage::Imported or f->linkage() == Linkage::Reexported)
+            Print(" external");
     }
 
-    auto get_id_raw(Value* v) -> usz {
-        register_value(v);
-        return ids[v];
+    /// Print start/end of function body.
+    void EnterFunctionBody(Function*) { Print(":\n"); }
+    void ExitFunctionBody(Function*) {}
+
+    /// Print a cast instruction.
+    void PrintCast(Inst* i, std::string_view mnemonic) {
+        auto c = as<UnaryInstBase>(i);
+        Print(
+            "    %{} = {} {} to {}",
+            Index(i),
+            mnemonic,
+            Val(c->operand(), true),
+            *c->type()
+        );
     }
 
-    auto get_id(Value* v) -> std::string {
-        register_value(v);
+    /// Print a binary instruction.
+    void PrintBinary(Inst* i, std::string_view mnemonic) {
+        auto b = as<BinaryInst>(i);
+        Print(
+            "    %{} = {} {}, {}",
+            Index(i),
+            mnemonic,
+            Val(b->lhs(), true),
+            Val(b->rhs(), false)
+        );
+    };
 
-        // NOTE: ALL "INLINE" VALUES MUST GO HERE
-        if (v->kind() == Value::Kind::Block ||
-            v->kind() == Value::Kind::Function ||
-            v->kind() == Value::Kind::IntegerConstant ||
-            v->kind() == Value::Kind::ArrayConstant ||
-            v->kind() == Value::Kind::Poison ||
-            v->kind() == Value::Kind::GlobalVariable ||
-            v->kind() == Value::Kind::Parameter) {
-            return value(v);
-        } else return fmt::format("%{}", ids[v]);
-    }
-
-    static std::string instruction_name(Value::Kind k) {
-        switch (k) {
-            case Value::Kind::Block: return "block";
-            case Value::Kind::Function: return "function";
-            case Value::Kind::IntegerConstant: return "constant.integer";
-            case Value::Kind::ArrayConstant: return "constant.array";
-            case Value::Kind::Poison: return "poison";
-            case Value::Kind::GlobalVariable: return "global";
-            case Value::Kind::Alloca: return "local";
-            case Value::Kind::Call: return "call";
-            case Value::Kind::GetElementPtr: return "gep";
-            case Value::Kind::Intrinsic: return "intrinsic";
-            case Value::Kind::Load: return "load";
-            case Value::Kind::Parameter: return "parameter";
-            case Value::Kind::Phi: return "phi";
-            case Value::Kind::Store: return "store";
-            case Value::Kind::Branch: return "branch";
-            case Value::Kind::CondBranch: return "branch.cond";
-            case Value::Kind::Return: return "return";
-            case Value::Kind::Unreachable: return "unreachable";
-            case Value::Kind::ZExt: return "zero.extend";
-            case Value::Kind::SExt: return "sign.extend";
-            case Value::Kind::Trunc: return "truncate";
-            case Value::Kind::Bitcast: return "bitcast";
-            case Value::Kind::Neg: return "negate";
-            case Value::Kind::Compl: return "complement";
-            case Value::Kind::Add: return "+";
-            case Value::Kind::Sub: return "-";
-            case Value::Kind::Mul: return "*";
-            case Value::Kind::SDiv: return "s.div";
-            case Value::Kind::UDiv: return "u.div";
-            case Value::Kind::SRem: return "s.rem";
-            case Value::Kind::URem: return "u.rem";
-            case Value::Kind::Shl: return "shl";
-            case Value::Kind::Sar: return "sar";
-            case Value::Kind::Shr: return "shr";
-            case Value::Kind::And: return "&";
-            case Value::Kind::Or: return "|";
-            case Value::Kind::Xor: return "^";
-            case Value::Kind::Eq: return "=";
-            case Value::Kind::Ne: return "!=";
-            case Value::Kind::SLt: return "<";
-            case Value::Kind::SLe: return "s.<=";
-            case Value::Kind::SGt: return "s.>";
-            case Value::Kind::SGe: return "s.>=";
-            case Value::Kind::ULt: return "u.<";
-            case Value::Kind::ULe: return "u.<=";
-            case Value::Kind::UGt: return "u.>";
-            case Value::Kind::UGe: return "u.>=";
-        }
-        LCC_UNREACHABLE();
-    }
-
-    std::string value(Value* v) {
-        if (!v) return "(null)";
-        register_value(v);
-        switch (v->kind()) {
-            case Value::Kind::Block: {
-                const auto& block = as<Block>(v);
-                return fmt::format("block {}", block->name());
-            }
-            case Value::Kind::Function: {
-                const auto& function = as<Function>(v);
-                return fmt::format("function {}", function->name());
-            }
-            case Value::Kind::Parameter: {
-                const auto& param = as<Parameter>(v);
-                return fmt::format("parameter {} : {}", param->index(), *param->type());
-            }
-            case Value::Kind::IntegerConstant: {
-                return fmt::format("{}", as<IntegerConstant>(v)->value());
-            }
-            case Value::Kind::ArrayConstant: {
-                const auto& array = as<ArrayConstant>(v);
-                return fmt::format("{} of {} {}", instruction_name(v->kind()), array->size(), *as<ArrayType>(array->type())->element_type());
-            }
-            case Value::Kind::Poison: {
-                return instruction_name(v->kind());
-            }
-            case Value::Kind::GlobalVariable: {
-                return instruction_name(v->kind());
-            }
+    /// Print an instruction.
+    void PrintInst(Inst* i) {
+        switch (i->kind()) {
+            /// Not an instruction.
+            case Value::Kind::Block:
+            case Value::Kind::Function:
+            case Value::Kind::IntegerConstant:
+            case Value::Kind::ArrayConstant:
+            case Value::Kind::Poison:
+            case Value::Kind::GlobalVariable:
+            case Value::Kind::Parameter:
+                LCC_UNREACHABLE();
 
             /// Instructions.
             case Value::Kind::Alloca: {
-                const auto& local = as<AllocaInst>(v);
-                return fmt::format("{} {} ({}B)", instruction_name(v->kind()), *local->allocated_type(), local->allocated_type()->bytes());
+                auto local = as<AllocaInst>(i);
+                Print("    %{} = alloca {}", Index(i), *local->allocated_type());
+                return;
             }
+
             case Value::Kind::Call: {
-                const auto& call = as<CallInst>(v);
+                auto c = as<CallInst>(i);
+                auto callee_ty = as<FunctionType>(c->callee()->type());
+                if (not callee_ty->ret()->is_void()) Print("    %{} = ", Index(i));
+                else Print("    ");
+                Print(
+                    "{}call {} (",
+                    c->is_tail_call() ? "tail " : "",
+                    Val(c->callee(), false)
+                );
 
-                if (call->args().empty())
-                    return fmt::format("{}()", get_id(call->callee()));
+                bool first = true;
+                for (auto arg : c->args()) {
+                    if (first) first = false;
+                    else Print(", ");
+                    Print("{}", Val(arg));
+                }
 
-                std::string out = "";
-                out += fmt::format("{}(", get_id(call->callee()));
-                for (const auto& arg : call->args())
-                    out += get_id(arg) + " ";
-
-                out[out.length() - 1] = ')'; // replace last space, ' ', with close paren, ')'.
-                return out;
+                if (not callee_ty->ret()->is_void()) Print(") -> {}", *callee_ty->ret());
+                else Print(")");
+                return;
             }
-            /*case Value::Kind::Copy: {
-                LCC_ASSERT(false, "TODO IR CopyInst");
-            }*/
+
             case Value::Kind::GetElementPtr: {
-                const auto& gep = as<GEPInst>(v);
-                return fmt::format("{} {} {} ({}B ea) from {}", instruction_name(v->kind()), get_id(gep->idx()), *gep->type(), gep->type()->bytes(), get_id(gep->ptr()));
+                auto gep = as<GEPInst>(i);
+                Print(
+                    "    %{} = gep {} from {} : {}",
+                    Index(i),
+                    *gep->type(),
+                    Val(gep->ptr(), false),
+                    Val(gep->idx())
+                );
+                return;
             }
-            case Value::Kind::Intrinsic: {
-                return instruction_name(v->kind());
-            }
+
+            case Value::Kind::Intrinsic: LCC_TODO();
+
             case Value::Kind::Load: {
-                const auto& load = as<LoadInst>(v);
-                return fmt::format("{} {} ({}B) from {}", instruction_name(v->kind()), *load->type(), load->type()->bytes(), get_id(load->ptr()));
+                auto load = as<LoadInst>(i);
+                Print(
+                    "    %{} = load {} from {}",
+                    Index(i),
+                    *load->type(),
+                    Val(load->ptr(), false)
+                );
+                return;
             }
+
             case Value::Kind::Phi: {
-                const auto& phi = as<PhiInst>(v);
-                auto out = instruction_name(v->kind());
-                for (const auto& operand : phi->operands())
-                    out += fmt::format(" [{}, {}]", operand.block->name(), get_id(operand.value));
-                return out;
+                auto phi = as<PhiInst>(i);
+                const auto FormatPHIVal = [this](auto& val) {
+                    return fmt::format(
+                        "[{} : {}]",
+                        Val(val.block, false),
+                        Val(val.value, false)
+                    );
+                };
+
+                Print(
+                    "    %{} = phi {}, {}",
+                    Index(i),
+                    *phi->type(),
+                    fmt::join(vws::transform(phi->operands(), FormatPHIVal), ", ")
+                );
+                return;
             }
+
             case Value::Kind::Store: {
-                const auto& store = as<StoreInst>(v);
-                LCC_ASSERT(store->val());
-                return fmt::format("store {} as {} ({}B) into address {}", get_id(store->val()), *store->val()->type(), store->val()->type()->bytes(), get_id(store->ptr()));
+                auto store = as<StoreInst>(i);
+                Print(
+                    "    store {} into {}",
+                    Val(store->val()),
+                    Val(store->ptr(), false)
+                );
+                return;
             }
 
             /// Terminators.
             case Value::Kind::Branch: {
-                const auto& branch = as<BranchInst>(v);
-                return fmt::format("{} to {}", instruction_name(v->kind()), get_id(branch->target()));
+                auto branch = as<BranchInst>(i);
+                Print("    branch to {}", Val(branch->target(), false));
+                return;
             }
+
             case Value::Kind::CondBranch: {
-                const auto& branch = as<CondBranchInst>(v);
-                return fmt::format("{} if {} then {} otherwise {}", instruction_name(v->kind()), get_id(branch->cond()), get_id(branch->then_block()), get_id(branch->else_block()));
+                auto branch = as<CondBranchInst>(i);
+                Print(
+                    "    branch on {} to {} else {}",
+                    Val(branch->cond(), false),
+                    Val(branch->then_block(), false),
+                    Val(branch->else_block(), false)
+                );
+                return;
             }
+
             case Value::Kind::Return: {
-                const auto& ret = as<ReturnInst>(v);
-                if (ret->val())
-                    return fmt::format("{} {}", instruction_name(v->kind()), get_id(ret->val()));
-                return instruction_name(v->kind());
+                auto ret = as<ReturnInst>(i);
+                if (ret->val()) Print("    return {}", Val(ret->val()));
+                else Print("    return");
+                return;
             }
+
             case Value::Kind::Unreachable: {
-                return instruction_name(v->kind());
+                Print("    unreachable");
+                return;
             }
 
             /// Unary instructions.
-            case Value::Kind::Bitcast: {
-                const auto& bitcast = as<BitcastInst>(v);
-                return fmt::format("{} {} as {}", instruction_name(v->kind()), get_id(bitcast->operand()), *bitcast->type());
+            case Value::Kind::Bitcast: PrintCast(i, "bitcast"); return;
+            case Value::Kind::ZExt: PrintCast(i, "zero.extend"); return;
+            case Value::Kind::SExt: PrintCast(i, "sign.extend"); return;
+            case Value::Kind::Trunc: PrintCast(i, "truncate"); return;
+
+            case Value::Kind::Neg: {
+                auto neg = as<UnaryInstBase>(i);
+                Print("    %{} = negate {}", Index(i), Val(neg->operand()));
+                return;
             }
 
-            case Value::Kind::ZExt:
-            case Value::Kind::SExt:
-            case Value::Kind::Trunc: {
-                const auto unary = as<UnaryInstBase>(v);
-                return fmt::format("{} {} to {}", instruction_name(v->kind()), get_id(unary->operand()), *unary->type());
-            }
-
-            case Value::Kind::Neg:
             case Value::Kind::Compl: {
-                const auto& unary = as<UnaryInstBase>(v);
-                return fmt::format("{} {}", instruction_name(v->kind()), get_id(unary->operand()));
+                auto c = as<UnaryInstBase>(i);
+                Print("    %{} = compl {}", Index(i), Val(c->operand()));
+                return;
             }
 
             /// Binary instructions.
+            case Value::Kind::Add: PrintBinary(i, "add"); return;
+            case Value::Kind::Sub: PrintBinary(i, "sub"); return;
+            case Value::Kind::Mul: PrintBinary(i, "mul"); return;
+            case Value::Kind::SDiv: PrintBinary(i, "s.div"); return;
+            case Value::Kind::UDiv: PrintBinary(i, "u.div"); return;
+            case Value::Kind::SRem: PrintBinary(i, "s.rem"); return;
+            case Value::Kind::URem: PrintBinary(i, "u.rem"); return;
+            case Value::Kind::Shl: PrintBinary(i, "shl"); return;
+            case Value::Kind::Sar: PrintBinary(i, "sar"); return;
+            case Value::Kind::Shr: PrintBinary(i, "shr"); return;
+            case Value::Kind::And: PrintBinary(i, "and"); return;
+            case Value::Kind::Or: PrintBinary(i, "or"); return;
+            case Value::Kind::Xor: PrintBinary(i, "xor"); return;
+            case Value::Kind::Eq: PrintBinary(i, "eq"); return;
+            case Value::Kind::Ne: PrintBinary(i, "ne"); return;
+            case Value::Kind::SLt: PrintBinary(i, "s.lt"); return;
+            case Value::Kind::SLe: PrintBinary(i, "s.le"); return;
+            case Value::Kind::SGt: PrintBinary(i, "s.gt"); return;
+            case Value::Kind::SGe: PrintBinary(i, "s.ge"); return;
+            case Value::Kind::ULt: PrintBinary(i, "u.lt"); return;
+            case Value::Kind::ULe: PrintBinary(i, "u.le"); return;
+            case Value::Kind::UGt: PrintBinary(i, "u.gt"); return;
+            case Value::Kind::UGe: PrintBinary(i, "u.ge"); return;
+        }
+
+        LCC_UNREACHABLE();
+    }
+
+    /// Get the inline representation of a value.
+    ///
+    /// In some contexts, the type is obvious (e.g. the address
+    /// of a store is always of type \c ptr), so there is no reason
+    /// to include it in the printout. The type is omitted if \c false
+    /// is passed for \c include_type.
+    auto Val(Value* v, bool include_type = true) -> std::string {
+        const auto Format =
+            [&]<typename... Args>(
+                fmt::format_string<Args...> fmt,
+                Args&&... args
+            ) -> std::string {
+            std::string val;
+            if (include_type) fmt::format_to(It(val), "{} ", *v->type());
+            fmt::format_to(It(val), fmt, std::forward<Args>(args)...);
+            return val;
+        };
+
+        switch (v->kind()) {
+            case Value::Kind::Function:
+                return Format("@{}", as<Function>(v)->name());
+
+            case Value::Kind::IntegerConstant:
+                return Format("{}", as<IntegerConstant>(v)->value());
+
+            case Value::Kind::Poison:
+                return Format("poison");
+
+            case Value::Kind::Parameter:
+                return Format("%{}", as<Parameter>(v)->index());
+
+            case Value::Kind::Block: {
+                return fmt::format(
+                    "{}%bb{}",
+                    include_type ? "block " : "",
+                    Index(as<Block>(v))
+                );
+            }
+
+            case Value::Kind::GlobalVariable: {
+                std::string val;
+                if (include_type) val += "ptr ";
+                fmt::format_to(It(val), "@{}", as<GlobalVariable>(v)->name());
+                return val;
+            }
+
+            /// TODO: Format this differently based on the array type?
+            case Value::Kind::ArrayConstant: {
+                auto a = as<ArrayConstant>(v);
+                return Format(
+                    "[{}]",
+                    fmt::join(
+                        std::span<const u8>(reinterpret_cast<const u8*>(a->data()), a->size()),
+                        " "
+                    )
+                );
+            }
+
+            case Value::Kind::Intrinsic: LCC_TODO();
+
+            /// These always yield a value.
+            case Value::Kind::Alloca:
+            case Value::Kind::GetElementPtr:
+            case Value::Kind::Call:
+            case Value::Kind::Load:
+            case Value::Kind::Phi:
+            case Value::Kind::ZExt:
+            case Value::Kind::SExt:
+            case Value::Kind::Trunc:
+            case Value::Kind::Bitcast:
+            case Value::Kind::Neg:
+            case Value::Kind::Compl:
             case Value::Kind::Add:
             case Value::Kind::Sub:
             case Value::Kind::Mul:
@@ -384,7 +489,6 @@ public:
             case Value::Kind::And:
             case Value::Kind::Or:
             case Value::Kind::Xor:
-            /// Compare instructions.
             case Value::Kind::Eq:
             case Value::Kind::Ne:
             case Value::Kind::SLt:
@@ -394,46 +498,84 @@ public:
             case Value::Kind::ULt:
             case Value::Kind::ULe:
             case Value::Kind::UGt:
-            case Value::Kind::UGe: {
-                const BinaryInst* binary = as<BinaryInst>(v);
-                return fmt::format("{} {} {}", instruction_name(v->kind()), get_id(binary->lhs()), get_id(binary->rhs()));
-            }
+            case Value::Kind::UGe:
+                return Format("%{}", Index(as<Inst>(v)));
+
+            /// These do not yield a value.
+            case Value::Kind::Store:
+            case Value::Kind::Branch:
+            case Value::Kind::CondBranch:
+            case Value::Kind::Return:
+            case Value::Kind::Unreachable:
+                LCC_UNREACHABLE();
         }
 
         LCC_UNREACHABLE();
     }
 
-    void _print(Value* value, std::string_view prefix, std::string_view suffix) {
-        fmt::print("{}{}{}", prefix, ValuePrinter::value(value), suffix);
-    }
+    /// Check if an instruction requires a temporary.
+    static bool RequiresTemporary(Inst* i) {
+        switch (i->kind()) {
+            /// Not an instruction.
+            case Value::Kind::Block:
+            case Value::Kind::Function:
+            case Value::Kind::IntegerConstant:
+            case Value::Kind::ArrayConstant:
+            case Value::Kind::Poison:
+            case Value::Kind::GlobalVariable:
+            case Value::Kind::Parameter:
+                LCC_UNREACHABLE();
 
-    void print(Value* value, std::string_view prefix = "", std::string_view suffix = "\n") {
-        _print(value, prefix, suffix);
-    }
+            /// Instructions that always yield a value.
+            case Value::Kind::Alloca:
+            case Value::Kind::GetElementPtr:
+            case Value::Kind::Load:
+            case Value::Kind::Phi:
+            case Value::Kind::ZExt:
+            case Value::Kind::SExt:
+            case Value::Kind::Trunc:
+            case Value::Kind::Bitcast:
+            case Value::Kind::Neg:
+            case Value::Kind::Compl:
+            case Value::Kind::Add:
+            case Value::Kind::Sub:
+            case Value::Kind::Mul:
+            case Value::Kind::SDiv:
+            case Value::Kind::UDiv:
+            case Value::Kind::SRem:
+            case Value::Kind::URem:
+            case Value::Kind::Shl:
+            case Value::Kind::Sar:
+            case Value::Kind::Shr:
+            case Value::Kind::And:
+            case Value::Kind::Or:
+            case Value::Kind::Xor:
+            case Value::Kind::Eq:
+            case Value::Kind::Ne:
+            case Value::Kind::SLt:
+            case Value::Kind::SLe:
+            case Value::Kind::SGt:
+            case Value::Kind::SGe:
+            case Value::Kind::ULt:
+            case Value::Kind::ULe:
+            case Value::Kind::UGt:
+            case Value::Kind::UGe:
+                return true;
 
-    void print(std::vector<Value*> values, std::string_view prefix = "", std::string_view suffix = "\n") {
-        for (auto* v : values) _print(v, prefix, suffix);
-    }
+            /// Instructions that may yield a value.
+            case Value::Kind::Call: return as<CallInst>(i)->type() != Type::VoidTy;
+            case Value::Kind::Intrinsic: LCC_TODO();
 
-    void print_module(lcc::Module* mod) {
-        for (auto function : mod->code()) {
-            static const auto StringifyParams = [](Function* f) {
-                return fmt::join(
-                    vws::transform(
-                        as<FunctionType>(f->type())->params(),
-                        [idx = 0](Type* t) mutable { return fmt::format("{} %{}", t->string(), idx++); }
-                    ),
-                    ", "
-                );
-            };
-
-            fmt::print("{}({}):\n", function->name(), StringifyParams(function));
-            for (const auto& b : function->blocks()) {
-                fmt::print("  {}:\n", b->name());
-                for (const auto& i : b->instructions())
-                    ValuePrinter::print(i, fmt::format("{:4} | ", ValuePrinter::get_id_raw(i)));
-            }
+            /// Instructions that never return a value.
+            case Value::Kind::Store:
+            case Value::Kind::Branch:
+            case Value::Kind::CondBranch:
+            case Value::Kind::Return:
+            case Value::Kind::Unreachable:
+                return false;
         }
+
+        LCC_UNREACHABLE();
     }
 };
 } // namespace
@@ -441,5 +583,5 @@ public:
 } // namespace lcc
 
 void lcc::Module::print_ir() {
-    ValuePrinter{}.print_module(this);
+    fmt::print("{}", LCCIRPrinter{}.Print(this));
 }

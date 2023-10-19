@@ -29,6 +29,9 @@ protected:
     /// Get the index of an instruction.
     auto Index(Inst* inst) const -> usz { return inst_indices.at(inst); }
 
+    /// Check if an instruction has an index.
+    auto HasIndex(Inst* inst) const -> bool { return inst_indices.contains(inst); }
+
     /// Get an insert iterator to a string.
     auto It(std::string& str) { return std::back_inserter(str); }
 

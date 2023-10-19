@@ -75,11 +75,8 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::ArrayConstant:
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
-                LCC_UNREACHABLE();
-
-            /// Always emitted in-line.
             case Value::Kind::Parameter:
-                return;
+                LCC_UNREACHABLE();
 
             case Value::Kind::Alloca:
                 Print(
@@ -312,6 +309,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::ArrayConstant:
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
+            case Value::Kind::Parameter:
                 LCC_UNREACHABLE();
 
             /// Instructions that always yield a value.
@@ -360,10 +358,6 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::CondBranch:
             case Value::Kind::Return:
             case Value::Kind::Unreachable:
-                return false;
-
-            /// Instructions that are no-ops or handled specially in LLVM IR.
-            case Value::Kind::Parameter:
                 return false;
         }
 
