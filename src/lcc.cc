@@ -2,17 +2,17 @@
 #include <c/parser.hh>
 #include <clopts.hh>
 #include <intercept/ast.hh>
+#include <intercept/ir_gen.hh>
 #include <intercept/parser.hh>
 #include <intercept/sema.hh>
-#include <intercept/ir_gen.hh>
 #include <laye/parser.hh>
 #include <laye/sema.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
+#include <lcc/ir/module.hh>
 #include <lcc/lcc-c.h>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
-#include <lcc/ir/module.hh>
 #include <string>
 
 namespace detail {
@@ -54,12 +54,16 @@ using options = clopts< // clang-format off
 } // namespace detail
 using detail::options;
 
+[[noreturn]] bool HandleOptParseError(std::string&& msg) {
+    lcc::Diag::Fatal("{}", msg);
+}
+
 int main(int argc, char** argv) {
-    options::parse(argc, argv);
+    auto opts = options::parse(argc, argv, HandleOptParseError);
 
     /// Get input files
-    auto& input_files = *options::get<"filepath">();
-    if (options::get<"-v">()) {
+    auto& input_files = *opts.get<"filepath">();
+    if (opts.get<"-v">()) {
         fmt::print("Input files:\n");
         for (const auto& input_file : input_files)
             fmt::print("- {}\n", input_file.path.string());
@@ -72,32 +76,35 @@ int main(int argc, char** argv) {
     /// Compile the file.
     lcc::Context context{detail::default_target};
     auto path_str = input_files[0].path.string();
-    auto& file = context.create_file(input_files[0].path, input_files[0].contents);
+    auto& file = context.create_file(
+        std::move(input_files[0].path),
+        std::move(input_files[0].contents)
+    );
 
     /// Intercept.
     if (path_str.ends_with(".int")) {
         /// Parse the file.
         auto mod = lcc::intercept::Parser::Parse(&context, file);
-        if (options::get<"--syntax-only">()) {
+        if (opts.get<"--syntax-only">()) {
             if (context.has_error()) std::exit(1);
-            if (options::get<"--ast">()) mod->print();
+            if (opts.get<"--ast">()) mod->print();
             std::exit(0);
         }
 
         /// Perform semantic analysis.
         lcc::intercept::Sema::Analyse(&context, *mod, true);
-        if (options::get<"--ast">()) {
+        if (opts.get<"--ast">()) {
             if (context.has_error()) std::exit(1);
             mod->print();
         }
 
         auto ir_module = lcc::intercept::IRGen::Generate(&context, *mod);
-        if (options::get<"--ir">()) {
+        if (opts.get<"--ir">()) {
             ir_module->print_ir();
             std::exit(0);
         }
 
-        if (options::get<"--llvm">()) {
+        if (opts.get<"--llvm">()) {
             fmt::print("{}", ir_module->llvm());
             std::exit(0);
         }
@@ -111,15 +118,15 @@ int main(int argc, char** argv) {
 
         /// Parse the file.
         auto mod = laye_context->parse_laye_file(file);
-        if (options::get<"--syntax-only">()) {
+        if (opts.get<"--syntax-only">()) {
             if (context.has_error()) std::exit(1);
-            if (options::get<"--ast">()) laye_context->print_modules();
+            if (opts.get<"--ast">()) laye_context->print_modules();
             std::exit(0);
         }
 
         /// Perform semantic analysis.
         lcc::laye::Sema::Analyse(laye_context, mod, true);
-        if (options::get<"--ast">()) {
+        if (opts.get<"--ast">()) {
             if (context.has_error()) std::exit(1);
             laye_context->print_modules();
         }
@@ -133,8 +140,8 @@ int main(int argc, char** argv) {
         auto c_context = new lcc::c::CContext{&context};
         auto translation_unit = lcc::c::Parser::Parse(c_context, file);
 
-        if (options::get<"--syntax-only">()) {
-            if (options::get<"--ast">()) translation_unit->print();
+        if (opts.get<"--syntax-only">()) {
+            if (opts.get<"--ast">()) translation_unit->print();
             std::exit(0);
         }
 
