@@ -1,44 +1,40 @@
-#include <lcc/ir/ir.hh>
-#include <lcc/ir/type.hh>
+#include <algorithm>
+#include <fmt/format.h>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
+#include <lcc/ir/ir.hh>
+#include <lcc/ir/type.hh>
 #include <lcc/utils/rtti.hh>
-
-#include <algorithm>
 #include <string>
-
-#include <fmt/format.h>
 
 namespace lcc {
 
 usz Type::bits() const {
     switch (kind) {
+        case Kind::Unknown:
+        case Kind::Void: return 0;
 
-    case Kind::Unknown:
-    case Kind::Void: return 0;
+        case Kind::Function:
+        case Kind::Pointer: return 64; // FIXME: Target-dependent pointer size
 
-    case Kind::Function:
-    case Kind::Pointer: return 64; // FIXME: Target-dependent pointer size
+        case Kind::Integer: {
+            const auto& i = as<IntegerType>(this);
+            return i->bitwidth();
+        }
 
-    case Kind::Integer: {
-        const auto& i = as<IntegerType>(this);
-        return i->bitwidth();
-    }
+        case Kind::Array: {
+            const auto& array = as<ArrayType>(this);
+            return array->element_type()->bits() * array->length();
+        }
 
-    case Kind::Array: {
-        const auto& array = as<ArrayType>(this);
-        return array->element_type()->bits() * array->length();
-    }
-
-    case Kind::Struct: {
-        const auto& struct_ = as<StructType>(this);
-        const std::vector<Type*>& members = struct_->members();
-        usz sum = 0;
-        for (const auto& m : members)
-            sum += m->bits();
-        return sum;
-    }
-
+        case Kind::Struct: {
+            const auto& struct_ = as<StructType>(this);
+            const std::vector<Type*>& members = struct_->members();
+            usz sum = 0;
+            for (const auto& m : members)
+                sum += m->bits();
+            return sum;
+        }
     }
     LCC_UNREACHABLE();
 }
@@ -50,16 +46,16 @@ usz Type::bytes() const {
 
 auto Type::string() const -> std::string {
     switch (kind) {
-    case Kind::Unknown: return "<?>";
-    case Kind::Pointer: return "ptr";
-    case Kind::Void: return "void";
-    case Kind::Array: return fmt::format("array of {}", as<ArrayType>(this)->element_type()->string());
-    case Kind::Function: return "function"; // TODO: function parameter and return types
-    case Kind::Integer: {
-        const auto& integer = as<IntegerType>(this);
-        return fmt::format("i{}", integer->bitwidth());
-    }
-    case Kind::Struct: return "struct"; // TODO: name, if it has one? maybe size?
+        case Kind::Unknown: return "<?>";
+        case Kind::Pointer: return "ptr";
+        case Kind::Void: return "void";
+        case Kind::Array: return fmt::format("array of {}", as<ArrayType>(this)->element_type()->string());
+        case Kind::Function: return "function"; // TODO: function parameter and return types
+        case Kind::Integer: {
+            const auto& integer = as<IntegerType>(this);
+            return fmt::format("i{}", integer->bitwidth());
+        }
+        case Kind::Struct: return "struct"; // TODO: name, if it has one? maybe size?
     }
     LCC_UNREACHABLE();
 }
@@ -81,10 +77,9 @@ FunctionType* FunctionType::Get(Context* ctx, Type* ret, std::vector<Type*> para
 
 IntegerType* IntegerType::Get(Context* ctx, usz bitwidth) {
     // Look in ctx type cache.
-    const auto& found = std::find_if(ctx->integer_types.begin(), ctx->integer_types.end(),
-                                     [&](const std::pair<usz, Type*>& pair) {
-                                         return pair.first == bitwidth;
-                                     });
+    const auto& found = std::find_if(ctx->integer_types.begin(), ctx->integer_types.end(), [&](const std::pair<usz, Type*>& pair) {
+        return pair.first == bitwidth;
+    });
     if (found != ctx->integer_types.end())
         return as<IntegerType>(found->second);
 
@@ -122,10 +117,6 @@ StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types) {
     return out;
 }
 
-bool is_block_terminator(Inst* inst) {
-    return inst && (+inst->kind() >= +Value::Kind::Branch && +inst->kind() <= +Value::Kind::Unreachable);
-}
-
 Inst* Block::insert(Inst* i, bool force) {
     if (not force and closed())
         Diag::ICE("Insertion into block that has already been closed.");
@@ -135,4 +126,23 @@ Inst* Block::insert(Inst* i, bool force) {
     return i;
 }
 
+bool Block::has_predecessor(Block* block) const {
+    auto term = block->terminator();
+    if (not term) return false;
+    switch (term->kind()) {
+        default: LCC_UNREACHABLE();
+        case Value::Kind::Unreachable:
+        case Value::Kind::Return:
+            return false;
+
+        case Value::Kind::Branch:
+            return as<BranchInst>(term)->target() == this;
+
+        case Value::Kind::CondBranch: {
+            auto cond_branch = as<CondBranchInst>(term);
+            return cond_branch->then_block() == this or cond_branch->else_block() == this;
+        }
+    }
 }
+
+} // namespace lcc

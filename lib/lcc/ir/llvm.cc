@@ -317,12 +317,38 @@ struct LLVMIRPrinter {
                 return;
             }
 
+            /// Emit an LLVM-compatible PHI node.
+            case Value::Kind::Phi: {
+                auto phi = as<PhiInst>(i);
+                phi->drop_stale_operands();
+                LCC_ASSERT(
+                    not phi->operands().empty(),
+                    "PHI instruction has no valid incoming values"
+                );
+
+                const auto FormatPHIVal = [this](auto& val) {
+                    return fmt::format(
+                        "[{}, {}]",
+                        Val(val.value, false),
+                        Val(val.block, false)
+                    );
+                };
+
+                fmt::format_to(
+                    It(),
+                    "    %{} = phi {} {}\n",
+                    inst_indices[i],
+                    Ty(phi->type()),
+                    fmt::join(vws::transform(phi->operands(), FormatPHIVal), ", ")
+                );
+                return;
+            }
+
             case Value::Kind::Unreachable: {
                 s += "    unreachable\n";
                 return;
             }
 
-            case Value::Kind::Phi:
             case Value::Kind::Intrinsic:
                 LCC_TODO();
         }

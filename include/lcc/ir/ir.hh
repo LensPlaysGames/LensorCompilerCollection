@@ -162,6 +162,11 @@ public:
     /// Get the parent block.
     auto block() const -> Block* { return parent; }
 
+    /// Check if this is a terminator instruction.
+    bool is_terminator() const {
+        return kind() >= Value::Kind::Branch and kind() <= Value::Kind::Unreachable;
+    }
+
     /// Get the source location of this instruction.
     auto location() const -> Location { return loc; }
 
@@ -177,8 +182,6 @@ public:
     /// RTTI.
     static bool classof(Value* v) { return +v->kind() >= +Kind::Alloca; }
 };
-
-bool is_block_terminator(Inst* inst);
 
 /// A basic block.
 class Block : public Value {
@@ -211,14 +214,15 @@ public:
     /// Get an iterator to the last instruction in this block.
     auto end() const -> ConstIterator { return {inst_list, inst_list.end()}; }
 
+    /// Check whether this block has a terminator.
+    bool closed() const { return terminator() != nullptr; }
+
     /// Get the parent function.
     auto function() const -> Function* { return parent; }
 
-    bool closed() const {
-        // An empty block is never closed; otherwise, a block is closed iff the
-        // last instruction is a block terminator.
-        return inst_list.size() && is_block_terminator(inst_list.back());
-    }
+    /// Check if this block has another block as one
+    /// of its predecessors.
+    bool has_predecessor(Block* block) const;
 
     /// Insert an instruction at the end of this block.
     ///
@@ -246,6 +250,14 @@ public:
 
     /// Set the name of this block.
     void name(std::string n) { block_name = std::move(n); }
+
+    /// Get the terminator instruction of this block; may return nullptr.
+    auto terminator() const -> Inst* {
+        if (inst_list.empty()) return nullptr;
+        auto i = inst_list.back();
+        if (not i->is_terminator()) return nullptr;
+        return i;
+    }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Block; }
@@ -571,7 +583,12 @@ public:
     /// This function removes any incoming values that are registered
     /// from blocks that are not predecessors of the block containing
     /// the PHI. If the PHI is not inserted in a block, this is a no-op.
-    void drop_stale_operands();
+    void drop_stale_operands() {
+        if (not block()) return;
+        std::erase_if(incoming, [&](const IncomingValue& elem){
+            return not block()->has_predecessor(elem.block);
+        });
+    }
 
     /// Get an iterator to the end of the incoming values.
     auto end() const -> ConstIterator { return {incoming, incoming.end()}; }
@@ -602,9 +619,7 @@ public:
     /// \param value The value to add.
     /// \param block The block it comes from.
     void set_incoming(Value* value, Block* block) {
-        auto existing = std::find_if(incoming.begin(), incoming.end(), [&](const IncomingValue& elem){
-            return elem.block == block;
-        });
+        auto existing = rgs::find(incoming, block, &IncomingValue::block);
         if (existing != incoming.end())
             *existing = { value, block };
         else incoming.push_back({ value, block });
