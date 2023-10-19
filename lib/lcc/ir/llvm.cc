@@ -499,7 +499,7 @@ struct LLVMIRPrinter {
 
             /// Index is the temporary index.
             case Value::Kind::Parameter:
-                return Format("%{}", as<ParamInst>(v)->index());
+                return Format("%{}", as<Parameter>(v)->index());
 
             /// Here be dragons.
             case Value::Kind::ArrayConstant: {

@@ -29,7 +29,7 @@ public:
         /// Instructions
         Alloca,
         Call,
-        //Copy,
+        // Copy,
         GetElementPtr,
         Intrinsic,
         Load,
@@ -114,7 +114,10 @@ class GlobalVariable : public Value {
 
 public:
     GlobalVariable(Type* t, std::string name, Linkage linkage, Value* init)
-    : Value(Value::Kind::GlobalVariable, t), _name(name), _linkage(linkage), _init(init) {}
+        : Value(Value::Kind::GlobalVariable, t),
+          _name(std::move(name)),
+          _linkage(linkage),
+          _init(init) {}
 
     const std::string& name() { return _name; }
     Linkage linkage() { return _linkage; }
@@ -298,19 +301,19 @@ class Function : public Value {
     CallConv cc;
 
 public:
-    Function(Context* ctx,
-             std::string mangled_name,
-             FunctionType* ty,
-             Linkage linkage,
-             CallConv calling_convention,
-             Location l = {}
-             ) : Value(Kind::Function, ty),
-                 func_name(mangled_name),
-                 loc(l),
-                 ctx(ctx),
-                 link(linkage),
-                 cc(calling_convention)
-    {}
+    Function(
+        Context* ctx,
+        std::string mangled_name,
+        FunctionType* ty,
+        Linkage linkage,
+        CallConv calling_convention,
+        Location l = {}
+    ) : Value(Kind::Function, ty),
+        func_name(std::move(mangled_name)),
+        loc(l),
+        ctx(ctx),
+        link(linkage),
+        cc(calling_convention) {}
 
     /// Get an iterator to the first block in this function.
     auto begin() const { return block_list.begin(); }
@@ -370,6 +373,22 @@ public:
     static bool classof(Value* v) { return v->kind() == Kind::Function; }
 };
 
+/// A parameter reference.
+class Parameter : public Value {
+    /// The parameter index.
+    u32 i;
+
+    /// Only the Function class should be able to create these.
+    friend Function;
+    Parameter(Type* ty, u32 idx) : Value(Kind::Parameter, ty), i(idx) {}
+public:
+    /// Get the parameter index.
+    auto index() const -> u32 { return i; }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Parameter; }
+};
+
 /// ============================================================================
 ///  Instructions
 /// ============================================================================
@@ -379,7 +398,7 @@ class AllocaInst : public Inst {
 
 public:
     AllocaInst(Type* ty, Location loc = {})
-    : Inst(Kind::Alloca, Type::PtrTy, loc), _allocated_type(ty) {}
+        : Inst(Kind::Alloca, Type::PtrTy, loc), _allocated_type(ty) {}
 
     Type* allocated_type() { return _allocated_type; }
 
@@ -489,7 +508,11 @@ class GEPInst : public Inst {
 public:
     GEPInst(Type* elementType, Value* arrayPointer, Value* arrayIndex, Location loc = {})
         : Inst(Kind::GetElementPtr, elementType, loc), pointer(arrayPointer), index(arrayIndex) {
-        LCC_ASSERT(pointer->type() == Type::PtrTy, "GEPInst may only operate on arrays or opaque pointers, which `{}` is not", *pointer->type());
+        LCC_ASSERT(
+            pointer->type() == Type::PtrTy,
+            "GEPInst may only operate on arrays or opaque pointers, which `{}` is not",
+            *pointer->type()
+        );
     }
 
     /// Get the base pointer.
@@ -585,7 +608,7 @@ public:
     /// the PHI. If the PHI is not inserted in a block, this is a no-op.
     void drop_stale_operands() {
         if (not block()) return;
-        std::erase_if(incoming, [&](const IncomingValue& elem){
+        std::erase_if(incoming, [&](const IncomingValue& elem) {
             return not block()->has_predecessor(elem.block);
         });
     }
@@ -604,7 +627,7 @@ public:
     ///
     /// \param block The block to remove the value for.
     void remove_incoming(Block* block) {
-        std::erase_if(incoming, [&](const IncomingValue& elem){
+        std::erase_if(incoming, [&](const IncomingValue& elem) {
             return elem.block == block;
         });
     }
@@ -621,30 +644,12 @@ public:
     void set_incoming(Value* value, Block* block) {
         auto existing = rgs::find(incoming, block, &IncomingValue::block);
         if (existing != incoming.end())
-            *existing = { value, block };
-        else incoming.push_back({ value, block });
+            *existing = {value, block};
+        else incoming.push_back({value, block});
     }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Phi; }
-};
-
-/// A parameter reference.
-///
-/// These should never be created manually.
-class ParamInst : public Inst {
-    /// The parameter index.
-    u32 i;
-
-public:
-    ParamInst(Type* ty, u32 idx, Location loc = {})
-        : Inst(Kind::Parameter, ty, loc), i(idx) {}
-
-    /// Get the parameter index.
-    auto index() const -> u32 { return i; }
-
-    /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Parameter; }
 };
 
 /// ============================================================================
@@ -762,7 +767,8 @@ protected:
         LCC_ASSERT(
             l->type() == r->type(),
             "Operands of `add` instruction must have the same type, but was {} and {}",
-            *l->type(), *r->type()
+            *l->type(),
+            *r->type()
         );
     }
 
@@ -950,7 +956,6 @@ protected:
         : BinaryInst(k, l, r, Type::I1Ty, loc) {}
 
 public:
-
     /// RTTI.
     static bool classof(Value* v) { return +v->kind() >= +Kind::Eq; }
 };
@@ -1075,7 +1080,7 @@ class UnaryInstBase : public Inst {
 
 protected:
     UnaryInstBase(Kind k, Value* v, Type* ty, Location loc = {})
-        : Inst(k, ty, loc), op(v) { }
+        : Inst(k, ty, loc), op(v) {}
 
 public:
     /// Get the operand.
@@ -1089,7 +1094,7 @@ public:
 class ZExtInst : public UnaryInstBase {
 public:
     ZExtInst(Value* v, Type* ty, Location loc = {})
-        : UnaryInstBase(Kind::ZExt, v, ty, loc) { }
+        : UnaryInstBase(Kind::ZExt, v, ty, loc) {}
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::ZExt; }
@@ -1099,7 +1104,7 @@ public:
 class SExtInst : public UnaryInstBase {
 public:
     SExtInst(Value* v, Type* ty, Location loc = {})
-        : UnaryInstBase(Kind::SExt, v, ty, loc) { }
+        : UnaryInstBase(Kind::SExt, v, ty, loc) {}
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::SExt; }
@@ -1109,7 +1114,7 @@ public:
 class TruncInst : public UnaryInstBase {
 public:
     TruncInst(Value* v, Type* ty, Location loc = {})
-        : UnaryInstBase(Kind::Trunc, v, ty, loc) { }
+        : UnaryInstBase(Kind::Trunc, v, ty, loc) {}
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Trunc; }
@@ -1133,7 +1138,7 @@ public:
 class NegInst : public UnaryInstBase {
 public:
     NegInst(Value* v, Location loc = {})
-        : UnaryInstBase(Kind::Neg, v, v->type(), loc) { }
+        : UnaryInstBase(Kind::Neg, v, v->type(), loc) {}
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Neg; }
@@ -1143,7 +1148,7 @@ public:
 class ComplInst : public UnaryInstBase {
 public:
     ComplInst(Value* v, Location loc = {})
-        : UnaryInstBase(Kind::Compl, v, v->type(), loc) { }
+        : UnaryInstBase(Kind::Compl, v, v->type(), loc) {}
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Compl; }
@@ -1197,7 +1202,6 @@ public:
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Poison; }
 };
-
 
 } // namespace lcc
 

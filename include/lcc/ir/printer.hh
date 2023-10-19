@@ -36,7 +36,8 @@ public:
             v->kind() == Value::Kind::IntegerConstant ||
             v->kind() == Value::Kind::ArrayConstant ||
             v->kind() == Value::Kind::Poison ||
-            v->kind() == Value::Kind::GlobalVariable) {
+            v->kind() == Value::Kind::GlobalVariable ||
+            v->kind() == Value::Kind::Parameter) {
                 return value(v);
             }
         else return fmt::format("%{}", ids[v]);
@@ -103,33 +104,37 @@ public:
         case Value::Kind::Block: {
             const auto& block = as<Block>(v);
             return fmt::format("block {}", block->name());
-        } break;
+        }
         case Value::Kind::Function: {
             const auto& function = as<Function>(v);
             return fmt::format("function {}", function->name());
-        } break;
+        }
+        case Value::Kind::Parameter: {
+            const auto& param = as<Parameter>(v);
+            return fmt::format("parameter {} : {}", param->index(), *param->type());
+        }
         case Value::Kind::IntegerConstant: {
             return fmt::format("{}", as<IntegerConstant>(v)->value());
-        } break;
+        }
         case Value::Kind::ArrayConstant: {
             const auto& array = as<ArrayConstant>(v);
             return fmt::format("{} of {} {}",
                                instruction_name(v->kind()),
                                array->size(),
                                *as<ArrayType>(array->type())->element_type());
-        } break;
+        }
         case Value::Kind::Poison: {
             return instruction_name(v->kind());
-        } break;
+        }
         case Value::Kind::GlobalVariable: {
             return instruction_name(v->kind());
-        } break;
+        }
 
         /// Instructions.
         case Value::Kind::Alloca: {
             const auto& local = as<AllocaInst>(v);
             return fmt::format("{} {} ({}B)", instruction_name(v->kind()), *local->allocated_type(), local->allocated_type()->bytes());
-        } break;
+        }
         case Value::Kind::Call: {
             const auto& call = as<CallInst>(v);
 
@@ -143,10 +148,10 @@ public:
 
             out[out.length() - 1] = ')'; // replace last space, ' ', with close paren, ')'.
             return out;
-        } break;
+        }
         /*case Value::Kind::Copy: {
             LCC_ASSERT(false, "TODO IR CopyInst");
-        } break;*/
+        }*/
         case Value::Kind::GetElementPtr: {
             const auto& gep = as<GEPInst>(v);
             return fmt::format("{} {} {} ({}B ea) from {}",
@@ -154,25 +159,21 @@ public:
                                get_id(gep->idx()),
                                *gep->type(), gep->type()->bytes(),
                                get_id(gep->ptr()));
-        } break;
+        }
         case Value::Kind::Intrinsic: {
             return instruction_name(v->kind());
-        } break;
+        }
         case Value::Kind::Load: {
             const auto& load = as<LoadInst>(v);
             return fmt::format("{} {} ({}B) from {}", instruction_name(v->kind()), *load->type(), load->type()->bytes(), get_id(load->ptr()));
-        } break;
-        case Value::Kind::Parameter: {
-            const auto& param = as<ParamInst>(v);
-            return fmt::format("{} {} ({}B)", instruction_name(v->kind()), *param->type(), param->type()->bytes());
-        } break;
+        }
         case Value::Kind::Phi: {
             const auto& phi = as<PhiInst>(v);
             auto out = instruction_name(v->kind());
             for (const auto& operand : phi->operands())
                 out += fmt::format(" [{}, {}]", operand.block->name(), get_id(operand.value));
             return out;
-        } break;
+        }
         case Value::Kind::Store: {
             const auto& store = as<StoreInst>(v);
             LCC_ASSERT(store->val());
@@ -180,29 +181,28 @@ public:
                                get_id(store->val()),
                                *store->val()->type(), store->val()->type()->bytes(),
                                get_id(store->ptr()));
-        } break;
+        }
 
         /// Terminators.
         case Value::Kind::Branch: {
             const auto& branch = as<BranchInst>(v);
             return fmt::format("{} to {}", instruction_name(v->kind()), get_id(branch->target()));
-        } break;
+        }
         case Value::Kind::CondBranch: {
             const auto& branch = as<CondBranchInst>(v);
             return fmt::format("{} if {} then {} otherwise {}", instruction_name(v->kind()),
                                get_id(branch->cond()),
                                get_id(branch->then_block()), get_id(branch->else_block()));
-            return instruction_name(v->kind());
-        } break;
+        }
         case Value::Kind::Return: {
             const auto& ret = as<ReturnInst>(v);
             if (ret->val())
                 return fmt::format("{} {}", instruction_name(v->kind()), get_id(ret->val()));
             return instruction_name(v->kind());
-        } break;
+        }
         case Value::Kind::Unreachable: {
             return instruction_name(v->kind());
-        } break;
+        }
 
         /// Unary instructions.
         case Value::Kind::Bitcast: {
@@ -215,13 +215,13 @@ public:
         case Value::Kind::Trunc: {
             const auto unary = as<UnaryInstBase>(v);
             return fmt::format("{} {} to {}", instruction_name(v->kind()), get_id(unary->operand()), *unary->type());
-        } break;
+        }
 
         case Value::Kind::Neg:
         case Value::Kind::Compl: {
             const auto& unary = as<UnaryInstBase>(v);
             return fmt::format("{} {}", instruction_name(v->kind()), get_id(unary->operand()));
-        } break;
+        }
 
         /// Binary instructions.
         case Value::Kind::Add:
@@ -250,7 +250,7 @@ public:
         case Value::Kind::UGe: {
             const BinaryInst* binary = as<BinaryInst>(v);
             return fmt::format("{} {} {}", instruction_name(v->kind()), get_id(binary->lhs()), get_id(binary->rhs()));
-        } break;
+        }
         }
 
 

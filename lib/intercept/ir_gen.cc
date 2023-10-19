@@ -701,15 +701,6 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
     if (auto* expr = f->body()) {
         block = new (*module) lcc::Block(fmt::format("body.{}", total_block));
         update_block(block);
-
-        unsigned int i = 0;
-        for (const auto& param : f->param_decls()) {
-            const auto& param_ir = new (*module) ParamInst(Convert(ctx, param->type()), i++, param->location());
-            generated_ir[param] = param_ir;
-            insert(param_ir);
-        }
-
-        // generate body
         generate_expression(expr);
     }
 }
