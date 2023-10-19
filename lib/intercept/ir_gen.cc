@@ -625,16 +625,30 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     } break;
 
     case Expr::Kind::IntrinsicCall: {
-
         LCC_ASSERT(false, "TODO: sorry, but IRGen of intrinsic calls isn't yet implemented.");
 
         const auto& intrinsic = as<IntrinsicCallExpr>(expr);
         switch (intrinsic->intrinsic_kind()) {
         case IntrinsicKind::BuiltinDebugtrap: {
             LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Debug Trap Builtin");
+            LCC_ASSERT(false, "TODO: Implement debug trap IR instruction, as it needs to make it all the way to MIR");
         } break;
         case IntrinsicKind::BuiltinFilename: {
             LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Filename Builtin");
+
+            if (!expr->location().is_valid())
+                Diag::ICE("Filename intrinsic does not have location to access filename from");
+
+            auto* f = ctx->files()[expr->location().file_id].get();
+            const auto& path_string = f->path().filename().string();
+            // TODO: Abstract this to "create_string()" or something.
+            auto path_data = std::vector<char>(path_string.begin(), path_string.end());
+            path_data.push_back('\0');
+            // TODO: element_type should match whatever a character is, I think.
+            auto* ty = lcc::ArrayType::Get(ctx, path_data.size(), lcc::IntegerType::Get(ctx, 8));
+            auto* array = new (*module) ArrayConstant(ty, std::move(path_data));
+            auto* str = new (*module) GlobalVariable(ty, fmt::format("__str{}", total_string++), Linkage::Internal, array);
+            generated_ir[expr] = str;
         } break;
         case IntrinsicKind::BuiltinLine: {
             LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to File Line Builtin");
@@ -643,10 +657,12 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Inline Builtin");
         } break;
         case IntrinsicKind::BuiltinMemCopy: {
-            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Memory Copy Builtin");
+            LCC_ASSERT(intrinsic->args().size() == 3, "Exactly three arguments to Memory Copy Builtin: (destination, source, amountOfBytesToCopy)");
+            LCC_ASSERT(false, "TODO: memcopy ir generation");
         } break;
         case IntrinsicKind::BuiltinMemSet: {
-            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Memory Set Builtin");
+            LCC_ASSERT(intrinsic->args().size() == 3, "Exactly three arguments to Memory Set Builtin");
+            LCC_ASSERT(false, "TODO: memset ir generation");
         } break;
         case IntrinsicKind::BuiltinSyscall: {
             LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Syscall Builtin");
@@ -655,7 +671,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     } break;
 
     case Expr::Kind::MemberAccess: {
-        LCC_ASSERT(false, "TODO: sorry, but IRGen of member access isn't yet implemented. I'll get to it.");
+        LCC_ASSERT(false, "TODO: Improve GEPInst implementation to allow for it to handle member access");
     } break;
 
     case Expr::Kind::CompoundLiteral: {

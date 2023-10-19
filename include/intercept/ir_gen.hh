@@ -24,6 +24,8 @@ class IRGen {
     usz total_for = 0;
     usz total_if = 0;
 
+    usz total_string = 0;
+
     void update_block(lcc::Block* new_block) {
         function->append_block(new_block);
         block = new_block;
