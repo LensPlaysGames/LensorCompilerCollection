@@ -1,0 +1,10 @@
+// 0
+// Hello, hunter!
+
+foreign callconv(cdecl) i32 puts(i8[*] s);
+
+void main()
+{
+    i8[*] str = "Hello, hunter!";
+    puts(str);
+}
