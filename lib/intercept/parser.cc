@@ -19,7 +19,7 @@ constexpr auto BinaryOrPostfixPrecedence(intc::TokenKind t) -> lcc::isz {
         /// Call and subscript have higher precedence than unary operators.
         /// Note: Unary operator precedence is 10'000.
         case Tk::LBrack:
-            return CallPrecedence;
+            return CallPrecedence + 1;
 
         case Tk::As:
         case Tk::AsBang:

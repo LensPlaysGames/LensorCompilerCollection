@@ -10,7 +10,6 @@
 #include <string>
 
 namespace lcc {
-
 Function::Function(
     Module* mod,
     std::string mangled_name,
@@ -579,9 +578,8 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     }
 };
 } // namespace
-
 } // namespace lcc
 
 void lcc::Module::print_ir() {
-    fmt::print("{}", LCCIRPrinter{}.Print(this));
+    fmt::print("{}", LCCIRPrinter::Print(this));
 }
