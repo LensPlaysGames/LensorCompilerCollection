@@ -93,13 +93,13 @@ void layec::Sema::AnalysePrototype(FunctionDecl* func) {
 }
 
 void layec::Sema::Analyse(Statement** statement) {
-    Note((*statement)->location(), "Analyse Statement {}\n", ToString((*statement)->kind()));
+    //Note((*statement)->location(), "Analyse Statement {}\n", ToString((*statement)->kind()));
     (*statement)->set_sema_in_progress();
     (*statement)->set_sema_errored();
 }
 
 bool layec::Sema::Analyse(Expr** expr) {
-    Note((*expr)->location(), "Analyse Expression {}\n", ToString((*expr)->kind()));
+    //Note((*expr)->location(), "Analyse Expression {}\n", ToString((*expr)->kind()));
     (*expr)->set_sema_in_progress();
     (*expr)->set_sema_errored();
     return false;

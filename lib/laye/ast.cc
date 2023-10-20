@@ -379,6 +379,7 @@ auto layec::Type::string(bool use_colours) const -> std::string {
                 access == TypeAccess::ReadOnly ? "readonly " : (access == TypeAccess::ReadOnly ? "writeonly " : "")
             );
         }
+
         case Kind::TypeBool: {
             auto w = as<BoolType>(this)->bit_width();
             if (w == 0) return fmt::format("{}bool", C(Cyan));
@@ -1010,10 +1011,12 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
 
             case K::LookupName: {
                 auto n = as<layec::NameExpr>(e);
+                (void)n;
             } break;
 
             case K::LookupPath: {
                 auto n = as<layec::PathExpr>(e);
+                (void)n;
             } break;
 
             case K::FieldIndex: {
