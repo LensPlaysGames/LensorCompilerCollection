@@ -1201,6 +1201,9 @@ public:
     auto end() const { return _data.end(); }
 
     /// Whether this is a string literal.
+    ///
+    /// This only affects how this array constant is printed
+    /// and should not be used for anything else.
     auto is_string_literal() const -> bool { return _is_string_literal; }
 
     /// Get the size.
