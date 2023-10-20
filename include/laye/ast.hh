@@ -662,6 +662,7 @@ class FunctionDecl : public NamedDecl {
     Type* _returnType;
     std::vector<FunctionParam> _params;
     Statement* _body;
+    // TODO(local): varargs
 
 public:
     FunctionDecl(Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<FunctionParam> params, Statement* body)
@@ -1680,6 +1681,7 @@ class FuncType : public Type {
     Expr* _calling_convention{};
     Type* _return_type;
     std::vector<Type*> _param_types;
+    // TODO(local): varargs
 
 public:
     FuncType(Location location, Type* return_type, std::vector<Type*> param_types)

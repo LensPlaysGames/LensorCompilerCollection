@@ -440,6 +440,19 @@ bool layec::Type::Equal(const Type* a, const Type* b) {
         }
 
         case Kind::TypeFunc: {
+            auto a2 = as<FuncType>(a);
+            auto b2 = as<FuncType>(b);
+            auto a2params = a2->param_types();
+            auto b2params = b2->param_types();
+            // TODO(local): varargs
+            if (a2params.size() != b2params.size())
+                return false;
+            for (usz i = 0; i < a2params.size(); i++) {
+                if (!Type::Equal(a2params[i], b2params[i]))
+                    return false;
+            }
+            return a2->calling_convention() == b2->calling_convention() and
+                Type::Equal(a2->return_type(), b2->return_type());
         }
 
         // all "instances" of these types are identical.
