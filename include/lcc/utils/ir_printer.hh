@@ -16,13 +16,19 @@ private:
     std::unordered_map<Block*, usz> block_indices{};
     std::unordered_map<Inst*, usz> inst_indices{};
 
+    explicit IRPrinter(bool use_colour) : use_colour(use_colour) {}
+
 public:
     /// Entry point.
-    static auto Print(Module* mod) -> std::string {
-        return IRPrinter{}.PrintModule(mod);
+    static auto Print(Module* mod, bool use_colour) -> std::string {
+        return IRPrinter{use_colour}.PrintModule(mod);
     }
 
 protected:
+    bool use_colour;
+    utils::Colours C{use_colour};
+    using enum utils::Colour;
+
     /// Get the index of a block.
     auto Index(Block* b) const -> usz { return block_indices.at(b); }
 
@@ -45,7 +51,7 @@ private:
     /// Emit a block and its containing instructions.
     void PrintBlock(Block* b) {
         for (usz i = 0; i < block_indent; i++) s += ' ';
-        Print("bb{}:\n", block_indices[b]);
+        Print("{}bb{}{}:\n", C(Yellow), block_indices[b], C(Red));
         for (auto inst : b->instructions()) {
             This()->PrintInst(inst);
             s += '\n';
@@ -85,6 +91,7 @@ private:
             else s += '\n';
             PrintFunction(f);
         }
+        s += C(Reset);
         return std::move(s);
     }
 

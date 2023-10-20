@@ -551,5 +551,5 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
 } // namespace lcc
 
 auto lcc::Module::llvm() -> std::string {
-    return LLVMIRPrinter::Print(this);
+    return LLVMIRPrinter::Print(this, false);
 }

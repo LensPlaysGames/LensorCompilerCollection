@@ -170,7 +170,7 @@ public:
     usz intern(std::string_view str);
 
     /// Print the AST of this module.
-    void print();
+    void print(bool use_colour);
 
     /// Get the top-level function.
     auto top_level_func() const -> FuncDecl* { return top_level_function; }

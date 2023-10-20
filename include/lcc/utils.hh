@@ -147,9 +147,8 @@ enum struct Colour {
 /// \endcode
 struct Colours {
     bool use_colours;
-    Colours(bool use_colours) : use_colours{use_colours} {}
-
-    auto operator()(Colour c) -> std::string_view {
+    constexpr Colours(bool use_colours) : use_colours{use_colours} {}
+    constexpr auto operator()(Colour c) const -> std::string_view {
         if (not use_colours) return "";
         switch (c) {
             case Colour::Reset: return "\033[m";
@@ -159,7 +158,7 @@ struct Colours {
             case Colour::Blue: return "\033[34m";
             case Colour::Magenta: return "\033[35m";
             case Colour::Cyan: return "\033[36m";
-            case Colour::White: return "\033[37m";
+            case Colour::White: return "\033[m\033[37m";
         }
         return "";
     }

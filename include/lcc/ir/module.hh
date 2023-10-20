@@ -32,7 +32,7 @@ public:
     auto llvm() -> std::string;
 
     /// Print the IR of this module.
-    void print_ir();
+    void print_ir(bool use_colour);
 
     auto code() -> std::vector<Function*>& { return _code; }
     auto code() const -> std::vector<Function*> { return _code; }

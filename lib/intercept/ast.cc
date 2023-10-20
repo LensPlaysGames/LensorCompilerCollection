@@ -864,6 +864,6 @@ auto intc::Type::string(bool use_colours) const -> std::string {
     LCC_UNREACHABLE();
 }
 
-void intc::Module::print() {
-    ASTPrinter{true}.print(this);
+void intc::Module::print(bool use_colour) {
+    ASTPrinter{use_colour}.print(this);
 }

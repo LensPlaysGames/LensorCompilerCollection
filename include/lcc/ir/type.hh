@@ -63,7 +63,7 @@ public:
     bool is_void() const { return kind == Kind::Void; }
 
     /// Get a string representation of this type.
-    auto string() const -> std::string;
+    auto string(bool use_colour = true) const -> std::string;
 };
 
 class ArrayType : public Type {

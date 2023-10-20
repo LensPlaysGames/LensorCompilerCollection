@@ -43,6 +43,7 @@ using namespace command_line_options;
 using options = clopts< // clang-format off
     help<>,
     option<"-o", "Path to the output filepath where target code will be stored">,
+    option<"--color", "Whether to include colours in the output (default: auto)", values<"always", "auto", "never">>,
     flag<"-v", "Enable verbose output">,
     flag<"--ast", "Print the AST and exit without generating code">,
     flag<"--syntax-only", "Do not perform semantic analysis">,
@@ -60,6 +61,15 @@ using detail::options;
 
 int main(int argc, char** argv) {
     auto opts = options::parse(argc, argv, HandleOptParseError);
+
+    /// Determine whether to use colours in the output.
+    /// TODO: Enable colours in the console on Windows (for `cmd`).
+    /// TODO: Diagnostics should honour this flag.
+    auto colour_opt = opts.get_or<"--color">("auto");
+    bool use_colour{};
+    if (colour_opt == "always") use_colour = true;
+    else if (colour_opt == "never") use_colour = false;
+    else use_colour = isatty(fileno(stdout));
 
     /// Get input files
     auto& input_files = *opts.get<"filepath">();
@@ -87,7 +97,7 @@ int main(int argc, char** argv) {
         auto mod = lcc::intercept::Parser::Parse(&context, file);
         if (opts.get<"--syntax-only">()) {
             if (context.has_error()) std::exit(1);
-            if (opts.get<"--ast">()) mod->print();
+            if (opts.get<"--ast">()) mod->print(use_colour);
             std::exit(0);
         }
 
@@ -95,12 +105,12 @@ int main(int argc, char** argv) {
         lcc::intercept::Sema::Analyse(&context, *mod, true);
         if (opts.get<"--ast">()) {
             if (context.has_error()) std::exit(1);
-            mod->print();
+            mod->print(use_colour);
         }
 
         auto ir_module = lcc::intercept::IRGen::Generate(&context, *mod);
         if (opts.get<"--ir">()) {
-            ir_module->print_ir();
+            ir_module->print_ir(use_colour);
             std::exit(0);
         }
 
