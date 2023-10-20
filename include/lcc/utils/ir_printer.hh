@@ -29,6 +29,10 @@ protected:
     utils::Colours C{use_colour};
     using enum utils::Colour;
 
+    /// Couldn’t decide on a colour for temporaries, so...
+    static constexpr auto TempColour = utils::Colour::Blue;
+    static constexpr auto BlockColour = utils::Colour::Green;
+
     /// Get the index of a block.
     auto Index(Block* b) const -> usz { return block_indices.at(b); }
 
@@ -51,7 +55,7 @@ private:
     /// Emit a block and its containing instructions.
     void PrintBlock(Block* b) {
         for (usz i = 0; i < block_indent; i++) s += ' ';
-        Print("{}bb{}{}:\n", C(Yellow), block_indices[b], C(Red));
+        Print("{}bb{}{}:\n", C(BlockColour), block_indices[b], C(Red));
         for (auto inst : b->instructions()) {
             This()->PrintInst(inst);
             s += '\n';
@@ -84,7 +88,7 @@ private:
 
     auto PrintModule(Module* mod) -> std::string {
         for (auto var : mod->vars()) This()->PrintGlobal(var);
-        s += '\n';
+        if (not mod->vars().empty()) s += '\n';
         bool first = true;
         for (auto f : mod->code()) {
             if (first) first = false;

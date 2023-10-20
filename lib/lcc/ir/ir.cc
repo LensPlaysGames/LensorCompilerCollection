@@ -243,7 +243,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         for (auto [i, arg] : vws::enumerate(ftype->params())) {
             if (first) first = false;
             else Print("{}, ", C(Red));
-            Print("{} {}%{}", arg->string(use_colour), C(Blue), i);
+            Print("{} {}%{}", arg->string(use_colour), C(TempColour), i);
         }
 
         Print("{})", C(Red));
@@ -256,7 +256,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     /// Print the start of a temporary.
     void PrintTemp(Inst* i) {
-        Print("    {}%{} {}= {}", C(White), Index(i), C(Red), C(Yellow));
+        Print("    {}%{} {}= {}", C(TempColour), Index(i), C(Red), C(Yellow));
     };
 
     /// Print a cast instruction.
@@ -486,7 +486,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     void PrintGlobal(GlobalVariable* v) {
         Print(
             "{}{} {}: {} {}",
-            C(White),
+            C(TempColour),
             v->name(),
             C(Red),
             v->type()->string(use_colour),
@@ -531,14 +531,14 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 return Format("{}poison", C(Red));
 
             case Value::Kind::Parameter:
-                return Format("{}%{}", C(Blue), as<Parameter>(v)->index());
+                return Format("{}%{}", C(TempColour), as<Parameter>(v)->index());
 
             case Value::Kind::Block: {
                 return fmt::format(
                     "{}{}{}%bb{}",
                     C(Cyan),
                     include_type ? "block " : "",
-                    C(Yellow),
+                    C(BlockColour),
                     Index(as<Block>(v))
                 );
             }
@@ -546,7 +546,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::GlobalVariable: {
                 std::string val;
                 if (include_type) fmt::format_to(It(val), "{}ptr ", C(Cyan));
-                fmt::format_to(It(val), "{}@{}", C(White), as<GlobalVariable>(v)->name());
+                fmt::format_to(It(val), "{}@{}", C(TempColour), as<GlobalVariable>(v)->name());
                 return val;
             }
 
@@ -624,7 +624,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::ULe:
             case Value::Kind::UGt:
             case Value::Kind::UGe:
-                return Format("{}%{}", C(White), Index(as<Inst>(v)));
+                return Format("{}%{}", C(TempColour), Index(as<Inst>(v)));
 
             /// These do not yield a value.
             case Value::Kind::Store:
