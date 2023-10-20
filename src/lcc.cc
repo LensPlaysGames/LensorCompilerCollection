@@ -15,6 +15,11 @@
 #include <lcc/utils.hh>
 #include <string>
 
+#ifdef _WIN32
+#    include <io.h>
+#    define isatty _isatty
+#endif
+
 namespace detail {
 void aluminium_handler() {
 #if defined(LCC_PLATFORM_WINDOWS)
