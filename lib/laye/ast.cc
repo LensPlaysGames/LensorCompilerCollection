@@ -162,25 +162,6 @@ std::string layec::ToString(layec::TokenKind kind) {
         case TokenKind::Noreturn: return "noreturn";
         case TokenKind::Rawptr: return "rawptr";
         case TokenKind::String: return "string";
-        case TokenKind::CChar: return "c_char";
-        case TokenKind::CSChar: return "c_schar";
-        case TokenKind::CUChar: return "c_uchar";
-        case TokenKind::CString: return "c_string";
-        case TokenKind::CShort: return "c_short";
-        case TokenKind::CUShort: return "c_ushort";
-        case TokenKind::CInt: return "c_int";
-        case TokenKind::CUInt: return "c_uint";
-        case TokenKind::CLong: return "c_long";
-        case TokenKind::CULong: return "c_ulong";
-        case TokenKind::CLongLong: return "c_longlong";
-        case TokenKind::CULongLong: return "c_ulonglong";
-        case TokenKind::CSizeT: return "c_sizet";
-        case TokenKind::CISizeT: return "c_isizet";
-        case TokenKind::CPtrDiffT: return "c_ptrdifft";
-        case TokenKind::CFloat: return "c_float";
-        case TokenKind::CDouble: return "c_double";
-        case TokenKind::CLongDouble: return "c_longdouble";
-        case TokenKind::CBool: return "c_bool";
         default: return "<unknown>";
     }
 }
@@ -298,7 +279,6 @@ std::string layec::ToString(Expr::Kind kind) {
         case Expr::Kind::TypeBool: return "TypeBool";
         case Expr::Kind::TypeInt: return "TypeInt";
         case Expr::Kind::TypeFloat: return "TypeFloat";
-        case Expr::Kind::TypeC: return "TypeC";
         default: return "<unknown>";
     }
 }
@@ -396,17 +376,6 @@ auto layec::Type::string(bool use_colours) const -> std::string {
             auto w = as<FloatType>(this)->bit_width();
             if (w == 0) return fmt::format("{}float", C(Cyan));
             return fmt::format("{}f{}", C(Cyan), w);
-        }
-
-        case Kind::TypeC: {
-            auto c = as<CType>(this);
-            auto access = c->access();
-            return fmt::format(
-                "{}{}{}",
-                C(Cyan),
-                access == TypeAccess::ReadOnly ? "readonly " : (access == TypeAccess::ReadOnly ? "writeonly " : ""),
-                ToString(c->kind())
-            );
         }
     }
 }

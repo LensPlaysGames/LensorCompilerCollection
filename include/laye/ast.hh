@@ -270,26 +270,6 @@ enum struct TokenKind {
     Noreturn,
     Rawptr,
     String,
-
-    CChar,
-    CSChar,
-    CUChar,
-    CString,
-    CShort,
-    CUShort,
-    CInt,
-    CUInt,
-    CLong,
-    CULong,
-    CLongLong,
-    CULongLong,
-    CSizeT,
-    CISizeT,
-    CPtrDiffT,
-    CFloat,
-    CDouble,
-    CLongDouble,
-    CBool,
 };
 
 using LayeToken = syntax::Token<TokenKind>;
@@ -581,8 +561,6 @@ public:
         TypeBool,
         TypeInt,
         TypeFloat,
-
-        TypeC,
     };
 
 private:
@@ -1507,7 +1485,7 @@ public:
     /// Check if types are equal to each other.
     static bool Equal(const Type* a, const Type* b);
 
-    static bool classof(const Expr* expr) { return +expr->kind() >= +Kind::TypeInfer && +expr->kind() <= +Kind::TypeC; }
+    static bool classof(const Expr* expr) { return +expr->kind() >= +Kind::TypeInfer && +expr->kind() <= +Kind::TypeFloat; }
 };
 
 class InferType : public Type {
@@ -1745,27 +1723,6 @@ public:
         : SizableType(Kind::TypeFloat, location, bit_width) {}
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeFloat; }
-};
-
-class CType : public Type {
-    TokenKind _kind;
-    TypeAccess _access;
-
-public:
-    CType(Location location, TokenKind kind)
-        : Type(Kind::TypeC, location), _kind(kind) {
-        LCC_ASSERT(+kind >= +TokenKind::CChar && +kind <= +TokenKind::CBool);
-    }
-
-    CType(Location location, TokenKind kind, TypeAccess access)
-        : Type(Kind::TypeC, location), _kind(kind), _access(access) {
-        LCC_ASSERT(+kind >= +TokenKind::CChar && +kind <= +TokenKind::CBool);
-    }
-
-    auto kind() const { return _kind; }
-    auto access() const { return _access; }
-
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeC; }
 };
 } // namespace lcc::laye
 
