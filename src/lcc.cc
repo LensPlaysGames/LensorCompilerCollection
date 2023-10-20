@@ -7,6 +7,7 @@
 #include <intercept/sema.hh>
 #include <laye/parser.hh>
 #include <laye/sema.hh>
+#include <laye/ir_gen.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/ir/module.hh>
@@ -144,6 +145,17 @@ int main(int argc, char** argv) {
         if (opts.get<"--ast">()) {
             if (context.has_error()) std::exit(1);
             laye_context->print_modules();
+        }
+
+        auto ir_module = lcc::laye::IRGen::Generate(laye_context, mod);
+        if (opts.get<"--ir">()) {
+            ir_module->print_ir(use_colour);
+            std::exit(0);
+        }
+
+        if (opts.get<"--llvm">()) {
+            fmt::print("{}", ir_module->llvm());
+            std::exit(0);
         }
 
         return 69;

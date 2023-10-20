@@ -389,6 +389,30 @@ public:
     bool is_function_scope() const { return _is_function_scope; }
 };
 
+class LitStringExpr;
+
+class EvalResult {
+    std::variant< // clang-format off
+        i64,
+        std::nullptr_t,
+        LitStringExpr*,
+        std::monostate
+    > data; // clang-format on
+public:
+    EvalResult() : data(std::monostate()) {}
+    EvalResult(i64 data) : data(data) {}
+    EvalResult(bool data) : data(i64(1)) {}
+    EvalResult(std::nullptr_t) : data(nullptr) {}
+    EvalResult(LitStringExpr* data) : data(data) {}
+
+    bool is_i64() const { return std::holds_alternative<i64>(data); }
+    bool is_null() const { return std::holds_alternative<std::nullptr_t>(data); }
+    bool is_string() const { return std::holds_alternative<LitStringExpr*>(data); }
+
+    i64 as_i64() const { return std::get<i64>(data); }
+    LitStringExpr* as_string() const { return std::get<LitStringExpr*>(data); }
+};
+
 class SemaNode {
 public:
     enum struct Kind {
@@ -511,6 +535,7 @@ public:
         Xor,
 
         UnwrapNilable,
+        Constant,
 
         // Lookups etc.
         LookupName,
@@ -1445,6 +1470,23 @@ public:
     static bool classof(const Expr* expr) { return expr->kind() == Kind::LitFloat; }
 };
 
+class ConstantExpr : public Expr {
+    EvalResult _value;
+    Expr* _expression;
+
+public:
+    ConstantExpr(Expr* expr, EvalResult value)
+        : Expr(Kind::Constant, expr->location()), _value(std::move(value)), _expression(expr) {
+        LCC_ASSERT(expr->sema_ok());
+        expr->set_sema_done();
+    }
+
+    auto expr() const { return _expression; }
+    auto value() const -> const EvalResult& { return _value; }
+    
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Constant; }
+};
+
 /// @brief Base class for type syntax nodes (which we're trying to make also Exprs.)
 class Type : public Expr {
 protected:
@@ -1471,6 +1513,10 @@ public:
     bool is_unknown() const;
     /// Check if this is the builtin \c void type.
     bool is_void() const;
+    /// Check if this is an integer type.
+    bool is_integer() const { return kind() == Kind::TypeInt; }
+    /// Check if this is an integer type.
+    bool is_bool() const { return kind() == Kind::TypeBool; }
     /// Check if this is a slice type.
     bool is_slice() const { return kind() == Kind::TypeSlice; }
     /// Check if this is a array type.
@@ -1588,6 +1634,8 @@ public:
 
     auto access() const { return _access; }
     auto rank_lengths() const -> std::span<Expr* const> { return _rank_lengths; }
+    auto rank() const -> usz { return _rank_lengths.size(); }
+    auto nth_length(usz i) const -> usz { return (usz)(as<ConstantExpr>(_rank_lengths[i]))->value().as_i64(); }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeArray; }
 };

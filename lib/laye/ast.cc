@@ -380,6 +380,104 @@ auto layec::Type::string(bool use_colours) const -> std::string {
     }
 }
 
+bool layec::Type::Equal(const Type* a, const Type* b) {
+    if (a->kind() != b->kind()) return false;
+    switch (a->kind()) {
+        // the `var` type should not exist past sema and should never
+        // never equal another type.
+        case Kind::TypeInfer: return false;
+
+        // nilable types are equal if their element types are equal.
+        case Kind::TypeNilable: {
+            auto a2 = as<NilableType>(a);
+            auto b2 = as<NilableType>(b);
+            return Type::Equal(a2->elem_type(), b2->elem_type());
+        }
+
+        case Kind::TypeErrUnion: {
+            auto a2 = as<ErrUnionType>(a);
+            auto b2 = as<ErrUnionType>(b);
+            if (a2->has_error_name() != b2->has_error_name())
+                return false;
+            if (a2->has_error_name() and a2->error_name() != b2->error_name())
+                return false;
+            return Type::Equal(a2->value_type(), b2->value_type());
+        }
+
+        // lookups are never equal unless actually identical.
+        case Kind::TypeLookupName: 
+        case Kind::TypeLookupPath:
+            return a == b;
+
+        case Kind::TypeArray: {
+            auto a2 = as<ArrayType>(a);
+            auto b2 = as<ArrayType>(b);
+            if (a2->access() != b2->access() or a2->rank() != b2->rank())
+                return false;
+            for (usz i = 0; i < a2->rank(); i++) {
+                if (a2->nth_length(i) != b2->nth_length(i))
+                    return false;
+            }
+            return Type::Equal(a2->elem_type(), b2->elem_type());
+        }
+
+        case Kind::TypeSlice: {
+            auto a2 = as<SliceType>(a);
+            auto b2 = as<SliceType>(b);
+            return a2->access() == b2->access() and Type::Equal(a2->elem_type(), b2->elem_type());
+        }
+
+        case Kind::TypePointer: {
+            auto a2 = as<PointerType>(a);
+            auto b2 = as<PointerType>(b);
+            return a2->access() == b2->access() and Type::Equal(a2->elem_type(), b2->elem_type());
+        }
+
+        case Kind::TypeBuffer: {
+            auto a2 = as<BufferType>(a);
+            auto b2 = as<BufferType>(b);
+            return a2->access() == b2->access() and Type::Equal(a2->elem_type(), b2->elem_type());
+        }
+
+        case Kind::TypeFunc: {
+        }
+
+        // all "instances" of these types are identical.
+        case Kind::TypeNoreturn:
+        case Kind::TypeRawptr:
+        case Kind::TypeVoid:
+            return true;
+
+        case Kind::TypeString: {
+            auto a2 = as<StringType>(a);
+            auto b2 = as<StringType>(b);
+            return a2->access() == b2->access();
+        }
+
+        case Kind::TypeBool: {
+            auto a2 = as<BoolType>(a);
+            auto b2 = as<BoolType>(b);
+            return a2->bit_width() == b2->bit_width();
+        }
+
+        case Kind::TypeInt: {
+            auto a2 = as<IntType>(a);
+            auto b2 = as<IntType>(b);
+            return a2->bit_width() == b2->bit_width() && a2->is_signed() == b2->is_signed();
+        }
+
+        case Kind::TypeFloat: {
+            auto a2 = as<FloatType>(a);
+            auto b2 = as<FloatType>(b);
+            return a2->bit_width() == b2->bit_width();
+        }
+
+        default: LCC_UNREACHABLE(); return false;
+    }
+
+    LCC_UNREACHABLE();
+}
+
 namespace {
 using lcc::as;
 using lcc::cast;

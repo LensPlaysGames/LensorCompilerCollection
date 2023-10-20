@@ -106,19 +106,40 @@ bool layec::Sema::Analyse(Expr** expr) {
 }
 
 template <bool PerformConversion>
-int layec::Sema::ConvertImpl(Expr** expr, Type* type) {
+int layec::Sema::ConvertImpl(Expr** expr, Type* to) {
     enum : int {
         TypesContainErrors = -2,
         ConversionImpossible = -1,
         NoOp = 0,
     };
 
+    auto from = (*expr)->type();
+    if (from->sema_errored() or to->sema_errored()) return TypesContainErrors;
+
+    auto Score = [](int i) {
+        LCC_ASSERT(i >= 1, "Score must be 1 or greater. Use the enum constants above for values <= 0");
+        return i;
+    };
+
+    if (Type::Equal(from, to))
+        return NoOp;
+    
+    if (from->is_integer() and to->is_bool()) {
+        if constexpr (PerformConversion) InsertImplicitCast(expr, to);
+        return Score(1);
+    }
+
+    if (from->is_function() and to->is_pointer() and Type::Equal(cast<SingleElementType>(to)->elem_type(), from)) {
+        if constexpr (PerformConversion) InsertImplicitCast(expr, to);
+        return NoOp;
+    }
+
     return ConversionImpossible;
 }
 
-bool layec::Sema::Convert(Expr** expr, Type* type) {
+bool layec::Sema::Convert(Expr** expr, Type* to) {
     if ((*expr)->sema_errored()) return true;
-    return ConvertImpl<true>(expr, type) >= 0;
+    return ConvertImpl<true>(expr, to) >= 0;
 }
 
 void layec::Sema::ConvertOrError(Expr** expr, Type* to) {
@@ -133,8 +154,8 @@ bool layec::Sema::ConvertToCommonType(Expr** a, Expr** b) {
     return Convert(a, (*b)->type()) or Convert(b, (*a)->type());
 }
 
-int layec::Sema::TryConvert(Expr** expr, Type* type) {
-    return ConvertImpl<false>(expr, type);
+int layec::Sema::TryConvert(Expr** expr, Type* to) {
+    return ConvertImpl<false>(expr, to);
 }
 
 void layec::Sema::Discard(Expr** expr) {

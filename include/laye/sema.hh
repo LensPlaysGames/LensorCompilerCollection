@@ -34,12 +34,12 @@ private:
     }
 
     template <bool PerformConversion>
-    int ConvertImpl(Expr** expr, Type* type);
+    int ConvertImpl(Expr** expr, Type* to);
 
-    [[nodiscard]] bool Convert(Expr** expr, Type* type);
+    [[nodiscard]] bool Convert(Expr** expr, Type* to);
     void ConvertOrError(Expr** expr, Type* to);
     [[nodiscard]] bool ConvertToCommonType(Expr** a, Expr** b);
-    [[nodiscard]] int TryConvert(Expr** expr, Type* type);
+    [[nodiscard]] int TryConvert(Expr** expr, Type* to);
 
     void Discard(Expr** expr);
     bool HasSideEffects(Expr* expr);
