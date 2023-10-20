@@ -479,6 +479,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
             case K::DeclBinding: {
                 auto n = cast<layec::BindingDecl>(s);
                 PrintLinkage(n->linkage());
+                PrintModifiers(n->mods());
                 PrintBasicHeader("BindingDecl", n);
                 out += fmt::format(
                     " {} {}{}",
