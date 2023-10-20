@@ -32,9 +32,17 @@ Function::Function(
     mod->add_function(this);
 }
 
+GlobalVariable::GlobalVariable(Module* mod, Type* t, std::string name, Linkage linkage, Value* init)
+    : Value(Value::Kind::GlobalVariable, t),
+      _name(std::move(name)),
+      _linkage(linkage),
+      _init(init) {
+    mod->add_var(this);
+}
+
 usz Type::bits() const {
     switch (kind) {
-        case Kind::Unknown:
+        case Kind::Unknown: Diag::ICE("Cannot get size of unknown type");
         case Kind::Void: return 0;
 
         case Kind::Function:
@@ -65,6 +73,27 @@ usz Type::bits() const {
 usz Type::bytes() const {
     usz bitwidth = bits();
     return bitwidth / 8 + (bitwidth % 8 ? 1 : 0);
+}
+
+usz Type::align() const {
+    switch (kind) {
+        case Kind::Unknown: Diag::ICE("Cannot get alignment of unknown type");
+
+        case Kind::Function:
+        case Kind::Pointer:
+            return 64; // FIXME: Target-dependent pointer size
+
+        case Kind::Void: return 1; /// Alignment of 0 is invalid.
+        case Kind::Array: return as<ArrayType>(this)->element_type()->align();
+        case Kind::Integer: return as<IntegerType>(this)->bitwidth();
+        case Kind::Struct: return rgs::max(as<StructType>(this)->members() | vws::transform(&Type::align));
+    }
+    LCC_UNREACHABLE();
+}
+
+usz Type::align_bytes() const {
+    usz alignment = align();
+    return alignment / 8 + (alignment % 8 ? 1 : 0);
 }
 
 auto Type::string() const -> std::string {
@@ -187,7 +216,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     /// Print the function signature.
     void PrintFunctionHeader(Function* f) {
         auto ftype = as<FunctionType>(f->type());
-        Print("{} {}(", *ftype->ret(), f->name());
+        Print("{} : {}(", f->name(), *ftype->ret());
 
         bool first = true;
         for (auto [i, arg] : vws::enumerate(ftype->params())) {
@@ -197,8 +226,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         }
 
         Print(")");
-        if (f->linkage() == Linkage::Imported or f->linkage() == Linkage::Reexported)
-            Print(" external");
+        if (f->imported()) Print(" external");
     }
 
     /// Print start/end of function body.
@@ -275,9 +303,9 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::GetElementPtr: {
                 auto gep = as<GEPInst>(i);
                 Print(
-                    "    %{} = gep {} from {} : {}",
+                    "    %{} = gep {} from {} at {}",
                     Index(i),
-                    *gep->type(),
+                    *gep->base_type(),
                     Val(gep->ptr(), false),
                     Val(gep->idx())
                 );
@@ -403,6 +431,23 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         LCC_UNREACHABLE();
     }
 
+    /// Print a global variable.
+    void PrintGlobal(GlobalVariable* v) {
+        Print(
+            "{} : {} ",
+            v->name(),
+            *v->type()
+        );
+
+        if (v->imported()) {
+            Print("external\n");
+            return;
+        }
+
+        if (v->init()) Print("= {}\n", Val(v->init(), false));
+        else Print("= null\n");
+    }
+
     /// Get the inline representation of a value.
     ///
     /// In some contexts, the type is obvious (e.g. the address
@@ -452,13 +497,34 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             /// TODO: Format this differently based on the array type?
             case Value::Kind::ArrayConstant: {
                 auto a = as<ArrayConstant>(v);
-                return Format(
-                    "[{}]",
-                    fmt::join(
-                        std::span<const u8>(reinterpret_cast<const u8*>(a->data()), a->size()),
-                        " "
-                    )
-                );
+
+                /// String.
+                if (a->is_string_literal()) {
+                    static const auto FormatChar = [](u8 c) {
+                        return std::isprint(c) and c != '\"'
+                                 ? std::string{char(c)}
+                                 : fmt::format("\\{:02X}", u8(c));
+                    };
+
+                    return Format(
+                        "\"{}\"",
+                        fmt::join(
+                            std::span<const char>(a->data(), a->size()) | vws::transform(FormatChar),
+                            ""
+                        )
+                    );
+                }
+
+                /// Array
+                else {
+                    return Format(
+                        "[{}]",
+                        fmt::join(
+                            std::span<const u8>(reinterpret_cast<const u8*>(a->data()), a->size()),
+                            " "
+                        )
+                    );
+                }
             }
 
             case Value::Kind::Intrinsic: LCC_TODO();

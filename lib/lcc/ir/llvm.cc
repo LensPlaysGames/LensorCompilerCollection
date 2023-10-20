@@ -8,11 +8,11 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
     void PrintFunctionHeader(Function* f) {
         auto ftype = as<FunctionType>(f->type());
         Print(
-            "{} {} {} @\"{}\" (",
-            f->blocks().empty() ? "declare" : "define",
+            "{} {} {} {} (",
+            f->imported() ? "declare" : "define",
             f->linkage() == Linkage::Internal ? "private" : "external",
             Ty(ftype->ret()),
-            f->name()
+            FormatName(f->name())
         );
 
         bool first = true;
@@ -253,7 +253,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 Print(
                     "    %{} = getelementptr {}, {}, {}",
                     Index(i),
-                    Ty(gep->type()),
+                    Ty(gep->base_type()),
                     Val(gep->ptr()),
                     Val(gep->idx())
                 );
@@ -296,6 +296,20 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
         }
 
         LCC_UNREACHABLE();
+    }
+
+    /// Print a global variable declaration or definition.
+    void PrintGlobal(GlobalVariable* v) {
+        const bool is_string = v->init() and is<ArrayConstant>(v->init()) and as<ArrayConstant>(v->init())->is_string_literal();
+        Print(
+            "{} = {} {} {} {}, align {}\n",
+            FormatName(v->name()),
+            v->imported() ? "external" : "private",
+            is_string ? "unnamed_addr constant" : "global",
+            Ty(v->type()),
+            v->init() ? Val(v->init(), false) : "zeroinitializer",
+            v->type()->align()
+        );
     }
 
     /// Check if the LLVM instruction that is emitted for
@@ -364,6 +378,14 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
         LCC_UNREACHABLE();
     }
 
+
+    /// Format a name for use in LLVM IR.
+    auto FormatName (std::string_view name) -> std::string {
+        auto printable = rgs::none_of(name, [](auto c) { return std::isspace(c); });
+        if (printable) return fmt::format("@{}", name);
+        else return fmt::format("@\"{}\"", name);
+    };
+
     /// Get the LLVM representation of a type.
     auto Ty(Type* ty) -> std::string {
         switch (ty->kind) {
@@ -419,14 +441,14 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::Function: {
                 std::string val;
                 if (include_type) val += "ptr ";
-                fmt::format_to(It(val), "@\"{}\"", as<Function>(v)->name());
+                val += FormatName(as<Function>(v)->name());
                 return val;
             }
 
             case Value::Kind::GlobalVariable: {
                 std::string val;
                 if (include_type) val += "ptr ";
-                fmt::format_to(It(val), "@\"{}\"", as<GlobalVariable>(v)->name());
+                val += FormatName(as<GlobalVariable>(v)->name());
                 return val;
             }
 
@@ -443,14 +465,35 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             /// Here be dragons.
             case Value::Kind::ArrayConstant: {
                 auto a = as<ArrayConstant>(v);
-                return Format(
-                    "[{}]",
-                    fmt::join(
-                        std::span<const char>(a->data(), a->size()) //
-                            | vws::transform([](auto c) { return fmt::format("i8 {}", u8(c)); }),
-                        ", "
-                    )
-                );
+
+                /// String.
+                if (a->is_string_literal()) {
+                    static const auto FormatChar = [](u8 c) {
+                        return std::isprint(c) and c != '\"'
+                            ? std::string{char(c)}
+                            : fmt::format("\\{:02X}", u8(c));
+                    };
+
+                    return Format(
+                        "c\"{}\"",
+                        fmt::join(
+                            std::span<const char>(a->data(), a->size()) | vws::transform(FormatChar),
+                            ""
+                        )
+                    );
+                }
+
+                /// Array.
+                else {
+                    return Format(
+                        "[{}]",
+                        fmt::join(
+                            std::span<const char>(a->data(), a->size()) //
+                                | vws::transform([](auto c) { return fmt::format("i8 {}", u8(c)); }),
+                            ", "
+                        )
+                    );
+                }
             }
 
             case Value::Kind::Intrinsic: LCC_TODO();

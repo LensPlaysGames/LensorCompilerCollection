@@ -128,6 +128,23 @@ enum struct FuncAttr {
     /// function not annotated with this attribute returns twice.
     ReturnsTwice,
 };
+
+constexpr bool IsImportedLinkage(Linkage link) {
+    switch (link) {
+        case Linkage::LocalVar:
+        case Linkage::Internal:
+        case Linkage::Used:
+        case Linkage::Exported:
+            return false;
+
+        case Linkage::Imported:
+        case Linkage::Reexported:
+            return true;
+    }
+
+    LCC_UNREACHABLE();
+}
+
 } // namespace lcc
 
 #endif // LCC_CORE_HH

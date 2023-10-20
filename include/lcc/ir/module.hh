@@ -11,7 +11,7 @@ class Module {
     Context* _ctx;
 
     std::vector<Function*> _code;
-    std::vector<Value*> _vars;
+    std::vector<GlobalVariable*> _vars;
 
     Module(Module&) = delete;
     Module(Module&&) = delete;
@@ -36,11 +36,11 @@ public:
 
     auto code() -> std::vector<Function*>& { return _code; }
     auto code() const -> std::vector<Function*> { return _code; }
-    auto vars() -> std::vector<Value*>& { return _vars; }
-    auto vars() const -> std::vector<Value*> { return _vars; }
+    auto vars() -> std::vector<GlobalVariable*>& { return _vars; }
+    auto vars() const -> std::vector<GlobalVariable*> { return _vars; }
 
     void add_function(Function* func) { _code.push_back(func); }
-    void add_var(Value* var) { _vars.push_back(var); }
+    void add_var(GlobalVariable* var) { _vars.push_back(var); }
 };
 } // namespace lcc
 

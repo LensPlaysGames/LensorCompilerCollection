@@ -33,6 +33,7 @@ class IRGen {
     }
 
     std::unordered_map<intercept::Expr*, lcc::Value*> generated_ir;
+    std::vector<lcc::GlobalVariable*> string_literals;
 
     IRGen(Context *c, intercept::Module& m) : ctx(c), int_module(m) {
         module = new lcc::Module(ctx);

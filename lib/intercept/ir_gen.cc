@@ -39,21 +39,21 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             Diag::ICE("Invalid builtin kind present during IR generation");
         }
         LCC_UNREACHABLE();
-    } break;
+    }
     case Type::Kind::FFIType: {
         return lcc::IntegerType::Get(ctx, in->size(ctx));
-    } break;
+    }
     case Type::Kind::Named: {
         Diag::ICE("Sema failed to resolve named type");
-    } break;
+    }
     case Type::Kind::Pointer:
     case Type::Kind::Reference: {
         return lcc::Type::PtrTy;
-    } break;
+    }
     case Type::Kind::Array: {
         const auto& t_array = as<ArrayType>(in);
         return lcc::ArrayType::Get(ctx, t_array->dimension(), Convert(ctx, t_array->element_type()));
-    } break;
+    }
     case Type::Kind::Function: {
         const auto& t_function = as<FuncType>(in);
 
@@ -62,17 +62,17 @@ lcc::Type* Convert(Context* ctx, Type* in) {
             param_types.push_back(Convert(ctx, p.type));
 
         return lcc::FunctionType::Get(ctx, Convert(ctx, t_function->return_type()), std::move(param_types));
-    } break;
+    }
     case Type::Kind::Struct: {
         std::vector<lcc::Type*> member_types{};
         for (const auto& m : as<StructType>(in)->members())
             member_types.push_back(Convert(ctx, m.type));
 
         return lcc::StructType::Get(ctx, std::move(member_types));
-    } break;
+    }
     case Type::Kind::Integer: {
         return lcc::IntegerType::Get(ctx, in->size(ctx));
-    } break;
+    }
     }
     LCC_UNREACHABLE();
 }
@@ -93,11 +93,11 @@ void intercept::IRGen::generate_lvalue(intercept::Expr* expr) {
     switch (expr->kind()) {
     case Expr::Kind::Call: {
         LCC_ASSERT(false, "TODO: Calls may be an lvalue depending on return type of callee; irgen is not done yet, sorry");
-    } break;
+    }
 
     case Expr::Kind::If: {
         LCC_ASSERT(false, "TODO: If expressions may be an lvalue depending on return type of callee; irgen is not done yet, sorry");
-    } break;
+    }
 
     case Expr::Kind::NameRef:
     case Expr::Kind::StringLiteral: {
@@ -162,7 +162,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         case Linkage::Internal:
         case Linkage::Used:
         case Linkage::Exported: {
-            auto* global = new (*module) GlobalVariable(Convert(ctx, decl->type()), decl->name(), decl->linkage(), nullptr);
+            auto* global = new (*module) GlobalVariable(module, Convert(ctx, decl->type()), decl->name(), decl->linkage(), nullptr);
             generated_ir[expr] = global;
         } break;
 
@@ -216,29 +216,37 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
             if (!lhs) LCC_ASSERT(false, "lvalue codegen for lhs of subscript didn't go as expected; sorry");
 
-            if (/* TODO: ctx->optimise && */ rhs_expr->kind() == Expr::Kind::IntegerLiteral && as<IntegerLiteral>(rhs_expr)->value() == 0) {
-                generated_ir[expr] = lhs;
-                break;
-            }
-
             generate_expression(rhs_expr);
             auto rhs = generated_ir[rhs_expr];
 
             Type* lhs_type_stripped = lhs_expr->type()->strip_references();
             if (lhs_type_stripped->is_pointer()) {
+                /// TODO(Sirraide): What if we have a reference to a pointer here in Intercept?
                 // pointer subscript needs scaled by size of pointer base type
                 auto* type_to_scale_by = as<PointerType>(lhs_type_stripped)->element_type();
                 auto* gep = new (*module) GEPInst(Convert(ctx, type_to_scale_by), lhs, rhs, expr->location());
                 generated_ir[expr] = gep;
                 insert(gep);
             } else if (lhs_type_stripped->is_array()) {
-                // array literal subscript (cry)
-                auto* element_type = as<ArrayType>(lhs_type_stripped)->element_type();
-                auto* alloca = new (*module) AllocaInst(Convert(ctx, lhs_type_stripped), expr->location());
-                auto* store = new (*module) StoreInst(lhs, alloca, expr->location());
-                auto* gep = new (*module) GEPInst(Convert(ctx, element_type), alloca, rhs, expr->location());
-                insert(alloca);
-                insert(store);
+                Inst* gep{};
+
+                /// Reference == lvalue.
+                if (not lhs_expr->type()->is_reference()) {
+                    // array literal subscript (cry)
+                    auto* element_type = as<ArrayType>(lhs_type_stripped)->element_type();
+                    auto* alloca = new (*module) AllocaInst(Convert(ctx, lhs_type_stripped), expr->location());
+                    auto* store = new (*module) StoreInst(lhs, alloca, expr->location());
+                    gep = new (*module) GEPInst(Convert(ctx, element_type), alloca, rhs, expr->location());
+                    insert(alloca);
+                    insert(store);
+                } else {
+                    gep = new (*module) GEPInst(
+                        Convert(ctx, lhs_type_stripped),
+                        lhs,
+                        rhs,
+                        expr->location()
+                    );
+                }
                 insert(gep);
                 generated_ir[expr] = gep;
             } else LCC_ASSERT(false, "Sorry, but the rhs of the subscript has an unexpected type");
@@ -392,14 +400,19 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     } break;
 
     case intercept::Expr::Kind::Cast: {
-        const auto& cast = as<CastExpr>(expr);
-
+        auto cast = as<CastExpr>(expr);
         generate_expression(cast->operand());
 
         lcc::Type *t_to = Convert(ctx, cast->type());
         lcc::Type *t_from = generated_ir[cast->operand()]->type();
 
-        // FIXME: Is this okay? Do we need to check is_lvalue_to_rvalue first?
+        if (cast->is_lvalue_to_rvalue()) {
+            auto load = new (*module) LoadInst(t_to, generated_ir[cast->operand()], expr->location());
+            generated_ir[expr] = load;
+            insert(load);
+            return;
+        }
+
         if (t_to == t_from) {
             generated_ir[expr] = generated_ir[cast->operand()];
             return;
@@ -410,33 +423,26 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         bool from_signed = cast->operand()->type()->is_signed_int(ctx);
 
-        if (cast->is_lvalue_to_rvalue()) {
-            auto load = new (*module) LoadInst(t_to, generated_ir[cast->operand()], expr->location());
-            generated_ir[expr] = load;
-            insert(load);
-        } else {
-            if (from_sz == to_sz) {
-                auto bitcast = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
-                generated_ir[expr] = bitcast;
-                insert(bitcast);
-            } else if (from_sz < to_sz) {
-                // smaller to larger: sign extend if needed, otherwise zero extend.
-                if (from_signed) {
-                    auto sign_extend = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
-                    generated_ir[expr] = sign_extend;
-                    insert(sign_extend);
-                }
-                else {
-                    auto zero_extend = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
-                    generated_ir[expr] = zero_extend;
-                    insert(zero_extend);
-                }
-            } else if (from_sz > to_sz) {
-                // larger to smaller: truncate.
-                auto truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
-                generated_ir[expr] = truncate;
-                insert(truncate);
+        if (from_sz == to_sz) {
+            auto bitcast = new (*module) BitcastInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+            generated_ir[expr] = bitcast;
+            insert(bitcast);
+        } else if (from_sz < to_sz) {
+            // smaller to larger: sign extend if needed, otherwise zero extend.
+            if (from_signed) {
+            auto sign_extend = new (*module) SExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+            generated_ir[expr] = sign_extend;
+            insert(sign_extend);
+            } else {
+            auto zero_extend = new (*module) ZExtInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+            generated_ir[expr] = zero_extend;
+            insert(zero_extend);
             }
+        } else if (from_sz > to_sz) {
+            // larger to smaller: truncate.
+            auto truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+            generated_ir[expr] = truncate;
+            insert(truncate);
         }
 
     } break;
@@ -600,12 +606,9 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
     } break;
 
-    case Expr::Kind::StringLiteral: {
-        const auto& literal_string_expr = as<StringLiteral>(expr);
-        std::string& literal_string = int_module.strings.at(literal_string_expr->string_index());
-        std::vector<char> data(literal_string.begin(), literal_string.end());
-        generated_ir[expr] = new (*module) ArrayConstant(lcc::ArrayType::Get(ctx, literal_string.length(), lcc::IntegerType::Get(ctx, 8)), data);
-    } break;
+    case Expr::Kind::StringLiteral:
+        generated_ir[expr] = string_literals[as<StringLiteral>(expr)->string_index()];
+        break;
 
     case Expr::Kind::Call: {
         const auto& call = as<CallExpr>(expr);
@@ -627,48 +630,32 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     } break;
 
     case Expr::Kind::IntrinsicCall: {
-        LCC_ASSERT(false, "TODO: sorry, but IRGen of intrinsic calls isn't yet implemented.");
-
-        const auto& intrinsic = as<IntrinsicCallExpr>(expr);
+        auto intrinsic = as<IntrinsicCallExpr>(expr);
         switch (intrinsic->intrinsic_kind()) {
-        case IntrinsicKind::BuiltinDebugtrap: {
-            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Debug Trap Builtin");
-            LCC_ASSERT(false, "TODO: Implement debug trap IR instruction, as it needs to make it all the way to MIR");
-        } break;
-        case IntrinsicKind::BuiltinFilename: {
-            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Filename Builtin");
+            /// Handled by sema.
+            case IntrinsicKind::BuiltinFilename:
+            case IntrinsicKind::BuiltinLine:
+                LCC_UNREACHABLE();
 
-            if (!expr->location().is_valid())
-                Diag::ICE("Filename intrinsic does not have location to access filename from");
+            case IntrinsicKind::BuiltinDebugtrap: {
+                LCC_ASSERT(intrinsic->args().empty(), "No arguments to Debug Trap Builtin");
+                LCC_ASSERT(false, "TODO: Implement debug trap IR instruction, as it needs to make it all the way to MIR");
+            } break;
 
-            auto* f = ctx->files()[expr->location().file_id].get();
-            const auto& path_string = f->path().filename().string();
-            // TODO: Abstract this to "create_string()" or something.
-            auto path_data = std::vector<char>(path_string.begin(), path_string.end());
-            path_data.push_back('\0');
-            // TODO: element_type should match whatever a character is, I think.
-            auto* ty = lcc::ArrayType::Get(ctx, path_data.size(), lcc::IntegerType::Get(ctx, 8));
-            auto* array = new (*module) ArrayConstant(ty, std::move(path_data));
-            auto* str = new (*module) GlobalVariable(ty, fmt::format("__str{}", total_string++), Linkage::Internal, array);
-            generated_ir[expr] = str;
-        } break;
-        case IntrinsicKind::BuiltinLine: {
-            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to File Line Builtin");
-        } break;
-        case IntrinsicKind::BuiltinInline: {
-            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Inline Builtin");
-        } break;
-        case IntrinsicKind::BuiltinMemCopy: {
-            LCC_ASSERT(intrinsic->args().size() == 3, "Exactly three arguments to Memory Copy Builtin: (destination, source, amountOfBytesToCopy)");
-            LCC_ASSERT(false, "TODO: memcopy ir generation");
-        } break;
-        case IntrinsicKind::BuiltinMemSet: {
-            LCC_ASSERT(intrinsic->args().size() == 3, "Exactly three arguments to Memory Set Builtin");
-            LCC_ASSERT(false, "TODO: memset ir generation");
-        } break;
-        case IntrinsicKind::BuiltinSyscall: {
-            LCC_ASSERT(intrinsic->args().size() == 0, "No arguments to Syscall Builtin");
-        } break;
+            case IntrinsicKind::BuiltinInline: {
+                LCC_ASSERT(intrinsic->args().empty(), "No arguments to Inline Builtin");
+            } break;
+            case IntrinsicKind::BuiltinMemCopy: {
+                LCC_ASSERT(intrinsic->args().size() == 3, "Exactly three arguments to Memory Copy Builtin: (destination, source, amountOfBytesToCopy)");
+                LCC_ASSERT(false, "TODO: memcopy ir generation");
+            } break;
+            case IntrinsicKind::BuiltinMemSet: {
+                LCC_ASSERT(intrinsic->args().size() == 3, "Exactly three arguments to Memory Set Builtin");
+                LCC_ASSERT(false, "TODO: memset ir generation");
+            } break;
+            case IntrinsicKind::BuiltinSyscall: {
+                LCC_ASSERT(intrinsic->args().empty(), "No arguments to Syscall Builtin");
+            } break;
         }
     } break;
 
@@ -709,6 +696,29 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
 
 auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Module* {
     auto ir_gen = IRGen(context, int_mod);
+
+    /// TODO: Move this into a function2?
+    for (const auto& str : int_mod.strings) {
+        auto ty = lcc::ArrayType::Get(context, str.length() + 1, lcc::IntegerType::Get(context, 8));
+        std::vector<char> data{str.begin(), str.end()};
+        data.push_back(0);
+        auto constant = new (*ir_gen.module) ArrayConstant(
+            ty,
+            std::move(data),
+            true
+        );
+
+        // String literals use a global variable under the hood.
+        auto var = new (*ir_gen.module) GlobalVariable(
+            ir_gen.module,
+            ty,
+            fmt::format(".str.{}", ir_gen.total_string++),
+            Linkage::Internal,
+            constant
+        );
+
+        ir_gen.string_literals.push_back(var);
+    }
 
     // We must /create/ *all* functions first, before generating the IR for
     // *any* of them. This is because a NameRef in one function may reference

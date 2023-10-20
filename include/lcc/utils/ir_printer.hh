@@ -33,7 +33,7 @@ protected:
     auto HasIndex(Inst* inst) const -> bool { return inst_indices.contains(inst); }
 
     /// Get an insert iterator to a string.
-    auto It(std::string& str) { return std::back_inserter(str); }
+    static auto It(std::string& str) { return std::back_inserter(str); }
 
     /// Append text to the output.
     template <typename... Args>
@@ -77,6 +77,8 @@ private:
     }
 
     auto PrintModule(Module* mod) -> std::string {
+        for (auto var : mod->vars()) This()->PrintGlobal(var);
+        s += '\n';
         bool first = true;
         for (auto f : mod->code()) {
             if (first) first = false;

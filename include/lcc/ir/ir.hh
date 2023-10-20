@@ -114,15 +114,12 @@ class GlobalVariable : public Value {
     Value* _init;
 
 public:
-    GlobalVariable(Type* t, std::string name, Linkage linkage, Value* init)
-        : Value(Value::Kind::GlobalVariable, t),
-          _name(std::move(name)),
-          _linkage(linkage),
-          _init(init) {}
+    GlobalVariable(Module* mod, Type* t, std::string name, Linkage linkage, Value* init);
 
-    const std::string& name() { return _name; }
-    Linkage linkage() { return _linkage; }
+    bool imported() const { return IsImportedLinkage(linkage()); }
     Value* init() { return _init; }
+    const std::string& name() { return _name; }
+    Linkage linkage() const { return _linkage; }
 
     /// RTTI.
     static bool classof(Value* v) { return +v->kind() >= +Kind::GlobalVariable; }
@@ -328,6 +325,9 @@ public:
     /// Get an iterator to the end of the block list.
     auto end() const { return block_list.end(); }
 
+    /// Whether this function is imported from another module.
+    bool imported() const { return IsImportedLinkage(link); }
+
     /// Get the linkage of this function.
     auto linkage() const -> Linkage { return link; }
 
@@ -501,15 +501,24 @@ class GEPInst : public Inst {
     // The index to offset from the base pointer; "x" in the equation.
     Value* index;
 
+    /// The element type.
+    Type* element_type;
+
 public:
     GEPInst(Type* elementType, Value* arrayPointer, Value* arrayIndex, Location loc = {})
-        : Inst(Kind::GetElementPtr, elementType, loc), pointer(arrayPointer), index(arrayIndex) {
+        : Inst(Kind::GetElementPtr, Type::PtrTy, loc),
+          pointer(arrayPointer),
+          index(arrayIndex),
+          element_type(elementType) {
         LCC_ASSERT(
-            pointer->type() == Type::PtrTy,
+            pointer->type() == Type::PtrTy or is<ArrayType>(pointer->type()),
             "GEPInst may only operate on arrays or opaque pointers, which `{}` is not",
             *pointer->type()
         );
     }
+
+    /// Get the base type of the array.
+    auto base_type() const -> Type* { return element_type; }
 
     /// Get the base pointer.
     auto ptr() const -> Value* { return pointer; }
@@ -1174,13 +1183,25 @@ public:
 /// such as strings or constant array literals.
 class ArrayConstant : public Value {
     std::vector<char> _data;
+    bool _is_string_literal = false;
 
 public:
-    ArrayConstant(Type* ty, std::vector<char> _data)
-        : Value(Kind::ArrayConstant, ty), _data(std::move(_data)) {}
+    ArrayConstant(Type* ty, std::vector<char> _data, bool is_string_literal = false)
+        : Value(Kind::ArrayConstant, ty),
+          _data(std::move(_data)),
+          _is_string_literal(is_string_literal) {}
+
+    /// Get an iterator to the start of the data.
+    auto begin() const { return _data.begin(); }
 
     /// Get the data.
     auto data() const -> const char* { return _data.data(); }
+
+    /// Get an iterator to the end of the data.
+    auto end() const { return _data.end(); }
+
+    /// Whether this is a string literal.
+    auto is_string_literal() const -> bool { return _is_string_literal; }
 
     /// Get the size.
     auto size() const -> size_t { return _data.size(); }

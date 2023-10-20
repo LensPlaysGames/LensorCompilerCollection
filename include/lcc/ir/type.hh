@@ -44,8 +44,11 @@ public:
     void* operator new(size_t) = delete;
     void* operator new(size_t sz, Context*) { return ::operator new(sz); }
 
-    /// Get the alignment of this type.
+    /// Get the alignment of this type, in bits.
     usz align() const;
+
+    /// Get the alignment of this type, in bytes.
+    usz align_bytes() const;
 
     /// Get the amount of bits required to represent an instance of this type.
     usz bits() const;

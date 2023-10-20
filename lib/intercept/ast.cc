@@ -81,9 +81,12 @@ intc::StringLiteral::StringLiteral(
 ) : TypedExpr{
         Kind::StringLiteral,
         location,
-        new(mod) ArrayType(
-            BuiltinType::Byte(mod),
-            new(mod) IntegerLiteral(value.size(), location),
+        new(mod) ReferenceType(
+            new(mod) ArrayType(
+                BuiltinType::Byte(mod),
+                new(mod) IntegerLiteral(value.size() + 1, location),
+                location
+            ),
             location
         ),
     },
