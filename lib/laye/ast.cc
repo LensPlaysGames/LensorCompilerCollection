@@ -447,6 +447,27 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
         out += fmt::format("{}>", C(White));
     }
 
+    void PrintModifiers(const std::vector<layec::DeclModifier>& mods) {
+        using K = layec::TokenKind;
+        out += C(Red);
+        for (const auto& m : mods) {
+            switch (m.decl_kind) {
+                default: break;
+                case K::Foreign: out += "Foreign "; break;
+                case K::Const: out += "Const "; break;
+                case K::Inline: out += "Inline "; break;
+                case K::Callconv: {
+                    switch (m.call_conv) {
+                        default: break;
+                        case lcc::CallConv::C: out += "CallConv(CDecl) "; break;
+                        case lcc::CallConv::Laye: out += "CallConv(Laye) "; break;
+                        case lcc::CallConv::Intercept: out += "CallConv(Intercept) "; break;
+                    }
+                } break;
+            }
+        }
+    }
+
     void PrintStatementHeader(const layec::Statement* s) {
         using K = layec::Statement::Kind;
         switch (s->kind()) {
@@ -472,6 +493,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
             case K::DeclFunction: {
                 auto n = cast<layec::FunctionDecl>(s);
                 PrintLinkage(n->linkage());
+                PrintModifiers(n->mods());
                 PrintBasicHeader("FunctionDecl", n);
                 out += fmt::format(
                     " {} {}{}",
