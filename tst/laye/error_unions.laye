@@ -1,0 +1,33 @@
+
+error IntegerParseError
+{
+    InvalidCharacter(u27 character),
+}
+
+error JsonDocumentParseError
+{
+    InvalidCharacter(u27 character, i32 line, i32 column),
+}
+
+struct JsonValue
+{
+    variant JsonObject { }
+    variant JsonArray { }
+    // ...
+}
+
+
+IntegerParseError!i32 parse_i32(std::string s)
+{
+    // ...
+    // illustrate that the types are identical with an anonymous error type,
+    // which resolves to the same error code and is therefore within the 
+    // declared error set in the return type
+    return error::InvalidCharacter('$');
+}
+
+JsonDocumentParseError!JsonValue parse_json(std::string s)
+{
+    // ...
+    return error::InvalidCharacter('$', 6, 9);
+}
