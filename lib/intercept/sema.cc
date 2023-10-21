@@ -105,8 +105,11 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
         return NoOp;
     }
 
-    /// Integer to boolean implicit conversions.
-    if (from->is_integer() and to->is_bool()) {
+    /// Integer to boolean and vis versa implicit conversions.
+    // FIXME: May want to not do this implicitly, but for now we're going for it.
+    if ((from->is_integer() and to->is_bool())
+        or (from->is_bool() and to->is_integer())) {
+        if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
         return Score(1);
     }
 
