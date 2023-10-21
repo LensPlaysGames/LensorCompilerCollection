@@ -1330,4 +1330,14 @@ public:
 };
 } // namespace lcc::intercept
 
+
+/// Formatter for types.
+template <>
+struct fmt::formatter<lcc::intercept::Type> : formatter<string_view> {
+    template <typename FormatContext>
+    auto format(const lcc::intercept::Type& t, FormatContext& ctx) {
+        return fmt::format_to(ctx.out(), "{}", t.string());
+    }
+};
+
 #endif // INTERCEPT_AST_HH
