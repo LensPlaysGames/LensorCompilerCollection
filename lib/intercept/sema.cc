@@ -668,7 +668,8 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             /// a problem.
             if (v->init() and not Convert(&v->init(), v->type())) Error(
                 v->init()->location(),
-                "Type of initialiser is not convertible to variable type {}",
+                "Type of initialiser, {}, is not convertible to variable type {}",
+                v->init()->type(),
                 v->type()
             );
         } break;
