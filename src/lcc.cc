@@ -13,6 +13,7 @@
 #include <lcc/ir/module.hh>
 #include <lcc/lcc-c.h>
 #include <lcc/target.hh>
+#include <lcc/format.hh>
 #include <lcc/utils.hh>
 #include <string>
 
@@ -45,16 +46,25 @@ const lcc::Target* default_target =
 #    error "Unsupported target"
 #endif
 
+/// Default format
+const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
+
 using namespace command_line_options;
 using options = clopts< // clang-format off
     help<>,
     option<"-o", "Path to the output filepath where target code will be stored">,
-    option<"--color", "Whether to include colours in the output (default: auto)", values<"always", "auto", "never">>,
+    option<"-f", "What format to emit code in (default: asm)",
+           values<
+               "llvm",
+               "asm", "gnu-as-att"
+               >
+           >,
+    option<"--color", "Whether to include colours in the output (default: auto)",
+           values<"always", "auto", "never">>,
     flag<"-v", "Enable verbose output">,
     flag<"--ast", "Print the AST and exit without generating code">,
     flag<"--syntax-only", "Do not perform semantic analysis">,
-    flag<"--ir", "Emit IR and exit">,
-    flag<"--llvm", "Emit LLVM IR">,
+    flag<"--ir", "Emit LCC intermediate representation and exit">,
     func<"--aluminium", "That special something to spice up your compilation", aluminium_handler>,
     multiple<positional<"filepath", "Path to files that should be compiled", file<std::vector<char>>, true>>
 >; // clang-format on
@@ -90,7 +100,16 @@ int main(int argc, char** argv) {
         lcc::Diag::Fatal("Expected exactly one input file");
 
     /// Compile the file.
-    lcc::Context context{detail::default_target};
+    // TODO: Get target from "-t" or "--target" command line option.
+    auto* format = detail::default_format;
+    if (auto format_string = opts.get<"-f">()) {
+        if (*format_string == "llvm") {
+            format = lcc::Format::llvm_textual_ir;
+        } else if (*format_string == "asm" || *format_string == "gnu-as-att") {
+            format = lcc::Format::gnu_as_att_assembly;
+        }
+    }
+    lcc::Context context{detail::default_target, format};
     auto path_str = input_files[0].path.string();
     auto& file = context.create_file(
         std::move(input_files[0].path),
@@ -120,11 +139,7 @@ int main(int argc, char** argv) {
             std::exit(0);
         }
 
-        if (opts.get<"--llvm">()) {
-            fmt::print("{}", ir_module->llvm());
-            std::exit(0);
-        }
-
+        ir_module->emit();
         return 42;
     }
 
@@ -153,11 +168,7 @@ int main(int argc, char** argv) {
             std::exit(0);
         }
 
-        if (opts.get<"--llvm">()) {
-            fmt::print("{}", ir_module->llvm());
-            std::exit(0);
-        }
-
+        ir_module->emit();
         return 69;
     }
 

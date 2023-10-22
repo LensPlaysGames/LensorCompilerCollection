@@ -2,7 +2,8 @@
 #include <lcc/ir/type.hh>
 #include <mutex>
 
-lcc::Context::Context(const Target* tgt) : _target(tgt) {
+lcc::Context::Context(const Target* tgt, const Format* fmt)
+    : _target(tgt), _format(fmt) {
     static std::once_flag once;
     std::call_once(once, InitialiseLCCData);
 

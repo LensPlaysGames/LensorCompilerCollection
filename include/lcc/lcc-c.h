@@ -9,6 +9,7 @@ extern "C" {
 
 typedef struct LccContext* LccContextRef;
 typedef struct LccTarget const* LccTargetRef;
+typedef struct LccFormat const* LccFormatRef;
 
 typedef struct LccStringView
 {
@@ -169,8 +170,13 @@ LccTargetRef lcc_target_x86_64_linux();
 /// Gets the target info for 64 bit Windows.
 LccTargetRef lcc_target_x86_64_windows();
 
+/// Gets the emission format for LLVM's Textual IR.
+LccFormatRef lcc_format_llvm_textual_ir();
+/// Gets the emission format for AT&T assembly targeting GNU's as.
+LccFormatRef lcc_format_gnu_as_att_assembly();
+
 /// Create an LCC context.
-LccContextRef lcc_context_create(LccTargetRef target);
+LccContextRef lcc_context_create(LccTargetRef target, LccFormatRef format);
 /// Create an LCC module in the given context.
 LccModuleRef lcc_module_create(LccContextRef context);
 

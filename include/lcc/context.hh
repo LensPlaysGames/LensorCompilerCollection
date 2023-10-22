@@ -12,6 +12,7 @@
 
 namespace lcc {
 class Target;
+class Format;
 
 class Context {
     /// The files owned by the context.
@@ -24,6 +25,7 @@ class Context {
     static void InitialiseLCCData();
 
     const Target* _target{};
+    const Format* _format{};
 
 public:
     /// IR type caches.
@@ -33,7 +35,7 @@ public:
     std::vector<Type*> struct_types;
 
     /// Create a new context.
-    explicit Context(const Target* tgt);
+    explicit Context(const Target* tgt, const Format* format);
 
     /// Do not allow copying or moving the context.
     Context(const Context&) = delete;
@@ -81,6 +83,9 @@ public:
 
     /// Get the target.
     [[nodiscard]] auto target() const -> const Target* { return _target; }
+
+    /// Get the target.
+    [[nodiscard]] auto format() const -> const Format* { return _format; }
 
 private:
     /// Register a file in the context.

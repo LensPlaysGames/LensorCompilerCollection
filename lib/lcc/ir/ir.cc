@@ -1,12 +1,14 @@
-#include <algorithm>
+#include <lcc/ir/ir.hh>
+
 #include <fmt/format.h>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
-#include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/utils/rtti.hh>
+
+#include <algorithm>
 #include <string>
 
 namespace lcc {
@@ -704,8 +706,9 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     }
 };
 } // namespace
-} // namespace lcc
 
-void lcc::Module::print_ir(bool use_colour) {
+void Module::print_ir(bool use_colour) {
     fmt::print("{}", LCCIRPrinter::Print(this, use_colour));
 }
+
+} // namespace lcc
