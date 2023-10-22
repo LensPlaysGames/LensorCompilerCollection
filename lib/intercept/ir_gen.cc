@@ -89,28 +89,6 @@ void intercept::IRGen::create_function(intercept::FuncDecl* f) {
     );
 }
 
-void intercept::IRGen::generate_lvalue(intercept::Expr* expr) {
-    switch (expr->kind()) {
-    case Expr::Kind::Call: {
-        LCC_ASSERT(false, "TODO: Calls may be an lvalue depending on return type of callee; irgen is not done yet, sorry");
-    }
-
-    case Expr::Kind::If: {
-        LCC_ASSERT(false, "TODO: If expressions may be an lvalue depending on return type of callee; irgen is not done yet, sorry");
-    }
-
-    case Expr::Kind::NameRef:
-    case Expr::Kind::StringLiteral: {
-        generate_expression(expr);
-    } break;
-
-    // TODO: More lvalue things
-
-    default: LCC_ASSERT(false, "Unhandled expression kind in lvalue codegen, sorry");
-
-    }
-}
-
 /// NOTE: If you `new` an /instruction/ (of, or derived from, type `Inst`), you need to `insert()` it.
 void intercept::IRGen::generate_expression(intercept::Expr* expr) {
     // Already generated
@@ -195,7 +173,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         // Assignment
         if (binary_expr->op() == TokenKind::ColonEq) {
-            generate_lvalue(lhs_expr);
+            generate_expression(lhs_expr);
             auto* lhs = generated_ir[lhs_expr];
 
             generate_expression(rhs_expr);
@@ -211,7 +189,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         // Subscript
         if (binary_expr->op() == TokenKind::LBrack) {
-            generate_lvalue(lhs_expr);
+            generate_expression(lhs_expr);
             Value* lhs = generated_ir[lhs_expr];
 
             if (!lhs) LCC_ASSERT(false, "lvalue codegen for lhs of subscript didn't go as expected; sorry");
