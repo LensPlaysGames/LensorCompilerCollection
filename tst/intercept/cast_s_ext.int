@@ -1,3 +1,5 @@
-;; SKIP
+;; 69
 
-;; TODO: We don't have signed numbers other than int to cast from!
+foo : s32 = -69;
+bar : s64 = foo;
+bar + 138;
