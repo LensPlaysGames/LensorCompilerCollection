@@ -222,7 +222,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                     insert(store);
                 } else {
                     gep = new (*module) GEPInst(
-                        Convert(ctx, lhs_type_stripped),
+                        Convert(ctx, as<ArrayType>(lhs_type_stripped)->element_type()),
                         lhs,
                         rhs,
                         expr->location()
