@@ -1,5 +1,7 @@
 #include <intercept/sema.hh>
+
 #include <lcc/context.hh>
+#include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 
 namespace intc = lcc::intercept;
@@ -131,14 +133,18 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
         /// be in range for the target type.
         EvalResult res;
         if ((*expr_ptr)->evaluate(context, res, false)) {
-            auto val = res.as_i64();
-            if (val < 0 and to->is_unsigned_int(context)) return ConversionImpossible;
-
             /// Note: We currently don’t support integer constants larger than 64
             /// bits internally, so if the type has a bit width larger than 64, it
             /// will always fit.
+            auto val = res.as_i64();
+
+            // Signed to Unsigned Conversion
+            if (val < 0 and to->is_unsigned_int(context)) return ConversionImpossible;
+
+            // Unsigned to Unsigned Conversion
             auto bits = to->size(context);
-            if (bits < 64 and u64(val) > u64(utils::MaxBitValue(bits))) return ConversionImpossible;
+            if (from->is_unsigned_int(context) && bits < 64 and u64(val) > u64(utils::MaxBitValue(bits))) return ConversionImpossible;
+
             if constexpr (PerformConversion) {
                 InsertImplicitCast(expr_ptr, to);
                 *expr_ptr = new (mod) ConstantExpr(*expr_ptr, res);
