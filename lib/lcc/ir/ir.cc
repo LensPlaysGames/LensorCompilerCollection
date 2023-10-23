@@ -63,10 +63,7 @@ usz Type::bits() const {
         case Kind::Struct: {
             const auto& struct_ = as<StructType>(this);
             const std::vector<Type*>& members = struct_->members();
-            usz sum = 0;
-            for (const auto& m : members)
-                sum += m->bits();
-            return sum;
+            return rgs::fold_left(vws::transform(members, &Type::bits), 0, std::plus{});
         }
     }
     LCC_UNREACHABLE();
