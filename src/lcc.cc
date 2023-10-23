@@ -139,7 +139,9 @@ int main(int argc, char** argv) {
             std::exit(0);
         }
 
+        ir_module->lower();
         ir_module->emit();
+
         return 42;
     }
 

@@ -238,7 +238,7 @@ public:
     auto insert(Inst* i, bool force = false) -> Inst*;
 
     /// Get the instructions in this block.
-    auto instructions() const -> const std::vector<Inst*>& { return inst_list; }
+    auto instructions() -> std::vector<Inst*>& { return inst_list; }
 
     /// Get the associated machine block.
     auto machine_block() const -> MBlock* { return mblock; }
