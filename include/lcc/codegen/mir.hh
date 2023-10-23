@@ -69,13 +69,15 @@ class MInst {
         UGe,
 
         ArchStart = 0x420,
-    };
+    } _kind;
 
-    // TODO: Do SSO basically
+    // TODO: Do SSO basically. For operands, instructions in MBlocks, and blocks in MFunctions.
     std::vector<MOperand> operands;
 
 public:
     MInst() = default;
+
+    InstructionKind kind() { return _kind; }
 
     void add_operand(MOperand op) {
         operands.push_back(op);
@@ -87,6 +89,49 @@ public:
 
     MOperand operator[] (usz index) const {
         return get_operand(index);
+    }
+
+    static bool is_terminator(InstructionKind k) {
+        // TODO: noreturn calls?
+        return k == InstructionKind::Return
+            or k == InstructionKind::Branch
+            or k == InstructionKind::CondBranch
+            or k == InstructionKind::Unreachable;
+    }
+};
+
+class MBlock {
+    std::vector<MInst> _instructions;
+
+public:
+    MBlock() = default;
+
+    auto instructions() -> std::vector<MInst>& {
+        return _instructions;
+    }
+
+    bool closed() {
+        if (_instructions.empty()) return false;
+        return MInst::is_terminator(_instructions.back().kind());
+    }
+
+    void add_instruction(const MInst& inst) {
+        LCC_ASSERT(not closed(), "Cannot insert into MBlock that has already been closed.");
+        _instructions.push_back(inst);
+    }
+};
+
+class MFunction {
+    std::vector<MBlock> _blocks;
+public:
+    MFunction() = default;
+
+    auto blocks() -> std::vector<MBlock>& {
+        return _blocks;
+    }
+
+    void add_block(const MBlock& block) {
+        _blocks.push_back(block);
     }
 };
 
