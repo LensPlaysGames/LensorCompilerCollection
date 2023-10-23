@@ -410,8 +410,8 @@ class CopyInst : public Inst {
     Value* _copied_value;
 
 public:
-    CopyInst(Value* ty, Location loc = {})
-        : Inst(Kind::Alloca, Type::PtrTy, loc), _copied_value(ty) {}
+    CopyInst(Value* v, Location loc = {})
+        : Inst(Kind::Copy, v->type(), loc), _copied_value(v) {}
 
     Value* value() { return _copied_value; }
 
