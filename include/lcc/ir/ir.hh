@@ -127,6 +127,9 @@ public:
 
 /// IR instruction.
 class Inst : public Value {
+    // So that parent can be set upon insertion.
+    friend Block;
+
     /// Associated machine instruction during early codegen.
     MInst* minst;
 

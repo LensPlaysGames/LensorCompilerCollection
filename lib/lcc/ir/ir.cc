@@ -201,6 +201,7 @@ Inst* Block::insert(Inst* i, bool force) {
         Diag::ICE("Insertion into block that has already been closed.");
 
     inst_list.push_back(i);
+    i->parent = this;
 
     return i;
 }
