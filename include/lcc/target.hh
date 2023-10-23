@@ -61,6 +61,19 @@ public:
     ///     pointers on some targets.
     usz size_of_pointer;
     usz align_of_pointer;
+
+    bool is_linux() const {
+        return this == x86_64_linux;
+    }
+
+    bool is_windows() const {
+        return this == x86_64_windows;
+    }
+
+    bool is_x64() const {
+        return this == x86_64_windows
+            or this == x86_64_linux;
+    }
 };
 
 namespace detail {
