@@ -308,6 +308,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
             case Value::Kind::Copy: {
                 auto copy = as<CopyInst>(i);
+                PrintTemp(i);
                 Print("copy {}", Val(copy->value()));
                 return;
             } break;
