@@ -306,6 +306,12 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 return;
             }
 
+            case Value::Kind::Copy: {
+                auto copy = as<CopyInst>(i);
+                Print("copy {}", Val(copy->value()));
+                return;
+            } break;
+
             case Value::Kind::Call: {
                 auto c = as<CallInst>(i);
                 auto callee_ty = as<FunctionType>(c->callee()->type());
@@ -590,6 +596,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Intrinsic: LCC_TODO();
 
             /// These always yield a value.
+            case Value::Kind::Copy:
             case Value::Kind::Alloca:
             case Value::Kind::GetElementPtr:
             case Value::Kind::Call:
@@ -652,6 +659,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 LCC_UNREACHABLE();
 
             /// Instructions that always yield a value.
+            case Value::Kind::Copy:
             case Value::Kind::Alloca:
             case Value::Kind::GetElementPtr:
             case Value::Kind::Load:

@@ -30,6 +30,7 @@ public:
         Parameter,
 
         /// Instructions
+        Copy,
         Alloca,
         Call,
         GetElementPtr,
@@ -403,6 +404,19 @@ public:
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Alloca; }
+};
+
+class CopyInst : public Inst {
+    Value* _copied_value;
+
+public:
+    CopyInst(Value* ty, Location loc = {})
+        : Inst(Kind::Alloca, Type::PtrTy, loc), _copied_value(ty) {}
+
+    Value* value() { return _copied_value; }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Copy; }
 };
 
 /// A call instruction.

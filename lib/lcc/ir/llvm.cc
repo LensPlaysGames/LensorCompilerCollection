@@ -86,6 +86,11 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 );
                 return;
 
+            case Value::Kind::Copy: {
+                LCC_ASSERT(false, "LLVM is not my problem");
+                return;
+            } break;
+
             case Value::Kind::Store: {
                 auto store = as<StoreInst>(i);
                 Print(
@@ -328,6 +333,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
 
             /// Instructions that always yield a value.
             case Value::Kind::Alloca:
+            case Value::Kind::Copy:
             case Value::Kind::GetElementPtr:
             case Value::Kind::Load:
             case Value::Kind::Phi:
@@ -500,6 +506,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
 
             /// These always yield a value.
             case Value::Kind::Alloca:
+            case Value::Kind::Copy:
             case Value::Kind::GetElementPtr:
             case Value::Kind::Call:
             case Value::Kind::Load:
