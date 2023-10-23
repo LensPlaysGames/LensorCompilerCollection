@@ -196,6 +196,16 @@ StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types) {
     return out;
 }
 
+void Block::insert_before(Inst* to_insert, Inst* before) {
+    auto before_it = std::find(inst_list.begin(), inst_list.end(), before);
+    inst_list.insert(before_it, to_insert);
+}
+
+void Block::insert_after(Inst* to_insert, Inst* after) {
+    auto after_it = std::find(inst_list.begin(), inst_list.end(), after);
+    inst_list.insert(after_it + 1, to_insert);
+}
+
 Inst* Block::insert(Inst* i, bool force) {
     if (not force and closed())
         Diag::ICE("Insertion into block that has already been closed.");

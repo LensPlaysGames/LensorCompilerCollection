@@ -241,6 +241,9 @@ public:
     /// \return The inserted instruction.
     auto insert(Inst* i, bool force = false) -> Inst*;
 
+    void insert_before(Inst* to_insert, Inst* before);
+    void insert_after(Inst* to_insert, Inst* after);
+
     /// Get the instructions in this block.
     auto instructions() -> std::vector<Inst*>& { return inst_list; }
 
