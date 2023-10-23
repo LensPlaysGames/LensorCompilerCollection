@@ -42,6 +42,7 @@ public:
     void add_function(Function* func) { _code.push_back(func); }
     void add_var(GlobalVariable* var) { _vars.push_back(var); }
 
+    void lower();
     void emit();
 };
 } // namespace lcc
