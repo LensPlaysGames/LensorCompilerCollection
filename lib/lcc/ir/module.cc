@@ -15,9 +15,9 @@
 
 namespace lcc {
 
-static MInst::Kind ir_binary_inst_kind_to_mir(Value::Kind kind) {
+static MInst::Kind ir_nary_inst_kind_to_mir(Value::Kind kind) {
     switch (kind) {
-        // Not binary instructions
+        // Not unary or binary instructions
         case Value::Kind::Function:
         case Value::Kind::Block:
         case Value::Kind::IntegerConstant:
@@ -37,14 +37,17 @@ static MInst::Kind ir_binary_inst_kind_to_mir(Value::Kind kind) {
         case Value::Kind::CondBranch:
         case Value::Kind::Return:
         case Value::Kind::Unreachable:
-        case Value::Kind::ZExt:
-        case Value::Kind::SExt:
-        case Value::Kind::Trunc:
-        case Value::Kind::Bitcast:
-        case Value::Kind::Neg:
-        case Value::Kind::Compl:
             LCC_UNREACHABLE();
 
+        // Unary
+        case Value::Kind::ZExt: return MInst::Kind::ZExt;
+        case Value::Kind::SExt: return MInst::Kind::SExt;
+        case Value::Kind::Trunc: return MInst::Kind::Trunc;
+        case Value::Kind::Bitcast: return MInst::Kind::Bitcast;
+        case Value::Kind::Neg: return MInst::Kind::Neg;
+        case Value::Kind::Compl: return MInst::Kind::Compl;
+
+        // Binary
         case Value::Kind::Add: return MInst::Kind::Add;
         case Value::Kind::Sub: return MInst::Kind::Sub;
         case Value::Kind::Mul: return MInst::Kind::Mul;
@@ -328,8 +331,12 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Trunc:
                     case Value::Kind::Bitcast:
                     case Value::Kind::Neg:
-                    case Value::Kind::Compl:
-                        LCC_TODO();
+                    case Value::Kind::Compl: {
+                        auto unary_ir = as<UnaryInstBase>(instruction);
+                        auto unary = MInst(ir_nary_inst_kind_to_mir(unary_ir->kind()));
+                        unary.add_operand(MOperandRegister{virts[unary_ir->operand()]});
+                        bb.add_instruction(unary);
+                    } break;
 
                     // Binary
                     case Value::Kind::Add:
@@ -356,7 +363,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::UGt:
                     case Value::Kind::UGe: {
                         auto binary_ir = as<BinaryInst>(instruction);
-                        auto binary = MInst(ir_binary_inst_kind_to_mir(binary_ir->kind()));
+                        auto binary = MInst(ir_nary_inst_kind_to_mir(binary_ir->kind()));
                         binary.add_operand(MOperandRegister(virts[binary_ir->lhs()]));
                         binary.add_operand(MOperandRegister(virts[binary_ir->rhs()]));
                         bb.add_instruction(binary);
