@@ -17,7 +17,7 @@ using MOperand = std::variant<MOperandRegister, MOperandImmediate, MOperandLocal
 
 class MInst {
 public:
-    enum struct InstructionKind {
+    enum struct Kind {
         /// Instructions
         Alloca,
         Call,
@@ -74,15 +74,15 @@ public:
 
 private:
 
-    InstructionKind _kind;
+    Kind _kind;
 
     // TODO: Do SSO basically. For operands, instructions in MBlocks, and blocks in MFunctions.
     std::vector<MOperand> operands;
 
 public:
-    MInst(InstructionKind kind) : _kind(kind) {};
+    MInst(Kind kind) : _kind(kind) {};
 
-    InstructionKind kind() { return _kind; }
+    Kind kind() { return _kind; }
 
     void add_operand(MOperand op) {
         operands.push_back(op);
@@ -96,12 +96,12 @@ public:
         return get_operand(index);
     }
 
-    static bool is_terminator(InstructionKind k) {
+    static bool is_terminator(Kind k) {
         // TODO: noreturn calls?
-        return k == InstructionKind::Return
-            or k == InstructionKind::Branch
-            or k == InstructionKind::CondBranch
-            or k == InstructionKind::Unreachable;
+        return k == Kind::Return
+            or k == Kind::Branch
+            or k == Kind::CondBranch
+            or k == Kind::Unreachable;
     }
 };
 

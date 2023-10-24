@@ -15,7 +15,7 @@
 
 namespace lcc {
 
-static MInst::InstructionKind ir_binary_inst_kind_to_mir(Value::Kind kind) {
+static MInst::Kind ir_binary_inst_kind_to_mir(Value::Kind kind) {
     switch (kind) {
         // Not binary instructions
         case Value::Kind::Function:
@@ -45,36 +45,35 @@ static MInst::InstructionKind ir_binary_inst_kind_to_mir(Value::Kind kind) {
         case Value::Kind::Compl:
             LCC_UNREACHABLE();
 
-        case Value::Kind::Add: return MInst::InstructionKind::Add;
-        case Value::Kind::Sub: return MInst::InstructionKind::Sub;
-        case Value::Kind::Mul: return MInst::InstructionKind::Mul;
-        case Value::Kind::SDiv: return MInst::InstructionKind::SDiv;
-        case Value::Kind::UDiv: return MInst::InstructionKind::UDiv;
-        case Value::Kind::SRem: return MInst::InstructionKind::SRem;
-        case Value::Kind::URem: return MInst::InstructionKind::URem;
-        case Value::Kind::Shl: return MInst::InstructionKind::Shl;
-        case Value::Kind::Sar: return MInst::InstructionKind::Sar;
-        case Value::Kind::Shr: return MInst::InstructionKind::Shr;
-        case Value::Kind::And: return MInst::InstructionKind::And;
-        case Value::Kind::Or: return MInst::InstructionKind::Or;
-        case Value::Kind::Xor: return MInst::InstructionKind::Xor;
-        case Value::Kind::Eq: return MInst::InstructionKind::Eq;
-        case Value::Kind::Ne: return MInst::InstructionKind::Ne;
-        case Value::Kind::SLt: return MInst::InstructionKind::SLt;
-        case Value::Kind::SLe: return MInst::InstructionKind::SLe;
-        case Value::Kind::SGt: return MInst::InstructionKind::SGt;
-        case Value::Kind::SGe: return MInst::InstructionKind::SGe;
-        case Value::Kind::ULt: return MInst::InstructionKind::ULt;
-        case Value::Kind::ULe: return MInst::InstructionKind::ULe;
-        case Value::Kind::UGt: return MInst::InstructionKind::UGt;
-        case Value::Kind::UGe: return MInst::InstructionKind::UGe;
+        case Value::Kind::Add: return MInst::Kind::Add;
+        case Value::Kind::Sub: return MInst::Kind::Sub;
+        case Value::Kind::Mul: return MInst::Kind::Mul;
+        case Value::Kind::SDiv: return MInst::Kind::SDiv;
+        case Value::Kind::UDiv: return MInst::Kind::UDiv;
+        case Value::Kind::SRem: return MInst::Kind::SRem;
+        case Value::Kind::URem: return MInst::Kind::URem;
+        case Value::Kind::Shl: return MInst::Kind::Shl;
+        case Value::Kind::Sar: return MInst::Kind::Sar;
+        case Value::Kind::Shr: return MInst::Kind::Shr;
+        case Value::Kind::And: return MInst::Kind::And;
+        case Value::Kind::Or: return MInst::Kind::Or;
+        case Value::Kind::Xor: return MInst::Kind::Xor;
+        case Value::Kind::Eq: return MInst::Kind::Eq;
+        case Value::Kind::Ne: return MInst::Kind::Ne;
+        case Value::Kind::SLt: return MInst::Kind::SLt;
+        case Value::Kind::SLe: return MInst::Kind::SLe;
+        case Value::Kind::SGt: return MInst::Kind::SGt;
+        case Value::Kind::SGe: return MInst::Kind::SGe;
+        case Value::Kind::ULt: return MInst::Kind::ULt;
+        case Value::Kind::ULe: return MInst::Kind::ULe;
+        case Value::Kind::UGt: return MInst::Kind::UGt;
+        case Value::Kind::UGe: return MInst::Kind::UGe;
     }
     LCC_UNREACHABLE();
 }
 
 void Module::lower() {
     if (_ctx->target()->is_x64()) {
-
         for (auto function : code()) {
             for (auto block : function->blocks()) {
                 for (auto [index, instruction] : vws::enumerate(block->instructions())) {
@@ -289,7 +288,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     case Value::Kind::Alloca: {
                         auto alloca_ir = as<AllocaInst>(instruction);
-                        auto alloca = MInst(MInst::InstructionKind::Alloca);
+                        auto alloca = MInst(MInst::Kind::Alloca);
                         alloca.add_operand(MOperandImmediate{alloca_ir->allocated_type()->bits()});
                         bb.add_instruction(alloca);
                     } break;
@@ -302,14 +301,23 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Store:
                     case Value::Kind::Branch:
                     case Value::Kind::CondBranch:
-                    case Value::Kind::Return:
                     case Value::Kind::Unreachable:
+                        LCC_TODO();
+
+                    case Value::Kind::Return: {
+                        auto ret = MInst(MInst::Kind::Return);
+                    } break;
+
+                    // Unary
                     case Value::Kind::ZExt:
                     case Value::Kind::SExt:
                     case Value::Kind::Trunc:
                     case Value::Kind::Bitcast:
                     case Value::Kind::Neg:
                     case Value::Kind::Compl:
+                        LCC_TODO();
+
+                    // Binary
                     case Value::Kind::Add:
                     case Value::Kind::Sub:
                     case Value::Kind::Mul:
