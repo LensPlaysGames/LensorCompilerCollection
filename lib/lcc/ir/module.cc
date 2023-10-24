@@ -296,16 +296,30 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Call:
                     case Value::Kind::GetElementPtr:
                     case Value::Kind::Intrinsic:
-                    case Value::Kind::Load:
                     case Value::Kind::Phi:
-                    case Value::Kind::Store:
                     case Value::Kind::Branch:
                     case Value::Kind::CondBranch:
                     case Value::Kind::Unreachable:
                         LCC_TODO();
 
+                    case Value::Kind::Store: {
+                        auto store_ir = as<StoreInst>(instruction);
+                        auto store = MInst(MInst::Kind::Store);
+                        store.add_operand(MOperandRegister{virts[store_ir->ptr()]});
+                        store.add_operand(MOperandRegister{virts[store_ir->val()]});
+                        bb.add_instruction(store);
+                    } break;
+                    case Value::Kind::Load: {
+                        auto load = MInst(MInst::Kind::Load);
+                        load.add_operand(MOperandRegister{virts[as<LoadInst>(instruction)->ptr()]});
+                    } break;
+
                     case Value::Kind::Return: {
+                        auto ret_ir = as<ReturnInst>(instruction);
                         auto ret = MInst(MInst::Kind::Return);
+                        if (ret_ir->has_value())
+                            ret.add_operand(MOperandRegister{virts[ret_ir->val()]});
+                        bb.add_instruction(ret);
                     } break;
 
                     // Unary
