@@ -9,7 +9,7 @@
 namespace lcc {
 
 // Machine Operand
-using MOperandRegister = usz;
+enum struct MOperandRegister : u64;
 using MOperandImmediate = u64;
 using MOperandLocal = AllocaInst*;
 using MOperandStatic = GlobalVariable*;
