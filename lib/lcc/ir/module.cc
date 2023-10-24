@@ -69,6 +69,7 @@ static MInst::InstructionKind ir_binary_inst_kind_to_mir(Value::Kind kind) {
         case Value::Kind::UGt: return MInst::InstructionKind::UGt;
         case Value::Kind::UGe: return MInst::InstructionKind::UGe;
     }
+    LCC_UNREACHABLE();
 }
 
 void Module::lower() {
