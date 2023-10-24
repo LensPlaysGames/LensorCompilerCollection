@@ -1113,6 +1113,10 @@ public:
 
     /// Set the operand.
     void operand(Value* v) { op = v; }
+
+    static bool classof(Value* v) {
+        return +v->kind() >= +Kind::ZExt and +v->kind() <= +Kind::Compl;
+    }
 };
 
 /// Zero-extend an integer value.

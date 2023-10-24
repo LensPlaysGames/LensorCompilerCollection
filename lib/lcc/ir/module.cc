@@ -15,8 +15,60 @@
 
 namespace lcc {
 
-// TODO: Use this, copy it out of `Module::lower()`
-static void lower_windows_x64() {
+static MInst::InstructionKind ir_binary_inst_kind_to_mir(Value::Kind kind) {
+    switch (kind) {
+        // Not binary instructions
+        case Value::Kind::Function:
+        case Value::Kind::Block:
+        case Value::Kind::IntegerConstant:
+        case Value::Kind::ArrayConstant:
+        case Value::Kind::Poison:
+        case Value::Kind::GlobalVariable:
+        case Value::Kind::Parameter:
+        case Value::Kind::Copy:
+        case Value::Kind::Alloca:
+        case Value::Kind::Call:
+        case Value::Kind::GetElementPtr:
+        case Value::Kind::Intrinsic:
+        case Value::Kind::Load:
+        case Value::Kind::Phi:
+        case Value::Kind::Store:
+        case Value::Kind::Branch:
+        case Value::Kind::CondBranch:
+        case Value::Kind::Return:
+        case Value::Kind::Unreachable:
+        case Value::Kind::ZExt:
+        case Value::Kind::SExt:
+        case Value::Kind::Trunc:
+        case Value::Kind::Bitcast:
+        case Value::Kind::Neg:
+        case Value::Kind::Compl:
+            LCC_UNREACHABLE();
+
+        case Value::Kind::Add: return MInst::InstructionKind::Add;
+        case Value::Kind::Sub: return MInst::InstructionKind::Sub;
+        case Value::Kind::Mul: return MInst::InstructionKind::Mul;
+        case Value::Kind::SDiv: return MInst::InstructionKind::SDiv;
+        case Value::Kind::UDiv: return MInst::InstructionKind::UDiv;
+        case Value::Kind::SRem: return MInst::InstructionKind::SRem;
+        case Value::Kind::URem: return MInst::InstructionKind::URem;
+        case Value::Kind::Shl: return MInst::InstructionKind::Shl;
+        case Value::Kind::Sar: return MInst::InstructionKind::Sar;
+        case Value::Kind::Shr: return MInst::InstructionKind::Shr;
+        case Value::Kind::And: return MInst::InstructionKind::And;
+        case Value::Kind::Or: return MInst::InstructionKind::Or;
+        case Value::Kind::Xor: return MInst::InstructionKind::Xor;
+        case Value::Kind::Eq: return MInst::InstructionKind::Eq;
+        case Value::Kind::Ne: return MInst::InstructionKind::Ne;
+        case Value::Kind::SLt: return MInst::InstructionKind::SLt;
+        case Value::Kind::SLe: return MInst::InstructionKind::SLe;
+        case Value::Kind::SGt: return MInst::InstructionKind::SGt;
+        case Value::Kind::SGe: return MInst::InstructionKind::SGe;
+        case Value::Kind::ULt: return MInst::InstructionKind::ULt;
+        case Value::Kind::ULe: return MInst::InstructionKind::ULe;
+        case Value::Kind::UGt: return MInst::InstructionKind::UGt;
+        case Value::Kind::UGe: return MInst::InstructionKind::UGe;
+    }
 }
 
 void Module::lower() {
@@ -279,7 +331,13 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::ULt:
                     case Value::Kind::ULe:
                     case Value::Kind::UGt:
-                    case Value::Kind::UGe: break;
+                    case Value::Kind::UGe: {
+                        auto binary_ir = as<BinaryInst>(instruction);
+                        auto binary = MInst(ir_binary_inst_kind_to_mir(binary_ir->kind()));
+                        binary.add_operand(MOperandRegister(virts[binary_ir->lhs()]));
+                        binary.add_operand(MOperandRegister(virts[binary_ir->rhs()]));
+                        bb.add_instruction(binary);
+                    } break;
                 }
             }
         }
