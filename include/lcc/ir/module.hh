@@ -28,6 +28,9 @@ public:
     /// Get the context that owns the module.
     auto context() const -> Context* { return _ctx; }
 
+    /// IR -> MIR
+    auto mir() -> std::vector<MFunction>;
+
     /// Emit the module as LLVM IR.
     auto llvm() -> std::string;
 

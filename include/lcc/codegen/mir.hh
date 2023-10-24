@@ -16,6 +16,7 @@ using MOperandStatic = GlobalVariable*;
 using MOperand = std::variant<MOperandRegister, MOperandImmediate, MOperandLocal, MOperandStatic>;
 
 class MInst {
+public:
     enum struct InstructionKind {
         /// Instructions
         Alloca,
@@ -69,13 +70,17 @@ class MInst {
         UGe,
 
         ArchStart = 0x420,
-    } _kind;
+    };
+
+private:
+
+    InstructionKind _kind;
 
     // TODO: Do SSO basically. For operands, instructions in MBlocks, and blocks in MFunctions.
     std::vector<MOperand> operands;
 
 public:
-    MInst() = default;
+    MInst(InstructionKind kind) : _kind(kind) {};
 
     InstructionKind kind() { return _kind; }
 
@@ -119,12 +124,20 @@ public:
         LCC_ASSERT(not closed(), "Cannot insert into MBlock that has already been closed.");
         _instructions.push_back(inst);
     }
+    void insert(const MInst& inst) { add_instruction(inst); }
 };
 
 class MFunction {
+    std::string _name;
+
     std::vector<MBlock> _blocks;
+
 public:
     MFunction() = default;
+
+    auto name() -> std::string& {
+        return _name;
+    }
 
     auto blocks() -> std::vector<MBlock>& {
         return _blocks;
