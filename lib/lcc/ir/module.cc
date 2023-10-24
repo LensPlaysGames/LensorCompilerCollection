@@ -146,9 +146,17 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Call:
                     case Value::Kind::GetElementPtr:
                     case Value::Kind::Intrinsic:
-                    case Value::Kind::Load:
-                    case Value::Kind::Store:
                         LCC_TODO();
+
+                    case Value::Kind::Load: {
+                        assign_virtual_register(as<LoadInst>(instruction)->ptr());
+                    } break;
+
+                    case Value::Kind::Store: {
+                        auto store = as<StoreInst>(instruction);
+                        assign_virtual_register(store->ptr());
+                        assign_virtual_register(store->val());
+                    } break;
 
                     case Value::Kind::Phi: {
                         for (auto phi_operand : as<PhiInst>(instruction)->operands()) {
@@ -229,7 +237,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Alloca: {
                         auto alloca_ir = as<AllocaInst>(instruction);
                         auto alloca = MInst(MInst::InstructionKind::Alloca);
-                        alloca.add_operand(MOperand());
+                        alloca.add_operand(MOperandImmediate{alloca_ir->allocated_type()->bits()});
                         bb.add_instruction(alloca);
                     } break;
 
