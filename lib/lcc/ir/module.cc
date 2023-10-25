@@ -457,9 +457,6 @@ auto Module::mir() -> std::vector<MFunction> {
         }
     }
 
-    using enum utils::Colour;
-    utils::Colours C{true};
-
     for (auto mfunc : funcs) {
         fmt::print("{}:\n", mfunc.name());
         for (auto mblock : mfunc.blocks()) {
@@ -472,7 +469,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     } else if (std::holds_alternative<MOperandRegister>(op)) {
                         fmt::print(" r{}", +std::get<MOperandRegister>(op));
                     } else if (std::holds_alternative<MOperandLocal>(op)) {
-                        fmt::print(" local {}{}", *std::get<MOperandLocal>(op)->type(), C(utils::Colour::Reset));
+                        fmt::print(" local {}", *std::get<MOperandLocal>(op)->type());
                     } else if (std::holds_alternative<MOperandStatic>(op)) {
                         auto _static = std::get<MOperandStatic>(op);
                         fmt::print(" static {} : {}", _static->name(), *_static->type());

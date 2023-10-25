@@ -99,25 +99,26 @@ auto Type::string(bool use_colour) const -> std::string {
     using enum utils::Colour;
     utils::Colours C{use_colour};
     switch (kind) {
-        case Kind::Unknown: return fmt::format("{}<?>", C(Cyan));
-        case Kind::Pointer: return fmt::format("{}ptr", C(Cyan));
-        case Kind::Void: return fmt::format("{}void", C(Cyan));
+        case Kind::Unknown: return fmt::format("{}<?>{}", C(Cyan), C(Reset));
+        case Kind::Pointer: return fmt::format("{}ptr{}", C(Cyan), C(Reset));
+        case Kind::Void: return fmt::format("{}void{}", C(Cyan), C(Reset));
 
         case Kind::Array: {
             auto arr = as<ArrayType>(this);
             return fmt::format(
-                "{}{}[{}{}{}]",
+                "{}{}[{}{}{}]{}",
                 arr->element_type()->string(),
                 C(Red),
                 C(Magenta),
                 arr->length(),
-                C(Red)
+                C(Red),
+                C(Reset)
             );
         }
 
         case Kind::Integer: {
             auto integer = as<IntegerType>(this);
-            return fmt::format("{}i{}", C(Cyan), integer->bitwidth());
+            return fmt::format("{}i{}{}", C(Cyan), integer->bitwidth(), C(Reset));
         }
 
         case Kind::Function: {
@@ -125,11 +126,12 @@ auto Type::string(bool use_colour) const -> std::string {
             auto ToString = [&](auto t) { return t->string(use_colour); };
             auto separator = fmt::format("{}, ", C(Red));
             return fmt::format(
-                "{}{}({}{})",
+                "{}{}({}{}){}",
                 f->ret()->string(),
                 C(Red),
                 fmt::join(vws::transform(f->params(), ToString), separator),
-                C(Red)
+                C(Red),
+                C(Reset)
             );
         }
 
