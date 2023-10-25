@@ -61,9 +61,7 @@ void lcc::intercept::Lexer::NextToken() {
     }
 
     /// Pop empty macro expansions off the expansion stack.
-    while (not macro_expansion_stack.empty())
-        if (macro_expansion_stack.back().done())
-            macro_expansion_stack.pop_back();
+    std::erase_if(macro_expansion_stack, [](MacroExpansion& x){ return x.done(); });
 
     /// Iff there are macro expansions to handle, get tokens from there
     /// instead of from the file.
