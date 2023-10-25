@@ -573,7 +573,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                *pair.second->allocated_type(),
                                pair.second->allocated_type()->bytes());
         };
-        return  fmt::format("{}:\n{}{}",
+        return  fmt::format("{}:\n{}\n{}",
                             function.name(),
                             fmt::join(vws::transform(vws::enumerate(function.locals()), PrintLocal), "\n"),
                             fmt::join(vws::transform(function.blocks(), PrintMBlock), "\n"));
