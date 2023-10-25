@@ -151,16 +151,16 @@ int main(int argc, char** argv) {
 
         /// Parse the file.
         auto mod = laye_context->parse_laye_file(file);
+        if (context.has_error()) std::exit(1);
         if (opts.get<"--syntax-only">()) {
-            if (context.has_error()) std::exit(1);
             if (opts.get<"--ast">()) laye_context->print_modules();
             std::exit(0);
         }
 
         /// Perform semantic analysis.
         lcc::laye::Sema::Analyse(laye_context, mod, true);
+        if (context.has_error()) std::exit(1);
         if (opts.get<"--ast">()) {
-            if (context.has_error()) std::exit(1);
             laye_context->print_modules();
         }
 
