@@ -21,9 +21,11 @@ public:
         /// Instructions
         Alloca,
         Call,
+        Copy,
         GetElementPtr,
         Intrinsic,
         Load,
+        Phi,
         Store,
 
         /// Terminators
@@ -94,6 +96,10 @@ public:
 
     MOperand operator[] (usz index) const {
         return get_operand(index);
+    }
+
+    std::vector<MOperand>& all_operands() {
+        return operands;
     }
 
     static bool is_terminator(Kind k) {

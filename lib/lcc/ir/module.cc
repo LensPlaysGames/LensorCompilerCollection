@@ -265,6 +265,30 @@ auto Module::mir() -> std::vector<MFunction> {
     }
 
 
+    // Handle inlining of values into operands vs using register references.
+    const auto MOperandValueReference = [&](Value* v) -> MOperand {
+        switch (v->kind()) {
+            default: break;
+
+            // FIXME: How to correctly handle these? Do we need MOperandBlock, MOperandFunction, etc?
+            case Value::Kind::Block:
+            case Value::Kind::Function:
+            case Value::Kind::Parameter:
+            case Value::Kind::GlobalVariable:
+                break;
+
+            case Value::Kind::IntegerConstant:
+                return MOperandImmediate{as<IntegerConstant>(v)->value()};
+
+            case Value::Kind::ArrayConstant:
+                LCC_ASSERT(false, "TODO: MIR generation from array constant");
+
+            case Value::Kind::Poison:
+                Diag::ICE("Cannot generate MIR from poison IR value");
+        }
+        return MOperandRegister{virts[v]};
+    };
+
     std::vector<MFunction> funcs{};
     for (auto function : code()) {
         funcs.push_back(MFunction());
@@ -294,35 +318,94 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto alloca = MInst(MInst::Kind::Alloca);
                         alloca.add_operand(MOperandImmediate{alloca_ir->allocated_type()->bits()});
                         bb.add_instruction(alloca);
+                        //generated_mir[instruction] = alloca;
                     } break;
 
-                    case Value::Kind::Call:
-                    case Value::Kind::GetElementPtr:
-                    case Value::Kind::Intrinsic:
-                    case Value::Kind::Phi:
-                    case Value::Kind::Branch:
-                    case Value::Kind::CondBranch:
-                    case Value::Kind::Unreachable:
-                        LCC_TODO();
+                    case Value::Kind::Phi: {
+                        auto phi_ir = as<PhiInst>(instruction);
+
+                        if (phi_ir->operands().empty()) {
+                            if (not phi_ir->users().empty()) {
+                                Diag::ICE("Cannot generate MIR from ill-formed IR: Phi instruction with no operands must not have any users.");
+                            }
+                            break;
+                        }
+
+                        auto phi = MInst(MInst::Kind::Phi);
+                        for (auto op : phi_ir->operands()) {
+                            phi.add_operand(MOperandValueReference(op.value));
+                        }
+                        bb.add_instruction(phi);
+                        //generated_mir[instruction] = phi;
+                    } break;
+
+                    case Value::Kind::Call: {
+                        auto call_ir = as<CallInst>(instruction);
+                        auto call = MInst(MInst::Kind::Call);
+                        call.add_operand(MOperandValueReference(call_ir->callee()));
+                        for (auto arg : call_ir->args()) {
+                            call.add_operand(MOperandValueReference(arg));
+                        }
+                        bb.add_instruction(call);
+                        //generated_mir[instruction] = call;
+                    } break;
+
+                    case Value::Kind::Intrinsic: {
+                        LCC_ASSERT(false, "TODO: Generate MIR for Intrinsic");
+                    } break;
+
+                    case Value::Kind::GetElementPtr: {
+                        // auto gep_ir = as<GEPInst>(instruction);
+                        LCC_ASSERT(false, "TODO: Generate MIR for GEP");
+                    } break;
+
+                    case Value::Kind::Branch: {
+                        auto branch_ir = as<BranchInst>(instruction);
+                        auto branch = MInst(MInst::Kind::Branch);
+                        branch.add_operand(MOperandValueReference(branch_ir->target()));
+                        bb.add_instruction(branch);
+                        //generated_mir[instruction] = branch;
+                    } break;
+
+                    case Value::Kind::CondBranch: {
+                        auto branch_ir = as<CondBranchInst>(instruction);
+                        auto branch = MInst(MInst::Kind::CondBranch);
+                        branch.add_operand(MOperandValueReference(branch_ir->cond()));
+                        branch.add_operand(MOperandValueReference(branch_ir->then_block()));
+                        branch.add_operand(MOperandValueReference(branch_ir->else_block()));
+                        bb.add_instruction(branch);
+                        //generated_mir[instruction] = branch;
+                    } break;
+
+                    case Value::Kind::Unreachable: {
+                        auto unreachable = MInst(MInst::Kind::Unreachable);
+                        bb.add_instruction(unreachable);
+                        //generated_mir[instruction] = unreachable;
+                    } break;
 
                     case Value::Kind::Store: {
                         auto store_ir = as<StoreInst>(instruction);
                         auto store = MInst(MInst::Kind::Store);
-                        store.add_operand(MOperandRegister{virts[store_ir->ptr()]});
-                        store.add_operand(MOperandRegister{virts[store_ir->val()]});
+                        store.add_operand(MOperandValueReference(store_ir->ptr()));
+                        store.add_operand(MOperandValueReference(store_ir->val()));
                         bb.add_instruction(store);
+                        //generated_mir[instruction] = store;
                     } break;
+
                     case Value::Kind::Load: {
                         auto load = MInst(MInst::Kind::Load);
-                        load.add_operand(MOperandRegister{virts[as<LoadInst>(instruction)->ptr()]});
+                        load.add_operand(MOperandValueReference(as<LoadInst>(instruction)->ptr()));
+                        bb.add_instruction(load);
+                        //generated_mir[instruction] = load;
                     } break;
 
                     case Value::Kind::Return: {
                         auto ret_ir = as<ReturnInst>(instruction);
                         auto ret = MInst(MInst::Kind::Return);
                         if (ret_ir->has_value())
-                            ret.add_operand(MOperandRegister{virts[ret_ir->val()]});
+                            ret.add_operand(MOperandValueReference(ret_ir->val()));
                         bb.add_instruction(ret);
+                        //generated_mir[instruction] = ret;
                     } break;
 
                     // Unary
@@ -334,8 +417,9 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Compl: {
                         auto unary_ir = as<UnaryInstBase>(instruction);
                         auto unary = MInst(ir_nary_inst_kind_to_mir(unary_ir->kind()));
-                        unary.add_operand(MOperandRegister{virts[unary_ir->operand()]});
+                        unary.add_operand(MOperandValueReference(unary_ir->operand()));
                         bb.add_instruction(unary);
+                        //generated_mir[instruction] = unary;
                     } break;
 
                     // Binary
@@ -364,14 +448,29 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::UGe: {
                         auto binary_ir = as<BinaryInst>(instruction);
                         auto binary = MInst(ir_nary_inst_kind_to_mir(binary_ir->kind()));
-                        binary.add_operand(MOperandRegister(virts[binary_ir->lhs()]));
-                        binary.add_operand(MOperandRegister(virts[binary_ir->rhs()]));
+                        binary.add_operand(MOperandValueReference(binary_ir->lhs()));
+                        binary.add_operand(MOperandValueReference(binary_ir->rhs()));
                         bb.add_instruction(binary);
+                        //generated_mir[instruction] = binary;
                     } break;
                 }
             }
         }
     }
+
+    for (auto mfunc : funcs) {
+        for (auto mblock : mfunc.blocks()) {
+            for (auto minst : mblock.instructions()) {
+                // phi2copy
+                if (minst.kind() == MInst::Kind::Phi) {
+                    // TODO: Insert copy of each operand value into virtual register of phi
+                    // MInst within block the value is coming from.
+                    LCC_ASSERT(false, "TODO: Lower MIR PHI");
+                }
+            }
+        }
+    }
+
 
     return funcs;
 }
