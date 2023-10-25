@@ -198,8 +198,19 @@ auto Module::mir() -> std::vector<MFunction> {
                         if (ret->has_value()) assign_virtual_register(ret->val());
                     } break;
 
-                    case Value::Kind::Call:
-                    case Value::Kind::GetElementPtr:
+                    case Value::Kind::Call: {
+                        auto call = as<CallInst>(instruction);
+                        assign_virtual_register(call->callee());
+                        for (auto& arg : call->args()) {
+                            assign_virtual_register(arg);
+                        }
+                    } break;
+
+                    case Value::Kind::GetElementPtr: {
+                        auto gep = as<GEPInst>(instruction);
+                        assign_virtual_register(gep->ptr());
+                        assign_virtual_register(gep->idx());
+                    } break;
                     case Value::Kind::Intrinsic:
                         LCC_TODO();
 
@@ -382,8 +393,11 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::GetElementPtr: {
-                        // auto gep_ir = as<GEPInst>(instruction);
-                        LCC_ASSERT(false, "TODO: Generate MIR for GEP");
+                        auto gep_ir = as<GEPInst>(instruction);
+                        auto gep = MInst(MInst::Kind::GetElementPtr, virts[instruction]);
+                        gep.add_operand(MOperandValueReference(f, gep_ir->ptr()));
+                        gep.add_operand(MOperandValueReference(f, gep_ir->idx()));
+                        bb.add_instruction(gep);
                     } break;
 
                     case Value::Kind::Branch: {
@@ -477,6 +491,9 @@ auto Module::mir() -> std::vector<MFunction> {
         }
     }
 
+    for (auto& global : vars()) {
+        fmt::print("{}: {}\n", global->name(), *global->type());
+    }
     for (auto& mfunc : funcs) {
         fmt::print("{}:\n", mfunc.name());
         for (auto [index, local] : vws::enumerate(mfunc.locals())) {
@@ -495,10 +512,10 @@ auto Module::mir() -> std::vector<MFunction> {
                     } else if (std::holds_alternative<MOperandRegister>(op)) {
                         fmt::print(" r{}", +std::get<MOperandRegister>(op));
                     } else if (std::holds_alternative<MOperandLocal>(op)) {
-                        fmt::print(" local_{}", +std::get<MOperandLocal>(op));
+                        fmt::print(" local({})", +std::get<MOperandLocal>(op));
                     } else if (std::holds_alternative<MOperandStatic>(op)) {
                         auto _static = std::get<MOperandStatic>(op);
-                        fmt::print(" static {} : {}", _static->name(), *_static->type());
+                        fmt::print(" {}", _static->name());
                     } else if (std::holds_alternative<MOperandFunction>(op)) {
                         fmt::print(" {}", std::get<MOperandFunction>(op)->name());
                     } else if (std::holds_alternative<MOperandBlock>(op)) {
