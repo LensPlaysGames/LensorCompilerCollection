@@ -8,6 +8,12 @@
 
 namespace lcc {
 
+// Machine Register Description
+struct Register {
+    u64 value;
+    usz size;
+};
+
 // Machine Operand
 enum struct MOperandRegister : u64;
 u64 operator+ (MOperandRegister r);
@@ -87,7 +93,7 @@ public:
 
 private:
 
-    usz _register;
+    Register _register;
 
     usz _opcode;
 
@@ -105,14 +111,15 @@ public:
         : _register(virtualRegister),
           _opcode(opcode) {};
 
-    usz reg() const { return _register; }
+    usz reg() const { return _register.value; }
+    usz regsize() const { return _register.size; }
+
+    usz opcode() const { return _opcode; }
 
     Kind kind() const {
         LCC_ASSERT(_opcode < +Kind::ArchStart, "kind() must only be called for general MIR instructions; for architecture-specific instructions, please call opcode()");
         return static_cast<Kind>(_opcode);
     }
-
-    usz opcode() const { return _opcode; }
 
     usz use_count() const { return _use_count; }
 
