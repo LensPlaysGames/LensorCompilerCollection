@@ -293,6 +293,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
             default: break;
         }
+        // TODO: Find MInst with this virtual register; if found, add to it's use count.
         return MOperandRegister{virts[v]};
     };
 
