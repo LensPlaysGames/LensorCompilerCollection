@@ -270,14 +270,19 @@ auto Module::mir() -> std::vector<MFunction> {
     // Handle inlining of values into operands vs using register references.
     const auto MOperandValueReference = [&](Value* v) -> MOperand {
         switch (v->kind()) {
-            default: break;
-
-            // FIXME: How to correctly handle these? Do we need MOperandBlock, MOperandFunction, etc?
-            case Value::Kind::Block:
             case Value::Kind::Function:
-            case Value::Kind::Parameter:
+                return MOperandFunction(as<Function>(v));
+
+            case Value::Kind::Block:
+                return MOperandBlock(as<Block>(v));
+
+            case Value::Kind::Parameter: break; // FIXME
+
+            case Value::Kind::Alloca:
+                return MOperandLocal{as<AllocaInst>(v)};
+
             case Value::Kind::GlobalVariable:
-                break;
+                return MOperandStatic{as<GlobalVariable>(v)};
 
             case Value::Kind::IntegerConstant:
                 return MOperandImmediate{as<IntegerConstant>(v)->value()};
@@ -287,6 +292,8 @@ auto Module::mir() -> std::vector<MFunction> {
 
             case Value::Kind::Poison:
                 Diag::ICE("Cannot generate MIR from poison IR value");
+
+            default: break;
         }
         return MOperandRegister{virts[v]};
     };
@@ -450,6 +457,9 @@ auto Module::mir() -> std::vector<MFunction> {
         }
     }
 
+    using enum utils::Colour;
+    utils::Colours C{true};
+
     for (auto mfunc : funcs) {
         for (auto mblock : mfunc.blocks()) {
             for (auto minst : mblock.instructions()) {
@@ -460,7 +470,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     } else if (std::holds_alternative<MOperandRegister>(op)) {
                         fmt::print(" r{}", +std::get<MOperandRegister>(op));
                     } else if (std::holds_alternative<MOperandLocal>(op)) {
-                        fmt::print(" local {}", *std::get<MOperandLocal>(op)->type());
+                        fmt::print(" local {}{}", *std::get<MOperandLocal>(op)->type(), C(utils::Colour::Reset));
                     } else if (std::holds_alternative<MOperandStatic>(op)) {
                         auto _static = std::get<MOperandStatic>(op);
                         fmt::print(" static {} : {}", _static->name(), *_static->type());

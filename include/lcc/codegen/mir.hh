@@ -14,7 +14,16 @@ u64 operator+ (MOperandRegister r);
 using MOperandImmediate = u64;
 using MOperandLocal = AllocaInst*;
 using MOperandStatic = GlobalVariable*;
-using MOperand = std::variant<MOperandRegister, MOperandImmediate, MOperandLocal, MOperandStatic>;
+using MOperandBlock = Block*;
+using MOperandFunction = Function*;
+using MOperand = std::variant<
+    MOperandRegister,
+    MOperandImmediate,
+    MOperandLocal,
+    MOperandStatic,
+    MOperandFunction,
+    MOperandBlock
+>;
 
 class MInst {
 public:
