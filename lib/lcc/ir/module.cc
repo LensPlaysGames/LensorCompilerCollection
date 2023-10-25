@@ -17,6 +17,7 @@
 namespace lcc {
 
 u64 operator+ (MOperandRegister r) { return static_cast<u64>(r); }
+u64 operator+ (MOperandLocal l) { return static_cast<u64>(l); }
 
 static MInst::Kind ir_nary_inst_kind_to_mir(Value::Kind kind) {
     switch (kind) {
@@ -186,10 +187,8 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Unreachable:
                         break;
 
-                    // Block operand handled above in block iteration
                     case Value::Kind::Branch: break;
 
-                    // Block operands handled above in block iteration
                     case Value::Kind::CondBranch: {
                         assign_virtual_register(as<CondBranchInst>(instruction)->cond());
                     } break;
@@ -265,8 +264,28 @@ auto Module::mir() -> std::vector<MFunction> {
         }
     }
 
+    // Generate MIR
+    std::vector<MFunction> funcs{};
+
+    // Find machine instruction based on virtual register.
+    const auto MInstByVirtualRegister = [&](usz virtual_register) -> MInst* {
+        for (auto& mfunc : funcs) {
+            for (auto& mblock : mfunc.blocks()) {
+                for (auto& instruction : mblock.instructions()) {
+                    if (instruction.virtual_register() == virtual_register)
+                        return &instruction;
+                }
+            }
+        }
+        return nullptr;
+    };
+
     // Handle inlining of values into operands vs using register references.
-    const auto MOperandValueReference = [&](Value* v) -> MOperand {
+    const auto MOperandValueReference = [&](MFunction& f, Value* v) -> MOperand {
+        // Find MInst if possible, add to use count.
+        if (auto inst = MInstByVirtualRegister(virts[v]))
+            inst->add_use();
+
         switch (v->kind()) {
             case Value::Kind::Function:
                 return MOperandFunction(as<Function>(v));
@@ -276,8 +295,13 @@ auto Module::mir() -> std::vector<MFunction> {
 
             case Value::Kind::Parameter: break; // FIXME
 
-            case Value::Kind::Alloca:
-                return MOperandLocal{as<AllocaInst>(v)};
+            case Value::Kind::Alloca: {
+                auto found = std::find(f.locals().begin(), f.locals().end(), as<AllocaInst>(v));
+                if (found == f.locals().end()) {
+                    Diag::ICE("MIR Generation: encountered reference to local before it has been declared");
+                }
+                return MOperandLocal{u64(found - f.locals().begin())};
+            }
 
             case Value::Kind::GlobalVariable:
                 return MOperandStatic{as<GlobalVariable>(v)};
@@ -297,8 +321,6 @@ auto Module::mir() -> std::vector<MFunction> {
         return MOperandRegister{virts[v]};
     };
 
-    // Generate MIR
-    std::vector<MFunction> funcs{};
     for (auto function : code()) {
         funcs.push_back(MFunction());
         auto& f = funcs.back();
@@ -322,11 +344,9 @@ auto Module::mir() -> std::vector<MFunction> {
                     // Instructions
                     case Value::Kind::Copy: break;
 
+                    // Inlined
                     case Value::Kind::Alloca: {
-                        auto alloca_ir = as<AllocaInst>(instruction);
-                        auto alloca = MInst(MInst::Kind::Alloca, virts[instruction]);
-                        alloca.add_operand(MOperandImmediate{alloca_ir->allocated_type()->bits()});
-                        bb.add_instruction(alloca);
+                        f.add_local(as<AllocaInst>(instruction));
                     } break;
 
                     case Value::Kind::Phi: {
@@ -341,8 +361,8 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         auto phi = MInst(MInst::Kind::Phi, virts[instruction]);
                         for (auto op : phi_ir->operands()) {
-                            phi.add_operand(MOperandValueReference(op.block));
-                            phi.add_operand(MOperandValueReference(op.value));
+                            phi.add_operand(MOperandValueReference(f, op.block));
+                            phi.add_operand(MOperandValueReference(f, op.value));
                         }
                         bb.add_instruction(phi);
                     } break;
@@ -350,9 +370,9 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Call: {
                         auto call_ir = as<CallInst>(instruction);
                         auto call = MInst(MInst::Kind::Call, virts[instruction]);
-                        call.add_operand(MOperandValueReference(call_ir->callee()));
+                        call.add_operand(MOperandValueReference(f, call_ir->callee()));
                         for (auto arg : call_ir->args()) {
-                            call.add_operand(MOperandValueReference(arg));
+                            call.add_operand(MOperandValueReference(f, arg));
                         }
                         bb.add_instruction(call);
                     } break;
@@ -369,16 +389,16 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Branch: {
                         auto branch_ir = as<BranchInst>(instruction);
                         auto branch = MInst(MInst::Kind::Branch, virts[instruction]);
-                        branch.add_operand(MOperandValueReference(branch_ir->target()));
+                        branch.add_operand(MOperandValueReference(f, branch_ir->target()));
                         bb.add_instruction(branch);
                     } break;
 
                     case Value::Kind::CondBranch: {
                         auto branch_ir = as<CondBranchInst>(instruction);
                         auto branch = MInst(MInst::Kind::CondBranch, virts[instruction]);
-                        branch.add_operand(MOperandValueReference(branch_ir->cond()));
-                        branch.add_operand(MOperandValueReference(branch_ir->then_block()));
-                        branch.add_operand(MOperandValueReference(branch_ir->else_block()));
+                        branch.add_operand(MOperandValueReference(f, branch_ir->cond()));
+                        branch.add_operand(MOperandValueReference(f, branch_ir->then_block()));
+                        branch.add_operand(MOperandValueReference(f, branch_ir->else_block()));
                         bb.add_instruction(branch);
                     } break;
 
@@ -390,14 +410,14 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Store: {
                         auto store_ir = as<StoreInst>(instruction);
                         auto store = MInst(MInst::Kind::Store, virts[instruction]);
-                        store.add_operand(MOperandValueReference(store_ir->ptr()));
-                        store.add_operand(MOperandValueReference(store_ir->val()));
+                        store.add_operand(MOperandValueReference(f, store_ir->ptr()));
+                        store.add_operand(MOperandValueReference(f, store_ir->val()));
                         bb.add_instruction(store);
                     } break;
 
                     case Value::Kind::Load: {
                         auto load = MInst(MInst::Kind::Load, virts[instruction]);
-                        load.add_operand(MOperandValueReference(as<LoadInst>(instruction)->ptr()));
+                        load.add_operand(MOperandValueReference(f, as<LoadInst>(instruction)->ptr()));
                         bb.add_instruction(load);
                     } break;
 
@@ -405,7 +425,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto ret_ir = as<ReturnInst>(instruction);
                         auto ret = MInst(MInst::Kind::Return, virts[instruction]);
                         if (ret_ir->has_value())
-                            ret.add_operand(MOperandValueReference(ret_ir->val()));
+                            ret.add_operand(MOperandValueReference(f, ret_ir->val()));
                         bb.add_instruction(ret);
                     } break;
 
@@ -418,7 +438,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Compl: {
                         auto unary_ir = as<UnaryInstBase>(instruction);
                         auto unary = MInst(ir_nary_inst_kind_to_mir(unary_ir->kind()), virts[instruction]);
-                        unary.add_operand(MOperandValueReference(unary_ir->operand()));
+                        unary.add_operand(MOperandValueReference(f, unary_ir->operand()));
                         bb.add_instruction(unary);
                     } break;
 
@@ -448,8 +468,8 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::UGe: {
                         auto binary_ir = as<BinaryInst>(instruction);
                         auto binary = MInst(ir_nary_inst_kind_to_mir(binary_ir->kind()), virts[instruction]);
-                        binary.add_operand(MOperandValueReference(binary_ir->lhs()));
-                        binary.add_operand(MOperandValueReference(binary_ir->rhs()));
+                        binary.add_operand(MOperandValueReference(f, binary_ir->lhs()));
+                        binary.add_operand(MOperandValueReference(f, binary_ir->rhs()));
                         bb.add_instruction(binary);
                     } break;
                 }
@@ -457,19 +477,25 @@ auto Module::mir() -> std::vector<MFunction> {
         }
     }
 
-    for (auto mfunc : funcs) {
+    for (auto& mfunc : funcs) {
         fmt::print("{}:\n", mfunc.name());
-        for (auto mblock : mfunc.blocks()) {
+        for (auto [index, local] : vws::enumerate(mfunc.locals())) {
+            fmt::print("  {}: {} ({} bytes)\n", index, *local->allocated_type(), local->allocated_type()->bytes());
+        }
+        for (auto& mblock : mfunc.blocks()) {
             fmt::print("  {}:\n", mblock.name());
-            for (auto minst : mblock.instructions()) {
-                fmt::print("    r{} | {}", minst.virtual_register(), ToString(minst.kind()));
-                for (auto op : minst.all_operands()) {
+            for (auto& minst : mblock.instructions()) {
+                fmt::print("    r{} | {}{}",
+                           minst.virtual_register(),
+                           minst.use_count() ? "" : "Unused ",
+                           ToString(minst.kind()));
+                for (auto& op : minst.all_operands()) {
                     if (std::holds_alternative<MOperandImmediate>(op)) {
                         fmt::print(" {}", std::get<MOperandImmediate>(op));
                     } else if (std::holds_alternative<MOperandRegister>(op)) {
                         fmt::print(" r{}", +std::get<MOperandRegister>(op));
                     } else if (std::holds_alternative<MOperandLocal>(op)) {
-                        fmt::print(" local {}", *std::get<MOperandLocal>(op)->type());
+                        fmt::print(" local_{}", +std::get<MOperandLocal>(op));
                     } else if (std::holds_alternative<MOperandStatic>(op)) {
                         auto _static = std::get<MOperandStatic>(op);
                         fmt::print(" static {} : {}", _static->name(), *_static->type());

@@ -12,7 +12,8 @@ namespace lcc {
 enum struct MOperandRegister : u64;
 u64 operator+ (MOperandRegister r);
 using MOperandImmediate = u64;
-using MOperandLocal = AllocaInst*;
+enum struct MOperandLocal : u64;
+u64 operator+ (MOperandLocal l);
 using MOperandStatic = GlobalVariable*;
 using MOperandFunction = Function*;
 using MOperandBlock = Block*;
@@ -90,8 +91,10 @@ private:
 
     Kind _kind;
 
+    usz _use_count{0};
+
     // TODO: Do SSO basically. For operands, instructions in MBlocks, and blocks in MFunctions.
-    std::vector<MOperand> operands;
+    std::vector<MOperand> operands{};
 
 public:
     MInst(Kind kind, usz virtualRegister)
@@ -102,6 +105,12 @@ public:
     usz virt() { return virtual_register(); }
 
     Kind kind() { return _kind; }
+
+    usz use_count() { return _use_count; }
+
+    void add_use() {
+        _use_count += 1;
+    }
 
     void add_operand(MOperand op) {
         operands.push_back(op);
@@ -161,6 +170,8 @@ class MFunction {
 
     std::vector<MBlock> _blocks;
 
+    std::vector<AllocaInst*> _locals;
+
 public:
     MFunction() = default;
 
@@ -174,6 +185,14 @@ public:
 
     void add_block(const MBlock& block) {
         _blocks.push_back(block);
+    }
+
+    auto locals() -> std::vector<AllocaInst*>& {
+        return _locals;
+    }
+
+    void add_local(AllocaInst* local) {
+        _locals.push_back(local);
     }
 };
 
