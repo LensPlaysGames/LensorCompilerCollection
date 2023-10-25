@@ -714,7 +714,7 @@ auto intc::Parser::ParseExprInNewScope() -> ExprResult {
     return ParseExpr();
 }
 
-/// <expr-for> ::= FOR <expr> [ "," ] <expr> [ "," ] <expr> <expr>
+/// <expr-for> ::= FOR <expr> [ "," ] <expr> [ "," ] <expr> DO <expr>
 auto intc::Parser::ParseForExpr() -> Result<ForExpr*> {
     auto loc = tok.location;
     LCC_ASSERT(Consume(Tk::For), "ParseForExpr called while not at 'for'");
