@@ -164,9 +164,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
     // virtual register assignment
     for (auto function : code()) {
-        assign_virtual_register(function);
         for (auto block : function->blocks()) {
-            assign_virtual_register(block);
             for (auto instruction : block->instructions()) {
                 assign_virtual_register(instruction);
                 switch (instruction->kind()) {
@@ -305,7 +303,7 @@ auto Module::mir() -> std::vector<MFunction> {
         auto& f = funcs.back();
         f.name() = function->name();
         for (auto block : function->blocks()) {
-            f.add_block(MBlock());
+            f.add_block(MBlock(block->name()));
             auto& bb = f.blocks().back();
             for (auto instruction : block->instructions()) {
                 switch (instruction->kind()) {
@@ -342,6 +340,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         auto phi = MInst(MInst::Kind::Phi, virts[instruction]);
                         for (auto op : phi_ir->operands()) {
+                            phi.add_operand(MOperandValueReference(op.block));
                             phi.add_operand(MOperandValueReference(op.value));
                         }
                         bb.add_instruction(phi);
@@ -461,9 +460,11 @@ auto Module::mir() -> std::vector<MFunction> {
     utils::Colours C{true};
 
     for (auto mfunc : funcs) {
+        fmt::print("{}:\n", mfunc.name());
         for (auto mblock : mfunc.blocks()) {
+            fmt::print("  {}:\n", mblock.name());
             for (auto minst : mblock.instructions()) {
-                fmt::print("r{} | {}", minst.virtual_register(), ToString(minst.kind()));
+                fmt::print("    r{} | {}", minst.virtual_register(), ToString(minst.kind()));
                 for (auto op : minst.all_operands()) {
                     if (std::holds_alternative<MOperandImmediate>(op)) {
                         fmt::print(" {}", std::get<MOperandImmediate>(op));
@@ -474,6 +475,10 @@ auto Module::mir() -> std::vector<MFunction> {
                     } else if (std::holds_alternative<MOperandStatic>(op)) {
                         auto _static = std::get<MOperandStatic>(op);
                         fmt::print(" static {} : {}", _static->name(), *_static->type());
+                    } else if (std::holds_alternative<MOperandFunction>(op)) {
+                        fmt::print(" {}", std::get<MOperandFunction>(op)->name());
+                    } else if (std::holds_alternative<MOperandBlock>(op)) {
+                        fmt::print(" {}", std::get<MOperandBlock>(op)->name());
                     }
                 }
                 fmt::print("\n");

@@ -14,8 +14,8 @@ u64 operator+ (MOperandRegister r);
 using MOperandImmediate = u64;
 using MOperandLocal = AllocaInst*;
 using MOperandStatic = GlobalVariable*;
-using MOperandBlock = Block*;
 using MOperandFunction = Function*;
+using MOperandBlock = Block*;
 using MOperand = std::variant<
     MOperandRegister,
     MOperandImmediate,
@@ -129,13 +129,19 @@ public:
 };
 
 class MBlock {
+    std::string _name;
+
     std::vector<MInst> _instructions;
 
 public:
-    MBlock() = default;
+    MBlock(std::string name) : _name(name) {};
 
     auto instructions() -> std::vector<MInst>& {
         return _instructions;
+    }
+
+    auto name() -> std::string& {
+        return _name;
     }
 
     bool closed() {
