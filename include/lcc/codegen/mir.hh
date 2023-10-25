@@ -101,12 +101,12 @@ public:
         : _virtual_register(virtualRegister),
           _kind(kind) {};
 
-    usz virtual_register() { return _virtual_register; }
-    usz virt() { return virtual_register(); }
+    usz virtual_register() const { return _virtual_register; }
+    usz virt() const { return virtual_register(); }
 
-    Kind kind() { return _kind; }
+    Kind kind() const { return _kind; }
 
-    usz use_count() { return _use_count; }
+    usz use_count() const { return _use_count; }
 
     void add_use() {
         _use_count += 1;
@@ -125,6 +125,10 @@ public:
     }
 
     std::vector<MOperand>& all_operands() {
+        return operands;
+    }
+
+    const std::vector<MOperand>& all_operands() const {
         return operands;
     }
 
@@ -149,7 +153,15 @@ public:
         return _instructions;
     }
 
+    auto instructions() const -> const std::vector<MInst>& {
+        return _instructions;
+    }
+
     auto name() -> std::string& {
+        return _name;
+    }
+
+    auto name() const -> const std::string& {
         return _name;
     }
 
@@ -179,7 +191,15 @@ public:
         return _name;
     }
 
+    auto name() const -> const std::string& {
+        return _name;
+    }
+
     auto blocks() -> std::vector<MBlock>& {
+        return _blocks;
+    }
+
+    auto blocks() const -> const std::vector<MBlock>& {
         return _blocks;
     }
 
@@ -188,6 +208,10 @@ public:
     }
 
     auto locals() -> std::vector<AllocaInst*>& {
+        return _locals;
+    }
+
+    auto locals() const -> const std::vector<AllocaInst*>& {
         return _locals;
     }
 

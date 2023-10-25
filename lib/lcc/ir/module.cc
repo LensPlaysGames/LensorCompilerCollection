@@ -491,41 +491,53 @@ auto Module::mir() -> std::vector<MFunction> {
         }
     }
 
-    for (auto& global : vars()) {
-        fmt::print("{}: {}\n", global->name(), *global->type());
-    }
-    for (auto& mfunc : funcs) {
-        fmt::print("{}:\n", mfunc.name());
-        for (auto [index, local] : vws::enumerate(mfunc.locals())) {
-            fmt::print("  {}: {} ({} bytes)\n", index, *local->allocated_type(), local->allocated_type()->bytes());
+    const auto PrintMOperand = [&](const MOperand& op) -> std::string {
+        if (std::holds_alternative<MOperandImmediate>(op))
+            return fmt::format("{}", std::get<MOperandImmediate>(op));
+        if (std::holds_alternative<MOperandRegister>(op))
+            return fmt::format("r{}", +std::get<MOperandRegister>(op));
+        if (std::holds_alternative<MOperandLocal>(op))
+            return fmt::format("local({})", +std::get<MOperandLocal>(op));
+        if (std::holds_alternative<MOperandStatic>(op))
+            auto _static = std::get<MOperandStatic>(op);
+        if (std::holds_alternative<MOperandFunction>(op))
+            return fmt::format("{}", std::get<MOperandFunction>(op)->name());
+        if (std::holds_alternative<MOperandBlock>(op))
+            return fmt::format("{}", std::get<MOperandBlock>(op)->name());
+        return "<?>";
+    };
+
+    const auto PrintMInst = [&](const MInst& inst) -> std::string {
+        return fmt::format("    r{} | {}{}{}{}",
+                           inst.virtual_register(),
+                           MInst::is_terminator(inst.kind()) or inst.use_count() ? "" : "Unused ",
+                           ToString(inst.kind()),
+                           inst.all_operands().empty() ? "" : " ",
+                           fmt::join(vws::transform(inst.all_operands(), PrintMOperand), " "));
+    };
+
+    const auto PrintMBlock = [&](const MBlock& block) -> std::string {
+        return fmt::format("  {}:\n{}",
+                           block.name(),
+                           fmt::join(vws::transform(block.instructions(), PrintMInst), "\n"));
+    };
+
+    const auto PrintMFunction = [&](const MFunction& function) {
+        auto out = fmt::format("{}:\n", function.name());
+        for (auto [index, local] : vws::enumerate(function.locals()))
+            out += fmt::format("  {}: {} ({} bytes)\n", index, *local->allocated_type(), local->allocated_type()->bytes());
+        out += fmt::format("{}", fmt::join(vws::transform(function.blocks(), PrintMBlock), "\n"));
+        return out;
+    };
+
+    const auto PrintMIR = [&](const std::vector<MFunction>& code) {
+        for (auto& global : vars()) {
+            fmt::print("{}: {}\n", global->name(), *global->type());
         }
-        for (auto& mblock : mfunc.blocks()) {
-            fmt::print("  {}:\n", mblock.name());
-            for (auto& minst : mblock.instructions()) {
-                fmt::print("    r{} | {}{}",
-                           minst.virtual_register(),
-                           minst.use_count() ? "" : "Unused ",
-                           ToString(minst.kind()));
-                for (auto& op : minst.all_operands()) {
-                    if (std::holds_alternative<MOperandImmediate>(op)) {
-                        fmt::print(" {}", std::get<MOperandImmediate>(op));
-                    } else if (std::holds_alternative<MOperandRegister>(op)) {
-                        fmt::print(" r{}", +std::get<MOperandRegister>(op));
-                    } else if (std::holds_alternative<MOperandLocal>(op)) {
-                        fmt::print(" local({})", +std::get<MOperandLocal>(op));
-                    } else if (std::holds_alternative<MOperandStatic>(op)) {
-                        auto _static = std::get<MOperandStatic>(op);
-                        fmt::print(" {}", _static->name());
-                    } else if (std::holds_alternative<MOperandFunction>(op)) {
-                        fmt::print(" {}", std::get<MOperandFunction>(op)->name());
-                    } else if (std::holds_alternative<MOperandBlock>(op)) {
-                        fmt::print(" {}", std::get<MOperandBlock>(op)->name());
-                    }
-                }
-                fmt::print("\n");
-            }
-        }
-    }
+        fmt::print("{}\n", fmt::join(vws::transform(code, PrintMFunction), "\n"));
+    };
+
+    PrintMIR(funcs);
 
     for (auto mfunc : funcs) {
         for (auto mblock : mfunc.blocks()) {
