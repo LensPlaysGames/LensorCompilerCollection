@@ -119,7 +119,7 @@ public:
 
     bool imported() const { return IsImportedLinkage(linkage()); }
     Value* init() { return _init; }
-    const std::string& name() { return _name; }
+    auto name() const -> const std::string& { return _name; }
     Linkage linkage() const { return _linkage; }
 
     /// RTTI.

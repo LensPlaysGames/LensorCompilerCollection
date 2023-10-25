@@ -499,7 +499,7 @@ auto Module::mir() -> std::vector<MFunction> {
         if (std::holds_alternative<MOperandLocal>(op))
             return fmt::format("local({})", +std::get<MOperandLocal>(op));
         if (std::holds_alternative<MOperandStatic>(op))
-            auto _static = std::get<MOperandStatic>(op);
+            return fmt::format("{}", std::get<MOperandStatic>(op)->name());
         if (std::holds_alternative<MOperandFunction>(op))
             return fmt::format("{}", std::get<MOperandFunction>(op)->name());
         if (std::holds_alternative<MOperandBlock>(op))
@@ -522,22 +522,26 @@ auto Module::mir() -> std::vector<MFunction> {
                            fmt::join(vws::transform(block.instructions(), PrintMInst), "\n"));
     };
 
-    const auto PrintMFunction = [&](const MFunction& function) {
-        auto out = fmt::format("{}:\n", function.name());
-        for (auto [index, local] : vws::enumerate(function.locals()))
-            out += fmt::format("  {}: {} ({} bytes)\n", index, *local->allocated_type(), local->allocated_type()->bytes());
-        out += fmt::format("{}", fmt::join(vws::transform(function.blocks(), PrintMBlock), "\n"));
-        return out;
+    const auto PrintMFunction = [&](const MFunction& function) -> std::string {
+        const auto PrintLocal = [&](std::pair<usz, AllocaInst*> pair) -> std::string {
+            return fmt::format("  {}: {} ({} bytes)\n", pair.first, *pair.second->allocated_type(), pair.second->allocated_type()->bytes());
+        };
+        return  fmt::format("{}:\n{}{}",
+                            function.name(),
+                            fmt::join(vws::transform(vws::enumerate(function.locals()), PrintLocal), "\n"),
+                            fmt::join(vws::transform(function.blocks(), PrintMBlock), "\n"));
     };
 
-    const auto PrintMIR = [&](const std::vector<MFunction>& code) {
-        for (auto& global : vars()) {
-            fmt::print("{}: {}\n", global->name(), *global->type());
-        }
-        fmt::print("{}\n", fmt::join(vws::transform(code, PrintMFunction), "\n"));
+    const auto PrintMIR = [&](const std::vector<MFunction>& code) -> std::string {
+        const auto PrintGlobal = [&](const GlobalVariable* global) -> std::string {
+            return fmt::format("{}: {}\n", global->name(), *global->type());
+        };
+        return fmt::format("{}\n{}\n",
+                           fmt::join(vws::transform(vars(), PrintGlobal), "\n"),
+                           fmt::join(vws::transform(code, PrintMFunction), "\n"));
     };
 
-    PrintMIR(funcs);
+    fmt::print("{}", PrintMIR(funcs));
 
     for (auto mfunc : funcs) {
         for (auto mblock : mfunc.blocks()) {
