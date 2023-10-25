@@ -160,6 +160,19 @@ auto Module::mir() -> std::vector<MFunction> {
     std::unordered_map<Value*, usz> virts{};
     const auto assign_virtual_register = [&](Value* v) {
         if (virts[v]) return; // don't double-assign registers
+        switch (v->kind()) {
+        case Value::Kind::Function:
+        case Value::Kind::Block:
+        case Value::Kind::IntegerConstant:
+        case Value::Kind::ArrayConstant:
+        case Value::Kind::Poison:
+        case Value::Kind::GlobalVariable:
+        case Value::Kind::Parameter:
+            return;
+
+        default:
+            break;
+        }
         virts[v] = ++virtual_register;
     };
 
