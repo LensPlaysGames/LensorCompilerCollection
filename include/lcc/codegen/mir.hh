@@ -10,6 +10,7 @@ namespace lcc {
 
 // Machine Operand
 enum struct MOperandRegister : u64;
+u64 operator+ (MOperandRegister r);
 using MOperandImmediate = u64;
 using MOperandLocal = AllocaInst*;
 using MOperandStatic = GlobalVariable*;
@@ -76,13 +77,20 @@ public:
 
 private:
 
+    usz _virtual_register;
+
     Kind _kind;
 
     // TODO: Do SSO basically. For operands, instructions in MBlocks, and blocks in MFunctions.
     std::vector<MOperand> operands;
 
 public:
-    MInst(Kind kind) : _kind(kind) {};
+    MInst(Kind kind, usz virtualRegister)
+        : _virtual_register(virtualRegister),
+          _kind(kind) {};
+
+    usz virtual_register() { return _virtual_register; }
+    usz virt() { return virtual_register(); }
 
     Kind kind() { return _kind; }
 
@@ -153,6 +161,54 @@ public:
         _blocks.push_back(block);
     }
 };
+
+inline std::string ToString(MInst::Kind k) {
+    switch(k) {
+        case MInst::Kind::Alloca: return "M.Alloca";
+        case MInst::Kind::Call: return "M.Call";
+        case MInst::Kind::Copy: return "M.Copy";
+        case MInst::Kind::GetElementPtr: return "M.GetElementPtr";
+        case MInst::Kind::Intrinsic: return "M.Intrinsic";
+        case MInst::Kind::Load: return "M.Load";
+        case MInst::Kind::Phi: return "M.Phi";
+        case MInst::Kind::Store: return "M.Store";
+        case MInst::Kind::Branch: return "M.Branch";
+        case MInst::Kind::CondBranch: return "M.CondBranch";
+        case MInst::Kind::Return: return "M.Return";
+        case MInst::Kind::Unreachable: return "M.Unreachable";
+        case MInst::Kind::ZExt: return "M.ZExt";
+        case MInst::Kind::SExt: return "M.SExt";
+        case MInst::Kind::Trunc: return "M.Trunc";
+        case MInst::Kind::Bitcast: return "M.Bitcast";
+        case MInst::Kind::Neg: return "M.Neg";
+        case MInst::Kind::Compl: return "M.Compl";
+        case MInst::Kind::Add: return "M.Add";
+        case MInst::Kind::Sub: return "M.Sub";
+        case MInst::Kind::Mul: return "M.Mul";
+        case MInst::Kind::SDiv: return "M.SDiv";
+        case MInst::Kind::UDiv: return "M.UDiv";
+        case MInst::Kind::SRem: return "M.SRem";
+        case MInst::Kind::URem: return "M.URem";
+        case MInst::Kind::Shl: return "M.Shl";
+        case MInst::Kind::Sar: return "M.Sar";
+        case MInst::Kind::Shr: return "M.Shr";
+        case MInst::Kind::And: return "M.And";
+        case MInst::Kind::Or: return "M.Or";
+        case MInst::Kind::Xor: return "M.Xor";
+        case MInst::Kind::Eq: return "M.Eq";
+        case MInst::Kind::Ne: return "M.Ne";
+        case MInst::Kind::SLt: return "M.SLt";
+        case MInst::Kind::SLe: return "M.SLe";
+        case MInst::Kind::SGt: return "M.SGt";
+        case MInst::Kind::SGe: return "M.SGe";
+        case MInst::Kind::ULt: return "M.ULt";
+        case MInst::Kind::ULe: return "M.ULe";
+        case MInst::Kind::UGt: return "M.UGt";
+        case MInst::Kind::UGe: return "M.UGe";
+        case MInst::Kind::ArchStart: return "M.ArchStart";
+    }
+    LCC_UNREACHABLE();
+}
 
 } // namespace lcc
 
