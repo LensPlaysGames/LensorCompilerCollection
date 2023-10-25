@@ -170,8 +170,12 @@ public:
         return MInst::is_terminator(_instructions.back().kind());
     }
 
-    void add_instruction(const MInst& inst) {
-        LCC_ASSERT(not closed(), "Cannot insert into MBlock that has already been closed.");
+    void add_instruction(const MInst& inst, bool forced = false) {
+        LCC_ASSERT(forced or not closed(), "Cannot insert into MBlock that has already been closed.");
+        if (forced and closed()) {
+            _instructions.insert(_instructions.end() - 1, inst);
+            return;
+        }
         _instructions.push_back(inst);
     }
     void insert(const MInst& inst) { add_instruction(inst); }

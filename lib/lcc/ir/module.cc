@@ -164,9 +164,9 @@ auto Module::mir() -> std::vector<MFunction> {
     };
 
     // virtual register assignment
-    for (auto function : code()) {
-        for (auto block : function->blocks()) {
-            for (auto instruction : block->instructions()) {
+    for (auto& function : code()) {
+        for (auto& block : function->blocks()) {
+            for (auto& instruction : block->instructions()) {
                 assign_virtual_register(instruction);
                 switch (instruction->kind()) {
 
@@ -332,14 +332,25 @@ auto Module::mir() -> std::vector<MFunction> {
         return MOperandRegister{virts[v]};
     };
 
-    for (auto function : code()) {
+    // To avoid iterator invalidation when any of these vectors are resizing,
+    // we "pre-construct" functions and blocks.
+    for (auto& function : code()) {
         funcs.push_back(MFunction());
         auto& f = funcs.back();
         f.name() = function->name();
-        for (auto block : function->blocks()) {
+        for (auto& block : function->blocks()) {
             f.add_block(MBlock(block->name()));
             auto& bb = f.blocks().back();
-            for (auto instruction : block->instructions()) {
+        }
+    }
+
+    for (auto [f_index, function] : vws::enumerate(code())) {
+        auto& f = funcs.at(usz(f_index));
+        function->machine_function(&f);
+        for (auto [block_index, block] : vws::enumerate(function->blocks())) {
+            auto& bb = f.blocks().at(usz(block_index));
+            block->machine_block(&bb);
+            for (auto& instruction : block->instructions()) {
                 switch (instruction->kind()) {
 
                     // Non-instructions
@@ -371,7 +382,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         }
 
                         auto phi = MInst(MInst::Kind::Phi, virts[instruction]);
-                        for (auto op : phi_ir->operands()) {
+                        for (auto& op : phi_ir->operands()) {
                             phi.add_operand(MOperandValueReference(f, op.block));
                             phi.add_operand(MOperandValueReference(f, op.value));
                         }
@@ -382,7 +393,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto call_ir = as<CallInst>(instruction);
                         auto call = MInst(MInst::Kind::Call, virts[instruction]);
                         call.add_operand(MOperandValueReference(f, call_ir->callee()));
-                        for (auto arg : call_ir->args()) {
+                        for (auto& arg : call_ir->args()) {
                             call.add_operand(MOperandValueReference(f, arg));
                         }
                         bb.add_instruction(call);
@@ -524,7 +535,10 @@ auto Module::mir() -> std::vector<MFunction> {
 
     const auto PrintMFunction = [&](const MFunction& function) -> std::string {
         const auto PrintLocal = [&](std::pair<usz, AllocaInst*> pair) -> std::string {
-            return fmt::format("  {}: {} ({} bytes)\n", pair.first, *pair.second->allocated_type(), pair.second->allocated_type()->bytes());
+            return fmt::format("  {}: {} ({} bytes)\n",
+                               pair.first,
+                               *pair.second->allocated_type(),
+                               pair.second->allocated_type()->bytes());
         };
         return  fmt::format("{}:\n{}{}",
                             function.name(),
@@ -541,21 +555,66 @@ auto Module::mir() -> std::vector<MFunction> {
                            fmt::join(vws::transform(code, PrintMFunction), "\n"));
     };
 
-    fmt::print("{}", PrintMIR(funcs));
-
-    for (auto mfunc : funcs) {
-        for (auto mblock : mfunc.blocks()) {
-            for (auto minst : mblock.instructions()) {
+    // Lowering
+    for (auto& mfunc : funcs) {
+        for (auto& mblock : mfunc.blocks()) {
+            std::vector<isz> indices_of_instructions_to_remove{};
+            for (auto [minst_index, minst] : vws::enumerate(mblock.instructions())) {
                 // phi2copy
                 if (minst.kind() == MInst::Kind::Phi) {
-                    // TODO: Insert copy of each operand value into virtual register of phi
+                    // Insert copy of each operand value into virtual register of phi
                     // MInst within block the value is coming from.
-                    LCC_ASSERT(false, "TODO: Lower MIR PHI");
+                    Block* block{};
+                    MBlock* phi_operand_block{};
+                    for (const auto& op : minst.all_operands()) {
+                        // Phi's operands are arranged in groups of two in the form of <block, value>.
+                        if (!block) {
+                            block = std::get<MOperandBlock>(op);
+                            phi_operand_block = block->machine_block();
+                            LCC_ASSERT(phi_operand_block, "Cannot phi2copy block that has no corresponding machine block");
+                            LCC_ASSERT(phi_operand_block != &mblock, "Cannot phi2copy when one of the Phi operands is in the same block as the Phi");
+                            continue;
+                        }
+
+                        if (std::holds_alternative<MOperandBlock>(op))
+                            Diag::ICE("Phi value cannot be a block");
+
+                        auto copy = MInst(MInst::Kind::Copy, minst.virtual_register());
+
+                        usz uses = minst.use_count();
+                        while (uses && uses--) copy.add_use();
+
+                        if (std::holds_alternative<MOperandImmediate>(op)) {
+                            copy.add_operand(std::get<MOperandImmediate>(op));
+                        } else if (std::holds_alternative<MOperandRegister>(op)) {
+                            copy.add_operand(std::get<MOperandRegister>(op));
+                        } else if (std::holds_alternative<MOperandLocal>(op)) {
+                            copy.add_operand(std::get<MOperandLocal>(op));
+                        } else if (std::holds_alternative<MOperandStatic>(op)) {
+                            copy.add_operand(std::get<MOperandStatic>(op));
+                        } else if (std::holds_alternative<MOperandFunction>(op)) {
+                            copy.add_operand(std::get<MOperandFunction>(op));
+                        } else if (std::holds_alternative<MOperandBlock>(op)) {
+                            copy.add_operand(std::get<MOperandBlock>(op));
+                        }
+
+                        phi_operand_block->add_instruction(copy, true);
+
+                        block = nullptr;
+                    }
+
+                    LCC_ASSERT(not block, "Phi *must* have an even number of operands: incoming block and value pairs");
+
+                    indices_of_instructions_to_remove.push_back(minst_index);
                 }
+            }
+            for (isz index : indices_of_instructions_to_remove | vws::reverse) {
+                mblock.instructions().erase(mblock.instructions().begin() + index);
             }
         }
     }
 
+    fmt::print("{}", PrintMIR(funcs));
 
     return funcs;
 }
