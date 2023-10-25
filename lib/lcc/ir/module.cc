@@ -568,7 +568,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
     const auto PrintMFunction = [&](const MFunction& function) -> std::string {
         const auto PrintLocal = [&](std::pair<usz, AllocaInst*> pair) -> std::string {
-            return fmt::format("  {}: {} ({} bytes)\n",
+            return fmt::format("  {}: {} ({} bytes)",
                                pair.first,
                                *pair.second->allocated_type(),
                                pair.second->allocated_type()->bytes());
@@ -581,7 +581,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
     const auto PrintMIR = [&](const std::vector<MFunction>& code) -> std::string {
         const auto PrintGlobal = [&](const GlobalVariable* global) -> std::string {
-            return fmt::format("{}: {}\n", global->name(), *global->type());
+            return fmt::format("{}: {}", global->name(), *global->type());
         };
         return fmt::format("{}\n{}\n",
                            fmt::join(vws::transform(vars(), PrintGlobal), "\n"),
