@@ -283,7 +283,7 @@ auto Module::mir() -> std::vector<MFunction> {
         for (auto& mfunc : funcs) {
             for (auto& mblock : mfunc.blocks()) {
                 for (auto& instruction : mblock.instructions()) {
-                    if (instruction.virtual_register() == virtual_register)
+                    if (instruction.reg() == virtual_register)
                         return &instruction;
                 }
             }
@@ -520,7 +520,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
     const auto PrintMInst = [&](const MInst& inst) -> std::string {
         return fmt::format("    r{} | {}{}{}{}",
-                           inst.virtual_register(),
+                           inst.reg(),
                            MInst::is_terminator(inst.kind()) or inst.use_count() ? "" : "Unused ",
                            ToString(inst.kind()),
                            inst.all_operands().empty() ? "" : " ",
@@ -579,7 +579,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         if (std::holds_alternative<MOperandBlock>(op))
                             Diag::ICE("Phi value cannot be a block");
 
-                        auto copy = MInst(MInst::Kind::Copy, minst.virtual_register());
+                        auto copy = MInst(MInst::Kind::Copy, minst.reg());
 
                         usz uses = minst.use_count();
                         while (uses && uses--) copy.add_use();

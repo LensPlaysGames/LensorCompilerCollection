@@ -87,7 +87,7 @@ public:
 
 private:
 
-    usz _virtual_register;
+    usz _register;
 
     usz _opcode;
 
@@ -98,15 +98,14 @@ private:
 
 public:
     MInst(Kind kind, usz virtualRegister)
-        : _virtual_register(virtualRegister),
+        : _register(virtualRegister),
           _opcode(static_cast<usz>(kind)) {};
 
     MInst(usz opcode, usz virtualRegister)
-        : _virtual_register(virtualRegister),
+        : _register(virtualRegister),
           _opcode(opcode) {};
 
-    usz virtual_register() const { return _virtual_register; }
-    usz virt() const { return virtual_register(); }
+    usz reg() const { return _register; }
 
     Kind kind() const {
         LCC_ASSERT(_opcode < +Kind::ArchStart, "kind() must only be called for general MIR instructions; for architecture-specific instructions, please call opcode()");
