@@ -1,9 +1,8 @@
 ;; ERROR
 
-puts : ext void(s : @byte)
+extern puts : void(s : @byte);
 
-str : @byte = "Lorem ipsum dolor sit amet consectetuer"[-1]
+str : @byte = "Lorem ipsum dolor sit amet consectetuer"[-1];
 
-puts(str)
-0
-
+puts(str);
+0;
