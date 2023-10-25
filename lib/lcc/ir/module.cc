@@ -161,17 +161,26 @@ auto Module::mir() -> std::vector<MFunction> {
     const auto assign_virtual_register = [&](Value* v) {
         if (virts[v]) return; // don't double-assign registers
         switch (v->kind()) {
-        case Value::Kind::Function:
-        case Value::Kind::Block:
-        case Value::Kind::IntegerConstant:
-        case Value::Kind::ArrayConstant:
-        case Value::Kind::Poison:
-        case Value::Kind::GlobalVariable:
-        case Value::Kind::Parameter:
-            return;
+            // Non-instructions
+            case Value::Kind::Function:
+            case Value::Kind::Block:
+            case Value::Kind::IntegerConstant:
+            case Value::Kind::ArrayConstant:
+            case Value::Kind::Poison:
+            case Value::Kind::GlobalVariable:
+            case Value::Kind::Parameter:
+                return;
 
-        default:
-            break;
+            // Instructions that can never produce a value
+            case Value::Kind::Store:
+            case Value::Kind::Branch:
+            case Value::Kind::CondBranch:
+            case Value::Kind::Return:
+            case Value::Kind::Unreachable:
+                    return;
+
+            default:
+                break;
         }
         virts[v] = ++virtual_register;
     };
@@ -532,6 +541,17 @@ auto Module::mir() -> std::vector<MFunction> {
     };
 
     const auto PrintMInst = [&](const MInst& inst) -> std::string {
+        // Instructions that can never produce a value shouldn't show register.
+        if (inst.kind() == MInst::Kind::Store
+            or inst.kind() == MInst::Kind::Branch
+            or inst.kind() == MInst::Kind::CondBranch
+            or inst.kind() == MInst::Kind::Return
+            or inst.kind() == MInst::Kind::Unreachable)
+            return fmt::format("    {}{}{}",
+                               ToString(inst.kind()),
+                               inst.all_operands().empty() ? "" : " ",
+                               fmt::join(vws::transform(inst.all_operands(), PrintMOperand), " "));
+
         return fmt::format("    r{} | {}{}{}{}",
                            inst.reg(),
                            MInst::is_terminator(inst.kind()) or inst.use_count() ? "" : "Unused ",
