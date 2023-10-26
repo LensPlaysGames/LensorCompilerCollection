@@ -366,13 +366,17 @@ void lcc::intercept::Lexer::NextToken() {
 }
 
 void lcc::intercept::Lexer::NextIdentifier() {
-    auto startOffset = CurrentOffset();
+    tok.text.clear();
 
-    NextChar();
-    while (IsIdentContinue(lastc)) NextChar();
-
+    /// Note(Sirraide): Istg if anyone gets the genius idea
+    /// of extracting a substring instead of appending character
+    /// by character, DON’T. There is a REASON why NextChar()
+    /// exists. Character != byte in the source file.
+    do {
+        tok.text += lastc;
+        NextChar();
+    } while (IsIdentContinue(lastc));
     tok.kind = TokenKind::Ident;
-    tok.text = GetSubstring(startOffset, CurrentOffset());
 }
 
 void lcc::intercept::Lexer::HandleIdentifier() {
