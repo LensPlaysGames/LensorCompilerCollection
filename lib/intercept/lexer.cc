@@ -95,7 +95,6 @@ void lcc::intercept::Lexer::NextToken() {
             tok.kind = TokenKind::Eof;
         } break;
 
-        /// EOF.
         case '\\': {
             /// Yeet backslash;
             NextChar();
@@ -586,10 +585,13 @@ void lcc::intercept::Lexer::ExpandMacro(Macro& m) {
 }
 
 void lcc::intercept::Lexer::HandleMacroDefinition() {
+    LCC_ASSERT(tok.kind == Tk::Ident && tok.text == "macro",
+               "HandleMacroDefinition must only be called when lexer state is at `macro`.");
+
     /// Check if we’re at EOF.
     const auto AtEof = [&] {
         if (tok.kind == Tk::Eof) {
-            Error("Unexpected end of file while parsing macro argument list");
+            Error("Unexpected end of file while parsing macro");
             return true;
         }
 
@@ -606,7 +608,7 @@ void lcc::intercept::Lexer::HandleMacroDefinition() {
 
     /// At this point, the parser state is at the "macro" token.
     raw_mode = true;
-    NextToken();
+    NextToken(); // eat "macro", plate macro name identifier
 
     /// Lex macro name.
     if (tok.kind != Tk::Ident) Error("Expected macro name after 'macro'");
@@ -619,6 +621,7 @@ void lcc::intercept::Lexer::HandleMacroDefinition() {
     /// Lex parameter token list.
     auto& macro = macros.emplace_back(name);
     for (;;) {
+        // First iteration eats macro name; afterwards, eats parameter tokens.
         NextToken();
         if (AtEof()) return;
         if (AtMacroKw("emits", "defines")) break;
@@ -664,6 +667,7 @@ void lcc::intercept::Lexer::HandleMacroDefinition() {
 
     /// Parse output list.
     for (;;) {
+        // First iteration eats "emits"; afterwards, eats output tokens.
         NextToken();
         if (AtEof()) return;
         if (AtMacroKw("endmacro")) break;
@@ -695,6 +699,9 @@ void lcc::intercept::Lexer::HandleMacroDefinition() {
         /// Add the token.
         macro.expansion.push_back(tok);
     }
+
+    LCC_ASSERT(tok.kind == Tk::Ident && tok.text == "endmacro",
+               "At end of macro but token is not endmacro");
 
     /// Yeet 'endmacro'.
     raw_mode = false;
