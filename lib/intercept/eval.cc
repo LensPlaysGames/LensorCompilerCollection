@@ -2,7 +2,7 @@
 #include <intercept/eval.hh>
 
 bool lcc::intercept::Expr::evaluate(const Context* ctx, EvalResult& out, bool required) {
-    LCC_ASSERT(ok(), "Cannot evaluate ill-formed or unchecked expression");
+    LCC_ASSERT(!required || ok(), "Cannot evaluate ill-formed or unchecked expression");
     switch (kind()) {
         case Kind::While:
         case Kind::For:
