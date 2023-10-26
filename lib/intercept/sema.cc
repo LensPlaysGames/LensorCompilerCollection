@@ -448,7 +448,7 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         Expr** last{};
         if (auto block = cast<BlockExpr>(decl->body())) {
             if (block->children().empty() and not ty->return_type()->is_void()) {
-                Error(decl->location(), "Non-void function must return a value");
+                Error(decl->location(), "Function `{}` has non-void return type, and must return a value", decl->name());
                 return;
             }
 
