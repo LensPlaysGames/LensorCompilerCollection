@@ -987,27 +987,34 @@ void intc::Parser::ParseTopLevel() {
 
         /// Parse a top-level expression.
         auto expr = ParseExpr();
-        //Consume(Tk::Semicolon);
         if (not Consume(Tk::Semicolon)) {
-            auto location = expr ? expr.value()->location() : Location{};
-            if (expr->kind() == Expr::Kind::VarDecl) {
-                auto var_decl = as<VarDecl>(expr.value());
-                if (var_decl->init())
-                    location = var_decl->init()->location();
-                else location = var_decl->type()->location();
-            }
-            if (expr->kind() == Expr::Kind::FuncDecl and as<FuncDecl>(expr.value())->body())
-                location = as<FuncDecl>(expr.value())->body()->location();
+            if (At(Tk::Eof)) {
+                Warning("Expected ';' but got end of file");
+            } else {
+                Location location{};
+                if (expr.value()->location().is_valid())
+                    location = expr.value()->location();
 
-            // Limit location to length of one, discarding the beginning (fold right).
-            if (location.len > 1) {
-                location.pos += location.len - 1;
-                location.len = 1;
-            }
+                // Attempt to get the location that is as close to where the semi-colon should be.
+                if (expr->kind() == Expr::Kind::VarDecl) {
+                    auto var_decl = as<VarDecl>(expr.value());
+                    if (var_decl->init())
+                        location = var_decl->init()->location();
+                    else location = var_decl->type()->location();
+                }
+                if (expr->kind() == Expr::Kind::FuncDecl and as<FuncDecl>(expr.value())->body())
+                    location = as<FuncDecl>(expr.value())->body()->location();
 
-            Warning(location, "Expected ';'")
-                .attach(false,
-                        Diag::Note(context, tok.location, "Before this"));
+                // Limit location to length of one, discarding the beginning (fold right).
+                if (location.len > 1) {
+                    location.pos += location.len - 1;
+                    location.len = 1;
+                }
+
+                Error(location, "Expected ';'")
+                    .attach(false,
+                            Diag::Note(context, tok.location, "Before this"));
+            }
         }
         if (expr) mod->add_top_level_expr(expr.value());
 
