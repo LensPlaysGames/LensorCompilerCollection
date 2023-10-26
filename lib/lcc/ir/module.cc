@@ -360,10 +360,8 @@ auto Module::mir() -> std::vector<MFunction> {
         funcs.push_back(MFunction());
         auto& f = funcs.back();
         f.name() = function->name();
-        for (auto& block : function->blocks()) {
+        for (auto& block : function->blocks())
             f.add_block(MBlock(block->name()));
-            auto& bb = f.blocks().back();
-        }
     }
 
     for (auto [f_index, function] : vws::enumerate(code())) {
@@ -574,9 +572,10 @@ auto Module::mir() -> std::vector<MFunction> {
                                *second->allocated_type(),
                                second->allocated_type()->bytes());
         };
-        return  fmt::format("{}:\n{}\n{}",
+        return  fmt::format("{}:\n{}{}{}",
                             function.name(),
                             fmt::join(vws::transform(vws::enumerate(function.locals()), PrintLocal), "\n"),
+                            function.locals().empty() ? "" : "\n",
                             fmt::join(vws::transform(function.blocks(), PrintMBlock), "\n"));
     };
 
@@ -584,9 +583,11 @@ auto Module::mir() -> std::vector<MFunction> {
         const auto PrintGlobal = [&](const GlobalVariable* global) -> std::string {
             return fmt::format("{}: {}", global->name(), *global->type());
         };
-        return fmt::format("{}\n{}\n",
+        return fmt::format("{}{}{}{}",
                            fmt::join(vws::transform(vars(), PrintGlobal), "\n"),
-                           fmt::join(vws::transform(code, PrintMFunction), "\n"));
+                           vars().empty() ? "" : "\n",
+                           fmt::join(vws::transform(code, PrintMFunction), "\n"),
+                           code.empty() ? "" : "\n");
     };
 
     // Lowering
