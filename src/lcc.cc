@@ -120,16 +120,16 @@ int main(int argc, char** argv) {
     if (path_str.ends_with(".int")) {
         /// Parse the file.
         auto mod = lcc::intercept::Parser::Parse(&context, file);
+        if (context.has_error()) std::exit(1);
         if (opts.get<"--syntax-only">()) {
-            if (context.has_error()) std::exit(1);
             if (opts.get<"--ast">()) mod->print(use_colour);
             std::exit(0);
         }
 
         /// Perform semantic analysis.
         lcc::intercept::Sema::Analyse(&context, *mod, true);
+        if (context.has_error()) std::exit(1);
         if (opts.get<"--ast">()) {
-            if (context.has_error()) std::exit(1);
             mod->print(use_colour);
         }
 
