@@ -1,4 +1,5 @@
 #include <intercept/parser.hh>
+#include <lcc/diags.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
 
@@ -986,7 +987,28 @@ void intc::Parser::ParseTopLevel() {
 
         /// Parse a top-level expression.
         auto expr = ParseExpr();
-        if (not Consume(Tk::Semicolon)) Error("Expected ';'");
+        //Consume(Tk::Semicolon);
+        if (not Consume(Tk::Semicolon)) {
+            auto location = expr ? expr.value()->location() : Location{};
+            if (expr->kind() == Expr::Kind::VarDecl) {
+                auto var_decl = as<VarDecl>(expr.value());
+                if (var_decl->init())
+                    location = var_decl->init()->location();
+                else location = var_decl->type()->location();
+            }
+            if (expr->kind() == Expr::Kind::FuncDecl and as<FuncDecl>(expr.value())->body())
+                location = as<FuncDecl>(expr.value())->body()->location();
+
+            // Limit location to length of one, discarding the beginning (fold right).
+            if (location.len > 1) {
+                location.pos += location.len - 1;
+                location.len = 1;
+            }
+
+            Error(location, "Expected ';'")
+                .attach(false,
+                        Diag::Note(context, tok.location, "Before this"));
+        }
         if (expr) mod->add_top_level_expr(expr.value());
 
         /// Synchronise on semicolons and braces in case of an error.
@@ -1010,6 +1032,7 @@ void intc::Parser::ParseTopLevel() {
 auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
     /// Parse the base type.
     Type* ty{};
+    auto location = tok.location;
     switch (tok.kind) {
         default: return Error("Expected type");
 
@@ -1105,8 +1128,10 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
                 NextToken();
                 auto size = ParseExpr();
                 if (not size) return size.diag();
+                // The 1 is for the rbrack.
+                location.len = u16(1 + tok.location.pos - location.pos);
                 if (not Consume(Tk::RBrack)) return Error("Expected ]");
-                ty = new (*mod) ArrayType(ty, *size, tok.location);
+                ty = new (*mod) ArrayType(ty, *size, location);
             } break;
         }
     }

@@ -4,6 +4,7 @@
 #include <intercept/ast.hh>
 #include <intercept/lexer.hh>
 #include <lcc/context.hh>
+#include <lcc/diags.hh>
 #include <lcc/syntax/lexer.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/result.hh>
@@ -86,8 +87,17 @@ private:
         return Diag::Error(context, where, fmt, std::forward<Args>(args)...);
     }
 
+    /// Issue a warning.
+    template <typename... Args>
+    Diag Warning(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Warning(context, where, fmt, std::forward<Args>(args)...);
+    }
+
     /// Issue an error at the location of the current token.
     using Lexer::Error;
+
+    /// Issue a warning at the location of the current token.
+    using Lexer::Warning;
 
     /// Get the global scope.
     auto GlobalScope() -> Scope* { return scope_stack[0]; }

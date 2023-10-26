@@ -101,6 +101,11 @@ protected:
         return Diag::Error(context, tok.location, fmt, std::forward<Args>(args)...);
     }
 
+    template <typename... Args>
+    Diag Warning(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Warning(context, tok.location, fmt, std::forward<Args>(args)...);
+    }
+
     void NextChar() {
         lastc = chars.next();
     }

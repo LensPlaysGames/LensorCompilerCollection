@@ -276,12 +276,24 @@ public:
 private:
     State _state = State::NotAnalysed;
 
+    Location _location = {};
+
 protected:
     constexpr SemaNode() = default;
+    constexpr SemaNode(Location loc) : _location(loc) {}
 
 public:
     /// Check if this expression was successfully analysed by sema.
     bool ok() const { return _state == State::Done; }
+
+    Location location() const {
+        return _location;
+    }
+
+    Location location(Location new_location) {
+        _location = new_location;
+        return _location;
+    }
 
     /// Get the state of semantic analysis for this node.
     /// \see SemaNode::State
@@ -333,11 +345,9 @@ public:
 private:
     const Kind _kind;
 
-    Location _location;
-
 protected:
     constexpr Type(Kind kind, Location location)
-        : _kind(kind), _location(location) {}
+        : SemaNode(location), _kind(kind) {}
 
 public:
     virtual ~Type() = default;
@@ -406,9 +416,6 @@ public:
 
     /// Check if this is the builtin \c void type.
     bool is_void() const;
-
-    /// Get the location of this type.
-    auto location() const { return _location; }
 
     /// Get the size of this type. It may be target-dependent,
     /// which is why this takes a context parameter.
@@ -778,11 +785,9 @@ public:
 private:
     const Kind _kind;
 
-    Location _location;
-
 protected:
     Expr(Kind kind, Location location)
-        : _kind(kind), _location(location) {}
+        : SemaNode(location), _kind(kind) {}
 
 public:
     virtual ~Expr() = default;
@@ -810,10 +815,6 @@ public:
     /// Check if this is an lvalue. Only lvalues can have their
     /// address taken or be converted to references.
     bool is_lvalue() const;
-
-    /// Access the location of this expression.
-    auto location() const { return _location; }
-    auto location(Location location) { _location = location; }
 
     auto type() const -> Type*;
 
