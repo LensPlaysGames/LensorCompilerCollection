@@ -668,7 +668,11 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
         // Bind param instructions.
         for (auto [i, param] : vws::enumerate(f->param_decls())) {
             auto inst = function->param(usz(i));
-            generated_ir[param] = inst;
+            auto alloca = new (*module) AllocaInst(inst->type(), param->location());
+            auto store = new (*module) StoreInst(inst, alloca);
+            insert(alloca);
+            insert(store);
+            generated_ir[param] = alloca;
         }
 
         generate_expression(expr);
