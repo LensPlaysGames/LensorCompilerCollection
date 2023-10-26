@@ -1005,7 +1005,7 @@ void intc::Parser::ParseTopLevel() {
                 location.len = 1;
             }
 
-            Error(location, "Expected ';'")
+            Warning(location, "Expected ';'")
                 .attach(false,
                         Diag::Note(context, tok.location, "Before this"));
         }
