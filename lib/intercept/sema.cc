@@ -448,11 +448,21 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         Expr** last{};
         if (auto block = cast<BlockExpr>(decl->body())) {
             if (block->children().empty() and not ty->return_type()->is_void()) {
-                Error(decl->location(), "Function `{}` has non-void return type, and must return a value", decl->name());
-                return;
+                // For anything except the top-level function, if there is an expected
+                // return value, there has to be one, otherwise it's an error.
+                if (decl->name() != "main") {
+                    Error(decl->location(), "Function `{}` has non-void return type, and must return a value", decl->name());
+                    return;
+                }
+
+                // For the top level function, a return value is be created if a valid
+                // one is not present.
+                auto inserted_return_value = new (mod) IntegerLiteral(0, {});
+                block->add(new (mod) ReturnExpr(inserted_return_value, {}));
             }
 
             last = &block->children().back();
+
         } else {
             last = &decl->body();
         }
@@ -1052,6 +1062,7 @@ void intc::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         }
 
         /// TODO(Sirraide): Overload resolution.
+        // See `docs/function_overload_resolution.org`
         Diag::ICE("Sorry, overload resolution is currently not implemented");
     }
 
