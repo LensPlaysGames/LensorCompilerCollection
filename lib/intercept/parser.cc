@@ -686,7 +686,9 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
 
     /// While we’re at the start of an expression, if we’re not parsing
     /// a single-expression, parse call arguments.
-    else if (not single_expression) {
+    // Exception: parsed expression (would-be callee) must be an identifier or
+    // a lambda.
+    else if (not single_expression and (lhs->kind() == Expr::Kind::NameRef or lhs->kind() == Expr::Kind::FuncDecl)) {
         std::vector<Expr*> args;
 
         /// Ignore unary operators that could also be binary operators.
