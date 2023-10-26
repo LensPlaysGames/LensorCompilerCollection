@@ -104,11 +104,11 @@ private:
 
 public:
     MInst(Kind kind, usz virtualRegister)
-        : _register(virtualRegister),
+        : _register(virtualRegister, 0), /// FIXME: Actually pass in register size.
           _opcode(static_cast<usz>(kind)) {};
 
     MInst(usz opcode, usz virtualRegister)
-        : _register(virtualRegister),
+        : _register(virtualRegister, 0), /// FIXME: Actually pass in register size.
           _opcode(opcode) {};
 
     usz reg() const { return _register.value; }

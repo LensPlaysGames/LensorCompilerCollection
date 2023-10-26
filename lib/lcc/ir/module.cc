@@ -567,11 +567,12 @@ auto Module::mir() -> std::vector<MFunction> {
     };
 
     const auto PrintMFunction = [&](const MFunction& function) -> std::string {
-        const auto PrintLocal = [&](std::pair<usz, AllocaInst*> pair) -> std::string {
+        const auto PrintLocal = [&](auto&& pair) -> std::string {
+            auto&& [first, second] = std::forward<decltype(pair)>(pair);
             return fmt::format("  {}: {} ({} bytes)",
-                               pair.first,
-                               *pair.second->allocated_type(),
-                               pair.second->allocated_type()->bytes());
+                               first,
+                               *second->allocated_type(),
+                               second->allocated_type()->bytes());
         };
         return  fmt::format("{}:\n{}\n{}",
                             function.name(),
