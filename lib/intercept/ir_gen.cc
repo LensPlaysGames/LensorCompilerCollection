@@ -184,7 +184,10 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
             auto* store = new (*module) StoreInst(rhs, lhs, expr->location());
 
-            generated_ir[expr] = store;
+            // Kind of confusing, but if the AST uses this node, it generally means it
+            // wants the lvalue of the thing being assigned to; that means that we
+            // need /that/ IR to be used by those users, not the store.
+            generated_ir[expr] = lhs;
             insert(store);
 
             break;
