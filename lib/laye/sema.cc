@@ -42,7 +42,7 @@ void layec::Sema::Analyse(Module* module) {
 
             attempted++;
 
-            Analyse((Statement**)&decl);
+            Analyse((Statement*&) (decl));
             LCC_ASSERT(decl->sema_state() != SemaState::NotAnalysed);
 
             if (not decl->sema_done_or_errored())
@@ -76,7 +76,7 @@ void layec::Sema::Analyse(Module* module) {
         if (not is<FunctionDecl, BindingDecl>(decl)) continue;
 
         LCC_ASSERT(decl->sema_state() == SemaState::NotAnalysed);
-        Analyse((Statement**)&decl);
+        Analyse((Statement*&) (decl));
         LCC_ASSERT(decl->sema_done_or_errored(), "should have finished function analysis");
     }
 
@@ -86,34 +86,127 @@ void layec::Sema::Analyse(Module* module) {
 void layec::Sema::AnalysePrototype(FunctionDecl* func) {
     LCC_ASSERT(func->sema_state() == SemaState::NotAnalysed);
 
-    func->return_type()->set_sema_errored();
-    for (auto param : func->params()) {
-        param.type->set_sema_errored();
+    AnalyseType(func->return_type());
+    LCC_ASSERT(func->return_type()->sema_done_or_errored());
+
+    for (auto& param : func->params()) {
+        AnalyseType(param.type);
+        LCC_ASSERT(param.type->sema_done_or_errored());
+    }
+
+    if (func->return_type()->is_void()) {
+        if (func->has_mod(TokenKind::Nodiscard))
+            Error(func->return_type()->location(), "Void function cannot be 'nodiscard'.");
+    }
+
+    if (func->return_type()->is_noreturn()) {
+        if (func->has_mod(TokenKind::Nodiscard))
+            Error(func->return_type()->location(), "Noreturn function cannot be 'nodiscard'.");
+
+        // TODO(local): noreturn is always impure, if we have purity checks in Laye
     }
 }
 
-void layec::Sema::Analyse(Statement** statement) {
-    //Note((*statement)->location(), "Analyse Statement {}\n", ToString((*statement)->kind()));
-    (*statement)->set_sema_in_progress();
-    (*statement)->set_sema_errored();
+void layec::Sema::Analyse(Statement*& statement) {
+    statement->set_sema_in_progress();
+
+    auto kind = statement->kind();
+    switch (kind) {
+        case Statement::Kind::DeclFunction: {
+            auto s = as<FunctionDecl>(statement);
+            if (auto& body = s->body()) {
+                if (auto expr_body = cast<ExprStatement>(body)) {
+                    std::vector<Statement*> children{};
+                    children.push_back(new (*module()) ReturnStatement{body->location(), expr_body->expr()});
+                    body = new (*module()) BlockStatement{body->location(), children};
+                }
+
+                LCC_ASSERT(is<BlockStatement>(body));
+                Analyse(body);
+            }
+        } break;
+
+        case Statement::Kind::Block: {
+            for (auto& child : as<BlockStatement>(statement)->children()) {
+                Analyse(child);
+            }
+        } break;
+
+        case Statement::Kind::Return: {
+            auto s = as<ReturnStatement>(statement);
+            // TODO(local): error if the function is noreturn
+            if (s->is_void_return()) {
+                // TODO(local): error if the function does not have void type
+            } else {
+                // TODO(local): error if the function does has void type
+                Analyse(s->value());
+            }
+        } break;
+
+        default: {
+            Warning(statement->location(), "Unhandled statement in Sema::Analyze(Statement*&): {}", ToString(kind));
+            statement->set_sema_errored();
+        } break;
+    }
+
+    if (not statement->sema_done_or_errored())
+        statement->set_sema_done();
 }
 
-bool layec::Sema::Analyse(Expr** expr) {
-    //Note((*expr)->location(), "Analyse Expression {}\n", ToString((*expr)->kind()));
-    (*expr)->set_sema_in_progress();
-    (*expr)->set_sema_errored();
-    return false;
+bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
+    expr->set_sema_in_progress();
+
+    auto kind = expr->kind();
+    switch (kind) {
+        case Expr::Kind::LitInt: {
+            
+        } break;
+
+        default: {
+            if (auto t = cast<Type>(expr)) return AnalyseType(t);
+            Warning(expr->location(), "Unhandled expression in Sema::Analyze(Expr*&): {}", ToString(kind));
+            expr->set_sema_errored();
+        } break;
+    }
+
+    if (not expr->sema_done_or_errored())
+        expr->set_sema_done();
+
+    return expr->sema_ok();
+}
+
+bool layec::Sema::AnalyseType(Type*& type) {
+    type->set_sema_in_progress();
+
+    auto kind = type->kind();
+    switch (kind) {
+        case Expr::Kind::TypeInt: {
+            auto t = as<IntType>(type);
+            if (t->bit_width() <= 0 or t->bit_width() > 65535)
+                type->set_sema_errored();
+        } break;
+
+        default: {
+            Warning(type->location(), "Unhandled type in Sema::Analyze(Type*&): {}", ToString(kind));
+            type->set_sema_errored();
+        } break;
+    }
+
+    if (not type->sema_done_or_errored())
+        type->set_sema_done();
+
+    return type->sema_ok();
 }
 
 template <bool PerformConversion>
-int layec::Sema::ConvertImpl(Expr** expr, Type* to) {
+int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
     enum : int {
         TypesContainErrors = -2,
         ConversionImpossible = -1,
         NoOp = 0,
     };
 
-    auto from = (*expr)->type();
+    auto from = expr->type();
     if (from->sema_errored() or to->sema_errored()) return TypesContainErrors;
 
     auto Score = [](int i) {
@@ -123,7 +216,7 @@ int layec::Sema::ConvertImpl(Expr** expr, Type* to) {
 
     if (Type::Equal(from, to))
         return NoOp;
-    
+
     if (from->is_integer() and to->is_bool()) {
         if constexpr (PerformConversion) InsertImplicitCast(expr, to);
         return Score(1);
@@ -137,28 +230,28 @@ int layec::Sema::ConvertImpl(Expr** expr, Type* to) {
     return ConversionImpossible;
 }
 
-bool layec::Sema::Convert(Expr** expr, Type* to) {
-    if ((*expr)->sema_errored()) return true;
+bool layec::Sema::Convert(Expr*& expr, Type* to) {
+    if (expr->sema_errored()) return true;
     return ConvertImpl<true>(expr, to) >= 0;
 }
 
-void layec::Sema::ConvertOrError(Expr** expr, Type* to) {
+void layec::Sema::ConvertOrError(Expr*& expr, Type* to) {
     if (not Convert(expr, to)) Error(
-        (*expr)->location(),
+        expr->location(),
         "Expression is not convertible to type {}",
         to->string(use_colours)
     );
 }
 
-bool layec::Sema::ConvertToCommonType(Expr** a, Expr** b) {
-    return Convert(a, (*b)->type()) or Convert(b, (*a)->type());
+bool layec::Sema::ConvertToCommonType(Expr*& a, Expr*& b) {
+    return Convert(a, b->type()) or Convert(b, a->type());
 }
 
-int layec::Sema::TryConvert(Expr** expr, Type* to) {
+int layec::Sema::TryConvert(Expr*& expr, Type* to) {
     return ConvertImpl<false>(expr, to);
 }
 
-void layec::Sema::Discard(Expr** expr) {
+void layec::Sema::Discard(Expr*& expr) {
     LCC_ASSERT(false);
 }
 
@@ -166,15 +259,15 @@ bool layec::Sema::HasSideEffects(Expr* expr) {
     LCC_ASSERT(false);
 }
 
-void layec::Sema::InsertImplicitCast(Expr** expr_ptr, Type* ty) {
+void layec::Sema::InsertImplicitCast(Expr*& expr_ptr, Type* ty) {
     LCC_ASSERT(false);
 }
 
-void layec::Sema::InsertPointerToIntegerCast(Expr** operand) {
+void layec::Sema::InsertPointerToIntegerCast(Expr*& operand) {
     LCC_ASSERT(false);
 }
 
-void layec::Sema::WrapWithCast(Expr** expr, Type* type, CastKind kind) {
+void layec::Sema::WrapWithCast(Expr*& expr, Type* type, CastKind kind) {
     LCC_ASSERT(false);
 }
 

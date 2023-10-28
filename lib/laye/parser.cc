@@ -162,12 +162,12 @@ auto Parser::ParseTopLevel() -> Result<Decl*> {
 auto Parser::TryParseDecl() -> Result<Decl*> {
     auto GetModifiers = [&](bool allocate) {
         std::vector<DeclModifier> modifiers{};
-        while (At(Tk::Inline, Tk::Export, Tk::Const, Tk::Foreign, Tk::Callconv)) {
+        while (At(Tk::Inline, Tk::Export, Tk::Const, Tk::Foreign, Tk::Callconv, Tk::Nodiscard, Tk::Impure)) {
             if (std::find_if(modifiers.begin(), modifiers.end(), [&](const auto& m) { return m.decl_kind == tok.kind; }) != modifiers.end()) {
                 if (allocate) Error("Duplicate modifier for declaration");
             }
 
-            if (At(Tk::Inline, Tk::Export, Tk::Const)) {
+            if (At(Tk::Inline, Tk::Export, Tk::Const, Tk::Nodiscard, Tk::Impure)) {
                 modifiers.push_back(DeclModifier{tok.kind});
                 NextToken();
             } else if (At(Tk::Foreign)) {
@@ -487,6 +487,12 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
         }
 
         return new (*this) GotoStatement{GetLocation(start), target};
+    } else if (Consume(Tk::Xyzzy)) {
+        if (consumeSemi and not Consume(Tk::SemiColon)) {
+            Error("Expected ';'");
+        }
+
+        return new (*this) XyzzyStatement{GetLocation(start)};
     } else if (Consume(Tk::If)) {
         if (not Consume(Tk::OpenParen)) {
             Error("Expected '('");

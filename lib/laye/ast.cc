@@ -13,17 +13,14 @@ void* layec::Scope::operator new(size_t sz, Parser& parser) {
     return ptr;
 }
 
-void* layec::Statement::operator new(size_t sz, Parser& parser) {
+void* layec::SemaNode::operator new(size_t sz, Parser& parser) {
     LCC_ASSERT(not parser.IsInSpeculativeParse(), "Should never be allocating syntax nodes while in speculative parse mode.");
-    auto ptr = ::operator new(sz);
-    parser.module->statements.push_back(static_cast<Statement*>(ptr));
-    return ptr;
+    return operator new(sz, *parser.module);
 }
 
-void* layec::Expr::operator new(size_t sz, Parser& parser) {
-    LCC_ASSERT(not parser.IsInSpeculativeParse(), "Should never be allocating syntax nodes while in speculative parse mode.");
+void* layec::SemaNode::operator new(size_t sz, Module& module) {
     auto ptr = ::operator new(sz);
-    parser.module->exprs.push_back(static_cast<Expr*>(ptr));
+    module.nodes.push_back(static_cast<Statement*>(ptr));
     return ptr;
 }
 
@@ -936,12 +933,8 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
             case K::DeclFunction: {
                 auto n = as<layec::FunctionDecl>(s);
                 if (not n->body()) break;
-                if (auto block = cast<layec::BlockStatement>(n->body())) {
-                    PrintChildren(block->children(), leading_text);
-                } else {
-                    layec::Statement* children[] = {n->body()};
-                    PrintChildren(children, leading_text);
-                }
+                layec::Statement* children[] = {n->body()};
+                PrintChildren(children, leading_text);
             } break;
 
             case K::DeclStruct: {

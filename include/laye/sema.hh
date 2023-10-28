@@ -25,28 +25,29 @@ public:
 private:
     void Analyse(Module* module);
     void AnalysePrototype(FunctionDecl* func);
-    void Analyse(Statement** statement);
-    bool Analyse(Expr** expr);
-    bool AnalyseAndDiscard(Expr** expr) {
+    void Analyse(Statement*& statement);
+    bool Analyse(Expr*& expr, Type* expected_type = nullptr);
+    bool AnalyseAndDiscard(Expr*& expr) {
         if (not Analyse(expr)) return false;
         Discard(expr);
         return true;
     }
+    bool AnalyseType(Type*& type);
 
     template <bool PerformConversion>
-    int ConvertImpl(Expr** expr, Type* to);
+    int ConvertImpl(Expr*& expr, Type* to);
 
-    [[nodiscard]] bool Convert(Expr** expr, Type* to);
-    void ConvertOrError(Expr** expr, Type* to);
-    [[nodiscard]] bool ConvertToCommonType(Expr** a, Expr** b);
-    [[nodiscard]] int TryConvert(Expr** expr, Type* to);
+    [[nodiscard]] bool Convert(Expr*& expr, Type* to);
+    void ConvertOrError(Expr*& expr, Type* to);
+    [[nodiscard]] bool ConvertToCommonType(Expr*& a, Expr*& b);
+    [[nodiscard]] int TryConvert(Expr*& expr, Type* to);
 
-    void Discard(Expr** expr);
+    void Discard(Expr*& expr);
     bool HasSideEffects(Expr* expr);
 
-    void InsertImplicitCast(Expr** expr_ptr, Type* ty);
-    void InsertPointerToIntegerCast(Expr** operand);
-    void WrapWithCast(Expr** expr, Type* type, CastKind kind);
+    void InsertImplicitCast(Expr*& expr_ptr, Type* ty);
+    void InsertPointerToIntegerCast(Expr*& operand);
+    void WrapWithCast(Expr*& expr, Type* type, CastKind kind);
 
     auto Ptr(Type* type) -> PointerType*;
 

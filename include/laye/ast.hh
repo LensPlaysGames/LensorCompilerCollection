@@ -13,6 +13,7 @@
 namespace lcc::laye {
 class ModuleHeader;
 class Module;
+class SemaNode;
 class Statement;
 class Decl;
 class NamedDecl;
@@ -92,8 +93,7 @@ private:
 
     std::vector<Decl*> _top_level_decls{};
 
-    std::vector<Statement*> statements{};
-    std::vector<Expr*> exprs{};
+    std::vector<SemaNode*> nodes{};
     std::vector<Scope*> scopes{};
 
     SemaState _state = SemaState::NotAnalysed;
@@ -149,8 +149,7 @@ public:
 
     void print();
 
-    friend Statement;
-    friend Expr;
+    friend SemaNode;
     friend Scope;
 };
 
@@ -231,6 +230,7 @@ enum struct TokenKind {
     Continue,
     Defer,
     Goto,
+    Xyzzy,
 
     Struct,
     Variant,
@@ -263,7 +263,8 @@ enum struct TokenKind {
     Foreign,
     Inline,
     Callconv,
-    // Impure,
+    Impure,
+    Nodiscard,
 
     Void,
     Var,
@@ -357,6 +358,7 @@ enum struct VarargsKind {
     Laye,
     C,
 };
+
 enum class CastKind {
     HardCast,
     ImplicitCast,
@@ -465,6 +467,10 @@ public:
         LCC_ASSERT(_state != SemaState::Done);
         _state = SemaState::Errored;
     }
+
+    void* operator new(size_t) = delete;
+    void* operator new(size_t sz, Parser& parser);
+    void* operator new(size_t sz, Module& module);
 };
 
 /// @brief Base class for statement syntax nodes.
@@ -503,6 +509,7 @@ public:
         Fallthrough,
         Defer,
         Goto,
+        Xyzzy,
 
         // Other
         Test,
@@ -516,9 +523,6 @@ protected:
         : SemaNode(SemaNode::Kind::Statement, location), _kind(kind) {}
 
 public:
-    void* operator new(size_t) = delete;
-    void* operator new(size_t sz, Parser& parser);
-
     auto kind() const { return _kind; }
 };
 
@@ -599,9 +603,6 @@ protected:
         : SemaNode(SemaNode::Kind::Expr, location), _kind(kind) {}
 
 public:
-    void* operator new(size_t) = delete;
-    void* operator new(size_t sz, Parser& parser);
-
     auto kind() const { return _kind; }
     auto type() const { return _type; }
 };
@@ -633,6 +634,12 @@ public:
     auto mods() const -> const std::vector<DeclModifier>& { return _mods; }
     auto name() const -> const std::string& { return _name; }
     auto template_params() const -> const std::vector<TemplateParam>& { return _template_params; }
+
+    bool has_mod(TokenKind mod_kind) const {
+        auto mod_list = mods();
+        auto e = std::find_if(mod_list.begin(), mod_list.end(), [mod_kind](const auto& m) { return m.decl_kind == mod_kind; });
+        return e != mod_list.end();
+    }
 
     auto linkage() const {
         auto mod_list = mods();
@@ -669,8 +676,14 @@ public:
         : NamedDecl(Kind::DeclFunction, location, mods, name, template_params), _returnType(returnType), _params(std::move(params)), _body(body) {}
 
     auto return_type() const { return _returnType; }
-    auto params() const -> std::span<FunctionParam const> { return _params; }
+    auto return_type() -> Type*& { return _returnType; }
+
+    auto params() const -> const std::vector<FunctionParam>& { return _params; }
+    auto params() -> std::vector<FunctionParam>& { return _params; }
+
     auto body() const { return _body; }
+    auto body() -> Statement*& { return _body; }
+    void body(Statement* body) { _body = body; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclFunction; }
 };
@@ -774,7 +787,8 @@ public:
     BlockStatement(Location location, std::vector<Statement*> children)
         : Statement(Kind::Block, location), _children(std::move(children)) {}
 
-    auto children() const -> std::span<Statement* const> { return _children; }
+    auto children() const -> const std::vector<Statement*>& { return _children; }
+    auto children() -> std::vector<Statement*>& { return _children; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Block; }
 };
@@ -979,6 +993,7 @@ public:
 
     bool is_void_return() const { return _value == nullptr; }
     auto value() const { return _value; }
+    auto value() -> Expr*& { return _value; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Return; }
 };
@@ -1031,6 +1046,14 @@ public:
     auto target() const -> const std::string& { return _target; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Goto; }
+};
+
+class XyzzyStatement : public Statement {
+public:
+    XyzzyStatement(Location location)
+        : Statement(Kind::Xyzzy, location) {}
+
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::Xyzzy; }
 };
 
 class TestStatement : public Statement {
@@ -1511,9 +1534,11 @@ public:
     usz align(const Context* ctx) const;
 
     /// Check if this is the uninitialised type.
-    bool is_unknown() const;
+    //bool is_unknown() const;
     /// Check if this is the builtin \c void type.
-    bool is_void() const;
+    bool is_void() const { return kind() == Kind::TypeVoid; }
+    /// Check if this is the builtin \c noreturn type.
+    bool is_noreturn() const { return kind() == Kind::TypeNoreturn; }
     /// Check if this is an integer type.
     bool is_integer() const { return kind() == Kind::TypeInt; }
     /// Check if this is an integer type.

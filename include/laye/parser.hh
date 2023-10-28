@@ -346,8 +346,7 @@ private:
     static OperatorKind BinaryOperatorKind(TokenKind tokenKind);
 
     friend Scope;
-    friend Statement;
-    friend Expr;
+    friend SemaNode;
 };
 } // namespace lcc::laye
 

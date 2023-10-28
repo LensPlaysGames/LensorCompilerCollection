@@ -1,6 +1,7 @@
 // 42
 
-int main() {
+i32 main()
+{
     int cond = 12;
     if (cond > 0)
         return 42;
