@@ -145,7 +145,13 @@ void Module::emit() {
     switch (_ctx->format()->format()) {
         case Format::INVALID: LCC_UNREACHABLE();
         case Format::LLVM_TEXTUAL_IR: {
-            fmt::print("{}", llvm());
+            auto llvm_ir = llvm();
+            auto out_file = _ctx->output_file_path();
+            if (out_file.empty())
+                fmt::print("{}", llvm_ir);
+            else {
+                File::WriteOrTerminate(llvm_ir.c_str(), llvm_ir.size(), out_file);
+            }
         } break;
         case Format::GNU_AS_ATT_ASSEMBLY: {
             auto machine_ir = mir();

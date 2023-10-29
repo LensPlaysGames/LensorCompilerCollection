@@ -54,7 +54,7 @@ auto lcc::File::TempPath(std::string_view extension) -> fs::path {
     return f;
 }
 
-bool lcc::File::Write(void* data, usz size, const fs::path& file) {
+bool lcc::File::Write(const void* data, usz size, const fs::path& file) {
     auto f = std::fopen(file.string().c_str(), "wb");
     if (not f) return false;
     defer { std::fclose(f); };
@@ -68,7 +68,7 @@ bool lcc::File::Write(void* data, usz size, const fs::path& file) {
     return true;
 }
 
-void lcc::File::WriteOrTerminate(void* data, usz size, const fs::path& file) {
+void lcc::File::WriteOrTerminate(const void* data, usz size, const fs::path& file) {
     if (not File::Write(data, size, file))
         Diag::Fatal("Failed to write to file '{}': {}", file.string(), std::strerror(errno));
 }

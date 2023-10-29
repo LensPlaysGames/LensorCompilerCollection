@@ -25,10 +25,10 @@ public:
     static auto TempPath(std::string_view extension) -> fs::path;
 
     /// Write to a file on disk.
-    [[nodiscard]] static bool Write(void* data, usz size, const fs::path& file);
+    [[nodiscard]] static bool Write(const void* data, usz size, const fs::path& file);
 
     /// Write to a file on disk and terminate on error.
-    static void WriteOrTerminate(void* data, usz size, const fs::path& file);
+    static void WriteOrTerminate(const void* data, usz size, const fs::path& file);
 
     /// We cannot move or copy files.
     File(const File&) = delete;

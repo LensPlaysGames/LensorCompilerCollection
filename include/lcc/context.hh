@@ -27,6 +27,8 @@ class Context {
     const Target* _target{};
     const Format* _format{};
 
+    std::string _output_file_path{};
+
 public:
     /// IR type caches.
     std::unordered_map<usz, Type*> integer_types;
@@ -86,6 +88,9 @@ public:
 
     /// Get the target.
     [[nodiscard]] auto format() const -> const Format* { return _format; }
+
+    [[nodiscard]] auto output_file_path() const { return _output_file_path; }
+    void output_file_path(std::string path) { _output_file_path = std::move(path); }
 
 private:
     /// Register a file in the context.

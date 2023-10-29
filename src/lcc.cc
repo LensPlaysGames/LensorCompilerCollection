@@ -110,6 +110,11 @@ int main(int argc, char** argv) {
         }
     }
     lcc::Context context{detail::default_target, format};
+
+    if (auto output_file_path = opts.get<"-o">()) {
+        context.output_file_path(*output_file_path);
+    }
+
     auto path_str = input_files[0].path.string();
     auto& file = context.create_file(
         std::move(input_files[0].path),
