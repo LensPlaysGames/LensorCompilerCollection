@@ -22,6 +22,7 @@ class Type;
 class Symbol;
 class Scope;
 class Parser;
+struct FunctionParam;
 
 /// State of semantic analysis for an expression or type.
 enum struct SemaState {
@@ -94,6 +95,7 @@ private:
     std::vector<Decl*> _top_level_decls{};
 
     std::vector<SemaNode*> nodes{};
+    std::vector<FunctionParam*> params{};
     std::vector<Scope*> scopes{};
 
     SemaState _state = SemaState::NotAnalysed;
@@ -150,6 +152,7 @@ public:
     void print();
 
     friend SemaNode;
+    friend FunctionParam;
     friend Scope;
 };
 
@@ -318,6 +321,7 @@ std::string ToString(TokenKind kind);
 std::string ToString(OperatorKind kind);
 
 struct DeclModifier {
+    Location location;
     TokenKind decl_kind;
     std::string string_value{};
     CallConv call_conv{};
@@ -325,6 +329,7 @@ struct DeclModifier {
 
 struct TemplateParam {
     std::string name;
+    Location location;
     Type* value_type;
 
     bool is_value_param() const { return value_type != nullptr; }
@@ -333,11 +338,16 @@ struct TemplateParam {
 struct FunctionParam {
     Type* type;
     std::string name;
+    Location location;
     Expr* init;
+
+    void* operator new(size_t) = delete;
+    void* operator new(size_t sz, Module& module);
 };
 
 struct EnumVariant {
     std::string name;
+    Location location;
     Expr* init;
 };
 
@@ -627,17 +637,26 @@ class NamedDecl : public Decl {
     std::string _name;
     std::vector<TemplateParam> _template_params{};
 
+    std::string _mangled_name;
+
 protected:
     NamedDecl(Kind kind, Location location, std::vector<DeclModifier> mods, std::string name)
-        : Decl(kind, location), _mods(std::move(mods)), _name(std::move(name)) {}
+        : Decl(kind, location), _mods(std::move(mods)), _name(std::move(name)) {
+        _mangled_name = _name;
+    }
 
     NamedDecl(Kind kind, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params)
-        : Decl(kind, location), _mods(std::move(mods)), _name(std::move(name)), _template_params(std::move(template_params)) {}
+        : Decl(kind, location), _mods(std::move(mods)), _name(std::move(name)), _template_params(std::move(template_params)) {
+        _mangled_name = _name;
+    }
 
 public:
     auto mods() const -> const std::vector<DeclModifier>& { return _mods; }
     auto name() const -> const std::string& { return _name; }
     auto template_params() const -> const std::vector<TemplateParam>& { return _template_params; }
+
+    auto mangled_name() const -> const std::string& { return _mangled_name; }
+    void mangled_name(std::string mangled_name) { _mangled_name = std::move(mangled_name); }
 
     bool has_mod(TokenKind mod_kind) const {
         auto mod_list = mods();
@@ -650,6 +669,13 @@ public:
         if (auto e = std::find_if(mod_list.begin(), mod_list.end(), [](const auto& m) { return m.decl_kind == TokenKind::Export; }); e != mod_list.end())
             return Linkage::Exported;
         return Linkage::Internal;
+    }
+
+    auto calling_convention() const {
+        auto mod_list = mods();
+        if (auto e = std::find_if(mod_list.begin(), mod_list.end(), [](const auto& m) { return m.decl_kind == TokenKind::Callconv; }); e != mod_list.end())
+            return e->call_conv;
+        return CallConv::Laye;
     }
 
     static bool classof(const Statement* statement) { return +statement->kind() >= +Kind::DeclBinding and +statement->kind() <= +Kind::DeclAlias; }
@@ -671,19 +697,19 @@ public:
 
 class FunctionDecl : public NamedDecl {
     Type* _returnType;
-    std::vector<FunctionParam> _params;
+    std::vector<FunctionParam*> _params;
     Statement* _body;
     // TODO(local): varargs
 
 public:
-    FunctionDecl(Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<FunctionParam> params, Statement* body)
+    FunctionDecl(Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<FunctionParam*> params, Statement* body)
         : NamedDecl(Kind::DeclFunction, location, mods, name, template_params), _returnType(returnType), _params(std::move(params)), _body(body) {}
 
     auto return_type() const { return _returnType; }
     auto return_type() -> Type*& { return _returnType; }
 
-    auto params() const -> const std::vector<FunctionParam>& { return _params; }
-    auto params() -> std::vector<FunctionParam>& { return _params; }
+    auto params() const -> const std::vector<FunctionParam*>& { return _params; }
+    auto params() -> std::vector<FunctionParam*>& { return _params; }
 
     auto body() const { return _body; }
     auto body() -> Statement*& { return _body; }

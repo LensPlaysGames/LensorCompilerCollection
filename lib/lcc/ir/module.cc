@@ -133,7 +133,7 @@ void Module::lower() {
             // XMM5, YMM5                   Volatile     Must be preserved as needed by caller; sixth vector-type argument when __vectorcall is used
             // XMM6:XMM15, YMM6:YMM15       Non volatile (XMM), Volatile (upper half of YMM). Must be preserved by callee. YMM registers must be preserved as needed by caller.
         } else if (_ctx->target() == Target::x86_64_linux) {
-            LCC_ASSERT(false, "TODO: SysV x86_64 Calling Convention Lowering");
+            //LCC_ASSERT(false, "TODO: SysV x86_64 Calling Convention Lowering");
         }
 
     } else {

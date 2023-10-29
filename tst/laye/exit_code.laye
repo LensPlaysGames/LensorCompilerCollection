@@ -1,3 +1,3 @@
 // 69
 
-i32 main() => 69;
+export i32 main() => 69;

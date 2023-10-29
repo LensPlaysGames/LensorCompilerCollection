@@ -24,6 +24,12 @@ void* layec::SemaNode::operator new(size_t sz, Module& module) {
     return ptr;
 }
 
+void* layec::FunctionParam::operator new(size_t sz, Module& module) {
+    auto ptr = ::operator new(sz);
+    module.params.push_back(static_cast<FunctionParam*>(ptr));
+    return ptr;
+}
+
 auto layec::LayeContext::parse_laye_file(File& file) -> Module* {
     auto lookup_path = fs::absolute(file.path()).string();
     if (not lookup_module(lookup_path)) {
@@ -240,6 +246,7 @@ std::string layec::ToString(Expr::Kind kind) {
         case Ek::Or: return "Or";
         case Ek::Xor: return "Xor";
         case Ek::UnwrapNilable: return "UnwrapNilable";
+        case Ek::Constant: return "Constant";
         case Ek::LookupName: return "LookupName";
         case Ek::LookupPath: return "LookupPath";
         case Ek::FieldIndex: return "FieldIndex";
@@ -278,6 +285,7 @@ std::string layec::ToString(Expr::Kind kind) {
         case Ek::TypeBool: return "TypeBool";
         case Ek::TypeInt: return "TypeInt";
         case Ek::TypeFloat: return "TypeFloat";
+        case Ek::TypePoison: return "TypePoison";
         default: return "<unknown>";
     }
 }
@@ -617,7 +625,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
                 auto params = n->params();
                 for (lcc::usz i = 0; i < params.size(); i++) {
                     if (i > 0) out += fmt::format("{}, ", C(White));
-                    out += fmt::format("{} {}{}", params[i].type->string(use_colour), C(White), params[i].name);
+                    out += fmt::format("{} {}{}", params[i]->type->string(use_colour), C(White), params[i]->name);
                 }
                 out += fmt::format("{})\n", C(White));
             } break;

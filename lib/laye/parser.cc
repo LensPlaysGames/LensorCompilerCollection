@@ -168,16 +168,16 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
             }
 
             if (At(Tk::Inline, Tk::Export, Tk::Const, Tk::Nodiscard, Tk::Impure)) {
-                modifiers.push_back(DeclModifier{tok.kind});
+                modifiers.push_back(DeclModifier{tok.location, tok.kind});
                 NextToken();
             } else if (At(Tk::Foreign)) {
                 NextToken();
 
                 if (At(Tk::LitString)) {
-                    modifiers.push_back(DeclModifier{Tk::Foreign, tok.text});
+                    modifiers.push_back(DeclModifier{tok.location, Tk::Foreign, tok.text});
                     NextToken();
                 } else {
-                    modifiers.push_back(DeclModifier{Tk::Foreign});
+                    modifiers.push_back(DeclModifier{tok.location, Tk::Foreign});
                 }
             } else if (At(Tk::Callconv)) {
                 NextToken();
@@ -205,7 +205,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
                     if (allocate) Error("Expected ')' to close calling convention specification");
                 }
 
-                modifiers.push_back(DeclModifier{Tk::Callconv, "", call_conv});
+                modifiers.push_back(DeclModifier{tok.location, Tk::Callconv, "", call_conv});
             }
         }
 
@@ -253,11 +253,12 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
 
     if (Consume(Tk::OpenParen)) {
         // TODO(local): parse varargs in function decls
-        std::vector<FunctionParam> params{};
+        std::vector<FunctionParam*> params{};
         while (not At(Tk::Eof, Tk::CloseParen)) {
             auto type = ParseType();
 
             auto param_name = tok.text;
+            auto param_location = tok.location;
             if (not Consume(Tk::Ident)) {
                 param_name.clear();
                 Error("Expected identifier");
@@ -268,7 +269,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
                 init = ParseExpr();
             }
 
-            params.push_back(FunctionParam{*type, param_name, *init});
+            params.push_back(new (*module) FunctionParam{*type, param_name, param_location, *init});
 
             if (not Consume(Tk::Comma)) break;
 
@@ -788,20 +789,23 @@ auto Parser::TryParseTemplateParams(bool allocate) -> Result<std::vector<Templat
             while (not At(Tk::Eof)) {
                 if (At(Tk::Ident) and PeekAt(1, Tk::Comma, Tk::Greater, Tk::GreaterGreater)) {
                     std::string name = tok.text;
+                    auto location = tok.location;
                     NextToken();
 
-                    template_params.push_back(TemplateParam{std::move(name), nullptr});
+                    template_params.push_back(TemplateParam{std::move(name), location, nullptr});
                 } else {
                     auto type = ParseType();
                     if (not type) goto continue_template_list;
 
                     std::string name = tok.text;
+                    auto location = tok.location;
+
                     if (not Consume(Tk::Ident)) {
                         name.clear();
                         Error("Expected identifier to name template parameter");
                     }
 
-                    template_params.push_back(TemplateParam{std::move(name), *type});
+                    template_params.push_back(TemplateParam{std::move(name), location, *type});
                 }
 
             continue_template_list:;

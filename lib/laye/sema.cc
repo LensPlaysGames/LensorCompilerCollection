@@ -68,7 +68,7 @@ void layec::Sema::Analyse(Module* module) {
 
             LCC_ASSERT(func_decl->return_type()->sema_done_or_errored(), "should have finished function return type analysis");
             for (auto param : func_decl->params()) {
-                LCC_ASSERT(param.type->sema_done_or_errored(), "should have finished function param type analysis");
+                LCC_ASSERT(param->type->sema_done_or_errored(), "should have finished function param type analysis");
             }
         }
     }
@@ -93,8 +93,8 @@ void layec::Sema::AnalysePrototype(FunctionDecl* func) {
     LCC_ASSERT(func->return_type()->sema_done_or_errored());
 
     for (auto& param : func->params()) {
-        AnalyseType(param.type);
-        LCC_ASSERT(param.type->sema_done_or_errored());
+        AnalyseType(param->type);
+        LCC_ASSERT(param->type->sema_done_or_errored());
     }
 
     if (func->return_type()->is_void()) {
@@ -279,7 +279,12 @@ int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
 
             if constexpr (PerformConversion) {
                 InsertImplicitCast(expr, to);
+
+                auto type = expr->type();
+                LCC_ASSERT(type);
+
                 expr = new (*module()) ConstantExpr(expr, res);
+                expr->type(type);
             }
 
             return Score(1);
