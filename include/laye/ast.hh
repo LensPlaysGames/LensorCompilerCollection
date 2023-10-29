@@ -569,6 +569,7 @@ public:
         LitFloat,
 
         // Types
+        TypePoison,
         TypeInfer,
         TypeNilable,
         TypeErrUnion,
@@ -605,6 +606,9 @@ protected:
 public:
     auto kind() const { return _kind; }
     auto type() const { return _type; }
+    void type(Type* type) { _type = type; }
+
+    bool evaluate(const LayeContext* laye_context, EvalResult& out, bool required);
 };
 
 std::string ToString(Expr::Kind kind);
@@ -1289,13 +1293,16 @@ public:
 class CastExpr : public Expr {
     Type* _type;
     Expr* _value;
+    CastKind _cast_kind;
 
 public:
-    CastExpr(Location location, Type* type, Expr* value)
-        : Expr(Kind::Cast, location), _type(type), _value(value) {}
+    CastExpr(Location location, Type* type, Expr* value, CastKind cast_kind)
+        : Expr(Kind::Cast, location), _type(type), _value(value), _cast_kind(cast_kind) {}
 
     auto type() const { return _type; }
     auto value() const { return _value; }
+    auto value() -> Expr*& { return _value; }
+    auto cast_kind() const { return _cast_kind; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Cast; }
 };
@@ -1533,6 +1540,7 @@ public:
     /// \return The alignment of this type, in bits.
     usz align(const Context* ctx) const;
 
+    bool is_poison() const { return kind() == Kind::TypePoison; }
     /// Check if this is the uninitialised type.
     //bool is_unknown() const;
     /// Check if this is the builtin \c void type.
@@ -1557,7 +1565,15 @@ public:
     /// Check if types are equal to each other.
     static bool Equal(const Type* a, const Type* b);
 
-    static bool classof(const Expr* expr) { return +expr->kind() >= +Kind::TypeInfer && +expr->kind() <= +Kind::TypeFloat; }
+    static bool classof(const Expr* expr) { return +expr->kind() >= +Kind::TypePoison && +expr->kind() <= +Kind::TypeFloat; }
+};
+
+class PoisonType : public Type {
+public:
+    PoisonType(Location location)
+        : Type(Kind::TypePoison, location) {}
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypePoison; }
 };
 
 class InferType : public Type {

@@ -1,5 +1,5 @@
-#include <filesystem>
 #include <laye/ast.hh>
+#include <bit>
 #include <laye/parser.hh>
 #include <lcc/utils/ast_printer.hh>
 #include <lcc/utils/rtti.hh>
@@ -200,83 +200,116 @@ std::string layec::ToString(layec::OperatorKind kind) {
 }
 
 std::string layec::ToString(Statement::Kind kind) {
+    using Sk = Statement::Kind;
     switch (kind) {
-        case Statement::Kind::OverloadSet: return "OverloadSet";
-        case Statement::Kind::DeclBinding: return "DeclBinding";
-        case Statement::Kind::DeclFunction: return "DeclFunction";
-        case Statement::Kind::DeclStruct: return "DeclStruct";
-        case Statement::Kind::DeclEnum: return "DeclEnum";
-        case Statement::Kind::DeclAlias: return "DeclAlias";
-        case Statement::Kind::DeclImport: return "DeclImport";
-        case Statement::Kind::Block: return "Block";
-        case Statement::Kind::Assign: return "Assign";
-        case Statement::Kind::Delete: return "Delete";
-        case Statement::Kind::Discard: return "Discard";
-        case Statement::Kind::Expr: return "Expr";
-        case Statement::Kind::Empty: return "Empty";
-        case Statement::Kind::If: return "If";
-        case Statement::Kind::For: return "For";
-        case Statement::Kind::ForEach: return "ForEach";
-        case Statement::Kind::DoFor: return "DoFor";
-        case Statement::Kind::Switch: return "Switch";
-        case Statement::Kind::Return: return "Return";
-        case Statement::Kind::Break: return "Break";
-        case Statement::Kind::Continue: return "Continue";
-        case Statement::Kind::Fallthrough: return "Fallthrough";
-        case Statement::Kind::Defer: return "Defer";
-        case Statement::Kind::Goto: return "Goto";
-        case Statement::Kind::Test: return "Test";
+        case Sk::OverloadSet: return "OverloadSet";
+        case Sk::DeclBinding: return "DeclBinding";
+        case Sk::DeclFunction: return "DeclFunction";
+        case Sk::DeclStruct: return "DeclStruct";
+        case Sk::DeclEnum: return "DeclEnum";
+        case Sk::DeclAlias: return "DeclAlias";
+        case Sk::DeclImport: return "DeclImport";
+        case Sk::Block: return "Block";
+        case Sk::Assign: return "Assign";
+        case Sk::Delete: return "Delete";
+        case Sk::Discard: return "Discard";
+        case Sk::Expr: return "Expr";
+        case Sk::Empty: return "Empty";
+        case Sk::If: return "If";
+        case Sk::For: return "For";
+        case Sk::ForEach: return "ForEach";
+        case Sk::DoFor: return "DoFor";
+        case Sk::Switch: return "Switch";
+        case Sk::Return: return "Return";
+        case Sk::Break: return "Break";
+        case Sk::Continue: return "Continue";
+        case Sk::Fallthrough: return "Fallthrough";
+        case Sk::Defer: return "Defer";
+        case Sk::Goto: return "Goto";
+        case Sk::Test: return "Test";
         default: return "<unknown>";
     }
 }
 
 std::string layec::ToString(Expr::Kind kind) {
+    using Ek = Expr::Kind;
     switch (kind) {
-        case Expr::Kind::Unary: return "Unary";
-        case Expr::Kind::Binary: return "Binary";
-        case Expr::Kind::And: return "And";
-        case Expr::Kind::Or: return "Or";
-        case Expr::Kind::Xor: return "Xor";
-        case Expr::Kind::UnwrapNilable: return "UnwrapNilable";
-        case Expr::Kind::LookupName: return "LookupName";
-        case Expr::Kind::LookupPath: return "LookupPath";
-        case Expr::Kind::FieldIndex: return "FieldIndex";
-        case Expr::Kind::ValueIndex: return "ValueIndex";
-        case Expr::Kind::Slice: return "Slice";
-        case Expr::Kind::Call: return "Call";
-        case Expr::Kind::Ctor: return "Ctor";
-        case Expr::Kind::Not: return "Not";
-        case Expr::Kind::Cast: return "Cast";
-        case Expr::Kind::New: return "New";
-        case Expr::Kind::Try: return "Try";
-        case Expr::Kind::Catch: return "Catch";
-        case Expr::Kind::Do: return "Do";
-        case Expr::Kind::Sizeof: return "Sizeof";
-        case Expr::Kind::Offsetof: return "Offsetof";
-        case Expr::Kind::Alignof: return "Alignof";
-        case Expr::Kind::LitNil: return "LitNil";
-        case Expr::Kind::LitBool: return "LitBool";
-        case Expr::Kind::LitString: return "LitString";
-        case Expr::Kind::LitInt: return "LitInt";
-        case Expr::Kind::LitFloat: return "LitFloat";
-        case Expr::Kind::TypeInfer: return "TypeInfer";
-        case Expr::Kind::TypeNilable: return "TypeNilable";
-        case Expr::Kind::TypeErrUnion: return "TypeErrUnion";
-        case Expr::Kind::TypeLookupName: return "TypeLookupName";
-        case Expr::Kind::TypeLookupPath: return "TypeLookupPath";
-        case Expr::Kind::TypeArray: return "TypeArray";
-        case Expr::Kind::TypeSlice: return "TypeSlice";
-        case Expr::Kind::TypePointer: return "TypePointer";
-        case Expr::Kind::TypeBuffer: return "TypeBuffer";
-        case Expr::Kind::TypeFunc: return "TypeFunc";
-        case Expr::Kind::TypeNoreturn: return "TypeNoreturn";
-        case Expr::Kind::TypeRawptr: return "TypeRawptr";
-        case Expr::Kind::TypeVoid: return "TypeVoid";
-        case Expr::Kind::TypeString: return "TypeString";
-        case Expr::Kind::TypeBool: return "TypeBool";
-        case Expr::Kind::TypeInt: return "TypeInt";
-        case Expr::Kind::TypeFloat: return "TypeFloat";
+        case Ek::Unary: return "Unary";
+        case Ek::Binary: return "Binary";
+        case Ek::And: return "And";
+        case Ek::Or: return "Or";
+        case Ek::Xor: return "Xor";
+        case Ek::UnwrapNilable: return "UnwrapNilable";
+        case Ek::LookupName: return "LookupName";
+        case Ek::LookupPath: return "LookupPath";
+        case Ek::FieldIndex: return "FieldIndex";
+        case Ek::ValueIndex: return "ValueIndex";
+        case Ek::Slice: return "Slice";
+        case Ek::Call: return "Call";
+        case Ek::Ctor: return "Ctor";
+        case Ek::Not: return "Not";
+        case Ek::Cast: return "Cast";
+        case Ek::New: return "New";
+        case Ek::Try: return "Try";
+        case Ek::Catch: return "Catch";
+        case Ek::Do: return "Do";
+        case Ek::Sizeof: return "Sizeof";
+        case Ek::Offsetof: return "Offsetof";
+        case Ek::Alignof: return "Alignof";
+        case Ek::LitNil: return "LitNil";
+        case Ek::LitBool: return "LitBool";
+        case Ek::LitString: return "LitString";
+        case Ek::LitInt: return "LitInt";
+        case Ek::LitFloat: return "LitFloat";
+        case Ek::TypeInfer: return "TypeInfer";
+        case Ek::TypeNilable: return "TypeNilable";
+        case Ek::TypeErrUnion: return "TypeErrUnion";
+        case Ek::TypeLookupName: return "TypeLookupName";
+        case Ek::TypeLookupPath: return "TypeLookupPath";
+        case Ek::TypeArray: return "TypeArray";
+        case Ek::TypeSlice: return "TypeSlice";
+        case Ek::TypePointer: return "TypePointer";
+        case Ek::TypeBuffer: return "TypeBuffer";
+        case Ek::TypeFunc: return "TypeFunc";
+        case Ek::TypeNoreturn: return "TypeNoreturn";
+        case Ek::TypeRawptr: return "TypeRawptr";
+        case Ek::TypeVoid: return "TypeVoid";
+        case Ek::TypeString: return "TypeString";
+        case Ek::TypeBool: return "TypeBool";
+        case Ek::TypeInt: return "TypeInt";
+        case Ek::TypeFloat: return "TypeFloat";
         default: return "<unknown>";
+    }
+}
+
+bool layec::Expr::evaluate(const layec::LayeContext* laye_context, layec::EvalResult& out, bool required) {
+    LCC_ASSERT(!required || sema_ok(), "Cannot evaluate ill-formed or unchecked expression");
+    switch (kind()) {
+        case Kind::LitInt:
+            out = i64(as<LitIntExpr>(this)->value());
+            return true;
+        
+        default: return false;
+    }
+}
+
+auto layec::Type::size(const Context* ctx) const -> usz {
+    if (auto st = cast<SizableType>(this)) {
+        return (usz)st->bit_width();
+    }
+
+    switch (kind()) {
+        default: LCC_TODO();
+    }
+}
+
+auto layec::Type::align(const Context* ctx) const -> usz {
+    if (auto st = cast<SizableType>(this)) {
+        return std::bit_ceil((usz)st->bit_width());
+    }
+
+    switch (kind()) {
+        default: LCC_TODO();
     }
 }
 
@@ -908,6 +941,17 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
                 PrintBasicHeader("LitFloatExpr", n);
                 out += fmt::format(" {}{}\n", C(Cyan), n->value());
             } break;
+
+            case K::Constant: {
+                auto n = cast<layec::ConstantExpr>(e);
+                PrintBasicHeader("ConstantExpr", e);
+                auto value = n->value();
+                if (value.is_i64()) {
+                    out += fmt::format(" {}{}\n", C(Cyan), value.as_i64());
+                } else {
+                    out += "???\n";
+                }
+            } break;
         }
     }
 
@@ -1217,6 +1261,12 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
             case K::Do: {
                 auto n = as<layec::DoExpr>(e);
                 PrintChildren(n->statements(), leading_text);
+            } break;
+
+            case K::Constant: {
+                auto n = as<layec::ConstantExpr>(e);
+                layec::SemaNode* children[] = {n->expr()};
+                PrintChildren(children, leading_text);
             } break;
         }
     }

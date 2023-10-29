@@ -1,4 +1,7 @@
 #include <laye/sema.hh>
+#include <lcc/context.hh>
+#include <lcc/target.hh>
+#include <lcc/utils/macros.hh>
 
 namespace layec = lcc::laye;
 
@@ -122,6 +125,8 @@ void layec::Sema::Analyse(Statement*& statement) {
                 }
 
                 LCC_ASSERT(is<BlockStatement>(body));
+
+                tempset curr_func = s;
                 Analyse(body);
             }
         } break;
@@ -133,13 +138,25 @@ void layec::Sema::Analyse(Statement*& statement) {
         } break;
 
         case Statement::Kind::Return: {
+            LCC_ASSERT(curr_func);
             auto s = as<ReturnStatement>(statement);
-            // TODO(local): error if the function is noreturn
+            
+            if (curr_func->return_type()->is_noreturn()) {
+                Error(s->location(), "Cannot return from noreturn function.");
+            }
+
             if (s->is_void_return()) {
-                // TODO(local): error if the function does not have void type
+                if (not curr_func->return_type()->is_void()) {
+                    Error(s->location(), "Nonvoid function requires a return value.");
+                }
             } else {
-                // TODO(local): error if the function does has void type
                 Analyse(s->value());
+                if (curr_func->return_type()->is_void()) {
+                    Error(s->location(), "Cannot return a value from a void function.");
+                } else {
+                    LCC_ASSERT(curr_func->return_type()->sema_done_or_errored());
+                    ConvertOrError(s->value(), curr_func->return_type());
+                }
             }
         } break;
 
@@ -154,24 +171,47 @@ void layec::Sema::Analyse(Statement*& statement) {
 }
 
 bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
+    LCC_ASSERT(curr_func);
+
+    if (expr->sema_state() != SemaState::NotAnalysed)
+        return expr->sema_ok();
     expr->set_sema_in_progress();
 
     auto kind = expr->kind();
     switch (kind) {
-        case Expr::Kind::LitInt: {
+        case Expr::Kind::Cast: {
+            auto e = as<CastExpr>(expr);
+            if (e->cast_kind() == CastKind::ImplicitCast) {
+                expr->type(e->type());
+                expr->set_sema_done();
+                break;
+            }
+
+            if (not Analyse(e->value(), e->type()))
+                break;
             
-        } break;
+            if (Convert(e->value(), e->type()))
+                break;
+            
+            LCC_TODO();
+        }
+
+        case Expr::Kind::LitInt:
+            expr->type(new (*module()) IntType(expr->location(), true, (int)context()->target()->size_of_pointer));
+            break;
 
         default: {
             if (auto t = cast<Type>(expr)) return AnalyseType(t);
             Warning(expr->location(), "Unhandled expression in Sema::Analyze(Expr*&): {}", ToString(kind));
             expr->set_sema_errored();
+            expr->type(new (*module()) PoisonType{expr->location()});
         } break;
     }
 
     if (not expr->sema_done_or_errored())
         expr->set_sema_done();
 
+    LCC_ASSERT(expr->type());
     return expr->sema_ok();
 }
 
@@ -182,8 +222,10 @@ bool layec::Sema::AnalyseType(Type*& type) {
     switch (kind) {
         case Expr::Kind::TypeInt: {
             auto t = as<IntType>(type);
-            if (t->bit_width() <= 0 or t->bit_width() > 65535)
+            if (t->bit_width() <= 0 or t->bit_width() > 65535) {
+                Error(type->location(), "Integer type bit width out of range (1 to 65535)");
                 type->set_sema_errored();
+            }
         } break;
 
         default: {
@@ -220,6 +262,38 @@ int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
     if (from->is_integer() and to->is_bool()) {
         if constexpr (PerformConversion) InsertImplicitCast(expr, to);
         return Score(1);
+    }
+
+    if (from->is_integer() and to->is_integer()) {
+        EvalResult res;
+        if (expr->evaluate(laye_context(), res, false)) {
+            auto val = res.as_i64();
+            if (val < 0 and not cast<IntType>(to)->is_signed()) {
+                return ConversionImpossible;
+            }
+
+            auto bits = to->size(context());
+            if (not cast<IntType>(from)->is_signed() and bits < 64 and u64(val) > u64(utils::MaxBitValue(bits))) {
+                return ConversionImpossible;
+            }
+
+            if constexpr (PerformConversion) {
+                InsertImplicitCast(expr, to);
+                expr = new (*module()) ConstantExpr(expr, res);
+            }
+
+            return Score(1);
+        }
+
+        if (
+            from->size(context()) <= to->size(context()) and
+            (not cast<IntType>(from)->is_signed() or cast<IntType>(to)->is_signed())
+        ) {
+            if constexpr (PerformConversion)
+                InsertImplicitCast(expr, to);
+
+            return Score(1);
+        }
     }
 
     if (from->is_function() and to->is_pointer() and Type::Equal(cast<SingleElementType>(to)->elem_type(), from)) {
@@ -259,8 +333,8 @@ bool layec::Sema::HasSideEffects(Expr* expr) {
     LCC_ASSERT(false);
 }
 
-void layec::Sema::InsertImplicitCast(Expr*& expr_ptr, Type* ty) {
-    LCC_ASSERT(false);
+void layec::Sema::InsertImplicitCast(Expr*& expr, Type* ty) {
+    WrapWithCast(expr, ty, CastKind::ImplicitCast);
 }
 
 void layec::Sema::InsertPointerToIntegerCast(Expr*& operand) {
@@ -268,7 +342,9 @@ void layec::Sema::InsertPointerToIntegerCast(Expr*& operand) {
 }
 
 void layec::Sema::WrapWithCast(Expr*& expr, Type* type, CastKind kind) {
-    LCC_ASSERT(false);
+    auto wrapper = new (*module()) CastExpr(expr->location(), type, expr, kind);
+    Analyse((Expr*&)wrapper);
+    expr = wrapper;
 }
 
 auto layec::Sema::Ptr(Type* type) -> PointerType* {

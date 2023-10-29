@@ -12,6 +12,8 @@ class Sema {
     /// Whether to use colours in diagnostics.
     bool use_colours;
 
+    FunctionDecl* curr_func;
+
     Sema(LayeContext* context, Module* module, bool use_colours)
         : _laye_context(context), _module(module), use_colours(use_colours) {}
 
