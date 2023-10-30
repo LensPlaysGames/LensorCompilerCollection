@@ -1,5 +1,8 @@
-// 0
+// R ./build/lcc --ir %s
 
+// * main : i32():
+// +   bb0:
+// +     return i32 0
 i32 main()
 {
     xyzzy;

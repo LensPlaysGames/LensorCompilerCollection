@@ -1,8 +1,20 @@
-// 0
-// Hello, hunter!
+// R ./build/lcc --ir %s
+// p re
+// p nocap
+// d t %[0-9]+
 
+// * (?<global>[^:\s]+) : i8\[15\] = "Hello, hunter!\\00"
+
+// * puts : i32(ptr %0) external
 foreign callconv(cdecl) i32 puts(i8[*] s);
 
+// * main : i32():
+// +   bb0:
+// +     (?<str>$t) = alloca ptr
+// +     store ptr @$global into $str
+// +     (?<l>$t) = load ptr from $str
+// +     $t = call @puts (ptr $l) -> i32
+// +     return i32 0
 i32 main()
 {
     i8[*] str = "Hello, hunter!";

@@ -256,119 +256,136 @@ target_link_libraries(lcc PRIVATE options liblcc)
 # Allow arbitrary characters in test names.
 cmake_policy(SET CMP0110 NEW)
 
-# User Option(s)
-set(
-    NATIVE_OPT TRUE
-    CACHE BOOL
-    "Whether or not to optimise for the system being compiled on. This should be true *unless* you are making distributed binaries."
-)
-
-set(
-    BUILD_NATIVE_TESTING TRUE
-    CACHE BOOL
-    "Whether or not to include native tests in ctest"
-)
-
-set(
-    BUILD_OPT_TESTING FALSE
-    CACHE BOOL
-    "Whether or not to include optimisation tests in ctest"
-)
-
-set(
-    BUILD_OBJ_TESTING FALSE
-    CACHE BOOL
-    "Whether or not to include object file target tests in ctest (default just includes assembly)"
-)
-
-set(
-    BUILD_LLVM_TESTING FALSE
-    CACHE BOOL
-    "Whether or not to include LLVM target tests in ctest (default just includes assembly)"
-)
-
-include(CTest)
 if (BUILD_TESTING)
-    add_executable(test_instantiator tst/main.cc)
-    target_link_libraries(test_instantiator PRIVATE fmt options)
-    target_compile_options(test_instantiator PRIVATE)
-
-    ## User needs to specify a linker.
-    if (NOT DEFINED INTERCEPT_TEST_LINKER)
-        set(INTERCEPT_TEST_LINKER "${CMAKE_CXX_COMPILER}")
-        message (WARNING "Please specify a linker for tests using -DINTERCEPT_TEST_LINKER=/path/to/linker. The path must be an absolute path and point to a version of gcc or clang (not clang-cl!)")
-    endif ()
-    message(STATUS "Using linker ${INTERCEPT_TEST_LINKER} for tests.")
-
-    file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
-    foreach (test ${tests})
-        if (BUILD_NATIVE_TESTING)
-            add_test(
-                NAME ASM_${test}
-                COMMAND $<TARGET_FILE:test_instantiator>
-                asm
-                "${test}"
-                $<TARGET_FILE:lcc>
-                "${INTERCEPT_TEST_LINKER}"
-                WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-                COMMAND_EXPAND_LISTS
-            )
-            set_tests_properties(ASM_${test} PROPERTIES TIMEOUT 10)
-        endif()
-        if (BUILD_OBJ_TESTING)
-            if (WIN32)
-                add_test(
-                    NAME OBJ_${test}
-                    COMMAND $<TARGET_FILE:test_instantiator>
-                    coff_object
-                    "${test}"
-                    $<TARGET_FILE:lcc>
-                    "${INTERCEPT_TEST_LINKER}"
-                    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-                    COMMAND_EXPAND_LISTS
-                )
-                set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 10)
-            else()
-                add_test(
-                    NAME OBJ_${test}
-                    COMMAND $<TARGET_FILE:test_instantiator>
-                    elf_object
-                    "${test}"
-                    $<TARGET_FILE:lcc>
-                    "${INTERCEPT_TEST_LINKER}"
-                    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-                    COMMAND_EXPAND_LISTS
-                )
-                set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 10)
-            endif()
-        endif()
-        if (BUILD_OPT_TESTING)
-            add_test(
-                NAME OPT_${test}
-                COMMAND $<TARGET_FILE:test_instantiator>
-                asm
-                "${test}"
-                $<TARGET_FILE:lcc>
-                "${INTERCEPT_TEST_LINKER}"
-                -O
-                WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-                COMMAND_EXPAND_LISTS
-            )
-            set_tests_properties(OPT_${test} PROPERTIES TIMEOUT 10)
-        endif()
-        if (BUILD_LLVM_TESTING)
-            add_test(
-                NAME LLVM_${test}
-                COMMAND $<TARGET_FILE:test_instantiator>
-                llvm
-                "${test}"
-                $<TARGET_FILE:lcc>
-                "${INTERCEPT_TEST_LINKER}"
-                WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-                COMMAND_EXPAND_LISTS
-            )
-
-            set_tests_properties(LLVM_${test} PROPERTIES TIMEOUT 10)
-        endif()
-    endforeach()
+    include(CTest)
+    if (NOT DEFINED FCHK_EXE_PATH)
+        #set(FCHK_EXE_PATH "./fchk/out/fchk")
+        message(FATAL_ERROR "ayo define FCHK_EXE_PATH bro")
+    endif()
+    include("${PROJECT_SOURCE_DIR}/fchk/cmake/FCHKDiscoverTests.cmake")
+    FCHKAddAllTestsInDir(
+        IN "tst/laye"
+        PATTERN "*.laye"
+        PREFIX "//"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        ARGS -l .
+        RECURSIVE
+    )
 endif()
+
+# User Option(s)
+# set(
+#     NATIVE_OPT TRUE
+#     CACHE BOOL
+#     "Whether or not to optimise for the system being compiled on. This should be true *unless* you are making distributed binaries."
+# )
+
+# set(
+#     BUILD_NATIVE_TESTING TRUE
+#     CACHE BOOL
+#     "Whether or not to include native tests in ctest"
+# )
+
+# set(
+#     BUILD_OPT_TESTING FALSE
+#     CACHE BOOL
+#     "Whether or not to include optimisation tests in ctest"
+# )
+
+# set(
+#     BUILD_OBJ_TESTING FALSE
+#     CACHE BOOL
+#     "Whether or not to include object file target tests in ctest (default just includes assembly)"
+# )
+
+# set(
+#     BUILD_LLVM_TESTING FALSE
+#     CACHE BOOL
+#     "Whether or not to include LLVM target tests in ctest (default just includes assembly)"
+# )
+
+# include(CTest)
+# if (BUILD_TESTING)
+#     add_executable(test_instantiator tst/main.cc)
+#     target_link_libraries(test_instantiator PRIVATE fmt options)
+#     target_compile_options(test_instantiator PRIVATE)
+
+#     ## User needs to specify a linker.
+#     if (NOT DEFINED INTERCEPT_TEST_LINKER)
+#         set(INTERCEPT_TEST_LINKER "${CMAKE_CXX_COMPILER}")
+#         message (WARNING "Please specify a linker for tests using -DINTERCEPT_TEST_LINKER=/path/to/linker. The path must be an absolute path and point to a version of gcc or clang (not clang-cl!)")
+#     endif ()
+#     message(STATUS "Using linker ${INTERCEPT_TEST_LINKER} for tests.")
+
+#     file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
+#     foreach (test ${tests})
+#         if (BUILD_NATIVE_TESTING)
+#             add_test(
+#                 NAME ASM_${test}
+#                 COMMAND $<TARGET_FILE:test_instantiator>
+#                 asm
+#                 "${test}"
+#                 $<TARGET_FILE:lcc>
+#                 "${INTERCEPT_TEST_LINKER}"
+#                 WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+#                 COMMAND_EXPAND_LISTS
+#             )
+#             set_tests_properties(ASM_${test} PROPERTIES TIMEOUT 10)
+#         endif()
+#         if (BUILD_OBJ_TESTING)
+#             if (WIN32)
+#                 add_test(
+#                     NAME OBJ_${test}
+#                     COMMAND $<TARGET_FILE:test_instantiator>
+#                     coff_object
+#                     "${test}"
+#                     $<TARGET_FILE:lcc>
+#                     "${INTERCEPT_TEST_LINKER}"
+#                     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+#                     COMMAND_EXPAND_LISTS
+#                 )
+#                 set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 10)
+#             else()
+#                 add_test(
+#                     NAME OBJ_${test}
+#                     COMMAND $<TARGET_FILE:test_instantiator>
+#                     elf_object
+#                     "${test}"
+#                     $<TARGET_FILE:lcc>
+#                     "${INTERCEPT_TEST_LINKER}"
+#                     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+#                     COMMAND_EXPAND_LISTS
+#                 )
+#                 set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 10)
+#             endif()
+#         endif()
+#         if (BUILD_OPT_TESTING)
+#             add_test(
+#                 NAME OPT_${test}
+#                 COMMAND $<TARGET_FILE:test_instantiator>
+#                 asm
+#                 "${test}"
+#                 $<TARGET_FILE:lcc>
+#                 "${INTERCEPT_TEST_LINKER}"
+#                 -O
+#                 WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+#                 COMMAND_EXPAND_LISTS
+#             )
+#             set_tests_properties(OPT_${test} PROPERTIES TIMEOUT 10)
+#         endif()
+#         if (BUILD_LLVM_TESTING)
+#             add_test(
+#                 NAME LLVM_${test}
+#                 COMMAND $<TARGET_FILE:test_instantiator>
+#                 llvm
+#                 "${test}"
+#                 $<TARGET_FILE:lcc>
+#                 "${INTERCEPT_TEST_LINKER}"
+#                 WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+#                 COMMAND_EXPAND_LISTS
+#             )
+
+#             set_tests_properties(LLVM_${test} PROPERTIES TIMEOUT 10)
+#         endif()
+#     endforeach()
+# endif()
