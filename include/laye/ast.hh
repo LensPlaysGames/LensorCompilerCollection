@@ -210,9 +210,13 @@ enum struct TokenKind {
     ColonColon,
 
     Bool,
+    BoolSized,
     Int,
+    IntSized,
     UInt,
+    UIntSized,
     Float,
+    FloatSized,
 
     // Context,
 
@@ -448,7 +452,7 @@ private:
     SemaState _state = SemaState::NotAnalysed;
 
 protected:
-    SemaNode(Kind kind, Location location)
+    constexpr SemaNode(Kind kind, Location location)
         : _kind(kind), _location(location) {}
 
 public:
@@ -617,7 +621,7 @@ private:
     Type* _type = nullptr;
 
 protected:
-    Expr(Kind kind, Location location)
+    constexpr Expr(Kind kind, Location location)
         : SemaNode(SemaNode::Kind::Expr, location), _kind(kind) {}
 
 public:
@@ -915,8 +919,11 @@ public:
     void set_label(std::string label) { _label = std::move(label); }
 
     auto condition() const { return _condition; }
+    auto condition() -> Expr*& { return _condition; }
     auto pass() const { return _pass; }
+    auto pass() -> Statement*& { return _pass; }
     auto fail() const { return _fail; }
+    auto fail() -> Statement*& { return _fail; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::If; }
 };
@@ -1141,7 +1148,9 @@ public:
 
     auto operator_kind() const { return _operator_kind; }
     auto lhs() const { return _lhs; }
+    auto lhs() -> Expr*& { return _lhs; }
     auto rhs() const { return _rhs; }
+    auto rhs() -> Expr*& { return _rhs; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Binary; }
 };
@@ -1575,7 +1584,7 @@ public:
 /// @brief Base class for type syntax nodes (which we're trying to make also Exprs.)
 class Type : public Expr {
 protected:
-    Type(Kind kind, Location location)
+    constexpr Type(Kind kind, Location location)
         : Expr(kind, location) {}
 
 public:
@@ -1619,6 +1628,8 @@ public:
     bool is_function() const { return kind() == Kind::TypeFunc; }
     /// Check if this is a string type.
     bool is_string() const { return kind() == Kind::TypeString; }
+
+    static Type* Bool;
 
     /// Check if types are equal to each other.
     static bool Equal(const Type* a, const Type* b);
@@ -1835,22 +1846,28 @@ public:
 
 class SizableType : public Type {
     int _bit_width;
+    bool _is_platform;
 
 protected:
-    SizableType(Kind kind, Location location, int bit_width)
-        : Type(kind, location), _bit_width(bit_width) {}
+    constexpr SizableType(Kind kind, Location location, int bit_width, bool is_platform = false)
+        : Type(kind, location), _bit_width(bit_width), _is_platform(is_platform) {}
 
 public:
     bool is_sized() const { return _bit_width > 0; }
-    int bit_width() const { return _bit_width; }
+
+    int  bit_width() const { return _bit_width; }
+    void bit_width(int w) { _bit_width = w; }
+    
+    bool is_platform() const { return _is_platform; }
+    void is_platform(bool p) { _is_platform = p; }
 
     static bool classof(const Expr* expr) { return +expr->kind() >= +Kind::TypeBool and +expr->kind() <= +Kind::TypeFloat; }
 };
 
 class BoolType : public SizableType {
 public:
-    BoolType(Location location, int bit_width = 0)
-        : SizableType(Kind::TypeBool, location, bit_width) {}
+    constexpr BoolType(Location location, int bit_width = 0, bool is_platform = false)
+        : SizableType(Kind::TypeBool, location, bit_width, is_platform) {}
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeBool; }
 };
@@ -1859,8 +1876,8 @@ class IntType : public SizableType {
     bool _is_signed;
 
 public:
-    IntType(Location location, bool is_signed, int bit_width = 0)
-        : SizableType(Kind::TypeInt, location, bit_width), _is_signed(is_signed) {}
+    constexpr IntType(Location location, bool is_signed, int bit_width = 0, bool is_platform = false)
+        : SizableType(Kind::TypeInt, location, bit_width, is_platform), _is_signed(is_signed) {}
 
     bool is_signed() const { return _is_signed; }
 
@@ -1869,8 +1886,8 @@ public:
 
 class FloatType : public SizableType {
 public:
-    FloatType(Location location, int bit_width = 0)
-        : SizableType(Kind::TypeFloat, location, bit_width) {}
+    constexpr FloatType(Location location, int bit_width = 0, bool is_platform = false)
+        : SizableType(Kind::TypeFloat, location, bit_width, is_platform) {}
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeFloat; }
 };

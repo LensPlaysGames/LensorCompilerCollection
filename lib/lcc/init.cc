@@ -1,9 +1,11 @@
 #include <intercept/ast.hh>
+#include <laye/ast.hh>
 #include <lcc/context.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/target.hh>
 
 namespace intc = lcc::intercept;
+namespace layec = lcc::laye;
 
 /// FIXME(Sirraide): We could probably just use `constinit` for all of this;
 ///     that way, we wouldn’t even need to call an initialisation function.
@@ -23,6 +25,8 @@ intc::Type* intc::Type::Unknown;
 intc::Type* intc::Type::Void;
 intc::Type* intc::Type::VoidPtr;
 intc::Type* intc::Type::OverloadSet;
+
+layec::Type* layec::Type::Bool;
 
 void lcc::Context::InitialiseLCCData() {
     /// Initialise builtin IR types.
@@ -56,4 +60,9 @@ void lcc::Context::InitialiseLCCData() {
     intc::Type::Void = &int_ty_void;
     intc::Type::OverloadSet = &int_ty_os;
     intc::Type::VoidPtr = &int_ty_void_ptr;
+
+    /// Initialise default instances of builtin Laye types.
+    static constinit layec::BoolType laye_ty_bool = {{}, 0, true};
+
+    layec::Type::Bool = &laye_ty_bool;
 }

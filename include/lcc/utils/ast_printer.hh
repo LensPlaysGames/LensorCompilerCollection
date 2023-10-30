@@ -24,13 +24,15 @@ struct ASTPrinter {
     void PrintBasicNode(
         std::string_view node_name,
         const NodeType* node,
-        const TypeType* type
+        const TypeType* type,
+        bool print_newline = true
     ) {
         PrintBasicHeader(node_name, node);
 
         /// Print the type if there is one.
         if (type) out += fmt::format(" {}", type->string(use_colour));
-        out += fmt::format("{}\n", C(Reset));
+        out += fmt::format("{}", C(Reset));
+        if (print_newline) out += "\n";
     }
 
     /// Print the start of the header of an AST node.

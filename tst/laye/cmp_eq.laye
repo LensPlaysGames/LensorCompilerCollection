@@ -1,9 +1,36 @@
-// 42
+// R ./build/lcc --ir %s
+// p re
+// p nocap
+// d b [a-zA-Z0-9\.]+
+// d t %[0-9]+
 
-i32 main()
+// * cmp_eq : i32():
+// +   $b:
+// +     (?<cond>$t) = alloca i64
+// +     store i64 12 into $cond
+// +     (?<cond_1>$t) = load i64 from $cond
+// +     (?<cond_2>$t) = eq i64 $cond_1, 12
+// +     branch on $cond_2 to %(?<pass1>$b) else %(?<fail1>$b)
+// +   $pass1:
+// +     return i32 1
+// +   $fail1:
+// +     (?<cond_3>$t) = load i64 from $cond
+// +     (?<cond_4>$t) = ne i64 $cond_3, 13
+// +     branch on $cond_4 to %(?<pass2>$b) else %(?<fail2>$b)
+// +   $pass2:
+// +     return i32 2
+// +   $fail2:
+// +     return i32 3
+// +   $b:
+// +     branch to %(?<un>$b)
+// +   $un:
+// +     unreachable
+i32 cmp_eq()
 {
     int cond = 12;
     if (cond == 12)
-        return 42;
-    else return 69;
+        return 1;
+    else if (cond != 13)
+        return 2;
+    else return 3;
 }

@@ -444,7 +444,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
             Error("Expected ';'");
         }
 
-        return new (*this) ReturnStatement{GetLocation(start), *return_value};
+        return new (*this) ReturnStatement{start, *return_value};
     } else if (Consume(Tk::Break)) {
         std::string target{};
         if (At(Tk::Ident)) {
@@ -456,7 +456,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
             Error("Expected ';'");
         }
 
-        return new (*this) BreakStatement{GetLocation(start), target};
+        return new (*this) BreakStatement{start, target};
     } else if (Consume(Tk::Continue)) {
         std::string target{};
         if (At(Tk::Ident)) {
@@ -468,7 +468,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
             Error("Expected ';'");
         }
 
-        return new (*this) ContinueStatement{GetLocation(start), target};
+        return new (*this) ContinueStatement{start, target};
     } else if (Consume(Tk::Defer)) {
         auto statement_result = ParseStatement(false);
         if (not statement_result) {
@@ -480,7 +480,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
             Error("Expected ';'");
         }
 
-        return new (*this) DeferStatement{GetLocation(start), *statement_result};
+        return new (*this) DeferStatement{start, *statement_result};
     } else if (Consume(Tk::Goto)) {
         std::string target{};
         if (At(Tk::Ident)) {
@@ -492,13 +492,13 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
             Error("Expected ';'");
         }
 
-        return new (*this) GotoStatement{GetLocation(start), target};
+        return new (*this) GotoStatement{start, target};
     } else if (Consume(Tk::Xyzzy)) {
         if (consumeSemi and not Consume(Tk::SemiColon)) {
             Error("Expected ';'");
         }
 
-        return new (*this) XyzzyStatement{GetLocation(start)};
+        return new (*this) XyzzyStatement{start};
     } else if (Consume(Tk::If)) {
         if (not Consume(Tk::OpenParen)) {
             Error("Expected '('");
@@ -529,7 +529,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
             }
         }
 
-        return new (*this) IfStatement{GetLocation(start), *condition_result, *pass_body, *fail_body};
+        return new (*this) IfStatement{start, *condition_result, *pass_body, *fail_body};
     } else if (Consume(Tk::For)) {
         if (not Consume(Tk::OpenParen)) {
             auto pass_body = ParseStatement();
@@ -538,7 +538,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
                 return pass_body.diag();
             }
 
-            return new (*this) ForStatement{GetLocation(start), nullptr, *pass_body, nullptr};
+            return new (*this) ForStatement{start, nullptr, *pass_body, nullptr};
         }
 
         auto first_start = CurrLocation();
@@ -603,7 +603,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
                     }
                 }
 
-                return new (*this) ForEachStatement{GetLocation(start), type, name, *sequence, *pass_body, *fail_body};
+                return new (*this) ForEachStatement{start, type, name, *sequence, *pass_body, *fail_body};
             }
 
             if (not Consume(Tk::SemiColon)) {
@@ -652,7 +652,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
                 }
             }
 
-            return new (*this) ForStatement{GetLocation(start), init, *condition, *increment, *pass_body, *fail_body};
+            return new (*this) ForStatement{start, init, *condition, *increment, *pass_body, *fail_body};
         } else {
             Expr* first_expr = nullptr;
             {
@@ -684,7 +684,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
                 }
             }
 
-            return new (*this) ForStatement{GetLocation(start), first_expr, *pass_body, *fail_body};
+            return new (*this) ForStatement{start, first_expr, *pass_body, *fail_body};
         }
     } else if (At(Tk::Do) and PeekAt(1, Tk::OpenBrace)) {
         NextToken();
@@ -712,7 +712,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
             Error("Expected ';'");
         }
 
-        return new (*this) DoForStatement{GetLocation(start), *condition_result, *body};
+        return new (*this) DoForStatement{start, *condition_result, *body};
     }
 
     auto expr = ParseExpr();
@@ -748,7 +748,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
         }
 
         auto assign_op = AssignOperatorKind(maybe_eq_tok.kind);
-        return new (*this) AssignStatement{GetLocation(start), assign_op, *expr, *rhs};
+        return new (*this) AssignStatement{maybe_eq_tok.location, assign_op, *expr, *rhs};
     }
 
     if (consumeSemi and not Consume(Tk::SemiColon)) {
@@ -1295,16 +1295,36 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         }
 
         auto location = tok.location;
-        int bit_width = (int) tok.integer_value;
 
         NextToken();
 
-        auto float_type = Result<Type*>::Null();
+        auto bool_type = Result<Type*>::Null();
         if (allocate) {
-            float_type = new (*this) BoolType{location, bit_width};
+            bool_type = new (*this) BoolType{location, 0, true};
         }
 
-        return TryParseTypeContinue(*float_type, allocate);
+        return TryParseTypeContinue(*bool_type, allocate);
+    }
+
+    if (At(Tk::BoolSized)) {
+        if (type_access != TypeAccess::ReadOnly) {
+            if (allocate) Error("Access modifiers do not apply to bool types");
+        }
+
+        auto location = tok.location;
+        int bit_width = (int) tok.integer_value;
+        if (bit_width <= 0 or bit_width > 65535) {
+            Error("Primitive type bit width must be in the range (0, 65535]");
+        }
+
+        NextToken();
+
+        auto bool_type = Result<Type*>::Null();
+        if (allocate) {
+            bool_type = new (*this) BoolType{location, bit_width};
+        }
+
+        return TryParseTypeContinue(*bool_type, allocate);
     }
 
     if (At(Tk::Int, Tk::UInt)) {
@@ -1315,13 +1335,35 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         }
 
         auto location = tok.location;
-        int bit_width = (int) tok.integer_value;
 
         NextToken();
 
         auto int_type = Result<Type*>::Null();
         if (allocate) {
-            int_type = new (*this) IntType{location, kw_kind == Tk::Int, bit_width};
+            int_type = new (*this) IntType{location, kw_kind == Tk::Int, 0, true};
+        }
+
+        return TryParseTypeContinue(*int_type, allocate);
+    }
+
+    if (At(Tk::IntSized, Tk::UIntSized)) {
+        auto kw_kind = tok.kind;
+
+        if (type_access != TypeAccess::ReadOnly) {
+            if (allocate) Error("Access modifiers do not apply to integer types");
+        }
+
+        auto location = tok.location;
+        int bit_width = (int) tok.integer_value;
+        if (bit_width <= 0 or bit_width > 65535) {
+            Error("Primitive type bit width must be in the range (0, 65535]");
+        }
+
+        NextToken();
+
+        auto int_type = Result<Type*>::Null();
+        if (allocate) {
+            int_type = new (*this) IntType{location, kw_kind == Tk::IntSized, bit_width};
         }
 
         return TryParseTypeContinue(*int_type, allocate);
@@ -1333,7 +1375,27 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         }
 
         auto location = tok.location;
+
+        NextToken();
+
+        auto float_type = Result<Type*>::Null();
+        if (allocate) {
+            float_type = new (*this) FloatType{location, 0, true};
+        }
+
+        return TryParseTypeContinue(*float_type, allocate);
+    }
+
+    if (At(Tk::FloatSized)) {
+        if (type_access != TypeAccess::ReadOnly) {
+            if (allocate) Error("Access modifiers do not apply to float types");
+        }
+
+        auto location = tok.location;
         int bit_width = (int) tok.integer_value;
+        if (bit_width != 16 and bit_width != 32 and bit_width != 64 and bit_width != 80 and bit_width != 128) {
+            Error("Float type bit width must be 16, 32, 64, 80 or 128");
+        }
 
         NextToken();
 

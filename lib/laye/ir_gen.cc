@@ -109,6 +109,10 @@ void layec::IRGen::GenerateIRFunctionBody(FunctionDecl* decl) {
         }
 
         GenerateStatement(as<BlockStatement>(decl->body()));
+
+        if (not curr_block->terminator()) {
+            Insert(new (*mod()) UnreachableInst(decl->location()));
+        }
     }
 }
 
@@ -156,6 +160,31 @@ void layec::IRGen::GenerateStatement(Statement* statement) {
             // Nothing happened.
         } break;
 
+        case Sk::If: {
+            auto s = as<IfStatement>(statement);
+
+            auto pass_block = new (*mod()) Block{fmt::format("if.pass.{}", total_if)};
+            auto fail_block = new (*mod()) Block{fmt::format("if.fail.{}", total_if)};
+            auto exit_block = new (*mod()) Block{fmt::format("if.exit.{}", total_if)};
+            total_if += 1;
+
+            auto cond_value = GenerateExpression(s->condition());
+            Insert(new (*mod()) CondBranchInst(cond_value, pass_block, fail_block, s->location()));
+
+            UpdateBlock(pass_block);
+            GenerateStatement(s->pass());
+            if (not curr_block->terminator())
+                Insert(new (*mod()) BranchInst(exit_block, s->location()));
+            
+            UpdateBlock(fail_block);
+            if (s->fail())
+                GenerateStatement(s->fail());
+            if (not curr_block->terminator())
+                Insert(new (*mod()) BranchInst(exit_block, s->location()));
+
+            UpdateBlock(exit_block);
+        } break;
+
         case Sk::Expr: {
             auto s = as<ExprStatement>(statement);
             GenerateExpression(s->expr());
@@ -171,6 +200,20 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
     switch (expr->kind()) {
         default: {
             LCC_ASSERT(false, "unhandled expr in Laye IR gen {}", ToString(expr->kind()));
+        } break;
+
+        case Ek::Cast: {
+            LCC_TODO();
+        } break;
+
+        case Ek::LitInt: {
+            auto e = as<LitIntExpr>(expr);
+            LCC_ASSERT(e->type());
+
+            auto value = e->value();
+            auto type = Convert(e->type());
+
+            _ir_values[expr] = new (*mod()) lcc::IntegerConstant{type, value};
         } break;
 
         case Ek::Constant: {
@@ -237,6 +280,35 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
             }
 
             _ir_values[expr] = lookup_value;
+        } break;
+
+        case Ek::Binary: {
+            auto e = as<BinaryExpr>(expr);
+            switch (e->operator_kind()) {
+                default: {
+                    LCC_ASSERT(false, "unhandled binary operator kind in Laye IR gen {}", ToString(e->operator_kind()));
+                } break;
+
+                case OperatorKind::Equal: {
+                    auto lhs = GenerateExpression(e->lhs());
+                    auto rhs = GenerateExpression(e->rhs());
+
+                    auto compare = new (*mod()) EqInst{lhs, rhs, e->location()};
+                    Insert(compare);
+
+                    _ir_values[expr] = compare;
+                } break;
+
+                case OperatorKind::NotEqual: {
+                    auto lhs = GenerateExpression(e->lhs());
+                    auto rhs = GenerateExpression(e->rhs());
+
+                    auto compare = new (*mod()) NeInst{lhs, rhs, e->location()};
+                    Insert(compare);
+
+                    _ir_values[expr] = compare;
+                } break;
+            }
         } break;
     }
 

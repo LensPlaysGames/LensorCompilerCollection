@@ -408,10 +408,10 @@ continue_identifier:
             }
             // clang-format off
             token.integer_value = integer_value;
-            token.kind = c == 'b' ? TokenKind::Bool :
-                         c == 'i' ? TokenKind::Int  :
-                         c == 'u' ? TokenKind::UInt :
-                                    TokenKind::Float;
+            token.kind = c == 'b' ? TokenKind::BoolSized :
+                         c == 'i' ? TokenKind::IntSized  :
+                         c == 'u' ? TokenKind::UIntSized :
+                                    TokenKind::FloatSized;
             return;
         } // clang-format on
     }

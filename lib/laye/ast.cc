@@ -186,7 +186,7 @@ std::string layec::ToString(layec::OperatorKind kind) {
         case OperatorKind::Mod: return "%";
         case OperatorKind::Greater: return ">";
         case OperatorKind::Less: return "<";
-        case OperatorKind::Equal: return "=";
+        case OperatorKind::Equal: return "==";
         case OperatorKind::NotEqual: return "!=";
         case OperatorKind::Compl: return "~";
         case OperatorKind::And: return "&";
@@ -413,21 +413,21 @@ auto layec::Type::string(bool use_colours) const -> std::string {
         }
 
         case Kind::TypeBool: {
-            auto w = as<BoolType>(this)->bit_width();
-            if (w == 0) return fmt::format("{}bool{}", C(Cyan), C(Reset));
-            return fmt::format("{}b{}{}", C(Cyan), w, C(Reset));
+            auto t = as<BoolType>(this);
+            if (t->is_platform()) return fmt::format("{}bool{}", C(Cyan), C(Reset));
+            return fmt::format("{}b{}{}", C(Cyan), t->bit_width(), C(Reset));
         }
 
         case Kind::TypeInt: {
-            auto i = as<IntType>(this);
-            if (i->bit_width() == 0) return fmt::format("{}{}int{}", C(Cyan), i->is_signed() ? "" : "u", C(Reset));
-            return fmt::format("{}{}{}{}", C(Cyan), i->is_signed() ? "i" : "u", i->bit_width(), C(Reset));
+            auto t = as<IntType>(this);
+            if (t->is_platform()) return fmt::format("{}{}int{}", C(Cyan), t->is_signed() ? "" : "u", C(Reset));
+            return fmt::format("{}{}{}{}", C(Cyan), t->is_signed() ? "i" : "u", t->bit_width(), C(Reset));
         }
 
         case Kind::TypeFloat: {
-            auto w = as<FloatType>(this)->bit_width();
-            if (w == 0) return fmt::format("{}float{}", C(Cyan), C(Reset));
-            return fmt::format("{}f{}{}", C(Cyan), w, C(Reset));
+            auto t = as<FloatType>(this);
+            if (t->is_platform()) return fmt::format("{}float{}", C(Cyan), C(Reset));
+            return fmt::format("{}f{}{}", C(Cyan), t->bit_width(), C(Reset));
         }
     }
 }
@@ -522,18 +522,26 @@ bool layec::Type::Equal(const Type* a, const Type* b) {
         case Kind::TypeBool: {
             auto a2 = as<BoolType>(a);
             auto b2 = as<BoolType>(b);
+            if (a2->is_platform())
+                return b2->is_platform();
             return a2->bit_width() == b2->bit_width();
         }
 
         case Kind::TypeInt: {
             auto a2 = as<IntType>(a);
             auto b2 = as<IntType>(b);
-            return a2->bit_width() == b2->bit_width() && a2->is_signed() == b2->is_signed();
+            if (a2->is_signed() != b2->is_signed())
+                return false;
+            if (a2->is_platform())
+                return b2->is_platform();
+            return a2->bit_width() == b2->bit_width();
         }
 
         case Kind::TypeFloat: {
             auto a2 = as<FloatType>(a);
             auto b2 = as<FloatType>(b);
+            if (a2->is_platform())
+                return b2->is_platform();
             return a2->bit_width() == b2->bit_width();
         }
 
@@ -802,7 +810,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
 
             case K::Binary: {
                 auto n = cast<layec::BinaryExpr>(e);
-                PrintBasicHeader("BinaryExpr", n);
+                PrintBasicNode("BinaryExpr", n, n->type(), false);
                 out += fmt::format(" {}{}\n", C(White), ToString(n->operator_kind()));
             } break;
 
@@ -832,7 +840,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
 
             case K::LookupName: {
                 auto n = cast<layec::NameExpr>(e);
-                PrintBasicHeader("NameExpr", e);
+                PrintBasicNode("NameExpr", e, n->type(), false);
                 out += fmt::format(" {}{}", C(Green), n->name());
                 PrintTemplateArgs(n->template_args());
                 out += "\n";
@@ -840,7 +848,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
 
             case K::LookupPath: {
                 auto n = cast<layec::PathExpr>(e);
-                PrintBasicHeader("PathExpr", e);
+                PrintBasicNode("PathExpr", e, n->type(), false);
                 out += " ";
                 for (usz i = 0; i < n->names().size(); i++) {
                     if (i > 0) out += "::";
@@ -889,6 +897,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
             case K::Cast: {
                 auto n = cast<layec::CastExpr>(e);
                 PrintBasicHeader("CastExpr", n);
+                out += fmt::format(" {}{}", n->type()->string(use_colour), C(Reset));
                 out += "\n";
             } break;
 
@@ -912,61 +921,52 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
             } break;
 
             case K::Do: {
-                auto n = cast<layec::DoExpr>(e);
-                PrintBasicHeader("DoExpr", n);
-                out += "\n";
+                PrintBasicNode("DoExpr", e, nullptr);
             } break;
 
             case K::Sizeof: {
-                auto n = cast<layec::SizeofExpr>(e);
-                PrintBasicHeader("SizeofExpr", n);
-                out += "\n";
+                PrintBasicNode("SizeofExpr", e, nullptr);
             } break;
 
             case K::Offsetof: {
-                auto n = cast<layec::OffsetofExpr>(e);
-                PrintBasicHeader("OffsetofExpr", n);
-                out += "\n";
+                PrintBasicNode("OffsetofExpr", e, nullptr);
             } break;
 
             case K::Alignof: {
-                auto n = cast<layec::AlignofExpr>(e);
-                PrintBasicHeader("AlignofExpr", n);
-                out += "\n";
+                PrintBasicNode("AlignofExpr", e, nullptr);
             } break;
 
             case K::LitNil: {
-                PrintBasicHeader("LitNilExpr", e);
-                out += "\n";
+                PrintBasicNode("LitNilExpr", e, nullptr);
             } break;
 
             case K::LitBool: {
                 auto n = cast<layec::LitBoolExpr>(e);
-                PrintBasicHeader("LitBoolExpr", n);
+                PrintBasicNode("LitBoolExpr", n, n->type(), false);
                 out += fmt::format(" {}{}\n", C(Cyan), n->value());
             } break;
 
             case K::LitString: {
                 auto n = cast<layec::LitStringExpr>(e);
-                PrintBasicHeader("LitStringExpr", n);
+                PrintBasicNode("LitStringExpr", n, n->type(), false);
                 out += fmt::format(" {}{}\n", C(Cyan), n->value());
             } break;
 
             case K::LitInt: {
                 auto n = cast<layec::LitIntExpr>(e);
-                PrintBasicHeader("LitIntExpr", n);
+                PrintBasicNode("LitIntExpr", n, n->type(), false);
                 out += fmt::format(" {}{}\n", C(Cyan), n->value());
             } break;
 
             case K::LitFloat: {
                 auto n = cast<layec::LitFloatExpr>(e);
-                PrintBasicHeader("LitFloatExpr", n);
+                PrintBasicNode("LitFloatExpr", n, n->type(), false);
                 out += fmt::format(" {}{}\n", C(Cyan), n->value());
             } break;
 
             case K::Constant: {
                 auto n = cast<layec::ConstantExpr>(e);
-                PrintBasicHeader("ConstantExpr", e);
+                PrintBasicNode("ConstantExpr", e, n->type(), false);
                 auto value = n->value();
                 if (value.is_i64()) {
                     out += fmt::format(" {}{}\n", C(Cyan), value.as_i64());

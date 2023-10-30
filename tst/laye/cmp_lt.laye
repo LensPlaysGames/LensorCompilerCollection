@@ -1,9 +1,0 @@
-// 42
-
-i32 main()
-{
-    int cond = 0;
-    if (cond < 12)
-        return 42;
-    else return 69;
-}

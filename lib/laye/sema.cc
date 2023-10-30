@@ -152,9 +152,9 @@ void layec::Sema::Analyse(Statement*& statement) {
                 LCC_TODO();
             } else {
                 AnalyseType(s->type());
-                if (Expr*& init = s->init()) {
-                    Analyse(init, s->type());
-                    ConvertOrError(init, s->type());
+                if (s->init()) {
+                    Analyse(s->init(), s->type());
+                    ConvertOrError(s->init(), s->type());
                 }
             }
         } break;
@@ -193,6 +193,16 @@ void layec::Sema::Analyse(Statement*& statement) {
             // Nothing happened.
         } break;
 
+        case Statement::Kind::If: {
+            auto s = as<IfStatement>(statement);
+
+            Analyse(s->condition(), Type::Bool);
+            ConvertOrError(s->condition(), Type::Bool);
+
+            Analyse(s->pass());
+            if (s->fail()) Analyse(s->fail());
+        } break;
+
         case Statement::Kind::Expr: {
             auto s = as<ExprStatement>(statement);
             LCC_ASSERT(s->expr());
@@ -200,7 +210,7 @@ void layec::Sema::Analyse(Statement*& statement) {
         } break;
 
         default: {
-            Warning(statement->location(), "Unhandled statement in Sema::Analyze(Statement*&): {}", ToString(kind));
+            Error(statement->location(), "Unhandled statement in Sema::Analyze(Statement*&): {}", ToString(kind));
             statement->set_sema_errored();
         } break;
     }
@@ -341,17 +351,41 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
             }
         } break;
 
+        case Expr::Kind::Binary: {
+            auto e = as<BinaryExpr>(expr);
+
+            Analyse(e->lhs());
+            Analyse(e->rhs());
+
+            switch (e->operator_kind()) {
+                default: {
+                    LCC_ASSERT(false, "unimplemented binary operator {}", ToString(e->operator_kind()));
+                } break;
+
+                case OperatorKind::Equal:
+                case OperatorKind::NotEqual: {
+                    expr->type(Type::Bool);
+                    if (not ConvertToCommonType(e->lhs(), e->rhs())) {
+                        expr->set_sema_errored();
+                        break;
+                    }
+
+                    // TODO(local): actually decide what a valid equality compare is
+                } break;
+            }
+        } break;
+
         case Expr::Kind::LitString: {
             expr->type(new (*module()) StringType(expr->location()));
         } break;
 
         case Expr::Kind::LitInt: {
-            expr->type(new (*module()) IntType(expr->location(), true, (int)context()->target()->size_of_pointer));
+            expr->type(new (*module()) IntType(expr->location(), true, (int)context()->target()->size_of_pointer, true));
         } break;
 
         default: {
             if (auto t = cast<Type>(expr)) return AnalyseType(t);
-            Warning(expr->location(), "Unhandled expression in Sema::Analyze(Expr*&): {}", ToString(kind));
+            Error(expr->location(), "Unhandled expression in Sema::Analyze(Expr*&): {}", ToString(kind));
             expr->set_sema_errored();
             expr->type(new (*module()) PoisonType{expr->location()});
         } break;
@@ -370,7 +404,7 @@ bool layec::Sema::AnalyseType(Type*& type) {
     auto kind = type->kind();
     switch (kind) {
         default: {
-            Warning(type->location(), "Unhandled type in Sema::Analyze(Type*&): {}", ToString(kind));
+            Error(type->location(), "Unhandled type in Sema::Analyze(Type*&): {}", ToString(kind));
             type->set_sema_errored();
         } break;
 
@@ -392,8 +426,10 @@ bool layec::Sema::AnalyseType(Type*& type) {
 
         case Expr::Kind::TypeInt: {
             auto t = as<IntType>(type);
-            if (t->bit_width() <= 0 or t->bit_width() > 65535) {
-                Error(type->location(), "Integer type bit width out of range (1 to 65535)");
+            if (t->is_platform()) {
+                t->bit_width(int(context()->target()->size_of_pointer));
+            } else if (t->bit_width() <= 0 or t->bit_width() > 65535) {
+                Error(type->location(), "Primitive type bit width must be in the range (0, 65535]");
                 type->set_sema_errored();
             }
         } break;
@@ -452,12 +488,15 @@ int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
             return Score(1);
         }
 
+        // TODO(local): special case platform integers
+
         if (
             from->size(context()) <= to->size(context()) and
             (not cast<IntType>(from)->is_signed() or cast<IntType>(to)->is_signed())
         ) {
-            if constexpr (PerformConversion)
+            if constexpr (PerformConversion) {
                 InsertImplicitCast(expr, to);
+            }
 
             return Score(1);
         }
