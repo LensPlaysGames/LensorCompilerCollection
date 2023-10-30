@@ -131,7 +131,7 @@ auto Type::string(bool use_colour) const -> std::string {
             auto arr = as<ArrayType>(this);
             return fmt::format(
                 "{}{}[{}{}{}]{}",
-                arr->element_type()->string(),
+                arr->element_type()->string(use_colour),
                 C(Red),
                 C(Magenta),
                 arr->length(),
@@ -151,7 +151,7 @@ auto Type::string(bool use_colour) const -> std::string {
             auto separator = fmt::format("{}, ", C(Red));
             return fmt::format(
                 "{}{}({}{}){}",
-                f->ret()->string(),
+                f->ret()->string(use_colour),
                 C(Red),
                 fmt::join(vws::transform(f->params(), ToString), separator),
                 C(Red),
