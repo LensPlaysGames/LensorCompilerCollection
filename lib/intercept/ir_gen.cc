@@ -543,18 +543,18 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         } break;
 
         case Expr::Kind::If: {
-            ///      +---------+
-            ///      | current |
-            ///      +---------+
-            ///     //         \\
-        /// +------+    +------+
-            /// | then |    | else |
-            /// +------+    +------+
-            ///        \\  //
-            ///       +------+
-            ///       | exit |
-            ///       +------+
-            ///
+            ///         +---------+         |
+            ///         | current |         |
+            ///         +---------+         |
+            ///        //         \\        |
+            ///    +------+    +------+     |
+            ///    | then |    | else |     |
+            ///    +------+    +------+     |
+            ///           \\  //            |
+            ///          +------+           |
+            ///          | exit |           |
+            ///          +------+           |
+            ///                             |
             const auto& if_expr = as<IfExpr>(expr);
 
             auto* then = new (*module) lcc::Block(fmt::format("if.then.{}", total_if));

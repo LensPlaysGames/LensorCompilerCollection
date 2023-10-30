@@ -1,4 +1,4 @@
-// R ./out/lcc --ir %s
+// R %lcc --ir %s
 
 // * main : i32():
 // +   bb0:
