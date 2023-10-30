@@ -261,7 +261,7 @@ if (BUILD_TESTING)
     include(CTest)
 
     ## Set fchk properties here.
-    set(FCHK_GIT_TAG v1.1.0)
+    set(FCHK_GIT_TAG v1.2.0)
 
     ## First, check if fchk has already been downloaded.
     if (NOT EXISTS "${PROJECT_SOURCE_DIR}/fchk/CMakeLists.txt")
@@ -287,6 +287,14 @@ if (BUILD_TESTING)
 
     ## Next, update it to the right tag.
     message(STATUS "Updating fchk")
+        execute_process(
+        COMMAND git fetch --tags
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/fchk"
+        COMMAND_ERROR_IS_FATAL ANY
+        ECHO_OUTPUT_VARIABLE
+        ECHO_ERROR_VARIABLE
+    )
+
     execute_process(
         COMMAND git fetch --depth 1 origin "${FCHK_GIT_TAG}"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/fchk"
@@ -306,7 +314,10 @@ if (BUILD_TESTING)
     ## We only need to download fchk to be able to configure this,
     ## so add a target for the tests to build it when we run the tests.
     add_custom_target(fchk ALL
-        COMMAND ${CMAKE_COMMAND} -S "${PROJECT_SOURCE_DIR}/fchk" -B "${PROJECT_SOURCE_DIR}/fchk/out"
+        COMMAND ${CMAKE_COMMAND}
+            -S "${PROJECT_SOURCE_DIR}/fchk"
+            -B "${PROJECT_SOURCE_DIR}/fchk/out"
+            -G "${CMAKE_GENERATOR}"
         COMMAND ${CMAKE_COMMAND} --build "${PROJECT_SOURCE_DIR}/fchk/out"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/fchk"
         BYPRODUCTS "${PROJECT_SOURCE_DIR}/fchk/out"
