@@ -152,6 +152,10 @@ void layec::IRGen::GenerateStatement(Statement* statement) {
             }
         } break;
 
+        case Sk::Xyzzy: {
+            // Nothing happened.
+        } break;
+
         case Sk::Expr: {
             auto s = as<ExprStatement>(statement);
             GenerateExpression(s->expr());

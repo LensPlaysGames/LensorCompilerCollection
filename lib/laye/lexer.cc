@@ -23,6 +23,7 @@ lcc::StringMap<Tk> keyword_infos{
     {"continue", Tk::Continue},
     {"defer", Tk::Defer},
     {"goto", Tk::Goto},
+    {"xyzzy", Tk::Xyzzy},
     {"struct", Tk::Struct},
     {"variant", Tk::Variant},
     {"enum", Tk::Enum},

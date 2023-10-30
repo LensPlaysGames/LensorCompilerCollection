@@ -189,6 +189,10 @@ void layec::Sema::Analyse(Statement*& statement) {
             }
         } break;
 
+        case Statement::Kind::Xyzzy: {
+            // Nothing happened.
+        } break;
+
         case Statement::Kind::Expr: {
             auto s = as<ExprStatement>(statement);
             LCC_ASSERT(s->expr());
