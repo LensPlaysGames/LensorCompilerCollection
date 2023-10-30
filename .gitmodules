@@ -1,0 +1,3 @@
+[submodule "fchk"]
+	path = fchk
+	url = git@github.com:Sirraide/fchk.git
