@@ -1,4 +1,4 @@
-// R ./build/lcc --ir %s
+// R ./out/lcc --ir %s
 // p re
 // p nocap
 // d t %[0-9]+
