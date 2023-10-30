@@ -245,8 +245,7 @@ enum struct TokenKind {
     From,
     As,
     Operator,
-    Readonly,
-    Writeonly,
+    Mut,
 
     New,
     Delete,
@@ -352,9 +351,8 @@ struct EnumVariant {
 };
 
 enum struct TypeAccess {
-    Default,
     ReadOnly,
-    WriteOnly,
+    Mutable,
 };
 
 enum struct PathKind {
@@ -376,7 +374,7 @@ enum class CastKind {
 
 class Scope {
     Scope* _parent;
-    std::unordered_multimap<std::string, Decl*, detail::StringHash, std::equal_to<>> symbols;
+    std::unordered_multimap<std::string, NamedDecl*, detail::StringHash, std::equal_to<>> symbols;
     bool _is_function_scope = false;
 
 public:
@@ -390,15 +388,24 @@ public:
     auto declare(
         Parser* parser,
         std::string name,
-        Decl* expr
-    ) -> Result<Decl*>;
+        NamedDecl* expr
+    ) -> Result<NamedDecl*>;
 
     auto parent() const { return _parent; }
+
+    auto find(std::string_view name) { return symbols.equal_range(name); }
 
     /// Mark this scope as a function scope.
     void set_function_scope() { _is_function_scope = true; }
 
     bool is_function_scope() const { return _is_function_scope; }
+
+    void debug_print() const {
+        fmt::print(">> scope ({})\n", (void*)this);
+        for (auto [first, second] : symbols) {
+            fmt::print("  {} ({})\n", first, (void*)second);
+        }
+    }
 };
 
 class LitStringExpr;
@@ -629,10 +636,11 @@ protected:
         : Statement(kind, location) {}
 
 public:
-    static bool classof(const Statement* statement) { return +statement->kind() >= +Kind::DeclBinding and +statement->kind() <= +Kind::DeclImport; }
+    static bool classof(const Statement* statement) { return +statement->kind() >= +Kind::OverloadSet and +statement->kind() <= +Kind::DeclImport; }
 };
 
 class NamedDecl : public Decl {
+    Module* _module;
     std::vector<DeclModifier> _mods;
     std::string _name;
     std::vector<TemplateParam> _template_params{};
@@ -640,12 +648,12 @@ class NamedDecl : public Decl {
     std::string _mangled_name;
 
 protected:
-    NamedDecl(Kind kind, Location location, std::vector<DeclModifier> mods, std::string name)
-        : Decl(kind, location), _mods(std::move(mods)), _name(std::move(name)) {
+    NamedDecl(Kind kind, Module* module, Location location, std::vector<DeclModifier> mods, std::string name)
+        : Decl(kind, location), _module(module), _mods(std::move(mods)), _name(std::move(name)) {
         _mangled_name = _name;
     }
 
-    NamedDecl(Kind kind, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params)
+    NamedDecl(Kind kind, Module* module, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params)
         : Decl(kind, location), _mods(std::move(mods)), _name(std::move(name)), _template_params(std::move(template_params)) {
         _mangled_name = _name;
     }
@@ -664,6 +672,8 @@ public:
         return e != mod_list.end();
     }
 
+    void add_mod(DeclModifier modifier) { _mods.push_back(modifier); }
+
     auto linkage() const {
         auto mod_list = mods();
         if (auto e = std::find_if(mod_list.begin(), mod_list.end(), [](const auto& m) { return m.decl_kind == TokenKind::Export; }); e != mod_list.end())
@@ -678,7 +688,7 @@ public:
         return CallConv::Laye;
     }
 
-    static bool classof(const Statement* statement) { return +statement->kind() >= +Kind::DeclBinding and +statement->kind() <= +Kind::DeclAlias; }
+    static bool classof(const Statement* statement) { return +statement->kind() >= +Kind::OverloadSet and +statement->kind() <= +Kind::DeclAlias; }
 };
 
 class BindingDecl : public NamedDecl {
@@ -686,24 +696,26 @@ class BindingDecl : public NamedDecl {
     Expr* _init;
 
 public:
-    BindingDecl(Location location, std::vector<DeclModifier> mods, Type* type, std::string name, Expr* init)
-        : NamedDecl(Kind::DeclBinding, location, mods, name), _type(type), _init(init) {}
+    BindingDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* type, std::string name, Expr* init)
+        : NamedDecl(Kind::DeclBinding, module, location, mods, name), _type(type), _init(init) {}
 
     auto type() const { return _type; }
+    auto type() -> Type*& { return _type; }
     auto init() const { return _init; }
+    auto init() -> Expr*& { return _init; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclBinding; }
 };
 
 class FunctionDecl : public NamedDecl {
+    Type* _function_type;
     Type* _returnType;
     std::vector<FunctionParam*> _params;
     Statement* _body;
     // TODO(local): varargs
 
 public:
-    FunctionDecl(Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<FunctionParam*> params, Statement* body)
-        : NamedDecl(Kind::DeclFunction, location, mods, name, template_params), _returnType(returnType), _params(std::move(params)), _body(body) {}
+    FunctionDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<FunctionParam*> params, Statement* body);
 
     auto return_type() const { return _returnType; }
     auto return_type() -> Type*& { return _returnType; }
@@ -715,18 +727,21 @@ public:
     auto body() -> Statement*& { return _body; }
     void body(Statement* body) { _body = body; }
 
+    auto function_type() const { return _function_type; }
+
     static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclFunction; }
 };
 
-class OverloadSet : public Statement {
+class OverloadSet : public NamedDecl {
     std::vector<FunctionDecl*> _overloads{};
 
 public:
-    OverloadSet(Location location)
-        : Statement(Kind::OverloadSet, location) {}
+    OverloadSet(Module* module, Location location, std::string name)
+        : NamedDecl(Kind::OverloadSet, module, location, {}, std::move(name)) {}
 
     void add(FunctionDecl* overload) { _overloads.push_back(overload); }
-    auto overloads() const -> std::span<FunctionDecl* const> { return _overloads; }
+    auto overloads() const -> const decltype(_overloads)& { return _overloads; }
+    auto overloads() -> decltype(_overloads)& { return _overloads; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::OverloadSet; }
 };
@@ -736,8 +751,8 @@ class StructDecl : public NamedDecl {
     std::vector<StructDecl*> _variants;
 
 public:
-    StructDecl(Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params, std::vector<BindingDecl*> fields, std::vector<StructDecl*> variants)
-        : NamedDecl(Kind::DeclStruct, location, mods, name, template_params), _fields(std::move(fields)), _variants(std::move(variants)) {}
+    StructDecl(Module* module, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params, std::vector<BindingDecl*> fields, std::vector<StructDecl*> variants)
+        : NamedDecl(Kind::DeclStruct, module, location, mods, name, template_params), _fields(std::move(fields)), _variants(std::move(variants)) {}
 
     auto fields() const -> std::span<BindingDecl* const> { return _fields; }
     auto variants() const -> std::span<StructDecl* const> { return _variants; }
@@ -750,8 +765,8 @@ class EnumDecl : public NamedDecl {
     std::vector<EnumVariant> _variants;
 
 public:
-    EnumDecl(Location location, std::vector<DeclModifier> mods, std::string name, Type* underlying_type, std::vector<EnumVariant> variants)
-        : NamedDecl(Kind::DeclEnum, location, mods, name), _underlying_type(underlying_type), _variants(std::move(variants)) {}
+    EnumDecl(Module* module, Location location, std::vector<DeclModifier> mods, std::string name, Type* underlying_type, std::vector<EnumVariant> variants)
+        : NamedDecl(Kind::DeclEnum, module, location, mods, name), _underlying_type(underlying_type), _variants(std::move(variants)) {}
 
     auto underlying_type() const { return _underlying_type; }
     auto variants() const -> std::span<EnumVariant const> { return _variants; }
@@ -763,8 +778,8 @@ class AliasDecl : public NamedDecl {
     Type* _type;
 
 public:
-    AliasDecl(Location location, std::vector<DeclModifier> mods, std::string name, Type* type)
-        : NamedDecl(Kind::DeclAlias, location, mods, name), _type(type) {}
+    AliasDecl(Module* module, Location location, std::vector<DeclModifier> mods, std::string name, Type* type)
+        : NamedDecl(Kind::DeclAlias, module, location, mods, name), _type(type) {}
 
     auto type() const { return _type; }
 
@@ -871,6 +886,7 @@ public:
         : Statement(Kind::Expr, expr->location()), _expr(expr) {}
 
     auto expr() const { return _expr; }
+    auto expr() -> Expr*& { return _expr; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Expr; }
 };
@@ -1188,6 +1204,7 @@ class NameExpr : public Expr {
     Scope* _scope;
     std::string _name{};
     std::vector<Expr*> _template_args{};
+    NamedDecl* _target{nullptr};
 
 public:
     NameExpr(Location location, Scope* scope, std::string name)
@@ -1200,6 +1217,10 @@ public:
     auto name() const -> const std::string& { return _name; }
     auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
 
+    auto target() const { return _target; }
+    auto target() -> NamedDecl*& { return _target; }
+    auto target(NamedDecl* t) { _target = t; }
+
     static bool classof(const Expr* expr) { return expr->kind() == Kind::LookupName; }
 };
 
@@ -1209,6 +1230,7 @@ class PathExpr : public Expr {
     std::vector<std::string> _names;
     std::vector<Location> _locations;
     std::vector<Expr*> _template_args{};
+    NamedDecl* _target{nullptr};
 
 public:
     PathExpr(PathKind path_kind, Scope* scope, std::vector<std::string> names, std::vector<Location> locations)
@@ -1222,6 +1244,10 @@ public:
     auto names() const -> const std::vector<std::string>& { return _names; }
     auto locations() const -> const std::vector<Location>& { return _locations; }
     auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
+
+    auto target() const { return _target; }
+    auto target() -> NamedDecl*& { return _target; }
+    auto target(NamedDecl* t) { _target = t; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::LookupPath; }
 };
@@ -1279,7 +1305,9 @@ public:
         : Expr(Kind::Call, location), _target(target), _args(std::move(args)) {}
 
     auto target() const { return _target; }
+    auto target() -> Expr*& { return _target; }
     auto args() const { return _args; }
+    auto args() -> decltype(_args)& { return _args; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Call; }
 };
@@ -1569,6 +1597,8 @@ public:
     bool is_poison() const { return kind() == Kind::TypePoison; }
     /// Check if this is the uninitialised type.
     //bool is_unknown() const;
+    /// Check if this is the builtin \c var type.
+    bool is_infer() const { return kind() == Kind::TypeInfer; }
     /// Check if this is the builtin \c void type.
     bool is_void() const { return kind() == Kind::TypeVoid; }
     /// Check if this is the builtin \c noreturn type.
@@ -1587,6 +1617,8 @@ public:
     bool is_buffer() const { return kind() == Kind::TypeBuffer; }
     /// Check if this is a function type.
     bool is_function() const { return kind() == Kind::TypeFunc; }
+    /// Check if this is a string type.
+    bool is_string() const { return kind() == Kind::TypeString; }
 
     /// Check if types are equal to each other.
     static bool Equal(const Type* a, const Type* b);
@@ -1680,6 +1712,7 @@ public:
         : Type(kind, location), _elem_type(elem_type) {}
 
     auto elem_type() const { return _elem_type; }
+    auto elem_type() -> Type*& { return _elem_type; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeNilable or (+expr->kind() >= +Kind::TypeArray and +expr->kind() <= +Kind::TypeBuffer); }
 };
@@ -1792,7 +1825,7 @@ class StringType : public Type {
     TypeAccess _access;
 
 public:
-    StringType(Location location, TypeAccess access = TypeAccess::Default)
+    StringType(Location location, TypeAccess access = TypeAccess::ReadOnly)
         : Type(Kind::TypeString, location), _access(access) {}
 
     auto access() const { return _access; }

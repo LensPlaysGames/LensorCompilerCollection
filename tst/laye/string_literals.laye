@@ -3,8 +3,9 @@
 
 foreign callconv(cdecl) i32 puts(i8[*] s);
 
-void main()
+i32 main()
 {
     i8[*] str = "Hello, hunter!";
     puts(str);
+    return 0;
 }

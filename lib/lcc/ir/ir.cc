@@ -42,6 +42,30 @@ GlobalVariable::GlobalVariable(Module* mod, Type* t, std::string name, Linkage l
     mod->add_var(this);
 }
 
+GlobalVariable* GlobalVariable::CreateStringPtr(Module* mod, std::string name, std::string_view str) {
+    auto context = mod->context();
+    auto ty = lcc::ArrayType::Get(context, str.length() + 1, lcc::IntegerType::Get(context, 8));
+
+    std::vector<char> data{str.begin(), str.end()};
+    data.push_back(0);
+    auto constant = new (*mod) ArrayConstant(
+        ty,
+        std::move(data),
+        true
+    );
+
+    // String literals use a global variable under the hood.
+    auto var = new (*mod) GlobalVariable(
+        mod,
+        ty,
+        std::move(name),
+        Linkage::Internal,
+        constant
+    );
+
+    return var;
+}
+
 usz Type::bits() const {
     switch (kind) {
         case Kind::Unknown: Diag::ICE("Cannot get size of unknown type");

@@ -42,11 +42,8 @@ auto layec::LayeContext::parse_laye_file(File& file) -> Module* {
 auto layec::Scope::declare(
     Parser* parser,
     std::string name,
-    Decl* decl
-) -> Result<Decl*> {
-    /// If the symbol already exists, then this is an error, unless
-    /// that symbol is a function declaration, and this is also a
-    /// function declaration.
+    NamedDecl* decl
+) -> Result<NamedDecl*> {
     if (
         auto it = symbols.find(name);
         it != symbols.end() and
@@ -57,6 +54,17 @@ auto layec::Scope::declare(
     /// Otherwise, add the symbol.
     symbols.emplace(std::move(name), decl);
     return decl;
+}
+
+
+layec::FunctionDecl::FunctionDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<FunctionParam*> params, Statement* body)
+    : NamedDecl(Kind::DeclFunction, module, location, mods, name, template_params), _returnType(returnType), _params(std::move(params)), _body(body) {
+    std::vector<Type*> param_types{};
+    for (auto param : _params) {
+        param_types.push_back(param->type);
+    }
+
+    _function_type = new (*module) FuncType{location, returnType, param_types};
 }
 
 std::string layec::ToString(layec::TokenKind kind) {
@@ -139,8 +147,7 @@ std::string layec::ToString(layec::TokenKind kind) {
         case TokenKind::From: return "from";
         case TokenKind::As: return "as";
         case TokenKind::Operator: return "operator";
-        case TokenKind::Readonly: return "readonly";
-        case TokenKind::Writeonly: return "writeonly";
+        case TokenKind::Mut: return "mut";
         case TokenKind::New: return "new";
         case TokenKind::Delete: return "delete";
         case TokenKind::Cast: return "cast";
@@ -293,9 +300,15 @@ std::string layec::ToString(Expr::Kind kind) {
 bool layec::Expr::evaluate(const layec::LayeContext* laye_context, layec::EvalResult& out, bool required) {
     LCC_ASSERT(!required || sema_ok(), "Cannot evaluate ill-formed or unchecked expression");
     switch (kind()) {
-        case Kind::LitInt:
+        case Kind::LitString: {
+            out = as<LitStringExpr>(this);
+            return true;
+        }
+
+        case Kind::LitInt: {
             out = i64(as<LitIntExpr>(this)->value());
             return true;
+        }
         
         default: return false;
     }
@@ -337,7 +350,7 @@ auto layec::Type::string(bool use_colours) const -> std::string {
                 out += "(expr)";
             }
         }
-        out += fmt::format("{}>", C(White));
+        out += fmt::format("{}>", C(Reset));
         return out;
     };
 
@@ -386,34 +399,35 @@ auto layec::Type::string(bool use_colours) const -> std::string {
             return fmt::format("{}({})", f->return_type()->string(use_colours), params_string);
         }
 
-        case Kind::TypeNoreturn: return fmt::format("{}noreturn", C(Cyan));
-        case Kind::TypeRawptr: return fmt::format("{}rawptr", C(Cyan));
-        case Kind::TypeVoid: return fmt::format("{}void", C(Cyan));
+        case Kind::TypeNoreturn: return fmt::format("{}noreturn{}", C(Cyan), C(Reset));
+        case Kind::TypeRawptr: return fmt::format("{}rawptr{}", C(Cyan), C(Reset));
+        case Kind::TypeVoid: return fmt::format("{}void{}", C(Cyan), C(Reset));
         case Kind::TypeString: {
             auto access = as<StringType>(this)->access();
             return fmt::format(
-                "{}{}string",
+                "{}{}string{}",
                 C(Cyan),
-                access == TypeAccess::ReadOnly ? "readonly " : (access == TypeAccess::ReadOnly ? "writeonly " : "")
+                access == TypeAccess::Mutable ? "mut " : "",
+                C(Reset)
             );
         }
 
         case Kind::TypeBool: {
             auto w = as<BoolType>(this)->bit_width();
-            if (w == 0) return fmt::format("{}bool", C(Cyan));
-            return fmt::format("{}b{}", C(Cyan), w);
+            if (w == 0) return fmt::format("{}bool{}", C(Cyan), C(Reset));
+            return fmt::format("{}b{}{}", C(Cyan), w, C(Reset));
         }
 
         case Kind::TypeInt: {
             auto i = as<IntType>(this);
-            if (i->bit_width() == 0) return fmt::format("{}{}int", C(Cyan), i->is_signed() ? "" : "u");
-            return fmt::format("{}{}{}", C(Cyan), i->is_signed() ? "i" : "u", i->bit_width());
+            if (i->bit_width() == 0) return fmt::format("{}{}int{}", C(Cyan), i->is_signed() ? "" : "u", C(Reset));
+            return fmt::format("{}{}{}{}", C(Cyan), i->is_signed() ? "i" : "u", i->bit_width(), C(Reset));
         }
 
         case Kind::TypeFloat: {
             auto w = as<FloatType>(this)->bit_width();
-            if (w == 0) return fmt::format("{}float", C(Cyan));
-            return fmt::format("{}f{}", C(Cyan), w);
+            if (w == 0) return fmt::format("{}float{}", C(Cyan), C(Reset));
+            return fmt::format("{}f{}{}", C(Cyan), w, C(Reset));
         }
     }
 }
@@ -956,11 +970,15 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
                 auto value = n->value();
                 if (value.is_i64()) {
                     out += fmt::format(" {}{}\n", C(Cyan), value.as_i64());
+                } else if (value.is_string()) {
+                    out += fmt::format(" {}{}\n", C(Cyan), value.as_string()->value());
                 } else {
-                    out += "???\n";
+                    out += " ???\n";
                 }
             } break;
         }
+
+        out += fmt::format("{}", C(Reset));
     }
 
     void PrintHeader(const layec::SemaNode* b) {

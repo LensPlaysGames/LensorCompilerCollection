@@ -20,7 +20,8 @@ class IRGen {
 
     std::unordered_map<SemaNode*, lcc::Value*> _ir_values;
     std::unordered_map<FunctionParam*, lcc::Value*> _ir_params;
-    std::vector<lcc::GlobalVariable*> string_literals;
+    //std::vector<lcc::GlobalVariable*> string_literals;
+    StringMap<lcc::GlobalVariable*> string_literals;
 
     lcc::Function* curr_func{nullptr};
     lcc::Block* curr_block{nullptr};
@@ -50,6 +51,8 @@ class IRGen {
         LCC_ASSERT(curr_func && curr_block, "Invalid insert point");
         curr_block->insert(inst);
     }
+
+    lcc::Type* Convert(lcc::laye::Type* in);
 
     void CreateIRFunctionValue(FunctionDecl* decl);
     void GenerateIRFunctionBody(FunctionDecl* decl);

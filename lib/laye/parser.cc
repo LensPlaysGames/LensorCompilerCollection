@@ -283,24 +283,29 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
             Error("Expected ')' to close function parameter list");
         }
 
-        auto func_scope = EnterScope();
-        func_scope.scope->set_function_scope();
+        FunctionDecl* func_decl{nullptr};
+        {
+            auto func_scope = EnterScope();
+            func_scope.scope->set_function_scope();
 
-        auto body = Result<Statement*>::Null();
-        if (At(Tk::OpenBrace)) {
-            body = ParseBlockStatement(std::move(func_scope));
-        } else {
-            if (Consume(Tk::EqualGreater)) {
-                auto expr = ParseExpr();
-                if (expr) body = new (*this) ExprStatement{*expr};
+            auto body = Result<Statement*>::Null();
+            if (At(Tk::OpenBrace)) {
+                body = ParseBlockStatement(std::move(func_scope));
+            } else {
+                if (Consume(Tk::EqualGreater)) {
+                    auto expr = ParseExpr();
+                    if (expr) body = new (*this) ExprStatement{*expr};
+                }
+
+                if (not Consume(Tk::SemiColon)) {
+                    Error("Expected ';'");
+                }
             }
 
-            if (not Consume(Tk::SemiColon)) {
-                Error("Expected ';'");
-            }
+            func_decl = new (*this) FunctionDecl{module, location, modifiers, *type, name, *template_params, std::move(params), *body};
         }
 
-        auto func_decl = new (*this) FunctionDecl{location, modifiers, *type, name, *template_params, params, *body};
+        LCC_ASSERT(func_decl);
         return CurrScope()->declare(this, func_decl->name(), func_decl);
     }
 
@@ -317,7 +322,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         Error("Expected ';'");
     }
 
-    auto binding_decl = new (*this) BindingDecl{location, modifiers, *type, name, *init};
+    auto binding_decl = new (*this) BindingDecl{module, location, modifiers, *type, name, *init};
     return CurrScope()->declare(this, binding_decl->name(), binding_decl);
 }
 
@@ -380,7 +385,7 @@ auto Parser::ParseStruct(std::vector<DeclModifier> mods) -> Result<StructDecl*> 
                 Error("Expected ';'");
             }
 
-            fields.push_back(new (*this) BindingDecl{GetLocation(field_start), mods, field_type, field_name, init});
+            fields.push_back(new (*this) BindingDecl{module, GetLocation(field_start), mods, field_type, field_name, init});
         }
     }
 
@@ -388,7 +393,7 @@ auto Parser::ParseStruct(std::vector<DeclModifier> mods) -> Result<StructDecl*> 
         Error("Expected '}}'");
     }
 
-    return new (*this) StructDecl{GetLocation(start), mods, struct_name, *template_params, fields, variants};
+    return new (*this) StructDecl{module, GetLocation(start), mods, struct_name, *template_params, fields, variants};
 }
 
 auto Parser::ParseDecl() -> Result<Decl*> {
@@ -558,7 +563,7 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
                     if (init_value_result) init_value = *init_value_result;
                 }
 
-                init = new (*this) BindingDecl{GetLocation(first_start), {}, init_type, init_name.text, init_value};
+                init = new (*this) BindingDecl{module, GetLocation(first_start), {}, init_type, init_name.text, init_value};
             }
 
             if (starts_with_decl and Consume(Tk::Colon)) {
@@ -945,22 +950,16 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allow_function
     auto start = CurrLocation();
     if (type) start = type->location();
 
-    auto type_access = TypeAccess::Default;
+    auto type_access = TypeAccess::ReadOnly;
     bool has_errored_for_access = false;
 
-    while (At(Tk::Readonly, Tk::Writeonly)) {
-        if (type_access != TypeAccess::Default && not has_errored_for_access) {
-            if (allocate) Error("Only one of 'readonly' or 'writeonly' may be specified for type access modifiers");
+    while (At(Tk::Mut)) {
+        if (type_access != TypeAccess::ReadOnly && not has_errored_for_access) {
+            if (allocate) Error("Only one of 'mut' may be specified for type access modifiers");
             has_errored_for_access = true;
         }
 
-        if (Consume(Tk::Readonly)) {
-            type_access = TypeAccess::ReadOnly;
-        } else if (Consume(Tk::Writeonly)) {
-            type_access = TypeAccess::WriteOnly;
-        } else {
-            LCC_ASSERT(false, "Somehow unhandled case of type access modifiers");
-        }
+        type_access = TypeAccess::Mutable;
     }
 
     if (Consume(Tk::Star)) {
@@ -1005,7 +1004,7 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allow_function
         }
         return TryParseTypeContinue(array_type, allocate, allow_functions);
     } else if (Consume(Tk::Question)) {
-        if (type_access != TypeAccess::Default) {
+        if (type_access != TypeAccess::ReadOnly) {
             if (allocate) Error("Nilable types cannot have access modifiers");
         }
 
@@ -1016,7 +1015,7 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allow_function
         return TryParseTypeContinue(nilable_type, allocate, allow_functions);
     } else if (allow_functions and Consume(Tk::OpenParen)) {
         // TODO(local): get a calling convention in here somewhere
-        if (type_access != TypeAccess::Default) {
+        if (type_access != TypeAccess::ReadOnly) {
             if (allocate) Error("Function types cannot have access modifiers");
         }
 
@@ -1039,7 +1038,7 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allow_function
         }
         return TryParseTypeContinue(function_type, allocate, allow_functions);
     } else {
-        if (type_access != TypeAccess::Default) {
+        if (type_access != TypeAccess::ReadOnly) {
             if (allocate) Error("Expected '*' or '[' to construct a container type");
         }
         return type;
@@ -1185,26 +1184,20 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
     will_attempt_to_parse_template_args = false;
     auto start = CurrLocation();
 
-    auto type_access = TypeAccess::Default;
+    auto type_access = TypeAccess::ReadOnly;
     bool has_errored_for_access = false;
 
-    while (At(Tk::Readonly, Tk::Writeonly)) {
-        if (type_access != TypeAccess::Default && not has_errored_for_access) {
-            if (allocate) Error("Only one of 'readonly' or 'writeonly' may be specified for type access modifiers");
+    while (At(Tk::Mut)) {
+        if (type_access != TypeAccess::ReadOnly && not has_errored_for_access) {
+            if (allocate) Error("Only one of 'mut' may be specified for type access modifiers");
             has_errored_for_access = true;
         }
 
-        if (Consume(Tk::Readonly)) {
-            type_access = TypeAccess::ReadOnly;
-        } else if (Consume(Tk::Writeonly)) {
-            type_access = TypeAccess::WriteOnly;
-        } else {
-            LCC_ASSERT(false, "Somehow unhandled case of type access modifiers");
-        }
+        type_access = TypeAccess::Mutable;
     }
 
     if (Consume(Tk::Bang)) {
-        if (type_access != TypeAccess::Default) {
+        if (type_access != TypeAccess::ReadOnly) {
             if (allocate) Error("Error-union types cannot have access modifiers");
         }
 
@@ -1236,7 +1229,7 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
     }
 
     if (At(Tk::Noreturn)) {
-        if (type_access != TypeAccess::Default) {
+        if (type_access != TypeAccess::ReadOnly) {
             if (allocate) Error("Access modifiers do not apply to the noreturn type");
         }
 
@@ -1252,7 +1245,7 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
     }
 
     if (At(Tk::Rawptr)) {
-        if (type_access != TypeAccess::Default) {
+        if (type_access != TypeAccess::ReadOnly) {
             if (allocate) Error("Access modifiers do not apply to the rawptr type");
         }
 
@@ -1268,7 +1261,7 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
     }
 
     if (At(Tk::Void)) {
-        if (type_access != TypeAccess::Default) {
+        if (type_access != TypeAccess::ReadOnly) {
             if (allocate) Error("Access modifiers do not apply to the void type");
         }
 
@@ -1297,7 +1290,7 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
     }
 
     if (At(Tk::Bool)) {
-        if (type_access != TypeAccess::Default) {
+        if (type_access != TypeAccess::ReadOnly) {
             if (allocate) Error("Access modifiers do not apply to bool types");
         }
 
@@ -1317,7 +1310,7 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
     if (At(Tk::Int, Tk::UInt)) {
         auto kw_kind = tok.kind;
 
-        if (type_access != TypeAccess::Default) {
+        if (type_access != TypeAccess::ReadOnly) {
             if (allocate) Error("Access modifiers do not apply to integer types");
         }
 
@@ -1335,7 +1328,7 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
     }
 
     if (At(Tk::Float)) {
-        if (type_access != TypeAccess::Default) {
+        if (type_access != TypeAccess::ReadOnly) {
             if (allocate) Error("Access modifiers do not apply to float types");
         }
 
@@ -1411,7 +1404,7 @@ auto Parser::ParsePrimaryExprContinue(Expr* expr) -> Result<Expr*> {
             Error("Expected ')' to close call argument list");
         }
 
-        return ParsePrimaryExprContinue(new (*this) CallExpr{GetLocation(expr->location()), expr, args});
+        return ParsePrimaryExprContinue(new (*this) CallExpr{GetLocation(expr->location()), expr, std::move(args)});
     } else if (Consume(Tk::Dot)) {
         std::string field_name = "";
         if (At(Tk::Ident)) {
@@ -1497,9 +1490,9 @@ auto Parser::ParsePrimaryIdentExprContinue(Expr* expr) -> Result<Expr*> {
 
         Type* type = nullptr;
         if (auto name_expr = cast<NameExpr>(expr)) {
-            type = new (*this) NameType{name_expr->location(), TypeAccess::Default, name_expr->scope(), name_expr->name(), name_expr->template_args()};
+            type = new (*this) NameType{name_expr->location(), TypeAccess::ReadOnly, name_expr->scope(), name_expr->name(), name_expr->template_args()};
         } else if (auto path_expr = cast<PathExpr>(expr)) {
-            type = new (*this) PathType{path_expr->path_kind(), TypeAccess::Default, path_expr->scope(), path_expr->names(), path_expr->locations(), path_expr->template_args()};
+            type = new (*this) PathType{path_expr->path_kind(), TypeAccess::ReadOnly, path_expr->scope(), path_expr->names(), path_expr->locations(), path_expr->template_args()};
         } else {
             LCC_ASSERT(false, "How did we get here?");
         }

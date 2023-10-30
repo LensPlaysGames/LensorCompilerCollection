@@ -16,8 +16,7 @@
 
 namespace layec = lcc::laye;
 
-namespace lcc::laye {
-lcc::Type* Convert(lcc::Context* ctx, layec::Type* in) {
+lcc::Type* layec::IRGen::Convert(layec::Type* in) {
     switch (in->kind()) {
         default: {
             Diag::ICE("Unhandled IR type conversion for Laye type {}", ToString(in->kind()));
@@ -27,8 +26,8 @@ lcc::Type* Convert(lcc::Context* ctx, layec::Type* in) {
             const auto& t = as<FuncType>(in);
             std::vector<lcc::Type*> param_types{};
             for (const auto& p : t->param_types())
-                param_types.push_back(Convert(ctx, p));
-            return lcc::FunctionType::Get(ctx, Convert(ctx, t->return_type()), std::move(param_types));
+                param_types.push_back(Convert(p));
+            return lcc::FunctionType::Get(_ctx, Convert(t->return_type()), std::move(param_types));
         }
 
         case Expr::Kind::TypeVoid: {
@@ -36,10 +35,14 @@ lcc::Type* Convert(lcc::Context* ctx, layec::Type* in) {
         }
 
         case Expr::Kind::TypeInt: {
-            return lcc::IntegerType::Get(ctx, in->size(ctx));
+            return lcc::IntegerType::Get(_ctx, in->size(_ctx));
+        }
+
+        case Expr::Kind::TypePointer:
+        case Expr::Kind::TypeBuffer: {
+            return lcc::Type::PtrTy;
         }
     }
-}
 }
 
 auto layec::IRGen::Generate(LayeContext* laye_context, laye::Module* module) -> lcc::Module* {
@@ -72,11 +75,16 @@ void layec::IRGen::CreateIRFunctionValue(FunctionDecl* decl) {
         param_types
     };
 
+    auto linkage = decl->linkage();
+    if (not decl->body()) {
+        linkage = Linkage::Imported;
+    }
+
     _ir_values[decl] = new (*mod()) Function(
         mod(),
         decl->mangled_name(),
-        as<FunctionType>(Convert(context(), func_type)),
-        decl->linkage(),
+        as<FunctionType>(Convert(func_type)),
+        linkage,
         decl->calling_convention(),
         decl->location()
     );
@@ -117,6 +125,22 @@ void layec::IRGen::GenerateStatement(Statement* statement) {
             }
         } break;
 
+        case Sk::DeclBinding: {
+            auto s = as<BindingDecl>(statement);
+
+            auto alloca = new (*mod()) AllocaInst(Convert(s->type()), s->location());
+            Insert(alloca);
+
+            _ir_values[s] = alloca;
+
+            if (s->init()) {
+                auto init_val = GenerateExpression(s->init());
+
+                auto store = new (*mod()) StoreInst(init_val, alloca, s->init()->location());
+                Insert(store);
+            }
+        } break;
+
         case Sk::Return: {
             auto s = as<ReturnStatement>(statement);
             if (s->is_void_return()) {
@@ -127,6 +151,11 @@ void layec::IRGen::GenerateStatement(Statement* statement) {
                 Insert(new (*mod()) ReturnInst(return_value, statement->location()));
             }
         } break;
+
+        case Sk::Expr: {
+            auto s = as<ExprStatement>(statement);
+            GenerateExpression(s->expr());
+        }
     }
 }
 
@@ -145,13 +174,65 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
             LCC_ASSERT(e->type());
 
             auto value = e->value();
-            auto type = Convert(context(), e->type());
+            auto type = Convert(e->type());
 
             if (value.is_i64()) {
                 _ir_values[expr] = new (*mod()) lcc::IntegerConstant{type, uint64_t(value.as_i64())};
+            } else if (value.is_string()) {
+                auto& string_value = value.as_string()->value();
+                auto it = string_literals.find(string_value);
+
+                GlobalVariable* ir_value;
+                if (it != string_literals.end()) {
+                    ir_value = it->second;
+                } else {
+                    ir_value = GlobalVariable::CreateStringPtr(mod(),
+                        fmt::format(".str.{}", total_string++), string_value);
+                    string_literals[string_value] = ir_value;
+                }
+
+                _ir_values[expr] = ir_value;
             } else {
                 LCC_TODO();
             }
+        } break;
+
+        case Ek::Call: {
+            auto e = as<CallExpr>(expr);
+
+            auto target = e->target();
+            auto target_value = GenerateExpression(target);
+
+            auto target_function_type = as<FunctionType>(Convert(target->type()));
+
+            std::vector<Value*> arg_values{};
+            for (auto& arg : e->args()) {
+                auto arg_value = GenerateExpression(arg);
+                arg_values.push_back(arg_value);
+            }
+
+            auto call = new (*mod()) lcc::CallInst(target_value, target_function_type, std::move(arg_values), e->location());
+            Insert(call);
+
+            _ir_values[expr] = call;
+        } break;
+
+        case Ek::LookupName: {
+            auto e = as<NameExpr>(expr);
+            auto target_decl = e->target();
+
+            auto target_value = _ir_values.at(target_decl);
+
+            Value* lookup_value = target_value;
+            if (not is<FunctionDecl>(target_decl)) {
+                auto load_type = Convert(e->type());
+                auto load = new (*mod()) lcc::LoadInst(load_type, lookup_value, e->location());
+                Insert(load);
+
+                lookup_value = load;
+            }
+
+            _ir_values[expr] = lookup_value;
         } break;
     }
 

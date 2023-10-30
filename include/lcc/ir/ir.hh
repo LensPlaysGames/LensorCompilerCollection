@@ -124,6 +124,8 @@ public:
 
     /// RTTI.
     static bool classof(Value* v) { return +v->kind() >= +Kind::GlobalVariable; }
+
+    static GlobalVariable* CreateStringPtr(Module* mod, std::string name, std::string_view string_value);
 };
 
 /// IR instruction.

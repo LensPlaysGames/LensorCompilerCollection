@@ -108,15 +108,30 @@ void layec::Sema::AnalysePrototype(FunctionDecl* func) {
 
         // TODO(local): noreturn is always impure, if we have purity checks in Laye
     }
+
+    LCC_ASSERT(func->sema_state() == SemaState::NotAnalysed);
 }
 
 void layec::Sema::Analyse(Statement*& statement) {
+    defer {
+        if (not statement->sema_done_or_errored())
+            statement->set_sema_done();
+        
+        LCC_ASSERT(statement->sema_done_or_errored());
+    };
+
     statement->set_sema_in_progress();
 
     auto kind = statement->kind();
     switch (kind) {
         case Statement::Kind::DeclFunction: {
             auto s = as<FunctionDecl>(statement);
+
+            if (s->name() == "main") {
+                // TODO(local): check that main is at global scope before adding this
+                s->add_mod(DeclModifier{s->location(), TokenKind::Export});
+            }
+
             if (auto& body = s->body()) {
                 if (auto expr_body = cast<ExprStatement>(body)) {
                     std::vector<Statement*> children{};
@@ -131,9 +146,23 @@ void layec::Sema::Analyse(Statement*& statement) {
             }
         } break;
 
+        case Statement::Kind::DeclBinding: {
+            auto s = as<BindingDecl>(statement);
+            if (s->type()->is_infer()) {
+                LCC_TODO();
+            } else {
+                AnalyseType(s->type());
+                if (Expr*& init = s->init()) {
+                    Analyse(init, s->type());
+                    ConvertOrError(init, s->type());
+                }
+            }
+        } break;
+
         case Statement::Kind::Block: {
             for (auto& child : as<BlockStatement>(statement)->children()) {
                 Analyse(child);
+                LCC_ASSERT(child->sema_done_or_errored());
             }
         } break;
 
@@ -160,14 +189,17 @@ void layec::Sema::Analyse(Statement*& statement) {
             }
         } break;
 
+        case Statement::Kind::Expr: {
+            auto s = as<ExprStatement>(statement);
+            LCC_ASSERT(s->expr());
+            AnalyseAndDiscard(s->expr());
+        } break;
+
         default: {
             Warning(statement->location(), "Unhandled statement in Sema::Analyze(Statement*&): {}", ToString(kind));
             statement->set_sema_errored();
         } break;
     }
-
-    if (not statement->sema_done_or_errored())
-        statement->set_sema_done();
 }
 
 bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
@@ -194,11 +226,124 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                 break;
             
             LCC_TODO();
-        }
+        } break;
 
-        case Expr::Kind::LitInt:
+        case Expr::Kind::LookupName: {
+            auto e = as<NameExpr>(expr);
+            auto name = e->name();
+
+            auto scope = e->scope();
+            decltype(scope->find(name)) symbols;
+
+            while (scope) {
+                //scope->debug_print();
+                symbols = scope->find(name);
+                scope = scope->parent();
+                if (symbols.first != symbols.second) break;
+            }
+
+            if (symbols.first == symbols.second) {
+                Error(expr->location(), "Unknown symbol '{}' (looking up names through imports is not supported yet.)", name);
+                expr->set_sema_errored();
+                expr->type(new (*module()) PoisonType{expr->location()});
+                break;
+            }
+
+            if (auto binding_decl = cast<BindingDecl>(symbols.first->second)) {
+                if (binding_decl->sema_state() == SemaState::InProgress) {
+                    Error(expr->location(), "Cannot use '{}' in its own initialiser", e->name());
+                    expr->set_sema_errored();
+                    expr->type(new (*module()) PoisonType{expr->location()});
+                    break;
+                }
+
+                e->target(binding_decl);
+                e->type(binding_decl->type());
+            } else if ([[maybe_unused]] auto function_decl = cast<FunctionDecl>(symbols.first->second)) {
+                std::vector<FunctionDecl*> overloads;
+                auto AppendOverloads = [&overloads](auto&& range) {
+                    for (auto it = range.first; it != range.second; it++)
+                        overloads.push_back(as<FunctionDecl>(it->second));
+                };
+
+                AppendOverloads(symbols);
+                for (; scope; scope = scope->parent())
+                    AppendOverloads(scope->find(e->name()));
+
+                // TODO(local): include overloads in imported scopes
+
+                if (overloads.size() == 1) {
+                    auto resolved_function = overloads[0];
+                    e->target(resolved_function);
+                    e->type(resolved_function->function_type());
+                    break;
+                }
+                
+                LCC_TODO();
+            } else {
+                LCC_TODO();
+            }
+        } break;
+
+        case Expr::Kind::Call: {
+            auto e = as<CallExpr>(expr);
+
+            for (auto& arg : e->args())
+                Analyse(arg);
+
+            if (not Analyse(e->target())) {
+                expr->set_sema_errored();
+                expr->type(new (*module()) PoisonType{expr->location()});
+                break;
+            }
+
+            if (auto named_target = cast<NameExpr>(e->target())) {
+                if ([[maybe_unused]] auto overload_set = cast<OverloadSet>(named_target->target())) {
+                    Diag::ICE("Laye overload resolution is currently not implemented");
+                }
+
+                auto callee_type = e->target()->type();
+                if (auto function_type = cast<FuncType>(callee_type)) {
+                    const auto& param_types = function_type->param_types();
+
+                    if (e->args().size() != param_types.size()) {
+                        Error(expr->location(), "Expected {} arguments to call, got {}.",
+                            param_types.size(), e->args().size());
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                        break;
+                    }
+
+                    for (unsigned i = 0; i < e->args().size(); i++) {
+                        auto& arg = e->args()[i];
+                        ConvertOrError(arg, param_types[i]);
+                    }
+
+                    expr->type(function_type->return_type());
+                } else {
+                    Error(e->target()->location(), "Cannot call non-function value");
+                    expr->set_sema_errored();
+                    expr->type(new (*module()) PoisonType{expr->location()});
+                    break;
+                }
+            } else if (auto path_target = cast<PathExpr>(e->target())) {
+                if ([[maybe_unused]] auto overload_set = cast<OverloadSet>(path_target->target())) {
+                    Diag::ICE("Laye overload resolution is currently not implemented");
+                }
+
+                LCC_TODO();
+            } else {
+                LCC_TODO();
+            }
+        } break;
+
+        case Expr::Kind::LitString: {
+            expr->type(new (*module()) StringType(expr->location()));
+        } break;
+
+        case Expr::Kind::LitInt: {
             expr->type(new (*module()) IntType(expr->location(), true, (int)context()->target()->size_of_pointer));
-            break;
+        } break;
 
         default: {
             if (auto t = cast<Type>(expr)) return AnalyseType(t);
@@ -211,7 +356,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
     if (not expr->sema_done_or_errored())
         expr->set_sema_done();
 
-    LCC_ASSERT(expr->type());
+    LCC_ASSERT(expr->type(), "for expr of kind '{}'", ToString(expr->kind()));
     return expr->sema_ok();
 }
 
@@ -220,17 +365,33 @@ bool layec::Sema::AnalyseType(Type*& type) {
 
     auto kind = type->kind();
     switch (kind) {
+        default: {
+            Warning(type->location(), "Unhandled type in Sema::Analyze(Type*&): {}", ToString(kind));
+            type->set_sema_errored();
+        } break;
+
+        case Expr::Kind::TypeBuffer: {
+            auto t = as<BufferType>(type);
+            if (not AnalyseType(t->elem_type()))
+                return false;
+            
+            if (t->elem_type()->is_void()) {
+                Error(t->elem_type()->location(), "Void is not a valid container element type");
+                type->set_sema_errored();
+            }
+
+            if (t->elem_type()->is_noreturn()) {
+                Error(t->elem_type()->location(), "Noreturn is only valid as a function return type");
+                type->set_sema_errored();
+            }
+        } break;
+
         case Expr::Kind::TypeInt: {
             auto t = as<IntType>(type);
             if (t->bit_width() <= 0 or t->bit_width() > 65535) {
                 Error(type->location(), "Integer type bit width out of range (1 to 65535)");
                 type->set_sema_errored();
             }
-        } break;
-
-        default: {
-            Warning(type->location(), "Unhandled type in Sema::Analyze(Type*&): {}", ToString(kind));
-            type->set_sema_errored();
         } break;
     }
 
@@ -280,11 +441,8 @@ int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
             if constexpr (PerformConversion) {
                 InsertImplicitCast(expr, to);
 
-                auto type = expr->type();
-                LCC_ASSERT(type);
-
                 expr = new (*module()) ConstantExpr(expr, res);
-                expr->type(type);
+                expr->type(to);
             }
 
             return Score(1);
@@ -304,6 +462,32 @@ int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
     if (from->is_function() and to->is_pointer() and Type::Equal(cast<SingleElementType>(to)->elem_type(), from)) {
         if constexpr (PerformConversion) InsertImplicitCast(expr, to);
         return NoOp;
+    }
+
+    if (from->is_string() and to->is_buffer()) {
+        auto to_buffer = as<BufferType>(to);
+        if (
+            to_buffer->elem_type()->is_integer() and
+            to_buffer->access() == TypeAccess::ReadOnly and
+            as<IntType>(to_buffer->elem_type())->bit_width() == 8
+        ) {
+            EvalResult res;
+            if (expr->evaluate(laye_context(), res, false)) {
+                if constexpr (PerformConversion) {
+                    InsertImplicitCast(expr, to);
+
+                    expr = new (*module()) ConstantExpr(expr, res);
+                    expr->type(to);
+                }
+
+                return Score(1);
+            }
+
+            if constexpr (PerformConversion)
+                InsertImplicitCast(expr, to);
+            
+            return Score(1);
+        }
     }
 
     return ConversionImpossible;
@@ -331,7 +515,13 @@ int layec::Sema::TryConvert(Expr*& expr, Type* to) {
 }
 
 void layec::Sema::Discard(Expr*& expr) {
-    LCC_ASSERT(false);
+    LCC_ASSERT(expr->sema_done_or_errored());
+    if (auto call_expr = cast<CallExpr>(expr)) {
+        [[maybe_unused]] auto call_target = call_expr->target();
+        Warning(expr->location(), "Do this later (nodiscard in sema) !");
+    } else {
+        Error(expr->location(), "Nonsense!");
+    }
 }
 
 bool layec::Sema::HasSideEffects(Expr* expr) {
