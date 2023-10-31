@@ -89,7 +89,7 @@ OperatorKind Parser::BinaryOperatorKind(TokenKind tokenKind) {
 }
 
 auto Parser::Parse(LayeContext* laye_context, File& file) -> Module* {
-    auto result = new Module{&file};
+    auto result = new Module{laye_context, &file};
 
     Parser parser{laye_context, &file, result};
     parser.NextToken();
@@ -114,17 +114,20 @@ auto Parser::Parse(LayeContext* laye_context, File& file) -> Module* {
                 std::string import_name = import->import_name();
 
                 auto file_dir = file.path().parent_path();
+                // TODO(local): also traverse include paths
                 auto import_file_path = file_dir / import_name;
 
                 if (import->has_alias()) {
                     import_name = import->alias();
                 } else {
                     // TODO(local): this should turn `import_name` into a valid Laye identifier if it isn't already
+                    fs::path name_as_path = import_name;
+                    import_name = name_as_path.filename().replace_extension("").string();
                 }
 
                 auto& import_file = laye_context->context()->get_or_load_file(import_file_path);
                 if (auto import_module = laye_context->parse_laye_file(import_file)) {
-                    result->add_import(import_name, import_header->location(), import_module);
+                    result->add_import(import_name, import_header->location(), import_module, is_export);
                 }
             }
         } else {
@@ -237,7 +240,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
     if (At(Tk::Struct)) {
         auto struct_result = ParseStruct(std::move(modifiers));
         if (not struct_result) return struct_result.diag();
-        return CurrScope()->declare(this, struct_result->name(), *struct_result);
+        return CurrScope()->declare(module, struct_result->name(), *struct_result);
     } else if (Consume(Tk::Enum)) {
         LCC_ASSERT(false, "TODO enum");
     }
@@ -306,7 +309,8 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         }
 
         LCC_ASSERT(func_decl);
-        return CurrScope()->declare(this, func_decl->name(), func_decl);
+        if (not CurrScope()->parent() and func_decl->is_export()) module->add_export(func_decl);
+        return CurrScope()->declare(module, func_decl->name(), func_decl);
     }
 
     if (template_params.is_value() and not(*template_params).empty()) {
@@ -323,7 +327,8 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
     }
 
     auto binding_decl = new (*this) BindingDecl{module, location, modifiers, *type, name, *init};
-    return CurrScope()->declare(this, binding_decl->name(), binding_decl);
+    if (not CurrScope()->parent() and binding_decl->is_export()) module->add_export(binding_decl);
+    return CurrScope()->declare(module, binding_decl->name(), binding_decl);
 }
 
 auto Parser::ParseStruct(std::vector<DeclModifier> mods) -> Result<StructDecl*> {

@@ -299,6 +299,76 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
             }
         } break;
 
+        case Expr::Kind::LookupPath: {
+            auto e = as<PathExpr>(expr);
+
+            auto path_names = e->names();
+            LCC_ASSERT(not path_names.empty());
+
+            auto first_name = path_names[0];
+            auto import_lookup = module()->lookup_import(first_name);
+            if (not import_lookup) {
+                Error(expr->location(), "Unknown symbol '{}'", first_name);
+                expr->set_sema_errored();
+                expr->type(new (*module()) PoisonType{expr->location()});
+                break;
+            }
+
+            auto curr_module = import_lookup->module;
+            for (usz i = 1; i < path_names.size(); i++) {
+                const auto& path_name = path_names[i];
+                bool is_last_name = i == path_names.size() - 1;
+
+                if (is_last_name) {
+                    auto module_exports = curr_module->exports();
+                    //module_exports->debug_print();
+                    auto exported_symbols = module_exports->find(path_name);
+
+                    if (exported_symbols.first == exported_symbols.second) {
+                        Error(expr->location(), "Unknown symbol '{}'", path_name);
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                        break;
+                    }
+
+                    if (auto binding_decl = cast<BindingDecl>(exported_symbols.first->second)) {
+                        if (binding_decl->sema_state() == SemaState::InProgress) {
+                            Error(expr->location(), "Cannot use '{}' in its own initialiser", path_name);
+                            expr->set_sema_errored();
+                            expr->type(new (*module()) PoisonType{expr->location()});
+                            break;
+                        }
+
+                        e->target(binding_decl);
+                        e->type(binding_decl->type());
+                    } else if ([[maybe_unused]] auto function_decl = cast<FunctionDecl>(exported_symbols.first->second)) {
+                        std::vector<FunctionDecl*> overloads;
+                        auto AppendOverloads = [&overloads](auto&& range) {
+                            for (auto it = range.first; it != range.second; it++)
+                                overloads.push_back(as<FunctionDecl>(it->second));
+                        };
+
+                        AppendOverloads(exported_symbols);
+
+                        // TODO(local): include overloads in imported scopes
+
+                        if (overloads.size() == 1) {
+                            auto resolved_function = overloads[0];
+                            e->target(resolved_function);
+                            e->type(resolved_function->function_type());
+                            break;
+                        }
+                        
+                        LCC_TODO();
+                    } else {
+                        LCC_TODO();
+                    }
+                } else {
+                    LCC_TODO();
+                }
+            }
+        } break;
+
         case Expr::Kind::Call: {
             auto e = as<CallExpr>(expr);
 
@@ -311,8 +381,8 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                 break;
             }
 
-            if (auto named_target = cast<NameExpr>(e->target())) {
-                if ([[maybe_unused]] auto overload_set = cast<OverloadSet>(named_target->target())) {
+            auto handle_lookup = [&](NamedDecl* target) {
+                if ([[maybe_unused]] auto overload_set = cast<OverloadSet>(target)) {
                     Diag::ICE("Laye overload resolution is currently not implemented");
                 }
 
@@ -325,7 +395,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                             param_types.size(), e->args().size());
                         expr->set_sema_errored();
                         expr->type(new (*module()) PoisonType{expr->location()});
-                        break;
+                        return;
                     }
 
                     for (unsigned i = 0; i < e->args().size(); i++) {
@@ -338,14 +408,14 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                     Error(e->target()->location(), "Cannot call non-function value");
                     expr->set_sema_errored();
                     expr->type(new (*module()) PoisonType{expr->location()});
-                    break;
+                    return;
                 }
-            } else if (auto path_target = cast<PathExpr>(e->target())) {
-                if ([[maybe_unused]] auto overload_set = cast<OverloadSet>(path_target->target())) {
-                    Diag::ICE("Laye overload resolution is currently not implemented");
-                }
+            };
 
-                LCC_TODO();
+            if (auto named_target = cast<NameExpr>(e->target())) {
+                handle_lookup(named_target->target());
+            } else if (auto path_target = cast<PathExpr>(e->target())) {
+                handle_lookup(path_target->target());
             } else {
                 LCC_TODO();
             }
@@ -561,7 +631,7 @@ void layec::Sema::Discard(Expr*& expr) {
     LCC_ASSERT(expr->sema_done_or_errored());
     if (auto call_expr = cast<CallExpr>(expr)) {
         [[maybe_unused]] auto call_target = call_expr->target();
-        Warning(expr->location(), "Do this later (nodiscard in sema) !");
+        //Warning(expr->location(), "Do this later (nodiscard in sema) !");
     } else {
         Error(expr->location(), "Nonsense!");
     }

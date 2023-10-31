@@ -53,6 +53,7 @@ using namespace command_line_options;
 using options = clopts< // clang-format off
     help<>,
     option<"-o", "Path to the output filepath where target code will be stored">,
+    multiple<option<"-I", "Add a directory to the include search paths">>,
     option<"-f", "What format to emit code in (default: asm)",
            values<
                "llvm",
@@ -109,7 +110,12 @@ int main(int argc, char** argv) {
             format = lcc::Format::gnu_as_att_assembly;
         }
     }
+
     lcc::Context context{detail::default_target, format};
+
+    for (const auto& dir : *opts.get<"-I">()) {
+        context.add_include_directory(dir);
+    }
 
     if (auto output_file_path = opts.get<"-o">()) {
         context.output_file_path(*output_file_path);

@@ -1,5 +1,5 @@
-#include <laye/ast.hh>
 #include <bit>
+#include <laye/ast.hh>
 #include <laye/parser.hh>
 #include <lcc/utils/ast_printer.hh>
 #include <lcc/utils/rtti.hh>
@@ -10,6 +10,12 @@ void* layec::Scope::operator new(size_t sz, Parser& parser) {
     LCC_ASSERT(not parser.IsInSpeculativeParse(), "Should never be allocating syntax scopes while in speculative parse mode.");
     auto ptr = ::operator new(sz);
     parser.module->scopes.push_back(static_cast<Scope*>(ptr));
+    return ptr;
+}
+
+void* layec::Scope::operator new(size_t sz, Module& module) {
+    auto ptr = ::operator new(sz);
+    module.scopes.push_back(static_cast<Scope*>(ptr));
     return ptr;
 }
 
@@ -39,8 +45,18 @@ auto layec::LayeContext::parse_laye_file(File& file) -> Module* {
     } else return nullptr;
 }
 
+layec::Module::Module(LayeContext* laye_context, File* file)
+    : _laye_context(laye_context), _file(file) {
+    _exports = new (*this) Scope(nullptr);
+}
+
+void layec::Module::add_export(NamedDecl* decl) {
+    //Diag::Note("Declaring an export in scope ({}) named {}", (void*)_exports, decl->name());
+    [[maybe_unused]] auto res = _exports->declare(this, decl->name(), decl);
+}
+
 auto layec::Scope::declare(
-    Parser* parser,
+    Module* module,
     std::string name,
     NamedDecl* decl
 ) -> Result<NamedDecl*> {
@@ -49,13 +65,12 @@ auto layec::Scope::declare(
         it != symbols.end() and
         not is<FunctionDecl>(it->second) and
         not is<FunctionDecl>(decl)
-    ) return Diag::Error(parser->context, decl->location(), "Redeclaration of '{}'", name);
+    ) return Diag::Error(module->context(), decl->location(), "Redeclaration of '{}'", name);
 
     /// Otherwise, add the symbol.
     symbols.emplace(std::move(name), decl);
     return decl;
 }
-
 
 layec::FunctionDecl::FunctionDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<FunctionParam*> params, Statement* body)
     : NamedDecl(Kind::DeclFunction, module, location, mods, name, template_params), _returnType(returnType), _params(std::move(params)), _body(body) {
@@ -309,14 +324,14 @@ bool layec::Expr::evaluate(const layec::LayeContext* laye_context, layec::EvalRe
             out = i64(as<LitIntExpr>(this)->value());
             return true;
         }
-        
+
         default: return false;
     }
 }
 
 auto layec::Type::size(const Context* ctx) const -> usz {
     if (auto st = cast<SizableType>(this)) {
-        return (usz)st->bit_width();
+        return (usz) st->bit_width();
     }
 
     switch (kind()) {
@@ -326,7 +341,7 @@ auto layec::Type::size(const Context* ctx) const -> usz {
 
 auto layec::Type::align(const Context* ctx) const -> usz {
     if (auto st = cast<SizableType>(this)) {
-        return std::bit_ceil((usz)st->bit_width());
+        return std::bit_ceil((usz) st->bit_width());
     }
 
     switch (kind()) {
@@ -457,7 +472,7 @@ bool layec::Type::Equal(const Type* a, const Type* b) {
         }
 
         // lookups are never equal unless actually identical.
-        case Kind::TypeLookupName: 
+        case Kind::TypeLookupName:
         case Kind::TypeLookupPath:
             return a == b;
 
@@ -504,7 +519,7 @@ bool layec::Type::Equal(const Type* a, const Type* b) {
                     return false;
             }
             return a2->calling_convention() == b2->calling_convention() and
-                Type::Equal(a2->return_type(), b2->return_type());
+                   Type::Equal(a2->return_type(), b2->return_type());
         }
 
         // all "instances" of these types are identical.
@@ -1177,12 +1192,12 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
 
             case K::LookupName: {
                 auto n = as<layec::NameExpr>(e);
-                (void)n;
+                (void) n;
             } break;
 
             case K::LookupPath: {
                 auto n = as<layec::PathExpr>(e);
-                (void)n;
+                (void) n;
             } break;
 
             case K::FieldIndex: {

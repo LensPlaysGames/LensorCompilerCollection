@@ -1,6 +1,7 @@
 // R %lcc --ir %s
 // p re
 // p nocap
+// d b [a-zA-Z0-9\.]+
 // d t %[0-9]+
 
 // * (?<global>[^:\s]+) : i8\[15\] = "Hello, hunter!\\00"
@@ -9,7 +10,7 @@
 foreign callconv(cdecl) i32 puts(i8[*] s);
 
 // * main : i32():
-// +   bb0:
+// +   $b:
 // +     (?<str>$t) = alloca ptr
 // +     store ptr @$global into $str
 // +     (?<l>$t) = load ptr from $str

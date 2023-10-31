@@ -54,6 +54,7 @@ class IRGen {
 
     lcc::Type* Convert(lcc::laye::Type* in);
 
+    void GenerateModule(Module* module);
     void CreateIRFunctionValue(FunctionDecl* decl);
     void GenerateIRFunctionBody(FunctionDecl* decl);
     void GenerateStatement(Statement* statement);

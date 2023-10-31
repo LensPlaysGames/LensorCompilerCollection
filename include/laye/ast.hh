@@ -77,12 +77,15 @@ public:
         std::string name;
         Location location;
         Module* module;
+        bool is_exported;
 
-        Ref(std::string name, Location location, Module* module)
-            : name(std::move(name)), location(location), module(module) {}
+        Ref(std::string name, Location location, Module* module, bool is_exported)
+            : name(std::move(name)), location(location), module(module), is_exported(is_exported) {}
     };
 
 private:
+    LayeContext* _laye_context;
+
     File* _file;
 
     usz unique_name_counter = 0;
@@ -90,7 +93,7 @@ private:
     std::vector<ModuleHeader*> _headers{};
 
     std::vector<Ref> _imports{};
-    std::vector<NamedDecl*> _exports{};
+    Scope* _exports{};
 
     std::vector<Decl*> _top_level_decls{};
 
@@ -101,18 +104,30 @@ private:
     SemaState _state = SemaState::NotAnalysed;
 
 public:
-    Module(File* file)
-        : _file(file) {}
+    Module(LayeContext* laye_context, File* file);
+
+    auto laye_context() const { return _laye_context; }
+    auto context() const { return _laye_context->context(); }
 
     auto file() const { return _file; }
 
     auto add_header(ModuleHeader* header) { _headers.push_back(header); }
-    auto add_import(std::string name, Location location, Module* module) { _imports.push_back(Ref{std::move(name), location, module}); }
-    auto add_export(NamedDecl* decl) { _exports.push_back(decl); }
+    auto add_import(std::string name, Location location, Module* module, bool is_exported) {
+        //Diag::Note("Adding an imported module with name '{}'", name);
+        _imports.push_back(Ref{std::move(name), location, module, is_exported});
+    }
+    void add_export(NamedDecl* decl);
     auto add_top_level_decl(Decl* decl) { _top_level_decls.push_back(decl); }
 
     auto imports() -> std::vector<Ref>& { return _imports; }
-    auto exports() -> std::vector<NamedDecl*>& { return _exports; }
+    auto lookup_import(const std::string& name, bool is_exported = false) const -> std::optional<Ref> {
+        auto it = std::find_if(_imports.begin(), _imports.end(), [name, is_exported](const Ref& m) { return (is_exported ? m.is_exported : true) and m.name == name; });
+        if (it == _imports.end())
+            return std::nullopt;
+        return *it;
+    }
+
+    auto exports() { return _exports; }
     auto top_level_decls() -> std::vector<Decl*>& { return _top_level_decls; }
 
     /// Intern a string and return its index.
@@ -388,9 +403,10 @@ public:
     /// Disallow creating scopes without a module reference.
     void* operator new(size_t) = delete;
     void* operator new(size_t sz, Parser& parser);
+    void* operator new(size_t sz, Module& module);
 
     auto declare(
-        Parser* parser,
+        Module* module,
         std::string name,
         NamedDecl* expr
     ) -> Result<NamedDecl*>;
@@ -405,9 +421,9 @@ public:
     bool is_function_scope() const { return _is_function_scope; }
 
     void debug_print() const {
-        fmt::print(">> scope ({})\n", (void*)this);
+        fmt::print(">> scope ({})\n", (void*) this);
         for (auto [first, second] : symbols) {
-            fmt::print("  {} ({})\n", first, (void*)second);
+            fmt::print("  {} ({})\n", first, (void*) second);
         }
     }
 };
@@ -677,6 +693,9 @@ public:
     }
 
     void add_mod(DeclModifier modifier) { _mods.push_back(modifier); }
+
+    bool is_export() const { return has_mod(TokenKind::Export); }
+    bool is_foreign() const { return has_mod(TokenKind::Foreign); }
 
     auto linkage() const {
         auto mod_list = mods();
@@ -1577,7 +1596,7 @@ public:
 
     auto expr() const { return _expression; }
     auto value() const -> const EvalResult& { return _value; }
-    
+
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Constant; }
 };
 
@@ -1605,7 +1624,7 @@ public:
 
     bool is_poison() const { return kind() == Kind::TypePoison; }
     /// Check if this is the uninitialised type.
-    //bool is_unknown() const;
+    // bool is_unknown() const;
     /// Check if this is the builtin \c var type.
     bool is_infer() const { return kind() == Kind::TypeInfer; }
     /// Check if this is the builtin \c void type.
@@ -1747,7 +1766,7 @@ public:
     auto access() const { return _access; }
     auto rank_lengths() const -> std::span<Expr* const> { return _rank_lengths; }
     auto rank() const -> usz { return _rank_lengths.size(); }
-    auto nth_length(usz i) const -> usz { return (usz)(as<ConstantExpr>(_rank_lengths[i]))->value().as_i64(); }
+    auto nth_length(usz i) const -> usz { return (usz) (as<ConstantExpr>(_rank_lengths[i]))->value().as_i64(); }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeArray; }
 };
@@ -1855,9 +1874,9 @@ protected:
 public:
     bool is_sized() const { return _bit_width > 0; }
 
-    int  bit_width() const { return _bit_width; }
+    int bit_width() const { return _bit_width; }
     void bit_width(int w) { _bit_width = w; }
-    
+
     bool is_platform() const { return _is_platform; }
     void is_platform(bool p) { _is_platform = p; }
 

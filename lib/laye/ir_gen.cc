@@ -45,19 +45,25 @@ lcc::Type* layec::IRGen::Convert(layec::Type* in) {
     }
 }
 
+void layec::IRGen::GenerateModule(laye::Module* module) {
+    for (auto& imported_module : module->imports()) {
+        GenerateModule(imported_module.module);
+    }
+
+    for (auto& tld : module->top_level_decls()) {
+        if (auto f = cast<FunctionDecl>(tld))
+            CreateIRFunctionValue(f);
+    }
+
+    for (auto& tld : module->top_level_decls()) {
+        if (auto f = cast<FunctionDecl>(tld))
+            GenerateIRFunctionBody(f);
+    }
+}
+
 auto layec::IRGen::Generate(LayeContext* laye_context, laye::Module* module) -> lcc::Module* {
     auto ir_gen = IRGen{laye_context, module};
-
-    for (auto& tld : module->top_level_decls()) {
-        if (auto f = cast<FunctionDecl>(tld))
-            ir_gen.CreateIRFunctionValue(f);
-    }
-
-    for (auto& tld : module->top_level_decls()) {
-        if (auto f = cast<FunctionDecl>(tld))
-            ir_gen.GenerateIRFunctionBody(f);
-    }
-
+    ir_gen.GenerateModule(module);
     return ir_gen.mod();
 }
 
@@ -266,6 +272,24 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
 
         case Ek::LookupName: {
             auto e = as<NameExpr>(expr);
+            auto target_decl = e->target();
+
+            auto target_value = _ir_values.at(target_decl);
+
+            Value* lookup_value = target_value;
+            if (not is<FunctionDecl>(target_decl)) {
+                auto load_type = Convert(e->type());
+                auto load = new (*mod()) lcc::LoadInst(load_type, lookup_value, e->location());
+                Insert(load);
+
+                lookup_value = load;
+            }
+
+            _ir_values[expr] = lookup_value;
+        } break;
+
+        case Ek::LookupPath: {
+            auto e = as<PathExpr>(expr);
             auto target_decl = e->target();
 
             auto target_value = _ir_values.at(target_decl);
