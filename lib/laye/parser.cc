@@ -221,7 +221,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         auto spec = EnterSpeculativeParse();
         auto discard_modifiers = GetModifiers(false);
 
-        if (not At(Tk::Struct, Tk::Enum)) {
+        if (not At(Tk::Struct, Tk::Enum, Tk::Alias)) {
             auto before_type_offset = tok.location.pos;
             if (not SpeculativeParseType()) {
                 return Result<Decl*>::Null();
@@ -241,8 +241,12 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         auto struct_result = ParseStruct(std::move(modifiers));
         if (not struct_result) return struct_result.diag();
         return CurrScope()->declare(module, struct_result->name(), *struct_result);
-    } else if (Consume(Tk::Enum)) {
+    } else if (At(Tk::Enum)) {
         LCC_ASSERT(false, "TODO enum");
+    } else if (At(Tk::Alias)) {
+        auto alias_result = ParseAlias(std::move(modifiers), false);
+        if (not alias_result) return alias_result.diag();
+        return CurrScope()->declare(module, alias_result->name(), *alias_result);
     }
 
     auto type = ParseType();
@@ -333,10 +337,9 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
 
 auto Parser::ParseStruct(std::vector<DeclModifier> mods) -> Result<StructDecl*> {
     LCC_ASSERT(not IsInSpeculativeParse());
-
-    auto start = tok.location;
     LCC_ASSERT(Consume(Tk::Struct, Tk::Variant));
 
+    auto location = tok.location;
     std::string struct_name{};
     if (At(Tk::Ident)) {
         struct_name = tok.text;
@@ -398,7 +401,39 @@ auto Parser::ParseStruct(std::vector<DeclModifier> mods) -> Result<StructDecl*> 
         Error("Expected '}}'");
     }
 
-    return new (*this) StructDecl{module, GetLocation(start), mods, struct_name, *template_params, fields, variants};
+    return new (*this) StructDecl{module, location, mods, struct_name, *template_params, fields, variants};
+}
+
+auto Parser::ParseAlias(std::vector<DeclModifier> mods, bool is_strict) -> Result<AliasDecl*>  {
+    LCC_ASSERT(not IsInSpeculativeParse());
+    LCC_ASSERT(Consume(Tk::Alias));
+
+    auto location = tok.location;
+    std::string alias_name{};
+    if (At(Tk::Ident)) {
+        alias_name = tok.text;
+        NextToken();
+    } else Error("Expected identifier");
+
+    if (not Consume(Tk::Equal)) {
+        return Error("Expected '='");
+    }
+
+    Type* alias_type = nullptr;
+    {
+        auto alias_type_result = ParseType();
+        if (alias_type_result) alias_type = *alias_type_result;
+        else {
+            Synchronise();
+            return alias_type_result.diag();
+        }
+    }
+
+    if (not Consume(Tk::SemiColon)) {
+        Error("Expected ';'");
+    }
+
+    return new (*this) AliasDecl{module, location, mods, is_strict, alias_name, alias_type};
 }
 
 auto Parser::ParseDecl() -> Result<Decl*> {

@@ -798,13 +798,17 @@ public:
 };
 
 class AliasDecl : public NamedDecl {
+    bool _is_strict;
     Type* _type;
 
 public:
-    AliasDecl(Module* module, Location location, std::vector<DeclModifier> mods, std::string name, Type* type)
-        : NamedDecl(Kind::DeclAlias, module, location, mods, name), _type(type) {}
+    AliasDecl(Module* module, Location location, std::vector<DeclModifier> mods, bool is_strict, std::string name, Type* type)
+        : NamedDecl(Kind::DeclAlias, module, location, mods, name), _is_strict(is_strict), _type(type) {}
+
+    bool is_strict() { return _is_strict; }
 
     auto type() const { return _type; }
+    auto type() -> Type*& { return _type; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclAlias; }
 };

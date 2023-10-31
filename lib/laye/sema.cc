@@ -159,6 +159,11 @@ void layec::Sema::Analyse(Statement*& statement) {
             }
         } break;
 
+        case Statement::Kind::DeclAlias: {
+            auto s = as<AliasDecl>(statement);
+            AnalyseType(s->type());
+        } break;
+
         case Statement::Kind::Block: {
             for (auto& child : as<BlockStatement>(statement)->children()) {
                 Analyse(child);
@@ -501,6 +506,33 @@ bool layec::Sema::AnalyseType(Type*& type) {
             } else if (t->bit_width() <= 0 or t->bit_width() > 65535) {
                 Error(type->location(), "Primitive type bit width must be in the range (0, 65535]");
                 type->set_sema_errored();
+            }
+        } break;
+
+        case Expr::Kind::TypeLookupName: {
+            auto t = as<NameType>(type);
+            auto name = t->name();
+
+            auto scope = t->scope();
+            decltype(scope->find(name)) symbols;
+
+            while (scope) {
+                //scope->debug_print();
+                symbols = scope->find(name);
+                scope = scope->parent();
+                if (symbols.first != symbols.second) break;
+            }
+
+            if (symbols.first == symbols.second) {
+                Error(type->location(), "Unknown symbol '{}' (looking up names through imports is not supported yet.)", name);
+                type->set_sema_errored();
+                break;
+            }
+
+            if (auto alias_decl = cast<AliasDecl>(symbols.first->second)) {
+                type = alias_decl->type();
+            } else {
+                LCC_TODO();
             }
         } break;
     }

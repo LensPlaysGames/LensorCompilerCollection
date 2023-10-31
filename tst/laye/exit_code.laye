@@ -1,6 +1,7 @@
 // R %lcc --ir %s
+// d b [a-zA-Z0-9\.]+
 
 // * main : i32():
-// +   bb0:
+// +   $b:
 // +     return i32 69
 i32 main() => 69;

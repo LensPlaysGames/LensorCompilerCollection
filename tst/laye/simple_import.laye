@@ -1,6 +1,4 @@
 // R %lcc --ir %s
-// p re
-// p nocap
 // d b [a-zA-Z0-9\.]+
 // d t %[0-9]+
 

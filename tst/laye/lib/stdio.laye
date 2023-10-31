@@ -1,6 +1,4 @@
 // R %lcc --ir %s
-// p re
-// p nocap
 // d t %[0-9]+
 
 // * puts : i32(ptr $t) external

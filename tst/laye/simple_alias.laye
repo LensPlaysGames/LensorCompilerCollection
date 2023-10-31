@@ -1,11 +1,10 @@
 // R %lcc --ir %s
 // d b [a-zA-Z0-9\.]+
+// d t %[0-9]+
+
+alias my_i32 = i32;
 
 // * main : i32():
 // +   $b:
 // +     return i32 0
-i32 main()
-{
-    xyzzy;
-    return 0;
-}
+my_i32 main() => 0;

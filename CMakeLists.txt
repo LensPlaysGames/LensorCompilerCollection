@@ -335,7 +335,7 @@ if (BUILD_TESTING)
         PATTERN "*.laye"
         PREFIX "//"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
-        ARGS -l . -D "lcc=$<TARGET_FILE:lcc>"
+        ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
         RECURSIVE
     )
 endif()

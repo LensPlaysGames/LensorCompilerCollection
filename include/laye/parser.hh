@@ -332,6 +332,7 @@ private:
     }
 
     auto ParseStruct(std::vector<DeclModifier> mods = {}) -> Result<StructDecl*>;
+    auto ParseAlias(std::vector<DeclModifier> mods = {}, bool is_strict = false) -> Result<AliasDecl*>;
 
     auto ParseConstructorBody() -> Result<std::vector<CtorFieldInit>>;
     auto ParsePrimaryExprContinue(Expr* expr) -> Result<Expr*>;
