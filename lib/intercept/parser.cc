@@ -979,7 +979,7 @@ void intc::Parser::ParseTopLevel() {
         if (not Consume(Tk::Semicolon)) {
             if (At(Tk::Eof)) {
                 Warning("Expected ';' but got end of file");
-            } else {
+            } else if (expr) {
                 Location location{};
                 if (expr.value()->location().is_valid())
                     location = expr.value()->location();
