@@ -345,4 +345,12 @@ if (BUILD_TESTING)
         ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
         RECURSIVE
     )
+
+    FCHKAddAllTestsInDir(
+        IN "tst/intercept/ir"
+        PATTERN "*.int"
+        PREFIX ";;"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
+    )
 endif()
