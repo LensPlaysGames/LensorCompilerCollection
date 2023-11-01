@@ -21,12 +21,10 @@ using ret_imm = Pattern<
     Inst<usz(x86_64Opcode::Return), o<1>>
 >;
 
-void rewrite_x86_64(MFunction& function) {
-    PatternList<
-        ret,
-        ret_imm
-    >::rewrite(function);
-}
+using x86_64PatternList = PatternList<
+    ret,
+    ret_imm
+>;
 
 } // namespace isel
 } // namespace lcc

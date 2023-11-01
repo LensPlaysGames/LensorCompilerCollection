@@ -2,6 +2,7 @@
 #define LCC_CODEGEN_INSTRUCTION_SELECTION_HH
 
 #include <lcc/utils.hh>
+#include <lcc/context.hh>
 #include <lcc/codegen/mir.hh>
 
 namespace lcc {
@@ -46,7 +47,11 @@ struct PatternList {
     }
 };
 
+
 } // namespace isel
+
+void select_instructions(const Context& ctx, MFunction& function);
+
 } // namespace lcc
 
 #endif /* LCC_CODEGEN_INSTRUCTION_SELECTION_HH */
