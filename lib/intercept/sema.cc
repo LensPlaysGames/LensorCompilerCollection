@@ -448,21 +448,17 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         Expr** last{};
         if (auto block = cast<BlockExpr>(decl->body())) {
             if (block->children().empty()) {
-                if (ty->return_type()->is_void()) {
-                    block->add(new (mod) ReturnExpr(nullptr, {}));
-                } else {
-                    // For anything except the top-level function, if there is an expected
-                    // return value, there has to be one, otherwise it's an error.
-                    if (decl->name() != "main") {
-                        Error(decl->location(), "Function `{}` has non-void return type, and must return a value", decl->name());
-                        return;
-                    }
-
-                    // For the top level function, a return value is be created if a valid
-                    // one is not present.
-                    auto inserted_return_value = new (mod) IntegerLiteral(0, {});
-                    block->add(new (mod) ReturnExpr(inserted_return_value, {}));
+                // For anything except the top-level function, if there is an expected
+                // return value, there has to be one, otherwise it's an error.
+                if (decl->name() != "main") {
+                    Error(decl->location(), "Function `{}` has non-void return type, and must return a value", decl->name());
+                    return;
                 }
+
+                // For the top level function, a return value is be created if a valid
+                // one is not present.
+                auto inserted_return_value = new (mod) IntegerLiteral(0, {});
+                block->add(new (mod) ReturnExpr(inserted_return_value, {}));
             }
 
             last = &block->children().back();
@@ -485,6 +481,11 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             block->add(new (mod) ReturnExpr(*last, {}));
         else decl->body() = new (mod) ReturnExpr(*last, {});
     } else {
+        // Empty block body needs a return expression.
+        if (auto block = cast<BlockExpr>(decl->body()))
+            if (block->children().empty())
+                block->add(new (mod) ReturnExpr(nullptr, {}));
+
         Discard(&decl->body());
     }
 }
