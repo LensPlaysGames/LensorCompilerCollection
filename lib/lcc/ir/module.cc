@@ -8,6 +8,7 @@
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/codegen/mir.hh>
+#include <lcc/codegen/isel.hh>
 #include <lcc/diags.hh>
 
 #include <algorithm>
@@ -154,6 +155,9 @@ void Module::emit(std::string_view output_file_path) {
         } break;
         case Format::GNU_AS_ATT_ASSEMBLY: {
             auto machine_ir = mir();
+
+            for (auto& mfunc : machine_ir)
+                select_instructions(context(), mfunc);
 
             LCC_ASSERT(false, "TODO: Emit gnu assembly");
         } break;

@@ -7,8 +7,8 @@
 
 namespace lcc {
 
-void select_instructions(const Context& ctx, MFunction& function) {
-    if (ctx.target()->is_x64())
+void select_instructions(const Context* const ctx, MFunction& function) {
+    if (ctx->target()->is_x64())
         lcc::isel::x86_64PatternList::rewrite(function);
 }
 

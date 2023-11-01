@@ -50,7 +50,7 @@ struct PatternList {
 
 } // namespace isel
 
-void select_instructions(const Context& ctx, MFunction& function);
+void select_instructions(const Context* const ctx, MFunction& function);
 
 } // namespace lcc
 
