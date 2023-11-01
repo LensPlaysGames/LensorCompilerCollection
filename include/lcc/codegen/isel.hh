@@ -29,6 +29,11 @@ struct Inst {
 
 template <typename in, typename out>
 struct Pattern {
+    // FIXME: Ideally, we would not iterate each function entirely for every
+    // pattern we want to match. Instead, we would iterate each pattern while
+    // we are iterating instructions until we find a matching one. However, I
+    // cannot figure out how to iterate types, so I'll leave that for somebody
+    // with double my IQ.
     static void rewrite(MFunction& function) {
         for (auto& block : function.blocks()) {
             for (auto& instruction : block.instructions()) {
