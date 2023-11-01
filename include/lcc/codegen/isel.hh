@@ -46,6 +46,9 @@ struct Inst {
 
 template <typename in, typename out>
 struct Pattern {
+    using input = in;
+    using output = out;
+
     // FIXME: Ideally, we would not iterate each function entirely for every
     // pattern we want to match. Instead, we would iterate each pattern while
     // we are iterating instructions until we find a matching one. However, I
