@@ -483,6 +483,9 @@ bool layec::Sema::AnalyseType(Type*& type) {
             type->set_sema_errored();
         } break;
 
+        case Expr::Kind::TypeVoid: {
+        } break;
+
         case Expr::Kind::TypeBuffer: {
             auto t = as<BufferType>(type);
             if (not AnalyseType(t->elem_type()))
