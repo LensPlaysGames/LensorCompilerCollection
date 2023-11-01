@@ -205,16 +205,21 @@ int main(int argc, char** argv) {
         return std::filesystem::path{path_string}.replace_extension(replacement).string();
     };
 
-    auto configured_output_file_path = opts.get_or<"-o">("a.out");
+    auto configured_output_file_path = opts.get_or<"-o">("");
     if (input_files.size() == 1) {
         std::string output_file_path = configured_output_file_path;
-        if (opts.get_or<"-o">("").empty()) {
-            output_file_path = ConvertFileExtensionToOutputFormat(output_file_path);
+        if (output_file_path.empty()) {
+            output_file_path = ConvertFileExtensionToOutputFormat(input_files[0].path.string());
         }
 
         GenerateOutputFile(input_files[0], output_file_path);
         if (context.has_error()) return 1;
     } else {
+        if (not configured_output_file_path.empty()) {
+            // TODO(local): you can, but only if we're planning to link these files; handle that later
+            lcc::Diag::Fatal("cannot specify -o when generating multiple output files");
+        }
+
         for (auto& input_file : input_files) {
             std::string output_file_path = ConvertFileExtensionToOutputFormat(input_file.path.string());
             GenerateOutputFile(input_file, output_file_path);
