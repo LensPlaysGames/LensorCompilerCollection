@@ -2,7 +2,7 @@
 #define LCC_CODEGEN_INSTRUCTION_SELECTION_HH
 
 #include <lcc/utils.hh>
-#include <lcc/context.hh>
+#include <lcc/ir/module.hh>
 #include <lcc/codegen/mir.hh>
 
 namespace lcc {
@@ -48,34 +48,74 @@ template <typename in, typename out>
 struct Pattern {
     using input = in;
     using output = out;
-
-    // FIXME: Ideally, we would not iterate each function entirely for every
-    // pattern we want to match. Instead, we would iterate each pattern while
-    // we are iterating instructions until we find a matching one. However, I
-    // cannot figure out how to iterate types, so I'll leave that for somebody
-    // with double my IQ.
-    static void rewrite(MFunction& function) {
-        for (auto& block : function.blocks()) {
-            for (auto& instruction : block.instructions()) {
-                if (instruction.opcode() == in::opcode) {
-                    fmt::print("Matching {}!\n", ToString(instruction.kind()));
-                }
-            }
-        }
-    }
 };
 
 template<typename... Patterns>
 struct PatternList {
-    static void rewrite(MFunction& function) {
-        (Patterns::rewrite(function), ...);
+    static MFunction rewrite(lcc::Module* mod, MFunction& function) {
+        MFunction out{};
+        out.name() = function.name();
+        out.locals() = function.locals();
+
+        // TODO: Get the longest pattern length
+        usz longest_pattern_length = 1;
+
+        // NOTE: If you modify block.instructions() in any way, you are going to
+        // have a bad time.
+        std::vector<MInst*> instructions{};
+
+        for (auto& old_block : function.blocks()) {
+            out.add_block(MBlock(old_block.name()));
+            auto& new_block = out.blocks().back();
+            for (auto& instruction : old_block.instructions()) {
+                usz instructions_handled = 0;
+
+                do {
+                    for (; instructions_handled < old_block.instructions().size(); ++instructions_handled) {
+                        // Add (up to) `longest_pattern_length` instructions to the instructions vector.
+                        if (instructions.size() >= longest_pattern_length) break;
+                        instructions.push_back(old_block.instructions().data() + instructions_handled);
+                    }
+
+                    bool to_be_handled = true;
+                    While<Patterns...>(to_be_handled, [&]<typename pattern>() {
+                            if (instructions.front()->opcode() == pattern::input::opcode) {
+                                fmt::print("Pattern matched!\n");
+                                LCC_TODO();
+
+                                to_be_handled = false; // break
+                            }
+                        });
+
+                    // If we get through *all* of the patterns, and none of them matched, we
+                    // can pop an instruction off the front and emit it into the output,
+                    // before going back to the "add instructions" bit.
+                    if (to_be_handled) {
+                        if (instructions.size()) {
+                            // Add front of `instructions` to emission output.
+                            new_block.insert(*instructions.front());
+                            // Pop instruction from front of vector.
+                            instructions.erase(instructions.begin());
+                        }
+                    }
+
+                    // If there are still instructions in the window to be handled, go back
+                    // and handle them (after topping off the window with any more
+                    // instructions that there may be). If the window is empty, but there are
+                    // still more instructions to handle in this block, also go back and
+                    // handle them.
+                } while (instructions.size() != 0 || instructions_handled < old_block.instructions().size());
+            }
+        }
+
+        return out;
     }
 };
 
 
 } // namespace isel
 
-void select_instructions(const Context* const ctx, MFunction& function);
+void select_instructions(Module* ctx, MFunction& function);
 
 } // namespace lcc
 

@@ -157,7 +157,7 @@ void Module::emit(std::string_view output_file_path) {
             auto machine_ir = mir();
 
             for (auto& mfunc : machine_ir)
-                select_instructions(context(), mfunc);
+                select_instructions(this, mfunc);
 
             LCC_ASSERT(false, "TODO: Emit gnu assembly");
         } break;
