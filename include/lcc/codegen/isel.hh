@@ -20,6 +20,11 @@ constexpr void While(bool& cond, auto&& lambda) {
     (impl.template operator()<pack>() and ...);
 }
 
+template<typename... pack>
+constexpr void Foreach(auto&& lambda) {
+    (lambda.template operator()<pack>(), ...);
+}
+
 template<i64 imm = 0>
 struct Immediate {
     static constexpr i64 immediate = imm;
