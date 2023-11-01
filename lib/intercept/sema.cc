@@ -742,7 +742,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
 
             /// Type must be a struct type.
             auto struct_type = cast<StructType>(m->object()->type()->strip_pointers_and_references());
-            if (struct_type) {
+            if (not struct_type) {
                 Error(
                     m->location(),
                     "LHS of member access must be a (pointer or reference to) struct, but was {}",
