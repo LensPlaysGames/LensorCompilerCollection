@@ -33,6 +33,9 @@ private:
     /// Print a diagnostic with no (valid) location info.
     void PrintDiagWithoutLocation();
 
+    /// Determine whether we should use colours at all.
+    bool ShouldUseColour() const;
+
 public:
     static constexpr u8 ICE_EXIT_CODE = 17;
     static constexpr u8 FATAL_EXIT_CODE = 18;

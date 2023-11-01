@@ -5,22 +5,18 @@
 #include <intercept/ir_gen.hh>
 #include <intercept/parser.hh>
 #include <intercept/sema.hh>
+#include <laye/ir_gen.hh>
 #include <laye/parser.hh>
 #include <laye/sema.hh>
-#include <laye/ir_gen.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
+#include <lcc/format.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/lcc-c.h>
 #include <lcc/target.hh>
-#include <lcc/format.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/platform.hh>
 #include <string>
-
-#ifdef _WIN32
-#    include <io.h>
-#    define isatty _isatty
-#endif
 
 namespace detail {
 void aluminium_handler() {
@@ -64,6 +60,7 @@ using options = clopts< // clang-format off
            values<"always", "auto", "never">>,
     flag<"-v", "Enable verbose output">,
     flag<"--ast", "Print the AST and exit without generating code">,
+    flag<"--sema", "Run sema only and exit">,
     flag<"--syntax-only", "Do not perform semantic analysis">,
     flag<"--ir", "Emit LCC intermediate representation and exit">,
     func<"--aluminium", "That special something to spice up your compilation", aluminium_handler>,
@@ -81,12 +78,11 @@ int main(int argc, char** argv) {
 
     /// Determine whether to use colours in the output.
     /// TODO: Enable colours in the console on Windows (for `cmd`).
-    /// TODO: Diagnostics should honour this flag.
     auto colour_opt = opts.get_or<"--color">("auto");
     bool use_colour{};
     if (colour_opt == "always") use_colour = true;
     else if (colour_opt == "never") use_colour = false;
-    else use_colour = isatty(fileno(stdout));
+    else use_colour = lcc::platform::StdoutIsTerminal() or lcc::platform::StderrIsTerminal();
 
     /// Get input files
     auto& input_files = *opts.get<"filepath">();
@@ -110,7 +106,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    lcc::Context context{detail::default_target, format};
+    lcc::Context context{detail::default_target, format, use_colour};
 
     for (const auto& dir : *opts.get<"-I">()) {
         context.add_include_directory(dir);
@@ -140,6 +136,9 @@ int main(int argc, char** argv) {
                 mod->print(use_colour);
             }
 
+            /// Stop after sema if requested.
+            if (opts.get<"--sema">()) std::exit(context.has_error());
+
             auto ir_module = lcc::intercept::IRGen::Generate(&context, *mod);
             if (opts.get<"--ir">()) {
                 ir_module->print_ir(use_colour);
@@ -168,6 +167,9 @@ int main(int argc, char** argv) {
             if (opts.get<"--ast">()) {
                 laye_context->print_modules();
             }
+
+            /// Stop after sema if requested.
+            if (opts.get<"--sema">()) std::exit(context.has_error());
 
             auto ir_module = lcc::laye::IRGen::Generate(laye_context, mod);
             if (opts.get<"--ir">()) {
@@ -201,7 +203,7 @@ int main(int argc, char** argv) {
         const char* replacement = ".o";
         if (context.format()->format() == lcc::Format::LLVM_TEXTUAL_IR)
             replacement = ".ll";
-        
+
         return std::filesystem::path{path_string}.replace_extension(replacement).string();
     };
 
@@ -227,7 +229,7 @@ int main(int argc, char** argv) {
         }
 
         // TODO(local): if we do linking, now's the time to link to the output file path, else a.out
-        //std::string linked_output_file_path = configured_output_file_path;
+        // std::string linked_output_file_path = configured_output_file_path;
     }
 
     return 0;

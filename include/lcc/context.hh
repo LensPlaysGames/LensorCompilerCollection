@@ -24,6 +24,9 @@ class Context {
     /// Called once the first time a context is created.
     static void InitialiseLCCData();
 
+    /// Miscellaneous flags.
+    bool _colour_diagnostics = false;
+
     const Target* _target{};
     const Format* _format{};
 
@@ -37,7 +40,7 @@ public:
     std::vector<Type*> struct_types;
 
     /// Create a new context.
-    explicit Context(const Target* tgt, const Format* format);
+    explicit Context(const Target* tgt, const Format* format, bool colour_diagnostics);
 
     /// Do not allow copying or moving the context.
     Context(const Context&) = delete;
@@ -88,6 +91,9 @@ public:
 
     /// Get the target.
     [[nodiscard]] auto format() const -> const Format* { return _format; }
+
+    /// Whether to use colours in diagnostics.
+    [[nodiscard]] bool use_colour_diagnostics() const { return _colour_diagnostics; }
 
     auto include_directories() const -> const decltype(_include_directories)& { return _include_directories; }
     void add_include_directory(std::string dir) { _include_directories.push_back(std::move(dir)); }

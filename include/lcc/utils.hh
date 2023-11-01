@@ -134,6 +134,7 @@ enum struct Colour {
     Magenta = 35,
     Cyan = 36,
     White = 37,
+    Bold = 1,
 };
 
 /// RAII helper to toggle colours when printing.
@@ -159,6 +160,7 @@ struct Colours {
             case Colour::Magenta: return "\033[35m";
             case Colour::Cyan: return "\033[36m";
             case Colour::White: return "\033[m\033[37m";
+            case Colour::Bold: return "\033[1m";
         }
         return "";
     }

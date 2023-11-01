@@ -1,10 +1,7 @@
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/utils/macros.hh>
-
-#ifdef __linux__
-#    include <execinfo.h>
-#endif
+#include <lcc/utils/platform.hh>
 
 /// ===========================================================================
 ///  Diagnostics.
@@ -13,18 +10,19 @@ using Kind = lcc::Diag::Kind;
 
 namespace {
 /// Get the colour of a diagnostic.
-static constexpr auto Colour(lcc::Diag::Kind kind) {
+static constexpr auto Colour(lcc::Diag::Kind kind) -> lcc::utils::Colour {
     switch (kind) {
-        case Kind::ICError: return fmt::fg(fmt::terminal_color::magenta) | fmt::emphasis::bold;
-        case Kind::Warning: return fmt::fg(fmt::terminal_color::yellow) | fmt::emphasis::bold;
-        case Kind::Note: return fmt::fg(fmt::terminal_color::green) | fmt::emphasis::bold;
+        using enum lcc::utils::Colour;
+        case Kind::ICError: return Magenta;
+        case Kind::Warning: return Yellow;
+        case Kind::Note: return Green;
 
         case Kind::FError:
         case Kind::Error:
-            return fmt::fg(fmt::terminal_color::red) | fmt::emphasis::bold;
+            return Red;
 
         default:
-            return fmt::text_style{};
+            return Reset;
     }
 }
 
@@ -39,37 +37,6 @@ static constexpr std::string_view Name(lcc::Diag::Kind kind) {
         default: return "Diagnostic";
     }
 }
-
-#ifdef __linux__
-/// Print the current stack trace.
-void PrintBacktrace() {
-    /// Get the backtrace.
-    static void* trace[128];
-    int n = backtrace(trace, 128);
-
-    /// Convert to strings.
-    std::vector<std::string> trace_strs;
-    trace_strs.reserve(lcc::usz(n));
-    for (int i = 0; i < n; i++) trace_strs.emplace_back(fmt::format("{:p}", trace[i]));
-
-    /// Symboliser path.
-    std::string sym = std::getenv("SYMBOLIZER_PATH") ?: "";
-    if (sym.empty()) sym = "llvm-symbolizer";
-
-    /// Use llvm-symbolizer to print the backtrace.
-    auto cmd = fmt::format(
-        "{} {} -e {} -s -p -C -i --color --output-style=GNU | awk '{{ print \"#\" NR, $0 }}'",
-        sym,
-        fmt::join(trace_strs, " "),
-        lcc::fs::canonical("/proc/self/exe").native()
-    );
-    std::system(cmd.c_str());
-}
-#else
-void PrintBacktrace() {
-    /// TODO: Implement this for other platforms.
-}
-#endif
 } // namespace
 
 /// Abort due to assertion failure.
@@ -80,7 +47,7 @@ void PrintBacktrace() {
 void lcc::Diag::HandleFatalErrors() {
     /// Abort on ICE.
     if (kind == Kind::ICError) {
-        PrintBacktrace();
+        lcc::platform::PrintBacktrace();
         std::exit(ICE_EXIT_CODE);
     }
 
@@ -90,18 +57,24 @@ void lcc::Diag::HandleFatalErrors() {
 
 /// Print a diagnostic with no (valid) location info.
 void lcc::Diag::PrintDiagWithoutLocation() {
+    using enum utils::Colour;
+    utils::Colours C(ShouldUseColour());
+
     /// Print the message.
-    fmt::print(stderr, Colour(kind), "{}: ", Name(kind));
+    fmt::print(stderr, "{}{}{}: {}", C(Bold), C(Colour(kind)), Name(kind), C(Reset));
     fmt::print(stderr, "{}\n", msg);
     HandleFatalErrors();
+}
+
+bool lcc::Diag::ShouldUseColour() const {
+    if (ctx) return ctx->use_colour_diagnostics();
+    return lcc::platform::StderrIsTerminal();
 }
 
 lcc::Diag::~Diag() { print(); }
 
 void lcc::Diag::print() {
-    using fmt::fg;
-    using enum fmt::emphasis;
-    using enum fmt::terminal_color;
+    using enum utils::Colour;
 
     /// If this diagnostic is suppressed, do nothing.
     if (kind == Kind::None) return;
@@ -136,12 +109,13 @@ void lcc::Diag::print() {
     /// If the location is invalid, either because the specified file does not
     /// exists, its position is out of bounds or 0, or its length is 0, then we
     /// skip printing the location.
+    utils::Colours C(ShouldUseColour());
     const auto& fs = ctx->files();
     if (not where.seekable(ctx)) {
         /// Even if the location is invalid, print the file name if we can.
         if (where.file_id < fs.size()) {
             const auto& file = *fs[where.file_id].get();
-            fmt::print(stderr, bold, "{}: ", file.path().string());
+            fmt::print(stderr, "{}{}: ", C(Bold), file.path().string());
         }
 
         /// Print the message.
@@ -166,16 +140,15 @@ void lcc::Diag::print() {
 
     /// Print the file name, line number, and column number.
     const auto& file = *fs[where.file_id].get();
-    fmt::print(stderr, bold, "{}:{}:{}: ", file.path().string(), line, col);
+    fmt::print(stderr, "{}{}:{}:{}: ", C(Bold), file.path().string(), line, col);
 
     /// Print the diagnostic name and message.
-    fmt::print(stderr, Colour(kind), "{}: ", Name(kind));
-    fmt::print(stderr, "{}\n", msg);
+    fmt::print(stderr, "{}{}: {}{}\n", C(Colour(kind)), Name(kind), C(Reset), msg);
 
     /// Print the line up to the start of the location, the range in the right
     /// colour, and the rest of the line.
     fmt::print(stderr, " {} | {}", line, before);
-    fmt::print(stderr, Colour(kind), "{}", range);
+    fmt::print(stderr, "{}{}{}{}", C(Bold), C(Colour(kind)), range, C(Reset));
     fmt::print(stderr, "{}\n", after);
 
     /// Determine the number of digits in the line number.
@@ -188,8 +161,9 @@ void lcc::Diag::print() {
         fmt::print(stderr, " ");
 
     /// Finally, underline the range.
-    for (usz i = 0; i < range.size(); i++) fmt::print(stderr, Colour(kind), "~");
-    fmt::print(stderr, "\n");
+    fmt::print(stderr, "{}{}", C(Bold), C(Colour(kind)));
+    for (usz i = 0; i < range.size(); i++) fmt::print(stderr, "~");
+    fmt::print(stderr, "{}\n", C(Reset));
 
     /// Handle fatal errors.
     HandleFatalErrors();

@@ -32,7 +32,8 @@ LccFormatRef lcc_format_gnu_as_att_assembly() {
 LccContextRef lcc_context_create(LccTargetRef target, LccFormatRef format) {
     return reinterpret_cast<LccContextRef>(new lcc::Context {
             reinterpret_cast<const lcc::Target*>(target),
-            reinterpret_cast<const lcc::Format*>(format)
+            reinterpret_cast<const lcc::Format*>(format),
+            true
         });
 }
 
