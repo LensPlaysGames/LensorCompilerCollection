@@ -8,6 +8,18 @@
 namespace lcc {
 namespace isel {
 
+/// `while`-like iteration over a template parameter pack.
+template<typename... pack>
+constexpr void While(bool& cond, auto&& lambda) {
+    auto impl = [&]<typename t>() {
+        if (not cond) return false;
+        lambda.template operator()<t>();
+        return true;
+    };
+
+    (impl.template operator()<pack>() and ...);
+}
+
 template<i64 imm = 0>
 struct Immediate {
     static constexpr i64 immediate = imm;
