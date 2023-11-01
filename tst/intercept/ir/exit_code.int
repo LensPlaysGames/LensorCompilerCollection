@@ -3,14 +3,7 @@
 ;; Declare `i_` as regex to match any bitwidth signed integer
 ;; d i_ i[0-9]+
 
-;; * main : $i_($i_ %0, ptr %1, ptr %2):
-;; +   bb0:
-;; +     %3 = alloca $i_
-;; +     store $i_ %0 into %3
-;; +     %4 = alloca ptr
-;; +     store ptr %1 into %4
-;; +     %5 = alloca ptr
-;; +     store ptr %2 into %5
-;; +     return $i_ 69
+;; * main : (?<ret_type>$i_)
+;; *     return $ret_type 69
 
 69;
