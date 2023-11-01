@@ -349,7 +349,7 @@ if (BUILD_TESTING)
     FCHKAddAllTestsInDir(
         IN "tst/intercept/ir"
         PATTERN "*.int"
-        PREFIX ";;"
+        PREFIX "\\\;\\\;"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
     )
