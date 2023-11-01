@@ -217,17 +217,6 @@ constexpr lcc::isz TypeQualifierPrecedence(intc::TokenKind t) {
 
 bool intc::Parser::AtStartOfExpression() { return MayStartAnExpression(tok.kind); }
 
-auto intc::Parser::Declare(std::string name, ObjectDecl* decl) -> Result<Decl*> {
-    Scope* var_scope{};
-    if (decl->linkage() == Linkage::LocalVar) {
-        var_scope = CurrScope() == GlobalScope() ? TopLevelScope() : CurrScope();
-    } else {
-        var_scope = CurrScope() == TopLevelScope() ? GlobalScope() : CurrScope();
-    }
-
-    return var_scope->declare(context, std::move(name), decl);
-}
-
 auto intc::Parser::Parse(Context* context, File& file) -> std::unique_ptr<Module> {
     Parser parser(context, &file);
 
@@ -349,7 +338,7 @@ auto intc::Parser::ParseDeclRest(
 
                     /// Type must be a struct type.
                     if (auto s = cast<StructType>(*decl)) {
-                        return CurrScope()->declare(
+                        return DeclScope()->declare(
                             context,
                             std::move(decl_name),
                             new (*mod) StructDecl(mod.get(), std::move(ident), s, location)
@@ -368,7 +357,7 @@ auto intc::Parser::ParseDeclRest(
                 if (not type) return type.diag();
 
                 /// Create the type alias.
-                return CurrScope()->declare(
+                return DeclScope()->declare(
                     context,
                     std::move(decl_name),
                     new (*mod) TypeAliasDecl(
@@ -420,7 +409,7 @@ auto intc::Parser::ParseDeclRest(
             );
 
             /// Add it to the current scope and return it.
-            return Declare(std::move(ident), var);
+            return DeclScope(var->linkage() == Linkage::LocalVar)->declare(context, std::move(ident), var);
         }
 
         /// Variable declaration with type inference.
@@ -442,7 +431,7 @@ auto intc::Parser::ParseDeclRest(
 
             /// Declarations that use type inference cannot be external or static.
             if (is_extern) Error(cc_loc, "Extern declarations must specify a type");
-            return Declare(std::move(ident), var);
+            return DeclScope(var->linkage() == Linkage::LocalVar)->declare(context, std::move(ident), var);
         }
     }
 }
@@ -1012,8 +1001,7 @@ void intc::Parser::ParseTopLevel() {
                 }
 
                 Error(location, "Expected ';'")
-                    .attach(false,
-                            Diag::Note(context, tok.location, "Before this"));
+                    .attach(false, Diag::Note(context, tok.location, "Before this"));
             }
         }
         if (expr) mod->add_top_level_expr(expr.value());
@@ -1196,5 +1184,5 @@ auto intc::Parser::ParseFuncDecl(
     if (name.empty()) return func;
 
     /// Add it to the current scope and return it.
-    return as<FuncDecl>(Declare(std::move(name), func));
+    return as<FuncDecl>(DeclScope()->declare(context, std::move(name), func));
 }

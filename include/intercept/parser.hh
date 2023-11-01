@@ -78,8 +78,15 @@ private:
     /// Get the current scope.
     auto CurrScope() -> Scope* { return scope_stack.back(); }
 
-    /// Declare a variable or function in the appropriate scope.
-    auto Declare(std::string name, ObjectDecl* decl) -> Result<Decl*>;
+    /// Get the scope to use for declarations.
+    auto DeclScope(bool for_local_var = false) -> Scope* {
+        /// Local variables always go in the current scope since
+        /// the global scope is *never* the current scope.
+        if (for_local_var) return CurrScope();
+
+        /// Globals at the top-level go in the global scope.
+        return CurrScope() == TopLevelScope() ? GlobalScope() : CurrScope();
+    }
 
     /// Issue an error.
     template <typename... Args>
