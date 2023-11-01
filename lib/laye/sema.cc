@@ -483,33 +483,24 @@ bool layec::Sema::AnalyseType(Type*& type) {
             type->set_sema_errored();
         } break;
 
-        case Expr::Kind::TypeVoid: {
+        case Expr::Kind::TypePoison: {
         } break;
 
-        case Expr::Kind::TypeBuffer: {
-            auto t = as<BufferType>(type);
-            if (not AnalyseType(t->elem_type()))
-                return false;
-            
-            if (t->elem_type()->is_void()) {
-                Error(t->elem_type()->location(), "Void is not a valid container element type");
-                type->set_sema_errored();
-            }
-
-            if (t->elem_type()->is_noreturn()) {
-                Error(t->elem_type()->location(), "Noreturn is only valid as a function return type");
-                type->set_sema_errored();
-            }
+        case Expr::Kind::TypeInfer: {
+            Error(type->location(), "Invalid context for `var` type.");
+            type->set_sema_errored();
         } break;
 
-        case Expr::Kind::TypeInt: {
-            auto t = as<IntType>(type);
-            if (t->is_platform()) {
-                t->bit_width(int(context()->target()->size_of_pointer));
-            } else if (t->bit_width() <= 0 or t->bit_width() > 65535) {
-                Error(type->location(), "Primitive type bit width must be in the range (0, 65535]");
+        case Expr::Kind::TypeNilable: {
+            auto t = as<NilableType>(type);
+            bool r = AnalyseType(t->elem_type());
+            if (not r)
                 type->set_sema_errored();
-            }
+            return r;
+        }
+
+        case Expr::Kind::TypeErrUnion: {
+            LCC_ASSERT(false, "Error Unions need to be updated, then sema can handle them");
         } break;
 
         case Expr::Kind::TypeLookupName: {
@@ -535,7 +526,106 @@ bool layec::Sema::AnalyseType(Type*& type) {
             if (auto alias_decl = cast<AliasDecl>(symbols.first->second)) {
                 type = alias_decl->type();
             } else {
+                type->set_sema_errored();
                 LCC_TODO();
+            }
+        } break;
+
+        case Expr::Kind::TypeArray: {
+            auto t = as<ArrayType>(type);
+            if (not AnalyseType(t->elem_type()))
+                type->set_sema_errored();
+            
+            if (t->elem_type()->is_void()) {
+                Error(t->elem_type()->location(), "Void is not a valid container element type");
+                type->set_sema_errored();
+            }
+
+            if (t->elem_type()->is_noreturn()) {
+                Error(t->elem_type()->location(), "Noreturn is only valid as a function return type");
+                type->set_sema_errored();
+            }
+
+            auto rank_length_exprs = t->rank_lengths();
+            for (int i = 0; i < rank_length_exprs.size(); i++)
+            {
+                auto& rank_length_expr = rank_length_exprs[i];
+
+                EvalResult res;
+                if (not rank_length_expr->evaluate(laye_context(), res, true)) {
+                    type->set_sema_errored();
+                    LCC_TODO();
+                    continue;
+                }
+
+                if (!res.is_i64()) {
+                    type->set_sema_errored();
+                    LCC_TODO();
+                    continue;
+                }
+
+                rank_length_expr = new (*module()) ConstantExpr(rank_length_expr, res);
+            }
+        } break;
+
+        case Expr::Kind::TypeSlice:
+        case Expr::Kind::TypePointer:
+        case Expr::Kind::TypeBuffer: {
+            auto t = as<SingleElementType>(type);
+            if (not AnalyseType(t->elem_type()))
+                type->set_sema_errored();
+            
+            if (t->elem_type()->is_void()) {
+                Error(t->elem_type()->location(), "Void is not a valid container element type");
+                type->set_sema_errored();
+            }
+
+            if (t->elem_type()->is_noreturn()) {
+                Error(t->elem_type()->location(), "Noreturn is only valid as a function return type");
+                type->set_sema_errored();
+            }
+        } break;
+
+        case Expr::Kind::TypeFunc: {
+            auto t = as<FuncType>(type);
+            if (not t->return_type()->is_void() and not t->return_type()->is_noreturn()) {
+                if (not AnalyseType(t->return_type()))
+                    type->set_sema_errored();
+            }
+            
+            for (auto& param_type : t->param_types()) {
+                if (not AnalyseType(param_type))
+                    type->set_sema_errored();
+            }
+        } break;
+
+        case Expr::Kind::TypeNoreturn: {
+        } break;
+
+        case Expr::Kind::TypeRawptr: {
+        } break;
+
+        case Expr::Kind::TypeVoid: {
+        } break;
+
+        case Expr::Kind::TypeBool:
+        case Expr::Kind::TypeInt: {
+            auto t = as<SizableType>(type);
+            if (t->is_platform()) {
+                t->bit_width(int(context()->target()->size_of_pointer));
+            } else if (t->bit_width() <= 0 or t->bit_width() > 65535) {
+                Error(type->location(), "Primitive type bit width must be in the range (0, 65535]");
+                type->set_sema_errored();
+            }
+        } break;
+
+        case Expr::Kind::TypeFloat: {
+            auto t = as<FloatType>(type);
+            if (t->is_platform()) {
+                t->bit_width(64);
+            } else if (t->bit_width() <= 0 or t->bit_width() > 65535) {
+                Error(type->location(), "Primitive type bit width must be in the range (0, 65535]");
+                type->set_sema_errored();
             }
         } break;
     }

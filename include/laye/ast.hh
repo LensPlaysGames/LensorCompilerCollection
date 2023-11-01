@@ -291,7 +291,6 @@ enum struct TokenKind {
     Var,
     Noreturn,
     Rawptr,
-    String,
 };
 
 using LayeToken = syntax::Token<TokenKind>;
@@ -624,7 +623,6 @@ public:
         TypeNoreturn,
         TypeRawptr,
         TypeVoid,
-        TypeString,
         TypeBool,
         TypeInt,
         TypeFloat,
@@ -1649,8 +1647,6 @@ public:
     bool is_buffer() const { return kind() == Kind::TypeBuffer; }
     /// Check if this is a function type.
     bool is_function() const { return kind() == Kind::TypeFunc; }
-    /// Check if this is a string type.
-    bool is_string() const { return kind() == Kind::TypeString; }
 
     static Type* Bool;
 
@@ -1768,7 +1764,8 @@ public:
         : SingleElementType(Kind::TypeArray, location, elem_type), _access(access), _rank_lengths(std::move(rank_lengths)) {}
 
     auto access() const { return _access; }
-    auto rank_lengths() const -> std::span<Expr* const> { return _rank_lengths; }
+    auto rank_lengths() -> decltype(_rank_lengths)& { return _rank_lengths; }
+    auto rank_lengths() const -> const decltype(_rank_lengths)& { return _rank_lengths; }
     auto rank() const -> usz { return _rank_lengths.size(); }
     auto nth_length(usz i) const -> usz { return (usz) (as<ConstantExpr>(_rank_lengths[i]))->value().as_i64(); }
 
@@ -1826,7 +1823,9 @@ public:
 
     auto calling_convention() const { return _calling_convention; }
     auto return_type() const { return _return_type; }
-    auto param_types() const -> std::span<Type* const> { return _param_types; }
+    auto return_type() -> Type*& { return _return_type; }
+    auto param_types() const -> const decltype(_param_types)& { return _param_types; }
+    auto param_types() -> decltype(_param_types)& { return _param_types; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeFunc; }
 };
@@ -1853,18 +1852,6 @@ public:
         : Type(Kind::TypeVoid, location) {}
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeVoid; }
-};
-
-class StringType : public Type {
-    TypeAccess _access;
-
-public:
-    StringType(Location location, TypeAccess access = TypeAccess::ReadOnly)
-        : Type(Kind::TypeString, location), _access(access) {}
-
-    auto access() const { return _access; }
-
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeString; }
 };
 
 class SizableType : public Type {
