@@ -22,12 +22,14 @@ struct o {
     static constexpr usz index = idx;
 };
 
-template<usz opcode, typename... operands>
-struct Inst {};
+template<usz opcode_, typename... operands>
+struct Inst {
+    static constexpr usz opcode = opcode_;
+};
 
 template <typename i, typename o>
 struct Pattern {
-    void rewrite(MFunction function);
+    static void rewrite(MFunction& function);
 };
 
 using ret = Pattern<
@@ -41,9 +43,14 @@ using ret_imm = Pattern<
     >;
 
 template<typename in, typename out>
-void Pattern<in, out>::rewrite(MFunction function) {
-    // I don't even know how this would work. Switching between types and
-    // values is frustrating and confusing.
+void Pattern<in, out>::rewrite(MFunction& function) {
+    for (auto& block : function.blocks()) {
+        for (auto& instruction : block.instructions()) {
+            if (instruction.kind() == in::opcode) {
+                fmt::print("Matching {}!\n", ToString(instruction.kind()));
+            }
+        }
+    }
 }
 
 }
