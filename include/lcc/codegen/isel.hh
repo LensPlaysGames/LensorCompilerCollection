@@ -31,7 +31,7 @@ struct Pattern {
     static void rewrite(MFunction& function) {
         for (auto& block : function.blocks()) {
             for (auto& instruction : block.instructions()) {
-                if (instruction.kind() == in::opcode) {
+                if (instruction.opcode() == in::opcode) {
                     fmt::print("Matching {}!\n", ToString(instruction.kind()));
                 }
             }
