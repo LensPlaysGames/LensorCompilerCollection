@@ -261,7 +261,7 @@ if (BUILD_TESTING)
     include(CTest)
 
     ## Set fchk properties here.
-    set(FCHK_GIT_TAG v1.2.0)
+    set(FCHK_GIT_TAG v2.0.1)
 
     ## First, check if fchk has already been downloaded.
     if (NOT EXISTS "${PROJECT_SOURCE_DIR}/fchk/CMakeLists.txt")
