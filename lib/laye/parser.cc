@@ -1316,19 +1316,6 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         return TryParseTypeContinue(*void_type, allocate);
     }
 
-    if (At(Tk::String)) {
-        auto location = tok.location;
-
-        NextToken();
-
-        auto string_type = Result<Type*>::Null();
-        if (allocate) {
-            string_type = new (*this) StringType{location, type_access};
-        }
-
-        return TryParseTypeContinue(*string_type, allocate);
-    }
-
     if (At(Tk::Bool)) {
         if (type_access != TypeAccess::ReadOnly) {
             if (allocate) Error("Access modifiers do not apply to bool types");

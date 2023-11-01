@@ -451,7 +451,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
         } break;
 
         case Expr::Kind::LitString: {
-            expr->type(new (*module()) StringType(expr->location()));
+            expr->type(new (*module()) LiteralStringType(expr->location()));
         } break;
 
         case Expr::Kind::LitInt: {

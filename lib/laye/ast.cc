@@ -295,6 +295,7 @@ std::string layec::ToString(Expr::Kind kind) {
         case Ek::TypeErrUnion: return "TypeErrUnion";
         case Ek::TypeLookupName: return "TypeLookupName";
         case Ek::TypeLookupPath: return "TypeLookupPath";
+        case Ek::TypeLiteralString: return "TypeLiteralString";
         case Ek::TypeArray: return "TypeArray";
         case Ek::TypeSlice: return "TypeSlice";
         case Ek::TypePointer: return "TypePointer";
@@ -303,7 +304,6 @@ std::string layec::ToString(Expr::Kind kind) {
         case Ek::TypeNoreturn: return "TypeNoreturn";
         case Ek::TypeRawptr: return "TypeRawptr";
         case Ek::TypeVoid: return "TypeVoid";
-        case Ek::TypeString: return "TypeString";
         case Ek::TypeBool: return "TypeBool";
         case Ek::TypeInt: return "TypeInt";
         case Ek::TypeFloat: return "TypeFloat";
@@ -417,15 +417,7 @@ auto layec::Type::string(bool use_colours) const -> std::string {
         case Kind::TypeNoreturn: return fmt::format("{}noreturn{}", C(Cyan), C(Reset));
         case Kind::TypeRawptr: return fmt::format("{}rawptr{}", C(Cyan), C(Reset));
         case Kind::TypeVoid: return fmt::format("{}void{}", C(Cyan), C(Reset));
-        case Kind::TypeString: {
-            auto access = as<StringType>(this)->access();
-            return fmt::format(
-                "{}{}string{}",
-                C(Cyan),
-                access == TypeAccess::Mutable ? "mut " : "",
-                C(Reset)
-            );
-        }
+        case Kind::TypeLiteralString: return fmt::format("{}literal string{}", C(Cyan), C(Reset));
 
         case Kind::TypeBool: {
             auto t = as<BoolType>(this);
@@ -526,13 +518,8 @@ bool layec::Type::Equal(const Type* a, const Type* b) {
         case Kind::TypeNoreturn:
         case Kind::TypeRawptr:
         case Kind::TypeVoid:
+        case Kind::TypeLiteralString:
             return true;
-
-        case Kind::TypeString: {
-            auto a2 = as<StringType>(a);
-            auto b2 = as<StringType>(b);
-            return a2->access() == b2->access();
-        }
 
         case Kind::TypeBool: {
             auto a2 = as<BoolType>(a);

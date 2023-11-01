@@ -291,6 +291,7 @@ enum struct TokenKind {
     Var,
     Noreturn,
     Rawptr,
+    String,
 };
 
 using LayeToken = syntax::Token<TokenKind>;
@@ -612,6 +613,7 @@ public:
 
         TypeLookupName,
         TypeLookupPath,
+        TypeLiteralString,
 
         TypeArray,
         TypeSlice,
@@ -1627,6 +1629,8 @@ public:
     bool is_poison() const { return kind() == Kind::TypePoison; }
     /// Check if this is the uninitialised type.
     // bool is_unknown() const;
+    /// Check if this is a string type.
+    bool is_string() const { return kind() == Kind::TypeLiteralString; }
     /// Check if this is the builtin \c var type.
     bool is_infer() const { return kind() == Kind::TypeInfer; }
     /// Check if this is the builtin \c void type.
@@ -1732,6 +1736,14 @@ public:
     auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeLookupPath; }
+};
+
+class LiteralStringType : public Type {
+public:
+    LiteralStringType(Location location)
+        : Type(Kind::TypeLiteralString, location) {}
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeLiteralString; }
 };
 
 class SingleElementType : public Type {
