@@ -27,7 +27,6 @@ class Context {
     const Target* _target{};
     const Format* _format{};
 
-    std::string _output_file_path{};
     std::vector<std::string> _include_directories{};
 
 public:
@@ -89,9 +88,6 @@ public:
 
     /// Get the target.
     [[nodiscard]] auto format() const -> const Format* { return _format; }
-
-    [[nodiscard]] auto output_file_path() const { return _output_file_path; }
-    void output_file_path(std::string path) { _output_file_path = std::move(path); }
 
     auto include_directories() const -> const decltype(_include_directories)& { return _include_directories; }
     void add_include_directory(std::string dir) { _include_directories.push_back(std::move(dir)); }

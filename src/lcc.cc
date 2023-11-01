@@ -96,9 +96,8 @@ int main(int argc, char** argv) {
             fmt::print("- {}\n", input_file.path.string());
     }
 
-    /// TODO: Handle multiple files.
-    if (input_files.empty() or input_files.size() > 1)
-        lcc::Diag::Fatal("Expected exactly one input file");
+    if (input_files.empty())
+        lcc::Diag::Fatal("no input files");
 
     /// Compile the file.
     // TODO: Get target from "-t" or "--target" command line option.
@@ -117,90 +116,114 @@ int main(int argc, char** argv) {
         context.add_include_directory(dir);
     }
 
-    if (auto output_file_path = opts.get<"-o">()) {
-        context.output_file_path(*output_file_path);
+    auto GenerateOutputFile = [&](auto& input_file, std::string_view output_file_path) {
+        auto path_str = input_file.path.string();
+        auto& file = context.create_file(
+            std::move(input_file.path),
+            std::move(input_file.contents)
+        );
+
+        /// Intercept.
+        if (path_str.ends_with(".int")) {
+            /// Parse the file.
+            auto mod = lcc::intercept::Parser::Parse(&context, file);
+            if (context.has_error()) std::exit(1);
+            if (opts.get<"--syntax-only">()) {
+                if (opts.get<"--ast">()) mod->print(use_colour);
+                std::exit(0);
+            }
+
+            /// Perform semantic analysis.
+            lcc::intercept::Sema::Analyse(&context, *mod, true);
+            if (context.has_error()) std::exit(1);
+            if (opts.get<"--ast">()) {
+                mod->print(use_colour);
+            }
+
+            auto ir_module = lcc::intercept::IRGen::Generate(&context, *mod);
+            if (opts.get<"--ir">()) {
+                ir_module->print_ir(use_colour);
+                std::exit(0);
+            }
+
+            ir_module->lower();
+            ir_module->emit(output_file_path);
+        }
+
+        /// Laye.
+        else if (path_str.ends_with(".laye")) {
+            auto laye_context = new lcc::laye::LayeContext{&context};
+
+            /// Parse the file.
+            auto mod = laye_context->parse_laye_file(file);
+            if (context.has_error()) std::exit(1);
+            if (opts.get<"--syntax-only">()) {
+                if (opts.get<"--ast">()) laye_context->print_modules();
+                std::exit(0);
+            }
+
+            /// Perform semantic analysis.
+            lcc::laye::Sema::Analyse(laye_context, mod, true);
+            if (context.has_error()) std::exit(1);
+            if (opts.get<"--ast">()) {
+                laye_context->print_modules();
+            }
+
+            auto ir_module = lcc::laye::IRGen::Generate(laye_context, mod);
+            if (opts.get<"--ir">()) {
+                ir_module->print_ir(use_colour);
+                std::exit(0);
+            }
+
+            ir_module->lower();
+            ir_module->emit(output_file_path);
+        }
+
+        /// C.
+        else if (path_str.ends_with(".c")) {
+            /// Parse the file.
+            auto c_context = new lcc::c::CContext{&context};
+            auto translation_unit = lcc::c::Parser::Parse(c_context, file);
+
+            if (opts.get<"--syntax-only">()) {
+                if (opts.get<"--ast">()) translation_unit->print();
+                std::exit(0);
+            }
+        }
+
+        /// Unknown.
+        else {
+            lcc::Diag::Fatal("Unrecognised input file type");
+        }
+    };
+
+    auto ConvertFileExtensionToOutputFormat = [&](std::string path_string) {
+        const char* replacement = ".o";
+        if (context.format()->format() == lcc::Format::LLVM_TEXTUAL_IR)
+            replacement = ".ll";
+        
+        return std::filesystem::path{path_string}.replace_extension(replacement).string();
+    };
+
+    auto configured_output_file_path = opts.get_or<"-o">("a.out");
+    if (input_files.size() == 1) {
+        std::string output_file_path = configured_output_file_path;
+        if (opts.get_or<"-o">("").empty()) {
+            output_file_path = ConvertFileExtensionToOutputFormat(output_file_path);
+        }
+
+        GenerateOutputFile(input_files[0], output_file_path);
+        if (context.has_error()) return 1;
+    } else {
+        for (auto& input_file : input_files) {
+            std::string output_file_path = ConvertFileExtensionToOutputFormat(input_file.path.string());
+            GenerateOutputFile(input_file, output_file_path);
+            if (context.has_error()) return 1;
+        }
+
+        // TODO(local): if we do linking, now's the time to link to the output file path, else a.out
+        //std::string linked_output_file_path = configured_output_file_path;
     }
 
-    auto path_str = input_files[0].path.string();
-    auto& file = context.create_file(
-        std::move(input_files[0].path),
-        std::move(input_files[0].contents)
-    );
-
-    /// Intercept.
-    if (path_str.ends_with(".int")) {
-        /// Parse the file.
-        auto mod = lcc::intercept::Parser::Parse(&context, file);
-        if (context.has_error()) std::exit(1);
-        if (opts.get<"--syntax-only">()) {
-            if (opts.get<"--ast">()) mod->print(use_colour);
-            std::exit(0);
-        }
-
-        /// Perform semantic analysis.
-        lcc::intercept::Sema::Analyse(&context, *mod, true);
-        if (context.has_error()) std::exit(1);
-        if (opts.get<"--ast">()) {
-            mod->print(use_colour);
-        }
-
-        auto ir_module = lcc::intercept::IRGen::Generate(&context, *mod);
-        if (opts.get<"--ir">()) {
-            ir_module->print_ir(use_colour);
-            std::exit(0);
-        }
-
-        ir_module->lower();
-        ir_module->emit();
-
-        return 42;
-    }
-
-    /// Laye.
-    if (path_str.ends_with(".laye")) {
-        auto laye_context = new lcc::laye::LayeContext{&context};
-
-        /// Parse the file.
-        auto mod = laye_context->parse_laye_file(file);
-        if (context.has_error()) std::exit(1);
-        if (opts.get<"--syntax-only">()) {
-            if (opts.get<"--ast">()) laye_context->print_modules();
-            std::exit(0);
-        }
-
-        /// Perform semantic analysis.
-        lcc::laye::Sema::Analyse(laye_context, mod, true);
-        if (context.has_error()) std::exit(1);
-        if (opts.get<"--ast">()) {
-            laye_context->print_modules();
-        }
-
-        auto ir_module = lcc::laye::IRGen::Generate(laye_context, mod);
-        if (opts.get<"--ir">()) {
-            ir_module->print_ir(use_colour);
-            std::exit(0);
-        }
-
-        ir_module->lower();
-        ir_module->emit();
-
-        return 0;
-    }
-
-    /// C.
-    if (path_str.ends_with(".c")) {
-        /// Parse the file.
-        auto c_context = new lcc::c::CContext{&context};
-        auto translation_unit = lcc::c::Parser::Parse(c_context, file);
-
-        if (opts.get<"--syntax-only">()) {
-            if (opts.get<"--ast">()) translation_unit->print();
-            std::exit(0);
-        }
-
-        return 99;
-    }
-
-    /// Unknown.
-    lcc::Diag::Fatal("Unrecognised input file type");
+    return 0;
 }
