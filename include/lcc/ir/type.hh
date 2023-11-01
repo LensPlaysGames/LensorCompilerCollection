@@ -143,7 +143,7 @@ class StructType : public Type {
     std::vector<Type*> _members;
 
 private:
-    StructType(std::vector<Type*> members) : Type(Kind::Array), _members(std::move(members)) {}
+    StructType(std::vector<Type*> members) : Type(Kind::Struct), _members(std::move(members)) {}
 
 public:
     static auto Get(Context* ctx, std::vector<Type*> member_types) -> StructType*;
