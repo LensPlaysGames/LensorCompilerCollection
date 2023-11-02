@@ -1,8 +1,9 @@
 // R %lcc --ir %s
 // d b [a-zA-Z0-9\.]+
 // d t %[0-9]+
+// d f _L[a-zA-Z0-9_]+
 
-// * cmp_eq : i32():
+// * $f : i32():
 // +   $b:
 // +     (?<cond>$t) = alloca i64
 // +     store i64 12 into $cond

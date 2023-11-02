@@ -116,7 +116,7 @@ void layec::Sema::Analyse(Statement*& statement) {
     defer {
         if (not statement->sema_done_or_errored())
             statement->set_sema_done();
-        
+
         LCC_ASSERT(statement->sema_done_or_errored());
     };
 
@@ -130,6 +130,7 @@ void layec::Sema::Analyse(Statement*& statement) {
             if (s->name() == "main") {
                 // TODO(local): check that main is at global scope before adding this
                 s->add_mod(DeclModifier{s->location(), TokenKind::Export});
+                s->add_mod(DeclModifier{s->location(), TokenKind::Foreign, "main"});
             }
 
             if (auto& body = s->body()) {
@@ -144,6 +145,8 @@ void layec::Sema::Analyse(Statement*& statement) {
                 tempset curr_func = s;
                 Analyse(body);
             }
+            
+            MangleName(s);
         } break;
 
         case Statement::Kind::DeclBinding: {
@@ -157,6 +160,8 @@ void layec::Sema::Analyse(Statement*& statement) {
                     ConvertOrError(s->init(), s->type());
                 }
             }
+
+            MangleName(s);
         } break;
 
         case Statement::Kind::DeclAlias: {
@@ -174,7 +179,7 @@ void layec::Sema::Analyse(Statement*& statement) {
         case Statement::Kind::Return: {
             LCC_ASSERT(curr_func);
             auto s = as<ReturnStatement>(statement);
-            
+
             if (curr_func->return_type()->is_noreturn()) {
                 Error(s->location(), "Cannot return from noreturn function.");
             }
@@ -240,10 +245,10 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
 
             if (not Analyse(e->value(), e->type()))
                 break;
-            
+
             if (Convert(e->value(), e->type()))
                 break;
-            
+
             LCC_TODO();
         } break;
 
@@ -255,7 +260,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
             decltype(scope->find(name)) symbols;
 
             while (scope) {
-                //scope->debug_print();
+                // scope->debug_print();
                 symbols = scope->find(name);
                 scope = scope->parent();
                 if (symbols.first != symbols.second) break;
@@ -297,7 +302,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                     e->type(resolved_function->function_type());
                     break;
                 }
-                
+
                 LCC_TODO();
             } else {
                 LCC_TODO();
@@ -326,7 +331,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
 
                 if (is_last_name) {
                     auto module_exports = curr_module->exports();
-                    //module_exports->debug_print();
+                    // module_exports->debug_print();
                     auto exported_symbols = module_exports->find(path_name);
 
                     if (exported_symbols.first == exported_symbols.second) {
@@ -363,7 +368,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                             e->type(resolved_function->function_type());
                             break;
                         }
-                        
+
                         LCC_TODO();
                     } else {
                         LCC_TODO();
@@ -396,8 +401,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                     const auto& param_types = function_type->param_types();
 
                     if (e->args().size() != param_types.size()) {
-                        Error(expr->location(), "Expected {} arguments to call, got {}.",
-                            param_types.size(), e->args().size());
+                        Error(expr->location(), "Expected {} arguments to call, got {}.", param_types.size(), e->args().size());
                         expr->set_sema_errored();
                         expr->type(new (*module()) PoisonType{expr->location()});
                         return;
@@ -455,7 +459,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
         } break;
 
         case Expr::Kind::LitInt: {
-            expr->type(new (*module()) IntType(expr->location(), true, (int)context()->target()->size_of_pointer, true));
+            expr->type(new (*module()) IntType(expr->location(), true, (int) context()->target()->size_of_pointer, true));
         } break;
 
         default: {
@@ -511,7 +515,7 @@ bool layec::Sema::AnalyseType(Type*& type) {
             decltype(scope->find(name)) symbols;
 
             while (scope) {
-                //scope->debug_print();
+                // scope->debug_print();
                 symbols = scope->find(name);
                 scope = scope->parent();
                 if (symbols.first != symbols.second) break;
@@ -535,7 +539,7 @@ bool layec::Sema::AnalyseType(Type*& type) {
             auto t = as<ArrayType>(type);
             if (not AnalyseType(t->elem_type()))
                 type->set_sema_errored();
-            
+
             if (t->elem_type()->is_void()) {
                 Error(t->elem_type()->location(), "Void is not a valid container element type");
                 type->set_sema_errored();
@@ -547,8 +551,7 @@ bool layec::Sema::AnalyseType(Type*& type) {
             }
 
             auto rank_length_exprs = t->rank_lengths();
-            for (usz i = 0; i < rank_length_exprs.size(); i++)
-            {
+            for (usz i = 0; i < rank_length_exprs.size(); i++) {
                 auto& rank_length_expr = rank_length_exprs[i];
 
                 EvalResult res;
@@ -574,7 +577,7 @@ bool layec::Sema::AnalyseType(Type*& type) {
             auto t = as<SingleElementType>(type);
             if (not AnalyseType(t->elem_type()))
                 type->set_sema_errored();
-            
+
             if (t->elem_type()->is_void()) {
                 Error(t->elem_type()->location(), "Void is not a valid container element type");
                 type->set_sema_errored();
@@ -592,7 +595,7 @@ bool layec::Sema::AnalyseType(Type*& type) {
                 if (not AnalyseType(t->return_type()))
                     type->set_sema_errored();
             }
-            
+
             for (auto& param_type : t->param_types()) {
                 if (not AnalyseType(param_type))
                     type->set_sema_errored();
@@ -723,7 +726,7 @@ int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
 
             if constexpr (PerformConversion)
                 InsertImplicitCast(expr, to);
-            
+
             return Score(1);
         }
     }
@@ -756,7 +759,7 @@ void layec::Sema::Discard(Expr*& expr) {
     LCC_ASSERT(expr->sema_done_or_errored());
     if (auto call_expr = cast<CallExpr>(expr)) {
         [[maybe_unused]] auto call_target = call_expr->target();
-        //Warning(expr->location(), "Do this later (nodiscard in sema) !");
+        // Warning(expr->location(), "Do this later (nodiscard in sema) !");
     } else {
         Error(expr->location(), "Nonsense!");
     }
@@ -776,10 +779,127 @@ void layec::Sema::InsertPointerToIntegerCast(Expr*& operand) {
 
 void layec::Sema::WrapWithCast(Expr*& expr, Type* type, CastKind kind) {
     auto wrapper = new (*module()) CastExpr(expr->location(), type, expr, kind);
-    Analyse((Expr*&)wrapper);
+    Analyse((Expr*&) wrapper);
     expr = wrapper;
 }
 
 auto layec::Sema::Ptr(Type* type) -> PointerType* {
     LCC_ASSERT(false);
+}
+
+auto layec::Sema::NameToMangledString(std::string_view s) -> std::string {
+    return fmt::format("{}_{}", s.size(), s);
+}
+
+auto layec::Sema::TypeToMangledString(Type* type) -> std::string {
+    switch (type->kind()) {
+        default: LCC_TODO();
+
+        case Expr::Kind::TypeNilable: {
+            auto t = as<NilableType>(type);
+            return fmt::format("n{}", TypeToMangledString(t->elem_type()));
+        }
+
+        case Expr::Kind::TypeLookupName: {
+            auto t = as<NameType>(type);
+            return NameToMangledString(t->name());
+        }
+
+        case Expr::Kind::TypeLookupPath: {
+            auto t = as<PathType>(type);
+            std::string result = "N";
+            for (auto& path : t->names()) {
+                result += NameToMangledString(path);
+            }
+            return result + "E";
+        }
+
+        case Expr::Kind::TypeLiteralString: LCC_UNREACHABLE();
+
+        case Expr::Kind::TypeArray: {
+            auto t = as<ArrayType>(type);
+            std::string result = fmt::format("Ca{}{}_", TypeToMangledString(t->elem_type()), t->rank());
+            for (auto& len_expr : t->rank_lengths()) {
+                i64 len = as<ConstantExpr>(len_expr)->value().as_i64();
+                result += fmt::format("{}_", len);
+            }
+            return result;
+        }
+
+        case Expr::Kind::TypeSlice: {
+            auto t = as<SliceType>(type);
+            return fmt::format("Cs{}", TypeToMangledString(t->elem_type()));
+        }
+
+        case Expr::Kind::TypePointer: {
+            auto t = as<PointerType>(type);
+            return fmt::format("Cp{}", TypeToMangledString(t->elem_type()));
+        }
+
+        case Expr::Kind::TypeBuffer: {
+            auto t = as<BufferType>(type);
+            return fmt::format("Cb{}", TypeToMangledString(t->elem_type()));
+        }
+
+        case Expr::Kind::TypeFunc: {
+            auto t = as<FuncType>(type);
+            std::string result = "f";
+            result += TypeToMangledString(t->return_type());
+            // TODO(local): template params, varargs
+            result += "P";
+            for (auto& param_type : t->param_types()) {
+                result += TypeToMangledString(param_type);
+            }
+            result += "E";
+            return result;
+        }
+
+        case Expr::Kind::TypeNoreturn: return "X";
+        case Expr::Kind::TypeRawptr: return "x";
+        case Expr::Kind::TypeVoid: return "v";
+
+        case Expr::Kind::TypeBool: {
+            auto t = as<BoolType>(type);
+            if (t->is_platform()) return "b";
+            return fmt::format("Sb{}_", t->bit_width());
+        }
+
+        case Expr::Kind::TypeInt: {
+            auto t = as<IntType>(type);
+            auto c = t->is_signed() ? "i" : "u";
+            if (t->is_platform()) return c;
+            else {
+                return fmt::format("S{}{}_", c, t->bit_width());
+            }
+        }
+
+        case Expr::Kind::TypeFloat: {
+            auto t = as<FloatType>(type);
+            if (t->is_platform()) return "f";
+            return fmt::format("Sf{}_", t->bit_width());
+        }
+    }
+}
+
+void layec::Sema::MangleName(NamedDecl* decl) {
+    if (decl->is_foreign())
+        return;
+
+    std::string mangled_name = fmt::format("_L{}", NameToMangledString(decl->mangled_name()));
+
+    if (auto func_decl = cast<FunctionDecl>(decl)) {
+        mangled_name += "F";
+        mangled_name += TypeToMangledString(func_decl->return_type());
+        // TODO(local): template params, varargs
+        mangled_name += "P";
+        for (auto& param : func_decl->params()) {
+            mangled_name += TypeToMangledString(param->type);
+        }
+        mangled_name += "E";
+    } else if (auto binding_decl = cast<BindingDecl>(decl)) {
+        mangled_name += "B";
+        mangled_name += TypeToMangledString(binding_decl->type());
+    } else return;
+
+    decl->mangled_name(mangled_name);
 }

@@ -53,6 +53,10 @@ private:
 
     auto Ptr(Type* type) -> PointerType*;
 
+    auto NameToMangledString(std::string_view s) -> std::string;
+    auto TypeToMangledString(Type* type) -> std::string;
+    void MangleName(NamedDecl* decl);
+
     /// Issue a note.
     template <typename... Args>
     Diag Note(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
