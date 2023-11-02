@@ -461,11 +461,8 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
                 block->add(new (mod) ReturnExpr(inserted_return_value, {}));
             }
 
-            last = &block->children().back();
-
-        } else {
-            last = &decl->body();
-        }
+            last = block->last_expr();
+        } else last = &decl->body();
 
         if (is<ReturnExpr>(*last)) return;
 
@@ -626,7 +623,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             }
 
             for (auto*& child : b->children()) {
-                const bool last = &child == &b->children().back();
+                const bool last = &child == b->last_expr();
                 if (not Analyse(&child, last ? expected_type : nullptr)) b->set_sema_errored();
                 if (not last and child->ok()) Discard(&child);
             }

@@ -1145,6 +1145,16 @@ public:
     auto children() -> std::vector<Expr*>& { return _children; }
     auto children() const -> const std::vector<Expr*>& { return _children; }
 
+    auto last_expr() -> Expr** {
+        if (_children.empty()) return nullptr;
+        auto last = &_children.back();
+        auto last_index = last - _children.data();
+        while (is<FuncDecl>(*last) && last_index--)
+            last = _children.data() + last_index;
+
+        return last;
+    }
+
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Block; }
 };
 
