@@ -191,6 +191,8 @@ int main(int argc, char** argv) {
                 if (opts.get<"--ast">()) translation_unit->print();
                 std::exit(0);
             }
+
+            LCC_TODO();
         }
 
         /// Unknown.

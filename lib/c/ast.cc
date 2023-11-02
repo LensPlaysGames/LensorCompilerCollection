@@ -253,4 +253,5 @@ bool cc::Expr::is_lvalue() const {
 }
 
 void cc::TranslationUnit::print() {
+    LCC_TODO();
 }

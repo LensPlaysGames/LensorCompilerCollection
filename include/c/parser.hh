@@ -62,9 +62,32 @@ private:
         return false;
     }
 
+    /// Issue an error.
+    template <typename... Args>
+    Diag Error(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Error(lcc_context(), where, fmt, std::forward<Args>(args)...);
+    }
+
+    /// Issue a warning.
+    template <typename... Args>
+    Diag Warning(Location where, fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Warning(lcc_context(), where, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    Diag Warning(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Warning(lcc_context(), token.location, fmt, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    Diag Error(fmt::format_string<Args...> fmt, Args&&... args) {
+        return Diag::Error(lcc_context(), token.location, fmt, std::forward<Args>(args)...);
+    }
+
     bool IsAtTypeStart();
 
-    auto ParseTopLevel() -> Decl*;
+    void ParseTopLevel();
+    auto ParseStatement() -> Result<Decl*>;
     auto ParseType() -> Type*;
 };
 }
