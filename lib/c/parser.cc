@@ -60,6 +60,9 @@ auto cc::Parser::ParseType() -> Type* {
     if (Consume(Tk::Int)) {
         return new (*translation_unit()) IntType{location, IntegerKind::Int};
     }
+    if (Consume(Tk::Void)) {
+        return new (*translation_unit()) VoidType{location};
+    }
 
     LCC_ASSERT(false, "TODO c type");
 }

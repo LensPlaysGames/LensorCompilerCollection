@@ -499,6 +499,8 @@ public:
         Enum,
         Typedef,
         Function,
+
+        Void,
     };
 
 private:
@@ -512,6 +514,14 @@ public:
     auto kind() const { return _kind; }
 };
 
+class VoidType : public Type {
+public:
+    VoidType(Location location)
+        : Type(Kind::Void, location) {}
+
+    static bool classof(const Type* type) { return type->kind() == Kind::Void; }
+};
+
 class IntType : public Type {
     IntegerKind _int_kind;
 
@@ -520,9 +530,10 @@ public:
         : Type(Kind::Integer, location), _int_kind(int_kind) {}
 
     auto int_kind() const { return _int_kind; }
-    
+
     static bool classof(const Type* type) { return type->kind() == Kind::Integer; }
 };
+
 } // namespace lcc::c
 
 #endif // C_AST_HH
