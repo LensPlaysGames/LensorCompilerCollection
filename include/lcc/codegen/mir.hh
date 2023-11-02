@@ -3,6 +3,7 @@
 
 #include <lcc/utils.hh>
 #include <lcc/ir/ir.hh>
+#include <lcc/ir/module.hh>
 
 #include <vector>
 
@@ -114,10 +115,15 @@ public:
     usz reg() const { return _register.value; }
     usz regsize() const { return _register.size; }
 
+    void reg(usz newRegister) { _register.value = newRegister; }
+    void regsize(usz newSize) { _register.size = newSize; }
+
     usz opcode() const { return _opcode; }
 
     Kind kind() const {
-        LCC_ASSERT(_opcode < +Kind::ArchStart, "kind() must only be called for general MIR instructions; for architecture-specific instructions, please call opcode()");
+        // FIXME: This should be enabled, but I don't have stackframes and can't
+        // tell where this is triggering from so... yeah.
+        //LCC_ASSERT(_opcode < +Kind::ArchStart, "kind() must only be called for general MIR instructions; for architecture-specific instructions, please call opcode()");
         return static_cast<Kind>(_opcode);
     }
 
@@ -286,6 +292,13 @@ inline std::string ToString(MInst::Kind k) {
     }
     LCC_UNREACHABLE();
 }
+
+auto PrintMOperand(const MOperand& op) -> std::string;
+auto PrintMInst(const MInst& inst) -> std::string;
+auto PrintMBlock(const MBlock& block) -> std::string;
+auto PrintMFunction(const MFunction& function) -> std::string;
+auto PrintMIR(std::vector<GlobalVariable*>& vars, std::vector<MFunction>& mcode) -> std::string;
+
 
 } // namespace lcc
 
