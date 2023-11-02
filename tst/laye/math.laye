@@ -24,7 +24,8 @@
 // +     (?<vd_temp2>$t) = eq i64 $vd_temp1, 12
 // +     store i1 $vd_temp2 into $vd
 // +     return
-void do_math() {
+void do_math()
+{
     int  a = 2 + 3;
     int  b = a * 4;
     int  c = a + b / 2;
