@@ -305,7 +305,9 @@ enum struct OperatorKind {
     Mod,
 
     Greater,
+    GreaterEqual,
     Less,
+    LessEqual,
     Equal,
     NotEqual,
 
@@ -322,8 +324,6 @@ enum struct OperatorKind {
     DivEqual,
     MulEqual,
     ModEqual,
-    LessEqual,
-    GreaterEqual,
     AndEqual,
     OrEqual,
     XorEqual,
@@ -1667,6 +1667,8 @@ public:
     bool is_buffer() const { return kind() == Kind::TypeBuffer; }
     /// Check if this is a function type.
     bool is_function() const { return kind() == Kind::TypeFunc; }
+    /// Check if this is a numeric type.
+    bool is_number() const { return kind() == Kind::TypeInt or kind() == Kind::TypeFloat; }
 
     static Type* Bool;
 

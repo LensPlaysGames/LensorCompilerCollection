@@ -35,6 +35,10 @@ lcc::Type* layec::IRGen::Convert(layec::Type* in) {
             return lcc::Type::VoidTy;
         }
 
+        case Expr::Kind::TypeBool: {
+            return lcc::IntegerType::Get(_ctx, in->size(_ctx));
+        }
+
         case Expr::Kind::TypeInt: {
             return lcc::IntegerType::Get(_ctx, in->size(_ctx));
         }
@@ -118,7 +122,9 @@ void layec::IRGen::GenerateIRFunctionBody(FunctionDecl* decl) {
         GenerateStatement(as<BlockStatement>(decl->body()));
 
         if (not curr_block->terminator()) {
-            Insert(new (*mod()) UnreachableInst(decl->location()));
+            if (decl->return_type()->is_void())
+                Insert(new (*mod()) ReturnInst(nullptr, decl->location()));
+            else Insert(new (*mod()) UnreachableInst(decl->location()));
         }
     }
 }
@@ -312,6 +318,52 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
             switch (e->operator_kind()) {
                 default: {
                     LCC_ASSERT(false, "unhandled binary operator kind in Laye IR gen {}", ToString(e->operator_kind()));
+                } break;
+
+                case OperatorKind::Add: {
+                    auto lhs = GenerateExpression(e->lhs());
+                    auto rhs = GenerateExpression(e->rhs());
+
+                    auto arith = new (*mod()) AddInst{lhs, rhs, e->location()};
+                    Insert(arith);
+
+                    _ir_values[expr] = arith;
+                } break;
+
+                case OperatorKind::Sub: {
+                    auto lhs = GenerateExpression(e->lhs());
+                    auto rhs = GenerateExpression(e->rhs());
+
+                    auto arith = new (*mod()) SubInst{lhs, rhs, e->location()};
+                    Insert(arith);
+
+                    _ir_values[expr] = arith;
+                } break;
+
+                case OperatorKind::Mul: {
+                    auto lhs = GenerateExpression(e->lhs());
+                    auto rhs = GenerateExpression(e->rhs());
+
+                    auto arith = new (*mod()) MulInst{lhs, rhs, e->location()};
+                    Insert(arith);
+
+                    _ir_values[expr] = arith;
+                } break;
+
+                case OperatorKind::Div: {
+                    auto lhs = GenerateExpression(e->lhs());
+                    auto rhs = GenerateExpression(e->rhs());
+
+                    Inst* arith;
+                    if (e->type()->is_integer() && not as<IntType>(e->type())->is_signed()) {
+                        arith = new (*mod()) UDivInst{lhs, rhs, e->location()};
+                        Insert(arith);
+                    } else {
+                        arith = new (*mod()) SDivInst{lhs, rhs, e->location()};
+                        Insert(arith);
+                    }
+
+                    _ir_values[expr] = arith;
                 } break;
 
                 case OperatorKind::Equal: {

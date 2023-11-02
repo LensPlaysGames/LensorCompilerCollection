@@ -145,7 +145,7 @@ void layec::Sema::Analyse(Statement*& statement) {
                 tempset curr_func = s;
                 Analyse(body);
             }
-            
+
             MangleName(s);
         } break;
 
@@ -441,6 +441,82 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                     LCC_ASSERT(false, "unimplemented binary operator {}", ToString(e->operator_kind()));
                 } break;
 
+                case OperatorKind::Add:
+                case OperatorKind::Sub:
+                case OperatorKind::Mul:
+                case OperatorKind::Div:
+                case OperatorKind::Mod:{
+                    if (not e->lhs()->type()->is_number()) {
+                        Error(
+                            e->lhs()->location(),
+                            "Cannot use type {} in operator {}",
+                            e->lhs()->type()->string(),
+                            ToString(e->operator_kind())
+                        );
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                    } else if (not e->rhs()->type()->is_number()) {
+                        Error(
+                            e->rhs()->location(),
+                            "Cannot use type {} in operator {}",
+                            e->rhs()->type()->string(),
+                            ToString(e->operator_kind())
+                        );
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                    }
+
+                    if (expr->sema_errored())
+                        break;
+
+                    if (not ConvertToCommonType(e->lhs(), e->rhs())) {
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                        break;
+                    }
+
+                    LCC_ASSERT(Type::Equal(e->lhs()->type(), e->rhs()->type()));
+                    expr->type(e->lhs()->type());
+                } break;
+
+                case OperatorKind::And:
+                case OperatorKind::Or:
+                case OperatorKind::Xor:
+                case OperatorKind::Lsh:
+                case OperatorKind::Rsh: {
+                    if (not e->lhs()->type()->is_integer()) {
+                        Error(
+                            e->lhs()->location(),
+                            "Cannot use type {} in operator {}",
+                            e->lhs()->type()->string(),
+                            ToString(e->operator_kind())
+                        );
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                    } else if (not e->rhs()->type()->is_integer()) {
+                        Error(
+                            e->rhs()->location(),
+                            "Cannot use type {} in operator {}",
+                            e->rhs()->type()->string(),
+                            ToString(e->operator_kind())
+                        );
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                    }
+
+                    if (expr->sema_errored())
+                        break;
+
+                    if (not ConvertToCommonType(e->lhs(), e->rhs())) {
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                        break;
+                    }
+
+                    LCC_ASSERT(Type::Equal(e->lhs()->type(), e->rhs()->type()));
+                    expr->type(e->lhs()->type());
+                } break;
+
                 case OperatorKind::Equal:
                 case OperatorKind::NotEqual: {
                     expr->type(Type::Bool);
@@ -450,6 +526,44 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                     }
 
                     // TODO(local): actually decide what a valid equality compare is
+                } break;
+
+                case OperatorKind::Greater:
+                case OperatorKind::GreaterEqual:
+                case OperatorKind::Less:
+                case OperatorKind::LessEqual: {
+                    expr->type(Type::Bool);
+
+                    if (not e->lhs()->type()->is_number()) {
+                        Error(
+                            e->lhs()->location(),
+                            "Cannot use type {} in operator {}",
+                            e->lhs()->type()->string(),
+                            ToString(e->operator_kind())
+                        );
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                    } else if (not e->rhs()->type()->is_number()) {
+                        Error(
+                            e->rhs()->location(),
+                            "Cannot use type {} in operator {}",
+                            e->rhs()->type()->string(),
+                            ToString(e->operator_kind())
+                        );
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                    }
+
+                    if (expr->sema_errored())
+                        break;
+
+                    if (not ConvertToCommonType(e->lhs(), e->rhs())) {
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                        break;
+                    }
+
+                    LCC_ASSERT(Type::Equal(e->lhs()->type(), e->rhs()->type()));
                 } break;
             }
         } break;
