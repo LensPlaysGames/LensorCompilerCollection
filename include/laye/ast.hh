@@ -667,15 +667,21 @@ class NamedDecl : public Decl {
 
     std::string _mangled_name;
 
+    void set_default_mangled_name() {
+        if (auto e = std::find_if(_mods.begin(), _mods.end(), [](const auto& m) { return m.decl_kind == TokenKind::Foreign; }); e != _mods.end() and not e->string_value.empty())
+            _mangled_name = e->string_value;
+        else _mangled_name = _name;
+    }
+
 protected:
     NamedDecl(Kind kind, Module* module, Location location, std::vector<DeclModifier> mods, std::string name)
         : Decl(kind, location), _module(module), _mods(std::move(mods)), _name(std::move(name)) {
-        _mangled_name = _name;
+        set_default_mangled_name();
     }
 
     NamedDecl(Kind kind, Module* module, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params)
         : Decl(kind, location), _mods(std::move(mods)), _name(std::move(name)), _template_params(std::move(template_params)) {
-        _mangled_name = _name;
+        set_default_mangled_name();
     }
 
 public:
@@ -692,10 +698,21 @@ public:
         return e != mod_list.end();
     }
 
-    void add_mod(DeclModifier modifier) { _mods.push_back(modifier); }
+    void add_mod(DeclModifier modifier) {
+        _mods.push_back(modifier);
+        if (modifier.decl_kind == TokenKind::Foreign and not modifier.string_value.empty())
+            _mangled_name = modifier.string_value;
+    }
 
     bool is_export() const { return has_mod(TokenKind::Export); }
     bool is_foreign() const { return has_mod(TokenKind::Foreign); }
+
+    auto foreign_name() const -> const std::string {
+        auto mod_list = mods();
+        if (auto e = std::find_if(mod_list.begin(), mod_list.end(), [](const auto& m) { return m.decl_kind == TokenKind::Foreign; }); e != mod_list.end())
+            return e->string_value;
+        return "";
+    }
 
     auto linkage() const {
         auto mod_list = mods();

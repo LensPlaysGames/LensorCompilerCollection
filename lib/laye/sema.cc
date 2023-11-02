@@ -547,7 +547,7 @@ bool layec::Sema::AnalyseType(Type*& type) {
             }
 
             auto rank_length_exprs = t->rank_lengths();
-            for (int i = 0; i < rank_length_exprs.size(); i++)
+            for (usz i = 0; i < rank_length_exprs.size(); i++)
             {
                 auto& rank_length_expr = rank_length_exprs[i];
 
