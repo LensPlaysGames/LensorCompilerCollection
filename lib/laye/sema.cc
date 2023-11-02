@@ -445,7 +445,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                 case OperatorKind::Sub:
                 case OperatorKind::Mul:
                 case OperatorKind::Div:
-                case OperatorKind::Mod:{
+                case OperatorKind::Mod: {
                     if (not e->lhs()->type()->is_number()) {
                         Error(
                             e->lhs()->location(),

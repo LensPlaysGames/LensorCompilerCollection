@@ -404,7 +404,7 @@ auto Parser::ParseStruct(std::vector<DeclModifier> mods) -> Result<StructDecl*> 
     return new (*this) StructDecl{module, location, mods, struct_name, *template_params, fields, variants};
 }
 
-auto Parser::ParseAlias(std::vector<DeclModifier> mods, bool is_strict) -> Result<AliasDecl*>  {
+auto Parser::ParseAlias(std::vector<DeclModifier> mods, bool is_strict) -> Result<AliasDecl*> {
     LCC_ASSERT(not IsInSpeculativeParse());
     LCC_ASSERT(Consume(Tk::Alias));
 
@@ -1116,7 +1116,7 @@ auto Parser::TryParseTemplateArguments(bool allocate) -> Result<std::vector<Expr
         continue_parse_args:;
             if (not Consume(Tk::Comma) or At(Tk::CloseParen)) break;
             else continue;
-            
+
         parse_type_arg:
             auto arg = ParseType();
             LCC_ASSERT(arg);

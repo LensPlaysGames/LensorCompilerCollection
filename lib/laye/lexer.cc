@@ -72,7 +72,7 @@ void lcc::laye::Lexer::ReadToken(LayeToken& token) {
     while (IsSpace(lastc)) {
         NextChar();
     }
-    
+
     token.location.pos = CurrentOffset();
 
     if (lastc == 0) {
@@ -312,7 +312,7 @@ void lcc::laye::Lexer::ReadToken(LayeToken& token) {
 
     token.location.len = (u16) (CurrentOffset() - token.location.pos);
 
-    //fmt::print(stderr, "LayeToken {{ text = {} }}\n", token.text);
+    // fmt::print(stderr, "LayeToken {{ text = {} }}\n", token.text);
 }
 
 void lcc::laye::Lexer::ReadIdentifierOrNumber(LayeToken& token) {

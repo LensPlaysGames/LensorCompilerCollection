@@ -1,18 +1,16 @@
-#include <laye/ir_gen.hh>
-
 #include <intercept/ast.hh>
+#include <laye/ir_gen.hh>
+#include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/ir/ir.hh>
-#include <lcc/ir/type.hh>
 #include <lcc/ir/module.hh>
-#include <lcc/context.hh>
+#include <lcc/ir/type.hh>
 #include <lcc/utils.hh>
-#include <lcc/utils/rtti.hh>
 #include <lcc/utils/macros.hh>
-
+#include <lcc/utils/rtti.hh>
 #include <memory>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 namespace layec = lcc::laye;
 
@@ -109,7 +107,7 @@ void layec::IRGen::GenerateIRFunctionBody(FunctionDecl* decl) {
 
         for (auto [i, param] : vws::enumerate(decl->params())) {
             auto inst = curr_func->param(usz(i));
-            
+
             auto alloca = new (*mod()) AllocaInst(inst->type(), param->location);
             Insert(alloca);
 
@@ -188,7 +186,7 @@ void layec::IRGen::GenerateStatement(Statement* statement) {
             GenerateStatement(s->pass());
             if (not curr_block->terminator())
                 Insert(new (*mod()) BranchInst(exit_block, s->location()));
-            
+
             UpdateBlock(fail_block);
             if (s->fail())
                 GenerateStatement(s->fail());
@@ -246,8 +244,7 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
                 if (it != string_literals.end()) {
                     ir_value = it->second;
                 } else {
-                    ir_value = GlobalVariable::CreateStringPtr(mod(),
-                        fmt::format(".str.{}", total_string++), string_value);
+                    ir_value = GlobalVariable::CreateStringPtr(mod(), fmt::format(".str.{}", total_string++), string_value);
                     string_literals[string_value] = ir_value;
                 }
 

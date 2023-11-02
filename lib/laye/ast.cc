@@ -51,7 +51,7 @@ layec::Module::Module(LayeContext* laye_context, File* file)
 }
 
 void layec::Module::add_export(NamedDecl* decl) {
-    //Diag::Note("Declaring an export in scope ({}) named {}", (void*)_exports, decl->name());
+    // Diag::Note("Declaring an export in scope ({}) named {}", (void*)_exports, decl->name());
     [[maybe_unused]] auto res = _exports->declare(this, decl->name(), decl);
 }
 
