@@ -11,7 +11,7 @@ class Parser {
     File* _file;
 
     Lexer _lexer;
-    
+
     CToken token{};
     std::vector<CToken> look_ahead{};
 

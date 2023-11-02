@@ -6,9 +6,9 @@ using Tk = cc::TokenKind;
 
 auto cc::Parser::Parse(CContext* context, File& file) -> TranslationUnit* {
     auto translation_unit = new TranslationUnit{context, &file};
-    
+
     Parser parser{translation_unit, file};
-    
+
     return translation_unit;
 }
 

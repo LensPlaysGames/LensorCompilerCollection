@@ -1,10 +1,9 @@
 #ifndef C_LEXER_HH
 #define C_LEXER_HH
 
-#include "lcc/file.hh"
-
 #include <c/ast.hh>
 #include <lcc/utils.hh>
+#include <lcc/file.hh>
 
 namespace lcc::c {
 class Lexer {

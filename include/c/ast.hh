@@ -1,9 +1,9 @@
 #ifndef C_AST_HH
 #define C_AST_HH
 
-#include "c/opts.hh"
-#include "lcc/utils/result.hh"
-#include "lcc/utils/rtti.hh"
+#include <c/opts.hh>
+#include <lcc/utils/result.hh>
+#include <lcc/utils/rtti.hh>
 
 #include <lcc/core.hh>
 #include <lcc/diags.hh>

@@ -153,7 +153,7 @@ std::string cc::ToString(TokenKind kind) {
 std::string cc::ToString(OperatorKind kind) {
     switch (kind) {
         default: return "<invalid operator>";
-        
+
         // Unary Operators
         case OperatorKind::PlusIdentity: return "+";
         case OperatorKind::Negate: return "-";
@@ -222,18 +222,18 @@ bool cc::Expr::is_lvalue() const {
     switch (_kind) {
         default:
             return false;
-        
+
         case Kind::Name:
             // TODO(local): if we can get access to the type of this name, then we need to check that its type is a valid l-value (are any invalid?)
             return true;
-        
+
         case Kind::Subscript:
             // TODO(local): so long as this does not evaluate to an array, it is an l-value. Get the type if we can
             return true;
-        
+
         case Kind::MemberSelect:
             return true;
-        
+
         case Kind::Unary: {
             auto unary = as<UnaryExpr>(this);
             if (unary->operator_kind() != OperatorKind::Dereference)
