@@ -186,7 +186,6 @@ std::string layec::ToString(layec::TokenKind kind) {
         case TokenKind::Var: return "var";
         case TokenKind::Noreturn: return "noreturn";
         case TokenKind::Rawptr: return "rawptr";
-        case TokenKind::String: return "string";
         default: return "<unknown>";
     }
 }

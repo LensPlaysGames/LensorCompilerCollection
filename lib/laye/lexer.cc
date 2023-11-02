@@ -58,7 +58,6 @@ lcc::StringMap<Tk> keyword_infos{
     {"var", Tk::Var},
     {"noreturn", Tk::Noreturn},
     {"rawptr", Tk::Rawptr},
-    {"string", Tk::String},
 };
 }
 
@@ -532,51 +531,51 @@ void lcc::laye::Lexer::ReadEscapeSequence(LayeToken& token) {
     NextChar();
     switch (lastc) {
         case 'n':
-            tok.text += '\n';
+            token.text += '\n';
             NextChar();
             break;
         case 'r':
-            tok.text += '\r';
+            token.text += '\r';
             NextChar();
             break;
         case 't':
-            tok.text += '\t';
+            token.text += '\t';
             NextChar();
             break;
         case 'f':
-            tok.text += '\f';
+            token.text += '\f';
             NextChar();
             break;
         case 'v':
-            tok.text += '\v';
+            token.text += '\v';
             NextChar();
             break;
         case 'a':
-            tok.text += '\a';
+            token.text += '\a';
             NextChar();
             break;
         case 'b':
-            tok.text += '\b';
+            token.text += '\b';
             NextChar();
             break;
         case 'e':
-            tok.text += '\033';
+            token.text += '\033';
             NextChar();
             break;
         case '0':
-            tok.text += '\0';
+            token.text += '\0';
             NextChar();
             break;
         case '\'':
-            tok.text += '\'';
+            token.text += '\'';
             NextChar();
             break;
         case '\"':
-            tok.text += '\"';
+            token.text += '\"';
             NextChar();
             break;
         case '\\':
-            tok.text += '\\';
+            token.text += '\\';
             NextChar();
             break;
         // TODO(local): unicode escape sequences

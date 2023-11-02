@@ -291,7 +291,6 @@ enum struct TokenKind {
     Var,
     Noreturn,
     Rawptr,
-    String,
 };
 
 using LayeToken = syntax::Token<TokenKind>;

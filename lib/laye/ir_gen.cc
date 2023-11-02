@@ -30,6 +30,7 @@ lcc::Type* layec::IRGen::Convert(layec::Type* in) {
             return lcc::FunctionType::Get(_ctx, Convert(t->return_type()), std::move(param_types));
         }
 
+        case Expr::Kind::TypeNoreturn:
         case Expr::Kind::TypeVoid: {
             return lcc::Type::VoidTy;
         }
