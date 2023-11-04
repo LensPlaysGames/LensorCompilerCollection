@@ -38,7 +38,17 @@ enum struct OperandKind {
 template<i64 imm = 0>
 struct Immediate {
     static constexpr i64 immediate = imm;
-    static constexpr usz index = usz(-1);
+    static constexpr usz index = 0;
+    static constexpr usz value = 0;
+    static constexpr usz size = 0;
+};
+
+template <usz val, usz sz>
+struct Register {
+    static constexpr i64 immediate = 0;
+    static constexpr usz index = 0;
+    static constexpr usz value = val;
+    static constexpr usz size = sz;
 };
 
 // Operand reference, by index.
@@ -46,6 +56,8 @@ template <usz idx>
 struct o {
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
+    static constexpr usz value = 0;
+    static constexpr usz size = 0;
 };
 
 template<OperandKind kind_, typename value_>
@@ -54,13 +66,10 @@ struct Operand{
     using value = value_;
 };
 
-
 template<usz opcode_, typename... operands>
 struct Inst {
     static constexpr usz opcode = opcode_;
 
-    // FIXME: We may need another parameter denoting the index of input and
-    // output we are "currently on" or whatever.
     static constexpr void rewrite_operands(std::vector<MInst*> input, MInst* out) {
         LCC_ASSERT(out, "Out parameter must not be nullptr");
         Foreach<operands...>([&]<typename operand>() {
@@ -144,14 +153,13 @@ struct PatternList {
 
                 bool to_be_handled = true;
                 While<Patterns...>(to_be_handled, [&]<typename pattern>() {
+                    // TODO: Handle multiple input instructions
                         if (instructions.front()->opcode() == pattern::input::opcode) {
                             // Remove pattern input instruction(s) from instruction window,
                             // keeping references to it/them.
                             std::vector<MInst*> input{};
-                            // TODO: Handle multiple input instructions
                             input.push_back(instructions.front());
                             instructions.erase(instructions.begin());
-
 
                             // Add pattern output instruction(s) to instruction window, fixing
                             // up reference-type operands (operand references get updated to the
