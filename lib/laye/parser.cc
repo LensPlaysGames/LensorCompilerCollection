@@ -114,8 +114,19 @@ auto Parser::Parse(LayeContext* laye_context, File& file) -> Module* {
                 std::string import_name = import->import_name();
 
                 auto file_dir = file.path().parent_path();
-                // TODO(local): also traverse include paths
                 auto import_file_path = file_dir / import_name;
+                if (not fs::exists(import_file_path)) {
+                    for (auto& dir : laye_context->context()->include_directories()) {
+                        import_file_path = fs::path{dir} / import_name;
+                        if (fs::exists(import_file_path))
+                            break;
+                    }
+                }
+
+                if (not fs::exists(import_file_path)) {
+                    parser.Error(import->location(), "Cannot import file because it does not exist");
+                    continue;
+                }
 
                 if (import->has_alias()) {
                     import_name = import->alias();

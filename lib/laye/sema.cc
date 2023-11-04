@@ -777,6 +777,21 @@ int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
         return Score(1);
     }
 
+    if (from->is_integer() and to->is_rawptr()) {
+        if constexpr (PerformConversion) InsertImplicitCast(expr, to);
+        return Score(2);
+    }
+
+    if ((from->is_buffer() or from->is_pointer()) and to->is_rawptr()) {
+        if constexpr (PerformConversion) InsertImplicitCast(expr, to);
+        return Score(3);
+    }
+
+    if (from->is_rawptr() and (to->is_buffer() or to->is_pointer())) {
+        if constexpr (PerformConversion) InsertImplicitCast(expr, to);
+        return Score(3);
+    }
+
     if (from->is_integer() and to->is_integer()) {
         EvalResult res;
         if (expr->evaluate(laye_context(), res, false)) {

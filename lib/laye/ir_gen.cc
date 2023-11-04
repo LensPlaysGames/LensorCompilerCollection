@@ -2,6 +2,7 @@
 #include <laye/ir_gen.hh>
 #include <lcc/context.hh>
 #include <lcc/core.hh>
+#include <lcc/target.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
@@ -41,6 +42,7 @@ lcc::Type* layec::IRGen::Convert(layec::Type* in) {
             return lcc::IntegerType::Get(_ctx, in->size(_ctx));
         }
 
+        case Expr::Kind::TypeRawptr:
         case Expr::Kind::TypePointer:
         case Expr::Kind::TypeBuffer: {
             return lcc::Type::PtrTy;
@@ -214,7 +216,35 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
         } break;
 
         case Ek::Cast: {
-            LCC_TODO();
+            auto e = as<CastExpr>(expr);
+
+            auto to = e->type();
+            auto from = e->value()->type();
+
+            auto value = GenerateExpression(e->value());
+
+            if (from->is_integer() and to->is_rawptr()) {
+                auto from_int = as<IntType>(from);
+                if ((usz)from_int->bit_width() == context()->target()->size_of_pointer) {
+                    auto cast = new (*mod()) lcc::BitcastInst(value, Convert(to), e->location());
+                    Insert(cast);
+                    _ir_values[expr] = cast;
+                } else {
+                    Diag::Error(context(), e->location(), "here");
+                    LCC_ASSERT(false, "cast from {} to {}", from->string(), to->string());
+                }
+            } else if (from->is_rawptr()) {
+                auto cast = new (*mod()) lcc::BitcastInst(value, Convert(to), e->location());
+                Insert(cast);
+                _ir_values[expr] = cast;
+            } else if ((from->is_pointer() or from->is_buffer()) and to->is_rawptr()) {
+                auto cast = new (*mod()) lcc::BitcastInst(value, Convert(to), e->location());
+                Insert(cast);
+                _ir_values[expr] = cast;
+            } else {
+                Diag::Error(context(), e->location(), "here");
+                LCC_ASSERT(false, "cast from {} to {}", from->string(), to->string());
+            }
         } break;
 
         case Ek::LitInt: {

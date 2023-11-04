@@ -1667,6 +1667,8 @@ public:
     bool is_buffer() const { return kind() == Kind::TypeBuffer; }
     /// Check if this is a function type.
     bool is_function() const { return kind() == Kind::TypeFunc; }
+    /// Check if this is the rawptr type.
+    bool is_rawptr() const { return kind() == Kind::TypeRawptr; }
     /// Check if this is a numeric type.
     bool is_number() const { return kind() == Kind::TypeInt or kind() == Kind::TypeFloat; }
 
