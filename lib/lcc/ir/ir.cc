@@ -162,9 +162,8 @@ auto Type::string(bool use_colour) const -> std::string {
         // TODO: name, if it has one; otherwise, all the member types.
         case Kind::Struct: {
             auto s = as<StructType>(this);
-            if (s->named())
-                return fmt::format("__struct_{}", s->name());
-            return fmt::format("__struct_{}", s->index());
+            if (s->named()) return fmt::format("{}{}{}", C(Green), s->name(), C(Reset));
+            return fmt::format("{}__struct_{}{}", C(Green), s->index(), C(Reset));
         }
     }
     LCC_UNREACHABLE();
@@ -271,9 +270,40 @@ bool Block::has_predecessor(Block* block) const {
 
 namespace {
 struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
+    std::string Ty(Type* ty) {
+        using enum utils::Colour;
+        utils::Colours C{use_colour};
+        if (auto struct_type = cast<StructType>(ty)) {
+            return fmt::format("@{}", struct_type->string(use_colour));
+        } else if (auto arr = cast<ArrayType>(ty)) {
+            return fmt::format(
+                "{}{}[{}{}{}]{}",
+                Ty(arr->element_type()),
+                C(Red),
+                C(Magenta),
+                arr->length(),
+                C(Red),
+                C(Reset)
+            );
+        } else if (auto f = cast<FunctionType>(ty)) {
+            auto ToString = [&](auto t) { return Ty(t); };
+            auto separator = fmt::format("{}, ", C(Red));
+            return fmt::format(
+                "{}{}({}{}){}",
+                Ty(f->ret()),
+                C(Red),
+                fmt::join(vws::transform(f->params(), ToString), separator),
+                C(Red),
+                C(Reset)
+            );
+        }
+
+        return ty->string(use_colour);
+    }
+
     void PrintStructType(Type* t) {
         auto struct_type = as<StructType>(t);
-        std::string struct_name = struct_type->string();
+        std::string struct_name = struct_type->string(use_colour);
 
         Print(
             "{}struct {}{}{} {{",
@@ -288,7 +318,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             for (auto [i, member] : vws::enumerate(struct_type->members())) {
                 if (first) first = false;
                 else Print("{},", C(Red));
-                Print(" {}", member->string(use_colour));
+                Print(" {}", Ty(member));
             }
         }
 
@@ -303,7 +333,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             C(Green),
             f->name(),
             C(Red),
-            ftype->ret()->string(use_colour),
+            Ty(ftype->ret()),
             C(Red)
         );
 
@@ -311,7 +341,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         for (auto [i, arg] : vws::enumerate(ftype->params())) {
             if (first) first = false;
             else Print("{}, ", C(Red));
-            Print("{} {}%{}", arg->string(use_colour), C(TempColour), i);
+            Print("{} {}%{}", Ty(arg), C(TempColour), i);
         }
 
         Print("{})", C(Red));
@@ -336,7 +366,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             mnemonic,
             Val(c->operand(), true),
             C(Red),
-            c->type()->string(use_colour)
+            Ty(c->type())
         );
     }
 
@@ -370,7 +400,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Alloca: {
                 auto local = as<AllocaInst>(i);
                 PrintTemp(i);
-                Print("alloca {}", local->allocated_type()->string(use_colour));
+                Print("alloca {}", Ty(local->allocated_type()));
                 return;
             }
 
@@ -401,7 +431,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 }
 
                 if (callee_ty->ret()->is_void()) Print("{})", C(Red));
-                else Print("{}) -> {}", C(Red), callee_ty->ret()->string(use_colour));
+                else Print("{}) -> {}", C(Red), Ty(callee_ty->ret()));
                 return;
             }
 
@@ -410,7 +440,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 PrintTemp(i);
                 Print(
                     "gep {} {}from {} {}at {}",
-                    gep->base_type()->string(use_colour),
+                    Ty(gep->base_type()),
                     C(Red),
                     Val(gep->ptr(), false),
                     C(Red),
@@ -426,7 +456,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 PrintTemp(i);
                 Print(
                     "load {} {}from {}",
-                    load->type()->string(use_colour),
+                    Ty(load->type()),
                     C(Red),
                     Val(load->ptr(), false)
                 );
@@ -450,7 +480,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 PrintTemp(i);
                 Print(
                     "phi {}{}, {}",
-                    phi->type()->string(use_colour),
+                    Ty(phi->type()),
                     C(Red),
                     fmt::join(vws::transform(phi->operands(), FormatPHIVal), separator)
                 );
@@ -564,7 +594,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             C(TempColour),
             v->name(),
             C(Red),
-            v->type()->string(use_colour),
+            Ty(v->type()),
             C(Red)
         );
 
@@ -590,7 +620,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 Args&&... args
             ) -> std::string {
             std::string val;
-            if (include_type) fmt::format_to(It(val), "{} ", v->type()->string(use_colour));
+            if (include_type) fmt::format_to(It(val), "{} ", Ty(v->type()));
             fmt::format_to(It(val), fmt, std::forward<Args>(args)...);
             return val;
         };

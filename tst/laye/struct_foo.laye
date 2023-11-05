@@ -1,7 +1,7 @@
 // R %lcc --ir %s
 // d s __struct_[0-9]+
 
-// * struct $s { i64, ptr, ptr, ptr }
+// * struct __struct_0 { i64, ptr, ptr, ptr }
 struct foo
 {
     int a;
