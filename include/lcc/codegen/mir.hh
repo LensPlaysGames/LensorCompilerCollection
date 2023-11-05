@@ -16,8 +16,7 @@ struct Register {
 };
 
 // Machine Operand
-enum struct MOperandRegister : u64;
-u64 operator+ (MOperandRegister r);
+using MOperandRegister = Register;
 using MOperandImmediate = u64;
 enum struct MOperandLocal : u64;
 u64 operator+ (MOperandLocal l);

@@ -9,7 +9,7 @@ auto PrintMOperand(const MOperand& op) -> std::string {
     if (std::holds_alternative<MOperandImmediate>(op))
         return fmt::format("{}", std::get<MOperandImmediate>(op));
     if (std::holds_alternative<MOperandRegister>(op))
-        return fmt::format("r{}", +std::get<MOperandRegister>(op));
+        return fmt::format("r{}.{}", std::get<MOperandRegister>(op).value, std::get<MOperandRegister>(op).size);
     if (std::holds_alternative<MOperandLocal>(op))
         return fmt::format("local({})", +std::get<MOperandLocal>(op));
     if (std::holds_alternative<MOperandStatic>(op))

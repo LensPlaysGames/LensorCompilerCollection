@@ -17,7 +17,6 @@
 
 namespace lcc {
 
-u64 operator+ (MOperandRegister r) { return static_cast<u64>(r); }
 u64 operator+ (MOperandLocal l) { return static_cast<u64>(l); }
 
 static MInst::Kind ir_nary_inst_kind_to_mir(Value::Kind kind) {
@@ -360,7 +359,8 @@ auto Module::mir() -> std::vector<MFunction> {
             default: break;
         }
         // TODO: Find MInst with this virtual register; if found, add to it's use count.
-        return MOperandRegister{virts[v]};
+        // FIXME: Zero-sized register...
+        return MOperandRegister{virts[v], 0};
     };
 
     // To avoid iterator invalidation when any of these vectors are resizing,
