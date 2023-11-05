@@ -1020,7 +1020,7 @@ auto layec::Sema::TypeToMangledString(Type* type) -> std::string {
 }
 
 void layec::Sema::MangleName(NamedDecl* decl) {
-    if (decl->is_foreign())
+    if (context()->nomangle or decl->is_foreign())
         return;
 
     std::string module_name;

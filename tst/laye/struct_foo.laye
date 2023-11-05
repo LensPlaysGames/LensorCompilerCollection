@@ -1,7 +1,6 @@
-// R %lcc --ir %s
-// d L _L[a-zA-Z0-9_]+
+// R %lcc --ir --nomangle %s
 
-// * struct $L { i64, ptr, ptr, ptr }
+// * struct foo { i64, ptr, ptr, ptr }
 struct foo
 {
     int a;

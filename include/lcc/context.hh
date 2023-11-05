@@ -39,6 +39,8 @@ public:
     std::vector<Type*> function_types;
     std::vector<Type*> struct_types;
 
+    bool nomangle = false;
+
     /// Create a new context.
     explicit Context(const Target* tgt, const Format* format, bool colour_diagnostics);
 
