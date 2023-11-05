@@ -439,7 +439,8 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                     Ty(as<ArrayType>(ty)->element_type())
                 );
 
-            case Type::Kind::Struct: LCC_TODO();
+            case Type::Kind::Struct:
+                return fmt::format("${}", GetStructName(as<StructType>(ty)));
         }
 
         LCC_UNREACHABLE();

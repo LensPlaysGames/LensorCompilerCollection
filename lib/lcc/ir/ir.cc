@@ -160,7 +160,12 @@ auto Type::string(bool use_colour) const -> std::string {
         }
 
         // TODO: name, if it has one; otherwise, all the member types.
-        case Kind::Struct: return "<struct>";
+        case Kind::Struct: {
+            auto s = as<StructType>(this);
+            if (s->named())
+                return fmt::format("__struct_{}", s->name());
+            return fmt::format("__struct_{}", s->index());
+        }
     }
     LCC_UNREACHABLE();
 }
@@ -266,15 +271,9 @@ bool Block::has_predecessor(Block* block) const {
 
 namespace {
 struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
-    std::string GetStructName(StructType* struct_type) {
-        if (struct_type->named())
-            return struct_type->name();
-        else return fmt::format("__struct_{}", struct_type->index());
-    }
-
     void PrintStructType(Type* t) {
         auto struct_type = as<StructType>(t);
-        std::string struct_name = GetStructName(struct_type);
+        std::string struct_name = struct_type->string();
 
         Print(
             "{}struct {}{}{} {{",
