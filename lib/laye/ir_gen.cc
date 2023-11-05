@@ -84,7 +84,7 @@ void layec::IRGen::CreateStructDeclType(StructDecl* decl) {
         member_types.push_back(field_type);
     }
 
-    auto struct_type = lcc::StructType::Get(context(), member_types, decl->mangled_name());
+    auto struct_type = lcc::StructType::Get(context(), member_types);
     _ir_types[decl] = struct_type;
 }
 

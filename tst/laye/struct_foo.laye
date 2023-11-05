@@ -1,7 +1,7 @@
 // R %lcc --ir %s
-// d L _L[a-zA-Z0-9_]+
+// d s __struct_[0-9]+
 
-// * struct $L { i64, ptr, ptr, ptr }
+// * struct $s { i64, ptr, ptr, ptr }
 struct foo
 {
     int a;

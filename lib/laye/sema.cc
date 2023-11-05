@@ -169,8 +169,6 @@ void layec::Sema::Analyse(Statement*& statement) {
             for (auto& field : s->fields()) {
                 Analyse((Statement*&) field);
             }
-
-            MangleName(s);
         } break;
 
         case Statement::Kind::DeclAlias: {
@@ -1048,12 +1046,6 @@ void layec::Sema::MangleName(NamedDecl* decl) {
     } else if (auto binding_decl = cast<BindingDecl>(decl)) {
         mangled_name += "B";
         mangled_name += TypeToMangledString(binding_decl->type());
-    } else if (auto struct_decl = cast<StructDecl>(decl)) {
-        mangled_name += "F";
-        for (auto& field : struct_decl->fields()) {
-            mangled_name += TypeToMangledString(field->type());
-        }
-        mangled_name += "E";
     }
 
     decl->mangled_name(mangled_name);
