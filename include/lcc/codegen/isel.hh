@@ -1,16 +1,17 @@
 #ifndef LCC_CODEGEN_INSTRUCTION_SELECTION_HH
 #define LCC_CODEGEN_INSTRUCTION_SELECTION_HH
 
-#include <lcc/utils.hh>
-#include <lcc/ir/module.hh>
 #include <lcc/codegen/mir.hh>
+#include <lcc/ir/module.hh>
+#include <lcc/utils.hh>
 #include <unordered_map>
+#include <variant>
 
 namespace lcc {
 namespace isel {
 
 /// `while`-like iteration over a template parameter pack.
-template<typename... pack>
+template <typename... pack>
 constexpr void While(bool& cond, auto&& lambda) {
     auto impl = [&]<typename t>() {
         if (not cond) return false;
@@ -21,13 +22,14 @@ constexpr void While(bool& cond, auto&& lambda) {
     (impl.template operator()<pack>() and ...);
 }
 
-template<typename... pack>
+template <typename... pack>
 constexpr void Foreach(auto&& lambda) {
     (lambda.template operator()<pack>(), ...);
 }
 
 enum struct OperandKind {
     Immediate,
+    Register,
     InputOperandReference,
     // TODO: The operand kinds
 };
@@ -35,7 +37,7 @@ enum struct OperandKind {
 // NOTE: The operand values are a bit scuffed, in that each one needs all
 // of the accessors in order for everything to compile...
 
-template<i64 imm = 0>
+template <i64 imm = 0>
 struct Immediate {
     static constexpr i64 immediate = imm;
     static constexpr usz index = 0;
@@ -60,59 +62,75 @@ struct o {
     static constexpr usz size = 0;
 };
 
-template<OperandKind kind_, typename value_>
-struct Operand{
+template <OperandKind kind_, typename value_>
+struct Operand {
     static constexpr const auto kind = kind_;
     using value = value_;
 };
 
-template<usz opcode_, typename... operands>
+template <usz opcode_, typename... operands>
 struct Inst {
     static constexpr usz opcode = opcode_;
 
-    static constexpr void rewrite_operands(std::vector<MInst*> input, MInst* out) {
-        LCC_ASSERT(out, "Out parameter must not be nullptr");
-        Foreach<operands...>([&]<typename operand>() {
-                // Initialise operand based on output pattern.
+    static constexpr usz operand_count = sizeof...(operands);
+
+    static constexpr void foreach_operand(auto&& lambda) {
+        (lambda.template operator()<operands>(), ...);
+    }
+
+    template <typename operand>
+    static constexpr MOperand get_operand(std::vector<MInst*> input) {
+        switch (operand::kind) {
+            case OperandKind::Immediate:
+                return MOperandImmediate(operand::value::immediate);
+
+            case OperandKind::Register:
+                return MOperandRegister(operand::value::value, operand::value::size);
+
+            case OperandKind::InputOperandReference: {
                 MOperand op{};
-                switch (operand::kind) {
-                    case OperandKind::Immediate:
-                        op = MOperandImmediate(operand::value::immediate);
-                        break;
-
-                    case OperandKind::InputOperandReference: {
-                        // Current operand index.
-                        usz i = 0;
-                        // Operand index we need to find.
-                        usz needle = operand::value::index;
-                        // Whether or not we've found the operand we are looking for.
-                        bool found = false;
-                        for (auto instruction : input) {
-                            for (auto op_candidate : instruction->all_operands()) {
-                                // This is the instruction we are looking for!
-                                if (i == needle) {
-                                    found = true;
-                                    op = op_candidate;
-                                }
-
-                                // We can stop looking at operands if we found the one we needed.
-                                if (found) break;
-
-                                // Increment operand index for the next operand.
-                                ++i;
-                            }
-                            // We can stop looking at instructions if we found the operand we needed.
-                            if (found) break;
+                // Current operand index.
+                usz i = 0;
+                // Operand index we need to find.
+                usz needle = operand::value::index;
+                // Whether or not we've found the operand we are looking for.
+                bool found = false;
+                for (auto instruction : input) {
+                    for (auto op_candidate : instruction->all_operands()) {
+                        // This is the instruction we are looking for!
+                        if (i == needle) {
+                            found = true;
+                            op = op_candidate;
                         }
 
-                        // FIXME: Which pattern? Possible to include it in error message somehow?
-                        LCC_ASSERT(found, "Pattern has ill-formed o<{}> operand: index greater than amount of operands in input.", needle);
+                        // We can stop looking at operands if we found the one we needed.
+                        if (found) break;
 
-                    } break;
+                        // Increment operand index for the next operand.
+                        ++i;
+                    }
+                    // We can stop looking at instructions if we found the operand we needed.
+                    if (found) break;
                 }
 
-                out->add_operand(op);
-            });
+                // FIXME: Which pattern? Possible to include it in error message somehow?
+                LCC_ASSERT(found, "Pattern has ill-formed o<{}> operand: index greater than amount of operands in input.", needle);
+
+                return op;
+            }
+        }
+        LCC_UNREACHABLE();
+    }
+};
+
+template <typename... instructions>
+struct InstList {
+    static constexpr usz size() {
+        return (sizeof(instructions), ...);
+    }
+
+    static constexpr void foreach (auto&& lambda) {
+        (lambda.template operator()<instructions>(), ...);
     }
 };
 
@@ -122,14 +140,14 @@ struct Pattern {
     using output = out;
 };
 
-template<typename... Patterns>
+template <typename... Patterns>
 struct PatternList {
     static MFunction rewrite(lcc::Module* mod, MFunction& function) {
         MFunction out{};
         out.name() = function.name();
         out.locals() = function.locals();
 
-        // TODO: Get the longest pattern length
+        // TODO: Get the longest input pattern length
         usz longest_pattern_length = 1;
 
         // NOTE: If you modify block.instructions() in any way, you are going to
@@ -153,36 +171,89 @@ struct PatternList {
 
                 bool to_be_handled = true;
                 While<Patterns...>(to_be_handled, [&]<typename pattern>() {
-                    // TODO: Handle multiple input instructions
-                        if (instructions.front()->opcode() == pattern::input::opcode) {
-                            // Remove pattern input instruction(s) from instruction window,
-                            // keeping references to it/them.
-                            std::vector<MInst*> input{};
-                            input.push_back(instructions.front());
-                            instructions.erase(instructions.begin());
+                    // If the input pattern is longer than the current amount of instructions,
+                    // skip this pattern.
+                    if (pattern::input::size() > instructions.size()) return;
 
-                            // Add pattern output instruction(s) to instruction window, fixing
-                            // up reference-type operands (operand references get updated to the
-                            // operand they reference). This is implemented in `Inst::rewrite_operands`.
+                    // Ensure all opcodes and operand types match from the input pattern.
+                    usz input_i = 0;
+                    bool pattern_matches = true;
+                    pattern::input::foreach ([&]<typename inst> {
+                        // If the pattern has failed to match, skip the rest of the instructions
+                        // in the pattern.
+                        if (not pattern_matches) return;
 
-                            // TODO: foreach output instruction...
+                        auto& instruction = instructions[input_i];
 
-                            // Use last instruction's vreg from input of pattern. TODO: Pass size.
-                            auto output = new MInst(pattern::output::opcode, input.back()->reg());
-
-                            // Match use count.
-                            // TODO: How will multiple output instructions be handled here? Do we need
-                            // to calculate the matched pattern's use counts and set those?
-                            usz use_count = input.back()->use_count();
-                            while (use_count) output->add_use();
-
-                            pool.push_back(output);
-                            instructions.insert(instructions.begin(), output);
-                            pattern::output::rewrite_operands(input, output);
-
-                            to_be_handled = false; // break
+                        // If the `i`th input instruction's opcode doesn't match the `i`th
+                        // instruction window's opcode, the pattern does not match.
+                        if (instruction->opcode() != inst::opcode) {
+                            pattern_matches = false;
+                            return;
                         }
+
+                        // Ensure operand amount and kinds match the input pattern.
+                        bool operands_match = false;
+                        if (inst::operand_count == instruction->all_operands().size()) {
+                            operands_match = true;
+
+                            usz op_i = 0;
+                            inst::foreach_operand([&]<typename op> {
+                                // If the operands have failed to match, skip the rest of the operands.
+                                if (not operands_match) return;
+
+                                auto& operand = instruction->all_operands()[op_i];
+                                if (std::holds_alternative<MOperandImmediate>(operand)) {
+                                    operands_match = op::kind == OperandKind::Immediate;
+                                } else if (std::holds_alternative<MOperandRegister>(operand)) {
+                                    operands_match = op::kind == OperandKind::Register;
+                                } else {
+                                    LCC_ASSERT(false, "Unhandled MIR Operand Kind in ISel...");
+                                }
+                                ++op_i;
+                            });
+                        }
+
+                        pattern_matches = operands_match;
+
+                        ++input_i;
                     });
+
+                    // If pattern does not match, continue trying more patterns.
+                    if (not pattern_matches) return;
+
+                    // Remove pattern input instruction(s) from instruction window,
+                    // keeping references to it/them.
+                    std::vector<MInst*> input{};
+                    input.insert(input.begin(), instructions.begin(), instructions.begin() + pattern::input::size());
+                    instructions.erase(instructions.begin(), instructions.begin() + pattern::input::size());
+
+                    // Add pattern output instruction(s) to instruction window, fixing
+                    // up reference-type operands (operand references get updated to the
+                    // operand they reference).
+
+                    isz output_i = 0;
+                    pattern::output::foreach ([&]<typename inst> {
+                        // FIXME: Do we need to just make new vregs? What size?
+                        // Use instruction's vreg from input of pattern. TODO: Pass size.
+                        auto output = new MInst(inst::opcode, input.back()->reg());
+                        // Keep track of newly allocated machine instructions.
+                        pool.push_back(output);
+                        instructions.insert(instructions.begin() + output_i, output);
+
+                        inst::foreach_operand([&]<typename op> {
+                            output->add_operand(inst::template get_operand<op>(input));
+                        });
+
+                        // Stupidly match use count (not sure if even necessary).
+                        usz use_count = input.back()->use_count();
+                        while (use_count--) output->add_use();
+
+                        ++output_i;
+                    });
+
+                    to_be_handled = false; // break
+                });
 
                 // If we get through *all* of the patterns, and none of them matched, we
                 // can pop an instruction off the front and emit it into the output,
@@ -210,12 +281,15 @@ struct PatternList {
             } while (instructions.size() != 0 || instructions_handled < old_block.instructions().size());
         }
 
-        fmt::print("{}\n", PrintMFunction(out));
+        fmt::print(
+            "After ISel\n"
+            "{}\n",
+            PrintMFunction(out)
+        );
 
         return out;
     }
 };
-
 
 } // namespace isel
 
