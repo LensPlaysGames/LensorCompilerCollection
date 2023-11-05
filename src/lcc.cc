@@ -62,7 +62,6 @@ using options = clopts< // clang-format off
     flag<"--ast", "Print the AST and exit without generating code">,
     flag<"--sema", "Run sema only and exit">,
     flag<"--syntax-only", "Do not perform semantic analysis">,
-    flag<"--nomangle", "Disable name mangling globally">,
     flag<"--ir", "Emit LCC intermediate representation and exit">,
     func<"--aluminium", "That special something to spice up your compilation", aluminium_handler>,
     multiple<positional<"filepath", "Path to files that should be compiled", file<std::vector<char>>, true>>
@@ -108,7 +107,6 @@ int main(int argc, char** argv) {
     }
 
     lcc::Context context{detail::default_target, format, use_colour};
-    context.nomangle = opts.get<"--nomangle">();
 
     for (const auto& dir : *opts.get<"-I">()) {
         context.add_include_directory(dir);
