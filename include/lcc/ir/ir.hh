@@ -107,6 +107,74 @@ public:
 
     /// Get the type of this value.
     Type* type() const { return value_type; }
+
+    static auto ToString(Value::Kind v) -> std::string {
+        using VK = Value::Kind;
+        switch (v) {
+            /// Values
+            case VK::Block: return "Block";
+            case VK::Function: return "Function";
+            case VK::IntegerConstant: return "IntegerConstant";
+            case VK::ArrayConstant: return "ArrayConstant";
+            case VK::Poison: return "Poison";
+            case VK::GlobalVariable: return "GlobalVariable";
+            case VK::Parameter: return "Parameter";
+
+            /// Instructions
+            case VK::Copy: return "Copy";
+            case VK::Alloca: return "Alloca";
+            case VK::Call: return "Call";
+            case VK::GetElementPtr: return "GetElementPtr";
+            case VK::Intrinsic: return "Intrinsic";
+            case VK::Load: return "Load";
+            case VK::Phi: return "Phi";
+            case VK::Store: return "Store";
+
+            /// Terminators
+            case VK::Branch: return "Branch";
+            case VK::CondBranch: return "CondBranch";
+            case VK::Return: return "Return";
+            case VK::Unreachable: return "Unreachable";
+
+            /// Unary instructions
+            case VK::ZExt: return "ZExt";
+            case VK::SExt: return "SExt";
+            case VK::Trunc: return "Trunc";
+            case VK::Bitcast: return "Bitcast";
+            case VK::Neg: return "Neg";
+            case VK::Compl: return "Compl";
+
+            /// Binary instructions
+            case VK::Add: return "Add";
+            case VK::Sub: return "Sub";
+            case VK::Mul: return "Mul";
+            case VK::SDiv: return "SDiv";
+            case VK::UDiv: return "UDiv";
+            case VK::SRem: return "SRem";
+            case VK::URem: return "URem";
+            case VK::Shl: return "Shl";
+            case VK::Sar: return "Sar";
+            case VK::Shr: return "Shr";
+            case VK::And: return "And";
+            case VK::Or: return "Or";
+            case VK::Xor: return "Xor";
+
+            /// Comparison instructions
+            case VK::Eq: return "Eq";
+            case VK::Ne: return "Ne";
+            // Signed comparisons
+            case VK::SLt: return "SLt";
+            case VK::SLe: return "SLe";
+            case VK::SGt: return "SGt";
+            case VK::SGe: return "SGe";
+            // Unsigned comparisons
+            case VK::ULt: return "ULt";
+            case VK::ULe: return "ULe";
+            case VK::UGt: return "UGt";
+            case VK::UGe: return "UGe";
+        }
+        LCC_UNREACHABLE();
+    }
 };
 
 class GlobalVariable : public Value {

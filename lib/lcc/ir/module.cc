@@ -3,6 +3,7 @@
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/x86_64.hh>
+#include <lcc/codegen/x86_64/assembly.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/format.hh>
@@ -116,7 +117,7 @@ void Module::lower() {
     }
 }
 
-void Module::emit(std::string_view output_file_path) {
+void Module::emit(std::filesystem::path output_file_path) {
     switch (_ctx->format()->format()) {
         case Format::INVALID: LCC_UNREACHABLE();
         case Format::LLVM_TEXTUAL_IR: {
@@ -133,7 +134,11 @@ void Module::emit(std::string_view output_file_path) {
             for (auto& mfunc : machine_ir)
                 select_instructions(this, mfunc);
 
-            LCC_ASSERT(false, "TODO: Emit gnu assembly");
+            // TODO: Register Allocation
+
+            if (_ctx->target()->is_x64())
+                x86_64::emit_gnu_att_assembly(output_file_path, this, machine_ir);
+            else LCC_ASSERT(false, "Unhandled code emission target, sorry");
         } break;
     }
 }

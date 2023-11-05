@@ -46,7 +46,7 @@ public:
     void add_var(GlobalVariable* var) { _vars.push_back(var); }
 
     void lower();
-    void emit(std::string_view output_file_path = "");
+    void emit(std::filesystem::path output_file_path);
 };
 } // namespace lcc
 

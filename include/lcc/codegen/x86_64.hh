@@ -36,6 +36,8 @@ enum struct RegisterId {
     RETURN = 0x210,
 };
 
+std::string ToString(RegisterId id);
+
 } // namespace x86_64
 } // namespace lcc
 
