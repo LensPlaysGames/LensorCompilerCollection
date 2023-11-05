@@ -793,8 +793,10 @@ public:
     StructDecl(Module* module, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params, std::vector<BindingDecl*> fields, std::vector<StructDecl*> variants)
         : NamedDecl(Kind::DeclStruct, module, location, mods, name, template_params), _fields(std::move(fields)), _variants(std::move(variants)) {}
 
-    auto fields() const -> std::span<BindingDecl* const> { return _fields; }
-    auto variants() const -> std::span<StructDecl* const> { return _variants; }
+    auto fields() const -> const decltype(_fields)& { return _fields; }
+    auto fields() -> decltype(_fields)& { return _fields; }
+    auto variants() const -> const decltype(_variants)& { return _variants; }
+    auto variants() -> decltype(_variants)& { return _variants; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclStruct; }
 };

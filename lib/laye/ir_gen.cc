@@ -56,6 +56,11 @@ void layec::IRGen::GenerateModule(laye::Module* module) {
     }
 
     for (auto& tld : module->top_level_decls()) {
+        if (auto struct_decl = cast<StructDecl>(tld))
+            CreateStructDeclType(struct_decl);
+    }
+
+    for (auto& tld : module->top_level_decls()) {
         if (auto f = cast<FunctionDecl>(tld))
             CreateIRFunctionValue(f);
     }
@@ -70,6 +75,17 @@ auto layec::IRGen::Generate(LayeContext* laye_context, laye::Module* module) -> 
     auto ir_gen = IRGen{laye_context, module};
     ir_gen.GenerateModule(module);
     return ir_gen.mod();
+}
+
+void layec::IRGen::CreateStructDeclType(StructDecl* decl) {
+    std::vector<lcc::Type*> member_types{};
+    for (const auto field : decl->fields()) {
+        auto field_type = Convert(field->type());
+        member_types.push_back(field_type);
+    }
+
+    auto struct_type = lcc::StructType::Get(context(), member_types);
+    _ir_types[decl] = struct_type;
 }
 
 void layec::IRGen::CreateIRFunctionValue(FunctionDecl* decl) {
@@ -201,7 +217,7 @@ void layec::IRGen::GenerateStatement(Statement* statement) {
         case Sk::Expr: {
             auto s = as<ExprStatement>(statement);
             GenerateExpression(s->expr());
-        }
+        } break;
     }
 }
 

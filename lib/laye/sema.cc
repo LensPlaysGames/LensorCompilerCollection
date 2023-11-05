@@ -164,6 +164,13 @@ void layec::Sema::Analyse(Statement*& statement) {
             MangleName(s);
         } break;
 
+        case Statement::Kind::DeclStruct: {
+            auto s = as<StructDecl>(statement);
+            for (auto& field : s->fields()) {
+                Analyse((Statement*&)field);
+            }
+        } break;
+
         case Statement::Kind::DeclAlias: {
             auto s = as<AliasDecl>(statement);
             AnalyseType(s->type());
