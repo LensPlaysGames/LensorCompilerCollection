@@ -238,9 +238,8 @@ struct PatternList {
 
                     isz output_i = 0;
                     pattern::output::foreach ([&]<typename inst> {
-                        // FIXME: Do we need to just make new vregs? What size?
-                        // Use instruction's vreg from input of pattern. TODO: Pass size.
-                        auto output = new MInst(inst::opcode, input.back()->reg());
+                        // Use instruction's vreg from input of pattern.
+                        auto output = new MInst(inst::opcode, {input.back()->reg(), input.back()->regsize()});
                         // Keep track of newly allocated machine instructions.
                         pool.push_back(output);
                         instructions.insert(instructions.begin() + output_i, output);

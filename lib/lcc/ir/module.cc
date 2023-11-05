@@ -410,7 +410,7 @@ auto Module::mir() -> std::vector<MFunction> {
                             break;
                         }
 
-                        auto phi = MInst(MInst::Kind::Phi, virts[instruction]);
+                        auto phi = MInst(MInst::Kind::Phi, {virts[instruction], phi_ir->type()->bits()});
                         for (auto& op : phi_ir->operands()) {
                             phi.add_operand(MOperandValueReference(f, op.block));
                             phi.add_operand(MOperandValueReference(f, op.value));
@@ -420,7 +420,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     case Value::Kind::Call: {
                         auto call_ir = as<CallInst>(instruction);
-                        auto call = MInst(MInst::Kind::Call, virts[instruction]);
+                        auto call = MInst(MInst::Kind::Call, {virts[instruction], call_ir->function_type()->ret()->bits()});
                         call.add_operand(MOperandValueReference(f, call_ir->callee()));
                         for (auto& arg : call_ir->args()) {
                             call.add_operand(MOperandValueReference(f, arg));
@@ -434,7 +434,9 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     case Value::Kind::GetElementPtr: {
                         auto gep_ir = as<GEPInst>(instruction);
-                        auto gep = MInst(MInst::Kind::GetElementPtr, virts[instruction]);
+                        // FIXME: zero sized register
+                        // TODO: ptr-width register.
+                        auto gep = MInst(MInst::Kind::GetElementPtr, {virts[instruction], 0});
                         gep.add_operand(MOperandValueReference(f, gep_ir->ptr()));
                         gep.add_operand(MOperandValueReference(f, gep_ir->idx()));
                         bb.add_instruction(gep);
@@ -442,14 +444,18 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     case Value::Kind::Branch: {
                         auto branch_ir = as<BranchInst>(instruction);
-                        auto branch = MInst(MInst::Kind::Branch, virts[instruction]);
+                        // A branch does not produce a useable value, and as such it's register
+                        // size is zero.
+                        auto branch = MInst(MInst::Kind::Branch, {virts[instruction], 0});
                         branch.add_operand(MOperandValueReference(f, branch_ir->target()));
                         bb.add_instruction(branch);
                     } break;
 
                     case Value::Kind::CondBranch: {
                         auto branch_ir = as<CondBranchInst>(instruction);
-                        auto branch = MInst(MInst::Kind::CondBranch, virts[instruction]);
+                        // A branch does not produce a useable value, and as such it's register
+                        // size is zero.
+                        auto branch = MInst(MInst::Kind::CondBranch, {virts[instruction], 0});
                         branch.add_operand(MOperandValueReference(f, branch_ir->cond()));
                         branch.add_operand(MOperandValueReference(f, branch_ir->then_block()));
                         branch.add_operand(MOperandValueReference(f, branch_ir->else_block()));
@@ -457,27 +463,35 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::Unreachable: {
-                        auto unreachable = MInst(MInst::Kind::Unreachable, virts[instruction]);
+                        // Unreachable does not produce a useable value, and as such it's register
+                        // size is zero.
+                        auto unreachable = MInst(MInst::Kind::Unreachable, {virts[instruction], 0});
                         bb.add_instruction(unreachable);
                     } break;
 
                     case Value::Kind::Store: {
                         auto store_ir = as<StoreInst>(instruction);
-                        auto store = MInst(MInst::Kind::Store, virts[instruction]);
-                        store.add_operand(MOperandValueReference(f, store_ir->ptr()));
+                        // A store does not produce a useable value, and as such it's register
+                        // size is zero.
+                        auto store = MInst(MInst::Kind::Store, {virts[instruction], 0});
                         store.add_operand(MOperandValueReference(f, store_ir->val()));
+                        store.add_operand(MOperandValueReference(f, store_ir->ptr()));
                         bb.add_instruction(store);
                     } break;
 
                     case Value::Kind::Load: {
-                        auto load = MInst(MInst::Kind::Load, virts[instruction]);
-                        load.add_operand(MOperandValueReference(f, as<LoadInst>(instruction)->ptr()));
+                        // FIXME: zero sized register
+                        auto load_ir = as<LoadInst>(instruction);
+                        auto load = MInst(MInst::Kind::Load, {virts[instruction], load_ir->type()->bits()});
+                        load.add_operand(MOperandValueReference(f, load_ir->ptr()));
                         bb.add_instruction(load);
                     } break;
 
                     case Value::Kind::Return: {
                         auto ret_ir = as<ReturnInst>(instruction);
-                        auto ret = MInst(MInst::Kind::Return, virts[instruction]);
+                        usz regsize = 0;
+                        if (ret_ir->has_value()) regsize = ret_ir->val()->type()->bits();
+                        auto ret = MInst(MInst::Kind::Return, {virts[instruction], regsize});
                         if (ret_ir->has_value())
                             ret.add_operand(MOperandValueReference(f, ret_ir->val()));
                         bb.add_instruction(ret);
@@ -491,7 +505,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Neg:
                     case Value::Kind::Compl: {
                         auto unary_ir = as<UnaryInstBase>(instruction);
-                        auto unary = MInst(ir_nary_inst_kind_to_mir(unary_ir->kind()), virts[instruction]);
+                        auto unary = MInst(ir_nary_inst_kind_to_mir(unary_ir->kind()), {virts[instruction], unary_ir->type()->bits()});
                         unary.add_operand(MOperandValueReference(f, unary_ir->operand()));
                         bb.add_instruction(unary);
                     } break;
@@ -521,7 +535,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::UGt:
                     case Value::Kind::UGe: {
                         auto binary_ir = as<BinaryInst>(instruction);
-                        auto binary = MInst(ir_nary_inst_kind_to_mir(binary_ir->kind()), virts[instruction]);
+                        auto binary = MInst(ir_nary_inst_kind_to_mir(binary_ir->kind()), {virts[instruction], binary_ir->type()->bits()});
                         binary.add_operand(MOperandValueReference(f, binary_ir->lhs()));
                         binary.add_operand(MOperandValueReference(f, binary_ir->rhs()));
                         bb.add_instruction(binary);
@@ -555,7 +569,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         if (std::holds_alternative<MOperandBlock>(op))
                             Diag::ICE("Phi value cannot be a block");
 
-                        auto copy = MInst(MInst::Kind::Copy, minst.reg());
+                        auto copy = MInst(MInst::Kind::Copy, {minst.reg(), minst.regsize()});
 
                         usz uses = minst.use_count();
                         while (uses && uses--) copy.add_use();

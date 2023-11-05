@@ -103,12 +103,12 @@ private:
     std::vector<MOperand> operands{};
 
 public:
-    MInst(Kind kind, usz virtualRegister)
-        : _register(virtualRegister, 0), /// FIXME: Actually pass in register size.
+    MInst(Kind kind, Register reg)
+        : _register(reg),
           _opcode(static_cast<usz>(kind)) {};
 
-    MInst(usz opcode, usz virtualRegister)
-        : _register(virtualRegister, 0), /// FIXME: Actually pass in register size.
+    MInst(usz opcode, Register reg)
+        : _register(reg),
           _opcode(opcode) {};
 
     usz reg() const { return _register.value; }

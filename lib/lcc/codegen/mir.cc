@@ -35,8 +35,8 @@ auto PrintMInst(const MInst& inst) -> std::string {
                            inst.all_operands().empty() ? "" : " ",
                            fmt::join(vws::transform(inst.all_operands(), PrintMOperand), " "));
 
-    return fmt::format("    r{} | {}{}{}{}",
-                       inst.reg(),
+    return fmt::format("    r{}.{} | {}{}{}{}",
+                       inst.reg(), inst.regsize(),
                        inst.use_count() or MInst::is_terminator(MInst::Kind(inst.opcode()))
                            ? ""
                            : "Unused ",
