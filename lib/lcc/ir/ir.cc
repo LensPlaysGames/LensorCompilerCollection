@@ -274,7 +274,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         using enum utils::Colour;
         utils::Colours C{use_colour};
         if (auto struct_type = cast<StructType>(ty)) {
-            return fmt::format("@{}", struct_type->string(use_colour));
+            return fmt::format("{}@{}{}", C(Green), struct_type->string(false), C(Reset));
         } else if (auto arr = cast<ArrayType>(ty)) {
             return fmt::format(
                 "{}{}[{}{}{}]{}",
@@ -303,7 +303,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
     void PrintStructType(Type* t) {
         auto struct_type = as<StructType>(t);
-        std::string struct_name = struct_type->string(use_colour);
+        std::string struct_name = struct_type->string(false);
 
         Print(
             "{}struct {}{}{} {{",
