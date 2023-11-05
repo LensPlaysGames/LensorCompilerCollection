@@ -143,11 +143,11 @@ struct Pattern {
 template <typename... Patterns>
 struct PatternList {
     static MFunction rewrite(lcc::Module* mod, MFunction& function) {
-        MFunction out{};
+        MFunction out{function.linkage(), function.calling_convention()};
         out.name() = function.name();
         out.locals() = function.locals();
 
-        // TODO: Get the longest input pattern length
+        // Get the longest input pattern length
         usz longest_pattern_length = 0;
         Foreach<Patterns...>([&]<typename _> {
             ++longest_pattern_length;

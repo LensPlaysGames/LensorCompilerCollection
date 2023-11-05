@@ -1,23 +1,21 @@
-#include <lcc/ir/module.hh>
-
+#include <algorithm>
 #include <fmt/format.h>
+#include <lcc/codegen/isel.hh>
+#include <lcc/codegen/mir.hh>
 #include <lcc/context.hh>
+#include <lcc/diags.hh>
 #include <lcc/format.hh>
+#include <lcc/ir/ir.hh>
+#include <lcc/ir/module.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/ir_printer.hh>
-#include <lcc/ir/ir.hh>
-#include <lcc/codegen/mir.hh>
-#include <lcc/codegen/isel.hh>
-#include <lcc/diags.hh>
-
-#include <algorithm>
 #include <unordered_set>
 #include <variant>
 
 namespace lcc {
 
-u64 operator+ (MOperandLocal l) { return static_cast<u64>(l); }
+u64 operator+(MOperandLocal l) { return static_cast<u64>(l); }
 
 static MInst::Kind ir_nary_inst_kind_to_mir(Value::Kind kind) {
     switch (kind) {
@@ -85,24 +83,28 @@ void Module::lower() {
             for (auto block : function->blocks()) {
                 for (auto [index, instruction] : vws::enumerate(block->instructions())) {
                     switch (instruction->kind()) {
-                    case Value::Kind::Load: {
-                        auto load = as<LoadInst>(instruction);
+                        case Value::Kind::Load: {
+                            auto load = as<LoadInst>(instruction);
 
-                        // Less than or equal to 8 bytes; nothing to change.
-                        if (load->type()->bits() <= 64) continue;
+                            // Less than or equal to 8 bytes; nothing to change.
+                            if (load->type()->bits() <= 64) continue;
 
-                        LCC_ASSERT(false, "TODO: Handle load > 8 bytes lowering");
-                    } break;
+                            // Possiblities:
+                            // - generate builtin memcpy for backend to handle
+                            // - unroll into 8 byte loads, temporary pointer stored into then
+                            //   incremented
+                            LCC_ASSERT(false, "TODO: Handle load > 8 bytes lowering");
+                        } break;
 
-                    case Value::Kind::Store: {
-                        auto store = as<StoreInst>(instruction);
+                        case Value::Kind::Store: {
+                            auto store = as<StoreInst>(instruction);
 
-                        // Less than or equal to 8 bytes; nothing to change.
-                        if (store->type()->bits() <= 64) continue;
+                            // Less than or equal to 8 bytes; nothing to change.
+                            if (store->type()->bits() <= 64) continue;
 
-                        LCC_ASSERT(false, "TODO: Handle store > 8 bytes lowering");
-                    } break;
-                    default: break;
+                            LCC_ASSERT(false, "TODO: Handle store > 8 bytes lowering");
+                        } break;
+                        default: break;
                     }
                 }
             }
@@ -133,7 +135,7 @@ void Module::lower() {
             // XMM5, YMM5                   Volatile     Must be preserved as needed by caller; sixth vector-type argument when __vectorcall is used
             // XMM6:XMM15, YMM6:YMM15       Non volatile (XMM), Volatile (upper half of YMM). Must be preserved by callee. YMM registers must be preserved as needed by caller.
         } else if (_ctx->target() == Target::x86_64_linux) {
-            //LCC_ASSERT(false, "TODO: SysV x86_64 Calling Convention Lowering");
+            // LCC_ASSERT(false, "TODO: SysV x86_64 Calling Convention Lowering");
         }
 
     } else {
@@ -185,7 +187,7 @@ auto Module::mir() -> std::vector<MFunction> {
             case Value::Kind::CondBranch:
             case Value::Kind::Return:
             case Value::Kind::Unreachable:
-                    return;
+                return;
 
             default:
                 break;
@@ -199,7 +201,6 @@ auto Module::mir() -> std::vector<MFunction> {
             for (auto& instruction : block->instructions()) {
                 assign_virtual_register(instruction);
                 switch (instruction->kind()) {
-
                     // Non-instructions
                     case Value::Kind::Function:
                     case Value::Kind::Block:
@@ -367,7 +368,7 @@ auto Module::mir() -> std::vector<MFunction> {
     // To avoid iterator invalidation when any of these vectors are resizing,
     // we "pre-construct" functions and blocks.
     for (auto& function : code()) {
-        funcs.push_back(MFunction());
+        funcs.push_back(MFunction(function->linkage(), function->call_conv()));
         auto& f = funcs.back();
         f.name() = function->name();
         for (auto& block : function->blocks())
@@ -382,7 +383,6 @@ auto Module::mir() -> std::vector<MFunction> {
             block->machine_block(&bb);
             for (auto& instruction : block->instructions()) {
                 switch (instruction->kind()) {
-
                     // Non-instructions
                     case Value::Kind::Function:
                     case Value::Kind::Block:
@@ -609,6 +609,5 @@ auto Module::mir() -> std::vector<MFunction> {
 
     return funcs;
 }
-
 
 } // namespace lcc

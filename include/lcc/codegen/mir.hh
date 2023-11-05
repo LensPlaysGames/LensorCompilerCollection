@@ -202,14 +202,20 @@ public:
 };
 
 class MFunction {
-    std::string _name;
+    std::string _name{};
 
-    std::vector<MBlock> _blocks;
+    std::vector<MBlock> _blocks{};
 
-    std::vector<AllocaInst*> _locals;
+    std::vector<AllocaInst*> _locals{};
+
+    /// The linkage of this function.
+    Linkage link;
+
+    /// The calling convention of this function.
+    CallConv cc;
 
 public:
-    MFunction() = default;
+    MFunction(Linkage linkage, CallConv call_conv) : link(linkage), cc(call_conv) {}
 
     auto name() -> std::string& {
         return _name;
@@ -225,6 +231,14 @@ public:
 
     auto blocks() const -> const std::vector<MBlock>& {
         return _blocks;
+    }
+
+    auto linkage() const -> Linkage {
+        return link;
+    }
+
+    auto calling_convention() const -> CallConv {
+        return cc;
     }
 
     void add_block(const MBlock& block) {
