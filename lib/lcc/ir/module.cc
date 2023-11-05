@@ -321,11 +321,8 @@ auto Module::mir() -> std::vector<MFunction> {
                 // FIXME: What does f.calling_convention() (C, Intercept, Laye) have to do
                 // with any of this?
 
-                fmt::print("HERE1\n");
                 if (_ctx->target()->is_x64()) {
-                    fmt::print("HERE2\n");
                     if (_ctx->target()->is_windows()) {
-                        fmt::print("HERE3\n");
                         // x64 Calling Convention lowering
                         auto parameter = as<Parameter>(v);
                         if (parameter->type()->bytes() <= 8 && parameter->index() < 4) {
