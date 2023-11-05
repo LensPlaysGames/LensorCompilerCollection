@@ -215,6 +215,9 @@ class MFunction {
     CallConv cc;
 
 public:
+    // For target-specific stuff...
+    usz sysv_integer_parameters_seen{};
+
     MFunction(Linkage linkage, CallConv call_conv) : link(linkage), cc(call_conv) {}
 
     auto name() -> std::string& {

@@ -2,6 +2,7 @@
 #include <fmt/format.h>
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
+#include <lcc/codegen/x86_64.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/format.hh>
@@ -108,34 +109,6 @@ void Module::lower() {
                     }
                 }
             }
-        }
-
-        if (_ctx->target()->is_windows()) {
-            // x64 Calling Convention Lowering
-
-            // Volatile means a register may be altered across function calls, and
-            // needs to be saved by the caller.
-            // RAX                          Volatile     Return value register
-            // RCX                          Volatile     First integer argument
-            // RDX                          Volatile     Second integer argument
-            // R8                           Volatile     Third integer argument
-            // R9                           Volatile     Fourth integer argument
-            // R10:R11                      Volatile     Must be preserved as needed by caller; used in syscall/sysret instructions
-            // R12:R15                      Nonvolatile  Must be preserved by callee
-            // RDI                          Nonvolatile  Must be preserved by callee
-            // RSI                          Nonvolatile  Must be preserved by callee
-            // RBX                          Nonvolatile  Must be preserved by callee
-            // RBP                          Nonvolatile  May be used as a frame pointer; must be preserved by callee
-            // RSP                          Nonvolatile  Stack pointer
-            // XMM0, YMM0                   Volatile     First FP argument; first vector-type argument when __vectorcall is used
-            // XMM1, YMM1                   Volatile     Second FP argument; second vector-type argument when __vectorcall is used
-            // XMM2, YMM2                   Volatile     Third FP argument; third vector-type argument when __vectorcall is used
-            // XMM3, YMM3                   Volatile     Fourth FP argument; fourth vector-type argument when __vectorcall is used
-            // XMM4, YMM4                   Volatile     Must be preserved as needed by caller; fifth vector-type argument when __vectorcall is used
-            // XMM5, YMM5                   Volatile     Must be preserved as needed by caller; sixth vector-type argument when __vectorcall is used
-            // XMM6:XMM15, YMM6:YMM15       Non volatile (XMM), Volatile (upper half of YMM). Must be preserved by callee. YMM registers must be preserved as needed by caller.
-        } else if (_ctx->target() == Target::x86_64_linux) {
-            // LCC_ASSERT(false, "TODO: SysV x86_64 Calling Convention Lowering");
         }
 
     } else {
@@ -338,7 +311,55 @@ auto Module::mir() -> std::vector<MFunction> {
             case Value::Kind::Block:
                 return MOperandBlock(as<Block>(v));
 
-            case Value::Kind::Parameter: break; // FIXME
+            case Value::Kind::Parameter: {
+                // Should probably do this some other way or put this somewhere else? Just
+                // feels weird here.
+                // Parameter Lowering
+                // TODO FOR FUN: Functions marked internal we can do all the fucky wucky
+                // to, to make more efficient-like.
+
+                // FIXME: What does f.calling_convention() (C, Intercept, Laye) have to do
+                // with any of this?
+
+                fmt::print("HERE1\n");
+                if (_ctx->target()->is_x64()) {
+                    fmt::print("HERE2\n");
+                    if (_ctx->target()->is_windows()) {
+                        fmt::print("HERE3\n");
+                        // x64 Calling Convention lowering
+                        auto parameter = as<Parameter>(v);
+                        if (parameter->type()->bytes() <= 8 && parameter->index() < 4) {
+                            static constexpr x86_64::RegisterId reg_by_param_index[4] {
+                                x86_64::RegisterId::RCX,
+                                x86_64::RegisterId::RDX,
+                                x86_64::RegisterId::R8,
+                                x86_64::RegisterId::R9
+                            };
+                            return MOperandRegister{+reg_by_param_index[parameter->index()], parameter->type()->bits()};
+                        } else {
+                            LCC_ASSERT(parameter->type()->bytes() <= 8, "TODO: x64 stack parameter lowering");
+                        }
+                    } else if (_ctx->target()->is_linux()) {
+                        // SysV x86_64 Calling Convention lowering
+                        static constexpr x86_64::RegisterId reg_by_integer_param_index[6] {
+                            x86_64::RegisterId::RDI,
+                            x86_64::RegisterId::RSI,
+                            x86_64::RegisterId::RDX,
+                            x86_64::RegisterId::RCX,
+                            x86_64::RegisterId::R8,
+                            x86_64::RegisterId::R9
+                        };
+                        auto parameter = as<Parameter>(v);
+                        // TODO: Actual SysV classification
+                        if (parameter->type()->bytes() <= 8 && f.sysv_integer_parameters_seen < 6) {
+                            return MOperandRegister(+reg_by_integer_param_index[f.sysv_integer_parameters_seen++], parameter->type()->bits());
+                        }
+                        return MOperandRegister(0, 0);
+                    }
+                }
+
+                LCC_UNREACHABLE();
+            } break;
 
             case Value::Kind::Alloca: {
                 auto found = std::find(f.locals().begin(), f.locals().end(), as<AllocaInst>(v));
