@@ -440,7 +440,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 );
 
             case Type::Kind::Struct:
-                return fmt::format("${}", GetStructName(as<StructType>(ty)));
+                return fmt::format("%{}", GetStructName(as<StructType>(ty)));
         }
 
         LCC_UNREACHABLE();
