@@ -167,8 +167,10 @@ void layec::Sema::Analyse(Statement*& statement) {
         case Statement::Kind::DeclStruct: {
             auto s = as<StructDecl>(statement);
             for (auto& field : s->fields()) {
-                Analyse((Statement*&)field);
+                Analyse((Statement*&) field);
             }
+
+            MangleName(s);
         } break;
 
         case Statement::Kind::DeclAlias: {
@@ -1021,7 +1023,18 @@ void layec::Sema::MangleName(NamedDecl* decl) {
     if (decl->is_foreign())
         return;
 
-    std::string mangled_name = fmt::format("_L{}", NameToMangledString(decl->mangled_name()));
+    std::string module_name;
+    {
+        auto file_id = decl->location().file_id;
+        const auto& file = *context()->files()[file_id].get();
+        module_name = fs::path{file.path()}.filename().replace_extension("").string();
+    }
+
+    std::string mangled_name = fmt::format(
+        "_LM{}X{}",
+        NameToMangledString(module_name),
+        NameToMangledString(decl->mangled_name())
+    );
 
     if (auto func_decl = cast<FunctionDecl>(decl)) {
         mangled_name += "F";
@@ -1035,7 +1048,13 @@ void layec::Sema::MangleName(NamedDecl* decl) {
     } else if (auto binding_decl = cast<BindingDecl>(decl)) {
         mangled_name += "B";
         mangled_name += TypeToMangledString(binding_decl->type());
-    } else return;
+    } else if (auto struct_decl = cast<StructDecl>(decl)) {
+        mangled_name += "F";
+        for (auto& field : struct_decl->fields()) {
+            mangled_name += TypeToMangledString(field->type());
+        }
+        mangled_name += "E";
+    }
 
     decl->mangled_name(mangled_name);
 }
