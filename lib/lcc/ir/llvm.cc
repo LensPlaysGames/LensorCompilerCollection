@@ -4,6 +4,10 @@
 namespace lcc {
 namespace {
 struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
+    void PrintStructType(Type* t, long int i) {
+        auto struct_type = as<StructType>(t);
+    }
+
     /// Emit a function signature
     void PrintFunctionHeader(Function* f) {
         auto ftype = as<FunctionType>(f->type());

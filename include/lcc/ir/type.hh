@@ -9,7 +9,7 @@ namespace lcc {
 /// Base class of all IR types.
 ///
 /// Note: IR types are immutable and cached and uniqued in the
-/// context. Two IR types are equal, iff their pointers are equal.
+/// context. Two IR types are equal, iff their pointers are equ``al.
 class Type {
     friend class lcc::Context;
 
@@ -141,18 +141,25 @@ class StructType : public Type {
     friend class lcc::Context;
 
     std::vector<Type*> _members;
+    std::string _name;
 
 private:
-    StructType(std::vector<Type*> members) : Type(Kind::Struct), _members(std::move(members)) {}
+    StructType(std::vector<Type*> members, std::string name) : Type(Kind::Struct), _members(std::move(members)), _name(std::move(name)) {}
 
 public:
-    static auto Get(Context* ctx, std::vector<Type*> member_types) -> StructType*;
+    static auto Get(Context* ctx, std::vector<Type*> member_types, std::string name = {}) -> StructType*;
 
     /// Return the element count.
     usz member_count() const { return _members.size(); }
 
-    /// Return the types of the members of the struct
+    /// Return the types of the members of the struct.
     auto members() const -> const std::vector<Type*>& { return _members; }
+
+    /// The name of this struct type, if it has one
+    auto name() const -> const std::string& { return _name; }
+
+    /// True if this is a unique, named struct type, false otherwise.
+    bool named() const { return not _name.empty(); }
 
     /// RTTI.
     static bool classof(const Type* t) { return t->kind == Kind::Struct; }

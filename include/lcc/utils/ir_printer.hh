@@ -1,6 +1,7 @@
 #ifndef LCC_UTILS_IR_PRINTER_HH
 #define LCC_UTILS_IR_PRINTER_HH
 
+#include <lcc/context.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils.hh>
@@ -87,6 +88,9 @@ private:
     }
 
     auto PrintModule(Module* mod) -> std::string {
+        for (auto [i, struct_type] : vws::enumerate(mod->context()->struct_types))
+            This()->PrintStructType(struct_type, i);
+        if (not mod->context()->struct_types.empty()) s += '\n';
         for (auto var : mod->vars()) This()->PrintGlobal(var);
         if (not mod->vars().empty()) s += '\n';
         bool first = true;

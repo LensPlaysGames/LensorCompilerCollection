@@ -208,16 +208,16 @@ ArrayType* ArrayType::Get(Context* ctx, usz length, Type* element_type) {
     return out;
 }
 
-StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types) {
+StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, std::string name) {
     // Look in ctx type cache.
     const auto& found = rgs::find_if(ctx->struct_types, [&](const Type* t) {
         const StructType* s = as<StructType>(t);
-        return rgs::equal(s->members(), member_types);
+        return s->name() == name and rgs::equal(s->members(), member_types);
     });
     if (found != ctx->struct_types.end())
         return as<StructType>(*found);
 
-    StructType* out = new (ctx) StructType(member_types);
+    StructType* out = new (ctx) StructType(member_types, name);
     ctx->struct_types.push_back(out);
     return out;
 }
@@ -263,6 +263,33 @@ bool Block::has_predecessor(Block* block) const {
 
 namespace {
 struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
+    void PrintStructType(Type* t, long int index) {
+        auto struct_type = as<StructType>(t);
+
+        std::string struct_name = struct_type->name();
+        if (struct_name.empty())
+            struct_name = fmt::format("__struct_{}", index);
+
+        Print(
+            "{}struct {}{}{} {{",
+            C(Red),
+            C(Green),
+            struct_name,
+            C(Red)
+        );
+
+        if (not struct_type->members().empty()) {
+            bool first = true;
+            for (auto [i, member] : vws::enumerate(struct_type->members())) {
+                if (first) first = false;
+                else Print("{},", C(Red));
+                Print(" {}", member->string(use_colour));
+            }
+        }
+
+        Print(" {}}}{}\n", C(Red), C(Reset));
+    }
+
     /// Print the function signature.
     void PrintFunctionHeader(Function* f) {
         auto ftype = as<FunctionType>(f->type());
