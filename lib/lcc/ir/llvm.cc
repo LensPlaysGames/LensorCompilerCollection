@@ -4,8 +4,27 @@
 namespace lcc {
 namespace {
 struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
+    std::string GetStructName(StructType* struct_type) {
+        if (struct_type->named())
+            return fmt::format("struct.{}", struct_type->name());
+        else return fmt::format("struct.{}", struct_type->index());
+    }
+
     void PrintStructType(Type* t) {
         auto struct_type = as<StructType>(t);
+        std::string struct_name = GetStructName(struct_type);
+
+        Print("%{} = type {{", struct_name);
+        if (not struct_type->members().empty()) {
+            bool first = true;
+            for (auto [i, member] : vws::enumerate(struct_type->members())) {
+                if (first) first = false;
+                else Print(",");
+                Print(" {}", Ty(member));
+            }
+        }
+
+        Print(" }}\n");
     }
 
     /// Emit a function signature
