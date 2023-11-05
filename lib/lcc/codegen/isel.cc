@@ -10,7 +10,7 @@ namespace lcc {
 
 void select_instructions(Module* mod, MFunction& function) {
     if (mod->context()->target()->is_x64())
-        lcc::isel::x86_64PatternList::rewrite(mod, function);
+        function = lcc::isel::x86_64PatternList::rewrite(mod, function);
 }
 
 } // namespace lcc
