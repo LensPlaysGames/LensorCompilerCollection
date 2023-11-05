@@ -324,8 +324,11 @@ auto Module::mir() -> std::vector<MFunction> {
     // Handle inlining of values into operands vs using register references.
     const auto MOperandValueReference = [&](MFunction& f, Value* v) -> MOperand {
         // Find MInst if possible, add to use count.
-        if (auto inst = MInstByVirtualRegister(virts[v]))
+        usz regsize;
+        if (auto inst = MInstByVirtualRegister(virts[v])) {
             inst->add_use();
+            regsize = inst->regsize();
+        }
 
         switch (v->kind()) {
             case Value::Kind::Function:
@@ -358,9 +361,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
             default: break;
         }
-        // TODO: Find MInst with this virtual register; if found, add to it's use count.
-        // FIXME: Zero-sized register...
-        return MOperandRegister{virts[v], 0};
+        return MOperandRegister{virts[v], regsize};
     };
 
     // To avoid iterator invalidation when any of these vectors are resizing,
