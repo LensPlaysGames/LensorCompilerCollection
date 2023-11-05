@@ -4,7 +4,7 @@
 namespace lcc {
 namespace {
 struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
-    void PrintStructType(Type* t, long int i) {
+    void PrintStructType(Type* t) {
         auto struct_type = as<StructType>(t);
     }
 

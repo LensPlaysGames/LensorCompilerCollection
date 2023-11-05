@@ -88,8 +88,7 @@ private:
     }
 
     auto PrintModule(Module* mod) -> std::string {
-        for (auto [i, struct_type] : vws::enumerate(mod->context()->struct_types))
-            This()->PrintStructType(struct_type, i);
+        for (auto struct_type : mod->context()->struct_types) This()->PrintStructType(struct_type);
         if (not mod->context()->struct_types.empty()) s += '\n';
         for (auto var : mod->vars()) This()->PrintGlobal(var);
         if (not mod->vars().empty()) s += '\n';

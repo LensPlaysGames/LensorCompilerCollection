@@ -217,7 +217,10 @@ StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, std::
     if (found != ctx->struct_types.end())
         return as<StructType>(*found);
 
-    StructType* out = new (ctx) StructType(member_types, name);
+    StructType* out;
+    if (not name.empty())
+        out = new (ctx) StructType(member_types, name);
+    else out = new (ctx) StructType(member_types, (long int)ctx->struct_types.size());
     ctx->struct_types.push_back(out);
     return out;
 }
@@ -263,12 +266,15 @@ bool Block::has_predecessor(Block* block) const {
 
 namespace {
 struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
-    void PrintStructType(Type* t, long int index) {
-        auto struct_type = as<StructType>(t);
+    std::string GetStructName(StructType* struct_type) {
+        if (struct_type->named())
+            return struct_type->name();
+        else return fmt::format("__struct_{}", struct_type->index());
+    }
 
-        std::string struct_name = struct_type->name();
-        if (struct_name.empty())
-            struct_name = fmt::format("__struct_{}", index);
+    void PrintStructType(Type* t) {
+        auto struct_type = as<StructType>(t);
+        std::string struct_name = GetStructName(struct_type);
 
         Print(
             "{}struct {}{}{} {{",

@@ -141,10 +141,11 @@ class StructType : public Type {
     friend class lcc::Context;
 
     std::vector<Type*> _members;
-    std::string _name;
+    std::variant<long int, std::string> _id;
 
 private:
-    StructType(std::vector<Type*> members, std::string name) : Type(Kind::Struct), _members(std::move(members)), _name(std::move(name)) {}
+    StructType(std::vector<Type*> members, std::string name) : Type(Kind::Struct), _members(std::move(members)), _id(std::move(name)) {}
+    StructType(std::vector<Type*> members, long int index) : Type(Kind::Struct), _members(std::move(members)), _id(index) {}
 
 public:
     static auto Get(Context* ctx, std::vector<Type*> member_types, std::string name = {}) -> StructType*;
@@ -155,11 +156,14 @@ public:
     /// Return the types of the members of the struct.
     auto members() const -> const std::vector<Type*>& { return _members; }
 
-    /// The name of this struct type, if it has one
-    auto name() const -> const std::string& { return _name; }
+    /// The name of this struct type if it is named
+    auto name() const -> const std::string& { return std::get<std::string>(_id); }
+
+    /// The global index, within its context, for this struct if it is unnamed
+    auto index() const -> long int { return std::get<long int>(_id); }
 
     /// True if this is a unique, named struct type, false otherwise.
-    bool named() const { return not _name.empty(); }
+    bool named() const { return std::holds_alternative<std::string>(_id); }
 
     /// RTTI.
     static bool classof(const Type* t) { return t->kind == Kind::Struct; }
