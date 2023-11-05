@@ -2,6 +2,7 @@
 #include <fmt/format.h>
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
+#include <lcc/codegen/register_allocation.hh>
 #include <lcc/codegen/x86_64.hh>
 #include <lcc/codegen/x86_64/assembly.hh>
 #include <lcc/context.hh>
@@ -135,6 +136,34 @@ void Module::emit(std::filesystem::path output_file_path) {
                 select_instructions(this, mfunc);
 
             // TODO: Register Allocation
+            MachineDescription desc{};
+            if (_ctx->target()->is_windows()) {
+                // Just the volatile registers
+                desc.registers = {
+                    +x86_64::RegisterId::RAX,
+                    +x86_64::RegisterId::RCX,
+                    +x86_64::RegisterId::RDX,
+                    +x86_64::RegisterId::R8,
+                    +x86_64::RegisterId::R9,
+                    +x86_64::RegisterId::R10,
+                    +x86_64::RegisterId::R11,
+                };
+            } else {
+                // Just the volatile registers
+                desc.registers = {
+                    +x86_64::RegisterId::RAX,
+                    +x86_64::RegisterId::RCX,
+                    +x86_64::RegisterId::RDX,
+                    +x86_64::RegisterId::RSI,
+                    +x86_64::RegisterId::RDI,
+                    +x86_64::RegisterId::R8,
+                    +x86_64::RegisterId::R9,
+                    +x86_64::RegisterId::R10,
+                    +x86_64::RegisterId::R11,
+                };
+            }
+            for (auto& mfunc : machine_ir)
+                allocate_registers(desc, mfunc);
 
             if (_ctx->target()->is_x64())
                 x86_64::emit_gnu_att_assembly(output_file_path, this, machine_ir);
@@ -331,26 +360,24 @@ auto Module::mir() -> std::vector<MFunction> {
                         // x64 Calling Convention lowering
                         auto parameter = as<Parameter>(v);
                         if (parameter->type()->bytes() <= 8 && parameter->index() < 4) {
-                            static constexpr x86_64::RegisterId reg_by_param_index[4] {
+                            static constexpr x86_64::RegisterId reg_by_param_index[4]{
                                 x86_64::RegisterId::RCX,
                                 x86_64::RegisterId::RDX,
                                 x86_64::RegisterId::R8,
-                                x86_64::RegisterId::R9
-                            };
+                                x86_64::RegisterId::R9};
                             return MOperandRegister{+reg_by_param_index[parameter->index()], parameter->type()->bits()};
                         } else {
                             LCC_ASSERT(parameter->type()->bytes() <= 8, "TODO: x64 stack parameter lowering");
                         }
                     } else if (_ctx->target()->is_linux()) {
                         // SysV x86_64 Calling Convention lowering
-                        static constexpr x86_64::RegisterId reg_by_integer_param_index[6] {
+                        static constexpr x86_64::RegisterId reg_by_integer_param_index[6]{
                             x86_64::RegisterId::RDI,
                             x86_64::RegisterId::RSI,
                             x86_64::RegisterId::RDX,
                             x86_64::RegisterId::RCX,
                             x86_64::RegisterId::R8,
-                            x86_64::RegisterId::R9
-                        };
+                            x86_64::RegisterId::R9};
                         auto parameter = as<Parameter>(v);
                         // TODO: Actual SysV classification
                         if (parameter->type()->bytes() <= 8 && f.sysv_integer_parameters_seen < 6) {
