@@ -31,6 +31,7 @@ enum struct OperandKind {
     Immediate,
     Register,
     InputOperandReference,
+    Local,
     // TODO: The operand kinds
 };
 
@@ -51,6 +52,14 @@ struct Register {
     static constexpr usz index = 0;
     static constexpr usz value = val;
     static constexpr usz size = sz;
+};
+
+template <typename... _>
+struct Local {
+    static constexpr i64 immediate = 0;
+    static constexpr usz index = 0;
+    static constexpr usz value = 0;
+    static constexpr usz size = 0;
 };
 
 // Operand reference, by index.
@@ -86,6 +95,9 @@ struct Inst {
 
             case OperandKind::Register:
                 return MOperandRegister(operand::value::value, operand::value::size);
+
+            case OperandKind::Local:
+                return MOperandLocal(operand::value::index);
 
             case OperandKind::InputOperandReference: {
                 MOperand op{};
@@ -211,6 +223,8 @@ struct PatternList {
                                     operands_match = op::kind == OperandKind::Immediate;
                                 } else if (std::holds_alternative<MOperandRegister>(operand)) {
                                     operands_match = op::kind == OperandKind::Register;
+                                } else if (std::holds_alternative<MOperandLocal>(operand)) {
+                                    operands_match = op::kind == OperandKind::Local;
                                 } else {
                                     LCC_ASSERT(false, "Unhandled MIR Operand Kind in ISel...");
                                 }

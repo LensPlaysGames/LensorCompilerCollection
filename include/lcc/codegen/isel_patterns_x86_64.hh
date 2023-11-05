@@ -7,11 +7,6 @@
 namespace lcc {
 namespace isel {
 
-enum struct x86_64Opcode : u32 {
-    Poison = u32(lcc::MInst::Kind::ArchStart),
-    Return, // ret
-    Move,   // mov
-};
 
 using ret = Pattern<
     InstList<Inst<usz(MInst::Kind::Return)>>,

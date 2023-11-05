@@ -5,8 +5,13 @@
 #include <lcc/codegen/mir.hh>
 
 namespace lcc {
-
 namespace x86_64 {
+
+enum struct Opcode : u32 {
+    Poison = u32(lcc::MInst::Kind::ArchStart),
+    Return, // ret
+    Move,   // mov
+};
 
 enum struct RegisterId {
     INVALID,
