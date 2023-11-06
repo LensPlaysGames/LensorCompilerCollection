@@ -8,6 +8,8 @@
 namespace lcc {
 
 struct MachineDescription {
+    usz return_register;
+    usz return_register_to_replace;
     std::vector<usz> registers;
 };
 

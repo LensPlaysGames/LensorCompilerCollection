@@ -135,33 +135,38 @@ void Module::emit(std::filesystem::path output_file_path) {
             for (auto& mfunc : machine_ir)
                 select_instructions(this, mfunc);
 
-            // TODO: Register Allocation
+            // Register Allocation
             MachineDescription desc{};
-            if (_ctx->target()->is_windows()) {
-                // Just the volatile registers
-                desc.registers = {
-                    +x86_64::RegisterId::RAX,
-                    +x86_64::RegisterId::RCX,
-                    +x86_64::RegisterId::RDX,
-                    +x86_64::RegisterId::R8,
-                    +x86_64::RegisterId::R9,
-                    +x86_64::RegisterId::R10,
-                    +x86_64::RegisterId::R11,
-                };
-            } else {
-                // Just the volatile registers
-                desc.registers = {
-                    +x86_64::RegisterId::RAX,
-                    +x86_64::RegisterId::RCX,
-                    +x86_64::RegisterId::RDX,
-                    +x86_64::RegisterId::RSI,
-                    +x86_64::RegisterId::RDI,
-                    +x86_64::RegisterId::R8,
-                    +x86_64::RegisterId::R9,
-                    +x86_64::RegisterId::R10,
-                    +x86_64::RegisterId::R11,
-                };
-            }
+            if (_ctx->target()->is_x64()) {
+                desc.return_register_to_replace = +x86_64::RegisterId::RETURN;
+                if (_ctx->target()->is_windows()) {
+                    desc.return_register = +x86_64::RegisterId::RAX;
+                    // Just the volatile registers
+                    desc.registers = {
+                        +x86_64::RegisterId::RAX,
+                        +x86_64::RegisterId::RCX,
+                        +x86_64::RegisterId::RDX,
+                        +x86_64::RegisterId::R8,
+                        +x86_64::RegisterId::R9,
+                        +x86_64::RegisterId::R10,
+                        +x86_64::RegisterId::R11,
+                    };
+                } else {
+                    desc.return_register = +x86_64::RegisterId::RAX;
+                    // Just the volatile registers
+                    desc.registers = {
+                        +x86_64::RegisterId::RAX,
+                        +x86_64::RegisterId::RCX,
+                        +x86_64::RegisterId::RDX,
+                        +x86_64::RegisterId::RSI,
+                        +x86_64::RegisterId::RDI,
+                        +x86_64::RegisterId::R8,
+                        +x86_64::RegisterId::R9,
+                        +x86_64::RegisterId::R10,
+                        +x86_64::RegisterId::R11,
+                    };
+                }
+            } else LCC_ASSERT(false, "Sorry, unhandled target architecture");
             for (auto& mfunc : machine_ir)
                 allocate_registers(desc, mfunc);
 

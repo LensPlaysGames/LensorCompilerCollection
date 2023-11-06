@@ -88,6 +88,24 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
     //   6. Map colors to registers, updating all register operands to the
     //      allocated register.
 
+    // STEP -1
+    // Replace explicit return registers with the actual return register...
+    for (auto& block : function.blocks()) {
+        for (auto& inst : block.instructions()) {
+            if (inst.reg() == desc.return_register_to_replace)
+                inst.reg(desc.return_register);
+            for (auto& op : inst.all_operands()) {
+                if (std::holds_alternative<MOperandRegister>(op)) {
+                    MOperandRegister reg = std::get<MOperandRegister>(op);
+                    if (reg.value == desc.return_register_to_replace) {
+                        reg.value = desc.return_register;
+                        op = reg;
+                    }
+                }
+            }
+        }
+    }
+
     // STEP ONE
     // Populate list of registers, first using hardware registers, then using virtual registers.
     std::vector<Register> registers{};
