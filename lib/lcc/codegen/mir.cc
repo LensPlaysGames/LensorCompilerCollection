@@ -39,7 +39,8 @@ auto PrintMInst(const MInst& inst) -> std::string {
         );
 
     return fmt::format(
-        "    r{}.{} | {}{}{}{}",
+        "    {}r{}.{} | {}{}{}{}",
+        inst.is_defining() ? "DEF " : "",
         inst.reg(),
         inst.regsize(),
         inst.use_count() or MInst::is_terminator(MInst::Kind(inst.opcode())) ? "" : "Unused ",

@@ -291,6 +291,14 @@ public:
     void add_local(AllocaInst* local) {
         _locals.push_back(local);
     }
+
+    auto block_by_name(std::string_view name) -> MBlock* {
+        auto found = std::find_if(_blocks.begin(), _blocks.end(), [&](const MBlock& b) {
+            return b.name() == name;
+        });
+        if (found == _blocks.end()) return nullptr;
+        return &*found;
+    }
 };
 
 inline std::string ToString(MInst::Kind k) {

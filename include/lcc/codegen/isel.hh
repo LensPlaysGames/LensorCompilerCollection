@@ -300,12 +300,6 @@ struct PatternList {
             } while (instructions.size() != 0 || instructions_handled < old_block.instructions().size());
         }
 
-        fmt::print(
-            "After ISel\n"
-            "{}\n",
-            PrintMFunction(out)
-        );
-
         return out;
     }
 };

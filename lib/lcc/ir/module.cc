@@ -135,6 +135,13 @@ void Module::emit(std::filesystem::path output_file_path) {
             for (auto& mfunc : machine_ir)
                 select_instructions(this, mfunc);
 
+            for (auto& mfunc : machine_ir) {
+                fmt::print(
+                    "After ISel\n"
+                    "{}\n",
+                    PrintMFunction(mfunc)
+                );
+            }
             // Register Allocation
             MachineDescription desc{};
             if (_ctx->target()->is_x64()) {
