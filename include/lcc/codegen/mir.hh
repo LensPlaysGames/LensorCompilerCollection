@@ -167,6 +167,11 @@ public:
 class MBlock {
     std::string _name;
 
+    // Probably not best to reference blocks by name. But, hey, it's what we
+    // got.
+    std::vector<std::string> _successors;
+    std::vector<std::string> _predecessors;
+
     std::vector<MInst> _instructions;
 
 public:
@@ -186,6 +191,30 @@ public:
 
     auto name() const -> const std::string& {
         return _name;
+    }
+
+    auto successors() -> std::vector<std::string>& {
+        return _successors;
+    }
+
+    auto successors() const -> std::vector<std::string> {
+        return _successors;
+    }
+
+    auto predecessors() -> std::vector<std::string>& {
+        return _predecessors;
+    }
+
+    auto predecessors() const -> std::vector<std::string> {
+        return _predecessors;
+    }
+
+    void add_successor(std::string block_name) {
+        _successors.push_back(block_name);
+    }
+
+    void add_predecessor(std::string block_name) {
+        _predecessors.push_back(block_name);
     }
 
     bool closed() {

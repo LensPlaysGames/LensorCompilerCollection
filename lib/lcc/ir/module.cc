@@ -428,16 +428,17 @@ auto Module::mir() -> std::vector<MFunction> {
         funcs.push_back(MFunction(function->linkage(), function->call_conv()));
         auto& f = funcs.back();
         f.name() = function->name();
-        for (auto& block : function->blocks())
+        function->machine_function(&f);
+        for (auto& block : function->blocks()) {
             f.add_block(MBlock(block->name()));
+            block->machine_block(&f.blocks().back());
+        }
     }
 
     for (auto [f_index, function] : vws::enumerate(code())) {
         auto& f = funcs.at(usz(f_index));
-        function->machine_function(&f);
         for (auto [block_index, block] : vws::enumerate(function->blocks())) {
             auto& bb = f.blocks().at(usz(block_index));
-            block->machine_block(&bb);
             for (auto& instruction : block->instructions()) {
                 switch (instruction->kind()) {
                     // Non-instructions
@@ -505,8 +506,14 @@ auto Module::mir() -> std::vector<MFunction> {
                         // A branch does not produce a useable value, and as such it's register
                         // size is zero.
                         auto branch = MInst(MInst::Kind::Branch, {virts[instruction], 0});
-                        branch.add_operand(MOperandValueReference(f, branch_ir->target()));
+                        auto op = MOperandValueReference(f, branch_ir->target());
+                        branch.add_operand(op);
                         bb.add_instruction(branch);
+                        if (std::holds_alternative<MOperandBlock>(op)) {
+                            MOperandBlock block = std::get<MOperandBlock>(op);
+                            bb.add_successor(block->name());
+                            block->machine_block()->add_predecessor(bb.name());
+                        }
                     } break;
 
                     case Value::Kind::CondBranch: {
@@ -515,9 +522,21 @@ auto Module::mir() -> std::vector<MFunction> {
                         // size is zero.
                         auto branch = MInst(MInst::Kind::CondBranch, {virts[instruction], 0});
                         branch.add_operand(MOperandValueReference(f, branch_ir->cond()));
-                        branch.add_operand(MOperandValueReference(f, branch_ir->then_block()));
-                        branch.add_operand(MOperandValueReference(f, branch_ir->else_block()));
+                        auto then_op = MOperandValueReference(f, branch_ir->then_block());
+                        auto else_op = MOperandValueReference(f, branch_ir->else_block());
+                        branch.add_operand(then_op);
+                        branch.add_operand(else_op);
                         bb.add_instruction(branch);
+                        if (std::holds_alternative<MOperandBlock>(then_op)) {
+                            MOperandBlock block = std::get<MOperandBlock>(then_op);
+                            bb.add_successor(block->name());
+                            block->machine_block()->add_predecessor(bb.name());
+                        }
+                        if (std::holds_alternative<MOperandBlock>(else_op)) {
+                            MOperandBlock block = std::get<MOperandBlock>(else_op);
+                            bb.add_successor(block->name());
+                            block->machine_block()->add_predecessor(bb.name());
+                        }
                     } break;
 
                     case Value::Kind::Unreachable: {

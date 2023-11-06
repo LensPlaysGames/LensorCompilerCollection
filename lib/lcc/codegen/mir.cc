@@ -51,11 +51,21 @@ auto PrintMInst(const MInst& inst) -> std::string {
 
 [[nodiscard]]
 auto PrintMBlock(const MBlock& block) -> std::string {
-    return fmt::format(
-        "  {}:\n{}",
-        block.name(),
-        fmt::join(vws::transform(block.instructions(), PrintMInst), "\n")
-    );
+    auto out = fmt::format("  {}:\n", block.name());
+    if (block.predecessors().size()) {
+        out += fmt::format(
+            "    predecessors: {}\n",
+            fmt::join(block.predecessors(), ", ")
+        );
+    }
+    if (block.successors().size()) {
+        out += fmt::format(
+            "    successors: {}\n",
+            fmt::join(block.successors(), ", ")
+        );
+    }
+    out += fmt::format("{}", fmt::join(vws::transform(block.instructions(), PrintMInst), "\n"));
+    return out;
 };
 
 [[nodiscard]]
