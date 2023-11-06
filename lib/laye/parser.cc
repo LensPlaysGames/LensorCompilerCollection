@@ -520,6 +520,28 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
         }
 
         return new (*this) ContinueStatement{start, target};
+    } else if (Consume(Tk::Discard)) {
+        Expr* value = nullptr;
+        if (not At(Tk::SemiColon)) {
+            if (auto expr = ParseExpr()) value = *expr;
+        } else Error(CurrLocation(), "Expression expected");
+
+        if (consumeSemi and not Consume(Tk::SemiColon)) {
+            Error("Expected ';'");
+        }
+
+        return new (*this) DiscardStatement{start, value};
+    } else if (Consume(Tk::Delete)) {
+        Expr* value = nullptr;
+        if (not At(Tk::SemiColon)) {
+            if (auto expr = ParseExpr()) value = *expr;
+        } else Error(CurrLocation(), "Expression expected");
+
+        if (consumeSemi and not Consume(Tk::SemiColon)) {
+            Error("Expected ';'");
+        }
+
+        return new (*this) DeleteStatement{start, value};
     } else if (Consume(Tk::Defer)) {
         auto statement_result = ParseStatement(false);
         if (not statement_result) {
@@ -1628,22 +1650,26 @@ auto Parser::ParsePrimaryExpr() -> Result<Expr*> {
     } else if (Consume(Tk::Do)) {
         LCC_ASSERT(false, "TODO do (expr)");
     } else if (Consume(Tk::New)) {
-        Expr* allocator = nullptr;
+        std::vector<Expr*> args{};
         if (Consume(Tk::OpenParen)) {
-            allocator = *ParseExpr();
-            if (not Consume(Tk::CloseParen)) {
-                if (allocator) Error("Expected ')' to close allocator specification");
-                else {
-                    Synchronise();
-                    return Error("Expected ')' to close allocator specification");
+            if (not At(Tk::CloseParen)) {
+                while (not At(Tk::Eof)) {
+                    auto arg = ParseExpr();
+                    if (arg) args.push_back(*arg);
+
+                    if (not Consume(Tk::Comma) or At(Tk::CloseParen)) break;
                 }
+            }
+
+            if (not Consume(Tk::CloseParen)) {
+                Error("Expected ')' to close call argument list");
             }
         }
 
         auto type = ParseType();
         auto body = ParseConstructorBody();
 
-        return new (*this) NewExpr{GetLocation(location), allocator, *type, *body};
+        return new (*this) NewExpr{GetLocation(location), args, *type, *body};
     } else if (At(Tk::True, Tk::False)) {
         auto literal_value = tok.kind == Tk::True;
         NextToken();

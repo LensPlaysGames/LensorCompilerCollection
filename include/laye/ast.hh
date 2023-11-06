@@ -653,6 +653,9 @@ public:
     /// Returns true if control flow cannot procede past this expression.
     /// Potentially confusingly, this means that the Return statement is noreturn.
     bool is_noreturn() const;
+
+    // Returns true if the value of this expression cannot be discarded.
+    bool is_nodiscard() const;
 };
 
 std::string ToString(Expr::Kind kind);
@@ -911,8 +914,8 @@ class DeleteStatement : public Statement {
     Expr* _expr;
 
 public:
-    DeleteStatement(Expr* expr)
-        : Statement(Kind::Delete, expr->location()), _expr(expr) {}
+    DeleteStatement(Location location, Expr* expr)
+        : Statement(Kind::Delete, location), _expr(expr) {}
 
     auto expr() const { return _expr; }
 
@@ -923,8 +926,8 @@ class DiscardStatement : public Statement {
     Expr* _expr;
 
 public:
-    DiscardStatement(Expr* expr)
-        : Statement(Kind::Discard, expr->location()), _expr(expr) {}
+    DiscardStatement(Location location, Expr* expr)
+        : Statement(Kind::Discard, location), _expr(expr) {}
 
     auto expr() const { return _expr; }
 
@@ -1420,19 +1423,19 @@ public:
 };
 
 class NewExpr : public Expr {
-    Expr* _alloc;
+    std::vector<Expr*> _args{};
     Type* _type;
     std::vector<CtorFieldInit> _inits;
 
 public:
     NewExpr(Location location, Type* type, std::vector<CtorFieldInit> inits)
-        : Expr(Kind::New, location), _alloc(nullptr), _type(type), _inits(std::move(inits)) {}
+        : Expr(Kind::New, location), _type(type), _inits(std::move(inits)) {}
 
-    NewExpr(Location location, Expr* alloc, Type* type, std::vector<CtorFieldInit> inits)
-        : Expr(Kind::New, location), _alloc(alloc), _type(type), _inits(std::move(inits)) {}
+    NewExpr(Location location, std::vector<Expr*> args, Type* type, std::vector<CtorFieldInit> inits)
+        : Expr(Kind::New, location), _args(std::move(args)), _type(type), _inits(std::move(inits)) {}
 
-    bool has_alloc() const { return _alloc != nullptr; }
-    auto alloc() const { return _alloc; }
+    auto args() const { return _args; }
+    auto args() -> decltype(_args)& { return _args; }
     auto type() const { return _type; }
     auto inits() const -> std::span<CtorFieldInit const> { return _inits; }
 

@@ -168,7 +168,7 @@ std::string layec::ToString(layec::TokenKind kind) {
         case TokenKind::Cast: return "cast";
         case TokenKind::Try: return "try";
         case TokenKind::Catch: return "catch";
-        // case TokenKind::Discard: return "discard";
+        case TokenKind::Discard: return "discard";
         case TokenKind::Sizeof: return "sizeof";
         case TokenKind::Alignof: return "alignof";
         case TokenKind::Offsetof: return "offsetof";
@@ -737,8 +737,10 @@ bool layec::Expr::is_noreturn() const {
 
         case Expr::Kind::New: {
             auto s = as<NewExpr>(this);
-            if (s->has_alloc() and s->alloc()->is_noreturn())
-                return true;
+            for (auto& arg : s->args()) {
+                if (arg->is_noreturn())
+                    return true;
+            }
             for (auto& init : s->inits()) {
                 if (init.value->is_noreturn())
                     return true;
