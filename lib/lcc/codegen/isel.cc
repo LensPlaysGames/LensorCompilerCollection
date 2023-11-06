@@ -1,10 +1,11 @@
-#include <lcc/utils.hh>
-#include <lcc/ir/module.hh>
-#include <lcc/context.hh>
-#include <lcc/target.hh>
-#include <lcc/codegen/mir.hh>
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/isel_patterns_x86_64.hh>
+#include <lcc/codegen/mir.hh>
+#include <lcc/codegen/x86_64.hh>
+#include <lcc/context.hh>
+#include <lcc/ir/module.hh>
+#include <lcc/target.hh>
+#include <lcc/utils.hh>
 
 namespace lcc {
 

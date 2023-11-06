@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
+#include <variant>
 
 namespace lcc {
 
