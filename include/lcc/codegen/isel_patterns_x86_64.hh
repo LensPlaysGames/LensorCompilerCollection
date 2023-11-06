@@ -20,16 +20,22 @@ using ret = Pattern<
 // InputOperandReference operand with a value of o<0> means replace the
 // operand with whatever the zero-eth operand is in the input
 // instructions; in this case, the immediate operand of the gMIR return.
-// NOTE: Immediate is always moved into 64 bit register.
-using ret_imm = Pattern<
-    InstList<Inst<usz(MInst::Kind::Return), Operand<OK::Immediate, Immediate<>>>>,
+// FIXME: Return register size is hardcoded at 64. We need some way to get
+// size from another operand, or something?
+template <typename ret_op>
+using ret_some_op = Pattern<
+    InstList<Inst<usz(MInst::Kind::Return), ret_op>>,
     InstList<
         Inst<usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<0>>, Operand<OK::Register, Register<usz(lcc::x86_64::RegisterId::RETURN), 64>>>,
         Inst<usz(x86_64::Opcode::Return)>>>;
 
+using ret_imm = ret_some_op<Operand<OK::Immediate, Immediate<>>>;
+using ret_reg = ret_some_op<Operand<OK::Register, Register<0, 0>>>;
+
 using x86_64PatternList = PatternList<
     ret,
     ret_imm,
+    ret_reg,
     store_reg_local>;
 
 } // namespace isel
