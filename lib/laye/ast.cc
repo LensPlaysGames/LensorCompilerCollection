@@ -600,7 +600,7 @@ bool layec::Statement::is_noreturn() const {
                 return true;
             // fail is not required, but if it's NOT noreturn
             // then the whole statement isn't either. (yes, even if the pass block is noreturn)
-            if (s->fail() && not s->fail()->is_noreturn())
+            if (auto fail = s->fail(); not fail->is_noreturn())
                 return false;
             return s->pass()->is_noreturn();
         }
@@ -610,12 +610,12 @@ bool layec::Statement::is_noreturn() const {
             // If the init is noreturn, then so is the whole for loop.
             // The init is always executed, and always executed -first-, so
             // if it blocks control flow then nothing else can execute.
-            if (s->init() and s->init()->is_noreturn())
+            if (auto init = s->init(); init->is_noreturn())
                 return true;
             // Similar to the init, the condition is always run second if it exists.
             // If the condition is noreturn, even if that's a semantic error,
             // the rest of the for loop can't continue.
-            if (s->condition() and s->condition()->is_noreturn())
+            if (auto condition = s->condition(); condition->is_noreturn())
                 return true;
             // For pass/fail, the for loop is only noreturn if both are noreturn.
             // The increment is lumped in with the pass block, since it always executes
@@ -638,7 +638,7 @@ bool layec::Statement::is_noreturn() const {
             auto s = as<DoForStatement>(this);
             // The condition may come last, but it always runs.
             // If a do-for condition is noreturn, the whole loop is.
-            if (s->condition() and s->condition()->is_noreturn())
+            if (auto condition = s->condition(); condition->is_noreturn())
                 return true;
             // obviously, if the loop body is noreturn then the whole loop is.
             return s->body()->is_noreturn();
@@ -699,6 +699,59 @@ bool layec::Expr::is_noreturn() const {
             }
             return s->target()->is_noreturn();
         }
+
+        case Expr::Kind::Slice: {
+            auto s = as<SliceExpr>(this);
+            if (auto offset = s->offset(); offset->is_noreturn())
+                return true;
+            if (auto length = s->length(); length->is_noreturn())
+                return true;
+            return s->target()->is_noreturn();
+        }
+
+        case Expr::Kind::Call: {
+            auto s = as<CallExpr>(this);
+            if (auto callee_type = s->type(); callee_type->is_function()) {
+                if (as<FuncType>(callee_type)->return_type()->is_noreturn())
+                    return true;
+            }
+            // again, not semantically valid, but any argument makes the whole thing noreturn
+            for (auto& arg : s->args()) {
+                if (arg->is_noreturn())
+                    return true;
+            }
+            return s->target()->is_noreturn();
+        }
+
+        case Expr::Kind::Ctor: {
+            auto s = as<CtorExpr>(this);
+            for (auto& init : s->inits()) {
+                if (init.value->is_noreturn())
+                    return true;
+            }
+            return false;
+        }
+
+        case Expr::Kind::Not: return as<NotExpr>(this)->value()->is_noreturn();
+        case Expr::Kind::Cast: return as<CastExpr>(this)->value()->is_noreturn();
+
+        case Expr::Kind::New: {
+            auto s = as<NewExpr>(this);
+            if (s->has_alloc() and s->alloc()->is_noreturn())
+                return true;
+            for (auto& init : s->inits()) {
+                if (init.value->is_noreturn())
+                    return true;
+            }
+            return false;
+        }
+
+        case Expr::Kind::Try: return as<TryExpr>(this)->value()->is_noreturn();
+        // for catch, the body is only executed conditionally with no alternative to check against,
+        // so only the expression value of the catch, not the error block body, is necessary to check.
+        case Expr::Kind::Catch: return as<CatchExpr>(this)->value()->is_noreturn();
+
+        case Expr::Kind::Do: LCC_TODO();
     }
 }
 
