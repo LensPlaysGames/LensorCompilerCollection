@@ -31,12 +31,15 @@ enum struct RegisterId {
     RSI,
     RBP,
     RSP,
+    RIP,
 
     // The function value return register: most likely RAX, but sometimes not.
     RETURN = 0x210,
 };
 
+std::string ToString(Opcode op);
 std::string ToString(RegisterId id);
+std::string ToString(RegisterId id, usz size);
 
 } // namespace x86_64
 } // namespace lcc

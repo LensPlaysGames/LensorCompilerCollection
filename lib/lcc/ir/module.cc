@@ -199,6 +199,8 @@ auto Module::mir() -> std::vector<MFunction> {
             default:
                 break;
         }
+        // TODO: Assign to this value that it is a defining use, somehow, for
+        // register allocation purposes.
         virts[v] = ++virtual_register;
     };
 

@@ -9,19 +9,11 @@
 namespace lcc {
 namespace x86_64 {
 
-std::string ToString(Opcode op) {
-    switch (op) {
-        case Opcode::Poison: return "x86_64.poison";
-        case Opcode::Return: return "ret";
-        case Opcode::Move: return "mov";
-    }
-    LCC_UNREACHABLE();
-}
-
 std::string ToString(MFunction& function, MOperand op) {
     if (std::holds_alternative<MOperandRegister>(op)) {
         // TODO: Assert that register id is one of the x86_64 register ids...
-        return fmt::format("%{}", ToString(RegisterId(std::get<MOperandRegister>(op).value)));
+        MOperandRegister reg = std::get<MOperandRegister>(op);
+        return fmt::format("%{}", ToString(RegisterId(reg.value), reg.size));
     } else if (std::holds_alternative<MOperandImmediate>(op)) {
         return fmt::format("${}", std::get<MOperandImmediate>(op));
     } else if (std::holds_alternative<MOperandLocal>(op)) {
@@ -60,8 +52,9 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
 
         // Function Header
         // TODO: Different stack frame kinds.
-        out += "    push %rbp\n"
-               "    mov %rsp, %rbp\n";
+        out +=
+            "    push %rbp\n"
+            "    mov %rsp, %rbp\n";
 
         for (auto& block : function.blocks()) {
             out += fmt::format("{}:\n", block.name());
@@ -79,6 +72,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
                     if (i == 0) out += ' ';
                     else out += ", ";
                     out += ToString(function, operand);
+                    ++i;
                 }
                 out += '\n';
             }
