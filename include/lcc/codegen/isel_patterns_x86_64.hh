@@ -20,10 +20,11 @@ using ret = Pattern<
 // InputOperandReference operand with a value of o<0> means replace the
 // operand with whatever the zero-eth operand is in the input
 // instructions; in this case, the immediate operand of the gMIR return.
+// NOTE: Immediate is always moved into 64 bit register.
 using ret_imm = Pattern<
     InstList<Inst<usz(MInst::Kind::Return), Operand<OK::Immediate, Immediate<>>>>,
     InstList<
-        Inst<usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<0>>, Operand<OK::Register, Register<usz(lcc::x86_64::RegisterId::RETURN), 0>>>,
+        Inst<usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<0>>, Operand<OK::Register, Register<usz(lcc::x86_64::RegisterId::RETURN), 64>>>,
         Inst<usz(x86_64::Opcode::Return)>>>;
 
 using x86_64PatternList = PatternList<

@@ -13,7 +13,7 @@ enum struct Opcode : u32 {
     Move,   // mov
 };
 
-enum struct RegisterId {
+enum struct RegisterId : u32 {
     INVALID,
     RAX,
     RBX,
