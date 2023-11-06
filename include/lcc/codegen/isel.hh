@@ -175,8 +175,10 @@ struct PatternList {
         std::vector<MInst*> pool{};
 
         for (auto& old_block : function.blocks()) {
-            out.add_block(MBlock(old_block.name()));
+            out.add_block(MBlock(old_block));
             auto& new_block = out.blocks().back();
+            new_block.instructions().clear();
+
             usz instructions_handled = 0;
             do {
                 for (; instructions_handled < old_block.instructions().size(); ++instructions_handled) {
