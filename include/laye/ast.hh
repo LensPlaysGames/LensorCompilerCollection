@@ -560,6 +560,10 @@ protected:
 
 public:
     auto kind() const { return _kind; }
+
+    /// Returns true if control flow cannot procede past this statement.
+    /// Potentially confusingly, this means that the Return statement is noreturn.
+    bool is_noreturn() const;
 };
 
 std::string ToString(Statement::Kind kind);
@@ -645,6 +649,10 @@ public:
     void type(Type* type) { _type = type; }
 
     bool evaluate(const LayeContext* laye_context, EvalResult& out, bool required);
+
+    /// Returns true if control flow cannot procede past this expression.
+    /// Potentially confusingly, this means that the Return statement is noreturn.
+    bool is_noreturn() const;
 };
 
 std::string ToString(Expr::Kind kind);
@@ -1073,7 +1081,7 @@ public:
         : Statement(Kind::Switch, location), _target(target), _cases(std::move(cases)) {}
 
     auto target() const { return _target; }
-    auto cases() const -> std::span<SwitchCase const> { return _cases; }
+    auto cases() const -> const decltype(_cases)& { return _cases; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Switch; }
 };

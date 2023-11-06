@@ -552,6 +552,156 @@ bool layec::Type::Equal(const Type* a, const Type* b) {
     LCC_UNREACHABLE();
 }
 
+bool layec::Statement::is_noreturn() const {
+    switch (kind()) {
+        default: return false;
+
+        case Statement::Kind::Block: {
+            auto s = as<BlockStatement>(this);
+            // if anything within the block is noreturn,
+            // then the whole block is.
+            for (auto& c : s->children()) {
+                if (c->is_noreturn())
+                    return true;
+            }
+            return false;
+        }
+
+        case Statement::Kind::Assign: {
+            auto s = as<AssignStatement>(this);
+            // an assignment being noreturn is not semantically valid,
+            // though if it were then either the target or the value would cause it to be.
+            return s->value()->is_noreturn() or s->target()->is_noreturn();
+        }
+
+        case Statement::Kind::Delete: {
+            auto s = as<DeleteStatement>(this);
+            // a delete statement being noreturn is not semantically valid,
+            // though if it were then the expression determines it.
+            return s->expr()->is_noreturn();
+        }
+
+        case Statement::Kind::Discard: {
+            auto s = as<DiscardStatement>(this);
+            // a discard statement being noreturn is not semantically valid (because a value
+            // is required to be discarded, and a noreturn expression doesn't return a value),
+            // though if it were then the expression determines it.
+            return s->expr()->is_noreturn();
+        }
+
+        case Statement::Kind::Expr: {
+            auto s = as<ExprStatement>(this);
+            return s->expr()->is_noreturn();
+        }
+
+        case Statement::Kind::If: {
+            auto s = as<IfStatement>(this);
+            if (s->condition()->is_noreturn())
+                return true;
+            // fail is not required, but if it's NOT noreturn
+            // then the whole statement isn't either. (yes, even if the pass block is noreturn)
+            if (s->fail() && not s->fail()->is_noreturn())
+                return false;
+            return s->pass()->is_noreturn();
+        }
+
+        case Statement::Kind::For: {
+            auto s = as<ForStatement>(this);
+            // If the init is noreturn, then so is the whole for loop.
+            // The init is always executed, and always executed -first-, so
+            // if it blocks control flow then nothing else can execute.
+            if (s->init() and s->init()->is_noreturn())
+                return true;
+            // Similar to the init, the condition is always run second if it exists.
+            // If the condition is noreturn, even if that's a semantic error,
+            // the rest of the for loop can't continue.
+            if (s->condition() and s->condition()->is_noreturn())
+                return true;
+            // For pass/fail, the for loop is only noreturn if both are noreturn.
+            // The increment is lumped in with the pass block, since it always executes
+            // after the pass block.
+            // If either is noreturn, the "pass" path should be considered noreturn.
+            return (s->pass()->is_noreturn() or (s->increment() and s->increment()->is_noreturn())) and
+                   (s->fail() && s->fail()->is_noreturn());
+        }
+
+        case Statement::Kind::ForEach: {
+            auto s = as<ForEachStatement>(this);
+            if (s->sequence()->is_noreturn())
+                return true;
+            // For pass/fail, the for each loop is only noreturn if both are noreturn.
+            return s->pass()->is_noreturn() and
+                   (s->fail() && s->fail()->is_noreturn());
+        }
+
+        case Statement::Kind::DoFor: {
+            auto s = as<DoForStatement>(this);
+            // The condition may come last, but it always runs.
+            // If a do-for condition is noreturn, the whole loop is.
+            if (s->condition() and s->condition()->is_noreturn())
+                return true;
+            // obviously, if the loop body is noreturn then the whole loop is.
+            return s->body()->is_noreturn();
+        }
+
+        case Statement::Kind::Switch: {
+            auto s = as<SwitchStatement>(this);
+            if (s->target()->is_noreturn())
+                return true;
+            // a switch is only noreturn if *all* cases are noreturn,
+            // since only one case needs to exist which continue control flow.
+            for (auto& c : s->cases()) {
+                if (not c.body->is_noreturn())
+                    return false;
+            }
+            return true;
+        }
+
+        // return is always noreturn, control never proceeds past one.
+        case Statement::Kind::Return: return true;
+    }
+}
+
+bool layec::Expr::is_noreturn() const {
+    switch (kind()) {
+        default: return false;
+
+        // none of these are semantically valid, but must be handled
+        case Expr::Kind::Unary: return as<UnaryExpr>(this)->value()->is_noreturn();
+        case Expr::Kind::Binary: {
+            auto s = as<BinaryExpr>(this);
+            return s->lhs()->is_noreturn() or s->rhs()->is_noreturn();
+        }
+
+        case Expr::Kind::And: {
+            auto s = as<AndExpr>(this);
+            return s->lhs()->is_noreturn() or s->rhs()->is_noreturn();
+        }
+
+        case Expr::Kind::Or: {
+            auto s = as<OrExpr>(this);
+            return s->lhs()->is_noreturn() or s->rhs()->is_noreturn();
+        }
+
+        case Expr::Kind::Xor: {
+            auto s = as<XorExpr>(this);
+            return s->lhs()->is_noreturn() or s->rhs()->is_noreturn();
+        }
+
+        case Expr::Kind::UnwrapNilable: return as<UnwrapNilableExpr>(this)->value()->is_noreturn();
+        case Expr::Kind::FieldIndex: return as<FieldIndexExpr>(this)->target()->is_noreturn();
+        case Expr::Kind::ValueIndex: {
+            auto s = as<ValueIndexExpr>(this);
+            // again, not semantically valid, but any index makes the whole thing noreturn
+            for (auto& ind : s->indices()) {
+                if (ind->is_noreturn())
+                    return true;
+            }
+            return s->target()->is_noreturn();
+        }
+    }
+}
+
 namespace {
 using lcc::as;
 using lcc::cast;
