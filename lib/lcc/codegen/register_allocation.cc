@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
+#include <ranges>
 #include <variant>
 
 namespace lcc {
@@ -28,6 +29,35 @@ struct AdjacencyMatrix {
     void clear(usz x, usz y) {
         data[coord(x, y)] = false;
     }
+};
+
+struct AdjacencyList {
+    // List of live indices that interfere with this->value.
+    std::vector<usz> adjacencies;
+
+    usz degree() const { return adjacencies.size(); }
+
+    // TODO: Originating instruction/operand?
+
+    // Value/Id of virtual register this list is for.
+    usz value;
+
+    // Live index of this list.
+    usz index;
+
+    usz regmask;
+
+    // Value/Id of register that this list has been colored with.
+    usz color;
+
+    // Whether or not this list has been allocated a register (color has been
+    // set).
+    bool allocated;
+
+    // Spill handling.
+    char spill_flag;
+    usz spill_offset;
+    usz spill_cost;
 };
 
 static void collect_interferences_from_block(
@@ -143,10 +173,10 @@ static void collect_interferences(AdjacencyMatrix& matrix, std::vector<Register>
 
     LCC_ASSERT(exits.size(), "Cannot walk CFG as function {} has no exit blocks", function.name());
 
-    //fmt::print(
-    //    "Collected following exit blocks for function {}: {}\n",
-    //    function.name(),
-    //    fmt::join(vws::transform(exits, [](MBlock* b) { return b->name(); }), ", ")
+    // fmt::print(
+    //     "Collected following exit blocks for function {}: {}\n",
+    //     function.name(),
+    //     fmt::join(vws::transform(exits, [](MBlock* b) { return b->name(); }), ", ")
     //);
 
     // From each exit block (collected above), follow control flow to the
@@ -218,10 +248,39 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
 
     // STEP TWO
     // Walk control flow in reverse, build adjacency matrix as you go.
+    // We walk in reverse because of how control flow tends to work; a single
+    // vreg may have multiple defining uses in different predecessor blocks.
     AdjacencyMatrix matrix{registers.size()};
 
-    // Collect the interferences by walking CFG in reverse.
+    // Collect the interferences into the matrix by walking CFG in reverse.
     collect_interferences(matrix, registers, function);
+
+    // STEP THREE
+    // Build adjacency lists from adjacency matrix
+    std::vector<AdjacencyList> lists{};
+
+    for (auto [i, reg] : vws::enumerate(registers)) {
+        AdjacencyList list{};
+        list.index = usz(i);
+        list.value = reg.value;
+        if (list.value < +MInst::Kind::ArchStart) {
+            list.color = list.value;
+            list.allocated = true;
+        }
+        lists.push_back(list);
+    }
+
+    for (auto [a_idx, a] : vws::enumerate(registers)) {
+        for (auto [b_idx, b] : vws::enumerate(registers)) {
+            if (a_idx == b_idx) break;
+            if (matrix.at(usz(a_idx), usz(b_idx))) {
+                auto& a_list = lists.at(usz(a_idx));
+                auto& b_list = lists.at(usz(b_idx));
+                a_list.adjacencies.push_back(b.value);
+                b_list.adjacencies.push_back(a.value);
+            }
+        }
+    }
 }
 
 } // namespace lcc
