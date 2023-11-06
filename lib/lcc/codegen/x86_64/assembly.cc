@@ -62,7 +62,10 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
                 if (instruction.opcode() == +x86_64::Opcode::Return) {
                     // Function Footer
                     // TODO: Different stack frame kinds.
-                    out += fmt::format("    pop %rbp\n");
+                    out += fmt::format(
+                        "    mov %rbp, %rsp\n"
+                        "    pop %rbp\n"
+                    );
                 }
 
                 out += "    ";
