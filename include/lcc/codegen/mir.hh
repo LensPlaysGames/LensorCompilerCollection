@@ -11,8 +11,9 @@ namespace lcc {
 
 // Machine Register Description
 struct Register {
-    u64 value;
-    usz size;
+    usz value;
+    uint size;
+    bool defining_use = false;
 };
 
 // Machine Operand
@@ -113,9 +114,11 @@ public:
 
     usz reg() const { return _register.value; }
     usz regsize() const { return _register.size; }
+    bool is_defining() const { return _register.defining_use; }
 
     void reg(usz newRegister) { _register.value = newRegister; }
-    void regsize(usz newSize) { _register.size = newSize; }
+    void regsize(uint newSize) { _register.size = newSize; }
+    void is_defining(bool newDefining) { _register.defining_use = newDefining; }
 
     usz opcode() const { return _opcode; }
 

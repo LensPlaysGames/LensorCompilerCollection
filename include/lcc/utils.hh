@@ -39,6 +39,7 @@ using u32 = uint32_t;
 using u64 = uint64_t;
 using usz = size_t;
 using uptr = uintptr_t;
+using uint = unsigned int;
 
 using i8 = int8_t;
 using i16 = int16_t;

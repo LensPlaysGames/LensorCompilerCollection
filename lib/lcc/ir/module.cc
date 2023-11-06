@@ -367,7 +367,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                 x86_64::RegisterId::RDX,
                                 x86_64::RegisterId::R8,
                                 x86_64::RegisterId::R9};
-                            return MOperandRegister{+reg_by_param_index[parameter->index()], parameter->type()->bits()};
+                            return MOperandRegister{+reg_by_param_index[parameter->index()], uint(parameter->type()->bits())};
                         } else {
                             LCC_ASSERT(parameter->type()->bytes() <= 8, "TODO: x64 stack parameter lowering");
                         }
@@ -383,7 +383,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto parameter = as<Parameter>(v);
                         // TODO: Actual SysV classification
                         if (parameter->type()->bytes() <= 8 && f.sysv_integer_parameters_seen < 6) {
-                            return MOperandRegister(+reg_by_integer_param_index[f.sysv_integer_parameters_seen++], parameter->type()->bits());
+                            return MOperandRegister(+reg_by_integer_param_index[f.sysv_integer_parameters_seen++], uint(parameter->type()->bits()));
                         }
                         return MOperandRegister(0, 0);
                     }
@@ -414,7 +414,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
             default: break;
         }
-        return MOperandRegister{virts[v], regsize};
+        return MOperandRegister{virts[v], uint(regsize)};
     };
 
     // To avoid iterator invalidation when any of these vectors are resizing,
@@ -463,7 +463,7 @@ auto Module::mir() -> std::vector<MFunction> {
                             break;
                         }
 
-                        auto phi = MInst(MInst::Kind::Phi, {virts[instruction], phi_ir->type()->bits()});
+                        auto phi = MInst(MInst::Kind::Phi, {virts[instruction], uint(phi_ir->type()->bits())});
                         for (auto& op : phi_ir->operands()) {
                             phi.add_operand(MOperandValueReference(f, op.block));
                             phi.add_operand(MOperandValueReference(f, op.value));
@@ -473,7 +473,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     case Value::Kind::Call: {
                         auto call_ir = as<CallInst>(instruction);
-                        auto call = MInst(MInst::Kind::Call, {virts[instruction], call_ir->function_type()->ret()->bits()});
+                        auto call = MInst(MInst::Kind::Call, {virts[instruction], uint(call_ir->function_type()->ret()->bits())});
                         call.add_operand(MOperandValueReference(f, call_ir->callee()));
                         for (auto& arg : call_ir->args()) {
                             call.add_operand(MOperandValueReference(f, arg));
@@ -533,9 +533,8 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::Load: {
-                        // FIXME: zero sized register
                         auto load_ir = as<LoadInst>(instruction);
-                        auto load = MInst(MInst::Kind::Load, {virts[instruction], load_ir->type()->bits()});
+                        auto load = MInst(MInst::Kind::Load, {virts[instruction], uint(load_ir->type()->bits())});
                         load.add_operand(MOperandValueReference(f, load_ir->ptr()));
                         bb.add_instruction(load);
                     } break;
@@ -544,7 +543,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto ret_ir = as<ReturnInst>(instruction);
                         usz regsize = 0;
                         if (ret_ir->has_value()) regsize = ret_ir->val()->type()->bits();
-                        auto ret = MInst(MInst::Kind::Return, {virts[instruction], regsize});
+                        auto ret = MInst(MInst::Kind::Return, {virts[instruction], uint(regsize)});
                         if (ret_ir->has_value())
                             ret.add_operand(MOperandValueReference(f, ret_ir->val()));
                         bb.add_instruction(ret);
@@ -558,7 +557,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Neg:
                     case Value::Kind::Compl: {
                         auto unary_ir = as<UnaryInstBase>(instruction);
-                        auto unary = MInst(ir_nary_inst_kind_to_mir(unary_ir->kind()), {virts[instruction], unary_ir->type()->bits()});
+                        auto unary = MInst(ir_nary_inst_kind_to_mir(unary_ir->kind()), {virts[instruction], uint(unary_ir->type()->bits())});
                         unary.add_operand(MOperandValueReference(f, unary_ir->operand()));
                         bb.add_instruction(unary);
                     } break;
@@ -588,7 +587,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::UGt:
                     case Value::Kind::UGe: {
                         auto binary_ir = as<BinaryInst>(instruction);
-                        auto binary = MInst(ir_nary_inst_kind_to_mir(binary_ir->kind()), {virts[instruction], binary_ir->type()->bits()});
+                        auto binary = MInst(ir_nary_inst_kind_to_mir(binary_ir->kind()), {virts[instruction], uint(binary_ir->type()->bits())});
                         binary.add_operand(MOperandValueReference(f, binary_ir->lhs()));
                         binary.add_operand(MOperandValueReference(f, binary_ir->rhs()));
                         bb.add_instruction(binary);
@@ -622,7 +621,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         if (std::holds_alternative<MOperandBlock>(op))
                             Diag::ICE("Phi value cannot be a block");
 
-                        auto copy = MInst(MInst::Kind::Copy, {minst.reg(), minst.regsize()});
+                        auto copy = MInst(MInst::Kind::Copy, {minst.reg(), uint(minst.regsize())});
 
                         usz uses = minst.use_count();
                         while (uses && uses--) copy.add_use();
