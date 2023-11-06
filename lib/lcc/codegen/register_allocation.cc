@@ -110,6 +110,14 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
     // STEP ONE
     // Populate list of registers, first using hardware registers, then using virtual registers.
     std::vector<Register> registers{};
+    // Helper function that handles not adding duplicates.
+    auto add_reg = [&](usz id, usz size) {
+        if (std::find_if(registers.begin(), registers.end(), [&](Register& r) {
+                return r.value == id;
+            }) == registers.end()) {
+            registers.push_back(Register{id, uint(size)});
+        }
+    };
     for (auto [index, reg] : vws::enumerate(desc.registers))
         add_reg(reg, 0);
 
