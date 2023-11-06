@@ -111,14 +111,17 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
     // Populate list of registers, first using hardware registers, then using virtual registers.
     std::vector<Register> registers{};
     for (auto [index, reg] : vws::enumerate(desc.registers))
-        registers.push_back(Register{reg, 0});
+        add_reg(reg, 0);
 
     for (auto& block : function.blocks()) {
         for (auto& inst : block.instructions()) {
-            if (std::find_if(registers.begin(), registers.end(), [&](Register& r) {
-                    return r.value == inst.reg();
-                }) == registers.end())
-                registers.push_back(Register{inst.reg(), inst.regsize()});
+            add_reg(inst.reg(), inst.regsize());
+            for (auto& op : inst.all_operands()) {
+                if (std::holds_alternative<MOperandRegister>(op)) {
+                    MOperandRegister reg = std::get<MOperandRegister>(op);
+                    add_reg(reg.value, reg.size);
+                }
+            }
         }
     }
 
