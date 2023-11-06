@@ -1283,6 +1283,24 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         return TryParseTypeContinue(error_union_type, allocate, false);
     }
 
+    if (At(Tk::Var)) {
+        if (type_access != TypeAccess::ReadOnly) {
+            if (allocate) Error("Access modifiers do not apply to the var type (for now)");
+        }
+
+        auto location = tok.location;
+        NextToken();
+
+        auto var_type = Result<Type*>::Null();
+        if (allocate) {
+            var_type = new (*this) InferType{location};
+        }
+
+        return *var_type;
+        // TODO(local): allow parsing continues for 'var', and disallow them at sema for better errors.
+        //return TryParseTypeContinue(*var_type, allocate);
+    }
+
     if (At(Tk::Ident, Tk::ColonColon, Tk::Global)) {
         // these constructors are already wrapped in `if (allocate)` in the TryparseNameOrPath function,
         //  so we don't have to do that explicitly.

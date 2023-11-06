@@ -1444,6 +1444,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
 
                     auto init = inits[i];
                     PrintBasicHeader("CtorFieldInit", n);
+                    out += "\n";
 
                     layec::SemaNode* children[] = {init.value};
                     PrintChildren(children, leading_text + (last ? "  " : "│ "));
@@ -1466,12 +1467,15 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
                 auto n = as<layec::NewExpr>(e);
                 auto inits = n->inits();
 
+                PrintChildren(n->args(), leading_text, inits.size() == 0);
+
                 for (lcc::usz i = 0; i < inits.size(); i++) {
                     const bool last = i == inits.size() - 1;
                     out += fmt::format("{}{}{}", C(Red), leading_text, last ? "└─" : "├─");
 
                     auto init = inits[i];
                     PrintBasicHeader("CtorFieldInit", n);
+                    out += "\n";
 
                     layec::SemaNode* children[] = {init.value};
                     PrintChildren(children, leading_text + (last ? "  " : "│ "));

@@ -65,9 +65,9 @@ struct ASTPrinter {
 
     /// Print the children of a node.
     template <typename TypeToPrint = NodeType>
-    void PrintChildren(std::span<TypeToPrint* const> exprs, std::string leading_text) {
+    void PrintChildren(std::span<TypeToPrint* const> exprs, std::string leading_text, bool handle_last = true) {
         for (lcc::usz i = 0; i < exprs.size(); i++) {
-            const bool last = i == exprs.size() - 1;
+            const bool last = handle_last and i == exprs.size() - 1;
 
             /// Print the leading text.
             out += fmt::format("{}{}{}", C(Red), leading_text, last ? "└─" : "├─");
@@ -78,13 +78,13 @@ struct ASTPrinter {
     }
 
     template <typename TypeToPrint = NodeType, usz n>
-    void PrintChildren(TypeToPrint* (&exprs)[n], std::string leading_text) {
-        PrintChildren(std::span<TypeToPrint* const>{exprs, n}, std::move(leading_text));
+    void PrintChildren(TypeToPrint* (&exprs)[n], std::string leading_text, bool handle_last = true) {
+        PrintChildren(std::span<TypeToPrint* const>{exprs, n}, std::move(leading_text), handle_last);
     }
 
     template <typename TypeToPrint = NodeType>
-    void PrintChildren(const std::vector<TypeToPrint*>& vec, std::string leading_text) {
-        PrintChildren(std::span<TypeToPrint* const>{vec}, std::move(leading_text));
+    void PrintChildren(const std::vector<TypeToPrint*>& vec, std::string leading_text, bool handle_last = true) {
+        PrintChildren(std::span<TypeToPrint* const>{vec}, std::move(leading_text), handle_last);
     }
 };
 
