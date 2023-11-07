@@ -37,6 +37,13 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
         if (var->init()) {
             out += fmt::format("{}: ", var->name());
             switch (var->init()->kind()) {
+                case Value::Kind::ArrayConstant: {
+                    auto array_constant = as<ArrayConstant>(var->init());
+                    out += fmt::format(".byte {}\n", fmt::join(vws::transform(*array_constant, [&](char c) {
+                        return fmt::format("0x{:x}", int(c));
+                    }), ","));
+                } break;
+
                 default:
                     LCC_ASSERT(false, "Sorry, but global variable initialisation with value kind {} is not supported.", Value::ToString(var->init()->kind()));
             }
