@@ -105,7 +105,7 @@ private:
     }
 
     /// Handle signed and unsigned division.
-    template <typename DivInst, typename ShiftInst, typename Eval>
+    template <typename DivInst, typename ShiftInst, auto Eval>
     void DivImpl(Inst* i) {
         auto d = as<DivInst>(i);
         auto rhs = cast<IntegerConstant>(d->rhs());
@@ -119,7 +119,7 @@ private:
 
         /// Evaluate the division if both operands are constants.
         else if (auto lhs = cast<IntegerConstant>(d->lhs())) {
-            auto result = new (*mod) IntegerConstant(d->type(), u64(Eval{}(lhs->value(), rhs->value())));
+            auto result = new (*mod) IntegerConstant(d->type(), u64(Eval(lhs->value(), rhs->value())));
             Replace(i, result);
         }
 
@@ -148,11 +148,11 @@ public:
             } break;
 
             case Value::Kind::SDiv:
-                DivImpl<SDivInst, SarInst, decltype([](auto l, auto r) { return i64(l) / i64(r); })>(i);
+                DivImpl<SDivInst, SarInst, [](auto l, auto r) { return i64(l) / i64(r); }>(i);
                 break;
 
             case Value::Kind::UDiv:
-                DivImpl<UDivInst, ShrInst, decltype([](auto l, auto r) { return u64(l) / u64(r); })>(i);
+                DivImpl<UDivInst, ShrInst, [](auto l, auto r) { return u64(l) / u64(r); }>(i);
                 break;
 
             case Value::Kind::Add: {
