@@ -181,14 +181,6 @@ public:
                 SetChanged();
             } break;
 
-            case Value::Kind::SDiv:
-                DivImpl<SDivInst, SarInst, [](auto l, auto r) { return l.sdiv(r); }>(i);
-                break;
-
-            case Value::Kind::UDiv:
-                DivImpl<UDivInst, ShrInst, [](auto l, auto r) { return l.udiv(r); }>(i);
-                break;
-
             case Value::Kind::Add: {
                 auto add = as<AddInst>(i);
                 auto lhs = cast<IntegerConstant>(add->lhs());
@@ -243,6 +235,45 @@ public:
                     else Replace<AddInst>(i, MakeInt(-rhs->value()), sub->lhs());
                 }
             } break;
+
+            case Value::Kind::Mul: {
+                auto mul = cast<MulInst>(i);
+                auto lhs = cast<IntegerConstant>(mul->lhs());
+                auto rhs = cast<IntegerConstant>(mul->rhs());
+
+                /// Evaluate if possible.
+                if (lhs and rhs) {
+                    Replace(i, lhs->value() * rhs->value());
+                }
+
+                /// Fold if possible. Otherwise, try to see if our rhs is
+                /// another mul whose lhs is a constant and fold with it.
+                else if (lhs) {
+                    if (lhs->value() == 1) Replace(i, mul->rhs());
+                    else if (auto rmul = cast<MulInst>(mul->rhs()); rmul and is<IntegerConstant>(rmul->lhs())) {
+                        auto rlhs = cast<IntegerConstant>(rmul->lhs());
+                        mul->lhs(MakeInt(lhs->value() * rlhs->value()));
+                        mul->rhs(rmul->rhs());
+                    }
+                }
+
+                /// If the rhs is a constant, fold it or move it to the left.
+                else if (rhs) {
+                    if (rhs->value() == 1) Replace(i, mul->lhs());
+                    else {
+                        mul->swap_operands();
+                        SetChanged();
+                    }
+                }
+            } break;
+
+            case Value::Kind::SDiv:
+                DivImpl<SDivInst, SarInst, [](auto l, auto r) { return l.sdiv(r); }>(i);
+                break;
+
+            case Value::Kind::UDiv:
+                DivImpl<UDivInst, ShrInst, [](auto l, auto r) { return l.udiv(r); }>(i);
+                break;
 
             case Value::Kind::Eq: CmpImpl<&aint::operator==>(i); break;
             case Value::Kind::Ne: CmpImpl<&aint::operator!=>(i); break;
