@@ -481,6 +481,15 @@ auto layec::Type::string(bool use_colours) const -> std::string {
     }
 }
 
+
+bool layec::Type::is_signed_integer() const {
+    return is_integer() and as<IntType>(this)->is_signed();
+}
+
+bool layec::Type::is_unsigned_integer() const {
+    return is_integer() and not as<IntType>(this)->is_signed();
+}
+
 auto layec::Type::strip_pointers_and_references() -> Type* {
     auto ty = this;
     while (is<PointerType, ReferenceType>(ty)) ty = as<SingleElementType>(ty)->elem_type();

@@ -252,7 +252,30 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
                 break;
             }
 
-            if (from->is_integer() and to->is_rawptr()) {
+            usz to_sz = to->size(context());
+            usz from_sz = from->size(context());
+
+            if (from->is_integer() and to->is_integer()) {
+                if (from_sz == to_sz) {
+                    auto cast = new (*mod()) lcc::BitcastInst(value, Convert(to), e->location());
+                    Insert(cast);
+                    _ir_values[expr] = cast;
+                } else if (from_sz < to_sz) {
+                    if (from->is_signed_integer()) {
+                        auto cast = new (*mod()) lcc::SExtInst(value, Convert(to), e->location());
+                        Insert(cast);
+                        _ir_values[expr] = cast;
+                    } else {
+                        auto cast = new (*mod()) lcc::ZExtInst(value, Convert(to), e->location());
+                        Insert(cast);
+                        _ir_values[expr] = cast;
+                    }
+                } else if (from_sz > to_sz) {
+                    auto cast = new (*mod()) lcc::TruncInst(value, Convert(to), e->location());
+                    Insert(cast);
+                    _ir_values[expr] = cast;
+                }
+            } else if (from->is_integer() and to->is_rawptr()) {
                 auto from_int = as<IntType>(from);
                 if ((usz)from_int->bit_width() == context()->target()->size_of_pointer) {
                     auto cast = new (*mod()) lcc::BitcastInst(value, Convert(to), e->location());

@@ -1688,6 +1688,23 @@ auto Parser::ParsePrimaryExpr() -> Result<Expr*> {
         auto body = ParseConstructorBody();
 
         return new (*this) NewExpr{GetLocation(location), args, *type, *body};
+    } else if (Consume(Tk::Cast)) {
+        Type* cast_type = nullptr;
+        if (not Consume(Tk::OpenParen)) {
+            Error("Expected '(' to start cast expression");
+        } else {
+            auto cast_type_result = ParseType();
+            if (cast_type_result) cast_type = *cast_type_result;
+
+            if (not Consume(Tk::CloseParen)) {
+                Error("Expected ')' to close cast expression type specifier");
+            }
+        }
+
+        auto cast_value = ParsePrimaryExpr();
+        if (not cast_value) return cast_value.diag();
+
+        return new (*this) CastExpr{location, cast_type, *cast_value, CastKind::HardCast};
     } else if (At(Tk::True, Tk::False)) {
         auto literal_value = tok.kind == Tk::True;
         NextToken();

@@ -152,7 +152,15 @@ void layec::Sema::Analyse(Statement*& statement) {
         case Statement::Kind::DeclBinding: {
             auto s = as<BindingDecl>(statement);
             if (s->type()->is_infer()) {
-                LCC_TODO();
+                if (not s->init()) {
+                    statement->set_sema_errored();
+                    Error(s->location(), "Cannot infer binding type without an initializer.");
+                    s->type() = new (*module()) PoisonType{s->type()->location()};
+                    break;
+                }
+
+                Analyse(s->init());
+                s->type() = s->init()->type();
             } else {
                 AnalyseType(s->type());
                 if (s->init()) {
@@ -188,16 +196,19 @@ void layec::Sema::Analyse(Statement*& statement) {
             auto s = as<ReturnStatement>(statement);
 
             if (curr_func->return_type()->is_noreturn()) {
+                statement->set_sema_errored();
                 Error(s->location(), "Cannot return from noreturn function.");
             }
 
             if (s->is_void_return()) {
                 if (not curr_func->return_type()->is_void()) {
+                    statement->set_sema_errored();
                     Error(s->location(), "Nonvoid function requires a return value.");
                 }
             } else {
                 Analyse(s->value());
                 if (curr_func->return_type()->is_void()) {
+                    statement->set_sema_errored();
                     Error(s->location(), "Cannot return a value from a void function.");
                 } else {
                     LCC_ASSERT(curr_func->return_type()->sema_done_or_errored());
@@ -244,17 +255,38 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
     switch (kind) {
         case Expr::Kind::Cast: {
             auto e = as<CastExpr>(expr);
+            AnalyseType(e->target_type());
+
             if (e->cast_kind() == CastKind::ImplicitCast or e->cast_kind() == CastKind::LValueToRValueConv) {
-                expr->type(e->type());
-                expr->set_sema_done();
+                expr->type(e->target_type());
                 break;
             }
 
-            if (not Analyse(e->value(), e->type()))
+            if (not Analyse(e->value(), e->target_type())) {
+                expr->type(new (*module()) PoisonType{expr->location()});
+                expr->set_sema_errored();
                 break;
+            }
 
-            if (Convert(e->value(), e->type()))
+            if (Convert(e->value(), e->target_type())) {
+                expr->type(e->target_type());
                 break;
+            }
+
+            auto from = e->value()->type();
+            auto to = e->target_type();
+
+            if (to->is_reference()) {
+                Error(e->location(), "Invalid cast of rvalue to reference type");
+                expr->set_sema_errored();
+                expr->type(new (*module()) PoisonType{expr->location()});
+                break;
+            }
+
+            if (from->is_integer() and to->is_integer()) {
+                expr->type(e->target_type());
+                break;
+            }
 
             LCC_TODO();
         } break;

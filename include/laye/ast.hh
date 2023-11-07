@@ -1476,8 +1476,8 @@ public:
     CastExpr(Location location, Type* type, Expr* value, CastKind cast_kind)
         : Expr(Kind::Cast, location), _type(type), _value(value), _cast_kind(cast_kind) {}
 
-    auto type() const { return _type; }
-    auto type() -> Type*& { return _type; }
+    auto target_type() const { return _type; }
+    auto target_type() -> Type*& { return _type; }
     auto value() const { return _value; }
     auto value() -> Expr*& { return _value; }
     auto cast_kind() const { return _cast_kind; }
@@ -1769,6 +1769,9 @@ public:
     bool is_rawptr() const { return kind() == Kind::TypeRawptr; }
     /// Check if this is a numeric type.
     bool is_number() const { return kind() == Kind::TypeInt or kind() == Kind::TypeFloat; }
+
+    bool is_signed_integer() const;
+    bool is_unsigned_integer() const;
 
     /// Return this type stripped of any pointers and references.
     auto strip_pointers_and_references() -> Type*;
