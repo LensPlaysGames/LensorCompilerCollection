@@ -311,6 +311,10 @@ enum struct OperatorKind {
     Equal,
     NotEqual,
 
+    Pos,
+    Neg,
+    Deref,
+    Address,
     Compl,
     And,
     Or,
@@ -330,8 +334,13 @@ enum struct OperatorKind {
     LshEqual,
     RshEqual,
 
-    // Call,
+    Call,
+    Cast,
     Index,
+    IndexEqual,
+
+    New,
+    Delete,
 };
 
 std::string ToString(TokenKind kind);
