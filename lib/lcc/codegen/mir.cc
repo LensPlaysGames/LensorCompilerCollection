@@ -72,12 +72,12 @@ auto PrintMBlock(const MBlock& block) -> std::string {
 [[nodiscard]]
 auto PrintMFunction(const MFunction& function) -> std::string {
     const auto PrintLocal = [&](auto&& pair) -> std::string {
-        auto&& [first, second] = std::forward<decltype(pair)>(pair);
+        auto&& [index, local] = std::forward<decltype(pair)>(pair);
         return fmt::format(
             "  {}: {} ({} bytes)",
-            first,
-            *second->allocated_type(),
-            second->allocated_type()->bytes()
+            index,
+            *local->allocated_type(),
+            local->allocated_type()->bytes()
         );
     };
     return fmt::format(
