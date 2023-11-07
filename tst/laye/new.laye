@@ -1,0 +1,22 @@
+// R 
+
+struct foo
+{
+    int bar;
+    int baz;
+}
+
+i32 main()
+{
+    var i32_ptr = new i32;
+    var foo_ptr = new foo;
+    var foo_ptr_init = new foo {
+        bar = 10,
+        baz = 20,
+    };
+    var foo_ptr_init_args = new (i32_ptr) foo {
+        bar = 10,
+        baz = 20,
+    };
+    return 0;
+}
