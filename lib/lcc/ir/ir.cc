@@ -268,6 +268,119 @@ bool Block::has_predecessor(Block* block) const {
     }
 }
 
+void Inst::EraseImpl() {
+    /// Clear usees.
+    switch (kind()) {
+        case Kind::Block:
+        case Kind::Function:
+        case Kind::IntegerConstant:
+        case Kind::ArrayConstant:
+        case Kind::Poison:
+        case Kind::GlobalVariable:
+        case Kind::Parameter:
+            LCC_UNREACHABLE();
+
+        case Kind::Alloca:
+        case Kind::Branch:
+        case Kind::Unreachable:
+            break;
+
+        case Kind::Call: {
+            auto c = as<CallInst>(this);
+            RemoveUse(c->callee(), this);
+            for (auto a : c->args()) RemoveUse(a, this);
+        } break;
+
+        case Kind::GetElementPtr: {
+            auto gep = as<GEPInst>(this);
+            RemoveUse(gep->ptr(), this);
+            RemoveUse(gep->idx(), this);
+        } break;
+
+        case Kind::Intrinsic: {
+            auto i = as<IntrinsicInst>(this);
+            for (auto a : i->operands()) RemoveUse(a, this);
+        } break;
+
+        case Kind::Load: {
+            auto load = as<LoadInst>(this);
+            RemoveUse(load->ptr(), this);
+        } break;
+
+        case Kind::Phi: {
+            auto phi = as<PhiInst>(this);
+            phi->clear();
+        } break;
+
+        case Kind::Store: {
+            auto s = as<StoreInst>(this);
+            RemoveUse(s->ptr(), this);
+        } break;
+
+        case Kind::CondBranch: {
+            auto br = as<CondBranchInst>(this);
+            RemoveUse(br->cond(), this);
+        } break;
+
+        case Kind::Return: {
+            auto ret = as<ReturnInst>(this);
+            if (ret->has_value()) RemoveUse(ret->val(), this);
+        } break;
+
+        case Kind::ZExt:
+        case Kind::SExt:
+        case Kind::Trunc:
+        case Kind::Bitcast:
+        case Kind::Neg:
+        case Kind::Copy:
+        case Kind::Compl: {
+            auto u = cast<UnaryInstBase>(this);
+            RemoveUse(u->operand(), this);
+        } break;
+
+        case Kind::Add:
+        case Kind::Sub:
+        case Kind::Mul:
+        case Kind::SDiv:
+        case Kind::UDiv:
+        case Kind::SRem:
+        case Kind::URem:
+        case Kind::Shl:
+        case Kind::Sar:
+        case Kind::Shr:
+        case Kind::And:
+        case Kind::Or:
+        case Kind::Xor:
+        case Kind::Eq:
+        case Kind::Ne:
+        case Kind::SLt:
+        case Kind::SLe:
+        case Kind::SGt:
+        case Kind::SGe:
+        case Kind::ULt:
+        case Kind::ULe:
+        case Kind::UGt:
+        case Kind::UGe: {
+            auto b = cast<BinaryInst>(this);
+            RemoveUse(b->lhs(), this);
+            RemoveUse(b->rhs(), this);
+        } break;
+    }
+
+    /// Erase this instruction.
+    if (parent) parent->instructions().erase(rgs::find(parent->instructions(), this));
+}
+
+void Inst::erase() {
+    LCC_ASSERT(users().empty(), "Cannot remove used instruction");
+    EraseImpl();
+}
+
+void Inst::erase_cascade() {
+    EraseImpl();
+    for (auto u : users()) u->erase_cascade();
+}
+
 namespace {
 struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     std::string Ty(Type* ty) {
@@ -407,7 +520,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Copy: {
                 auto copy = as<CopyInst>(i);
                 PrintTemp(i);
-                Print("copy {}", Val(copy->value()));
+                Print("copy {}", Val(copy->operand()));
                 return;
             } break;
 

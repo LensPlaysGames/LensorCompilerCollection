@@ -30,7 +30,6 @@ public:
         Parameter,
 
         /// Instructions
-        Copy,
         Alloca,
         Call,
         GetElementPtr,
@@ -51,6 +50,7 @@ public:
         Trunc,
         Bitcast,
         Neg,
+        Copy,
         Compl,
 
         /// Binary instructions
@@ -218,24 +218,39 @@ protected:
         : Value(k, t), minst(nullptr), parent(nullptr), loc(l) {}
 
     /// Remove a use by an instruction.
-    static void RemoveUse(Inst* of, Value* by) {
+    static void RemoveUse(Value* of_value, Value* by) {
+        if (not is<Inst>(of_value)) return;
         if (not is<Inst>(by)) return;
+        auto of = as<Inst>(of_value);
         auto it = rgs::find(of->user_list, by);
         if (it == of->user_list.end()) return;
         of->user_list.erase(it);
     }
 
     /// Add a use by an instruction.
-    static void AddUse(Inst* of, Value* by) {
+    static void AddUse(Value* of_value, Value* by) {
+        if (not is<Inst>(of_value)) return;
         if (not is<Inst>(by)) return;
+        auto of = as<Inst>(of_value);
         auto it = rgs::find(of->user_list, by);
-        if (it == of->user_list.end()) return;
+        if (it != of->user_list.end()) return;
         of->user_list.emplace_back(as<Inst>(by));
     }
+
+    /// Erase this instruction without checking if it
+    /// is still used by anything.
+    void EraseImpl();
 
 public:
     /// Get the parent block.
     auto block() const -> Block* { return parent; }
+
+    /// Erase this instruction from its parent block.
+    void erase();
+
+    /// Erase this instruction and all instructions that use this
+    /// instruction. Be careful when using this.
+    void erase_cascade();
 
     /// Check if this is a terminator instruction.
     bool is_terminator() const {
@@ -479,19 +494,6 @@ public:
     static bool classof(Value* v) { return v->kind() == Kind::Alloca; }
 };
 
-class CopyInst : public Inst {
-    Value* _copied_value;
-
-public:
-    CopyInst(Value* v, Location loc = {})
-        : Inst(Kind::Copy, v->type(), loc), _copied_value(v) {}
-
-    Value* value() { return _copied_value; }
-
-    /// RTTI.
-    static bool classof(Value* v) { return v->kind() == Kind::Copy; }
-};
-
 /// A call instruction.
 class CallInst : public Inst {
     /// The value being called.
@@ -524,7 +526,10 @@ public:
         std::vector<Value*> arguments,
         Location loc = {}
     ) : Inst(Kind::Call, callee_type->ret(), loc),
-        callee_value(callee), callee_type(callee_type), arguments(std::move(arguments)) {}
+        callee_value(callee), callee_type(callee_type), arguments(std::move(arguments)) {
+        AddUse(callee_value, this);
+        for (auto a : this->arguments) AddUse(a, this);
+    }
 
     /// Get the arguments.
     auto args() const -> const std::vector<Value*>& { return arguments; }
@@ -565,7 +570,9 @@ public:
         std::vector<Value*> operands,
         Location loc = {}
     ) : Inst(Kind::Intrinsic, Type::UnknownTy, loc),
-        intrinsic(intrinsic), operand_list(std::move(operands)) {}
+        intrinsic(intrinsic), operand_list(std::move(operands)) {
+        for (auto o : operand_list) AddUse(o, this);
+    }
 
     /// Get the intrinsic ID.
     auto intrinsic_kind() const -> IntrinsicKind { return intrinsic; }
@@ -605,6 +612,9 @@ public:
             "GEPInst may only operate on arrays or opaque pointers, which `{}` is not",
             *pointer->type()
         );
+
+        AddUse(pointer, this);
+        AddUse(index, this);
     }
 
     /// Get the base type of the array.
@@ -629,6 +639,7 @@ public:
     LoadInst(Type* ty, Value* ptr, Location loc = {})
         : Inst(Kind::Load, ty, loc), pointer(ptr) {
         LCC_ASSERT(ptr->type() == Type::PtrTy, "LoadInst can only load from pointers");
+        AddUse(pointer, this);
     }
 
     /// Get the pointer to load from.
@@ -653,6 +664,8 @@ public:
     StoreInst(Value* val, Value* ptr, Location loc = {})
         : Inst(Kind::Store, Type::VoidTy, loc), value(val), pointer(ptr) {
         LCC_ASSERT(ptr->type() == Type::PtrTy, "StoreInst can only store to pointers");
+        AddUse(value, this);
+        AddUse(pointer, this);
     }
 
     /// Get the value to store.
@@ -696,6 +709,12 @@ public:
     /// Get an iterator to the start of the incoming values.
     auto begin() const -> ConstIterator { return {incoming, incoming.begin()}; }
 
+    /// Remove all operands.
+    void clear() {
+        for (auto& i : incoming) RemoveUse(i.value, this);
+        incoming.clear();
+    }
+
     /// Remove stale incoming values.
     ///
     /// This function removes any incoming values that are registered
@@ -704,7 +723,9 @@ public:
     void drop_stale_operands() {
         if (not block()) return;
         std::erase_if(incoming, [&](const IncomingValue& elem) {
-            return not block()->has_predecessor(elem.block);
+            auto should_erase = not block()->has_predecessor(elem.block);
+            if (should_erase) RemoveUse(elem.value, this);
+            return should_erase;
         });
     }
 
@@ -722,9 +743,10 @@ public:
     ///
     /// \param block The block to remove the value for.
     void remove_incoming(Block* block) {
-        std::erase_if(incoming, [&](const IncomingValue& elem) {
-            return elem.block == block;
-        });
+        auto it = rgs::find(incoming, block, &IncomingValue::block);
+        if (it == incoming.end()) return;
+        RemoveUse(it->value, this);
+        incoming.erase(it);
     }
 
     /// Register an incoming value from a block.
@@ -738,9 +760,16 @@ public:
     /// \param block The block it comes from.
     void set_incoming(Value* value, Block* block) {
         auto existing = rgs::find(incoming, block, &IncomingValue::block);
-        if (existing != incoming.end())
-            *existing = {value, block};
-        else incoming.push_back({value, block});
+        if (existing == incoming.end()) incoming.emplace_back(value, block);
+        else {
+            RemoveUse(existing->value, this);
+            existing->value = value;
+        }
+
+        /// Doing this in this order ensures that this also works
+        /// if someone calls this on a block+value combination that
+        /// already exists.
+        AddUse(value, this);
     }
 
     /// RTTI.
@@ -789,7 +818,9 @@ public:
         Block* else_,
         Location loc = {}
     ) : Inst(Kind::CondBranch, Type::UnknownTy, loc),
-        condition(cond), then_(then_), else_(else_) {}
+        condition(cond), then_(then_), else_(else_) {
+        AddUse(condition, this);
+    }
 
     /// Get the condition.
     auto cond() const -> Value* { return condition; }
@@ -820,7 +851,9 @@ class ReturnInst : public Inst {
 
 public:
     ReturnInst(Value* val, Location loc = {})
-        : Inst(Kind::Return, Type::VoidTy, loc), value(val) {}
+        : Inst(Kind::Return, Type::VoidTy, loc), value(val) {
+        if (value) AddUse(value, this);
+    }
 
     /// Check if this instruction returns a value.
     auto has_value() const -> bool { return value != nullptr; }
@@ -869,7 +902,10 @@ protected:
 
 public:
     BinaryInst(Kind k, Value* l, Value* r, Type* ty, Location loc = {})
-        : Inst(k, ty, loc), left(l), right(r) {}
+        : Inst(k, ty, loc), left(l), right(r) {
+        AddUse(left, this);
+        AddUse(right, this);
+    }
 
     /// Get the left operand.
     auto lhs() const -> Value* { return left; }
@@ -1175,7 +1211,9 @@ class UnaryInstBase : public Inst {
 
 protected:
     UnaryInstBase(Kind k, Value* v, Type* ty, Location loc = {})
-        : Inst(k, ty, loc), op(v) {}
+        : Inst(k, ty, loc), op(v) {
+        AddUse(op, this);
+    }
 
 public:
     /// Get the operand.
@@ -1187,6 +1225,16 @@ public:
     static bool classof(Value* v) {
         return +v->kind() >= +Kind::ZExt and +v->kind() <= +Kind::Compl;
     }
+};
+
+/// SSA copy. Used during lowering only.
+class CopyInst : public UnaryInstBase {
+public:
+    CopyInst(Value* v, Location loc = {})
+        : UnaryInstBase(Kind::Copy, v, v->type(), loc) {}
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Copy; }
 };
 
 /// Zero-extend an integer value.

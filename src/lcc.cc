@@ -13,6 +13,7 @@
 #include <lcc/format.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/lcc-c.h>
+#include <lcc/opt/opt.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/platform.hh>
@@ -58,6 +59,7 @@ using options = clopts< // clang-format off
            >,
     option<"--color", "Whether to include colours in the output (default: auto)",
            values<"always", "auto", "never">>,
+    experimental::short_option<"-O", "Set optimisation level (default: 0)", values<0, 1, 2, 3>>,
     flag<"-v", "Enable verbose output">,
     flag<"--ast", "Print the AST and exit without generating code">,
     flag<"--sema", "Run sema only and exit">,
@@ -119,6 +121,20 @@ int main(int argc, char** argv) {
             std::move(input_file.contents)
         );
 
+        /// Common path after IR gen.
+        auto EmitModule = [&](lcc::Module* m) {
+            if (auto opt = opts.get_or<"-O">(0))
+                lcc::opt::Optimise(m, int(opt));
+
+            if (opts.get<"--ir">()) {
+                m->print_ir(use_colour);
+                std::exit(0);
+            }
+
+            m->lower();
+            m->emit(output_file_path);
+        };
+
         /// Intercept.
         if (path_str.ends_with(".int")) {
             /// Parse the file.
@@ -139,14 +155,7 @@ int main(int argc, char** argv) {
             /// Stop after sema if requested.
             if (opts.get<"--sema">()) std::exit(context.has_error());
 
-            auto ir_module = lcc::intercept::IRGen::Generate(&context, *mod);
-            if (opts.get<"--ir">()) {
-                ir_module->print_ir(use_colour);
-                std::exit(0);
-            }
-
-            ir_module->lower();
-            ir_module->emit(output_file_path);
+            EmitModule(lcc::intercept::IRGen::Generate(&context, *mod));
         }
 
         /// Laye.
@@ -171,14 +180,7 @@ int main(int argc, char** argv) {
             /// Stop after sema if requested.
             if (opts.get<"--sema">()) std::exit(context.has_error());
 
-            auto ir_module = lcc::laye::IRGen::Generate(laye_context, mod);
-            if (opts.get<"--ir">()) {
-                ir_module->print_ir(use_colour);
-                std::exit(0);
-            }
-
-            ir_module->lower();
-            ir_module->emit(output_file_path);
+            EmitModule(lcc::laye::IRGen::Generate(laye_context, mod));
         }
 
         /// C.
