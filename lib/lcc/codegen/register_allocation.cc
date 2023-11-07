@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
+#include <lcc/utils.hh>
 #include <ranges>
 #include <variant>
 
@@ -281,6 +282,123 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             }
         }
     }
+
+    // STEP FOUR
+    // Build something called the "coloring stack": this is the list of live
+    // indices (index into lists vector) that determine what order we should
+    // assign registers in.
+    std::vector<usz> coloring_stack{};
+
+    const auto should_skip_list = [&](AdjacencyList& list) {
+        return list.value < +MInst::Kind::ArchStart || list.allocated;
+    };
+
+    usz k = desc.registers.size();
+    // We don't color hardware registers with other hardware registers,
+    // so we don't count them.
+    usz count = registers.size() - k;
+    while (count) {
+        /// degree < k rule:
+        ///   A graph G is k-colorable if, for every node N in G, the degree
+        ///   of N < k.
+        bool done{true};
+        do {
+            done = true;
+            for (auto [i, list] : vws::enumerate(lists)) {
+                if (should_skip_list(list)) continue;
+                if (list.degree() < k) {
+                    list.allocated = 1;
+                    done = false;
+                    count--;
+                    coloring_stack.push_back(usz(i));
+                }
+            }
+        } while (!done && count);
+
+        if (count) {
+            /// Determine node with minimal spill cost.
+            usz min_cost = (usz) -1; /// (!)
+            usz node_to_spill = 0;
+
+            for (auto& list : lists) {
+                if (should_skip_list(list)) continue;
+                list.spill_cost = list.degree() ? (list.spill_cost / list.degree()) : 0;
+                if (list.degree() and list.spill_cost <= min_cost) {
+                    min_cost = list.spill_cost;
+                    node_to_spill = list.index;
+                    if (not min_cost) break;
+                }
+            }
+            /// Push onto color allocation stack.
+            coloring_stack.push_back(node_to_spill);
+            lists.at(node_to_spill).allocated = true;
+            count--;
+        }
+    }
+
+    // fmt::print("Coloring Stack: {}\n", fmt::join(coloring_stack, ", "));
+
+    // STEP FIVE
+    // Use coloring stack to assign hardware registers (colors) to virtual
+    // registers, ensuring no overlap (interferences/adjacencies).
+    for (usz i : coloring_stack) {
+        auto& list = lists.at(i);
+        // Skip hardware registers (no need to color them).
+        if (list.value < +MInst::Kind::ArchStart) continue;
+        usz register_interferences = list.regmask;
+        for (usz i_adj : list.adjacencies) {
+            auto adj_list = std::find_if(lists.begin(), lists.end(), [&](AdjacencyList& list) {
+                return list.value == i_adj;
+            });
+            LCC_ASSERT(adj_list != lists.end(), "Could not find adjacency list corresponding to vreg {}", i_adj);
+            // If any adjacency of the current list is already colored, the current
+            // list must not be colored with that color.
+            if (adj_list->color) register_interferences |= (usz) 1 << (adj_list->color - 1);
+        }
+
+        usz reg_value = 0;
+        for (auto [reg_idx, reg] : vws::enumerate(desc.registers)) {
+            if (not(register_interferences & (usz(1) << reg_idx))) {
+                reg_value = reg;
+                break;
+            }
+        }
+
+        LCC_ASSERT(reg_value, "Can not color graph with {} colors until stack spilling is implemented!", desc.registers.size());
+
+        list.color = reg_value;
+        list.allocated = true;
+
+        // fmt::print("Vreg {} mapped to HWreg {}\n", list.value, list.color);
+    }
+
+    // STEP SIX
+    // Actually update all references to old virtual registers with newly
+    // colored hardware registers.
+    for (auto& list : lists) {
+        // Skip hardware registers (no need to color them).
+        if (list.value < +MInst::Kind::ArchStart) continue;
+        LCC_ASSERT(list.allocated, "AdjacencyList must have a color allocated");
+        usz vreg = list.value;
+        usz color = list.color;
+        for (auto& block : function.blocks()) {
+            for (auto& instruction : block.instructions()) {
+                if (instruction.reg() == vreg) instruction.reg(color);
+                for (auto& op : instruction.all_operands()) {
+                    if (std::holds_alternative<MOperandRegister>(op)) {
+                        MOperandRegister reg = std::get<MOperandRegister>(op);
+                        if (reg.value == vreg) {
+                            reg.value = color;
+                            op = reg;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // TODO: Track registers used in function so that calls can properly do
+    // caller-saved registers.
 }
 
 } // namespace lcc

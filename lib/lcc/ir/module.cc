@@ -135,13 +135,8 @@ void Module::emit(std::filesystem::path output_file_path) {
             for (auto& mfunc : machine_ir)
                 select_instructions(this, mfunc);
 
-            for (auto& mfunc : machine_ir) {
-                fmt::print(
-                    "After ISel\n"
-                    "{}\n",
-                    PrintMFunction(mfunc)
-                );
-            }
+            fmt::print("After ISel\n{}\n", fmt::join(vws::transform(machine_ir, PrintMFunction), "\n"));
+
             // Register Allocation
             MachineDescription desc{};
             if (_ctx->target()->is_x64()) {
@@ -176,6 +171,12 @@ void Module::emit(std::filesystem::path output_file_path) {
             } else LCC_ASSERT(false, "Sorry, unhandled target architecture");
             for (auto& mfunc : machine_ir)
                 allocate_registers(desc, mfunc);
+
+            // FIXME: This code causes a segfault and I don't know why.
+            // fmt::print("After RA:\n");
+            // for (auto& mfunc : machine_ir) {
+            //     fmt::print("{}\n", PrintMFunction(mfunc));
+            // }
 
             if (_ctx->target()->is_x64())
                 x86_64::emit_gnu_att_assembly(output_file_path, this, machine_ir);
