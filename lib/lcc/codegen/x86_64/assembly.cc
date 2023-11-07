@@ -17,11 +17,9 @@ std::string ToString(MFunction& function, MOperand op) {
     } else if (std::holds_alternative<MOperandImmediate>(op)) {
         return fmt::format("${}", std::get<MOperandImmediate>(op));
     } else if (std::holds_alternative<MOperandLocal>(op)) {
-        // TODO: Offset starts at different amounts based on stack frame kind.
-        usz offset = 16;
-        for (usz index = 0; index < +std::get<MOperandLocal>(op); ++index) {
+        usz offset = 0;
+        for (usz index = 0; index <= +std::get<MOperandLocal>(op); ++index)
             offset += function.locals().at(index)->allocated_type()->bytes();
-        }
         return fmt::format("{}(%rbp)", -isz(offset));
     } else if (std::holds_alternative<MOperandStatic>(op)) {
         return fmt::format("{}(%rip)", std::get<MOperandStatic>(op)->name());
