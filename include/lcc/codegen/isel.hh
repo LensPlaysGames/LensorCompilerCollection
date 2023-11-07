@@ -31,6 +31,7 @@ enum struct OperandKind {
     Immediate,
     Register,
     InputOperandReference,
+    InputInstructionReference,
     Local,
     // TODO: The operand kinds
 };
@@ -65,6 +66,15 @@ struct Local {
 // Operand reference, by index.
 template <usz idx>
 struct o {
+    static constexpr i64 immediate = 0;
+    static constexpr usz index = idx;
+    static constexpr usz value = 0;
+    static constexpr usz size = 0;
+};
+
+// Instruction reference, by index.
+template <usz idx>
+struct i {
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
     static constexpr usz value = 0;
@@ -130,6 +140,29 @@ struct Inst {
 
                 return op;
             }
+
+            case OperandKind::InputInstructionReference: {
+                MOperand op{};
+                // Current instruction index.
+                usz i = 0;
+                // Instruction index we need to find.
+                usz needle = operand::value::index;
+                // Whether or not we've found the instruction we are looking for.
+                bool found = false;
+                for (auto instruction : input) {
+                    if (i == needle) {
+                        found = true;
+                        op = MOperandRegister(instruction->reg(), instruction->regsize());
+                    }
+                    if (found) break;
+                    ++i;
+                }
+
+                LCC_ASSERT(found, "Pattern has ill-formed i<{}> operand: index greater than amount of instructions in input.", needle);
+
+                return op;
+            }
+
         }
         LCC_UNREACHABLE();
     }
