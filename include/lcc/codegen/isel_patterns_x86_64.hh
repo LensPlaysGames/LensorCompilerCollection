@@ -32,19 +32,24 @@ using ret_some_op = Pattern<
 using ret_imm = ret_some_op<Operand<OK::Immediate, Immediate<>>>;
 using ret_reg = ret_some_op<Operand<OK::Register, Register<0, 0>>>;
 
-// TODO:
 // InputInstructionReference operand with a value of i<0> means replace
 // the operand with a register with a value equal to the zero-eth
 // instruction in the input instructions: in this case, the output
 // register of the load.
-// using load_local = Pattern<
-//     InstList<Inst<usz(MInst::Kind::Load), Operand<OK::Local, Local<>>>>,
-//     InstList<Inst<usz(x86_64::Opcode::Move), Operand<OK::InputInstructionReference, i<0>>>>;
+template <typename load_op>
+using load_some_op = Pattern<
+    InstList<Inst<usz(MInst::Kind::Load), load_op>>,
+    InstList<Inst<usz(x86_64::Opcode::Move), Operand<OK::InputInstructionReference, i<0>>>>>;
+
+using load_local = load_some_op<Operand<OK::Local, Local<>>>;
+using load_reg = load_some_op<Operand<OK::Register, Register<0, 0>>>;
 
 using x86_64PatternList = PatternList<
     ret,
     ret_imm,
     ret_reg,
+    load_local,
+    load_reg,
     store_reg_local>;
 
 } // namespace isel
