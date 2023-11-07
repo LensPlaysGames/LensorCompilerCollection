@@ -1729,6 +1729,13 @@ auto Parser::ParsePrimaryExpr() -> Result<Expr*> {
         auto deref_value = ParsePrimaryExpr();
         if (not deref_value) return deref_value.diag();
         return new (*this) UnaryExpr{location, OperatorKind::Deref, *deref_value};
+    } else if (Consume(Tk::OpenParen)) {
+        auto expr = ParseExpr();
+        if (not expr) return expr.diag();
+        if (not Consume(Tk::CloseParen)) {
+            Error("Expected ')' to close grouped expression");
+        }
+        return expr;
     }
 
     NextToken();

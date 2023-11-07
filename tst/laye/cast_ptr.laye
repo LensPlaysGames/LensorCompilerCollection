@@ -1,0 +1,18 @@
+// R %lcc --ir %s
+// d b [a-zA-Z0-9\.]+
+// d t %[0-9]+
+// d f _L[a-zA-Z0-9_]+
+
+// * main : i32():
+// +   $b:
+// +     (?<p>$t) = alloca i64
+// +     store i64 69 into $p
+// +     (?<load>$t) = load i64 from $p
+// +     (?<cast>$t) = truncate i64 $load to i32
+// +     return i32 $cast
+i32 main()
+{
+    rawptr r = 0;
+    var p = cast(i8[*]) r;
+    return cast(i32) p;
+}

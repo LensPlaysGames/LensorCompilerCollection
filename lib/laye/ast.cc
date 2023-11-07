@@ -3,6 +3,8 @@
 #include <laye/parser.hh>
 #include <lcc/utils/ast_printer.hh>
 #include <lcc/utils/rtti.hh>
+#include <lcc/context.hh>
+#include <lcc/target.hh>
 
 namespace layec = lcc::laye;
 
@@ -344,7 +346,12 @@ auto layec::Type::size(const Context* ctx) const -> usz {
     }
 
     switch (kind()) {
-        default: LCC_TODO();
+        default: LCC_ASSERT(false, "unhandled type {} in type->size()", ToString(kind()));
+
+        case Expr::Kind::TypeRawptr:
+        case Expr::Kind::TypePointer:
+        case Expr::Kind::TypeReference:
+        case Expr::Kind::TypeBuffer: return ctx->target()->size_of_pointer;
     }
 }
 
@@ -383,7 +390,7 @@ auto layec::Type::string(bool use_colours) const -> std::string {
     };
 
     switch (kind()) {
-        default: LCC_ASSERT(false, "unhandled type in type->string()");
+        default: LCC_ASSERT(false, "unhandled type {} in type->string()", ToString(kind()));
 
         case Kind::TypeInfer: return fmt::format("{}var", C(Cyan));
         case Kind::TypeNilable: return fmt::format("{}?", as<NilableType>(this)->elem_type()->string(use_colours));
