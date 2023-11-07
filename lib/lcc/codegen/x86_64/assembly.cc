@@ -69,6 +69,22 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
 
                 out += "    ";
                 out += ToString(Opcode(instruction.opcode()));
+                if (instruction.opcode() == +x86_64::Opcode::Move) {
+                    if (std::holds_alternative<MOperandImmediate>(instruction.get_operand(0))) {
+                        if (std::holds_alternative<MOperandLocal>(instruction.get_operand(1))) {
+                            // Moving immediate into local (memory) requires mov suffix in GNU. We use
+                            // size of local to determine how big of a move to do.
+                            auto bitwidth = function.locals().at(+std::get<MOperandLocal>(instruction.get_operand(1)))->allocated_type()->bits();
+                            switch (bitwidth) {
+                                case 64: out += 'q'; break;
+                                case 32: out += 'd'; break;
+                                case 16: out += 'w'; break;
+                                case 8: out += 'b'; break;
+                                default: LCC_ASSERT(false, "Invalid move");
+                            }
+                        }
+                    }
+                }
                 usz i = 0;
                 for (auto& operand : instruction.all_operands()) {
                     if (i == 0) out += ' ';
