@@ -11,7 +11,7 @@ struct AdjacencyMatrix {
     std::unique_ptr<bool[]> data;
     usz size;
 
-    AdjacencyMatrix(usz sz) : data(std::make_unique<bool[]>(sz)), size(sz) {}
+    AdjacencyMatrix(usz sz) : data(std::make_unique<bool[]>(sz * sz)), size(sz) {}
 
     usz coord(usz x, usz y) const {
         LCC_ASSERT(x < size, "AdjacencyMatrix: X out of bounds");
@@ -120,8 +120,8 @@ static void collect_interferences_from_block(
         }
 
         // Make all register operands interfere with each other.
-        for (auto& A : vreg_operands) {
-            for (auto& B : vreg_operands) {
+        for (auto A : vreg_operands) {
+            for (auto B : vreg_operands) {
                 matrix.set(A.idx, B.idx);
             }
         }
@@ -129,7 +129,7 @@ static void collect_interferences_from_block(
         // Make all reg operands interfere with the register of this function, if
         // it is a defining use.
         if (inst.is_defining()) {
-            for (auto& r : vreg_operands) {
+            for (auto r : vreg_operands) {
                 matrix.set(r.idx, live_idx_from_register_value(inst.reg()));
             }
         }
@@ -137,14 +137,14 @@ static void collect_interferences_from_block(
         // TODO: Make all reg operands interfere with all clobbers of this instruction
 
         // Make all reg operands interfere with all currently live values
-        for (auto& r : vreg_operands) {
-            for (auto& live : live_values)
+        for (auto r : vreg_operands) {
+            for (auto live : live_values)
                 matrix.set(r.idx, live_idx_from_register_value(live));
         }
 
         // If a virtual register is not live and is seen as an operand, it is
         // added to the vector of live values.
-        for (auto& r : vreg_operands) {
+        for (auto r : vreg_operands) {
             if (not r.reg.defining_use and std::find(live_values.begin(), live_values.end(), r.reg.value) == live_values.end())
                 live_values.push_back(r.reg.value);
         }
