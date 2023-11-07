@@ -500,12 +500,17 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::GetElementPtr: {
+                        // MInst GEP:
+                        //   0th operand: the pointer
+                        //   1st operand: index to offset from pointer
+                        //   2nd operand: scale factor for previous index
+                        //   o<0> + (o<1> * o<2>), basically.
+
                         auto gep_ir = as<GEPInst>(instruction);
-                        // FIXME: zero sized register
-                        // TODO: ptr-width register.
                         auto gep = MInst(MInst::Kind::GetElementPtr, {virts[instruction], 0});
                         gep.add_operand(MOperandValueReference(f, gep_ir->ptr()));
                         gep.add_operand(MOperandValueReference(f, gep_ir->idx()));
+                        gep.add_operand(MOperandImmediate(gep_ir->type()->bits()));
                         bb.add_instruction(gep);
                     } break;
 
