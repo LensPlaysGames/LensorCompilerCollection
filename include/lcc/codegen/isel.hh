@@ -152,7 +152,7 @@ struct Inst {
                 for (auto instruction : input) {
                     if (i == needle) {
                         found = true;
-                        op = MOperandRegister(instruction->reg(), instruction->regsize());
+                        op = MOperandRegister(instruction->reg(), uint(instruction->regsize()));
                     }
                     if (found) break;
                     ++i;
