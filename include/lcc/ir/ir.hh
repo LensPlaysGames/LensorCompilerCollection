@@ -9,6 +9,7 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/iterator.hh>
 #include <lcc/utils/rtti.hh>
+#include <lcc/utils/generator.hh>
 
 namespace lcc {
 class Parameter;
@@ -217,16 +218,6 @@ protected:
     Inst(Kind k, Type* t, Location l = {})
         : Value(k, t), minst(nullptr), parent(nullptr), loc(l) {}
 
-    /// Remove a use by an instruction.
-    static void RemoveUse(Value* of_value, Value* by) {
-        if (not is<Inst>(of_value)) return;
-        if (not is<Inst>(by)) return;
-        auto of = as<Inst>(of_value);
-        auto it = rgs::find(of->user_list, by);
-        if (it == of->user_list.end()) return;
-        of->user_list.erase(it);
-    }
-
     /// Add a use by an instruction.
     static void AddUse(Value* of_value, Value* by) {
         if (not is<Inst>(of_value)) return;
@@ -237,13 +228,40 @@ protected:
         of->user_list.emplace_back(as<Inst>(by));
     }
 
+    /// Iterate the children of an instruction. This is only
+    /// to be used internally as it exposes the values and
+    /// can thus be used to break the invariants of the IR if
+    /// used carelessly.
+    auto Children() -> Generator<Value**>;
+
     /// Erase this instruction without checking if it
     /// is still used by anything.
     void EraseImpl();
 
+    /// Remove a use by an instruction.
+    static void RemoveUse(Value* of_value, Value* by) {
+        if (not is<Inst>(of_value)) return;
+        if (not is<Inst>(by)) return;
+        auto of = as<Inst>(of_value);
+        auto it = rgs::find(of->user_list, by);
+        if (it == of->user_list.end()) return;
+        of->user_list.erase(it);
+    }
+
 public:
     /// Get the parent block.
     auto block() const -> Block* { return parent; }
+
+    /// Iterate over the children of this instruction.
+    auto children() const -> Generator<Value*>;
+
+    /// Iterate over all children of a certain instruction type.
+    template <std::derived_from<Value> Inst>
+    auto children_of_kind() const -> Generator<Inst*> {
+        for (auto v : children())
+            if (auto c = cast<Inst>(v))
+                co_yield c;
+    }
 
     /// Erase this instruction from its parent block.
     void erase();
@@ -265,6 +283,9 @@ public:
 
     /// Set the associated machine instruction.
     void machine_inst(MInst* m) { minst = m; }
+
+    /// Replace all uses of this instruction with another value.
+    void replace_with(Value *v);
 
     /// Get the users of this instruction.
     auto users() const -> const std::vector<Inst*>& { return user_list; }
@@ -482,6 +503,7 @@ public:
 /// ============================================================================
 /// A stack allocation.
 class AllocaInst : public Inst {
+    friend Inst;
     Type* _allocated_type;
 
 public:
@@ -496,6 +518,8 @@ public:
 
 /// A call instruction.
 class CallInst : public Inst {
+    friend Inst;
+
     /// The value being called.
     Value* callee_value;
 
@@ -558,6 +582,8 @@ public:
 
 /// Backend intrinsic.
 class IntrinsicInst : public Inst {
+    friend Inst;
+
     /// The intrinsic ID.
     IntrinsicKind intrinsic;
 
@@ -592,6 +618,8 @@ public:
 /// GEP(T, p, x) = p + (sizeof(T) * x)
 ///
 class GEPInst : public Inst {
+    friend Inst;
+
     /// The base pointer to index from; "p" in the equation.
     Value* pointer;
 
@@ -632,6 +660,8 @@ public:
 
 /// A load instruction.
 class LoadInst : public Inst {
+    friend Inst;
+
     /// The pointer to load from.
     Value* pointer;
 
@@ -654,6 +684,8 @@ public:
 
 /// A store instruction.
 class StoreInst : public Inst {
+    friend Inst;
+
     /// The value to store.
     Value* value;
 
@@ -686,6 +718,8 @@ public:
 
 /// PHI instruction.
 class PhiInst : public Inst {
+    friend Inst;
+
     /// An incoming value.
     struct IncomingValue {
         /// The value.
@@ -783,6 +817,8 @@ public:
 
 /// Unconditional branch instruction.
 class BranchInst : public Inst {
+    friend Inst;
+
     /// The block to branch to.
     Block* target_block;
 
@@ -802,6 +838,8 @@ public:
 
 /// Conditional branch instruction.
 class CondBranchInst : public Inst {
+    friend Inst;
+
     /// The condition.
     Value* condition;
 
@@ -846,6 +884,8 @@ public:
 
 /// Return instruction.
 class ReturnInst : public Inst {
+    friend Inst;
+
     /// The value to return.
     Value* value;
 
@@ -870,6 +910,8 @@ public:
 
 /// Unreachable instruction.
 class UnreachableInst : public Inst {
+    friend Inst;
+
 public:
     UnreachableInst(Location loc = {})
         : Inst(Kind::Unreachable, Type::VoidTy, loc) {}
@@ -883,6 +925,8 @@ public:
 /// ============================================================================
 /// Base class for binary instructions.
 class BinaryInst : public Inst {
+    friend Inst;
+
     /// The left operand.
     Value* left;
 
@@ -1207,6 +1251,8 @@ public:
 
 /// Unary instructions.
 class UnaryInstBase : public Inst {
+    friend Inst;
+
     Value* op;
 
 protected:

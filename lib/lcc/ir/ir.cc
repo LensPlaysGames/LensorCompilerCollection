@@ -1,14 +1,12 @@
-#include <lcc/ir/ir.hh>
-
+#include <algorithm>
 #include <fmt/format.h>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
+#include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/utils/ir_printer.hh>
 #include <lcc/utils/rtti.hh>
-
-#include <algorithm>
 #include <string>
 
 namespace lcc {
@@ -224,7 +222,7 @@ StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, std::
     StructType* out;
     if (not name.empty())
         out = new (ctx) StructType(member_types, name);
-    else out = new (ctx) StructType(member_types, (long int)ctx->struct_types.size());
+    else out = new (ctx) StructType(member_types, (long int) ctx->struct_types.size());
     ctx->struct_types.push_back(out);
     return out;
 }
@@ -268,7 +266,7 @@ bool Block::has_predecessor(Block* block) const {
     }
 }
 
-void Inst::EraseImpl() {
+auto Inst::Children() -> Generator<Value**> {
     /// Clear usees.
     switch (kind()) {
         case Kind::Block:
@@ -287,44 +285,44 @@ void Inst::EraseImpl() {
 
         case Kind::Call: {
             auto c = as<CallInst>(this);
-            RemoveUse(c->callee(), this);
-            for (auto a : c->args()) RemoveUse(a, this);
+            co_yield &c->callee_value;
+            for (auto& a : c->arguments) co_yield &a;
         } break;
 
         case Kind::GetElementPtr: {
             auto gep = as<GEPInst>(this);
-            RemoveUse(gep->ptr(), this);
-            RemoveUse(gep->idx(), this);
+            co_yield &gep->pointer;
+            co_yield &gep->index;
         } break;
 
         case Kind::Intrinsic: {
             auto i = as<IntrinsicInst>(this);
-            for (auto a : i->operands()) RemoveUse(a, this);
+            for (auto a : i->operand_list) co_yield &a;
         } break;
 
         case Kind::Load: {
             auto load = as<LoadInst>(this);
-            RemoveUse(load->ptr(), this);
+            co_yield &load->pointer;
         } break;
 
         case Kind::Phi: {
             auto phi = as<PhiInst>(this);
-            phi->clear();
+            for (auto& [value, _] : phi->incoming) co_yield &value;
         } break;
 
         case Kind::Store: {
             auto s = as<StoreInst>(this);
-            RemoveUse(s->ptr(), this);
+            co_yield &s->pointer;
         } break;
 
         case Kind::CondBranch: {
             auto br = as<CondBranchInst>(this);
-            RemoveUse(br->cond(), this);
+            co_yield &br->condition;
         } break;
 
         case Kind::Return: {
             auto ret = as<ReturnInst>(this);
-            if (ret->has_value()) RemoveUse(ret->val(), this);
+            if (ret->has_value()) co_yield &ret->value;
         } break;
 
         case Kind::ZExt:
@@ -335,7 +333,7 @@ void Inst::EraseImpl() {
         case Kind::Copy:
         case Kind::Compl: {
             auto u = cast<UnaryInstBase>(this);
-            RemoveUse(u->operand(), this);
+            co_yield &u->op;
         } break;
 
         case Kind::Add:
@@ -362,13 +360,23 @@ void Inst::EraseImpl() {
         case Kind::UGt:
         case Kind::UGe: {
             auto b = cast<BinaryInst>(this);
-            RemoveUse(b->lhs(), this);
-            RemoveUse(b->rhs(), this);
+            co_yield &b->left;
+            co_yield &b->right;
         } break;
     }
+}
+
+void Inst::EraseImpl() {
+    /// Clear usees.
+    for (auto usee : Children()) RemoveUse(*usee, this);
 
     /// Erase this instruction.
     if (parent) parent->instructions().erase(rgs::find(parent->instructions(), this));
+}
+
+auto Inst::children() const -> Generator<Value*> {
+    /// const_cast is fine since this does not mutate the instruction.
+    for (auto v : const_cast<Inst*>(this)->Children()) co_yield *v;
 }
 
 void Inst::erase() {
@@ -379,6 +387,19 @@ void Inst::erase() {
 void Inst::erase_cascade() {
     EraseImpl();
     for (auto u : users()) u->erase_cascade();
+}
+
+void Inst::replace_with(Value* v) {
+    for (auto u : users()) {
+        for (auto use : u->Children()) {
+            if (*use == this) {
+                RemoveUse(this, u);
+                AddUse(v, u);
+                *use = v;
+            }
+        }
+    }
+    erase();
 }
 
 namespace {
