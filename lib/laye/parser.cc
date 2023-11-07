@@ -697,9 +697,9 @@ auto Parser::ParseStatement(bool consumeSemi) -> Result<Statement*> {
                 }
             }
 
-            auto increment = Result<Statement*>::Null();
+            auto increment = Result<Expr*>::Null();
             if (not Consume(Tk::SemiColon)) {
-                increment = ParseStatement(false);
+                increment = ParseExpr();
                 if (not increment) {
                     Synchronise();
                     return increment.diag();

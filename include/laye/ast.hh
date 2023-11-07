@@ -113,7 +113,7 @@ public:
 
     auto add_header(ModuleHeader* header) { _headers.push_back(header); }
     auto add_import(std::string name, Location location, Module* module, bool is_exported) {
-        //Diag::Note("Adding an imported module with name '{}'", name);
+        // Diag::Note("Adding an imported module with name '{}'", name);
         _imports.push_back(Ref{std::move(name), location, module, is_exported});
     }
     void add_export(NamedDecl* decl);
@@ -874,7 +874,7 @@ public:
     auto import_name() const -> const std::string& { return _import_name; }
     bool is_wildcard() const { return _is_wildcard; }
     bool has_import_names() const { return not _import_names.empty(); }
-    auto import_names() const -> std::span<std::string const> { return _import_names; }
+    auto import_names() const -> const decltype(_import_names)& { return _import_names; }
     bool has_alias() const { return not _alias.empty(); }
     auto alias() const -> const std::string& { return _alias; }
 
@@ -905,19 +905,28 @@ public:
 
     auto assign_op() const { return _assign_op; }
     auto target() const { return _target; }
+    auto target() -> Expr*& { return _target; }
     auto value() const { return _value; }
+    auto value() -> Expr*& { return _value; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Assign; }
 };
 
 class DeleteStatement : public Statement {
+    std::vector<Expr*> _args{};
     Expr* _expr;
 
 public:
     DeleteStatement(Location location, Expr* expr)
         : Statement(Kind::Delete, location), _expr(expr) {}
 
+    DeleteStatement(Location location, std::vector<Expr*> args, Expr* expr)
+        : Statement(Kind::Delete, location), _args(std::move(args)), _expr(expr) {}
+
+    auto args() const { return _args; }
+    auto args() -> decltype(_args)& { return _args; }
     auto expr() const { return _expr; }
+    auto expr() -> Expr*& { return _expr; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Delete; }
 };
@@ -930,6 +939,7 @@ public:
         : Statement(Kind::Discard, location), _expr(expr) {}
 
     auto expr() const { return _expr; }
+    auto expr() -> Expr*& { return _expr; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Discard; }
 };
@@ -968,7 +978,7 @@ public:
 
     bool has_label() const { return not _label.empty(); }
     auto label() const -> const std::string& { return _label; }
-    void set_label(std::string label) { _label = std::move(label); }
+    void label(std::string label) { _label = std::move(label); }
 
     auto condition() const { return _condition; }
     auto condition() -> Expr*& { return _condition; }
@@ -985,7 +995,7 @@ class ForStatement : public Statement {
 
     Statement* _init;
     Expr* _condition;
-    Statement* _increment;
+    Expr* _increment;
 
     Statement* _pass;
     Statement* _fail;
@@ -994,19 +1004,24 @@ public:
     ForStatement(Location location, Expr* condition, Statement* pass, Statement* fail)
         : Statement(Kind::For, location), _init(nullptr), _condition(condition), _increment(nullptr), _pass(pass), _fail(fail) {}
 
-    ForStatement(Location location, Statement* init, Expr* condition, Statement* increment, Statement* pass, Statement* fail)
+    ForStatement(Location location, Statement* init, Expr* condition, Expr* increment, Statement* pass, Statement* fail)
         : Statement(Kind::For, location), _init(init), _condition(condition), _increment(increment), _pass(pass), _fail(fail) {}
 
     bool has_label() const { return not _label.empty(); }
     auto label() const -> const std::string& { return _label; }
-    void set_label(std::string label) { _label = std::move(label); }
+    void label(std::string label) { _label = std::move(label); }
 
     auto init() const { return _init; }
+    auto init() -> Statement*& { return _init; }
     auto condition() const { return _condition; }
+    auto condition() -> Expr*& { return _condition; }
     auto increment() const { return _increment; }
+    auto increment() -> Expr*& { return _increment; }
 
     auto pass() const { return _pass; }
+    auto pass() -> Statement*& { return _pass; }
     auto fail() const { return _fail; }
+    auto fail() -> Statement*& { return _fail; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::For; }
 };
@@ -1027,14 +1042,18 @@ public:
 
     bool has_label() const { return not _label.empty(); }
     auto label() const -> const std::string& { return _label; }
-    void set_label(std::string label) { _label = std::move(label); }
+    void label(std::string label) { _label = std::move(label); }
 
     auto type() const { return _type; }
+    auto type() -> Type*& { return _type; }
     auto name() const -> const std::string& { return _name; }
     auto sequence() const { return _sequence; }
+    auto sequence() -> Expr*& { return _sequence; }
 
     auto pass() const { return _pass; }
+    auto pass() -> Statement*& { return _pass; }
     auto fail() const { return _fail; }
+    auto fail() -> Statement*& { return _fail; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::ForEach; }
 };
@@ -1051,10 +1070,12 @@ public:
 
     bool has_label() const { return not _label.empty(); }
     auto label() const -> const std::string& { return _label; }
-    void set_label(std::string label) { _label = std::move(label); }
+    void label(std::string label) { _label = std::move(label); }
 
     auto condition() const { return _condition; }
+    auto condition() -> Expr*& { return _condition; }
     auto body() const { return _body; }
+    auto body() -> Statement*& { return _body; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::DoFor; }
 };
@@ -1084,7 +1105,9 @@ public:
         : Statement(Kind::Switch, location), _target(target), _cases(std::move(cases)) {}
 
     auto target() const { return _target; }
+    auto target() -> Expr*& { return _target; }
     auto cases() const -> const decltype(_cases)& { return _cases; }
+    auto cases() -> decltype(_cases)& { return _cases; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Switch; }
 };
@@ -1112,6 +1135,7 @@ public:
 
     bool has_target() const { return not _target.empty(); }
     auto target() const -> const std::string& { return _target; }
+    void target(std::string target) { _target = std::move(target); }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Break; }
 };
@@ -1125,6 +1149,7 @@ public:
 
     bool has_target() const { return not _target.empty(); }
     auto target() const -> const std::string& { return _target; }
+    void target(std::string target) { _target = std::move(target); }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Continue; }
 };
@@ -1137,6 +1162,7 @@ public:
         : Statement(Kind::Defer, location), _statement(statement) {}
 
     auto statement() const { return _statement; }
+    auto statement() -> Statement*& { return _statement; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Defer; }
 };
@@ -1149,6 +1175,7 @@ public:
         : Statement(Kind::Goto, location), _target(std::move(target)) {}
 
     auto target() const -> const std::string& { return _target; }
+    void target(std::string target) { _target = std::move(target); }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Goto; }
 };
@@ -1170,7 +1197,9 @@ public:
         : Statement(Kind::Test, location), _name(std::move(name)), _children(std::move(children)) {}
 
     auto name() const -> const std::string& { return _name; }
-    auto children() const -> std::span<Statement* const> { return _children; }
+    void name(std::string name) { _name = std::move(name); }
+    auto children() const -> const decltype(_children)& { return _children; }
+    auto children() -> decltype(_children)& { return _children; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::Test; }
 };
@@ -1185,6 +1214,7 @@ public:
 
     auto operator_kind() const { return _operator_kind; }
     auto value() const { return _value; }
+    auto value() -> Expr*& { return _value; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Unary; }
 };
@@ -1216,7 +1246,9 @@ public:
         : Expr(Kind::And, location), _lhs(lhs), _rhs(rhs) {}
 
     auto lhs() const { return _lhs; }
+    auto lhs() -> Expr*& { return _lhs; }
     auto rhs() const { return _rhs; }
+    auto rhs() -> Expr*& { return _rhs; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::And; }
 };
@@ -1230,7 +1262,9 @@ public:
         : Expr(Kind::Or, location), _lhs(lhs), _rhs(rhs) {}
 
     auto lhs() const { return _lhs; }
+    auto lhs() -> Expr*& { return _lhs; }
     auto rhs() const { return _rhs; }
+    auto rhs() -> Expr*& { return _rhs; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Or; }
 };
@@ -1244,7 +1278,9 @@ public:
         : Expr(Kind::Xor, location), _lhs(lhs), _rhs(rhs) {}
 
     auto lhs() const { return _lhs; }
+    auto lhs() -> Expr*& { return _lhs; }
     auto rhs() const { return _rhs; }
+    auto rhs() -> Expr*& { return _rhs; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Xor; }
 };
@@ -1257,6 +1293,7 @@ public:
         : Expr(Kind::UnwrapNilable, location), _value(value) {}
 
     auto value() const { return _value; }
+    auto value() -> Expr*& { return _value; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::UnwrapNilable; }
 };
@@ -1276,7 +1313,8 @@ public:
 
     auto scope() const { return _scope; }
     auto name() const -> const std::string& { return _name; }
-    auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
+    auto template_args() const -> const decltype(_template_args)& { return _template_args; }
+    auto template_args() -> decltype(_template_args)& { return _template_args; }
 
     auto target() const { return _target; }
     auto target() -> NamedDecl*& { return _target; }
@@ -1304,7 +1342,8 @@ public:
     auto scope() const { return _scope; }
     auto names() const -> const std::vector<std::string>& { return _names; }
     auto locations() const -> const std::vector<Location>& { return _locations; }
-    auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
+    auto template_args() const -> const decltype(_template_args)& { return _template_args; }
+    auto template_args() -> decltype(_template_args)& { return _template_args; }
 
     auto target() const { return _target; }
     auto target() -> NamedDecl*& { return _target; }
@@ -1322,6 +1361,7 @@ public:
         : Expr(Kind::FieldIndex, location), _target(target), _field_name(field_name) {}
 
     auto target() const { return _target; }
+    auto target() -> Expr*& { return _target; }
     auto field_name() const -> const std::string& { return _field_name; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::FieldIndex; }
@@ -1336,7 +1376,9 @@ public:
         : Expr(Kind::ValueIndex, location), _target(target), _indices(std::move(indices)) {}
 
     auto target() const { return _target; }
-    auto indices() const -> std::span<Expr* const> { return _indices; }
+    auto target() -> Expr*& { return _target; }
+    auto indices() const -> const decltype(_indices)& { return _indices; }
+    auto indices() -> decltype(_indices)& { return _indices; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::ValueIndex; }
 };
@@ -1351,8 +1393,11 @@ public:
         : Expr(Kind::Slice, location), _target(target), _offset(offset), _length(length) {}
 
     auto target() const { return _target; }
+    auto target() -> Expr*& { return _target; }
     auto offset() const { return _offset; }
+    auto offset() -> Expr*& { return _offset; }
     auto length() const { return _length; }
+    auto length() -> Expr*& { return _length; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Slice; }
 };
@@ -1388,7 +1433,9 @@ public:
         : Expr(Kind::Ctor, location), _type(type), _inits(std::move(inits)) {}
 
     auto type() const { return _type; }
-    auto inits() const -> std::span<CtorFieldInit const> { return _inits; }
+    auto type() -> Type*& { return _type; }
+    auto inits() const -> const decltype(_inits)& { return _inits; }
+    auto inits() -> decltype(_inits)& { return _inits; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Ctor; }
 };
@@ -1401,6 +1448,7 @@ public:
         : Expr(Kind::Not, location), _value(value) {}
 
     auto value() const { return _value; }
+    auto value() -> Expr*& { return _value; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Not; }
 };
@@ -1415,6 +1463,7 @@ public:
         : Expr(Kind::Cast, location), _type(type), _value(value), _cast_kind(cast_kind) {}
 
     auto type() const { return _type; }
+    auto type() -> Type*& { return _type; }
     auto value() const { return _value; }
     auto value() -> Expr*& { return _value; }
     auto cast_kind() const { return _cast_kind; }
@@ -1437,7 +1486,9 @@ public:
     auto args() const { return _args; }
     auto args() -> decltype(_args)& { return _args; }
     auto type() const { return _type; }
-    auto inits() const -> std::span<CtorFieldInit const> { return _inits; }
+    auto type() -> Type*& { return _type; }
+    auto inits() const -> const decltype(_inits)& { return _inits; }
+    auto inits() -> decltype(_inits)& { return _inits; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::New; }
 };
@@ -1450,6 +1501,7 @@ public:
         : Expr(Kind::Try, location), _value(value) {}
 
     auto value() const { return _value; }
+    auto value() -> Expr*& { return _value; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Try; }
 };
@@ -1464,8 +1516,10 @@ public:
         : Expr(Kind::Catch, location), _value(value), _error_name(std::move(error_name)), _body(body) {}
 
     auto value() const { return _value; }
+    auto value() -> Expr*& { return _value; }
     auto error_name() const -> const std::string& { return _error_name; }
     auto body() const { return _body; }
+    auto body() -> Statement*& { return _body; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Catch; }
 };
@@ -1515,7 +1569,8 @@ public:
     DoExpr(Location location, std::vector<Statement*> statements)
         : Expr(Kind::Do, location), _statements(std::move(statements)) {}
 
-    auto statements() const -> std::span<Statement* const> { return _statements; }
+    auto statements() const -> const decltype(_statements)& { return _statements; }
+    auto statements() -> decltype(_statements)& { return _statements; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Do; }
 };
@@ -1528,6 +1583,7 @@ public:
         : Expr(Kind::Sizeof, location), _type(type) {}
 
     auto type() const { return _type; }
+    auto type() -> Type*& { return _type; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Sizeof; }
 };
@@ -1541,6 +1597,7 @@ public:
         : Expr(Kind::Offsetof, location), _type(type), _field_name(std::move(field_name)) {}
 
     auto type() const { return _type; }
+    auto type() -> Type*& { return _type; }
     auto field_name() const -> const std::string& { return _field_name; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Offsetof; }
@@ -1555,6 +1612,7 @@ public:
         : Expr(Kind::Alignof, location), _type(type), _field_name(std::move(field_name)) {}
 
     auto type() const { return _type; }
+    auto type() -> Type*& { return _type; }
     auto field_name() const -> const std::string& { return _field_name; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Alignof; }
@@ -1741,7 +1799,8 @@ public:
     auto access() const { return _access; }
     auto scope() const { return _scope; }
     auto name() const -> const std::string& { return _name; }
-    auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
+    auto template_args() const -> const decltype(_template_args)& { return _template_args; }
+    auto template_args() -> decltype(_template_args)& { return _template_args; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeLookupName; }
 };
@@ -1766,7 +1825,8 @@ public:
     auto scope() const { return _scope; }
     auto names() const -> const std::vector<std::string>& { return _names; }
     auto locations() const -> const std::vector<Location>& { return _locations; }
-    auto template_args() const -> const std::vector<Expr*>& { return _template_args; }
+    auto template_args() const -> const decltype(_template_args)& { return _template_args; }
+    auto template_args() -> decltype(_template_args)& { return _template_args; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeLookupPath; }
 };
@@ -1809,8 +1869,8 @@ public:
         : SingleElementType(Kind::TypeArray, location, elem_type), _access(access), _rank_lengths(std::move(rank_lengths)) {}
 
     auto access() const { return _access; }
-    auto rank_lengths() -> decltype(_rank_lengths)& { return _rank_lengths; }
     auto rank_lengths() const -> const decltype(_rank_lengths)& { return _rank_lengths; }
+    auto rank_lengths() -> decltype(_rank_lengths)& { return _rank_lengths; }
     auto rank() const -> usz { return _rank_lengths.size(); }
     auto nth_length(usz i) const -> usz { return (usz) (as<ConstantExpr>(_rank_lengths[i]))->value().as_i64(); }
 
