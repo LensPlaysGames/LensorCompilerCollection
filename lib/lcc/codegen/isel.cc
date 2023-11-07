@@ -38,6 +38,8 @@ static void calculate_defining_uses_for_block(
     std::vector<MBlock*> visited,
     std::vector<MBlock*> doubly_visited
 ) {
+    LCC_ASSERT(block, "Cannot calculate defining uses for NULL block");
+
     /// Don't visit the same block thrice.
     if (std::find(visited.begin(), visited.end(), block) != visited.end()) {
         if (std::find(doubly_visited.begin(), doubly_visited.end(), block) != doubly_visited.end())
@@ -80,6 +82,9 @@ static void calculate_defining_uses(MFunction& function) {
 }
 
 void select_instructions(Module* mod, MFunction& function) {
+    // Don't selection instructions for empty functions.
+    if (function.blocks().empty()) return;
+
     if (mod->context()->target()->is_x64())
         function = lcc::isel::x86_64PatternList::rewrite(mod, function);
 

@@ -187,6 +187,9 @@ static void collect_interferences(AdjacencyMatrix& matrix, std::vector<Register>
 }
 
 void allocate_registers(const MachineDescription& desc, MFunction& function) {
+    // Don't allocate registers for empty functions.
+    if (function.blocks().empty()) return;
+
     // Steps:
     //   1. Collect all existing registers, both hardware and virtual.
     //   2. Walk control flow in reverse, build adjacency matrix as you go.
