@@ -267,7 +267,6 @@ bool Block::has_predecessor(Block* block) const {
 }
 
 auto Inst::Children() -> Generator<Value**> {
-    /// Clear usees.
     switch (kind()) {
         case Kind::Block:
         case Kind::Function:
@@ -313,6 +312,7 @@ auto Inst::Children() -> Generator<Value**> {
         case Kind::Store: {
             auto s = as<StoreInst>(this);
             co_yield &s->pointer;
+            co_yield &s->value;
         } break;
 
         case Kind::CondBranch: {
