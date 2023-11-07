@@ -256,6 +256,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
         case Expr::Kind::Cast: {
             auto e = as<CastExpr>(expr);
             AnalyseType(e->target_type());
+            Analyse(e->value(), e->target_type());
 
             if (e->cast_kind() == CastKind::ImplicitCast or e->cast_kind() == CastKind::LValueToRValueConv) {
                 expr->type(e->target_type());
@@ -288,7 +289,12 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                 break;
             }
 
-            LCC_TODO();
+            if (from->is_rawptr() and to->is_integer()) {
+                expr->type(e->target_type());
+                break;
+            }
+
+            LCC_ASSERT(false, "Unhandled case for cast expr {} -> {}", e->value()->type()->string(use_colours), e->target_type()->string(use_colours));
         } break;
 
         case Expr::Kind::LookupName: {

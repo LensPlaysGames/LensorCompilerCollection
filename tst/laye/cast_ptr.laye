@@ -4,15 +4,20 @@
 // d f _L[a-zA-Z0-9_]+
 
 // * main : i32():
-// +   $b:
-// +     (?<p>$t) = alloca i64
-// +     store i64 69 into $p
-// +     (?<load>$t) = load i64 from $p
-// +     (?<cast>$t) = truncate i64 $load to i32
-// +     return i32 $cast
+// +   bb0:
+// +     (?<r>$t) = alloca ptr
+// +     (?<zero>$t) = bitcast i64 0 to ptr
+// +     store ptr $zero into $r
+// +     (?<p>$t) = alloca ptr
+// +     (?<temp_1>$t) = load ptr from $r
+// +     (?<temp_2>$t) = bitcast ptr $temp_1 to ptr
+// +     store ptr $temp_2 into $t
+// +     (?<temp_3>$t) = load ptr from $r
+// +     (?<temp_4>$t) = truncate ptr $temp_3 to i32
+// +     return i32 $temp_4
 i32 main()
 {
     rawptr r = 0;
     var p = cast(i8[*]) r;
-    return cast(i32) p;
+    return cast(i32) r;
 }

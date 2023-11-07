@@ -252,10 +252,10 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
                 break;
             }
 
-            usz to_sz = to->size(context());
-            usz from_sz = from->size(context());
+            auto IntLikeCast = [&]() {
+                usz to_sz = to->size(context());
+                usz from_sz = from->size(context());
 
-            if (from->is_integer() and to->is_integer()) {
                 if (from_sz == to_sz) {
                     auto cast = new (*mod()) lcc::BitcastInst(value, Convert(to), e->location());
                     Insert(cast);
@@ -275,16 +275,10 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
                     Insert(cast);
                     _ir_values[expr] = cast;
                 }
-            } else if (from->is_integer() and to->is_rawptr()) {
-                auto from_int = as<IntType>(from);
-                if ((usz)from_int->bit_width() == context()->target()->size_of_pointer) {
-                    auto cast = new (*mod()) lcc::BitcastInst(value, Convert(to), e->location());
-                    Insert(cast);
-                    _ir_values[expr] = cast;
-                } else {
-                    Diag::Error(context(), e->location(), "here");
-                    LCC_ASSERT(false, "cast from {} to {}", from->string(), to->string());
-                }
+            };
+
+            if ((from->is_integer() and to->is_integer()) or (from->is_integer() and to->is_rawptr()) or (from->is_rawptr() and to->is_integer())) {
+                IntLikeCast();
             } else if (from->is_rawptr()) {
                 auto cast = new (*mod()) lcc::BitcastInst(value, Convert(to), e->location());
                 Insert(cast);
