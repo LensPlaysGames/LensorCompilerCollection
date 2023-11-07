@@ -399,6 +399,13 @@ void Inst::replace_with(Value* v) {
             }
         }
     }
+
+    /// If v is an instruction and not inserted in a block, insert it now.
+    if (auto inst = cast<Inst>(v); inst and parent and not inst->parent) {
+        auto block = cast<Block>(parent);
+        block->insert_before(inst, this);
+    }
+
     erase();
 }
 

@@ -13,6 +13,22 @@ struct OptimisationPass {
     [[nodiscard]] bool changed() const { return has_changed; }
 
 protected:
+    /// Create a new instruction, replace another instruction with
+    /// it, and mark that a change has occurred.
+    template <typename Instruction, typename... Args>
+    auto Replace(Inst* what, Args&&... args) -> Instruction* {
+        auto i = new (*mod) Instruction(std::forward<Args>(args)...);
+        what->replace_with(i);
+        SetChanged();
+        return i;
+    }
+
+    /// Replace an instruction with a value.
+    auto Replace(Inst* i, Value* v) {
+        i->replace_with(v);
+        SetChanged();
+    }
+
     /// Mark that this pass has changed the ir.
     void SetChanged() { has_changed = true; }
 
@@ -26,18 +42,10 @@ private:
 ///
 /// REQUIRED: void run(Inst* inst);
 ///
-///     Called for every instruction `i` for which `is<I>(i)`
-///     returns true, where `I` is any of the elements in the
-///     pack `Instructions`.
+///     Called for every instruction in a function.
 ///
-template <typename... Instructions>
 struct InstructionRewritePass : OptimisationPass {
     using IsInstRewritePass = std::true_type;
-
-    /// Check if this an instruction should be handled by this pass.
-    [[nodiscard]] static bool matches(Inst* inst) {
-        return (Instructions::classof(inst) or ...);
-    }
 };
 
 /// Optimisation pass that follows the control flow graph.
@@ -72,19 +80,98 @@ struct CFGIterationPass : OptimisationPass {
     using IsCFGIterationPass = std::true_type;
 };
 
-/// Pass that deleted unused locals.
-struct DeleteUnusedAllocasPass : InstructionRewritePass<AllocaInst> {
+/// Pass that performs constant folding and propagation. Passes that
+/// operate on individual instructions and don’t really fit in anywhere
+/// else can also go here.
+struct InstCombinePass : InstructionRewritePass {
+private:
+    /// Get the lhs and rhs of a binary expression as integer constants.
+    static auto GetIntegerPair(BinaryInst* b) {
+        using IC = IntegerConstant;
+
+        struct Result {
+            bool pair;
+            u64 lhs;
+            u64 rhs;
+        };
+
+        if (is<IC>(b->lhs()) and is<IC>(b->rhs())) return Result{
+            true,
+            cast<IC>(b->lhs())->value(),
+            cast<IC>(b->rhs())->value(),
+        };
+
+        return Result{false, 0, 0};
+    }
+
+    /// Handle signed and unsigned division.
+    template <typename DivInst, typename ShiftInst, typename Eval>
+    void DivImpl(Inst* i) {
+        auto d = as<DivInst>(i);
+        auto rhs = cast<IntegerConstant>(d->rhs());
+        if (not rhs) return;
+
+        /// Check for division by zero.
+        if (rhs->value() == 0) Replace<PoisonValue>(i, d->type());
+
+        /// Division by 1 is a no-op.
+        else if (rhs->value() == 1) Replace(i, d->lhs());
+
+        /// Evaluate the division if both operands are constants.
+        else if (auto lhs = cast<IntegerConstant>(d->lhs())) {
+            auto result = new (*mod) IntegerConstant(d->type(), u64(Eval{}(lhs->value(), rhs->value())));
+            Replace(i, result);
+        }
+
+        /// Division by a power of two is a right shift.
+        else if (std::has_single_bit(rhs->value())) {
+            auto shift_amount = new (*mod) IntegerConstant(d->type(), u64(std::countr_zero(rhs->value())));
+            Replace<ShiftInst>(i, d->lhs(), shift_amount, d->location());
+        }
+    }
+
+public:
     void run(Inst* i) {
-        auto alloca = as<AllocaInst>(i);
+        switch (i->kind()) {
+            default: return;
+            case Value::Kind::Alloca: {
+                auto alloca = as<AllocaInst>(i);
 
-        /// If all of our uses are stores, then this alloca is dead.
-        for (auto u : alloca->users())
-            if (not is<StoreInst>(u))
-                return;
+                /// If all of our uses are stores, then this alloca is dead.
+                for (auto u : alloca->users())
+                    if (not is<StoreInst>(u))
+                        return;
 
-        /// Delete the alloca and stores.
-        alloca->erase_cascade();
-        SetChanged();
+                /// Delete the alloca and stores.
+                alloca->erase_cascade();
+                SetChanged();
+            } break;
+
+            case Value::Kind::SDiv:
+                DivImpl<SDivInst, SarInst, decltype([](auto l, auto r) { return i64(l) / i64(r); })>(i);
+                break;
+
+            case Value::Kind::UDiv:
+                DivImpl<UDivInst, ShrInst, decltype([](auto l, auto r) { return u64(l) / u64(r); })>(i);
+                break;
+
+            case Value::Kind::Add: {
+                auto lhs = cast<IntegerConstant>(as<AddInst>(i)->lhs());
+                auto rhs = cast<IntegerConstant>(as<AddInst>(i)->rhs());
+
+                /// Evaluate if possible.
+                if (lhs and rhs) {
+                    auto result = new (*mod) IntegerConstant(i->type(), lhs->value() + rhs->value());
+                    Replace(i, result);
+                }
+
+                /// If either operand is zero, replace the instruction w/ the other one.
+                else if (lhs and lhs->value() == 0)
+                    Replace(i, as<AddInst>(i)->rhs());
+                else if (rhs and rhs->value() == 0)
+                    Replace(i, as<AddInst>(i)->lhs());
+            } break;
+        }
     }
 };
 
@@ -206,8 +293,8 @@ struct Optimiser {
     /// Entry point.
     void run() { // clang-format off
         RunPasses<
-            DeleteUnusedAllocasPass,
-            StoreFowardingPass
+            StoreFowardingPass,
+            InstCombinePass
         >();
     } // clang-format on
 
@@ -235,21 +322,8 @@ private:
                             ii >= f->blocks()[bi]->instructions().size()
                         ) return p.changed();
 
-                        /// Instruction rewrite pass.
-                        if constexpr (requires { typename Pass::IsInstRewritePass; }) {
-                            auto* inst = f->blocks()[bi]->instructions()[ii];
-                            if (Pass::matches(inst)) p.run(inst);
-                        }
-
-                        /// CGF iteration pass.
-                        else if constexpr (requires { typename Pass::IsCFGIterationPass; }) {
-                            p.run(f->blocks()[bi]->instructions()[ii]);
-                        }
-
-                        /// Unknown pass.
-                        else {
-                            static_assert(always_false<Pass>, "Invalid pass");
-                        }
+                        /// Run the pass on the instruction.
+                        p.run(f->blocks()[bi]->instructions()[ii]);
                     }
 
                     /// Call leave() callback if there is one.

@@ -284,7 +284,11 @@ public:
     /// Set the associated machine instruction.
     void machine_inst(MInst* m) { minst = m; }
 
-    /// Replace all uses of this instruction with another value.
+    /// Replace all uses of this instruction with another
+    /// value and erase this instruction from its parent
+    /// block. If the replacement value is an instruction
+    /// that is not inserted anywhere, it will be inserted
+    /// before this instruction.
     void replace_with(Value *v);
 
     /// Get the users of this instruction.
