@@ -7,9 +7,10 @@
 #include <lcc/ir/type.hh>
 #include <lcc/location.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/aint.hh>
+#include <lcc/utils/generator.hh>
 #include <lcc/utils/iterator.hh>
 #include <lcc/utils/rtti.hh>
-#include <lcc/utils/generator.hh>
 
 namespace lcc {
 class Parameter;
@@ -289,7 +290,7 @@ public:
     /// block. If the replacement value is an instruction
     /// that is not inserted anywhere, it will be inserted
     /// before this instruction.
-    void replace_with(Value *v);
+    void replace_with(Value* v);
 
     /// Get the users of this instruction.
     auto users() const -> const std::vector<Inst*>& { return user_list; }
@@ -1356,14 +1357,16 @@ public:
 /// ============================================================================
 /// Immediate value.
 class IntegerConstant : public Value {
-    uint64_t _value;
+    aint _value;
 
 public:
-    IntegerConstant(Type* ty, uint64_t value)
-        : Value(Kind::IntegerConstant, ty), _value(value) {}
+    IntegerConstant(Type* ty, aint value)
+        : Value(Kind::IntegerConstant, ty), _value(value.trunc(u8(as<IntegerType>(ty)->bits()))) {
+        LCC_ASSERT(as<IntegerType>(ty)->bits() <= 64, "Integer constants must be 64 bits or less");
+    }
 
     /// Get the value.
-    uint64_t value() const { return _value; }
+    aint value() const { return _value; }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::IntegerConstant; }

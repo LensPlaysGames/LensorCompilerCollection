@@ -91,8 +91,8 @@ private:
 
         struct Result {
             bool pair;
-            u64 lhs;
-            u64 rhs;
+            aint lhs;
+            aint rhs;
         };
 
         if (is<IC>(b->lhs()) and is<IC>(b->rhs())) return Result{
@@ -101,7 +101,7 @@ private:
             cast<IC>(b->rhs())->value(),
         };
 
-        return Result{false, 0, 0};
+        return Result{false, {}, {}};
     }
 
     /// Handle signed and unsigned division.
@@ -119,13 +119,13 @@ private:
 
         /// Evaluate the division if both operands are constants.
         else if (auto lhs = cast<IntegerConstant>(d->lhs())) {
-            auto result = new (*mod) IntegerConstant(d->type(), u64(Eval(lhs->value(), rhs->value())));
+            auto result = new (*mod) IntegerConstant(d->type(), Eval(lhs->value(), rhs->value()));
             Replace(i, result);
         }
 
         /// Division by a power of two is a right shift.
-        else if (std::has_single_bit(rhs->value())) {
-            auto shift_amount = new (*mod) IntegerConstant(d->type(), u64(std::countr_zero(rhs->value())));
+        else if (rhs->value().is_power_of_two()) {
+            auto shift_amount = new (*mod) IntegerConstant(d->type(), rhs->value().log2());
             Replace<ShiftInst>(i, d->lhs(), shift_amount, d->location());
         }
     }
@@ -148,11 +148,11 @@ public:
             } break;
 
             case Value::Kind::SDiv:
-                DivImpl<SDivInst, SarInst, [](auto l, auto r) { return i64(l) / i64(r); }>(i);
+                DivImpl<SDivInst, SarInst, [](auto l, auto r) { return l.sdiv(r); }>(i);
                 break;
 
             case Value::Kind::UDiv:
-                DivImpl<UDivInst, ShrInst, [](auto l, auto r) { return u64(l) / u64(r); }>(i);
+                DivImpl<UDivInst, ShrInst, [](auto l, auto r) { return l.udiv(r); }>(i);
                 break;
 
             case Value::Kind::Add: {

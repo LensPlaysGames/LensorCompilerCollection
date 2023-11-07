@@ -417,7 +417,7 @@ auto Module::mir() -> std::vector<MFunction> {
                 return MOperandStatic{as<GlobalVariable>(v)};
 
             case Value::Kind::IntegerConstant:
-                return MOperandImmediate{as<IntegerConstant>(v)->value()};
+                return MOperandImmediate{*as<IntegerConstant>(v)->value()};
 
             case Value::Kind::ArrayConstant:
                 LCC_ASSERT(false, "TODO: MIR generation from array constant");
