@@ -9,7 +9,10 @@
 // +     (?<r>$t) = alloca $ret_ty
 // +     store $ret_ty 69 into $r
 // +     (?<r_ptr>$t) = alloca ptr
-// +     (?<addr>$t) = 
+// +     store ptr $r into $r_ptr
+// +     (?<addr>$t) = load ptr from $r_ptr
+// +     (?<val>$t) = load $ret_ty from $addr
+// +     return $ret_ty $val
 i32 main()
 {
     i32 r = 69;
