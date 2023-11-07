@@ -13,6 +13,11 @@ struct OptimisationPass {
     [[nodiscard]] bool changed() const { return has_changed; }
 
 protected:
+    /// Helper to create an integer constant.
+    auto MakeInt(aint value) -> IntegerConstant* {
+        return new (*mod) IntegerConstant(IntegerType::Get(mod->context(), value.bits()), value);
+    }
+
     /// Create a new instruction, replace another instruction with
     /// it, and mark that a change has occurred.
     template <typename Instruction, typename... Args>
@@ -26,6 +31,12 @@ protected:
     /// Replace an instruction with a value.
     auto Replace(Inst* i, Value* v) {
         i->replace_with(v);
+        SetChanged();
+    }
+
+    /// Replace an instruction with a an integer constant.
+    auto Replace(Inst* i, aint value) {
+        i->replace_with(MakeInt(value));
         SetChanged();
     }
 
@@ -119,15 +130,38 @@ private:
 
         /// Evaluate the division if both operands are constants.
         else if (auto lhs = cast<IntegerConstant>(d->lhs())) {
-            auto result = new (*mod) IntegerConstant(d->type(), Eval(lhs->value(), rhs->value()));
-            Replace(i, result);
+            Replace(i, Eval(lhs->value(), rhs->value()));
         }
 
         /// Division by a power of two is a right shift.
         else if (rhs->value().is_power_of_two()) {
-            auto shift_amount = new (*mod) IntegerConstant(d->type(), rhs->value().log2());
-            Replace<ShiftInst>(i, d->lhs(), shift_amount, d->location());
+            Replace<ShiftInst>(i, d->lhs(), MakeInt(rhs->value().log2()), d->location());
         }
+    }
+
+    /// Handle eq, ne, lt, le, gt, ge.
+    template <bool (aint::*Eval)(aint) const>
+    void CmpImpl(Inst* i) {
+        auto b = as<BinaryInst>(i);
+
+        /// A comparison against itself is false for lt, gt, ne and true for le, ge, eq.
+        if (b->lhs() == b->rhs()) {
+            Replace(i, is<EqInst, SLeInst, ULeInst, SGeInst, UGeInst>(i));
+            return;
+        }
+
+        /// Try to fold the value.
+        auto [ok, lhs, rhs] = GetIntegerPair(b);
+        if (not ok) return;
+        Replace(i, std::invoke(Eval, lhs, rhs));
+    }
+
+    /// Handle trunc, sext, zext.
+    template <auto Eval>
+    void TruncExtImpl(Inst* i) {
+        auto e = as<UnaryInstBase>(i);
+        auto op = cast<IntegerConstant>(e->operand());
+        if (op) Replace(i, std::invoke(Eval, op->value(), u8(cast<IntegerType>(e->type())->bitwidth())));
     }
 
 public:
@@ -156,21 +190,74 @@ public:
                 break;
 
             case Value::Kind::Add: {
-                auto lhs = cast<IntegerConstant>(as<AddInst>(i)->lhs());
-                auto rhs = cast<IntegerConstant>(as<AddInst>(i)->rhs());
+                auto add = as<AddInst>(i);
+                auto lhs = cast<IntegerConstant>(add->lhs());
+                auto rhs = cast<IntegerConstant>(add->rhs());
 
                 /// Evaluate if possible.
                 if (lhs and rhs) {
-                    auto result = new (*mod) IntegerConstant(i->type(), lhs->value() + rhs->value());
-                    Replace(i, result);
+                    Replace(i, lhs->value() + rhs->value());
                 }
 
-                /// If either operand is zero, replace the instruction w/ the other one.
-                else if (lhs and lhs->value() == 0)
-                    Replace(i, as<AddInst>(i)->rhs());
-                else if (rhs and rhs->value() == 0)
-                    Replace(i, as<AddInst>(i)->lhs());
+                /// Fold if possible. Otherwise, try to see if our rhs is
+                /// another add whose lhs is a constant and fold with it.
+                else if (lhs) {
+                    if (lhs->value() == 0) Replace(i, add->rhs());
+                    else if (auto radd = cast<AddInst>(add->rhs()); radd and is<IntegerConstant>(radd->lhs())) {
+                        auto rlhs = cast<IntegerConstant>(radd->lhs());
+                        add->lhs(MakeInt(lhs->value() + rlhs->value()));
+                        add->rhs(radd->rhs());
+                    }
+                }
+
+                /// If the rhs is a constant, fold it or move it to the left.
+                else if (rhs) {
+                    if (rhs->value() == 0) Replace(i, add->lhs());
+                    else {
+                        add->swap_operands();
+                        SetChanged();
+                    }
+                }
             } break;
+
+            case Value::Kind::Sub: {
+                auto sub = as<SubInst>(i);
+                auto lhs = cast<IntegerConstant>(sub->lhs());
+                auto rhs = cast<IntegerConstant>(sub->rhs());
+
+                /// If the operands are the same, the result is 0.
+                if (lhs == rhs) {
+                    Replace<IntegerConstant>(i, i->type(), 0);
+                }
+
+                /// Evaluate if possible.
+                else if (lhs and rhs) {
+                    Replace(i, lhs->value() - rhs->value());
+                }
+
+                /// If the RHS is a constant, fold it or move it to the
+                /// left; the latter case involves rewriting `a - b` to
+                /// `-b + a`.
+                else if (rhs) {
+                    if (rhs->value() == 0) Replace(i, sub->lhs());
+                    else Replace<AddInst>(i, MakeInt(-rhs->value()), sub->lhs());
+                }
+            } break;
+
+            case Value::Kind::Eq: CmpImpl<&aint::operator==>(i); break;
+            case Value::Kind::Ne: CmpImpl<&aint::operator!=>(i); break;
+            case Value::Kind::SLt: CmpImpl<&aint::slt>(i); break;
+            case Value::Kind::ULt: CmpImpl<&aint::ult>(i); break;
+            case Value::Kind::SGt: CmpImpl<&aint::sgt>(i); break;
+            case Value::Kind::UGt: CmpImpl<&aint::ugt>(i); break;
+            case Value::Kind::SLe: CmpImpl<&aint::sle>(i); break;
+            case Value::Kind::ULe: CmpImpl<&aint::ule>(i); break;
+            case Value::Kind::SGe: CmpImpl<&aint::sge>(i); break;
+            case Value::Kind::UGe: CmpImpl<&aint::uge>(i); break;
+
+            case Value::Kind::Trunc: TruncExtImpl<&aint::trunc>(i); break;
+            case Value::Kind::SExt: TruncExtImpl<&aint::sext>(i); break;
+            case Value::Kind::ZExt: TruncExtImpl<&aint::zext>(i); break;
         }
     }
 };

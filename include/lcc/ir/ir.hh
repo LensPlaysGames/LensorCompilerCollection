@@ -249,6 +249,13 @@ protected:
         of->user_list.erase(it);
     }
 
+    /// Replace an operand with another operand and update uses.
+    void UpdateOperand(Value*& op, Value* newval) {
+        RemoveUse(op, this);
+        AddUse(newval, this);
+        op = newval;
+    }
+
 public:
     /// Get the parent block.
     auto block() const -> Block* { return parent; }
@@ -960,13 +967,16 @@ public:
     auto lhs() const -> Value* { return left; }
 
     /// Replace the left operand.
-    void lhs(Value* v);
+    void lhs(Value* v) { UpdateOperand(left, v); }
 
     /// Get the right operand.
     auto rhs() const -> Value* { return right; }
 
     /// Replace the right operand.
-    void rhs(Value* v);
+    void rhs(Value* v) { UpdateOperand(right, v); }
+
+    /// Swap the LHS and RHS.
+    void swap_operands() { std::swap(left, right); }
 
     /// RTTI.
     static bool classof(Value* v) { return +v->kind() >= +Kind::Add; }
