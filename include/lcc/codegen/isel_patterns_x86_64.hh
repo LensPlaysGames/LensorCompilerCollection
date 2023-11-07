@@ -9,10 +9,6 @@ namespace isel {
 
 using OK = OperandKind;
 
-using store_reg_local = Pattern<
-    InstList<Inst<usz(MInst::Kind::Store), Operand<OK::Register, Register<0, 0>>, Operand<OK::Local, Local<>>>>,
-    InstList<Inst<usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputOperandReference, o<1>>>>>;
-
 using ret = Pattern<
     InstList<Inst<usz(MInst::Kind::Return)>>,
     InstList<Inst<usz(x86_64::Opcode::Return)>>>;
@@ -39,10 +35,18 @@ using ret_reg = ret_some_op<Operand<OK::Register, Register<0, 0>>>;
 template <typename load_op>
 using load_some_op = Pattern<
     InstList<Inst<usz(MInst::Kind::Load), load_op>>,
-    InstList<Inst<usz(x86_64::Opcode::Move), Operand<OK::InputInstructionReference, i<0>>>>>;
+    InstList<Inst<usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputInstructionReference, i<0>>>>>;
 
 using load_local = load_some_op<Operand<OK::Local, Local<>>>;
 using load_reg = load_some_op<Operand<OK::Register, Register<0, 0>>>;
+
+template <typename store_op>
+using store_some_op_local = Pattern<
+    InstList<Inst<usz(MInst::Kind::Store), store_op, Operand<OK::Local, Local<>>>>,
+    InstList<Inst<usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputOperandReference, o<1>>>>>;
+
+using store_reg_local = store_some_op_local<Operand<OK::Register, Register<0, 0>>>;
+using store_imm_local = store_some_op_local<Operand<OK::Immediate, Immediate<0>>>;
 
 using x86_64PatternList = PatternList<
     ret,
@@ -50,7 +54,8 @@ using x86_64PatternList = PatternList<
     ret_reg,
     load_local,
     load_reg,
-    store_reg_local>;
+    store_reg_local,
+    store_imm_local>;
 
 } // namespace isel
 } // namespace lcc
