@@ -199,9 +199,15 @@ std::string layec::ToString(layec::OperatorKind kind) {
         case OperatorKind::Div: return "/";
         case OperatorKind::Mod: return "%";
         case OperatorKind::Greater: return ">";
+        case OperatorKind::GreaterEqual: return ">=";
         case OperatorKind::Less: return "<";
+        case OperatorKind::LessEqual: return "<=";
         case OperatorKind::Equal: return "==";
         case OperatorKind::NotEqual: return "!=";
+        case OperatorKind::Pos: return "+";
+        case OperatorKind::Neg: return "-";
+        case OperatorKind::Address: return "&";
+        case OperatorKind::Deref: return "*";
         case OperatorKind::Compl: return "~";
         case OperatorKind::And: return "&";
         case OperatorKind::Or: return "|";
@@ -214,14 +220,17 @@ std::string layec::ToString(layec::OperatorKind kind) {
         case OperatorKind::DivEqual: return "/=";
         case OperatorKind::MulEqual: return "*/";
         case OperatorKind::ModEqual: return "%=";
-        case OperatorKind::LessEqual: return "<=";
-        case OperatorKind::GreaterEqual: return ">=";
         case OperatorKind::AndEqual: return "&=";
         case OperatorKind::OrEqual: return "|=";
         case OperatorKind::XorEqual: return "~=";
         case OperatorKind::LshEqual: return "<<=";
         case OperatorKind::RshEqual: return ">>=";
+        case OperatorKind::Call: return "()";
+        case OperatorKind::Cast: return "cast";
         case OperatorKind::Index: return "[]";
+        case OperatorKind::IndexEqual: return "[]=";
+        case OperatorKind::New: return "new";
+        case OperatorKind::Delete: return "delete";
         default: return "<unknown>";
     }
 }
@@ -307,6 +316,7 @@ std::string layec::ToString(Expr::Kind kind) {
         case Ek::TypeInt: return "TypeInt";
         case Ek::TypeFloat: return "TypeFloat";
         case Ek::TypePoison: return "TypePoison";
+        case Ek::TypeReference: return "TypeReference";
         default: return "<unknown>";
     }
 }
@@ -368,6 +378,10 @@ auto layec::Type::string(bool use_colours) const -> std::string {
         return out;
     };
 
+    auto AccessString = [&](TypeAccess access, bool lhs_space = true) {
+        return access == TypeAccess::ReadOnly ? "" : (lhs_space ? fmt::format(" {}mut{}", C(Cyan), C(Reset)) : fmt::format("{}mut{} ", C(Cyan), C(Reset)));
+    };
+
     switch (kind()) {
         default: LCC_ASSERT(false, "unhandled type in type->string()");
 
@@ -397,10 +411,39 @@ auto layec::Type::string(bool use_colours) const -> std::string {
             return path + TemplateArgsToString(as<PathType>(this)->template_args());
         }
 
-        case Kind::TypeArray: return fmt::format("{}[{} array]", as<ArrayType>(this)->elem_type()->string(use_colours), as<ArrayType>(this)->rank_lengths().size());
-        case Kind::TypeSlice: return fmt::format("{}[]", as<SliceType>(this)->elem_type()->string(use_colours));
-        case Kind::TypePointer: return fmt::format("{}*", as<PointerType>(this)->elem_type()->string(use_colours));
-        case Kind::TypeBuffer: return fmt::format("{}[*]", as<BufferType>(this)->elem_type()->string(use_colours));
+        case Kind::TypeArray: {
+            auto t = as<ArrayType>(this);
+            if (sema_ok()) {
+                LCC_TODO();
+            }
+
+            return fmt::format(
+                "{}{}[{} array]",
+                t->elem_type()->string(use_colours),
+                AccessString(t->access()),
+                t->rank_lengths().size()
+            );
+        }
+
+        case Kind::TypeSlice: {
+            auto t = as<SliceType>(this);
+            return fmt::format("{}{}[]", t->elem_type()->string(use_colours), AccessString(t->access()));
+        }
+
+        case Kind::TypePointer: {
+            auto t = as<PointerType>(this);
+            return fmt::format("{}{}*", t->elem_type()->string(use_colours), AccessString(t->access()));
+        }
+
+        case Kind::TypeReference: {
+            auto t = as<ReferenceType>(this);
+            return fmt::format("{}{}&", t->elem_type()->string(use_colours), AccessString(t->access()));
+        }
+
+        case Kind::TypeBuffer: {
+            auto t = as<BufferType>(this);
+            return fmt::format("{}{}[*]", t->elem_type()->string(use_colours), AccessString(t->access()));
+        }
 
         case Kind::TypeFunc: {
             auto f = as<FuncType>(this);
@@ -436,6 +479,23 @@ auto layec::Type::string(bool use_colours) const -> std::string {
             return fmt::format("{}f{}{}", C(Cyan), t->bit_width(), C(Reset));
         }
     }
+}
+
+auto layec::Type::strip_pointers_and_references() -> Type* {
+    auto ty = this;
+    while (is<PointerType, ReferenceType>(ty)) ty = as<SingleElementType>(ty)->elem_type();
+    return ty;
+}
+
+auto layec::Type::strip_references() -> Type* {
+    auto ty = this;
+    while (is<ReferenceType>(ty)) ty = as<ReferenceType>(ty)->elem_type();
+    return ty;
+}
+
+bool layec::Expr::is_lvalue() const {
+    if (not type()) return false;
+    return is<ReferenceType>(type());
 }
 
 bool layec::Type::Equal(const Type* a, const Type* b) {
@@ -488,6 +548,12 @@ bool layec::Type::Equal(const Type* a, const Type* b) {
         case Kind::TypePointer: {
             auto a2 = as<PointerType>(a);
             auto b2 = as<PointerType>(b);
+            return a2->access() == b2->access() and Type::Equal(a2->elem_type(), b2->elem_type());
+        }
+
+        case Kind::TypeReference: {
+            auto a2 = as<ReferenceType>(a);
+            auto b2 = as<ReferenceType>(b);
             return a2->access() == b2->access() and Type::Equal(a2->elem_type(), b2->elem_type());
         }
 

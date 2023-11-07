@@ -51,7 +51,17 @@ private:
     void InsertPointerToIntegerCast(Expr*& operand);
     void WrapWithCast(Expr*& expr, Type* type, CastKind kind);
 
-    auto Ptr(Type* type) -> PointerType*;
+    /// Convert lvalues to rvalues and leave rvalues unchanged.
+    ///
+    /// This may insert a cast expression.
+    /// \return The type of the rvalue.
+    auto LValueToRValue(Expr*& expr) -> Type*;
+
+    /// Create a (type-checked) pointer to a type.
+    auto Ptr(Type* type, TypeAccess access) -> PointerType*;
+
+    /// Create a (type-checked) reference to a type.
+    auto Ref(Type* type, TypeAccess access) -> ReferenceType*;
 
     auto NameToMangledString(std::string_view s) -> std::string;
     auto TypeToMangledString(Type* type) -> std::string;

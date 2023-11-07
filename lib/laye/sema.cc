@@ -244,7 +244,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
     switch (kind) {
         case Expr::Kind::Cast: {
             auto e = as<CastExpr>(expr);
-            if (e->cast_kind() == CastKind::ImplicitCast) {
+            if (e->cast_kind() == CastKind::ImplicitCast or e->cast_kind() == CastKind::LValueToRValueConv) {
                 expr->type(e->type());
                 expr->set_sema_done();
                 break;
@@ -289,7 +289,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                 }
 
                 e->target(binding_decl);
-                e->type(binding_decl->type());
+                e->type(Ref(binding_decl->type(), TypeAccess::Mutable));
             } else if ([[maybe_unused]] auto function_decl = cast<FunctionDecl>(symbols.first->second)) {
                 std::vector<FunctionDecl*> overloads;
                 auto AppendOverloads = [&overloads](auto&& range) {
@@ -310,7 +310,13 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                     break;
                 }
 
-                LCC_TODO();
+                Statement* os = new (*module()) OverloadSet(module(), expr->location(), name, overloads);
+                Analyse(os);
+
+                if (os->sema_errored()) expr->set_sema_errored();
+
+                e->target(as<NamedDecl>(os));
+                e->type(Type::OverloadSet);
             } else {
                 LCC_TODO();
             }
@@ -437,6 +443,58 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
             }
         } break;
 
+        case Expr::Kind::Unary: {
+            auto e = as<UnaryExpr>(expr);
+            Analyse(e->value());
+
+            switch (e->operator_kind()) {
+                default: {
+                    LCC_ASSERT(false, "unimplemented unary operator {}", ToString(e->operator_kind()));
+                } break;
+
+                case OperatorKind::Address: {
+                    if (not e->value()->is_lvalue()) {
+                        Error(expr->location(), "Cannot take the address of a non-lvalue expression");
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                        break;
+                    }
+
+                    LCC_ASSERT(e->value()->type()->is_reference());
+                    auto ref_type = as<ReferenceType>(e->value()->type());
+                    expr->type(Ptr(ref_type->elem_type(), ref_type->access()));
+                } break;
+
+                case OperatorKind::Deref: {
+                    PointerType* pointer_type = nullptr;
+                    Type*& value_type = e->value()->type();
+
+                    auto value_type_noref = value_type->strip_references();
+                    if (not value_type_noref->is_pointer())
+                        goto cannot_dereference_type;
+
+                    // make sure we have that pointer type; if it's the same, it's a noop
+                    if (not Convert(e->value(), value_type_noref)) {
+                        expr->set_sema_errored();
+                        expr->type(new (*module()) PoisonType{expr->location()});
+                        break;
+                    }
+
+                    pointer_type = as<PointerType>(value_type_noref);
+                    if (pointer_type->elem_type()->is_void() or pointer_type->elem_type()->is_noreturn())
+                        goto cannot_dereference_type;
+
+                    expr->type(pointer_type->elem_type());
+                    break;
+
+                cannot_dereference_type:
+                    Error(expr->location(), "Cannot dereference type {}", e->value()->type()->string(use_colours));
+                    expr->set_sema_errored();
+                    expr->type(new (*module()) PoisonType{expr->location()});
+                } break;
+            }
+        } break;
+
         case Expr::Kind::Binary: {
             auto e = as<BinaryExpr>(expr);
 
@@ -453,20 +511,23 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                 case OperatorKind::Mul:
                 case OperatorKind::Div:
                 case OperatorKind::Mod: {
-                    if (not e->lhs()->type()->is_number()) {
+                    auto lhs_type = e->lhs()->type()->strip_references();
+                    auto rhs_type = e->rhs()->type()->strip_references();
+
+                    if (not lhs_type->is_number()) {
                         Error(
                             e->lhs()->location(),
                             "Cannot use type {} in operator {}",
-                            e->lhs()->type()->string(),
+                            lhs_type->string(),
                             ToString(e->operator_kind())
                         );
                         expr->set_sema_errored();
                         expr->type(new (*module()) PoisonType{expr->location()});
-                    } else if (not e->rhs()->type()->is_number()) {
+                    } else if (not rhs_type->is_number()) {
                         Error(
                             e->rhs()->location(),
                             "Cannot use type {} in operator {}",
-                            e->rhs()->type()->string(),
+                            rhs_type->string(),
                             ToString(e->operator_kind())
                         );
                         expr->set_sema_errored();
@@ -599,6 +660,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
 }
 
 bool layec::Sema::AnalyseType(Type*& type) {
+    if (type->sema_done_or_errored()) return type->sema_ok();
     type->set_sema_in_progress();
 
     auto kind = type->kind();
@@ -694,6 +756,7 @@ bool layec::Sema::AnalyseType(Type*& type) {
 
         case Expr::Kind::TypeSlice:
         case Expr::Kind::TypePointer:
+        case Expr::Kind::TypeReference:
         case Expr::Kind::TypeBuffer: {
             auto t = as<SingleElementType>(type);
             if (not AnalyseType(t->elem_type()))
@@ -771,17 +834,50 @@ int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
     auto from = expr->type();
     if (from->sema_errored() or to->sema_errored()) return TypesContainErrors;
 
-    auto Score = [](int i) {
+    /// This is so we don’t forget that we’ve applied lvalue-to-rvalue
+    /// conversion and raised the score by one.
+    bool requires_lvalue_to_rvalue_conversion = false;
+    auto Score = [requires_lvalue_to_rvalue_conversion](int i) {
         LCC_ASSERT(i >= 1, "Score must be 1 or greater. Use the enum constants above for values <= 0");
-        return i;
+        return i + int(requires_lvalue_to_rvalue_conversion);
     };
 
     if (Type::Equal(from, to))
         return NoOp;
 
-    if (from->is_integer() and to->is_bool()) {
-        if constexpr (PerformConversion) InsertImplicitCast(expr, to);
-        return Score(1);
+    /// Get reference-to-reference conversions out of the way early.
+    if (from->is_reference() and to->is_reference()) {
+        /// A reference can be converted to the same reference.
+        if (Type::Equal(from, to)) return NoOp;
+
+        /// References to arrays can be converted to references to
+        /// the first element.
+        auto arr = cast<ArrayType>(as<ReferenceType>(from)->elem_type());
+        if (arr and Type::Equal(arr->elem_type(), as<ReferenceType>(to)->elem_type())) {
+            if constexpr (PerformConversion) InsertImplicitCast(expr, to);
+            return Score(1);
+        }
+
+        return ConversionImpossible;
+    }
+
+    requires_lvalue_to_rvalue_conversion = expr->is_lvalue();
+    if constexpr (PerformConversion) from = LValueToRValue(expr);
+    else from = from->strip_references();
+
+    if (Type::Equal(from, to))
+        return NoOp;
+
+    if (from->is_pointer() and to->is_pointer()) {
+        auto from_ptr = as<PointerType>(from);
+        auto to_ptr = as<PointerType>(to);
+
+        // If the two pointer types have the same element type and compatible type access modifiers, it's a noop
+        if (Type::Equal(from_ptr->elem_type(), to_ptr->elem_type())) {
+            // notably, compatible type access means either equal, or the target is stricter
+            if (from_ptr->access() == to_ptr->access() or to_ptr->access() == TypeAccess::ReadOnly)
+                return NoOp;
+        }
     }
 
     if (from->is_integer() and to->is_rawptr()) {
@@ -797,6 +893,11 @@ int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
     if (from->is_rawptr() and (to->is_buffer() or to->is_pointer())) {
         if constexpr (PerformConversion) InsertImplicitCast(expr, to);
         return Score(3);
+    }
+
+    if (from->is_integer() and to->is_bool()) {
+        if constexpr (PerformConversion) InsertImplicitCast(expr, to);
+        return Score(1);
     }
 
     if (from->is_integer() and to->is_integer()) {
@@ -878,7 +979,8 @@ bool layec::Sema::Convert(Expr*& expr, Type* to) {
 void layec::Sema::ConvertOrError(Expr*& expr, Type* to) {
     if (not Convert(expr, to)) Error(
         expr->location(),
-        "Expression is not convertible to type {}",
+        "Expression of type {} is not convertible to type {}",
+        expr->type()->string(use_colours),
         to->string(use_colours)
     );
 }
@@ -919,8 +1021,32 @@ void layec::Sema::WrapWithCast(Expr*& expr, Type* type, CastKind kind) {
     expr = wrapper;
 }
 
-auto layec::Sema::Ptr(Type* type) -> PointerType* {
-    LCC_ASSERT(false);
+auto layec::Sema::LValueToRValue(Expr*& expr) -> Type* {
+    /// Functions are cast to function pointers.
+    if (expr->type()->is_function()) {
+        auto ty = Ptr(expr->type(), TypeAccess::Mutable);
+        WrapWithCast(expr, ty, CastKind::LValueToRValueConv);
+        return ty;
+    }
+
+    /// Otherwise, remove references and cast to that.
+    auto ty = expr->type()->strip_references();
+    if (not Type::Equal(ty, expr->type()))
+        WrapWithCast(expr, ty, CastKind::LValueToRValueConv);
+    
+    return ty;
+}
+
+auto layec::Sema::Ptr(Type* type, TypeAccess access) -> PointerType* {
+    Type* ptr = new (*module()) PointerType(type->location(), access, type);
+    AnalyseType(ptr);
+    return as<PointerType>(ptr);
+}
+
+auto layec::Sema::Ref(Type* type, TypeAccess access) -> ReferenceType* {
+    Type* ptr = new (*module()) ReferenceType(type->location(), access, type);
+    AnalyseType(ptr);
+    return as<ReferenceType>(ptr);
 }
 
 auto layec::Sema::NameToMangledString(std::string_view s) -> std::string {

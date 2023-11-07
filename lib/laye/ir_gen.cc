@@ -44,6 +44,7 @@ lcc::Type* layec::IRGen::Convert(layec::Type* in) {
 
         case Expr::Kind::TypeRawptr:
         case Expr::Kind::TypePointer:
+        case Expr::Kind::TypeReference:
         case Expr::Kind::TypeBuffer: {
             return lcc::Type::PtrTy;
         }
@@ -239,6 +240,18 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
 
             auto value = GenerateExpression(e->value());
 
+            if (e->cast_kind() == CastKind::LValueToRValueConv) {
+                auto load = new (*mod()) LoadInst(Convert(to), value, expr->location());
+                Insert(load);
+                _ir_values[expr] = load;
+                break;
+            }
+
+            if (Type::Equal(to, from)) {
+                _ir_values[expr] = value;
+                break;
+            }
+
             if (from->is_integer() and to->is_rawptr()) {
                 auto from_int = as<IntType>(from);
                 if ((usz)from_int->bit_width() == context()->target()->size_of_pointer) {
@@ -325,17 +338,7 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
             auto target_decl = e->target();
 
             auto target_value = _ir_values.at(target_decl);
-
-            Value* lookup_value = target_value;
-            if (not is<FunctionDecl>(target_decl)) {
-                auto load_type = Convert(e->type());
-                auto load = new (*mod()) lcc::LoadInst(load_type, lookup_value, e->location());
-                Insert(load);
-
-                lookup_value = load;
-            }
-
-            _ir_values[expr] = lookup_value;
+            _ir_values[expr] = target_value;
         } break;
 
         case Ek::LookupPath: {
@@ -343,60 +346,59 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
             auto target_decl = e->target();
 
             auto target_value = _ir_values.at(target_decl);
+            _ir_values[expr] = target_value;
+        } break;
 
-            Value* lookup_value = target_value;
-            if (not is<FunctionDecl>(target_decl)) {
-                auto load_type = Convert(e->type());
-                auto load = new (*mod()) lcc::LoadInst(load_type, lookup_value, e->location());
-                Insert(load);
+        case Ek::Unary: {
+            auto e = as<UnaryExpr>(expr);
+            auto value = GenerateExpression(e->value());
 
-                lookup_value = load;
+            switch (e->operator_kind()) {
+                default: {
+                    LCC_ASSERT(false, "unhandled unary operator kind in Laye IR gen {}", ToString(e->operator_kind()));
+                } break;
+
+                case OperatorKind::Address: {
+                    _ir_values[expr] = value;
+                } break;
+
+                case OperatorKind::Deref: {
+                    auto load = new (*mod()) LoadInst(Convert(e->type()), value, expr->location());
+                    Insert(load);
+                    _ir_values[expr] = load;
+                } break;
             }
-
-            _ir_values[expr] = lookup_value;
         } break;
 
         case Ek::Binary: {
             auto e = as<BinaryExpr>(expr);
+            auto lhs = GenerateExpression(e->lhs());
+            auto rhs = GenerateExpression(e->rhs());
+
             switch (e->operator_kind()) {
                 default: {
                     LCC_ASSERT(false, "unhandled binary operator kind in Laye IR gen {}", ToString(e->operator_kind()));
                 } break;
 
                 case OperatorKind::Add: {
-                    auto lhs = GenerateExpression(e->lhs());
-                    auto rhs = GenerateExpression(e->rhs());
-
                     auto arith = new (*mod()) AddInst{lhs, rhs, e->location()};
                     Insert(arith);
-
                     _ir_values[expr] = arith;
                 } break;
 
                 case OperatorKind::Sub: {
-                    auto lhs = GenerateExpression(e->lhs());
-                    auto rhs = GenerateExpression(e->rhs());
-
                     auto arith = new (*mod()) SubInst{lhs, rhs, e->location()};
                     Insert(arith);
-
                     _ir_values[expr] = arith;
                 } break;
 
                 case OperatorKind::Mul: {
-                    auto lhs = GenerateExpression(e->lhs());
-                    auto rhs = GenerateExpression(e->rhs());
-
                     auto arith = new (*mod()) MulInst{lhs, rhs, e->location()};
                     Insert(arith);
-
                     _ir_values[expr] = arith;
                 } break;
 
                 case OperatorKind::Div: {
-                    auto lhs = GenerateExpression(e->lhs());
-                    auto rhs = GenerateExpression(e->rhs());
-
                     Inst* arith;
                     if (e->type()->is_integer() && not as<IntType>(e->type())->is_signed()) {
                         arith = new (*mod()) UDivInst{lhs, rhs, e->location()};
@@ -410,22 +412,14 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
                 } break;
 
                 case OperatorKind::Equal: {
-                    auto lhs = GenerateExpression(e->lhs());
-                    auto rhs = GenerateExpression(e->rhs());
-
                     auto compare = new (*mod()) EqInst{lhs, rhs, e->location()};
                     Insert(compare);
-
                     _ir_values[expr] = compare;
                 } break;
 
                 case OperatorKind::NotEqual: {
-                    auto lhs = GenerateExpression(e->lhs());
-                    auto rhs = GenerateExpression(e->rhs());
-
                     auto compare = new (*mod()) NeInst{lhs, rhs, e->location()};
                     Insert(compare);
-
                     _ir_values[expr] = compare;
                 } break;
             }

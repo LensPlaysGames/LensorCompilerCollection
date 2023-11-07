@@ -397,6 +397,7 @@ enum struct VarargsKind {
 enum class CastKind {
     HardCast,
     ImplicitCast,
+    LValueToRValueConv,
 };
 
 class Scope {
@@ -623,6 +624,7 @@ public:
         TypeNilable,
         TypeErrUnion,
 
+        TypeOverloadSet,
         TypeLookupName,
         TypeLookupPath,
         TypeLiteralString,
@@ -631,6 +633,7 @@ public:
         TypeSlice,
         TypePointer,
         TypeBuffer,
+        TypeReference,
 
         TypeFunc,
 
@@ -655,6 +658,7 @@ protected:
 public:
     auto kind() const { return _kind; }
     auto type() const { return _type; }
+    auto type() -> Type*& { return _type; }
     void type(Type* type) { _type = type; }
 
     bool evaluate(const LayeContext* laye_context, EvalResult& out, bool required);
@@ -665,6 +669,8 @@ public:
 
     // Returns true if the value of this expression cannot be discarded.
     bool is_nodiscard() const;
+
+    bool is_lvalue() const;
 };
 
 std::string ToString(Expr::Kind kind);
@@ -792,13 +798,12 @@ public:
 };
 
 class OverloadSet : public NamedDecl {
-    std::vector<FunctionDecl*> _overloads{};
+    std::vector<FunctionDecl*> _overloads;
 
 public:
-    OverloadSet(Module* module, Location location, std::string name)
-        : NamedDecl(Kind::OverloadSet, module, location, {}, std::move(name)) {}
+    OverloadSet(Module* module, Location location, std::string name, std::vector<FunctionDecl*> overloads)
+        : NamedDecl(Kind::OverloadSet, module, location, {}, std::move(name)), _overloads(std::move(overloads)) {}
 
-    void add(FunctionDecl* overload) { _overloads.push_back(overload); }
     auto overloads() const -> const decltype(_overloads)& { return _overloads; }
     auto overloads() -> decltype(_overloads)& { return _overloads; }
 
@@ -1715,6 +1720,17 @@ public:
     /// \param ctx The context to use.
     /// \return The size of this type, in bits.
     usz size(const Context* ctx) const;
+
+    /// Get the minimum amount of bytes required to represent this type.
+    /// Implemented in terms of `size()`.
+    ///
+    /// \param ctx The context to use.
+    /// \return The minimum amount of bytes required to represent an
+    ///         instance of this type.
+    usz size_in_bytes(const Context* ctx) const {
+        return (size(ctx) / 8) + (size(ctx) % 8 ? 1 : 0);
+    }
+
     /// Get the alignment of this type. It may be target-dependent,
     /// which is why this takes a context parameter.
     ///
@@ -1743,6 +1759,8 @@ public:
     bool is_array() const { return kind() == Kind::TypeArray; }
     /// Check if this is a pointer type.
     bool is_pointer() const { return kind() == Kind::TypePointer; }
+    /// Check if this is a reference type.
+    bool is_reference() const { return kind() == Kind::TypeReference; }
     /// Check if this is a buffer type.
     bool is_buffer() const { return kind() == Kind::TypeBuffer; }
     /// Check if this is a function type.
@@ -1752,7 +1770,18 @@ public:
     /// Check if this is a numeric type.
     bool is_number() const { return kind() == Kind::TypeInt or kind() == Kind::TypeFloat; }
 
+    /// Return this type stripped of any pointers and references.
+    auto strip_pointers_and_references() -> Type*;
+
+    /// Return this type stripped of any references.
+    auto strip_references() -> Type*;
+
+    /// It’s way too easy to accidentally write `a == b` when
+    /// you really meant `*a == *b`, so we don’t allow this.
+    bool operator==(const Type& other) const = delete;
+
     static Type* Bool;
+    static Type* OverloadSet;
 
     /// Check if types are equal to each other.
     static bool Equal(const Type* a, const Type* b);
@@ -1790,6 +1819,14 @@ public:
     auto value_type() const { return _value_type; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeErrUnion; }
+};
+
+class OverloadSetType : public Type {
+public:
+    constexpr OverloadSetType(Location location)
+        : Type(Kind::TypeOverloadSet, location) {}
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeOverloadSet; }
 };
 
 class NameType : public Type {
@@ -1858,7 +1895,7 @@ public:
     auto elem_type() const { return _elem_type; }
     auto elem_type() -> Type*& { return _elem_type; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeNilable or (+expr->kind() >= +Kind::TypeArray and +expr->kind() <= +Kind::TypeBuffer); }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeNilable or (+expr->kind() >= +Kind::TypeArray and +expr->kind() <= +Kind::TypeReference); }
 };
 
 class NilableType : public SingleElementType {
@@ -1920,6 +1957,18 @@ public:
     auto access() const { return _access; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeBuffer; }
+};
+
+class ReferenceType : public SingleElementType {
+    TypeAccess _access;
+
+public:
+    ReferenceType(Location location, TypeAccess access, Type* elem_type)
+        : SingleElementType(Kind::TypeReference, location, elem_type), _access(access) {}
+
+    auto access() const { return _access; }
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeReference; }
 };
 
 class FuncType : public Type {

@@ -1,0 +1,18 @@
+// R %lcc --ir %s
+// d b  [a-zA-Z0-9\.]+
+// d t  %[0-9]+
+// d f  _L[a-zA-Z0-9_]+
+// d ty [a-zA-Z0-9_]+
+
+// * main : (?<ret_ty>$ty)():
+// +   $b:
+// +     (?<r>$t) = alloca $ret_ty
+// +     store $ret_ty 69 into $r
+// +     (?<r_ptr>$t) = alloca ptr
+// +     (?<addr>$t) = 
+i32 main()
+{
+    i32 r = 69;
+    i32* r_ptr = &r;
+    return *r_ptr;
+}

@@ -1704,6 +1704,14 @@ auto Parser::ParsePrimaryExpr() -> Result<Expr*> {
         auto literal_value = tok.float_value;
         NextToken();
         return ParsePrimaryExprContinue(new (*this) LitFloatExpr{location, literal_value});
+    } else if (Consume(Tk::Ampersand)) {
+        auto addr_value = ParsePrimaryExpr();
+        if (not addr_value) return addr_value.diag();
+        return new (*this) UnaryExpr{location, OperatorKind::Address, *addr_value};
+    } else if (Consume(Tk::Star)) {
+        auto deref_value = ParsePrimaryExpr();
+        if (not deref_value) return deref_value.diag();
+        return new (*this) UnaryExpr{location, OperatorKind::Deref, *deref_value};
     }
 
     NextToken();
