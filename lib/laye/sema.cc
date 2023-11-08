@@ -174,9 +174,22 @@ void layec::Sema::Analyse(Statement*& statement) {
 
         case Statement::Kind::DeclStruct: {
             auto s = as<StructDecl>(statement);
+
+            std::vector<StructField> fields{};
             for (auto& field : s->fields()) {
                 Analyse((Statement*&) field);
+                fields.push_back({ field->name(), field->type() });
             }
+
+            auto struct_type = new (*module()) StructType(s->location(), s->name(), std::move(fields));
+
+            if (not s->variants().empty())
+            {
+                std::vector<VariantType*> variants{};
+                struct_type->variants(std::move(variants));
+            }
+
+            s->type(struct_type);
         } break;
 
         case Statement::Kind::DeclAlias: {
@@ -750,6 +763,8 @@ bool layec::Sema::AnalyseType(Type*& type) {
 
             if (auto alias_decl = cast<AliasDecl>(symbols.first->second)) {
                 type = alias_decl->type();
+            } else if (auto struct_decl = cast<StructDecl>(symbols.first->second)) {
+                type = struct_decl->type();
             } else {
                 type->set_sema_errored();
                 LCC_TODO();
@@ -1094,6 +1109,11 @@ auto layec::Sema::NameToMangledString(std::string_view s) -> std::string {
 auto layec::Sema::TypeToMangledString(Type* type) -> std::string {
     switch (type->kind()) {
         default: LCC_TODO();
+
+        case Expr::Kind::TypeStruct: {
+            auto t = as<StructType>(type);
+            return NameToMangledString(t->name());
+        }
 
         case Expr::Kind::TypeNilable: {
             auto t = as<NilableType>(type);

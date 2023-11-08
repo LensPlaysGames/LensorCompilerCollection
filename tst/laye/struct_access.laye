@@ -1,0 +1,15 @@
+// R
+
+struct vec2i
+{
+    i32 x;
+    i32 y;
+}
+
+i32 main()
+{
+    vec2i v;
+    v.x = 34;
+    v.y = 35;
+    return v.x + v.y;
+}

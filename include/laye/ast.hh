@@ -636,6 +636,9 @@ public:
         TypeReference,
 
         TypeFunc,
+        TypeStruct,
+        TypeVariant,
+        TypeEnum,
 
         TypeNoreturn,
         TypeRawptr,
@@ -813,6 +816,7 @@ public:
 class StructDecl : public NamedDecl {
     std::vector<BindingDecl*> _fields;
     std::vector<StructDecl*> _variants;
+    Type* _type;
 
 public:
     StructDecl(Module* module, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params, std::vector<BindingDecl*> fields, std::vector<StructDecl*> variants)
@@ -822,6 +826,10 @@ public:
     auto fields() -> decltype(_fields)& { return _fields; }
     auto variants() const -> const decltype(_variants)& { return _variants; }
     auto variants() -> decltype(_variants)& { return _variants; }
+
+    auto type() const { return _type; }
+    auto type() -> Type*& { return _type; }
+    void type(Type* type) { _type = type; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclStruct; }
 };
@@ -1994,6 +2002,59 @@ public:
     auto param_types() -> decltype(_param_types)& { return _param_types; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeFunc; }
+};
+
+struct StructField {
+    std::string name;
+    Type* type;
+};
+
+class VariantType;
+
+class StructType : public Type {
+    std::string _name;
+    std::vector<StructField> _fields;
+    std::vector<VariantType*> _variants;
+
+protected:
+    StructType(Kind kind, Location location, std::string name, std::vector<StructField> fields)
+        : Type(kind, location), _name(std::move(name)), _fields(std::move(fields)) {}
+
+public:
+    StructType(Location location, std::string name, std::vector<StructField> fields)
+        : Type(Kind::TypeStruct, location), _name(std::move(name)), _fields(std::move(fields)) {}
+
+    auto name() const -> const std::string& { return _name; }
+
+    auto fields() const -> const decltype(_fields)& { return _fields; }
+    auto fields() -> decltype(_fields)& { return _fields; }
+
+    auto variants() const -> const decltype(_variants)& { return _variants; }
+    auto variants() -> decltype(_variants)& { return _variants; }
+    void variants(std::vector<VariantType*> vars) { _variants = std::move(vars); }
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeStruct; }
+};
+
+class VariantType : public StructType {
+    StructType* _parent_struct;
+
+public:
+    VariantType(Location location, StructType* parent_struct, std::string name, std::vector<StructField> fields)
+        : StructType(Kind::TypeVariant, location, std::move(name), std::move(fields)), _parent_struct(parent_struct) {}
+
+    auto parent_struct() const { return _parent_struct; }
+    auto parent_struct() -> StructType*& { return _parent_struct; }
+    void parent_struct(StructType* parent) { _parent_struct = parent; }
+
+    auto root_struct_type() const {
+        const StructType* root = this;
+        while (root and is<VariantType>(root))
+            root = as<VariantType>(root)->parent_struct();
+        return root;
+    }
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeVariant; }
 };
 
 class NoreturnType : public Type {

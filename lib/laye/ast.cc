@@ -392,6 +392,8 @@ auto layec::Type::string(bool use_colours) const -> std::string {
     switch (kind()) {
         default: LCC_ASSERT(false, "unhandled type {} in type->string()", ToString(kind()));
 
+        case Kind::TypePoison: return fmt::format("{}poison", C(Cyan));
+
         case Kind::TypeInfer: return fmt::format("{}var", C(Cyan));
         case Kind::TypeNilable: return fmt::format("{}?", as<NilableType>(this)->elem_type()->string(use_colours));
         case Kind::TypeErrUnion: {
@@ -461,6 +463,14 @@ auto layec::Type::string(bool use_colours) const -> std::string {
                 params_string += fmt::format("{}", params[i]->string(use_colours));
             }
             return fmt::format("{}({})", f->return_type()->string(use_colours), params_string);
+        }
+
+        case Kind::TypeStruct: {
+            return fmt::format(
+                "{}{}",
+                C(White),
+                as<StructType>(this)->name()
+            );
         }
 
         case Kind::TypeNoreturn: return fmt::format("{}noreturn{}", C(Cyan), C(Reset));

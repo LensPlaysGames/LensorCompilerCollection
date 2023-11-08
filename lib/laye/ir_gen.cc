@@ -29,6 +29,22 @@ lcc::Type* layec::IRGen::Convert(layec::Type* in) {
             return lcc::FunctionType::Get(_ctx, Convert(t->return_type()), std::move(param_types));
         }
 
+        case Expr::Kind::TypeStruct: {
+            const auto& t = as<StructType>(in);
+            std::vector<lcc::Type*> member_types{};
+            for (const auto& field : t->fields()) {
+                auto field_type = Convert(field.type);
+                member_types.push_back(field_type);
+            }
+
+            if (t->variants().size()) {
+                LCC_ASSERT(false, "variants in struct types");
+            }
+
+            auto struct_type = lcc::StructType::Get(context(), member_types);
+            return struct_type;
+        }
+
         case Expr::Kind::TypeNoreturn:
         case Expr::Kind::TypeVoid: {
             return lcc::Type::VoidTy;
@@ -79,14 +95,8 @@ auto layec::IRGen::Generate(LayeContext* laye_context, laye::Module* module) -> 
 }
 
 void layec::IRGen::CreateStructDeclType(StructDecl* decl) {
-    std::vector<lcc::Type*> member_types{};
-    for (const auto field : decl->fields()) {
-        auto field_type = Convert(field->type());
-        member_types.push_back(field_type);
-    }
-
-    auto struct_type = lcc::StructType::Get(context(), member_types);
-    _ir_types[decl] = struct_type;
+    LCC_ASSERT(decl->type());
+    _ir_types[decl] = Convert(decl->type());
 }
 
 void layec::IRGen::CreateIRFunctionValue(FunctionDecl* decl) {
