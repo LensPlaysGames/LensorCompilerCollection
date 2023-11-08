@@ -53,7 +53,7 @@ class IRGen {
         curr_block->insert(inst);
     }
 
-    lcc::Type* Convert(lcc::laye::Type* in);
+    lcc::Type* Convert(const lcc::laye::Type* in);
 
     void GenerateModule(Module* module);
     void CreateStructDeclType(StructDecl* decl);

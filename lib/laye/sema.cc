@@ -615,8 +615,8 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                 case OperatorKind::Mul:
                 case OperatorKind::Div:
                 case OperatorKind::Mod: {
-                    auto lhs_type = e->lhs()->type()->strip_references();
-                    auto rhs_type = e->rhs()->type()->strip_references();
+                    auto lhs_type = LValueToRValue(e->lhs());
+                    auto rhs_type = LValueToRValue(e->rhs());
 
                     if (not lhs_type->is_number()) {
                         Error(

@@ -2,10 +2,10 @@
 #include <laye/ir_gen.hh>
 #include <lcc/context.hh>
 #include <lcc/core.hh>
-#include <lcc/target.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
+#include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
@@ -15,7 +15,7 @@
 
 namespace layec = lcc::laye;
 
-lcc::Type* layec::IRGen::Convert(layec::Type* in) {
+lcc::Type* layec::IRGen::Convert(const layec::Type* in) {
     switch (in->kind()) {
         default: {
             Diag::ICE("Unhandled IR type conversion for Laye type {}", ToString(in->kind()));
@@ -472,14 +472,22 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
             // TODO(local): I guess figure out the C++ism to get the index of a thing, idr it
             for (auto [i, field] : vws::enumerate(target_struct_type->fields())) {
                 if (field.name == field_name) {
-                    field_index = (isz)field_index;
+                    field_index = (isz) i;
                     break;
                 }
             }
 
             LCC_ASSERT(field_index >= 0);
+            auto member_index = new (*mod()) IntegerConstant(lcc::IntegerType::Get(_ctx, 64), field_index);
+            auto member_ptr = new (*mod()) GetMemberPtrInst(
+                Convert(target_struct_type),
+                target_value,
+                member_index,
+                expr->location()
+            );
 
-            //auto member_ptr = new (*mod()) lcc::Inst
+            Insert(member_ptr);
+            _ir_values[expr] = member_ptr;
         } break;
     }
 
