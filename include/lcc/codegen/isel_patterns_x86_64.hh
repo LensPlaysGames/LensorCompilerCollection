@@ -48,6 +48,16 @@ using store_some_op_local = Pattern<
 using store_reg_local = store_some_op_local<Operand<OK::Register, Register<0, 0>>>;
 using store_imm_local = store_some_op_local<Operand<OK::Immediate, Immediate<0>>>;
 
+template <typename copy_op>
+using copy_some_op = Pattern<
+    InstList<Inst<usz(MInst::Kind::Copy), copy_op>>,
+    InstList<Inst<usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputInstructionReference, i<0>>>>>;
+
+using copy_reg = copy_some_op<Operand<OK::Register, Register<0, 0>>>;
+using copy_global = copy_some_op<Operand<OK::Global, Global<>>>;
+using copy_local = copy_some_op<Operand<OK::Local, Local<>>>;
+using copy_imm = copy_some_op<Operand<OK::Immediate, Immediate<0>>>;
+
 using x86_64PatternList = PatternList<
     ret,
     ret_imm,
@@ -55,7 +65,11 @@ using x86_64PatternList = PatternList<
     load_local,
     load_reg,
     store_reg_local,
-    store_imm_local>;
+    store_imm_local,
+    copy_reg,
+    copy_global,
+    copy_local,
+    copy_imm>;
 
 } // namespace isel
 } // namespace lcc
