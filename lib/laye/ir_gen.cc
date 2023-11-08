@@ -16,6 +16,10 @@
 namespace layec = lcc::laye;
 
 lcc::Type* layec::IRGen::Convert(const layec::Type* in) {
+    if (_ir_types.contains(in)) {
+        return _ir_types[in];
+    }
+
     switch (in->kind()) {
         default: {
             Diag::ICE("Unhandled IR type conversion for Laye type {}", ToString(in->kind()));
@@ -29,9 +33,58 @@ lcc::Type* layec::IRGen::Convert(const layec::Type* in) {
             return lcc::FunctionType::Get(_ctx, Convert(t->return_type()), std::move(param_types));
         }
 
+        case Expr::Kind::TypeVariant: {
+            const auto* t = as<VariantType>(in);
+            std::string name = "__variant_";
+
+            std::vector<lcc::Type*> member_types{};
+            member_types.push_back(lcc::IntegerType::Get(context(), context()->target()->size_of_pointer));
+
+            std::function<void(const StructType*)> PopulateDataTopDown;
+            PopulateDataTopDown = [&](const StructType* curr_type) {
+                if (auto variant_type = cast<VariantType>(curr_type)) {
+                    PopulateDataTopDown(variant_type->parent_struct());
+                    name += "_";
+                }
+
+                name += curr_type->name();
+
+                for (const auto& field : curr_type->fields()) {
+                    auto field_type = Convert(field.type);
+                    member_types.push_back(field_type);
+                }
+            };
+
+            PopulateDataTopDown(t);
+
+            if (not t->variants().empty()) {
+                usz largest_variant_size_in_bytes = 0;
+                for (const auto& variant : t->variants()) {
+                    Convert(variant);
+                    usz variant_size_in_bytes = variant->size_in_bytes_alone(context());
+                    if (variant_size_in_bytes > largest_variant_size_in_bytes)
+                        largest_variant_size_in_bytes = variant_size_in_bytes;
+                }
+
+                // TODO(local): or maybe just set it to 1 byte by default, so empty variants are allowed (for indev purposes mostly)
+                LCC_ASSERT(largest_variant_size_in_bytes != 0);
+
+                auto variant_storage_array_type = lcc::ArrayType::Get(context(), largest_variant_size_in_bytes, lcc::IntegerType::Get(context(), 8));
+                member_types.push_back(variant_storage_array_type);
+            }
+
+            auto variant_type = lcc::StructType::Get(context(), member_types, name);
+            return variant_type;
+        }
+
         case Expr::Kind::TypeStruct: {
             const auto& t = as<StructType>(in);
+
             std::vector<lcc::Type*> member_types{};
+            if (not t->variants().empty()) {
+                member_types.push_back(lcc::IntegerType::Get(context(), context()->target()->size_of_pointer));
+            }
+
             for (const auto& field : t->fields()) {
                 auto field_type = Convert(field.type);
                 member_types.push_back(field_type);
@@ -40,7 +93,8 @@ lcc::Type* layec::IRGen::Convert(const layec::Type* in) {
             if (not t->variants().empty()) {
                 usz largest_variant_size_in_bytes = 0;
                 for (const auto& variant : t->variants()) {
-                    usz variant_size_in_bytes = variant->size_in_bytes(context());
+                    Convert(variant);
+                    usz variant_size_in_bytes = variant->size_in_bytes_alone(context());
                     if (variant_size_in_bytes > largest_variant_size_in_bytes)
                         largest_variant_size_in_bytes = variant_size_in_bytes;
                 }

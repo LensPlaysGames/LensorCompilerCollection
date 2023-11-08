@@ -2054,6 +2054,12 @@ public:
         return root;
     }
 
+    usz size_alone(const Context* ctx) const;
+    usz size_in_bytes_alone(const Context* ctx) const {
+        return (size_alone(ctx) / 8) + (size_alone(ctx) % 8 ? 1 : 0);
+    }
+    usz align_alone(const Context* ctx) const;
+
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeVariant; }
 };
 

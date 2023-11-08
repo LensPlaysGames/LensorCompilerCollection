@@ -20,7 +20,7 @@ class IRGen {
 
     std::unordered_map<SemaNode*, lcc::Value*> _ir_values;
     std::unordered_map<FunctionParam*, lcc::Value*> _ir_params;
-    std::unordered_map<SemaNode*, lcc::Type*> _ir_types;
+    std::unordered_map<const SemaNode*, lcc::Type*> _ir_types;
     //std::vector<lcc::GlobalVariable*> string_literals;
     StringMap<lcc::GlobalVariable*> string_literals;
 

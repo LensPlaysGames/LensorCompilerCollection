@@ -353,12 +353,21 @@ auto layec::Type::size(const Context* ctx) const -> usz {
         case Expr::Kind::TypeReference:
         case Expr::Kind::TypeBuffer: return ctx->target()->size_of_pointer;
 
-        case Expr::Kind::TypeVariant:
+        case Expr::Kind::TypeVariant: {
+            auto t = as<VariantType>(this);
+            return t->root_struct_type()->size(ctx);
+        }
+
         case Expr::Kind::TypeStruct: {
             auto t = as<layec::StructType>(this);
 
             usz current_size = 0;
             usz current_align = 1;
+
+            if (not t->variants().empty()) {
+                current_size = ctx->target()->size_of_pointer;
+                current_align = ctx->target()->align_of_pointer;
+            }
 
             for (auto& field : t->fields()) {
                 usz field_size = field.type->size(ctx);
@@ -374,8 +383,8 @@ auto layec::Type::size(const Context* ctx) const -> usz {
             }
 
             for (auto& variant : t->variants()) {
-                usz variant_size = variant->size(ctx);
-                usz variant_align = variant->align(ctx);
+                usz variant_size = variant->size_alone(ctx);
+                usz variant_align = variant->align_alone(ctx);
 
                 if (variant_align > current_align)
                     current_align = variant_align;
@@ -405,7 +414,11 @@ auto layec::Type::align(const Context* ctx) const -> usz {
         case Expr::Kind::TypeReference:
         case Expr::Kind::TypeBuffer: return ctx->target()->align_of_pointer;
 
-        case Expr::Kind::TypeVariant:
+        case Expr::Kind::TypeVariant: {
+            auto t = as<VariantType>(this);
+            return t->root_struct_type()->align(ctx);
+        }
+
         case Expr::Kind::TypeStruct: {
             auto t = as<layec::StructType>(this);
 
@@ -417,7 +430,7 @@ auto layec::Type::align(const Context* ctx) const -> usz {
             }
 
             for (auto& variant : t->variants()) {
-                usz variant_align = variant->align(ctx);
+                usz variant_align = variant->align_alone(ctx);
                 if (variant_align > current_align)
                     current_align = variant_align;
             }
@@ -425,6 +438,64 @@ auto layec::Type::align(const Context* ctx) const -> usz {
             return current_align;
         }
     }
+}
+
+auto layec::VariantType::size_alone(const Context* ctx) const -> usz {
+    auto t = this;
+
+    usz current_size = 0;
+    usz current_align = 1;
+
+    // NOTE(local): the size of a variant does not contain any tag data, even if it
+    // contains other nested variants; the root struct tag covers all variant cases.
+
+    for (auto& field : t->fields()) {
+        usz field_size = field.type->size(ctx);
+        usz field_align = field.type->align(ctx);
+
+        if (field_align > current_align)
+            current_align = field_align;
+
+        usz padding = (field_align - (current_size & (field_align - 1))) & (field_align - 1);
+        usz aligned_offset = current_size + padding;
+
+        current_size = aligned_offset + field_size;
+    }
+
+    for (auto& variant : t->variants()) {
+        usz variant_size = variant->size_alone(ctx);
+        usz variant_align = variant->align_alone(ctx);
+
+        if (variant_align > current_align)
+            current_align = variant_align;
+
+        usz padding = (variant_align - (current_size & (variant_align - 1))) & (variant_align - 1);
+        usz aligned_offset = current_size + padding;
+
+        current_size = aligned_offset + variant_size;
+    }
+
+    current_size += (current_align - (current_size & (current_align - 1))) & (current_align - 1);
+    return current_size;
+}
+
+auto layec::VariantType::align_alone(const Context* ctx) const -> usz {
+    auto t = this;
+
+    usz current_align = 1;
+    for (auto& field : t->fields()) {
+        usz field_align = field.type->align(ctx);
+        if (field_align > current_align)
+            current_align = field_align;
+    }
+
+    for (auto& variant : t->variants()) {
+        usz variant_align = variant->align_alone(ctx);
+        if (variant_align > current_align)
+            current_align = variant_align;
+    }
+
+    return current_align;
 }
 
 auto layec::Type::string(bool use_colours) const -> std::string {

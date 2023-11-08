@@ -175,6 +175,28 @@ void layec::Sema::Analyse(Statement*& statement) {
         case Statement::Kind::DeclStruct: {
             auto s = as<StructDecl>(statement);
 
+            /// TODO(local):
+            ///
+            /// Creating all of the necessary struct types in a way that's actually useful
+            /// is a bit more complicated than just storing the root struct as its shared types
+            /// plus a byte array for the max size of all variants it contains.
+            ///
+            /// The end goal is to have a struct which looks like this:
+            ///
+            /// struct foo {
+            ///     int shared;
+            ///     variant bar { int nested; }
+            /// }
+            ///
+            /// behave like IR types that look like this:
+            /// 
+            /// struct foo { i64, i64, i8[8] } // including the implicit tag
+            /// struct foo_bar { i64, i64, i64 }
+            /// 
+            /// This means the sema types should probably behave the same, especially so
+            /// if we want to allow storing variants as their own type and value, rather than
+            /// always requiring the base struct type + a pattern match + a special case.
+
             std::function<StructType*(StructDecl*, StructType*)> CreateStructOrVariantType;
             CreateStructOrVariantType = [&](StructDecl* struct_decl, StructType* parent_struct) {
                 std::vector<StructField> fields{};
