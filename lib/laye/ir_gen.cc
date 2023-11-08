@@ -185,6 +185,15 @@ void layec::IRGen::GenerateStatement(Statement* statement) {
             }
         } break;
 
+        case Sk::Assign: {
+            auto s = as<AssignStatement>(statement);
+            auto target_value = GenerateExpression(s->target());
+            LCC_ASSERT(target_value->type()->is_ptr());
+            auto assign_value = GenerateExpression(s->value());
+            auto store = new (*mod()) StoreInst(assign_value, target_value, s->target()->location());
+            Insert(store);
+        } break;
+
         case Sk::Return: {
             auto s = as<ReturnStatement>(statement);
             if (s->is_void_return()) {
@@ -450,6 +459,27 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
                     _ir_values[expr] = compare;
                 } break;
             }
+        } break;
+
+        case Ek::FieldIndex: {
+            auto e = as<FieldIndexExpr>(expr);
+            auto target_value = GenerateExpression(e->target());
+            LCC_ASSERT(target_value->type()->is_ptr());
+            const auto* target_struct_type = as<StructType>(e->target()->type()->strip_references());
+            const auto& field_name = e->field_name();
+
+            isz field_index = -1;
+            // TODO(local): I guess figure out the C++ism to get the index of a thing, idr it
+            for (auto [i, field] : vws::enumerate(target_struct_type->fields())) {
+                if (field.name == field_name) {
+                    field_index = (isz)field_index;
+                    break;
+                }
+            }
+
+            LCC_ASSERT(field_index >= 0);
+
+            //auto member_ptr = new (*mod()) lcc::Inst
         } break;
     }
 
