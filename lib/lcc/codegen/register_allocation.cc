@@ -62,6 +62,24 @@ struct AdjacencyList {
     char spill_flag;
     usz spill_offset;
     usz spill_cost;
+
+    auto string_base() const -> std::string {
+        return fmt::format("r{}", value, index);
+    }
+
+    auto string(const std::vector<AdjacencyList>& lists) const -> std::string {
+        auto out = string_base() + ": ";
+        bool first{true};
+        for (usz adj_i : adjacencies) {
+            if (not first) out += ", ";
+            else first = false;
+            auto found = std::find_if(lists.begin(), lists.end(), [&](const AdjacencyList& l) {
+                return adj_i == l.value;
+            });
+            out += lists.at(usz(found - lists.begin())).string_base();
+        }
+        return out;
+    }
 };
 
 static void collect_interferences_from_block(
@@ -181,7 +199,7 @@ static void collect_interferences(AdjacencyMatrix& matrix, std::vector<Register>
     //     "Collected following exit blocks for function {}: {}\n",
     //     function.name(),
     //     fmt::join(vws::transform(exits, [](MBlock* b) { return b->name(); }), ", ")
-    //);
+    // );
 
     // From each exit block (collected above), follow control flow to the
     // root of the function (entry block), or to a block already visited.
@@ -288,6 +306,10 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             }
         }
     }
+
+    // fmt::print("AdjacencyLists:\n");
+    // for (auto list : lists)
+    //     fmt::print("{}\n", list.string(lists));
 
     // STEP FOUR
     // Build something called the "coloring stack": this is the list of live
