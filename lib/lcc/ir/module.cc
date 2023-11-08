@@ -518,12 +518,6 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::GetElementPtr: {
-                        // MInst GEP:
-                        //   0th operand: the pointer
-                        //   1st operand: index to offset from pointer
-                        //   2nd operand: scale factor for previous index
-                        //   o<0> + (o<1> * o<2>), basically.
-
                         auto gep_ir = as<GEPInst>(instruction);
                         auto reg = Register{virts[instruction], uint(gep_ir->type()->bits())};
 
@@ -564,8 +558,19 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::GetMemberPtr: {
-                        LCC_ASSERT(false, "TODO: gMIR lowering of GetMemberPtr");
-                    }
+                        auto gmp_ir = as<GetMemberPtrInst>(instruction);
+
+                        LCC_ASSERT(
+                            gmp_ir->idx()->kind() == Value::Kind::IntegerConstant,
+                            "Sorry, but gMIR lowering of GetMemberPtr requires constant member index"
+                        );
+
+                        auto add = MInst(MInst::Kind::Add, {virts[instruction], uint(gmp_ir->type()->bits())});
+                        add.add_operand(MOperandValueReference(f, gmp_ir->ptr()));
+                        add.add_operand(MOperandValueReference(f, gmp_ir->idx()));
+
+                        bb.add_instruction(add);
+                    } break;
 
                     case Value::Kind::Branch: {
                         auto branch_ir = as<BranchInst>(instruction);
