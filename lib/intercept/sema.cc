@@ -739,7 +739,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             auto m = as<MemberAccessExpr>(expr);
 
             /// If there is an error analysing the object, we don’t know
-            /// its type an can thus not continue checking this.
+            /// its type and can thus not continue checking this.
             if (not Analyse(&m->object())) {
                 m->set_sema_errored();
                 break;
@@ -794,7 +794,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
 
             /// A member access is an lvalue iff the object is an lvalue.
             m->object(obj);
-            m->type(m->is_lvalue() ? Ref(it->type) : it->type);
+            m->type(m->object()->is_lvalue() ? Ref(it->type) : it->type);
         } break;
 
         /// Unary prefix and postfix expressions.
