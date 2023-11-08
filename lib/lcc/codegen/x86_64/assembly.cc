@@ -65,6 +65,15 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
         for (auto& block : function.blocks()) {
             out += fmt::format("{}:\n", block.name());
             for (auto& instruction : block.instructions()) {
+                // Don't move a register into itself.
+                if (instruction.opcode() == +x86_64::Opcode::Move and instruction.all_operands().size() == 2) {
+                    auto lhs = instruction.get_operand(0);
+                    auto rhs = instruction.get_operand(1);
+                    if (std::holds_alternative<MOperandRegister>(lhs) and std::holds_alternative<MOperandRegister>(rhs) and std::get<MOperandRegister>(lhs).value == std::get<MOperandRegister>(rhs).value)
+                        continue;
+                    ;
+                }
+
                 if (instruction.opcode() == +x86_64::Opcode::Return) {
                     // Function Footer
                     // TODO: Different stack frame kinds.
@@ -81,7 +90,9 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
                         if (std::holds_alternative<MOperandLocal>(instruction.get_operand(1))) {
                             // Moving immediate into local (memory) requires mov suffix in GNU. We use
                             // size of local to determine how big of a move to do.
-                            auto bitwidth = function.locals().at(+std::get<MOperandLocal>(instruction.get_operand(1)))->allocated_type()->bits();
+                            auto local_index = +std::get<MOperandLocal>(instruction.get_operand(1));
+                            auto* local = function.locals().at(local_index);
+                            auto bitwidth = local->allocated_type()->bits();
                             switch (bitwidth) {
                                 case 64: out += 'q'; break;
                                 case 32: out += 'd'; break;
