@@ -39,9 +39,15 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
             switch (var->init()->kind()) {
                 case Value::Kind::ArrayConstant: {
                     auto array_constant = as<ArrayConstant>(var->init());
-                    out += fmt::format(".byte {}\n", fmt::join(vws::transform(*array_constant, [&](char c) {
-                        return fmt::format("0x{:x}", int(c));
-                    }), ","));
+                    out += fmt::format(
+                        ".byte {}\n",
+                        fmt::join(
+                            vws::transform(*array_constant, [&](char c) {
+                                return fmt::format("0x{:x}", int(c));
+                            }),
+                            ","
+                        )
+                    );
                 } break;
 
                 default:
@@ -61,6 +67,15 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
         out +=
             "    push %rbp\n"
             "    mov %rsp, %rbp\n";
+
+        usz stack_frame_size = rgs::fold_left(
+            vws::transform(function.locals(), [](AllocaInst* l) {
+                return l->allocated_type()->bytes();
+            }),
+            0,
+            std::plus{}
+        );
+        if (stack_frame_size) out += fmt::format("    sub ${}, %rsp\n", stack_frame_size);
 
         for (auto& block : function.blocks()) {
             out += fmt::format("{}:\n", block.name());
