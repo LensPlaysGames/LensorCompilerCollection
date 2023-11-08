@@ -58,6 +58,10 @@ using copy_global = copy_some_op<Operand<OK::Global, Global<>>>;
 using copy_local = copy_some_op<Operand<OK::Local, Local<>>>;
 using copy_imm = copy_some_op<Operand<OK::Immediate, Immediate<0>>>;
 
+using s_ext_reg = Pattern<
+    InstList<Inst<usz(MInst::Kind::SExt), Operand<OK::Register, Register<0, 0>>>>,
+    InstList<Inst<usz(x86_64::Opcode::MoveSignExtended), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputInstructionReference, i<0>>>>>;
+
 using x86_64PatternList = PatternList<
     ret,
     ret_imm,
@@ -69,7 +73,8 @@ using x86_64PatternList = PatternList<
     copy_reg,
     copy_global,
     copy_local,
-    copy_imm>;
+    copy_imm,
+    s_ext_reg>;
 
 } // namespace isel
 } // namespace lcc
