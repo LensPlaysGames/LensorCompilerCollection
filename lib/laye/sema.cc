@@ -244,6 +244,28 @@ void layec::Sema::Analyse(Statement*& statement) {
             if (s->fail()) Analyse(s->fail());
         } break;
 
+        case Statement::Kind::Assign: {
+            auto s = as<AssignStatement>(statement);
+
+            Analyse(s->target());
+            LCC_ASSERT(s->target()->type());
+
+            Analyse(s->value());
+            LCC_ASSERT(s->value()->type());
+
+            if (!s->target()->is_lvalue()) {
+                Error(s->target()->location(), "Cannot assign to a non-lvalue");
+                statement->set_sema_errored();
+            } else {
+                auto nonref_target_type = s->target()->type()->strip_references();
+                ConvertOrError(s->value(), nonref_target_type);
+            }
+
+            if (not s->target()->sema_ok() or not s->value()->sema_ok()) {
+                statement->set_sema_errored();
+            }
+        } break;
+
         case Statement::Kind::Expr: {
             auto s = as<ExprStatement>(statement);
             LCC_ASSERT(s->expr());
@@ -440,6 +462,37 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                 } else {
                     LCC_TODO();
                 }
+            }
+        } break;
+
+        case Expr::Kind::FieldIndex: {
+            auto e = as<FieldIndexExpr>(expr);
+            Analyse(e->target());
+            LCC_ASSERT(e->target()->type());
+
+            if (!e->target()->is_lvalue()) {
+                Error(expr->location(), "Cannot lookup a field from a non-lvalue");
+                expr->set_sema_errored();
+                expr->type(new (*module()) PoisonType{expr->location()});
+                break;
+            }
+
+            auto nonref_target_type = e->target()->type()->strip_references();
+            if (auto struct_type = cast<StructType>(nonref_target_type)) {
+                auto lookup = rgs::find_if(struct_type->fields(), [e](StructField field) { return field.name == e->field_name(); });
+                if (lookup == struct_type->fields().end()) {
+                    Error(expr->location(), "No such field '{}' in {}", e->field_name(), struct_type->string(use_colours));
+                    expr->set_sema_errored();
+                    expr->type(new (*module()) PoisonType{expr->location()});
+                    break;
+                }
+
+                auto access = as<ReferenceType>(e->target()->type())->access();
+                expr->type(Ref(lookup->type, access));
+            } else {
+                Error(expr->location(), "Cannot lookup a field from a non-struct type");
+                expr->set_sema_errored();
+                expr->type(new (*module()) PoisonType{expr->location()});
             }
         } break;
 

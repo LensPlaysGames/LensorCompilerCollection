@@ -41,7 +41,7 @@ lcc::Type* layec::IRGen::Convert(layec::Type* in) {
                 LCC_ASSERT(false, "variants in struct types");
             }
 
-            auto struct_type = lcc::StructType::Get(context(), member_types);
+            auto struct_type = lcc::StructType::Get(context(), member_types, t->name());
             return struct_type;
         }
 
