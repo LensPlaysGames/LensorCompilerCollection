@@ -2033,7 +2033,7 @@ public:
     auto variants() -> decltype(_variants)& { return _variants; }
     void variants(std::vector<VariantType*> vars) { _variants = std::move(vars); }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeStruct; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeStruct or expr->kind() == Kind::TypeVariant; }
 };
 
 class VariantType : public StructType {

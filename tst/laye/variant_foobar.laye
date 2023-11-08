@@ -1,0 +1,24 @@
+// R 
+
+struct foo
+{
+    int shared;
+    
+    variant bar
+    {
+        int* data;
+    }
+
+    variant baz
+    {
+        i8 some_small_number;
+        int some_big_number;
+    }
+
+    variant qux
+    {
+        i8 a;
+        int b;
+        i8 c;
+    }
+}

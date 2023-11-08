@@ -175,21 +175,34 @@ void layec::Sema::Analyse(Statement*& statement) {
         case Statement::Kind::DeclStruct: {
             auto s = as<StructDecl>(statement);
 
-            std::vector<StructField> fields{};
-            for (auto& field : s->fields()) {
-                Analyse((Statement*&) field);
-                fields.push_back({ field->name(), field->type() });
-            }
+            std::function<StructType*(StructDecl*, StructType*)> CreateStructOrVariantType;
+            CreateStructOrVariantType = [&](StructDecl* struct_decl, StructType* parent_struct) {
+                std::vector<StructField> fields{};
+                for (auto& field : struct_decl->fields()) {
+                    Analyse((Statement*&) field);
+                    fields.push_back({ field->name(), field->type() });
+                }
 
-            auto struct_type = new (*module()) StructType(s->location(), s->name(), std::move(fields));
+                StructType* struct_type;
+                if (parent_struct)
+                    struct_type = new (*module()) VariantType(struct_decl->location(), parent_struct, struct_decl->name(), std::move(fields));
+                else struct_type = new (*module()) StructType(struct_decl->location(), struct_decl->name(), std::move(fields));
 
-            if (not s->variants().empty())
-            {
-                std::vector<VariantType*> variants{};
-                struct_type->variants(std::move(variants));
-            }
+                if (not struct_decl->variants().empty())
+                {
+                    std::vector<VariantType*> variants{};
+                    for (const auto& variant : struct_decl->variants()) {
+                        auto variant_type = as<VariantType>(CreateStructOrVariantType(variant, struct_type));
+                        variants.push_back(variant_type);
+                    }
 
-            s->type(struct_type);
+                    struct_type->variants(std::move(variants));
+                }
+
+                return struct_type;
+            };
+
+            s->type(CreateStructOrVariantType(s, nullptr));
         } break;
 
         case Statement::Kind::DeclAlias: {

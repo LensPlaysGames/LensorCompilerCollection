@@ -1,10 +1,10 @@
 #include <bit>
 #include <laye/ast.hh>
 #include <laye/parser.hh>
-#include <lcc/utils/ast_printer.hh>
-#include <lcc/utils/rtti.hh>
 #include <lcc/context.hh>
 #include <lcc/target.hh>
+#include <lcc/utils/ast_printer.hh>
+#include <lcc/utils/rtti.hh>
 
 namespace layec = lcc::laye;
 
@@ -352,6 +352,43 @@ auto layec::Type::size(const Context* ctx) const -> usz {
         case Expr::Kind::TypePointer:
         case Expr::Kind::TypeReference:
         case Expr::Kind::TypeBuffer: return ctx->target()->size_of_pointer;
+
+        case Expr::Kind::TypeVariant:
+        case Expr::Kind::TypeStruct: {
+            auto t = as<layec::StructType>(this);
+
+            usz current_size = 0;
+            usz current_align = 1;
+
+            for (auto& field : t->fields()) {
+                usz field_size = field.type->size(ctx);
+                usz field_align = field.type->align(ctx);
+
+                if (field_align > current_align)
+                    current_align = field_align;
+
+                usz padding = (field_align - (current_size & (field_align - 1))) & (field_align - 1);
+                usz aligned_offset = current_size + padding;
+
+                current_size = aligned_offset + field_size;
+            }
+
+            for (auto& variant : t->variants()) {
+                usz variant_size = variant->size(ctx);
+                usz variant_align = variant->align(ctx);
+
+                if (variant_align > current_align)
+                    current_align = variant_align;
+
+                usz padding = (variant_align - (current_size & (variant_align - 1))) & (variant_align - 1);
+                usz aligned_offset = current_size + padding;
+
+                current_size = aligned_offset + variant_size;
+            }
+
+            current_size += (current_align - (current_size & (current_align - 1))) & (current_align - 1);
+            return current_size;
+        }
     }
 }
 
@@ -362,6 +399,31 @@ auto layec::Type::align(const Context* ctx) const -> usz {
 
     switch (kind()) {
         default: LCC_TODO();
+
+        case Expr::Kind::TypeRawptr:
+        case Expr::Kind::TypePointer:
+        case Expr::Kind::TypeReference:
+        case Expr::Kind::TypeBuffer: return ctx->target()->align_of_pointer;
+
+        case Expr::Kind::TypeVariant:
+        case Expr::Kind::TypeStruct: {
+            auto t = as<layec::StructType>(this);
+
+            usz current_align = 1;
+            for (auto& field : t->fields()) {
+                usz field_align = field.type->align(ctx);
+                if (field_align > current_align)
+                    current_align = field_align;
+            }
+
+            for (auto& variant : t->variants()) {
+                usz variant_align = variant->align(ctx);
+                if (variant_align > current_align)
+                    current_align = variant_align;
+            }
+
+            return current_align;
+        }
     }
 }
 
@@ -497,7 +559,6 @@ auto layec::Type::string(bool use_colours) const -> std::string {
         }
     }
 }
-
 
 bool layec::Type::is_signed_integer() const {
     return is_integer() and as<IntType>(this)->is_signed();

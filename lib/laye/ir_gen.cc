@@ -37,8 +37,19 @@ lcc::Type* layec::IRGen::Convert(const layec::Type* in) {
                 member_types.push_back(field_type);
             }
 
-            if (t->variants().size()) {
-                LCC_ASSERT(false, "variants in struct types");
+            if (not t->variants().empty()) {
+                usz largest_variant_size_in_bytes = 0;
+                for (const auto& variant : t->variants()) {
+                    usz variant_size_in_bytes = variant->size_in_bytes(context());
+                    if (variant_size_in_bytes > largest_variant_size_in_bytes)
+                        largest_variant_size_in_bytes = variant_size_in_bytes;
+                }
+
+                // TODO(local): or maybe just set it to 1 byte by default, so empty variants are allowed (for indev purposes mostly)
+                LCC_ASSERT(largest_variant_size_in_bytes != 0);
+
+                auto variant_storage_array_type = lcc::ArrayType::Get(context(), largest_variant_size_in_bytes, lcc::IntegerType::Get(context(), 8));
+                member_types.push_back(variant_storage_array_type);
             }
 
             auto struct_type = lcc::StructType::Get(context(), member_types, t->name());
