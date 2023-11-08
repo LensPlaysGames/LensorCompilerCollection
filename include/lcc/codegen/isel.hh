@@ -122,8 +122,34 @@ struct Operand {
     using value = value_;
 };
 
-template <usz opcode_, typename... operands>
+enum struct ClobberKind {
+    Operand,
+    RegisterValue,
+};
+// A list of clobbers (c<index> or r<value>)
+template <typename... clobbers>
+struct Clobbers {
+    static constexpr void foreach (auto&& lambda) {
+        (lambda.template operator()<clobbers>(), ...);
+    }
+};
+template <usz idx>
+struct c {
+    static constexpr ClobberKind kind = ClobberKind::Operand;
+    static constexpr usz index = idx;
+    static constexpr usz value = 0;
+};
+template <usz register_value>
+struct r {
+    static constexpr ClobberKind kind = ClobberKind::RegisterValue;
+    static constexpr usz index = 0;
+    static constexpr usz value = register_value;
+};
+
+template <typename clobbers_, usz opcode_, typename... operands>
 struct Inst {
+    using clobbers = clobbers_;
+
     static constexpr usz opcode = opcode_;
 
     static constexpr usz operand_count = sizeof...(operands);
@@ -346,6 +372,13 @@ struct PatternList {
                         // Keep track of newly allocated machine instructions.
                         pool.push_back(output);
                         instructions.insert(instructions.begin() + output_i, output);
+
+                        inst::clobbers::foreach([&]<typename clobber> {
+                            if constexpr (clobber::kind == ClobberKind::Operand)
+                                output->add_operand_clobber(clobber::index);
+                            else if constexpr (clobber::kind == ClobberKind::RegisterValue)
+                                LCC_ASSERT(false, "TODO: Register clobbers member in MIR");
+                        });
 
                         inst::foreach_operand([&]<typename op> {
                             output->add_operand(inst::template get_operand<op>(mod, input, new_virtuals));

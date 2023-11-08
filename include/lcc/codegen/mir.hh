@@ -102,6 +102,9 @@ private:
     // TODO: Do SSO basically. For operands, instructions in MBlocks, and blocks in MFunctions.
     std::vector<MOperand> operands{};
 
+    // Indices of operands of this instruction that this instruction clobbers.
+    std::vector<usz> _operand_clobbers{};
+
 public:
     MInst(Kind kind, Register reg)
         : _register(reg),
@@ -152,6 +155,18 @@ public:
 
     const std::vector<MOperand>& all_operands() const {
         return operands;
+    }
+
+    std::vector<usz>& operand_clobbers() {
+        return _operand_clobbers;
+    }
+
+    std::vector<usz> operand_clobbers() const {
+        return _operand_clobbers;
+    }
+
+    void add_operand_clobber(usz operand_index) {
+        _operand_clobbers.push_back(operand_index);
     }
 
     static bool is_terminator(Kind k) {

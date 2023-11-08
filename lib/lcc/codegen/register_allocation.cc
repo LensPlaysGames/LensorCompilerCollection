@@ -140,22 +140,18 @@ static void collect_interferences_from_block(
             }
         }
 
-        // Make all register operands interfere with each other.
-        for (auto A : vreg_operands) {
-            for (auto B : vreg_operands) {
-                matrix.set(A.idx, B.idx);
+        // Make all reg operands interfere with all clobbers of this instruction
+        for (auto r : vreg_operands) {
+            for (auto index : inst.operand_clobbers()) {
+                auto op = inst.get_operand(index);
+                if (std::holds_alternative<MOperandRegister>(op)) {
+                    auto reg = std::get<MOperandRegister>(op);
+                    auto live_idx = live_idx_from_register_value(reg.value);
+                    // fmt::print("{} and {} interfere due to clobbering\n", reg.value, r.reg.value);
+                    matrix.set(r.idx, live_idx);
+                }
             }
         }
-
-        // Make all reg operands interfere with the register of this function, if
-        // it is a defining use.
-        if (inst.is_defining()) {
-            for (auto r : vreg_operands) {
-                matrix.set(r.idx, live_idx_from_register_value(inst.reg()));
-            }
-        }
-
-        // TODO: Make all reg operands interfere with all clobbers of this instruction
 
         // Make all reg operands interfere with all currently live values
         for (auto r : vreg_operands) {
