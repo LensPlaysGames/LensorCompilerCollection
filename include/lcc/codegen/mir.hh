@@ -20,7 +20,7 @@ struct Register {
 using MOperandRegister = Register;
 using MOperandImmediate = u64;
 enum struct MOperandLocal : u64;
-u64 operator+ (MOperandLocal l);
+u64 operator+(MOperandLocal l);
 using MOperandStatic = GlobalVariable*;
 using MOperandFunction = Function*;
 using MOperandBlock = Block*;
@@ -30,8 +30,7 @@ using MOperand = std::variant<
     MOperandLocal,
     MOperandStatic,
     MOperandFunction,
-    MOperandBlock
->;
+    MOperandBlock>;
 
 class MInst {
 public:
@@ -93,7 +92,6 @@ public:
     };
 
 private:
-
     Register _register;
 
     usz _opcode;
@@ -106,11 +104,11 @@ private:
 public:
     MInst(Kind kind, Register reg)
         : _register(reg),
-          _opcode(static_cast<usz>(kind)) {};
+          _opcode(static_cast<usz>(kind)){};
 
     MInst(usz opcode, Register reg)
         : _register(reg),
-          _opcode(opcode) {};
+          _opcode(opcode){};
 
     usz reg() const { return _register.value; }
     usz regsize() const { return _register.size; }
@@ -125,7 +123,7 @@ public:
     Kind kind() const {
         // FIXME: This should be enabled, but I don't have stackframes and can't
         // tell where this is triggering from so... yeah.
-        //LCC_ASSERT(_opcode < +Kind::ArchStart, "kind() must only be called for general MIR instructions; for architecture-specific instructions, please call opcode()");
+        // LCC_ASSERT(_opcode < +Kind::ArchStart, "kind() must only be called for general MIR instructions; for architecture-specific instructions, please call opcode()");
         return static_cast<Kind>(_opcode);
     }
 
@@ -143,7 +141,7 @@ public:
         return operands.at(index);
     }
 
-    MOperand operator[] (usz index) const {
+    MOperand operator[](usz index) const {
         return get_operand(index);
     }
 
@@ -175,7 +173,7 @@ class MBlock {
     std::vector<MInst> _instructions;
 
 public:
-    MBlock(std::string name) : _name(name) {};
+    MBlock(std::string name) : _name(name){};
 
     auto instructions() -> std::vector<MInst>& {
         return _instructions;
@@ -302,7 +300,7 @@ public:
 };
 
 inline std::string ToString(MInst::Kind k) {
-    switch(k) {
+    switch (k) {
         case MInst::Kind::Alloca: return "M.Alloca";
         case MInst::Kind::Call: return "M.Call";
         case MInst::Kind::Copy: return "M.Copy";
@@ -354,7 +352,6 @@ auto PrintMInst(const MInst& inst) -> std::string;
 auto PrintMBlock(const MBlock& block) -> std::string;
 auto PrintMFunction(const MFunction& function) -> std::string;
 auto PrintMIR(std::vector<GlobalVariable*>& vars, std::vector<MFunction>& mcode) -> std::string;
-
 
 } // namespace lcc
 
