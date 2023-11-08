@@ -197,7 +197,6 @@ void Module::emit(std::filesystem::path output_file_path) {
 }
 
 auto Module::mir() -> std::vector<MFunction> {
-    usz virtual_register = 0x420;
     std::unordered_map<Value*, usz> virts{};
     const auto assign_virtual_register = [&](Value* v) {
         if (virts[v]) return; // don't double-assign registers
@@ -223,9 +222,7 @@ auto Module::mir() -> std::vector<MFunction> {
             default:
                 break;
         }
-        // TODO: Assign to this value that it is a defining use, somehow, for
-        // register allocation purposes.
-        virts[v] = ++virtual_register;
+        virts[v] = next_vreg();
     };
 
     // virtual register assignment

@@ -13,6 +13,8 @@ class Module {
     std::vector<Function*> _code;
     std::vector<GlobalVariable*> _vars;
 
+    usz _virtual_register{0x420};
+
     Module(Module&) = delete;
     Module(Module&&) = delete;
     Module& operator=(Module&) = delete;
@@ -47,6 +49,10 @@ public:
 
     void lower();
     void emit(std::filesystem::path output_file_path);
+
+    usz next_vreg() {
+        return _virtual_register++;
+    }
 
     /// Parse a module from a file.
     static auto Parse(Context* ctx, File& file) -> std::unique_ptr<Module>;
