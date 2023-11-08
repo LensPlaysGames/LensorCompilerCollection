@@ -132,10 +132,18 @@ void Module::emit(std::filesystem::path output_file_path) {
         case Format::GNU_AS_ATT_ASSEMBLY: {
             auto machine_ir = mir();
 
+            if (_ctx->should_print_mir())
+                fmt::print("{}", PrintMIR(vars(), machine_ir));
+
             for (auto& mfunc : machine_ir)
                 select_instructions(this, mfunc);
 
-            fmt::print("After ISel\n{}\n", fmt::join(vws::transform(machine_ir, PrintMFunction), "\n"));
+            if (_ctx->should_print_mir()) {
+                fmt::print(
+                    "After ISel\n{}\n",
+                    fmt::join(vws::transform(machine_ir, PrintMFunction), "\n")
+                );
+            }
 
             // Register Allocation
             MachineDescription desc{};
@@ -172,9 +180,12 @@ void Module::emit(std::filesystem::path output_file_path) {
             for (auto& mfunc : machine_ir)
                 allocate_registers(desc, mfunc);
 
-            fmt::print("After RA:\n");
-            for (auto& mfunc : machine_ir) {
-                fmt::print("{}\n", PrintMFunction(mfunc));
+            if (_ctx->should_print_mir()) {
+                fmt::print(
+                    "After RA\n{}\n",
+                    fmt::join(vws::transform(machine_ir, PrintMFunction), "\n")
+                );
+                std::exit(0);
             }
 
             if (_ctx->target()->is_x64())
@@ -722,8 +733,6 @@ auto Module::mir() -> std::vector<MFunction> {
             }
         }
     }
-
-    fmt::print("{}", PrintMIR(vars(), funcs));
 
     return funcs;
 }

@@ -7,7 +7,7 @@
 #include <lcc/utils.hh>
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
-#define LCC_PLATFORM_WINDOWS 1
+#    define LCC_PLATFORM_WINDOWS 1
 #endif
 
 namespace lcc {
@@ -26,6 +26,7 @@ class Context {
 
     /// Miscellaneous flags.
     bool _colour_diagnostics = false;
+    bool _should_print_mir = false;
 
     const Target* _target{};
     const Format* _format{};
@@ -40,7 +41,12 @@ public:
     std::vector<Type*> struct_types;
 
     /// Create a new context.
-    explicit Context(const Target* tgt, const Format* format, bool colour_diagnostics);
+    explicit Context(
+        const Target* tgt,
+        const Format* format,
+        bool colour_diagnostics,
+        bool should_print_mir
+    );
 
     /// Do not allow copying or moving the context.
     Context(const Context&) = delete;
@@ -61,7 +67,8 @@ public:
     }
 
     /// Get a list of all files owned by the context.
-    [[nodiscard]] auto files() const -> const decltype(owned_files)& {
+    [[nodiscard]]
+    auto files() const -> const decltype(owned_files)& {
         return owned_files;
     }
 
@@ -75,7 +82,8 @@ public:
     File& get_or_load_file(fs::path path);
 
     /// Check if the error flag is set.
-    [[nodiscard]] bool has_error() const { return error_flag; }
+    [[nodiscard]]
+    bool has_error() const { return error_flag; }
 
     /// Set the error flag.
     ///
@@ -87,16 +95,27 @@ public:
     }
 
     /// Get the target.
-    [[nodiscard]] auto target() const -> const Target* { return _target; }
+    [[nodiscard]]
+    auto target() const -> const Target* { return _target; }
 
     /// Get the target.
-    [[nodiscard]] auto format() const -> const Format* { return _format; }
+    [[nodiscard]]
+    auto format() const -> const Format* { return _format; }
 
     /// Whether to use colours in diagnostics.
-    [[nodiscard]] bool use_colour_diagnostics() const { return _colour_diagnostics; }
+    [[nodiscard]]
+    bool use_colour_diagnostics() const { return _colour_diagnostics; }
 
-    auto include_directories() const -> const decltype(_include_directories)& { return _include_directories; }
-    void add_include_directory(std::string dir) { _include_directories.push_back(std::move(dir)); }
+    [[nodiscard]]
+    bool should_print_mir() const { return _should_print_mir; }
+
+    auto include_directories() const -> const decltype(_include_directories)& {
+        return _include_directories;
+    }
+
+    void add_include_directory(std::string dir) {
+        _include_directories.push_back(std::move(dir));
+    }
 
 private:
     /// Register a file in the context.

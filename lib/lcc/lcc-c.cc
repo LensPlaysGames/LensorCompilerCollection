@@ -33,7 +33,8 @@ LccContextRef lcc_context_create(LccTargetRef target, LccFormatRef format) {
     return reinterpret_cast<LccContextRef>(new lcc::Context {
             reinterpret_cast<const lcc::Target*>(target),
             reinterpret_cast<const lcc::Format*>(format),
-            true
+            true, // use colour in diagnostics
+            false // do not print mir and exit
         });
 }
 

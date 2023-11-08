@@ -2,8 +2,15 @@
 #include <lcc/ir/type.hh>
 #include <mutex>
 
-lcc::Context::Context(const Target* tgt, const Format* fmt, bool colour_diags)
-    : _colour_diagnostics(colour_diags), _target(tgt), _format(fmt) {
+lcc::Context::Context(
+    const Target* tgt,
+    const Format* fmt,
+    bool colour_diags,
+    bool should_print_mir
+) : _colour_diagnostics(colour_diags),
+    _should_print_mir(should_print_mir),
+    _target(tgt),
+    _format(fmt) {
     static std::once_flag once;
     std::call_once(once, InitialiseLCCData);
 

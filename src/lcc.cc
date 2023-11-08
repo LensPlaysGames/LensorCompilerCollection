@@ -65,6 +65,7 @@ using options = clopts< // clang-format off
     flag<"--sema", "Run sema only and exit">,
     flag<"--syntax-only", "Do not perform semantic analysis">,
     flag<"--ir", "Emit LCC intermediate representation and exit">,
+    flag<"--mir", "Emit LCC machine instruction representation at various stages and exit">,
     func<"--aluminium", "That special something to spice up your compilation", aluminium_handler>,
     multiple<positional<"filepath", "Path to files that should be compiled", file<std::vector<char>>, true>>
 >; // clang-format on
@@ -85,6 +86,9 @@ int main(int argc, char** argv) {
     if (colour_opt == "always") use_colour = true;
     else if (colour_opt == "never") use_colour = false;
     else use_colour = lcc::platform::StdoutIsTerminal() or lcc::platform::StderrIsTerminal();
+
+    // Determine whether we should print MIR or not.
+    bool should_print_mir{opts.get<"--mir">()};
 
     /// Get input files
     auto& input_files = *opts.get<"filepath">();
@@ -108,11 +112,14 @@ int main(int argc, char** argv) {
         }
     }
 
-    lcc::Context context{detail::default_target, format, use_colour};
+    lcc::Context context{
+        detail::default_target,
+        format,
+        use_colour,
+        should_print_mir};
 
-    for (const auto& dir : *opts.get<"-I">()) {
+    for (const auto& dir : *opts.get<"-I">())
         context.add_include_directory(dir);
-    }
 
     auto GenerateOutputFile = [&](auto& input_file, std::string_view output_file_path) {
         auto path_str = input_file.path.string();
