@@ -53,18 +53,6 @@ private:
 ///
 /// REQUIRED: void run(Inst* inst);
 ///
-///     Called for every instruction in a function.
-///
-struct InstructionRewritePass : OptimisationPass {
-    using IsInstRewritePass = std::true_type;
-};
-
-/// Optimisation pass that follows the control flow graph.
-///
-/// API:
-///
-/// REQUIRED: void run(Inst* inst);
-///
 ///     Called for every instruction `i` for which `is<I>(i)`
 ///     returns true, where `I` is any of the elements in the
 ///     pack `Instructions`.
@@ -87,8 +75,8 @@ struct InstructionRewritePass : OptimisationPass {
 ///
 ///     Called whenever we leave a block.
 ///
-struct CFGIterationPass : OptimisationPass {
-    using IsCFGIterationPass = std::true_type;
+struct InstructionRewritePass : OptimisationPass {
+    using IsInstRewritePass = std::true_type;
 };
 
 /// Pass that performs constant folding and propagation. Passes that
@@ -179,6 +167,17 @@ public:
                 /// Delete the alloca and stores.
                 alloca->erase_cascade();
                 SetChanged();
+            } break;
+
+            case Value::Kind::CondBranch: {
+                auto br = cast<CondBranchInst>(i);
+                auto cond = cast<IntegerConstant>(br->cond());
+
+                /// Collapse if the condition is known at compile time.
+                if (cond) Replace<BranchInst>(i, cond->value() == 1 ? br->then_block() : br->else_block());
+
+                /// Or if the then and else blocks are the same.
+                else if (br->then_block() == br->else_block()) Replace<BranchInst>(i, br->then_block());
             } break;
 
             case Value::Kind::Add: {
@@ -275,8 +274,8 @@ public:
                 DivImpl<UDivInst, ShrInst, [](auto l, auto r) { return l.udiv(r); }>(i);
                 break;
 
-            case Value::Kind::Eq: CmpImpl<&aint::operator==>(i); break;
-            case Value::Kind::Ne: CmpImpl<&aint::operator!=>(i); break;
+            case Value::Kind::Eq: CmpImpl<&aint::operator== >(i); break;
+            case Value::Kind::Ne: CmpImpl<&aint::operator!= >(i); break;
             case Value::Kind::SLt: CmpImpl<&aint::slt>(i); break;
             case Value::Kind::ULt: CmpImpl<&aint::ult>(i); break;
             case Value::Kind::SGt: CmpImpl<&aint::sgt>(i); break;
@@ -294,7 +293,7 @@ public:
 };
 
 /// Pass that performs simple store forwarding.
-struct StoreFowardingPass : CFGIterationPass {
+struct StoreFowardingPass : InstructionRewritePass {
     struct Var {
         AllocaInst* alloca;
         StoreInst* store{};
@@ -402,6 +401,51 @@ private:
     }
 };
 
+/// Eliminated instructions whose results are unused if they have no side-effects.
+struct DCEPass : InstructionRewritePass {
+    void run(Inst* i) {
+        if (not i->users().empty()) return;
+        switch (i->kind()) {
+            default: return;
+            case Value::Kind::GetElementPtr:
+            case Value::Kind::Load:
+            case Value::Kind::Phi:
+            case Value::Kind::ZExt:
+            case Value::Kind::SExt:
+            case Value::Kind::Trunc:
+            case Value::Kind::Bitcast:
+            case Value::Kind::Neg:
+            case Value::Kind::Copy:
+            case Value::Kind::Compl:
+            case Value::Kind::Add:
+            case Value::Kind::Sub:
+            case Value::Kind::Mul:
+            case Value::Kind::SDiv:
+            case Value::Kind::UDiv:
+            case Value::Kind::SRem:
+            case Value::Kind::URem:
+            case Value::Kind::Shl:
+            case Value::Kind::Sar:
+            case Value::Kind::Shr:
+            case Value::Kind::And:
+            case Value::Kind::Or:
+            case Value::Kind::Xor:
+            case Value::Kind::Eq:
+            case Value::Kind::Ne:
+            case Value::Kind::SLt:
+            case Value::Kind::SLe:
+            case Value::Kind::SGt:
+            case Value::Kind::SGe:
+            case Value::Kind::ULt:
+            case Value::Kind::ULe:
+            case Value::Kind::UGt:
+            case Value::Kind::UGe:
+                i->erase();
+                return;
+        }
+    }
+};
+
 struct Optimiser {
     Module* const mod;
 
@@ -412,7 +456,8 @@ struct Optimiser {
     void run() { // clang-format off
         RunPasses<
             StoreFowardingPass,
-            InstCombinePass
+            InstCombinePass,
+            DCEPass
         >();
     } // clang-format on
 
@@ -426,35 +471,32 @@ private:
                 /// Use indices here to avoid iterator invalidation.
                 for (usz bi = 0; bi < f->blocks().size(); bi++) {
                     /// Call enter() callback if there is one.
-                    if constexpr (
-                        requires { typename Pass::IsCFGIterationPass; } and
-                        requires { p.enter(f->blocks()[bi]); }
-                    ) p.enter(f->blocks()[bi]);
+                    if constexpr (requires { p.enter(f->blocks()[bi]); }) p.enter(f->blocks()[bi]);
 
                     for (usz ii = 0; ii < f->blocks()[bi]->instructions().size(); ii++) {
+                        auto Done = [&] {
+                            return bi >= f->blocks().size() or
+                                   ii >= f->blocks()[bi]->instructions().size();
+                        };
+
                         /// Some passes may end up deleting all remaining instructions,
                         /// so make sure to check that we still have instructions left
                         /// after each pass.
-                        if (
-                            bi >= f->blocks().size() or
-                            ii >= f->blocks()[bi]->instructions().size()
-                        ) return p.changed();
+                        if (Done()) return p.changed();
 
-                        /// Run the pass on the instruction.
-                        p.run(f->blocks()[bi]->instructions()[ii]);
+                        /// Keep running the pass on the instruction if it has changed.
+                        Inst* inst;
+                        do {
+                            inst = f->blocks()[bi]->instructions()[ii];
+                            p.run(inst);
+                        } while (not Done() and inst != f->blocks()[bi]->instructions()[ii]);
                     }
 
                     /// Call leave() callback if there is one.
-                    if constexpr (
-                        requires { typename Pass::IsCFGIterationPass; } and
-                        requires { p.leave(f->blocks()[bi]); }
-                    ) p.leave(f->blocks()[bi]);
+                    if constexpr (requires { p.leave(f->blocks()[bi]); }) p.leave(f->blocks()[bi]);
 
                     /// Call atfork() callback if there is one and we’re at a fork.
-                    if constexpr (
-                        requires { typename Pass::IsCFGIterationPass; } and
-                        requires { p.atfork(f->blocks()[bi]); }
-                    ) {
+                    if constexpr (requires { p.atfork(f->blocks()[bi]); }) {
                         auto b = f->blocks()[bi];
                         if (b->terminator() and is<CondBranchInst>(b->terminator()))
                             p.atfork(b);
@@ -462,11 +504,7 @@ private:
                 }
 
                 /// Call done() callback if there is one.
-                if constexpr (
-                    requires { typename Pass::IsCFGIterationPass; } and
-                    requires { p.done(); }
-                ) p.done();
-
+                if constexpr (requires { p.done(); }) p.done();
                 return p.changed();
             };
 
