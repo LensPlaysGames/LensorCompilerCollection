@@ -16,6 +16,7 @@ struct AdjacencyMatrix {
     usz coord(usz x, usz y) const {
         LCC_ASSERT(x < size, "AdjacencyMatrix: X out of bounds");
         LCC_ASSERT(y < size, "AdjacencyMatrix: Y out of bounds");
+        LCC_ASSERT(x != y, "AdjacencyMatrix: X and Y are equal; must not set adjacency with self");
         return y * size + x;
     }
 
@@ -24,10 +25,12 @@ struct AdjacencyMatrix {
     }
 
     void set(usz x, usz y) {
+        if (x == y) return;
         data[coord(x, y)] = true;
     }
 
     void clear(usz x, usz y) {
+        if (x == y) return;
         data[coord(x, y)] = false;
     }
 };
