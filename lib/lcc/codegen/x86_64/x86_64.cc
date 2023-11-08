@@ -8,6 +8,9 @@ std::string ToString(Opcode op) {
         case Opcode::Poison: return "x86_64.poison";
         case Opcode::Return: return "ret";
         case Opcode::Move: return "mov";
+        case Opcode::LoadEffectiveAddress: return "lea";
+        case Opcode::Add: return "add";
+        case Opcode::Multiply: return "mul";
     }
     LCC_UNREACHABLE();
 }

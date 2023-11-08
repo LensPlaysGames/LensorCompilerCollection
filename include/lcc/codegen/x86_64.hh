@@ -11,6 +11,10 @@ enum struct Opcode : u32 {
     Poison = u32(lcc::MInst::Kind::ArchStart),
     Return, // ret
     Move,   // mov
+    LoadEffectiveAddress, //lea
+
+    Add, // add
+    Multiply, // mul
 };
 
 enum struct RegisterId : u32 {
