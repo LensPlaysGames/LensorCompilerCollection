@@ -288,6 +288,10 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 return;
             }
 
+            case Value::Kind::GetMemberPtr: {
+                LCC_ASSERT(false, "TODO: Translate GetMemberPtr to LLVM Textual IR");
+            }
+
             /// Emit an LLVM-compatible PHI node.
             case Value::Kind::Phi: {
                 auto phi = as<PhiInst>(i);
@@ -358,6 +362,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::Alloca:
             case Value::Kind::Copy:
             case Value::Kind::GetElementPtr:
+            case Value::Kind::GetMemberPtr:
             case Value::Kind::Load:
             case Value::Kind::Phi:
             case Value::Kind::ZExt:
@@ -532,6 +537,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::Alloca:
             case Value::Kind::Copy:
             case Value::Kind::GetElementPtr:
+            case Value::Kind::GetMemberPtr:
             case Value::Kind::Call:
             case Value::Kind::Load:
             case Value::Kind::Phi:

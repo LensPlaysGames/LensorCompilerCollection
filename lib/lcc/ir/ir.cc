@@ -294,6 +294,12 @@ auto Inst::Children() -> Generator<Value**> {
             co_yield &gep->index;
         } break;
 
+        case Kind::GetMemberPtr: {
+            auto gmp = as<GetMemberPtrInst>(this);
+            co_yield &gmp->pointer;
+            co_yield &gmp->index;
+        } break;
+
         case Kind::Intrinsic: {
             auto i = as<IntrinsicInst>(this);
             for (auto a : i->operand_list) co_yield &a;
@@ -595,6 +601,20 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 return;
             }
 
+            case Value::Kind::GetMemberPtr: {
+                auto gmp = as<GetMemberPtrInst>(i);
+                PrintTemp(i);
+                Print(
+                    "gmp {} {}from {} {}at {}",
+                    Ty(gmp->struct_type()),
+                    C(Red),
+                    Val(gmp->ptr(), false),
+                    C(Red),
+                    Val(gmp->idx())
+                );
+                return;
+            }
+
             case Value::Kind::Intrinsic: LCC_TODO();
 
             case Value::Kind::Load: {
@@ -844,6 +864,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Copy:
             case Value::Kind::Alloca:
             case Value::Kind::GetElementPtr:
+            case Value::Kind::GetMemberPtr:
             case Value::Kind::Call:
             case Value::Kind::Load:
             case Value::Kind::Phi:
@@ -907,6 +928,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Copy:
             case Value::Kind::Alloca:
             case Value::Kind::GetElementPtr:
+            case Value::Kind::GetMemberPtr:
             case Value::Kind::Load:
             case Value::Kind::Phi:
             case Value::Kind::ZExt:

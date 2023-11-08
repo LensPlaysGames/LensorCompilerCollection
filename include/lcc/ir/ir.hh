@@ -39,6 +39,7 @@ public:
         Alloca,
         Call,
         GetElementPtr,
+        GetMemberPtr,
         Intrinsic,
         Load,
         Phi,
@@ -131,6 +132,7 @@ public:
             case VK::Alloca: return "Alloca";
             case VK::Call: return "Call";
             case VK::GetElementPtr: return "GetElementPtr";
+            case VK::GetMemberPtr: return "GetMemberPtr";
             case VK::Intrinsic: return "Intrinsic";
             case VK::Load: return "Load";
             case VK::Phi: return "Phi";
@@ -700,6 +702,54 @@ public:
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::GetElementPtr; }
+};
+
+// Get the Nth member of struct pointed to by ptr().
+class GetMemberPtrInst : public Inst {
+    friend Inst;
+    friend parser::Parser;
+
+    /// A pointer to an instance of a struct of type `struct_type`.
+    Value* pointer{};
+
+    /// The index of the member to get the address of within the struct.
+    Value* index{};
+
+    /// The struct type.
+    Type* struct_t;
+
+    /// TODO: Used by the IR parser.
+    GetMemberPtrInst(Type* structType, Location loc)
+        : Inst(Kind::GetMemberPtr, Type::PtrTy, loc),
+          struct_t(structType) {}
+
+public:
+    GetMemberPtrInst(Type* structType, Value* structPointer, Value* memberIndex, Location loc = {})
+        : Inst(Kind::GetMemberPtr, Type::PtrTy, loc),
+          pointer(structPointer),
+          index(memberIndex),
+          struct_t(structType) {
+        LCC_ASSERT(
+            pointer->type() == Type::PtrTy,
+            "GetMemberInst may only operate on opaque pointers, which `{}` is not",
+            *pointer->type()
+        );
+
+        AddUse(pointer, this);
+        AddUse(index, this);
+    }
+
+    /// Get the struct type we are calculating the offset of a member of.
+    auto struct_type() const -> Type* { return struct_t; }
+
+    /// Get the base pointer.
+    auto ptr() const -> Value* { return pointer; }
+
+    /// Get the index.
+    auto idx() const -> Value* { return index; }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::GetMemberPtr; }
 };
 
 /// A load instruction.

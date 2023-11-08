@@ -34,6 +34,7 @@ static MInst::Kind ir_nary_inst_kind_to_mir(Value::Kind kind) {
         case Value::Kind::Alloca:
         case Value::Kind::Call:
         case Value::Kind::GetElementPtr:
+        case Value::Kind::GetMemberPtr:
         case Value::Kind::Intrinsic:
         case Value::Kind::Load:
         case Value::Kind::Phi:
@@ -274,6 +275,13 @@ auto Module::mir() -> std::vector<MFunction> {
                         assign_virtual_register(gep->ptr());
                         assign_virtual_register(gep->idx());
                     } break;
+
+                    case Value::Kind::GetMemberPtr: {
+                        auto gmp = as<GetMemberPtrInst>(instruction);
+                        assign_virtual_register(gmp->ptr());
+                        assign_virtual_register(gmp->idx());
+                    } break;
+
                     case Value::Kind::Intrinsic:
                         LCC_TODO();
 
@@ -554,6 +562,10 @@ auto Module::mir() -> std::vector<MFunction> {
                         bb.add_instruction(mul);
                         bb.add_instruction(add);
                     } break;
+
+                    case Value::Kind::GetMemberPtr: {
+                        LCC_ASSERT(false, "TODO: gMIR lowering of GetMemberPtr");
+                    }
 
                     case Value::Kind::Branch: {
                         auto branch_ir = as<BranchInst>(instruction);

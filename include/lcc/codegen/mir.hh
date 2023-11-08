@@ -40,6 +40,7 @@ public:
         Call,
         Copy,
         GetElementPtr,
+        GetMemberPtr,
         Intrinsic,
         Load,
         Phi,
@@ -305,6 +306,7 @@ inline std::string ToString(MInst::Kind k) {
         case MInst::Kind::Call: return "M.Call";
         case MInst::Kind::Copy: return "M.Copy";
         case MInst::Kind::GetElementPtr: return "M.GetElementPtr";
+        case MInst::Kind::GetMemberPtr: return "M.GetMemberPtr";
         case MInst::Kind::Intrinsic: return "M.Intrinsic";
         case MInst::Kind::Load: return "M.Load";
         case MInst::Kind::Phi: return "M.Phi";
