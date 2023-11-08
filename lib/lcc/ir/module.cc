@@ -556,15 +556,31 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     case Value::Kind::GetMemberPtr: {
                         auto gmp_ir = as<GetMemberPtrInst>(instruction);
+                        auto reg = Register{virts[instruction], uint(gmp_ir->type()->bits())};
 
                         LCC_ASSERT(
                             gmp_ir->idx()->kind() == Value::Kind::IntegerConstant,
                             "Sorry, but gMIR lowering of GetMemberPtr requires constant member index"
                         );
 
-                        auto add = MInst(MInst::Kind::Add, {virts[instruction], uint(gmp_ir->type()->bits())});
+                        auto member_index = as<IntegerConstant>(gmp_ir->idx())->value().value();
+
+                        auto offset = 0;
+                        for (auto [member_idx, member_ty] : vws::enumerate(as<StructType>(gmp_ir->struct_type())->members())) {
+                            if (usz(member_idx) >= member_index) break;
+                            offset += member_ty->bytes();
+                        }
+
+                        if (not offset) {
+                            auto copy = MInst(MInst::Kind::Copy, reg);
+                            copy.add_operand(MOperandValueReference(f, gmp_ir->ptr()));
+                            bb.add_instruction(copy);
+                            break;
+                        }
+
+                        auto add = MInst(MInst::Kind::Add, reg);
                         add.add_operand(MOperandValueReference(f, gmp_ir->ptr()));
-                        add.add_operand(MOperandValueReference(f, gmp_ir->idx()));
+                        add.add_operand(MOperandImmediate(offset));
 
                         bb.add_instruction(add);
                     } break;
