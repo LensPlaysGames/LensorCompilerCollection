@@ -507,19 +507,41 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         auto gep_ir = as<GEPInst>(instruction);
                         auto reg = Register{virts[instruction], uint(gep_ir->type()->bits())};
-                        auto gep = MInst(MInst::Kind::GetElementPtr, reg);
-                        gep.add_operand(MOperandValueReference(f, gep_ir->ptr()));
-                        if (gep_ir->idx()->kind() == Value::Kind::IntegerConstant) {
-                            aint index = as<IntegerConstant>(gep_ir->idx())->value();
-                            aint scale = gep_ir->base_type()->bytes();
-                            gep.add_operand(MOperandImmediate(index.value() * scale.value()));
-                        } else {
-                            auto mul = MInst(MInst::Kind::Mul, reg);
-                            mul.add_operand(MOperandValueReference(f, gep_ir->idx()));
-                            mul.add_operand(MOperandImmediate(gep_ir->base_type()->bytes()));
-                            gep.add_operand(MOperandRegister(reg));
+
+                        if (auto idx = cast<IntegerConstant>(gep_ir->idx())) {
+                            usz offset = gep_ir->base_type()->bytes() * idx->value().value();
+
+                            if (not offset) {
+                                auto copy = MInst(MInst::Kind::Copy, reg);
+                                copy.add_operand(MOperandValueReference(f, gep_ir->ptr()));
+                                bb.add_instruction(copy);
+                                break;
+                            }
+
+                            auto add = MInst(MInst::Kind::Add, reg);
+                            add.add_operand(MOperandValueReference(f, gep_ir->ptr()));
+                            add.add_operand(MOperandImmediate(offset));
+
+                            usz use_count = gep_ir->users().size();
+                            while (use_count--) add.add_use();
+
+                            bb.add_instruction(add);
+                            break;
                         }
-                        bb.add_instruction(gep);
+
+                        auto mul = MInst(MInst::Kind::Mul, reg);
+                        mul.add_operand(MOperandImmediate(gep_ir->base_type()->bytes()));
+                        mul.add_operand(MOperandValueReference(f, gep_ir->idx()));
+
+                        auto add = MInst(MInst::Kind::Add, reg);
+                        add.add_operand(MOperandValueReference(f, gep_ir->ptr()));
+                        add.add_operand(reg);
+
+                        usz use_count = gep_ir->users().size();
+                        while (use_count--) add.add_use();
+
+                        bb.add_instruction(mul);
+                        bb.add_instruction(add);
                     } break;
 
                     case Value::Kind::Branch: {
