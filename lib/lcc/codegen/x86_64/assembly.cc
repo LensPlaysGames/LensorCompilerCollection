@@ -21,8 +21,8 @@ std::string ToString(MFunction& function, MOperand op) {
         for (usz index = 0; index <= +std::get<MOperandLocal>(op); ++index)
             offset += function.locals().at(index)->allocated_type()->bytes();
         return fmt::format("{}(%rbp)", -isz(offset));
-    } else if (std::holds_alternative<MOperandStatic>(op)) {
-        return fmt::format("{}(%rip)", std::get<MOperandStatic>(op)->name());
+    } else if (std::holds_alternative<MOperandGlobal>(op)) {
+        return fmt::format("{}(%rip)", std::get<MOperandGlobal>(op)->name());
     } else if (std::holds_alternative<MOperandFunction>(op)) {
         return fmt::format("{}", std::get<MOperandFunction>(op)->name());
     } else if (std::holds_alternative<MOperandBlock>(op)) {

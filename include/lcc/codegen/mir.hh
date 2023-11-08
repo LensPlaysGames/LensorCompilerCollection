@@ -21,14 +21,14 @@ using MOperandRegister = Register;
 using MOperandImmediate = u64;
 enum struct MOperandLocal : u64;
 u64 operator+(MOperandLocal l);
-using MOperandStatic = GlobalVariable*;
+using MOperandGlobal = GlobalVariable*;
 using MOperandFunction = Function*;
 using MOperandBlock = Block*;
 using MOperand = std::variant<
     MOperandRegister,
     MOperandImmediate,
     MOperandLocal,
-    MOperandStatic,
+    MOperandGlobal,
     MOperandFunction,
     MOperandBlock>;
 

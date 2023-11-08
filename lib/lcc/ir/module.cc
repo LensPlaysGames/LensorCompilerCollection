@@ -172,11 +172,10 @@ void Module::emit(std::filesystem::path output_file_path) {
             for (auto& mfunc : machine_ir)
                 allocate_registers(desc, mfunc);
 
-            // FIXME: This code causes a segfault and I don't know why.
-            // fmt::print("After RA:\n");
-            // for (auto& mfunc : machine_ir) {
-            //     fmt::print("{}\n", PrintMFunction(mfunc));
-            // }
+            fmt::print("After RA:\n");
+            for (auto& mfunc : machine_ir) {
+                fmt::print("{}\n", PrintMFunction(mfunc));
+            }
 
             if (_ctx->target()->is_x64())
                 x86_64::emit_gnu_att_assembly(output_file_path, this, machine_ir);
@@ -414,7 +413,7 @@ auto Module::mir() -> std::vector<MFunction> {
             }
 
             case Value::Kind::GlobalVariable:
-                return MOperandStatic{as<GlobalVariable>(v)};
+                return MOperandGlobal{as<GlobalVariable>(v)};
 
             case Value::Kind::IntegerConstant:
                 return MOperandImmediate{*as<IntegerConstant>(v)->value()};
@@ -669,8 +668,8 @@ auto Module::mir() -> std::vector<MFunction> {
                             copy.add_operand(std::get<MOperandRegister>(op));
                         } else if (std::holds_alternative<MOperandLocal>(op)) {
                             copy.add_operand(std::get<MOperandLocal>(op));
-                        } else if (std::holds_alternative<MOperandStatic>(op)) {
-                            copy.add_operand(std::get<MOperandStatic>(op));
+                        } else if (std::holds_alternative<MOperandGlobal>(op)) {
+                            copy.add_operand(std::get<MOperandGlobal>(op));
                         } else if (std::holds_alternative<MOperandFunction>(op)) {
                             copy.add_operand(std::get<MOperandFunction>(op));
                         } else if (std::holds_alternative<MOperandBlock>(op)) {
