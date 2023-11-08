@@ -11,8 +11,13 @@ enum struct Opcode : u32 {
     Poison = u32(lcc::MInst::Kind::ArchStart),
     Return, // ret
     Move,   // mov
-    MoveSignExtended, // movsx
-    LoadEffectiveAddress, //lea
+    MoveSignExtended,     // movsx
+
+    // Optional third offset operand (default zero).
+    MoveDereferenceRHS,   // mov <any>, [offset](%register).
+    MoveDereferenceLHS,   // mov [offset](%register), <any>
+
+    LoadEffectiveAddress, // lea
 
     Add, // add
     Multiply, // mul

@@ -7,6 +7,8 @@ std::string ToString(Opcode op) {
     switch (op) {
         case Opcode::Poison: return "x86_64.poison";
         case Opcode::Return: return "ret";
+        case Opcode::MoveDereferenceLHS:
+        case Opcode::MoveDereferenceRHS:
         case Opcode::Move: return "mov";
         case Opcode::MoveSignExtended: return "movsx";
         case Opcode::LoadEffectiveAddress: return "lea";
@@ -42,6 +44,7 @@ std::string ToString(RegisterId id) {
 }
 
 std::string ToString(RegisterId id, usz size) {
+    if (not size) size = 64;
     switch (id) {
         case RegisterId::INVALID: return "x86_64.INVALID";
         case RegisterId::RAX: {

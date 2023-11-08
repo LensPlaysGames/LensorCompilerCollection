@@ -86,7 +86,6 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
                     auto rhs = instruction.get_operand(1);
                     if (std::holds_alternative<MOperandRegister>(lhs) and std::holds_alternative<MOperandRegister>(rhs) and std::get<MOperandRegister>(lhs).value == std::get<MOperandRegister>(rhs).value)
                         continue;
-                    ;
                 }
 
                 if (instruction.opcode() == +x86_64::Opcode::Return) {
@@ -100,12 +99,48 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
 
                 out += "    ";
                 out += ToString(Opcode(instruction.opcode()));
+                if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS) {
+                    auto lhs = instruction.get_operand(0);
+                    auto rhs = instruction.get_operand(1);
+                    usz offset = 0;
+                    if (instruction.all_operands().size() == 3) {
+                        auto given_offset = instruction.get_operand(2);
+                        LCC_ASSERT(
+                                   std::holds_alternative<MOperandImmediate>(given_offset),
+                                   "Offset operand of dereferencing move must be an immediate"
+                                   );
+                        offset = std::get<MOperandImmediate>(given_offset);
+                    }
+                    if (offset)
+                        out += fmt::format(" {}, {}({})\n", ToString(function, lhs), offset, ToString(function, rhs));
+                    else out += fmt::format(" {}, ({})\n", ToString(function, lhs), ToString(function, rhs));
+                    continue;
+                }
+                if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceLHS) {
+                    auto lhs = instruction.get_operand(0);
+                    auto rhs = instruction.get_operand(1);
+                    usz offset = 0;
+                    if (instruction.all_operands().size() == 3) {
+                        auto given_offset = instruction.get_operand(2);
+                        LCC_ASSERT(
+                                   std::holds_alternative<MOperandImmediate>(given_offset),
+                                   "Offset operand of dereferencing move must be an immediate"
+                                   );
+                        offset = std::get<MOperandImmediate>(given_offset);
+                    }
+                    if (offset)
+                        out += fmt::format(" {}({}), {}\n", offset, ToString(function, lhs), ToString(function, rhs));
+                    else out += fmt::format(" ({}), {}\n", ToString(function, lhs), ToString(function, rhs));
+                    continue;
+                }
                 if (instruction.opcode() == +x86_64::Opcode::Move) {
-                    if (std::holds_alternative<MOperandImmediate>(instruction.get_operand(0))) {
-                        if (std::holds_alternative<MOperandLocal>(instruction.get_operand(1))) {
+                    auto lhs = instruction.get_operand(0);
+                    auto rhs = instruction.get_operand(1);
+                    if (std::holds_alternative<MOperandImmediate>(lhs)) {
+                        if (std::holds_alternative<MOperandLocal>(rhs)) {
                             // Moving immediate into local (memory) requires mov suffix in GNU. We use
                             // size of local to determine how big of a move to do.
-                            auto local_index = +std::get<MOperandLocal>(instruction.get_operand(1));
+                            auto local_index = +std::get<MOperandLocal>(rhs);
                             auto* local = function.locals().at(local_index);
                             auto bitwidth = local->allocated_type()->bits();
                             switch (bitwidth) {
