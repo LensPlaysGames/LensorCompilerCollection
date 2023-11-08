@@ -214,7 +214,9 @@ StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, std::
     // Look in ctx type cache.
     const auto& found = rgs::find_if(ctx->struct_types, [&](const Type* t) {
         const StructType* s = as<StructType>(t);
-        return s->name() == name and rgs::equal(s->members(), member_types);
+        return s->named()
+               ? s->name() == name and rgs::equal(s->members(), member_types)
+               : rgs::equal(as<StructType>(ctx->struct_types[usz(s->index())])->members(), member_types);
     });
     if (found != ctx->struct_types.end())
         return as<StructType>(*found);
