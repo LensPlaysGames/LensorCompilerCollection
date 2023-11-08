@@ -94,7 +94,7 @@ static void collect_interferences_from_block(
     // Basically, walk over the instructions of the block backwards, keeping
     // track of all virtual registers that have been encountered but not
     // their defining use, as these are our "live values".
-    for (auto& inst : block->instructions()) {
+    for (auto& inst : block->instructions() | vws::reverse) {
         // If the defining use of a virtual register is an operand of this
         // instruction, remove it from vector of live vals.
         if (inst.is_defining()) std::erase(live_values, inst.reg());
