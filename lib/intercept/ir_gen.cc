@@ -641,7 +641,16 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         } break;
 
         case Expr::Kind::MemberAccess: {
-            LCC_ASSERT(false, "TODO: Improve GEPInst implementation to allow for it to handle member access");
+            auto member_access = as<MemberAccessExpr>(expr);
+
+            generate_expression(member_access->object());
+
+            auto struct_t = Convert(ctx, member_access->struct_type());
+            auto instance_pointer = generated_ir[member_access->object()];
+            auto index = new (*module) IntegerConstant(lcc::IntegerType::Get(ctx, 64), member_access->member());
+            auto gmp = new (*module) GetMemberPtrInst(struct_t, instance_pointer, index);
+            generated_ir[expr] = gmp;
+            insert(gmp);
         } break;
 
         case Expr::Kind::CompoundLiteral: {
