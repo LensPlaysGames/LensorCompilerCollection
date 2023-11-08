@@ -135,8 +135,15 @@ int main(int argc, char** argv) {
             m->emit(output_file_path);
         };
 
+        /// LCC IR.
+        if (path_str.ends_with(".lcc")) {
+            auto mod = lcc::Module::Parse(&context, file);
+            if (context.has_error()) std::exit(1);
+            EmitModule(mod.get());
+        }
+
         /// Intercept.
-        if (path_str.ends_with(".int")) {
+        else if (path_str.ends_with(".int")) {
             /// Parse the file.
             auto mod = lcc::intercept::Parser::Parse(&context, file);
             if (context.has_error()) std::exit(1);

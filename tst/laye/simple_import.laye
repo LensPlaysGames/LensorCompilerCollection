@@ -4,10 +4,10 @@
 
 // * (?<global>[^:\s]+) : i8\[22\] = "Hello, simple import!\\00"
 
-// * puts : i32(ptr $t) external
+// * puts : imported i32(ptr $t)
 import "lib/stdio.laye";
 
-// * main : i32():
+// * main : layecc i32():
 // +   $b:
 // +     $t = call @puts (ptr @$global) -> i32
 // +     return i32 0

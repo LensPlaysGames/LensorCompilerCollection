@@ -4,7 +4,7 @@
 // d f  _L[a-zA-Z0-9_]+
 // d ty [a-zA-Z0-9_]+
 
-// * main : (?<ret_ty>$ty)():
+// * main : layecc (?<ret_ty>$ty)():
 // +   $b:
 // +     (?<r>$t) = alloca $ret_ty
 // +     store $ret_ty 69 into $r

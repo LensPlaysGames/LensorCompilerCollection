@@ -470,10 +470,14 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     void PrintFunctionHeader(Function* f) {
         auto ftype = as<FunctionType>(f->type());
         Print(
-            "{}{} {}: {}{}(",
+            "{}{} {}:{}{}{}{} {}{}(",
             C(Green),
             f->name(),
             C(Red),
+            f->linkage() == Linkage::Exported ? ""sv : " "sv,
+            f->linkage() == Linkage::Exported ? "" : StringifyEnum(f->linkage()),
+            f->call_conv() == CallConv::C ? ""sv : " "sv,
+            f->call_conv() == CallConv::C ? ""sv : StringifyEnum(f->call_conv()),
             Ty(ftype->ret()),
             C(Red)
         );
@@ -486,7 +490,6 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         }
 
         Print("{})", C(Red));
-        if (f->imported()) Print(" external");
     }
 
     /// Print start/end of function body.
@@ -558,8 +561,10 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 if (not callee_ty->ret()->is_void()) PrintTemp(i);
                 else Print("    {}", C(Yellow));
                 Print(
-                    "{}call {} {}(",
-                    c->is_tail_call() ? "tail " : "",
+                    "{}call{}{} {} {}(",
+                    c->is_tail_call() ? "tail "sv : ""sv,
+                    c->call_conv() == CallConv::C ? ""sv : " "sv,
+                    c->call_conv() == CallConv::C ? ""sv : StringifyEnum(c->call_conv()),
                     Val(c->callee(), false),
                     C(Red)
                 );
@@ -681,9 +686,9 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
             /// Unary instructions.
             case Value::Kind::Bitcast: PrintCast(i, "bitcast"); return;
-            case Value::Kind::ZExt: PrintCast(i, "zero.extend"); return;
-            case Value::Kind::SExt: PrintCast(i, "sign.extend"); return;
-            case Value::Kind::Trunc: PrintCast(i, "truncate"); return;
+            case Value::Kind::ZExt: PrintCast(i, "zext"); return;
+            case Value::Kind::SExt: PrintCast(i, "sext"); return;
+            case Value::Kind::Trunc: PrintCast(i, "trunc"); return;
 
             case Value::Kind::Neg: {
                 auto neg = as<UnaryInstBase>(i);
@@ -703,10 +708,10 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Add: PrintBinary(i, "add"); return;
             case Value::Kind::Sub: PrintBinary(i, "sub"); return;
             case Value::Kind::Mul: PrintBinary(i, "mul"); return;
-            case Value::Kind::SDiv: PrintBinary(i, "s.div"); return;
-            case Value::Kind::UDiv: PrintBinary(i, "u.div"); return;
-            case Value::Kind::SRem: PrintBinary(i, "s.rem"); return;
-            case Value::Kind::URem: PrintBinary(i, "u.rem"); return;
+            case Value::Kind::SDiv: PrintBinary(i, "sdiv"); return;
+            case Value::Kind::UDiv: PrintBinary(i, "udiv"); return;
+            case Value::Kind::SRem: PrintBinary(i, "srem"); return;
+            case Value::Kind::URem: PrintBinary(i, "urem"); return;
             case Value::Kind::Shl: PrintBinary(i, "shl"); return;
             case Value::Kind::Sar: PrintBinary(i, "sar"); return;
             case Value::Kind::Shr: PrintBinary(i, "shr"); return;
@@ -715,14 +720,14 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Xor: PrintBinary(i, "xor"); return;
             case Value::Kind::Eq: PrintBinary(i, "eq"); return;
             case Value::Kind::Ne: PrintBinary(i, "ne"); return;
-            case Value::Kind::SLt: PrintBinary(i, "s.lt"); return;
-            case Value::Kind::SLe: PrintBinary(i, "s.le"); return;
-            case Value::Kind::SGt: PrintBinary(i, "s.gt"); return;
-            case Value::Kind::SGe: PrintBinary(i, "s.ge"); return;
-            case Value::Kind::ULt: PrintBinary(i, "u.lt"); return;
-            case Value::Kind::ULe: PrintBinary(i, "u.le"); return;
-            case Value::Kind::UGt: PrintBinary(i, "u.gt"); return;
-            case Value::Kind::UGe: PrintBinary(i, "u.ge"); return;
+            case Value::Kind::SLt: PrintBinary(i, "slt"); return;
+            case Value::Kind::SLe: PrintBinary(i, "sle"); return;
+            case Value::Kind::SGt: PrintBinary(i, "sgt"); return;
+            case Value::Kind::SGe: PrintBinary(i, "sge"); return;
+            case Value::Kind::ULt: PrintBinary(i, "ult"); return;
+            case Value::Kind::ULe: PrintBinary(i, "ule"); return;
+            case Value::Kind::UGt: PrintBinary(i, "ugt"); return;
+            case Value::Kind::UGe: PrintBinary(i, "uge"); return;
         }
 
         LCC_UNREACHABLE();

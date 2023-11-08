@@ -153,12 +153,12 @@ BreakBeforeTernaryOperators: true
 ## Format ctors like so:
 ##
 ##     Constructor()
-##         : bar(42)
-##         , baz(23)
+##         : bar(42),
+##           baz(23)
 #BreakConstructorInitializers: BeforeComma
 
 ## Same thing, but for class declarations.
-BreakInheritanceList: BeforeComma
+BreakInheritanceList: AfterColon
 
 ## Allow breaking long string literals across multiple lines.
 BreakStringLiterals: true

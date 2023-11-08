@@ -7,33 +7,44 @@
 #include <variant>
 
 namespace lcc {
+template <typename Type, bool allow_construction_from_nullptr = not std::is_pointer_v<Type>>
+requires (not std::is_reference_v<Type>)
+class [[nodiscard]] Result;
+
+namespace detail {
+
+template <typename T>
+struct make_result {
+    using type = Result<std::remove_cvref_t<T>>;
+    static constexpr bool value = false;
+};
+
+template <typename T>
+struct make_result<Result<T>> {
+    using type = Result<std::remove_cvref_t<T>>;
+    static constexpr bool value = true;
+};
+
+template <typename T>
+using make_result_t = typename make_result<T>::type;
+
+template <typename T>
+static constexpr bool is_result_v = make_result<T>::value;
+
+} // namespace detail
+
 /// Result type that can hold either a value or a diagnostic.
 ///
 /// If the result contains a diagnostic, the diagnostic is
 /// issued in the destructor, as it usually would be.
-template <typename Type, bool allow_construction_from_nullptr = not std::is_pointer_v<Type>>
+template <typename Type, bool allow_construction_from_nullptr>
 requires (not std::is_reference_v<Type>)
 class [[nodiscard]] Result {
+public:
     using ValueType = std::conditional_t<std::is_void_v<Type>, std::monostate, Type>;
+
+private:
     std::variant<ValueType, Diag> data;
-
-    template <typename T>
-    struct make_result {
-        using type = Result<T>;
-        static constexpr bool value = false;
-    };
-
-    template <typename T>
-    struct make_result<Result<T>> {
-        using type = Result<T>;
-        static constexpr bool value = true;
-    };
-
-    template <typename T>
-    using make_result_t = typename make_result<T>::type;
-
-    template <typename T>
-    static constexpr bool is_result_v = make_result<T>::value;
 
     /// Construct a null result.
     struct NullConstructTag {};
@@ -67,21 +78,6 @@ public:
         else data = std::move(other.value());
     }
 
-    /// Checked cast for results.
-    ///
-    /// Note: \c is() and \c cast() seem to have confusing semantics in
-    /// conjunction with results, so we only provide this one for now:
-    /// it’s unclear what \c is() should return if the result holds a
-    /// diagnostic, and \c cast() is just a bad idea because it would
-    /// just fill our results with null pointers, which is something
-    /// we’re actively trying to prevent.
-    template <typename To, typename From>
-    requires is_result_v<From>
-    friend auto as(From&& result) -> Result<To*> {
-        if (result.is_diag()) return std::forward<decltype(result)>(result).diag();
-        else return Result<To*>{lcc::as<To>(std::forward<decltype(result)>(result).value())};
-    }
-
     /// Get the diagnostic.
     ///
     /// This returns a && to simplify the `return res.diag()` pattern.
@@ -108,6 +104,11 @@ public:
     [[nodiscard]] auto operator->() -> ValueType
     requires std::is_pointer_v<ValueType>
     { return value(); }
+
+    /// Access the underlying value.
+    [[nodiscard]] auto operator->() -> ValueType*
+    requires (not std::is_pointer_v<ValueType>)
+    { return std::addressof(value()); }
 
     /// \brief Monad bind operator for results.
     ///
@@ -143,8 +144,8 @@ public:
     /// \return A diagnostic if this holds a diagnostic, and the result of invoking
     ///     \c cb with the value otherwise.
     template <typename Callable>
-    [[nodiscard]] auto operator>>=(Callable&& cb) -> make_result_t<std::invoke_result_t<Callable, ValueType&>> {
-        using ResultType = make_result_t<std::invoke_result_t<Callable, ValueType&>>;
+    [[nodiscard]] auto operator>>=(Callable&& cb) -> detail::make_result_t<std::invoke_result_t<Callable, ValueType&>> {
+        using ResultType = detail::make_result_t<std::invoke_result_t<Callable, ValueType&>>;
         if (is_diag()) return diag();
         return ResultType{std::invoke(std::forward<Callable>(cb), value())};
     }
@@ -157,6 +158,21 @@ public:
     requires std::is_pointer_v<ValueType>
     { return Result(NullConstructTag{}); }
 };
+
+/// Checked cast for results.
+///
+/// Note: \c is() and \c cast() seem to have confusing semantics in
+/// conjunction with results, so we only provide this one for now:
+/// it’s unclear what \c is() should return if the result holds a
+/// diagnostic, and \c cast() is just a bad idea because it would
+/// just fill our results with null pointers, which is something
+/// we’re actively trying to prevent.
+template <typename To, typename From>
+requires detail::is_result_v<From>
+auto as(From&& result) -> Result<To*> {
+    if (result.is_diag()) return std::forward<decltype(result)>(result).diag();
+    else return Result<To*>{lcc::as<To>(std::forward<decltype(result)>(result).value())};
+}
 
 /// Return true if any of the provided results are errors.
 template <typename... ValueTypes>

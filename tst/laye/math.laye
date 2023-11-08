@@ -3,7 +3,7 @@
 // d t %[0-9]+
 // d f _L[a-zA-Z0-9_]+
 
-// * $f : void():
+// * $f : internal layecc void():
 // +   $b:
 // +     (?<va>$t) = alloca i64
 // +     (?<va_temp>$t) = add i64 2, 3
@@ -15,7 +15,7 @@
 // +     (?<vc>$t) = alloca i64
 // +     (?<va3>$t) = load i64 from $va
 // +     (?<vb2>$t) = load i64 from $vb
-// +     (?<vc_temp1>$t) = s.div i64 $vb2, 2
+// +     (?<vc_temp1>$t) = sdiv i64 $vb2, 2
 // +     (?<vc_temp2>$t) = add i64 $va3, $vc_temp1
 // +     store i64 $vc_temp2 into $vc
 // +     (?<vd>$t) = alloca i64

@@ -3,7 +3,7 @@
 // d t %[0-9]+
 // d f _L[a-zA-Z0-9_]+
 
-// * main : i32():
+// * main : layecc i32():
 // +   bb0:
 // +     (?<r>$t) = alloca ptr
 // +     (?<zero>$t) = bitcast i64 0 to ptr
@@ -13,7 +13,7 @@
 // +     (?<temp_2>$t) = bitcast ptr $temp_1 to ptr
 // +     store ptr $temp_2 into $t
 // +     (?<temp_3>$t) = load ptr from $r
-// +     (?<temp_4>$t) = truncate ptr $temp_3 to i32
+// +     (?<temp_4>$t) = trunc ptr $temp_3 to i32
 // +     return i32 $temp_4
 i32 main()
 {

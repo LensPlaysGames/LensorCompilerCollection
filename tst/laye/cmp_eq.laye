@@ -3,7 +3,7 @@
 // d t %[0-9]+
 // d f _L[a-zA-Z0-9_]+
 
-// * $f : i32():
+// * $f : internal layecc i32():
 // +   $b:
 // +     (?<cond>$t) = alloca i64
 // +     store i64 12 into $cond

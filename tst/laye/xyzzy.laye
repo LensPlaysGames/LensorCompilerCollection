@@ -1,7 +1,7 @@
 // R %lcc --ir %s
 // d b [a-zA-Z0-9\.]+
 
-// * main : i32():
+// * main : layecc i32():
 // +   $b:
 // +     return i32 0
 i32 main()

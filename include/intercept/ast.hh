@@ -953,6 +953,9 @@ class FuncDecl : public ObjectDecl {
     /// do not get a decl.
     std::vector<VarDecl*> _params;
 
+    /// Calling convention.
+    CallConv _cc;
+
 public:
     FuncDecl(
         std::string name,
@@ -961,9 +964,10 @@ public:
         Scope* scope,
         Module* mod,
         Linkage linkage,
-        Location location
+        Location location,
+        CallConv cc = CallConv::Intercept
     ) : ObjectDecl(Kind::FuncDecl, type, std::move(name), mod, linkage, location),
-        _body(body), _scope(scope) {
+        _body(body), _scope(scope), _cc(cc) {
         mod->add_function(this);
 
         /// Functions receive special handling in sema and their types are
@@ -972,6 +976,8 @@ public:
     }
 
     auto body() -> Expr*& { return _body; }
+
+    auto call_conv() const -> CallConv { return _cc; }
 
     auto return_type() const -> Type* {
         return as<FuncType>(type())->return_type();

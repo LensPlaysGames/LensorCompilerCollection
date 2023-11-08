@@ -104,6 +104,14 @@ struct StringHash {
         return std::hash<std::string_view>{}(std::string_view{txt.data(), txt.size()});
     }
 };
+
+/// Enum that has a StringifyEnum() function.
+template <typename T>
+concept FormattableEnum = requires (T t) {
+    requires std::is_enum_v<T>;
+    { StringifyEnum(t) } -> std::convertible_to<std::string_view>;
+};
+
 } // namespace lcc::detail
 
 namespace lcc {
@@ -203,5 +211,16 @@ void ReplaceAll(
     std::string_view to
 );
 } // namespace lcc::utils
+
+template <lcc::detail::FormattableEnum T>
+struct fmt::formatter<T> {
+    template <typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(T t, FormatContext& ctx) {
+        return fmt::format_to(ctx.out(), "{}", StringifyEnum(t));
+    }
+};
 
 #endif // LCC_UTILS_HH

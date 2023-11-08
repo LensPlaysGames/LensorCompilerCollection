@@ -36,7 +36,6 @@ endif()
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     find_program(MOLD_LINKER "mold")
     if (MOLD_LINKER)
-        add_compile_options(-fuse-ld=mold)
         add_link_options(-fuse-ld=mold)
     endif()
 endif()
@@ -143,10 +142,15 @@ endif()
 
 ## Debug/Release flags.
 if (NOT MSVC)
+    if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        target_compile_options(options INTERFACE $<$<CONFIG:DEBUG>:-rdynamic>)
+    endif()
+
     target_compile_options(options INTERFACE
-        $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
+        $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
         $<$<CONFIG:RELEASE>:-O3 -march=native>
     )
+
     target_link_options(options INTERFACE
         $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
         $<$<CONFIG:RELEASE>:-O3 -march=native>
@@ -192,7 +196,7 @@ target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
 ## Add libclopts.
 FetchContent_Declare(clopts
     GIT_REPOSITORY https://github.com/Sirraide/clopts.git
-    GIT_TAG v2.0.0
+    GIT_TAG v2.0.3
     SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/clopts"
 )
 FetchContent_MakeAvailable(clopts)
@@ -336,6 +340,7 @@ if (BUILD_TESTING)
     set(FCHK_EXE_PATH "${PROJECT_SOURCE_DIR}/fchk/out/fchk")
     include("${PROJECT_SOURCE_DIR}/fchk/cmake/FCHKDiscoverTests.cmake")
 
+
     ## Add more tests below if need be.
     FCHKAddAllTestsInDir(
         IN "tst/laye"
@@ -349,7 +354,15 @@ if (BUILD_TESTING)
     FCHKAddAllTestsInDir(
         IN "tst/intercept/ir"
         PATTERN "*.int"
-        PREFIX "\\\;\\\;"
+        PREFIX "$<SEMICOLON>$<SEMICOLON>"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
+    )
+
+    FCHKAddAllTestsInDir(
+        IN "tst/ir"
+        PATTERN "*.lcc"
+        PREFIX "$<SEMICOLON>"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
     )

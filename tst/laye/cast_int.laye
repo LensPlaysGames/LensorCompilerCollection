@@ -3,12 +3,12 @@
 // d t %[0-9]+
 // d f _L[a-zA-Z0-9_]+
 
-// * main : i32():
+// * main : layecc i32():
 // +   $b:
 // +     (?<v>$t) = alloca i64
 // +     store i64 69 into $v
 // +     (?<load>$t) = load i64 from $v
-// +     (?<cast>$t) = truncate i64 $load to i32
+// +     (?<cast>$t) = trunc i64 $load to i32
 // +     return i32 $cast
 i32 main()
 {

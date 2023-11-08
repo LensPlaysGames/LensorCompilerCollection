@@ -47,6 +47,9 @@ public:
 
     void lower();
     void emit(std::filesystem::path output_file_path);
+
+    /// Parse a module from a file.
+    static auto Parse(Context* ctx, File& file) -> std::unique_ptr<Module>;
 };
 } // namespace lcc
 

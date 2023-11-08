@@ -50,6 +50,7 @@ intc::Module::Module(
         this,
         Linkage::Exported,
         {},
+        CallConv::C,
     };
 }
 

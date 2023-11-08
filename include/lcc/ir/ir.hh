@@ -15,6 +15,10 @@
 namespace lcc {
 class Parameter;
 
+namespace parser {
+class Parser;
+}
+
 /// An IR value.
 ///
 /// This may either be an instruction, a block, a function
@@ -200,7 +204,7 @@ public:
 
 /// IR instruction.
 class Inst : public Value {
-    // So that parent can be set upon insertion.
+    /// So that parent can be set upon insertion.
     friend Block;
 
     /// Associated machine instruction during early codegen.
@@ -251,7 +255,7 @@ protected:
 
     /// Replace an operand with another operand and update uses.
     void UpdateOperand(Value*& op, Value* newval) {
-        RemoveUse(op, this);
+        if (op) RemoveUse(op, this);
         AddUse(newval, this);
         op = newval;
     }
@@ -516,6 +520,8 @@ public:
 /// A stack allocation.
 class AllocaInst : public Inst {
     friend Inst;
+    friend parser::Parser;
+
     Type* _allocated_type;
 
 public:
@@ -531,9 +537,10 @@ public:
 /// A call instruction.
 class CallInst : public Inst {
     friend Inst;
+    friend parser::Parser;
 
     /// The value being called.
-    Value* callee_value;
+    Value* callee_value{};
 
     /// The type of the function being called.
     ///
@@ -543,10 +550,13 @@ class CallInst : public Inst {
     ///
     /// FIXME: Once everything is working, determine whether
     ///        we actually ended up needing this.
-    FunctionType* callee_type;
+    FunctionType* callee_type{};
 
     /// The arguments to the call.
     std::vector<Value*> arguments;
+
+    /// The calling convention of this instruction.
+    CallConv cc;
 
     /// Whether the call is a tail call.
     bool tail_call : 1 = false;
@@ -555,20 +565,32 @@ class CallInst : public Inst {
     /// must be inlined regardless of the optimisation level.
     bool force_inline : 1 = false;
 
+    /// Used by the IR Parser.
+    CallInst(FunctionType* ftype, Location loc)
+        : Inst(Kind::Call, ftype->ret(), loc),
+          callee_type(ftype) {}
+
 public:
     CallInst(
         Value* callee,
         FunctionType* callee_type,
         std::vector<Value*> arguments,
-        Location loc = {}
+        Location loc = {},
+        CallConv cc = {}
     ) : Inst(Kind::Call, callee_type->ret(), loc),
-        callee_value(callee), callee_type(callee_type), arguments(std::move(arguments)) {
+        callee_value(callee),
+        callee_type(callee_type),
+        arguments(std::move(arguments)),
+        cc(cc) {
         AddUse(callee_value, this);
         for (auto a : this->arguments) AddUse(a, this);
     }
 
     /// Get the arguments.
     auto args() const -> const std::vector<Value*>& { return arguments; }
+
+    /// Get the calling convention.
+    auto call_conv() const -> CallConv { return cc; }
 
     /// Get the callee.
     auto callee() const -> Value* { return callee_value; }
@@ -595,6 +617,7 @@ public:
 /// Backend intrinsic.
 class IntrinsicInst : public Inst {
     friend Inst;
+    friend parser::Parser;
 
     /// The intrinsic ID.
     IntrinsicKind intrinsic;
@@ -631,15 +654,21 @@ public:
 ///
 class GEPInst : public Inst {
     friend Inst;
+    friend parser::Parser;
 
     /// The base pointer to index from; "p" in the equation.
-    Value* pointer;
+    Value* pointer{};
 
-    // The index to offset from the base pointer; "x" in the equation.
-    Value* index;
+    /// The index to offset from the base pointer; "x" in the equation.
+    Value* index{};
 
     /// The element type.
     Type* element_type;
+
+    /// Used by the IR parser.
+    GEPInst(Type* elem, Location loc)
+        : Inst(Kind::GetElementPtr, Type::PtrTy, loc),
+          element_type(elem) {}
 
 public:
     GEPInst(Type* elementType, Value* arrayPointer, Value* arrayIndex, Location loc = {})
@@ -673,9 +702,13 @@ public:
 /// A load instruction.
 class LoadInst : public Inst {
     friend Inst;
+    friend parser::Parser;
 
     /// The pointer to load from.
-    Value* pointer;
+    Value* pointer{};
+
+    /// Used by the IR parser.
+    LoadInst(Type* ty, Location loc = {}) : Inst(Kind::Load, ty, loc) {}
 
 public:
     LoadInst(Type* ty, Value* ptr, Location loc = {})
@@ -697,12 +730,16 @@ public:
 /// A store instruction.
 class StoreInst : public Inst {
     friend Inst;
+    friend parser::Parser;
 
     /// The value to store.
-    Value* value;
+    Value* value{};
 
     /// The pointer to store to.
-    Value* pointer;
+    Value* pointer{};
+
+    /// Used by the IR parser.
+    StoreInst(Location loc = {}) : Inst(Kind::Store, Type::VoidTy, loc) {}
 
 public:
     StoreInst(Value* val, Value* ptr, Location loc = {})
@@ -731,14 +768,15 @@ public:
 /// PHI instruction.
 class PhiInst : public Inst {
     friend Inst;
+    friend parser::Parser;
 
     /// An incoming value.
     struct IncomingValue {
         /// The value.
-        Value* value;
+        Value* value{};
 
         /// The block it comes from.
-        Block* block;
+        Block* block{};
     };
 
     /// Iterators.
@@ -830,9 +868,13 @@ public:
 /// Unconditional branch instruction.
 class BranchInst : public Inst {
     friend Inst;
+    friend parser::Parser;
 
     /// The block to branch to.
-    Block* target_block;
+    Block* target_block{};
+
+    /// Used by the IR parser.
+    BranchInst(Location loc = {}) : Inst(Kind::Branch, Type::VoidTy, loc) {}
 
 public:
     BranchInst(Block* target, Location loc = {})
@@ -851,15 +893,19 @@ public:
 /// Conditional branch instruction.
 class CondBranchInst : public Inst {
     friend Inst;
+    friend parser::Parser;
 
     /// The condition.
-    Value* condition;
+    Value* condition{};
 
     /// The block to branch to if the condition is true.
-    Block* then_;
+    Block* then_{};
 
     /// The block to branch to if the condition is false.
-    Block* else_;
+    Block* else_{};
+
+    /// Used by the IR parser.
+    CondBranchInst(Location loc = {}) : Inst(Kind::CondBranch, Type::VoidTy, loc) {}
 
 public:
     CondBranchInst(
@@ -897,9 +943,10 @@ public:
 /// Return instruction.
 class ReturnInst : public Inst {
     friend Inst;
+    friend parser::Parser;
 
     /// The value to return.
-    Value* value;
+    Value* value{};
 
 public:
     ReturnInst(Value* val, Location loc = {})
@@ -914,7 +961,7 @@ public:
     auto val() const -> Value* { return value; }
 
     /// Replace the value.
-    void val(Value* v);
+    void val(Value* v) { UpdateOperand(value, v); }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Return; }
@@ -923,6 +970,7 @@ public:
 /// Unreachable instruction.
 class UnreachableInst : public Inst {
     friend Inst;
+    friend parser::Parser;
 
 public:
     UnreachableInst(Location loc = {})
@@ -938,12 +986,13 @@ public:
 /// Base class for binary instructions.
 class BinaryInst : public Inst {
     friend Inst;
+    friend parser::Parser;
 
     /// The left operand.
-    Value* left;
+    Value* left{};
 
     /// The right operand.
-    Value* right;
+    Value* right{};
 
 protected:
     /// Assert that two operands have the same type.
@@ -959,8 +1008,9 @@ protected:
 public:
     BinaryInst(Kind k, Value* l, Value* r, Type* ty, Location loc = {})
         : Inst(k, ty, loc), left(l), right(r) {
-        AddUse(left, this);
-        AddUse(right, this);
+        /// IR parser may pass nullptr here.
+        if (left) AddUse(left, this);
+        if (right) AddUse(right, this);
     }
 
     /// Get the left operand.
@@ -984,6 +1034,11 @@ public:
 
 /// An add instruction.
 class AddInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    AddInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Add, nullptr, nullptr, ty, loc) {}
+
 public:
     AddInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::Add, l, r, l->type(), loc) {
@@ -996,6 +1051,11 @@ public:
 
 /// A subtract instruction.
 class SubInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    SubInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Sub, nullptr, nullptr, ty, loc) {}
+
 public:
     SubInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::Sub, l, r, l->type(), loc) {
@@ -1008,6 +1068,11 @@ public:
 
 /// A multiply instruction.
 class MulInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    MulInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Mul, nullptr, nullptr, ty, loc) {}
+
 public:
     MulInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::Mul, l, r, l->type(), loc) {
@@ -1020,6 +1085,11 @@ public:
 
 /// A signed divide instruction.
 class SDivInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    SDivInst(Type* ty, Location loc = {}) : BinaryInst(Kind::SDiv, nullptr, nullptr, ty, loc) {}
+
 public:
     SDivInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::SDiv, l, r, l->type(), loc) {
@@ -1032,6 +1102,11 @@ public:
 
 /// A signed remainder instruction.
 class SRemInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    SRemInst(Type* ty, Location loc = {}) : BinaryInst(Kind::SRem, nullptr, nullptr, ty, loc) {}
+
 public:
     SRemInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::SRem, l, r, l->type(), loc) {
@@ -1044,6 +1119,11 @@ public:
 
 /// An unsigned divide instruction.
 class UDivInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    UDivInst(Type* ty, Location loc = {}) : BinaryInst(Kind::UDiv, nullptr, nullptr, ty, loc) {}
+
 public:
     UDivInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::UDiv, l, r, l->type(), loc) {
@@ -1056,6 +1136,11 @@ public:
 
 /// An unsigned remainder instruction.
 class URemInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    URemInst(Type* ty, Location loc = {}) : BinaryInst(Kind::URem, nullptr, nullptr, ty, loc) {}
+
 public:
     URemInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::URem, l, r, l->type(), loc) {
@@ -1068,6 +1153,11 @@ public:
 
 /// A left shift instruction.
 class ShlInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    ShlInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Shl, nullptr, nullptr, ty, loc) {}
+
 public:
     ShlInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::Shl, l, r, l->type(), loc) {
@@ -1080,6 +1170,11 @@ public:
 
 /// An arithmetic right shift.
 class SarInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    SarInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Sar, nullptr, nullptr, ty, loc) {}
+
 public:
     SarInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::Sar, l, r, l->type(), loc) {
@@ -1092,6 +1187,11 @@ public:
 
 /// A logical right shift.
 class ShrInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    ShrInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Shr, nullptr, nullptr, ty, loc) {}
+
 public:
     ShrInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::Shr, l, r, l->type(), loc) {
@@ -1104,6 +1204,11 @@ public:
 
 /// A bitwise and instruction.
 class AndInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    AndInst(Type* ty, Location loc = {}) : BinaryInst(Kind::And, nullptr, nullptr, ty, loc) {}
+
 public:
     AndInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::And, l, r, l->type(), loc) {
@@ -1116,6 +1221,11 @@ public:
 
 /// A bitwise or instruction.
 class OrInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    OrInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Or, nullptr, nullptr, ty, loc) {}
+
 public:
     OrInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::Or, l, r, l->type(), loc) {
@@ -1128,6 +1238,11 @@ public:
 
 /// A bitwise xor instruction.
 class XorInst : public BinaryInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    XorInst(Type* ty, Location loc = {}) : BinaryInst(Kind::Xor, nullptr, nullptr, ty, loc) {}
+
 public:
     XorInst(Value* l, Value* r, Location loc = {})
         : BinaryInst(Kind::Or, l, r, l->type(), loc) {
@@ -1141,6 +1256,8 @@ public:
 /// Base class for comparison instructions; this is just so we
 /// can do is<CompareInst> and because the type is always i1.
 class CompareInst : public BinaryInst {
+    friend parser::Parser;
+
 protected:
     CompareInst(Kind k, Value* l, Value* r, Location loc = {})
         : BinaryInst(k, l, r, Type::I1Ty, loc) {}
@@ -1152,6 +1269,11 @@ public:
 
 /// Instruction that compares two values for equality.
 class EqInst : public CompareInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    EqInst(Location loc = {}) : CompareInst(Kind::Eq, nullptr, nullptr, loc) {}
+
 public:
     EqInst(Value* l, Value* r, Location loc = {})
         : CompareInst(Kind::Eq, l, r, loc) {
@@ -1164,6 +1286,11 @@ public:
 
 /// Instruction that compares two values for inequality.
 class NeInst : public CompareInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    NeInst(Location loc = {}) : CompareInst(Kind::Ne, nullptr, nullptr, loc) {}
+
 public:
     NeInst(Value* l, Value* r, Location loc = {})
         : CompareInst(Kind::Ne, l, r, loc) {
@@ -1176,21 +1303,30 @@ public:
 
 /// Instruction that compares two values for less-than.
 class SLtInst : public CompareInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    SLtInst(Location loc = {}) : CompareInst(Kind::SLt, nullptr, nullptr, loc) {}
+
 public:
     SLtInst(Value* l, Value* r, Location loc = {})
         : CompareInst(Kind::ULt, l, r, loc) {
-        // TODO: Assert type of `Value* l` is signed
         AssertSameType(l, r);
     }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::SLt; }
 };
+
 class ULtInst : public CompareInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    ULtInst(Location loc = {}) : CompareInst(Kind::ULt, nullptr, nullptr, loc) {}
+
 public:
     ULtInst(Value* l, Value* r, Location loc = {})
         : CompareInst(Kind::SLt, l, r, loc) {
-        // TODO: Assert type of `Value* l` is unsigned
         AssertSameType(l, r);
     }
 
@@ -1200,6 +1336,10 @@ public:
 
 /// Instruction that compares two values for less-than-or-equal.
 class SLeInst : public CompareInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    SLeInst(Location loc = {}) : CompareInst(Kind::SLe, nullptr, nullptr, loc) {}
 public:
     SLeInst(Value* l, Value* r, Location loc = {})
         : CompareInst(Kind::SLe, l, r, loc) {
@@ -1209,7 +1349,12 @@ public:
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::SLe; }
 };
+
 class ULeInst : public CompareInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    ULeInst(Location loc = {}) : CompareInst(Kind::ULe, nullptr, nullptr, loc) {}
 public:
     ULeInst(Value* l, Value* r, Location loc = {})
         : CompareInst(Kind::ULe, l, r, loc) {
@@ -1222,6 +1367,11 @@ public:
 
 /// Instruction that compares two values for greater-than.
 class SGtInst : public CompareInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    SGtInst(Location loc = {}) : CompareInst(Kind::SGt, nullptr, nullptr, loc) {}
+
 public:
     SGtInst(Value* l, Value* r, Location loc = {})
         : CompareInst(Kind::SGt, l, r, loc) {
@@ -1231,7 +1381,13 @@ public:
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::SGt; }
 };
+
 class UGtInst : public CompareInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    UGtInst(Location loc = {}) : CompareInst(Kind::UGt, nullptr, nullptr, loc) {}
+
 public:
     UGtInst(Value* l, Value* r, Location loc = {})
         : CompareInst(Kind::UGt, l, r, loc) {
@@ -1244,6 +1400,11 @@ public:
 
 /// Instruction that compares two values for greater-than-or-equal.
 class SGeInst : public CompareInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    SGeInst(Location loc = {}) : CompareInst(Kind::SGe, nullptr, nullptr, loc) {}
+
 public:
     SGeInst(Value* l, Value* r, Location loc = {})
         : CompareInst(Kind::SGe, l, r, loc) {
@@ -1253,7 +1414,13 @@ public:
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::SGe; }
 };
+
 class UGeInst : public CompareInst {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    UGeInst(Location loc = {}) : CompareInst(Kind::UGe, nullptr, nullptr, loc) {}
+
 public:
     UGeInst(Value* l, Value* r, Location loc = {})
         : CompareInst(Kind::UGe, l, r, loc) {
@@ -1267,13 +1434,15 @@ public:
 /// Unary instructions.
 class UnaryInstBase : public Inst {
     friend Inst;
+    friend parser::Parser;
 
-    Value* op;
+    Value* op{};
 
 protected:
     UnaryInstBase(Kind k, Value* v, Type* ty, Location loc = {})
         : Inst(k, ty, loc), op(v) {
-        AddUse(op, this);
+        /// IR parser may pass nullptr here.
+        if (op) AddUse(op, this);
     }
 
 public:
@@ -1290,6 +1459,11 @@ public:
 
 /// SSA copy. Used during lowering only.
 class CopyInst : public UnaryInstBase {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    CopyInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::Copy, nullptr, ty, loc) {}
+
 public:
     CopyInst(Value* v, Location loc = {})
         : UnaryInstBase(Kind::Copy, v, v->type(), loc) {}
@@ -1300,6 +1474,11 @@ public:
 
 /// Zero-extend an integer value.
 class ZExtInst : public UnaryInstBase {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    ZExtInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::ZExt, nullptr, ty, loc) {}
+
 public:
     ZExtInst(Value* v, Type* ty, Location loc = {})
         : UnaryInstBase(Kind::ZExt, v, ty, loc) {}
@@ -1310,6 +1489,11 @@ public:
 
 /// Sign-extend an integer value.
 class SExtInst : public UnaryInstBase {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    SExtInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::SExt, nullptr, ty, loc) {}
+
 public:
     SExtInst(Value* v, Type* ty, Location loc = {})
         : UnaryInstBase(Kind::SExt, v, ty, loc) {}
@@ -1320,6 +1504,11 @@ public:
 
 /// Truncate an integer value.
 class TruncInst : public UnaryInstBase {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    TruncInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::Trunc, nullptr, ty, loc) {}
+
 public:
     TruncInst(Value* v, Type* ty, Location loc = {})
         : UnaryInstBase(Kind::Trunc, v, ty, loc) {}
@@ -1330,6 +1519,11 @@ public:
 
 /// Bitcast a value to another type.
 class BitcastInst : public UnaryInstBase {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    BitcastInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::Bitcast, nullptr, ty, loc) {}
+
 public:
     BitcastInst(Value* v, Type* ty, Location loc = {})
         : UnaryInstBase(Kind::Bitcast, v, ty, loc) {
@@ -1344,6 +1538,11 @@ public:
 
 /// Negate an integer value.
 class NegInst : public UnaryInstBase {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    NegInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::Neg, nullptr, ty, loc) {}
+
 public:
     NegInst(Value* v, Location loc = {})
         : UnaryInstBase(Kind::Neg, v, v->type(), loc) {}
@@ -1354,6 +1553,11 @@ public:
 
 /// Bitwise complement of an integer value.
 class ComplInst : public UnaryInstBase {
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    ComplInst(Type* ty, Location loc = {}) : UnaryInstBase(Kind::Compl, nullptr, ty, loc) {}
+
 public:
     ComplInst(Value* v, Location loc = {})
         : UnaryInstBase(Kind::Compl, v, v->type(), loc) {}

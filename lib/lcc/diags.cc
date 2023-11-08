@@ -130,7 +130,7 @@ void lcc::Diag::print() {
     /// and everything after.
     std::string before(line_start, col);
     std::string range(line_start + col, where.len);
-    std::string after(line_start + col + where.len, line_end);
+    std::string after(std::min(line_start + col + where.len, line_end), line_end);
 
     /// Replace tabs with spaces. We need to do this *after* splitting
     /// because this invalidates the offsets.

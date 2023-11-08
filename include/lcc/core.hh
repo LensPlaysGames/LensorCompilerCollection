@@ -145,6 +145,29 @@ constexpr bool IsImportedLinkage(Linkage link) {
     LCC_UNREACHABLE();
 }
 
+constexpr auto StringifyEnum(Linkage l) -> std::string_view {
+    switch (l) {
+        case Linkage::LocalVar: return "local";
+        case Linkage::Internal: return "internal";
+        case Linkage::Used: return "used";
+        case Linkage::Exported: return "exported";
+        case Linkage::Imported: return "imported";
+        case Linkage::Reexported: return "reexported";
+    }
+
+    LCC_UNREACHABLE();
+}
+
+constexpr auto StringifyEnum(CallConv cc) -> std::string_view {
+    switch (cc) {
+        case CallConv::C: return "ccc";
+        case CallConv::Laye: return "layecc";
+        case CallConv::Intercept: return "intcc";
+    }
+
+    LCC_UNREACHABLE();
+}
+
 } // namespace lcc
 
 #endif // LCC_CORE_HH

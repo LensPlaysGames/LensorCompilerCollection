@@ -82,7 +82,7 @@ void intercept::IRGen::create_function(intercept::FuncDecl* f) {
         f->mangled_name(),
         as<FunctionType>(Convert(ctx, f->type())),
         f->linkage(),
-        CallConv::Intercept,
+        f->call_conv(),
         f->location()
     );
 }
