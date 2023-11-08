@@ -128,7 +128,8 @@ bool intc::Expr::is_assignable_lvalue() const {
         return not is<FuncType>(ref->element_type());
 
     /// Variable declarations are assignable lvalues.
-    return is<VarDecl>(this);
+    /// Member accesses are assignable lvalues.
+    return is<VarDecl>(this) || is<MemberAccessExpr>(this);
 }
 
 auto intc::Expr::type() const -> Type* {
