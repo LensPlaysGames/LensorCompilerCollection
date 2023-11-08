@@ -1,7 +1,7 @@
 // R %lcc --ir %s
 // d b [a-zA-Z0-9\.]+
 
-// * main : layecc i32():
+// * main : layecc i64():
 // +   $b:
-// +     return i32 69
-i32 main() => 69;
+// +     return i64 69
+int main() => 69;

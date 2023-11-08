@@ -3,7 +3,7 @@
 // d t %[0-9]+
 // d f _L[a-zA-Z0-9_]+
 
-// * $f : internal layecc void():
+// * $f : internal layecc i64():
 // +   $b:
 // +     (?<va>$t) = alloca i64
 // +     (?<va_temp>$t) = add i64 2, 3
@@ -24,10 +24,11 @@
 // +     (?<vd_temp2>$t) = eq i64 $vd_temp1, 12
 // +     store i1 $vd_temp2 into $vd
 // +     return
-void do_math()
+int do_math()
 {
     int  a = 2 + 3;
     int  b = a * 4;
     int  c = a + b / 2;
     bool d = c - 3 == 12;
+    return 0;
 }

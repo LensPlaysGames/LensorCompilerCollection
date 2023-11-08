@@ -1,6 +1,6 @@
 // R %lcc --ir %s
 // d t %[0-9]+
 
-// * puts : imported i32(ptr %0)
+// * puts : imported i64(ptr %0)
 foreign "puts" callconv(cdecl)
-i32 my_wacky_function(i8[*] s);
+int my_wacky_function(i8[*] s);

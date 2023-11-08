@@ -1,10 +1,10 @@
 // R %lcc --ir %s
 // d b [a-zA-Z0-9\.]+
 
-// * main : layecc i32():
+// * main : layecc i64():
 // +   $b:
-// +     return i32 0
-i32 main()
+// +     return i64 0
+int main()
 {
     xyzzy;
     return 0;

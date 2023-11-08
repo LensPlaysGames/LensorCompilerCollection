@@ -2,9 +2,9 @@
 // d b [a-zA-Z0-9\.]+
 // d t %[0-9]+
 
-alias my_i32 = i32;
+alias my_int = int;
 
-// * main : layecc i32():
+// * main : layecc i64():
 // +   $b:
-// +     return i32 0
-my_i32 main() => 0;
+// +     return i64 0
+my_int main() => 0;

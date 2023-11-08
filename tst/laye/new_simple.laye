@@ -4,7 +4,7 @@ foreign callconv(c) rawptr malloc(int count);
 // https://itanium-cxx-abi.github.io/cxx-abi/abi.html#mangling-operator
 rawptr operator new(int count) => malloc(count);
 
-i32 main()
+int main()
 {
     // expands to:
     //   i32* i32_ptr = cast(i32*) operator new(sizeof(i32));

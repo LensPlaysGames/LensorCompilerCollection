@@ -7,11 +7,11 @@
 // * puts : imported i32(ptr $t)
 import "lib/stdio.laye";
 
-// * main : layecc i32():
+// * main : layecc i64():
 // +   $b:
 // +     $t = call @puts (ptr @$global) -> i32
-// +     return i32 0
-i32 main()
+// +     return i64 0
+int main()
 {
     stdio::puts("Hello, simple import!");
     return 0;

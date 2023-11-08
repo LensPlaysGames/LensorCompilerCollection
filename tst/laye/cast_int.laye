@@ -3,15 +3,15 @@
 // d t %[0-9]+
 // d f _L[a-zA-Z0-9_]+
 
-// * main : layecc i32():
+// * main : layecc i64():
 // +   $b:
 // +     (?<v>$t) = alloca i64
 // +     store i64 69 into $v
 // +     (?<load>$t) = load i64 from $v
-// +     (?<cast>$t) = trunc i64 $load to i32
-// +     return i32 $cast
-i32 main()
+// +     (?<cast>$t) = bitcast i64 $load to i64
+// +     return i64 $cast
+int main()
 {
     uint v = 69;
-    return cast(i32) v;
+    return cast(int) v;
 }

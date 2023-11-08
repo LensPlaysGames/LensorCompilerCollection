@@ -7,14 +7,14 @@
 // * puts : imported i32(ptr %0)
 foreign callconv(cdecl) i32 puts(i8[*] s);
 
-// * main : layecc i32():
+// * main : layecc i64():
 // +   $b:
 // +     (?<str>$t) = alloca ptr
 // +     store ptr @$global into $str
 // +     (?<l>$t) = load ptr from $str
 // +     $t = call @puts (ptr $l) -> i32
-// +     return i32 0
-i32 main()
+// +     return i64 0
+int main()
 {
     i8[*] str = "Hello, hunter!";
     puts(str);

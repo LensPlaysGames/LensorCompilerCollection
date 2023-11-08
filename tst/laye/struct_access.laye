@@ -2,11 +2,11 @@
 
 struct vec2i
 {
-    i32 x;
-    i32 y;
+    int x;
+    int y;
 }
 
-i32 main()
+int main()
 {
     vec2i v;
     v.x = 34;

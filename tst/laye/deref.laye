@@ -13,9 +13,9 @@
 // +     (?<addr>$t) = load ptr from $r_ptr
 // +     (?<val>$t) = load $ret_ty from $addr
 // +     return $ret_ty $val
-i32 main()
+int main()
 {
-    i32 r = 69;
-    i32* r_ptr = &r;
+    int r = 69;
+    int* r_ptr = &r;
     return *r_ptr;
 }
