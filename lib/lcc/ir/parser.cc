@@ -711,6 +711,20 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         return gep;
     }
 
+    if (tok.text == "gmp") {
+        auto ty = ParseType();
+        auto lit = ParseLiteral("from");
+        auto ptr = ParseUntypedValue(Type::PtrTy);
+        auto at = ParseLiteral("at");
+        auto idx = ParseValue();
+        if (IsError(ty, lit, ptr, at, idx)) return Diag();
+        auto gmp = new (*mod) GetMemberPtrInst(*ty, loc);
+        SetValue(gmp, gmp->pointer, *ptr);
+        SetValue(gmp, gmp->index, idx->second);
+        AddTemporary(std::move(tmp), gmp);
+        return gmp;
+    }
+
     if (tok.text == "load") {
         NextToken();
         auto ty = ParseType();
