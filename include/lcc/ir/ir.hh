@@ -207,6 +207,9 @@ class Inst : public Value {
     /// So that parent can be set upon insertion.
     friend Block;
 
+    /// IR Parser needs to update uses.
+    friend parser::Parser;
+
     /// Associated machine instruction during early codegen.
     MInst* minst;
 

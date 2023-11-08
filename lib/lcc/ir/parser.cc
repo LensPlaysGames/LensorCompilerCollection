@@ -5,8 +5,6 @@
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/result.hh>
 
-#define bind &Parser::
-
 /// Namespace required for friend declarations in ir.hh.
 namespace lcc::parser {
 enum struct TokenKind {
@@ -79,8 +77,8 @@ class Parser : syntax::Lexer<syntax::Token<TokenKind>> {
 
     /// Unresolved values.
     StringMap<std::vector<Block**>> block_fixups{};
-    StringMap<std::vector<Value**>> temporary_fixups{};
-    StringMap<std::vector<Value**>> global_fixups{};
+    StringMap<std::vector<std::pair<Inst*, Value**>>> temporary_fixups{};
+    StringMap<std::vector<std::pair<Inst*, Value**>>> global_fixups{};
 
 public:
     std::unique_ptr<Module> mod;
@@ -141,7 +139,7 @@ private:
 
     /// Get a `Value*` for a temporary, or mark it to be resolved later.
     void SetBlock(Block*& val, IRValue v);
-    void SetValue(Value*& val, IRValue v);
+    void SetValue(Inst* parent, Value*& val, IRValue v);
 
     static bool IsIdentStart(char c) { return IsAlpha(c) or c == '_' or c == '.'; }
     static bool IsIdentContinue(char c) {
@@ -391,8 +389,8 @@ auto lcc::parser::Parser::ParseBinary(std::string tmp) -> Result<Inst*> {
         inst = new (*mod) Instruction(loc);
     }
 
-    SetValue(inst->left, lhs->second);
-    SetValue(inst->right, *rhs);
+    SetValue(inst, inst->left, lhs->second);
+    SetValue(inst, inst->right, *rhs);
     AddTemporary(std::move(tmp), inst);
     return inst;
 }
@@ -449,10 +447,10 @@ auto lcc::parser::Parser::ParseCall(bool tail) -> Result<CallInst*> {
         loc
     );
 
-    SetValue(call->callee_value, *callee);
+    SetValue(call, call->callee_value, *callee);
     call->arguments.resize(args.size());
     for (const auto& [i, arg] : vws::enumerate(args))
-        SetValue(call->arguments[usz(i)], arg);
+        SetValue(call, call->arguments[usz(i)], arg);
 
     if (tail) call->set_tail_call();
     call->cc = cc;
@@ -482,7 +480,7 @@ auto lcc::parser::Parser::ParseCast(std::string tmp) -> Result<Inst*> {
     auto ty = ParseType();
     if (IsError(val, to, ty)) return Diag();
     auto inst = new (*mod) Instruction(*ty, tok.location);
-    SetValue(inst->op, val->second);
+    SetValue(inst, inst->op, val->second);
     AddTemporary(std::move(tmp), inst);
     return inst;
 }
@@ -567,7 +565,10 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     for (auto& [tmp, fixups] : temporary_fixups) {
         auto it = temporaries.find(tmp);
         if (it == temporaries.end()) return Error("Unknown value '{}'", tmp);
-        for (auto elem : fixups) *elem = it->second;
+        for (auto elem : fixups) {
+            *elem.second = it->second;
+            Inst::AddUse(it->second, elem.first);
+        }
     }
 
     /// Fix up blocks.
@@ -606,8 +607,8 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
 
             if (IsError(val, into, ptr)) return Diag();
             auto store = new (*mod) StoreInst(loc);
-            SetValue(store->value, val->second);
-            SetValue(store->pointer, *ptr);
+            SetValue(store, store->value, val->second);
+            SetValue(store, store->pointer, *ptr);
             return store;
         }
 
@@ -634,7 +635,7 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
                 auto els = ParseUntypedValue(nullptr);
                 if (IsError(cond, lit_to, to, lit_else, els)) return Diag();
                 auto br = new (*mod) CondBranchInst(loc);
-                SetValue(br->condition, *cond);
+                SetValue(br, br->condition, *cond);
                 SetBlock(br->then_, *to);
                 SetBlock(br->else_, *els);
                 return br;
@@ -649,7 +650,7 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
             if (not At(Tk::Newline)) {
                 auto res = ParseValue();
                 if (res.is_diag()) return res.diag();
-                SetValue(ret->value, res->second);
+                SetValue(ret, ret->value, res->second);
             }
             return ret;
         }
@@ -684,7 +685,7 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         auto arg = ParseValue();
         if (arg.is_diag()) return arg.diag();
         auto copy = new (*mod) CopyInst(arg->first, loc);
-        SetValue(copy->op, arg->second);
+        SetValue(copy, copy->op, arg->second);
         AddTemporary(std::move(tmp), copy);
         return copy;
     }
@@ -704,8 +705,8 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         auto idx = ParseValue();
         if (IsError(ty, lit, ptr, at, idx)) return Diag();
         auto gep = new (*mod) GEPInst(*ty, loc);
-        SetValue(gep->pointer, *ptr);
-        SetValue(gep->index, idx->second);
+        SetValue(gep, gep->pointer, *ptr);
+        SetValue(gep, gep->index, idx->second);
         AddTemporary(std::move(tmp), gep);
         return gep;
     }
@@ -717,7 +718,7 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         auto ptr = ParseUntypedValue(Type::PtrTy);
         if (IsError(ty, from, ptr)) return Diag();
         auto load = new (*mod) LoadInst(*ty, loc);
-        SetValue(load->pointer, *ptr);
+        SetValue(load, load->pointer, *ptr);
         AddTemporary(std::move(tmp), load);
         return load;
     }
@@ -745,7 +746,7 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         phi->incoming.resize(blocks.size());
         for (auto&& [i, inc] : vws::enumerate(phi->incoming)) {
             SetBlock(inc.block, blocks[usz(i)]);
-            SetValue(inc.value, values[usz(i)]);
+            SetValue(phi, inc.value, values[usz(i)]);
         }
 
         AddTemporary(std::move(tmp), phi);
@@ -757,7 +758,7 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         auto val = ParseValue();
         if (val.is_diag()) return val.diag();
         auto neg = new (*mod) NegInst(val->first, loc);
-        SetValue(neg->op, val->second);
+        SetValue(neg, neg->op, val->second);
         AddTemporary(std::move(tmp), neg);
         return neg;
     }
@@ -766,10 +767,10 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         NextToken();
         auto val = ParseValue();
         if (val.is_diag()) return val.diag();
-        auto neg = new (*mod) ComplInst(val->first, loc);
-        SetValue(neg->op, val->second);
-        AddTemporary(std::move(tmp), neg);
-        return neg;
+        auto c = new (*mod) ComplInst(val->first, loc);
+        SetValue(c, c->op, val->second);
+        AddTemporary(std::move(tmp), c);
+        return c;
     }
 
     if (tok.text == "add") return ParseBinary<AddInst>(std::move(tmp));
@@ -814,7 +815,10 @@ auto lcc::parser::Parser::ParseModule() -> Result<void> {
     for (auto&& [name, fixups] : global_fixups) {
         auto it = globals.find(name);
         if (it == globals.end()) return Error("Unknown global '{}'", name);
-        for (auto elem : fixups) *elem = it->second;
+        for (auto elem : fixups) {
+            *elem.second = it->second;
+            Inst::AddUse(it->second, elem.first);
+        }
     }
 
     return {};
@@ -887,10 +891,15 @@ auto lcc::parser::Parser::ParseValue() -> Result<std::pair<Type*, IRValue>> {
     return std::pair{*ty, *val};
 }
 
-void lcc::parser::Parser::SetValue(lcc::Value*& val, lcc::parser::Parser::IRValue v) {
-    if (auto value = std::get_if<Value*>(&v)) val = *value;
-    else if (auto g = std::get_if<Global>(&v)) global_fixups[g->data].push_back(&val);
-    else temporary_fixups[std::get<Temporary>(v).data].push_back(&val);
+void lcc::parser::Parser::SetValue(Inst* parent, Value*& val, IRValue v) {
+    if (auto value = std::get_if<Value*>(&v)) {
+        val = *value;
+        Inst::AddUse(*value, parent);
+    } else if (auto g = std::get_if<Global>(&v)) {
+        global_fixups[g->data].emplace_back(parent, &val);
+    } else {
+        temporary_fixups[std::get<Temporary>(v).data].emplace_back(parent, &val);
+    }
 }
 
 void lcc::parser::Parser::SetBlock(lcc::Block*& val, lcc::parser::Parser::IRValue v) {

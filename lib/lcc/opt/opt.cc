@@ -421,7 +421,7 @@ private:
     void RunPasses() {
         for (auto f : mod->code()) {
             auto RunPass = [&]<typename Pass> {
-                Pass p{mod};
+                Pass p{{mod}};
 
                 /// Use indices here to avoid iterator invalidation.
                 for (usz bi = 0; bi < f->blocks().size(); bi++) {

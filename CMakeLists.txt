@@ -144,6 +144,8 @@ endif()
 if (NOT MSVC)
     if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         target_compile_options(options INTERFACE $<$<CONFIG:DEBUG>:-rdynamic>)
+    else()
+        target_compile_options(options INTERFACE -Wno-unused-private-field)
     endif()
 
     target_compile_options(options INTERFACE

@@ -11,11 +11,11 @@ template <typename Derived, usz block_indent>
 class IRPrinter {
 private:
     std::string s{};
-    usz tmp = 0;
+    isz tmp = 0;
 
     /// Map from blocks and instructions to their indices.
-    std::unordered_map<Block*, usz> block_indices{};
-    std::unordered_map<Inst*, usz> inst_indices{};
+    std::unordered_map<Block*, isz> block_indices{};
+    std::unordered_map<Inst*, isz> inst_indices{};
 
     explicit IRPrinter(bool use_colour) : use_colour(use_colour) {}
 
@@ -35,10 +35,16 @@ protected:
     static constexpr auto BlockColour = utils::Colour::Green;
 
     /// Get the index of a block.
-    auto Index(Block* b) const -> usz { return block_indices.at(b); }
+    auto Index(Block* b) const -> isz {
+        if (not block_indices.contains(b)) return -1;
+        return block_indices.at(b);
+    }
 
     /// Get the index of an instruction.
-    auto Index(Inst* inst) const -> usz { return inst_indices.at(inst); }
+    auto Index(Inst* inst) const -> isz {
+        if (not inst_indices.contains(inst)) return -1;
+        return inst_indices.at(inst);
+    }
 
     /// Check if an instruction has an index.
     auto HasIndex(Inst* inst) const -> bool { return inst_indices.contains(inst); }
@@ -66,7 +72,7 @@ private:
     /// Emit a function definition or declaration as LLVM IR.
     void PrintFunction(Function* f) {
         /// Print function signature.
-        tmp = f->param_count();
+        tmp = isz(f->param_count());
         This()->PrintFunctionHeader(f);
         if (f->blocks().empty()) {
             s += '\n';
@@ -75,7 +81,7 @@ private:
 
         /// Set indices for instructions and blocks.
         for (auto [i, b] : vws::enumerate(f->blocks())) {
-            block_indices[b] = usz(i);
+            block_indices[b] = i;
             for (auto inst : b->instructions())
                 if (This()->RequiresTemporary(inst))
                     inst_indices[inst] = tmp++;
