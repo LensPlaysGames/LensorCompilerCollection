@@ -506,10 +506,19 @@ auto Module::mir() -> std::vector<MFunction> {
                         //   o<0> + (o<1> * o<2>), basically.
 
                         auto gep_ir = as<GEPInst>(instruction);
-                        auto gep = MInst(MInst::Kind::GetElementPtr, {virts[instruction], 0});
+                        auto reg = Register{virts[instruction], uint(gep_ir->type()->bits())};
+                        auto gep = MInst(MInst::Kind::GetElementPtr, reg);
                         gep.add_operand(MOperandValueReference(f, gep_ir->ptr()));
-                        gep.add_operand(MOperandValueReference(f, gep_ir->idx()));
-                        gep.add_operand(MOperandImmediate(gep_ir->type()->bits()));
+                        if (gep_ir->idx()->kind() == Value::Kind::IntegerConstant) {
+                            aint index = as<IntegerConstant>(gep_ir->idx())->value();
+                            aint scale = gep_ir->base_type()->bytes();
+                            gep.add_operand(MOperandImmediate(index.value() * scale.value()));
+                        } else {
+                            auto mul = MInst(MInst::Kind::Mul, reg);
+                            mul.add_operand(MOperandValueReference(f, gep_ir->idx()));
+                            mul.add_operand(MOperandImmediate(gep_ir->base_type()->bytes()));
+                            gep.add_operand(MOperandRegister(reg));
+                        }
                         bb.add_instruction(gep);
                     } break;
 
