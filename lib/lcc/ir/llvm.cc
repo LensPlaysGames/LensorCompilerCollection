@@ -289,7 +289,16 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             }
 
             case Value::Kind::GetMemberPtr: {
-                LCC_ASSERT(false, "TODO: Translate GetMemberPtr to LLVM Textual IR");
+                auto gmp = as<GetMemberPtrInst>(i);
+                //  %x = getelementptr inbounds %struct.vec2i, ptr %v, i32 0, i32 0
+                Print(
+                    "    %{} = getelementptr inbounds {}, {}, i32 0, i32 {}",
+                    Index(i),
+                    Ty(gmp->struct_type()),
+                    Val(gmp->ptr()),
+                    as<IntegerConstant>(gmp->idx())->value()
+                );
+                return;
             }
 
             /// Emit an LLVM-compatible PHI node.
