@@ -29,11 +29,21 @@ constexpr void Foreach(auto&& lambda) {
 
 enum struct OperandKind {
     Immediate,
+
     Register,
-    InputOperandReference,
-    InputInstructionReference,
+    // For use in the output of patterns when a temporary register is needed.
+    // Use like Operand<OK::NewVirtual, v<0>> and so-on.
+    NewVirtual,
+
+    // A reference to a stack frame object.
     Local,
+    // A reference to a symbol.
     Global,
+
+    // Resolves to a Register
+    InputInstructionReference,
+    InputOperandReference,
+
     // TODO: The operand kinds
 };
 
@@ -76,6 +86,16 @@ struct Global {
     static constexpr GlobalVariable* global = nullptr;
 };
 
+// New virtual register, by unique index within each pattern.
+template <usz idx>
+struct v {
+    static constexpr i64 immediate = 0;
+    static constexpr usz index = idx;
+    static constexpr usz value = 0;
+    static constexpr usz size = 0;
+    static constexpr GlobalVariable* global = nullptr;
+};
+
 // Operand reference, by index.
 template <usz idx>
 struct o {
@@ -113,13 +133,24 @@ struct Inst {
     }
 
     template <typename operand>
-    static constexpr MOperand get_operand(std::vector<MInst*> input) {
+    static constexpr MOperand get_operand(
+        Module* mod,
+        std::vector<MInst*> input,
+        std::unordered_map<usz, usz>& new_virtuals
+    ) {
         switch (operand::kind) {
             case OperandKind::Immediate:
                 return MOperandImmediate(operand::value::immediate);
 
             case OperandKind::Register:
                 return MOperandRegister(operand::value::value, operand::value::size);
+
+            case OperandKind::NewVirtual: {
+                if (not new_virtuals.contains(operand::value::index)) {
+                    new_virtuals[operand::value::index] = mod->next_vreg();
+                }
+                return MOperandRegister(new_virtuals[operand::value::index], 0);
+            }
 
             case OperandKind::Local:
                 return MOperandLocal(operand::value::index);
@@ -180,7 +211,6 @@ struct Inst {
 
                 return op;
             }
-
         }
         LCC_UNREACHABLE();
     }
@@ -305,6 +335,10 @@ struct PatternList {
                     // up reference-type operands (operand references get updated to the
                     // operand they reference).
 
+                    // Map of the index from v<index> to the id of the new virtual register it
+                    // should be replaced with.
+                    std::unordered_map<usz, usz> new_virtuals{};
+
                     isz output_i = 0;
                     pattern::output::foreach ([&]<typename inst> {
                         // Use instruction's vreg from input of pattern.
@@ -314,7 +348,7 @@ struct PatternList {
                         instructions.insert(instructions.begin() + output_i, output);
 
                         inst::foreach_operand([&]<typename op> {
-                            output->add_operand(inst::template get_operand<op>(input));
+                            output->add_operand(inst::template get_operand<op>(mod, input, new_virtuals));
                         });
 
                         // Stupidly match use count (not sure if even necessary).
