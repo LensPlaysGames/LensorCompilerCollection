@@ -419,6 +419,9 @@ void Inst::replace_with(Value* v) {
 
 namespace {
 struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
+    void PrintHeader() {
+    }
+
     std::string Ty(Type* ty) {
         using enum utils::Colour;
         utils::Colours C{use_colour};
@@ -617,7 +620,29 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 return;
             }
 
-            case Value::Kind::Intrinsic: LCC_TODO();
+            case Value::Kind::Intrinsic: {
+                auto intrinsic = as<IntrinsicInst>(i);
+                auto operands = intrinsic->operands();
+                switch (intrinsic->intrinsic_kind()) {
+                    default: LCC_ASSERT(false, "Unimplemented intrinsic in LCC IR printer");
+
+                    case IntrinsicKind::MemCopy: {
+                        Print(
+                            "    {}intrinsic {}@memcpy{}({}{}, {}{}, {}{})",
+                            C(Yellow),
+                            C(Green),
+                            C(Red),
+                            Val(operands[0]),
+                            C(Red),
+                            Val(operands[1]),
+                            C(Red),
+                            Val(operands[2]),
+                            C(Red)
+                        );
+                        return;
+                    }
+                }
+            }
 
             case Value::Kind::Load: {
                 auto load = as<LoadInst>(i);
@@ -966,7 +991,18 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
             /// Instructions that may yield a value.
             case Value::Kind::Call: return as<CallInst>(i)->type() != Type::VoidTy;
-            case Value::Kind::Intrinsic: LCC_TODO();
+            case Value::Kind::Intrinsic: {
+                auto intrinsic = as<IntrinsicInst>(i);
+                switch (intrinsic->intrinsic_kind()) {
+                    default: LCC_UNREACHABLE();
+                    
+                    case IntrinsicKind::MemCopy:
+                    case IntrinsicKind::MemSet: return false;
+
+                    case IntrinsicKind::DebugTrap: return false;
+                    case IntrinsicKind::SystemCall: return true; // ??
+                }
+            }
 
             /// Instructions that never return a value.
             case Value::Kind::Store:

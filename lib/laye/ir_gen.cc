@@ -361,7 +361,9 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
                 }
             };
 
-            if ((from->is_integer() and to->is_integer()) or (from->is_integer() and to->is_rawptr()) or (from->is_rawptr() and to->is_integer())) {
+            if (from->is_reference() and to->is_reference()) {
+                _ir_values[expr] = value;
+            } else if ((from->is_integer() and to->is_integer()) or (from->is_integer() and to->is_rawptr()) or (from->is_rawptr() and to->is_integer())) {
                 IntLikeCast();
             } else if (from->is_rawptr()) {
                 auto cast = new (*mod()) lcc::BitcastInst(value, Convert(to), e->location());

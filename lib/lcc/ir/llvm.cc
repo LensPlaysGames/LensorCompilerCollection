@@ -3,7 +3,14 @@
 
 namespace lcc {
 namespace {
+static const std::string LLVMMemCpyIntrinsic = "llvm.memcpy.p0.p0.i64";
+
 struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
+    void PrintHeader() {
+        Print("; Function Attrs: nocallback nofree nounwind willreturn memory(argmem: readwrite)\n");
+        Print("declare void @{}(ptr noalias nocapture writeonly, ptr noalias nocapture readonly, i64, i1 immarg)\n", LLVMMemCpyIntrinsic);
+    }
+
     std::string GetStructName(StructType* struct_type) {
         if (struct_type->named())
             return fmt::format("struct.{}", struct_type->name());
@@ -332,8 +339,24 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 return;
             }
 
-            case Value::Kind::Intrinsic:
-                LCC_TODO();
+            case Value::Kind::Intrinsic: {
+                auto intrinsic = as<IntrinsicInst>(i);
+                auto operands = intrinsic->operands();
+                switch (intrinsic->intrinsic_kind()) {
+                    default: LCC_ASSERT(false, "Unimplemented intrinsic in LLVM backend");
+
+                    case IntrinsicKind::MemCopy: {
+                        Print(
+                            "    call void @{}({}, {}, {}, i1 false)",
+                            LLVMMemCpyIntrinsic,
+                            Val(operands[0]),
+                            Val(operands[1]),
+                            Val(operands[2])
+                        );
+                        return;
+                    }
+                }
+            }
         }
 
         LCC_UNREACHABLE();
@@ -407,7 +430,18 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
 
             /// Instructions that may yield a value.
             case Value::Kind::Call: return as<CallInst>(i)->type() != Type::VoidTy;
-            case Value::Kind::Intrinsic: LCC_TODO();
+            case Value::Kind::Intrinsic: {
+                auto intrinsic = as<IntrinsicInst>(i);
+                switch (intrinsic->intrinsic_kind()) {
+                    default: LCC_UNREACHABLE();
+                    
+                    case IntrinsicKind::MemCopy:
+                    case IntrinsicKind::MemSet: return false;
+
+                    case IntrinsicKind::DebugTrap: return false;
+                    case IntrinsicKind::SystemCall: return true; // ??
+                }
+            }
 
             /// Instructions that never return a value.
             case Value::Kind::Store:

@@ -52,6 +52,10 @@ constexpr auto StringifyEnum(TokenKind t) -> std::string_view {
     return "<invalid>";
 }
 
+std::unordered_map<std::string, IntrinsicKind> intrinsic_kinds{
+    {"@memcpy", IntrinsicKind::MemCopy}
+};
+
 class Parser : syntax::Lexer<syntax::Token<TokenKind>> {
     using Tk = TokenKind;
     using Token = syntax::Token<Tk>;
@@ -129,6 +133,7 @@ private:
 
     auto ParseBlock() -> Result<Block*>;
     auto ParseCall(bool tail) -> Result<CallInst*>;
+    auto ParseIntrinsic() -> Result<IntrinsicInst*>;
     auto ParseCallConv() -> CallConv;
     auto ParseFunction() -> Result<void>;
     auto ParseLiteral(std::string_view lit) -> Result<void>;
@@ -457,6 +462,40 @@ auto lcc::parser::Parser::ParseCall(bool tail) -> Result<CallInst*> {
     return call;
 }
 
+auto lcc::parser::Parser::ParseIntrinsic() -> Result<IntrinsicInst*> {
+    std::vector<Type*> arg_types;
+    std::vector<IRValue> args;
+
+    auto intrinsic_name = tok.text;
+    if (not At(Tk::Global)) return Error("Expected intrinsic name");
+    
+    auto name = tok.text;
+    auto loc = tok.location;
+
+    auto intrinsic_it = intrinsic_kinds.find(name);
+    if (intrinsic_it == intrinsic_kinds.end()) return Error("Unrecognized intrinsic name");
+
+    NextToken();
+
+    if (not Consume(Tk::LParen)) return Error("Expected '('");
+    while (not At(Tk::RParen)) {
+        auto arg = ParseValue();
+        if (not arg) return arg.diag();
+        arg_types.push_back(arg->first);
+        args.push_back(arg->second);
+        if (not Consume(Tk::Comma)) break;
+    }
+
+    if (not Consume(Tk::RParen)) return Error("Expected ')'");
+
+    auto intrinsic = new (*mod) IntrinsicInst(intrinsic_it->second, {}, loc);
+    intrinsic->operand_list.resize(args.size());
+    for (const auto& [i, arg] : vws::enumerate(args))
+        SetValue(intrinsic, intrinsic->operand_list[usz(i)], arg);
+
+    return intrinsic;
+}
+
 auto lcc::parser::Parser::ParseCallConv() -> CallConv {
     CallConv cc = CallConv::C;
     if (At(Tk::Keyword)) {
@@ -597,6 +636,11 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
             const bool tail = tok.text == "tail";
             if (tail) NextToken();
             return ParseCall(tail);
+        }
+
+        if (tok.text == "intrinsic") {
+            NextToken();
+            return ParseIntrinsic();
         }
 
         if (tok.text == "store") {

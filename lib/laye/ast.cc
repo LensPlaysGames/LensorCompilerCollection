@@ -675,6 +675,7 @@ bool layec::Expr::is_lvalue() const {
 
 bool layec::Type::Equal(const Type* a, const Type* b) {
     if (a->kind() != b->kind()) return false;
+    if ((void*)a == (void*)b) return true;
     switch (a->kind()) {
         // the `var` type should not exist past sema and should never
         // never equal another type.

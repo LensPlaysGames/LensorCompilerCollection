@@ -93,11 +93,28 @@ void Module::lower() {
                             // Less than or equal to 8 bytes; nothing to change.
                             if (load->type()->bits() <= 64) continue;
 
-                            // Possiblities:
-                            // - generate builtin memcpy for backend to handle
-                            // - unroll into 8 byte loads, temporary pointer stored into then
-                            //   incremented
-                            LCC_ASSERT(false, "TODO: Handle load > 8 bytes lowering");
+                            auto users = load->users();
+                            if (users.size() == 1 and users[0]->kind() == Value::Kind::Store) {
+                                auto store = as<StoreInst>(users[0]);
+
+                                auto source_ptr = load->ptr();
+                                auto dest_ptr = store->ptr();
+
+                                LCC_ASSERT(load->type()->bytes() == store->val()->type()->bytes());
+                                auto byte_count = load->type()->bytes();
+
+                                std::vector<Value*> memcpy_operands{dest_ptr, source_ptr, new (*this) IntegerConstant(IntegerType::Get(context(), 64), byte_count)};
+                                auto memcpy_inst = new (*this) IntrinsicInst(IntrinsicKind::MemCopy, memcpy_operands, load->location());
+                                load->replace_with(memcpy_inst);
+
+                                store->erase();
+                            } else {
+                                // Possiblities:
+                                // - generate builtin memcpy for backend to handle
+                                // - unroll into 8 byte loads, temporary pointer stored into then
+                                //   incremented
+                                LCC_ASSERT(false, "TODO: Handle load > 8 bytes lowering");
+                            }
                         } break;
 
                         case Value::Kind::Store: {

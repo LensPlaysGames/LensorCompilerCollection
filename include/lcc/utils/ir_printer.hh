@@ -94,6 +94,7 @@ private:
     }
 
     auto PrintModule(Module* mod) -> std::string {
+        This()->PrintHeader();
         for (auto struct_type : mod->context()->struct_types) This()->PrintStructType(struct_type);
         if (not mod->context()->struct_types.empty()) s += '\n';
         for (auto var : mod->vars()) This()->PrintGlobal(var);

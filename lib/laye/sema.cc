@@ -271,8 +271,20 @@ void layec::Sema::Analyse(Statement*& statement) {
                 Error(s->target()->location(), "Cannot assign to a non-lvalue");
                 statement->set_sema_errored();
             } else {
+                if (s->target()->type()->is_reference() and s->value()->type()->is_reference()) {
+                    if (TryConvert(s->value(), s->target()->type()) >= 0)
+                        Convert(s->value(), s->target()->type());
+                }
+
                 auto nonref_target_type = s->target()->type()->strip_references();
-                ConvertOrError(s->value(), nonref_target_type);
+                if (not Convert(s->value(), nonref_target_type)) {
+                    Error(
+                        s->value()->location(),
+                        "Expression of type {} is not convertible to type {}",
+                        s->value()->type()->string(use_colours),
+                        nonref_target_type->string(use_colours)
+                    );
+                }
             }
 
             if (not s->target()->sema_ok() or not s->value()->sema_ok()) {
@@ -1040,6 +1052,14 @@ int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
     if (from->is_reference() and to->is_reference()) {
         /// A reference can be converted to the same reference.
         if (Type::Equal(from, to)) return NoOp;
+
+        /// References to variants can be converted to references of any parent struct type.
+        auto from_variant = cast<VariantType>(as<ReferenceType>(from)->elem_type());
+        auto to_struct = cast<StructType>(as<ReferenceType>(to)->elem_type());
+        if (from_variant and to_struct and from_variant->inherits_from(to_struct)) {
+            if constexpr (PerformConversion) InsertImplicitCast(expr, to);
+            return Score(1);
+        }
 
         /// References to arrays can be converted to references to
         /// the first element.

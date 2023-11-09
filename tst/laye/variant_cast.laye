@@ -18,5 +18,7 @@ int main()
 {
     jvalue anyval;
     jvalue::integer ival;
-    return 0;
+    ival.value = 69;
+    anyval = ival;
+    return ival.value;
 }

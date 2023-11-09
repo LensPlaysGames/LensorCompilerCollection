@@ -396,6 +396,7 @@ enum struct VarargsKind {
 
 enum class CastKind {
     HardCast,
+    StructBitcast,
     ImplicitCast,
     LValueToRValueConv,
 };
@@ -1781,6 +1782,8 @@ public:
     bool is_rawptr() const { return kind() == Kind::TypeRawptr; }
     /// Check if this is a numeric type.
     bool is_number() const { return kind() == Kind::TypeInt or kind() == Kind::TypeFloat; }
+    bool is_struct() const { return kind() == Kind::TypeStruct or kind() == Kind::TypeVariant; }
+    bool is_variant() const { return kind() == Kind::TypeVariant; }
 
     bool is_signed_integer() const;
     bool is_unsigned_integer() const;
@@ -2056,6 +2059,20 @@ public:
         while (root and is<VariantType>(root))
             root = as<VariantType>(root)->parent_struct();
         return root;
+    }
+
+    bool inherits_from(const StructType* struct_type) const {
+        StructType* s = parent_struct();
+        while (s) {
+            if (Type::Equal(struct_type, s))
+                return true;
+
+            if (auto v = cast<VariantType>(s))
+                s = v->parent_struct();
+            else s = nullptr;
+        }
+
+        return false;
     }
 
     usz size_alone(const Context* ctx) const;

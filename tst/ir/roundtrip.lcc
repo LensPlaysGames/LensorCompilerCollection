@@ -53,6 +53,8 @@ cc3 : imported intcc i32()
 ; +     %32 = call @cc2 () -> i32
 ; +     %33 = call @cc2 () -> i32
 ; +     %34 = call intcc @cc3 () -> i32
+; +     %35 = alloca i32
+; +     intrinsic @memcpy(ptr %29, ptr %35, i64 4)
 ; +     return
 ops : exported void(i32 %0, i32 %1):
   bb0:
@@ -100,6 +102,8 @@ ops : exported void(i32 %0, i32 %1):
     %32 = call ccc @cc2 () -> i32
     %33 = call @cc2 () -> i32
     %34 = call intcc @cc3 () -> i32
+    %35 = alloca i32
+    intrinsic @memcpy(ptr %29, ptr %35, i64 4)
     return
 
 

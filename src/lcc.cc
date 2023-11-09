@@ -133,12 +133,12 @@ int main(int argc, char** argv) {
             if (auto opt = opts.get_or<"-O">(0))
                 lcc::opt::Optimise(m, int(opt));
 
+            m->lower();
             if (opts.get<"--ir">()) {
                 m->print_ir(use_colour);
                 std::exit(0);
             }
 
-            m->lower();
             m->emit(output_file_path);
         };
 
