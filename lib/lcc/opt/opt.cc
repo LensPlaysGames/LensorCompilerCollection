@@ -657,6 +657,13 @@ private:
     }
 };
 
+/// CFG simplification pass.
+struct CFGSimplPass : InstructionRewritePass {
+    void done(Function* f) {
+
+    }
+};
+
 /// Eliminated instructions whose results are unused if they have no side-effects.
 struct DCEPass : InstructionRewritePass {
     void run(Inst* i) {
@@ -749,23 +756,25 @@ private:
                 /// Call enter() callback if there is one.
                 if constexpr (requires { p.enter(f->blocks()[bi]); }) p.enter(f->blocks()[bi]);
 
-                for (usz ii = 0; ii < f->blocks()[bi]->instructions().size(); ii++) {
-                    auto Done = [&] {
-                        return bi >= f->blocks().size() or
-                               ii >= f->blocks()[bi]->instructions().size();
-                    };
+                if constexpr (requires { p.run(std::declval<Inst*>()); }) {
+                    for (usz ii = 0; ii < f->blocks()[bi]->instructions().size(); ii++) {
+                        auto Done = [&] {
+                            return bi >= f->blocks().size() or
+                                   ii >= f->blocks()[bi]->instructions().size();
+                        };
 
-                    /// Some passes may end up deleting all remaining instructions,
-                    /// so make sure to check that we still have instructions left
-                    /// after each pass.
-                    if (Done()) break;
+                        /// Some passes may end up deleting all remaining instructions,
+                        /// so make sure to check that we still have instructions left
+                        /// after each pass.
+                        if (Done()) break;
 
-                    /// Run the pass on the instruction.
-                    Inst* inst;
-                    do {
-                        inst = f->blocks()[bi]->instructions()[ii];
-                        p.run(inst);
-                    } while (not Done() and inst != f->blocks()[bi]->instructions()[ii]);
+                        /// Run the pass on the instruction.
+                        Inst* inst;
+                        do {
+                            inst = f->blocks()[bi]->instructions()[ii];
+                            p.run(inst);
+                        } while (not Done() and inst != f->blocks()[bi]->instructions()[ii]);
+                    }
                 }
 
                 /// Call leave() callback if there is one.
@@ -780,7 +789,7 @@ private:
             }
 
             /// Call done() callback if there is one.
-            if constexpr (requires { p.done(); }) p.done();
+            if constexpr (requires { p.done(f); }) p.done(f);
             changed = p.changed() or changed;
         }
         return changed;

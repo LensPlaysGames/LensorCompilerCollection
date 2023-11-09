@@ -27,11 +27,13 @@ class Value {
 public:
     enum struct Kind {
         /// Values
-        Block,
-        Function,
         IntegerConstant,
         ArrayConstant,
         Poison,
+
+        /// Values that track their users.
+        Block,
+        Function,
         GlobalVariable,
         Parameter,
 
@@ -188,7 +190,25 @@ public:
     }
 };
 
-class GlobalVariable : public Value {
+/// Value with a user list.
+class UseTrackingValue : public Value {
+    friend Inst;
+
+    /// Users of this value.
+    std::vector<Inst*> user_list;
+
+protected:
+    UseTrackingValue(Kind k, Type* t = Type::UnknownTy) : Value(k, t) {}
+
+public:
+    /// Get the users of this value.
+    auto users() const -> const std::vector<Inst*>& { return user_list; }
+
+    /// RTTI.
+    static bool classof(const Value* v) { return v->kind() > Value::Kind::Block; }
+};
+
+class GlobalVariable : public UseTrackingValue {
     std::string _name;
     Linkage _linkage;
     Value* _init;
@@ -208,7 +228,7 @@ public:
 };
 
 /// IR instruction.
-class Inst : public Value {
+class Inst : public UseTrackingValue {
     /// So that parent can be set upon insertion.
     friend Block;
 
@@ -218,9 +238,6 @@ class Inst : public Value {
     /// Associated machine instruction during early codegen.
     MInst* minst;
 
-    /// Users of this instruction.
-    std::vector<Inst*> user_list;
-
     /// The parent block that this instruction is inserted in.
     Block* parent;
 
@@ -229,16 +246,15 @@ class Inst : public Value {
 
 protected:
     Inst(Kind k, Type* t, Location l = {})
-        : Value(k, t), minst(nullptr), parent(nullptr), loc(l) {}
+        : UseTrackingValue(k, t), minst(nullptr), parent(nullptr), loc(l) {}
 
     /// Add a use by an instruction.
-    static void AddUse(Value* of_value, Value* by) {
-        if (not is<Inst>(of_value)) return;
-        if (not is<Inst>(by)) return;
-        auto of = as<Inst>(of_value);
+    static void AddUse(Value* of_value, Inst* by) {
+        if (not is<UseTrackingValue>(of_value)) return;
+        auto of = as<UseTrackingValue>(of_value);
         auto it = rgs::find(of->user_list, by);
         if (it != of->user_list.end()) return;
-        of->user_list.emplace_back(as<Inst>(by));
+        of->user_list.emplace_back(by);
     }
 
     /// Iterate the children of an instruction. This is only
@@ -252,17 +268,17 @@ protected:
     void EraseImpl();
 
     /// Remove a use by an instruction.
-    static void RemoveUse(Value* of_value, Value* by) {
-        if (not is<Inst>(of_value)) return;
-        if (not is<Inst>(by)) return;
-        auto of = as<Inst>(of_value);
+    static void RemoveUse(Value* of_value, Inst* by) {
+        if (not is<UseTrackingValue>(of_value)) return;
+        auto of = as<UseTrackingValue>(of_value);
         auto it = rgs::find(of->user_list, by);
         if (it == of->user_list.end()) return;
         of->user_list.erase(it);
     }
 
     /// Replace an operand with another operand and update uses.
-    void UpdateOperand(Value*& op, Value* newval) {
+    template <std::derived_from<Value> T>
+    void UpdateOperand(T*& op, T* newval) {
         if (op) RemoveUse(op, this);
         AddUse(newval, this);
         op = newval;
@@ -311,15 +327,12 @@ public:
     /// before this instruction.
     void replace_with(Value* v);
 
-    /// Get the users of this instruction.
-    auto users() const -> const std::vector<Inst*>& { return user_list; }
-
     /// RTTI.
     static bool classof(Value* v) { return +v->kind() >= +Kind::Alloca; }
 };
 
 /// A basic block.
-class Block : public Value {
+class Block : public UseTrackingValue {
     using Iterator = utils::VectorIterator<Inst*>;
     using ConstIterator = utils::VectorConstIterator<Inst*>;
 
@@ -340,7 +353,7 @@ class Block : public Value {
 
 public:
     Block(std::string n = "")
-        : Value(Kind::Block),
+        : UseTrackingValue(Kind::Block),
           block_name(std::move(n)) {}
 
     /// Get an iterator to the first instruction in this block.
@@ -405,7 +418,7 @@ public:
 };
 
 /// An IR function.
-class Function : public Value {
+class Function : public UseTrackingValue {
     using Iterator = utils::VectorIterator<Block*>;
     using ConstIterator = utils::VectorConstIterator<Block*>;
 
@@ -513,13 +526,13 @@ public:
 };
 
 /// A parameter reference.
-class Parameter : public Value {
+class Parameter : public UseTrackingValue {
     /// The parameter index.
     u32 i;
 
     /// Only the Function class should be able to create these.
     friend Function;
-    Parameter(Type* ty, u32 idx) : Value(Kind::Parameter, ty), i(idx) {}
+    Parameter(Type* ty, u32 idx) : UseTrackingValue(Kind::Parameter, ty), i(idx) {}
 public:
     /// Get the parameter index.
     auto index() const -> u32 { return i; }
@@ -851,7 +864,11 @@ public:
 
     /// Remove all operands.
     void clear() {
-        for (auto& i : incoming) RemoveUse(i.value, this);
+        for (auto& i : incoming) {
+            RemoveUse(i.value, this);
+            RemoveUse(i.block, this);
+        }
+
         incoming.clear();
     }
 
@@ -864,7 +881,10 @@ public:
         if (not block()) return;
         std::erase_if(incoming, [&](const IncomingValue& elem) {
             auto should_erase = not block()->has_predecessor(elem.block);
-            if (should_erase) RemoveUse(elem.value, this);
+            if (should_erase) {
+                RemoveUse(elem.value, this);
+                RemoveUse(elem.block, this);
+            }
             return should_erase;
         });
     }
@@ -886,6 +906,7 @@ public:
         auto it = rgs::find(incoming, block, &IncomingValue::block);
         if (it == incoming.end()) return;
         RemoveUse(it->value, this);
+        RemoveUse(it->block, this);
         incoming.erase(it);
     }
 
@@ -910,6 +931,7 @@ public:
         /// if someone calls this on a block+value combination that
         /// already exists.
         AddUse(value, this);
+        AddUse(block, this);
     }
 
     /// RTTI.
@@ -934,13 +956,15 @@ class BranchInst : public Inst {
 
 public:
     BranchInst(Block* target, Location loc = {})
-        : Inst(Kind::Branch, Type::UnknownTy, loc), target_block(target) {}
+        : Inst(Kind::Branch, Type::UnknownTy, loc), target_block(target) {
+        AddUse(target_block, this);
+    }
 
     /// Get the target block.
     auto target() const -> Block* { return target_block; }
 
     /// Replace the target with another block.
-    void target(Block* b) { target_block = b; }
+    void target(Block* b) { UpdateOperand(target_block, b); }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Branch; }
@@ -972,25 +996,27 @@ public:
     ) : Inst(Kind::CondBranch, Type::UnknownTy, loc),
         condition(cond), then_(then_), else_(else_) {
         AddUse(condition, this);
+        AddUse(then_, this);
+        AddUse(else_, this);
     }
 
     /// Get the condition.
     auto cond() const -> Value* { return condition; }
 
     /// Replace the condition.
-    void cond(Value* v);
+    void cond(Value* v) { UpdateOperand(condition, v); }
 
     /// Get the block to branch to if the condition is false.
     auto else_block() const -> Block* { return else_; }
 
     /// Replace the else block.
-    void else_block(Block* b) { else_ = b; }
+    void else_block(Block* b) { UpdateOperand(else_, b); }
 
     /// Get the block to branch to if the condition is true.
     auto then_block() const -> Block* { return then_; }
 
     /// Replace the then block.
-    void then_block(Block* b) { then_ = b; }
+    void then_block(Block* b) { UpdateOperand(then_, b); }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::CondBranch; }

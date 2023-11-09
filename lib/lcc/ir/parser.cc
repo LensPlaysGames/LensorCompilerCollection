@@ -79,7 +79,7 @@ class Parser : syntax::Lexer<syntax::Token<TokenKind>> {
     StringMap<Value*> globals{};
 
     /// Unresolved values.
-    StringMap<std::vector<Block**>> block_fixups{};
+    StringMap<std::vector<std::pair<Inst*, Block**>>> block_fixups{};
     StringMap<std::vector<std::pair<Inst*, Value**>>> temporary_fixups{};
     StringMap<std::vector<std::pair<Inst*, Value**>>> global_fixups{};
 
@@ -145,7 +145,7 @@ private:
     auto ParseValue() -> Result<std::pair<Type*, IRValue>>;
 
     /// Get a `Value*` for a temporary, or mark it to be resolved later.
-    void SetBlock(Block*& val, IRValue v);
+    void SetBlock(Inst* parent, Block*& val, IRValue v);
     void SetValue(Inst* parent, Value*& val, IRValue v);
 
     static bool IsIdentStart(char c) { return IsAlpha(c) or c == '_' or c == '.'; }
@@ -618,7 +618,10 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
         if (it == temporaries.end()) return Error("Unknown block '{}'", tmp);
         auto b = cast<Block>(it->second);
         if (not b) return Error("'{}' is not a block", tmp);
-        for (auto elem : fixups) *elem = b;
+        for (auto elem : fixups) {
+            *elem.second = b;
+            Inst::AddUse(b, elem.first);
+        }
     }
 
     return {};
@@ -684,7 +687,7 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
                 auto res = ParseUntypedValue(nullptr);
                 if (res.is_diag()) return res.diag();
                 auto br = new (*mod) BranchInst(loc);
-                SetBlock(br->target_block, *res);
+                SetBlock(br, br->target_block, *res);
                 return br;
             }
 
@@ -699,8 +702,8 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
                 if (IsError(cond, lit_to, to, lit_else, els)) return Diag();
                 auto br = new (*mod) CondBranchInst(loc);
                 SetValue(br, br->condition, *cond);
-                SetBlock(br->then_, *to);
-                SetBlock(br->else_, *els);
+                SetBlock(br, br->then_, *to);
+                SetBlock(br, br->else_, *els);
                 return br;
             }
 
@@ -797,7 +800,7 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         auto phi = new (*mod) PhiInst(*type, loc);
         phi->incoming.resize(blocks.size());
         for (auto&& [i, inc] : vws::enumerate(phi->incoming)) {
-            SetBlock(inc.block, blocks[usz(i)]);
+            SetBlock(phi, inc.block, blocks[usz(i)]);
             SetValue(phi, inc.value, values[usz(i)]);
         }
 
@@ -954,7 +957,7 @@ void lcc::parser::Parser::SetValue(Inst* parent, Value*& val, IRValue v) {
     }
 }
 
-void lcc::parser::Parser::SetBlock(lcc::Block*& val, lcc::parser::Parser::IRValue v) {
+void lcc::parser::Parser::SetBlock(Inst* parent, lcc::Block*& val, lcc::parser::Parser::IRValue v) {
     if (auto value = std::get_if<Value*>(&v)) {
         auto b = cast<Block>(*value);
         if (not b) {
@@ -962,10 +965,11 @@ void lcc::parser::Parser::SetBlock(lcc::Block*& val, lcc::parser::Parser::IRValu
             return;
         }
         val = b;
+        Inst::AddUse(b, parent);
     } else if (auto g = std::get_if<Global>(&v)) {
         Error("Value does not name a block");
     } else {
-        block_fixups[std::get<Temporary>(v).data].push_back(&val);
+        block_fixups[std::get<Temporary>(v).data].emplace_back(parent, &val);
     }
 }
 
