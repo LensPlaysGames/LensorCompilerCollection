@@ -550,8 +550,10 @@ struct StoreFowardingPass : InstructionRewritePass {
 
     std::vector<Var> vars{};
 
-    /// This pass can’t handle forwarding stores across conditional branches.
-    void atfork(Block*) { vars.clear(); }
+    /// This pass can’t handle forwarding stores across branches; the
+    /// jump threading code will usually end up combining blocks anyway
+    /// if possible, and more complex cases are handled by mem2reg.
+    void enter(Block*) { vars.clear(); }
 
     void done() {
         for (auto& var : vars) EraseLastStoreIfUnused(var);

@@ -396,11 +396,12 @@ void Inst::erase() {
 
 void Inst::erase_cascade() {
     EraseImpl();
-    for (auto u : users()) u->erase_cascade();
+    while (not users().empty()) users().front()->erase_cascade();
 }
 
 void Inst::replace_with(Value* v) {
-    for (auto u : users()) {
+    while (not users().empty()) {
+        auto u = users().front();
         for (auto use : u->Children()) {
             if (*use == this) {
                 RemoveUse(this, u);
