@@ -1565,7 +1565,7 @@ public:
     Value* operand() const { return op; }
 
     /// Set the operand.
-    void operand(Value* v) { op = v; }
+    void operand(Value* v) { UpdateOperand(op, v); }
 
     static bool classof(Value* v) {
         return +v->kind() >= +Kind::ZExt and +v->kind() <= +Kind::Compl;

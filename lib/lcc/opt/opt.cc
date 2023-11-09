@@ -278,10 +278,11 @@ public:
                 }
             } break;
 
-            /// Combine array and struct copies emitted as loads+stores into a memcpy.
             case Value::Kind::Store: {
                 auto s = as<StoreInst>(i);
                 auto ty = s->val()->type();
+
+                /// Combine array and struct copies emitted as loads+stores into a memcpy.
                 if (not is<ArrayType, StructType>(ty)) break;
 
                 /// If the load’s only user is this, combine them.
@@ -308,11 +309,32 @@ public:
                 l->erase();
             } break;
 
-            /// GEP w/ 0 is a no-op.
+            case Value::Kind::Bitcast: {
+                auto b = as<BitcastInst>(i);
+
+                /// Bitcast to the same type is a no-op.
+                if (b->type() == b->operand()->type()) {
+                    Replace(b, b->operand());
+                    break;
+                }
+
+                /// Fold nested casts.
+                auto nested = cast<BitcastInst>(b->operand());
+                if (nested) {
+                    if (nested->operand()->type() == b->type()) Replace(b, nested->operand());
+                    else {
+                        b->operand(nested->operand());
+                        SetChanged();
+                    }
+                }
+            } break;
+
             case Value::Kind::GetElementPtr:
             case Value::Kind::GetMemberPtr: {
                 auto gep = as<GEPBaseInst>(i);
                 auto index = cast<IntegerConstant>(gep->idx());
+
+                /// GEP w/ 0 is a no-op.
                 if (index and index->value() == 0) Replace(i, gep->ptr());
             } break;
 
