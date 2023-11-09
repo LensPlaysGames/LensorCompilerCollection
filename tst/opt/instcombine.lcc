@@ -33,3 +33,13 @@ fold_add_sub : i32(i32 %0):
     %3 = add i32 3, %2
     %4 = sub i32 %3, 5
     return i32 %4
+
+; * memcpy : void(ptr %0, ptr %1):
+; +   bb0:
+; +     intrinsic @memcpy(ptr %0, ptr %1, i64 400)
+; +     return
+memcpy : void(ptr %0, ptr %1):
+  bb0:
+    %2 = load i32[100] from %1
+    store i32[100] %2 into %0
+    return

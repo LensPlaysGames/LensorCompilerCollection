@@ -278,6 +278,36 @@ public:
                 }
             } break;
 
+            /// Combine array and struct copies emitted as loads+stores into a memcpy.
+            case Value::Kind::Store: {
+                auto s = as<StoreInst>(i);
+                auto ty = s->val()->type();
+                if (not is<ArrayType, StructType>(ty)) break;
+
+                /// If the load’s only user is this, combine them.
+                auto l = cast<LoadInst>(s->val());
+                if (not l or l->users().size() > 1) break;
+
+                /// Make sure they’re right next to each other in the
+                /// same block, else intervening operations might change
+                /// the semantics of this.
+                auto b = s->block();
+                if (not s->block() or not l->block()) break;
+                if (s->block() != l->block()) break;
+                if (std::next(rgs::find(b->instructions(), l)) != rgs::find(b->instructions(), s)) break;
+
+                /// Insert a memcpy.
+                Create<IntrinsicInst>(
+                    s,
+                    IntrinsicKind::MemCopy,
+                    std::vector<Value*>{s->ptr(), l->ptr(), MakeInt(ty->bytes())}
+                );
+
+                /// Finally, erase the load and store.
+                s->erase();
+                l->erase();
+            } break;
+
             /// GEP w/ 0 is a no-op.
             case Value::Kind::GetElementPtr:
             case Value::Kind::GetMemberPtr: {

@@ -710,7 +710,7 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         if (tok.text == "return") {
             NextToken();
             auto ret = new (*mod) ReturnInst(nullptr, loc);
-            if (not At(Tk::Newline)) {
+            if (not At(Tk::Newline, Tk::Eof)) {
                 auto res = ParseValue();
                 if (res.is_diag()) return res.diag();
                 SetValue(ret, ret->value, res->second);
