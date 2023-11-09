@@ -28,6 +28,16 @@ protected:
         return i;
     }
 
+    /// Create a new instruction, and insert it after another instruction.
+    template <typename Instruction, typename... Args>
+    auto Create(Inst* after, Args&&... args) -> Instruction* {
+        LCC_ASSERT(after->block(), "Cannot insert after floating instruction");
+        auto i = new (*mod) Instruction(std::forward<Args>(args)...);
+        after->block()->insert_after(i, after);
+        SetChanged();
+        return i;
+    }
+
     /// Replace an instruction with a value.
     auto Replace(Inst* i, Value* v) {
         i->replace_with(v);
@@ -302,6 +312,125 @@ public:
     }
 };
 
+/// Scalar replacement of aggregates.
+///
+/// Split allocas of aggregate types (structs and arrays)
+/// into multiple variables if possible so we can optimise
+/// each one in isolation.
+struct SROAPass : InstructionRewritePass {
+private:
+    void TrySplitAlloca(AllocaInst* a) {
+        /// Skip if this is not a struct or array type.
+        if (not is<StructType, ArrayType>(a->allocated_type())) return;
+
+        /// Variable is unused, just delete it.
+        if (a->users().empty()) {
+            a->erase_cascade();
+            SetChanged();
+            return;
+        }
+
+        /// Any instruction that is not a gep causes this alloca
+        /// to escape, in which case we can’t split it.
+        ///
+        /// If the entire aggregate is ever loaded from or stored
+        /// to at once, we can’t split it either, so even stores
+        /// and loads make this optimisation impossible here.
+        ///
+        /// (Note that we could do more if we treat converting
+        /// pointers to struct members back to a ptr to the struct
+        /// itself as UB, but we don’t enforce that atm).
+        for (auto u : a->users()) {
+            if (not is<GEPBaseInst>(u)) return;
+
+            /// Furthermore, if an array is accessed dynamically,
+            /// then we can’t split it either.
+            auto gep = cast<GEPInst>(u);
+            if (not gep) continue;
+            if (not is<IntegerConstant>(gep->idx())) return;
+        }
+
+        if (is<StructType>(a->allocated_type())) SplitStruct(a);
+        else SplitArray(a);
+    }
+
+    /// Unlike structs, arrays are split on-demand since we don’t
+    /// want to e.g. split an array of 1000 elements into 1000
+    /// allocas.
+    void SplitArray(AllocaInst* a) {
+        /// Split elements as needed.
+        auto elem_type = cast<ArrayType>(a->allocated_type())->element_type();
+        std::unordered_map<u64, AllocaInst*> insts{};
+
+        /// Replace GEPs.
+        while (not a->users().empty()) {
+            auto gep = as<GEPInst>(a->users().front());
+            auto idx = as<IntegerConstant>(gep->idx())->value();
+
+            /// If the index is negative, then this is an out-of-bounds
+            /// access. Replace it with a poison value.
+            if (idx.is_negative()) {
+                Replace<PoisonValue>(gep, gep->type());
+                continue;
+            }
+
+            /// Create the alloca for this index, if there isn’t already one.
+            AllocaInst* elem;
+            if (auto it = insts.find(*idx); it != insts.end()) elem = it->second;
+            else {
+                elem = Create<AllocaInst>(a, elem_type);
+                insts[*idx] = elem;
+            }
+
+            /// Replace the gep with it.
+            gep->replace_with(elem);
+        }
+
+        /// Finally, delete the original alloca.
+        a->erase_cascade();
+    }
+
+    /// Split a struct into multiple variables; since structs
+    /// generally don’t contain that many members, we can do
+    /// this eagerly.
+    void SplitStruct(AllocaInst* a) {
+        auto stype = as<StructType>(a->allocated_type());
+        std::vector<AllocaInst*> insts{stype->member_count()};
+        for (auto&& [i, f] : vws::enumerate(stype->members())) {
+            insts[usz(i)] = Create<AllocaInst>(
+                i == 0 ? a : insts[usz(i) - 1],
+                f,
+                a->location()
+            );
+        }
+
+        /// Replace GEPs.
+        while (not a->users().empty()) {
+            auto gep = as<GetMemberPtrInst>(a->users().front());
+
+            /// Convert out-of-bounds and non-constant GEPs to poison values.
+            auto idx = cast<IntegerConstant>(gep->idx());
+            if (not idx or idx->value().uge(insts.size())) {
+                Replace<PoisonValue>(gep, gep->type());
+                continue;
+            }
+
+            /// Replace inbounds GEPs with the corresponding alloca.
+            gep->replace_with(insts[*idx->value()]);
+        }
+
+        /// Finally, delete the original alloca.
+        a->erase_cascade();
+        SetChanged();
+    }
+
+public:
+    void run(Inst* i) {
+        auto a = cast<AllocaInst>(i);
+        if (a) TrySplitAlloca(a);
+    }
+};
+
 /// Pass that performs simple store forwarding.
 struct StoreFowardingPass : InstructionRewritePass {
     struct Var {
@@ -465,6 +594,7 @@ struct Optimiser {
     /// Entry point.
     void run() { // clang-format off
         RunPasses<
+            SROAPass,
             StoreFowardingPass,
             InstCombinePass,
             DCEPass
@@ -496,8 +626,10 @@ private:
 
                         /// Run the pass on the instruction.
                         Inst* inst;
-                        inst = f->blocks()[bi]->instructions()[ii];
-                        p.run(inst);
+                        do {
+                            inst = f->blocks()[bi]->instructions()[ii];
+                            p.run(inst);
+                        } while (inst != f->blocks()[bi]->instructions()[ii]);
                     }
 
                     /// Call leave() callback if there is one.

@@ -1,0 +1,23 @@
+; R %lcc --ir -O3 %s
+
+; p lit []
+
+; * main : i32():
+; +   bb0:
+; +     return i32 42
+main : i32():
+  bb0:
+    ; Note: We purposefully allocate an absurd amount of
+    ; integers here so as to ensure that the SROA pass does
+    ; not insert allocas for each one, since that would most
+    ; definitely cause any reasonable system to run out of
+    ; memory.
+    %0 = alloca i32[1000000000000000000]
+    %1 = gep i32[1000000000000000000] from %0 at i43 5
+    %2 = gep i32[1000000000000000000] from %0 at i43 47
+    store i32 20 into %1
+    store i32 22 into %2
+    %3 = load i32 from %1
+    %4 = load i32 from %2
+    %5 = add i32 %3, %4
+    return i32 %5

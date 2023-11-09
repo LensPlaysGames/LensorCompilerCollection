@@ -53,8 +53,7 @@ constexpr auto StringifyEnum(TokenKind t) -> std::string_view {
 }
 
 std::unordered_map<std::string, IntrinsicKind> intrinsic_kinds{
-    {"@memcpy", IntrinsicKind::MemCopy}
-};
+    {"@memcpy", IntrinsicKind::MemCopy}};
 
 class Parser : syntax::Lexer<syntax::Token<TokenKind>> {
     using Tk = TokenKind;
@@ -130,6 +129,9 @@ private:
 
     template <typename Instruction>
     auto ParseCast(std::string res) -> Result<Inst*>;
+
+    template <typename Instruction>
+    auto ParseGEP(std::string res) -> Result<Inst*>;
 
     auto ParseBlock() -> Result<Block*>;
     auto ParseCall(bool tail) -> Result<CallInst*>;
@@ -468,7 +470,7 @@ auto lcc::parser::Parser::ParseIntrinsic() -> Result<IntrinsicInst*> {
 
     auto intrinsic_name = tok.text;
     if (not At(Tk::Global)) return Error("Expected intrinsic name");
-    
+
     auto name = tok.text;
     auto loc = tok.location;
 
@@ -622,6 +624,23 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     return {};
 }
 
+template <typename Instruction>
+auto lcc::parser::Parser::ParseGEP(std::string tmp) -> Result<Inst*> {
+    auto loc = tok.location;
+    NextToken();
+    auto ty = ParseType();
+    auto lit = ParseLiteral("from");
+    auto ptr = ParseUntypedValue(Type::PtrTy);
+    auto at = ParseLiteral("at");
+    auto idx = ParseValue();
+    if (IsError(ty, lit, ptr, at, idx)) return Diag();
+    auto gep = new (*mod) Instruction(*ty, loc);
+    SetValue(gep, gep->pointer, *ptr);
+    SetValue(gep, gep->index, idx->second);
+    AddTemporary(std::move(tmp), gep);
+    return gep;
+}
+
 auto lcc::parser::Parser::ParseLiteral(std::string_view lit) -> Result<void> {
     if (not At(Tk::Keyword) or tok.text != lit) return Error("Expected '{}'", lit);
     NextToken();
@@ -741,33 +760,8 @@ auto lcc::parser::Parser::ParseInstruction() -> Result<Inst*> {
         return call;
     }
 
-    if (tok.text == "gep") {
-        auto ty = ParseType();
-        auto lit = ParseLiteral("from");
-        auto ptr = ParseUntypedValue(Type::PtrTy);
-        auto at = ParseLiteral("at");
-        auto idx = ParseValue();
-        if (IsError(ty, lit, ptr, at, idx)) return Diag();
-        auto gep = new (*mod) GEPInst(*ty, loc);
-        SetValue(gep, gep->pointer, *ptr);
-        SetValue(gep, gep->index, idx->second);
-        AddTemporary(std::move(tmp), gep);
-        return gep;
-    }
-
-    if (tok.text == "gmp") {
-        auto ty = ParseType();
-        auto lit = ParseLiteral("from");
-        auto ptr = ParseUntypedValue(Type::PtrTy);
-        auto at = ParseLiteral("at");
-        auto idx = ParseValue();
-        if (IsError(ty, lit, ptr, at, idx)) return Diag();
-        auto gmp = new (*mod) GetMemberPtrInst(*ty, loc);
-        SetValue(gmp, gmp->pointer, *ptr);
-        SetValue(gmp, gmp->index, idx->second);
-        AddTemporary(std::move(tmp), gmp);
-        return gmp;
-    }
+    if (tok.text == "gep") return ParseGEP<GEPInst>(std::move(tmp));
+    if (tok.text == "gmp") return ParseGEP<GetMemberPtrInst>(std::move(tmp));
 
     if (tok.text == "load") {
         NextToken();

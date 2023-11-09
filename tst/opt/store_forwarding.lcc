@@ -1,0 +1,15 @@
+; R %lcc --ir -O3 %s
+
+; * main : i64():
+; +   bb0:
+; +     return i64 69
+main : i64():
+  bb0:
+    %0 = alloca i64
+    %1 = alloca i64
+    store i64 34 into %0
+    store i64 35 into %1
+    %2 = load i64 from %0
+    %3 = load i64 from %1
+    %4 = add i64 %2, %3
+    return i64 %4

@@ -115,6 +115,9 @@ public:
     /// Get the type of this value.
     Type* type() const { return value_type; }
 
+    /// Print this value for debugging.
+    void print() const;
+
     static auto ToString(Value::Kind v) -> std::string {
         using VK = Value::Kind;
         switch (v) {
@@ -352,6 +355,9 @@ public:
     /// Get the parent function.
     auto function() const -> Function* { return parent; }
 
+    /// Set the parent function.
+    void function(Function* f) { parent = f; }
+
     /// Check if this block has another block as one
     /// of its predecessors.
     bool has_predecessor(Block* block) const;
@@ -445,7 +451,10 @@ public:
     /// Get an iterator to the first block in this function.
     auto begin() const { return block_list.begin(); }
 
-    void append_block(Block* b) { block_list.push_back(b); };
+    void append_block(Block* b) {
+        block_list.push_back(b);
+        b->function(this);
+    }
 
     /// Get the blocks in this function.
     auto blocks() const -> const std::vector<Block*>& { return block_list; }
@@ -731,7 +740,7 @@ class GetMemberPtrInst : public GEPBaseInst {
 
 public:
     GetMemberPtrInst(Type* structType, Value* structPointer, Value* memberIndex, Location loc = {})
-        : GEPBaseInst(Kind::GetMemberPtr, structType, structPointer, memberIndex, loc){
+        : GEPBaseInst(Kind::GetMemberPtr, structType, structPointer, memberIndex, loc) {
         LCC_ASSERT(
             pointer->type() == Type::PtrTy,
             "GetMemberInst may only operate on opaque pointers, which `{}` is not",

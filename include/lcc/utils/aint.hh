@@ -104,7 +104,7 @@ public:
     [[nodiscard]] constexpr bool operator<=(i64 rhs) const { return SExt() <= rhs; }
 
     [[nodiscard]] constexpr Word operator*() const { return w; }
-    [[nodiscard]] constexpr bool is_negative() const { return bool(sign_bit()); }
+    [[nodiscard]] constexpr bool is_negative() const { return bool(w & sign_bit()); }
     [[nodiscard]] constexpr bool is_power_of_two() const { return std::has_single_bit(value()); }
     [[nodiscard]] constexpr auto bits() const -> u8 { return bit_width; }
     [[nodiscard]] constexpr Word log2() const { return Word(std::countr_zero(value())); }

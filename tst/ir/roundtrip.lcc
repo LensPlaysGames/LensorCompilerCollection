@@ -1,5 +1,7 @@
 ; R %lcc %s --ir --color=never
 
+; p lit []
+
 ; * cc1 : imported layecc i32(i32 %0)
 ; * cc2 : imported i32()
 ; * cc3 : imported intcc i32()
@@ -45,7 +47,7 @@ cc3 : imported intcc i32()
 ; +   bb4:
 ; +     unreachable
 ; +   bb5:
-; +     %28 = phi i32, \[%bb3 : 4\], \[%bb4 : poison\]
+; +     %28 = phi i32, [%bb3 : 4], [%bb4 : poison]
 ; +     %29 = alloca i32
 ; +     store i32 %28 into %29
 ; +     %30 = load i32 from %29
@@ -53,8 +55,9 @@ cc3 : imported intcc i32()
 ; +     %32 = call @cc2 () -> i32
 ; +     %33 = call @cc2 () -> i32
 ; +     %34 = call intcc @cc3 () -> i32
-; +     %35 = alloca i32
-; +     intrinsic @memcpy(ptr %29, ptr %35, i64 4)
+; +     %35 = alloca i32[100]
+; +     %36 = gep i32[100] from %35 at i32 0
+; +     intrinsic @memcpy(ptr %29, ptr %36, i64 4)
 ; +     return
 ops : exported void(i32 %0, i32 %1):
   bb0:
@@ -102,8 +105,9 @@ ops : exported void(i32 %0, i32 %1):
     %32 = call ccc @cc2 () -> i32
     %33 = call @cc2 () -> i32
     %34 = call intcc @cc3 () -> i32
-    %35 = alloca i32
-    intrinsic @memcpy(ptr %29, ptr %35, i64 4)
+    %35 = alloca i32[100]
+    %36 = gep i32[100] from %35 at i32 0
+    intrinsic @memcpy(ptr %29, ptr %36, i64 4)
     return
 
 

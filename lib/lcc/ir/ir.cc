@@ -230,13 +230,15 @@ StructType* StructType::Get(Context* ctx, std::vector<Type*> member_types, std::
 }
 
 void Block::insert_before(Inst* to_insert, Inst* before) {
-    auto before_it = std::find(inst_list.begin(), inst_list.end(), before);
+    auto before_it = rgs::find(inst_list, before);
     inst_list.insert(before_it, to_insert);
+    to_insert->parent = this;
 }
 
 void Block::insert_after(Inst* to_insert, Inst* after) {
-    auto after_it = std::find(inst_list.begin(), inst_list.end(), after);
+    auto after_it = rgs::find(inst_list, after);
     inst_list.insert(after_it + 1, to_insert);
+    to_insert->parent = this;
 }
 
 Inst* Block::insert(Inst* i, bool force) {
@@ -419,6 +421,8 @@ void Inst::replace_with(Value* v) {
 
 namespace {
 struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
+    using IRPrinter::IRPrinter;
+
     void PrintHeader() {
     }
 
@@ -1015,11 +1019,43 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
 
         LCC_UNREACHABLE();
     }
+
+    /// Print an individual value.
+    ///
+    /// This is *not* to be used when printing the rest of
+    /// the IR! This is the entry point for printing a single
+    /// value only.
+    static void PrintValue(const Value* const_value, bool use_colour) {
+        /// Ok because we’re not going to mutate this, but we should
+        /// probably refactor the IR printer to use const Value*’s
+        /// instead...
+        auto v = const_cast<Value*>(const_value);
+        LCCIRPrinter p{use_colour};
+        if (auto b = cast<Block>(v)) {
+            if (b->function()) p.SetFunctionIndices(b->function());
+            p.PrintBlock(b);
+        } else if (auto f = cast<Function>(v)) {
+            p.SetFunctionIndices(f);
+            p.PrintFunction(f);
+        } else if (auto i = cast<Inst>(v)) {
+            if (i->block() and i->block()->function()) p.SetFunctionIndices(i->block()->function());
+            p.PrintInst(i);
+        } else if (is<GlobalVariable>(v)) {
+            p.PrintGlobal(as<GlobalVariable>(v));
+        } else {
+            p.Print("{}", p.Val(v, true));
+        }
+        fmt::print("{}", p.Output());
+    }
 };
 } // namespace
 
 void Module::print_ir(bool use_colour) {
     fmt::print("{}", LCCIRPrinter::Print(this, use_colour));
+}
+
+void Value::print() const {
+    LCCIRPrinter::PrintValue(this, true);
 }
 
 } // namespace lcc

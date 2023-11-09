@@ -17,7 +17,6 @@ private:
     std::unordered_map<Block*, isz> block_indices{};
     std::unordered_map<Inst*, isz> inst_indices{};
 
-    explicit IRPrinter(bool use_colour) : use_colour(use_colour) {}
 
 public:
     /// Entry point.
@@ -26,6 +25,8 @@ public:
     }
 
 protected:
+    explicit IRPrinter(bool use_colour) : use_colour(use_colour) {}
+
     bool use_colour;
     utils::Colours C{use_colour};
     using enum utils::Colour;
@@ -52,13 +53,15 @@ protected:
     /// Get an insert iterator to a string.
     static auto It(std::string& str) { return std::back_inserter(str); }
 
+    /// Get the content to be printed.
+    auto Output() -> std::string_view { return s; }
+
     /// Append text to the output.
     template <typename... Args>
     void Print(fmt::format_string<Args...> fmt, Args&&... args) {
         fmt::format_to(It(s), fmt, std::forward<Args>(args)...);
     }
 
-private:
     /// Emit a block and its containing instructions.
     void PrintBlock(Block* b) {
         for (usz i = 0; i < block_indent; i++) s += ' ';
@@ -79,13 +82,7 @@ private:
             return;
         }
 
-        /// Set indices for instructions and blocks.
-        for (auto [i, b] : vws::enumerate(f->blocks())) {
-            block_indices[b] = i;
-            for (auto inst : b->instructions())
-                if (This()->RequiresTemporary(inst))
-                    inst_indices[inst] = tmp++;
-        }
+        SetFunctionIndices(f);
 
         /// Print the body.
         This()->EnterFunctionBody(f);
@@ -107,6 +104,15 @@ private:
         }
         s += C(Reset);
         return std::move(s);
+    }
+
+    void SetFunctionIndices(Function* f) {
+        for (auto [i, b] : vws::enumerate(f->blocks())) {
+            block_indices[b] = i;
+            for (auto inst : b->instructions())
+                if (This()->RequiresTemporary(inst))
+                    inst_indices[inst] = tmp++;
+        }
     }
 
     /// Get a pointer to the derived class.
