@@ -393,6 +393,10 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
         list.color = reg_value;
         list.allocated = true;
 
+        // Track registers used in function so that calls can properly do
+        // caller-saved registers.
+        function.registers_used().insert(u8(list.color));
+
         // fmt::print("Vreg {} mapped to HWreg {}\n", list.value, list.color);
     }
 
@@ -421,8 +425,6 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
         }
     }
 
-    // TODO: Track registers used in function so that calls can properly do
-    // caller-saved registers.
 }
 
 } // namespace lcc

@@ -254,6 +254,8 @@ class MFunction {
 
     std::vector<AllocaInst*> _locals{};
 
+    std::unordered_set<u8> _registers_used{};
+
     /// The linkage of this function.
     Linkage link;
 
@@ -304,6 +306,14 @@ public:
 
     void add_local(AllocaInst* local) {
         _locals.push_back(local);
+    }
+
+    auto registers_used() -> std::unordered_set<u8>& {
+        return _registers_used;
+    }
+
+    auto registers_used() const -> const std::unordered_set<u8>& {
+        return _registers_used;
     }
 
     auto block_by_name(std::string_view name) -> MBlock* {
