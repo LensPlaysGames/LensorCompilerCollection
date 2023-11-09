@@ -337,17 +337,40 @@ private:
         /// to at once, we can’t split it either, so even stores
         /// and loads make this optimisation impossible here.
         ///
+        /// The only exception to this is if the pointer is used
+        /// to store an element type because a gep of index 0 has
+        /// been inlined.
+        ///
         /// (Note that we could do more if we treat converting
         /// pointers to struct members back to a ptr to the struct
         /// itself as UB, but we don’t enforce that atm).
         for (auto u : a->users()) {
-            if (not is<GEPBaseInst>(u)) return;
+            /// If an array is accessed dynamically, then we can’t
+            /// split it either.
+            if (auto gep = cast<GEPInst>(u)) {
+                if (not is<IntegerConstant>(gep->idx())) return;
+                continue;
+            }
 
-            /// Furthermore, if an array is accessed dynamically,
-            /// then we can’t split it either.
-            auto gep = cast<GEPInst>(u);
-            if (not gep) continue;
-            if (not is<IntegerConstant>(gep->idx())) return;
+            /// Any member GEP is fine.
+            if (is<GetMemberPtrInst>(u)) continue;
+
+            /// Loads and stores are fine, provided they don’t
+            /// load or store the entire object, and provided
+            /// that we’re not storing the alloca itself.
+            if (auto l = cast<LoadInst>(u)) {
+                if (l->type() == a->allocated_type()) return;
+                continue;
+            }
+
+            if (auto s = cast<StoreInst>(u)) {
+                if (s->val() == a) return;
+                if (s->val()->type() == a->allocated_type()) return;
+                continue;
+            }
+
+            /// Any other instruction escapes the alloca.
+            return;
         }
 
         if (is<StructType>(a->allocated_type())) SplitStruct(a);
@@ -362,32 +385,41 @@ private:
         auto elem_type = cast<ArrayType>(a->allocated_type())->element_type();
         std::unordered_map<u64, AllocaInst*> insts{};
 
-        /// Replace GEPs.
-        while (not a->users().empty()) {
-            auto gep = as<GEPInst>(a->users().front());
-            auto idx = as<IntegerConstant>(gep->idx())->value();
+        /// Helper to create an alloca for an index.
+        auto CreateAlloca = [&](u64 idx) {
+            if (auto it = insts.find(idx); it != insts.end()) return it->second;
+            return insts[idx] = Create<AllocaInst>(a, elem_type);
+        };
 
-            /// If the index is negative, then this is an out-of-bounds
-            /// access. Replace it with a poison value.
-            if (idx.is_negative()) {
-                Replace<PoisonValue>(gep, gep->type());
+        /// Replace GEPs and pointer operands of stores and loads.
+        while (not a->users().empty()) {
+            auto u = a->users().front();
+            if (auto gep = cast<GEPInst>(u)) {
+                auto idx = as<IntegerConstant>(gep->idx())->value();
+
+                /// If the index is negative, then this is an out-of-bounds
+                /// access. Replace it with a poison value.
+                if (idx.is_negative()) {
+                    Replace<PoisonValue>(gep, gep->type());
+                    continue;
+                }
+
+                /// Create the alloca for this index, if there isn’t already one.
+                AllocaInst* elem = CreateAlloca(*idx);
+
+                /// Replace the gep with it.
+                gep->replace_with(elem);
                 continue;
             }
 
-            /// Create the alloca for this index, if there isn’t already one.
-            AllocaInst* elem;
-            if (auto it = insts.find(*idx); it != insts.end()) elem = it->second;
-            else {
-                elem = Create<AllocaInst>(a, elem_type);
-                insts[*idx] = elem;
-            }
-
-            /// Replace the gep with it.
-            gep->replace_with(elem);
+            /// Create the alloca for index 0.
+            AllocaInst* first = CreateAlloca(0);
+            if (auto l = cast<LoadInst>(u)) l->ptr(first);
+            else as<StoreInst>(u)->ptr(first);
         }
 
         /// Finally, delete the original alloca.
-        a->erase_cascade();
+        a->erase();
     }
 
     /// Split a struct into multiple variables; since structs
@@ -406,21 +438,27 @@ private:
 
         /// Replace GEPs.
         while (not a->users().empty()) {
-            auto gep = as<GetMemberPtrInst>(a->users().front());
+            auto u = a->users().front();
+            if (auto gep = cast<GetMemberPtrInst>(u)) {
+                /// Convert out-of-bounds and non-constant GEPs to poison values.
+                auto idx = cast<IntegerConstant>(gep->idx());
+                if (not idx or idx->value().uge(insts.size())) {
+                    Replace<PoisonValue>(gep, gep->type());
+                    continue;
+                }
 
-            /// Convert out-of-bounds and non-constant GEPs to poison values.
-            auto idx = cast<IntegerConstant>(gep->idx());
-            if (not idx or idx->value().uge(insts.size())) {
-                Replace<PoisonValue>(gep, gep->type());
+                /// Replace inbounds GEPs with the corresponding alloca.
+                gep->replace_with(insts[*idx->value()]);
                 continue;
             }
 
-            /// Replace inbounds GEPs with the corresponding alloca.
-            gep->replace_with(insts[*idx->value()]);
+            /// Replace loads and stores with the first element.
+            if (auto l = cast<LoadInst>(u)) l->ptr(insts[0]);
+            else as<StoreInst>(u)->ptr(insts[0]);
         }
 
         /// Finally, delete the original alloca.
-        a->erase_cascade();
+        a->erase();
         SetChanged();
     }
 
@@ -467,6 +505,11 @@ struct StoreFowardingPass : InstructionRewritePass {
             /// No alloca for load.
             if (var == vars.end()) return;
 
+            /// Bail out on aggregates; sroa has to take
+            /// care of those first.
+            if (is<ArrayType, StructType>(var->alloca->allocated_type()))
+                return;
+
             /// Cache this value if there was no last value.
             if (not var->last_value or var->needs_reload) {
                 var->needs_reload = false;
@@ -499,6 +542,11 @@ struct StoreFowardingPass : InstructionRewritePass {
             /// No alloca for store.
             if (var == vars.end()) return;
 
+            /// Bail out on aggregates; sroa has to take
+            /// care of those first.
+            if (is<ArrayType, StructType>(var->alloca->allocated_type()))
+                return;
+
             /// Erase the last value if it was as store and ended
             /// up not being used by anything.
             EraseLastStoreIfUnused(*var);
@@ -511,12 +559,11 @@ struct StoreFowardingPass : InstructionRewritePass {
 
         /// Any other instruction that uses an alloca escapes that alloca.
         for (auto a : i->children_of_kind<AllocaInst>()) {
-            auto var = rgs::find(vars, a, &Var::alloca);
-            if (var != vars.end()) var->escaped = true;
-            else {
-                vars.emplace_back(a);
-                vars.back().escaped = true;
-            }
+            Var* var;
+            if (auto it = rgs::find(vars, a, &Var::alloca); it != vars.end()) var = &*it;
+            else var = &vars.emplace_back(a);
+            var->escaped = true;
+            var->last_store_used = true;
         }
 
         /// Calls invalidate all escaped values.
@@ -601,57 +648,73 @@ struct Optimiser {
         >();
     } // clang-format on
 
+    /// Entry point for running select passes.
+    void run_passes(std::string_view passes) {
+        for (const auto& p : vws::split(passes, ',')) {
+            auto s = std::string_view{p};
+            if (s == "sroa") RunPass<SROAPass>();
+            else if (s == "sfwd") RunPass<StoreFowardingPass>();
+            else if (s == "icmb") RunPass<InstCombinePass>();
+            else if (s == "dce") RunPass<DCEPass>();
+            else if (s == "*") run();
+            else Diag::Fatal("Unknown pass '{}'", s);
+        }
+    }
+
 private:
     template <typename... Passes>
     void RunPasses() {
+        /// Run all passes so long as at least one of them returns true.
+        while ((int(RunPass<Passes>()) | ...)) {}
+    }
+
+    template <typename Pass>
+    bool RunPass() {
+        bool changed = false;
         for (auto f : mod->code()) {
-            auto RunPass = [&]<typename Pass> {
-                Pass p{{mod}};
+            Pass p{{mod}};
 
-                /// Use indices here to avoid iterator invalidation.
-                for (usz bi = 0; bi < f->blocks().size(); bi++) {
-                    /// Call enter() callback if there is one.
-                    if constexpr (requires { p.enter(f->blocks()[bi]); }) p.enter(f->blocks()[bi]);
+            /// Use indices here to avoid iterator invalidation.
+            for (usz bi = 0; bi < f->blocks().size(); bi++) {
+                /// Call enter() callback if there is one.
+                if constexpr (requires { p.enter(f->blocks()[bi]); }) p.enter(f->blocks()[bi]);
 
-                    for (usz ii = 0; ii < f->blocks()[bi]->instructions().size(); ii++) {
-                        auto Done = [&] {
-                            return bi >= f->blocks().size() or
-                                   ii >= f->blocks()[bi]->instructions().size();
-                        };
+                for (usz ii = 0; ii < f->blocks()[bi]->instructions().size(); ii++) {
+                    auto Done = [&] {
+                        return bi >= f->blocks().size() or
+                               ii >= f->blocks()[bi]->instructions().size();
+                    };
 
-                        /// Some passes may end up deleting all remaining instructions,
-                        /// so make sure to check that we still have instructions left
-                        /// after each pass.
-                        if (Done()) return p.changed();
+                    /// Some passes may end up deleting all remaining instructions,
+                    /// so make sure to check that we still have instructions left
+                    /// after each pass.
+                    if (Done()) break;
 
-                        /// Run the pass on the instruction.
-                        Inst* inst;
-                        do {
-                            inst = f->blocks()[bi]->instructions()[ii];
-                            p.run(inst);
-                        } while (inst != f->blocks()[bi]->instructions()[ii]);
-                    }
-
-                    /// Call leave() callback if there is one.
-                    if constexpr (requires { p.leave(f->blocks()[bi]); }) p.leave(f->blocks()[bi]);
-
-                    /// Call atfork() callback if there is one and we’re at a fork.
-                    if constexpr (requires { p.atfork(f->blocks()[bi]); }) {
-                        auto b = f->blocks()[bi];
-                        if (b->terminator() and is<CondBranchInst>(b->terminator()))
-                            p.atfork(b);
-                    }
+                    /// Run the pass on the instruction.
+                    Inst* inst;
+                    do {
+                        inst = f->blocks()[bi]->instructions()[ii];
+                        p.run(inst);
+                    } while (not Done() and inst != f->blocks()[bi]->instructions()[ii]);
                 }
 
-                /// Call done() callback if there is one.
-                if constexpr (requires { p.done(); }) p.done();
-                return p.changed();
-            };
+                /// Call leave() callback if there is one.
+                if constexpr (requires { p.leave(f->blocks()[bi]); }) p.leave(f->blocks()[bi]);
 
-            /// Run all passes so long as at least one of them returns true.
-            while ((int(RunPass.template operator()<Passes>()) | ...)) {}
+                /// Call atfork() callback if there is one and we’re at a fork.
+                if constexpr (requires { p.atfork(f->blocks()[bi]); }) {
+                    auto b = f->blocks()[bi];
+                    if (b->terminator() and is<CondBranchInst>(b->terminator()))
+                        p.atfork(b);
+                }
+            }
+
+            /// Call done() callback if there is one.
+            if constexpr (requires { p.done(); }) p.done();
+            changed = p.changed() or changed;
         }
-    }
+        return changed;
+    };
 };
 
 } // namespace
@@ -660,4 +723,9 @@ private:
 void lcc::opt::Optimise(Module* module, int opt_level) {
     Optimiser o{module, opt_level};
     o.run();
+}
+
+void lcc::opt::RunPasses(lcc::Module* module, std::string_view passes) {
+    Optimiser o{module, 0};
+    o.run_passes(passes);
 }

@@ -59,6 +59,7 @@ using options = clopts< // clang-format off
            >,
     option<"--color", "Whether to include colours in the output (default: auto)",
            values<"always", "auto", "never">>,
+    option<"--passes", "Comma-separated list of optimisation passes to run">,
     experimental::short_option<"-O", "Set optimisation level (default: 0)", values<0, 1, 2, 3>>,
     flag<"-v", "Enable verbose output">,
     flag<"--ast", "Print the AST and exit without generating code">,
@@ -130,6 +131,15 @@ int main(int argc, char** argv) {
 
         /// Common path after IR gen.
         auto EmitModule = [&](lcc::Module* m) {
+            /// Do NOT do anything else as this means that we
+            /// *only* want to run optimisation passes; specifically,
+            /// do *not* run lowering if this option was specified.
+            if (auto p = opts.get<"--passes">()) {
+                lcc::opt::RunPasses(m, *p);
+                if (opts.get<"--ir">()) m->print_ir(use_colour);
+                std::exit(0);
+            }
+
             if (auto opt = opts.get_or<"-O">(0))
                 lcc::opt::Optimise(m, int(opt));
 

@@ -21,3 +21,13 @@ main : i32():
     %4 = load i32 from %2
     %5 = add i32 %3, %4
     return i32 %5
+
+; * first_elem : i32():
+; +   bb0:
+; +     return i32 42
+first_elem : i32():
+  bb0:
+    %0 = alloca i32[4]
+    store i32 42 into %0
+    %1 = load i32 from %0
+    return i32 %1

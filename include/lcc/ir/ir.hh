@@ -777,7 +777,7 @@ public:
     auto ptr() const -> Value* { return pointer; }
 
     /// Replace the pointer.
-    void ptr(Value* v);
+    void ptr(Value* v) { UpdateOperand(pointer, v); }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Load; }
@@ -809,13 +809,13 @@ public:
     auto val() const -> Value* { return value; }
 
     /// Replace the value.
-    void val(Value* v);
+    void val(Value* v) { UpdateOperand(value, v); }
 
     /// Get the pointer to store to.
     auto ptr() const -> Value* { return pointer; }
 
     /// Replace the pointer.
-    void ptr(Value* v);
+    void ptr(Value* v) { UpdateOperand(pointer, v); }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Store; }
