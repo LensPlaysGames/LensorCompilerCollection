@@ -198,6 +198,7 @@ public:
                         auto rlhs = cast<IntegerConstant>(radd->lhs());
                         add->lhs(MakeInt(lhs->value() + rlhs->value()));
                         add->rhs(radd->rhs());
+                        SetChanged();
                     }
                 }
 
@@ -253,6 +254,7 @@ public:
                         auto rlhs = cast<IntegerConstant>(rmul->lhs());
                         mul->lhs(MakeInt(lhs->value() * rlhs->value()));
                         mul->rhs(rmul->rhs());
+                        SetChanged();
                     }
                 }
 
@@ -264,6 +266,14 @@ public:
                         SetChanged();
                     }
                 }
+            } break;
+
+            /// GEP w/ 0 is a no-op.
+            case Value::Kind::GetElementPtr:
+            case Value::Kind::GetMemberPtr: {
+                auto gep = as<GEPBaseInst>(i);
+                auto index = cast<IntegerConstant>(gep->idx());
+                if (index and index->value() == 0) Replace(i, gep->ptr());
             } break;
 
             case Value::Kind::SDiv:
@@ -484,12 +494,10 @@ private:
                         /// after each pass.
                         if (Done()) return p.changed();
 
-                        /// Keep running the pass on the instruction if it has changed.
+                        /// Run the pass on the instruction.
                         Inst* inst;
-                        do {
-                            inst = f->blocks()[bi]->instructions()[ii];
-                            p.run(inst);
-                        } while (not Done() and inst != f->blocks()[bi]->instructions()[ii]);
+                        inst = f->blocks()[bi]->instructions()[ii];
+                        p.run(inst);
                     }
 
                     /// Call leave() callback if there is one.

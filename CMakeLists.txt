@@ -362,7 +362,7 @@ if (BUILD_TESTING)
     )
 
     FCHKAddAllTestsInDir(
-        IN "tst/ir"
+        IN "tst/ir" "tst/opt"
         PATTERN "*.lcc"
         PREFIX "$<SEMICOLON>"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"

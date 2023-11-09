@@ -1,0 +1,35 @@
+; R %lcc --ir -O3 %s
+
+; * fold_trivial : i32():
+; +   bb0:
+; +     return i32 3
+fold_trivial : i32():
+  bb1:
+    %0 = add i32 1, 2
+    return i32 %0
+
+; * fold_add_lhs : i32(i32 %0):
+; +   bb0:
+; +     %1 = add i32 9, %0
+; +     return i32 %1
+fold_add : i32(i32 %0):
+  bb1:
+    %1 = add i32 1, %0
+    %2 = add i32 2, %1
+    %3 = add i32 %2, 1
+    %4 = add i32 %3, 2
+    %5 = add i32 1, %4
+    %6 = add i32 %5, 2
+    return i32 %6
+
+; * fold_add_sub : i32(i32 %0):
+; +   bb1:
+; +     %1 add i32 1, %0
+; +     return i32 %1
+fold_add_sub : i32(i32 %0):
+  bb1:
+    %1 = add i32 %0, 1
+    %2 = add i32 %1, 2
+    %3 = add i32 3, %2
+    %4 = sub i32 %3, 5
+    return i32 %4

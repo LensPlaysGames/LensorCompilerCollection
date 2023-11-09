@@ -650,17 +650,11 @@ public:
     static bool classof(Value* v) { return v->kind() == Kind::Intrinsic; }
 };
 
-/// A "get element pointer", or GEP, instruction.
-///
-/// For now, GEP stores the element type as it's type, then indexes it's
-/// base pointer based on that.
-///
-/// GEP(T, p, x) = p + (sizeof(T) * x)
-///
-class GEPInst : public Inst {
+/// Base class for GEP/GMP.
+class GEPBaseInst : public Inst {
     friend Inst;
-    friend parser::Parser;
 
+protected:
     /// The base pointer to index from; "p" in the equation.
     Value* pointer{};
 
@@ -670,27 +664,17 @@ class GEPInst : public Inst {
     /// The element type.
     Type* element_type;
 
-    /// Used by the IR parser.
-    GEPInst(Type* elem, Location loc)
-        : Inst(Kind::GetElementPtr, Type::PtrTy, loc),
-          element_type(elem) {}
-
-public:
-    GEPInst(Type* elementType, Value* arrayPointer, Value* arrayIndex, Location loc = {})
-        : Inst(Kind::GetElementPtr, Type::PtrTy, loc),
-          pointer(arrayPointer),
-          index(arrayIndex),
+    GEPBaseInst(Kind k, Type* elementType, Value* ptr, Value* idx, Location loc = {})
+        : Inst(k, Type::PtrTy, loc),
+          pointer(ptr),
+          index(idx),
           element_type(elementType) {
-        LCC_ASSERT(
-            pointer->type() == Type::PtrTy or is<ArrayType>(pointer->type()),
-            "GEPInst may only operate on arrays or opaque pointers, which `{}` is not",
-            *pointer->type()
-        );
-
-        AddUse(pointer, this);
-        AddUse(index, this);
+        /// IR Parser may cause nullptr to be passed here.
+        if (pointer) AddUse(pointer, this);
+        if (index) AddUse(index, this);
     }
 
+public:
     /// Get the base type of the array.
     auto base_type() const -> Type* { return element_type; }
 
@@ -701,52 +685,62 @@ public:
     auto idx() const -> Value* { return index; }
 
     /// RTTI.
+    static bool classof(Value* v) {
+        return v->kind() == Kind::GetElementPtr or
+               v->kind() == Kind::GetMemberPtr;
+    }
+};
+
+/// A "get element pointer", or GEP, instruction.
+///
+/// For now, GEP stores the element type as it's type, then indexes it's
+/// base pointer based on that.
+///
+/// GEP(T, p, x) = p + (sizeof(T) * x)
+///
+class GEPInst : public GEPBaseInst {
+    friend Inst;
+    friend parser::Parser;
+
+    /// Used by the IR parser.
+    GEPInst(Type* elem, Location loc)
+        : GEPBaseInst(Kind::GetElementPtr, elem, nullptr, nullptr, loc) {}
+
+public:
+    GEPInst(Type* elementType, Value* arrayPointer, Value* arrayIndex, Location loc = {})
+        : GEPBaseInst(Kind::GetElementPtr, elementType, arrayPointer, arrayIndex, loc) {
+        LCC_ASSERT(
+            pointer->type() == Type::PtrTy or is<ArrayType>(pointer->type()),
+            "GEPInst may only operate on arrays or opaque pointers, which `{}` is not",
+            *pointer->type()
+        );
+    }
+
+    /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::GetElementPtr; }
 };
 
 // Get the Nth member of struct pointed to by ptr().
-class GetMemberPtrInst : public Inst {
+class GetMemberPtrInst : public GEPBaseInst {
     friend Inst;
     friend parser::Parser;
 
-    /// A pointer to an instance of a struct of type `struct_type`.
-    Value* pointer{};
-
-    /// The index of the member to get the address of within the struct.
-    Value* index{};
-
-    /// The struct type.
-    Type* struct_t;
-
     /// TODO: Used by the IR parser.
     GetMemberPtrInst(Type* structType, Location loc)
-        : Inst(Kind::GetMemberPtr, Type::PtrTy, loc),
-          struct_t(structType) {}
+        : GEPBaseInst(Kind::GetMemberPtr, structType, nullptr, nullptr, loc) {}
 
 public:
     GetMemberPtrInst(Type* structType, Value* structPointer, Value* memberIndex, Location loc = {})
-        : Inst(Kind::GetMemberPtr, Type::PtrTy, loc),
-          pointer(structPointer),
-          index(memberIndex),
-          struct_t(structType) {
+        : GEPBaseInst(Kind::GetMemberPtr, structType, structPointer, memberIndex, loc){
         LCC_ASSERT(
             pointer->type() == Type::PtrTy,
             "GetMemberInst may only operate on opaque pointers, which `{}` is not",
             *pointer->type()
         );
-
-        AddUse(pointer, this);
-        AddUse(index, this);
     }
 
     /// Get the struct type we are calculating the offset of a member of.
-    auto struct_type() const -> Type* { return struct_t; }
-
-    /// Get the base pointer.
-    auto ptr() const -> Value* { return pointer; }
-
-    /// Get the index.
-    auto idx() const -> Value* { return index; }
+    auto struct_type() const -> StructType* { return as<StructType>(element_type); }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::GetMemberPtr; }
