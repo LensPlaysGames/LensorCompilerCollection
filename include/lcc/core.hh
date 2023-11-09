@@ -65,15 +65,19 @@ enum struct CallConv {
 
 enum struct IntrinsicKind {
     /// Issue a software breakpoint.
+    /// Operands: none
     DebugTrap,
 
     /// Copy memory; similar to C `memmove()`.
+    /// Operands: ptr %dest, ptr %src, any_int %bytes
     MemCopy,
 
     /// Fill memory; similar to C `memset()`.
+    /// Operands: ptr %dest, i8 %value, any_int %bytes
     MemSet,
 
     /// Perform a system call.
+    /// Operands: any_int %syscall, any_int... %args
     SystemCall,
 };
 

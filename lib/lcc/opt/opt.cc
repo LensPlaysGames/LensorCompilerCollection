@@ -385,6 +385,21 @@ private:
             /// Any member GEP is fine.
             if (is<GetMemberPtrInst>(u)) continue;
 
+            /// Memcpy to this variable is fine if the operand is
+            /// a constant, and we are copying the entire aggregate.
+            ///
+            /// TODO: Support copying only part of an aggregate; this
+            ///     entails potentially emitting 2 more memcpys if the
+            ///     end of the copy is like halfway through an array
+            ///     element or struct member.
+            if (auto m = cast<IntrinsicInst>(u)) {
+                if (m->intrinsic_kind() != IntrinsicKind::MemCopy) return;
+                if (m->operands()[0] != a) return;
+                auto size = cast<IntegerConstant>(m->operands()[2]);
+                if (not size or size->value() != a->allocated_type()->bytes()) return;
+                continue;
+            }
+
             /// Loads and stores are fine, provided they don’t
             /// load or store the entire object, and provided
             /// that we’re not storing the alloca itself.
@@ -422,8 +437,17 @@ private:
         };
 
         /// Replace GEPs and pointer operands of stores and loads.
-        while (not a->users().empty()) {
-            auto u = a->users().front();
+        for (usz i = 0; i < a->users().size(); /** No increment! **/) {
+            auto u = a->users()[i];
+
+            /// Memcpys will be handled once we know what
+            /// elements will actually remain in use after this.
+            if (is<IntrinsicInst>(u)) {
+                i++;
+                continue;
+            }
+
+            /// Replace GEPs.
             if (auto gep = cast<GEPInst>(u)) {
                 auto idx = as<IntegerConstant>(gep->idx())->value();
 
@@ -446,6 +470,20 @@ private:
             AllocaInst* first = CreateAlloca(0);
             if (auto l = cast<LoadInst>(u)) l->ptr(first);
             else as<StoreInst>(u)->ptr(first);
+        }
+
+        /// Handle Memcpys.
+        while (not a->users().empty()) {
+            auto cpy = cast<IntrinsicInst>(a->users().front());
+
+            /// Use individual loads and stores for all elements that are actually used.
+            for (auto&& [idx, inst] : insts) {
+                auto addr = Create<GEPInst>(cpy, elem_type, cpy->operands()[1], MakeInt(idx));
+                auto load = Create<LoadInst>(addr, elem_type, addr);
+                Create<StoreInst>(load, load, inst);
+            }
+
+            cpy->erase();
         }
 
         /// Finally, delete the original alloca.
@@ -671,9 +709,9 @@ struct Optimiser {
     /// Entry point.
     void run() { // clang-format off
         RunPasses<
+            InstCombinePass,
             SROAPass,
             StoreFowardingPass,
-            InstCombinePass,
             DCEPass
         >();
     } // clang-format on
