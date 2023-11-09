@@ -4,6 +4,7 @@
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils.hh>
+#include <set>
 #include <variant>
 #include <vector>
 
@@ -254,7 +255,7 @@ class MFunction {
 
     std::vector<AllocaInst*> _locals{};
 
-    std::unordered_set<u8> _registers_used{};
+    std::set<u8> _registers_used{};
 
     /// The linkage of this function.
     Linkage link;
@@ -308,11 +309,11 @@ public:
         _locals.push_back(local);
     }
 
-    auto registers_used() -> std::unordered_set<u8>& {
+    auto registers_used() -> std::set<u8>& {
         return _registers_used;
     }
 
-    auto registers_used() const -> const std::unordered_set<u8>& {
+    auto registers_used() const -> const std::set<u8>& {
         return _registers_used;
     }
 
@@ -374,10 +375,15 @@ inline std::string ToString(MInst::Kind k) {
     LCC_UNREACHABLE();
 }
 
+[[nodiscard]]
 auto PrintMOperand(const MOperand& op) -> std::string;
+[[nodiscard]]
 auto PrintMInst(const MInst& inst) -> std::string;
+[[nodiscard]]
 auto PrintMBlock(const MBlock& block) -> std::string;
+[[nodiscard]]
 auto PrintMFunction(const MFunction& function) -> std::string;
+[[nodiscard]]
 auto PrintMIR(std::vector<GlobalVariable*>& vars, std::vector<MFunction>& mcode) -> std::string;
 
 } // namespace lcc
