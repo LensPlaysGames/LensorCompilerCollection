@@ -169,9 +169,9 @@ public:
             case Value::Kind::Alloca: {
                 auto alloca = as<AllocaInst>(i);
 
-                /// If all of our uses are stores, then this alloca is dead.
+                /// If all of our uses are stores to us, then this alloca is dead.
                 for (auto u : alloca->users())
-                    if (not is<StoreInst>(u))
+                    if (not is<StoreInst>(u) or as<StoreInst>(u)->val() == alloca)
                         return;
 
                 /// Delete the alloca and stores.

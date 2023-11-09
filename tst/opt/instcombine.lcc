@@ -52,3 +52,15 @@ memcpy : void(ptr %0, ptr %1):
     %2 = load i32[100] from %1
     store i32[100] %2 into %0
     return
+
+; Don’t delete stores *of* allocas.
+; * escape_alloca : void(ptr %0):
+; +   bb0:
+; +     %1 = alloca i64
+; +     store ptr %1 into %0
+; +     return
+escape_alloca : void(ptr %0):
+  bb0:
+    %1 = alloca i64
+    store ptr %1 into %0
+    return
