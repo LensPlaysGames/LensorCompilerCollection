@@ -7,6 +7,7 @@ std::string ToString(Opcode op) {
     switch (op) {
         case Opcode::Poison: return "x86_64.poison";
         case Opcode::Return: return "ret";
+        case Opcode::Call: return "call";
         case Opcode::MoveDereferenceLHS:
         case Opcode::MoveDereferenceRHS:
         case Opcode::Move: return "mov";
@@ -14,31 +15,8 @@ std::string ToString(Opcode op) {
         case Opcode::LoadEffectiveAddress: return "lea";
         case Opcode::Add: return "add";
         case Opcode::Multiply: return "mul";
-    }
-    LCC_UNREACHABLE();
-}
-
-std::string ToString(RegisterId id) {
-    switch (id) {
-        case RegisterId::INVALID: return "x86_64.INVALID";
-        case RegisterId::RAX: return "rax";
-        case RegisterId::RBX: return "rbx";
-        case RegisterId::RCX: return "rcx";
-        case RegisterId::RDX: return "rdx";
-        case RegisterId::R8: return "r8";
-        case RegisterId::R9: return "r9";
-        case RegisterId::R10: return "r10";
-        case RegisterId::R11: return "r11";
-        case RegisterId::R12: return "r12";
-        case RegisterId::R13: return "r13";
-        case RegisterId::R14: return "r14";
-        case RegisterId::R15: return "r15";
-        case RegisterId::RDI: return "rdi";
-        case RegisterId::RSI: return "rsi";
-        case RegisterId::RBP: return "rbp";
-        case RegisterId::RSP: return "rsp";
-        case RegisterId::RIP: return "rip";
-        case RegisterId::RETURN: return "x86_64.RETURN";
+        case Opcode::Push: return "push";
+        case Opcode::Pop: return "pop";
     }
     LCC_UNREACHABLE();
 }
@@ -164,6 +142,10 @@ std::string ToString(RegisterId id, usz size) {
         case RegisterId::RETURN: return "x86_64.RETURN";
     }
     LCC_UNREACHABLE();
+}
+
+std::string ToString(RegisterId id) {
+    return ToString(id, 64);
 }
 
 } // namespace x86_64
