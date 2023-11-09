@@ -606,6 +606,23 @@ auto layec::Type::string(bool use_colours) const -> std::string {
             );
         }
 
+        case Kind::TypeVariant: {
+            auto f = as<VariantType>(this);
+            std::string result{};
+
+            std::function<void(const StructType*)> AppendToResult;
+            AppendToResult = [&](const StructType* struct_type) {
+                if (auto variant_type = cast<VariantType>(struct_type)) {
+                    AppendToResult(variant_type->parent_struct());
+                    result += fmt::format("{}::", C(Red));
+                }
+                result += fmt::format("{}{}", C(White), struct_type->name());
+            };
+
+            AppendToResult(f);
+            return result;
+        }
+
         case Kind::TypeNoreturn: return fmt::format("{}noreturn{}", C(Cyan), C(Reset));
         case Kind::TypeRawptr: return fmt::format("{}rawptr{}", C(Cyan), C(Reset));
         case Kind::TypeVoid: return fmt::format("{}void{}", C(Cyan), C(Reset));

@@ -430,9 +430,13 @@ public:
     bool is_function_scope() const { return _is_function_scope; }
 
     void debug_print() const {
-        fmt::print(">> scope ({})\n", (void*) this);
-        for (auto [first, second] : symbols) {
-            fmt::print("  {} ({})\n", first, (void*) second);
+        const Scope* scope = this;
+        while (scope) {
+            fmt::print(">> scope ({})\n", (void*) scope);
+            for (auto [first, second] : scope->symbols) {
+                fmt::print("  {} ({})\n", first, (void*) second);
+            }
+            scope = scope->parent();
         }
     }
 };

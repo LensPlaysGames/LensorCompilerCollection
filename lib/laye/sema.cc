@@ -175,34 +175,12 @@ void layec::Sema::Analyse(Statement*& statement) {
         case Statement::Kind::DeclStruct: {
             auto s = as<StructDecl>(statement);
 
-            /// TODO(local):
-            ///
-            /// Creating all of the necessary struct types in a way that's actually useful
-            /// is a bit more complicated than just storing the root struct as its shared types
-            /// plus a byte array for the max size of all variants it contains.
-            ///
-            /// The end goal is to have a struct which looks like this:
-            ///
-            /// struct foo {
-            ///     int shared;
-            ///     variant bar { int nested; }
-            /// }
-            ///
-            /// behave like IR types that look like this:
-            /// 
-            /// struct foo { i64, i64, i8[8] } // including the implicit tag
-            /// struct foo_bar { i64, i64, i64 }
-            /// 
-            /// This means the sema types should probably behave the same, especially so
-            /// if we want to allow storing variants as their own type and value, rather than
-            /// always requiring the base struct type + a pattern match + a special case.
-
             std::function<StructType*(StructDecl*, StructType*)> CreateStructOrVariantType;
             CreateStructOrVariantType = [&](StructDecl* struct_decl, StructType* parent_struct) {
                 std::vector<StructField> fields{};
                 for (auto& field : struct_decl->fields()) {
                     Analyse((Statement*&) field);
-                    fields.push_back({ field->name(), field->type() });
+                    fields.push_back({field->name(), field->type()});
                 }
 
                 StructType* struct_type;
@@ -210,17 +188,18 @@ void layec::Sema::Analyse(Statement*& statement) {
                     struct_type = new (*module()) VariantType(struct_decl->location(), parent_struct, struct_decl->name(), std::move(fields));
                 else struct_type = new (*module()) StructType(struct_decl->location(), struct_decl->name(), std::move(fields));
 
-                if (not struct_decl->variants().empty())
-                {
+                if (not struct_decl->variants().empty()) {
                     std::vector<VariantType*> variants{};
                     for (const auto& variant : struct_decl->variants()) {
                         auto variant_type = as<VariantType>(CreateStructOrVariantType(variant, struct_type));
+                        variant->type(variant_type);
                         variants.push_back(variant_type);
                     }
 
                     struct_type->variants(std::move(variants));
                 }
 
+                AnalyseType((Type*&)struct_type);
                 return struct_type;
             };
 
@@ -321,6 +300,12 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
         return expr->sema_ok();
     expr->set_sema_in_progress();
 
+    auto UnknownSymbol = [&](const std::string& symbol_name) {
+        Error(expr->location(), "Unknown symbol '{}'", symbol_name);
+        expr->set_sema_errored();
+        expr->type(new (*module()) PoisonType{expr->location()});
+    };
+
     auto kind = expr->kind();
     switch (kind) {
         case Expr::Kind::Cast: {
@@ -369,26 +354,11 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
 
         case Expr::Kind::LookupName: {
             auto e = as<NameExpr>(expr);
-            auto name = e->name();
+            auto entity = LookupManyEntitiesFrom(e->scope(), e->name(), e->location());
 
-            auto scope = e->scope();
-            decltype(scope->find(name)) symbols;
-
-            while (scope) {
-                // scope->debug_print();
-                symbols = scope->find(name);
-                scope = scope->parent();
-                if (symbols.first != symbols.second) break;
-            }
-
-            if (symbols.first == symbols.second) {
-                Error(expr->location(), "Unknown symbol '{}' (looking up names through imports is not supported yet.)", name);
-                expr->set_sema_errored();
-                expr->type(new (*module()) PoisonType{expr->location()});
-                break;
-            }
-
-            if (auto binding_decl = cast<BindingDecl>(symbols.first->second)) {
+            if (not entity){
+                UnknownSymbol(e->name());
+            } else if (auto binding_decl = cast<BindingDecl>(entity)) {
                 if (binding_decl->sema_state() == SemaState::InProgress) {
                     Error(expr->location(), "Cannot use '{}' in its own initialiser", e->name());
                     expr->set_sema_errored();
@@ -398,35 +368,14 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
 
                 e->target(binding_decl);
                 e->type(Ref(binding_decl->type(), TypeAccess::Mutable));
-            } else if ([[maybe_unused]] auto function_decl = cast<FunctionDecl>(symbols.first->second)) {
-                std::vector<FunctionDecl*> overloads;
-                auto AppendOverloads = [&overloads](auto&& range) {
-                    for (auto it = range.first; it != range.second; it++)
-                        overloads.push_back(as<FunctionDecl>(it->second));
-                };
-
-                AppendOverloads(symbols);
-                for (; scope; scope = scope->parent())
-                    AppendOverloads(scope->find(e->name()));
-
-                // TODO(local): include overloads in imported scopes
-
-                if (overloads.size() == 1) {
-                    auto resolved_function = overloads[0];
-                    e->target(resolved_function);
-                    e->type(resolved_function->function_type());
-                    break;
-                }
-
-                Statement* os = new (*module()) OverloadSet(module(), expr->location(), name, overloads);
-                Analyse(os);
-
-                if (os->sema_errored()) expr->set_sema_errored();
-
-                e->target(as<NamedDecl>(os));
+            } else if (auto function_decl = cast<FunctionDecl>(entity)) {
+                e->target(function_decl);
+                e->type(function_decl->function_type());
+            } else if (auto overload_set = cast<OverloadSet>(entity)) {
+                e->target(overload_set);
                 e->type(Type::OverloadSet);
             } else {
-                LCC_TODO();
+                UnknownSymbol(e->name());
             }
         } break;
 
@@ -439,30 +388,23 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
             auto first_name = path_names[0];
             auto import_lookup = module()->lookup_import(first_name);
             if (not import_lookup) {
-                Error(expr->location(), "Unknown symbol '{}'", first_name);
-                expr->set_sema_errored();
-                expr->type(new (*module()) PoisonType{expr->location()});
+                UnknownSymbol(first_name);
                 break;
             }
 
             auto curr_module = import_lookup->module;
             for (usz i = 1; i < path_names.size(); i++) {
                 const auto& path_name = path_names[i];
+                const auto& path_location = e->locations()[i];
                 bool is_last_name = i == path_names.size() - 1;
 
                 if (is_last_name) {
                     auto module_exports = curr_module->exports();
-                    // module_exports->debug_print();
-                    auto exported_symbols = module_exports->find(path_name);
+                    auto entity = LookupManyEntitiesWithin(module_exports, path_name, path_location);
 
-                    if (exported_symbols.first == exported_symbols.second) {
-                        Error(expr->location(), "Unknown symbol '{}'", path_name);
-                        expr->set_sema_errored();
-                        expr->type(new (*module()) PoisonType{expr->location()});
-                        break;
-                    }
-
-                    if (auto binding_decl = cast<BindingDecl>(exported_symbols.first->second)) {
+                    if (not entity) {
+                        UnknownSymbol(path_name);
+                    } else if (auto binding_decl = cast<BindingDecl>(entity)) {
                         if (binding_decl->sema_state() == SemaState::InProgress) {
                             Error(expr->location(), "Cannot use '{}' in its own initialiser", path_name);
                             expr->set_sema_errored();
@@ -472,30 +414,17 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
 
                         e->target(binding_decl);
                         e->type(binding_decl->type());
-                    } else if ([[maybe_unused]] auto function_decl = cast<FunctionDecl>(exported_symbols.first->second)) {
-                        std::vector<FunctionDecl*> overloads;
-                        auto AppendOverloads = [&overloads](auto&& range) {
-                            for (auto it = range.first; it != range.second; it++)
-                                overloads.push_back(as<FunctionDecl>(it->second));
-                        };
-
-                        AppendOverloads(exported_symbols);
-
-                        // TODO(local): include overloads in imported scopes
-
-                        if (overloads.size() == 1) {
-                            auto resolved_function = overloads[0];
-                            e->target(resolved_function);
-                            e->type(resolved_function->function_type());
-                            break;
-                        }
-
-                        LCC_TODO();
+                    } else if (auto function_decl = cast<FunctionDecl>(entity)) {
+                        e->target(function_decl);
+                        e->type(function_decl->function_type());
+                    } else if (auto overload_set = cast<OverloadSet>(entity)) {
+                        e->target(overload_set);
+                        e->type(Type::OverloadSet);
                     } else {
-                        LCC_TODO();
+                        UnknownSymbol(path_name);
                     }
                 } else {
-                    LCC_TODO();
+                    LCC_ASSERT(false, "Sema doesn't know how to go multiple levels deep on paths yet");
                 }
             }
         } break;
@@ -831,32 +760,68 @@ bool layec::Sema::AnalyseType(Type*& type) {
 
         case Expr::Kind::TypeLookupName: {
             auto t = as<NameType>(type);
-            auto name = t->name();
+            auto entity = LookupSingleEntityFrom(t->scope(), t->name());
 
-            auto scope = t->scope();
-            decltype(scope->find(name)) symbols;
-
-            while (scope) {
-                // scope->debug_print();
-                symbols = scope->find(name);
-                scope = scope->parent();
-                if (symbols.first != symbols.second) break;
-            }
-
-            if (symbols.first == symbols.second) {
-                Error(type->location(), "Unknown symbol '{}' (looking up names through imports is not supported yet.)", name);
-                type->set_sema_errored();
-                break;
-            }
-
-            if (auto alias_decl = cast<AliasDecl>(symbols.first->second)) {
+            if (auto alias_decl = cast<AliasDecl>(entity)) {
                 type = alias_decl->type();
-            } else if (auto struct_decl = cast<StructDecl>(symbols.first->second)) {
+            } else if (auto struct_decl = cast<StructDecl>(entity)) {
                 type = struct_decl->type();
             } else {
+                Error(type->location(), "Unknown type symbol '{}' (looking up names through imports is not supported yet.)", t->name());
                 type->set_sema_errored();
-                LCC_TODO();
             }
+        } break;
+
+        case Expr::Kind::TypeLookupPath: {
+            auto t = as<PathType>(type);
+
+            const auto& path_names = t->names();
+            const auto& locations = t->locations();
+            LCC_ASSERT(not path_names.empty());
+            LCC_ASSERT(path_names.size() == locations.size());
+
+            auto entity = LookupSingleEntityFrom(t->scope(), path_names[0]);
+            if (entity) {
+                if (auto struct_decl = cast<StructDecl>(entity)) {
+                    auto NoVariantInStruct = [&](Location location, const std::string& name, StructDecl* sd) {
+                        Error(location, "No variant '{}' in struct {}", name, sd->type()->string(use_colours));
+                        type->set_sema_errored();
+                    };
+
+                    StructDecl* curr_struct_decl = struct_decl;
+                    for (usz i = 1; i < path_names.size(); i++) {
+                        const auto& path_name = path_names[i];
+                        const auto& path_location = locations[i];
+
+                        const auto& variants = curr_struct_decl->variants();
+                        if (variants.empty()) {
+                            NoVariantInStruct(path_location, path_name, curr_struct_decl);
+                            break;
+                        }
+
+                        auto variant_it = rgs::find_if(variants, [&](StructDecl* v) { return v->name() == path_name; });
+                        if (variant_it == variants.end()) {
+                            NoVariantInStruct(path_location, path_name, curr_struct_decl);
+                            break;
+                        }
+
+                        curr_struct_decl = *variant_it;
+                    }
+
+                    if (type->sema_done_or_errored())
+                        break;
+
+                    type = curr_struct_decl->type();
+                    LCC_ASSERT(type);
+                    LCC_ASSERT(type->kind() == Expr::Kind::TypeVariant);
+                    LCC_ASSERT(type->sema_done_or_errored());
+                }
+            }
+
+            if (type->sema_done_or_errored())
+                break;
+
+            LCC_ASSERT(false, "need to handle type lookup through namespaces");
         } break;
 
         case Expr::Kind::TypeArray: {
@@ -927,6 +892,15 @@ bool layec::Sema::AnalyseType(Type*& type) {
             }
         } break;
 
+        case Expr::Kind::TypeStruct:
+        case Expr::Kind::TypeVariant: {
+            auto t = as<StructType>(type);
+            for (auto& field : t->fields())
+                AnalyseType(field.type);
+            for (auto& variant : t->variants())
+                AnalyseType((Type*&)variant);
+        } break;
+
         case Expr::Kind::TypeNoreturn: {
         } break;
 
@@ -962,6 +936,82 @@ bool layec::Sema::AnalyseType(Type*& type) {
         type->set_sema_done();
 
     return type->sema_ok();
+}
+
+auto layec::Sema::LookupSingleEntityWithin(Scope* scope, const std::string& name) -> NamedDecl* {
+    auto symbols = scope->find(name);
+    if (symbols.first == symbols.second)
+        return nullptr;
+
+    return symbols.first->second;
+}
+
+auto layec::Sema::LookupSingleEntityFrom(Scope* scope, const std::string& name) -> NamedDecl* {
+    while (scope) {
+        auto lookup = LookupSingleEntityWithin(scope, name);
+        if (lookup) return lookup;
+        scope = scope->parent();
+    }
+
+    return nullptr;
+}
+
+auto layec::Sema::LookupManyEntitiesWithin(Scope* scope, const std::string& name, Location location) -> NamedDecl* {
+    decltype(scope->find(name)) symbols = scope->find(name);
+    if (symbols.first == symbols.second)
+        return nullptr;
+
+    auto entity = symbols.first->second;
+    if ([[maybe_unused]] auto function_decl = cast<FunctionDecl>(entity)) {
+        std::vector<FunctionDecl*> overloads{};
+        for (auto it = symbols.first; it != symbols.second; it++)
+            overloads.push_back(as<FunctionDecl>(it->second));
+
+        if (overloads.size() == 1)
+            return overloads[0];
+
+        entity = new (*module()) OverloadSet(module(), location, name, overloads);
+        Analyse((Statement*&) entity);
+    }
+
+    return entity;
+}
+
+auto layec::Sema::LookupManyEntitiesFrom(Scope* scope, const std::string& name, Location location) -> NamedDecl* {
+    decltype(scope->find(name)) symbols;
+
+    while (scope) {
+        // scope->debug_print();
+        symbols = scope->find(name);
+        scope = scope->parent();
+        if (symbols.first != symbols.second) break;
+    }
+
+    if (symbols.first == symbols.second)
+        return nullptr;
+
+    auto entity = symbols.first->second;
+    if ([[maybe_unused]] auto function_decl = cast<FunctionDecl>(entity)) {
+        std::vector<FunctionDecl*> overloads;
+        auto AppendOverloads = [&overloads](auto&& range) {
+            for (auto it = range.first; it != range.second; it++)
+                overloads.push_back(as<FunctionDecl>(it->second));
+        };
+
+        AppendOverloads(symbols);
+        for (; scope; scope = scope->parent())
+            AppendOverloads(scope->find(name));
+
+        // TODO(local): include overloads in imported scopes
+
+        if (overloads.size() == 1)
+            return overloads[0];
+
+        entity = new (*module()) OverloadSet(module(), location, name, overloads);
+        Analyse((Statement*&) entity);
+    }
+
+    return entity;
 }
 
 template <bool PerformConversion>
@@ -1174,7 +1224,7 @@ auto layec::Sema::LValueToRValue(Expr*& expr) -> Type* {
     auto ty = expr->type()->strip_references();
     if (not Type::Equal(ty, expr->type()))
         WrapWithCast(expr, ty, CastKind::LValueToRValueConv);
-    
+
     return ty;
 }
 
@@ -1201,6 +1251,22 @@ auto layec::Sema::TypeToMangledString(Type* type) -> std::string {
         case Expr::Kind::TypeStruct: {
             auto t = as<StructType>(type);
             return NameToMangledString(t->name());
+        }
+
+        case Expr::Kind::TypeVariant: {
+            auto t = as<VariantType>(type);
+            std::string result = "V";
+
+            std::function<void(const StructType*)> AppendToResult;
+            AppendToResult = [&](const StructType* struct_type) {
+                if (auto variant_type = cast<VariantType>(struct_type)) {
+                    AppendToResult(variant_type->parent_struct());
+                }
+                result += NameToMangledString(struct_type->name());
+            };
+
+            AppendToResult(t);
+            return result + "E";
         }
 
         case Expr::Kind::TypeNilable: {
