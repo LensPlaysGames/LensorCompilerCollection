@@ -414,8 +414,8 @@ auto lcc::parser::Parser::ParseBlock() -> Result<Block*> {
         NextToken();
         auto i = ParseInstruction();
         if (i.is_diag()) continue;
-        (void) ConsumeOrError(Tk::Newline);
         b->insert(*i, true);
+        if (not At(Tk::Eof)) (void) ConsumeOrError(Tk::Newline);
     }
 
     return b;
