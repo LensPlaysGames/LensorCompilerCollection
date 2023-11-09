@@ -58,6 +58,10 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
     }
 
     for (auto& function : mir) {
+        if (function.linkage() == Linkage::Imported) {
+            out += fmt::format("    .extern {}\n", function.name());
+            continue;
+        }
         if (function.linkage() == Linkage::Exported)
             out += fmt::format("    .globl {}\n", function.name());
         out += fmt::format("{}:\n", function.name());
