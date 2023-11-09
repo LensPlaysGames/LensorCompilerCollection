@@ -378,7 +378,7 @@ auto Inst::Children() -> Generator<Value**> {
 
 void Inst::EraseImpl() {
     /// Clear usees.
-    for (auto usee : Children()) RemoveUse(*usee, this);
+    for (auto usee : children()) RemoveUse(usee, this);
 
     /// Erase this instruction.
     if (parent) parent->instructions().erase(rgs::find(parent->instructions(), this));
@@ -386,7 +386,15 @@ void Inst::EraseImpl() {
 
 auto Inst::children() const -> Generator<Value*> {
     /// const_cast is fine since this does not mutate the instruction.
-    for (auto v : const_cast<Inst*>(this)->Children()) co_yield *v;
+    auto self = const_cast<Inst*>(this);
+    for (auto v : self->Children()) co_yield *v;
+
+    /// Include blocks if there are any.
+    if (auto br = cast<BranchInst>(self)) co_yield br->target();
+    else if (auto cond_br = cast<CondBranchInst>(self)) {
+        co_yield  cond_br->then_block();
+        co_yield cond_br->else_block();
+    }
 }
 
 void Inst::erase() {
@@ -402,6 +410,8 @@ void Inst::erase_cascade() {
 void Inst::replace_with(Value* v) {
     while (not users().empty()) {
         auto u = users().front();
+
+        /// Using `Children()` is fine here since we are not a block.
         for (auto use : u->Children()) {
             if (*use == this) {
                 RemoveUse(this, u);
@@ -418,6 +428,65 @@ void Inst::replace_with(Value* v) {
     }
 
     erase();
+}
+
+void Block::erase() {
+    LCC_ASSERT(users().empty(), "Cannot remove used block");
+
+    /// Erase all instructions in this block.
+    while (not inst_list.empty()) inst_list.back()->erase_cascade();
+    auto it = rgs::find(parent->blocks(), this);
+    parent->blocks().erase(it);
+}
+
+void Block::merge(lcc::Block* b) {
+    LCC_ASSERT(not closed() or as<BranchInst>(terminator())->target() == b);
+    LCC_ASSERT(not parent or not b->parent or parent == b->parent);
+
+    /// Fix PHIs.
+    if (parent) {
+        for (usz i = 0; i < users().size(); /** No increment! **/) {
+            auto phi = cast<PhiInst>(users()[i]);
+            if (not phi) {
+                i++;
+                continue;
+            }
+
+            /// Any PHIs in the other block must be replaced with
+            /// the value from this block; since the other block
+            /// has only us as a predecessor, there must only be
+            /// one value in those PHIs.
+            if (phi->parent == b) {
+                phi->drop_stale_operands();
+                LCC_ASSERT(phi->operands().size() <= 1);
+                if (auto in = phi->get_incoming(this)) phi->replace_with(in);
+                else phi->erase();
+
+                /// Don’t increment since we’ve just removed a user.
+                continue;
+            }
+
+            /// Any PHIs that use a value from the other block must
+            /// be updated to use the value from this block.
+            else if (auto in = phi->get_incoming(b)) {
+                phi->remove_incoming(b);
+                phi->set_incoming(in, this);
+                i++;
+            }
+        }
+    }
+
+    /// Erase our terminator only after fixing the PHIs so the call
+    /// to drop_stale_operands() doesn’t yeet the one value we care
+    /// about.
+    if (auto t = terminator()) t->erase();
+
+    /// Set the parent for each instruction to this block and move
+    /// them all over. Lastly, delete the block.
+    for (auto i : b->inst_list) i->parent = this;
+    inst_list.insert(inst_list.end(), b->inst_list.begin(), b->inst_list.end());
+    b->inst_list.clear();
+    if (b->parent) b->erase();
 }
 
 namespace {

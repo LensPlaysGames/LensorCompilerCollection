@@ -205,7 +205,7 @@ public:
     auto users() const -> const std::vector<Inst*>& { return user_list; }
 
     /// RTTI.
-    static bool classof(const Value* v) { return v->kind() > Value::Kind::Block; }
+    static bool classof(const Value* v) { return v->kind() >= Value::Kind::Block; }
 };
 
 class GlobalVariable : public UseTrackingValue {
@@ -261,6 +261,12 @@ protected:
     /// to be used internally as it exposes the values and
     /// can thus be used to break the invariants of the IR if
     /// used carelessly.
+    ///
+    /// Unlike `children()`, this function does *not* iterate
+    /// over any blocks.
+    ///
+    /// This is a low-level API. Prefer to use `children()`
+    /// instead.
     auto Children() -> Generator<Value**>;
 
     /// Erase this instruction without checking if it
@@ -365,6 +371,9 @@ public:
     /// Check whether this block has a terminator.
     bool closed() const { return terminator() != nullptr; }
 
+    /// Erase this block and all instructions in it.
+    void erase();
+
     /// Get the parent function.
     auto function() const -> Function* { return parent; }
 
@@ -398,6 +407,23 @@ public:
 
     /// Set the associated machine block.
     void machine_block(MBlock* m) { mblock = m; }
+
+    /// Merge another block into this one.
+    ///
+    /// This operation is only valid if:
+    ///
+    ///     - The other block has no predecessors, other than
+    ///       possibly this block, and
+    ///
+    ///     - This block has no terminator, or its terminator
+    ///       is a direct branch to the other block, and
+    ///
+    ///     - The two blocks are inserted in different functions;
+    ///       however, it is valid for one or neither of the blocks
+    ///       to be inserted in a function.
+    ///
+    /// The other block is removed.
+    void merge(Block* b);
 
     /// Get the name of this block.
     auto name() const -> const std::string& { return block_name; }
@@ -470,7 +496,7 @@ public:
     }
 
     /// Get the blocks in this function.
-    auto blocks() const -> const std::vector<Block*>& { return block_list; }
+    auto blocks() -> std::vector<Block*>& { return block_list; }
 
     /// Get the calling convention of this function.
     auto call_conv() const -> CallConv { return cc; }
@@ -894,6 +920,13 @@ public:
 
     /// Get the incoming values.
     auto operands() const -> const std::vector<IncomingValue>& { return incoming; }
+
+    /// Get the incoming value for a block, if any.
+    auto get_incoming(Block* b) -> Value* {
+        auto it = rgs::find(incoming, b, &IncomingValue::block);
+        if (it == incoming.end()) return nullptr;
+        return it->value;
+    }
 
     /// Remove an incoming value for a block.
     ///

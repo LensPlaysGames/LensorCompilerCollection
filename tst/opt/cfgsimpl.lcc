@@ -1,0 +1,26 @@
+; R %lcc --ir -O3 %s
+
+; * remove_unreachable : i64():
+; +   bb0
+; +     return i64 1
+remove_unreachable : i64():
+  bb0:
+    %0 = alloca i64
+    store i64 12 into %0
+    %1 = load i64 from %0
+    %2 = eq i64 %1, 12
+    branch on %2 to %bb1 else %bb2
+  bb1:
+    return i64 1
+  bb2:
+    %3 = load i64 from %0
+    %4 = ne i64 %3, 13
+    branch on %4 to %bb3 else %bb4
+  bb3:
+    return i64 2
+  bb4:
+    return i64 3
+  bb5:
+    branch to %bb6
+  bb6:
+    unreachable

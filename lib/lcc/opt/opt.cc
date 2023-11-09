@@ -660,7 +660,46 @@ private:
 /// CFG simplification pass.
 struct CFGSimplPass : InstructionRewritePass {
     void done(Function* f) {
+        /// We start at 1 because the entry block is always reachable.
+        for (usz i = 1; i < f->blocks().size(); /** No increment! **/) {
+            auto b = f->blocks()[i];
 
+            /// Count how many users of this block are not PHIs.
+            Inst* branch = nullptr;
+            for (auto u : b->users()) {
+                if (not is<PhiInst>(u)) {
+                    if (branch) goto next_block;
+                    branch = u;
+                }
+            }
+
+            /// If there is only one non-PHI user, and that user
+            /// is a direct branch to this, inline this block into
+            /// the block containing that branch
+            if (branch) {
+                if (not is<BranchInst>(branch)) goto next_block;
+                branch->block()->merge(b);
+            }
+
+            /// Otherwise, the block is unreachable. Remove it from all PHIs.
+            else {
+                for (auto u : b->users()) {
+                    auto phi = as<PhiInst>(u);
+                    phi->remove_incoming(b);
+                }
+
+                /// Yeet!
+                b->erase();
+            }
+
+            /// Avoid incrementing since we may just have
+            /// removed this block, and incrementing would
+            /// cause use to skip the next one.
+            continue;
+
+        next_block:
+            i++;
+        }
     }
 };
 
@@ -721,6 +760,7 @@ struct Optimiser {
             InstCombinePass,
             SROAPass,
             StoreFowardingPass,
+            CFGSimplPass,
             DCEPass
         >();
     } // clang-format on
@@ -733,6 +773,7 @@ struct Optimiser {
             else if (s == "sfwd") RunPass<StoreFowardingPass>();
             else if (s == "icmb") RunPass<InstCombinePass>();
             else if (s == "dce") RunPass<DCEPass>();
+            else if (s == "cfgs") RunPass<CFGSimplPass>();
             else if (s == "*") run();
             else Diag::Fatal("Unknown pass '{}'", s);
         }
