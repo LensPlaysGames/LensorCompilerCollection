@@ -1,5 +1,7 @@
 // R %lcc --ir %s
 
+// p lit []
+
 // * struct vec2i { i64, i64 }
 // + struct __variant_foo_bar_baz { i64, i64, ptr, @vec2i }
 // + struct __variant_foo_bar_qux { i64, i64, ptr, i64, @vec2i }
