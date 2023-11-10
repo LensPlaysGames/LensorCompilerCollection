@@ -364,7 +364,9 @@ auto intc::Type::strip_references() -> Type* {
 }
 
 bool intc::Type::Equal(const Type* a, const Type* b) {
+    if (a == b) return true;
     if (a->kind() != b->kind()) return false;
+    
     switch (a->kind()) {
         case Kind::Builtin: {
             auto ba = as<BuiltinType>(a);
@@ -410,6 +412,7 @@ bool intc::Type::Equal(const Type* a, const Type* b) {
         case Kind::Struct: {
             auto sa = as<StructType>(a);
             auto sb = as<StructType>(b);
+
             if (sa->decl() or sb->decl()) return false;
 
             /// Compare fields.
