@@ -131,9 +131,15 @@ private:
             Replace(i, Eval(lhs->value(), rhs->value()));
         }
 
-        /// Division by a power of two is a right shift.
-        else if (rhs->value().is_power_of_two()) {
-            Replace<ShiftInst>(i, d->lhs(), MakeInt(rhs->value().log2()), d->location());
+        /// Division by a power of two is a right shift (note that
+        /// this only works for *unsigned* division; for signed
+        /// division, we defer optimising this to the backend).
+        else {
+            if constexpr (std::is_same_v<DivInst, UDivInst>) {
+                if (rhs->value().is_power_of_two()) {
+                    Replace<ShiftInst>(i, d->lhs(), MakeInt(rhs->value().log2()), d->location());
+                }
+            }
         }
     }
 

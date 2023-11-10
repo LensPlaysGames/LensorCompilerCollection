@@ -64,3 +64,18 @@ escape_alloca : void(ptr %0):
     %1 = alloca i64
     store ptr %1 into %0
     return
+
+
+; Optimise udiv to shift, but not sdiv.
+; * divs : i64(i64 %0):
+; +   bb0:
+; +     %1 = shr i64 %0, 4
+; +     %2 = sdiv i64 %0, 16
+; +     %3 = add i64 %1, %2
+; +     return i64 %3
+divs : i64(i64 %0):
+  bb0:
+    %1 = udiv i64 %0, 16
+    %2 = sdiv i64 %0, 16
+    %3 = add i64 %1, %2
+    return i64 %3
