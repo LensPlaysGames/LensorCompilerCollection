@@ -791,6 +791,8 @@ public:
     void body(Statement* body) { _body = body; }
 
     auto function_type() const { return _function_type; }
+    auto function_type() -> Type*& { return _function_type; }
+    auto function_type(Type* type) { _function_type = type; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclFunction; }
 };
@@ -1774,6 +1776,7 @@ public:
     bool is_number() const { return kind() == Kind::TypeInt or kind() == Kind::TypeFloat; }
     bool is_struct() const { return kind() == Kind::TypeStruct or kind() == Kind::TypeVariant; }
     bool is_variant() const { return kind() == Kind::TypeVariant; }
+    bool is_named_type() const { return kind() == Kind::TypeLookupName or kind() == Kind::TypeLookupPath; }
 
     bool is_signed_integer() const;
     bool is_unsigned_integer() const;

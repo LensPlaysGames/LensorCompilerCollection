@@ -113,7 +113,10 @@ void Module::lower() {
                                 // - generate builtin memcpy for backend to handle
                                 // - unroll into 8 byte loads, temporary pointer stored into then
                                 //   incremented
-                                LCC_ASSERT(false, "TODO: Handle load > 8 bytes lowering");
+
+                                // NOTE(local): For now, allowing the IR to otherwise handle big loads like any other type,
+                                // relying on the backend to decide what happens.
+                                //LCC_ASSERT(false, "TODO: Handle load > 8 bytes lowering");
                             }
                         } break;
 
@@ -123,7 +126,9 @@ void Module::lower() {
                             // Less than or equal to 8 bytes; nothing to change.
                             if (store->type()->bits() <= 64) continue;
 
-                            LCC_ASSERT(false, "TODO: Handle store > 8 bytes lowering");
+                            // NOTE(local): For now, allowing the IR to handle big stores like any other type,
+                            // relying on the backend to decide what happens.
+                            //LCC_ASSERT(false, "TODO: Handle store > 8 bytes lowering");
                         } break;
                         default: break;
                     }

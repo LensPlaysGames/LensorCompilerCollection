@@ -91,10 +91,12 @@ void layec::Sema::AnalysePrototype(FunctionDecl* func) {
 
     AnalyseType(func->return_type());
     LCC_ASSERT(func->return_type()->sema_done_or_errored());
-
+    
+    std::vector<Type*> param_types{};
     for (auto& param : func->params()) {
         Analyse((Statement*&)param);
         LCC_ASSERT(param->sema_done_or_errored());
+        param_types.push_back(param->type());
         // TODO(local): attempt to evaluate constants for parameter inits
     }
 
@@ -110,6 +112,7 @@ void layec::Sema::AnalysePrototype(FunctionDecl* func) {
         // TODO(local): noreturn is always impure, if we have purity checks in Laye
     }
 
+    func->function_type(new (*module()) FuncType{func->location(), func->return_type(), param_types});
     LCC_ASSERT(func->sema_state() == SemaState::NotAnalysed);
 }
 
@@ -507,6 +510,8 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                         ConvertOrError(arg, param_types[i]);
                     }
 
+
+                    LCC_ASSERT(not function_type->return_type()->is_named_type());
                     expr->type(function_type->return_type());
                 } else {
                     Error(e->target()->location(), "Cannot call non-function value");
@@ -949,6 +954,7 @@ bool layec::Sema::AnalyseType(Type*& type) {
     if (not type->sema_done_or_errored())
         type->set_sema_done();
 
+    LCC_ASSERT(not type->is_named_type());
     return type->sema_ok();
 }
 

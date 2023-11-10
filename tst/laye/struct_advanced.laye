@@ -1,11 +1,39 @@
-// R
+// R %lcc --ir %s
+// d b  [a-zA-Z0-9\.]+
+// d t  %[0-9]+
+// d f  _L[a-zA-Z0-9_]+
+// d id [a-zA-Z0-9_]+
 
+// * struct (?<vec2i>$id) { i64, i64 }
 struct vec2i
 {
     int x;
     int y;
 }
 
+// * $f : internal layecc @$vec2i(ptr (?<tmp_add_0>$t), ptr (?<tmp_add_1>$t)):
+// +   bb0:
+// +     (?<tmp_add_2>$t) = alloca ptr
+// +     store ptr $tmp_add_0 into $tmp_add_2
+// +     (?<tmp_add_3>$t) = alloca ptr
+// +     store ptr $tmp_add_1 into $tmp_add_3
+// +     (?<tmp_add_4>$t) = alloca @$vec2i
+// +     (?<tmp_add_5>$t) = gmp @$vec2i from $tmp_add_4 at i64 0
+// +     (?<tmp_add_6>$t) = gmp @$vec2i from $tmp_add_2 at i64 0
+// +     (?<tmp_add_7>$t) = load i64 from $tmp_add_6
+// +     (?<tmp_add_8>$t) = gmp @$vec2i from $tmp_add_3 at i64 0
+// +     (?<tmp_add_9>$t) = load i64 from $tmp_add_8
+// +     (?<tmp_add_10>$t) = add i64 $tmp_add_7, $tmp_add_9
+// +     store i64 $tmp_add_10 into $tmp_add_5
+// +     (?<tmp_add_11>$t) = gmp @$vec2i from $tmp_add_4 at i64 1
+// +     (?<tmp_add_12>$t) = gmp @$vec2i from $tmp_add_2 at i64 1
+// +     (?<tmp_add_13>$t) = load i64 from $tmp_add_12
+// +     (?<tmp_add_14>$t) = gmp @$vec2i from $tmp_add_3 at i64 1
+// +     (?<tmp_add_15>$t) = load i64 from $tmp_add_14
+// +     (?<tmp_add_16>$t) = add i64 $tmp_add_13, $tmp_add_15
+// +     store i64 $tmp_add_16 into $tmp_add_11
+// +     (?<tmp_add_17>$t) = load @$vec2i from $tmp_add_4
+// +     return @$vec2i $tmp_add_17
 vec2i vec2i_add(vec2i& a, vec2i& b)
 {
     vec2i result;
@@ -14,6 +42,31 @@ vec2i vec2i_add(vec2i& a, vec2i& b)
     return result;
 }
 
+// * main : i64():
+// +   bb0:
+// +     (?<tmp_main_0>$t) = alloca @$vec2i
+// +     (?<tmp_main_1>$t) = gmp @$vec2i from $tmp_main_0 at i64 0
+// +     store i64 34 into $tmp_main_1
+// +     (?<tmp_main_2>$t) = gmp @$vec2i from $tmp_main_0 at i64 1
+// +     store i64 330 into $tmp_main_2
+// +     (?<tmp_main_3>$t) = alloca @$vec2i
+// +     (?<tmp_main_4>$t) = gmp @$vec2i from $tmp_main_3 at i64 0
+// +     store i64 35 into $tmp_main_4
+// +     (?<tmp_main_5>$t) = gmp @$vec2i from $tmp_main_3 at i64 1
+// +     store i64 90 into $tmp_main_5
+// +     (?<tmp_main_6>$t) = alloca @$vec2i
+// +     (?<tmp_main_7>$t) = call @_LM15_struct_advancedX9_vec2i_addF5_vec2iPCr5_vec2iCr5_vec2iE (ptr $tmp_main_0, ptr $tmp_main_3) -> @$vec2i
+// +     store @$vec2i $tmp_main_7 into $tmp_main_6
+// +     (?<tmp_main_8>$t) = alloca i64
+// +     (?<tmp_main_9>$t) = gmp @$vec2i from $tmp_main_6 at i64 0
+// +     (?<tmp_main_10>$t) = load i64 from $tmp_main_9
+// +     (?<tmp_main_11>$t) = mul i64 $tmp_main_10, 10
+// +     (?<tmp_main_12>$t) = gmp @$vec2i from $tmp_main_6 at i64 1
+// +     (?<tmp_main_13>$t) = load i64 from $tmp_main_12
+// +     (?<tmp_main_14>$t) = add i64 $tmp_main_11, $tmp_main_13
+// +     store i64 $tmp_main_14 into $tmp_main_8
+// +     (?<tmp_main_15>$t) = load i64 from $tmp_main_8
+// +     return i64 $tmp_main_15
 int main()
 {
     vec2i foo;
