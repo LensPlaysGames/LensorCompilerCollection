@@ -124,6 +124,41 @@ int main(int argc, char** argv) {
         context.add_include_directory(dir);
     }
 
+    auto ConvertFileExtensionToOutputFormat = [&](std::string path_string) {
+        const char* replacement = ".s";
+        if (context.format()->format() == lcc::Format::LLVM_TEXTUAL_IR)
+            replacement = ".ll";
+
+        return std::filesystem::path{path_string}.replace_extension(replacement).string();
+    };
+
+    /// Common path after IR gen.
+    auto EmitModule = [&](lcc::Module* m, std::string_view input_file_path, std::string_view output_file_path) {
+        /// Do NOT do anything else as this means that we
+        /// *only* want to run optimisation passes; specifically,
+        /// do *not* run lowering if this option was specified.
+        if (auto p = opts.get<"--passes">()) {
+            lcc::opt::RunPasses(m, *p);
+            if (opts.get<"--ir">()) m->print_ir(use_colour);
+            return;
+        }
+
+        if (auto opt = opts.get_or<"-O">(0))
+            lcc::opt::Optimise(m, int(opt));
+
+        if (opts.get<"--ir">()) {
+            m->print_ir(use_colour);
+            return;
+        }
+
+        m->lower();
+        m->emit(output_file_path);
+
+        if (opts.get<"-v">()) {
+            fmt::print("Generated output from {} at {}\n", input_file_path, output_file_path);
+        }
+    };
+
     // NOTE: Moves the input file, so, uhh, don't use that after passing it to
     // this.
     auto GenerateOutputFile = [&](auto& input_file, std::string_view output_file_path) {
@@ -133,57 +168,35 @@ int main(int argc, char** argv) {
             std::move(input_file.contents)
         );
 
-        /// Common path after IR gen.
-        auto EmitModule = [&](lcc::Module* m) {
-            /// Do NOT do anything else as this means that we
-            /// *only* want to run optimisation passes; specifically,
-            /// do *not* run lowering if this option was specified.
-            if (auto p = opts.get<"--passes">()) {
-                lcc::opt::RunPasses(m, *p);
-                if (opts.get<"--ir">()) m->print_ir(use_colour);
-                std::exit(0);
-            }
-
-            if (auto opt = opts.get_or<"-O">(0))
-                lcc::opt::Optimise(m, int(opt));
-
-            if (opts.get<"--ir">()) {
-                m->print_ir(use_colour);
-                std::exit(0);
-            }
-
-            m->lower();
-            m->emit(output_file_path);
-        };
-
         /// LCC IR.
         if (path_str.ends_with(".lcc")) {
             auto mod = lcc::Module::Parse(&context, file);
-            if (context.has_error()) std::exit(1);
-            EmitModule(mod.get());
+            if (context.has_error()) return; // the error condition is handled by the caller already
+            return EmitModule(mod.get(), path_str, output_file_path);
         }
 
         /// Intercept.
         else if (path_str.ends_with(".int")) {
             /// Parse the file.
             auto mod = lcc::intercept::Parser::Parse(&context, file);
-            if (context.has_error()) std::exit(1);
+            if (context.has_error()) return; // the error condition is handled by the caller already
             if (opts.get<"--syntax-only">()) {
                 if (opts.get<"--ast">()) mod->print(use_colour);
-                std::exit(0);
+                return;
             }
 
             /// Perform semantic analysis.
             lcc::intercept::Sema::Analyse(&context, *mod, true);
-            if (context.has_error()) std::exit(1);
+            if (context.has_error()) return; // the error condition is handled by the caller already
             if (opts.get<"--ast">()) {
                 mod->print(use_colour);
+                return;
             }
 
             /// Stop after sema if requested.
-            if (opts.get<"--sema">()) std::exit(context.has_error());
+            if (opts.get<"--sema">()) return;
 
-            EmitModule(lcc::intercept::IRGen::Generate(&context, *mod));
+            return EmitModule(lcc::intercept::IRGen::Generate(&context, *mod), path_str, output_file_path);
         }
 
         /// Laye.
@@ -192,23 +205,29 @@ int main(int argc, char** argv) {
 
             /// Parse the file.
             auto mod = laye_context->parse_laye_file(file);
-            if (context.has_error()) std::exit(1);
+            if (context.has_error()) return; // the error condition is handled by the caller already
             if (opts.get<"--syntax-only">()) {
                 if (opts.get<"--ast">()) laye_context->print_modules();
-                std::exit(0);
+                // stop processing this file, but DO continue to process other files passed in
+                return;
             }
 
             /// Perform semantic analysis.
             lcc::laye::Sema::Analyse(laye_context, mod, true);
-            if (context.has_error()) std::exit(1);
+            if (context.has_error()) return; // the error condition is handled by the caller already
             if (opts.get<"--ast">()) {
                 laye_context->print_modules();
+                return;
             }
 
             /// Stop after sema if requested.
-            if (opts.get<"--sema">()) std::exit(context.has_error());
+            if (opts.get<"--sema">()) return;
 
-            EmitModule(lcc::laye::IRGen::Generate(laye_context, mod));
+            for (auto module : laye_context->modules()) {
+                std::string input_file_path = module->file()->path().string();
+                std::string output_file_path = ConvertFileExtensionToOutputFormat(input_file_path);
+                EmitModule(lcc::laye::IRGen::Generate(laye_context, module), input_file_path, output_file_path);
+            }
         }
 
         /// C.
@@ -219,7 +238,7 @@ int main(int argc, char** argv) {
 
             if (opts.get<"--syntax-only">()) {
                 if (opts.get<"--ast">()) translation_unit->print();
-                std::exit(0);
+                return;
             }
 
             LCC_TODO();
@@ -231,14 +250,6 @@ int main(int argc, char** argv) {
         }
     };
 
-    auto ConvertFileExtensionToOutputFormat = [&](std::string path_string) {
-        const char* replacement = ".s";
-        if (context.format()->format() == lcc::Format::LLVM_TEXTUAL_IR)
-            replacement = ".ll";
-
-        return std::filesystem::path{path_string}.replace_extension(replacement).string();
-    };
-
     auto configured_output_file_path = opts.get_or<"-o">("");
     if (input_files.size() == 1) {
         std::string output_file_path = configured_output_file_path;
@@ -246,8 +257,8 @@ int main(int argc, char** argv) {
             output_file_path = ConvertFileExtensionToOutputFormat(input_files[0].path.string());
 
         GenerateOutputFile(input_files[0], output_file_path);
-        if (opts.get<"-v">()) fmt::print("Generated output at {}\n", output_file_path);
         if (context.has_error()) return 1;
+        if (opts.get<"-v">()) fmt::print("Generated output at {}\n", output_file_path);
     } else {
         if (not configured_output_file_path.empty()) {
             // TODO(local): you can, but only if we're planning to link these files; handle that later
@@ -258,8 +269,6 @@ int main(int argc, char** argv) {
             std::string input_file_path = input_file.path.string();
             std::string output_file_path = ConvertFileExtensionToOutputFormat(input_file_path);
             GenerateOutputFile(input_file, output_file_path);
-            if (opts.get<"-v">()) fmt::print("Generated output from {} at {}\n", input_file_path, output_file_path);
-            if (context.has_error()) return 1;
         }
 
         // TODO(local): if we do linking, now's the time to link to the output file path, else a.out

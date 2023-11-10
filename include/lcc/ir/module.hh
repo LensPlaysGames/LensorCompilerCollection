@@ -9,6 +9,7 @@ namespace lcc {
 /// An LCC IR module.
 class Module {
     Context* _ctx;
+    std::string _name;
 
     std::vector<Function*> _code;
     std::vector<GlobalVariable*> _vars;
@@ -25,10 +26,13 @@ public:
     ///
     /// It is recommended to allocate these on the heap since
     /// they can’t be moved.
-    Module(Context* ctx) : _ctx(ctx) {}
+    Module(Context* ctx, std::string name = "<unnamed>") : _ctx(ctx), _name(std::move(name)) {}
 
     /// Get the context that owns the module.
     auto context() const -> Context* { return _ctx; }
+
+    /// Get the name of this module.
+    auto name() const -> const std::string& { return _name; }
 
     /// IR -> MIR
     auto mir() -> std::vector<MFunction>;

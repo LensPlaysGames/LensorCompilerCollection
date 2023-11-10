@@ -42,7 +42,7 @@ class IRGen {
     IRGen(LayeContext* laye_context, laye::Module* laye_module)
         : _laye_context(laye_context), _laye_module(laye_module) {
         _ctx = laye_context->context();
-        _mod = new lcc::Module(laye_context->context());
+        _mod = new lcc::Module(laye_context->context(), laye_module->file()->path().string());
     }
 
     void Insert(lcc::Inst* inst) {

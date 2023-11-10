@@ -493,7 +493,10 @@ namespace {
 struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
     using IRPrinter::IRPrinter;
 
-    void PrintHeader() {
+    void PrintHeader(Module* mod) {
+        using enum utils::Colour;
+        utils::Colours C{use_colour};
+        Print("{}; LCC Module '{}'{}\n", C(White), mod->name(), C(Reset));
     }
 
     std::string Ty(Type* ty) {

@@ -68,6 +68,7 @@ public:
 
     auto parse_laye_file(File& file) -> Module*;
 
+    auto modules() const { return rgs::views::transform(_modules, [](auto pair) { return pair.second; }); }
     void print_modules();
 };
 

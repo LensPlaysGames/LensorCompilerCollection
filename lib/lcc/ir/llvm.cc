@@ -6,7 +6,7 @@ namespace {
 static const std::string LLVMMemCpyIntrinsic = "llvm.memcpy.p0.p0.i64";
 
 struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
-    void PrintHeader() {
+    void PrintHeader(Module* mod) {
         Print("; Function Attrs: nocallback nofree nounwind willreturn memory(argmem: readwrite)\n");
         Print("declare void @{}(ptr noalias nocapture writeonly, ptr noalias nocapture readonly, i64, i1 immarg)\n", LLVMMemCpyIntrinsic);
     }
