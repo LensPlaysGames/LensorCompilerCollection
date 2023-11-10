@@ -1188,7 +1188,7 @@ public:
           _value(std::move(value)),
           _expression(expr) {
         LCC_ASSERT(expr->ok());
-        expr->set_sema_done();
+        set_sema_done();
     }
 
     auto expr() const { return _expression; }
