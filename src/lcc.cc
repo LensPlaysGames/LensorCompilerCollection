@@ -228,7 +228,7 @@ int main(int argc, char** argv) {
     };
 
     auto ConvertFileExtensionToOutputFormat = [&](std::string path_string) {
-        const char* replacement = ".o";
+        const char* replacement = ".s";
         if (context.format()->format() == lcc::Format::LLVM_TEXTUAL_IR)
             replacement = ".ll";
 
