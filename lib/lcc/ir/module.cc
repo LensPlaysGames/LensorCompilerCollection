@@ -623,7 +623,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         auto member_index = as<IntegerConstant>(gmp_ir->idx())->value().value();
 
-                        auto offset = 0;
+                        usz offset = 0;
                         for (auto [member_idx, member_ty] : vws::enumerate(as<StructType>(gmp_ir->struct_type())->members())) {
                             if (usz(member_idx) >= member_index) break;
                             offset += member_ty->bytes();
