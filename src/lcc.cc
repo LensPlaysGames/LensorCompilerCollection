@@ -119,9 +119,13 @@ int main(int argc, char** argv) {
         use_colour,
         should_print_mir};
 
-    for (const auto& dir : *opts.get<"-I">())
+    for (const auto& dir : *opts.get<"-I">()) {
+        if (opts.get<"-v">()) fmt::print("Added input directory: {}\n", dir);
         context.add_include_directory(dir);
+    }
 
+    // NOTE: Moves the input file, so, uhh, don't use that after passing it to
+    // this.
     auto GenerateOutputFile = [&](auto& input_file, std::string_view output_file_path) {
         auto path_str = input_file.path.string();
         auto& file = context.create_file(
@@ -238,11 +242,11 @@ int main(int argc, char** argv) {
     auto configured_output_file_path = opts.get_or<"-o">("");
     if (input_files.size() == 1) {
         std::string output_file_path = configured_output_file_path;
-        if (output_file_path.empty()) {
+        if (output_file_path.empty())
             output_file_path = ConvertFileExtensionToOutputFormat(input_files[0].path.string());
-        }
 
         GenerateOutputFile(input_files[0], output_file_path);
+        if (opts.get<"-v">()) fmt::print("Generated output at {}\n", output_file_path);
         if (context.has_error()) return 1;
     } else {
         if (not configured_output_file_path.empty()) {
@@ -251,8 +255,10 @@ int main(int argc, char** argv) {
         }
 
         for (auto& input_file : input_files) {
-            std::string output_file_path = ConvertFileExtensionToOutputFormat(input_file.path.string());
+            std::string input_file_path = input_file.path.string();
+            std::string output_file_path = ConvertFileExtensionToOutputFormat(input_file_path);
             GenerateOutputFile(input_file, output_file_path);
+            if (opts.get<"-v">()) fmt::print("Generated output from {} at {}\n", input_file_path, output_file_path);
             if (context.has_error()) return 1;
         }
 
