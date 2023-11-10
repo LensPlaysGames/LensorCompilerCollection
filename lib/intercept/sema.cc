@@ -899,7 +899,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             }
 
             /// If it is an integer, try to evaluate it for bounds checking.
-            if (auto arr = as<ArrayType>(ty); arr and arr->size()->ok()) {
+            if (auto arr = cast<ArrayType>(ty); arr and arr->size()->ok()) {
                 EvalResult res;
                 if (b->rhs()->evaluate(context, res, false)) {
                     if (res.as_i64() < 0 or res.as_i64() >= as<ConstantExpr>(arr->size())->value().as_i64())
