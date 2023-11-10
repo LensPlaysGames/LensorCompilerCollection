@@ -73,6 +73,12 @@ using copy_mem_op = Pattern<
 using copy_global = copy_mem_op<Operand<OK::Global, Global<>>>;
 using copy_local = copy_mem_op<Operand<OK::Local, Local<>>>;
 
+template <typename callee>
+using simple_call = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Call), callee>>,
+    InstList<Inst<Clobbers<>, usz(x86_64::Opcode::Call), Operand<OK::InputOperandReference, o<0>>>>>;
+
+using simple_function_call = simple_call<Operand<OK::Function, Function<>>>;
 
 using s_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::SExt), Operand<OK::Register, Register<0, 0>>>>,
@@ -105,7 +111,8 @@ using x86_64PatternList = PatternList<
     copy_imm,
     s_ext_reg,
     add_local_imm,
-    add_reg_reg>;
+    add_reg_reg,
+    simple_function_call>;
 
 } // namespace isel
 } // namespace lcc
