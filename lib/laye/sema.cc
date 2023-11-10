@@ -275,7 +275,7 @@ void layec::Sema::Analyse(Statement*& statement) {
             } else {
                 if (s->target()->type()->is_reference() and s->value()->type()->is_reference()) {
                     if (TryConvert(s->value(), s->target()->type()) >= 0)
-                        Convert(s->value(), s->target()->type());
+                        ConvertOrError(s->value(), s->target()->type());
                 }
 
                 auto nonref_target_type = s->target()->type()->strip_references();
@@ -1202,9 +1202,11 @@ bool layec::Sema::Convert(Expr*& expr, Type* to) {
 void layec::Sema::ConvertOrError(Expr*& expr, Type* to) {
     if (not Convert(expr, to)) Error(
         expr->location(),
-        "Expression of type {} is not convertible to type {}",
+        "Expression of type {} ({}) is not convertible to type {} ({})",
         expr->type()->string(use_colours),
-        to->string(use_colours)
+        ToString(expr->type()->kind()),
+        to->string(use_colours),
+        ToString(to->kind())
     );
 }
 

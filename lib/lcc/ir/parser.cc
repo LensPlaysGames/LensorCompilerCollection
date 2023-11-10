@@ -966,7 +966,7 @@ void lcc::parser::Parser::SetBlock(Inst* parent, lcc::Block*& val, lcc::parser::
         }
         val = b;
         Inst::AddUse(b, parent);
-    } else if (auto g = std::get_if<Global>(&v)) {
+    } else if ([[maybe_unused]] auto g = std::get_if<Global>(&v)) {
         Error("Value does not name a block");
     } else {
         block_fixups[std::get<Temporary>(v).data].emplace_back(parent, &val);

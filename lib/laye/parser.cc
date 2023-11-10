@@ -307,7 +307,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
             func_scope.scope->set_function_scope();
 
             for (auto& param : params) {
-                CurrScope()->declare(module, param->name(), param);
+                (void)CurrScope()->declare(module, param->name(), param);
             }
 
             auto body = Result<Statement*>::Null();

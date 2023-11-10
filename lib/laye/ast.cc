@@ -297,6 +297,7 @@ std::string layec::ToString(Expr::Kind kind) {
         case Ek::TypeInfer: return "TypeInfer";
         case Ek::TypeNilable: return "TypeNilable";
         case Ek::TypeErrUnion: return "TypeErrUnion";
+        case Ek::TypeOverloadSet: return "TypeOverloadSet";
         case Ek::TypeLookupName: return "TypeLookupName";
         case Ek::TypeLookupPath: return "TypeLookupPath";
         case Ek::TypeLiteralString: return "TypeLiteralString";
@@ -305,6 +306,9 @@ std::string layec::ToString(Expr::Kind kind) {
         case Ek::TypePointer: return "TypePointer";
         case Ek::TypeBuffer: return "TypeBuffer";
         case Ek::TypeFunc: return "TypeFunc";
+        case Ek::TypeStruct: return "TypeStruct";
+        case Ek::TypeVariant: return "TypeVariant";
+        case Ek::TypeEnum: return "TypeEnum";
         case Ek::TypeNoreturn: return "TypeNoreturn";
         case Ek::TypeRawptr: return "TypeRawptr";
         case Ek::TypeVoid: return "TypeVoid";
@@ -692,10 +696,9 @@ bool layec::Type::Equal(const Type* a, const Type* b) {
             return Type::Equal(a2->value_type(), b2->value_type());
         }
 
-        // lookups are never equal unless actually identical.
         case Kind::TypeLookupName:
         case Kind::TypeLookupPath:
-            return a == b;
+            return false;
 
         case Kind::TypeArray: {
             auto a2 = as<ArrayType>(a);
