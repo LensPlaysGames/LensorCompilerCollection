@@ -803,8 +803,8 @@ auto intc::Parser::ParseFuncBody(bool is_extern) -> Result<std::pair<Expr*, Scop
     if (Consume(Tk::Eq)) expr = ParseExpr();
     else if (At(Tk::LBrace)) expr = ParseBlock(std::move(sc));
 
-    /// If the body isn't followed by either, it's not a valid function decleration
-    else Error("Function decleration should be followed by `=` and an expression or a block");
+    /// If the body isn't followed by either, it's not a valid function declaration
+    else Error("Function declaration should be followed by `=` and an expression or a block");
 
     if (expr.is_diag()) return expr.diag();
     return std::pair{*expr, scope};
