@@ -22,11 +22,11 @@ template <typename ret_op>
 using ret_some_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Return), ret_op>>,
     InstList<
-        Inst<Clobbers<c<1>>, usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<0>>, Operand<OK::Register, Register<usz(lcc::x86_64::RegisterId::RETURN), 64>>>,
+        Inst<Clobbers<c<1>>, usz(x86_64::Opcode::Move), o<0>, Register<usz(lcc::x86_64::RegisterId::RETURN), 64>>,
         Inst<Clobbers<>, usz(x86_64::Opcode::Return)>>>;
 
-using ret_imm = ret_some_op<Operand<OK::Immediate, Immediate<>>>;
-using ret_reg = ret_some_op<Operand<OK::Register, Register<0, 0>>>;
+using ret_imm = ret_some_op<Immediate<>>;
+using ret_reg = ret_some_op<Register<0, 0>>;
 
 // InputInstructionReference operand with a value of i<0> means replace
 // the operand with a register with a value equal to the zero-eth
@@ -35,66 +35,66 @@ using ret_reg = ret_some_op<Operand<OK::Register, Register<0, 0>>>;
 template <typename load_op>
 using load_some_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Load), load_op>>,
-    InstList<Inst<Clobbers<c<1>>, usz(x86_64::Opcode::MoveDereferenceLHS), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputInstructionReference, i<0>>>>>;
+    InstList<Inst<Clobbers<c<1>>, usz(x86_64::Opcode::MoveDereferenceLHS), o<0>, i<0>>>>;
 
-using load_local = load_some_op<Operand<OK::Local, Local<>>>;
-using load_reg = load_some_op<Operand<OK::Register, Register<0, 0>>>;
+using load_local = load_some_op<Local<>>;
+using load_reg = load_some_op<Register<0, 0>>;
 
 template <typename store_op>
 using store_some_op_local = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), store_op, Operand<OK::Local, Local<>>>>,
-    InstList<Inst<Clobbers<c<1>>, usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputOperandReference, o<1>>>>>;
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), store_op, Local<>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(x86_64::Opcode::Move), o<0>, o<1>>>>;
 
-using store_reg_local = store_some_op_local<Operand<OK::Register, Register<0, 0>>>;
-using store_imm_local = store_some_op_local<Operand<OK::Immediate, Immediate<0>>>;
+using store_reg_local = store_some_op_local<Register<0, 0>>;
+using store_imm_local = store_some_op_local<Immediate<0>>;
 
 // store immediate 'imm' into register 'r':
 //   mov $imm, %tmp
 //   mov %tmp, (%r)
 using store_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), Operand<OK::Immediate, Immediate<0>>, Operand<OK::Register, Register<0, 0>>>>,
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), Immediate<0>, Register<0, 0>>>,
     InstList<
-        Inst<Clobbers<>, usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<0>>, Operand<OK::NewVirtual, v<0>>>,
-        Inst<Clobbers<c<1>>, usz(x86_64::Opcode::MoveDereferenceRHS), Operand<OK::NewVirtual, v<0>>, Operand<OK::InputOperandReference, o<1>>>>>;
+        Inst<Clobbers<>, usz(x86_64::Opcode::Move), o<0>, v<0>>,
+        Inst<Clobbers<c<1>>, usz(x86_64::Opcode::MoveDereferenceRHS), v<0>, o<1>>>>;
 
 template <typename copy_op>
 using copy_some_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Copy), copy_op>>,
-    InstList<Inst<Clobbers<c<1>>, usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputInstructionReference, i<0>>>>>;
+    InstList<Inst<Clobbers<c<1>>, usz(x86_64::Opcode::Move), o<0>, i<0>>>>;
 
-using copy_reg = copy_some_op<Operand<OK::Register, Register<0, 0>>>;
-using copy_imm = copy_some_op<Operand<OK::Immediate, Immediate<0>>>;
+using copy_reg = copy_some_op<Register<0, 0>>;
+using copy_imm = copy_some_op<Immediate<0>>;
 
 template <typename copy_op>
 using copy_mem_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Copy), copy_op>>,
-    InstList<Inst<Clobbers<c<1>>, usz(x86_64::Opcode::LoadEffectiveAddress), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputInstructionReference, i<0>>>>>;
+    InstList<Inst<Clobbers<c<1>>, usz(x86_64::Opcode::LoadEffectiveAddress), o<0>, i<0>>>>;
 
-using copy_global = copy_mem_op<Operand<OK::Global, Global<>>>;
-using copy_local = copy_mem_op<Operand<OK::Local, Local<>>>;
+using copy_global = copy_mem_op<Global<>>;
+using copy_local = copy_mem_op<Local<>>;
 
 template <typename callee>
 using simple_call = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Call), callee>>,
-    InstList<Inst<Clobbers<>, usz(x86_64::Opcode::Call), Operand<OK::InputOperandReference, o<0>>>>>;
+    InstList<Inst<Clobbers<>, usz(x86_64::Opcode::Call), o<0>>>>;
 
-using simple_function_call = simple_call<Operand<OK::Function, Function<>>>;
+using simple_function_call = simple_call<Function<>>;
 
 using s_ext_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::SExt), Operand<OK::Register, Register<0, 0>>>>,
-    InstList<Inst<Clobbers<c<1>>, usz(x86_64::Opcode::MoveSignExtended), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputInstructionReference, i<0>>>>>;
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::SExt), Register<0, 0>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(x86_64::Opcode::MoveSignExtended), o<0>, i<0>>>>;
 
 using add_local_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Operand<OK::Local, Local<>>, Operand<OK::Immediate, Immediate<>>>>,
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Local<>, Immediate<>>>,
     InstList<
-        Inst<Clobbers<>, usz(x86_64::Opcode::LoadEffectiveAddress), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputInstructionReference, i<0>>>,
-        Inst<Clobbers<c<1>>, usz(x86_64::Opcode::Add), Operand<OK::InputOperandReference, o<1>>, Operand<OK::InputInstructionReference, i<0>>>>>;
+        Inst<Clobbers<>, usz(x86_64::Opcode::LoadEffectiveAddress), o<0>, i<0>>,
+        Inst<Clobbers<c<1>>, usz(x86_64::Opcode::Add), o<1>, i<0>>>>;
 
 using add_reg_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Operand<OK::Register, Register<0, 0>>, Operand<OK::Register, Register<0, 0>>>>,
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Register<0, 0>, Register<0, 0>>>,
     InstList<
-        Inst<Clobbers<>, usz(x86_64::Opcode::Add), Operand<OK::InputOperandReference, o<0>>, Operand<OK::InputOperandReference, o<1>>>,
-        Inst<Clobbers<c<1>>, usz(x86_64::Opcode::Move), Operand<OK::InputOperandReference, o<1>>, Operand<OK::InputInstructionReference, i<0>>>>>;
+        Inst<Clobbers<>, usz(x86_64::Opcode::Add), o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, usz(x86_64::Opcode::Move), o<1>, i<0>>>>;
 
 using x86_64PatternList = PatternList<
     ret,

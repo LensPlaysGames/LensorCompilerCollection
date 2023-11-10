@@ -55,6 +55,7 @@ enum struct OperandKind {
 
 template <i64 imm = 0>
 struct Immediate {
+    static constexpr OperandKind kind = OperandKind::Immediate;
     static constexpr i64 immediate = imm;
     static constexpr usz index = 0;
     static constexpr usz value = 0;
@@ -66,6 +67,7 @@ struct Immediate {
 
 template <usz val, usz sz>
 struct Register {
+    static constexpr OperandKind kind = OperandKind::Register;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
     static constexpr usz value = val;
@@ -77,6 +79,7 @@ struct Register {
 
 template <typename... _>
 struct Local {
+    static constexpr OperandKind kind = OperandKind::Local;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
     static constexpr usz value = 0;
@@ -88,6 +91,7 @@ struct Local {
 
 template <typename... _>
 struct Global {
+    static constexpr OperandKind kind = OperandKind::Global;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
     static constexpr usz value = 0;
@@ -99,6 +103,7 @@ struct Global {
 
 template <typename... _>
 struct Function {
+    static constexpr OperandKind kind = OperandKind::Function;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
     static constexpr usz value = 0;
@@ -110,6 +115,7 @@ struct Function {
 
 template <typename... _>
 struct Block {
+    static constexpr OperandKind kind = OperandKind::Block;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
     static constexpr usz value = 0;
@@ -122,6 +128,7 @@ struct Block {
 // New virtual register, by unique index within each pattern.
 template <usz idx>
 struct v {
+    static constexpr OperandKind kind = OperandKind::NewVirtual;
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
     static constexpr usz value = 0;
@@ -134,6 +141,7 @@ struct v {
 // Operand reference, by index.
 template <usz idx>
 struct o {
+    static constexpr OperandKind kind = OperandKind::InputOperandReference;
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
     static constexpr usz value = 0;
@@ -146,6 +154,7 @@ struct o {
 // Instruction reference, by index.
 template <usz idx>
 struct i {
+    static constexpr OperandKind kind = OperandKind::InputInstructionReference;
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
     static constexpr usz value = 0;
@@ -153,12 +162,6 @@ struct i {
     static constexpr GlobalVariable* global = nullptr;
     static constexpr lcc::Function* function = nullptr;
     static constexpr lcc::Block* block = nullptr;
-};
-
-template <OperandKind kind_, typename value_>
-struct Operand {
-    static constexpr const auto kind = kind_;
-    using value = value_;
 };
 
 enum struct ClobberKind {
@@ -205,36 +208,36 @@ struct Inst {
     ) {
         switch (operand::kind) {
             case OperandKind::Immediate:
-                return MOperandImmediate(operand::value::immediate);
+                return MOperandImmediate(operand::immediate);
 
             case OperandKind::Register:
-                return MOperandRegister(operand::value::value, operand::value::size);
+                return MOperandRegister(operand::value, operand::size);
 
             case OperandKind::NewVirtual: {
-                if (not new_virtuals.contains(operand::value::index)) {
-                    new_virtuals[operand::value::index] = mod->next_vreg();
+                if (not new_virtuals.contains(operand::index)) {
+                    new_virtuals[operand::index] = mod->next_vreg();
                 }
-                return MOperandRegister(new_virtuals[operand::value::index], 0);
+                return MOperandRegister(new_virtuals[operand::index], 0);
             }
 
             case OperandKind::Local:
-                return MOperandLocal(operand::value::index);
+                return MOperandLocal(operand::index);
 
             case OperandKind::Global:
-                return MOperandGlobal(operand::value::global);
+                return MOperandGlobal(operand::global);
 
             case OperandKind::Function:
-                return MOperandFunction(operand::value::function);
+                return MOperandFunction(operand::function);
 
             case OperandKind::Block:
-                return MOperandGlobal(operand::value::block);
+                return MOperandGlobal(operand::block);
 
             case OperandKind::InputOperandReference: {
                 MOperand op{};
                 // Current operand index.
                 usz i = 0;
                 // Operand index we need to find.
-                usz needle = operand::value::index;
+                usz needle = operand::index;
                 // Whether or not we've found the operand we are looking for.
                 bool found = false;
                 for (auto instruction : input) {
@@ -266,7 +269,7 @@ struct Inst {
                 // Current instruction index.
                 usz i = 0;
                 // Instruction index we need to find.
-                usz needle = operand::value::index;
+                usz needle = operand::index;
                 // Whether or not we've found the instruction we are looking for.
                 bool found = false;
                 for (auto instruction : input) {
