@@ -479,7 +479,7 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         else decl->body() = new (mod) ReturnExpr(*last, {});
     } else {
         if (auto block = cast<BlockExpr>(decl->body())) {
-            if (not is<ReturnExpr>(*block->last_expr()))
+            if (not block->children().size() or not is<ReturnExpr>(*block->last_expr()))
                 block->add(new (mod) ReturnExpr(nullptr, {}));
         } else {
             // TODO: If a function with void return type and a non-block body
