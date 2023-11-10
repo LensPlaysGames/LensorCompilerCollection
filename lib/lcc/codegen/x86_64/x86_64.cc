@@ -7,6 +7,7 @@ std::string ToString(Opcode op) {
     switch (op) {
         case Opcode::Poison: return "x86_64.poison";
         case Opcode::Return: return "ret";
+        case Opcode::Jump: return "jmp";
         case Opcode::Call: return "call";
         case Opcode::MoveDereferenceLHS:
         case Opcode::MoveDereferenceRHS:

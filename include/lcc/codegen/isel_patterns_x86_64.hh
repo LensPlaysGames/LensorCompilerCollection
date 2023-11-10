@@ -80,6 +80,13 @@ using simple_call = Pattern<
 
 using simple_function_call = simple_call<Function<>>;
 
+template <typename callee>
+using simple_branch = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Branch), callee>>,
+    InstList<Inst<Clobbers<>, usz(x86_64::Opcode::Jump), o<0>>>>;
+
+using simple_block_branch = simple_branch<Block<>>;
+
 using s_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::SExt), Register<0, 0>>>,
     InstList<Inst<Clobbers<c<1>>, usz(x86_64::Opcode::MoveSignExtended), o<0>, i<0>>>>;
@@ -112,7 +119,8 @@ using x86_64PatternList = PatternList<
     s_ext_reg,
     add_local_imm,
     add_reg_reg,
-    simple_function_call>;
+    simple_function_call,
+    simple_block_branch>;
 
 } // namespace isel
 } // namespace lcc

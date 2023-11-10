@@ -12,6 +12,7 @@ enum struct Opcode : u32 {
     Return, // ret
     Push, // push
     Pop, // pop
+    Jump, // jmp
     Call, // call
     Move,   // mov
     MoveSignExtended,     // movsx
