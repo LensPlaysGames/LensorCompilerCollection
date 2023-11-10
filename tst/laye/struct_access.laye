@@ -9,7 +9,7 @@ struct vec2i
     int y;
 }
 
-// * main : layecc i64():
+// * main : i64():
 // +   bb0:
 // +     (?<v>$t) = alloca @vec2i
 // +     (?<x0>$t) = gmp @vec2i from $v at i64 0

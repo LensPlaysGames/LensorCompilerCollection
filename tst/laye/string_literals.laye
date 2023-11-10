@@ -7,7 +7,7 @@
 // * puts : imported i32(ptr %0)
 foreign callconv(cdecl) i32 puts(i8[*] s);
 
-// * main : layecc i64():
+// * main : i64():
 // +   $b:
 // +     (?<str>$t) = alloca ptr
 // +     store ptr @$global into $str

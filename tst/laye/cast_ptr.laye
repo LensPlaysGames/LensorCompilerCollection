@@ -3,7 +3,7 @@
 // d t %[0-9]+
 // d f _L[a-zA-Z0-9_]+
 
-// * main : layecc i64():
+// * main : i64():
 // +   bb0:
 // +     (?<r>$t) = alloca ptr
 // +     (?<zero>$t) = bitcast i64 0 to ptr
