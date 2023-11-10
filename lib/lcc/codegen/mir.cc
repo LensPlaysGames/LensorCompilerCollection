@@ -19,11 +19,11 @@ auto PrintMOperand(const MOperand& op) -> std::string {
     if (std::holds_alternative<MOperandLocal>(op))
         return fmt::format("local({})", +std::get<MOperandLocal>(op));
     if (std::holds_alternative<MOperandGlobal>(op))
-        return fmt::format("{}", std::get<MOperandGlobal>(op)->name());
+        return fmt::format("global({})", std::get<MOperandGlobal>(op)->name());
     if (std::holds_alternative<MOperandFunction>(op))
-        return fmt::format("{}", std::get<MOperandFunction>(op)->name());
+        return fmt::format("function({})", std::get<MOperandFunction>(op)->name());
     if (std::holds_alternative<MOperandBlock>(op))
-        return fmt::format("{}", std::get<MOperandBlock>(op)->name());
+        return fmt::format("block({})", std::get<MOperandBlock>(op)->name());
     return "<?>";
 }
 
