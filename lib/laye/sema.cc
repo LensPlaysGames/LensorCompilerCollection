@@ -68,7 +68,7 @@ void layec::Sema::Analyse(Module* module) {
 
             LCC_ASSERT(func_decl->return_type()->sema_done_or_errored(), "should have finished function return type analysis");
             for (auto param : func_decl->params()) {
-                LCC_ASSERT(param->type->sema_done_or_errored(), "should have finished function param type analysis");
+                LCC_ASSERT(param->sema_done_or_errored(), "should have finished function param type analysis");
             }
         }
     }
@@ -93,8 +93,9 @@ void layec::Sema::AnalysePrototype(FunctionDecl* func) {
     LCC_ASSERT(func->return_type()->sema_done_or_errored());
 
     for (auto& param : func->params()) {
-        AnalyseType(param->type);
-        LCC_ASSERT(param->type->sema_done_or_errored());
+        Analyse((Statement*&)param);
+        LCC_ASSERT(param->sema_done_or_errored());
+        // TODO(local): attempt to evaluate constants for parameter inits
     }
 
     if (func->return_type()->is_void()) {
@@ -131,6 +132,7 @@ void layec::Sema::Analyse(Statement*& statement) {
                 // TODO(local): check that main is at global scope before adding this
                 s->add_mod(DeclModifier{s->location(), TokenKind::Export});
                 s->add_mod(DeclModifier{s->location(), TokenKind::Foreign, "main"});
+                s->add_mod(DeclModifier{s->location(), TokenKind::Callconv, {}, CallConv::C});
             }
 
             if (auto& body = s->body()) {
@@ -1053,9 +1055,19 @@ int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {
         /// A reference can be converted to the same reference.
         if (Type::Equal(from, to)) return NoOp;
 
+        auto from_ref = as<ReferenceType>(from);
+        auto to_ref = as<ReferenceType>(to);
+
+        // If the two reference types have the same element type and compatible type access modifiers, it's a noop
+        if (Type::Equal(from_ref->elem_type(), to_ref->elem_type())) {
+            // notably, compatible type access means either equal, or the target is stricter
+            if (from_ref->access() == to_ref->access() or to_ref->access() == TypeAccess::ReadOnly)
+                return NoOp;
+        }
+
         /// References to variants can be converted to references of any parent struct type.
-        auto from_variant = cast<VariantType>(as<ReferenceType>(from)->elem_type());
-        auto to_struct = cast<StructType>(as<ReferenceType>(to)->elem_type());
+        auto from_variant = cast<VariantType>(from_ref->elem_type());
+        auto to_struct = cast<StructType>(to_ref->elem_type());
         if (from_variant and to_struct and from_variant->inherits_from(to_struct)) {
             if constexpr (PerformConversion) InsertImplicitCast(expr, to);
             return Score(1);
@@ -1325,6 +1337,11 @@ auto layec::Sema::TypeToMangledString(Type* type) -> std::string {
             return fmt::format("Cs{}", TypeToMangledString(t->elem_type()));
         }
 
+        case Expr::Kind::TypeReference: {
+            auto t = as<ReferenceType>(type);
+            return fmt::format("Cr{}", TypeToMangledString(t->elem_type()));
+        }
+
         case Expr::Kind::TypePointer: {
             auto t = as<PointerType>(type);
             return fmt::format("Cp{}", TypeToMangledString(t->elem_type()));
@@ -1398,7 +1415,7 @@ void layec::Sema::MangleName(NamedDecl* decl) {
         // TODO(local): template params, varargs
         mangled_name += "P";
         for (auto& param : func_decl->params()) {
-            mangled_name += TypeToMangledString(param->type);
+            mangled_name += TypeToMangledString(param->type());
         }
         mangled_name += "E";
     } else if (auto binding_decl = cast<BindingDecl>(decl)) {

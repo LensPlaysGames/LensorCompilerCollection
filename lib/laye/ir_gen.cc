@@ -169,7 +169,7 @@ void layec::IRGen::CreateIRFunctionValue(FunctionDecl* decl) {
 
     std::vector<layec::Type*> param_types{};
     for (auto& param : params) {
-        param_types.push_back(param->type);
+        param_types.push_back(param->type());
     }
 
     auto func_type = new (*laye_mod()) layec::FuncType{
@@ -202,13 +202,13 @@ void layec::IRGen::GenerateIRFunctionBody(FunctionDecl* decl) {
         for (auto [i, param] : vws::enumerate(decl->params())) {
             auto inst = curr_func->param(usz(i));
 
-            auto alloca = new (*mod()) AllocaInst(inst->type(), param->location);
+            auto alloca = new (*mod()) AllocaInst(inst->type(), param->location());
             Insert(alloca);
 
             auto store = new (*mod()) StoreInst(inst, alloca);
             Insert(store);
 
-            _ir_params[param] = alloca;
+            _ir_values[param] = alloca;
         }
 
         GenerateStatement(as<BlockStatement>(decl->body()));

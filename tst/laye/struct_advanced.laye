@@ -1,0 +1,28 @@
+// R
+
+struct vec2i
+{
+    int x;
+    int y;
+}
+
+vec2i vec2i_add(vec2i& a, vec2i& b)
+{
+    vec2i result;
+    result.x = a.x + b.x;
+    result.y = a.y + b.y;
+    return result;
+}
+
+int main()
+{
+    vec2i foo;
+    foo.x = 34;
+    foo.y = 330;
+    vec2i bar;
+    bar.x = 35;
+    bar.y = 90;
+    vec2i baz = vec2i_add(foo, bar);
+    int qux = (baz.x * 10) + baz.y;
+    return qux;
+}

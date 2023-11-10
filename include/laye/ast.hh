@@ -361,16 +361,6 @@ struct TemplateParam {
     bool is_value_param() const { return value_type != nullptr; }
 };
 
-struct FunctionParam {
-    Type* type;
-    std::string name;
-    Location location;
-    Expr* init;
-
-    void* operator new(size_t) = delete;
-    void* operator new(size_t sz, Module& module);
-};
-
 struct EnumVariant {
     std::string name;
     Location location;
@@ -783,18 +773,18 @@ public:
 class FunctionDecl : public NamedDecl {
     Type* _function_type;
     Type* _returnType;
-    std::vector<FunctionParam*> _params;
+    std::vector<BindingDecl*> _params;
     Statement* _body;
     // TODO(local): varargs
 
 public:
-    FunctionDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<FunctionParam*> params, Statement* body);
+    FunctionDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<BindingDecl*> params, Statement* body);
 
     auto return_type() const { return _returnType; }
     auto return_type() -> Type*& { return _returnType; }
 
-    auto params() const -> const std::vector<FunctionParam*>& { return _params; }
-    auto params() -> std::vector<FunctionParam*>& { return _params; }
+    auto params() const -> const std::vector<BindingDecl*>& { return _params; }
+    auto params() -> std::vector<BindingDecl*>& { return _params; }
 
     auto body() const { return _body; }
     auto body() -> Statement*& { return _body; }

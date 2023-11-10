@@ -271,7 +271,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
 
     if (Consume(Tk::OpenParen)) {
         // TODO(local): parse varargs in function decls
-        std::vector<FunctionParam*> params{};
+        std::vector<BindingDecl*> params{};
         while (not At(Tk::Eof, Tk::CloseParen)) {
             auto type = ParseType();
 
@@ -287,7 +287,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
                 init = ParseExpr();
             }
 
-            params.push_back(new (*module) FunctionParam{*type, param_name, param_location, *init});
+            params.push_back(new (*module) BindingDecl{module, param_location, {}, *type, param_name, *init});
 
             if (not Consume(Tk::Comma)) break;
 
@@ -305,6 +305,10 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
         {
             auto func_scope = EnterScope();
             func_scope.scope->set_function_scope();
+
+            for (auto& param : params) {
+                CurrScope()->declare(module, param->name(), param);
+            }
 
             auto body = Result<Statement*>::Null();
             if (At(Tk::OpenBrace)) {
@@ -1041,6 +1045,12 @@ auto Parser::TryParseTypeContinue(Type* type, bool allocate, bool allow_function
             pointer_type = new (*this) PointerType{GetLocation(start), type_access, type};
         }
         return TryParseTypeContinue(pointer_type, allocate, allow_functions);
+    } else if (Consume(Tk::Ampersand)) {
+        Type* reference_type = nullptr;
+        if (allocate) {
+            reference_type = new (*this) ReferenceType{GetLocation(start), type_access, type};
+        }
+        return TryParseTypeContinue(reference_type, allocate, allow_functions);
     } else if (Consume(Tk::OpenBracket)) {
         if (Consume(Tk::CloseBracket)) {
             Type* slice_type = nullptr;

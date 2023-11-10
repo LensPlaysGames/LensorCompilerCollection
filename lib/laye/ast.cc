@@ -32,12 +32,6 @@ void* layec::SemaNode::operator new(size_t sz, Module& module) {
     return ptr;
 }
 
-void* layec::FunctionParam::operator new(size_t sz, Module& module) {
-    auto ptr = ::operator new(sz);
-    module.params.push_back(static_cast<FunctionParam*>(ptr));
-    return ptr;
-}
-
 auto layec::LayeContext::parse_laye_file(File& file) -> Module* {
     auto lookup_path = fs::absolute(file.path()).string();
     if (not lookup_module(lookup_path)) {
@@ -74,11 +68,11 @@ auto layec::Scope::declare(
     return decl;
 }
 
-layec::FunctionDecl::FunctionDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<FunctionParam*> params, Statement* body)
+layec::FunctionDecl::FunctionDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<BindingDecl*> params, Statement* body)
     : NamedDecl(Kind::DeclFunction, module, location, mods, name, template_params), _returnType(returnType), _params(std::move(params)), _body(body) {
     std::vector<Type*> param_types{};
     for (auto param : _params) {
-        param_types.push_back(param->type);
+        param_types.push_back(param->type());
     }
 
     _function_type = new (*module) FuncType{location, returnType, param_types};
@@ -1095,7 +1089,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
                 auto params = n->params();
                 for (lcc::usz i = 0; i < params.size(); i++) {
                     if (i > 0) out += fmt::format("{}, ", C(White));
-                    out += fmt::format("{} {}{}", params[i]->type->string(use_colour), C(White), params[i]->name);
+                    out += fmt::format("{} {}{}", params[i]->type()->string(use_colour), C(White), params[i]->name());
                 }
                 out += fmt::format("{})\n", C(White));
             } break;
