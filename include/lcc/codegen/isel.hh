@@ -40,6 +40,9 @@ enum struct OperandKind {
     // A reference to a symbol.
     Global,
 
+    Function,
+    Block,
+
     // Resolves to a Register
     InputInstructionReference,
     InputOperandReference,
@@ -57,6 +60,8 @@ struct Immediate {
     static constexpr usz value = 0;
     static constexpr usz size = 0;
     static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
 };
 
 template <usz val, usz sz>
@@ -66,6 +71,8 @@ struct Register {
     static constexpr usz value = val;
     static constexpr usz size = sz;
     static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
 };
 
 template <typename... _>
@@ -75,6 +82,8 @@ struct Local {
     static constexpr usz value = 0;
     static constexpr usz size = 0;
     static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
 };
 
 template <typename... _>
@@ -84,6 +93,30 @@ struct Global {
     static constexpr usz value = 0;
     static constexpr usz size = 0;
     static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
+};
+
+template <typename... _>
+struct Function {
+    static constexpr i64 immediate = 0;
+    static constexpr usz index = 0;
+    static constexpr usz value = 0;
+    static constexpr usz size = 0;
+    static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
+};
+
+template <typename... _>
+struct Block {
+    static constexpr i64 immediate = 0;
+    static constexpr usz index = 0;
+    static constexpr usz value = 0;
+    static constexpr usz size = 0;
+    static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
 };
 
 // New virtual register, by unique index within each pattern.
@@ -94,6 +127,8 @@ struct v {
     static constexpr usz value = 0;
     static constexpr usz size = 0;
     static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
 };
 
 // Operand reference, by index.
@@ -104,6 +139,8 @@ struct o {
     static constexpr usz value = 0;
     static constexpr usz size = 0;
     static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
 };
 
 // Instruction reference, by index.
@@ -114,6 +151,8 @@ struct i {
     static constexpr usz value = 0;
     static constexpr usz size = 0;
     static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
 };
 
 template <OperandKind kind_, typename value_>
@@ -183,6 +222,12 @@ struct Inst {
 
             case OperandKind::Global:
                 return MOperandGlobal(operand::value::global);
+
+            case OperandKind::Function:
+                return MOperandFunction(operand::value::function);
+
+            case OperandKind::Block:
+                return MOperandGlobal(operand::value::block);
 
             case OperandKind::InputOperandReference: {
                 MOperand op{};
@@ -327,7 +372,7 @@ struct PatternList {
                                 // If the operands have failed to match, skip the rest of the operands.
                                 if (not operands_match) return;
 
-                                auto& operand = instruction->all_operands()[op_i];
+                                auto& operand = instruction->all_operands().at(op_i);
                                 if (std::holds_alternative<MOperandImmediate>(operand)) {
                                     operands_match = op::kind == OperandKind::Immediate;
                                 } else if (std::holds_alternative<MOperandRegister>(operand)) {
@@ -336,6 +381,10 @@ struct PatternList {
                                     operands_match = op::kind == OperandKind::Local;
                                 } else if (std::holds_alternative<MOperandGlobal>(operand)) {
                                     operands_match = op::kind == OperandKind::Global;
+                                } else if (std::holds_alternative<MOperandFunction>(operand)) {
+                                    operands_match = op::kind == OperandKind::Function;
+                                } else if (std::holds_alternative<MOperandBlock>(operand)) {
+                                    operands_match = op::kind == OperandKind::Block;
                                 } else {
                                     LCC_ASSERT(false, "Unhandled MIR Operand Kind in ISel...");
                                 }

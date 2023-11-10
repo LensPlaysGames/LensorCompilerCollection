@@ -519,11 +519,52 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     case Value::Kind::Call: {
                         auto call_ir = as<CallInst>(instruction);
+
                         auto call = MInst(MInst::Kind::Call, {virts[instruction], uint(call_ir->function_type()->ret()->bits())});
                         call.add_operand(MOperandValueReference(f, call_ir->callee()));
-                        for (auto& arg : call_ir->args()) {
-                            call.add_operand(MOperandValueReference(f, arg));
-                        }
+
+                        if (_ctx->target()->is_x64()) {
+                            if (_ctx->target()->is_windows()) {
+                                std::vector<usz> arg_regs = {
+                                    +x86_64::RegisterId::RCX,
+                                    +x86_64::RegisterId::RDX,
+                                    +x86_64::RegisterId::R8,
+                                    +x86_64::RegisterId::R9,
+                                };
+
+                                for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
+                                    if (usz(arg_i) < arg_regs.size() and arg->type()->bytes() <= 8) {
+                                        auto copy = MInst(MInst::Kind::Copy, {arg_regs[usz(arg_i)], 64});
+                                        copy.add_operand(MOperandValueReference(f, arg));
+                                        bb.add_instruction(copy);
+                                    } else {
+                                        LCC_ASSERT(false, "Handle gMIR lowering of x64 memory arguments");
+                                    }
+                                }
+
+                            } else if (_ctx->target()->is_linux()) {
+                                std::vector<usz> arg_regs = {
+                                    +x86_64::RegisterId::RDI,
+                                    +x86_64::RegisterId::RSI,
+                                    +x86_64::RegisterId::RDX,
+                                    +x86_64::RegisterId::RCX,
+                                    +x86_64::RegisterId::R8,
+                                    +x86_64::RegisterId::R9,
+                                };
+
+                                for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
+                                    if (usz(arg_i) < arg_regs.size() and arg->type()->bytes() <= 8) {
+                                        auto copy = MInst(MInst::Kind::Copy, {arg_regs[usz(arg_i)], 64});
+                                        copy.add_operand(MOperandValueReference(f, arg));
+                                        bb.add_instruction(copy);
+                                    } else {
+                                        LCC_ASSERT(false, "Handle gMIR lowering of SysV memory/multiple register arguments");
+                                    }
+                                }
+
+                            }
+                        } else (LCC_ASSERT(false, "Unhandled architecture in gMIR generation from IR"));
+
                         bb.add_instruction(call);
                     } break;
 
