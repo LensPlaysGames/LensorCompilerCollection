@@ -112,10 +112,18 @@ using sub_reg_reg = Pattern<
         Inst<Clobbers<>, usz(Opcode::Sub), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
-using cond_branch_reg_reg = Pattern<
+using cond_branch_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::CondBranch), Register<0, 0>, Block<>, Block<>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Test), o<0>, o<0>>,
+        Inst<Clobbers<>, usz(Opcode::JumpIfZeroFlag), o<2>>,
+        Inst<Clobbers<>, usz(Opcode::Jump), o<1>>>>;
+
+using cond_branch_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::CondBranch), Immediate<0>, Block<>, Block<>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0>>,
+        Inst<Clobbers<>, usz(Opcode::Test), v<0>, v<0>>,
         Inst<Clobbers<>, usz(Opcode::JumpIfZeroFlag), o<2>>,
         Inst<Clobbers<>, usz(Opcode::Jump), o<1>>>>;
 
@@ -157,7 +165,8 @@ using x86_64PatternList = PatternList<
     sub_reg_reg,
     simple_function_call,
     simple_block_branch,
-    cond_branch_reg_reg,
+    cond_branch_reg,
+    cond_branch_imm,
     u_lt_reg_reg,
     s_lt_reg_reg,
     u_lt_eq_reg_reg,
