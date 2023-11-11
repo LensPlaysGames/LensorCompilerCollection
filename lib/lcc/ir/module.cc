@@ -473,10 +473,21 @@ auto Module::mir() -> std::vector<MFunction> {
         funcs.push_back(MFunction(function->linkage(), function->call_conv()));
         auto& f = funcs.back();
         f.name() = function->name();
-        function->machine_function(&f);
-        for (auto& block : function->blocks()) {
+        for (auto& block : function->blocks())
             f.add_block(MBlock(block->name()));
-            block->machine_block(&f.blocks().back());
+    }
+
+    // Now that the vectors won't be resizing, we can put MFunction and MBlock
+    // pointers into the Functions and Blocks they originate from.
+    // NOTE: I may want to make a "locking" vector that can be locked and
+    // never resized again, to assert that all iterators taken will never
+    // invalidate.
+    for (auto [f_index, function] : vws::enumerate(code())) {
+        auto& f = funcs.at(usz(f_index));
+        function->machine_function(&f);
+        for (auto [block_index, block] : vws::enumerate(function->blocks())) {
+            auto& bb = f.blocks().at(usz(block_index));
+            block->machine_block(&bb);
         }
     }
 
@@ -566,7 +577,6 @@ auto Module::mir() -> std::vector<MFunction> {
                                         LCC_ASSERT(false, "Handle gMIR lowering of SysV memory/multiple register arguments");
                                     }
                                 }
-
                             }
                         } else (LCC_ASSERT(false, "Unhandled architecture in gMIR generation from IR"));
 
@@ -658,7 +668,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         bb.add_instruction(branch);
                         if (std::holds_alternative<MOperandBlock>(op)) {
                             MOperandBlock block = std::get<MOperandBlock>(op);
-                            bb.add_successor(block->name());
+                            bb.add_successor(block->machine_block()->name());
                             block->machine_block()->add_predecessor(bb.name());
                         }
                     } break;
@@ -676,12 +686,12 @@ auto Module::mir() -> std::vector<MFunction> {
                         bb.add_instruction(branch);
                         if (std::holds_alternative<MOperandBlock>(then_op)) {
                             MOperandBlock block = std::get<MOperandBlock>(then_op);
-                            bb.add_successor(block->name());
+                            bb.add_successor(block->machine_block()->name());
                             block->machine_block()->add_predecessor(bb.name());
                         }
                         if (std::holds_alternative<MOperandBlock>(else_op)) {
                             MOperandBlock block = std::get<MOperandBlock>(else_op);
-                            bb.add_successor(block->name());
+                            bb.add_successor(block->machine_block()->name());
                             block->machine_block()->add_predecessor(bb.name());
                         }
                     } break;
