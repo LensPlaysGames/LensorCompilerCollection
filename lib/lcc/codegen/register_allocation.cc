@@ -377,12 +377,16 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             LCC_ASSERT(adj_list != lists.end(), "Could not find adjacency list corresponding to vreg {}", i_adj);
             // If any adjacency of the current list is already colored, the current
             // list must not be colored with that color.
-            if (adj_list->color) register_interferences |= (usz) 1 << (adj_list->color - 1);
+            if (adj_list->color) {
+                // fmt::print("Colored adjacency: [r{}, {}]\n", adj_list->value, adj_list->color);
+                register_interferences |= usz(1) << adj_list->color;
+            }
         }
 
+
         usz reg_value = 0;
-        for (auto [reg_idx, reg] : vws::enumerate(desc.registers)) {
-            if (not(register_interferences & (usz(1) << reg_idx))) {
+        for (auto reg : desc.registers) {
+            if (not(register_interferences & (usz(1) << reg))) {
                 reg_value = reg;
                 break;
             }
