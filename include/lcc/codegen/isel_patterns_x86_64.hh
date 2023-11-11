@@ -105,6 +105,37 @@ using add_reg_reg = Pattern<
         Inst<Clobbers<>, usz(Opcode::Add), o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
+using sub_reg_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sub), Register<0, 0>, Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Sub), o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+
+using cond_branch_reg_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::CondBranch), Register<0, 0>, Block<>, Block<>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Test), o<0>, o<0>>,
+        Inst<Clobbers<>, usz(Opcode::JumpIfZeroFlag), o<2>>,
+        Inst<Clobbers<>, usz(Opcode::Jump), o<1>>>>;
+
+template <MInst::Kind kind, Opcode set_opcode>
+using cmp_reg_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(kind), Register<0, 0>, Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Compare), o<0>, o<1>>,
+        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
+        Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
+
+using u_lt_reg_reg = cmp_reg_reg<MInst::Kind::ULt, Opcode::SetByteIfLessUnsigned>;
+using s_lt_reg_reg = cmp_reg_reg<MInst::Kind::SLt, Opcode::SetByteIfLessSigned>;
+using u_lt_eq_reg_reg = cmp_reg_reg<MInst::Kind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
+using s_lt_eq_reg_reg = cmp_reg_reg<MInst::Kind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
+using u_gt_reg_reg = cmp_reg_reg<MInst::Kind::UGt, Opcode::SetByteIfGreaterUnsigned>;
+using s_gt_reg_reg = cmp_reg_reg<MInst::Kind::SGt, Opcode::SetByteIfGreaterSigned>;
+using u_gt_eq_reg_reg = cmp_reg_reg<MInst::Kind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
+using s_gt_eq_reg_reg = cmp_reg_reg<MInst::Kind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
+using eq_reg_reg = cmp_reg_reg<MInst::Kind::Eq, Opcode::SetByteIfEqual>;
+
 using x86_64PatternList = PatternList<
     ret,
     ret_imm,
@@ -121,8 +152,19 @@ using x86_64PatternList = PatternList<
     s_ext_reg,
     add_local_imm,
     add_reg_reg,
+    sub_reg_reg,
     simple_function_call,
-    simple_block_branch>;
+    simple_block_branch,
+    cond_branch_reg_reg,
+    u_lt_reg_reg,
+    s_lt_reg_reg,
+    u_lt_eq_reg_reg,
+    s_lt_eq_reg_reg,
+    u_gt_reg_reg,
+    s_gt_reg_reg,
+    u_gt_eq_reg_reg,
+    s_gt_eq_reg_reg,
+    eq_reg_reg>;
 
 } // namespace isel
 } // namespace lcc
