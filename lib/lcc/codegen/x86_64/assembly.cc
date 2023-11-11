@@ -9,10 +9,16 @@
 namespace lcc {
 namespace x86_64 {
 
-std::string friendly_name(std::string in) {
-    if (in.size())
-        std::replace(in.begin() + 1, in.end(), '.', '_');
-    return in;
+std::string block_name(std::string in) {
+    if (in.empty()) {
+        static usz block_count = 0;
+        return fmt::format(".__block_{}", block_count++);
+    }
+    // . in the middle of an identifier is not allowed
+    std::replace(in.begin(), in.end(), '.', '_');
+    // . at the beginning tells the assembler it's a local label and not a
+    // function.
+    return fmt::format(".{}", in);
 }
 
 std::string ToString(MFunction& function, MOperand op) {
@@ -32,7 +38,7 @@ std::string ToString(MFunction& function, MOperand op) {
     } else if (std::holds_alternative<MOperandFunction>(op)) {
         return fmt::format("{}", std::get<MOperandFunction>(op)->name());
     } else if (std::holds_alternative<MOperandBlock>(op)) {
-        return fmt::format("{}", friendly_name(std::get<MOperandBlock>(op)->name()));
+        return fmt::format("{}", block_name(std::get<MOperandBlock>(op)->name()));
     } else LCC_ASSERT(false, "Unhandled MOperand kind (index {})", op.index());
 }
 
@@ -88,7 +94,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
         if (stack_frame_size) out += fmt::format("    sub ${}, %rsp\n", stack_frame_size);
 
         for (auto& block : function.blocks()) {
-            out += fmt::format("{}:\n", friendly_name(block.name()));
+            out += fmt::format("{}:\n", block_name(block.name()));
 
             for (auto& instruction : block.instructions()) {
                 // Don't move a register into itself.
@@ -120,9 +126,9 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
                     if (instruction.all_operands().size() == 3) {
                         auto given_offset = instruction.get_operand(2);
                         LCC_ASSERT(
-                                   std::holds_alternative<MOperandImmediate>(given_offset),
-                                   "Offset operand of dereferencing move must be an immediate"
-                                   );
+                            std::holds_alternative<MOperandImmediate>(given_offset),
+                            "Offset operand of dereferencing move must be an immediate"
+                        );
                         offset = std::get<MOperandImmediate>(given_offset);
                     }
                     if (offset)
@@ -137,9 +143,9 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
                     if (instruction.all_operands().size() == 3) {
                         auto given_offset = instruction.get_operand(2);
                         LCC_ASSERT(
-                                   std::holds_alternative<MOperandImmediate>(given_offset),
-                                   "Offset operand of dereferencing move must be an immediate"
-                                   );
+                            std::holds_alternative<MOperandImmediate>(given_offset),
+                            "Offset operand of dereferencing move must be an immediate"
+                        );
                         offset = std::get<MOperandImmediate>(given_offset);
                     }
                     if (offset)
