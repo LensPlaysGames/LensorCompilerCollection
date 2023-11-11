@@ -1,17 +1,17 @@
-Numbers:> type {
-  x: integer
-  y: integer
-}
+Numbers: struct {
+  x: int;
+  y: int;
+};
 
 ;; Pass two arch-sized signed integers to a function that returns their sum.
-sum_two: ext integer(numbers: Numbers)
+extern sum_two: int(numbers: Numbers);
 
 ;; The function in C actually just calls an Intercept function; this one.
-sum_two_impl: integer(numbers: Numbers) nomangle {
-  numbers.x + numbers.y
-}
+sum_two_impl: int(numbers: Numbers) nomangle {
+  numbers.x + numbers.y;
+};
 
-foo: Numbers
-foo.x := 34
-foo.y := 35
-sum_two(foo)
+foo: Numbers;
+foo.x := 34;
+foo.y := 35;
+sum_two(foo);
