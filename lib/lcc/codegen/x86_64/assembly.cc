@@ -1,4 +1,5 @@
 #include <lcc/codegen/mir.hh>
+#include <lcc/codegen/register_allocation.hh>
 #include <lcc/codegen/x86_64.hh>
 #include <lcc/codegen/x86_64/assembly.hh>
 #include <lcc/context.hh>
@@ -42,7 +43,7 @@ std::string ToString(MFunction& function, MOperand op) {
     } else LCC_ASSERT(false, "Unhandled MOperand kind (index {})", op.index());
 }
 
-void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, std::vector<MFunction>& mir) {
+void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, const MachineDescription& desc, std::vector<MFunction>& mir) {
     auto out = fmt::format("    .file \"{}\"\n", output_path.string());
 
     for (auto* var : module->vars()) {
@@ -111,10 +112,13 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
                 if (instruction.opcode() == +x86_64::Opcode::Return) {
                     // Function Footer
                     // TODO: Different stack frame kinds.
-                    out += fmt::format(
+                    out +=
                         "    mov %rbp, %rsp\n"
-                        "    pop %rbp\n"
-                    );
+                        "    pop %rbp\n";
+                } else if (instruction.opcode() == +x86_64::Opcode::Call) {
+                    // Save return register, if necessary.
+                    if (instruction.reg() != desc.return_register)
+                        out += fmt::format("    push %{}\n", ToString(x86_64::RegisterId(desc.return_register)));
                 }
 
                 out += "    ";
@@ -187,6 +191,19 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
                     ++i;
                 }
                 out += '\n';
+
+                if (instruction.opcode() == +x86_64::Opcode::Call) {
+                    // Move return value from return register to result register, if necessary.
+                    // Also restore return register, if necessary.
+                    if (instruction.reg() != desc.return_register) {
+                        out += fmt::format(
+                            "    mov %{}, %{}\n",
+                            ToString(x86_64::RegisterId(desc.return_register), instruction.regsize()),
+                            ToString(x86_64::RegisterId(instruction.reg()), instruction.regsize())
+                        );
+                        out += fmt::format("    pop %{}\n", ToString(x86_64::RegisterId(desc.return_register)));
+                    }
+                }
             }
         }
     }

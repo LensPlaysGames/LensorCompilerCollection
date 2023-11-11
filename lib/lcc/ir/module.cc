@@ -116,7 +116,7 @@ void Module::lower() {
 
                                 // NOTE(local): For now, allowing the IR to otherwise handle big loads like any other type,
                                 // relying on the backend to decide what happens.
-                                //LCC_ASSERT(false, "TODO: Handle load > 8 bytes lowering");
+                                // LCC_ASSERT(false, "TODO: Handle load > 8 bytes lowering");
                             }
                         } break;
 
@@ -128,7 +128,7 @@ void Module::lower() {
 
                             // NOTE(local): For now, allowing the IR to handle big stores like any other type,
                             // relying on the backend to decide what happens.
-                            //LCC_ASSERT(false, "TODO: Handle store > 8 bytes lowering");
+                            // LCC_ASSERT(false, "TODO: Handle store > 8 bytes lowering");
                         } break;
                         default: break;
                     }
@@ -212,7 +212,7 @@ void Module::emit(std::filesystem::path output_file_path) {
             }
 
             if (_ctx->target()->is_x64())
-                x86_64::emit_gnu_att_assembly(output_file_path, this, machine_ir);
+                x86_64::emit_gnu_att_assembly(output_file_path, this, desc, machine_ir);
             else LCC_ASSERT(false, "Unhandled code emission target, sorry");
         } break;
     }
@@ -284,9 +284,8 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Call: {
                         auto call = as<CallInst>(instruction);
                         assign_virtual_register(call->callee());
-                        for (auto& arg : call->args()) {
+                        for (auto& arg : call->args())
                             assign_virtual_register(arg);
-                        }
                     } break;
 
                     case Value::Kind::GetElementPtr: {
@@ -536,9 +535,6 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Call: {
                         auto call_ir = as<CallInst>(instruction);
 
-                        auto call = MInst(MInst::Kind::Call, {virts[instruction], uint(call_ir->function_type()->ret()->bits())});
-                        call.add_operand(MOperandValueReference(f, call_ir->callee()));
-
                         if (_ctx->target()->is_x64()) {
                             if (_ctx->target()->is_windows()) {
                                 std::vector<usz> arg_regs = {
@@ -578,8 +574,10 @@ auto Module::mir() -> std::vector<MFunction> {
                                     }
                                 }
                             }
-                        } else (LCC_ASSERT(false, "Unhandled architecture in gMIR generation from IR"));
+                        } else (LCC_ASSERT(false, "Unhandled architecture in gMIR generation from IR call"));
 
+                        auto call = MInst(MInst::Kind::Call, {virts[instruction], uint(call_ir->function_type()->ret()->bits())});
+                        call.add_operand(MOperandValueReference(f, call_ir->callee()));
                         bb.add_instruction(call);
                     } break;
 
