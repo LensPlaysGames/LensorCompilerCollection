@@ -16,20 +16,20 @@ void layec::Sema::Analyse(Module* module) {
     module->set_sema_in_progress();
 
     /// Analyse all imports first, since we depend on them in our module.
-    for (auto& import : module->imports()) {
-        auto imported_module = import.module;
-        if (imported_module->sema_state() == SemaState::InProgress) {
-            Error(import.location, "Circular dependency detected: cannot import this module");
-            imported_module->set_sema_errored();
-            continue;
-        } else if (imported_module->sema_errored()) {
-            imported_module->set_sema_errored();
-            continue;
-        }
+    // for (auto& import : module->imports()) {
+    //     auto imported_module = import.module;
+    //     if (imported_module->sema_state() == SemaState::InProgress) {
+    //         Error(import.location, "Circular dependency detected: cannot import this module");
+    //         imported_module->set_sema_errored();
+    //         continue;
+    //     } else if (imported_module->sema_errored()) {
+    //         imported_module->set_sema_errored();
+    //         continue;
+    //     }
 
-        Analyse(imported_module);
-        LCC_ASSERT(imported_module->sema_done_or_errored(), "module analysis did not result in a done or errored module state");
-    }
+    //     Analyse(imported_module);
+    //     LCC_ASSERT(imported_module->sema_done_or_errored(), "module analysis did not result in a done or errored module state");
+    // }
 
     /// Step 1: Continue to analyse type declarations for as long as we need.
     bool all_module_types_resolved_or_errored = false;
@@ -91,10 +91,10 @@ void layec::Sema::AnalysePrototype(FunctionDecl* func) {
 
     AnalyseType(func->return_type());
     LCC_ASSERT(func->return_type()->sema_done_or_errored());
-    
+
     std::vector<Type*> param_types{};
     for (auto& param : func->params()) {
-        Analyse((Statement*&)param);
+        Analyse((Statement*&) param);
         LCC_ASSERT(param->sema_done_or_errored());
         param_types.push_back(param->type());
         // TODO(local): attempt to evaluate constants for parameter inits
@@ -204,7 +204,7 @@ void layec::Sema::Analyse(Statement*& statement) {
                     struct_type->variants(std::move(variants));
                 }
 
-                AnalyseType((Type*&)struct_type);
+                AnalyseType((Type*&) struct_type);
                 return struct_type;
             };
 
@@ -373,7 +373,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
             auto e = as<NameExpr>(expr);
             auto entity = LookupManyEntitiesFrom(e->scope(), e->name(), e->location());
 
-            if (not entity){
+            if (not entity) {
                 UnknownSymbol(e->name());
             } else if (auto binding_decl = cast<BindingDecl>(entity)) {
                 if (binding_decl->sema_state() == SemaState::InProgress) {
@@ -389,6 +389,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                 e->target(function_decl);
                 e->type(function_decl->function_type());
             } else if (auto overload_set = cast<OverloadSet>(entity)) {
+                // NOTE(local): the case of overload sets is a little trickier on whether or not
                 e->target(overload_set);
                 e->type(Type::OverloadSet);
             } else {
@@ -402,48 +403,50 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
             auto path_names = e->names();
             LCC_ASSERT(not path_names.empty());
 
-            auto first_name = path_names[0];
-            auto import_lookup = module()->lookup_import(first_name);
-            if (not import_lookup) {
-                UnknownSymbol(first_name);
-                break;
-            }
+            LCC_TODO();
 
-            auto curr_module = import_lookup->module;
-            for (usz i = 1; i < path_names.size(); i++) {
-                const auto& path_name = path_names[i];
-                const auto& path_location = e->locations()[i];
-                bool is_last_name = i == path_names.size() - 1;
+            // auto first_name = path_names[0];
+            // auto import_lookup = module()->lookup_import(first_name);
+            // if (not import_lookup) {
+            //     UnknownSymbol(first_name);
+            //     break;
+            // }
 
-                if (is_last_name) {
-                    auto module_exports = curr_module->exports();
-                    auto entity = LookupManyEntitiesWithin(module_exports, path_name, path_location);
+            // auto curr_module = import_lookup->module;
+            // for (usz i = 1; i < path_names.size(); i++) {
+            //     const auto& path_name = path_names[i];
+            //     const auto& path_location = e->locations()[i];
+            //     bool is_last_name = i == path_names.size() - 1;
 
-                    if (not entity) {
-                        UnknownSymbol(path_name);
-                    } else if (auto binding_decl = cast<BindingDecl>(entity)) {
-                        if (binding_decl->sema_state() == SemaState::InProgress) {
-                            Error(expr->location(), "Cannot use '{}' in its own initialiser", path_name);
-                            expr->set_sema_errored();
-                            expr->type(new (*module()) PoisonType{expr->location()});
-                            break;
-                        }
+            //     if (is_last_name) {
+            //         auto module_exports = curr_module->exports();
+            //         auto entity = LookupManyEntitiesWithin(module_exports, path_name, path_location);
 
-                        e->target(binding_decl);
-                        e->type(binding_decl->type());
-                    } else if (auto function_decl = cast<FunctionDecl>(entity)) {
-                        e->target(function_decl);
-                        e->type(function_decl->function_type());
-                    } else if (auto overload_set = cast<OverloadSet>(entity)) {
-                        e->target(overload_set);
-                        e->type(Type::OverloadSet);
-                    } else {
-                        UnknownSymbol(path_name);
-                    }
-                } else {
-                    LCC_ASSERT(false, "Sema doesn't know how to go multiple levels deep on paths yet");
-                }
-            }
+            //         if (not entity) {
+            //             UnknownSymbol(path_name);
+            //         } else if (auto binding_decl = cast<BindingDecl>(entity)) {
+            //             if (binding_decl->sema_state() == SemaState::InProgress) {
+            //                 Error(expr->location(), "Cannot use '{}' in its own initialiser", path_name);
+            //                 expr->set_sema_errored();
+            //                 expr->type(new (*module()) PoisonType{expr->location()});
+            //                 break;
+            //             }
+
+            //             e->target(binding_decl);
+            //             e->type(binding_decl->type());
+            //         } else if (auto function_decl = cast<FunctionDecl>(entity)) {
+            //             e->target(function_decl);
+            //             e->type(function_decl->function_type());
+            //         } else if (auto overload_set = cast<OverloadSet>(entity)) {
+            //             e->target(overload_set);
+            //             e->type(Type::OverloadSet);
+            //         } else {
+            //             UnknownSymbol(path_name);
+            //         }
+            //     } else {
+            //         LCC_ASSERT(false, "Sema doesn't know how to go multiple levels deep on paths yet");
+            //     }
+            // }
         } break;
 
         case Expr::Kind::FieldIndex: {
@@ -509,7 +512,6 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
                         auto& arg = e->args()[i];
                         ConvertOrError(arg, param_types[i]);
                     }
-
 
                     LCC_ASSERT(not function_type->return_type()->is_named_type());
                     expr->type(function_type->return_type());
@@ -917,7 +919,7 @@ bool layec::Sema::AnalyseType(Type*& type) {
             for (auto& field : t->fields())
                 AnalyseType(field.type);
             for (auto& variant : t->variants())
-                AnalyseType((Type*&)variant);
+                AnalyseType((Type*&) variant);
         } break;
 
         case Expr::Kind::TypeNoreturn: {

@@ -57,7 +57,6 @@ lcc::StringMap<Tk> keyword_infos{
     {"void", Tk::Void},
     {"var", Tk::Var},
     {"noreturn", Tk::Noreturn},
-    {"rawptr", Tk::Rawptr},
 };
 }
 

@@ -133,10 +133,6 @@ lcc::Type* layec::IRGen::Convert(const layec::Type* in) {
 }
 
 void layec::IRGen::GenerateModule(laye::Module* module) {
-    for (auto& imported_module : module->imports()) {
-        GenerateModule(imported_module.module);
-    }
-
     for (auto& tld : module->top_level_decls()) {
         if (auto struct_decl = cast<StructDecl>(tld))
             CreateStructDeclType(struct_decl);
@@ -180,7 +176,9 @@ void layec::IRGen::CreateIRFunctionValue(FunctionDecl* decl) {
 
     auto linkage = decl->linkage();
     if (not decl->body()) {
-        linkage = Linkage::Imported;
+        if (decl->is_export())
+            linkage = Linkage::Reexported;
+        else linkage = Linkage::Imported;
     }
 
     _ir_values[decl] = new (*mod()) Function(

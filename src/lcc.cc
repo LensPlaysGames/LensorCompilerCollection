@@ -204,7 +204,7 @@ int main(int argc, char** argv) {
             auto laye_context = new lcc::laye::LayeContext{&context};
 
             /// Parse the file.
-            auto mod = laye_context->parse_laye_file(file);
+            auto mod = laye_context->get_or_load_module(file);
             if (context.has_error()) return; // the error condition is handled by the caller already
             if (opts.get<"--syntax-only">()) {
                 if (opts.get<"--ast">()) laye_context->print_modules();

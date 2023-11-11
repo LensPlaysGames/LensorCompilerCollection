@@ -111,13 +111,13 @@ auto Parser::Parse(LayeContext* laye_context, File& file) -> Module* {
                 auto import = *import_header;
                 result->add_header(import);
 
-                std::string import_name = import->import_name();
+                std::string import_namespace = import->query();
 
                 auto file_dir = file.path().parent_path();
-                auto import_file_path = file_dir / import_name;
+                auto import_file_path = file_dir / import_namespace;
                 if (not fs::exists(import_file_path)) {
                     for (auto& dir : laye_context->context()->include_directories()) {
-                        import_file_path = fs::path{dir} / import_name;
+                        import_file_path = fs::path{dir} / import_namespace;
                         if (fs::exists(import_file_path))
                             break;
                     }
@@ -129,17 +129,17 @@ auto Parser::Parse(LayeContext* laye_context, File& file) -> Module* {
                 }
 
                 if (import->has_alias()) {
-                    import_name = import->alias();
+                    import_namespace = import->alias();
                 } else {
-                    // TODO(local): this should turn `import_name` into a valid Laye identifier if it isn't already
-                    fs::path name_as_path = import_name;
-                    import_name = name_as_path.filename().replace_extension("").string();
+                    // TODO(local): this should turn `import_namespace` into a valid Laye identifier if it isn't already
+                    fs::path name_as_path = import_namespace;
+                    import_namespace = name_as_path.filename().replace_extension("").string();
                 }
 
-                auto& import_file = laye_context->context()->get_or_load_file(import_file_path);
-                if (auto import_module = laye_context->parse_laye_file(import_file)) {
-                    result->add_import(import_name, import_header->location(), import_module, is_export);
-                }
+                import->import_namespace(import_namespace);
+
+                auto imported_module = laye_context->get_or_load_module(import_file_path);
+                import->target_module(imported_module);
             }
         } else {
             break;
@@ -307,7 +307,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
             func_scope.scope->set_function_scope();
 
             for (auto& param : params) {
-                (void)CurrScope()->declare(module, param->name(), param);
+                (void) CurrScope()->declare(module, param->name(), param);
             }
 
             auto body = Result<Statement*>::Null();
@@ -1308,7 +1308,7 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
 
         return *var_type;
         // TODO(local): allow parsing continues for 'var', and disallow them at sema for better errors.
-        //return TryParseTypeContinue(*var_type, allocate);
+        // return TryParseTypeContinue(*var_type, allocate);
     }
 
     if (At(Tk::Ident, Tk::ColonColon, Tk::Global)) {
@@ -1343,22 +1343,6 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         }
 
         return TryParseTypeContinue(*noreturn_type, allocate);
-    }
-
-    if (At(Tk::Rawptr)) {
-        if (type_access != TypeAccess::ReadOnly) {
-            if (allocate) Error("Access modifiers do not apply to the rawptr type");
-        }
-
-        auto location = tok.location;
-        NextToken();
-
-        auto rawptr_type = Result<Type*>::Null();
-        if (allocate) {
-            rawptr_type = new (*this) RawptrType{location};
-        }
-
-        return TryParseTypeContinue(*rawptr_type, allocate);
     }
 
     if (At(Tk::Void)) {

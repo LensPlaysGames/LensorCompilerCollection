@@ -12,6 +12,7 @@
 
 namespace lcc::laye {
 class ModuleHeader;
+class ImportHeader;
 class Module;
 class SemaNode;
 class Statement;
@@ -51,39 +52,30 @@ class LayeContext {
 
     StringMap<Module*> _modules{};
 
+    auto parse_laye_file(File& file) -> Module*;
+    void add_module(const std::string& canonical_name, Module* module) { _modules.emplace(canonical_name, module); }
+
 public:
     LayeContext(Context* context)
         : _context(context) {}
 
-    void add_module(std::string abs_name, Module* module) { _modules.emplace(std::move(abs_name), module); }
-
     auto context() const { return _context; }
-    auto lookup_module(std::string abs_name) -> Module* {
-        if (auto it = _modules.find(abs_name); it != _modules.end()) {
+    auto modules() const { return rgs::views::transform(_modules, [](auto pair) { return pair.second; }); }
+    auto get_or_load_module(fs::path path) -> Module*;
+    auto get_or_load_module(File& file) -> Module*;
+
+    void print_modules();
+
+    auto lookup_module(const std::string& canonical_name) -> Module* {
+        if (auto it = _modules.find(canonical_name); it != _modules.end()) {
             return it->second;
         }
 
         return nullptr;
     }
-
-    auto parse_laye_file(File& file) -> Module*;
-
-    auto modules() const { return rgs::views::transform(_modules, [](auto pair) { return pair.second; }); }
-    void print_modules();
 };
 
 class Module {
-public:
-    struct Ref {
-        std::string name;
-        Location location;
-        Module* module;
-        bool is_exported;
-
-        Ref(std::string name, Location location, Module* module, bool is_exported)
-            : name(std::move(name)), location(location), module(module), is_exported(is_exported) {}
-    };
-
 private:
     LayeContext* _laye_context;
 
@@ -92,8 +84,7 @@ private:
     usz unique_name_counter = 0;
 
     std::vector<ModuleHeader*> _headers{};
-
-    std::vector<Ref> _imports{};
+    std::vector<ImportHeader*> _imports{};
     Scope* _exports{};
 
     std::vector<Decl*> _top_level_decls{};
@@ -112,21 +103,15 @@ public:
 
     auto file() const { return _file; }
 
-    auto add_header(ModuleHeader* header) { _headers.push_back(header); }
-    auto add_import(std::string name, Location location, Module* module, bool is_exported) {
-        // Diag::Note("Adding an imported module with name '{}'", name);
-        _imports.push_back(Ref{std::move(name), location, module, is_exported});
-    }
+    void add_header(ModuleHeader* header);
+
     void add_export(NamedDecl* decl);
     auto add_top_level_decl(Decl* decl) { _top_level_decls.push_back(decl); }
 
-    auto imports() -> std::vector<Ref>& { return _imports; }
-    auto lookup_import(const std::string& name, bool is_exported = false) const -> std::optional<Ref> {
-        auto it = std::find_if(_imports.begin(), _imports.end(), [name, is_exported](const Ref& m) { return (is_exported ? m.is_exported : true) and m.name == name; });
-        if (it == _imports.end())
-            return std::nullopt;
-        return *it;
-    }
+    auto imports();
+    auto lookup_import(const std::string& name, bool is_exported = false) const -> std::optional<ImportHeader*>;
+
+    auto scope() -> Scope*;
 
     auto exports() { return _exports; }
     auto top_level_decls() -> std::vector<Decl*>& { return _top_level_decls; }
@@ -728,6 +713,13 @@ public:
             _mangled_name = modifier.string_value;
     }
 
+    void remove_mod(TokenKind kind) {
+        while (not _mods.empty()) {
+            auto it = rgs::find_if(_mods, [kind](DeclModifier& m) { return m.decl_kind == kind; });
+            _mods.erase(it);
+        }
+    }
+
     bool is_export() const { return has_mod(TokenKind::Export); }
     bool is_foreign() const { return has_mod(TokenKind::Foreign); }
 
@@ -878,25 +870,31 @@ public:
 // import "file" as file;
 class ImportHeader : public ModuleHeader {
     bool _exported;
-    std::string _import_name;
+    std::string _query;
     bool _is_wildcard = false;
     std::vector<std::string> _import_names{};
     std::string _alias;
+    Module* _target_module;
+    std::string _namespace;
 
 public:
-    ImportHeader(Location location, bool exported, std::string import_name, bool is_wildcard = false, std::string alias = {})
-        : ModuleHeader(Kind::DeclImport, location), _exported(exported), _import_name(import_name), _is_wildcard(is_wildcard), _alias(std::move(alias)) {}
+    ImportHeader(Location location, bool exported, std::string query, bool is_wildcard = false, std::string alias = {})
+        : ModuleHeader(Kind::DeclImport, location), _exported(exported), _query(query), _is_wildcard(is_wildcard), _alias(std::move(alias)) {}
 
-    ImportHeader(Location location, bool exported, std::string import_name, std::vector<std::string> import_names, std::string alias = {})
-        : ModuleHeader(Kind::DeclImport, location), _exported(exported), _import_name(import_name), _import_names(std::move(import_names)), _alias(std::move(alias)) {}
+    ImportHeader(Location location, bool exported, std::string query, std::vector<std::string> import_names, std::string alias = {})
+        : ModuleHeader(Kind::DeclImport, location), _exported(exported), _query(query), _import_names(std::move(import_names)), _alias(std::move(alias)) {}
 
     bool exported() const { return _exported; }
-    auto import_name() const -> const std::string& { return _import_name; }
+    auto query() const -> const std::string& { return _query; }
     bool is_wildcard() const { return _is_wildcard; }
     bool has_import_names() const { return not _import_names.empty(); }
     auto import_names() const -> const decltype(_import_names)& { return _import_names; }
+    void import_namespace(std::string import_namespace) { _namespace = std::move(import_namespace); }
     bool has_alias() const { return not _alias.empty(); }
     auto alias() const -> const std::string& { return _alias; }
+    auto target_module() const { return _target_module; }
+    void target_module(Module* target_module) { _target_module = target_module; }
+    auto import_namespace() const { return _namespace; }
 
     static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclImport; }
 };
