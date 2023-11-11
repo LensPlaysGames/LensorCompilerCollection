@@ -108,8 +108,9 @@ using add_reg_reg = Pattern<
 using sub_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Sub), Register<0, 0>, Register<0, 0>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Sub), o<0>, o<1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+        // NOTE: GNU ordering of operands
+        Inst<Clobbers<>, usz(Opcode::Sub), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using cond_branch_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::CondBranch), Register<0, 0>, Block<>, Block<>>>,
@@ -122,7 +123,8 @@ template <MInst::Kind kind, Opcode set_opcode>
 using cmp_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(kind), Register<0, 0>, Register<0, 0>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Compare), o<0>, o<1>>,
+        // NOTE: GNU ordering of operands
+        Inst<Clobbers<>, usz(Opcode::Compare), o<1>, o<0>>,
         Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
         Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
