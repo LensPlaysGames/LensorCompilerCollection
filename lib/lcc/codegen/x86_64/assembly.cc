@@ -9,6 +9,12 @@
 namespace lcc {
 namespace x86_64 {
 
+std::string friendly_name(std::string in) {
+    if (in.size())
+        std::replace(in.begin() + 1, in.end(), '.', '_');
+    return in;
+}
+
 std::string ToString(MFunction& function, MOperand op) {
     if (std::holds_alternative<MOperandRegister>(op)) {
         // TODO: Assert that register id is one of the x86_64 register ids...
@@ -26,7 +32,7 @@ std::string ToString(MFunction& function, MOperand op) {
     } else if (std::holds_alternative<MOperandFunction>(op)) {
         return fmt::format("{}", std::get<MOperandFunction>(op)->name());
     } else if (std::holds_alternative<MOperandBlock>(op)) {
-        return fmt::format("{}", std::get<MOperandBlock>(op)->name());
+        return fmt::format("{}", friendly_name(std::get<MOperandBlock>(op)->name()));
     } else LCC_ASSERT(false, "Unhandled MOperand kind (index {})", op.index());
 }
 
@@ -82,7 +88,8 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
         if (stack_frame_size) out += fmt::format("    sub ${}, %rsp\n", stack_frame_size);
 
         for (auto& block : function.blocks()) {
-            out += fmt::format("{}:\n", block.name());
+            out += fmt::format("{}:\n", friendly_name(block.name()));
+
             for (auto& instruction : block.instructions()) {
                 // Don't move a register into itself.
                 if (instruction.opcode() == +x86_64::Opcode::Move and instruction.all_operands().size() == 2) {
@@ -91,6 +98,9 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
                     if (std::holds_alternative<MOperandRegister>(lhs) and std::holds_alternative<MOperandRegister>(rhs) and std::get<MOperandRegister>(lhs).value == std::get<MOperandRegister>(rhs).value)
                         continue;
                 }
+
+                // Update 1-bit operations (boolean) to the minimum addressable on x86_64: a byte.
+                if (instruction.regsize() == 1) instruction.regsize(8);
 
                 if (instruction.opcode() == +x86_64::Opcode::Return) {
                     // Function Footer
@@ -103,7 +113,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
 
                 out += "    ";
                 out += ToString(Opcode(instruction.opcode()));
-                if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS) {
+                if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS and std::holds_alternative<MOperandRegister>(instruction.get_operand(1))) {
                     auto lhs = instruction.get_operand(0);
                     auto rhs = instruction.get_operand(1);
                     usz offset = 0;
@@ -120,7 +130,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
                     else out += fmt::format(" {}, ({})\n", ToString(function, lhs), ToString(function, rhs));
                     continue;
                 }
-                if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceLHS) {
+                if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceLHS and std::holds_alternative<MOperandRegister>(instruction.get_operand(0))) {
                     auto lhs = instruction.get_operand(0);
                     auto rhs = instruction.get_operand(1);
                     usz offset = 0;
@@ -161,6 +171,12 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, st
                 for (auto& operand : instruction.all_operands()) {
                     if (i == 0) out += ' ';
                     else out += ", ";
+                    // Update 1-bit operations (boolean) to the minimum addressable on x86_64: a byte.
+                    if (std::holds_alternative<MOperandRegister>(operand) and std::get<MOperandRegister>(operand).size == 1) {
+                        auto tmp = std::get<MOperandRegister>(operand);
+                        tmp.size = 8;
+                        operand = tmp;
+                    }
                     out += ToString(function, operand);
                     ++i;
                 }
