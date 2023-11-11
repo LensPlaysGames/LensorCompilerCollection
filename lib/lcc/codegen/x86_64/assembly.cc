@@ -208,6 +208,8 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
         }
     }
 
+    out += ".section .note.GNU-stack\n";
+
     File::WriteOrTerminate(out.data(), out.size(), output_path);
 }
 
