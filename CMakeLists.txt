@@ -274,7 +274,13 @@ if (BUILD_TESTING)
     include(CTest)
 
     ## Set fchk properties here.
-    set(FCHK_GIT_TAG v2.0.2)
+    if (DEFINED FCHK_GIT_TAG)
+      message(
+        FATAL_ERROR
+        "You've defined FCHK_GIT_TAG as a user-specified option, but you must alter the CMakeLists.txt to change this variable"
+      )
+    endif()
+    set(FCHK_GIT_TAG v2.1.1)
 
     ## First, check if fchk has already been downloaded.
     if (NOT EXISTS "${PROJECT_SOURCE_DIR}/fchk/CMakeLists.txt")
@@ -351,6 +357,7 @@ if (BUILD_TESTING)
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
         RECURSIVE
+        DEPENDS lcc fchk
     )
 
     FCHKAddAllTestsInDir(
@@ -359,6 +366,7 @@ if (BUILD_TESTING)
         PREFIX "$<SEMICOLON>$<SEMICOLON>"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
+        DEPENDS lcc fchk
     )
 
     FCHKAddAllTestsInDir(
@@ -367,5 +375,6 @@ if (BUILD_TESTING)
         PREFIX "$<SEMICOLON>"
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
+        DEPENDS lcc fchk
     )
 endif()
