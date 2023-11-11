@@ -564,13 +564,27 @@ auto Module::mir() -> std::vector<MFunction> {
                                     +x86_64::RegisterId::R9,
                                 };
 
+                                const usz arg_reg_total = arg_regs.size();
+                                usz arg_regs_used = 0;
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
-                                    if (usz(arg_i) < arg_regs.size() and arg->type()->bytes() <= 8) {
-                                        auto copy = MInst(MInst::Kind::Copy, {arg_regs[usz(arg_i)], 64});
+                                    if (arg_regs_used < arg_reg_total and arg->type()->bytes() <= 8) {
+                                        auto copy = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], 64});
                                         copy.add_operand(MOperandValueReference(f, arg));
                                         bb.add_instruction(copy);
+                                    } else if (arg_regs_used < arg_reg_total - 1 and arg->type()->bytes() <= 16) {
+
+                                        auto copy_a = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], 64});
+                                        auto copy_b = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], 64});
+
+                                        // TODO: Er, what are the operands...? We can't load the arg. We have to
+                                        // load half the arg. So, uhh... Yeah.
+
+                                        bb.add_instruction(copy_a);
+                                        bb.add_instruction(copy_b);
+
+                                        LCC_ASSERT(false, "Handle gMIR lowering of SysV multiple register argument");
                                     } else {
-                                        LCC_ASSERT(false, "Handle gMIR lowering of SysV memory/multiple register arguments");
+                                        LCC_ASSERT(false, "Handle gMIR lowering of SysV memory argument");
                                     }
                                 }
                             }
