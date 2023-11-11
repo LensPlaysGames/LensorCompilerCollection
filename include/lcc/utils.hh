@@ -22,8 +22,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <vector>
 #include <variant>
+#include <vector>
 
 namespace lcc {
 using namespace std::literals;
@@ -129,7 +129,97 @@ namespace lcc {
 /// anything that supports \c data() and \c size() accessors as a key.
 template <typename Type>
 using StringMap = std::unordered_map<std::string, Type, detail::StringHash, std::equal_to<>>;
-}
+
+/// Fixed-sized buffer, intended to be used where a vector
+/// could be used, but resizing is not needed.
+template <typename T>
+requires (not std::is_reference_v<T>, not std::is_const_v<T>)
+class Buffer {
+    /// The buffer.
+    std::unique_ptr<T[]> buffer{};
+    usz element_count{};
+
+public:
+    using value_type = T;
+    using reference = T&;
+    using const_reference = const T&;
+    using iterator = T*;
+    using const_iterator = const T*;
+
+    /// Create an empty buffer.
+    explicit Buffer() = default;
+
+    /// Create a new buffer that can hold N elements.
+    explicit Buffer(usz size)
+        : buffer{std::make_unique<T[]>(size)},
+          element_count{size} {}
+
+    /// Create a new buffer from an iterator range.
+    template <typename Iter>
+    explicit Buffer(Iter begin, Iter end)
+        : buffer{std::make_unique<T[]>(std::distance(begin, end))},
+          element_count{std::distance(begin, end)} {
+        std::copy(begin, end, buffer.get());
+    }
+
+    /// Create a new buffer from a range.
+    template <typename Range>
+    requires (not std::is_same_v<std::remove_cvref_t<Range>, Buffer<T>>)
+    explicit Buffer(Range&& range) : Buffer{std::begin(range), std::end(range)} {}
+
+    /// Create a new buffer from an initialiser list.
+    Buffer(std::initializer_list<T> elems) : Buffer{elems.begin(), elems.end()} {}
+
+    /// Get an iterator to the start of the buffer.
+    auto begin() const -> const_iterator { return buffer.get(); }
+    auto begin() -> iterator { return buffer.get(); }
+
+    /// Get a pointer to the buffer data.
+    auto data() const -> const T* { return buffer.get(); }
+    auto data() -> T* { return buffer.get(); }
+
+    /// Check if the buffer is empty.
+    auto empty() const -> bool { return size() == 0; }
+
+    /// Get an iterator to the end of the buffer.
+    auto end() const -> const_iterator { return buffer.get() + size(); }
+    auto end() -> iterator { return buffer.get() + size(); }
+
+    /// Get the buffer size.
+    auto size() const -> usz { return element_count; }
+
+    /// Access an element of the buffer.
+    auto operator[](usz idx) const -> const_reference {
+        CheckInbounds(idx);
+        return buffer[idx];
+    }
+
+    /// Access an element of the buffer.
+    auto operator[](usz idx) -> reference {
+        CheckInbounds(idx);
+        return buffer[idx];
+    }
+
+    /// Access a range of elements of the buffer.
+    auto operator[](usz start, usz end) const -> std::span<const T> {
+        CheckInbounds(start);
+        CheckInbounds(end);
+        return std::span{buffer.get() + start, end - start};
+    }
+
+    /// Access a range of elements of the buffer.
+    auto operator[](usz start, usz end) -> std::span<T> {
+        CheckInbounds(start);
+        CheckInbounds(end);
+        return std::span{buffer.get() + start, end - start};
+    }
+
+private:
+    void CheckInbounds(usz idx) {
+        LCC_ASSERT(idx < size(), "Index out of bounds");
+    }
+};
+} // namespace lcc
 
 /// More rarely used functions go here so as to not pollute the lcc namespace too much.
 namespace lcc::utils {
