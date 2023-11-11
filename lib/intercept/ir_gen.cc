@@ -557,8 +557,25 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             ///                             |
             const auto& if_expr = as<IfExpr>(expr);
 
+            if (not if_expr->else_()) {
+                auto* then = new (*module) lcc::Block(fmt::format("if.then.{}", total_if));
+                // TODO: exit block not needed if then is noreturn.
+                auto* exit = new (*module) lcc::Block(fmt::format("if.exit.{}", total_if));
+                total_if += 1;
+
+                generate_expression(if_expr->condition());
+                insert(new (*module) CondBranchInst(generated_ir[if_expr->condition()], then, exit, expr->location()));
+
+                update_block(then);
+                generate_expression(if_expr->then());
+
+                update_block(exit);
+                break;
+            }
+
             auto* then = new (*module) lcc::Block(fmt::format("if.then.{}", total_if));
             auto* else_ = new (*module) lcc::Block(fmt::format("if.else.{}", total_if));
+            // TODO: exit block not needed when both then and else are noreturn.
             auto* exit = new (*module) lcc::Block(fmt::format("if.exit.{}", total_if));
             total_if += 1;
 
