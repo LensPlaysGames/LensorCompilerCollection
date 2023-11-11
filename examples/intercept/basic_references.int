@@ -1,10 +1,10 @@
 ;; 42
 
-a : integer = 69
+a : int = 69;
 
-foo : void(x : &integer) {
-  x := 42
-}
+foo : void(x : &int) {
+  x := 42;
+};
 
-foo(a)
-a ;; should return 42
+foo a;
+a; ;; should return 42
