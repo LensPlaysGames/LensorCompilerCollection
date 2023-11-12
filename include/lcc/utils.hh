@@ -167,9 +167,6 @@ public:
     requires (not std::is_same_v<std::remove_cvref_t<Range>, Buffer<T>>)
     explicit Buffer(Range&& range) : Buffer{std::begin(range), std::end(range)} {}
 
-    /// Create a new buffer from an initialiser list.
-    Buffer(std::initializer_list<T> elems) : Buffer{elems.begin(), elems.end()} {}
-
     /// Get an iterator to the start of the buffer.
     auto begin() const -> const_iterator { return buffer.get(); }
     auto begin() -> iterator { return buffer.get(); }

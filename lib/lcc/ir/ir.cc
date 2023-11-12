@@ -2,6 +2,7 @@
 #include <fmt/format.h>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
+#include <lcc/ir/domtree.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
@@ -392,7 +393,7 @@ auto Inst::children() const -> Generator<Value*> {
     /// Include blocks if there are any.
     if (auto br = cast<BranchInst>(self)) co_yield br->target();
     else if (auto cond_br = cast<CondBranchInst>(self)) {
-        co_yield  cond_br->then_block();
+        co_yield cond_br->then_block();
         co_yield cond_br->else_block();
     }
 }
@@ -487,6 +488,42 @@ void Block::merge(lcc::Block* b) {
     inst_list.insert(inst_list.end(), b->inst_list.begin(), b->inst_list.end());
     b->inst_list.clear();
     if (b->parent) b->erase();
+}
+
+auto lcc::Block::predecessor_count() const -> usz {
+    std::unordered_set<Block*> preds;
+    for (auto u : users())
+        if (u->parent)
+            preds.insert(u->parent);
+    return preds.size();
+}
+
+auto lcc::Block::successors() const -> Generator<Block*> {
+    if (not closed()) co_return;
+    switch (terminator()->kind()) {
+        default: break;
+
+        case Kind::Branch:
+            co_yield as<BranchInst>(terminator())->target();
+            break;
+
+        case Kind::CondBranch:
+            auto br = as<CondBranchInst>(terminator());
+            co_yield br->then_block();
+            if (br->else_block() != br->then_block()) co_yield br->else_block();
+            break;
+    }
+}
+
+auto lcc::Block::successor_count() const -> usz {
+    if (not closed()) return 0;
+    switch (terminator()->kind()) {
+        default: return 0;
+        case Kind::Branch: return 1;
+        case Kind::CondBranch:
+            auto br = as<CondBranchInst>(terminator());
+            return br->then_block() == br->else_block() ? 1 : 2;
+    }
 }
 
 namespace {
@@ -641,7 +678,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                 PrintTemp(i);
                 Print("copy {}", Val(copy->operand()));
                 return;
-            } break;
+            }
 
             case Value::Kind::Call: {
                 auto c = as<CallInst>(i);

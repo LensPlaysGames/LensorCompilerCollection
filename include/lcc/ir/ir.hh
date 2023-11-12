@@ -431,6 +431,19 @@ public:
     /// Set the name of this block.
     void name(std::string n) { block_name = std::move(n); }
 
+    /// Get the number of predecessors of this block.
+    auto predecessor_count() const -> usz;
+
+    /// Get the successors of this block.
+    ///
+    /// If the block’s terminator is a conditional branch whose
+    /// then and else blocks are the same, only one successor
+    /// will be returned.
+    auto successors() const -> Generator<Block*>;
+
+    /// Get the number of different blocks this block may branch to.
+    auto successor_count() const -> usz;
+
     /// Get the terminator instruction of this block; may return nullptr.
     auto terminator() const -> Inst* {
         if (inst_list.empty()) return nullptr;

@@ -1,3 +1,4 @@
+#include <lcc/ir/domtree.hh>
 #include <lcc/opt/opt.hh>
 
 namespace lcc::opt {
@@ -776,6 +777,13 @@ struct DCEPass : InstructionRewritePass {
     }
 };
 
+/// Debugging pass to print the dominator tree of a function.
+struct PrintDOMTreePass : InstructionRewritePass {
+    void done(Function* f) {
+        fmt::print("{}", DomTree{f}.debug());
+    }
+};
+
 struct Optimiser {
     Module* const mod;
 
@@ -802,6 +810,7 @@ struct Optimiser {
             else if (s == "icmb") RunPass<InstCombinePass>();
             else if (s == "dce") RunPass<DCEPass>();
             else if (s == "cfgs") RunPass<CFGSimplPass>();
+            else if (s == "print-dom") RunPass<PrintDOMTreePass>();
             else if (s == "*") run();
             else Diag::Fatal("Unknown pass '{}'", s);
         }
