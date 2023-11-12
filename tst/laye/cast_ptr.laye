@@ -1,4 +1,5 @@
-// R
+// R 
+
 int main()
 {
     int[*] r = cast(int[*]) 0;

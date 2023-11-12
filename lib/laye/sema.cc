@@ -1,21 +1,146 @@
 #include <laye/sema.hh>
 #include <lcc/context.hh>
 #include <lcc/target.hh>
+#include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 
 namespace layec = lcc::laye;
 
+namespace lcc {
+
+template <typename Entity>
+class DependencyGraph {
+    struct Node {
+        Entity* entity;
+        std::vector<Entity*> dependencies{};
+
+        Node(Entity* entity) : entity(entity) {}
+    };
+
+    std::vector<Node*> nodes;
+
+public:
+    struct Result {
+        enum class Kind {
+            Ok,
+            Cycle,
+        };
+
+        Kind kind;
+        std::vector<Entity*> order{};
+        Entity* from;
+        Entity* to;
+    };
+
+    DependencyGraph() {}
+
+    auto add_dependency(Entity* entity, Entity* dependency) {
+        Node* node;
+
+        auto it = rgs::find_if(nodes, [&](Node* node) { return node->entity == entity; });
+        if (it != nodes.end()) {
+            node = *it;
+        } else {
+            node = new Node(entity);
+            nodes.push_back(node);
+        }
+
+        LCC_ASSERT(node);
+        if (dependency) node->dependencies.push_back(dependency);
+    }
+
+    auto ensure_tracked(Entity* entity) { add_dependency(entity, nullptr); }
+
+    Result get_resolved_order() {
+        std::vector<Entity*> resolved{};
+        std::vector<Entity*> seen{};
+
+        std::function<Result(const Entity*)> ResolveDependencies;
+        ResolveDependencies = [&](const Entity* entity) -> Result {
+            auto resolved_it = rgs::find(resolved, entity);
+            if (resolved_it != resolved.end())
+                return Result { Result::Kind::Ok };
+
+            seen.push_back(entity);
+
+            auto it = rgs::find_if(nodes, [&](Node* node) { return node->entity == entity; });
+            bool is_resolved = it == nodes.end() or (*it)->dependencies.empty();
+
+            if (not is_resolved) {
+                const std::vector<Entity*>& dependencies = (*it)->dependencies;
+                for (Entity* dep : dependencies) {
+                    auto dep_resolved_it = rgs::find(resolved, dep);
+                    if (dep_resolved_it != resolved.end())
+                        return Result { Result::Kind::Ok };
+
+                    auto dep_seen_it = rgs::find(seen, dep);
+                    if (dep_seen_it != seen.end())
+                        return Result { Result::Kind::Cycle, {}, entity, *dep_seen_it };
+
+                    Result result = ResolveDependencies(dep);
+                    if (result.kind != Result::Kind::Ok) {
+                        return result;
+                    }
+                }
+            }
+            
+            resolved.push_back(entity);
+            seen.erase(rgs::find(seen, entity));
+
+            return Result { Result::Kind::Ok };
+        };
+
+        for (Node* node : nodes) {
+            Result result = ResolveDependencies(node->entity);
+            if (result.kind != Result::Kind::Ok) {
+                return result;
+            }
+        }
+
+        return Result { Result::Kind::Ok, std::move(resolved) };
+    }
+};
+
+};
+
 void layec::Sema::Analyse(LayeContext* laye_context, Module* module, bool use_colours) {
     LCC_ASSERT(laye_context);
 
-    Sema sema{laye_context, module, use_colours};
-    sema.Analyse(module);
+    std::unordered_map<Module*, Sema*> analysers{};
+    analysers[module] = new Sema {laye_context, module, use_colours};
+
+    std::function<void(ImportHeader*)> CreateSemas;
+    CreateSemas = [&](ImportHeader* import_header) {
+        auto imported_module = import_header->target_module();
+        if (analysers.contains(imported_module)) {
+            return;
+        }
+
+        analysers[imported_module] = new Sema {laye_context, imported_module, use_colours};
+    };
+
+    for (auto& import_header : module->imports()) {
+        CreateSemas(import_header);
+    }
+
+    DependencyGraph<NamedDecl> depgraph{};
+
+    for (auto [m, sema] : analysers) {
+        for (auto tld : m->top_level_decls()) {
+            switch (tld->kind()) {
+                default: LCC_ASSERT(false, "Unhandled top level declaration {} when generating dependencies", ToString(tld->kind()));
+
+                case Statement::Kind::DeclFunction: {
+                    auto func_decl = as<FunctionDecl>(tld);
+                } break;
+            }
+        }
+    }
 }
 
 void layec::Sema::Analyse(Module* module) {
     module->set_sema_in_progress();
 
-    /// Analyse all imports first, since we depend on them in our module.
     // for (auto& import : module->imports()) {
     //     auto imported_module = import.module;
     //     if (imported_module->sema_state() == SemaState::InProgress) {
@@ -26,7 +151,6 @@ void layec::Sema::Analyse(Module* module) {
     //         imported_module->set_sema_errored();
     //         continue;
     //     }
-
     //     Analyse(imported_module);
     //     LCC_ASSERT(imported_module->sema_done_or_errored(), "module analysis did not result in a done or errored module state");
     // }
@@ -371,30 +495,33 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
 
         case Expr::Kind::LookupName: {
             auto e = as<NameExpr>(expr);
-            auto entity = LookupManyEntitiesFrom(e->scope(), e->name(), e->location());
 
-            if (not entity) {
-                UnknownSymbol(e->name());
-            } else if (auto binding_decl = cast<BindingDecl>(entity)) {
-                if (binding_decl->sema_state() == SemaState::InProgress) {
-                    Error(expr->location(), "Cannot use '{}' in its own initialiser", e->name());
-                    expr->set_sema_errored();
-                    expr->type(new (*module()) PoisonType{expr->location()});
-                    break;
-                }
+            LCC_ASSERT(false, "Analyse(LookupName)");
 
-                e->target(binding_decl);
-                e->type(Ref(binding_decl->type(), TypeAccess::Mutable));
-            } else if (auto function_decl = cast<FunctionDecl>(entity)) {
-                e->target(function_decl);
-                e->type(function_decl->function_type());
-            } else if (auto overload_set = cast<OverloadSet>(entity)) {
-                // NOTE(local): the case of overload sets is a little trickier on whether or not
-                e->target(overload_set);
-                e->type(Type::OverloadSet);
-            } else {
-                UnknownSymbol(e->name());
-            }
+            // auto entity = LookupManyEntitiesFrom(e->scope(), e->name(), e->location());
+
+            // if (not entity) {
+            //     UnknownSymbol(e->name());
+            // } else if (auto binding_decl = cast<BindingDecl>(entity)) {
+            //     if (binding_decl->sema_state() == SemaState::InProgress) {
+            //         Error(expr->location(), "Cannot use '{}' in its own initialiser", e->name());
+            //         expr->set_sema_errored();
+            //         expr->type(new (*module()) PoisonType{expr->location()});
+            //         break;
+            //     }
+
+            //     e->target(binding_decl);
+            //     e->type(Ref(binding_decl->type(), TypeAccess::Mutable));
+            // } else if (auto function_decl = cast<FunctionDecl>(entity)) {
+            //     e->target(function_decl);
+            //     e->type(function_decl->function_type());
+            // } else if (auto overload_set = cast<OverloadSet>(entity)) {
+            //     // NOTE(local): the case of overload sets is a little trickier on whether or not
+            //     e->target(overload_set);
+            //     e->type(Type::OverloadSet);
+            // } else {
+            //     UnknownSymbol(e->name());
+            // }
         } break;
 
         case Expr::Kind::LookupPath: {
@@ -403,7 +530,7 @@ bool layec::Sema::Analyse(Expr*& expr, Type* expected_type) {
             auto path_names = e->names();
             LCC_ASSERT(not path_names.empty());
 
-            LCC_TODO();
+            LCC_ASSERT(false, "Analyse(LookupPath)");
 
             // auto first_name = path_names[0];
             // auto import_lookup = module()->lookup_import(first_name);
@@ -781,68 +908,74 @@ bool layec::Sema::AnalyseType(Type*& type) {
 
         case Expr::Kind::TypeLookupName: {
             auto t = as<NameType>(type);
-            auto entity = LookupSingleEntityFrom(t->scope(), t->name());
 
-            if (auto alias_decl = cast<AliasDecl>(entity)) {
+            auto type_entity = LookupTypeEntity(t->scope(), t->name());
+            if (auto alias_decl = cast<AliasDecl>(type_entity)) {
+                LCC_ASSERT(alias_decl->type()->sema_done_or_errored());
                 type = alias_decl->type();
-            } else if (auto struct_decl = cast<StructDecl>(entity)) {
+            } else if (auto struct_decl = cast<StructDecl>(type_entity)) {
+                LCC_ASSERT(struct_decl->type()->sema_done_or_errored());
                 type = struct_decl->type();
             } else {
-                Error(type->location(), "Unknown type symbol '{}' (looking up names through imports is not supported yet.)", t->name());
-                type->set_sema_errored();
+                Error(type->location(), "Unknown type symbol '{}'", t->name());
+                type = new (*module()) PoisonType(type->location());
             }
+
+            LCC_ASSERT(not type->is_named_type());
         } break;
 
         case Expr::Kind::TypeLookupPath: {
             auto t = as<PathType>(type);
 
-            const auto& path_names = t->names();
-            const auto& locations = t->locations();
-            LCC_ASSERT(not path_names.empty());
-            LCC_ASSERT(path_names.size() == locations.size());
+            LCC_ASSERT(false, "AnalyseType(TypeLookupName)");
 
-            auto entity = LookupSingleEntityFrom(t->scope(), path_names[0]);
-            if (entity) {
-                if (auto struct_decl = cast<StructDecl>(entity)) {
-                    auto NoVariantInStruct = [&](Location location, const std::string& name, StructDecl* sd) {
-                        Error(location, "No variant '{}' in struct {}", name, sd->type()->string(use_colours));
-                        type->set_sema_errored();
-                    };
+            // const auto& path_names = t->names();
+            // const auto& locations = t->locations();
+            // LCC_ASSERT(not path_names.empty());
+            // LCC_ASSERT(path_names.size() == locations.size());
 
-                    StructDecl* curr_struct_decl = struct_decl;
-                    for (usz i = 1; i < path_names.size(); i++) {
-                        const auto& path_name = path_names[i];
-                        const auto& path_location = locations[i];
+            // auto entity = LookupSingleEntityFrom(t->scope(), path_names[0]);
+            // if (entity) {
+            //     if (auto struct_decl = cast<StructDecl>(entity)) {
+            //         auto NoVariantInStruct = [&](Location location, const std::string& name, StructDecl* sd) {
+            //             Error(location, "No variant '{}' in struct {}", name, sd->type()->string(use_colours));
+            //             type->set_sema_errored();
+            //         };
 
-                        const auto& variants = curr_struct_decl->variants();
-                        if (variants.empty()) {
-                            NoVariantInStruct(path_location, path_name, curr_struct_decl);
-                            break;
-                        }
+            //         StructDecl* curr_struct_decl = struct_decl;
+            //         for (usz i = 1; i < path_names.size(); i++) {
+            //             const auto& path_name = path_names[i];
+            //             const auto& path_location = locations[i];
 
-                        auto variant_it = rgs::find_if(variants, [&](StructDecl* v) { return v->name() == path_name; });
-                        if (variant_it == variants.end()) {
-                            NoVariantInStruct(path_location, path_name, curr_struct_decl);
-                            break;
-                        }
+            //             const auto& variants = curr_struct_decl->variants();
+            //             if (variants.empty()) {
+            //                 NoVariantInStruct(path_location, path_name, curr_struct_decl);
+            //                 break;
+            //             }
 
-                        curr_struct_decl = *variant_it;
-                    }
+            //             auto variant_it = rgs::find_if(variants, [&](StructDecl* v) { return v->name() == path_name; });
+            //             if (variant_it == variants.end()) {
+            //                 NoVariantInStruct(path_location, path_name, curr_struct_decl);
+            //                 break;
+            //             }
 
-                    if (type->sema_done_or_errored())
-                        break;
+            //             curr_struct_decl = *variant_it;
+            //         }
 
-                    type = curr_struct_decl->type();
-                    LCC_ASSERT(type);
-                    LCC_ASSERT(type->kind() == Expr::Kind::TypeVariant);
-                    LCC_ASSERT(type->sema_done_or_errored());
-                }
-            }
+            //         if (type->sema_done_or_errored())
+            //             break;
 
-            if (type->sema_done_or_errored())
-                break;
+            //         type = curr_struct_decl->type();
+            //         LCC_ASSERT(type);
+            //         LCC_ASSERT(type->kind() == Expr::Kind::TypeVariant);
+            //         LCC_ASSERT(type->sema_done_or_errored());
+            //     }
+            // }
 
-            LCC_ASSERT(false, "need to handle type lookup through namespaces");
+            // if (type->sema_done_or_errored())
+            //     break;
+
+            // LCC_ASSERT(false, "need to handle type lookup through namespaces");
         } break;
 
         case Expr::Kind::TypeArray: {
@@ -960,12 +1093,59 @@ bool layec::Sema::AnalyseType(Type*& type) {
     return type->sema_ok();
 }
 
+auto layec::Sema::LookupTypeEntity(Scope* from_scope, const std::string& name) -> NamedDecl* {
+    // Note that there shouldn't be any reason to create duplicate "imported" versions
+    // of type entities, since the type system and referenced values within
+    // the IR should be entirely orthogonal.
+
+    Scope* search_scope = from_scope;
+    while (search_scope) {
+        auto lookup = search_scope->find(name);
+
+        // if a lookup fails (two identical iterators, 0 range) then we look at the next scope up
+        if (lookup.first == lookup.second) {
+            search_scope = search_scope->parent();
+            continue;
+        }
+
+        auto entity = lookup.first->second;
+
+        // if the lookedup entity is of a type declaration, then return it
+        if (is<AliasDecl, StructDecl, EnumDecl>(entity))
+            return entity;
+
+        // otherwise, we continue up the next scope
+    }
+
+    // if we reach here, then nothing within the module is a type entity.
+    // time to search through imports.
+
+    std::vector<NamedDecl*> possible_type_entities{};
+    for (auto& import_decl : module()->imports()) {
+        if (not import_decl->is_wildcard()) continue;
+        
+        auto imported_module = import_decl->target_module();
+        auto imported_entity_scope = imported_module->exports();
+    }
+
+    LCC_ASSERT(false, "LookupTypeEntity");
+}
+
+auto layec::Sema::LookupValueEntity(Scope* from_scope, const std::string& name) -> NamedDecl* {
+    LCC_ASSERT(false, "LookupValueEntity");
+}
+
+#if false
 auto layec::Sema::LookupSingleEntityWithin(Scope* scope, const std::string& name) -> NamedDecl* {
     auto symbols = scope->find(name);
     if (symbols.first == symbols.second)
         return nullptr;
 
-    return symbols.first->second;
+    NamedDecl* decl = symbols.first->second;
+    if (scope->module() != module())
+    {
+        
+    }
 }
 
 auto layec::Sema::LookupSingleEntityFrom(Scope* scope, const std::string& name) -> NamedDecl* {
@@ -1035,6 +1215,7 @@ auto layec::Sema::LookupManyEntitiesFrom(Scope* scope, const std::string& name, 
 
     return entity;
 }
+#endif
 
 template <bool PerformConversion>
 int layec::Sema::ConvertImpl(Expr*& expr, Type* to) {

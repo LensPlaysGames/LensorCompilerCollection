@@ -108,7 +108,7 @@ public:
     void add_export(NamedDecl* decl);
     auto add_top_level_decl(Decl* decl) { _top_level_decls.push_back(decl); }
 
-    auto imports();
+    auto imports() const -> const decltype(_imports)& { return _imports; };
     auto lookup_import(const std::string& name, bool is_exported = false) const -> std::optional<ImportHeader*>;
 
     auto scope() -> Scope*;
@@ -379,8 +379,11 @@ enum class CastKind {
 
 class Scope {
     Scope* _parent;
+    Module* _module;
     std::unordered_multimap<std::string, NamedDecl*, detail::StringHash, std::equal_to<>> symbols;
     bool _is_function_scope = false;
+
+    auto module(Module* module) { _module = module; }
 
 public:
     Scope(Scope* parent)
@@ -398,6 +401,7 @@ public:
     ) -> Result<NamedDecl*>;
 
     auto parent() const { return _parent; }
+    auto module() const { return _module; }
 
     auto find(std::string_view name) { return symbols.equal_range(name); }
 
@@ -1802,7 +1806,9 @@ public:
 class PoisonType : public Type {
 public:
     PoisonType(Location location)
-        : Type(Kind::TypePoison, location) {}
+        : Type(Kind::TypePoison, location) {
+        set_sema_errored();
+    }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypePoison; }
 };

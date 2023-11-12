@@ -36,11 +36,8 @@ private:
     }
     bool AnalyseType(Type*& type);
 
-    auto LookupSingleEntityWithin(Scope* scope, const std::string& name) -> NamedDecl*;
-    auto LookupSingleEntityFrom(Scope* scope, const std::string& name) -> NamedDecl*;
-
-    auto LookupManyEntitiesWithin(Scope* scope, const std::string& name, Location location) -> NamedDecl*;
-    auto LookupManyEntitiesFrom(Scope* scope, const std::string& name, Location location) -> NamedDecl*;
+    auto LookupTypeEntity(Scope* from_scope, const std::string& name) -> NamedDecl*;
+    auto LookupValueEntity(Scope* from_scope, const std::string& name) -> NamedDecl*;
 
     template <bool PerformConversion>
     int ConvertImpl(Expr*& expr, Type* to);

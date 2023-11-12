@@ -10,14 +10,16 @@ namespace layec = lcc::laye;
 
 void* layec::Scope::operator new(size_t sz, Parser& parser) {
     LCC_ASSERT(not parser.IsInSpeculativeParse(), "Should never be allocating syntax scopes while in speculative parse mode.");
-    auto ptr = ::operator new(sz);
-    parser.module->scopes.push_back(static_cast<Scope*>(ptr));
+    auto ptr = static_cast<Scope*>(::operator new(sz));
+    ptr->module(parser.module);
+    parser.module->scopes.push_back(ptr);
     return ptr;
 }
 
 void* layec::Scope::operator new(size_t sz, Module& module) {
-    auto ptr = ::operator new(sz);
-    module.scopes.push_back(static_cast<Scope*>(ptr));
+    auto ptr = static_cast<Scope*>(::operator new(sz));
+    ptr->module(&module);
+    module.scopes.push_back(ptr);
     return ptr;
 }
 
