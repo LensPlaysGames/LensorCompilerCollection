@@ -12,9 +12,9 @@ public:
 
     /// Get all elements of a set.
     auto elements(usz a) -> Generator<usz> {
-        for (auto root = find(a); auto e : entries)
+        for (auto root = find(a); auto [i, e] : vws::enumerate(entries))
             if (find(e) == root)
-                co_yield e;
+                co_yield usz(i);
     }
 
     usz find(usz a) {
@@ -28,7 +28,6 @@ public:
         entries[bset] = aset;
     }
 };
-
 
 /// Context for computing the dominator tree of a function.
 ///
@@ -50,6 +49,7 @@ public:
 /// the algorithm, see the paper mentioned above.
 struct DomTreeBuilder {
     Buffer<usz>& idoms;
+    Buffer<std::vector<usz>>& children;
     Function* f;
 
     /// Flags indicating whether we’ve already visited a node.
@@ -83,6 +83,8 @@ struct DomTreeBuilder {
     std::unordered_multimap<usz, std::pair<usz, usz>> arcs{};
 
     void Build() {
+        idoms[0] = 0;
+
         for (auto [i, u] : vws::enumerate(f->blocks()))
             total[usz(i)] = u->predecessor_count();
 
@@ -100,7 +102,7 @@ private:
         Previsit(u);
 
         for (auto s : f->blocks()[u]->successors()) {
-            auto v = usz(std::distance(f->blocks().begin(), rgs::find(f->blocks(), s)));
+            auto v = s->id();
             if (not visited[v]) {
                 DFS(v);
                 parents[v] = u;
@@ -138,7 +140,10 @@ private:
                 if (total[v] == 0) {
                     auto x = contr.find(parents[v]);
                     if (u == x) {
-                        for (auto w : same.elements(v)) idoms[w] = u;
+                        for (auto w : same.elements(v)) {
+                            idoms[w] = u;
+                            children[u].push_back(w);
+                        }
                     } else {
                         same.unite(x, v);
                     }
@@ -173,18 +178,32 @@ private:
 } // namespace
 } // namespace lcc
 
-lcc::DomTree::DomTree(Function* f) : f(f) {
+lcc::DomTree::DomTree(Function* f, bool compute_dominance_frontiers) : f(f) {
     if (f->blocks().empty()) return;
-    DomTreeBuilder{idoms, f}.Build();
+
+    /// Build dominator tree.
+    DomTreeBuilder{idoms, children, f}.Build();
+
+    /// Compute dominance frontiers.
+    if (not compute_dominance_frontiers) return;
+    for (auto [i, a] : vws::enumerate(f->blocks())) {
+        for (auto b : a->successors()) {
+            for (Block* x = a; not strictly_dominates(x, b);) {
+                auto xid = x->id();
+                df[xid].push_back(b);
+                x = f->blocks()[idoms[xid]];
+            }
+        }
+    }
 }
 
-auto lcc::DomTree::debug() -> std::string {
+auto lcc::DomTree::debug() const -> std::string {
     std::string out;
     out += fmt::format("digraph {} {{\n", f->name());
     for (auto [i, _] : vws::enumerate(f->blocks()))
         out += fmt::format("    {} [label=\"bb{}\"];\n", i, i);
     for (auto [i, _] : vws::enumerate(f->blocks()))
-        out += fmt::format("    {} -> {};\n", idoms[usz(i)], i);
+        out += fmt::format("    {} -> {};\n", isz(idoms[usz(i)]), i);
     out += "}\n";
     return out;
 }

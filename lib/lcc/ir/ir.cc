@@ -271,6 +271,11 @@ bool Block::has_predecessor(Block* block) const {
     }
 }
 
+auto Block::id() const -> usz {
+    if (not parent) return 0;
+    return usz(std::distance(parent->blocks().begin(), rgs::find(parent->blocks(), this)));
+}
+
 auto Inst::Children() -> Generator<Value**> {
     switch (kind()) {
         case Kind::Block:
@@ -408,6 +413,13 @@ void Inst::erase_cascade() {
     while (not users().empty()) users().front()->erase_cascade();
 }
 
+auto Inst::instructions_before_this() -> std::span<Inst*> {
+    if (not parent) return {};
+    auto it = rgs::find(parent->instructions(), this);
+    LCC_ASSERT(it != parent->instructions().end(), "Instruction not found in parent");
+    return {parent->instructions().begin(), it};
+}
+
 void Inst::replace_with(Value* v) {
     while (not users().empty()) {
         auto u = users().front();
@@ -429,6 +441,14 @@ void Inst::replace_with(Value* v) {
     }
 
     erase();
+}
+
+auto Block::create_phi(Type* type, Location loc) -> PhiInst* {
+    auto phi = new (*parent->module()) PhiInst(type, loc);
+    auto it = rgs::find_if(inst_list, [](Inst* i) { return not is<PhiInst>(i); });
+    inst_list.insert(it, phi);
+    phi->parent = this;
+    return phi;
 }
 
 void Block::erase() {
@@ -493,7 +513,7 @@ void Block::merge(lcc::Block* b) {
 auto lcc::Block::predecessor_count() const -> usz {
     std::unordered_set<Block*> preds;
     for (auto u : users())
-        if (u->parent)
+        if (is<BranchInst, CondBranchInst>(u) and u->parent)
             preds.insert(u->parent);
     return preds.size();
 }

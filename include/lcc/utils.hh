@@ -154,6 +154,12 @@ public:
         : buffer{std::make_unique<T[]>(size)},
           element_count{size} {}
 
+    /// Create a new buffer that can hold N elements and initialize it with a value.
+    explicit Buffer(usz size, T val)
+        : Buffer{size} {
+        std::fill(begin(), end(), val);
+    }
+
     /// Create a new buffer from an iterator range.
     template <typename Iter>
     explicit Buffer(Iter begin, Iter end)
@@ -212,7 +218,7 @@ public:
     }
 
 private:
-    void CheckInbounds(usz idx) {
+    void CheckInbounds(usz idx) const {
         LCC_ASSERT(idx < size(), "Index out of bounds");
     }
 };
@@ -297,6 +303,15 @@ void ReplaceAll(
     std::string_view from,
     std::string_view to
 );
+
+/// Convert a range to a container.
+template <rgs::range Range>
+auto to_vec(Range r) -> std::vector<rgs::range_value_t<Range>> {
+    std::vector<rgs::range_value_t<Range>> out{};
+    out.insert(out.end(), rgs::begin(r), rgs::end(r));
+    return out;
+}
+
 } // namespace lcc::utils
 
 template <lcc::detail::FormattableEnum T>

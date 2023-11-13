@@ -686,6 +686,129 @@ private:
     }
 };
 
+/// SSA construction pass (aka mem2reg).
+struct SSAConstructionPass : InstructionRewritePass {
+    std::vector<AllocaInst*> allocas{};
+
+    void run(Inst* i) {
+        auto a = cast<AllocaInst>(i);
+        if (a) allocas.push_back(a);
+    }
+
+    void done(Function* f) {
+        DomTree dom_tree{f};
+
+        /// Determine what allocas we can convert.
+        auto optimisable = utils::to_vec(allocas | vws::filter(Optimisable));
+        if (optimisable.empty()) return;
+
+        /// Definitions of a variable.
+        std::unordered_map<AllocaInst*, std::vector<Inst*>> defs{optimisable.size()};
+
+        /// Map from PHIs to their corresponding allocas.
+        using Entry = std::pair<PhiInst*, AllocaInst*>;
+        std::vector<Entry> phis;
+
+        /// Get a value of a variable from a definition if it is one.
+        auto DefinedValue = [&](AllocaInst* a, Inst* def) -> Value* {
+            auto d = rgs::find(defs[a], def);
+            if (d == defs[a].end()) return nullptr;
+            if (auto s = cast<StoreInst>(*d)) return s->val();
+            return *d;
+        };
+
+        /// Get the reaching definition of a variable for an instruction.
+        /// FIXME: This is currently *very* dumb and inefficient...
+        auto ReachingDef = [&](AllocaInst* a, Inst* user) -> Value* {
+            /// Search backwards in this block.
+            for (auto i : vws::reverse(user->instructions_before_this())) {
+                auto d = DefinedValue(a, i);
+                if (d) return d;
+            }
+
+            /// Search dominators.
+            for (auto b : dom_tree.parents(user->block())) {
+                for (auto i : vws::reverse(b->instructions())) {
+                    auto d = DefinedValue(a, i);
+                    if (d) return d;
+                }
+            }
+
+            /// No reaching def!
+            return new (*mod) PoisonValue(a->allocated_type());
+        };
+
+        /// Insert PHIs for each alloca.
+        for (auto [i, a] : vws::enumerate(optimisable)) {
+            SetChanged();
+
+            /// Collect definitions.
+            auto def_blocks =
+                a->users()                                              //
+                | vws::filter([](Inst* u) { return is<StoreInst>(u); }) //
+                | vws::transform(&Inst::block);
+
+            /// Insert a PHI at each block of DF+(defs).
+            for (auto b : dom_tree.iterated_dom_frontier(def_blocks)) {
+                auto phi = b->create_phi(a->allocated_type(), a->location());
+                defs[a].push_back(phi);
+                phis.emplace_back(phi, a);
+            }
+        }
+
+        /// Add incoming values for each reaching definition.
+        for (auto b : dom_tree.dfs_preorder()) {
+            for (auto i : b->instructions()) {
+                /// If this instruction is a store to an optimisable
+                /// alloca, mark it as the new reaching definition.
+                if (auto s = cast<StoreInst>(i)) {
+                    auto a = rgs::find(optimisable, s->ptr());
+                    if (a != optimisable.end()) defs[*a].push_back(s);
+                }
+
+                /// If this instruction uses a load of an optimisable
+                /// alloca, replace the load with the reaching definition
+                /// of that alloca.
+                i->replace_children<LoadInst>([&](LoadInst* l) -> Value* {
+                    auto a = rgs::find(optimisable, l->ptr());
+                    if (a == optimisable.end()) return nullptr;
+                    return ReachingDef(*a, l);
+                });
+            }
+
+            /// Update PHIs in successors.
+            for (auto s : b->successors()) {
+                for (auto i : s->instructions()) {
+                    auto phi = cast<PhiInst>(i);
+                    if (not phi) break;
+
+                    /// This is one of the PHIs we inserted for a specific variable.
+                    if (auto it = rgs::find(phis, phi, &Entry::first); it != phis.end())
+                        phi->set_incoming(ReachingDef(it->second, b->instructions().back()), b);
+                }
+            }
+        }
+
+        /// Lastly, erase all allocas.
+        for (auto a : optimisable) a->erase_cascade();
+    }
+
+private:
+    static bool Optimisable(AllocaInst* a) {
+        /// Allocas of non-aggregate types are not optimised
+        /// here so SROA has a chance to split them.
+        if (is<StructType, ArrayType>(a->type())) return false;
+
+        /// Allocas that have uses other than loads and stores
+        /// (to the alloca) can not be converted either.
+        return rgs::all_of(a->users(), [a](Inst* u) {
+            if (is<LoadInst>(u)) return true;
+            if (auto s = cast<StoreInst>(u); s and a == s->ptr()) return true;
+            return false;
+        });
+    }
+};
+
 /// CFG simplification pass.
 struct CFGSimplPass : InstructionRewritePass {
     void done(Function* f) {
@@ -780,7 +903,7 @@ struct DCEPass : InstructionRewritePass {
 /// Debugging pass to print the dominator tree of a function.
 struct PrintDOMTreePass : InstructionRewritePass {
     void done(Function* f) {
-        fmt::print("{}", DomTree{f}.debug());
+        fmt::print("{}", DomTree{f, false}.debug());
     }
 };
 
@@ -797,6 +920,7 @@ struct Optimiser {
             SROAPass,
             StoreFowardingPass,
             CFGSimplPass,
+            SSAConstructionPass,
             DCEPass
         >();
     } // clang-format on
@@ -809,6 +933,7 @@ struct Optimiser {
             else if (s == "sfwd") RunPass<StoreFowardingPass>();
             else if (s == "icmb") RunPass<InstCombinePass>();
             else if (s == "dce") RunPass<DCEPass>();
+            else if (s == "ssa") RunPass<SSAConstructionPass>();
             else if (s == "cfgs") RunPass<CFGSimplPass>();
             else if (s == "print-dom") RunPass<PrintDOMTreePass>();
             else if (s == "*") run();

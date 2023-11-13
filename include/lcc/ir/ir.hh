@@ -14,6 +14,7 @@
 
 namespace lcc {
 class Parameter;
+class PhiInst;
 
 namespace parser {
 class Parser;
@@ -312,6 +313,9 @@ public:
     /// instruction. Be careful when using this.
     void erase_cascade();
 
+    /// Iterate over all instructions before (and not including) this one.
+    auto instructions_before_this() -> std::span<Inst*>;
+
     /// Check if this is a terminator instruction.
     bool is_terminator() const {
         return kind() >= Value::Kind::Branch and kind() <= Value::Kind::Unreachable;
@@ -325,6 +329,25 @@ public:
 
     /// Set the associated machine instruction.
     void machine_inst(MInst* m) { minst = m; }
+
+    /// Replace children of this instruction.
+    ///
+    /// This iterates over all children of this instruction and
+    /// calls a callback to determine whether each one of them
+    /// should be replaced. If the callback returns a non-null
+    /// Value*, the child is replaced.
+    ///
+    /// \tparam InstType If provided, only children of this type
+    ///     will be replaced.
+    /// \param cb The callback to call for each child.
+    template <typename InstType = Value, typename Callable>
+    void replace_children(Callable cb) {
+        for (auto** child : Children()) {
+            auto c = cast<InstType>(*child);
+            if (not c) continue;
+            if (auto replacement = std::invoke(cb, c)) UpdateOperand(*child, replacement);
+        }
+    }
 
     /// Replace all uses of this instruction with another
     /// value and erase this instruction from its parent
@@ -371,6 +394,13 @@ public:
     /// Check whether this block has a terminator.
     bool closed() const { return terminator() != nullptr; }
 
+    /// Create a PHI node in this block.
+    ///
+    /// For scheduling purposes, all PHI nodes in a block
+    /// *must* be at the very beginning of the block, so
+    /// this will insert a new PHI after all existing PHIs.
+    auto create_phi(Type* type, Location loc = {}) -> PhiInst*;
+
     /// Erase this block and all instructions in it.
     void erase();
 
@@ -383,6 +413,9 @@ public:
     /// Check if this block has another block as one
     /// of its predecessors.
     bool has_predecessor(Block* block) const;
+
+    /// Get the index of this block in the parent function.
+    auto id() const -> usz;
 
     /// Insert an instruction at the end of this block.
     ///
@@ -519,6 +552,12 @@ public:
 
     /// Get an iterator to the end of the block list.
     auto end() const { return block_list.end(); }
+
+    /// Get the entry block of this function, if any.
+    auto entry() const -> Block* {
+        if (block_list.empty()) return nullptr;
+        return block_list.front();
+    }
 
     /// Whether this function is imported from another module.
     bool imported() const { return IsImportedLinkage(link); }
@@ -878,6 +917,7 @@ class PhiInst : public Inst {
     friend Inst;
     friend parser::Parser;
 
+public:
     /// An incoming value.
     struct IncomingValue {
         /// The value.
@@ -891,6 +931,7 @@ class PhiInst : public Inst {
     using Iterator = utils::VectorIterator<IncomingValue>;
     using ConstIterator = utils::VectorConstIterator<IncomingValue>;
 
+private:
     /// The incoming values.
     std::vector<IncomingValue> incoming{};
 
@@ -954,6 +995,17 @@ public:
         RemoveUse(it->value, this);
         RemoveUse(it->block, this);
         incoming.erase(it);
+    }
+
+    /// Replace an incoming value for a block.
+    ///
+    /// This replaces the incoming value with another value and
+    /// does nothing if there is no entry in the PHI from that
+    /// block.
+    void replace_incoming_if_present(Block* from_block, Value* new_val) {
+        auto it = rgs::find(incoming, from_block, &IncomingValue::block);
+        if (it == incoming.end()) return;
+        UpdateOperand(it->value, new_val);
     }
 
     /// Register an incoming value from a block.
