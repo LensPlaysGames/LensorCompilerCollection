@@ -595,6 +595,10 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
         AddTemporary(std::move(arg), f->param(usz(i)));
     }
 
+    /// Clear the last function’s fixup lists.
+    temporary_fixups.clear();
+    block_fixups.clear();
+
     /// Parse blocks.
     while (Consume(Tk::Indent)) {
         auto b = ParseBlock();
