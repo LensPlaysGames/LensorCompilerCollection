@@ -280,7 +280,7 @@ if (BUILD_TESTING)
         "You've defined FCHK_GIT_TAG as a user-specified option, but you must alter the CMakeLists.txt to change this variable"
       )
     endif()
-    set(FCHK_GIT_TAG v2.1.1)
+    set(FCHK_GIT_TAG v3.0.0)
 
     ## First, check if fchk has already been downloaded.
     if (NOT EXISTS "${PROJECT_SOURCE_DIR}/fchk/CMakeLists.txt")
