@@ -559,6 +559,9 @@ public:
         return block_list.front();
     }
 
+    /// Whether this module exports this function.
+    bool exported() const { return IsExportedLinkage(link); }
+
     /// Whether this function is imported from another module.
     bool imported() const { return IsImportedLinkage(link); }
 

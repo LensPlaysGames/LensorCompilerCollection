@@ -62,11 +62,9 @@ private:
 ///
 /// API:
 ///
-/// REQUIRED: void run(Inst* inst);
+/// OPTIONAL: void run_on_instruction(Inst* inst);
 ///
-///     Called for every instruction `i` for which `is<I>(i)`
-///     returns true, where `I` is any of the elements in the
-///     pack `Instructions`.
+///     Called for every instruction.
 ///
 /// OPTIONAL: void atfork(Block* fork);
 ///
@@ -74,21 +72,29 @@ private:
 ///     in the control flow graph. The `fork` block is the block
 ///     that contains the conditional branch.
 ///
-/// OPTIONAL: void done();
+/// OPTIONAL: void run_on_function(Function*);
 ///
 ///     Called when we’re done iterating over the control flow graph.
 ///
-/// OPTIONAL: void enter(Block* block);
+/// OPTIONAL: void enter_block(Block* block);
 ///
 ///     Called whenever we enter a new block.
 ///
-/// OPTIONAL: void leave(Block* block);
+/// OPTIONAL: void leave_block(Block* block);
 ///
 ///     Called whenever we leave a block.
 ///
-struct InstructionRewritePass : OptimisationPass {
-    using IsInstRewritePass = std::true_type;
-};
+struct InstructionRewritePass : OptimisationPass {};
+
+/// Optimisation pass that runs on an entire module.
+///
+/// API:
+///
+/// REQUIRED: void run();
+///
+///     Called once for the entire module.
+///
+struct ModuleRewritePass : OptimisationPass {};
 
 /// Pass that performs constant folding and propagation. Passes that
 /// operate on individual instructions and don’t really fit in anywhere
@@ -170,7 +176,7 @@ private:
     }
 
 public:
-    void run(Inst* i) {
+    void run_on_instruction(Inst* i) {
         switch (i->kind()) {
             default: return;
             case Value::Kind::Alloca: {
@@ -353,8 +359,8 @@ public:
                 DivImpl<UDivInst, ShrInst, [](auto l, auto r) { return l.udiv(r); }>(i);
                 break;
 
-            case Value::Kind::Eq: CmpImpl<&aint::operator== >(i); break;
-            case Value::Kind::Ne: CmpImpl<&aint::operator!= >(i); break;
+            case Value::Kind::Eq: CmpImpl < &aint::operator==>(i); break;
+            case Value::Kind::Ne: CmpImpl < &aint::operator!=>(i); break;
             case Value::Kind::SLt: CmpImpl<&aint::slt>(i); break;
             case Value::Kind::ULt: CmpImpl<&aint::ult>(i); break;
             case Value::Kind::SGt: CmpImpl<&aint::sgt>(i); break;
@@ -560,7 +566,7 @@ private:
     }
 
 public:
-    void run(Inst* i) {
+    void run_on_instruction(Inst* i) {
         auto a = cast<AllocaInst>(i);
         if (a) TrySplitAlloca(a);
     }
@@ -582,13 +588,13 @@ struct StoreFowardingPass : InstructionRewritePass {
     /// This pass can’t handle forwarding stores across branches; the
     /// jump threading code will usually end up combining blocks anyway
     /// if possible, and more complex cases are handled by mem2reg.
-    void enter(Block*) { vars.clear(); }
+    void enter_block(Block*) { vars.clear(); }
 
-    void done() {
+    void run_on_function(Function*) {
         for (auto& var : vars) EraseLastStoreIfUnused(var);
     }
 
-    void run(Inst* i) {
+    void run_on_instruction(Inst* i) {
         /// Record a new variable.
         if (auto a = cast<AllocaInst>(i)) {
             vars.emplace_back(a);
@@ -690,17 +696,18 @@ private:
 struct SSAConstructionPass : InstructionRewritePass {
     std::vector<AllocaInst*> allocas{};
 
-    void run(Inst* i) {
+    void run_on_instruction(Inst* i) {
         auto a = cast<AllocaInst>(i);
         if (a) allocas.push_back(a);
     }
 
-    void done(Function* f) {
+    void run_on_function(Function* f) {
         DomTree dom_tree{f};
 
         /// Determine what allocas we can convert.
         auto optimisable = utils::to_vec(allocas | vws::filter(Optimisable));
         if (optimisable.empty()) return;
+        SetChanged();
 
         /// Definitions of a variable.
         std::unordered_map<AllocaInst*, std::vector<Inst*>> defs{optimisable.size()};
@@ -740,8 +747,6 @@ struct SSAConstructionPass : InstructionRewritePass {
 
         /// Insert PHIs for each alloca.
         for (auto [i, a] : vws::enumerate(optimisable)) {
-            SetChanged();
-
             /// Collect definitions.
             auto def_blocks =
                 a->users()                                              //
@@ -811,7 +816,7 @@ private:
 
 /// CFG simplification pass.
 struct CFGSimplPass : InstructionRewritePass {
-    void done(Function* f) {
+    void run_on_function(Function* f) {
         /// We start at 1 because the entry block is always reachable.
         for (usz i = 1; i < f->blocks().size(); /** No increment! **/) {
             auto b = f->blocks()[i];
@@ -847,6 +852,7 @@ struct CFGSimplPass : InstructionRewritePass {
             /// Avoid incrementing since we may just have
             /// removed this block, and incrementing would
             /// cause use to skip the next one.
+            SetChanged();
             continue;
 
         next_block:
@@ -855,9 +861,9 @@ struct CFGSimplPass : InstructionRewritePass {
     }
 };
 
-/// Eliminated instructions whose results are unused if they have no side-effects.
+/// Eliminate instructions whose results are unused if they have no side-effects.
 struct DCEPass : InstructionRewritePass {
-    void run(Inst* i) {
+    void run_on_instruction(Inst* i) {
         if (not i->users().empty()) return;
         switch (i->kind()) {
             default: return;
@@ -895,14 +901,32 @@ struct DCEPass : InstructionRewritePass {
             case Value::Kind::UGt:
             case Value::Kind::UGe:
                 i->erase();
+                SetChanged();
                 return;
+        }
+    }
+};
+
+struct GlobalDCEPass : ModuleRewritePass {
+    void run() {
+        for (usz i = 0; i < mod->code().size(); /** No increment! **/) {
+            auto f = mod->code()[i];
+
+            /// Do not delete exported functions or used functions.
+            if (f->exported() or not f->users().empty()) {
+                i++;
+                continue;
+            }
+
+            /// Yeet.
+            mod->code().erase(mod->code().begin() + isz(i));
         }
     }
 };
 
 /// Debugging pass to print the dominator tree of a function.
 struct PrintDOMTreePass : InstructionRewritePass {
-    void done(Function* f) {
+    void run_on_function(Function* f) {
         fmt::print("{}", DomTree{f, false}.debug());
     }
 };
@@ -921,7 +945,8 @@ struct Optimiser {
             StoreFowardingPass,
             CFGSimplPass,
             SSAConstructionPass,
-            DCEPass
+            DCEPass,
+            GlobalDCEPass
         >();
     } // clang-format on
 
@@ -933,6 +958,7 @@ struct Optimiser {
             else if (s == "sfwd") RunPass<StoreFowardingPass>();
             else if (s == "icmb") RunPass<InstCombinePass>();
             else if (s == "dce") RunPass<DCEPass>();
+            else if (s == "gdce") RunPass<GlobalDCEPass>();
             else if (s == "ssa") RunPass<SSAConstructionPass>();
             else if (s == "cfgs") RunPass<CFGSimplPass>();
             else if (s == "print-dom") RunPass<PrintDOMTreePass>();
@@ -950,16 +976,27 @@ private:
 
     template <typename Pass>
     bool RunPass() {
+        if constexpr (std::derived_from<Pass, InstructionRewritePass>) {
+            return RunPassOnInstructions<Pass>();
+        } else if constexpr (std::derived_from<Pass, ModuleRewritePass>) {
+            return RunPassOnModule<Pass>();
+        } else {
+            static_assert(always_false<Pass>, "Pass must be an InstructionRewritePass or ModuleRewritePass");
+        }
+    };
+
+    template <typename Pass>
+    bool RunPassOnInstructions() {
         bool changed = false;
         for (auto f : mod->code()) {
             Pass p{{mod}};
 
             /// Use indices here to avoid iterator invalidation.
             for (usz bi = 0; bi < f->blocks().size(); bi++) {
-                /// Call enter() callback if there is one.
-                if constexpr (requires { p.enter(f->blocks()[bi]); }) p.enter(f->blocks()[bi]);
+                /// Call enter callback if there is one.
+                if constexpr (requires { &Pass::enter_block; }) p.enter_block(f->blocks()[bi]);
 
-                if constexpr (requires { p.run(std::declval<Inst*>()); }) {
+                if constexpr (requires { &Pass::run_on_instruction; }) {
                     for (usz ii = 0; ii < f->blocks()[bi]->instructions().size(); ii++) {
                         auto Done = [&] {
                             return bi >= f->blocks().size() or
@@ -975,16 +1012,16 @@ private:
                         Inst* inst;
                         do {
                             inst = f->blocks()[bi]->instructions()[ii];
-                            p.run(inst);
+                            p.run_on_instruction(inst);
                         } while (not Done() and inst != f->blocks()[bi]->instructions()[ii]);
                     }
                 }
 
                 /// Call leave() callback if there is one.
-                if constexpr (requires { p.leave(f->blocks()[bi]); }) p.leave(f->blocks()[bi]);
+                if constexpr (requires { &Pass::leave_block; }) p.leave_block(f->blocks()[bi]);
 
                 /// Call atfork() callback if there is one and we’re at a fork.
-                if constexpr (requires { p.atfork(f->blocks()[bi]); }) {
+                if constexpr (requires { &Pass::atfork; }) {
                     auto b = f->blocks()[bi];
                     if (b->terminator() and is<CondBranchInst>(b->terminator()))
                         p.atfork(b);
@@ -992,11 +1029,18 @@ private:
             }
 
             /// Call done() callback if there is one.
-            if constexpr (requires { p.done(f); }) p.done(f);
+            if constexpr (requires { &Pass::run_on_function; }) p.run_on_function(f);
             changed = p.changed() or changed;
         }
         return changed;
-    };
+    }
+
+    template <typename Pass>
+    bool RunPassOnModule() {
+        Pass p{{mod}};
+        p.run();
+        return p.changed();
+    }
 };
 
 } // namespace
