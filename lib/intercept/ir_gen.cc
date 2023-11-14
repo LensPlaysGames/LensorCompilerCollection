@@ -392,6 +392,12 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             lcc::Type* t_to = Convert(ctx, cast->type());
             lcc::Type* t_from = generated_ir[cast->operand()]->type();
 
+            /// No-op.
+            if (cast->is_ref_to_lvalue() or cast->is_lvalue_to_ref()) {
+                generated_ir[expr] = generated_ir[cast->operand()];
+                return;
+            }
+
             if (cast->is_lvalue_to_rvalue()) {
                 auto load = new (*module) LoadInst(t_to, generated_ir[cast->operand()], expr->location());
                 generated_ir[expr] = load;

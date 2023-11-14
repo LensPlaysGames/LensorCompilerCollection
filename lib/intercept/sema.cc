@@ -1,5 +1,4 @@
 #include <intercept/sema.hh>
-
 #include <lcc/context.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
@@ -35,10 +34,10 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
 
     /// This is so we don’t forget that we’ve applied lvalue-to-rvalue
     /// conversion and raised the score by one.
-    bool requires_lvalue_to_rvalue_conversion = false;
+    int score = 0;
     auto Score = [&](int i) {
         LCC_ASSERT(i, "Score must be 1 or greater. Use the enum constants above for values <= 0");
-        return i + int(requires_lvalue_to_rvalue_conversion);
+        return i + int(score);
     };
 
     /// Any type can be converted to void.
@@ -47,14 +46,19 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
     /// Any type can be converted to itself.
     if (Type::Equal(from, to)) return NoOp;
 
-    /// Function types can be converted to their corresponding function types.
-    if (from->is_function() and to->is_pointer() and Type::Equal(to->elem(), from)) {
-        if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
-        return NoOp;
+    /// All conversions beside reference binding require lvalue-to-rvalue conversion.
+    if (to->is_reference() and Type::Equal(from, to->elem())) {
+        if ((*expr_ptr)->is_lvalue()) {
+            if constexpr (PerformConversion) WrapWithCast(expr_ptr, to, CastKind::LValueToReference);
+            return NoOp;
+        }
+
+        return ConversionImpossible;
     }
 
-    /// Try deproceduring.
-    if (Deproceduring(expr_ptr)) return Score(1);
+    /// Lvalue to rvalue conversion is required.
+    score += (*expr_ptr)->is_lvalue();
+    if constexpr (PerformConversion) LValueToRValue(expr_ptr, false);
 
     /// Get reference-to-reference conversions out of the way early.
     if (from->is_reference() and to->is_reference()) {
@@ -72,14 +76,21 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
         return ConversionImpossible;
     }
 
-    /// Lvalues and are convertible to references.
-    if (to->is_reference()) { return (*expr_ptr)->is_lvalue() ? NoOp : ConversionImpossible; }
+    /// Strip reference from `from` if need be.
+    if (auto ref = cast<ReferenceType>(from)) {
+        from = ref->element_type();
+        score += 1;
+        if constexpr (PerformConversion) LValueToRValue(expr_ptr);
+    }
 
-    /// Any conversions after this require lvalue-to-rvalue conversion
-    /// first if the expression is an lvalue.
-    requires_lvalue_to_rvalue_conversion = (*expr_ptr)->is_lvalue();
-    if constexpr (PerformConversion) from = LValueToRValue(expr_ptr);
-    else from = from->strip_references();
+    /// Function types can be converted to their corresponding function types.
+    if (from->is_function() and to->is_pointer() and Type::Equal(to->elem(), from)) {
+        if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
+        return NoOp;
+    }
+
+    /// Try deproceduring.
+    if (Deproceduring(expr_ptr)) return Score(1);
 
     /// Now check if the types are equal. In many cases, lvalue-to-rvalue
     /// conversion is all we need.
@@ -109,8 +120,7 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
 
     /// Integer to boolean and vis versa implicit conversions.
     // FIXME: May want to not do this implicitly, but for now we're going for it.
-    if ((from->is_integer() and to->is_bool())
-        or (from->is_bool() and to->is_integer())) {
+    if ((from->is_integer() and to->is_bool()) or (from->is_bool() and to->is_integer())) {
         if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
         return Score(1);
     }
@@ -138,12 +148,16 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
             /// will always fit.
             auto val = res.as_i64();
 
-            // Signed to Unsigned Conversion
+            /// Signed to Unsigned Conversion
             if (val < 0 and to->is_unsigned_int(context)) return ConversionImpossible;
 
-            // Unsigned to Unsigned Conversion
+            /// Unsigned to Unsigned Conversion
             auto bits = to->size(context);
-            if (from->is_unsigned_int(context) && bits < 64 and u64(val) > u64(utils::MaxBitValue(bits))) return ConversionImpossible;
+            if (
+                from->is_unsigned_int(context) and
+                bits < 64 and
+                u64(val) > u64(utils::MaxBitValue(bits))
+            ) return ConversionImpossible;
 
             if constexpr (PerformConversion) {
                 InsertImplicitCast(expr_ptr, to);
@@ -324,6 +338,31 @@ bool intc::Sema::HasSideEffects(Expr* expr) {
     LCC_UNREACHABLE();
 }
 
+bool intc::Sema::ImplicitDereference(Expr** expr) {
+    if (is<ReferenceType>((*expr)->type())) {
+        /// Don’t strip reference here since we want an lvalue.
+        LValueToRValue(expr, false);
+        WrapWithCast(
+            expr,
+            as<TypeWithOneElement>((*expr)->type())->element_type(),
+            CastKind::ReferenceToLValue
+        );
+    }
+
+    while (is<PointerType>((*expr)->type())) {
+        *expr = new (mod) UnaryExpr(
+            TokenKind::At,
+            *expr,
+            false,
+            (*expr)->location()
+        );
+
+        LCC_ASSERT(Analyse(expr));
+    }
+
+    return (*expr)->is_lvalue();
+}
+
 void intc::Sema::InsertImplicitCast(Expr** expr_ptr, Type* ty) {
     WrapWithCast(expr_ptr, ty, CastKind::ImplicitCast);
 }
@@ -333,19 +372,18 @@ void intc::Sema::InsertPointerToIntegerCast(Expr** operand) {
         InsertImplicitCast(operand, Type::Int);
 }
 
-auto intc::Sema::LValueToRValue(Expr** expr) -> Type* {
-    /// Functions are cast to function pointers.
-    if ((*expr)->type()->is_function()) {
-        auto ty = Ptr((*expr)->type());
-        WrapWithCast(expr, ty, CastKind::LValueToRValueConv);
-        return ty;
-    }
+void intc::Sema::LValueToRValue(Expr** expr, bool strip_ref) {
+    if ((*expr)->sema_errored()) return;
+    if ((*expr)->is_lvalue()) WrapWithCast(expr, (*expr)->type(), CastKind::LValueToRValueConv);
+    if (strip_ref and is<ReferenceType>((*expr)->type())) {
+        WrapWithCast(
+            expr,
+            as<TypeWithOneElement>((*expr)->type())->element_type(),
+            CastKind::ReferenceToLValue
+        );
 
-    /// Otherwise, remove references and cast to that.
-    auto ty = (*expr)->type()->strip_references();
-    if (not Type::Equal(ty, (*expr)->type()))
-        WrapWithCast(expr, ty, CastKind::LValueToRValueConv);
-    return ty;
+        LValueToRValue(expr);
+    }
 }
 
 auto intc::Sema::Ptr(Type* ty) -> PointerType* {
@@ -473,10 +511,14 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
             ty->return_type()
         );
 
+        LValueToRValue(last);
+
         // Insert a `ReturnExpr` which returns `last`.
-        if (auto block = cast<BlockExpr>(decl->body()))
-            block->add(new (mod) ReturnExpr(*last, {}));
-        else decl->body() = new (mod) ReturnExpr(*last, {});
+        if (auto block = cast<BlockExpr>(decl->body())) {
+            *last = new (mod) ReturnExpr(*last, {});
+        } else {
+            decl->body() = new (mod) ReturnExpr(*last, {});
+        }
     } else {
         if (auto block = cast<BlockExpr>(decl->body())) {
             if (not block->children().size() or not is<ReturnExpr>(*block->last_expr()))
@@ -559,6 +601,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 "Invalid type for loop condition: {}",
                 l->condition()->type()
             );
+            LValueToRValue(&l->condition());
             AnalyseAndDiscard(&l->body());
         } break;
 
@@ -585,6 +628,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                     "Type of return expression is not convertible to return type {}",
                     ret_type
                 );
+                LValueToRValue(&r->value());
             }
         } break;
 
@@ -598,6 +642,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 "Invalid type for if condition: {}",
                 i->condition()->type()
             );
+            LValueToRValue(&i->condition());
 
             /// Analyse the branches.
             Analyse(&i->then());
@@ -607,7 +652,16 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             /// is void. Otherwise, it is the common type of the two branches.
             if (i->then()->ok() and (not i->else_() or i->else_()->ok())) {
                 if (not i->else_() or not ConvertToCommonType(&i->then(), &i->else_())) i->type(Type::Void);
-                else i->type(i->then()->type());
+                else {
+                    i->type(i->then()->type());
+
+                    /// Ensure that either both branches are lvalues, or neither is.
+                    if (i->then()->is_lvalue() and i->else_()->is_lvalue()) i->set_lvalue();
+                    else {
+                        LValueToRValue(&i->then());
+                        LValueToRValue(&i->else_());
+                    }
+                }
             } else {
                 i->set_sema_errored();
             }
@@ -633,7 +687,10 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 if (not last and child->ok()) Discard(&child);
             }
 
-            if (not b->sema_errored()) b->type(b->children().back()->type());
+            if (not b->sema_errored()) {
+                b->set_lvalue(b->children().back()->is_lvalue());
+                b->type(b->children().back()->type());
+            }
         } break;
 
         /// This mainly handles explicit casts, which allow more
@@ -692,12 +749,18 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             /// that, if this fails, we do not mark this node as errored as
             /// its type is well-formed; it’s just the initialiser that has
             /// a problem.
-            if (v->init() and not Convert(&v->init(), v->type())) Error(
-                v->init()->location(),
-                "Type of initialiser, {}, is not convertible to variable type {}",
-                v->init()->type(),
-                v->type()
-            );
+            if (v->init()) {
+                if (not Convert(&v->init(), v->type())) Error(
+                    v->init()->location(),
+                    "Type of initialiser, {}, is not convertible to variable type {}",
+                    v->init()->type(),
+                    v->type()
+                );
+
+                LValueToRValue(&v->init());
+            }
+
+            v->set_lvalue();
         } break;
 
         /// Currently, each expression of a compound literal must be
@@ -772,29 +835,10 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             /// Set the struct and member index.
             m->finalise(struct_type, usz(std::distance(members.begin(), it)));
 
-            /// If the object is a pointer or reference, we need to dereference it
-            /// until only an lvalue is left.
-            auto obj = m->object();
-            for (;;) {
-                /// If the object is a reference, then its object type must be
-                /// a pointer type or the struct. If it’s the struct, we’re done.
-                if (auto ref = cast<ReferenceType>(obj->type())) {
-                    if (ref->element_type()->is_struct()) break;
-
-                    /// Otherwise, load the pointer.
-                    LValueToRValue(&obj);
-                }
-
-                /// If the object is a pointer, then we need to dereference it.
-                if (is<PointerType>(obj->type())) {
-                    obj = new (mod) UnaryExpr(TokenKind::At, obj, false, obj->location());
-                    LCC_ASSERT(Analyse(&obj));
-                }
-            }
-
-            /// A member access is an lvalue iff the object is an lvalue.
-            m->object(obj);
-            m->type(m->object()->is_lvalue() ? Ref(it->type) : it->type);
+            /// Dereference pointers until we have an lvalue to struct. The
+            /// member access is an lvalue, iff the struct is an lvalue.
+            m->set_lvalue(ImplicitDereference(&m->object()));
+            m->type(it->type);
         } break;
 
         /// Unary prefix and postfix expressions.
@@ -881,7 +925,8 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
 
         /// Pointer or array subscript.
         case TokenKind::LBrack: {
-            auto ty = b->lhs()->type()->strip_references();
+            ImplicitDereference(&b->lhs());
+            auto ty = b->lhs()->type();
             if (not is<PointerType, ArrayType>(ty)) {
                 Error(b->location(), "LHS of subscript must be a pointer or array, but was {}", b->lhs()->type());
                 b->set_sema_errored();
@@ -991,8 +1036,9 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
         /// Assignment.
         case TokenKind::ColonEq: {
             LValueToRValue(&b->rhs());
-            if (not b->lhs()->is_assignable_lvalue()) {
-                Error(b->location(), "LHS of assignment must be an (assignable) lvalue");
+            ImplicitDereference(&b->lhs());
+            if (not b->lhs()->is_lvalue()) {
+                Error(b->location(), "LHS of assignment must be an lvalue");
                 b->set_sema_errored();
                 return;
             }
@@ -1000,20 +1046,23 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             /// The type of the assignment is the same lvalue. Note that if
             /// the lhs is indeed an lvalue, we don’t ever mark this as errored
             /// because we know what its type is going to be, irrespective of
-            /// whether the assignment if valid or not.
-            b->type(Ref(b->lhs()->type()));
+            /// whether the assignment is valid or not.
+            b->type(b->lhs()->type());
+
+            /// Assignment yields an lvalue.
+            b->set_lvalue();
 
             /// The RHS must be assignable to the LHS.
-            auto var_type = b->lhs()->type()->strip_references();
-            if (not Convert(&b->rhs(), var_type)) {
+            if (not Convert(&b->rhs(), b->lhs()->type())) {
                 Error(
                     b->location(),
                     "Type of expression {} is not convertible to variable type {}",
                     b->rhs()->type(),
-                    var_type
+                    b->lhs()->type()
                 );
                 return;
             }
+
         } break;
     }
 }
@@ -1098,7 +1147,10 @@ void intc::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
         );
     }
 
-    /// Check that the arguments are convertible to the parameter types.
+    /// Check that the arguments are convertible to the parameter types. This
+    /// is one of the few places where we allow reference binding, so perform
+    /// lvalue-to-rvalue conversion only if the parameter type is not a reference
+    /// type. This is all handled transparently by Convert().
     for (usz i = 0, end = std::min(expr->args().size(), func_type->params().size()); i < end; i++) {
         if (not Convert(expr->args().data() + i, func_type->params()[i].type)) Error(
             expr->args()[i]->location(),
@@ -1112,7 +1164,15 @@ void intc::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 void intc::Sema::AnalyseCast(CastExpr* c) {
     /// Implicit casts and lvalue-to-rvalue conversions are
     /// only ever created by sema, so we know they’re fine.
-    if (c->is_implicit_cast() or c->is_lvalue_to_rvalue()) return;
+    if (
+        c->is_implicit_cast() or
+        c->is_lvalue_to_rvalue() or
+        c->is_lvalue_to_ref() or
+        c->is_ref_to_lvalue()
+    ) {
+        c->set_lvalue(c->is_ref_to_lvalue());
+        return;
+    }
 
     /// If analysis of the operand failed, we don’t know its
     /// type and thus have no way of checking whether the cast
@@ -1228,6 +1288,9 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
             ConvertOrError(&expr->args()[0], Type::VoidPtr);
             ConvertOrError(&expr->args()[1], Type::VoidPtr);
             ConvertOrError(&expr->args()[2], Type::Int);
+            LValueToRValue(&expr->args()[0]);
+            LValueToRValue(&expr->args()[1]);
+            LValueToRValue(&expr->args()[2]);
 
             /// Unlike C’s memcpy()/memmove(), this returns nothing.
             expr->type(Type::Void);
@@ -1243,6 +1306,9 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
             ConvertOrError(&expr->args()[0], Type::VoidPtr);
             ConvertOrError(&expr->args()[1], Type::Byte);
             ConvertOrError(&expr->args()[2], Type::Int);
+            LValueToRValue(&expr->args()[0]);
+            LValueToRValue(&expr->args()[1]);
+            LValueToRValue(&expr->args()[2]);
 
             /// Unlike C’s memset(), this returns nothing.
             expr->type(Type::Void);
@@ -1258,6 +1324,7 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
                 Analyse(&arg);
                 InsertPointerToIntegerCast(&arg);
                 ConvertOrError(&arg, Type::Int);
+                LValueToRValue(&arg);
             }
 
             /// Syscalls all return integer.
@@ -1321,7 +1388,8 @@ void intc::Sema::AnalyseNameRef(NameRefExpr* expr) {
         }
 
         expr->target(syms.first->second);
-        expr->type(Ref(syms.first->second->type()));
+        expr->type(syms.first->second->type());
+        expr->set_lvalue();
         return;
     }
 
@@ -1383,25 +1451,28 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
                 break;
             }
 
-            u->type(Ptr(as<ReferenceType>(u->operand()->type())->element_type()));
+            u->type(Ptr(u->operand()->type()));
         } break;
 
         /// Convert a pointer to an lvalue.
         case TokenKind::At: {
             /// The pointer itself must be an rvalue.
-            auto ty = LValueToRValue(&u->operand());
+            LValueToRValue(&u->operand());
+            auto ty = u->operand()->type();
             if (not is<PointerType>(ty)) {
                 Error(u->location(), "Cannot dereference non-pointer type {}", ty);
                 u->set_sema_errored();
                 break;
             }
 
-            u->type(Ref(as<PointerType>(ty)->element_type()));
+            u->type(as<PointerType>(ty)->element_type());
+            u->set_lvalue();
         } break;
 
         /// Negate an integer.
         case TokenKind::Minus: {
-            auto ty = LValueToRValue(&u->operand());
+            LValueToRValue(&u->operand());
+            auto ty = u->operand()->type();
             if (not ty->is_integer()) {
                 Error(
                     u->location(),
@@ -1417,7 +1488,8 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
 
         /// Bitwise-not an integer.
         case TokenKind::Tilde: {
-            auto ty = LValueToRValue(&u->operand());
+            LValueToRValue(&u->operand());
+            auto ty = u->operand()->type();
             if (not ty->is_integer()) {
                 Error(
                     u->location(),
@@ -1433,7 +1505,8 @@ void intc::Sema::AnalyseUnary(UnaryExpr* u) {
 
         /// Negate a bool, integer, or pointer.
         case TokenKind::Exclam: {
-            auto ty = LValueToRValue(&u->operand());
+            LValueToRValue(&u->operand());
+            auto ty = u->operand()->type();
             if (not is<PointerType>(ty) and not ty->is_integer(true)) {
                 Error(
                     u->location(),

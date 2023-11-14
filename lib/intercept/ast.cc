@@ -117,21 +117,6 @@ auto intc::Scope::declare(
     return decl;
 }
 
-bool intc::Expr::is_lvalue() const {
-    return is<ReferenceType>(type()) or is<VarDecl, FuncDecl>(this);
-}
-
-bool intc::Expr::is_assignable_lvalue() const {
-    /// References to anything other than functions are
-    /// assignable lvalues.
-    if (auto ref = cast<ReferenceType>(type()))
-        return not is<FuncType>(ref->element_type());
-
-    /// Variable declarations are assignable lvalues.
-    /// Member accesses are assignable lvalues.
-    return is<VarDecl>(this) || is<MemberAccessExpr>(this);
-}
-
 auto intc::Expr::type() const -> Type* {
     if (auto e = cast<TypedExpr>(this)) return e->type();
     return Type::Void;
@@ -352,21 +337,22 @@ auto intc::Type::size(const lcc::Context* ctx) const -> usz {
 }
 
 auto intc::Type::strip_pointers_and_references() -> Type* {
-    auto ty = this;
-    while (is<PointerType, ReferenceType>(ty)) ty = ty->elem();
+    auto ty = strip_references();
+    while (is<PointerType>(ty)) ty = ty->elem();
     return ty;
 }
 
 auto intc::Type::strip_references() -> Type* {
     auto ty = this;
-    while (is<ReferenceType>(ty)) ty = ty->elem();
+    if (is<ReferenceType>(ty)) ty = ty->elem();
+    LCC_ASSERT(not is<ReferenceType>(ty), "Double references are not permitted");
     return ty;
 }
 
 bool intc::Type::Equal(const Type* a, const Type* b) {
     if (a == b) return true;
     if (a->kind() != b->kind()) return false;
-    
+
     switch (a->kind()) {
         case Kind::Builtin: {
             auto ba = as<BuiltinType>(a);
@@ -461,6 +447,16 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
     std::unordered_set<const intc::FuncDecl*> printed_functions{};
     bool print_children_of_children = true;
 
+    void PrintLValue(const intc::Expr* e) {
+        if (e->is_lvalue()) out += fmt::format(" {}lvalue", C(Blue));
+        out += '\n';
+    };
+
+    void PrintBasicInterceptNode(std::string_view name, const intc::Expr* node, intc::Type* t) {
+        PrintBasicNode(name, node, t, false);
+        PrintLValue(node);
+    };
+
     /// Print the header (name + location + type) of a node.
     void PrintHeader(const intc::Expr* e) {
         using K = intc::Expr::Kind;
@@ -483,10 +479,11 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                 PrintLinkage(v->linkage());
                 PrintBasicHeader("VarDecl", e);
                 out += fmt::format(
-                    " {}{} {}\n",
+                    " {}{} {} {}lvalue\n",
                     C(White),
                     v->name(),
-                    v->type()->string(use_colour)
+                    v->type()->string(use_colour),
+                    C(Blue)
                 );
                 return;
             }
@@ -495,11 +492,12 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                 auto b = as<intc::BinaryExpr>(e);
                 PrintBasicHeader("BinaryExpr", e);
                 out += fmt::format(
-                    " {}{} {}\n",
+                    " {}{} {}",
                     C(Red),
                     intc::ToString(b->op()),
                     b->type()->string(use_colour)
                 );
+                PrintLValue(e);
                 return;
             }
 
@@ -507,11 +505,12 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                 auto u = as<intc::UnaryExpr>(e);
                 PrintBasicHeader("UnaryExpr", e);
                 out += fmt::format(
-                    " {}{} {}\n",
+                    " {}{} {}",
                     C(Red),
                     intc::ToString(u->op()),
                     u->type()->string(use_colour)
                 );
+                PrintLValue(e);
                 return;
             }
 
@@ -531,11 +530,12 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                 auto n = as<intc::NameRefExpr>(e);
                 PrintBasicHeader("NameRefExpr", e);
                 out += fmt::format(
-                    " {}{} {}\n",
+                    " {}{} {}",
                     C(White),
                     n->name(),
                     n->type()->string(use_colour)
                 );
+                PrintLValue(e);
                 return;
             }
 
@@ -547,34 +547,37 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                     case intc::CastKind::HardCast: out += fmt::format(" {}as! ", C(Red)); break;
                     case intc::CastKind::ImplicitCast: out += fmt::format(" {}Implicit ", C(Red)); break;
                     case intc::CastKind::LValueToRValueConv: out += fmt::format(" {}LValueToRValue ", C(Red)); break;
+                    case intc::CastKind::LValueToReference: out += fmt::format(" {}LValueToReference ", C(Red)); break;
+                    case intc::CastKind::ReferenceToLValue: out += fmt::format(" {}ReferenceToLValue ", C(Red)); break;
                 }
                 out += e->type()->string(use_colour);
-                out += '\n';
+                PrintLValue(e);
                 return;
             }
 
             case K::If: {
                 PrintBasicHeader("IfExpr", e);
-                if (not e->type()->is_void()) out += fmt::format(" {}\n", e->type()->string(use_colour));
+                if (not e->type()->is_void()) out += fmt::format(" {}", e->type()->string(use_colour));
+                PrintLValue(e);
                 return;
             }
 
-            case K::OverloadSet: PrintBasicNode("OverloadSet", e, e->type()); return;
-            case K::EvaluatedConstant: PrintBasicNode("ConstantExpr", e, e->type()); return;
-            case K::StructDecl: PrintBasicNode("StructDecl", e, e->type()); return;
-            case K::TypeAliasDecl: PrintBasicNode("TypeAliasDecl", e, e->type()); return;
-            case K::StringLiteral: PrintBasicNode("StringLiteral", e, e->type()); return;
-            case K::CompoundLiteral: PrintBasicNode("CompoundLiteral", e, e->type()); return;
-            case K::While: PrintBasicNode("WhileExpr", e, nullptr); return;
-            case K::For: PrintBasicNode("ForExpr", e, nullptr); return;
-            case K::Block: PrintBasicNode("BlockExpr", e, e->type()); return;
-            case K::Return: PrintBasicNode("ReturnExpr", e, nullptr); return;
-            case K::Call: PrintBasicNode("CallExpr", e, e->type()); return;
-            case K::IntrinsicCall: PrintBasicNode("IntrinsicCallExpr", e, e->type()); return;
-            case K::MemberAccess: PrintBasicNode("MemberAccessExpr", e, e->type()); return;
+            case K::OverloadSet: PrintBasicInterceptNode("OverloadSet", e, e->type()); return;
+            case K::EvaluatedConstant: PrintBasicInterceptNode("ConstantExpr", e, e->type()); return;
+            case K::StructDecl: PrintBasicInterceptNode("StructDecl", e, e->type()); return;
+            case K::TypeAliasDecl: PrintBasicInterceptNode("TypeAliasDecl", e, e->type()); return;
+            case K::StringLiteral: PrintBasicInterceptNode("StringLiteral", e, e->type()); return;
+            case K::CompoundLiteral: PrintBasicInterceptNode("CompoundLiteral", e, e->type()); return;
+            case K::While: PrintBasicInterceptNode("WhileExpr", e, nullptr); return;
+            case K::For: PrintBasicInterceptNode("ForExpr", e, nullptr); return;
+            case K::Block: PrintBasicInterceptNode("BlockExpr", e, e->type()); return;
+            case K::Return: PrintBasicInterceptNode("ReturnExpr", e, nullptr); return;
+            case K::Call: PrintBasicInterceptNode("CallExpr", e, e->type()); return;
+            case K::IntrinsicCall: PrintBasicInterceptNode("IntrinsicCallExpr", e, e->type()); return;
+            case K::MemberAccess: PrintBasicInterceptNode("MemberAccessExpr", e, e->type()); return;
         }
 
-        PrintBasicNode(R"(<???>)", e, e->type());
+        PrintBasicInterceptNode(R"(<???>)", e, e->type());
     }
 
     void PrintNodeChildren(const intc::Expr* e, std::string leading_text = "") {

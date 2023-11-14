@@ -112,6 +112,8 @@ enum class CastKind {
     HardCast,           ///< Explicit cast using \c as!.
     ImplicitCast,       ///< Implicit conversion.
     LValueToRValueConv, ///< Lvalue-to-rvalue conversion.
+    LValueToReference,  ///< Lvalue-to-reference conversion.
+    ReferenceToLValue,  ///< Reference-to-lvalue conversion.
 };
 
 /// Convert a token kind to a string representation.
@@ -784,6 +786,7 @@ public:
 
 private:
     const Kind _kind;
+    bool _lvalue = false;
 
 protected:
     Expr(Kind kind, Location location)
@@ -809,12 +812,12 @@ public:
 
     Kind kind() const { return _kind; }
 
-    /// Check if this is an lvalue that can be assigned to.
-    bool is_assignable_lvalue() const;
-
     /// Check if this is an lvalue. Only lvalues can have their
     /// address taken or be converted to references.
-    bool is_lvalue() const;
+    bool is_lvalue() const { return _lvalue; }
+
+    /// Mark this as an lvalue.
+    void set_lvalue(bool lvalue = true) { _lvalue = lvalue; }
 
     auto type() const -> Type*;
 
@@ -1247,6 +1250,8 @@ public:
     bool is_hard_cast() const { return _cast_kind == CastKind::HardCast; }
     bool is_implicit_cast() const { return _cast_kind == CastKind::ImplicitCast; }
     bool is_lvalue_to_rvalue() const { return _cast_kind == CastKind::LValueToRValueConv; }
+    bool is_lvalue_to_ref() const { return _cast_kind == CastKind::LValueToReference; }
+    bool is_ref_to_lvalue() const { return _cast_kind == CastKind::ReferenceToLValue; }
     bool is_soft_cast() const { return _cast_kind == CastKind::SoftCast; }
 
     /// Get the operand of this expression.

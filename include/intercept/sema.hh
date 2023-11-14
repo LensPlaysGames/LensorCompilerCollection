@@ -132,6 +132,16 @@ private:
     /// Check if an expression has side effects.
     static bool HasSideEffects(Expr* expr);
 
+    /// Dereference an expression, potentially yielding an lvalue.
+    ///
+    /// This differs from LValueToRValue conversion in that it
+    ///
+    ///     1. strips pointers too, and
+    ///     2. produces an lvalue if possible.
+    ///
+    /// \return Whether the result is an lvalue.
+    bool ImplicitDereference(Expr** expr);
+
     /// Insert an implicit cast of an expression to a type.
     ///
     /// This creates a new cast expression and replaces the expression
@@ -146,11 +156,16 @@ private:
     /// Otherwise, this is a no-op.
     void InsertPointerToIntegerCast(Expr** operand);
 
-    /// Convert lvalues to rvalues and leave rvalues unchanged.
+    /// Convert lvalues to rvalues and leave rvalues unchanged. Also
+    /// convert references to rvalues of their referenced type.
     ///
     /// This may insert a cast expression.
+    ///
+    /// \param expr A pointer to the expression to convert.
+    /// \param strip_ref Whether to also convert a reference to
+    ///     the referenced type, if present.
     /// \return The type of the rvalue.
-    auto LValueToRValue(Expr** expr) -> Type*;
+    void LValueToRValue(Expr** expr, bool strip_ref = true);
 
     /// Create a (type-checked) pointer to a type.
     auto Ptr(Type* type) -> PointerType*;
