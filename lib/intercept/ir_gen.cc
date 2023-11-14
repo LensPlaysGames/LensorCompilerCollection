@@ -180,7 +180,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                 generate_expression(rhs_expr);
                 auto* rhs = generated_ir[rhs_expr];
 
-                if (lhs_expr->type()->is_reference()) {
+                if (lhs_expr->kind() != Expr::Kind::MemberAccess and lhs_expr->type()->is_reference()) {
                     auto* load = new (*module) LoadInst(lcc::Type::PtrTy, lhs, expr->location());
                     insert(load);
                     lhs = load;
