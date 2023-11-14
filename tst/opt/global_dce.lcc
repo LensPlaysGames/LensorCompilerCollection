@@ -16,7 +16,6 @@ used : void():
   bb0:
     return
 
-
 ; !* bar
 bar : internal void():
   bb0:

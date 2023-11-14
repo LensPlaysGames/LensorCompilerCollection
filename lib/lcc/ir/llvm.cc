@@ -3,17 +3,16 @@
 
 namespace lcc {
 namespace {
-static const std::string LLVMMemCpyIntrinsic = "llvm.memcpy.p0.p0.i64";
+constexpr std::string_view LLVMMemCpyIntrinsic = "llvm.memcpy.p0.p0.i64";
 
 struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
     void PrintHeader(Module* mod) {
-        Print("; Function Attrs: nocallback nofree nounwind willreturn memory(argmem: readwrite)\n");
-        Print("declare void @{}(ptr noalias nocapture writeonly, ptr noalias nocapture readonly, i64, i1 immarg)\n", LLVMMemCpyIntrinsic);
+        Print("; Function Attrs: \n");
+        Print("declare void @{}(ptr, ptr, i64, i1)\n", LLVMMemCpyIntrinsic);
     }
 
     std::string GetStructName(StructType* struct_type) {
-        if (struct_type->named())
-            return fmt::format("struct.{}", struct_type->name());
+        if (struct_type->named()) return fmt::format("struct.{}", struct_type->name());
         else return fmt::format("struct.{}", struct_type->index());
     }
 
@@ -106,6 +105,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
             case Value::Kind::Parameter:
+            case Value::Kind::Copy:
                 LCC_UNREACHABLE();
 
             case Value::Kind::Alloca:
@@ -115,11 +115,6 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                     Ty(as<AllocaInst>(i)->allocated_type())
                 );
                 return;
-
-            case Value::Kind::Copy: {
-                LCC_ASSERT(false, "LLVM is not my problem");
-                return;
-            } break;
 
             case Value::Kind::Store: {
                 auto store = as<StoreInst>(i);
@@ -206,9 +201,9 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 /// Scuffed bitcast.
                 else {
                     auto idx = Index(i);
-                    Print("    %.{}.alloca = alloca {}, i64 1\n", idx, Ty(from));
-                    Print("    store {}, ptr %.{}.alloca\n", Val(c->operand()), idx);
-                    Print("    %{} = load {}, ptr %.{}.alloca", idx, Ty(to), idx);
+                    Print("    %.{}.alloca = alloca {}, i64 1, align 1\n", idx, Ty(from));
+                    Print("    store {}, ptr %.{}.alloca, align 1\n", Val(c->operand()), idx);
+                    Print("    %{} = load {}, ptr %.{}.alloca, align 1", idx, Ty(to), idx);
                 }
 
                 return;
@@ -388,11 +383,11 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
             case Value::Kind::Parameter:
+            case Value::Kind::Copy:
                 LCC_UNREACHABLE();
 
             /// Instructions that always yield a value.
             case Value::Kind::Alloca:
-            case Value::Kind::Copy:
             case Value::Kind::GetElementPtr:
             case Value::Kind::GetMemberPtr:
             case Value::Kind::Load:
@@ -434,12 +429,12 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 auto intrinsic = as<IntrinsicInst>(i);
                 switch (intrinsic->intrinsic_kind()) {
                     default: LCC_UNREACHABLE();
-                    
+
                     case IntrinsicKind::MemCopy:
                     case IntrinsicKind::MemSet: return false;
 
                     case IntrinsicKind::DebugTrap: return false;
-                    case IntrinsicKind::SystemCall: return true; // ??
+                    case IntrinsicKind::SystemCall: return true;
                 }
             }
 
@@ -455,9 +450,8 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
         LCC_UNREACHABLE();
     }
 
-
     /// Format a name for use in LLVM IR.
-    auto FormatName (std::string_view name) -> std::string {
+    auto FormatName(std::string_view name) -> std::string {
         auto printable = rgs::none_of(name, [](auto c) { return std::isspace(c); });
         if (printable) return fmt::format("@{}", name);
         else return fmt::format("@\"{}\"", name);
@@ -548,8 +542,8 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 if (a->is_string_literal()) {
                     static const auto FormatChar = [](u8 c) {
                         return std::isprint(c) and c != '\"'
-                            ? std::string{char(c)}
-                            : fmt::format("\\{:02X}", u8(c));
+                                 ? std::string{char(c)}
+                                 : fmt::format("\\{:02X}", u8(c));
                     };
 
                     return Format(
