@@ -432,7 +432,10 @@ auto Module::mir() -> std::vector<MFunction> {
                         auto parameter = as<Parameter>(v);
                         // TODO: Actual SysV classification
                         if (parameter->type()->bytes() <= 8 && f.sysv_integer_parameters_seen < 6) {
-                            return MOperandRegister(+reg_by_integer_param_index[f.sysv_integer_parameters_seen++], uint(parameter->type()->bits()));
+                            return MOperandRegister(
+                                +reg_by_integer_param_index[f.sysv_integer_parameters_seen++],
+                                uint(parameter->type()->bits())
+                            );
                         }
                         return MOperandRegister(0, 0);
                     }
@@ -572,17 +575,24 @@ auto Module::mir() -> std::vector<MFunction> {
                                         copy.add_operand(MOperandValueReference(f, arg));
                                         bb.add_instruction(copy);
                                     } else if (arg_regs_used < arg_reg_total - 1 and arg->type()->bytes() <= 16) {
-
                                         auto copy_a = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], 64});
-                                        auto copy_b = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], 64});
+                                        auto copy_b = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], uint(arg->type()->bits() - 64)});
 
-                                        // TODO: Er, what are the operands...? We can't load the arg. We have to
-                                        // load half the arg. So, uhh... Yeah.
+                                        if (arg->kind() == Value::Kind::Load) {
+                                            LCC_ASSERT(false, "TODO: Create a temporary, store into it, and then treat argument like any other alloca.");
+                                        } else if (arg->kind() == Value::Kind::Alloca) {
+                                            copy_a.add_operand(MOperandValueReference(f, arg));
+
+                                            auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
+                                            add_b.add_operand(MOperandValueReference(f, arg));
+                                            add_b.add_operand(MOperandImmediate(64));
+
+                                            copy_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
+                                            bb.add_instruction(add_b);
+                                        } else LCC_ASSERT(false, "Handle gMIR lowering of SysV multiple register argument");
 
                                         bb.add_instruction(copy_a);
                                         bb.add_instruction(copy_b);
-
-                                        LCC_ASSERT(false, "Handle gMIR lowering of SysV multiple register argument");
                                     } else {
                                         LCC_ASSERT(false, "Handle gMIR lowering of SysV memory argument");
                                     }
