@@ -624,8 +624,16 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             auto function_type = as<FunctionType>(Convert(ctx, call->callee_type()));
 
             std::vector<Value*> args{};
-            for (const auto& arg : call->args()) {
+            for (const auto& [i, arg] : vws::enumerate(call->args())) {
                 generate_expression(arg);
+                if (not(generated_ir[arg]->type() == function_type->params().at(usz(i)))) {
+                    LCC_ASSERT(
+                        false,
+                        "Intercept IRGen: Argument type {} is not equal to expected parameter type {}",
+                        *generated_ir[arg]->type(),
+                        *function_type->params().at(usz(i))
+                    );
+                }
                 args.push_back(generated_ir[arg]);
             }
 
