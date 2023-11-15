@@ -760,10 +760,10 @@ class GEPBaseInst : public Inst {
     friend Inst;
 
 protected:
-    /// The base pointer to index from; "p" in the equation.
+    /// The base pointer to index from.
     Value* pointer{};
 
-    /// The index to offset from the base pointer; "x" in the equation.
+    /// The index to offset from the base pointer.
     Value* index{};
 
     /// The element type.
@@ -780,7 +780,6 @@ protected:
     }
 
 public:
-    /// Get the base type of the array.
     auto base_type() const -> Type* { return element_type; }
 
     /// Get the base pointer.
