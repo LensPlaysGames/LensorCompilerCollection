@@ -30,6 +30,7 @@ public:
         /// Values
         IntegerConstant,
         ArrayConstant,
+        Register,
         Poison,
 
         /// Values that track their users.
@@ -129,6 +130,7 @@ public:
             case VK::Function: return "Function";
             case VK::IntegerConstant: return "IntegerConstant";
             case VK::ArrayConstant: return "ArrayConstant";
+            case VK::Register: return "Register";
             case VK::Poison: return "Poison";
             case VK::GlobalVariable: return "GlobalVariable";
             case VK::Parameter: return "Parameter";
@@ -1803,6 +1805,26 @@ public:
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::ArrayConstant; }
+};
+
+class RegisterValue : public Value {
+    usz _value;
+    usz _size;
+
+public:
+    RegisterValue(Type* ty, usz value, usz size)
+        : Value(Kind::Register, ty),
+          _value(value),
+          _size(size) {}
+
+    /// Get the register id/value.
+    usz value() const { return _value; }
+
+    /// Get the register size in bits.
+    usz size() const { return _size; }
+
+    /// RTTI.
+    static bool classof(Value* v) { return v->kind() == Kind::Register; }
 };
 
 /// Poison value.

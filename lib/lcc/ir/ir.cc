@@ -282,6 +282,7 @@ auto Inst::Children() -> Generator<Value**> {
         case Kind::Function:
         case Kind::IntegerConstant:
         case Kind::ArrayConstant:
+        case Kind::Register:
         case Kind::Poison:
         case Kind::GlobalVariable:
         case Kind::Parameter:
@@ -680,6 +681,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Function:
             case Value::Kind::IntegerConstant:
             case Value::Kind::ArrayConstant:
+            case Value::Kind::Register:
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
             case Value::Kind::Parameter:
@@ -965,6 +967,11 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Parameter:
                 return Format("{}%{}", C(TempColour), as<Parameter>(v)->index());
 
+            case Value::Kind::Register: {
+                auto* r = as<RegisterValue>(v);
+                return Format("{}r{}.{}", C(TempColour), r->value(), r->size());
+            }
+
             case Value::Kind::Block: {
                 return fmt::format(
                     "{}{}{}%bb{}",
@@ -1080,6 +1087,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             case Value::Kind::Function:
             case Value::Kind::IntegerConstant:
             case Value::Kind::ArrayConstant:
+            case Value::Kind::Register:
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
             case Value::Kind::Parameter:

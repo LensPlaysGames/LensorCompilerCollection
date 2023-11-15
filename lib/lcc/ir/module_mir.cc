@@ -9,13 +9,14 @@
 
 namespace lcc {
 
-static MInst::Kind ir_nary_inst_kind_to_mir(Value::Kind kind) {
+static auto ir_nary_inst_kind_to_mir(Value::Kind kind) -> MInst::Kind {
     switch (kind) {
         // Not unary or binary instructions
         case Value::Kind::Function:
         case Value::Kind::Block:
         case Value::Kind::IntegerConstant:
         case Value::Kind::ArrayConstant:
+        case Value::Kind::Register:
         case Value::Kind::Poison:
         case Value::Kind::GlobalVariable:
         case Value::Kind::Parameter:
@@ -110,6 +111,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Block:
                     case Value::Kind::IntegerConstant:
                     case Value::Kind::ArrayConstant:
+                    case Value::Kind::Register:
                     case Value::Kind::Poison:
                     case Value::Kind::GlobalVariable:
                     case Value::Kind::Parameter:
@@ -324,6 +326,11 @@ auto Module::mir() -> std::vector<MFunction> {
             case Value::Kind::ArrayConstant:
                 LCC_ASSERT(false, "TODO: MIR generation from array constant");
 
+            case Value::Kind::Register: {
+                auto* reg = as<RegisterValue>(v);
+                return MOperandRegister{reg->value(), uint(reg->size())};
+            }
+
             case Value::Kind::Poison:
                 Diag::ICE("Cannot generate MIR from poison IR value");
 
@@ -367,6 +374,7 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Block:
                     case Value::Kind::IntegerConstant:
                     case Value::Kind::ArrayConstant:
+                    case Value::Kind::Register:
                     case Value::Kind::Poison:
                     case Value::Kind::GlobalVariable:
                     case Value::Kind::Parameter:

@@ -103,6 +103,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::IntegerConstant:
             case Value::Kind::ArrayConstant:
             case Value::Kind::Poison:
+            case Value::Kind::Register:
             case Value::Kind::GlobalVariable:
             case Value::Kind::Parameter:
             case Value::Kind::Copy:
@@ -381,6 +382,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             case Value::Kind::IntegerConstant:
             case Value::Kind::ArrayConstant:
             case Value::Kind::Poison:
+            case Value::Kind::Register:
             case Value::Kind::GlobalVariable:
             case Value::Kind::Parameter:
             case Value::Kind::Copy:
@@ -502,6 +504,8 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
         };
 
         switch (v->kind()) {
+            case Value::Kind::Register: LCC_UNREACHABLE();
+
             case Value::Kind::Block:
                 return fmt::format(
                     "{}%bb{}",
