@@ -180,11 +180,6 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                 generate_expression(rhs_expr);
                 auto* rhs = generated_ir[rhs_expr];
 
-                if (lhs_expr->kind() != Expr::Kind::MemberAccess and lhs_expr->type()->is_reference()) {
-                    auto* load = new (*module) LoadInst(lcc::Type::PtrTy, lhs, expr->location());
-                    insert(load);
-                    lhs = load;
-                }
                 auto* store = new (*module) StoreInst(rhs, lhs, expr->location());
 
                 // Kind of confusing, but if the AST uses this node, it generally means it
