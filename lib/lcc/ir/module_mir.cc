@@ -72,6 +72,8 @@ static auto ir_nary_inst_kind_to_mir(Value::Kind kind) -> MInst::Kind {
 }
 
 static void parameter_lowering(Module* module, Function* f) {
+    if (f->imported()) return;
+
     // TODO FOR FUN: Functions marked internal we can do all the fucky wucky
     // to, to make more efficient-like.
 
@@ -104,6 +106,7 @@ static void parameter_lowering(Module* module, Function* f) {
                     auto param_regsize = uint(parameter->type()->bits());
                     auto* reg = new (*module) RegisterValue(parameter->type(), param_reg, param_regsize);
                     auto* copy = new (*module) CopyInst(reg);
+                    lowered_params[parameter] = copy;
                     to_insert.push_back(copy);
                 } else {
                     LCC_ASSERT(false, "TODO: x64 memory parameter lowering");
@@ -117,7 +120,7 @@ static void parameter_lowering(Module* module, Function* f) {
                     x86_64::RegisterId::RCX,
                     x86_64::RegisterId::R8,
                     x86_64::RegisterId::R9};
-                // TODO: Actual SysV classification
+                // TODO: Actual SysV classification (iff necessary)
                 // Single register
                 // Parameters that fit into registers can be loaded from that register.
                 if (parameter->type()->bytes() <= 8 && sysv_integer_parameters_seen < 6) {
@@ -199,6 +202,7 @@ auto Module::mir() -> std::vector<MFunction> {
             case Value::Kind::Block:
             case Value::Kind::IntegerConstant:
             case Value::Kind::ArrayConstant:
+            case Value::Kind::Register:
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
             case Value::Kind::Parameter:
@@ -235,14 +239,16 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Parameter:
                         LCC_UNREACHABLE();
 
-                    case Value::Kind::Copy: break;
-
                     // Instructions with no *IR* operands
                     case Value::Kind::Alloca:
                     case Value::Kind::Unreachable:
                         break;
 
                     case Value::Kind::Branch: break;
+
+                    case Value::Kind::Copy: {
+                        assign_virtual_register(as<CopyInst>(instruction)->operand());
+                    } break;
 
                     case Value::Kind::CondBranch: {
                         assign_virtual_register(as<CondBranchInst>(instruction)->cond());
@@ -444,7 +450,12 @@ auto Module::mir() -> std::vector<MFunction> {
                         LCC_UNREACHABLE();
 
                     // Instructions
-                    case Value::Kind::Copy: break;
+                    case Value::Kind::Copy: {
+                        auto copy_ir = as<CopyInst>(instruction);
+                        auto copy = MInst(MInst::Kind::Copy, {virts[instruction], uint(copy_ir->type()->bits())});
+                        copy.add_operand(MOperandValueReference(f, copy_ir->operand()));
+                        bb.add_instruction(copy);
+                    } break;
 
                     // Inlined
                     case Value::Kind::Alloca: {
