@@ -59,6 +59,10 @@ using store_imm_reg = Pattern<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), v<0>, o<1>>>>;
 
+using store_reg_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), Register<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), o<0>, o<1>>>>;
+
 template <typename copy_op>
 using copy_some_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Copy), copy_op>>,
@@ -155,6 +159,7 @@ using x86_64PatternList = PatternList<
     store_reg_local,
     store_imm_local,
     store_imm_reg,
+    store_reg_reg,
     copy_reg,
     copy_global,
     copy_local,
