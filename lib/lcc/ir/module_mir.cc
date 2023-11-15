@@ -71,7 +71,125 @@ static auto ir_nary_inst_kind_to_mir(Value::Kind kind) -> MInst::Kind {
     LCC_UNREACHABLE();
 }
 
+static void parameter_lowering(Module* module, Function* f) {
+    // TODO FOR FUN: Functions marked internal we can do all the fucky wucky
+    // to, to make more efficient-like.
+
+    // FIXME: What does f.calling_convention() (C, Intercept, Laye) have to do
+    // with any of this?
+
+    // 1. Insert instructions at beginning of function to load parameters from
+    // where they will /actually/ be.
+
+    // NOTE: To avoid iterator invalidation, this has been split into two
+    // steps, 1a and 1b.
+
+    //   1a. Collect instructions to insert.
+    std::unordered_map<Parameter*, Value*> lowered_params{};
+    std::vector<Inst*> to_insert{};
+    const Target* target = module->context()->target();
+    usz sysv_integer_parameters_seen = 0;
+    for (usz param_i = 0; param_i < f->param_count(); ++param_i) {
+        auto* parameter = f->param(param_i);
+        if (target->is_x64()) {
+            if (target->is_windows()) {
+                // x64 Calling Convention lowering
+                if (parameter->type()->bytes() <= 8 && parameter->index() < 4) {
+                    static constexpr x86_64::RegisterId reg_by_param_index[4]{
+                        x86_64::RegisterId::RCX,
+                        x86_64::RegisterId::RDX,
+                        x86_64::RegisterId::R8,
+                        x86_64::RegisterId::R9};
+                    auto param_reg = +reg_by_param_index[parameter->index()];
+                    auto param_regsize = uint(parameter->type()->bits());
+                    auto* reg = new (*module) RegisterValue(parameter->type(), param_reg, param_regsize);
+                    auto* copy = new (*module) CopyInst(reg);
+                    to_insert.push_back(copy);
+                } else {
+                    LCC_ASSERT(false, "TODO: x64 memory parameter lowering");
+                }
+            } else if (target->is_linux()) {
+                // SysV x86_64 Calling Convention lowering
+                static constexpr x86_64::RegisterId reg_by_integer_param_index[6]{
+                    x86_64::RegisterId::RDI,
+                    x86_64::RegisterId::RSI,
+                    x86_64::RegisterId::RDX,
+                    x86_64::RegisterId::RCX,
+                    x86_64::RegisterId::R8,
+                    x86_64::RegisterId::R9};
+                // TODO: Actual SysV classification
+                // Single register
+                // Parameters that fit into registers can be loaded from that register.
+                if (parameter->type()->bytes() <= 8 && sysv_integer_parameters_seen < 6) {
+                    auto param_reg = +reg_by_integer_param_index[sysv_integer_parameters_seen++];
+                    auto param_regsize = uint(parameter->type()->bits());
+                    auto* reg = new (*module) RegisterValue(parameter->type(), param_reg, param_regsize);
+                    auto* copy = new (*module) CopyInst(reg);
+                    lowered_params[parameter] = copy;
+                    to_insert.push_back(copy);
+                }
+                // Multiple register
+                // Two register-sized words (called eight-bytes in SysV) may be split into
+                // both of it's parts and passed in two argument registers.
+                else if (parameter->type()->bytes() <= 16 && sysv_integer_parameters_seen < 5) {
+                    // CONJECTURE: I was thinking, and it seems that if we want further uses
+                    // of a parameter that has been split into two will almost certainly
+                    // expect that it is *not* split into two. So, we insert an alloca, and
+                    // store from the two registers into that. Further uses of this parameter
+                    // will get the alloca instead. POSSIBLE BUG: If the further uses expect a
+                    // dereferenced one and we give it a pointer, we're going to have a bad
+                    // time. So we also may have to insert loads for these sorts of parameter
+                    // uses down below in certain cases...
+                    LCC_ASSERT(false, "TODO: SysV handle multiple register parameter");
+                }
+                // Memory
+                // Anything that can't fit into registers goes into memory.
+                else {
+                    LCC_ASSERT(false, "TODO: SysV handle memory parameter");
+                }
+            }
+        }
+    }
+
+    //   1b. Insert collected instructions.
+    Inst* begin = f->entry()->instructions().front();
+    for (auto* inst : to_insert) {
+        f->entry()->insert_before(
+            inst,
+            begin
+        );
+    }
+
+    // 2. Replace all "Parameter" values with the lowered value.
+    for (auto* bb : f->blocks()) {
+        for (auto* inst : bb->instructions()) {
+            inst->replace_children([&](Value* child) -> Value* {
+                if (child->kind() == Value::Kind::Parameter) {
+                    auto* parameter = as<Parameter>(child);
+                    auto* replacement = lowered_params[parameter];
+                    LCC_ASSERT(replacement, "Attempt to lower parameter failed because parameter had no lowered value");
+                    return replacement;
+                } else return nullptr;
+            });
+        }
+    }
+};
+
 auto Module::mir() -> std::vector<MFunction> {
+    for (auto* f : code()) {
+        // Lowering passes on IR go here.
+        parameter_lowering(this, f);
+    }
+
+    if (_ctx->should_print_mir())
+        print_ir(_ctx->use_colour_diagnostics());
+
+    // Begin MIR generation by assigning virtual registers to each and every
+    // value in the IR. While the IR can reference the direct result of a
+    // value as an operand, machines generally can't. The best a machine can
+    // do is put the result of a certain computation in a specific register,
+    // and then later, if you haven't done anything to clobber it, that result
+    // will still be there. A virtual register is exactly that.
     std::unordered_map<Value*, usz> virts{};
     const auto assign_virtual_register = [&](Value* v) {
         if (virts[v]) return; // don't double-assign registers
@@ -251,61 +369,6 @@ auto Module::mir() -> std::vector<MFunction> {
                 return MOperandBlock(as<Block>(v));
 
             case Value::Kind::Parameter: {
-                // Should probably do this some other way or put this somewhere else? Just
-                // feels weird here.
-                // Parameter Lowering
-
-                // TODO FOR FUN: Functions marked internal we can do all the fucky wucky
-                // to, to make more efficient-like.
-
-                // FIXME: What does f.calling_convention() (C, Intercept, Laye) have to do
-                // with any of this?
-
-                if (_ctx->target()->is_x64()) {
-                    if (_ctx->target()->is_windows()) {
-                        // x64 Calling Convention lowering
-                        auto parameter = as<Parameter>(v);
-                        if (parameter->type()->bytes() <= 8 && parameter->index() < 4) {
-                            static constexpr x86_64::RegisterId reg_by_param_index[4]{
-                                x86_64::RegisterId::RCX,
-                                x86_64::RegisterId::RDX,
-                                x86_64::RegisterId::R8,
-                                x86_64::RegisterId::R9};
-                            return MOperandRegister{+reg_by_param_index[parameter->index()], uint(parameter->type()->bits())};
-                        } else {
-                            LCC_ASSERT(parameter->type()->bytes() <= 8, "TODO: x64 stack parameter lowering");
-                        }
-                    } else if (_ctx->target()->is_linux()) {
-                        // SysV x86_64 Calling Convention lowering
-                        static constexpr x86_64::RegisterId reg_by_integer_param_index[6]{
-                            x86_64::RegisterId::RDI,
-                            x86_64::RegisterId::RSI,
-                            x86_64::RegisterId::RDX,
-                            x86_64::RegisterId::RCX,
-                            x86_64::RegisterId::R8,
-                            x86_64::RegisterId::R9};
-                        auto parameter = as<Parameter>(v);
-                        // TODO: Actual SysV classification
-                        //
-                        if (parameter->type()->bytes() <= 8 && f.sysv_integer_parameters_seen < 6) {
-                            return MOperandRegister(
-                                +reg_by_integer_param_index[f.sysv_integer_parameters_seen++],
-                                uint(parameter->type()->bits())
-                            );
-                        }
-                        // Multiple register arguments
-                        // Two register-sized words (called eight-bytes in SysV) may be split into
-                        // both of it's parts and passed in two argument registers.
-                        if (parameter->type()->bytes() <= 16 && f.sysv_integer_parameters_seen < 5) {
-                            // FIXME: I don't think this is possible from here, or given the current
-                            // API. We need to do parameter lowering elsewhere, possibly before MIR
-                            // generation entirely. I dunno.
-                            LCC_ASSERT(false, "SysV handle multiple register parameter");
-                        }
-                        LCC_ASSERT(false, "SysV handle memory parameter");
-                    }
-                }
-
                 LCC_UNREACHABLE();
             } break;
 
