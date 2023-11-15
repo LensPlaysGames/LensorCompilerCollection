@@ -689,15 +689,19 @@ class NamedDecl : public Decl {
 protected:
     NamedDecl(Kind kind, Module* module, Location location, std::vector<DeclModifier> mods, std::string name)
         : Decl(kind, location), _module(module), _mods(std::move(mods)), _name(std::move(name)) {
+        LCC_ASSERT(module);
         set_default_mangled_name();
     }
 
     NamedDecl(Kind kind, Module* module, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params)
-        : Decl(kind, location), _mods(std::move(mods)), _name(std::move(name)), _template_params(std::move(template_params)) {
+        : Decl(kind, location), _module(module), _mods(std::move(mods)), _name(std::move(name)), _template_params(std::move(template_params)) {
+        LCC_ASSERT(module);
         set_default_mangled_name();
     }
 
 public:
+    auto module() const -> Module* { return _module; }
+
     auto mods() const -> const std::vector<DeclModifier>& { return _mods; }
     auto name() const -> const std::string& { return _name; }
     auto template_params() const -> const std::vector<TemplateParam>& { return _template_params; }

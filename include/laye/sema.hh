@@ -7,64 +7,57 @@
 namespace lcc::laye {
 class Sema {
     LayeContext* _laye_context;
-    Module* _module;
 
     /// Whether to use colours in diagnostics.
     bool use_colours;
 
     FunctionDecl* curr_func;
 
-    Sema(LayeContext* context, Module* module, bool use_colours)
-        : _laye_context(context), _module(module), use_colours(use_colours) {}
+    Sema(LayeContext* context, bool use_colours)
+        : _laye_context(context), use_colours(use_colours) {}
 
 public:
     static void Analyse(LayeContext* context, Module* module, bool use_colours = true);
 
     auto context() const { return _laye_context->context(); }
     auto laye_context() const { return _laye_context; }
-    auto module() const { return _module; }
 
 private:
-    void Analyse(Module* module);
-    void AnalysePrototype(FunctionDecl* func);
-    void Analyse(Statement*& statement);
-    bool Analyse(Expr*& expr, Type* expected_type = nullptr);
-    bool AnalyseAndDiscard(Expr*& expr) {
-        if (not Analyse(expr)) return false;
-        Discard(expr);
+    void Analyse(Module* module, Statement*& statement);
+    bool Analyse(Module* module, Expr*& expr, Type* expected_type = nullptr);
+    bool AnalyseAndDiscard(Module* module, Expr*& expr) {
+        if (not Analyse(module, expr)) return false;
+        Discard(module, expr);
         return true;
     }
-    bool AnalyseType(Type*& type);
-
-    auto LookupTypeEntity(Scope* from_scope, const std::string& name) -> NamedDecl*;
-    auto LookupValueEntity(Scope* from_scope, const std::string& name) -> NamedDecl*;
+    bool AnalyseType(Module* module, Type*& type);
 
     template <bool PerformConversion>
-    int ConvertImpl(Expr*& expr, Type* to);
+    int ConvertImpl(Module* module, Expr*& expr, Type* to);
 
-    [[nodiscard]] bool Convert(Expr*& expr, Type* to);
-    void ConvertOrError(Expr*& expr, Type* to);
-    [[nodiscard]] bool ConvertToCommonType(Expr*& a, Expr*& b);
-    [[nodiscard]] int TryConvert(Expr*& expr, Type* to);
+    [[nodiscard]] bool Convert(Module* module, Expr*& expr, Type* to);
+    void ConvertOrError(Module* module, Expr*& expr, Type* to);
+    [[nodiscard]] bool ConvertToCommonType(Module* module, Expr*& a, Expr*& b);
+    [[nodiscard]] int TryConvert(Module* module, Expr*& expr, Type* to);
 
-    void Discard(Expr*& expr);
+    void Discard(Module* module, Expr*& expr);
     bool HasSideEffects(Expr* expr);
 
-    void InsertImplicitCast(Expr*& expr_ptr, Type* ty);
-    void InsertPointerToIntegerCast(Expr*& operand);
-    void WrapWithCast(Expr*& expr, Type* type, CastKind kind);
+    void InsertImplicitCast(Module* module, Expr*& expr_ptr, Type* ty);
+    void InsertPointerToIntegerCast(Module* module, Expr*& operand);
+    void WrapWithCast(Module* module, Expr*& expr, Type* type, CastKind kind);
 
     /// Convert lvalues to rvalues and leave rvalues unchanged.
     ///
     /// This may insert a cast expression.
     /// \return The type of the rvalue.
-    auto LValueToRValue(Expr*& expr) -> Type*;
+    auto LValueToRValue(Module* module, Expr*& expr) -> Type*;
 
     /// Create a (type-checked) pointer to a type.
-    auto Ptr(Type* type, TypeAccess access) -> PointerType*;
+    auto Ptr(Module* module, Type* type, TypeAccess access) -> PointerType*;
 
     /// Create a (type-checked) reference to a type.
-    auto Ref(Type* type, TypeAccess access) -> ReferenceType*;
+    auto Ref(Module* module, Type* type, TypeAccess access) -> ReferenceType*;
 
     auto NameToMangledString(std::string_view s) -> std::string;
     auto TypeToMangledString(Type* type) -> std::string;
