@@ -523,8 +523,17 @@ auto Module::mir() -> std::vector<MFunction> {
                                         auto copy_a = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], 64});
                                         auto copy_b = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], uint(arg->type()->bits() - 64)});
 
-                                        if (arg->kind() == Value::Kind::Load) {
-                                            LCC_ASSERT(false, "TODO: Create a temporary, store into it, and then treat argument like any other alloca.");
+                                        if (auto load_arg = cast<LoadInst>(arg)) {
+                                            if (auto alloca = cast<AllocaInst>(load_arg->ptr())) {
+                                                copy_a.add_operand(MOperandValueReference(f, alloca));
+
+                                                auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
+                                                add_b.add_operand(MOperandValueReference(f, alloca));
+                                                add_b.add_operand(MOperandImmediate(8));
+
+                                                copy_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
+                                                bb.add_instruction(add_b);
+                                            } else LCC_ASSERT(false, "TODO: Create a temporary, store into it, and then treat argument like any other alloca.");
                                         } else if (arg->kind() == Value::Kind::Alloca) {
                                             copy_a.add_operand(MOperandValueReference(f, arg));
 
