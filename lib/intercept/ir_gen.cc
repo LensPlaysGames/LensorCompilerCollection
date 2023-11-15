@@ -626,6 +626,13 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             std::vector<Value*> args{};
             for (const auto& [i, arg] : vws::enumerate(call->args())) {
                 generate_expression(arg);
+                if (auto alloca = cast<AllocaInst>(generated_ir[arg])) {
+                    if (alloca->allocated_type() == function_type->params().at(usz(i))) {
+                        auto* load = new (*module) LoadInst(function_type->params().at(usz(i)), alloca);
+                        generated_ir[arg] = load;
+                        insert(load);
+                    }
+                }
                 if (not(generated_ir[arg]->type() == function_type->params().at(usz(i)))) {
                     LCC_ASSERT(
                         false,
