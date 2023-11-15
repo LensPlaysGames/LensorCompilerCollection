@@ -143,7 +143,37 @@ static void parameter_lowering(Module* module, Function* f) {
                     // dereferenced one and we give it a pointer, we're going to have a bad
                     // time. So we also may have to insert loads for these sorts of parameter
                     // uses down below in certain cases...
-                    LCC_ASSERT(false, "TODO: SysV handle multiple register parameter");
+
+                    usz param_reg_a = +reg_by_integer_param_index[sysv_integer_parameters_seen++];
+                    usz param_regsize_a = 64;
+                    usz param_reg_b = +reg_by_integer_param_index[sysv_integer_parameters_seen++];
+                    usz param_regsize_b = parameter->type()->bits() - 64;
+
+                    auto* alloca = new (*module) AllocaInst(parameter->type());
+                    // type of alloca is always ptr
+                    // copy alloca == ptr
+                    // load alloca == underlying type
+
+                    auto* reg_a = new (*module) RegisterValue(parameter->type(), param_reg_a, param_regsize_a);
+                    auto* store_a = new (*module) StoreInst(reg_a, alloca);
+
+                    auto* constant = new (*module) IntegerConstant(
+                        IntegerType::Get(module->context(), 64),
+                        8
+                    );
+                    auto* gep_b = new (*module) GEPInst(IntegerType::Get(module->context(), 8), alloca, constant);
+                    auto* reg_b = new (*module) RegisterValue(parameter->type(), param_reg_b, param_regsize_b);
+                    auto* store_b = new (*module) StoreInst(reg_b, gep_b);
+
+                    auto* load = new (*module) LoadInst(parameter->type(), alloca);
+
+                    to_insert.push_back(alloca);
+                    to_insert.push_back(store_a);
+                    to_insert.push_back(gep_b);
+                    to_insert.push_back(store_b);
+                    to_insert.push_back(load);
+
+                    lowered_params[parameter] = load;
                 }
                 // Memory
                 // Anything that can't fit into registers goes into memory.
@@ -181,6 +211,10 @@ static void parameter_lowering(Module* module, Function* f) {
 auto Module::mir() -> std::vector<MFunction> {
     for (auto* f : code()) {
         // Lowering passes on IR go here.
+        // NOTE: Sirraide is /very/ upset that I've done this. He believes this
+        // should happen *after* MIR generation has already occured. But, at that
+        // point, trying to keep track of what is an argument or a parameter to
+        // what call is just ... way too much complexity in the MIR, imo.
         parameter_lowering(this, f);
     }
 
