@@ -86,11 +86,9 @@ void Module::emit(std::filesystem::path output_file_path) {
         case Format::INVALID: LCC_UNREACHABLE();
         case Format::LLVM_TEXTUAL_IR: {
             auto llvm_ir = llvm();
-            if (output_file_path.empty())
+            if (output_file_path.empty() || output_file_path == "-")
                 fmt::print("{}", llvm_ir);
-            else {
-                File::WriteOrTerminate(llvm_ir.c_str(), llvm_ir.size(), output_file_path);
-            }
+            else File::WriteOrTerminate(llvm_ir.c_str(), llvm_ir.size(), output_file_path);
         } break;
         case Format::GNU_AS_ATT_ASSEMBLY: {
             auto machine_ir = mir();

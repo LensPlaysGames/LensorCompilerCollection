@@ -210,7 +210,9 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
 
     out += ".section .note.GNU-stack\n";
 
-    File::WriteOrTerminate(out.data(), out.size(), output_path);
+    if (output_path == "-")
+        fmt::print("{}", out);
+    else File::WriteOrTerminate(out.data(), out.size(), output_path);
 }
 
 } // namespace x86_64
