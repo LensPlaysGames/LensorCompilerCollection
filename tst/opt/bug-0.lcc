@@ -1,0 +1,65 @@
+; R %lcc %s -O1 --ir
+
+; p lit []
+
+; * gcd_euclid : i64(i64 %0, i64 %1):
+; +   bb0:
+; +     %2 = eq i64 %0, %1
+; +     branch on %2 to %bb1 else %bb2
+; +   bb1:
+; +     branch to %bb6
+; +   bb2:
+; +     %3 = ult i64 %0, %1
+; +     branch on %3 to %bb3 else %bb4
+; +   bb3:
+; +     %4 = sub i64 %1, %0
+; +     %5 = call @gcd_euclid (i64 %0, i64 %4) -> i64
+; +     branch to %bb5
+; +   bb4:
+; +     %6 = sub i64 %0, %1
+; +     %7 = call @gcd_euclid (i64 %6, i64 %1) -> i64
+; +     branch to %bb5
+; +   bb5:
+; +     %8 = phi i64, [%bb3 : %5], [%bb4 : %7]
+; +     branch to %bb6
+; +   bb6:
+; +     %9 = phi i64, [%bb1 : %0], [%bb5 : %8]
+; +     return i64 %9
+gcd_euclid : i64(i64 %0, i64 %1):
+  bb0:
+    %2 = alloca i64
+    store i64 %0 into %2
+    %3 = alloca i64
+    store i64 %1 into %3
+    %4 = load i64 from %2
+    %5 = load i64 from %3
+    %6 = eq i64 %4, %5
+    branch on %6 to %bb1 else %bb2
+  bb1:
+    %7 = load i64 from %2
+    branch to %bb6
+  bb2:
+    %8 = load i64 from %2
+    %9 = load i64 from %3
+    %10 = ult i64 %8, %9
+    branch on %10 to %bb3 else %bb4
+  bb3:
+    %11 = load i64 from %2
+    %12 = load i64 from %3
+    %13 = load i64 from %2
+    %14 = sub i64 %12, %13
+    %15 = call @gcd_euclid (i64 %11, i64 %14) -> i64
+    branch to %bb5
+  bb4:
+    %16 = load i64 from %2
+    %17 = load i64 from %3
+    %18 = sub i64 %16, %17
+    %19 = load i64 from %3
+    %20 = call @gcd_euclid (i64 %18, i64 %19) -> i64
+    branch to %bb5
+  bb5:
+    %21 = phi i64, [%bb3 : %15], [%bb4 : %20]
+    branch to %bb6
+  bb6:
+    %22 = phi i64, [%bb1 : %7], [%bb5 : %21]
+    return i64 %22

@@ -241,7 +241,7 @@ public:
                 auto rhs = cast<IntegerConstant>(sub->rhs());
 
                 /// If the operands are the same, the result is 0.
-                if (lhs == rhs) {
+                if (sub->lhs() == sub->rhs()) {
                     Replace<IntegerConstant>(i, i->type(), 0);
                 }
 
