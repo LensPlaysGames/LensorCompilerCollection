@@ -731,7 +731,7 @@ void IRGen::generate_function(intercept::FuncDecl* f) {
 auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Module* {
     auto ir_gen = IRGen(context, int_mod);
 
-    /// TODO: Move this into a function2?
+    /// TODO: Move this into a function?
     for (const auto& str : int_mod.strings) {
         auto var = GlobalVariable::CreateStringPtr(
             ir_gen.module,
