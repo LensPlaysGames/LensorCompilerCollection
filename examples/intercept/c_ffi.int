@@ -7,7 +7,7 @@ Numbers: struct {
 extern sum_two: int(numbers: Numbers);
 
 ;; The function in C actually just calls an Intercept function; this one.
-sum_two_impl: int(numbers: Numbers) nomangle {
+export sum_two_impl: int(numbers: Numbers) nomangle {
   numbers.x + numbers.y;
 };
 
