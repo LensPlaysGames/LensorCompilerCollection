@@ -16,7 +16,6 @@ static auto ir_nary_inst_kind_to_mir(Value::Kind kind) -> MInst::Kind {
         case Value::Kind::Block:
         case Value::Kind::IntegerConstant:
         case Value::Kind::ArrayConstant:
-        case Value::Kind::Register:
         case Value::Kind::Poison:
         case Value::Kind::GlobalVariable:
         case Value::Kind::Parameter:
@@ -71,153 +70,7 @@ static auto ir_nary_inst_kind_to_mir(Value::Kind kind) -> MInst::Kind {
     LCC_UNREACHABLE();
 }
 
-static void parameter_lowering(Module* module, Function* f) {
-    if (f->imported()) return;
-
-    // TODO FOR FUN: Functions marked internal we can do all the fucky wucky
-    // to, to make more efficient-like.
-
-    // FIXME: What does f.calling_convention() (C, Intercept, Laye) have to do
-    // with any of this?
-
-    // 1. Insert instructions at beginning of function to load parameters from
-    // where they will /actually/ be.
-
-    // NOTE: To avoid iterator invalidation, this has been split into two
-    // steps, 1a and 1b.
-
-    //   1a. Collect instructions to insert.
-    std::unordered_map<Parameter*, Value*> lowered_params{};
-    std::vector<Inst*> to_insert{};
-    const Target* target = module->context()->target();
-    usz sysv_integer_parameters_seen = 0;
-    for (usz param_i = 0; param_i < f->param_count(); ++param_i) {
-        auto* parameter = f->param(param_i);
-        if (target->is_x64()) {
-            if (target->is_windows()) {
-                // x64 Calling Convention lowering
-                if (parameter->type()->bytes() <= 8 && parameter->index() < 4) {
-                    static constexpr x86_64::RegisterId reg_by_param_index[4]{
-                        x86_64::RegisterId::RCX,
-                        x86_64::RegisterId::RDX,
-                        x86_64::RegisterId::R8,
-                        x86_64::RegisterId::R9};
-                    auto param_reg = +reg_by_param_index[parameter->index()];
-                    auto param_regsize = uint(parameter->type()->bits());
-                    auto* reg = new (*module) RegisterValue(parameter->type(), param_reg, param_regsize);
-                    auto* copy = new (*module) CopyInst(reg);
-                    lowered_params[parameter] = copy;
-                    to_insert.push_back(copy);
-                } else {
-                    LCC_ASSERT(false, "TODO: x64 memory parameter lowering");
-                }
-            } else if (target->is_linux()) {
-                // SysV x86_64 Calling Convention lowering
-                static constexpr x86_64::RegisterId reg_by_integer_param_index[6]{
-                    x86_64::RegisterId::RDI,
-                    x86_64::RegisterId::RSI,
-                    x86_64::RegisterId::RDX,
-                    x86_64::RegisterId::RCX,
-                    x86_64::RegisterId::R8,
-                    x86_64::RegisterId::R9};
-                // TODO: Actual SysV classification (iff necessary)
-                // Single register
-                // Parameters that fit into registers can be loaded from that register.
-                if (parameter->type()->bytes() <= 8 && sysv_integer_parameters_seen < 6) {
-                    auto param_reg = +reg_by_integer_param_index[sysv_integer_parameters_seen++];
-                    auto param_regsize = uint(parameter->type()->bits());
-                    auto* reg = new (*module) RegisterValue(parameter->type(), param_reg, param_regsize);
-                    auto* copy = new (*module) CopyInst(reg);
-                    lowered_params[parameter] = copy;
-                    to_insert.push_back(copy);
-                }
-                // Multiple register
-                // Two register-sized words (called eight-bytes in SysV) may be split into
-                // both of it's parts and passed in two argument registers.
-                else if (parameter->type()->bytes() <= 16 && sysv_integer_parameters_seen < 5) {
-                    // CONJECTURE: I was thinking, and it seems that if we want further uses
-                    // of a parameter that has been split into two will almost certainly
-                    // expect that it is *not* split into two. So, we insert an alloca, and
-                    // store from the two registers into that. Further uses of this parameter
-                    // will get the alloca instead. POSSIBLE BUG: If the further uses expect a
-                    // dereferenced one and we give it a pointer, we're going to have a bad
-                    // time. So we also may have to insert loads for these sorts of parameter
-                    // uses down below in certain cases...
-
-                    usz param_reg_a = +reg_by_integer_param_index[sysv_integer_parameters_seen++];
-                    usz param_regsize_a = 64;
-                    usz param_reg_b = +reg_by_integer_param_index[sysv_integer_parameters_seen++];
-                    usz param_regsize_b = parameter->type()->bits() - 64;
-
-                    auto* alloca = new (*module) AllocaInst(parameter->type());
-                    // type of alloca is always ptr
-                    // copy alloca == ptr
-                    // load alloca == underlying type
-
-                    auto* reg_a = new (*module) RegisterValue(parameter->type(), param_reg_a, param_regsize_a);
-                    auto* store_a = new (*module) StoreInst(reg_a, alloca);
-
-                    auto* constant = new (*module) IntegerConstant(
-                        IntegerType::Get(module->context(), 64),
-                        8
-                    );
-                    auto* gep_b = new (*module) GEPInst(IntegerType::Get(module->context(), 8), alloca, constant);
-                    auto* reg_b = new (*module) RegisterValue(parameter->type(), param_reg_b, param_regsize_b);
-                    auto* store_b = new (*module) StoreInst(reg_b, gep_b);
-
-                    auto* load = new (*module) LoadInst(parameter->type(), alloca);
-
-                    to_insert.push_back(alloca);
-                    to_insert.push_back(store_a);
-                    to_insert.push_back(gep_b);
-                    to_insert.push_back(store_b);
-                    to_insert.push_back(load);
-
-                    lowered_params[parameter] = load;
-                }
-                // Memory
-                // Anything that can't fit into registers goes into memory.
-                else {
-                    LCC_ASSERT(false, "TODO: SysV handle memory parameter");
-                }
-            }
-        }
-    }
-
-    //   1b. Insert collected instructions.
-    Inst* begin = f->entry()->instructions().front();
-    for (auto* inst : to_insert) {
-        f->entry()->insert_before(
-            inst,
-            begin
-        );
-    }
-
-    // 2. Replace all "Parameter" values with the lowered value.
-    for (auto* bb : f->blocks()) {
-        for (auto* inst : bb->instructions()) {
-            inst->replace_children([&](Value* child) -> Value* {
-                if (child->kind() == Value::Kind::Parameter) {
-                    auto* parameter = as<Parameter>(child);
-                    auto* replacement = lowered_params[parameter];
-                    LCC_ASSERT(replacement, "Attempt to lower parameter failed because parameter had no lowered value");
-                    return replacement;
-                } else return nullptr;
-            });
-        }
-    }
-};
-
 auto Module::mir() -> std::vector<MFunction> {
-    for (auto* f : code()) {
-        // Lowering passes on IR go here.
-        // NOTE: Sirraide is /very/ upset that I've done this. He believes this
-        // should happen *after* MIR generation has already occured. But, at that
-        // point, trying to keep track of what is an argument or a parameter to
-        // what call is just ... way too much complexity in the MIR, imo.
-        parameter_lowering(this, f);
-    }
-
     if (_ctx->should_print_mir())
         print_ir(_ctx->use_colour_diagnostics());
 
@@ -236,7 +89,6 @@ auto Module::mir() -> std::vector<MFunction> {
             case Value::Kind::Block:
             case Value::Kind::IntegerConstant:
             case Value::Kind::ArrayConstant:
-            case Value::Kind::Register:
             case Value::Kind::Poison:
             case Value::Kind::GlobalVariable:
             case Value::Kind::Parameter:
@@ -267,7 +119,6 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Block:
                     case Value::Kind::IntegerConstant:
                     case Value::Kind::ArrayConstant:
-                    case Value::Kind::Register:
                     case Value::Kind::Poison:
                     case Value::Kind::GlobalVariable:
                     case Value::Kind::Parameter:
@@ -429,11 +280,6 @@ auto Module::mir() -> std::vector<MFunction> {
             case Value::Kind::ArrayConstant:
                 LCC_ASSERT(false, "TODO: MIR generation from array constant");
 
-            case Value::Kind::Register: {
-                auto* reg = as<RegisterValue>(v);
-                return MOperandRegister{reg->value(), uint(reg->size())};
-            }
-
             case Value::Kind::Poison:
                 Diag::ICE("Cannot generate MIR from poison IR value");
 
@@ -477,7 +323,6 @@ auto Module::mir() -> std::vector<MFunction> {
                     case Value::Kind::Block:
                     case Value::Kind::IntegerConstant:
                     case Value::Kind::ArrayConstant:
-                    case Value::Kind::Register:
                     case Value::Kind::Poison:
                     case Value::Kind::GlobalVariable:
                     case Value::Kind::Parameter:
@@ -715,6 +560,90 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     case Value::Kind::Store: {
                         auto store_ir = as<StoreInst>(instruction);
+
+                        // Special case lowering of storing parameter into a local.
+                        if (auto param = cast<Parameter>(store_ir->val())) {
+                            // TODO FOR FUN: Functions marked internal we can do all the fucky wucky
+                            // to, to make more efficient-like.
+                            // FIXME: What does f.calling_convention() (C, Intercept, Laye) have to do
+                            // with any of this?
+                            if (_ctx->target()->is_x64()) {
+                                if (_ctx->target()->is_windows()) {
+                                    // x64 Calling Convention lowering
+                                    if (param->type()->bytes() <= 8 && param->index() < 4) {
+                                        static constexpr x86_64::RegisterId reg_by_param_index[4]{
+                                            x86_64::RegisterId::RCX,
+                                            x86_64::RegisterId::RDX,
+                                            x86_64::RegisterId::R8,
+                                            x86_64::RegisterId::R9};
+                                        auto param_reg = +reg_by_param_index[param->index()];
+                                        auto param_regsize = uint(param->type()->bits());
+                                        auto copy = MInst(MInst::Kind::Copy, MOperandRegister(param_reg, param_regsize));
+                                        bb.add_instruction(copy);
+                                    } else {
+                                        LCC_ASSERT(false, "TODO: x64 memory parameter lowering");
+                                    }
+                                } else if (_ctx->target()->is_linux()) {
+                                    usz sysv_registers_used = 0;
+                                    for (usz i = 0; i < param->index(); ++i) {
+                                        auto p = function->param(i);
+                                        if (p->type()->bytes() <= 8 and sysv_registers_used < 6)
+                                            ++sysv_registers_used;
+                                        else if (p->type()->bytes() <= 16 and sysv_registers_used < 5)
+                                            sysv_registers_used += 2;
+                                    }
+
+                                    static constexpr x86_64::RegisterId reg_by_param_index[6]{
+                                        x86_64::RegisterId::RDI,
+                                        x86_64::RegisterId::RSI,
+                                        x86_64::RegisterId::RDX,
+                                        x86_64::RegisterId::RCX,
+                                        x86_64::RegisterId::R8,
+                                        x86_64::RegisterId::R9};
+
+                                    // Single register parameter
+                                    if (param->type()->bytes() <= 8 and sysv_registers_used < 6) {
+                                        auto store = MInst(MInst::Kind::Store, {virts[instruction], 0});
+                                        store.add_operand(MOperandRegister(+reg_by_param_index[param->index()], uint(param->type()->bits())));
+                                        store.add_operand(MOperandValueReference(f, store_ir->ptr()));
+                                        break; // Value::Kind::Store
+                                    }
+                                    // Multiple register parameter
+                                    else if (param->type()->bytes() <= 16 and sysv_registers_used < 5) {
+                                        if (auto alloca = cast<AllocaInst>(store_ir->ptr())) {
+                                            // Multiple register parameter stored into alloca
+                                            auto reg_a = MOperandRegister(
+                                                +reg_by_param_index[sysv_registers_used++],
+                                                64
+                                            );
+                                            auto reg_b = MOperandRegister(
+                                                +reg_by_param_index[sysv_registers_used++],
+                                                uint(param->type()->bits() - 64)
+                                            );
+
+                                            auto store_a = MInst(MInst::Kind::Store, {virts[instruction], 0});
+                                            store_a.add_operand(reg_a);
+                                            store_a.add_operand(MOperandValueReference(f, alloca));
+
+                                            auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
+                                            add_b.add_operand(MOperandValueReference(f, alloca));
+                                            add_b.add_operand(MOperandImmediate(8));
+
+                                            auto store_b = MInst(MInst::Kind::Store, {virts[instruction], 0});
+                                            store_b.add_operand(reg_b);
+                                            store_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
+
+                                            bb.add_instruction(store_a);
+                                            bb.add_instruction(add_b);
+                                            bb.add_instruction(store_b);
+                                            break; // Value::Kind::Store
+                                        }
+                                        LCC_UNREACHABLE();
+                                    } else LCC_ASSERT(false, "TODO: SysV lowering of memory parameter");
+                                }
+                            }
+                        }
+
                         // A store does not produce a useable value, and as such it's register
                         // size is zero.
                         auto store = MInst(MInst::Kind::Store, {virts[instruction], 0});
