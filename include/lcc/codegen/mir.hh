@@ -172,10 +172,12 @@ public:
 
     static bool is_terminator(Kind k) {
         // TODO: noreturn calls?
+        // clang-format off
         return k == Kind::Return
             or k == Kind::Branch
             or k == Kind::CondBranch
             or k == Kind::Unreachable;
+        // clang-format on
     }
 };
 
@@ -246,6 +248,12 @@ public:
         _instructions.push_back(inst);
     }
     void insert(const MInst& inst) { add_instruction(inst); }
+
+    void remove_inst_by_reg(usz regvalue) {
+        std::erase_if(_instructions, [&](const MInst& minst) -> bool {
+            return minst.reg() == regvalue;
+        });
+    }
 };
 
 class MFunction {

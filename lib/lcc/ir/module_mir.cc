@@ -399,33 +399,38 @@ auto Module::mir() -> std::vector<MFunction> {
                                         copy.add_operand(MOperandValueReference(f, arg));
                                         bb.add_instruction(copy);
                                     } else if (arg_regs_used < arg_reg_total - 1 and arg->type()->bytes() <= 16) {
-                                        auto copy_a = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], 64});
-                                        auto copy_b = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], uint(arg->type()->bits() - 64)});
+                                        auto load_a = MInst(MInst::Kind::Load, {arg_regs[arg_regs_used++], 64});
+                                        auto load_b = MInst(MInst::Kind::Load, {arg_regs[arg_regs_used++], uint(arg->type()->bits() - 64)});
 
                                         if (auto load_arg = cast<LoadInst>(arg)) {
                                             if (auto alloca = cast<AllocaInst>(load_arg->ptr())) {
-                                                copy_a.add_operand(MOperandValueReference(f, alloca));
+                                                load_a.add_operand(MOperandValueReference(f, alloca));
 
                                                 auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
                                                 add_b.add_operand(MOperandValueReference(f, alloca));
                                                 add_b.add_operand(MOperandImmediate(8));
 
-                                                copy_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
+                                                load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
                                                 bb.add_instruction(add_b);
+
+                                                // In doing the copying and stuff, we have effectively loaded the thing
+                                                // manually. So, we remove the load that was there before.
+                                                bb.remove_inst_by_reg(virts[load_arg]);
+
                                             } else LCC_ASSERT(false, "TODO: Create a temporary, store into it, and then treat argument like any other alloca.");
                                         } else if (arg->kind() == Value::Kind::Alloca) {
-                                            copy_a.add_operand(MOperandValueReference(f, arg));
+                                            load_a.add_operand(MOperandValueReference(f, arg));
 
                                             auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
                                             add_b.add_operand(MOperandValueReference(f, arg));
                                             add_b.add_operand(MOperandImmediate(8));
 
-                                            copy_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
+                                            load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
                                             bb.add_instruction(add_b);
                                         } else LCC_ASSERT(false, "Handle gMIR lowering of SysV multiple register argument");
 
-                                        bb.add_instruction(copy_a);
-                                        bb.add_instruction(copy_b);
+                                        bb.add_instruction(load_a);
+                                        bb.add_instruction(load_b);
                                     } else {
                                         LCC_ASSERT(false, "Handle gMIR lowering of SysV memory argument");
                                     }
