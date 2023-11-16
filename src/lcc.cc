@@ -225,7 +225,6 @@ int main(int argc, char** argv) {
 
             for (auto module : laye_context->modules()) {
                 std::string input_file_path = module->file()->path().string();
-                std::string output_file_path = ConvertFileExtensionToOutputFormat(input_file_path);
                 EmitModule(lcc::laye::IRGen::Generate(laye_context, module), input_file_path, output_file_path);
             }
         }
