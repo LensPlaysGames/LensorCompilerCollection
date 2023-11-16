@@ -581,10 +581,11 @@ auto Module::mir() -> std::vector<MFunction> {
                                             x86_64::RegisterId::RDX,
                                             x86_64::RegisterId::R8,
                                             x86_64::RegisterId::R9};
-                                        auto param_reg = +reg_by_param_index[param->index()];
-                                        auto param_regsize = uint(param->type()->bits());
-                                        auto copy = MInst(MInst::Kind::Copy, MOperandRegister(param_reg, param_regsize));
-                                        bb.add_instruction(copy);
+                                        auto store = MInst(MInst::Kind::Store, {virts[instruction], 0});
+                                        store.add_operand(MOperandRegister(+reg_by_param_index[param->index()], uint(param->type()->bits())));
+                                        store.add_operand(MOperandValueReference(f, store_ir->ptr()));
+                                        bb.add_instruction(store);
+                                        break; // Value::Kind::Store
                                     } else {
                                         LCC_ASSERT(false, "TODO: x64 memory parameter lowering");
                                     }
@@ -611,6 +612,7 @@ auto Module::mir() -> std::vector<MFunction> {
                                         auto store = MInst(MInst::Kind::Store, {virts[instruction], 0});
                                         store.add_operand(MOperandRegister(+reg_by_param_index[param->index()], uint(param->type()->bits())));
                                         store.add_operand(MOperandValueReference(f, store_ir->ptr()));
+                                        bb.add_instruction(store);
                                         break; // Value::Kind::Store
                                     }
                                     // Multiple register parameter
