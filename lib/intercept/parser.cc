@@ -296,7 +296,7 @@ auto intc::Parser::ParseDecl() -> Result<Decl*> {
         };
 
         /// Exported declaration.
-        if (CurrScope() != GlobalScope())
+        if (CurrScope() != TopLevelScope())
             Error("Exported declarations are only allowed at the top level");
 
         decl = decl >>= Export;
