@@ -143,7 +143,15 @@ auto LookupTypeEntity(Module* from_module, Scope* from_scope, const std::string&
     LCC_ASSERT(false, "LookupTypeEntity");
 }
 
+auto LookupTypeEntity(Module* from_module, Scope* from_scope, const std::vector<std::string>& names, const std::vector<Location>& locations) -> NamedDecl* {
+    LCC_ASSERT(false, "LookupTypeEntity");
+}
+
 auto LookupValueEntity(Module* from_module, Scope* from_scope, const std::string& name) -> NamedDecl* {
+    LCC_ASSERT(false, "LookupValueEntity");
+}
+
+auto LookupValueEntity(Module* from_module, Scope* from_scope, const std::vector<std::string>& names, const std::vector<Location>& locations) -> NamedDecl* {
     LCC_ASSERT(false, "LookupValueEntity");
 }
 
@@ -510,9 +518,7 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
         case Expr::Kind::LookupPath: {
             auto e = as<PathExpr>(expr);
 
-            auto path_names = e->names();
-            LCC_ASSERT(not path_names.empty());
-
+            auto entity = LookupValueEntity(module, e->scope(), e->names(), e->locations());
             LCC_ASSERT(false, "Analyse(module, LookupPath)");
 
             // auto first_name = path_names[0];
