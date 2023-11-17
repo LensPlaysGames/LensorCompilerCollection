@@ -365,7 +365,7 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             FormatName(v->name()),
             v->imported() ? "external" : "private",
             is_string ? "unnamed_addr constant" : "global",
-            Ty(v->type()),
+            Ty(v->allocated_type()),
             v->init() ? Val(v->init(), false) : "zeroinitializer",
             v->type()->align()
         );

@@ -34,10 +34,11 @@ Function::Function(
 }
 
 GlobalVariable::GlobalVariable(Module* mod, Type* t, std::string name, Linkage linkage, Value* init)
-    : UseTrackingValue(Value::Kind::GlobalVariable, t),
+    : UseTrackingValue(Value::Kind::GlobalVariable, Type::PtrTy),
       _name(std::move(name)),
       _linkage(linkage),
-      _init(init) {
+      _init(init),
+      _allocated_type(t) {
     mod->add_var(this);
 }
 
@@ -921,7 +922,7 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
             C(TempColour),
             v->name(),
             C(Red),
-            Ty(v->type()),
+            Ty(v->allocated_type()),
             C(Red)
         );
 

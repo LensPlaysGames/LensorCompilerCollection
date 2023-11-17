@@ -213,10 +213,12 @@ class GlobalVariable : public UseTrackingValue {
     std::string _name;
     Linkage _linkage;
     Value* _init;
+    Type* _allocated_type;
 
 public:
     GlobalVariable(Module* mod, Type* t, std::string name, Linkage linkage, Value* init);
 
+    Type* allocated_type() { return _allocated_type; }
     bool imported() const { return IsImportedLinkage(linkage()); }
     Value* init() { return _init; }
     auto name() const -> const std::string& { return _name; }
