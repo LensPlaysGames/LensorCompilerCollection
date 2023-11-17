@@ -1,12 +1,12 @@
 ;; 69
 
-vec2 :> type {
-  x : integer
-  y : integer
-}
+vec2 : struct {
+  x : int;
+  y : int;
+};
 
-my_vec2 : vec2
+my_vec2 : vec2;
 
-my_vec2.x := 34
-my_vec2.y := 35
-my_vec2.x + my_vec2.y
+my_vec2.x := 34;
+my_vec2.y := 35;
+my_vec2.x + my_vec2.y;
