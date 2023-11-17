@@ -138,7 +138,12 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                 case Linkage::Internal:
                 case Linkage::Used:
                 case Linkage::Exported: {
-                    auto* global = new (*module) GlobalVariable(module, Convert(ctx, decl->type()), decl->name(), decl->linkage(), nullptr);
+                    Value* init = nullptr;
+                    if (auto* init_expr = decl->init()) {
+                        generate_expression(init_expr);
+                        init = generated_ir[init_expr];
+                    }
+                    auto* global = new (*module) GlobalVariable(module, Convert(ctx, decl->type()), decl->name(), decl->linkage(), init);
                     generated_ir[expr] = global;
                 } break;
 
