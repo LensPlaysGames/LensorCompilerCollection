@@ -26,6 +26,7 @@ lcc::StringMap<Tk> keywords{
     {"return", Tk::Return},
     {"export", Tk::Export},
     {"struct", Tk::Struct},
+    {"enum", Tk::Enum},
     {"lambda", Tk::Lambda},
 };
 } // namespace
@@ -817,6 +818,7 @@ bool lcc::intercept::InterceptToken::operator==(const InterceptToken& rhs) const
         case TokenKind::Return:
         case TokenKind::Export:
         case TokenKind::Struct:
+        case TokenKind::Enum:
         case TokenKind::Lambda:
             return true;
     }
@@ -885,6 +887,7 @@ std::string_view lcc::intercept::ToString(Tk kind) {
         case Tk::Expression: return "expression";
         case Tk::Bool: return "bool";
         case Tk::Struct: return "struct";
+        case Tk::Enum: return "enum";
         case Tk::Lambda: return "lambda";
     }
 

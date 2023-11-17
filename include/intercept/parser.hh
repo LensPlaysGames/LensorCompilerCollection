@@ -113,6 +113,7 @@ private:
     auto ParseBlock(ScopeRAII sc) -> Result<BlockExpr*>;
     auto ParseDecl() -> Result<Decl*>;
     auto ParseDeclRest(std::string ident, Location location, bool is_extern, bool is_static) -> Result<Decl*>;
+    auto ParseEnumType() -> Result<EnumType*>;
     auto ParseExpr(isz current_precedence = 0, bool single_expression = false) -> ExprResult;
     auto ParseExprInNewScope() -> ExprResult;
     auto ParseForExpr() -> Result<ForExpr*>;

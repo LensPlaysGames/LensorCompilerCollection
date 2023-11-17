@@ -23,7 +23,7 @@ void IRGen::insert(lcc::Inst* inst) {
 
 lcc::Type* Convert(Context* ctx, Type* in) {
     switch (in->kind()) {
-        case Type::Kind::Builtin: {
+        case Type::Kind::Builtin:
             switch ((as<BuiltinType>(in))->builtin_kind()) {
                 case BuiltinType::BuiltinKind::Bool:
                     return lcc::Type::I1Ty;
@@ -37,21 +37,22 @@ lcc::Type* Convert(Context* ctx, Type* in) {
                     Diag::ICE("Invalid builtin kind present during IR generation");
             }
             LCC_UNREACHABLE();
-        }
-        case Type::Kind::FFIType: {
+
+        case Type::Kind::FFIType:
             return lcc::IntegerType::Get(ctx, in->size(ctx));
-        }
-        case Type::Kind::Named: {
+
+        case Type::Kind::Named:
             Diag::ICE("Sema failed to resolve named type");
-        }
+
         case Type::Kind::Pointer:
-        case Type::Kind::Reference: {
+        case Type::Kind::Reference:
             return lcc::Type::PtrTy;
-        }
+
         case Type::Kind::Array: {
             const auto& t_array = as<ArrayType>(in);
             return lcc::ArrayType::Get(ctx, t_array->dimension(), Convert(ctx, t_array->element_type()));
         }
+
         case Type::Kind::Function: {
             const auto& t_function = as<FuncType>(in);
 
@@ -61,6 +62,7 @@ lcc::Type* Convert(Context* ctx, Type* in) {
 
             return lcc::FunctionType::Get(ctx, Convert(ctx, t_function->return_type()), std::move(param_types));
         }
+
         case Type::Kind::Struct: {
             std::vector<lcc::Type*> member_types{};
             for (const auto& m : as<StructType>(in)->members())
@@ -68,9 +70,12 @@ lcc::Type* Convert(Context* ctx, Type* in) {
 
             return lcc::StructType::Get(ctx, std::move(member_types));
         }
-        case Type::Kind::Integer: {
+
+        case Type::Kind::Enum:
+            return Convert(ctx, as<EnumType>(in)->underlying_type());
+
+        case Type::Kind::Integer:
             return lcc::IntegerType::Get(ctx, in->size(ctx));
-        }
     }
     LCC_UNREACHABLE();
 }
@@ -377,6 +382,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                 case TokenKind::Static:
                 case TokenKind::String:
                 case TokenKind::Struct:
+                case TokenKind::Enum:
                 case TokenKind::Semicolon:
                 case TokenKind::Then:
                 case TokenKind::Tilde:
@@ -709,7 +715,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         } break;
 
         // no-op/handled elsewhere
-        case Expr::Kind::StructDecl: break;
+        case Expr::Kind::TypeDecl: break;
         case Expr::Kind::TypeAliasDecl: break;
         case Expr::Kind::FuncDecl: break;
         case Expr::Kind::OverloadSet: break;

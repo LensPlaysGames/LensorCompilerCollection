@@ -167,6 +167,10 @@ auto intc::Type::align(const lcc::Context* ctx) const -> usz {
             }
             LCC_UNREACHABLE();
 
+        /// const_cast is ok because we’re just reading the underlying type.
+        case Kind::Enum:
+            return const_cast<EnumType*>(as<EnumType>(this))->underlying_type()->align(ctx);
+
         /// Unresolved named type.
         case Kind::Named: return 1;
 
@@ -190,6 +194,10 @@ auto intc::Type::elem() const -> Type* {
         case Kind::Pointer: return as<PointerType>(this)->element_type();
         case Kind::Reference: return as<ReferenceType>(this)->element_type();
         case Kind::Array: return as<ArrayType>(this)->element_type();
+
+        /// const_cast is ok because we’re just reading the underlying type.
+        case Kind::Enum:
+            return const_cast<EnumType*>(as<EnumType>(this))->underlying_type();
 
         case Kind::Builtin:
         case Kind::FFIType:
@@ -319,6 +327,10 @@ auto intc::Type::size(const lcc::Context* ctx) const -> usz {
             }
             LCC_UNREACHABLE();
 
+        /// const_cast is ok because we’re just reading the underlying type.
+        case Kind::Enum:
+            return const_cast<EnumType*>(as<EnumType>(this))->underlying_type()->size(ctx);
+
         case Kind::Named: return 0;
         case Kind::Function: return 0;
 
@@ -366,8 +378,10 @@ bool intc::Type::Equal(const Type* a, const Type* b) {
             return fa->ffi_kind() == fb->ffi_kind();
         }
 
-        /// Named types are never equal unless they’re the exact same instance.
-        case Kind::Named: return a == b;
+        /// These are never equal unless they’re the exact same instance.
+        case Kind::Named:
+        case Kind::Enum:
+            return a == b;
 
         case Kind::Pointer:
         case Kind::Reference:
@@ -564,7 +578,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
 
             case K::OverloadSet: PrintBasicInterceptNode("OverloadSet", e, e->type()); return;
             case K::EvaluatedConstant: PrintBasicInterceptNode("ConstantExpr", e, e->type()); return;
-            case K::StructDecl: PrintBasicInterceptNode("StructDecl", e, e->type()); return;
+            case K::TypeDecl: PrintBasicInterceptNode("TypeDecl", e, e->type()); return;
             case K::TypeAliasDecl: PrintBasicInterceptNode("TypeAliasDecl", e, e->type()); return;
             case K::StringLiteral: PrintBasicInterceptNode("StringLiteral", e, e->type()); return;
             case K::CompoundLiteral: PrintBasicInterceptNode("CompoundLiteral", e, e->type()); return;
@@ -668,7 +682,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
 
             case K::OverloadSet:
             case K::EvaluatedConstant:
-            case K::StructDecl:
+            case K::TypeDecl:
             case K::TypeAliasDecl:
             case K::IntegerLiteral:
             case K::StringLiteral:
@@ -796,7 +810,18 @@ auto intc::Type::string(bool use_colours) const -> std::string {
                 "{}struct {}{}{}",
                 C(Red),
                 C(Cyan),
-                decl->name().empty() ? "<anonymous>" : decl->name(),
+                not decl or decl->name().empty() ? "<anonymous>" : decl->name(),
+                C(Reset)
+            );
+        }
+
+        case Kind::Enum: {
+            auto decl = as<EnumType>(this)->decl();
+            return fmt::format(
+                "{}enum {}{}{}",
+                C(Red),
+                C(Cyan),
+                not decl or decl->name().empty() ? "<anonymous>" : decl->name(),
                 C(Reset)
             );
         }

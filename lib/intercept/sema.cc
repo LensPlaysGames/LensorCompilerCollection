@@ -260,7 +260,7 @@ bool intc::Sema::HasSideEffects(Expr* expr) {
         case Expr::Kind::While:
         case Expr::Kind::For:
         case Expr::Kind::Return:
-        case Expr::Kind::StructDecl:
+        case Expr::Kind::TypeDecl:
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::VarDecl:
         case Expr::Kind::FuncDecl:
@@ -862,7 +862,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             break;
 
         /// The actual work here is analysing the type, so this is a no-op.
-        case Expr::Kind::StructDecl:
+        case Expr::Kind::TypeDecl:
         case Expr::Kind::TypeAliasDecl:
             break;
 
@@ -1552,7 +1552,7 @@ bool intc::Sema::Analyse(Type** type_ptr) {
             for (auto scope = n->scope(); scope; scope = scope->parent()) {
                 auto syms = scope->find(n->name());
                 if (syms.first == syms.second) continue;
-                if (auto s = cast<StructDecl>(syms.first->second)) {
+                if (auto s = cast<TypeDecl>(syms.first->second)) {
                     Expr* e = s;
                     Analyse(&e);
                     ty = s->type();
@@ -1717,6 +1717,11 @@ bool intc::Sema::Analyse(Type** type_ptr) {
             s->alignment(alignment);
             s->byte_size(byte_size ? utils::AlignTo(byte_size, alignment) : 0);
         } break;
+
+        /// Calculate enumerator values.
+        case Type::Kind::Enum: {
+            LCC_TODO();
+        }
     }
 
     /// Do *not* use `type` here, as it may have been replaced by something else.

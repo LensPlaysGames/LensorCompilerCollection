@@ -99,6 +99,7 @@ enum struct TokenKind {
     Return,
     Export,
     Struct,
+    Enum,
     Lambda,
 
     Gensym,
@@ -340,6 +341,7 @@ public:
         Reference,
         Array,
         Function,
+        Enum,
         Struct,
         Integer,
     };
@@ -688,9 +690,32 @@ public:
     static bool classof(const Type* type) { return type->kind() == Kind::Function; }
 };
 
-class StructDecl;
+class TypeDecl;
 
-class StructType : public Type {
+class DeclaredType : public Type {
+    TypeDecl* _decl{};
+
+public:
+    DeclaredType(Kind kind, Location location)
+        : Type(kind, location) {}
+
+    /// Associate this type with a declaration.
+    void associate_with_decl(TypeDecl* decl) {
+        LCC_ASSERT(not _decl, "Cannot associate a struct type with two struct decls");
+        _decl = decl;
+    }
+
+    /// Get the declaration of this type.
+    ///
+    /// If this is an anonymous type, this returns null.
+    auto decl() const -> TypeDecl* { return _decl; }
+
+    static bool classof(const Type* type) {
+        return type->kind() == Kind::Enum or type->kind() == Kind::Struct;
+    }
+};
+
+class StructType : public DeclaredType {
 public:
     struct Member {
         Type* type;
@@ -703,37 +728,50 @@ public:
     };
 
 private:
-    StructDecl* _struct_decl{};
     std::vector<Member> _members;
-
     usz _byte_size{};
     usz _alignment{};
 
 public:
     StructType(std::vector<Member> members, Location location)
-        : Type(Kind::Struct, location), _members(std::move(members)) {}
+        : DeclaredType(Kind::Struct, location), _members(std::move(members)) {}
 
     usz alignment() const { return _alignment; }
     void alignment(usz alignment) { _alignment = alignment; }
 
-    /// Associate this type with a declaration.
-    void associate_with_decl(StructDecl* decl) {
-        LCC_ASSERT(not _struct_decl, "Cannot associate a struct type with two struct decls");
-        _struct_decl = decl;
-    }
-
     usz byte_size() const { return _byte_size; }
     void byte_size(usz byteSize) { _byte_size = byteSize; }
-
-    /// Get the declaration of this type.
-    ///
-    /// If this is an anonymous type, this returns null.
-    auto decl() const -> StructDecl* { return _struct_decl; }
 
     auto members() -> std::vector<Member>& { return _members; }
     auto members() const -> const std::vector<Member>& { return _members; }
 
     static bool classof(const Type* type) { return type->kind() == Kind::Struct; }
+};
+
+class EnumType : public DeclaredType {
+public:
+    struct Enumerator {
+        std::string name;
+        Expr* value;
+        Location loc;
+    };
+
+private:
+    std::vector<Enumerator> _enumerators;
+    Type* _underlying_type{};
+
+public:
+    EnumType(Type* underlying_type, std::vector<Enumerator> enumerators, Location location)
+        : DeclaredType(Kind::Enum, location),
+          _enumerators(std::move(enumerators)),
+          _underlying_type(underlying_type) {}
+
+    auto enumerators() -> std::vector<Enumerator>& { return _enumerators; }
+    auto enumerators() const -> const std::vector<Enumerator>& { return _enumerators; }
+
+    auto underlying_type() -> Type*& { return _underlying_type; }
+
+    static bool classof(const Type* type) { return type->kind() == Kind::Enum; }
 };
 
 class IntegerType : public Type {
@@ -760,7 +798,7 @@ public:
         For,
         Return,
 
-        StructDecl,
+        TypeDecl,
         TypeAliasDecl,
         VarDecl,
         FuncDecl,
@@ -821,33 +859,6 @@ public:
 
     auto type() const -> Type*;
 
-    static auto kind_string(Kind k) -> std::string_view {
-        switch (k) {
-        case Kind::While: return "while";
-        case Kind::For: return "for";
-        case Kind::Return: return "return";
-        case Kind::StructDecl: return "decl.struct";
-        case Kind::TypeAliasDecl: return "decl.type_alias";
-        case Kind::VarDecl: return "decl.var";
-        case Kind::FuncDecl: return "decl.proc";
-        case Kind::IntegerLiteral: return "literal.int";
-        case Kind::StringLiteral: return "literal.string";
-        case Kind::CompoundLiteral: return "literal.compound";
-        case Kind::OverloadSet: return "overload_set";
-        case Kind::EvaluatedConstant: return "constant";
-        case Kind::If: return "if";
-        case Kind::Block: return "block";
-        case Kind::Call: return "call";
-        case Kind::IntrinsicCall: return "call.intrinsic";
-        case Kind::Cast: return "cast";
-        case Kind::Unary: return "op.binary";
-        case Kind::Binary: return "op.unary";
-        case Kind::NameRef: return "name_ref";
-        case Kind::MemberAccess: return "member_access";
-        }
-        LCC_UNREACHABLE();
-    }
-
     /// Deep-copy an expression.
     static Expr* Clone(Module& mod, Expr* expr);
 };
@@ -867,7 +878,7 @@ public:
     auto type_ref() -> Type** { return &_type; }
 
     static bool classof(const Expr* expr) {
-        return expr->kind() >= Kind::StructDecl and expr->kind() <= Kind::MemberAccess;
+        return expr->kind() >= Kind::TypeDecl and expr->kind() <= Kind::MemberAccess;
     }
 };
 
@@ -884,7 +895,7 @@ public:
     auto name(std::string name) { _name = std::move(name); }
 
     static bool classof(const Expr* expr) {
-        return expr->kind() >= Kind::StructDecl and expr->kind() <= Kind::FuncDecl;
+        return expr->kind() >= Kind::TypeDecl and expr->kind() <= Kind::FuncDecl;
     }
 };
 
@@ -999,20 +1010,20 @@ public:
     static bool classof(const Expr* expr) { return expr->kind() == Kind::FuncDecl; }
 };
 
-class StructDecl : public Decl {
+class TypeDecl : public Decl {
     /// The module this struct is declared in.
     Module* _module{};
 
 public:
-    StructDecl(Module* mod, std::string name, StructType* declared_type, Location location)
-        : Decl(Kind::StructDecl, std::move(name), declared_type, location), _module(mod) {
+    TypeDecl(Module* mod, std::string name, DeclaredType* declared_type, Location location)
+        : Decl(Kind::TypeDecl, std::move(name), declared_type, location), _module(mod) {
         declared_type->associate_with_decl(this);
     }
 
     /// Get the module this struct is declared in.
     auto module() const -> Module* { return _module; }
 
-    static bool classof(const Expr* expr) { return expr->kind() == Kind::StructDecl; }
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeDecl; }
 };
 
 class TypeAliasDecl : public Decl {
@@ -1351,7 +1362,6 @@ public:
     static bool classof(const Expr* expr) { return expr->kind() == Kind::MemberAccess; }
 };
 } // namespace lcc::intercept
-
 
 /// Formatter for types.
 template <>

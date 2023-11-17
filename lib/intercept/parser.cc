@@ -116,6 +116,7 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::Return:
         case Tk::Export:
         case Tk::Struct:
+        case Tk::Enum:
         case Tk::Lambda:
         case Tk::Expression:
             return true;
@@ -323,29 +324,23 @@ auto intc::Parser::ParseDeclRest(
         case Tk::Colon: {
             NextToken();
 
-            /// If the next token is 'type' or 'struct', then this
+            /// If the next token is 'enum', 'type' or 'struct', then this
             /// is a type declaration.
-            if (At(Tk::Struct, Tk::Type)) {
+            if (At(Tk::Enum, Tk::Struct, Tk::Type)) {
                 if (is_extern) Error("Type declarations cannot be extern");
                 if (is_static) Error("Type declarations cannot be static");
                 auto decl_name = ident; /// Copy required below.
 
-                /// Struct declaration.
-                if (At(Tk::Struct)) {
+                /// Struct or enum declaration.
+                if (At(Tk::Enum, Tk::Struct)) {
                     /// Parse the type.
                     auto decl = ParseType();
                     if (not decl) return decl.diag();
-
-                    /// Type must be a struct type.
-                    if (auto s = cast<StructType>(*decl)) {
-                        return DeclScope()->declare(
-                            context,
-                            std::move(decl_name),
-                            new (*mod) StructDecl(mod.get(), std::move(ident), s, location)
-                        );
-                    } else {
-                        return Error("Declared type must be an unqualified struct type");
-                    }
+                    return DeclScope()->declare(
+                        context,
+                        std::move(decl_name),
+                        new (*mod) TypeDecl(mod.get(), std::move(ident), as<DeclaredType>(*decl), location)
+                    );
                 }
 
                 /// Type alias declaration.
@@ -436,6 +431,53 @@ auto intc::Parser::ParseDeclRest(
     }
 }
 
+/// Parse an enum declaration.
+///
+/// <type-enum> ::= ENUM [ "(" <type> ")" ] [ <enum-body> ]
+/// <enum-body> ::= "{" { IDENTIFIER [ ":=" <expr> ] [ "," ] } "}"
+auto intc::Parser::ParseEnumType() -> Result<EnumType*> {
+    auto loc = tok.location;
+    LCC_ASSERT(Consume(Tk::Enum), "ParseEnumType called while not at 'enum'");
+
+    /// Parse optional underlying type. Default is `int`.
+    Type* underlying = Type::Int;
+    if (Consume(Tk::LParen)) {
+        auto ty = ParseType();
+        if (not ty) return ty.diag();
+        if (not Consume(Tk::RParen)) Error("Expected )");
+        underlying = *ty;
+    }
+
+    /// The body is optional.
+    if (not At(Tk::LBrace)) return new (*mod) EnumType(underlying, {}, loc);
+
+    /// Parse body.
+    std::vector<EnumType::Enumerator> enumerators;
+    NextToken();
+    while (At(Tk::Ident)) {
+        auto name = tok.text;
+        auto enumerator_loc = tok.location;
+        NextToken();
+
+        /// Parse optional value.
+        Expr* value{};
+        if (Consume(Tk::ColonEq)) {
+            auto v = ParseExpr();
+            if (v) value = *v;
+        }
+
+        /// Add enumerator.
+        enumerators.emplace_back(std::move(name), value, enumerator_loc);
+
+        /// Any yeet a comma, if any.
+        Consume(Tk::Comma);
+    }
+
+    /// Done.
+    if (not Consume(Tk::RBrace)) Error("Expected }}");
+    return new (*mod) EnumType(underlying, std::move(enumerators), loc);
+}
+
 /// See grammar.bnf for a list of productions handled by this rule.
 /// <expr> ::= ...
 auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> ExprResult {
@@ -475,6 +517,7 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
         case Tk::IntKw:
         case Tk::Void:
         case Tk::Struct:
+        case Tk::Enum:
         case Tk::Type:
             return Error("Types are not allowed here. Did you forget a ':' or 'lambda'?");
 
@@ -930,8 +973,8 @@ auto intc::Parser::ParsePreamble(File& f) -> Result<void> {
 /// <member-decl> ::= IDENTIFIER ":" <type> [ ";" ]
 auto intc::Parser::ParseStructType() -> Result<StructType*> {
     auto loc = tok.location;
-    LCC_ASSERT(Consume(Tk::Struct), "ParseStructType called while not at 'type'");
-    if (not Consume(Tk::LBrace)) return Error("Expected '{{' after 'type' in struct declaration");
+    LCC_ASSERT(Consume(Tk::Struct), "ParseStructType called while not at 'struct'");
+    if (not Consume(Tk::LBrace)) return Error("Expected '{{' after 'struct' in struct declaration");
 
     /// Parse the struct body.
     std::vector<StructType::Member> members;
@@ -1021,7 +1064,7 @@ void intc::Parser::ParseTopLevel() {
 ///
 /// <type>           ::= <type-quals> <type-base> <type-rest> | "(" <type> ")"
 /// <type-quals>     ::= { "@" | "&" }
-/// <type-base>      ::= <type-struct> | <type-builtin> | IDENTIFIER | INT_TYPE
+/// <type-base>      ::= <type-struct> | <type-enum> | <type-builtin> | IDENTIFIER | INT_TYPE
 /// <type-struct>    ::= TYPE <struct-body>
 /// <type-builtin>   ::= INTEGER | BYTE | BOOL | VOID
 /// <type-rest>      ::= { <type-arr-sz> | <type-signature>  }
@@ -1086,6 +1129,12 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
         /// Structure type.
         case Tk::Struct:
             if (auto type = ParseStructType(); not type) return type.diag();
+            else ty = *type;
+            break;
+
+        /// Enumeration type.
+        case Tk::Enum:
+            if (auto type = ParseEnumType(); not type) return type.diag();
             else ty = *type;
             break;
 

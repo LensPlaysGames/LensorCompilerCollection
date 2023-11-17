@@ -56,8 +56,9 @@
 /// type precedence, see the comment in ParseType().
 <type>           ::= <type-quals> <type-base> <type-rest> | "(" <type> ")"
 <type-quals>     ::= { "@" | "&" }
-<type-base>      ::= <type-struct> | <type-builtin> | IDENTIFIER | INT_TYPE
+<type-base>      ::= <type-struct> | <type-enum> | <type-builtin> | IDENTIFIER | INT_TYPE
 <type-struct>    ::= STRUCT <struct-body>
+<type-enum>      ::= ENUM [ "(" <type> ")" ] [ <enum-body> ]
 <type-builtin>   ::= INT | BYTE | BOOL | VOID
 <type-rest>      ::= { <type-arr-sz> | <type-signature>  }
 <type-arr-sz>    ::= "[" <expr> "]"
@@ -71,6 +72,7 @@
 <type-function>  ::= <type-base> <type-signature>
 <function-body>  ::= "=" <expr> | <expr-block>
 <struct-body>    ::= "{" { <member-decl> } "}"
+<enum-body>      ::= "{" { IDENTIFIER [ ":=" <expr> ] [ "," ] } "}"
 <member-decl>    ::= IDENTIFIER ":" <type> [ ";" ]
 <binary>         ::= /// All binary operators
 <prefix>         ::= /// All unary prefix operators

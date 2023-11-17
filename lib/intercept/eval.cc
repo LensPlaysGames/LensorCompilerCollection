@@ -7,7 +7,7 @@ bool lcc::intercept::Expr::evaluate(const Context* ctx, EvalResult& out, bool re
         case Kind::While:
         case Kind::For:
         case Kind::Return:
-        case Kind::StructDecl:
+        case Kind::TypeDecl:
         case Kind::TypeAliasDecl:
         case Kind::VarDecl:
         case Kind::FuncDecl:
