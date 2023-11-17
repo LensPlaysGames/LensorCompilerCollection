@@ -862,7 +862,7 @@ class LoadInst : public Inst {
 public:
     LoadInst(Type* ty, Value* ptr, Location loc = {})
         : Inst(Kind::Load, ty, loc), pointer(ptr) {
-        LCC_ASSERT(ptr->type() == Type::PtrTy, "LoadInst can only load from pointers");
+        LCC_ASSERT(ptr->type() == Type::PtrTy, "IR: LoadInst can only load from pointers, which {} is not", *ty);
         AddUse(pointer, this);
     }
 
