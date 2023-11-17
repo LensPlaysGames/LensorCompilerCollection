@@ -160,6 +160,11 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                     generated_ir[expr] = neg;
                     insert(neg);
                 } break;
+                case TokenKind::Tilde: {
+                    auto* cmpl = new (*module) ComplInst(generated_ir[unary_expr->operand()], expr->location());
+                    generated_ir[expr] = cmpl;
+                    insert(cmpl);
+                } break;
                 case TokenKind::At: {
                     generated_ir[expr] = generated_ir[unary_expr->operand()];
                 } break;
