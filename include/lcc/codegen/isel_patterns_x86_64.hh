@@ -163,6 +163,25 @@ using u_gt_eq_reg_reg = cmp_reg_reg<MInst::Kind::UGe, Opcode::SetByteIfEqualOrGr
 using s_gt_eq_reg_reg = cmp_reg_reg<MInst::Kind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
 using eq_reg_reg = cmp_reg_reg<MInst::Kind::Eq, Opcode::SetByteIfEqual>;
 
+template <MInst::Kind kind, Opcode set_opcode>
+using cmp_reg_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(kind), Register<0, 0>, Immediate<0>>>,
+    InstList<
+        // NOTE: GNU ordering of operands
+        Inst<Clobbers<>, usz(Opcode::Compare), o<1>, o<0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
+        Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
+
+using u_lt_reg_imm = cmp_reg_imm<MInst::Kind::ULt, Opcode::SetByteIfLessUnsigned>;
+using s_lt_reg_imm = cmp_reg_imm<MInst::Kind::SLt, Opcode::SetByteIfLessSigned>;
+using u_lt_eq_reg_imm = cmp_reg_imm<MInst::Kind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
+using s_lt_eq_reg_imm = cmp_reg_imm<MInst::Kind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
+using u_gt_reg_imm = cmp_reg_imm<MInst::Kind::UGt, Opcode::SetByteIfGreaterUnsigned>;
+using s_gt_reg_imm = cmp_reg_imm<MInst::Kind::SGt, Opcode::SetByteIfGreaterSigned>;
+using u_gt_eq_reg_imm = cmp_reg_imm<MInst::Kind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
+using s_gt_eq_reg_imm = cmp_reg_imm<MInst::Kind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
+using eq_reg_imm = cmp_reg_imm<MInst::Kind::Eq, Opcode::SetByteIfEqual>;
+
 using x86_64PatternList = PatternList<
     ret,
     ret_imm,
@@ -200,7 +219,17 @@ using x86_64PatternList = PatternList<
     s_gt_reg_reg,
     u_gt_eq_reg_reg,
     s_gt_eq_reg_reg,
-    eq_reg_reg>;
+    eq_reg_reg,
+
+    u_lt_reg_imm,
+    s_lt_reg_imm,
+    u_lt_eq_reg_imm,
+    s_lt_eq_reg_imm,
+    u_gt_reg_imm,
+    s_gt_reg_imm,
+    u_gt_eq_reg_imm,
+    s_gt_eq_reg_imm,
+    eq_reg_imm>;
 
 } // namespace isel
 } // namespace lcc
