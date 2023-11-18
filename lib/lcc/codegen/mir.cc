@@ -27,10 +27,23 @@ auto PrintMOperand(const MOperand& op) -> std::string {
     return "<?>";
 }
 
+auto MInstOpcodeToString(usz opcode) -> std::string {
+    return opcode < +MInst::Kind::ArchStart
+             ? ToString(static_cast<MInst::Kind>(opcode))
+             : fmt::format("{}", opcode);
+}
+
 [[nodiscard]]
-auto PrintMInst(const MInst& inst) -> std::string {
+auto PrintMInstImpl(const MInst& inst, auto&& inst_opcode) -> std::string {
     // Instructions that can never produce a value shouldn't show register.
-    if (inst.opcode() < +MInst::Kind::ArchStart and (inst.kind() == MInst::Kind::Store or inst.kind() == MInst::Kind::Branch or inst.kind() == MInst::Kind::CondBranch or inst.kind() == MInst::Kind::Return or inst.kind() == MInst::Kind::Unreachable))
+    // clang-format off
+    if (inst.opcode() < +MInst::Kind::ArchStart
+        and (inst.kind() == MInst::Kind::Store
+             or inst.kind() == MInst::Kind::Branch
+             or inst.kind() == MInst::Kind::CondBranch
+             or inst.kind() == MInst::Kind::Return
+             or inst.kind() == MInst::Kind::Unreachable))
+        // clang-format on
         return fmt::format(
             "    {}{}{}",
             ToString(inst.kind()),
@@ -44,14 +57,19 @@ auto PrintMInst(const MInst& inst) -> std::string {
         inst.reg(),
         inst.regsize(),
         inst.use_count() or MInst::is_terminator(MInst::Kind(inst.opcode())) ? "" : "Unused ",
-        inst.opcode() < +MInst::Kind::ArchStart ? ToString(inst.kind()) : fmt::format("{}", inst.opcode()),
+        inst_opcode(inst.opcode()),
         inst.all_operands().empty() ? "" : " ",
         fmt::join(vws::transform(inst.all_operands(), PrintMOperand), " ")
     );
 }
 
 [[nodiscard]]
-auto PrintMBlock(const MBlock& block) -> std::string {
+auto PrintMInst(const MInst& inst) -> std::string {
+    return PrintMInstImpl(inst, MInstOpcodeToString);
+}
+
+[[nodiscard]]
+auto PrintMBlockImpl(const MBlock& block, auto&& inst_opcode) -> std::string {
     auto out = fmt::format("  {}:\n", block.name());
     if (block.predecessors().size()) {
         out += fmt::format(
@@ -65,12 +83,20 @@ auto PrintMBlock(const MBlock& block) -> std::string {
             fmt::join(block.successors(), ", ")
         );
     }
-    out += fmt::format("{}", fmt::join(vws::transform(block.instructions(), PrintMInst), "\n"));
+    for (auto& instruction : block.instructions()) {
+        out += PrintMInstImpl(instruction, inst_opcode);
+        out += '\n';
+    }
     return out;
 };
 
 [[nodiscard]]
-auto PrintMFunction(const MFunction& function) -> std::string {
+auto PrintMBlock(const MBlock& block) -> std::string {
+    return PrintMBlockImpl(block, MInstOpcodeToString);
+}
+
+[[nodiscard]]
+auto PrintMFunctionImpl(const MFunction& function, auto&& inst_opcode) -> std::string {
     const auto PrintLocal = [&](auto&& pair) -> std::string {
         auto&& [index, local] = std::forward<decltype(pair)>(pair);
         return fmt::format(
@@ -80,14 +106,24 @@ auto PrintMFunction(const MFunction& function) -> std::string {
             local->allocated_type()->bytes()
         );
     };
-    return fmt::format(
-        "{}:\n{}{}{}",
+    auto out = fmt::format(
+        "{}:\n{}{}",
         function.name(),
         fmt::join(vws::transform(vws::enumerate(function.locals()), PrintLocal), "\n"),
-        function.locals().empty() ? "" : "\n",
-        fmt::join(vws::transform(function.blocks(), PrintMBlock), "\n")
+        function.locals().empty() ? "" : "\n"
     );
+    for (auto& block : function.blocks()) {
+        out += PrintMBlockImpl(block, inst_opcode);
+        if (&block != &function.blocks().back())
+            out += '\n';
+    }
+    return out;
 };
+
+[[nodiscard]]
+auto PrintMFunction(const MFunction& function) -> std::string {
+    return PrintMFunctionImpl(function, MInstOpcodeToString);
+}
 
 [[nodiscard]]
 auto PrintMIR(std::vector<GlobalVariable*>& vars, std::vector<MFunction>& mcode) -> std::string {

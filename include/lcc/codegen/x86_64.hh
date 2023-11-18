@@ -67,6 +67,7 @@ enum struct RegisterId : u32 {
     RETURN = 0x210,
 };
 
+std::string opcode_to_string(usz opcode);
 std::string ToString(Opcode op);
 std::string ToString(RegisterId id);
 std::string ToString(RegisterId id, usz size);

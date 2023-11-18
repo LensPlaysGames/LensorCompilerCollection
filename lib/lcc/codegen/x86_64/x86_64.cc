@@ -1,5 +1,7 @@
 #include <lcc/codegen/x86_64.hh>
 
+#include <lcc/codegen/mir.hh>
+
 namespace lcc {
 namespace x86_64 {
 
@@ -33,6 +35,12 @@ std::string ToString(Opcode op) {
         case Opcode::SetByteIfEqualOrGreaterSigned: return "setge";
     }
     LCC_UNREACHABLE();
+}
+
+std::string opcode_to_string(usz opcode) {
+    if (opcode >= +MInst::Kind::ArchStart)
+        return ToString(static_cast<Opcode>(opcode));
+    return MInstOpcodeToString(opcode);
 }
 
 std::string ToString(RegisterId id, usz size) {

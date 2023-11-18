@@ -386,9 +386,17 @@ inline std::string ToString(MInst::Kind k) {
 [[nodiscard]]
 auto PrintMOperand(const MOperand& op) -> std::string;
 [[nodiscard]]
+auto MInstOpcodeToString(usz opcode) -> std::string;
+[[nodiscard]]
+auto PrintMInstImpl(const MInst& inst, auto&& inst_opcode) -> std::string;
+[[nodiscard]]
 auto PrintMInst(const MInst& inst) -> std::string;
 [[nodiscard]]
+auto PrintMBlockImpl(const MBlock& block, auto&& inst_opcode) -> std::string;
+[[nodiscard]]
 auto PrintMBlock(const MBlock& block) -> std::string;
+[[nodiscard]]
+auto PrintMFunctionImpl(const MFunction& function, auto&& inst_opcode) -> std::string;
 [[nodiscard]]
 auto PrintMFunction(const MFunction& function) -> std::string;
 [[nodiscard]]

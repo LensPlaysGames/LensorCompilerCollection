@@ -100,10 +100,16 @@ void Module::emit(std::filesystem::path output_file_path) {
                 select_instructions(this, mfunc);
 
             if (_ctx->should_print_mir()) {
-                fmt::print(
-                    "After ISel\n{}\n",
-                    fmt::join(vws::transform(machine_ir, PrintMFunction), "\n")
-                );
+                fmt::print("After ISel\n");
+                if (_ctx->target()->is_x64()) {
+                    for (auto& f : machine_ir)
+                        fmt::print("{}\n", PrintMFunctionImpl(f, x86_64::opcode_to_string));
+                } else {
+                    fmt::print(
+                        "{}\n",
+                        fmt::join(vws::transform(machine_ir, PrintMFunction), "\n")
+                    );
+                }
             }
 
             // Register Allocation
@@ -142,10 +148,16 @@ void Module::emit(std::filesystem::path output_file_path) {
                 allocate_registers(desc, mfunc);
 
             if (_ctx->should_print_mir()) {
-                fmt::print(
-                    "After RA\n{}\n",
-                    fmt::join(vws::transform(machine_ir, PrintMFunction), "\n")
-                );
+                fmt::print("After RA\n");
+                if (_ctx->target()->is_x64()) {
+                    for (auto& f : machine_ir)
+                        fmt::print("{}\n", PrintMFunctionImpl(f, x86_64::opcode_to_string));
+                } else {
+                    fmt::print(
+                        "{}\n",
+                        fmt::join(vws::transform(machine_ir, PrintMFunction), "\n")
+                    );
+                }
                 std::exit(0);
             }
 
