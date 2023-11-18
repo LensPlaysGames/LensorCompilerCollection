@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
+#include <lcc/codegen/x86_64.hh>
 #include <lcc/utils.hh>
 #include <ranges>
 #include <variant>
@@ -140,20 +141,42 @@ static void collect_interferences_from_block(
             }
         }
 
+        // FIXME:
+        // Lens_r: I've removed this, because I'm pretty sure it's not needed, and
+        // everything appears to still work. However, I have a feeling that
+        // ignoring clobbers entirely in RA isn't the proper move. So, I need to
+        // figure out what the hell clobbers would be used for in RA. What does it
+        // mean if an instruction clobbers a register? Does that register go
+        // live *after* the instruction? During it only?
+        //
         // Make all reg operands interfere with all clobbers of this instruction
-        for (auto r : vreg_operands) {
-            for (auto index : inst.operand_clobbers()) {
-                auto op = inst.get_operand(index);
-                if (std::holds_alternative<MOperandRegister>(op)) {
-                    auto reg = std::get<MOperandRegister>(op);
-                    auto live_idx = live_idx_from_register_value(reg.value);
-                    // fmt::print("{} and {} interfere due to clobbering\n", reg.value, r.reg.value);
-                    matrix.set(r.idx, live_idx);
-                }
-            }
-        }
+        // x86_64 GNU ASM
+        //     mov 40(%v0), %v1
+        // MIR Representation
+        //     MoveDereferenceLHS(v0, v1, 40) clobbers 1st operand
+        // RESULT
+        //     v0 and v1 interfere, as v0 is a register operand and v1 is a clobber.
+        //
+        // for (auto r : vreg_operands) {
+        //    for (auto index : inst.operand_clobbers()) {
+        //        auto op = inst.get_operand(index);
+        //        if (std::holds_alternative<MOperandRegister>(op)) {
+        //            auto reg = std::get<MOperandRegister>(op);
+        //            auto live_idx = live_idx_from_register_value(reg.value);
+        //            // fmt::print("{} and {} interfere due to clobbering\n", reg.value, r.reg.value);
+        //            matrix.set(r.idx, live_idx);
+        //        }
+        //    }
+        //}
 
         // Make all reg operands interfere with all currently live values
+        // Live Values: v3, v7
+        // x86_64 GNU ASM
+        //     mov 40(%v0), %v1
+        // MIR Representation
+        //     MoveDereferenceLHS(v0, v1, 40) clobbers 1st operand
+        // RESULT
+        //     Both v0 and v1 interfere with both v3 and v7.
         for (auto r : vreg_operands) {
             for (auto live : live_values)
                 matrix.set(r.idx, live_idx_from_register_value(live));
@@ -237,6 +260,13 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             }
         }
     }
+
+    // TODO: We need the context here (or the module so we can get to the
+    // context) so that we can query if target is actually x86_64.
+    // fmt::print(
+    //    "Return register replaced.\n{}\n",
+    //    PrintMFunctionImpl(function, x86_64::opcode_to_string)
+    //);
 
     // STEP ONE
     // Populate list of registers, first using hardware registers, then using virtual registers.
@@ -383,7 +413,6 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             }
         }
 
-
         usz reg_value = 0;
         for (auto reg : desc.registers) {
             if (not(register_interferences & (usz(1) << reg))) {
@@ -428,7 +457,6 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             }
         }
     }
-
 }
 
 } // namespace lcc
