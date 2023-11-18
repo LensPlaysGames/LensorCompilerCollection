@@ -133,6 +133,10 @@ static void collect_interferences_from_block(
             usz idx;
         } MIROperandPlusLiveValIndex;
         std::vector<MIROperandPlusLiveValIndex> vreg_operands{};
+        if (inst.reg() >= +MInst::Kind::ArchStart) {
+            auto reg = Register{inst.reg(), uint(inst.regsize())};
+            vreg_operands.push_back({reg, live_idx_from_register(reg)});
+        }
         for (auto& op : inst.all_operands()) {
             if (std::holds_alternative<MOperandRegister>(op)) {
                 auto reg = std::get<MOperandRegister>(op);
@@ -188,6 +192,9 @@ static void collect_interferences_from_block(
             if (not r.reg.defining_use and std::find(live_values.begin(), live_values.end(), r.reg.value) == live_values.end())
                 live_values.push_back(r.reg.value);
         }
+        // Handle the case of a non-defining register operand in use of the
+        // instruction that defines that register.
+        if (inst.is_defining()) std::erase(live_values, inst.reg());
 
     } // for inst
 
