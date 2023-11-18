@@ -2,6 +2,7 @@
 #define LCC_EVAL_HH
 
 #include <lcc/utils.hh>
+#include <lcc/utils/aint.hh>
 
 namespace lcc::intercept {
 class Scope;
@@ -15,23 +16,28 @@ class StringLiteral;
 
 class EvalResult {
     std::variant< // clang-format off
-        i64,
+        aint,
         std::nullptr_t,
         StringLiteral*,
         std::monostate
     > data; // clang-format on
 public:
     EvalResult() : data(std::monostate()) {}
-    EvalResult(i64 data) : data(data) {}
-    EvalResult(bool data) : data(i64(1)) {}
     EvalResult(std::nullptr_t) : data(nullptr) {}
     EvalResult(StringLiteral* data) : data(data) {}
+    EvalResult(aint data) : data(data) {}
+    EvalResult(std::same_as<bool> auto data) : EvalResult(aint(1)) {}
 
-    bool is_i64() const { return std::holds_alternative<i64>(data); }
+    /// Requires rather annoying explicit disabmiguation due to subsumption rules
+    EvalResult(std::integral auto data)
+    requires (not std::is_same_v<std::remove_cvref_t<decltype(data)>, bool>)
+        : EvalResult(aint(data)) {}
+
+    bool is_int() const { return std::holds_alternative<aint>(data); }
     bool is_null() const { return std::holds_alternative<std::nullptr_t>(data); }
     bool is_string() const { return std::holds_alternative<StringLiteral*>(data); }
 
-    i64 as_i64() const { return std::get<i64>(data); }
+    aint as_int() const { return std::get<aint>(data); }
     StringLiteral* as_string() const { return std::get<StringLiteral*>(data); }
 };
 

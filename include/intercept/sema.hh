@@ -3,6 +3,7 @@
 
 #include <intercept/ast.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/aint.hh>
 
 namespace lcc::intercept {
 class Sema {
@@ -116,6 +117,9 @@ private:
     Diag Error(Location loc, fmt::format_string<format_type_t<Args>...> fmt, Args&&... args) {
         return Diag::Error(context, loc, fmt, Format<Args>(std::forward<Args>(args))...);
     }
+
+    /// Evaluate a constant expression and ensure it is an integer.
+    bool EvaluateAsInt(Expr* expr, Type* int_type, aint& out);
 
     /// Format a type.
     template <typename Ty>

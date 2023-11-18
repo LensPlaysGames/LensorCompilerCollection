@@ -449,10 +449,16 @@ auto intc::Parser::ParseEnumType() -> Result<EnumType*> {
     }
 
     /// The body is optional.
-    if (not At(Tk::LBrace)) return new (*mod) EnumType(underlying, {}, loc);
+    if (not At(Tk::LBrace)) return new (*mod) EnumType(
+        new (*mod) Scope(CurrScope()),
+        underlying,
+        {},
+        loc
+    );
 
     /// Parse body.
-    std::vector<EnumType::Enumerator> enumerators;
+    ScopeRAII sc{this};
+    std::vector<EnumeratorDecl*> enumerators;
     NextToken();
     while (At(Tk::Ident)) {
         auto name = tok.text;
@@ -467,7 +473,7 @@ auto intc::Parser::ParseEnumType() -> Result<EnumType*> {
         }
 
         /// Add enumerator.
-        enumerators.emplace_back(std::move(name), value, enumerator_loc);
+        enumerators.emplace_back(new (*mod) EnumeratorDecl(std::move(name), value, enumerator_loc));
 
         /// Any yeet a comma, if any.
         Consume(Tk::Comma);
@@ -475,7 +481,7 @@ auto intc::Parser::ParseEnumType() -> Result<EnumType*> {
 
     /// Done.
     if (not Consume(Tk::RBrace)) Error("Expected }}");
-    return new (*mod) EnumType(underlying, std::move(enumerators), loc);
+    return new (*mod) EnumType(sc.scope, underlying, std::move(enumerators), loc);
 }
 
 /// See grammar.bnf for a list of productions handled by this rule.
@@ -690,7 +696,7 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
                 auto member = tok.text;
                 auto loc = tok.location;
                 NextToken();
-                lhs = new (*mod) MemberAccessExpr(*lhs, std::move(member), loc);
+                lhs = new (*mod) MemberAccessExpr(*lhs, std::move(member), {lhs->location(), loc});
                 continue;
             }
         }
@@ -977,6 +983,7 @@ auto intc::Parser::ParseStructType() -> Result<StructType*> {
     if (not Consume(Tk::LBrace)) return Error("Expected '{{' after 'struct' in struct declaration");
 
     /// Parse the struct body.
+    ScopeRAII sc{this};
     std::vector<StructType::Member> members;
     while (not At(Tk::RBrace)) {
         /// Name.
@@ -998,7 +1005,7 @@ auto intc::Parser::ParseStructType() -> Result<StructType*> {
     if (not Consume(Tk::RBrace)) return Error("Expected '}}' in struct declaration");
 
     /// Create the struct type.
-    return new (*mod) StructType(std::move(members), Location{loc, tok.location});
+    return new (*mod) StructType(sc.scope, std::move(members), Location{loc, tok.location});
 }
 
 /// <file> ::= <preamble> { [ <expr> ] ";" }

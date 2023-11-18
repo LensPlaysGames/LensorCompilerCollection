@@ -6,6 +6,7 @@
 #include <lcc/diags.hh>
 #include <lcc/syntax/token.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/aint.hh>
 #include <lcc/utils/result.hh>
 #include <span>
 
@@ -389,6 +390,9 @@ public:
     /// Check if this is a builtin type.
     bool is_builtin() const { return _kind == Kind::Builtin; }
 
+    /// Check if this is an enum type.
+    bool is_enum() const { return _kind == Kind::Enum; }
+
     /// Check if this is a function type.
     bool is_function() const { return _kind == Kind::Function; }
 
@@ -695,9 +699,12 @@ class TypeDecl;
 class DeclaredType : public Type {
     TypeDecl* _decl{};
 
+    /// The scope for the contents of this type.
+    Scope* _scope{};
+
 public:
-    DeclaredType(Kind kind, Location location)
-        : Type(kind, location) {}
+    DeclaredType(Kind kind, Scope* scope, Location location)
+        : Type(kind, location), _scope(scope) {}
 
     /// Associate this type with a declaration.
     void associate_with_decl(TypeDecl* decl) {
@@ -709,6 +716,9 @@ public:
     ///
     /// If this is an anonymous type, this returns null.
     auto decl() const -> TypeDecl* { return _decl; }
+
+    /// Get the scope for the contents of this type.
+    auto scope() -> Scope* { return _scope; }
 
     static bool classof(const Type* type) {
         return type->kind() == Kind::Enum or type->kind() == Kind::Struct;
@@ -733,8 +743,8 @@ private:
     usz _alignment{};
 
 public:
-    StructType(std::vector<Member> members, Location location)
-        : DeclaredType(Kind::Struct, location), _members(std::move(members)) {}
+    StructType(Scope* scope, std::vector<Member> members, Location location)
+        : DeclaredType(Kind::Struct, scope, location), _members(std::move(members)) {}
 
     usz alignment() const { return _alignment; }
     void alignment(usz alignment) { _alignment = alignment; }
@@ -748,26 +758,19 @@ public:
     static bool classof(const Type* type) { return type->kind() == Kind::Struct; }
 };
 
+class EnumeratorDecl;
 class EnumType : public DeclaredType {
-public:
-    struct Enumerator {
-        std::string name;
-        Expr* value;
-        Location loc;
-    };
-
-private:
-    std::vector<Enumerator> _enumerators;
+    std::vector<EnumeratorDecl*> _enumerators;
     Type* _underlying_type{};
 
 public:
-    EnumType(Type* underlying_type, std::vector<Enumerator> enumerators, Location location)
-        : DeclaredType(Kind::Enum, location),
+    EnumType(Scope* scope, Type* underlying_type, std::vector<EnumeratorDecl*> enumerators, Location location)
+        : DeclaredType(Kind::Enum, scope, location),
           _enumerators(std::move(enumerators)),
           _underlying_type(underlying_type) {}
 
-    auto enumerators() -> std::vector<Enumerator>& { return _enumerators; }
-    auto enumerators() const -> const std::vector<Enumerator>& { return _enumerators; }
+    auto enumerators() -> std::vector<EnumeratorDecl*>& { return _enumerators; }
+    auto enumerators() const -> const std::vector<EnumeratorDecl*>& { return _enumerators; }
 
     auto underlying_type() -> Type*& { return _underlying_type; }
 
@@ -800,6 +803,7 @@ public:
 
         TypeDecl,
         TypeAliasDecl,
+        EnumeratorDecl,
         VarDecl,
         FuncDecl,
 
@@ -897,6 +901,25 @@ public:
     static bool classof(const Expr* expr) {
         return expr->kind() >= Kind::TypeDecl and expr->kind() <= Kind::FuncDecl;
     }
+};
+
+/// Enumerator declaration.
+///
+/// This is a decl so NameRefExpr can refer to it.
+class EnumeratorDecl : public Decl {
+    Expr* _init;
+
+public:
+    EnumeratorDecl(std::string name, Expr* init, Location location)
+        : Decl(Kind::EnumeratorDecl, std::move(name), Type::Int, location),
+          _init(init) {}
+
+    auto init() -> Expr*& { return _init; }
+    auto init() const { return _init; }
+
+    aint value() const;
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::EnumeratorDecl; }
 };
 
 /// A declaration that has linkage.
@@ -1016,7 +1039,8 @@ class TypeDecl : public Decl {
 
 public:
     TypeDecl(Module* mod, std::string name, DeclaredType* declared_type, Location location)
-        : Decl(Kind::TypeDecl, std::move(name), declared_type, location), _module(mod) {
+        : Decl(Kind::TypeDecl, std::move(name), declared_type, location),
+          _module(mod) {
         declared_type->associate_with_decl(this);
     }
 
@@ -1035,16 +1059,16 @@ public:
 };
 
 class IntegerLiteral : public TypedExpr {
-    u64 _value;
+    aint _value;
 
 public:
-    IntegerLiteral(u64 value, Location location)
+    IntegerLiteral(aint value, Location location)
         : TypedExpr(Kind::IntegerLiteral, location, Type::Int), _value(value) {
         /// For now, there should be no way that the value could be out of range.
         set_sema_done();
     }
 
-    u64 value() const { return _value; }
+    aint value() const { return _value; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::IntegerLiteral; }
 };
@@ -1194,7 +1218,7 @@ public:
 /// Expression that has been evaluated by sema, together w/ a cached value.
 class ConstantExpr : public TypedExpr {
     EvalResult _value;
-    Expr* _expression;
+    Expr* _expression{};
 
 public:
     ConstantExpr(Expr* expr, EvalResult value)
@@ -1205,7 +1229,16 @@ public:
         set_sema_done();
     }
 
+    ConstantExpr(Type* ty, EvalResult value, Location location)
+        : TypedExpr(Kind::EvaluatedConstant, location, ty),
+          _value(std::move(value)) {
+        set_sema_done();
+    }
+
+    /// May return null. This is the case if a constant value of non-`int`
+    /// type needs to be synthesised by the compiler.
     auto expr() const { return _expression; }
+
     auto value() -> EvalResult& { return _value; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::EvaluatedConstant; }

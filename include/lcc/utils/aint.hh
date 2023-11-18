@@ -23,18 +23,18 @@ public:
 
 private:
     Word w{};
-    u8 bit_width{1};
+    u8 bit_width{64};
 
     static constexpr Word Bits = sizeof(Word) * CHAR_BIT;
 
-    constexpr auto SExt() const -> SWord {  return SWord(sign_bit() ? ~Word(0) & w : w); }
+    constexpr auto SExt() const -> SWord { return SWord(sign_bit() ? ~Word(0) & w : w); }
 
 public:
     constexpr aint() = default;
     constexpr aint(bool b) : aint(1, Word(b)) {}
     constexpr aint(std::integral auto value) : aint(sizeof value * CHAR_BIT, Word(value)) {}
-    constexpr aint(u8 width, SWord value) : aint(width, aint(width, Word(value)).sext(width).value()) {}
-    constexpr aint(u8 width, Word value) : w(Word(value)), bit_width(width) {
+    constexpr aint(u64 width, SWord value) : aint(width, aint(width, Word(value)).sext(width).value()) {}
+    constexpr aint(u64 width, Word value) : w(Word(value)), bit_width(u8(width)) {
         LCC_ASSERT(width and width <= Bits, "Bit width must be between 1 and 64");
 
         /// Truncate the value to the given bit width.
@@ -81,9 +81,12 @@ public:
     [[nodiscard]] constexpr aint shr(aint rhs) const { return {bit_width, w >> rhs.w}; }
     [[nodiscard]] constexpr aint sar(aint rhs) const { return {bit_width, Word(SExt() >> rhs.SExt())}; }
 
-    [[nodiscard]] constexpr aint sext(u8 bits) const { return {bits, SExt()}; }
-    [[nodiscard]] constexpr aint zext(u8 bits) const { return {bits, w}; }
-    [[nodiscard]] constexpr aint trunc(u8 bits) const { return {bits, w}; }
+    [[nodiscard]] constexpr aint sext(u64 bits) const {
+        if (bits == bit_width) return *this;
+        return {bits, SExt()};
+    }
+    [[nodiscard]] constexpr aint zext(u64 bits) const { return {bits, w}; }
+    [[nodiscard]] constexpr aint trunc(u64 bits) const { return {bits, w}; }
 
     [[nodiscard]] constexpr bool ult(aint rhs) const { return w < rhs.w; }
     [[nodiscard]] constexpr bool ule(aint rhs) const { return w <= rhs.w; }
@@ -106,11 +109,14 @@ public:
     [[nodiscard]] constexpr Word operator*() const { return w; }
     [[nodiscard]] constexpr bool is_negative() const { return bool(w & sign_bit()); }
     [[nodiscard]] constexpr bool is_power_of_two() const { return std::has_single_bit(value()); }
-    [[nodiscard]] constexpr auto bits() const -> u8 { return bit_width; }
+    [[nodiscard]] constexpr auto bits() const -> u64 { return bit_width; }
     [[nodiscard]] constexpr Word log2() const { return Word(std::countr_zero(value())); }
     [[nodiscard]] constexpr Word popcount() const { return Word(std::popcount(value())); }
     [[nodiscard]] constexpr Word sign_bit() const { return (Word(1) << Word(bit_width - 1)); }
     [[nodiscard]] constexpr auto value() const -> Word { return w; }
+
+    [[nodiscard]] constexpr explicit operator Word() { return w; }
+    [[nodiscard]] constexpr explicit operator SWord() { return SExt(); }
 
     [[nodiscard]] auto str() const -> std::string { return fmt::format("{}", w); }
 };

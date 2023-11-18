@@ -435,7 +435,7 @@ bool intc::Type::Equal(const Type* a, const Type* b) {
 
 auto intc::ArrayType::dimension() const -> usz {
     LCC_ASSERT(ok(), "Can only call dimension() if type has been type checked successfully");
-    return usz(as<ConstantExpr>(size())->value().as_i64());
+    return usz(as<ConstantExpr>(size())->value().as_int());
 }
 
 auto intc::CallExpr::callee_type() const -> FuncType* {
@@ -447,6 +447,13 @@ auto intc::CallExpr::callee_type() const -> FuncType* {
 
 auto intc::Expr::Clone(Module& mod, Expr* expr) -> Expr* {
     LCC_ASSERT(false, "TODO: Clone expressions");
+}
+
+auto intc::EnumeratorDecl::value() const -> aint {
+    LCC_ASSERT(ok(), "value() can only be used if the enumerator was analysed successfully");
+    return is<ConstantExpr>(init())
+             ? as<ConstantExpr>(init())->value().as_int()
+             : as<IntegerLiteral>(init())->value();
 }
 
 /// ===========================================================================
@@ -502,6 +509,18 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
                 return;
             }
 
+            case K::EnumeratorDecl: {
+                auto v = as<intc::EnumeratorDecl>(e);
+                PrintBasicHeader("EnumeratorDecl", e);
+                out += fmt::format(
+                    " {}{} {}{}\n",
+                    C(Blue),
+                    v->name(),
+                    C(Magenta),
+                    v->ok() ? v->value().str() : "?"
+                );
+                return;
+            }
             case K::Binary: {
                 auto b = as<intc::BinaryExpr>(e);
                 PrintBasicHeader("BinaryExpr", e);
@@ -684,6 +703,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
             case K::EvaluatedConstant:
             case K::TypeDecl:
             case K::TypeAliasDecl:
+            case K::EnumeratorDecl:
             case K::IntegerLiteral:
             case K::StringLiteral:
             case K::IntrinsicCall:
@@ -834,7 +854,7 @@ auto intc::Type::string(bool use_colours) const -> std::string {
                     arr->element_type()->string(use_colours),
                     C(Red),
                     C(Magenta),
-                    sz->value().as_i64(),
+                    sz->value().as_int(),
                     C(Red),
                     C(Reset)
                 );

@@ -4,6 +4,9 @@
 bool lcc::intercept::Expr::evaluate(const Context* ctx, EvalResult& out, bool required) {
     LCC_ASSERT(!required || ok(), "Cannot evaluate ill-formed or unchecked expression");
     switch (kind()) {
+        /// These are here not necessarily because they are not constant
+        /// expressions but rather because evaluating them has not yet
+        /// been implemented.
         case Kind::While:
         case Kind::For:
         case Kind::Return:
@@ -17,12 +20,13 @@ bool lcc::intercept::Expr::evaluate(const Context* ctx, EvalResult& out, bool re
         case Kind::IntrinsicCall:
         case Kind::NameRef:
         case Kind::MemberAccess:
+        case Kind::EnumeratorDecl:
         not_constexpr:
             if (required) Diag::Error(ctx, location(), "Not a constant expression");
             return false;
 
         case Kind::IntegerLiteral:
-            out = i64(as<IntegerLiteral>(this)->value());
+            out = as<IntegerLiteral>(this)->value();
             return true;
 
         case Kind::StringLiteral:
@@ -50,7 +54,8 @@ bool lcc::intercept::Expr::evaluate(const Context* ctx, EvalResult& out, bool re
             /// Evaluate the condition.
             EvalResult res;
             if (not i->condition()->evaluate(ctx, res, required)) return false;
-            return res.is_i64() and res.as_i64()
+            if (not res.is_int()) goto not_constexpr;
+            return res.as_int() != 0
                      ? i->then()->evaluate(ctx, out, required)
                      : i->else_()->evaluate(ctx, out, required);
         }
@@ -78,24 +83,24 @@ bool lcc::intercept::Expr::evaluate(const Context* ctx, EvalResult& out, bool re
             switch (u->op()) {
                 default: goto not_constexpr;
                 case TokenKind::Minus:
-                    if (res.is_i64()) {
-                        out = -res.as_i64();
+                    if (res.is_int()) {
+                        out = -res.as_int();
                         return true;
                     }
 
                     goto not_constexpr;
 
                 case TokenKind::Tilde:
-                    if (res.is_i64()) {
-                        out = ~res.as_i64();
+                    if (res.is_int()) {
+                        out = ~res.as_int();
                         return true;
                     }
 
                     goto not_constexpr;
 
                 case TokenKind::Exclam:
-                    if (res.is_i64()) {
-                        out = res.as_i64() == 0;
+                    if (res.is_int()) {
+                        out = res.as_int() == 0;
                         return true;
                     }
 
@@ -108,91 +113,95 @@ bool lcc::intercept::Expr::evaluate(const Context* ctx, EvalResult& out, bool re
             EvalResult lhs, rhs;
             if (not b->lhs()->evaluate(ctx, lhs, required)) return false;
             if (not b->rhs()->evaluate(ctx, rhs, required)) return false;
-            if (not lhs.is_i64() or not rhs.is_i64()) goto not_constexpr;
+            if (not lhs.is_int() or not rhs.is_int()) goto not_constexpr;
             switch (b->op()) {
                 default: goto not_constexpr;
                 case TokenKind::Eq:
-                    out = lhs.as_i64() == rhs.as_i64();
+                    out = lhs.as_int() == rhs.as_int();
                     return true;
 
                 case TokenKind::Ne:
-                    out = lhs.as_i64() != rhs.as_i64();
+                    out = lhs.as_int() != rhs.as_int();
                     return true;
 
                 case TokenKind::Lt:
                     out = b->type()->is_signed_int(ctx)
-                            ? lhs.as_i64() < rhs.as_i64()
-                            : u64(lhs.as_i64()) < u64(rhs.as_i64());
+                            ? lhs.as_int().slt(rhs.as_int())
+                            : lhs.as_int().ult(rhs.as_int());
                     return true;
 
                 case TokenKind::Gt:
                     out = b->type()->is_signed_int(ctx)
-                            ? lhs.as_i64() > rhs.as_i64()
-                            : u64(lhs.as_i64()) > u64(rhs.as_i64());
+                            ? lhs.as_int().sgt(rhs.as_int())
+                            : lhs.as_int().ugt(rhs.as_int());
                     return true;
 
                 case TokenKind::Le:
                     out = b->type()->is_signed_int(ctx)
-                            ? lhs.as_i64() <= rhs.as_i64()
-                            : u64(lhs.as_i64()) <= u64(rhs.as_i64());
+                            ? lhs.as_int().sle(rhs.as_int())
+                            : lhs.as_int().ule(rhs.as_int());
                     return true;
 
                 case TokenKind::Ge:
                     out = b->type()->is_signed_int(ctx)
-                            ? lhs.as_i64() >= rhs.as_i64()
-                            : u64(lhs.as_i64()) >= u64(rhs.as_i64());
+                            ? lhs.as_int().sge(rhs.as_int())
+                            : lhs.as_int().uge(rhs.as_int());
                     return true;
 
                 case TokenKind::Star:
-                    out = lhs.as_i64() * rhs.as_i64();
+                    out = lhs.as_int() * rhs.as_int();
                     return true;
 
                 case TokenKind::Slash:
-                    if (rhs.as_i64() == 0) {
+                    if (rhs.as_int() == 0) {
                         if (required) Diag::Error(ctx, location(), "Division by zero");
                         return false;
                     }
 
-                    out = lhs.as_i64() / rhs.as_i64();
+                    out = b->type()->is_signed_int(ctx)
+                            ? lhs.as_int().sdiv(rhs.as_int())
+                            : lhs.as_int().udiv(rhs.as_int());
                     return true;
 
                 case TokenKind::Percent:
-                    if (rhs.as_i64() == 0) {
+                    if (rhs.as_int() == 0) {
                         if (required) Diag::Error(ctx, location(), "Division by zero");
                         return false;
                     }
 
-                    out = lhs.as_i64() % rhs.as_i64();
+                    out = b->type()->is_signed_int(ctx)
+                            ? lhs.as_int().srem(rhs.as_int())
+                            : lhs.as_int().urem(rhs.as_int());
                     return true;
 
                 case TokenKind::Plus:
-                    out = lhs.as_i64() + rhs.as_i64();
+                    out = lhs.as_int() + rhs.as_int();
                     return true;
 
                 case TokenKind::Minus:
-                    out = lhs.as_i64() - rhs.as_i64();
+                    out = lhs.as_int() - rhs.as_int();
                     return true;
 
                 case TokenKind::Shl:
-                    out = lhs.as_i64() << rhs.as_i64();
+                    out = lhs.as_int() << rhs.as_int();
                     return true;
 
                 case TokenKind::Shr:
                     out = b->type()->is_signed_int(ctx)
-                            ? lhs.as_i64() >> rhs.as_i64()
-                            : i64(u64(lhs.as_i64()) >> u64(rhs.as_i64()));
+                            ? lhs.as_int().sar(rhs.as_int())
+                            : lhs.as_int().shr(rhs.as_int());
                     return true;
 
                 case TokenKind::Ampersand:
-                    out = lhs.as_i64() & rhs.as_i64();
+                    out = lhs.as_int() & rhs.as_int();
                     return true;
 
                 case TokenKind::Pipe:
-                    out = lhs.as_i64() | rhs.as_i64();
+                    out = lhs.as_int() | rhs.as_int();
                     return true;
 
                 case TokenKind::Caret:
-                    out = lhs.as_i64() ^ rhs.as_i64();
+                    out = lhs.as_int() ^ rhs.as_int();
                     return true;
             }
         }

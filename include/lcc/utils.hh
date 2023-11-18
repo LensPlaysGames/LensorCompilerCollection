@@ -304,6 +304,17 @@ void ReplaceAll(
     std::string_view to
 );
 
+/// Invoke a templated lambda or class w/ a templated operator().
+///
+/// \code
+///   auto f = [] <typename T> (int x) { ... };
+///   invoke_template<int>(f, 42);
+/// \endcode
+template <typename ...TemplateArgs, typename ...Args, typename Templ>
+auto invoke_template(Templ&& t, Args&& ...args) -> decltype(auto) {
+    return std::forward<Templ>(t).template operator() <TemplateArgs...>(std::forward<Args>(args)...);
+}
+
 /// Convert a range to a container.
 template <rgs::range Range>
 auto to_vec(Range r) -> std::vector<rgs::range_value_t<Range>> {

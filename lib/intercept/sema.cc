@@ -146,17 +146,17 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
             /// Note: We currently don’t support integer constants larger than 64
             /// bits internally, so if the type has a bit width larger than 64, it
             /// will always fit.
-            auto val = res.as_i64();
+            auto val = res.as_int();
 
             /// Signed to Unsigned Conversion
-            if (val < 0 and to->is_unsigned_int(context)) return ConversionImpossible;
+            if (val.slt(0) and to->is_unsigned_int(context)) return ConversionImpossible;
 
             /// Unsigned to Unsigned Conversion
             auto bits = to->size(context);
             if (
                 from->is_unsigned_int(context) and
                 bits < 64 and
-                u64(val) > u64(utils::MaxBitValue(bits))
+                val > u64(utils::MaxBitValue(bits))
             ) return ConversionImpossible;
 
             if constexpr (PerformConversion) {
@@ -254,6 +254,41 @@ void intc::Sema::Discard(Expr** expr_ptr) {
     );
 }
 
+bool intc::Sema::EvaluateAsInt(Expr* expr, Type* int_type, aint& out) {
+    EvalResult res;
+    if (not expr->evaluate(context, res, true)) return false;
+
+    /// Must be an int.
+    if (not res.is_int()) {
+        Error(expr->location(), "Expression is not an integer constant expression");
+        return false;
+    }
+
+    /// Print a diagnostic if the thing doesn’t fit.
+    bool ok = true;
+    auto bits = int_type->size(context);
+    aint val = res.as_int();
+    auto TooLarge = [&]<typename Int>(auto cb) {
+        out = std::invoke(cb, val, bits);
+        if (std::invoke(cb, out, 64) != std::invoke(cb, val, 64)) {
+            ok = false;
+            Error(
+                expr->location(),
+                "Value {} of integer constant does not fit in an {}",
+                Int(val),
+                int_type
+            );
+        }
+    };
+
+    /// Check that the value fits in the integer type.
+    bool is_signed = int_type->is_signed_int(context);
+    LCC_ASSERT(bits <= 64, "Bit width of integer type in constant expression must be 64 or less");
+    if (is_signed) utils::invoke_template<i64>(TooLarge, &aint::sext);
+    else utils::invoke_template<u64>(TooLarge, &aint::zext);
+    return ok;
+}
+
 bool intc::Sema::HasSideEffects(Expr* expr) {
     switch (expr->kind()) {
         /// These always have side effects.
@@ -264,6 +299,7 @@ bool intc::Sema::HasSideEffects(Expr* expr) {
         case Expr::Kind::TypeAliasDecl:
         case Expr::Kind::VarDecl:
         case Expr::Kind::FuncDecl:
+        case Expr::Kind::EnumeratorDecl:
             return true;
 
         /// These never have side effects.
@@ -274,9 +310,6 @@ bool intc::Sema::HasSideEffects(Expr* expr) {
             return false;
 
         /// For these, it depends.
-        case Expr::Kind::EvaluatedConstant:
-            return HasSideEffects(as<ConstantExpr>(expr)->expr());
-
         case Expr::Kind::Cast:
             return HasSideEffects(as<CastExpr>(expr)->operand());
 
@@ -291,6 +324,11 @@ bool intc::Sema::HasSideEffects(Expr* expr) {
 
         case Expr::Kind::Block:
             return rgs::any_of(as<BlockExpr>(expr)->children(), HasSideEffects);
+
+        case Expr::Kind::EvaluatedConstant: {
+            auto c = as<ConstantExpr>(expr);
+            return c->expr() and HasSideEffects(c->expr());
+        }
 
         case Expr::Kind::Binary: {
             auto b = as<BinaryExpr>(expr);
@@ -763,6 +801,9 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             v->set_lvalue();
         } break;
 
+        /// These are handled by the code that also handles enums.
+        case Expr::Kind::EnumeratorDecl: LCC_UNREACHABLE();
+
         /// Currently, each expression of a compound literal must be
         /// convertible to the same type.
         case Expr::Kind::CompoundLiteral: {
@@ -809,6 +850,41 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             }
 
             /// TODO(Sirraide): Accessing ‘members’ of modules.
+
+            /// ‘object’ is actually a type name.
+            if (is<NameRefExpr>(m->object()) and is<TypeDecl>(as<NameRefExpr>(m->object())->target())) {
+                auto t = as<TypeDecl>(as<NameRefExpr>(m->object())->target());
+                if (is<StructType>(t->type())) LCC_TODO();
+
+                /// Handle accessing enumerators.
+                if (auto e = cast<EnumType>(t->type())) {
+                    auto it = rgs::find_if(e->enumerators(), [&](auto&& en) { return en->name() == m->name(); });
+                    if (it == e->enumerators().end()) {
+                        Error(m->location(), "Type {} has no enumerator named '{}'", e, m->name());
+                        m->set_sema_errored();
+                        break;
+                    }
+
+                    auto enumerator = *it;
+                    if (enumerator->sema_errored()) {
+                        m->set_sema_errored();
+                        break;
+                    }
+
+                    if (not enumerator->ok()) {
+                        Error(m->location(), "Enumerator {} cannot be used before it is defined", enumerator->name());
+                        m->set_sema_errored();
+                        break;
+                    }
+
+                    m->type(enumerator->type());
+                    m->set_sema_done();
+                    *expr_ptr = new (mod) ConstantExpr(expr, enumerator->value());
+                    break;
+                }
+
+                LCC_UNREACHABLE();
+            }
 
             /// Type must be a struct type.
             auto struct_type = cast<StructType>(m->object()->type()->strip_pointers_and_references());
@@ -947,7 +1023,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             if (auto arr = cast<ArrayType>(ty); arr and arr->size()->ok()) {
                 EvalResult res;
                 if (b->rhs()->evaluate(context, res, false)) {
-                    if (res.as_i64() < 0 or res.as_i64() >= as<ConstantExpr>(arr->size())->value().as_i64())
+                    if (res.as_int().is_negative() or res.as_int() >= as<ConstantExpr>(arr->size())->value().as_int().value())
                         Error(b->location(), "Array subscript out of bounds");
 
                     /// Since we already have the result, store it for later.
@@ -1055,7 +1131,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             /// The RHS must be assignable to the LHS.
             if (not Convert(&b->rhs(), b->lhs()->type())) {
                 Error(
-                    b->location(),
+                    b->rhs()->location(),
                     "Type of expression {} is not convertible to variable type {}",
                     b->rhs()->type(),
                     b->lhs()->type()
@@ -1197,27 +1273,31 @@ void intc::Sema::AnalyseCast(CastExpr* c) {
         return;
     }
 
-    /// Explicitly casting from integers to integers and
-    /// integers to booleans and booleans to integers is allowed.
-    if (from->is_integer(true) and to->is_integer(true)) return;
+    /// Explicitly casting from enums/integers to integers and
+    /// enums/integers to booleans and booleans to integers is allowed.
+    if ((from->is_integer(true) or from->is_enum()) and to->is_integer(true)) return;
 
     /// Casting from pointers to integers and pointers to booleans is allowed.
     if (from->is_pointer() and to->is_integer(true)) return;
 
-    /// Hard casts between pointers and from pointers to integers are
-    /// allowed. Note that, if the pointers are compatible, the call to
-    /// Convert() above will have already taken care of this case, so we
-    /// don’t need to check for that here.
-    if (to->is_pointer() and (from->is_integer() or from->is_pointer())) {
-        if (c->is_hard_cast()) return;
-        Error(
+    /// Helper to allow only hard casts.
+    auto HardCast = [&] {
+        if (not c->is_hard_cast()) Error(
             c->location(),
             "Cast from {} to {} is unsafe. If this is intended, use 'as!' instead",
             from,
             to
         );
-        return;
-    }
+    };
+
+    /// Hard casts from integers to enums are allowed.
+    if (from->is_integer(true) and to->is_enum()) return HardCast();
+
+    /// Hard casts between pointers and from pointers to integers are
+    /// allowed. Note that, if the pointers are compatible, the call to
+    /// Convert() above will have already taken care of this case, so we
+    /// don’t need to check for that here.
+    if (to->is_pointer() and (from->is_integer() or from->is_pointer())) return HardCast();
 
     /// Hard casts between types that have the same size are allowed.
     if (from->size(context) == to->size(context) and c->is_hard_cast()) return;
@@ -1389,7 +1469,7 @@ void intc::Sema::AnalyseNameRef(NameRefExpr* expr) {
 
         expr->target(syms.first->second);
         expr->type(syms.first->second->type());
-        expr->set_lvalue();
+        if (syms.first->second->is_lvalue()) expr->set_lvalue();
         return;
     }
 
@@ -1532,7 +1612,7 @@ bool intc::Sema::Analyse(Type** type_ptr) {
     auto type = *type_ptr;
 
     /// Don’t analyse the same type twice.
-    if (type->sema_done_or_errored()) return type->ok();
+    if (type->sema() != SemaNode::State::NotAnalysed) return type->ok();
     type->set_sema_in_progress();
 
     switch (type->kind()) {
@@ -1626,12 +1706,12 @@ bool intc::Sema::Analyse(Type** type_ptr) {
             EvalResult res;
             usz size = 1;
             if (a->size()->ok() and a->size()->evaluate(context, res, false)) {
-                if (res.as_i64() < 1) {
+                if (res.as_int().slt(1)) {
                     Error(a->location(), "Array size must be greater than 0");
                     a->set_sema_errored();
                 }
 
-                size = usz(res.as_i64());
+                size = res.as_int().value();
             } else {
                 if (a->size()->ok()) Error(a->location(), "Array size must be known at compile time");
                 a->set_sema_errored();
@@ -1640,7 +1720,7 @@ bool intc::Sema::Analyse(Type** type_ptr) {
             /// Always create a constant expression for the array size as
             /// other parts of the program assume that array sizes are
             /// constant.
-            a->size() = new (mod) ConstantExpr(a->size(), EvalResult{i64(size)});
+            a->size() = new (mod) ConstantExpr(a->size(), EvalResult(size));
         } break;
 
         /// Analyse the parameters, the return type, and attributes.
@@ -1720,8 +1800,69 @@ bool intc::Sema::Analyse(Type** type_ptr) {
 
         /// Calculate enumerator values.
         case Type::Kind::Enum: {
-            LCC_TODO();
-        }
+            auto e = as<EnumType>(type);
+            isz next_val = 0;
+
+            /// If the underlying type is invalid, default to int so we don’t crash.
+            if (not Analyse(&e->underlying_type())) {
+                e->set_sema_errored();
+                e->underlying_type() = Type::Int;
+            }
+
+            /// Check that all enumerators are unique.
+            std::unordered_set<std::string> names;
+            for (auto& val : e->enumerators()) {
+                if (not names.insert(val->name()).second) {
+                    Error(val->location(), "Duplicate enumerator '{}'", val->name());
+                    e->set_sema_errored();
+                }
+            }
+
+            /// Assign enumerator values to all enumerators.
+            for (auto& val : e->enumerators()) {
+                val->type(e);
+
+                /// Set the value if there is none.
+                if (not val->init()) {
+                    val->init() = new (mod) ConstantExpr(e, next_val, val->location());
+                    val->set_sema_done();
+                }
+
+                /// Analyse the value and evaluate it as an integer; if
+                /// either one fails, default the value to 0 so we don’t
+                /// crash.
+                else {
+                    aint res;
+                    bool converted;
+                    if (
+                        not Analyse(&val->init()) or
+                        not(converted = Convert(&val->init(), e->underlying_type())) or
+                        not EvaluateAsInt(val->init(), e->underlying_type(), res)
+                    ) {
+                        if (val->init()->ok() and not converted) Error(
+                            val->init()->location(),
+                            "Type {} of initialiser is not convertible to {}",
+                            val->init()->type(),
+                            e->underlying_type()
+                        );
+
+                        val->init() = new (mod) ConstantExpr(e, aint(), val->location());
+                        val->set_sema_errored();
+                    } else {
+                        InsertImplicitCast(&val->init(), e);
+                        val->init() = new (mod) ConstantExpr(val->init(), EvalResult{res});
+                        val->set_sema_done();
+                        next_val = isz(as<ConstantExpr>(val->init())->value().as_int().zext(64).value());
+                    }
+                }
+
+                next_val++;
+                if (val->ok()) {
+                    auto d = e->scope()->declare(context, auto{val->name()}, val);
+                    LCC_ASSERT(not d.is_diag());
+                }
+            }
+        } break;
     }
 
     /// Do *not* use `type` here, as it may have been replaced by something else.

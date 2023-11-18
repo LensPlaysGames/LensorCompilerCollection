@@ -456,8 +456,8 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             if (result.is_null()) {
                 // Zero constant... I dunno
                 generated_ir[expr] = new (*module) IntegerConstant(Convert(ctx, constant->type()), 0);
-            } else if (result.is_i64()) {
-                generated_ir[expr] = new (*module) IntegerConstant(Convert(ctx, constant->type()), (uint64_t) result.as_i64());
+            } else if (result.is_int()) {
+                generated_ir[expr] = new (*module) IntegerConstant(Convert(ctx, constant->type()), result.as_int());
             } else if (result.is_string()) {
                 LCC_ASSERT(false, "TODO: IR generation of constant strings");
             }
@@ -707,6 +707,11 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             auto gmp = new (*module) GetMemberPtrInst(struct_t, instance_pointer, index);
             generated_ir[expr] = gmp;
             insert(gmp);
+        } break;
+
+        case Expr::Kind::EnumeratorDecl: {
+            auto enumerator = as<EnumeratorDecl>(expr);
+            generated_ir[expr] = new (*module) IntegerConstant(Convert(ctx, enumerator->type()), enumerator->value());
         } break;
 
         case Expr::Kind::CompoundLiteral: {
