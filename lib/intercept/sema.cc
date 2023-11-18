@@ -584,11 +584,9 @@ void intc::Sema::AnalyseFunctionSignature(FuncDecl* decl) {
     /// deleted by the optimiser.
     auto ty = as<FuncType>(decl->type());
     if (ty->has_attr(FuncAttr::Used)) {
-        if (decl->linkage() != Linkage::Internal) {
+        if (decl->linkage() != Linkage::Internal)
             Diag::Warning(context, decl->location(), "'used' has no effect on this function");
-        } else {
-            decl->linkage(Linkage::Used);
-        }
+        else decl->linkage(Linkage::Used);
     }
 }
 
