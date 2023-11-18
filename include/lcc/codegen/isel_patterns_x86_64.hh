@@ -109,8 +109,21 @@ using add_reg_reg = Pattern<
         Inst<Clobbers<>, usz(Opcode::Add), o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
+using add_imm_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Immediate<0>, Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Add), o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+
 using sub_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Sub), Register<0, 0>, Register<0, 0>>>,
+    InstList<
+        // NOTE: GNU ordering of operands
+        Inst<Clobbers<>, usz(Opcode::Sub), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+
+using sub_reg_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sub), Register<0, 0>, Immediate<0>>>,
     InstList<
         // NOTE: GNU ordering of operands
         Inst<Clobbers<>, usz(Opcode::Sub), o<1>, o<0>>,
@@ -164,14 +177,21 @@ using x86_64PatternList = PatternList<
     copy_global,
     copy_local,
     copy_imm,
+
     s_ext_reg,
+
     add_local_imm,
     add_reg_reg,
+    add_imm_reg,
+
     sub_reg_reg,
+    sub_reg_imm,
+
     simple_function_call,
     simple_block_branch,
     cond_branch_reg,
     cond_branch_imm,
+
     u_lt_reg_reg,
     s_lt_reg_reg,
     u_lt_eq_reg_reg,
