@@ -552,7 +552,7 @@ void intc::Sema::AnalyseFunctionBody(FuncDecl* decl) {
         LValueToRValue(last);
 
         // Insert a `ReturnExpr` which returns `last`.
-        if (auto block = cast<BlockExpr>(decl->body())) {
+        if (is<BlockExpr>(decl->body())) {
             *last = new (mod) ReturnExpr(*last, {});
         } else {
             decl->body() = new (mod) ReturnExpr(*last, {});
