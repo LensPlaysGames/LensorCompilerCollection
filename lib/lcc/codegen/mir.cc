@@ -85,7 +85,8 @@ auto PrintMBlockImpl(const MBlock& block, auto&& inst_opcode) -> std::string {
     }
     for (auto& instruction : block.instructions()) {
         out += PrintMInstImpl(instruction, inst_opcode);
-        out += '\n';
+        if (&instruction != &block.instructions().back())
+            out += '\n';
     }
     return out;
 };
@@ -114,8 +115,7 @@ auto PrintMFunctionImpl(const MFunction& function, auto&& inst_opcode) -> std::s
     );
     for (auto& block : function.blocks()) {
         out += PrintMBlockImpl(block, inst_opcode);
-        if (&block != &function.blocks().back())
-            out += '\n';
+        out += '\n';
     }
     return out;
 };
