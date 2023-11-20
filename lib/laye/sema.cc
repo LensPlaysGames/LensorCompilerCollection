@@ -140,19 +140,191 @@ auto LookupTypeEntity(Module* from_module, Scope* from_scope, const std::string&
         auto imported_entity_scope = imported_module->exports();
     }
 
-    LCC_ASSERT(false, "LookupTypeEntity");
+    LCC_ASSERT(false, "LookupTypeEntity Single");
 }
 
 auto LookupTypeEntity(Module* from_module, Scope* from_scope, const std::vector<std::string>& names, const std::vector<Location>& locations) -> NamedDecl* {
-    LCC_ASSERT(false, "LookupTypeEntity");
+    LCC_ASSERT(not names.empty());
+    LCC_ASSERT(names.size() == locations.size());
+
+    usz name_index = 0;
+    const std::string& first_name = names[name_index];
+
+    NamedDecl* found_decl = nullptr;
+
+    Scope* search_scope = from_scope;
+    while (search_scope and not found_decl) {
+        auto lookup = search_scope->find(first_name);
+
+        // if a lookup fails (two identical iterators, 0 range) then we look at the next scope up
+        if (lookup.first == lookup.second) {
+            search_scope = search_scope->parent();
+            continue;
+        }
+
+        auto entity = lookup.first->second;
+
+        // if the lookedup entity is of a type declaration, then store it (and break out of the loop)
+        if (is<AliasDecl, StructDecl, EnumDecl>(entity)) {
+            found_decl = entity;
+            name_index++;
+            break;
+        }
+
+        // otherwise, we continue up the next scope
+    }
+
+    Module* search_module = from_module;
+    while (not found_decl and name_index < names.size()) {
+        // if we're searching through an imported module, we only have access to its exports.
+        // otherwise, we have access to *all* imports, not just the exported imports.
+        bool exports_only = search_module != from_module;
+        const std::string& name = names[name_index];
+
+        if (exports_only) {
+            // look for a type in the exports first, and continue from here if one is found
+            auto lookup = search_module->exports()->find(name);
+            if (lookup.first != lookup.second) {
+                auto entity = lookup.first->second;
+                if (is<AliasDecl, StructDecl, EnumDecl>(entity)) {
+                    found_decl = entity;
+                    name_index++;
+                    break;
+                }
+            }
+        }
+
+        auto found_import = search_module->lookup_import(name, exports_only);
+        if (not found_import.has_value()) {
+            // we error here and return
+            Diag::Error(from_module->context(), locations[name_index], "No scope or type named '{}' was found in this context.", name);
+            return nullptr;
+        }
+
+        search_module = found_import.value()->target_module();
+        name_index++;
+    }
+
+    if (not found_decl) {
+        LCC_ASSERT(name_index >= names.size());
+        Diag::Error(from_module->context(), locations.back(), "'{}' is not a type name in this context, it is a scope name. Are you missing a type name after it?", names.back());
+        return nullptr;
+    }
+
+    LCC_ASSERT(name_index <= names.size());
+    while (name_index < names.size()) {
+        LCC_ASSERT(found_decl);
+        const std::string& name = names[name_index];
+
+        if (auto struct_decl = cast<StructDecl>(found_decl)) {
+            StructDecl* variant_decl = nullptr;
+            for (auto v : struct_decl->variants()) {
+                if (v->name() == name) {
+                    variant_decl = v;
+                    break;
+                }
+            }
+
+            if (not variant_decl) {
+                Diag::Error(from_module->context(), locations[name_index], "Struct '{}' does not contain a variant named '{}'.", found_decl->name(), name);
+                return nullptr;
+            }
+
+            found_decl = variant_decl;
+        } else {
+            Diag::Error(from_module->context(), locations[name_index], "'{}' does not contain subtypes; cannot lookup type name '{}'.", found_decl->name(), name);
+            return nullptr;
+        }
+
+        name_index++;
+    }
+
+    LCC_ASSERT(found_decl);
+    return found_decl;
 }
 
 auto LookupValueEntity(Module* from_module, Scope* from_scope, const std::string& name) -> NamedDecl* {
-    LCC_ASSERT(false, "LookupValueEntity");
+    LCC_ASSERT(false, "LookupValueEntity Single");
 }
 
 auto LookupValueEntity(Module* from_module, Scope* from_scope, const std::vector<std::string>& names, const std::vector<Location>& locations) -> NamedDecl* {
-    LCC_ASSERT(false, "LookupValueEntity");
+    LCC_ASSERT(not names.empty());
+    LCC_ASSERT(names.size() == locations.size());
+
+    usz name_index = 0;
+    const std::string& first_name = names[name_index];
+
+    NamedDecl* found_decl = nullptr;
+
+    Scope* search_scope = from_scope;
+    while (search_scope and not found_decl) {
+        auto lookup = search_scope->find(first_name);
+
+        // if a lookup fails (two identical iterators, 0 range) then we look at the next scope up
+        if (lookup.first == lookup.second) {
+            search_scope = search_scope->parent();
+            continue;
+        }
+
+        auto entity = lookup.first->second;
+
+        // if the lookedup entity is of a "value" declaration, then store it (and break out of the loop)
+        if (is<BindingDecl, FunctionDecl>(entity)) {
+            found_decl = entity;
+            name_index++;
+            break;
+        }
+
+        // otherwise, we continue up the next scope
+    }
+
+    Module* search_module = from_module;
+    while (not found_decl and name_index < names.size()) {
+        // if we're searching through an imported module, we only have access to its exports.
+        // otherwise, we have access to *all* imports, not just the exported imports.
+        bool exports_only = search_module != from_module;
+        const std::string& name = names[name_index];
+
+        if (exports_only) {
+            // look for a "value" in the exports first, and continue from here if one is found
+            auto lookup = search_module->exports()->find(name);
+            if (lookup.first != lookup.second) {
+                auto entity = lookup.first->second;
+                if (is<BindingDecl, FunctionDecl>(entity)) {
+                    found_decl = entity;
+                    name_index++;
+                    break;
+                }
+            }
+        }
+
+        auto found_import = search_module->lookup_import(name, exports_only);
+        if (not found_import.has_value()) {
+            // we error here and return
+            Diag::Error(from_module->context(), locations[name_index], "No scope or value named '{}' was found in this context.", name);
+            return nullptr;
+        }
+
+        search_module = found_import.value()->target_module();
+        name_index++;
+    }
+
+    if (not found_decl) {
+        LCC_ASSERT(name_index >= names.size());
+        Diag::Error(from_module->context(), locations.back(), "'{}' is not a value name in this context, it is a scope name. Are you missing a value name after it?", names.back());
+        return nullptr;
+    }
+
+    LCC_ASSERT(name_index <= names.size());
+    if (name_index < names.size()) {
+        const std::string& name = names[name_index];
+        Diag::Error(from_module->context(), locations[name_index], "'{}' is not a scope.", found_decl->name(), name);
+        return nullptr;
+    }
+
+    LCC_ASSERT(name_index == names.size());
+    LCC_ASSERT(found_decl);
+    return found_decl;
 }
 
 void GenerateDependencies(DependencyGraph<NamedDecl>& deps, Module* module, FunctionDecl* decl) {
@@ -519,7 +691,19 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
             auto e = as<PathExpr>(expr);
 
             auto entity = LookupValueEntity(module, e->scope(), e->names(), e->locations());
-            LCC_ASSERT(false, "Analyse(module, LookupPath)");
+            if (not entity) {
+                // error should already have been reported.
+                expr->set_sema_errored();
+                expr->type(new (*module) PoisonType{expr->location()});
+                break;
+            }
+
+            if (auto function_decl = cast<FunctionDecl>(entity)) {
+                e->target(function_decl);
+                e->type(function_decl->function_type());
+            } else {
+                LCC_ASSERT(false, "Analyse(module, LookupPath)");
+            }
 
             // auto first_name = path_names[0];
             // auto import_lookup = module()->lookup_import(first_name);

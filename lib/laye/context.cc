@@ -42,7 +42,7 @@ void Module::add_header(ModuleHeader* header) {
 
 auto Module::lookup_import(const std::string& name, bool is_exported) const -> std::optional<ImportHeader*> {
     auto it = std::find_if(_imports.begin(), _imports.end(), [name, is_exported](auto m) {
-        return (is_exported ? m->exported() : true) and m->alias() == name;
+        return (is_exported ? m->exported() : true) and m->import_namespace() == name;
     });
     if (it == _imports.end())
         return std::nullopt;
