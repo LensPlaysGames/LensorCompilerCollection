@@ -1,6 +1,58 @@
 #include <c/ast.hh>
+#include <fmt/format.h>
+#include <lcc/utils.hh>
 
 namespace cc = lcc::c;
+
+std::string cc::ToString(Statement::Kind kind) {
+    switch (kind) {
+        case Statement::Kind::DeclStart_:
+            return "decl.start";
+        case Statement::Kind::Variable:
+            return "var";
+        case Statement::Kind::Prototype:
+            return "prototype";
+        case Statement::Kind::Function:
+            return "function";
+        case Statement::Kind::Struct:
+            return "struct";
+        case Statement::Kind::Union:
+            return "union";
+        case Statement::Kind::Enum:
+            return "enum";
+        case Statement::Kind::Typedef:
+            return "typedef";
+        case Statement::Kind::DeclEnd_:
+            return "decl.end";
+        case Statement::Kind::If:
+            return "if";
+        case Statement::Kind::Switch:
+            return "switch";
+        case Statement::Kind::For:
+            return "for";
+        case Statement::Kind::While:
+            return "while";
+        case Statement::Kind::DoWhile:
+            return "do.while";
+        case Statement::Kind::Goto:
+            return "goto";
+        case Statement::Kind::Break:
+            return "break";
+        case Statement::Kind::Continue:
+            return "continue";
+        case Statement::Kind::Compound:
+            return "compound";
+        case Statement::Kind::Expr:
+            return "expr";
+        case Statement::Kind::Empty:
+            return "empty";
+        case Statement::Kind::TryExcept:
+            return "try.except";
+        case Statement::Kind::TryFinally:
+            return "try.finally";
+    }
+    LCC_UNREACHABLE();
+}
 
 std::string cc::ToString(TokenKind kind) {
     switch (kind) {
@@ -247,11 +299,16 @@ bool cc::Expr::is_lvalue() const {
             return expr->is_lvalue();
         }
 
-        // TODO(local): const object (nonmodifiable l-value)
-        // TODO(local): check C standards for any more valid l-values
+            // TODO(local): const object (nonmodifiable l-value)
+            // TODO(local): check C standards for any more valid l-values
     }
 }
 
 void cc::TranslationUnit::print() {
+    for (auto* decl : _top_level_decls) {
+        if (decl->is_statement()) fmt::print("STATEMENT ");
+        if (decl->is_expr()) fmt::print(("EXPRESSION "));
+        fmt::print("{} {}\n", ToString(decl->kind()), decl->name());
+    }
     LCC_TODO();
 }

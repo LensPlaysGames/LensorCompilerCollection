@@ -13,8 +13,6 @@ auto cc::Parser::Parse(CContext* context, File& file) -> TranslationUnit* {
 }
 
 void cc::Parser::ParseTopLevel() {
-    /// TODO: Create the global scope; add it to the top level function.
-
     /// Parse the file.
     for (;;) {
         if (Consume(Tk::SemiColon)) continue;
@@ -26,7 +24,7 @@ void cc::Parser::ParseTopLevel() {
         auto statement = ParseStatement();
         if (not Consume(Tk::SemiColon)) {
             if (At(Tk::EndOfFile)) {
-                Warning("Expected ';' but got end of file");
+                Error("Expected ';' but got end of file");
             } else if (statement) {
                 Location location{};
                 if (statement.value()->location().is_valid())

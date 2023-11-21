@@ -408,6 +408,8 @@ public:
     auto kind() const { return _kind; }
 };
 
+std::string ToString(Statement::Kind kind);
+
 class Decl : public Statement {
     std::string _name;
 
