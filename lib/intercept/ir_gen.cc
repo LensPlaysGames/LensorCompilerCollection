@@ -178,6 +178,9 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                 case TokenKind::At: {
                     generated_ir[expr] = generated_ir[unary_expr->operand()];
                 } break;
+                case TokenKind::Ampersand: {
+                    generated_ir[expr] = generated_ir[unary_expr->operand()];
+                } break;
                 default: LCC_ASSERT(false, "Sorry, but IRGen of unary operator {} has, apparently, not been implemented. Sorry about that.", ToString(unary_expr->op()));
             }
         } break;
