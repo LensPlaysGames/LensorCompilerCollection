@@ -114,6 +114,9 @@ static void collect_interferences_from_block(
     // track of all virtual registers that have been encountered but not
     // their defining use, as these are our "live values".
     for (auto& inst : block->instructions() | vws::reverse) {
+        // fmt::print("{}\n", PrintMInstImpl(inst, x86_64::opcode_to_string));
+        // fmt::print("live after: {}\n", fmt::join(live_values, ", "));
+
         // If the defining use of a virtual register is an operand of this
         // instruction, remove it from vector of live vals.
         if (inst.is_defining()) std::erase(live_values, inst.reg());
@@ -121,6 +124,23 @@ static void collect_interferences_from_block(
             if (std::holds_alternative<MOperandRegister>(op)) {
                 auto reg = std::get<MOperandRegister>(op);
                 if (reg.defining_use) std::erase(live_values, reg.value);
+            }
+        }
+
+        // fmt::print("live during: {}\n", fmt::join(live_values, ", "));
+
+        // Register Clobbers
+        // Basically, a "clobbered register" has the affect that all live values
+        // will interfere with the clobber.
+        for (auto index : inst.operand_clobbers()) {
+            auto op = inst.get_operand(index);
+            if (std::holds_alternative<MOperandRegister>(op)) {
+                auto reg = std::get<MOperandRegister>(op);
+                auto live_idx = live_idx_from_register(reg);
+                for (auto live : live_values) {
+                    matrix.set(live_idx_from_register_value(live), live_idx);
+                    // fmt::print("Clobber r{} interferes with live value r{}\n", reg.value, live);
+                }
             }
         }
 
@@ -145,33 +165,36 @@ static void collect_interferences_from_block(
             }
         }
 
-        // FIXME:
-        // Lens_r: I've removed this, because I'm pretty sure it's not needed, and
-        // everything appears to still work. However, I have a feeling that
-        // ignoring clobbers entirely in RA isn't the proper move. So, I need to
-        // figure out what the hell clobbers would be used for in RA. What does it
-        // mean if an instruction clobbers a register? Does that register go
-        // live *after* the instruction? During it only?
-        //
-        // Make all reg operands interfere with all clobbers of this instruction
+        // Make all reg operands interfere with each other; if two different,
+        // non-clobbered registers are used as inputs to an instruction, they must
+        // exist at the same time (at instruction execution), and therefore must
+        // interfere. For cases like `move %v0 into %v1` where v1 is marked as
+        // clobbered, v0 and v1 do not interfere.
         // x86_64 GNU ASM
         //     mov 40(%v0), %v1
         // MIR Representation
         //     MoveDereferenceLHS(v0, v1, 40) clobbers 1st operand
         // RESULT
-        //     v0 and v1 interfere, as v0 is a register operand and v1 is a clobber.
-        //
-        // for (auto r : vreg_operands) {
-        //    for (auto index : inst.operand_clobbers()) {
-        //        auto op = inst.get_operand(index);
-        //        if (std::holds_alternative<MOperandRegister>(op)) {
-        //            auto reg = std::get<MOperandRegister>(op);
-        //            auto live_idx = live_idx_from_register_value(reg.value);
-        //            // fmt::print("{} and {} interfere due to clobbering\n", reg.value, r.reg.value);
-        //            matrix.set(r.idx, live_idx);
-        //        }
-        //    }
-        //}
+        //     Both v0 and v1 interfere with both v3 and v7.
+
+        // Collect clobbered registers
+        std::vector<usz> clobbered_regs{};
+        for (auto index : inst.operand_clobbers()) {
+            auto& op = inst.all_operands().at(index);
+            if (std::holds_alternative<MOperandRegister>(op)) {
+                auto reg = std::get<MOperandRegister>(op);
+                clobbered_regs.push_back(reg.value);
+            }
+        }
+
+        for (auto A : vreg_operands) {
+            for (auto B : vreg_operands) {
+                if (rgs::find(clobbered_regs, A.reg.value) == clobbered_regs.end() and rgs::find(clobbered_regs, B.reg.value) == clobbered_regs.end()) {
+                    matrix.set(A.idx, B.idx);
+                    // fmt::print("Non-clobbered register operands r{} and r{} interfere\n", A.reg.value, B.reg.value);
+                }
+            }
+        }
 
         // Make all reg operands interfere with all currently live values
         // Live Values: v3, v7
@@ -195,6 +218,8 @@ static void collect_interferences_from_block(
         // Handle the case of a non-defining register operand in use of the
         // instruction that defines that register.
         if (inst.is_defining()) std::erase(live_values, inst.reg());
+
+        // fmt::print("live before: {}\n", fmt::join(live_values, ", "));
 
     } // for inst
 
