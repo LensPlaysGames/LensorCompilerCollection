@@ -9,6 +9,7 @@
 #include <lcc/syntax/token.hh>
 #include <lcc/utils.hh>
 #include <span>
+#include <lcc/utils/dependency_graph.hh>
 
 namespace lcc::laye {
 class ModuleHeader;
@@ -56,6 +57,8 @@ class LayeContext {
     void add_module(const std::string& canonical_name, Module* module) { _modules.emplace(canonical_name, module); }
 
 public:
+    DependencyGraph<NamedDecl> dependencies{};
+
     LayeContext(Context* context)
         : _context(context) {}
 
