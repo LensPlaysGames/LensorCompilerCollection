@@ -9,6 +9,7 @@
 #include <deque>
 #include <filesystem>
 #include <fmt/color.h>
+#include <fmt/compile.h>
 #include <fmt/format.h>
 #include <functional>
 #include <memory>
@@ -110,6 +111,28 @@ template <typename T>
 concept FormattableEnum = requires (T t) {
     requires std::is_enum_v<T>;
     { StringifyEnum(t) } -> std::convertible_to<std::string_view>;
+};
+
+/// Compile-time string that can be passed as a template parameter.
+template <usz sz>
+struct static_string {
+    char chars[sz]{};
+    usz elem_count{};
+
+    consteval static_string() {}
+
+    consteval static_string(const char (&raw)[sz]) : elem_count{sz} {
+        std::copy_n(raw, sz, chars);
+    }
+
+    constexpr char operator[](usz idx) const {
+        LCC_ASSERT(idx < size(), "Index out of bounds");
+        return chars[idx];
+    }
+
+    constexpr auto data() const -> const char* { return chars; }
+    constexpr auto size() const -> usz { return elem_count; }
+    constexpr auto view() const -> std::string_view { return {data(), size()}; }
 };
 
 } // namespace lcc::detail
@@ -222,6 +245,21 @@ private:
         LCC_ASSERT(idx < size(), "Index out of bounds");
     }
 };
+
+/// Compile time fmt::format.
+template <detail::static_string format, auto... Args>
+constexpr auto ConstexprFormat() -> std::string_view {
+    static constexpr usz size = fmt::formatted_size(FMT_COMPILE(format.view()), Args...);
+    static constexpr std::array<char, size> data = [] {
+        std::array<char, size> d{};
+        fmt::format_to(d.begin(), FMT_COMPILE(format.view()), Args...);
+        return d;
+    }();
+
+    /// Exclude the null terminator.
+    return {data.data(), size - 1};
+}
+
 } // namespace lcc
 
 /// More rarely used functions go here so as to not pollute the lcc namespace too much.
