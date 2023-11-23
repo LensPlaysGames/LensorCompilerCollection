@@ -71,6 +71,7 @@ std::string opcode_to_string(usz opcode);
 std::string ToString(Opcode op);
 std::string ToString(RegisterId id);
 std::string ToString(RegisterId id, usz size);
+bool IsValidRegisterId(usz reg);
 
 } // namespace x86_64
 } // namespace lcc

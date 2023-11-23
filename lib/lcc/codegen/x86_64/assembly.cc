@@ -24,8 +24,8 @@ std::string block_name(std::string in) {
 
 std::string ToString(MFunction& function, MOperand op) {
     if (std::holds_alternative<MOperandRegister>(op)) {
-        // TODO: Assert that register id is one of the x86_64 register ids...
         MOperandRegister reg = std::get<MOperandRegister>(op);
+        LCC_ASSERT(IsValidRegisterId(reg.value), "Register with value '{}' is not a valid x86_64 register.", reg.value);
         return fmt::format("%{}", ToString(RegisterId(reg.value), reg.size));
     } else if (std::holds_alternative<MOperandImmediate>(op)) {
         return fmt::format("${}", std::get<MOperandImmediate>(op));
@@ -213,6 +213,10 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
     if (output_path == "-")
         fmt::print("{}", out);
     else File::WriteOrTerminate(out.data(), out.size(), output_path);
+}
+
+bool IsValidRegisterId(usz reg) {
+    return (reg == +RegisterId::RETURN) or (reg >= +RegisterId::RAX and reg <= +RegisterId::RIP);
 }
 
 } // namespace x86_64
