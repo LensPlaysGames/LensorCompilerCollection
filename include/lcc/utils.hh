@@ -248,7 +248,7 @@ private:
 
 /// Compile time fmt::format.
 template <detail::static_string format, auto... Args>
-constexpr auto ConstexprFormat() -> std::string_view {
+consteval auto ConstexprFormat() -> std::string_view {
     static constexpr usz size = fmt::formatted_size(FMT_COMPILE(format.view()), Args...);
     static constexpr std::array<char, size> data = [] {
         std::array<char, size> d{};
