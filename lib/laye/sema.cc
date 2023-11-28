@@ -148,6 +148,40 @@ auto LookupTypeEntity(Module* from_module, Scope* from_scope, const std::vector<
 }
 
 auto LookupValueEntity(Module* from_module, Scope* from_scope, const std::string& name) -> NamedDecl* {
+    // Note that there shouldn't be any reason to create duplicate "imported" versions
+    // of type entities, since the type system and referenced values within
+    // the IR should be entirely orthogonal.
+
+    Scope* search_scope = from_scope;
+    while (search_scope) {
+        auto lookup = search_scope->find(name);
+
+        // if a lookup fails (two identical iterators, 0 range) then we look at the next scope up
+        if (lookup.first == lookup.second) {
+            search_scope = search_scope->parent();
+            continue;
+        }
+
+        auto entity = lookup.first->second;
+
+        // if the lookedup entity is of a type declaration, then return it
+        if (is<BindingDecl, FunctionDecl>(entity))
+            return entity;
+
+        // otherwise, we continue up the next scope
+    }
+
+    // if we reach here, then nothing within the module is a type entity.
+    // time to search through imports.
+
+    std::vector<NamedDecl*> possible_type_entities{};
+    for (auto& import_decl : from_module->imports()) {
+        if (not import_decl->is_wildcard()) continue;
+
+        auto imported_module = import_decl->target_module();
+        auto imported_entity_scope = imported_module->exports();
+    }
+
     LCC_ASSERT(false, "LookupValueEntity Single");
 }
 
@@ -235,6 +269,14 @@ void GenerateDependencies(DependencyGraph<NamedDecl>& deps, Module* module, Func
     deps.ensure_tracked(decl);
 }
 
+void GenerateDependencies(DependencyGraph<NamedDecl>& deps, Module* module, StructDecl* decl) {
+    deps.ensure_tracked(decl);
+}
+
+void GenerateDependencies(DependencyGraph<NamedDecl>& deps, Module* module, AliasDecl* decl) {
+    deps.ensure_tracked(decl);
+}
+
 void GenerateDependencies(DependencyGraph<NamedDecl>& deps, Module* module) {
     if (module->sema_state() == SemaState::InProgress) return;
     module->set_sema_in_progress();
@@ -251,6 +293,16 @@ void GenerateDependencies(DependencyGraph<NamedDecl>& deps, Module* module) {
             case Statement::Kind::DeclFunction: {
                 auto func_decl = as<FunctionDecl>(tld);
                 GenerateDependencies(deps, module, func_decl);
+            } break;
+
+            case Statement::Kind::DeclStruct: {
+                auto struct_decl = as<StructDecl>(tld);
+                GenerateDependencies(deps, module, struct_decl);
+            } break;
+
+            case Statement::Kind::DeclAlias: {
+                auto alias_decl = as<AliasDecl>(tld);
+                GenerateDependencies(deps, module, alias_decl);
             } break;
         }
     }
@@ -562,7 +614,30 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
         case Expr::Kind::LookupName: {
             auto e = as<NameExpr>(expr);
 
-            LCC_ASSERT(false, "Analyse(module, LookupName)");
+
+            auto entity = LookupValueEntity(module, e->scope(), e->name());
+            if (not entity) {
+                // error should already have been reported.
+                expr->set_sema_errored();
+                expr->type(new (*module) PoisonType{expr->location()});
+                break;
+            }
+
+            if (auto binding_decl = cast<BindingDecl>(entity)) {
+                if (binding_decl->sema_state() == SemaState::InProgress) {
+                    Error(expr->location(), "Cannot use '{}' in its own initialiser", e->name());
+                    expr->set_sema_errored();
+                    expr->type(new (*module) PoisonType{expr->location()});
+                    break;
+                }
+                e->target(binding_decl);
+                e->type(Ref(module, binding_decl->type(), TypeAccess::Mutable));
+            } else if (auto function_decl = cast<FunctionDecl>(entity)) {
+                e->target(function_decl);
+                e->type(function_decl->function_type());
+            } else {
+                LCC_ASSERT(false, "Analyse(module, LookupName)");
+            }
 
             // auto entity = LookupManyEntitiesFrom(e->scope(), e->name(), e->location());
 
@@ -575,7 +650,6 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
             //         expr->type(new (*module) PoisonType{expr->location()});
             //         break;
             //     }
-
             //     e->target(binding_decl);
             //     e->type(Ref(binding_decl->type(), TypeAccess::Mutable));
             // } else if (auto function_decl = cast<FunctionDecl>(entity)) {

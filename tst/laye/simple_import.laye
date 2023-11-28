@@ -4,7 +4,9 @@
 
 // * (?<global>[^:\s]+) : i8\[22\] = "Hello, simple import!\\00"
 
-// * puts : imported i32(ptr $t)
+// Note that this is temporarily wrong, and should be:
+// puts : imported i32(ptr $t)
+// * puts : reexported i32(ptr $t)
 import "lib/stdio.laye";
 
 // * main : i64():

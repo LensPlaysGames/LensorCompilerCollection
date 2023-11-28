@@ -35,12 +35,8 @@ void* layec::SemaNode::operator new(size_t sz, Module& module) {
 }
 
 auto layec::LayeContext::parse_laye_file(File& file) -> Module* {
-    auto lookup_path = fs::absolute(file.path()).string();
-    if (not lookup_module(lookup_path)) {
-        auto mod = lcc::laye::Parser::Parse(this, file);
-        add_module(fs::absolute(file.path()).string(), mod);
-        return mod;
-    } else return nullptr;
+    auto mod = lcc::laye::Parser::Parse(this, file);
+    return mod;
 }
 
 layec::Module::Module(LayeContext* laye_context, File* file)

@@ -1,6 +1,6 @@
 // R %lcc --ir %s
 // d t %[0-9]+
 
-// * puts : imported i32(ptr $t)
+// * puts : reexported i32(ptr $t)
 export foreign callconv(cdecl)
 i32 puts(i8[*] s);
