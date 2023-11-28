@@ -40,8 +40,8 @@ auto LookupTypeEntity(Module* from_module, Scope* from_scope, const std::string&
     for (auto& import_decl : from_module->imports()) {
         if (not import_decl->is_wildcard()) continue;
 
-        auto imported_module = import_decl->target_module();
-        auto imported_entity_scope = imported_module->exports();
+        [[maybe_unused]] auto imported_module = import_decl->target_module();
+        [[maybe_unused]] auto imported_entity_scope = imported_module->exports();
     }
 
     LCC_ASSERT(false, "LookupTypeEntity Single");
@@ -178,8 +178,8 @@ auto LookupValueEntity(Module* from_module, Scope* from_scope, const std::string
     for (auto& import_decl : from_module->imports()) {
         if (not import_decl->is_wildcard()) continue;
 
-        auto imported_module = import_decl->target_module();
-        auto imported_entity_scope = imported_module->exports();
+        [[maybe_unused]] auto imported_module = import_decl->target_module();
+        [[maybe_unused]] auto imported_entity_scope = imported_module->exports();
     }
 
     LCC_ASSERT(false, "LookupValueEntity Single");
@@ -559,7 +559,7 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
         return expr->sema_ok();
     expr->set_sema_in_progress();
 
-    auto UnknownSymbol = [&](const std::string& symbol_name) {
+    [[maybe_unused]] auto UnknownSymbol = [&](const std::string& symbol_name) {
         Error(expr->location(), "Unknown symbol '{}'", symbol_name);
         expr->set_sema_errored();
         expr->type(new (*module) PoisonType{expr->location()});
@@ -1075,7 +1075,7 @@ bool layec::Sema::AnalyseType(Module* module, Type*& type) {
         } break;
 
         case Expr::Kind::TypeLookupPath: {
-            auto t = as<PathType>(type);
+            [[maybe_unused]] auto t = as<PathType>(type);
 
             LCC_ASSERT(false, "AnalyseType(module, TypeLookupName)");
 
