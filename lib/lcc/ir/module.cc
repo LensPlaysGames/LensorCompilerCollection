@@ -1,10 +1,12 @@
 #include <algorithm>
 #include <fmt/format.h>
+#include <lcc/codegen/generic_object.hh>
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
 #include <lcc/codegen/x86_64.hh>
 #include <lcc/codegen/x86_64/assembly.hh>
+#include <lcc/codegen/x86_64/object.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/format.hh>
@@ -92,6 +94,8 @@ void Module::emit(std::filesystem::path output_file_path) {
             else File::WriteOrTerminate(llvm_ir.c_str(), llvm_ir.size(), output_file_path);
         } break;
 
+        case Format::COFF_OBJECT:
+        case Format::ELF_OBJECT:
         case Format::GNU_AS_ATT_ASSEMBLY: {
             auto machine_ir = mir();
 
@@ -164,14 +168,20 @@ void Module::emit(std::filesystem::path output_file_path) {
                 std::exit(0);
             }
 
-            if (_ctx->target()->is_x64())
-                x86_64::emit_gnu_att_assembly(output_file_path, this, desc, machine_ir);
-            else LCC_ASSERT(false, "Unhandled code emission target, sorry");
-        } break;
+            if (_ctx->format()->format() == Format::GNU_AS_ATT_ASSEMBLY) {
+                if (_ctx->target()->is_x64())
+                    x86_64::emit_gnu_att_assembly(output_file_path, this, desc, machine_ir);
+                else LCC_ASSERT(false, "Unhandled code emission target, sorry");
+            } else if (_ctx->format()->format() == Format::ELF_OBJECT) {
+                GenericObject gobj{};
+                if (_ctx->target()->is_x64())
+                    gobj = x86_64::emit_mcode_gobj(this, desc, machine_ir);
+                else LCC_ASSERT(false, "Unhandled code emission target, sorry");
 
-        case Format::COFF_OBJECT:
-        case Format::ELF_OBJECT: {
-            LCC_TODO("Emit object file");
+                LCC_TODO("Emit ELF object from generic object format");
+            } else if (_ctx->format()->format() == Format::COFF_OBJECT) {
+                LCC_TODO("Emit COFF object from generic object format");
+            }
         } break;
     }
 }

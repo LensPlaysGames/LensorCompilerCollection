@@ -71,7 +71,7 @@ struct GenericObject {
         return section(name);
     }
 
-    // NOTE: Requires .data, .bss sections to exist.
+    // NOTE: Requires .data, .bss sections to exist. .bss needs is_fill set to true.
     void symbol_from_global(GlobalVariable* var) {
         const bool imported = var->linkage() == Linkage::Imported || var->linkage() == Linkage::Reexported;
         const bool exported = var->linkage() == Linkage::Exported || var->linkage() == Linkage::Reexported;
