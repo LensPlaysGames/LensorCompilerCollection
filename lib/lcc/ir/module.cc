@@ -84,12 +84,14 @@ void Module::lower() {
 void Module::emit(std::filesystem::path output_file_path) {
     switch (_ctx->format()->format()) {
         case Format::INVALID: LCC_UNREACHABLE();
+
         case Format::LLVM_TEXTUAL_IR: {
             auto llvm_ir = llvm();
             if (output_file_path.empty() || output_file_path == "-")
                 fmt::print("{}", llvm_ir);
             else File::WriteOrTerminate(llvm_ir.c_str(), llvm_ir.size(), output_file_path);
         } break;
+
         case Format::GNU_AS_ATT_ASSEMBLY: {
             auto machine_ir = mir();
 
@@ -144,6 +146,7 @@ void Module::emit(std::filesystem::path output_file_path) {
                     };
                 }
             } else LCC_ASSERT(false, "Sorry, unhandled target architecture");
+
             for (auto& mfunc : machine_ir)
                 allocate_registers(desc, mfunc);
 
