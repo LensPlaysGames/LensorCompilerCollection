@@ -1,0 +1,33 @@
+// R %lcc --ir %s
+
+// d b [a-zA-Z0-9\.]+
+// d t %[0-9]+
+// d f _L[a-zA-Z0-9_]+
+
+// main : i64():
+//   $b:
+//     (?<val>$t) = alloca i64
+//     store i64 0 into $val
+//     branch to %(?<cond0>$b)
+//   $cond0:
+//     (?<val0>$t) = load i64 from $val
+//     (?<cond>$t) = slt i64 $val0, 10
+//     branch on $cond to %(?<pass>$b) else %(?<exit>$b)
+//   $pass:
+//     (?<val0>$t) = load i64 from $val
+//     (?<inc>$t) = add i64 $val1, 1
+//     store i64 $inc into $val
+//     branch to %$cond0
+//   $exit:
+//     (?<val2>$t) = load i64 from $val
+//     return i64 $val2
+
+int main()
+{
+    int x = 0;
+    for (x < 10) {
+        x = x + 1;
+    }
+
+    return x;
+}

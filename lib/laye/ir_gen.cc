@@ -309,6 +309,35 @@ void layec::IRGen::GenerateStatement(Statement* statement) {
             UpdateBlock(exit_block);
         } break;
 
+        case Sk::For: {
+            auto s = as<ForStatement>(statement);
+
+            LCC_ASSERT(s->init() == nullptr, "Initializers in for loops are not yet supported");
+            LCC_ASSERT(s->increment() == nullptr, "Incrememters in for loops are not yet supported");
+            LCC_ASSERT(s->fail() == nullptr, "Fail blocks in for loops are not yet supported");
+
+            auto cond_block = new (*mod()) Block{fmt::format("for.cond.{}", total_for)};
+            auto pass_block = new (*mod()) Block{fmt::format("for.pass.{}", total_for)};
+            auto exit_block = new (*mod()) Block{fmt::format("for.exit.{}", total_for)};
+            total_for += 1;
+
+            Insert(new (*mod()) BranchInst(cond_block, s->location()));
+            UpdateBlock(cond_block);
+
+            lcc::Value* cond_value0;
+            if (s->condition())
+                cond_value0 = GenerateExpression(s->condition());
+            else cond_value0 = new (*mod()) lcc::IntegerConstant(lcc::Type::I1Ty, 1);
+            Insert(new (*mod()) CondBranchInst(cond_value0, pass_block, exit_block));
+
+            UpdateBlock(pass_block);
+            GenerateStatement(s->pass());
+            if (not curr_block->terminator())
+                Insert(new (*mod()) BranchInst(cond_block, s->location()));
+
+            UpdateBlock(exit_block);
+        } break;
+
         case Sk::Expr: {
             auto s = as<ExprStatement>(statement);
             GenerateExpression(s->expr());
@@ -534,6 +563,34 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
                     auto compare = new (*mod()) NeInst{lhs, rhs, e->location()};
                     Insert(compare);
                     _ir_values[expr] = compare;
+                } break;
+
+                case OperatorKind::Less: {
+                    if (e->lhs()->type()->is_signed_integer())
+                        _ir_values[expr] = new (*mod()) SLtInst{lhs, rhs, e->location()};
+                    else _ir_values[expr] = new (*mod()) ULtInst{lhs, rhs, e->location()};
+                    Insert(static_cast<Inst*>(_ir_values[expr]));
+                } break;
+
+                case OperatorKind::LessEqual: {
+                    if (e->lhs()->type()->is_signed_integer())
+                        _ir_values[expr] = new (*mod()) SLeInst{lhs, rhs, e->location()};
+                    else _ir_values[expr] = new (*mod()) ULeInst{lhs, rhs, e->location()};
+                    Insert(static_cast<Inst*>(_ir_values[expr]));
+                } break;
+
+                case OperatorKind::Greater: {
+                    if (e->lhs()->type()->is_signed_integer())
+                        _ir_values[expr] = new (*mod()) SGtInst{lhs, rhs, e->location()};
+                    else _ir_values[expr] = new (*mod()) UGtInst{lhs, rhs, e->location()};
+                    Insert(static_cast<Inst*>(_ir_values[expr]));
+                } break;
+
+                case OperatorKind::GreaterEqual: {
+                    if (e->lhs()->type()->is_signed_integer())
+                        _ir_values[expr] = new (*mod()) SGeInst{lhs, rhs, e->location()};
+                    else _ir_values[expr] = new (*mod()) UGeInst{lhs, rhs, e->location()};
+                    Insert(static_cast<Inst*>(_ir_values[expr]));
                 } break;
             }
         } break;

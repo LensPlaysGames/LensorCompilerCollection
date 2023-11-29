@@ -505,6 +505,22 @@ void layec::Sema::Analyse(Module* module, Statement*& statement) {
             if (s->fail()) Analyse(module, s->fail());
         } break;
 
+        case Statement::Kind::For: {
+            auto s = as<ForStatement>(statement);
+
+            if (s->init()) Analyse(module, s->init());
+
+            if (s->condition()) {
+                Analyse(module, s->condition(), Type::Bool);
+                ConvertOrError(module, s->condition(), Type::Bool);
+            }
+
+            if (s->increment()) AnalyseAndDiscard(module, s->increment());
+
+            Analyse(module, s->pass());
+            if (s->fail()) Analyse(module, s->fail());
+        } break;
+
         case Statement::Kind::Assign: {
             auto s = as<AssignStatement>(statement);
 
@@ -867,6 +883,9 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
             Analyse(module, e->lhs());
             Analyse(module, e->rhs());
 
+            auto lhs_type = LValueToRValue(module, e->lhs());
+            auto rhs_type = LValueToRValue(module, e->rhs());
+
             switch (e->operator_kind()) {
                 default: {
                     LCC_ASSERT(false, "unimplemented binary operator {}", ToString(e->operator_kind()));
@@ -968,20 +987,20 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
                 case OperatorKind::LessEqual: {
                     expr->type(Type::Bool);
 
-                    if (not e->lhs()->type()->is_number()) {
+                    if (not lhs_type->is_number()) {
                         Error(
                             e->lhs()->location(),
                             "Cannot use type {} in operator {}",
-                            e->lhs()->type()->string(),
+                            lhs_type->string(),
                             ToString(e->operator_kind())
                         );
                         expr->set_sema_errored();
                         expr->type(new (*module) PoisonType{expr->location()});
-                    } else if (not e->rhs()->type()->is_number()) {
+                    } else if (not rhs_type->is_number()) {
                         Error(
                             e->rhs()->location(),
                             "Cannot use type {} in operator {}",
-                            e->rhs()->type()->string(),
+                            rhs_type->string(),
                             ToString(e->operator_kind())
                         );
                         expr->set_sema_errored();
@@ -997,7 +1016,7 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
                         break;
                     }
 
-                    LCC_ASSERT(Type::Equal(e->lhs()->type(), e->rhs()->type()));
+                    LCC_ASSERT(Type::Equal(lhs_type, rhs_type));
                 } break;
             }
         } break;

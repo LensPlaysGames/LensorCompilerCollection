@@ -27,7 +27,6 @@ class IRGen {
     lcc::Block* curr_block{nullptr};
 
     usz total_block = 0;
-    usz total_while = 0;
     usz total_for = 0;
     usz total_if = 0;
 

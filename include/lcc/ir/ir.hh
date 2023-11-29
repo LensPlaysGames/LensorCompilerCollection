@@ -1494,7 +1494,7 @@ class SLtInst : public CompareInst {
 
 public:
     SLtInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::ULt, l, r, loc) {
+        : CompareInst(Kind::SLt, l, r, loc) {
         AssertSameType(l, r);
     }
 
@@ -1510,7 +1510,7 @@ class ULtInst : public CompareInst {
 
 public:
     ULtInst(Value* l, Value* r, Location loc = {})
-        : CompareInst(Kind::SLt, l, r, loc) {
+        : CompareInst(Kind::ULt, l, r, loc) {
         AssertSameType(l, r);
     }
 
