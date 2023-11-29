@@ -72,7 +72,7 @@ using f64 = double;
 
 #define LCC_UNREACHABLE() LCC_ASSERT(false, "Unreachable")
 
-#define LCC_TODO() LCC_ASSERT(false, "Todo")
+#define LCC_TODO(...) LCC_ASSERT(false, "TODO" __VA_OPT__(": {}" , fmt::format(__VA_ARGS__)))
 
 template <typename>
 concept always_false = false;
