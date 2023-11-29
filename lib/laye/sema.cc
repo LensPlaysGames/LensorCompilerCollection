@@ -329,6 +329,34 @@ void layec::Sema::Analyse(LayeContext* laye_context, Module* module, bool use_co
     Sema sema{laye_context, use_colours};
     for (auto& tld : order.order) {
         LCC_ASSERT(tld->module());
+        if (auto s = cast<StructDecl>(tld)) {
+            std::function<StructType*(StructDecl*, StructType*)> CreateStructOrVariantType;
+            CreateStructOrVariantType = [&](StructDecl* struct_decl, StructType* parent_struct) {
+                StructType* struct_type;
+                if (parent_struct)
+                    struct_type = new (*module) VariantType(struct_decl->location(), parent_struct, struct_decl->name());
+                else struct_type = new (*module) StructType(struct_decl->location(), struct_decl->name());
+                
+                if (not struct_decl->variants().empty()) {
+                    std::vector<VariantType*> variants{};
+                    for (const auto& variant : struct_decl->variants()) {
+                        auto variant_type = as<VariantType>(CreateStructOrVariantType(variant, struct_type));
+                        variant->type(variant_type);
+                        variants.push_back(variant_type);
+                    }
+
+                    struct_type->variants(variants);
+                }
+                
+                return struct_type;
+            };
+
+            s->type(CreateStructOrVariantType(s, nullptr));
+        }
+    }
+
+    for (auto& tld : order.order) {
+        LCC_ASSERT(tld->module());
         sema.Analyse(tld->module(), (Statement*&)tld);
     }
 }
@@ -422,35 +450,28 @@ void layec::Sema::Analyse(Module* module, Statement*& statement) {
         case Statement::Kind::DeclStruct: {
             auto s = as<StructDecl>(statement);
 
-            std::function<StructType*(StructDecl*, StructType*)> CreateStructOrVariantType;
-            CreateStructOrVariantType = [&](StructDecl* struct_decl, StructType* parent_struct) {
+            std::function<void(StructDecl*)> PopulateStructTypeFields;
+            PopulateStructTypeFields = [&](StructDecl* struct_decl) {
+                LCC_ASSERT(struct_decl->type());
+                auto struct_type = as<StructType>(struct_decl->type());
+
                 std::vector<StructField> fields{};
                 for (auto& field : struct_decl->fields()) {
                     Analyse(module, (Statement*&) field);
                     fields.push_back({field->name(), field->type()});
                 }
 
-                StructType* struct_type;
-                if (parent_struct)
-                    struct_type = new (*module) VariantType(struct_decl->location(), parent_struct, struct_decl->name(), std::move(fields));
-                else struct_type = new (*module) StructType(struct_decl->location(), struct_decl->name(), std::move(fields));
+                struct_type->fields(fields);
 
-                if (not struct_decl->variants().empty()) {
-                    std::vector<VariantType*> variants{};
-                    for (const auto& variant : struct_decl->variants()) {
-                        auto variant_type = as<VariantType>(CreateStructOrVariantType(variant, struct_type));
-                        variant->type(variant_type);
-                        variants.push_back(variant_type);
-                    }
-
-                    struct_type->variants(std::move(variants));
+                for (const auto& variant : struct_decl->variants()) {
+                    PopulateStructTypeFields(variant);
                 }
 
                 AnalyseType(module, (Type*&) struct_type);
                 return struct_type;
             };
 
-            s->type(CreateStructOrVariantType(s, nullptr));
+            PopulateStructTypeFields(s);
         } break;
 
         case Statement::Kind::DeclAlias: {
@@ -1083,7 +1104,8 @@ bool layec::Sema::AnalyseType(Module* module, Type*& type) {
                 LCC_ASSERT(alias_decl->type()->sema_done_or_errored());
                 type = alias_decl->type();
             } else if (auto struct_decl = cast<StructDecl>(type_entity)) {
-                LCC_ASSERT(struct_decl->type()->sema_done_or_errored());
+                LCC_ASSERT(struct_decl->type());
+                //LCC_ASSERT(struct_decl->type()->sema_done_or_errored());
                 type = struct_decl->type();
             } else {
                 Error(type->location(), "Unknown type symbol '{}'", t->name());

@@ -2029,17 +2029,18 @@ class StructType : public Type {
     std::vector<VariantType*> _variants;
 
 protected:
-    StructType(Kind kind, Location location, std::string name, std::vector<StructField> fields)
+    StructType(Kind kind, Location location, std::string name, std::vector<StructField> fields = {})
         : Type(kind, location), _name(std::move(name)), _fields(std::move(fields)) {}
 
 public:
-    StructType(Location location, std::string name, std::vector<StructField> fields)
+    StructType(Location location, std::string name, std::vector<StructField> fields = {})
         : Type(Kind::TypeStruct, location), _name(std::move(name)), _fields(std::move(fields)) {}
 
     auto name() const -> const std::string& { return _name; }
 
     auto fields() const -> const decltype(_fields)& { return _fields; }
     auto fields() -> decltype(_fields)& { return _fields; }
+    auto fields(std::vector<StructField> fields) { _fields = std::move(fields); }
 
     auto variants() const -> const decltype(_variants)& { return _variants; }
     auto variants() -> decltype(_variants)& { return _variants; }
@@ -2052,7 +2053,7 @@ class VariantType : public StructType {
     StructType* _parent_struct;
 
 public:
-    VariantType(Location location, StructType* parent_struct, std::string name, std::vector<StructField> fields)
+    VariantType(Location location, StructType* parent_struct, std::string name, std::vector<StructField> fields = {})
         : StructType(Kind::TypeVariant, location, std::move(name), std::move(fields)), _parent_struct(parent_struct) {}
 
     auto parent_struct() const { return _parent_struct; }
