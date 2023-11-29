@@ -52,13 +52,15 @@ using options = clopts< // clang-format off
     option<"-o", "Path to the output filepath where target code will be stored">,
     multiple<option<"-I", "Add a directory to the include search paths">>,
     option<"-f", "What format to emit code in (default: asm)",
-           values<
-               "llvm",
-               "asm", "gnu-as-att"
-               >
-           >,
+        values<
+            "llvm",
+            "asm", "gnu-as-att",
+            "obj", "elf", "coff"
+        >
+    >,
     option<"--color", "Whether to include colours in the output (default: auto)",
-           values<"always", "auto", "never">>,
+        values<"always", "auto", "never">
+    >,
     option<"--passes", "Comma-separated list of optimisation passes to run">,
     experimental::short_option<"-O", "Set optimisation level (default: 0)", values<0, 1, 2, 3>>,
     flag<"-v", "Enable verbose output">,
@@ -110,6 +112,16 @@ int main(int argc, char** argv) {
             format = lcc::Format::llvm_textual_ir;
         } else if (*format_string == "asm" || *format_string == "gnu-as-att") {
             format = lcc::Format::gnu_as_att_assembly;
+        } else if (*format_string == "obj") {
+#if defined(_MSC_VER)
+            format = lcc::Format::coff:object;
+#else
+            format = lcc::Format::elf_object;
+#endif
+        } else if (*format_string == "elf") {
+            format = lcc::Format::elf_object;
+        } else if (*format_string == "coff") {
+            format = lcc::Format::coff_object;
         }
     }
 

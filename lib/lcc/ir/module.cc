@@ -168,6 +168,11 @@ void Module::emit(std::filesystem::path output_file_path) {
                 x86_64::emit_gnu_att_assembly(output_file_path, this, desc, machine_ir);
             else LCC_ASSERT(false, "Unhandled code emission target, sorry");
         } break;
+
+        case Format::COFF_OBJECT:
+        case Format::ELF_OBJECT: {
+            LCC_TODO("Emit object file");
+        } break;
     }
 }
 
