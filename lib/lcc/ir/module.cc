@@ -178,6 +178,12 @@ void Module::emit(std::filesystem::path output_file_path) {
                     gobj = x86_64::emit_mcode_gobj(this, desc, machine_ir);
                 else LCC_ASSERT(false, "Unhandled code emission target, sorry");
 
+                // TODO: Have some way for "frontend" to specify sections in the output
+                // object file, such that Intercept can store it's module metadata in
+                // there.
+
+                fmt::print("{}\n", gobj.print());
+
                 LCC_TODO("Emit ELF object from generic object format");
             } else if (_ctx->format()->format() == Format::COFF_OBJECT) {
                 LCC_TODO("Emit COFF object from generic object format");

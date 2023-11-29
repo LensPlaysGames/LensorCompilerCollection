@@ -1,5 +1,6 @@
 #include <lcc/codegen/generic_object.hh>
 #include <lcc/codegen/x86_64/object.hh>
+#include <lcc/context.hh>
 
 namespace lcc {
 namespace x86_64 {
@@ -17,6 +18,14 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
     Section& text = out.section(".text");
     Section& data = out.section(".data");
     Section& bss = out.section(".bss");
+
+    for (auto* var : module->vars())
+        out.symbol_from_global(var);
+
+    for (auto& func : mir) {
+        // TODO: Create symbol for function.
+        // TODO: Assemble function into machine code.
+    }
 
     LCC_TODO("Actually assemble into machine code, populate symbols, etc");
 

@@ -1,6 +1,7 @@
 #ifndef LCC_GENERIC_OBJECT_HH
 #define LCC_GENERIC_OBJECT_HH
 
+#include <fmt/format.h>
 #include <lcc/ir/ir.hh>
 #include <lcc/utils.hh>
 
@@ -17,6 +18,81 @@ struct Section {
     // Iff is_fill is true, contents isn't valid; use length + value to
     // construct contents of section.
     bool is_fill{false};
+
+    std::string print() {
+        auto out = fmt::format(
+            "[SECTION]: {}\n"
+            "CONTENTS:",
+            name
+        );
+
+        if (is_fill) {
+            out += fmt::format(" {} {:x}\n", length, value);
+        } else {
+            const auto size = contents.size();
+            out += fmt::format("\n================ {} bytes\n", size);
+
+            // Print bytes like hexdump, kinda
+            usz i = 0;
+            if (size > 15) {
+                for (; i < size - 16; i += 16) {
+                    out += fmt::format(
+                        "      {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}  {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}",
+                        contents[i],
+                        contents[i + 1],
+                        contents[i + 2],
+                        contents[i + 3],
+                        contents[i + 4],
+                        contents[i + 5],
+                        contents[i + 6],
+                        contents[i + 7],
+                        contents[i + 8],
+                        contents[i + 9],
+                        contents[i + 10],
+                        contents[i + 11],
+                        contents[i + 12],
+                        contents[i + 13],
+                        contents[i + 14],
+                        contents[i + 15]
+                    );
+
+                    out += "      |";
+                    // Loop over 16 bytes starting at `i`.
+                    for (usz index = i; index < i + 16; ++index) {
+                        unsigned char c = contents[index];
+                        if (c < ' ' || c > '~') c = '.';
+                        out += fmt::format("{}", c);
+                    }
+                    out += "|\n";
+                }
+            }
+
+            // Last line
+            if (i < size) {
+                out += "      ";
+                for (usz index = i; index < i + 16; ++index) {
+                    // If inbounds, print byte, otherwise print blank space to keep alignment.
+                    if (index < size) out += fmt::format("{:02x}", contents[index]);
+                    else out += "  ";
+                    // Space after every one except for the last.
+                    if (index - i != 15) out += ' ';
+                    // Inbetween the 7th and 8th (0-based), there is an extra space.
+                    if (index - i == 7) out += ' ';
+                }
+                out += "      |";
+                for (usz index = i; index < i + 16; ++index) {
+                    if (index < size) {
+                        unsigned char c = contents[index];
+                        if (c < ' ' || c > '~') c = '.';
+                        out += fmt::format("{}", c);
+                    } else out += '.';
+                }
+            }
+
+            out += "\n================\n";
+        }
+        return out;
+    }
 };
 
 struct Symbol {
@@ -27,6 +103,22 @@ struct Symbol {
         EXPORT, // like static but global
         EXTERNAL,
     } kind{Kind::NONE};
+
+    std::string kind_string(Kind k) {
+        switch (k) {
+            case Kind::NONE:
+                return "NONE";
+            case Kind::FUNCTION:
+                return "FUNCTION";
+            case Kind::STATIC:
+                return "STATIC";
+            case Kind::EXPORT:
+                return "EXPORT";
+            case Kind::EXTERNAL:
+                return "EXTERNAL";
+        }
+        LCC_UNREACHABLE();
+    }
 
     std::string name{};
 
@@ -39,6 +131,10 @@ struct Symbol {
 
     // Offset into originating section where symbol is defined.
     usz byte_offset{};
+
+    std::string print() {
+        return fmt::format("[SYMBOL]: {}({}) {}  {}", byte_offset, section_name, name, kind_string(kind));
+    }
 };
 
 struct Relocation {
@@ -47,8 +143,28 @@ struct Relocation {
         DISPLACEMENT32,
         DISPLACEMENT32_PCREL,
     } kind;
+
+    std::string kind_string(Kind k) {
+        switch (k) {
+            case Kind::NONE:
+                return "NONE";
+            case Kind::DISPLACEMENT32:
+                return "DISP32";
+            case Kind::DISPLACEMENT32_PCREL:
+                return "DISP32_PCREL";
+        }
+        LCC_UNREACHABLE();
+    }
+
+    // THOUGHTS: This /could/ be an index into symbols array of GenericObject,
+    // if we don't want to duplicate all these short strings and stuff.
     Symbol symbol;
+
     isz addend;
+
+    std::string print() {
+        return fmt::format("[RELOC]: {}  {}{:+}", kind_string(kind), symbol.name, addend);
+    }
 };
 
 constexpr isz align_to(isz value, isz alignment) {
@@ -108,6 +224,20 @@ struct GenericObject {
                 uninitialized_data.length += var->type()->bytes();
             }
         }
+    }
+
+    std::string print() {
+        std::string out{};
+        out += fmt::format("SYMBOLS: {}\n", symbols.size());
+        for (auto sym : symbols)
+            out += sym.print();
+        out += fmt::format("RELOCATIONS: {}\n", relocations.size());
+        for (auto relocation : relocations)
+            out += relocation.print();
+        out += fmt::format("SECTIONS: {}\n", sections.size());
+        for (auto section : sections)
+            out += section.print();
+        return out;
     }
 };
 
