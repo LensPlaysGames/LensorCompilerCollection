@@ -4,6 +4,7 @@
 #include <lcc/codegen/x86_64/assembly.hh>
 #include <lcc/context.hh>
 #include <lcc/utils.hh>
+#include <lcc/ir/ir.hh>
 #include <string>
 #include <variant>
 
@@ -72,6 +73,21 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                             ","
                         )
                     );
+                } break;
+
+                case Value::Kind::IntegerConstant: {
+                    auto integer_constant = as<IntegerConstant>(var->init());
+                    LCC_ASSERT(integer_constant->type()->bytes() <= 8, "Oversized integer constant");
+                    // Represent bytes literally
+                    out += ".byte ";
+                    u64 value = integer_constant->value().value();
+                    for (usz i = 0; i < integer_constant->type()->bytes(); ++i) {
+                        int byte = (value >> (i * 8)) & 0xff;
+                        out += fmt::format("0x{:x}", byte);
+                        if (i + 1 < integer_constant->type()->bytes())
+                            out += ", ";
+                    }
+                    out += '\n';
                 } break;
 
                 default:
