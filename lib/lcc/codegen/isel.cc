@@ -85,8 +85,11 @@ void select_instructions(Module* mod, MFunction& function) {
     // Don't selection instructions for empty functions.
     if (function.blocks().empty()) return;
 
-    if (mod->context()->target()->is_x64())
+    if (mod->context()->target()->is_x64()) {
+        // TODO: rewrite truncates into bitwise ands.
+
         function = lcc::isel::x86_64PatternList::rewrite(mod, function);
+    }
 
     calculate_defining_uses(function);
 }
