@@ -198,8 +198,29 @@ struct GenericObject {
                                   ? Symbol::Kind::EXPORT
                                   : Symbol::Kind::STATIC;
 
-            LCC_TODO("Handle initialized globals in symbol_from_global");
+            Section& initialized_data = section(".data");
+            symbols.push_back({kind, var->name(), ".data", initialized_data.contents.size()});
 
+            switch (var->init()->kind()) {
+                case Value::Kind::IntegerConstant: {
+                    auto integer_constant = as<IntegerConstant>(var->init());
+                    LCC_ASSERT(integer_constant->type()->bytes() <= 8, "Oversized integer constant");
+                    // FIXME: Big/Little endianness handling.
+                    u64 value = integer_constant->value().value();
+                    for (usz i = 0; i < integer_constant->type()->bytes(); ++i) {
+                        u8 byte = (value >> (i * 8)) & 0xff;
+                        initialized_data.contents.push_back(byte);
+                    }
+                } break;
+
+                case Value::Kind::ArrayConstant: {
+                    auto array_constant = as<ArrayConstant>(var->init());
+                    for (char c : *array_constant) initialized_data.contents.push_back(u8(c));
+                } break;
+
+                default:
+                    LCC_ASSERT(false, "Sorry, but global variable initialisation with value kind {} is not supported.", Value::ToString(var->init()->kind()));
+            }
         } else {
             if (imported) {
                 // Create symbol referencing externally-defined value.
