@@ -10,7 +10,18 @@
 namespace lcc {
 namespace x86_64 {
 
-std::string block_name(std::string in) {
+// NOTE: Does not handle empty string (because we want every input of this
+// function to produce the same output)
+static std::string safe_name(std::string in) {
+    LCC_ASSERT(not in.empty(), "safe_name does not handle empty string input");
+    // . in the middle of an identifier is not allowed
+    std::replace(in.begin(), in.end(), '.', '_');
+    // . at the beginning tells the assembler it's a local label and not a
+    // function.
+    return fmt::format(".{}", in);
+}
+
+static std::string block_name(std::string in) {
     if (in.empty()) {
         static usz block_count = 0;
         return fmt::format(".__block_{}", block_count++);
@@ -35,7 +46,7 @@ std::string ToString(MFunction& function, MOperand op) {
             offset += function.locals().at(index)->allocated_type()->bytes();
         return fmt::format("{}(%rbp)", -isz(offset));
     } else if (std::holds_alternative<MOperandGlobal>(op)) {
-        return fmt::format("{}(%rip)", std::get<MOperandGlobal>(op)->name());
+        return fmt::format("{}(%rip)", safe_name(std::get<MOperandGlobal>(op)->name()));
     } else if (std::holds_alternative<MOperandFunction>(op)) {
         return fmt::format("{}", std::get<MOperandFunction>(op)->name());
     } else if (std::holds_alternative<MOperandBlock>(op)) {
@@ -48,7 +59,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
 
     for (auto* var : module->vars()) {
         if (var->init()) {
-            out += fmt::format("{}: ", var->name());
+            out += fmt::format("{}: ", safe_name(var->name()));
             switch (var->init()->kind()) {
                 case Value::Kind::ArrayConstant: {
                     auto array_constant = as<ArrayConstant>(var->init());
@@ -92,7 +103,12 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
             0,
             std::plus{}
         );
-        if (stack_frame_size) out += fmt::format("    sub ${}, %rsp\n", stack_frame_size);
+        if (stack_frame_size) {
+            constexpr usz alignment = 16;
+            // FIXME: ALIGN_TO, once we have that.
+            stack_frame_size = (stack_frame_size + ((alignment - (stack_frame_size % alignment)) % alignment));
+            out += fmt::format("    sub ${}, %rsp\n", stack_frame_size);
+        }
 
         for (auto& block : function.blocks()) {
             out += fmt::format("{}:\n", block_name(block.name()));
