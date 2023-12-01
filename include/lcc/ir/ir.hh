@@ -1183,7 +1183,7 @@ protected:
     void AssertSameType(Value* l, Value* r) {
         LCC_ASSERT(
             l->type() == r->type(),
-            "Operands of `add` instruction must have the same type, but was {} and {}",
+            "Left and right side of binary operand (check backtrace for which one) must have the same type, but was {} and {}",
             *l->type(),
             *r->type()
         );
