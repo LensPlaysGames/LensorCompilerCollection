@@ -16,6 +16,7 @@ enum struct Opcode : u32 {
     Call,             // call
     Move,             // mov
     MoveSignExtended, // movsx
+    MoveZeroExtended, // movzx
 
     // Optional third offset operand (default zero).
     MoveDereferenceRHS, // mov <any>, [offset](%register).
@@ -114,6 +115,7 @@ constexpr auto ToString(Opcode op) -> std::string_view {
         case Opcode::MoveDereferenceRHS:
         case Opcode::Move: return "mov";
         case Opcode::MoveSignExtended: return "movsx";
+        case Opcode::MoveZeroExtended: return "movzx";
         case Opcode::LoadEffectiveAddress: return "lea";
         case Opcode::Add: return "add";
         case Opcode::Multiply: return "mul";

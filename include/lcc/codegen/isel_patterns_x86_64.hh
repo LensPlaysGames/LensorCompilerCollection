@@ -39,6 +39,7 @@ using load_some_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Load), load_op>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceLHS), o<0>, i<0>>>>;
 
+using load_global = load_some_op<Global<>>;
 using load_local = load_some_op<Local<>>;
 using load_reg = load_some_op<Register<0, 0>>;
 
@@ -182,10 +183,15 @@ using u_gt_eq_reg_imm = cmp_reg_imm<MInst::Kind::UGe, Opcode::SetByteIfEqualOrGr
 using s_gt_eq_reg_imm = cmp_reg_imm<MInst::Kind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
 using eq_reg_imm = cmp_reg_imm<MInst::Kind::Eq, Opcode::SetByteIfEqual>;
 
+using z_ext_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::ZExt), Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(Opcode::MoveZeroExtended), o<0>, i<0>>>>;
+
 using x86_64PatternList = PatternList<
     ret,
     ret_imm,
     ret_reg,
+    load_global,
     load_local,
     load_reg,
     store_reg_local,
@@ -198,6 +204,7 @@ using x86_64PatternList = PatternList<
     copy_imm,
 
     s_ext_reg,
+    z_ext_reg,
 
     add_local_imm,
     add_reg_reg,
