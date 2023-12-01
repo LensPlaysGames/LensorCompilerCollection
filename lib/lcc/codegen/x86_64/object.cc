@@ -23,8 +23,26 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
         out.symbol_from_global(var);
 
     for (auto& func : mir) {
-        // TODO: Create symbol for function.
+        const bool exported = func.linkage() == Linkage::Exported || func.linkage() == Linkage::Reexported;
+        const bool imported = func.linkage() == Linkage::Imported || func.linkage() == Linkage::Reexported;
+
+        if (imported) {
+            Symbol sym{};
+            sym.kind = Symbol::Kind::EXTERNAL;
+            sym.name = func.name();
+            // FIXME: Is section name or byte offset needed?
+            out.symbols.push_back(sym);
+        } else {
+            Symbol sym{};
+            sym.kind = Symbol::Kind::FUNCTION;
+            sym.name = func.name();
+            sym.section_name = text.name;
+            sym.byte_offset = text.contents.size();
+            out.symbols.push_back(sym);
+        }
+
         // TODO: Assemble function into machine code.
+
     }
 
     LCC_TODO("Actually assemble into machine code, populate symbols, etc");
