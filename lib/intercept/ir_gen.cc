@@ -238,9 +238,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                 } else if (lhs_type_stripped->is_array()) {
                     Inst* gep{};
 
-                    /// Reference == lvalue.
-                    if (not lhs_expr->type()->is_reference()) {
-                        LCC_TODO("Known bugs lie beyond regarding string literal subscripting... sorry!");
+                    if (not lhs_expr->is_lvalue()) {
                         // array literal subscript (cry)
                         auto* element_type = as<ArrayType>(lhs_type_stripped)->element_type();
                         auto* alloca = new (*module) AllocaInst(Convert(ctx, lhs_type_stripped), expr->location());
