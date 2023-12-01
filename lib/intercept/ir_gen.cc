@@ -3,6 +3,7 @@
 #include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/ir/ir.hh>
+#include <lcc/target.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/utils.hh>
@@ -165,6 +166,13 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             generate_expression(unary_expr->operand());
 
             switch (unary_expr->op()) {
+                case TokenKind::Exclam: {
+                    auto* zero_imm = new (*module) lcc::IntegerConstant(lcc::IntegerType::Get(ctx, ctx->target()->size_of_pointer), 0);
+                    auto zero_imm_bitcast = new (*module) lcc::BitcastInst(zero_imm, lcc::Type::PtrTy);
+                    auto* eq = new (*module) EqInst(generated_ir[unary_expr->operand()], zero_imm_bitcast, expr->location());
+                    generated_ir[expr] = eq;
+                    insert(eq);
+                } break;
                 case TokenKind::Minus: {
                     auto* neg = new (*module) NegInst(generated_ir[unary_expr->operand()], expr->location());
                     generated_ir[expr] = neg;
@@ -232,6 +240,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
                     /// Reference == lvalue.
                     if (not lhs_expr->type()->is_reference()) {
+                        LCC_TODO("Known bugs lie beyond regarding string literal subscripting... sorry!");
                         // array literal subscript (cry)
                         auto* element_type = as<ArrayType>(lhs_type_stripped)->element_type();
                         auto* alloca = new (*module) AllocaInst(Convert(ctx, lhs_type_stripped), expr->location());
