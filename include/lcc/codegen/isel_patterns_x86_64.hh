@@ -123,6 +123,30 @@ using shl_imm_imm = Pattern<
         Inst<Clobbers<>, usz(Opcode::ShiftLeft), o<1>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
+using sar_imm_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sar), Immediate<0, 0>, Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(x86_64::RegisterId::RCX), 32>>,
+        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), Register<usz(x86_64::RegisterId::RCX), 8>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
+
+using shr_imm_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shr), Immediate<0, 0>, Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(x86_64::RegisterId::RCX), 32>>,
+        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), Register<usz(x86_64::RegisterId::RCX), 8>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
+
+using shl_imm_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shl), Immediate<0, 0>, Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(x86_64::RegisterId::RCX), 32>>,
+        Inst<Clobbers<>, usz(Opcode::ShiftLeft), Register<usz(x86_64::RegisterId::RCX), 8>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
+
 // FIXME: If immediate's value doesn't fit into 8 bits, we can't encode it like this.
 using sar_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Sar), Register<0, 0>, Immediate<0, 0>>>,
@@ -327,6 +351,10 @@ using x86_64PatternList = PatternList <
       shl_imm_imm,
       shr_imm_imm,
       sar_imm_imm,
+
+      shl_imm_reg,
+      shr_imm_reg,
+      sar_imm_reg,
 
       shl_reg_imm,
       shr_reg_imm,
