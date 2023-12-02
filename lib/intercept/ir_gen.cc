@@ -458,9 +458,18 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                 }
             } else if (from_sz > to_sz) {
                 // larger to smaller: truncate.
-                auto truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
-                generated_ir[expr] = truncate;
-                insert(truncate);
+                // but not for bools. bools need != 0 emitted instead.
+                if (cast->type() == Type::Bool) {
+                    auto zero_imm = new (*module) IntegerConstant(generated_ir[cast->operand()]->type(), 0);
+                    auto ne = new (*module) NeInst(generated_ir[cast->operand()], zero_imm, cast->location());
+                    generated_ir[expr] = ne;
+                    insert(ne);
+                } else {
+                    auto truncate = new (*module) TruncInst(generated_ir[cast->operand()], Convert(ctx, cast->type()), expr->location());
+                    generated_ir[expr] = truncate;
+                    insert(truncate);
+                }
+
             }
 
         } break;
