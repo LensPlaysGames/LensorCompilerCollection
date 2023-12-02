@@ -6,6 +6,7 @@
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
+#include <variant>
 
 namespace lcc {
 
@@ -86,9 +87,51 @@ void select_instructions(Module* mod, MFunction& function) {
     if (function.blocks().empty()) return;
 
     if (mod->context()->target()->is_x64()) {
-        // TODO: rewrite truncates into bitwise ands.
-
         function = lcc::isel::x86_64PatternList::rewrite(mod, function);
+
+        // In-code instruction selection. Ideally, we wouldn't have to do this at
+        // all. But, not all hardware is ideal.
+        for (auto& block : function.blocks()) {
+            for (usz index = 0; index < block.instructions().size(); ++index) {
+                MInst& inst = block.instructions().at(index);
+                switch (inst.kind()) {
+                    // Rewrite truncates into bitwise ands.
+                    //
+                    // r3.1 | M.Trunc r1.64
+                    // becomes the following machine code, GNU syntax
+                    //     mov %r1.64, %r3.64
+                    //     and %r3.64, $1
+                    case MInst::Kind::Trunc: {
+                        LCC_ASSERT(std::holds_alternative<MOperandRegister>(inst.get_operand(0)),
+                                   "Sorry, but you can only truncate registers for right now");
+
+                        auto mov_inst = MInst(usz(x86_64::Opcode::Move), {0, 0});
+                        auto operand_reg = std::get<MOperandRegister>(inst.get_operand(0));
+                        auto destination_reg = Register(inst.reg(), uint(inst.regsize()));
+                        destination_reg.size = operand_reg.size;
+                        mov_inst.add_operand(operand_reg);
+                        mov_inst.add_operand(destination_reg);
+
+                        auto and_inst = MInst(usz(x86_64::Opcode::And), {0, 0});
+                        // Set bottom inst.regsize() bits of immediate.
+                        usz imm = 0;
+                        for (usz bit_i = 0; bit_i < inst.regsize(); ++bit_i)
+                            imm |= (usz(1) << bit_i);
+
+                        and_inst.add_operand(MOperandImmediate(imm));
+                        and_inst.add_operand(destination_reg);
+
+                        // replace truncate with move
+                        block.instructions()[index] = mov_inst;
+                        // insert and instruction after move, previously truncate
+                        // ++index to skip newly inserted instruction.
+                        block.instructions().insert(block.instructions().begin() + isz(++index), and_inst);
+                    } break;
+
+                    default: break;
+                }
+            }
+        }
     }
 
     calculate_defining_uses(function);

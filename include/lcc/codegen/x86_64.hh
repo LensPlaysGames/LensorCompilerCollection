@@ -24,6 +24,9 @@ enum struct Opcode : u32 {
 
     LoadEffectiveAddress, // lea
 
+    // Bitwise
+    And,
+
     Add,      // add
     Multiply, // mul
 
@@ -117,6 +120,7 @@ constexpr auto ToString(Opcode op) -> std::string_view {
         case Opcode::MoveSignExtended: return "movsx";
         case Opcode::MoveZeroExtended: return "movzx";
         case Opcode::LoadEffectiveAddress: return "lea";
+        case Opcode::And: return "and";
         case Opcode::Add: return "add";
         case Opcode::Multiply: return "mul";
         case Opcode::Sub: return "sub";
