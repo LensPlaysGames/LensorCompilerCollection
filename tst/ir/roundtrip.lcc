@@ -9,6 +9,11 @@ cc1 : imported layecc i32(i32)
 cc2 : imported ccc i32()
 cc3 : imported intcc i32()
 
+; * varargs1 : void() variadic
+; * varargs2 : i32(ptr %0) variadic
+varargs1 : void() variadic
+varargs2 : i32(ptr %0) variadic
+
 ; * ops : void(i32 %0, i32 %1):
 ; +   bb0:
 ; +     %2 = add i32 %0, %1
@@ -57,6 +62,8 @@ cc3 : imported intcc i32()
 ; +     %34 = call intcc @cc3 () -> i32
 ; +     %35 = alloca i32[100]
 ; +     %36 = gep i32[100] from %35 at i32 0
+; +     call @varargs1 () variadic
+; +     %37 = call @varargs2 (ptr %36, i32 %28) variadic -> i32
 ; +     intrinsic @memcpy(ptr %29, ptr %36, i64 4)
 ; +     return
 ops : exported void(i32 %0, i32 %1):
@@ -107,6 +114,8 @@ ops : exported void(i32 %0, i32 %1):
     %34 = call intcc @cc3 () -> i32
     %35 = alloca i32[100]
     %36 = gep i32[100] from %35 at i32 0
+    call @varargs1 () variadic
+    %37 = call @varargs2 (ptr %36, i32 %28) variadic -> i32
     intrinsic @memcpy(ptr %29, ptr %36, i64 4)
     return
 

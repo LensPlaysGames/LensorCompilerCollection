@@ -149,12 +149,14 @@ auto Type::string(bool use_colour) const -> std::string {
             auto f = as<FunctionType>(this);
             auto ToString = [&](auto t) { return t->string(use_colour); };
             auto separator = fmt::format("{}, ", C(Red));
+            auto variadic = f->variadic() ? fmt::format(" {}variadic", C(Red)) : "";
             return fmt::format(
-                "{}{}({}{}){}",
+                "{}{}({}{}){}{}",
                 f->ret()->string(use_colour),
                 C(Red),
                 fmt::join(vws::transform(f->params(), ToString), separator),
                 C(Red),
+                variadic,
                 C(Reset)
             );
         }
@@ -170,16 +172,16 @@ auto Type::string(bool use_colour) const -> std::string {
 }
 
 /// Get or create a function type.
-FunctionType* FunctionType::Get(Context* ctx, Type* ret, std::vector<Type*> params) {
+FunctionType* FunctionType::Get(Context* ctx, Type* ret, std::vector<Type*> params, bool is_variadic) {
     // Look in ctx type cache.
     const auto& found = rgs::find_if(ctx->function_types, [&](const Type* t) {
         const FunctionType* f = as<FunctionType>(t);
-        return f->ret() == ret && rgs::equal(f->params(), params);
+        return f->ret() == ret && rgs::equal(f->params(), params) && f->variadic() == is_variadic;
     });
     if (found != ctx->function_types.end())
         return as<FunctionType>(*found);
 
-    FunctionType* out = new (ctx) FunctionType(ret, params);
+    FunctionType* out = new (ctx) FunctionType(ret, params, is_variadic);
     ctx->function_types.push_back(out);
     return out;
 }
@@ -575,12 +577,14 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         } else if (auto f = cast<FunctionType>(ty)) {
             auto ToString = [&](auto t) { return Ty(t); };
             auto separator = fmt::format("{}, ", C(Red));
+            auto variadic = f->variadic() ? fmt::format(" {}variadic", C(Red)) : "";
             return fmt::format(
-                "{}{}({}{}){}",
+                "{}{}({}{}){}{}",
                 Ty(f->ret()),
                 C(Red),
                 fmt::join(vws::transform(f->params(), ToString), separator),
                 C(Red),
+                variadic,
                 C(Reset)
             );
         }
@@ -636,6 +640,10 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
         }
 
         Print("{})", C(Red));
+
+        if (ftype->variadic()) {
+            Print(" {}variadic", C(Red));
+        }
     }
 
     /// Print start/end of function body.
@@ -722,8 +730,10 @@ struct LCCIRPrinter : IRPrinter<LCCIRPrinter, 2> {
                     Print("{}", Val(arg));
                 }
 
-                if (callee_ty->ret()->is_void()) Print("{})", C(Red));
-                else Print("{}) -> {}", C(Red), Ty(callee_ty->ret()));
+                auto variadic = callee_ty->variadic() ? fmt::format(" {}variadic", C(Red)) : "";
+
+                if (callee_ty->ret()->is_void()) Print("{}){}", C(Red), variadic);
+                else Print("{}){} -> {}", C(Red), variadic, Ty(callee_ty->ret()));
                 return;
             }
 

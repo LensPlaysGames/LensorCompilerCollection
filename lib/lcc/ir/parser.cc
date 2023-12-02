@@ -443,6 +443,13 @@ auto lcc::parser::Parser::ParseCall(bool tail) -> Result<CallInst*> {
     }
 
     if (not Consume(Tk::RParen)) return Error("Expected ')'");
+
+    bool is_variadic = false;
+    if (At(Tk::Keyword) and tok.text == "variadic") {
+        NextToken();
+        is_variadic = true;
+    }
+
     if (Consume(Tk::Arrow)) {
         auto ty = ParseType();
         if (not ty) return ty.diag();
@@ -450,7 +457,7 @@ auto lcc::parser::Parser::ParseCall(bool tail) -> Result<CallInst*> {
     }
 
     auto call = new (*mod) CallInst(
-        FunctionType::Get(mod->context(), ret, std::move(arg_types)),
+        FunctionType::Get(mod->context(), ret, std::move(arg_types), is_variadic),
         loc
     );
 
@@ -570,11 +577,17 @@ auto lcc::parser::Parser::ParseFunction() -> Result<void> {
     }
     if (not Consume(Tk::RParen)) return Error("Expected ')'");
 
+    bool is_variadic = false;
+    if (At(Tk::Keyword) and tok.text == "variadic") {
+        NextToken();
+        is_variadic = true;
+    }
+
     /// Create the function.
     auto f = new (*mod) Function(
         mod.get(),
         std::move(name),
-        FunctionType::Get(mod->context(), *ret, std::move(args)),
+        FunctionType::Get(mod->context(), *ret, std::move(args), is_variadic),
         linkage,
         cc,
         loc
