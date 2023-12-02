@@ -133,7 +133,7 @@ struct Symbol {
     usz byte_offset{};
 
     std::string print() {
-        return fmt::format("[SYMBOL]: {}({}) {}  {}", byte_offset, section_name, name, kind_string(kind));
+        return fmt::format("[SYMBOL]: {}({}) {}  {}\n", byte_offset, section_name, name, kind_string(kind));
     }
 };
 
@@ -163,7 +163,7 @@ struct Relocation {
     isz addend;
 
     std::string print() {
-        return fmt::format("[RELOC]: {}  {}{:+}", kind_string(kind), symbol.name, addend);
+        return fmt::format("[RELOC]: {}  {}{:+}\n", kind_string(kind), symbol.name, addend);
     }
 };
 
@@ -249,13 +249,13 @@ struct GenericObject {
 
     std::string print() {
         std::string out{};
-        out += fmt::format("SYMBOLS: {}\n", symbols.size());
+        //out += fmt::format("SYMBOLS: {}\n", symbols.size());
         for (auto sym : symbols)
             out += sym.print();
-        out += fmt::format("RELOCATIONS: {}\n", relocations.size());
+        //out += fmt::format("RELOCATIONS: {}\n", relocations.size());
         for (auto relocation : relocations)
             out += relocation.print();
-        out += fmt::format("SECTIONS: {}\n", sections.size());
+        //out += fmt::format("SECTIONS: {}\n", sections.size());
         for (auto section : sections)
             out += section.print();
         return out;
