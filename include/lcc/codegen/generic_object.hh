@@ -242,7 +242,7 @@ struct GenericObject {
                 symbols.push_back(s);
 
                 // Write uninitialized bytes for this variable.
-                uninitialized_data.length += var->type()->bytes();
+                uninitialized_data.length += u32(var->type()->bytes());
             }
         }
     }

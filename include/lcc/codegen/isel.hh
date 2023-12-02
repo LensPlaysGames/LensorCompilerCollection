@@ -253,7 +253,7 @@ struct Inst {
                     size = std::get<MOperandImmediate>(op).size;
                 else LCC_ASSERT(false, "Sorry, moperand type not handled in NewVirtual handling...");
 
-                return MOperandRegister(new_virtuals[operand::index], size);
+                return MOperandRegister(new_virtuals[operand::index], uint(size));
             }
 
             case OperandKind::Local:
