@@ -102,6 +102,18 @@ using s_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::SExt), Register<0, 0>>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveSignExtended), o<0>, i<0>>>>;
 
+using and_reg_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::And), Register<0, 0>, Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::And), o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+
+using and_reg_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::And), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::And), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+
 using add_local_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Local<>, Immediate<>>>,
     InstList<
@@ -229,6 +241,9 @@ using x86_64PatternList = PatternList<
 
     s_ext_reg,
     z_ext_reg,
+
+    and_reg_reg,
+    and_reg_imm,
 
     add_local_imm,
     add_reg_reg,
