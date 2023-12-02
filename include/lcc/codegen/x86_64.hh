@@ -37,6 +37,7 @@ enum struct Opcode : u32 {
     JumpIfZeroFlag, // jz
 
     SetByteIfEqual,                  // sete (set if equal)
+    SetByteIfNotEqual,               // setne (set if not equal)
     SetByteIfEqualOrLessUnsigned,    // setbe (set if below or equal, "below" being Intel's way of meaning unsigned less than)
     SetByteIfEqualOrLessSigned,      // setle (set if less or equal, "less" being Intel's way of meaning **signed** less than)
     SetByteIfEqualOrGreaterUnsigned, // setae (set if above or equal, "above" being Intel's way of meaning unsigned greater than)
@@ -130,6 +131,7 @@ constexpr auto ToString(Opcode op) -> std::string_view {
         case Opcode::JumpIfZeroFlag: return "jz";
         case Opcode::Compare: return "cmp";
         case Opcode::SetByteIfEqual: return "sete";
+        case Opcode::SetByteIfNotEqual: return "setne";
         case Opcode::SetByteIfLessUnsigned: return "setb";
         case Opcode::SetByteIfLessSigned: return "setl";
         case Opcode::SetByteIfGreaterUnsigned: return "seta";

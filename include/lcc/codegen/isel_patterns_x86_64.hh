@@ -185,6 +185,7 @@ using s_gt_reg_reg = cmp_reg_reg<MInst::Kind::SGt, Opcode::SetByteIfGreaterSigne
 using u_gt_eq_reg_reg = cmp_reg_reg<MInst::Kind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
 using s_gt_eq_reg_reg = cmp_reg_reg<MInst::Kind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
 using eq_reg_reg = cmp_reg_reg<MInst::Kind::Eq, Opcode::SetByteIfEqual>;
+using ne_reg_reg = cmp_reg_reg<MInst::Kind::Ne, Opcode::SetByteIfNotEqual>;
 
 template <MInst::Kind kind, Opcode set_opcode>
 using cmp_reg_imm = Pattern<
@@ -204,6 +205,7 @@ using s_gt_reg_imm = cmp_reg_imm<MInst::Kind::SGt, Opcode::SetByteIfGreaterSigne
 using u_gt_eq_reg_imm = cmp_reg_imm<MInst::Kind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
 using s_gt_eq_reg_imm = cmp_reg_imm<MInst::Kind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
 using eq_reg_imm = cmp_reg_imm<MInst::Kind::Eq, Opcode::SetByteIfEqual>;
+using ne_reg_imm = cmp_reg_imm<MInst::Kind::Ne, Opcode::SetByteIfNotEqual>;
 
 using z_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::ZExt), Register<0, 0>>>,
@@ -255,6 +257,7 @@ using x86_64PatternList = PatternList<
     u_gt_eq_reg_reg,
     s_gt_eq_reg_reg,
     eq_reg_reg,
+    ne_reg_reg,
 
     u_lt_reg_imm,
     s_lt_reg_imm,
@@ -264,7 +267,8 @@ using x86_64PatternList = PatternList<
     s_gt_reg_imm,
     u_gt_eq_reg_imm,
     s_gt_eq_reg_imm,
-    eq_reg_imm>;
+    eq_reg_imm,
+    ne_reg_imm>;
 
 } // namespace isel
 } // namespace lcc
