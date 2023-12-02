@@ -1106,11 +1106,10 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
 
                     if (not ConvertToCommonType(module, e->lhs(), e->rhs())) {
                         expr->set_sema_errored();
-                        expr->type(new (*module) PoisonType{expr->location()});
                         break;
                     }
 
-                    LCC_ASSERT(Type::Equal(lhs_type, rhs_type));
+                    LCC_ASSERT(Type::Equal(e->lhs()->type(), e->rhs()->type()), "types: {} and {}", e->lhs()->type()->string(use_colours), e->rhs()->type()->string(use_colours));
                 } break;
             }
         } break;

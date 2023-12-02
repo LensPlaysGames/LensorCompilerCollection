@@ -285,6 +285,11 @@ void layec::IRGen::GenerateStatement(Statement* statement) {
             total_if += 1;
 
             auto cond_value = GenerateExpression(s->condition());
+            if (cond_value->type() != lcc::Type::I1Ty) {
+                Inst* cond_cmp = new (*mod()) NeInst(cond_value, new (*mod()) IntegerConstant(cond_value->type(), 0), s->condition()->location());
+                Insert(cond_cmp);
+                cond_value = cond_cmp;
+            }
             Insert(new (*mod()) CondBranchInst(cond_value, pass_block, fail_block, s->location()));
 
             UpdateBlock(pass_block);
