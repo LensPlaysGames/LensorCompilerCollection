@@ -1,0 +1,8 @@
+foreign callconv(cdecl)
+i32 printf(i8[*] format, varargs);
+
+int main() {
+    i32 number = 69;
+    printf("number: %d\n", number);
+    return 0;
+}

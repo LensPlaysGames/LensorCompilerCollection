@@ -4,8 +4,8 @@
 #include <lcc/context.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
-#include <lcc/utils/macros.hh>
 #include <lcc/utils/dependency_graph.hh>
+#include <lcc/utils/macros.hh>
 
 namespace lcc::laye {
 
@@ -27,10 +27,11 @@ auto LookupTypeEntity(Module* from_module, Scope* from_scope, const std::string&
         auto entity = lookup.first->second;
 
         // if the lookedup entity is of a type declaration, then return it
-        if (is<AliasDecl, StructDecl, EnumDecl>(entity))
+        if (is<AliasDecl, StructDecl, EnumDecl, TemplateTypeDecl>(entity))
             return entity;
 
         // otherwise, we continue up the next scope
+        search_scope = search_scope->parent();
     }
 
     // if we reach here, then nothing within the module is a type entity.
@@ -169,6 +170,7 @@ auto LookupValueEntity(Module* from_module, Scope* from_scope, const std::string
             return entity;
 
         // otherwise, we continue up the next scope
+        search_scope = search_scope->parent();
     }
 
     // if we reach here, then nothing within the module is a type entity.
@@ -326,7 +328,6 @@ void layec::Sema::Analyse(LayeContext* laye_context, Module* module, bool use_co
         return;
     }
 
-    Sema sema{laye_context, use_colours};
     for (auto& tld : order.order) {
         LCC_ASSERT(tld->module());
         if (auto s = cast<StructDecl>(tld)) {
@@ -336,7 +337,7 @@ void layec::Sema::Analyse(LayeContext* laye_context, Module* module, bool use_co
                 if (parent_struct)
                     struct_type = new (*module) VariantType(struct_decl->location(), parent_struct, struct_decl->name());
                 else struct_type = new (*module) StructType(struct_decl->location(), struct_decl->name());
-                
+
                 if (not struct_decl->variants().empty()) {
                     std::vector<VariantType*> variants{};
                     for (const auto& variant : struct_decl->variants()) {
@@ -347,7 +348,7 @@ void layec::Sema::Analyse(LayeContext* laye_context, Module* module, bool use_co
 
                     struct_type->variants(variants);
                 }
-                
+
                 return struct_type;
             };
 
@@ -355,10 +356,12 @@ void layec::Sema::Analyse(LayeContext* laye_context, Module* module, bool use_co
         }
     }
 
+    Sema* sema = new Sema{laye_context, use_colours};
     for (auto& tld : order.order) {
         LCC_ASSERT(tld->module());
-        sema.Analyse(tld->module(), (Statement*&)tld);
+        sema->Analyse(tld->module(), (Statement*&) tld);
     }
+    delete sema;
 }
 
 void layec::Sema::Analyse(Module* module, Statement*& statement) {
@@ -375,7 +378,7 @@ void layec::Sema::Analyse(Module* module, Statement*& statement) {
     switch (kind) {
         case Statement::Kind::DeclFunction: {
             auto s = as<FunctionDecl>(statement);
-            
+
             AnalyseType(module, s->return_type());
             LCC_ASSERT(s->return_type()->sema_done_or_errored());
 
@@ -399,7 +402,7 @@ void layec::Sema::Analyse(Module* module, Statement*& statement) {
                 // TODO(local): noreturn is always impure, if we have purity checks in Laye
             }
 
-            s->function_type(new (*module) FuncType{s->location(), s->return_type(), param_types});
+            s->function_type(new (*module) FuncType{s->location(), s->return_type(), param_types, s->varargs_kind()});
 
             if (s->name() == "main") {
                 // TODO(local): check that main is at global scope before adding this
@@ -502,6 +505,7 @@ void layec::Sema::Analyse(Module* module, Statement*& statement) {
                 }
             } else {
                 Analyse(module, s->value());
+                LValueToRValue(module, s->value());
                 if (curr_func->return_type()->is_void()) {
                     statement->set_sema_errored();
                     Error(s->location(), "Cannot return a value from a void function.");
@@ -607,12 +611,18 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
         case Expr::Kind::Cast: {
             auto e = as<CastExpr>(expr);
             AnalyseType(module, e->target_type());
-            Analyse(module, e->value(), e->target_type());
-
-            if (e->cast_kind() == CastKind::ImplicitCast or e->cast_kind() == CastKind::LValueToRValueConv) {
+            if (
+                e->is_implicit_cast() or
+                e->is_lvalue_to_rvalue() or
+                e->is_lvalue_to_ref() or
+                e->is_ref_to_lvalue()
+            ) {
                 expr->type(e->target_type());
+                e->set_lvalue(e->is_ref_to_lvalue());
                 break;
             }
+
+            Analyse(module, e->value(), e->target_type());
 
             if (not Analyse(module, e->value(), e->target_type())) {
                 expr->type(new (*module) PoisonType{expr->location()});
@@ -635,6 +645,11 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
                 break;
             }
 
+            if (from->is_buffer() and to->is_buffer()) {
+                expr->type(e->target_type());
+                break;
+            }
+
             if (from->is_integer() and to->is_integer()) {
                 expr->type(e->target_type());
                 break;
@@ -650,7 +665,6 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
 
         case Expr::Kind::LookupName: {
             auto e = as<NameExpr>(expr);
-
 
             auto entity = LookupValueEntity(module, e->scope(), e->name());
             if (not entity) {
@@ -668,7 +682,8 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
                     break;
                 }
                 e->target(binding_decl);
-                e->type(Ref(module, binding_decl->type(), TypeAccess::Mutable));
+                e->type(binding_decl->type());
+                e->set_lvalue();
             } else if (auto function_decl = cast<FunctionDecl>(entity)) {
                 e->target(function_decl);
                 e->type(function_decl->function_type());
@@ -766,7 +781,6 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
         case Expr::Kind::FieldIndex: {
             auto e = as<FieldIndexExpr>(expr);
             Analyse(module, e->target());
-            LCC_ASSERT(e->target()->type());
 
             if (!e->target()->is_lvalue()) {
                 Error(expr->location(), "Cannot lookup a field from a non-lvalue");
@@ -775,8 +789,7 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
                 break;
             }
 
-            auto nonref_target_type = e->target()->type()->strip_references();
-            if (auto struct_type = cast<StructType>(nonref_target_type)) {
+            if (auto struct_type = cast<StructType>(e->target()->type()->strip_pointers_and_references())) {
                 auto lookup = rgs::find_if(struct_type->fields(), [e](StructField field) { return field.name == e->field_name(); });
                 if (lookup == struct_type->fields().end()) {
                     Error(expr->location(), "No such field '{}' in {}", e->field_name(), struct_type->string(use_colours));
@@ -785,10 +798,45 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
                     break;
                 }
 
-                auto access = as<ReferenceType>(e->target()->type())->access();
-                expr->type(Ref(module, lookup->type, access));
+                expr->set_lvalue(ImplicitDereference(module, e->target()));
+                expr->type(lookup->type);
             } else {
                 Error(expr->location(), "Cannot lookup a field from a non-struct type");
+                expr->set_sema_errored();
+                expr->type(new (*module) PoisonType{expr->location()});
+            }
+        } break;
+
+        case Expr::Kind::ValueIndex: {
+            auto e = as<ValueIndexExpr>(expr);
+            Analyse(module, e->target());
+
+            if (!e->target()->is_lvalue()) {
+                Error(expr->location(), "Cannot lookup an index from a non-lvalue");
+                expr->set_sema_errored();
+                expr->type(new (*module) PoisonType{expr->location()});
+                break;
+            }
+
+            if (e->indices().size() != 1) {
+                Error(expr->location(), "Currently, only exactly one index value is supported");
+                expr->set_sema_errored();
+                expr->type(new (*module) PoisonType{expr->location()});
+                break;
+            }
+
+            auto& index = e->indices()[0];
+            Analyse(module, index, Type::UInt);
+            if (!Convert(module, index, Type::UInt)) {
+                ConvertOrError(module, index, Type::Int);
+            }
+
+            auto nonref_target_type = e->target()->type()->strip_references();
+            if (auto buffer_type = cast<BufferType>(nonref_target_type)) {
+                auto access = as<ReferenceType>(e->target()->type())->access();
+                expr->type(Ref(module, buffer_type->elem_type(), access));
+            } else {
+                Error(expr->location(), "Cannot lookup a field from a non-container type");
                 expr->set_sema_errored();
                 expr->type(new (*module) PoisonType{expr->location()});
             }
@@ -815,16 +863,38 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
                 if (auto function_type = cast<FuncType>(callee_type)) {
                     const auto& param_types = function_type->param_types();
 
-                    if (e->args().size() != param_types.size()) {
-                        Error(expr->location(), "Expected {} arguments to call, got {}.", param_types.size(), e->args().size());
-                        expr->set_sema_errored();
-                        expr->type(new (*module) PoisonType{expr->location()});
-                        return;
-                    }
+                    if (function_type->varargs_kind() == VarargsKind::None) {
+                        if (e->args().size() != param_types.size()) {
+                            Error(expr->location(), "Expected {} arguments to call, got {}.", param_types.size(), e->args().size());
+                            expr->set_sema_errored();
+                            expr->type(new (*module) PoisonType{expr->location()});
+                            return;
+                        }
 
-                    for (unsigned i = 0; i < e->args().size(); i++) {
-                        auto& arg = e->args()[i];
-                        ConvertOrError(module, arg, param_types[i]);
+                        for (unsigned i = 0; i < e->args().size(); i++) {
+                            auto& arg = e->args()[i];
+                            LValueToRValue(module, arg);
+                            ConvertOrError(module, arg, param_types[i]);
+                        }
+                    } else if (function_type->varargs_kind() == VarargsKind::C) {
+                        if (e->args().size() < param_types.size()) {
+                            Error(expr->location(), "Expected at least {} arguments to call, got {}.", param_types.size(), e->args().size());
+                            expr->set_sema_errored();
+                            expr->type(new (*module) PoisonType{expr->location()});
+                            return;
+                        }
+
+                        for (unsigned i = 0; i < e->args().size(); i++) {
+                            auto& arg = e->args()[i];
+                            LValueToRValue(module, arg);
+                            if (i < param_types.size()) {
+                                ConvertOrError(module, arg, param_types[i]);
+                            } else {
+                                ConvertToCVarargsTypeOrError(module, arg);
+                            }
+                        }
+                    } else {
+                        LCC_TODO();
                     }
 
                     LCC_ASSERT(not function_type->return_type()->is_named_type());
@@ -863,12 +933,12 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
                         break;
                     }
 
-                    LCC_ASSERT(e->value()->type()->is_reference());
-                    auto ref_type = as<ReferenceType>(e->value()->type());
-                    expr->type(Ptr(module, ref_type->elem_type(), ref_type->access()));
+                    expr->type(Ptr(module, e->value()->type(), TypeAccess::Mutable));
                 } break;
 
                 case OperatorKind::Deref: {
+                    LValueToRValue(module, e->value());
+
                     PointerType* pointer_type = nullptr;
                     Type*& value_type = e->value()->type();
 
@@ -888,6 +958,7 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
                         goto cannot_dereference_type;
 
                     expr->type(pointer_type->elem_type());
+                    expr->set_lvalue();
                     break;
 
                 cannot_dereference_type:
@@ -904,8 +975,11 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
             Analyse(module, e->lhs());
             Analyse(module, e->rhs());
 
-            auto lhs_type = LValueToRValue(module, e->lhs());
-            auto rhs_type = LValueToRValue(module, e->rhs());
+            LValueToRValue(module, e->lhs());
+            LValueToRValue(module, e->rhs());
+
+            auto lhs_type = e->lhs()->type();
+            auto rhs_type = e->rhs()->type();
 
             switch (e->operator_kind()) {
                 default: {
@@ -917,9 +991,6 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
                 case OperatorKind::Mul:
                 case OperatorKind::Div:
                 case OperatorKind::Mod: {
-                    auto lhs_type = LValueToRValue(module, e->lhs());
-                    auto rhs_type = LValueToRValue(module, e->rhs());
-
                     if (not lhs_type->is_number()) {
                         Error(
                             e->lhs()->location(),
@@ -1105,8 +1176,83 @@ bool layec::Sema::AnalyseType(Module* module, Type*& type) {
                 type = alias_decl->type();
             } else if (auto struct_decl = cast<StructDecl>(type_entity)) {
                 LCC_ASSERT(struct_decl->type());
-                //LCC_ASSERT(struct_decl->type()->sema_done_or_errored());
-                type = struct_decl->type();
+
+                auto& template_params = struct_decl->template_params();
+                auto& template_args = t->template_args();
+
+                if (template_params.size() != template_args.size()) {
+                    if (template_params.empty()) {
+                        Error(
+                            type->location(),
+                            "Struct type {} does not have template parameters, but {} template arguments were provided",
+                            struct_decl->name(),
+                            template_args.size()
+                        );
+                    } else if (template_args.empty()) {
+                        Error(
+                            type->location(),
+                            "Struct type {} requires {} template parameters, but no template arguments were provided",
+                            struct_decl->name(),
+                            template_params.size()
+                        );
+                    } else {
+                        Error(
+                            type->location(),
+                            "Struct type {} requires {} template parameters, but {} template argument(s) were provided",
+                            struct_decl->name(),
+                            template_params.size(),
+                            template_args.size()
+                        );
+                    }
+
+                    type = new (*module) PoisonType(type->location());
+                } else {
+                    type = struct_decl->type();
+
+                    if (not template_args.empty()) {
+                        if (auto lookup_inst = FindExistingInstantiation(struct_decl, template_args)) {
+                            LCC_ASSERT(lookup_inst->is_expr());
+                            auto st = as<StructType>(static_cast<Expr*>(lookup_inst));
+                            //Note(t->location(), "found existing instantiation: {}\n", st->string(use_colours));
+                            LCC_ASSERT(st->template_arguments().size() == template_args.size());
+                            type = st;
+                        } else {
+                            std::string mname = t->name();
+                            mname += "_";
+
+                            TypeInstantiationContext inst_context{};
+                            for (usz i = 0; i < template_args.size(); i++) {
+                                auto tparam = template_params.at(i);
+
+                                auto targ = template_args.at(i);
+                                if (auto type_tparam = cast<TemplateTypeDecl>(tparam)) {
+                                    if (auto type_targ = cast<Type>(targ)) {
+                                        AnalyseType(module, type_targ);
+                                        inst_context.declare(type_tparam, type_targ);
+
+                                        mname += TypeToMangledString(type_targ);
+                                    } else {
+                                        LCC_TODO();
+                                    }
+                                } else {
+                                    LCC_TODO();
+                                }
+                            }
+                            
+                            auto inst_type = as<StructType>(struct_decl->type()->instantiate(module, inst_context));
+                            inst_type->template_arguments(template_args);
+                            inst_type->mangled_name(mname);
+
+                            InstantiationInfo info{template_args, inst_type};
+                            _instantiations.emplace(struct_decl, info);
+
+                            type = inst_type;
+                            LCC_ASSERT(type != nullptr);
+                        }
+                    }
+                }
+            } else if (auto template_type_decl = cast<TemplateTypeDecl>(type_entity)) {
+                type = new (*module) TemplateParamType(type->location(), template_type_decl);
             } else {
                 Error(type->location(), "Unknown type symbol '{}'", t->name());
                 type = new (*module) PoisonType(type->location());
@@ -1366,6 +1512,38 @@ auto layec::Sema::LookupManyEntitiesFrom(Scope* scope, const std::string& name, 
 }
 #endif
 
+auto layec::Sema::FindExistingInstantiation(NamedDecl* decl, const std::vector<Expr*> template_args) -> SemaNode* {
+    auto itr = _instantiations.equal_range(decl);
+    if (itr.first == itr.second)
+        return nullptr;
+    
+    for (auto it = itr.first; it != itr.second; it++) {
+        auto& existing_args = it->second.template_args;
+
+        if (existing_args.size() != template_args.size())
+            continue;
+        
+        bool args_match = true;
+        for (usz i = 0; args_match and i < existing_args.size(); i++) {
+            auto earg = existing_args[i];
+            auto targ = template_args[i];
+
+            if (earg == targ)
+                continue; // easy match
+            
+            if (auto type_earg = cast<Type>(earg); is<Type>(targ)) {
+                if (!Type::Equal(type_earg, as<Type>(targ)))
+                    args_match = false;
+            }
+        }
+
+        if (args_match)
+            return it->second.instantiation;
+    }
+
+    return nullptr;
+}
+
 template <bool PerformConversion>
 int layec::Sema::ConvertImpl(Module* module, Expr*& expr, Type* to) {
     enum : int {
@@ -1423,8 +1601,10 @@ int layec::Sema::ConvertImpl(Module* module, Expr*& expr, Type* to) {
     }
 
     requires_lvalue_to_rvalue_conversion = expr->is_lvalue();
-    if constexpr (PerformConversion) from = LValueToRValue(module, expr);
-    else from = from->strip_references();
+    if constexpr (PerformConversion) {
+        LValueToRValue(module, expr);
+        from = expr->type();
+    } else from = from->strip_references();
 
     if (Type::Equal(from, to))
         return NoOp;
@@ -1437,6 +1617,18 @@ int layec::Sema::ConvertImpl(Module* module, Expr*& expr, Type* to) {
         if (Type::Equal(from_ptr->elem_type(), to_ptr->elem_type())) {
             // notably, compatible type access means either equal, or the target is stricter
             if (from_ptr->access() == to_ptr->access() or to_ptr->access() == TypeAccess::ReadOnly)
+                return NoOp;
+        }
+    }
+
+    if (from->is_pointer() and to->is_reference()) {
+        auto from_ptr = as<PointerType>(from);
+        auto to_ref = as<ReferenceType>(to);
+
+        // If the two pointer types have the same element type and compatible type access modifiers, it's a noop
+        if (Type::Equal(from_ptr->elem_type(), to_ref->elem_type())) {
+            // notably, compatible type access means either equal, or the target is stricter
+            if (from_ptr->access() == to_ref->access() or to_ref->access() == TypeAccess::ReadOnly)
                 return NoOp;
         }
     }
@@ -1548,6 +1740,33 @@ void layec::Sema::ConvertOrError(Module* module, Expr*& expr, Type* to) {
     );
 }
 
+void layec::Sema::ConvertToCVarargsTypeOrError(Module* module, Expr*& expr) {
+    Type* varargs_type = nullptr;
+    Type*& expr_type = expr->type();
+
+    auto context = module->context();
+    auto target_info = context->target();
+    auto ffi = target_info->ffi;
+
+    // All values passed to varargs are copied bit by bit and padded to sizeof int.
+    // Floats are promoted to doubles, short and char promoted to int, everything
+    // else effectively memcpy'd to the stack.
+    if (expr_type->is_integer()) {
+        if (expr_type->size(context) < ffi.size_of_int) {
+            auto ffi_int_type = new (*module) IntType({}, expr_type->is_signed_integer(), false);
+            WrapWithCast(module, expr, ffi_int_type, CastKind::ImplicitCast);
+            Analyse(module, expr);
+            return;
+        }
+    }
+
+    if (expr_type->size(context) <= target_info->size_of_pointer) {
+        return; // good enough for now
+    }
+
+    Error(expr->location(), "Cannot convert type {} to a type correct for C varargs (yet?)", expr_type->string(use_colours));
+}
+
 bool layec::Sema::ConvertToCommonType(Module* module, Expr*& a, Expr*& b) {
     return Convert(module, a, b->type()) or Convert(module, b, a->type());
 }
@@ -1579,25 +1798,34 @@ void layec::Sema::InsertPointerToIntegerCast(Module* module, Expr*& operand) {
 }
 
 void layec::Sema::WrapWithCast(Module* module, Expr*& expr, Type* type, CastKind kind) {
-    auto wrapper = new (*module) CastExpr(expr->location(), type, expr, kind);
-    Analyse(module, (Expr*&) wrapper);
-    expr = wrapper;
+    expr = new (*module) CastExpr(expr->location(), type, expr, kind);
+    Analyse(module, expr);
 }
 
-auto layec::Sema::LValueToRValue(Module* module, Expr*& expr) -> Type* {
-    /// Functions are cast to function pointers.
-    if (expr->type()->is_function()) {
-        auto ty = Ptr(module, expr->type(), TypeAccess::Mutable);
-        WrapWithCast(module, expr, ty, CastKind::LValueToRValueConv);
-        return ty;
+bool layec::Sema::ImplicitDereference(Module* module, Expr*& expr) {
+    if (is<ReferenceType>(expr->type())) {
+        /// Don’t strip reference here since we want an lvalue.
+        LValueToRValue(module, expr, false);
+        WrapWithCast(module, expr, as<ReferenceType>(expr->type())->elem_type(), CastKind::ReferenceToLValue);
     }
 
-    /// Otherwise, remove references and cast to that.
-    auto ty = expr->type()->strip_references();
-    if (not Type::Equal(ty, expr->type()))
-        WrapWithCast(module, expr, ty, CastKind::LValueToRValueConv);
+    while (is<PointerType>(expr->type())) {
+        expr = new (*module) UnaryExpr(expr->location(), OperatorKind::Deref, expr);
+        Analyse(module, expr);
+    }
 
-    return ty;
+    return expr->is_lvalue();
+}
+
+void layec::Sema::LValueToRValue(Module* module, Expr*& expr, bool strip_ref) {
+    if (expr->sema_errored())
+        return;
+    else if (expr->is_lvalue()) {
+        WrapWithCast(module, expr, expr->type(), CastKind::LValueToRValueConv);
+    } else if (strip_ref and is<ReferenceType>(expr->type())) {
+        WrapWithCast(module, expr, as<ReferenceType>(expr->type())->elem_type(), CastKind::ReferenceToLValue);
+        LValueToRValue(module, expr);
+    }
 }
 
 auto layec::Sema::Ptr(Module* module, Type* type, TypeAccess access) -> PointerType* {
@@ -1618,7 +1846,13 @@ auto layec::Sema::NameToMangledString(std::string_view s) -> std::string {
 
 auto layec::Sema::TypeToMangledString(Type* type) -> std::string {
     switch (type->kind()) {
-        default: LCC_TODO();
+        default: LCC_ASSERT(false, "TypeToMangledString for type {}", ToString(type->kind()));
+
+        case Expr::Kind::TypePoison: return "P";
+        case Expr::Kind::TypeTemplateParam: {
+            auto t = as<TemplateParamType>(type);
+            return fmt::format("T{}", NameToMangledString(t->name()));
+        }
 
         case Expr::Kind::TypeStruct: {
             auto t = as<StructType>(type);

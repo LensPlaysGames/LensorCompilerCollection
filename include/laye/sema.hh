@@ -6,12 +6,19 @@
 
 namespace lcc::laye {
 class Sema {
+    struct InstantiationInfo {
+        std::vector<Expr*> template_args;
+        SemaNode* instantiation;
+    };
+
     LayeContext* _laye_context;
 
     /// Whether to use colours in diagnostics.
     bool use_colours;
 
     FunctionDecl* curr_func;
+
+    std::unordered_multimap<NamedDecl*, InstantiationInfo> _instantiations{};
 
     Sema(LayeContext* context, bool use_colours)
         : _laye_context(context), use_colours(use_colours) {}
@@ -32,11 +39,14 @@ private:
     }
     bool AnalyseType(Module* module, Type*& type);
 
+    auto FindExistingInstantiation(NamedDecl* decl, const std::vector<Expr*> template_args) -> SemaNode*;
+
     template <bool PerformConversion>
     int ConvertImpl(Module* module, Expr*& expr, Type* to);
 
     [[nodiscard]] bool Convert(Module* module, Expr*& expr, Type* to);
     void ConvertOrError(Module* module, Expr*& expr, Type* to);
+    void ConvertToCVarargsTypeOrError(Module* module, Expr*& expr);
     [[nodiscard]] bool ConvertToCommonType(Module* module, Expr*& a, Expr*& b);
     [[nodiscard]] int TryConvert(Module* module, Expr*& expr, Type* to);
 
@@ -51,7 +61,9 @@ private:
     ///
     /// This may insert a cast expression.
     /// \return The type of the rvalue.
-    auto LValueToRValue(Module* module, Expr*& expr) -> Type*;
+    void LValueToRValue(Module* module, Expr*& expr, bool strip_ref = true);
+
+    bool ImplicitDereference(Module* module, Expr*& expr);
 
     /// Create a (type-checked) pointer to a type.
     auto Ptr(Module* module, Type* type, TypeAccess access) -> PointerType*;

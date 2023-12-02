@@ -30,7 +30,7 @@ lcc::Type* layec::IRGen::Convert(const layec::Type* in) {
             std::vector<lcc::Type*> param_types{};
             for (const auto& p : t->param_types())
                 param_types.push_back(Convert(p));
-            return lcc::FunctionType::Get(_ctx, Convert(t->return_type()), std::move(param_types));
+            return lcc::FunctionType::Get(_ctx, Convert(t->return_type()), std::move(param_types), t->varargs_kind() == VarargsKind::C);
         }
 
         case Expr::Kind::TypeVariant: {
@@ -106,7 +106,7 @@ lcc::Type* layec::IRGen::Convert(const layec::Type* in) {
                 member_types.push_back(variant_storage_array_type);
             }
 
-            auto struct_type = lcc::StructType::Get(context(), member_types, t->name());
+            auto struct_type = lcc::StructType::Get(context(), member_types, t->mangled_name());
             return struct_type;
         }
 
@@ -139,15 +139,18 @@ void layec::IRGen::GenerateModule(laye::Module* module) {
         if (decl->module() == module)
             continue;
 
-        if (auto struct_decl = cast<StructDecl>(decl))
-            CreateStructDeclType(struct_decl);
-        else if (auto f = cast<FunctionDecl>(decl))
+        if (auto struct_decl = cast<StructDecl>(decl)) {
+            if (struct_decl->template_params().empty())
+                CreateStructDeclType(struct_decl);
+        } else if (auto f = cast<FunctionDecl>(decl))
             CreateIRFunctionValue(f);
     }
 
     for (auto& tld : module->top_level_decls()) {
-        if (auto struct_decl = cast<StructDecl>(tld))
-            CreateStructDeclType(struct_decl);
+        if (auto struct_decl = cast<StructDecl>(tld)) {
+            if (struct_decl->template_params().empty())
+                CreateStructDeclType(struct_decl);
+        }
     }
 
     for (auto& tld : module->top_level_decls()) {
@@ -173,18 +176,7 @@ void layec::IRGen::CreateStructDeclType(StructDecl* decl) {
 }
 
 void layec::IRGen::CreateIRFunctionValue(FunctionDecl* decl) {
-    auto params = decl->params();
-
-    std::vector<layec::Type*> param_types{};
-    for (auto& param : params) {
-        param_types.push_back(param->type());
-    }
-
-    auto func_type = new (*laye_mod()) layec::FuncType{
-        decl->location(),
-        decl->return_type(),
-        param_types
-    };
+    auto func_type = decl->function_type();
 
     auto linkage = decl->linkage();
     if (not decl->body()) {
@@ -363,7 +355,12 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
 
             auto value = GenerateExpression(e->value());
 
-            if (e->cast_kind() == CastKind::LValueToRValueConv) {
+            if (e->is_ref_to_lvalue() or e->is_lvalue_to_ref()) {
+                _ir_values[expr] = value;
+                break;
+            }
+
+            if (e->is_lvalue_to_rvalue()) {
                 auto load = new (*mod()) LoadInst(Convert(to), value, expr->location());
                 Insert(load);
                 _ir_values[expr] = load;
@@ -408,7 +405,7 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
                 auto cast = new (*mod()) lcc::BitcastInst(value, Convert(to), e->location());
                 Insert(cast);
                 _ir_values[expr] = cast;
-            } else if ((from->is_pointer() or from->is_buffer()) and to->is_rawptr()) {
+            } else if ((from->is_rawptr() or from->is_pointer() or from->is_buffer()) and (to->is_rawptr() or to->is_pointer() or to->is_buffer())) {
                 auto cast = new (*mod()) lcc::BitcastInst(value, Convert(to), e->location());
                 Insert(cast);
                 _ir_values[expr] = cast;
@@ -505,9 +502,7 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
                 } break;
 
                 case OperatorKind::Deref: {
-                    auto load = new (*mod()) LoadInst(Convert(e->type()), value, expr->location());
-                    Insert(load);
-                    _ir_values[expr] = load;
+                    _ir_values[expr] = value;
                 } break;
             }
         } break;
@@ -623,8 +618,28 @@ lcc::Value* layec::IRGen::GenerateExpression(Expr* expr) {
             Insert(member_ptr);
             _ir_values[expr] = member_ptr;
         } break;
+
+        case Ek::ValueIndex: {
+            auto e = as<ValueIndexExpr>(expr);
+            auto target_value = GenerateExpression(e->target());
+            LCC_ASSERT(target_value->type()->is_ptr());
+            LCC_ASSERT(e->indices().size() == 1);
+            auto index_value = GenerateExpression(e->indices()[0]);
+            auto index_ptr = new (*mod()) GEPInst(
+                Convert(e->type()->strip_references()),
+                target_value,
+                index_value,
+                expr->location()
+            );
+            Insert(index_ptr);
+            _ir_values[expr] = index_ptr;
+        } break;
     }
 
     LCC_ASSERT(_ir_values[expr]);
+    if (expr->is_lvalue() and not _ir_values[expr]->type()->is_ptr()) {
+        Diag::ICE("generated IR for an lvalue, but the resulting instruction did not have pointer type (instead, it has type {}) for expression of type {}", _ir_values[expr]->type()->string(false), ToString(expr->kind()));
+    }
+
     return _ir_values[expr];
 }

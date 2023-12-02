@@ -66,8 +66,8 @@ auto layec::Scope::declare(
     return decl;
 }
 
-layec::FunctionDecl::FunctionDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<BindingDecl*> params, Statement* body)
-    : NamedDecl(Kind::DeclFunction, module, location, mods, name, template_params), _returnType(returnType), _params(std::move(params)), _body(body) {
+layec::FunctionDecl::FunctionDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<NamedDecl*> template_params, std::vector<BindingDecl*> params, VarargsKind varargs_kind, Statement* body)
+    : NamedDecl(Kind::DeclFunction, module, location, std::move(mods), std::move(name), std::move(template_params)), _returnType(returnType), _params(std::move(params)), _varargs_kind(varargs_kind), _body(body) {
     std::vector<Type*> param_types{};
     for (auto param : _params) {
         param_types.push_back(param->type());
@@ -271,6 +271,7 @@ std::string layec::ToString(Expr::Kind kind) {
         case Ek::Xor: return "Xor";
         case Ek::UnwrapNilable: return "UnwrapNilable";
         case Ek::Constant: return "Constant";
+        case Ek::TemplateParamConstant: return "TemplateParamConstant";
         case Ek::LookupName: return "LookupName";
         case Ek::LookupPath: return "LookupPath";
         case Ek::FieldIndex: return "FieldIndex";
@@ -315,7 +316,21 @@ std::string layec::ToString(Expr::Kind kind) {
         case Ek::TypeFloat: return "TypeFloat";
         case Ek::TypePoison: return "TypePoison";
         case Ek::TypeReference: return "TypeReference";
+        case Ek::TypeTemplateParam: return "TypeTemplateParam";
         default: return "<unknown>";
+    }
+}
+
+std::string layec::ToString(CastKind cast_kind) {
+    switch (cast_kind) {
+        default: return "<unknown>";
+        case CastKind::SoftCast: return "SoftCast";
+        case CastKind::HardCast: return "HardCast";
+        case CastKind::StructBitcast: return "StructBitcast";
+        case CastKind::ImplicitCast: return "ImplicitCast";
+        case CastKind::LValueToRValueConv: return "LValueToRValueConv";
+        case CastKind::LValueToReference: return "LValueToReference";
+        case CastKind::ReferenceToLValue: return "ReferenceToLValue";
     }
 }
 
@@ -333,6 +348,46 @@ bool layec::Expr::evaluate(const layec::LayeContext* laye_context, layec::EvalRe
         }
 
         default: return false;
+    }
+}
+
+auto layec::Type::instantiate(Module* module, const TypeInstantiationContext& context) -> Type* {
+    switch (kind()) {
+        default: return this;
+
+        case Expr::Kind::TypeStruct: {
+            auto t = as<StructType>(this);
+
+            std::vector<StructField> fields{};
+            std::vector<VariantType*> variants{};
+
+            for (auto& field : t->fields()) {
+                fields.push_back({ field.name, field.type->instantiate(module, context) });
+            }
+
+            for (auto& variant : t->variants()) {
+                variants.push_back(as<VariantType>(variant->instantiate(module, context)));
+            }
+
+            auto new_type = new (*module) StructType(t->location(), t->name(), std::move(fields));
+            new_type->variants(std::move(variants));
+
+            return new_type;
+        }
+
+        case Expr::Kind::TypeTemplateParam: {
+            auto t = as<TemplateParamType>(this);
+            auto lookup = context.find_type(t->declaration());
+            if (not lookup) {
+                Diag::Fatal("Failed to lookup a template type in context, when creating a template type requires a successful lookup in the first place (I think)");
+            }
+            return lookup;
+        }
+
+        case Expr::Kind::TypeBuffer: {
+            auto t = as<BufferType>(this);
+            return new (*module) BufferType(t->location(), t->access(), t->elem_type()->instantiate(module, context));
+        }
     }
 }
 
@@ -501,7 +556,7 @@ auto layec::Type::string(bool use_colours) const -> std::string {
     auto TemplateArgsToString = [&](const std::vector<layec::Expr*>& template_args) {
         std::string out{};
         if (template_args.empty()) return out;
-        out += fmt::format("<{}", C(White));
+        out += fmt::format("{}<{}", C(Red), C(White));
         for (lcc::usz i = 0; i < template_args.size(); i++) {
             if (i > 0) out += fmt::format("{}, ", C(White));
             if (auto type_arg = cast<layec::Type>(template_args[i])) {
@@ -510,7 +565,7 @@ auto layec::Type::string(bool use_colours) const -> std::string {
                 out += "(expr)";
             }
         }
-        out += fmt::format("{}>", C(Reset));
+        out += fmt::format("{}>{}", C(Red), C(Reset));
         return out;
     };
 
@@ -521,21 +576,26 @@ auto layec::Type::string(bool use_colours) const -> std::string {
     switch (kind()) {
         default: LCC_ASSERT(false, "unhandled type {} in type->string()", ToString(kind()));
 
-        case Kind::TypePoison: return fmt::format("{}poison", C(Cyan));
+        case Kind::TypePoison: return fmt::format("{}poison{}", C(Cyan), C(Reset));
 
-        case Kind::TypeInfer: return fmt::format("{}var", C(Cyan));
-        case Kind::TypeNilable: return fmt::format("{}?", as<NilableType>(this)->elem_type()->string(use_colours));
+        case Kind::TypeInfer: return fmt::format("{}var{}", C(Cyan), C(Reset));
+        case Kind::TypeNilable: return fmt::format("{}{}?{}", as<NilableType>(this)->elem_type()->string(use_colours), C(White), C(Reset));
         case Kind::TypeErrUnion: {
             auto e = as<ErrUnionType>(this);
-            return fmt::format("{}!{}", e->error_name(), e->value_type()->string(use_colours));
+            return fmt::format("{}{}!{}", e->error_name(), e->value_type()->string(use_colours), C(White), C(Reset));
+        }
+
+        case Kind::TypeTemplateParam: {
+            return fmt::format("{}{}{}", C(Yellow), as<TemplateParamType>(this)->name(), C(Reset));
         }
 
         case Kind::TypeLookupName: {
             return fmt::format(
-                "{}{}{}",
+                "{}{}{}{}",
                 C(White),
                 as<NameType>(this)->name(),
-                TemplateArgsToString(as<NameType>(this)->template_args())
+                TemplateArgsToString(as<NameType>(this)->template_args()),
+                C(Reset)
             );
         }
 
@@ -546,7 +606,7 @@ auto layec::Type::string(bool use_colours) const -> std::string {
                 if (i > 0) path += fmt::format("{}::", C(White));
                 path += fmt::format("{}{}", C(White), path);
             }
-            return path + TemplateArgsToString(as<PathType>(this)->template_args());
+            return fmt::format("{}{}{}", path, TemplateArgsToString(as<PathType>(this)->template_args()), C(Reset));
         }
 
         case Kind::TypeArray: {
@@ -556,31 +616,35 @@ auto layec::Type::string(bool use_colours) const -> std::string {
             }
 
             return fmt::format(
-                "{}{}[{} array]",
+                "{}{}{}[{}{} array{}]{}",
                 t->elem_type()->string(use_colours),
                 AccessString(t->access()),
-                t->rank_lengths().size()
+                C(White),
+                C(Reset),
+                t->rank_lengths().size(),
+                C(White),
+                C(Reset)
             );
         }
 
         case Kind::TypeSlice: {
             auto t = as<SliceType>(this);
-            return fmt::format("{}{}[]", t->elem_type()->string(use_colours), AccessString(t->access()));
+            return fmt::format("{}{}{}[]{}", t->elem_type()->string(use_colours), AccessString(t->access()), C(White), C(Reset));
         }
 
         case Kind::TypePointer: {
             auto t = as<PointerType>(this);
-            return fmt::format("{}{}*", t->elem_type()->string(use_colours), AccessString(t->access()));
+            return fmt::format("{}{}{}*{}", t->elem_type()->string(use_colours), AccessString(t->access()), C(White), C(Reset));
         }
 
         case Kind::TypeReference: {
             auto t = as<ReferenceType>(this);
-            return fmt::format("{}{}&", t->elem_type()->string(use_colours), AccessString(t->access()));
+            return fmt::format("{}{}{}&{}", t->elem_type()->string(use_colours), AccessString(t->access()), C(White), C(Reset));
         }
 
         case Kind::TypeBuffer: {
             auto t = as<BufferType>(this);
-            return fmt::format("{}{}[*]", t->elem_type()->string(use_colours), AccessString(t->access()));
+            return fmt::format("{}{}{}[*]{}", t->elem_type()->string(use_colours), AccessString(t->access()), C(White), C(Reset));
         }
 
         case Kind::TypeFunc: {
@@ -591,14 +655,20 @@ auto layec::Type::string(bool use_colours) const -> std::string {
                 if (i > 0) params_string += fmt::format("{}, ", C(White));
                 params_string += fmt::format("{}", params[i]->string(use_colours));
             }
-            return fmt::format("{}({})", f->return_type()->string(use_colours), params_string);
+            if (f->varargs_kind() == VarargsKind::C) {
+                if (params.size() > 0) params_string += fmt::format("{}, ", C(White));
+                params_string += fmt::format("{}varargs", C(Red));
+            }
+            return fmt::format("{}{}({}{}){}", f->return_type()->string(use_colours), C(White), params_string, C(White), C(Reset));
         }
 
         case Kind::TypeStruct: {
             return fmt::format(
-                "{}{}",
+                "{}{}{}{}",
                 C(White),
-                as<StructType>(this)->name()
+                as<StructType>(this)->name(),
+                TemplateArgsToString(as<StructType>(this)->template_arguments()),
+                C(Reset)
             );
         }
 
@@ -616,7 +686,7 @@ auto layec::Type::string(bool use_colours) const -> std::string {
             };
 
             AppendToResult(f);
-            return result;
+            return fmt::format("{}{}{}", result, TemplateArgsToString(f->template_arguments()), C(Reset));
         }
 
         case Kind::TypeNoreturn: return fmt::format("{}noreturn{}", C(Cyan), C(Reset));
@@ -664,11 +734,6 @@ auto layec::Type::strip_references() -> Type* {
     return ty;
 }
 
-bool layec::Expr::is_lvalue() const {
-    if (not type()) return false;
-    return is<ReferenceType>(type());
-}
-
 bool layec::Type::Equal(const Type* a, const Type* b) {
     if (a->kind() != b->kind()) return false;
     if ((void*)a == (void*)b) return true;
@@ -693,6 +758,8 @@ bool layec::Type::Equal(const Type* a, const Type* b) {
                 return false;
             return Type::Equal(a2->value_type(), b2->value_type());
         }
+
+        case Kind::TypeStruct: return false;
 
         case Kind::TypeLookupName:
         case Kind::TypeLookupPath:
@@ -783,7 +850,7 @@ bool layec::Type::Equal(const Type* a, const Type* b) {
             return a2->bit_width() == b2->bit_width();
         }
 
-        default: LCC_UNREACHABLE(); return false;
+        default: LCC_ASSERT(false, "Type::Equal({}, {})", ToString(a->kind()), ToString(b->kind())); return false;
     }
 
     LCC_UNREACHABLE();
@@ -1002,16 +1069,16 @@ using lcc::is;
 using namespace lcc;
 
 struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::Type> {
-    void PrintTemplateParams(const std::vector<layec::TemplateParam>& template_params) {
+    void PrintTemplateParams(const std::vector<layec::NamedDecl*>& template_params) {
         if (template_params.empty()) return;
         out += fmt::format("{}<", C(White));
         for (lcc::usz i = 0; i < template_params.size(); i++) {
             if (i > 0) out += fmt::format("{}, ", C(White));
             auto param = template_params[i];
-            if (param.is_value_param()) {
-                out += fmt::format("{} ", param.value_type->string(use_colour));
+            if (auto value_param = cast<layec::TemplateValueDecl>(param)) {
+                out += fmt::format("{} ", value_param->type()->string(use_colour));
             }
-            out += fmt::format("{}{}", C(Green), param.name);
+            out += fmt::format("{}{}", C(Yellow), param->name());
         }
         out += fmt::format("{}>", C(White));
     }
@@ -1090,7 +1157,14 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
                 auto params = n->params();
                 for (lcc::usz i = 0; i < params.size(); i++) {
                     if (i > 0) out += fmt::format("{}, ", C(White));
+                    if (i == params.size() - 1 and n->varargs_kind() == layec::VarargsKind::Laye) {
+                        out += fmt::format("{}varargs ", C(Red));
+                    }
                     out += fmt::format("{} {}{}", params[i]->type()->string(use_colour), C(White), params[i]->name());
+                }
+                if (n->varargs_kind() == layec::VarargsKind::C) {
+                    if (params.size() > 0) out += fmt::format("{}, ", C(White));
+                    out += fmt::format("{}varargs", C(Red));
                 }
                 out += fmt::format("{})\n", C(White));
             } break;
@@ -1239,51 +1313,64 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
 
     void PrintExprHeader(const layec::Expr* e) {
         using K = layec::Expr::Kind;
+        auto PrintIsLValue = [&]() {
+            if (e->is_lvalue())
+                out += fmt::format(" {}LValue", C(Red));
+        };
+
         switch (e->kind()) {
             default: {
                 PrintBasicHeader(R"(<??? Expr>)", e);
+                PrintIsLValue();
                 out += fmt::format(" {}{}\n", C(Magenta), +e->kind());
             } break;
 
             case K::Unary: {
                 auto n = cast<layec::UnaryExpr>(e);
                 PrintBasicHeader("UnaryExpr", n);
-                out += "\n";
+                PrintIsLValue();
+                out += fmt::format(" {}{} {}\n", C(White), ToString(n->operator_kind()), n->type()->string(use_colour));
             } break;
 
             case K::Binary: {
                 auto n = cast<layec::BinaryExpr>(e);
                 PrintBasicNode("BinaryExpr", n, n->type(), false);
-                out += fmt::format(" {}{}\n", C(White), ToString(n->operator_kind()));
+                PrintIsLValue();
+                out += fmt::format(" {}{} {}\n", C(White), ToString(n->operator_kind()), n->type()->string(use_colour));
             } break;
 
             case K::And: {
                 auto n = cast<layec::AndExpr>(e);
                 PrintBasicHeader("AndExpr", n);
+                PrintIsLValue();
                 out += "\n";
             } break;
 
             case K::Or: {
                 auto n = cast<layec::OrExpr>(e);
                 PrintBasicHeader("OrExpr", n);
+                PrintIsLValue();
                 out += "\n";
             } break;
 
             case K::Xor: {
                 auto n = cast<layec::XorExpr>(e);
                 PrintBasicHeader("XorExpr", n);
+                PrintIsLValue();
                 out += "\n";
             } break;
 
             case K::UnwrapNilable: {
                 auto n = cast<layec::UnwrapNilableExpr>(e);
                 PrintBasicHeader("UnwrapNilableExpr", n);
+                PrintIsLValue();
                 out += "\n";
             } break;
 
             case K::LookupName: {
                 auto n = cast<layec::NameExpr>(e);
                 PrintBasicNode("NameExpr", e, n->type(), false);
+                PrintIsLValue();
                 out += fmt::format(" {}{}", C(Green), n->name());
                 PrintTemplateArgs(n->template_args());
                 out += "\n";
@@ -1292,6 +1379,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
             case K::LookupPath: {
                 auto n = cast<layec::PathExpr>(e);
                 PrintBasicNode("PathExpr", e, n->type(), false);
+                PrintIsLValue();
                 out += " ";
                 for (usz i = 0; i < n->names().size(); i++) {
                     if (i > 0) out += "::";
@@ -1304,42 +1392,50 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
             case K::FieldIndex: {
                 auto n = cast<layec::FieldIndexExpr>(e);
                 PrintBasicHeader("FieldIndexExpr", n);
+                PrintIsLValue();
                 out += fmt::format(" {} {}{}\n", n->type()->string(use_colour), C(Green), n->field_name());
             } break;
 
             case K::ValueIndex: {
                 auto n = cast<layec::ValueIndexExpr>(e);
                 PrintBasicHeader("ValueIndexExpr", n);
+                PrintIsLValue();
                 out += "\n";
             } break;
 
             case K::Slice: {
                 auto n = cast<layec::SliceExpr>(e);
                 PrintBasicHeader("SliceExpr", n);
+                PrintIsLValue();
                 out += "\n";
             } break;
 
             case K::Call: {
                 auto n = cast<layec::CallExpr>(e);
                 PrintBasicHeader("CallExpr", n);
+                PrintIsLValue();
                 out += "\n";
             } break;
 
             case K::Ctor: {
                 auto n = cast<layec::CtorExpr>(e);
                 PrintBasicHeader("CtorExpr", n);
+                PrintIsLValue();
                 out += "\n";
             } break;
 
             case K::Not: {
                 auto n = cast<layec::NotExpr>(e);
                 PrintBasicHeader("NotExpr", n);
+                PrintIsLValue();
                 out += "\n";
             } break;
 
             case K::Cast: {
                 auto n = cast<layec::CastExpr>(e);
                 PrintBasicHeader("CastExpr", n);
+                PrintIsLValue();
+                out += fmt::format(" {}{}{}", C(Red), ToString(n->cast_kind()), C(Reset));
                 out += fmt::format(" {}{}", n->type()->string(use_colour), C(Reset));
                 out += "\n";
             } break;
@@ -1347,69 +1443,84 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
             case K::New: {
                 auto n = cast<layec::NewExpr>(e);
                 PrintBasicHeader("NewExpr", n);
+                PrintIsLValue();
                 out += "\n";
             } break;
 
             case K::Try: {
                 auto n = cast<layec::TryExpr>(e);
                 PrintBasicHeader("TryExpr", n);
+                PrintIsLValue();
                 out += "\n";
             } break;
 
             case K::Catch: {
                 auto n = cast<layec::CatchExpr>(e);
                 PrintBasicHeader("CatchExpr", n);
+                PrintIsLValue();
                 if (not n->error_name().empty())
                     out += fmt::format(" {}{}\n", C(Green), n->error_name());
             } break;
 
             case K::Do: {
                 PrintBasicNode("DoExpr", e, nullptr);
+                PrintIsLValue();
             } break;
 
             case K::Sizeof: {
                 PrintBasicNode("SizeofExpr", e, nullptr);
+                PrintIsLValue();
             } break;
 
             case K::Offsetof: {
                 PrintBasicNode("OffsetofExpr", e, nullptr);
+                PrintIsLValue();
             } break;
 
             case K::Alignof: {
                 PrintBasicNode("AlignofExpr", e, nullptr);
+                PrintIsLValue();
             } break;
 
             case K::LitNil: {
                 PrintBasicNode("LitNilExpr", e, nullptr);
+                PrintIsLValue();
             } break;
 
             case K::LitBool: {
                 auto n = cast<layec::LitBoolExpr>(e);
                 PrintBasicNode("LitBoolExpr", n, n->type(), false);
+                PrintIsLValue();
                 out += fmt::format(" {}{}\n", C(Cyan), n->value());
             } break;
 
             case K::LitString: {
                 auto n = cast<layec::LitStringExpr>(e);
                 PrintBasicNode("LitStringExpr", n, n->type(), false);
+                PrintIsLValue();
+                // TODO(local): unescape?
+                //lcc::utils::unescape();
                 out += fmt::format(" {}{}\n", C(Cyan), n->value());
             } break;
 
             case K::LitInt: {
                 auto n = cast<layec::LitIntExpr>(e);
                 PrintBasicNode("LitIntExpr", n, n->type(), false);
+                PrintIsLValue();
                 out += fmt::format(" {}{}\n", C(Cyan), n->value());
             } break;
 
             case K::LitFloat: {
                 auto n = cast<layec::LitFloatExpr>(e);
                 PrintBasicNode("LitFloatExpr", n, n->type(), false);
+                PrintIsLValue();
                 out += fmt::format(" {}{}\n", C(Cyan), n->value());
             } break;
 
             case K::Constant: {
                 auto n = cast<layec::ConstantExpr>(e);
                 PrintBasicNode("ConstantExpr", e, n->type(), false);
+                PrintIsLValue();
                 auto value = n->value();
                 if (value.is_i64()) {
                     out += fmt::format(" {}{}\n", C(Cyan), value.as_i64());
@@ -1509,8 +1620,13 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
 
             case K::If: {
                 auto n = as<layec::IfStatement>(s);
-                layec::SemaNode* children[] = {n->condition(), n->pass(), n->fail()};
-                PrintChildren(children, leading_text);
+                if (n->fail()) {
+                    layec::SemaNode* children[] = {n->condition(), n->pass(), n->fail()};
+                    PrintChildren(children, leading_text);
+                } else {
+                    layec::SemaNode* children[] = {n->condition(), n->pass()};
+                    PrintChildren(children, leading_text);
+                }
             } break;
 
             case K::For: {

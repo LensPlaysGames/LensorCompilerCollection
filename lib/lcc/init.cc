@@ -27,6 +27,8 @@ intc::Type* intc::Type::VoidPtr;
 intc::Type* intc::Type::OverloadSet;
 
 layec::Type* layec::Type::Bool;
+layec::Type* layec::Type::Int;
+layec::Type* layec::Type::UInt;
 layec::Type* layec::Type::OverloadSet;
 
 void lcc::Context::InitialiseLCCData() {
@@ -64,8 +66,12 @@ void lcc::Context::InitialiseLCCData() {
 
     /// Initialise default instances of builtin Laye types.
     static constinit layec::BoolType laye_ty_bool = {{}, 0, true};
+    static constinit layec::IntType laye_ty_int = {{}, true, 0, true};
+    static constinit layec::IntType laye_ty_uint = {{}, false, 0, true};
     static constinit layec::OverloadSetType laye_ty_os = {{}};
 
     layec::Type::Bool = &laye_ty_bool;
+    layec::Type::Int = &laye_ty_int;
+    layec::Type::UInt = &laye_ty_uint;
     layec::Type::OverloadSet = &laye_ty_os;
 }

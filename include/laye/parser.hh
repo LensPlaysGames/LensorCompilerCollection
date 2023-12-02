@@ -300,7 +300,7 @@ private:
     auto ParseStatement(bool consumeSemi = true) -> Result<Statement*>;
     auto ParseBlockStatement(ScopeRAII sc) -> Result<BlockStatement*>;
 
-    auto TryParseTemplateParams(bool allocate) -> Result<std::vector<TemplateParam>>;
+    auto TryParseTemplateParams(bool allocate) -> Result<std::vector<NamedDecl*>>;
     bool SpeculativeParseTemplateParams() {
         LCC_ASSERT(IsInSpeculativeParse());
         auto result = TryParseTemplateParams(false);

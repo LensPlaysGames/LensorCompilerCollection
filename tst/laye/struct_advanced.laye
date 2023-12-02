@@ -55,7 +55,7 @@ vec2i vec2i_add(vec2i& a, vec2i& b)
 // +     (?<tmp_main_5>$t) = gmp @$vec2i from $tmp_main_3 at i64 1
 // +     store i64 90 into $tmp_main_5
 // +     (?<tmp_main_6>$t) = alloca @$vec2i
-// +     (?<tmp_main_7>$t) = call @_LM15_struct_advancedX9_vec2i_addF5_vec2iPCr5_vec2iCr5_vec2iE (ptr $tmp_main_0, ptr $tmp_main_3) -> @$vec2i
+// +     (?<tmp_main_7>$t) = call @$f (ptr $tmp_main_0, ptr $tmp_main_3) -> @$vec2i
 // +     store @$vec2i $tmp_main_7 into $tmp_main_6
 // +     (?<tmp_main_8>$t) = alloca i64
 // +     (?<tmp_main_9>$t) = gmp @$vec2i from $tmp_main_6 at i64 0
@@ -75,7 +75,7 @@ int main()
     vec2i bar;
     bar.x = 35;
     bar.y = 90;
-    vec2i baz = vec2i_add(foo, bar);
+    vec2i baz = vec2i_add(&foo, &bar);
     int qux = (baz.x * 10) + baz.y;
     return qux;
 }

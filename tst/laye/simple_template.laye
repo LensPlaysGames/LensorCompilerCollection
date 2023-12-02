@@ -1,0 +1,36 @@
+
+foreign callconv(cdecl)
+i8[*] malloc(uint size);
+
+struct list<T>
+{
+    T[*] elements;
+    int capacity;
+    int count;
+}
+
+void push_int(list<int>& l, int x)
+{
+    if (l.capacity == 0) {
+        l.capacity = 16;
+        l.elements = cast(int[*]) malloc(8 * cast(uint) l.capacity);
+    }
+
+    l.elements[l.count] = x;
+    l.count = l.count + 1;
+}
+
+int main()
+{
+    list<int> values;
+    values.capacity = 0;
+    values.count = 0;
+
+    int i = 0;
+    for (i < 10) {
+        push_int(&values, i);
+        i = i + 1;
+    }
+
+    return values.elements[2];
+}

@@ -272,7 +272,23 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
     if (Consume(Tk::OpenParen)) {
         // TODO(local): parse varargs in function decls
         std::vector<BindingDecl*> params{};
+        VarargsKind varargs_kind = VarargsKind::None;
+        bool has_errored_for_additional_params = false;
         while (not At(Tk::Eof, Tk::CloseParen)) {
+            if (varargs_kind != VarargsKind::None and not has_errored_for_additional_params) {
+                has_errored_for_additional_params = true;
+                Error("Additional parameters are not allowed after `varargs`");
+            }
+
+            if (Consume(Tk::Varargs)) {
+                varargs_kind = VarargsKind::C;
+                if (At(Tk::Eof, Tk::CloseParen) or Consume(Tk::Comma)) {
+                    continue;
+                } else {
+                    varargs_kind = VarargsKind::Laye;
+                }
+            }
+
             auto type = ParseType();
 
             auto param_name = tok.text;
@@ -324,7 +340,7 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
                 }
             }
 
-            func_decl = new (*this) FunctionDecl{module, location, modifiers, *type, name, *template_params, std::move(params), *body};
+            func_decl = new (*this) FunctionDecl{module, location, modifiers, *type, name, *template_params, std::move(params), varargs_kind, *body};
         }
 
         LCC_ASSERT(func_decl);
@@ -363,6 +379,11 @@ auto Parser::ParseStruct(std::vector<DeclModifier> mods) -> Result<StructDecl*> 
 
     auto template_params = MaybeParseTemplateParams();
     if (not template_params) return template_params.diag();
+
+    auto struct_scope = EnterScope();
+    for (auto& template_param : *template_params) {
+        CurrScope()->declare(template_param->module(), template_param->name(), template_param);
+    }
 
     if (not Consume(Tk::OpenBrace)) {
         return Error("Expected '{{'");
@@ -856,10 +877,10 @@ auto Parser::ParseBlockStatement([[maybe_unused]] ScopeRAII sc) -> Result<BlockS
     return new (*this) BlockStatement{Location{start_location, end_location}, children};
 }
 
-auto Parser::TryParseTemplateParams(bool allocate) -> Result<std::vector<TemplateParam>> {
+auto Parser::TryParseTemplateParams(bool allocate) -> Result<std::vector<NamedDecl*>> {
     LCC_ASSERT((not allocate) == IsInSpeculativeParse(), "TryParseTemplateParams requires that the allocate parameter be the opposite of the result of IsInSpeculativeParse(). If allocations are enabled, then no speculative parse stack should exist. If allocations are disabled, then it is required that a specilative parse stack exists.");
 
-    std::vector<TemplateParam> template_params{};
+    std::vector<NamedDecl*> template_params{};
     if (not allocate) {
         return template_params;
     }
@@ -874,7 +895,7 @@ auto Parser::TryParseTemplateParams(bool allocate) -> Result<std::vector<Templat
                     auto location = tok.location;
                     NextToken();
 
-                    template_params.push_back(TemplateParam{std::move(name), location, nullptr});
+                    template_params.push_back(new (*module) TemplateTypeDecl{module, location, std::move(name)});
                 } else {
                     auto type = ParseType();
                     if (not type) goto continue_template_list;
@@ -887,7 +908,7 @@ auto Parser::TryParseTemplateParams(bool allocate) -> Result<std::vector<Templat
                         Error("Expected identifier to name template parameter");
                     }
 
-                    template_params.push_back(TemplateParam{std::move(name), location, *type});
+                    template_params.push_back(new (*module) TemplateValueDecl{module, location, *type, std::move(name)});
                 }
 
             continue_template_list:;
@@ -1215,7 +1236,7 @@ auto Parser::TryParseNameOrPath(
                 }
 
                 if (allocate) {
-                    return name_ctor(name_location, name_text, *template_args_result);
+                    return name_ctor(name_location, name_text, std::move(*template_args_result));
                 } else {
                     if (At(Tk::Less) and IsLocationImmediatelyFollowing())
                         will_attempt_to_parse_template_args = true;
@@ -1248,7 +1269,7 @@ auto Parser::TryParseNameOrPath(
         }
 
         if (allocate) {
-            return path_ctor(path_kind, path_names, path_locations, *template_args_result);
+            return path_ctor(path_kind, path_names, path_locations, std::move(*template_args_result));
         } else {
             if (At(Tk::Less) and IsLocationImmediatelyFollowing())
                 will_attempt_to_parse_template_args = true;
@@ -1315,11 +1336,11 @@ auto Parser::TryParseType(bool allocate, bool allowFunctions) -> Result<Type*> {
         // these constructors are already wrapped in `if (allocate)` in the TryparseNameOrPath function,
         //  so we don't have to do that explicitly.
         auto NameCtor = [&](Location location, std::string name, std::vector<Expr*> template_args) -> Expr* {
-            return new (*this) NameType{location, type_access, CurrScope(), name, template_args};
+            return new (*this) NameType{location, type_access, CurrScope(), name, std::move(template_args)};
         };
 
         auto PathCtor = [&](PathKind path_kind, std::vector<std::string> names, std::vector<Location> locations, std::vector<Expr*> template_args) -> Expr* {
-            return new (*this) PathType{path_kind, type_access, CurrScope(), names, locations, template_args};
+            return new (*this) PathType{path_kind, type_access, CurrScope(), names, locations, std::move(template_args)};
         };
 
         auto id_type = TryParseNameOrPath(allocate, NameCtor, PathCtor);

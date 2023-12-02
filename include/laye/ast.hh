@@ -342,14 +342,6 @@ struct DeclModifier {
     CallConv call_conv{};
 };
 
-struct TemplateParam {
-    std::string name;
-    Location location;
-    Type* value_type;
-
-    bool is_value_param() const { return value_type != nullptr; }
-};
-
 struct EnumVariant {
     std::string name;
     Location location;
@@ -374,11 +366,16 @@ enum struct VarargsKind {
 };
 
 enum class CastKind {
+    SoftCast,
     HardCast,
     StructBitcast,
     ImplicitCast,
     LValueToRValueConv,
+    LValueToReference,
+    ReferenceToLValue,
 };
+
+std::string ToString(CastKind cast_kind);
 
 class Scope {
     Scope* _parent;
@@ -515,6 +512,8 @@ public:
 
         // Declarations
         DeclBinding,
+        DeclTemplateType,
+        DeclTemplateValue,
         DeclFunction,
         DeclStruct,
         DeclEnum,
@@ -578,6 +577,7 @@ public:
 
         UnwrapNilable,
         Constant,
+        TemplateParamConstant,
 
         // Lookups etc.
         LookupName,
@@ -612,6 +612,8 @@ public:
         TypeNilable,
         TypeErrUnion,
 
+        TypeTemplateParam,
+
         TypeOverloadSet,
         TypeLookupName,
         TypeLookupPath,
@@ -642,6 +644,8 @@ private:
     /// sema fields
     Type* _type = nullptr;
 
+    bool _is_lvalue = false;
+
 protected:
     constexpr Expr(Kind kind, Location location)
         : SemaNode(SemaNode::Kind::Expr, location), _kind(kind) {}
@@ -661,7 +665,8 @@ public:
     // Returns true if the value of this expression cannot be discarded.
     bool is_nodiscard() const;
 
-    bool is_lvalue() const;
+    bool is_lvalue() const { return _is_lvalue; }
+    void set_lvalue(bool f = true) { _is_lvalue = f; }
 };
 
 std::string ToString(Expr::Kind kind);
@@ -679,7 +684,7 @@ class NamedDecl : public Decl {
     Module* _module;
     std::vector<DeclModifier> _mods;
     std::string _name;
-    std::vector<TemplateParam> _template_params{};
+    std::vector<NamedDecl*> _template_params{};
 
     std::string _mangled_name;
 
@@ -696,7 +701,7 @@ protected:
         set_default_mangled_name();
     }
 
-    NamedDecl(Kind kind, Module* module, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params)
+    NamedDecl(Kind kind, Module* module, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<NamedDecl*> template_params)
         : Decl(kind, location), _module(module), _mods(std::move(mods)), _name(std::move(name)), _template_params(std::move(template_params)) {
         LCC_ASSERT(module);
         set_default_mangled_name();
@@ -707,7 +712,7 @@ public:
 
     auto mods() const -> const std::vector<DeclModifier>& { return _mods; }
     auto name() const -> const std::string& { return _name; }
-    auto template_params() const -> const std::vector<TemplateParam>& { return _template_params; }
+    auto template_params() const -> const std::vector<NamedDecl*>& { return _template_params; }
 
     auto mangled_name() const -> const std::string& { return _mangled_name; }
     void mangled_name(std::string mangled_name) { _mangled_name = std::move(mangled_name); }
@@ -778,17 +783,20 @@ class FunctionDecl : public NamedDecl {
     Type* _function_type;
     Type* _returnType;
     std::vector<BindingDecl*> _params;
+    VarargsKind _varargs_kind;
     Statement* _body;
-    // TODO(local): varargs
 
 public:
-    FunctionDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<TemplateParam> template_params, std::vector<BindingDecl*> params, Statement* body);
+    FunctionDecl(Module* module, Location location, std::vector<DeclModifier> mods, Type* returnType, std::string name, std::vector<NamedDecl*> template_params, std::vector<BindingDecl*> params, VarargsKind varargs_kind, Statement* body);
 
     auto return_type() const { return _returnType; }
     auto return_type() -> Type*& { return _returnType; }
 
     auto params() const -> const std::vector<BindingDecl*>& { return _params; }
     auto params() -> std::vector<BindingDecl*>& { return _params; }
+
+    auto varargs_kind() const { return _varargs_kind; }
+    void varargs_kind(VarargsKind k) { _varargs_kind = k; }
 
     auto body() const { return _body; }
     auto body() -> Statement*& { return _body; }
@@ -814,13 +822,35 @@ public:
     static bool classof(const Statement* statement) { return statement->kind() == Kind::OverloadSet; }
 };
 
+class TemplateTypeDecl : public NamedDecl {
+public:
+    TemplateTypeDecl(Module* module, Location location, std::string name)
+        : NamedDecl(Kind::DeclTemplateType, module, location, {}, std::move(name)) {}
+
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclTemplateType; }
+};
+
+class TemplateValueDecl : public NamedDecl {
+    Type* _type;
+
+public:
+    TemplateValueDecl(Module* module, Location location, Type* type, std::string name)
+        : NamedDecl(Kind::DeclTemplateValue, module, location, {}, std::move(name)), _type(type) {}
+
+    auto type() const { return _type; }
+    auto type() -> Type*& { return _type; }
+    void type(Type* type) { _type = type; }
+
+    static bool classof(const Statement* statement) { return statement->kind() == Kind::DeclTemplateValue; }
+};
+
 class StructDecl : public NamedDecl {
     std::vector<BindingDecl*> _fields;
     std::vector<StructDecl*> _variants;
     Type* _type;
 
 public:
-    StructDecl(Module* module, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<TemplateParam> template_params, std::vector<BindingDecl*> fields, std::vector<StructDecl*> variants)
+    StructDecl(Module* module, Location location, std::vector<DeclModifier> mods, std::string name, std::vector<NamedDecl*> template_params, std::vector<BindingDecl*> fields, std::vector<StructDecl*> variants)
         : NamedDecl(Kind::DeclStruct, module, location, mods, name, template_params), _fields(std::move(fields)), _variants(std::move(variants)) {}
 
     auto fields() const -> const decltype(_fields)& { return _fields; }
@@ -1493,9 +1523,17 @@ public:
 
     auto target_type() const { return _type; }
     auto target_type() -> Type*& { return _type; }
+    // operand
     auto value() const { return _value; }
     auto value() -> Expr*& { return _value; }
     auto cast_kind() const { return _cast_kind; }
+
+    bool is_hard_cast() const { return _cast_kind == CastKind::HardCast; }
+    bool is_implicit_cast() const { return _cast_kind == CastKind::ImplicitCast; }
+    bool is_lvalue_to_rvalue() const { return _cast_kind == CastKind::LValueToRValueConv; }
+    bool is_lvalue_to_ref() const { return _cast_kind == CastKind::LValueToReference; }
+    bool is_ref_to_lvalue() const { return _cast_kind == CastKind::ReferenceToLValue; }
+    bool is_soft_cast() const { return _cast_kind == CastKind::SoftCast; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Cast; }
 };
@@ -1720,6 +1758,25 @@ public:
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Constant; }
 };
 
+class TypeInstantiationContext {
+    std::unordered_map<NamedDecl*, Type*> _type_declarations{};
+public:
+    void declare(NamedDecl* decl, Type* type) {
+        if (auto type_decl = cast<TemplateTypeDecl>(decl)) {
+            _type_declarations.emplace(type_decl, type);
+        } else {
+            LCC_ASSERT(false, "TypeInstantiationContext::declare");
+        }
+    }
+
+    auto find_type(TemplateTypeDecl* type_decl) const -> Type* {
+        auto it = _type_declarations.find(type_decl);
+        if (it == _type_declarations.end())
+            return nullptr;
+        return it->second;
+    }
+};
+
 /// @brief Base class for type syntax nodes (which we're trying to make also Exprs.)
 class Type : public Expr {
 protected:
@@ -1728,6 +1785,8 @@ protected:
 
 public:
     auto string(bool use_colours = false) const -> std::string;
+
+    auto instantiate(Module* module, const TypeInstantiationContext& context) -> Type*;
 
     /// Get the size of this type. It may be target-dependent,
     /// which is why this takes a context parameter.
@@ -1802,6 +1861,8 @@ public:
     bool operator==(const Type& other) const = delete;
 
     static Type* Bool;
+    static Type* Int;
+    static Type* UInt;
     static Type* OverloadSet;
 
     /// Check if types are equal to each other.
@@ -1908,6 +1969,19 @@ public:
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeLiteralString; }
 };
 
+class TemplateParamType : public Type {
+    TemplateTypeDecl* _template_type_decl;
+
+public:
+    TemplateParamType(Location location, TemplateTypeDecl* template_type_decl)
+        : Type(Kind::TypeTemplateParam, location), _template_type_decl(template_type_decl) {}
+
+    auto declaration() const { return _template_type_decl; }
+    auto name() const -> const std::string& { return _template_type_decl->name(); }
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeTemplateParam; }
+};
+
 class SingleElementType : public Type {
     Type* _elem_type;
 
@@ -1998,20 +2072,22 @@ class FuncType : public Type {
     Expr* _calling_convention{};
     Type* _return_type;
     std::vector<Type*> _param_types;
-    // TODO(local): varargs
+    VarargsKind _varargs_kind;
 
 public:
-    FuncType(Location location, Type* return_type, std::vector<Type*> param_types)
-        : Type(Kind::TypeFunc, location), _return_type(return_type), _param_types(std::move(param_types)) {}
+    FuncType(Location location, Type* return_type, std::vector<Type*> param_types, VarargsKind varargs_kind = VarargsKind::None)
+        : Type(Kind::TypeFunc, location), _return_type(return_type), _param_types(std::move(param_types)), _varargs_kind(varargs_kind) {}
 
-    FuncType(Location location, Expr* calling_convention, Type* return_type, std::vector<Type*> param_types)
-        : Type(Kind::TypeFunc, location), _calling_convention(calling_convention), _return_type(return_type), _param_types(std::move(param_types)) {}
+    FuncType(Location location, Expr* calling_convention, Type* return_type, std::vector<Type*> param_types, VarargsKind varargs_kind = VarargsKind::None)
+        : Type(Kind::TypeFunc, location), _calling_convention(calling_convention), _return_type(return_type), _param_types(std::move(param_types)), _varargs_kind(varargs_kind) {}
 
     auto calling_convention() const { return _calling_convention; }
     auto return_type() const { return _return_type; }
     auto return_type() -> Type*& { return _return_type; }
     auto param_types() const -> const decltype(_param_types)& { return _param_types; }
     auto param_types() -> decltype(_param_types)& { return _param_types; }
+    auto varargs_kind() const { return _varargs_kind; }
+    void varargs_kind(VarargsKind k) { _varargs_kind = k; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeFunc; }
 };
@@ -2028,13 +2104,20 @@ class StructType : public Type {
     std::vector<StructField> _fields;
     std::vector<VariantType*> _variants;
 
+    std::string _mangled_name;
+    std::vector<Expr*> _template_arguments{};
+
 protected:
     StructType(Kind kind, Location location, std::string name, std::vector<StructField> fields = {})
-        : Type(kind, location), _name(std::move(name)), _fields(std::move(fields)) {}
+        : Type(kind, location), _name(std::move(name)), _fields(std::move(fields)) {
+        _mangled_name = _name;
+    }
 
 public:
     StructType(Location location, std::string name, std::vector<StructField> fields = {})
-        : Type(Kind::TypeStruct, location), _name(std::move(name)), _fields(std::move(fields)) {}
+        : Type(Kind::TypeStruct, location), _name(std::move(name)), _fields(std::move(fields)) {
+        _mangled_name = _name;
+    }
 
     auto name() const -> const std::string& { return _name; }
 
@@ -2045,6 +2128,12 @@ public:
     auto variants() const -> const decltype(_variants)& { return _variants; }
     auto variants() -> decltype(_variants)& { return _variants; }
     void variants(std::vector<VariantType*> vars) { _variants = std::move(vars); }
+
+    auto mangled_name() const -> const std::string& { return _mangled_name; }
+    auto mangled_name(std::string n) { _mangled_name = std::move(n); }
+
+    auto template_arguments() const -> const decltype(_template_arguments)& { return _template_arguments; }
+    void template_arguments(std::vector<Expr*> args) { _template_arguments = std::move(args); }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::TypeStruct or expr->kind() == Kind::TypeVariant; }
 };
