@@ -335,10 +335,12 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                 } break;
 
                 // Binary bitwise operations
+                case TokenKind::AndKw:
                 case TokenKind::Ampersand: {
                     // Bitwise AND
                     generated_ir[expr] = new (*module) AndInst(lhs, rhs, expr->location());
                 } break;
+                case TokenKind::OrKw:
                 case TokenKind::Pipe: {
                     // Bitwise OR
                     generated_ir[expr] = new (*module) OrInst(lhs, rhs, expr->location());

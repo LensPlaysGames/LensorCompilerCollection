@@ -30,6 +30,8 @@ lcc::StringMap<Tk> keywords{
     {"lambda", Tk::Lambda},
     {"true", Tk::TrueKw},
     {"false", Tk::FalseKw},
+    {"and", Tk::AndKw},
+    {"or", Tk::OrKw},
 };
 } // namespace
 
@@ -824,6 +826,8 @@ bool lcc::intercept::InterceptToken::operator==(const InterceptToken& rhs) const
         case TokenKind::Lambda:
         case TokenKind::TrueKw:
         case TokenKind::FalseKw:
+        case TokenKind::AndKw:
+        case TokenKind::OrKw:
             return true;
     }
 
@@ -892,6 +896,8 @@ std::string_view lcc::intercept::ToString(Tk kind) {
         case Tk::Bool: return "bool";
         case Tk::TrueKw: return "true";
         case Tk::FalseKw: return "false";
+        case Tk::AndKw: return "and";
+        case Tk::OrKw: return "or";
         case Tk::Struct: return "struct";
         case Tk::Enum: return "enum";
         case Tk::Lambda: return "lambda";

@@ -96,6 +96,8 @@ enum struct TokenKind {
     Bool,
     TrueKw,
     FalseKw,
+    AndKw,
+    OrKw,
     IntKw,
     ArbitraryInt,
     For,

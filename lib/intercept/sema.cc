@@ -1011,6 +1011,36 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
     switch (b->op()) {
         default: Diag::ICE("Invalid binary operator '{}'", ToString(b->op()));
 
+        case TokenKind::AndKw:
+        case TokenKind::OrKw: {
+            LValueToRValue(&b->lhs());
+            LValueToRValue(&b->rhs());
+            auto lhs = b->lhs()->type();
+            auto rhs = b->rhs()->type();
+
+            /// Both types must be integers or booleans.
+            if (not lhs->is_integer(true) or not rhs->is_integer(true)) {
+                Error(b->location(), "Cannot perform arithmetic on {} and {}", lhs, rhs);
+                b->set_sema_errored();
+                return;
+            }
+
+            /// Convert both operands to booleans.
+            if (not Convert(&b->lhs(), Type::Bool)) {
+                Error(b->location(), "Binary logical operator {} on {} and {}: cannot convert lhs, of type {}, to {}", ToString(b->op()), lhs, rhs, lhs, Type::Bool);
+                b->set_sema_errored();
+                return;
+            }
+            if (not Convert(&b->rhs(), Type::Bool)) {
+                Error(b->location(), "Binary logical operator {} on {} and {}: cannot convert rhs, of type {}, to {}", ToString(b->op()), lhs, rhs, lhs, Type::Bool);
+                b->set_sema_errored();
+                return;
+            }
+
+            /// The result type is bool.
+            b->type(Type::Bool);
+        } break;
+
         /// Pointer or array subscript.
         case TokenKind::LBrack: {
             ImplicitDe_Reference(&b->lhs());

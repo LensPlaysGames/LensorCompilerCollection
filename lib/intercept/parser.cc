@@ -53,6 +53,11 @@ constexpr auto BinaryOrPostfixPrecedence(intc::TokenKind t) -> lcc::isz {
         case Tk::Ge:
             return 200;
 
+        case Tk::AndKw:
+            return 150;
+        case Tk::OrKw:
+            return 145;
+
         case Tk::ColonEq:
         case Tk::ColonColon:
             return 100;
@@ -162,6 +167,8 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::ArbitraryInt:
         case Tk::Gensym:
         case Tk::MacroArg:
+        case Tk::AndKw:
+        case Tk::OrKw:
             return false;
     }
 
