@@ -120,6 +120,24 @@ using add_imm_reg = Pattern<
         Inst<Clobbers<>, usz(Opcode::Add), o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
+using add_reg_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Add), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+
+using mul_reg_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Mul), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Multiply), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+
+using mul_imm_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Mul), Immediate<0, 0>, Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Multiply), o<0>, o<1>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+
 using sub_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Sub), Register<0, 0>, Register<0, 0>>>,
     InstList<
@@ -213,6 +231,10 @@ using x86_64PatternList = PatternList<
     add_local_imm,
     add_reg_reg,
     add_imm_reg,
+    add_reg_imm,
+
+    mul_imm_reg,
+    mul_reg_imm,
 
     sub_reg_reg,
     sub_reg_imm,

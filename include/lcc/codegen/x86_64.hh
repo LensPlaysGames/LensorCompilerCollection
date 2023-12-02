@@ -122,7 +122,7 @@ constexpr auto ToString(Opcode op) -> std::string_view {
         case Opcode::LoadEffectiveAddress: return "lea";
         case Opcode::And: return "and";
         case Opcode::Add: return "add";
-        case Opcode::Multiply: return "mul";
+        case Opcode::Multiply: return "imul";
         case Opcode::Sub: return "sub";
         case Opcode::Push: return "push";
         case Opcode::Pop: return "pop";
