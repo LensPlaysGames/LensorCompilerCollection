@@ -171,6 +171,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                     auto zero_imm_bitcast = new (*module) lcc::BitcastInst(zero_imm, lcc::Type::PtrTy);
                     auto* eq = new (*module) EqInst(generated_ir[unary_expr->operand()], zero_imm_bitcast, expr->location());
                     generated_ir[expr] = eq;
+                    insert(zero_imm_bitcast);
                     insert(eq);
                 } break;
                 case TokenKind::Minus: {
