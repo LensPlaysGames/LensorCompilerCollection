@@ -53,13 +53,13 @@ enum struct OperandKind {
 // NOTE: The operand values are a bit scuffed, in that each one needs all
 // of the accessors in order for everything to compile...
 
-template <i64 imm = 0>
+template <i64 imm = 0, u64 sz = 0>
 struct Immediate {
     static constexpr OperandKind kind = OperandKind::Immediate;
     static constexpr i64 immediate = imm;
     static constexpr usz index = 0;
     static constexpr usz value = 0;
-    static constexpr usz size = 0;
+    static constexpr usz size = sz;
     static constexpr GlobalVariable* global = nullptr;
     static constexpr lcc::Function* function = nullptr;
     static constexpr lcc::Block* block = nullptr;
@@ -126,7 +126,7 @@ struct Block {
 };
 
 // New virtual register, by unique index within each pattern.
-template <usz idx>
+template <usz idx, usz op_idx>
 struct v {
     static constexpr OperandKind kind = OperandKind::NewVirtual;
     static constexpr i64 immediate = 0;
@@ -217,7 +217,43 @@ struct Inst {
                 if (not new_virtuals.contains(operand::index)) {
                     new_virtuals[operand::index] = mod->next_vreg();
                 }
-                return MOperandRegister(new_virtuals[operand::index], 0);
+
+                MOperand op{};
+                // Current operand index.
+                usz i = 0;
+                // Operand index we need to find.
+                usz needle = operand::size;
+                // Whether or not we've found the operand we are looking for.
+                bool found = false;
+                for (auto instruction : input) {
+                    for (auto op_candidate : instruction->all_operands()) {
+                        // This is the instruction we are looking for!
+                        if (i == needle) {
+                            found = true;
+                            op = op_candidate;
+                        }
+
+                        // We can stop looking at operands if we found the one we needed.
+                        if (found) break;
+
+                        // Increment operand index for the next operand.
+                        ++i;
+                    }
+                    // We can stop looking at instructions if we found the operand we needed.
+                    if (found) break;
+                }
+
+                // FIXME: Which pattern? Possible to include it in error message somehow?
+                LCC_ASSERT(found, "Pattern has ill-formed o<{}> operand: index greater than amount of operands in input.", needle);
+
+                usz size = 0;
+                if (std::holds_alternative<MOperandRegister>(op))
+                    size = std::get<MOperandRegister>(op).size;
+                else if (std::holds_alternative<MOperandImmediate>(op))
+                    size = std::get<MOperandImmediate>(op).size;
+                else LCC_ASSERT(false, "Sorry, moperand type not handled in NewVirtual handling...");
+
+                return MOperandRegister(new_virtuals[operand::index], size);
             }
 
             case OperandKind::Local:
