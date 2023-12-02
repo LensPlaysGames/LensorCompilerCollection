@@ -237,8 +237,11 @@ int main(int argc, char** argv) {
 
             for (auto module : laye_context->modules()) {
                 std::string input_file_path = module->file()->path().string();
-                EmitModule(lcc::laye::IRGen::Generate(laye_context, module), input_file_path, output_file_path);
+                std::string module_output_file_path = ConvertFileExtensionToOutputFormat(module->file()->path().string());
+                EmitModule(lcc::laye::IRGen::Generate(laye_context, module), input_file_path, module_output_file_path);
             }
+
+            // TODO(local): after generating all of the modules separate, THEN obey the `output_file_path` when linking
         }
 
         /// C.

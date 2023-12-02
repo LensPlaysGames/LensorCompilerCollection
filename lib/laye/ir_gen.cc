@@ -133,7 +133,7 @@ lcc::Type* layec::IRGen::Convert(const layec::Type* in) {
 }
 
 void layec::IRGen::GenerateModule(laye::Module* module) {
-    auto order = laye_context()->dependencies.get_resolved_order().order;
+    auto order = module->dependencies.get_resolved_order().order;
     for (auto decl : order) {
         // generate this module's declarations in a more simple fashion later.
         if (decl->module() == module)

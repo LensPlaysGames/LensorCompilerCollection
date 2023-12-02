@@ -57,8 +57,6 @@ class LayeContext {
     void add_module(const std::string& canonical_name, Module* module) { _modules.emplace(canonical_name, module); }
 
 public:
-    DependencyGraph<NamedDecl> dependencies{};
-
     LayeContext(Context* context)
         : _context(context) {}
 
@@ -99,6 +97,8 @@ private:
     SemaState _state = SemaState::NotAnalysed;
 
 public:
+    DependencyGraph<NamedDecl> dependencies{};
+    
     Module(LayeContext* laye_context, File* file);
 
     auto laye_context() const { return _laye_context; }

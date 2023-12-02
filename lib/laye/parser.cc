@@ -251,12 +251,14 @@ auto Parser::TryParseDecl() -> Result<Decl*> {
     if (At(Tk::Struct)) {
         auto struct_result = ParseStruct(std::move(modifiers));
         if (not struct_result) return struct_result.diag();
+        if (not CurrScope()->parent() and (*struct_result)->is_export()) module->add_export(*struct_result);
         return CurrScope()->declare(module, struct_result->name(), *struct_result);
     } else if (At(Tk::Enum)) {
         LCC_ASSERT(false, "TODO enum");
     } else if (At(Tk::Alias)) {
         auto alias_result = ParseAlias(std::move(modifiers), false);
         if (not alias_result) return alias_result.diag();
+        if (not CurrScope()->parent() and (*alias_result)->is_export()) module->add_export(*alias_result);
         return CurrScope()->declare(module, alias_result->name(), *alias_result);
     }
 

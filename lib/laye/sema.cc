@@ -77,6 +77,7 @@ auto LookupTypeEntity(Module* from_module, Scope* from_scope, const std::vector<
         }
 
         // otherwise, we continue up the next scope
+        search_scope = search_scope->parent();
     }
 
     Module* search_module = from_module;
@@ -216,6 +217,7 @@ auto LookupValueEntity(Module* from_module, Scope* from_scope, const std::vector
         }
 
         // otherwise, we continue up the next scope
+        search_scope = search_scope->parent();
     }
 
     Module* search_module = from_module;
@@ -319,9 +321,9 @@ namespace layec = lcc::laye;
 void layec::Sema::Analyse(LayeContext* laye_context, Module* module, bool use_colours) {
     LCC_ASSERT(laye_context);
 
-    layec::GenerateDependencies(laye_context->dependencies, module);
+    layec::GenerateDependencies(module->dependencies, module);
 
-    auto order = laye_context->dependencies.get_resolved_order();
+    auto order = module->dependencies.get_resolved_order();
     if (order.kind == DependencyGraph<NamedDecl>::Result::Kind::Cycle) {
         Diag::Note(laye_context->context(), order.to->location(), "Other dependency is here");
         Diag::Error(laye_context->context(), order.from->location(), "Cyclic dependency detected");
@@ -1140,6 +1142,99 @@ bool layec::Sema::AnalyseType(Module* module, Type*& type) {
     if (type->sema_done_or_errored()) return type->sema_ok();
     type->set_sema_in_progress();
 
+    auto AnalyzeLookup = [&](const std::string& name, NamedDecl* type_entity, const std::vector<Expr*> template_args) {
+        if (type_entity == nullptr){
+            Error(type->location(), "Unknown type symbol '{}'", name);
+            type = new (*module) PoisonType(type->location());
+        } else if (auto alias_decl = cast<AliasDecl>(type_entity)) {
+            LCC_ASSERT(alias_decl->type()->sema_done_or_errored());
+            type = alias_decl->type();
+        } else if (auto struct_decl = cast<StructDecl>(type_entity)) {
+            LCC_ASSERT(struct_decl->type());
+
+            auto& template_params = struct_decl->template_params();
+
+            if (template_params.size() != template_args.size()) {
+                if (template_params.empty()) {
+                    Error(
+                        type->location(),
+                        "Struct type {} does not have template parameters, but {} template arguments were provided",
+                        struct_decl->name(),
+                        template_args.size()
+                    );
+                } else if (template_args.empty()) {
+                    Error(
+                        type->location(),
+                        "Struct type {} requires {} template parameters, but no template arguments were provided",
+                        struct_decl->name(),
+                        template_params.size()
+                    );
+                } else {
+                    Error(
+                        type->location(),
+                        "Struct type {} requires {} template parameters, but {} template argument(s) were provided",
+                        struct_decl->name(),
+                        template_params.size(),
+                        template_args.size()
+                    );
+                }
+
+                type = new (*module) PoisonType(type->location());
+            } else {
+                type = struct_decl->type();
+
+                if (not template_args.empty()) {
+                    if (auto lookup_inst = FindExistingInstantiation(struct_decl, template_args)) {
+                        LCC_ASSERT(lookup_inst->is_expr());
+                        auto st = as<StructType>(static_cast<Expr*>(lookup_inst));
+                        //Note(t->location(), "found existing instantiation: {}\n", st->string(use_colours));
+                        LCC_ASSERT(st->template_arguments().size() == template_args.size());
+                        type = st;
+                    } else {
+                        std::string mname = name;
+                        mname += "_";
+
+                        TypeInstantiationContext inst_context{};
+                        for (usz i = 0; i < template_args.size(); i++) {
+                            auto tparam = template_params.at(i);
+
+                            auto targ = template_args.at(i);
+                            if (auto type_tparam = cast<TemplateTypeDecl>(tparam)) {
+                                if (auto type_targ = cast<Type>(targ)) {
+                                    AnalyseType(module, type_targ);
+                                    inst_context.declare(type_tparam, type_targ);
+
+                                    mname += TypeToMangledString(type_targ);
+                                } else {
+                                    LCC_TODO();
+                                }
+                            } else {
+                                LCC_TODO();
+                            }
+                        }
+                        
+                        auto inst_type = as<StructType>(struct_decl->type()->instantiate(module, inst_context));
+                        inst_type->template_arguments(template_args);
+                        inst_type->mangled_name(mname);
+
+                        InstantiationInfo info{template_args, inst_type};
+                        _instantiations.emplace(struct_decl, info);
+
+                        type = inst_type;
+                        LCC_ASSERT(type != nullptr);
+                    }
+                }
+            }
+        } else if (auto template_type_decl = cast<TemplateTypeDecl>(type_entity)) {
+            type = new (*module) TemplateParamType(type->location(), template_type_decl);
+        } else {
+            Error(type->location(), "Unknown type symbol '{}'", name);
+            type = new (*module) PoisonType(type->location());
+        }
+
+        LCC_ASSERT(not type->is_named_type());
+    };
+
     auto kind = type->kind();
     switch (kind) {
         default: {
@@ -1171,100 +1266,14 @@ bool layec::Sema::AnalyseType(Module* module, Type*& type) {
             auto t = as<NameType>(type);
 
             auto type_entity = LookupTypeEntity(module, t->scope(), t->name());
-            if (auto alias_decl = cast<AliasDecl>(type_entity)) {
-                LCC_ASSERT(alias_decl->type()->sema_done_or_errored());
-                type = alias_decl->type();
-            } else if (auto struct_decl = cast<StructDecl>(type_entity)) {
-                LCC_ASSERT(struct_decl->type());
-
-                auto& template_params = struct_decl->template_params();
-                auto& template_args = t->template_args();
-
-                if (template_params.size() != template_args.size()) {
-                    if (template_params.empty()) {
-                        Error(
-                            type->location(),
-                            "Struct type {} does not have template parameters, but {} template arguments were provided",
-                            struct_decl->name(),
-                            template_args.size()
-                        );
-                    } else if (template_args.empty()) {
-                        Error(
-                            type->location(),
-                            "Struct type {} requires {} template parameters, but no template arguments were provided",
-                            struct_decl->name(),
-                            template_params.size()
-                        );
-                    } else {
-                        Error(
-                            type->location(),
-                            "Struct type {} requires {} template parameters, but {} template argument(s) were provided",
-                            struct_decl->name(),
-                            template_params.size(),
-                            template_args.size()
-                        );
-                    }
-
-                    type = new (*module) PoisonType(type->location());
-                } else {
-                    type = struct_decl->type();
-
-                    if (not template_args.empty()) {
-                        if (auto lookup_inst = FindExistingInstantiation(struct_decl, template_args)) {
-                            LCC_ASSERT(lookup_inst->is_expr());
-                            auto st = as<StructType>(static_cast<Expr*>(lookup_inst));
-                            //Note(t->location(), "found existing instantiation: {}\n", st->string(use_colours));
-                            LCC_ASSERT(st->template_arguments().size() == template_args.size());
-                            type = st;
-                        } else {
-                            std::string mname = t->name();
-                            mname += "_";
-
-                            TypeInstantiationContext inst_context{};
-                            for (usz i = 0; i < template_args.size(); i++) {
-                                auto tparam = template_params.at(i);
-
-                                auto targ = template_args.at(i);
-                                if (auto type_tparam = cast<TemplateTypeDecl>(tparam)) {
-                                    if (auto type_targ = cast<Type>(targ)) {
-                                        AnalyseType(module, type_targ);
-                                        inst_context.declare(type_tparam, type_targ);
-
-                                        mname += TypeToMangledString(type_targ);
-                                    } else {
-                                        LCC_TODO();
-                                    }
-                                } else {
-                                    LCC_TODO();
-                                }
-                            }
-                            
-                            auto inst_type = as<StructType>(struct_decl->type()->instantiate(module, inst_context));
-                            inst_type->template_arguments(template_args);
-                            inst_type->mangled_name(mname);
-
-                            InstantiationInfo info{template_args, inst_type};
-                            _instantiations.emplace(struct_decl, info);
-
-                            type = inst_type;
-                            LCC_ASSERT(type != nullptr);
-                        }
-                    }
-                }
-            } else if (auto template_type_decl = cast<TemplateTypeDecl>(type_entity)) {
-                type = new (*module) TemplateParamType(type->location(), template_type_decl);
-            } else {
-                Error(type->location(), "Unknown type symbol '{}'", t->name());
-                type = new (*module) PoisonType(type->location());
-            }
-
-            LCC_ASSERT(not type->is_named_type());
+            AnalyzeLookup(t->name(), type_entity, t->template_args());
         } break;
 
         case Expr::Kind::TypeLookupPath: {
-            [[maybe_unused]] auto t = as<PathType>(type);
+            auto t = as<PathType>(type);
 
-            LCC_ASSERT(false, "AnalyseType(module, TypeLookupName)");
+            auto type_entity = LookupTypeEntity(module, t->scope(), t->names(), t->locations());
+            AnalyzeLookup(t->names().back(), type_entity, t->template_args());
 
             // const auto& path_names = t->names();
             // const auto& locations = t->locations();

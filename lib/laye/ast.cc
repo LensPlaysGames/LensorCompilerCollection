@@ -1171,6 +1171,8 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
 
             case K::DeclStruct: {
                 auto n = cast<layec::StructDecl>(s);
+                PrintLinkage(n->linkage());
+                PrintModifiers(n->mods());
                 PrintBasicHeader("StructDecl", n);
                 out += fmt::format(
                     " {}{}",
@@ -1183,6 +1185,8 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
 
             case K::DeclEnum: {
                 auto n = cast<layec::EnumDecl>(s);
+                PrintLinkage(n->linkage());
+                PrintModifiers(n->mods());
                 PrintBasicHeader("EnumDecl", n);
                 out += fmt::format(
                     " {}{}\n",
@@ -1193,6 +1197,8 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, layec::SemaNode, layec::T
 
             case K::DeclAlias: {
                 auto n = cast<layec::AliasDecl>(s);
+                PrintLinkage(n->linkage());
+                PrintModifiers(n->mods());
                 PrintBasicHeader("AliasDecl", n);
                 out += fmt::format(
                     " {}{}",
