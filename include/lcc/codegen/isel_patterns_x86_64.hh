@@ -102,6 +102,67 @@ using s_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::SExt), Register<0, 0>>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveSignExtended), o<0>, i<0>>>>;
 
+using sar_imm_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sar), Immediate<0, 0>, Immediate<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), o<1>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
+
+using shr_imm_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shr), Immediate<0, 0>, Immediate<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), o<1>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
+
+using shl_imm_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shl), Immediate<0, 0>, Immediate<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::ShiftLeft), o<1>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
+
+// FIXME: If immediate's value doesn't fit into 8 bits, we can't encode it like this.
+using sar_reg_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sar), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+
+using shr_reg_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shr), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+
+using shl_reg_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shl), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::ShiftLeft), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+
+using sar_reg_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sar), Register<0, 0>, Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(x86_64::RegisterId::RCX), 32>>, // 32 bits to clear dependencies
+        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), Register<usz(x86_64::RegisterId::RCX), 8>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+
+using shr_reg_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shr), Register<0, 0>, Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(x86_64::RegisterId::RCX), 32>>, // 32 bits to clear dependencies
+        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), Register<usz(x86_64::RegisterId::RCX), 8>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+
+using shl_reg_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shl), Register<0, 0>, Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(x86_64::RegisterId::RCX), 32>>, // 32 bits to clear dependencies
+        Inst<Clobbers<>, usz(Opcode::ShiftLeft), Register<usz(x86_64::RegisterId::RCX), 8>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
+
 using and_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::And), Register<0, 0>, Register<0, 0>>>,
     InstList<
@@ -262,6 +323,14 @@ using x86_64PatternList = PatternList <
 
       s_ext_reg,
       z_ext_reg,
+
+      shl_imm_imm,
+      shr_imm_imm,
+      sar_imm_imm,
+
+      shl_reg_imm,
+      shr_reg_imm,
+      sar_reg_imm,
 
       shl_reg_reg,
       shr_reg_reg,

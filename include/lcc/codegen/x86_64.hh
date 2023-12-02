@@ -26,6 +26,9 @@ enum struct Opcode : u32 {
 
     // Bitwise
     And,
+    ShiftRightArithmetic,
+    ShiftRightLogical,
+    ShiftLeft,
 
     Add,      // add
     Multiply, // mul
@@ -122,6 +125,9 @@ constexpr auto ToString(Opcode op) -> std::string_view {
         case Opcode::MoveZeroExtended: return "movzx";
         case Opcode::LoadEffectiveAddress: return "lea";
         case Opcode::And: return "and";
+        case Opcode::ShiftLeft: return "shl";
+        case Opcode::ShiftRightLogical: return "shr";
+        case Opcode::ShiftRightArithmetic: return "sar";
         case Opcode::Add: return "add";
         case Opcode::Multiply: return "imul";
         case Opcode::Sub: return "sub";
