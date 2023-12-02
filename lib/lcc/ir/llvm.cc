@@ -51,6 +51,12 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
             Print("{} %{}", Ty(arg), i);
         }
 
+        if (ftype->variadic()) {
+            if (ftype->params().size() != 0)
+                Print(", ");
+            Print("...");
+        }
+
         Print(")");
     }
 
@@ -216,11 +222,24 @@ struct LLVMIRPrinter : IRPrinter<LLVMIRPrinter, 0> {
                 if (not callee_ty->ret()->is_void()) Print("    %{} = ", Index(i));
                 else Print("    ");
                 Print(
-                    "{}call {} {} (",
+                    "{}call {} ",
                     c->is_tail_call() ? "tail " : "",
-                    Ty(callee_ty->ret()),
-                    Val(c->callee(), false)
+                    Ty(callee_ty->ret())
                 );
+
+                if (callee_ty->variadic()) {
+                    Print("(");
+                    bool first = true;
+                    for (auto callee_param_ty : callee_ty->params()) {
+                        if (first) first = false;
+                        else Print(", ");
+                        Print("{}", Ty(callee_param_ty));
+                    }
+                    if (not first) Print(", ");
+                    Print("...) ");
+                }
+
+                Print("{} (", Val(c->callee(), false));
 
                 bool first = true;
                 for (auto arg : c->args()) {
