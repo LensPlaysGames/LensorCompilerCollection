@@ -376,6 +376,20 @@ bool intc::Sema::HasSideEffects(Expr* expr) {
     LCC_UNREACHABLE();
 }
 
+bool intc::Sema::ImplicitDe_Reference(Expr** expr) {
+    if (is<ReferenceType>((*expr)->type())) {
+        /// Don’t strip reference here since we want an lvalue.
+        LValueToRValue(expr, false);
+        WrapWithCast(
+            expr,
+            as<TypeWithOneElement>((*expr)->type())->element_type(),
+            CastKind::ReferenceToLValue
+        );
+    }
+
+    return (*expr)->is_lvalue();
+}
+
 bool intc::Sema::ImplicitDereference(Expr** expr) {
     if (is<ReferenceType>((*expr)->type())) {
         /// Don’t strip reference here since we want an lvalue.
@@ -999,7 +1013,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
 
         /// Pointer or array subscript.
         case TokenKind::LBrack: {
-            ImplicitDereference(&b->lhs());
+            ImplicitDe_Reference(&b->lhs());
             auto ty = b->lhs()->type();
             if (not is<PointerType, ArrayType>(ty)) {
                 Error(b->location(), "LHS of subscript must be a pointer or array, but was {}", b->lhs()->type());
@@ -1110,7 +1124,7 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
         /// Assignment.
         case TokenKind::ColonEq: {
             LValueToRValue(&b->rhs());
-            ImplicitDereference(&b->lhs());
+            ImplicitDe_Reference(&b->lhs());
             if (not b->lhs()->is_lvalue()) {
                 Error(b->location(), "LHS of assignment must be an lvalue");
                 b->set_sema_errored();

@@ -146,6 +146,13 @@ private:
     /// \return Whether the result is an lvalue.
     bool ImplicitDereference(Expr** expr);
 
+    /// De-reference an expression, potentially yielding an lvalue.
+    ///
+    /// Does not do anything to pointers.
+    ///
+    /// \return Whether the result is an lvalue.
+    bool ImplicitDe_Reference(Expr** expr);
+
     /// Insert an implicit cast of an expression to a type.
     ///
     /// This creates a new cast expression and replaces the expression
