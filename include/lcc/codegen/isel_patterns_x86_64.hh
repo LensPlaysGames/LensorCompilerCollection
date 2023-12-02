@@ -11,6 +11,10 @@ namespace isel {
 using OK = OperandKind;
 using Opcode = x86_64::Opcode;
 
+using bitcast_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Bitcast), Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(Opcode::Move), o<0>, i<0>>>>;
+
 using ret = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Return)>>,
     InstList<Inst<Clobbers<>, usz(Opcode::Return)>>>;
@@ -49,16 +53,16 @@ using store_some_op_local = Pattern<
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, o<1>>>>;
 
 using store_reg_local = store_some_op_local<Register<0, 0>>;
-using store_imm_local = store_some_op_local<Immediate<0>>;
+using store_imm_local = store_some_op_local<Immediate<0, 0>>;
 
 // store immediate 'imm' into register 'r':
 //   mov $imm, %tmp
 //   mov %tmp, (%r)
 using store_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), Immediate<0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), Immediate<0, 0>, Register<0, 0>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), v<0>, o<1>>>>;
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), v<0, 0>, o<1>>>>;
 
 using store_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), Register<0, 0>, Register<0, 0>>>,
@@ -70,7 +74,7 @@ using copy_some_op = Pattern<
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using copy_reg = copy_some_op<Register<0, 0>>;
-using copy_imm = copy_some_op<Immediate<0>>;
+using copy_imm = copy_some_op<Immediate<0, 0>>;
 
 template <typename copy_op>
 using copy_mem_op = Pattern<
@@ -111,7 +115,7 @@ using add_reg_reg = Pattern<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using add_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Immediate<0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Immediate<0, 0>, Register<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Add), o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
@@ -124,7 +128,7 @@ using sub_reg_reg = Pattern<
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using sub_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sub), Register<0, 0>, Immediate<0>>>,
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sub), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
         // NOTE: GNU ordering of operands
         Inst<Clobbers<>, usz(Opcode::Sub), o<1>, o<0>>,
@@ -138,10 +142,10 @@ using cond_branch_reg = Pattern<
         Inst<Clobbers<>, usz(Opcode::Jump), o<1>>>>;
 
 using cond_branch_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::CondBranch), Immediate<0>, Block<>, Block<>>>,
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::CondBranch), Immediate<0, 0>, Block<>, Block<>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0>>,
-        Inst<Clobbers<>, usz(Opcode::Test), v<0>, v<0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::Test), v<0, 0>, v<0, 0>>,
         Inst<Clobbers<>, usz(Opcode::JumpIfZeroFlag), o<2>>,
         Inst<Clobbers<>, usz(Opcode::Jump), o<1>>>>;
 
@@ -151,7 +155,7 @@ using cmp_reg_reg = Pattern<
     InstList<
         // NOTE: GNU ordering of operands
         Inst<Clobbers<>, usz(Opcode::Compare), o<1>, o<0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0, 0>, i<0>>,
         Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
 using u_lt_reg_reg = cmp_reg_reg<MInst::Kind::ULt, Opcode::SetByteIfLessUnsigned>;
@@ -166,11 +170,11 @@ using eq_reg_reg = cmp_reg_reg<MInst::Kind::Eq, Opcode::SetByteIfEqual>;
 
 template <MInst::Kind kind, Opcode set_opcode>
 using cmp_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(kind), Register<0, 0>, Immediate<0>>>,
+    InstList<Inst<Clobbers<>, usz(kind), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
         // NOTE: GNU ordering of operands
         Inst<Clobbers<>, usz(Opcode::Compare), o<1>, o<0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0>, i<0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), Immediate<0, 0>, i<0>>,
         Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
 using u_lt_reg_imm = cmp_reg_imm<MInst::Kind::ULt, Opcode::SetByteIfLessUnsigned>;
@@ -212,6 +216,8 @@ using x86_64PatternList = PatternList<
 
     sub_reg_reg,
     sub_reg_imm,
+
+    bitcast_imm,
 
     simple_function_call,
     simple_block_branch,
