@@ -102,8 +102,26 @@ void select_instructions(Module* mod, MFunction& function) {
                     //     mov %r1.64, %r3.64
                     //     and %r3.64, $1
                     case MInst::Kind::Trunc: {
+                        if (std::holds_alternative<MOperandImmediate>(inst.get_operand(0))) {
+                            auto imm = std::get<MOperandImmediate>(inst.get_operand(0));
+                            auto mov_imm = MInst(usz(x86_64::Opcode::Move), {0, 0});
+
+                            // Set bottom inst.regsize() bits of mask.
+                            usz mask = 0;
+                            for (usz bit_i = 0; bit_i < inst.regsize(); ++bit_i)
+                                mask |= (usz(1) << bit_i);
+
+                            // Use mask to do truncation
+                            imm.value &= mask;
+
+                            mov_imm.add_operand(imm);
+                            mov_imm.add_operand(MOperandRegister{inst.reg(), uint(inst.regsize())});
+                            block.instructions()[index] = mov_imm;
+                            break;
+                        }
+
                         LCC_ASSERT(std::holds_alternative<MOperandRegister>(inst.get_operand(0)),
-                                   "Sorry, but you can only truncate registers for right now");
+                                   "Sorry, but you can only truncate registers and immediates for right now");
 
                         auto mov_inst = MInst(usz(x86_64::Opcode::Move), {0, 0});
                         auto operand_reg = std::get<MOperandRegister>(inst.get_operand(0));
