@@ -17,9 +17,14 @@ struct Register {
     bool defining_use = false;
 };
 
+struct Immediate {
+    usz value{};
+    uint size{};
+};
+
 // Machine Operand
 using MOperandRegister = Register;
-using MOperandImmediate = u64;
+using MOperandImmediate = Immediate;
 enum struct MOperandLocal : u64;
 u64 operator+(MOperandLocal l);
 using MOperandGlobal = GlobalVariable*;

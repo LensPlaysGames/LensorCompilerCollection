@@ -5,8 +5,10 @@ namespace lcc {
 
 [[nodiscard]]
 auto PrintMOperand(const MOperand& op) -> std::string {
-    if (std::holds_alternative<MOperandImmediate>(op))
-        return fmt::format("{}", std::get<MOperandImmediate>(op));
+    if (std::holds_alternative<MOperandImmediate>(op)) {
+        auto imm = std::get<MOperandImmediate>(op);
+        return fmt::format("{}.{}", imm.value, imm.size);
+    }
     if (std::holds_alternative<MOperandRegister>(op)) {
         auto reg = std::get<MOperandRegister>(op);
         return fmt::format(

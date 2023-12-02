@@ -40,7 +40,7 @@ std::string ToString(MFunction& function, MOperand op) {
         MOperandRegister reg = std::get<MOperandRegister>(op);
         return fmt::format("%{}", ToString(RegisterId(reg.value), reg.size));
     } else if (std::holds_alternative<MOperandImmediate>(op)) {
-        return fmt::format("${}", std::get<MOperandImmediate>(op));
+        return fmt::format("${}", std::get<MOperandImmediate>(op).value);
     } else if (std::holds_alternative<MOperandLocal>(op)) {
         usz offset = 0;
         for (usz index = 0; index <= +std::get<MOperandLocal>(op); ++index)
@@ -165,7 +165,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                             std::holds_alternative<MOperandImmediate>(given_offset),
                             "Offset operand of dereferencing move must be an immediate"
                         );
-                        offset = std::get<MOperandImmediate>(given_offset);
+                        offset = std::get<MOperandImmediate>(given_offset).value;
                     }
                     if (offset)
                         out += fmt::format(" {}, {}({})\n", ToString(function, lhs), offset, ToString(function, rhs));
@@ -182,7 +182,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                             std::holds_alternative<MOperandImmediate>(given_offset),
                             "Offset operand of dereferencing move must be an immediate"
                         );
-                        offset = std::get<MOperandImmediate>(given_offset);
+                        offset = std::get<MOperandImmediate>(given_offset).value;
                     }
                     if (offset)
                         out += fmt::format(" {}({}), {}\n", offset, ToString(function, lhs), ToString(function, rhs));

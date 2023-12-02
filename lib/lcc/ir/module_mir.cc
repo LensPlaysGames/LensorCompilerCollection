@@ -327,7 +327,7 @@ auto Module::mir() -> std::vector<MFunction> {
                 return MOperandGlobal{as<GlobalVariable>(v)};
 
             case Value::Kind::IntegerConstant:
-                return MOperandImmediate{*as<IntegerConstant>(v)->value()};
+                return MOperandImmediate{*as<IntegerConstant>(v)->value(), uint(v->type()->bits())};
 
             case Value::Kind::ArrayConstant:
                 LCC_ASSERT(false, "TODO: MIR generation from array constant");
@@ -460,7 +460,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                                 auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
                                                 add_b.add_operand(MOperandValueReference(function, f, alloca));
-                                                add_b.add_operand(MOperandImmediate(8));
+                                                add_b.add_operand(MOperandImmediate(8, 32));
 
                                                 load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
                                                 bb.add_instruction(add_b);
@@ -475,7 +475,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                             auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
                                             add_b.add_operand(MOperandValueReference(function, f, arg));
-                                            add_b.add_operand(MOperandImmediate(8));
+                                            add_b.add_operand(MOperandImmediate(8, 32));
 
                                             load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
                                             bb.add_instruction(add_b);
@@ -515,7 +515,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                             auto add = MInst(MInst::Kind::Add, reg);
                             add.add_operand(MOperandValueReference(function, f, gep_ir->ptr()));
-                            add.add_operand(MOperandImmediate(offset));
+                            add.add_operand(MOperandImmediate(offset, 32));
 
                             usz use_count = gep_ir->users().size();
                             while (use_count--) add.add_use();
@@ -525,7 +525,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         }
 
                         auto mul = MInst(MInst::Kind::Mul, reg);
-                        mul.add_operand(MOperandImmediate(gep_ir->base_type()->bytes()));
+                        mul.add_operand(MOperandImmediate(gep_ir->base_type()->bytes(), 32));
                         mul.add_operand(MOperandValueReference(function, f, gep_ir->idx()));
 
                         auto add = MInst(MInst::Kind::Add, reg);
@@ -565,7 +565,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                         auto add = MInst(MInst::Kind::Add, reg);
                         add.add_operand(MOperandValueReference(function, f, gmp_ir->ptr()));
-                        add.add_operand(MOperandImmediate(offset));
+                        add.add_operand(MOperandImmediate(offset, 32));
 
                         bb.add_instruction(add);
                     } break;
@@ -661,7 +661,7 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                         auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
                                         add_b.add_operand(MOperandValueReference(function, f, alloca));
-                                        add_b.add_operand(MOperandImmediate(8));
+                                        add_b.add_operand(MOperandImmediate(8, 32));
 
                                         auto store_b = MInst(MInst::Kind::Store, {virts[instruction], 0});
                                         store_b.add_operand(reg_b);
