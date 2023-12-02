@@ -94,6 +94,8 @@ enum struct TokenKind {
     Void,
     Byte,
     Bool,
+    TrueKw,
+    FalseKw,
     IntKw,
     ArbitraryInt,
     For,
@@ -1064,6 +1066,12 @@ class IntegerLiteral : public TypedExpr {
 public:
     IntegerLiteral(aint value, Location location)
         : TypedExpr(Kind::IntegerLiteral, location, Type::Int), _value(value) {
+        /// For now, there should be no way that the value could be out of range.
+        set_sema_done();
+    }
+
+    IntegerLiteral(aint value, Type* ty, Location location)
+        : TypedExpr(Kind::IntegerLiteral, location, ty), _value(value) {
         /// For now, there should be no way that the value could be out of range.
         set_sema_done();
     }

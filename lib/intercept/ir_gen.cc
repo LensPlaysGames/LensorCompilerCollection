@@ -399,6 +399,8 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                 case TokenKind::Tilde:
                 case TokenKind::Type:
                 case TokenKind::Void:
+                case TokenKind::TrueKw:
+                case TokenKind::FalseKw:
                 case TokenKind::While:
                     Diag(ctx, Diag::Kind::ICError, expr->location(), fmt::format("Unexpected operator {} in binary expression", ToString(binary_expr->op())));
                     break;

@@ -1,3 +1,4 @@
+#include <intercept/ast.hh>
 #include <intercept/parser.hh>
 #include <lcc/diags.hh>
 #include <lcc/utils/macros.hh>
@@ -119,6 +120,8 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::Enum:
         case Tk::Lambda:
         case Tk::Expression:
+        case Tk::TrueKw:
+        case Tk::FalseKw:
             return true;
 
         case Tk::Invalid:
@@ -514,6 +517,14 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
         /// Expression that starts with an identifier.
         case Tk::Ident:
             lhs = ParseIdentExpr();
+            break;
+
+        case Tk::TrueKw:
+            lhs = new (*mod) IntegerLiteral(aint(1), BuiltinType::Bool(*mod, tok.location), tok.location);
+            break;
+
+        case Tk::FalseKw:
+            lhs = new (*mod) IntegerLiteral(aint(0), BuiltinType::Bool(*mod, tok.location), tok.location);
             break;
 
         /// Because of parsing problems, expressions must not start with a type.
