@@ -435,7 +435,7 @@ constexpr bool is_one_of(usz value) {
 }
 
 static constexpr u8 prefix16 = 0x66;
-static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
+static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Section& text) {
     // TODO: Once I write code to assemble all the instructions, start to
     // consolidate and de-duplicate code by looking at "pattern" of
     // instruction encoding as if opcode can be switched out.
@@ -746,7 +746,14 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                 if (dst.size == 64 or reg_topbit(dst))
                     text += rex_byte(dst.size == 64, reg_topbit(dst), false, false);
                 text += {0x8d, modrm};
-                // TODO: relocation
+                // Make RIP-relative disp32 relocation
+                Relocation reloc{};
+                reloc.symbol.byte_offset = text.contents.size();
+                reloc.symbol.name = global->name();
+                reloc.symbol.section_name = text.name;
+                reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
+                gobj.relocations.push_back(reloc);
+
                 text += {0, 0, 0, 0};
 
             } else Diag::ICE(
@@ -762,7 +769,15 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                 auto func = extract_function(inst);
 
                 text += {0xe8};
-                // TODO: relocation
+                // Make RIP-relative disp32 relocation
+                Relocation reloc{};
+                reloc.symbol.kind = Symbol::Kind::FUNCTION;
+                reloc.symbol.byte_offset = text.contents.size();
+                reloc.symbol.name = func->name();
+                reloc.symbol.section_name = text.name;
+                reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
+                gobj.relocations.push_back(reloc);
+
                 text += {0, 0, 0, 0};
 
             } else Diag::ICE(
@@ -798,10 +813,10 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
     }
 }
 
-static void assemble(MFunction& func, Section& text) {
+static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
     for (auto& block : func.blocks()) {
         for (auto& inst : block.instructions()) {
-            assemble_inst(func, inst, text);
+            assemble_inst(gobj, func, inst, text);
         }
     }
 }
@@ -849,7 +864,7 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
         }
 
         // Assemble function into machine code.
-        assemble(func, text);
+        assemble(out, func, text);
     }
 
     // LCC_TODO("Actually assemble into machine code, populate symbols, etc");
