@@ -1,3 +1,4 @@
+#include <c/ast.hh>
 #include <c/parser.hh>
 
 namespace cc = lcc::c;
@@ -8,6 +9,7 @@ auto cc::Parser::Parse(CContext* context, File& file) -> TranslationUnit* {
     auto translation_unit = new TranslationUnit{context, &file};
 
     Parser parser{translation_unit, file};
+    parser.ParseTopLevel();
 
     return translation_unit;
 }
@@ -50,6 +52,9 @@ void cc::Parser::ParseTopLevel() {
 }
 
 auto cc::Parser::ParseStatement() -> Result<Decl*> {
+    // auto* t = ParseType();
+    // std::string id = token.text;
+
     LCC_ASSERT(false, "TODO c statement");
 }
 
