@@ -74,6 +74,20 @@ static constexpr std::vector<u8> as_bytes(MOperandImmediate imm) {
     LCC_UNREACHABLE();
 }
 
+static constexpr std::vector<u8> as_bytes_cap32(MOperandImmediate imm) {
+    if (imm.size <= 8)
+        return {u8(imm.value)};
+    if (imm.size <= 16)
+        return as_bytes(u16(imm.value));
+    if (imm.size <= 32)
+        return as_bytes(u32(imm.value));
+    if (imm.size <= 64) {
+        // TODO: assert that the top half of value isn't used (sign extended anyway).
+        return as_bytes(u32(imm.value));
+    }
+    LCC_UNREACHABLE();
+}
+
 // NOTE: +rw indicates the lower three bits of the opcode byte are used
 // to indicate the 16-bit register operand.
 // For registers R8 through R15, the REX.b bit also needs set.
@@ -556,7 +570,7 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                 text += {op, modrm};
                 // modrm 0b10 disp32 offset
                 text += as_bytes(i32(offset));
-                text += as_bytes(imm);
+                text += as_bytes_cap32(imm);
             } else Diag::ICE(
                 "Sorry, unhandled form of move (deref rhs)\n    {}\n",
                 PrintMInstImpl(inst, opcode_to_string)
