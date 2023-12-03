@@ -343,6 +343,12 @@ bool is_global(MInst& inst) {
 auto extract_global(MInst& inst) {
     return std::get<MOperandGlobal>(inst.get_operand(0));
 }
+bool is_function(MInst& inst) {
+    return is_one_operand<MOperandFunction>(inst);
+}
+auto extract_function(MInst& inst) {
+    return std::get<MOperandFunction>(inst.get_operand(0));
+}
 
 template <typename Op1, typename Op2>
 bool is_two_operand(MInst& inst) {
@@ -377,6 +383,13 @@ bool is_reg_local(MInst& inst) {
 auto extract_reg_local(MInst& inst) {
     return extract_two_operand<MOperandRegister, MOperandLocal>(inst);
 }
+bool is_reg_global(MInst& inst) {
+    return is_two_operand<MOperandRegister, MOperandGlobal>(inst);
+}
+auto extract_reg_global(MInst& inst) {
+    return extract_two_operand<MOperandRegister, MOperandGlobal>(inst);
+}
+
 bool is_imm_reg(MInst& inst) {
     return is_two_operand<MOperandImmediate, MOperandRegister>(inst);
 }
@@ -389,6 +402,13 @@ bool is_imm_local(MInst& inst) {
 auto extract_imm_local(MInst& inst) {
     return extract_two_operand<MOperandImmediate, MOperandLocal>(inst);
 }
+bool is_imm_global(MInst& inst) {
+    return is_two_operand<MOperandImmediate, MOperandGlobal>(inst);
+}
+auto extract_imm_global(MInst& inst) {
+    return extract_two_operand<MOperandImmediate, MOperandGlobal>(inst);
+}
+
 bool is_local_imm(MInst& inst) {
     return is_two_operand<MOperandLocal, MOperandImmediate>(inst);
 }
@@ -400,6 +420,13 @@ bool is_local_reg(MInst& inst) {
 }
 auto extract_local_reg(MInst& inst) {
     return extract_two_operand<MOperandLocal, MOperandRegister>(inst);
+}
+
+bool is_global_reg(MInst& inst) {
+    return is_two_operand<MOperandGlobal, MOperandRegister>(inst);
+}
+auto extract_global_reg(MInst& inst) {
+    return extract_two_operand<MOperandGlobal, MOperandRegister>(inst);
 }
 
 template <usz... ints>
@@ -692,11 +719,56 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
             );
         } break;
 
+        case Opcode::LoadEffectiveAddress: {
+            // GNU syntax (src, dst operands)
+            //  0x66 0x8d /r | LEA m, r16 | RM
+            //       0x8d /r | LEA m, r32 | RM
+            // REX.W 0x8d /r | LEA m, r64 | RM
+            // "RM" means source operand goes in r/m field of modrm byte and
+            // destination operand goes in reg field.
+            if (is_global_reg(inst)) {
+                auto [global, dst] = extract_global_reg(inst);
+
+                LCC_ASSERT(
+                    (is_one_of<16, 32, 64>(dst.size)),
+                    "x86_64 lea only supports 16, 32, or 64 bit register destination operand: got {}",
+                    dst.size
+                );
+
+                u8 modrm = modrm_byte(0b00, regbits(dst), 0b101);
+
+                if (dst.size == 16) text += prefix16;
+                if (dst.size == 64 or reg_topbit(dst))
+                    text += rex_byte(dst.size == 64, reg_topbit(dst), false, false);
+                text += {0x8d, modrm};
+                // TODO: relocation
+                text += {0, 0, 0, 0};
+
+            } else Diag::ICE(
+                "Sorry, unhandled form\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
+        } break;
+
+        case Opcode::Call: {
+            // 0xe8 cd | CALL rel32 | D
+            // "D" means operand is encoded as literal offset.
+            if (is_function(inst)) {
+                auto func = extract_function(inst);
+
+                text += {0xe8};
+                // TODO: relocation
+                text += {0, 0, 0, 0};
+
+            } else Diag::ICE(
+                "Sorry, unhandled form\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
+        } break;
+
         case Opcode::Jump:
-        case Opcode::Call:
         case Opcode::MoveSignExtended:
         case Opcode::MoveZeroExtended:
-        case Opcode::LoadEffectiveAddress:
         case Opcode::And:
         case Opcode::ShiftRightLogical:
         case Opcode::Add:
