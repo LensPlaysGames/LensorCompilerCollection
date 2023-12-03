@@ -607,6 +607,47 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
             );
         } break;
 
+        case Opcode::ShiftLeft:
+        case Opcode::ShiftRightArithmetic: {
+            // /digit where digit is:
+            //     ShiftLeft:            /4
+            //     ShiftRightArithmetic: /7
+            //
+            //       0xd2 /4  |  SAL %cl, r/m8   |  MC
+            // 0x66  0xd3 /4  |  SAL %cl, r/m16  |  MC
+            //       0xd3 /4  |  SAL %cl, r/m32  |  MC
+            // REX.W 0xd3 /4  |  SAL %cl, r/m64  |  MC
+            if (is_reg_reg(inst)) {
+                auto [src, dst] = extract_reg_reg(inst);
+
+                LCC_ASSERT(
+                    src.value == +RegisterId::RCX and src.size == 8,
+                    "x86_64 only supports shifting by a register value when that register is CL: got {}",
+                    ToString(RegisterId(src.value), src.size)
+                );
+
+                LCC_ASSERT(
+                    (is_one_of<1, 8, 16, 32, 64>(dst.size)),
+                    "x86_64: Invalid register size: got {}",
+                    dst.size
+                );
+
+                u8 op = 0xd3;
+                if (dst.size == 1 or dst.size == 8)
+                    op = 0xd2;
+
+                u8 opcode_extension = 4;
+                if (inst.opcode() == +Opcode::ShiftRightArithmetic)
+                    opcode_extension = 7;
+                u8 modrm = modrm_byte(0b11, opcode_extension, regbits(dst));
+
+                if (dst.size == 16) text += prefix16;
+                if (dst.size == 64 or reg_topbit(dst))
+                    text += rex_byte(dst.size == 64, false, false, reg_topbit(dst));
+                text += {op, modrm};
+            }
+        } break;
+
         case Opcode::Pop:
         case Opcode::Jump:
         case Opcode::Call:
@@ -614,9 +655,7 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
         case Opcode::MoveZeroExtended:
         case Opcode::LoadEffectiveAddress:
         case Opcode::And:
-        case Opcode::ShiftRightArithmetic:
         case Opcode::ShiftRightLogical:
-        case Opcode::ShiftLeft:
         case Opcode::Add:
         case Opcode::Multiply:
         case Opcode::Sub:
