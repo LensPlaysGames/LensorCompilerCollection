@@ -318,6 +318,20 @@ public:
         return _locals;
     }
 
+    // Given an index into the locals of this function (aka what local
+    // operands are), return the offset required to get to the beginning of
+    // this local.
+    // <local_offset(index)>(%rbp), basically
+    auto local_offset(usz needle) const -> isz {
+        isz offset = 0;
+        for (usz index = 0; index <= needle; ++index)
+            offset -= isz(_locals.at(index)->allocated_type()->bytes());
+        return offset;
+    }
+    auto local_offset(MOperandLocal local) const -> isz {
+        return local_offset(+local);
+    }
+
     void add_local(AllocaInst* local) {
         _locals.push_back(local);
     }
