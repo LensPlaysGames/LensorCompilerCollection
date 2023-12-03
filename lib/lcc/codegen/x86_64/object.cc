@@ -409,6 +409,14 @@ constexpr bool is_one_of(usz value) {
 
 static constexpr u8 prefix16 = 0x66;
 static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
+    // TODO: Once I write code to assemble all the instructions, start to
+    // consolidate and de-duplicate code by looking at "pattern" of
+    // instruction encoding as if opcode can be switched out.
+    // For example, (mov reg, reg) and (mov_dereference_rhs reg, local) both
+    // share the same pattern, and due to the MR vs RM operand ordering, the
+    // same code can handle both. So, we could make like a `emit_opcode_modrm`
+    // function or something that can handle both of these just by switching
+    // out the opcode it writes.
     switch (Opcode(inst.opcode())) {
         case Opcode::Return:
             text += 0xc3;
