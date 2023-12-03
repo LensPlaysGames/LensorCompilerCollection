@@ -375,13 +375,25 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
     // function or something that can handle both of these just by switching
     // out the opcode it writes.
     switch (Opcode(inst.opcode())) {
-        case Opcode::Return:
+        case Opcode::Return: {
+            // TODO: Stack frame kinds
+            // GNU syntax (src, dst operands)
+            // mov %rbp, %rsp
+            // pop %rbp
+            auto mov_rbp_into_rsp = MInst(usz(Opcode::Move), {0, 0});
+            mov_rbp_into_rsp.add_operand(MOperandRegister(usz(RegisterId::RBP), 64));
+            mov_rbp_into_rsp.add_operand(MOperandRegister(usz(RegisterId::RSP), 64));
+            auto pop_rbp = MInst(usz(Opcode::Pop), {0, 0});
+            pop_rbp.add_operand(MOperandRegister(usz(RegisterId::RBP), 64));
+            assemble_inst(gobj, func, mov_rbp_into_rsp, text);
+            assemble_inst(gobj, func, pop_rbp, text);
+
             text += 0xc3;
-            break;
+        } break;
 
         case Opcode::Push: {
-            //       0x50+rw  |  PUSH r16  |  O
-            // REX.W 0x50+rd  |  PUSH r64  |  O
+            // 0x50+rw  |  PUSH r16  |  O
+            // 0x50+rd  |  PUSH r64  |  O
             if (is_reg(inst)) {
                 auto reg = extract_reg(inst);
 
@@ -396,8 +408,8 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 // But, we also need rex byte (without w bit set) to encode x64
                 // registers (r8-r15), even when pushing the 16 bit versions of those
                 // registers, to accomodate the top bit of the register encoding.
-                if (reg.size == 64 or reg_topbit(reg))
-                    text += rex_byte(reg.size == 64, false, false, reg_topbit(reg));
+                if (reg_topbit(reg))
+                    text += rex_byte(false, false, false, reg_topbit(reg));
                 text += 0x50 + rd_encoding(reg);
             }
             // 0x6a ib  |  PUSH imm8   |  I
@@ -419,8 +431,8 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
         } break;
 
         case Opcode::Pop: {
-            //       0x58+rw  |  PUSH r16  |  O
-            // REX.W 0x58+rd  |  PUSH r64  |  O
+            // 0x58+rw  |  POP r16  |  O
+            // 0x58+rd  |  POP r64  |  O
             if (is_reg(inst)) {
                 auto reg = extract_reg(inst);
 
@@ -431,8 +443,8 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 );
 
                 if (reg.size == 16) text += prefix16;
-                if (reg.size == 64 or reg_topbit(reg))
-                    text += rex_byte(reg.size == 64, false, false, reg_topbit(reg));
+                if (reg_topbit(reg))
+                    text += rex_byte(false, false, false, reg_topbit(reg));
                 text += 0x58 + rd_encoding(reg);
             } else Diag::ICE(
                 "Sorry, unhandled form\n    {}\n",
@@ -449,7 +461,12 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
             // "/r" means that register/memory operands are encoded in modrm byte.
             // "MR" means that the source operand goes in reg field of modrm and the
             // destination operand goes in the r/m field.
-            if (is_reg_reg(inst)) opcode_slash_r(gobj, func, inst, 0x88, text);
+            if (is_reg_reg(inst)) {
+                // OPT: Don't emit moves from a register into itself
+                auto [src, dst] = extract_reg_reg(inst);
+                if (src.value != dst.value)
+                    opcode_slash_r(gobj, func, inst, 0x88, text);
+            }
             // GNU syntax (src, dst operands)
             //        0xb0+rb ib | MOV imm8, r8   | OI
             //   0x66 0xb8+rw iw | MOV imm16, r16 | OI
@@ -1016,9 +1033,20 @@ static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
              text.name,
              text.contents.size()}
         );
-        for (auto& inst : block.instructions()) {
+
+        // TODO: Stack frame kinds.
+        // GNU syntax (src, dst operands)
+        // push %rbp
+        // mov %rsp, %rbp
+        auto push_rbp = MInst(usz(Opcode::Push), {0, 0});
+        push_rbp.add_operand(MOperandRegister(usz(RegisterId::RBP), 64));
+        auto mov_rsp_into_rbp = MInst(usz(Opcode::Move), {0, 0});
+        mov_rsp_into_rbp.add_operand(MOperandRegister(usz(RegisterId::RSP), 64));
+        mov_rsp_into_rbp.add_operand(MOperandRegister(usz(RegisterId::RBP), 64));
+
+        for (auto& inst : block.instructions())
             assemble_inst(gobj, func, inst, text);
-        }
+
     }
 }
 
@@ -1053,7 +1081,6 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
             Symbol sym{};
             sym.kind = Symbol::Kind::EXTERNAL;
             sym.name = func.name();
-            // FIXME: Is section name or byte offset needed?
             out.symbols.push_back(sym);
         } else {
             Symbol sym{};
