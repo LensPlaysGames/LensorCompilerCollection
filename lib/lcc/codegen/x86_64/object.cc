@@ -443,9 +443,9 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                     text += rex_byte(reg.size == 64, false, false, reg_topbit(reg));
                 text += 0x50 + rd_encoding(reg);
             }
-            //       0x6a ib  |  PUSH imm8   |  I
-            //       0x68 iw  |  PUSH imm16  |  I
-            //       0x68 id  |  PUSH imm32  |  I
+            // 0x6a ib  |  PUSH imm8   |  I
+            // 0x68 iw  |  PUSH imm16  |  I
+            // 0x68 id  |  PUSH imm32  |  I
             else if (is_imm(inst)) {
                 auto imm = extract_imm(inst);
 
@@ -455,7 +455,10 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                     text += 0x68;
                     text += as_bytes(imm);
                 } else Diag::ICE("x86_64 only supports pushing immediates sized 32, 16, or 8 bits: got {}", imm.size);
-            }
+            } else Diag::ICE(
+                "Sorry, unhandled form\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
         } break;
 
         case Opcode::Move: {
@@ -661,7 +664,10 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                 if (dst.size == 64 or reg_topbit(dst))
                     text += rex_byte(dst.size == 64, false, false, reg_topbit(dst));
                 text += {op, modrm};
-            }
+            } else Diag::ICE(
+                "Sorry, unhandled form\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
         } break;
 
         case Opcode::Pop:
