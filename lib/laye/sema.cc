@@ -424,6 +424,10 @@ void layec::Sema::Analyse(Module* module, Statement*& statement) {
 
                 tempset curr_func = s;
                 Analyse(module, body);
+
+                if (not s->return_type()->is_void() and not body->is_noreturn()) {
+                    Error(s->location(), "Not all code paths return a value");
+                }
             }
 
             MangleName(s);
@@ -526,6 +530,7 @@ void layec::Sema::Analyse(Module* module, Statement*& statement) {
             auto s = as<IfStatement>(statement);
 
             Analyse(module, s->condition(), Type::Bool);
+            LValueToRValue(module, s->condition());
             ConvertOrError(module, s->condition(), Type::Bool);
 
             Analyse(module, s->pass());
@@ -539,6 +544,7 @@ void layec::Sema::Analyse(Module* module, Statement*& statement) {
 
             if (s->condition()) {
                 Analyse(module, s->condition(), Type::Bool);
+                LValueToRValue(module, s->condition());
                 ConvertOrError(module, s->condition(), Type::Bool);
             }
 
@@ -555,6 +561,7 @@ void layec::Sema::Analyse(Module* module, Statement*& statement) {
             LCC_ASSERT(s->target()->type());
 
             Analyse(module, s->value());
+            LValueToRValue(module, s->value());
             LCC_ASSERT(s->value()->type());
 
             if (!s->target()->is_lvalue()) {
@@ -977,6 +984,9 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
             Analyse(module, e->lhs());
             Analyse(module, e->rhs());
 
+            ImplicitDereference(module, e->lhs());
+            ImplicitDereference(module, e->rhs());
+
             LValueToRValue(module, e->lhs());
             LValueToRValue(module, e->rhs());
 
@@ -1081,20 +1091,20 @@ bool layec::Sema::Analyse(Module* module, Expr*& expr, Type* expected_type) {
                 case OperatorKind::LessEqual: {
                     expr->type(Type::Bool);
 
-                    if (not lhs_type->is_number()) {
+                    if (not e->lhs()->type()->is_number()) {
                         Error(
                             e->lhs()->location(),
                             "Cannot use type {} in operator {}",
-                            lhs_type->string(),
+                            e->lhs()->type()->string(),
                             ToString(e->operator_kind())
                         );
                         expr->set_sema_errored();
                         expr->type(new (*module) PoisonType{expr->location()});
-                    } else if (not rhs_type->is_number()) {
+                    } else if (not e->rhs()->type()->is_number()) {
                         Error(
                             e->rhs()->location(),
                             "Cannot use type {} in operator {}",
-                            rhs_type->string(),
+                            e->rhs()->type()->string(),
                             ToString(e->operator_kind())
                         );
                         expr->set_sema_errored();
@@ -1817,7 +1827,7 @@ bool layec::Sema::ImplicitDereference(Module* module, Expr*& expr) {
         WrapWithCast(module, expr, as<ReferenceType>(expr->type())->elem_type(), CastKind::ReferenceToLValue);
     }
 
-    while (is<PointerType>(expr->type())) {
+    while (is<PointerType, ReferenceType>(expr->type())) {
         expr = new (*module) UnaryExpr(expr->location(), OperatorKind::Deref, expr);
         Analyse(module, expr);
     }

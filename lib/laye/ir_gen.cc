@@ -223,6 +223,20 @@ void layec::IRGen::GenerateIRFunctionBody(FunctionDecl* decl) {
     }
 }
 
+void layec::IRGen::EnsureBoolIsI1(lcc::laye::Expr* expr, lcc::Value*& value) {
+    if (value->type() != lcc::Type::I1Ty) {
+        Inst* cond_cmp;
+        if (expr->type()->is_integer() or expr->type()->is_bool()) {
+            cond_cmp = new (*mod()) NeInst(value, new (*mod()) IntegerConstant(value->type(), 0), expr->location());
+        } else {
+            LCC_TODO();
+        }
+
+        Insert(cond_cmp);
+        value = cond_cmp;
+    }
+}
+
 void layec::IRGen::GenerateStatement(Statement* statement) {
     using Sk = Statement::Kind;
     switch (statement->kind()) {
@@ -280,30 +294,45 @@ void layec::IRGen::GenerateStatement(Statement* statement) {
             auto s = as<IfStatement>(statement);
 
             auto pass_block = new (*mod()) Block{fmt::format("if.pass.{}", total_if)};
-            auto fail_block = new (*mod()) Block{fmt::format("if.fail.{}", total_if)};
-            auto exit_block = new (*mod()) Block{fmt::format("if.exit.{}", total_if)};
+
+            Block* fail_block = nullptr;
+            if (s->fail()) fail_block = new (*mod()) Block{fmt::format("if.fail.{}", total_if)};
+
+            Block* exit_block = nullptr;
+            if (not s->is_noreturn())
+                exit_block = new (*mod()) Block{fmt::format("if.exit.{}", total_if)};
+            else {
+                LCC_ASSERT(s->pass()->is_noreturn());
+                if (s->fail()) LCC_ASSERT(s->fail()->is_noreturn());
+            }
+
+            auto cond_branch_target_block = s->fail() ? fail_block : exit_block;
+            LCC_ASSERT(cond_branch_target_block);
+
             total_if += 1;
 
-            auto cond_value = GenerateExpression(s->condition());
-            if (cond_value->type() != lcc::Type::I1Ty) {
-                Inst* cond_cmp = new (*mod()) NeInst(cond_value, new (*mod()) IntegerConstant(cond_value->type(), 0), s->condition()->location());
-                Insert(cond_cmp);
-                cond_value = cond_cmp;
-            }
-            Insert(new (*mod()) CondBranchInst(cond_value, pass_block, fail_block, s->location()));
+            Value* cond_value = GenerateExpression(s->condition());
+            EnsureBoolIsI1(s->condition(), cond_value);
+            Insert(new (*mod()) CondBranchInst(cond_value, pass_block, cond_branch_target_block, s->location()));
 
             UpdateBlock(pass_block);
             GenerateStatement(s->pass());
-            if (not curr_block->terminator())
+            if (not curr_block->terminator()) {
+                LCC_ASSERT(exit_block);
                 Insert(new (*mod()) BranchInst(exit_block, s->location()));
+            }
 
-            UpdateBlock(fail_block);
-            if (s->fail())
-                GenerateStatement(s->fail());
-            if (not curr_block->terminator())
-                Insert(new (*mod()) BranchInst(exit_block, s->location()));
+            if (fail_block) {
+                UpdateBlock(fail_block);
+                if (s->fail())
+                    GenerateStatement(s->fail());
+                if (not curr_block->terminator()) {
+                    LCC_ASSERT(exit_block);
+                    Insert(new (*mod()) BranchInst(exit_block, s->location()));
+                }
+            }
 
-            UpdateBlock(exit_block);
+            if (exit_block) UpdateBlock(exit_block);
         } break;
 
         case Sk::For: {
@@ -322,8 +351,10 @@ void layec::IRGen::GenerateStatement(Statement* statement) {
             UpdateBlock(cond_block);
 
             lcc::Value* cond_value0;
-            if (s->condition())
+            if (s->condition()) {
                 cond_value0 = GenerateExpression(s->condition());
+                EnsureBoolIsI1(s->condition(), cond_value0);
+            }
             else cond_value0 = new (*mod()) lcc::IntegerConstant(lcc::Type::I1Ty, 1);
             Insert(new (*mod()) CondBranchInst(cond_value0, pass_block, exit_block));
 

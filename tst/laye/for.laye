@@ -21,9 +21,7 @@
 //   $exit:
 //     (?<val2>$t) = load i64 from $val
 //     return i64 $val2
-
-int main()
-{
+int main() {
     int x = 0;
     for (x < 10) {
         x = x + 1;

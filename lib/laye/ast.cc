@@ -895,17 +895,23 @@ bool layec::Statement::is_noreturn() const {
 
         case Statement::Kind::Expr: {
             auto s = as<ExprStatement>(this);
+            LCC_ASSERT(s->expr());
             return s->expr()->is_noreturn();
         }
 
         case Statement::Kind::If: {
             auto s = as<IfStatement>(this);
+            LCC_ASSERT(s->condition());
+            LCC_ASSERT(s->pass());
             if (s->condition()->is_noreturn())
                 return true;
             // fail is not required, but if it's NOT noreturn
             // then the whole statement isn't either. (yes, even if the pass block is noreturn)
-            if (auto fail = s->fail(); not fail->is_noreturn())
+            if (not s->fail()) return false;
+
+            if (not s->fail()->is_noreturn())
                 return false;
+
             return s->pass()->is_noreturn();
         }
 
@@ -914,12 +920,12 @@ bool layec::Statement::is_noreturn() const {
             // If the init is noreturn, then so is the whole for loop.
             // The init is always executed, and always executed -first-, so
             // if it blocks control flow then nothing else can execute.
-            if (auto init = s->init(); init->is_noreturn())
+            if (s->init() and s->init()->is_noreturn())
                 return true;
             // Similar to the init, the condition is always run second if it exists.
             // If the condition is noreturn, even if that's a semantic error,
             // the rest of the for loop can't continue.
-            if (auto condition = s->condition(); condition->is_noreturn())
+            if (s->condition() and s->condition()->is_noreturn())
                 return true;
             // For pass/fail, the for loop is only noreturn if both are noreturn.
             // The increment is lumped in with the pass block, since it always executes
@@ -974,6 +980,8 @@ bool layec::Expr::is_noreturn() const {
         case Expr::Kind::Unary: return as<UnaryExpr>(this)->value()->is_noreturn();
         case Expr::Kind::Binary: {
             auto s = as<BinaryExpr>(this);
+            LCC_ASSERT(s->lhs());
+            LCC_ASSERT(s->rhs());
             return s->lhs()->is_noreturn() or s->rhs()->is_noreturn();
         }
 

@@ -19,21 +19,25 @@ struct vec2i
 // +     store ptr $tmp_add_1 into $tmp_add_3
 // +     (?<tmp_add_4>$t) = alloca @$vec2i
 // +     (?<tmp_add_5>$t) = gmp @$vec2i from $tmp_add_4 at i64 0
-// +     (?<tmp_add_6>$t) = gmp @$vec2i from $tmp_add_2 at i64 0
-// +     (?<tmp_add_7>$t) = load i64 from $tmp_add_6
-// +     (?<tmp_add_8>$t) = gmp @$vec2i from $tmp_add_3 at i64 0
-// +     (?<tmp_add_9>$t) = load i64 from $tmp_add_8
-// +     (?<tmp_add_10>$t) = add i64 $tmp_add_7, $tmp_add_9
-// +     store i64 $tmp_add_10 into $tmp_add_5
-// +     (?<tmp_add_11>$t) = gmp @$vec2i from $tmp_add_4 at i64 1
-// +     (?<tmp_add_12>$t) = gmp @$vec2i from $tmp_add_2 at i64 1
-// +     (?<tmp_add_13>$t) = load i64 from $tmp_add_12
-// +     (?<tmp_add_14>$t) = gmp @$vec2i from $tmp_add_3 at i64 1
-// +     (?<tmp_add_15>$t) = load i64 from $tmp_add_14
-// +     (?<tmp_add_16>$t) = add i64 $tmp_add_13, $tmp_add_15
-// +     store i64 $tmp_add_16 into $tmp_add_11
-// +     (?<tmp_add_17>$t) = load @$vec2i from $tmp_add_4
-// +     return @$vec2i $tmp_add_17
+// +     (?<tmp_add_6>$t) = load ptr from $tmp_add_2
+// +     (?<tmp_add_7>$t) = gmp @$vec2i from $tmp_add_6 at i64 0
+// +     (?<tmp_add_8>$t) = load i64 from $tmp_add_7
+// +     (?<tmp_add_9>$t) = load ptr from $tmp_add_3
+// +     (?<tmp_add_10>$t) = gmp @$vec2i from $tmp_add_9 at i64 0
+// +     (?<tmp_add_11>$t) = load i64 from $tmp_add_10
+// +     (?<tmp_add_12>$t) = add i64 $tmp_add_8, $tmp_add_11
+// +     store i64 $tmp_add_12 into $tmp_add_5
+// +     (?<tmp_add_13>$t) = gmp @$vec2i from $tmp_add_4 at i64 1
+// +     (?<tmp_add_14>$t) = load ptr from $tmp_add_2
+// +     (?<tmp_add_15>$t) = gmp @$vec2i from $tmp_add_14 at i64 1
+// +     (?<tmp_add_16>$t) = load i64 from $tmp_add_15
+// +     (?<tmp_add_17>$t) = load ptr from $tmp_add_3
+// +     (?<tmp_add_18>$t) = gmp @$vec2i from $tmp_add_17 at i64 1
+// +     (?<tmp_add_19>$t) = load i64 from $tmp_add_18
+// +     (?<tmp_add_20>$t) = add i64 $tmp_add_16, $tmp_add_19
+// +     store i64 $tmp_add_20 into $tmp_add_13
+// +     (?<tmp_add_21>$t) = load @$vec2i from $tmp_add_4
+// +     return @$vec2i $tmp_add_21
 vec2i vec2i_add(vec2i& a, vec2i& b)
 {
     vec2i result;
@@ -46,14 +50,14 @@ vec2i vec2i_add(vec2i& a, vec2i& b)
 // +   bb0:
 // +     (?<tmp_main_0>$t) = alloca @$vec2i
 // +     (?<tmp_main_1>$t) = gmp @$vec2i from $tmp_main_0 at i64 0
-// +     store i64 34 into $tmp_main_1
+// +     store i64 3 into $tmp_main_1
 // +     (?<tmp_main_2>$t) = gmp @$vec2i from $tmp_main_0 at i64 1
-// +     store i64 330 into $tmp_main_2
+// +     store i64 1 into $tmp_main_2
 // +     (?<tmp_main_3>$t) = alloca @$vec2i
 // +     (?<tmp_main_4>$t) = gmp @$vec2i from $tmp_main_3 at i64 0
-// +     store i64 35 into $tmp_main_4
+// +     store i64 4 into $tmp_main_4
 // +     (?<tmp_main_5>$t) = gmp @$vec2i from $tmp_main_3 at i64 1
-// +     store i64 90 into $tmp_main_5
+// +     store i64 2 into $tmp_main_5
 // +     (?<tmp_main_6>$t) = alloca @$vec2i
 // +     (?<tmp_main_7>$t) = call @$f (ptr $tmp_main_0, ptr $tmp_main_3) -> @$vec2i
 // +     store @$vec2i $tmp_main_7 into $tmp_main_6
@@ -70,11 +74,11 @@ vec2i vec2i_add(vec2i& a, vec2i& b)
 int main()
 {
     vec2i foo;
-    foo.x = 34;
-    foo.y = 330;
+    foo.x = 3;
+    foo.y = 1;
     vec2i bar;
-    bar.x = 35;
-    bar.y = 90;
+    bar.x = 4;
+    bar.y = 2;
     vec2i baz = vec2i_add(&foo, &bar);
     int qux = (baz.x * 10) + baz.y;
     return qux;

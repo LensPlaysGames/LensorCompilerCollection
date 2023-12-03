@@ -59,6 +59,7 @@ class IRGen {
     void GenerateIRFunctionBody(FunctionDecl* decl);
     void GenerateStatement(Statement* statement);
     lcc::Value* GenerateExpression(Expr* expr);
+    void EnsureBoolIsI1(lcc::laye::Expr* expr, lcc::Value*& value);
 
 public:
     auto laye_context() const { return _laye_context; }

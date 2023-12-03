@@ -20,10 +20,6 @@
 // +     return i64 2
 // +   $fail2:
 // +     return i64 3
-// +   $b:
-// +     branch to %(?<un>$b)
-// +   $un:
-// +     unreachable
 int cmp_eq()
 {
     int cond = 12;
