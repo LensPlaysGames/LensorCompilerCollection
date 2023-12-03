@@ -75,7 +75,7 @@ struct Section {
                     out += "      |";
                     // Loop over 16 bytes starting at `i`.
                     for (usz index = i; index < i + 16; ++index) {
-                        unsigned char c = contents[index];
+                        char c = char(contents[index]);
                         if (c < ' ' || c > '~') c = '.';
                         out += fmt::format("{}", c);
                     }
@@ -98,11 +98,12 @@ struct Section {
                 out += "      |";
                 for (usz index = i; index < i + 16; ++index) {
                     if (index < size) {
-                        unsigned char c = contents[index];
+                        char c = char(contents[index]);
                         if (c < ' ' || c > '~') c = '.';
                         out += fmt::format("{}", c);
                     } else out += '.';
                 }
+                out += '|';
             }
 
             out += "\n================\n";
