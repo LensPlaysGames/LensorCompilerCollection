@@ -12,6 +12,7 @@ namespace x86_64 {
 // NOTE: +rw indicates the lower three bits of the opcode byte are used
 // to indicate the 16-bit register operand.
 // For registers R8 through R15, the REX.b bit also needs set.
+[[nodiscard]]
 static constexpr u8 rw_encoding(RegisterId id) {
     switch (id) {
         case RegisterId::RAX:
@@ -56,7 +57,7 @@ static constexpr u8 rw_encoding(RegisterId id) {
     LCC_UNREACHABLE();
 }
 
-// NOTE: +rw indicates the lower three bits of the opcode byte are used
+// NOTE: +rd indicates the lower three bits of the opcode byte are used
 // to indicate the 32 or 64-bit register operand.
 // For registers R8 through R15, the REX.b bit also needs set.
 // EAX: 0
@@ -75,11 +76,21 @@ static constexpr u8 rw_encoding(RegisterId id) {
 // R13D: REX.B, 5
 // R14D: REX.B, 6
 // R15D: REX.B, 7
+[[nodiscard]]
 static constexpr u8 rd_encoding(RegisterId id) {
     return rw_encoding(id);
 }
+[[nodiscard]]
+static constexpr u8 rd_encoding(Register reg) {
+    return rd_encoding(RegisterId(reg.value));
+}
+[[nodiscard]]
+static constexpr u8 rd_encoding(MOperand op) {
+    // LCC_ASSERT(std::holds_alternative<MOperandRegister>(op));
+    return rd_encoding(RegisterId(std::get<MOperandRegister>(op).value));
+}
 
-// NOTE: +rw indicates the lower three bits of the opcode byte are used
+// NOTE: +rb indicates the lower three bits of the opcode byte are used
 // to indicate the 32 or 64-bit register operand.
 // For registers R8 through R15, the REX.b bit also needs set.
 // AL: 0
@@ -98,15 +109,17 @@ static constexpr u8 rd_encoding(RegisterId id) {
 // R13B: REX.b, 5
 // R14B: REX.b, 6
 // R15B: REX.b, 7
+[[nodiscard]]
 static constexpr u8 rb_encoding(RegisterId id) {
     return rw_encoding(id);
 }
 
-// Don't use me directly!
+[[nodiscard]]
 static constexpr u8 rex_byte(bool w, bool r, bool x, bool b) {
     return u8(0b01000000 | ((w ? 1 : 0) << 3) | ((r ? 1 : 0) << 2) | ((x ? 1 : 0) << 1) | (b ? 1 : 0));
 }
 /// REX.W prefix is commonly used to promote a 32-bit operation to 64-bit.
+[[nodiscard]]
 static constexpr u8 rexw_byte() {
     return rex_byte(true, false, false, false);
 }
@@ -139,6 +152,9 @@ static constexpr bool regbits_top(u8 bits) {
 }
 static constexpr bool reg_topbit(RegisterId id) {
     return regbits_top(regbits(id));
+}
+static constexpr bool reg_topbit(Register reg) {
+    return regbits_top(regbits(RegisterId(reg.value)));
 }
 
 static constexpr u8 modrm_byte(u8 mod, u8 reg, u8 rm) {
@@ -186,6 +202,27 @@ static constexpr void mcode_sib_if_r12(Section& text, RegisterId address_registe
 }
 
 // Must be MOperand* types
+template <typename Op>
+bool is_one_operand(MInst& inst) {
+    // clang-format off
+    return inst.all_operands().size() == 1
+           and std::holds_alternative<Op>(inst.get_operand(0));
+    // clang-format on
+}
+
+bool is_imm(MInst& inst) {
+    return is_one_operand<MOperandImmediate>(inst);
+}
+bool is_reg(MInst& inst) {
+    return is_one_operand<MOperandRegister>(inst);
+}
+bool is_local(MInst& inst) {
+    return is_one_operand<MOperandLocal>(inst);
+}
+bool is_global(MInst& inst) {
+    return is_one_operand<MOperandGlobal>(inst);
+}
+
 template <typename Op1, typename Op2>
 bool is_two_operand(MInst& inst) {
     // clang-format off
@@ -220,9 +257,90 @@ bool is_local_reg(MInst& inst) {
     return is_two_operand<MOperandLocal, MOperandRegister>(inst);
 }
 
+template <usz... ints>
+constexpr bool is_one_of(usz value) {
+    return ((ints == value) or ...);
+}
+
+static constexpr u8 prefix16 = 0x66;
 static void assemble_inst(MInst& inst, Section& text) {
-    (void) inst;
-    (void) text;
+    switch (Opcode(inst.opcode())) {
+        case Opcode::Return:
+            text += 0xc3;
+            break;
+
+        case Opcode::Push: {
+            if (is_reg(inst)) {
+                auto reg = std::get<MOperandRegister>(inst.get_operand(0));
+                LCC_ASSERT(
+                    (is_one_of<16, 64>(reg.size)),
+                    "x86_64 only supports pushing 16 and 64 bit register onto the stack: got {}",
+                    reg.size
+                );
+                if (reg.size == 16) text += prefix16;
+                // If reg size is 64, we of course need rexw byte to encode that.
+                // But, we also need rex byte (without w bit set) to encode x64
+                // registers (r8-r15), even when pushing the 16 bit versions of those
+                // registers, to accomodate the top bit of the register encoding.
+                if (reg.size == 64 or reg_topbit(reg))
+                    text += rex_byte(reg.size == 64, false, false, reg_topbit(reg));
+                text += 0x50 + rd_encoding(reg);
+            } else if (is_imm(inst)) {
+                auto imm = std::get<MOperandImmediate>(inst.get_operand(0));
+                if (imm.size <= 8)
+                    text += {0x6a, u8(imm.value)};
+                else if (imm.size <= 16) {
+                    const u8 upper = (imm.value >> 8) & 0xff;
+                    const u8 lower = imm.value & 0xff;
+                    text += {0x68, upper, lower};
+                } else if (imm.size <= 32) {
+                    // 0xffff.ffff
+                    // a ____
+                    // b      ____
+                    const u8 upper_a = (imm.value >> 24) & 0xff;
+                    const u8 lower_a = (imm.value >> 16) & 0xff;
+                    const u8 upper_b = (imm.value >> 8) & 0xff;
+                    const u8 lower_b = imm.value & 0xff;
+                    text += {0x68, upper_a, lower_a, upper_b, lower_b};
+                } else Diag::ICE("x86_64 only supports pushing immediates sized 32, 16, or 8 bits: got {}", imm.size);
+            }
+        } break;
+
+        case Opcode::Move: {
+            
+        } break;
+
+        case Opcode::Pop:
+        case Opcode::Jump:
+        case Opcode::Call:
+        case Opcode::MoveSignExtended:
+        case Opcode::MoveZeroExtended:
+        case Opcode::MoveDereferenceRHS:
+        case Opcode::MoveDereferenceLHS:
+        case Opcode::LoadEffectiveAddress:
+        case Opcode::And:
+        case Opcode::ShiftRightArithmetic:
+        case Opcode::ShiftRightLogical:
+        case Opcode::ShiftLeft:
+        case Opcode::Add:
+        case Opcode::Multiply:
+        case Opcode::Sub:
+        case Opcode::Compare:
+        case Opcode::Test:
+        case Opcode::JumpIfZeroFlag:
+        case Opcode::SetByteIfEqual:
+        case Opcode::SetByteIfNotEqual:
+        case Opcode::SetByteIfEqualOrLessUnsigned:
+        case Opcode::SetByteIfEqualOrLessSigned:
+        case Opcode::SetByteIfEqualOrGreaterUnsigned:
+        case Opcode::SetByteIfEqualOrGreaterSigned:
+        case Opcode::SetByteIfLessUnsigned:
+        case Opcode::SetByteIfLessSigned:
+        case Opcode::SetByteIfGreaterUnsigned:
+        case Opcode::SetByteIfGreaterSigned: break;
+
+        case Opcode::Poison: LCC_UNREACHABLE();
+    }
 }
 
 static void assemble(MFunction& func, Section& text) {

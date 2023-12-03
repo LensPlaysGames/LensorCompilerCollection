@@ -12,6 +12,17 @@ struct Section {
 
     std::vector<u8> contents{};
 
+    Section& operator+=(u8 rhs) {
+        contents.push_back(rhs);
+        return *this;
+    }
+
+    // use like <section> += {0x32, 0x4}, etc.
+    Section& operator+=(const std::initializer_list<const u8> rhs) {
+        contents.insert(contents.end(), rhs.begin(), rhs.end());
+        return *this;
+    }
+
     u32 length{0};
     u8 value{0};
 
