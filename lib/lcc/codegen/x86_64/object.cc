@@ -1,6 +1,7 @@
 #include <bit>
 #include <lcc/codegen/generic_object.hh>
 #include <lcc/codegen/mir.hh>
+#include <lcc/codegen/mir_utils.hh>
 #include <lcc/codegen/x86_64.hh>
 #include <lcc/codegen/x86_64/object.hh>
 #include <lcc/context.hh>
@@ -301,132 +302,69 @@ static constexpr void mcode_sib_if_r12(Section& text, RegisterId address_registe
         text.contents.push_back(sib_byte(0b00, 0b100, 0b100));
 }
 
-// Must be MOperand* types
-template <typename Op>
-requires std::is_convertible_v<Op, MOperand>
-bool is_one_operand(MInst& inst) {
-    // clang-format off
-    return inst.all_operands().size() == 1
-           and std::holds_alternative<Op>(inst.get_operand(0));
-    // clang-format on
-}
-
-bool is_imm(MInst& inst) {
-    return is_one_operand<MOperandImmediate>(inst);
-}
-auto extract_imm(MInst& inst) {
-    return std::get<MOperandImmediate>(inst.get_operand(0));
-}
-bool is_reg(MInst& inst) {
-    return is_one_operand<MOperandRegister>(inst);
-}
-auto extract_reg(MInst& inst) {
-    return std::get<MOperandRegister>(inst.get_operand(0));
-}
-bool is_local(MInst& inst) {
-    return is_one_operand<MOperandLocal>(inst);
-}
-auto extract_local(MInst& inst) {
-    return std::get<MOperandLocal>(inst.get_operand(0));
-}
-bool is_global(MInst& inst) {
-    return is_one_operand<MOperandGlobal>(inst);
-}
-auto extract_global(MInst& inst) {
-    return std::get<MOperandGlobal>(inst.get_operand(0));
-}
-bool is_function(MInst& inst) {
-    return is_one_operand<MOperandFunction>(inst);
-}
-auto extract_function(MInst& inst) {
-    return std::get<MOperandFunction>(inst.get_operand(0));
-}
-
-template <typename Op1, typename Op2>
-bool is_two_operand(MInst& inst) {
-    // clang-format off
-    return inst.all_operands().size() == 2
-           and std::holds_alternative<Op1>(inst.get_operand(0))
-           and std::holds_alternative<Op2>(inst.get_operand(1));
-    // clang-format on
-}
-template <typename Op1, typename Op2>
-std::tuple<Op1, Op2> extract_two_operand(MInst& inst) {
-    return {
-        std::get<Op1>(inst.get_operand(0)),
-        std::get<Op2>(inst.get_operand(1))};
-}
-
-bool is_reg_imm(MInst& inst) {
-    return is_two_operand<MOperandRegister, MOperandImmediate>(inst);
-}
-auto extract_reg_imm(MInst& inst) {
-    return extract_two_operand<MOperandRegister, MOperandImmediate>(inst);
-}
-bool is_reg_reg(MInst& inst) {
-    return is_two_operand<MOperandRegister, MOperandRegister>(inst);
-}
-auto extract_reg_reg(MInst& inst) {
-    return extract_two_operand<MOperandRegister, MOperandRegister>(inst);
-}
-bool is_reg_local(MInst& inst) {
-    return is_two_operand<MOperandRegister, MOperandLocal>(inst);
-}
-auto extract_reg_local(MInst& inst) {
-    return extract_two_operand<MOperandRegister, MOperandLocal>(inst);
-}
-bool is_reg_global(MInst& inst) {
-    return is_two_operand<MOperandRegister, MOperandGlobal>(inst);
-}
-auto extract_reg_global(MInst& inst) {
-    return extract_two_operand<MOperandRegister, MOperandGlobal>(inst);
-}
-
-bool is_imm_reg(MInst& inst) {
-    return is_two_operand<MOperandImmediate, MOperandRegister>(inst);
-}
-auto extract_imm_reg(MInst& inst) {
-    return extract_two_operand<MOperandImmediate, MOperandRegister>(inst);
-}
-bool is_imm_local(MInst& inst) {
-    return is_two_operand<MOperandImmediate, MOperandLocal>(inst);
-}
-auto extract_imm_local(MInst& inst) {
-    return extract_two_operand<MOperandImmediate, MOperandLocal>(inst);
-}
-bool is_imm_global(MInst& inst) {
-    return is_two_operand<MOperandImmediate, MOperandGlobal>(inst);
-}
-auto extract_imm_global(MInst& inst) {
-    return extract_two_operand<MOperandImmediate, MOperandGlobal>(inst);
-}
-
-bool is_local_imm(MInst& inst) {
-    return is_two_operand<MOperandLocal, MOperandImmediate>(inst);
-}
-auto extract_local_imm(MInst& inst) {
-    return extract_two_operand<MOperandLocal, MOperandImmediate>(inst);
-}
-bool is_local_reg(MInst& inst) {
-    return is_two_operand<MOperandLocal, MOperandRegister>(inst);
-}
-auto extract_local_reg(MInst& inst) {
-    return extract_two_operand<MOperandLocal, MOperandRegister>(inst);
-}
-
-bool is_global_reg(MInst& inst) {
-    return is_two_operand<MOperandGlobal, MOperandRegister>(inst);
-}
-auto extract_global_reg(MInst& inst) {
-    return extract_two_operand<MOperandGlobal, MOperandRegister>(inst);
-}
-
 template <usz... ints>
 constexpr bool is_one_of(usz value) {
     return ((ints == value) or ...);
 }
 
 static constexpr u8 prefix16 = 0x66;
+
+// /r means register and r/m operand referenced by modrm.
+// Pattern must be:
+//           0x88 /r
+//      0x66 0x89 /r
+//           0x89 /r
+//     REX.W 0x89 /r
+// but where 0x88 and 0x89 are switched out with some other opcodes. MR vs
+// RM operand encoding handles it per opcode.
+static void opcode_slash_r(GenericObject& gobj, MFunction& func, MInst& inst, u8 opcode, Section& text) {
+    // GNU syntax (src, dst operands)
+    //
+    //       0x88 /r  |  MOV r8, r/m8     |  MR
+    //  0x66 0x89 /r  |  MOV r16, r/m16   |  MR
+    //       0x89 /r  |  MOV r32, r/m32   |  MR
+    // REX.W 0x89 /r  |  MOV r64, r/m64   |  MR
+    //
+    // GNU syntax (src, dst operands)
+    //       0x38 /r | CMP r8, r/m8   | MR
+    //  0x66 0x39 /r | CMP r16, r/m16 | MR
+    //       0x39 /r | CMP r32, r/m32 | MR
+    // REX.W 0x39 /r | CMP r64, r/m64 | MR
+    //
+    // "/r" means that register/memory operands are encoded in modrm byte.
+    //
+    // "MR" means that the source operand goes in reg field of modrm and the
+    // destination operand goes in the r/m field.
+    if (is_reg_reg(inst)) {
+        auto [src, dst] = extract_reg_reg(inst);
+
+        LCC_ASSERT(
+            src.size == dst.size,
+            "x86_64 only supports register to register modrm encoding when the registers are of the same size: got {} and {}",
+            src.size,
+            dst.size
+        );
+
+        // 1 isn't a valid register, but we treat it as 1 byte. Makes lowering of
+        // booleans much easier.
+        LCC_ASSERT(
+            (is_one_of<1, 8, 16, 32, 64>(src.size)),
+            "x86_64: invalid register size"
+        );
+
+        u8 op = opcode + 1;
+        if (src.size == 1 or src.size == 8)
+            op -= 1;
+
+        u8 modrm = modrm_byte(0b11, regbits(src), regbits(dst));
+
+        if (src.size == 16) text += prefix16;
+        if (src.size == 64 or reg_topbit(src) or reg_topbit(dst))
+            text += rex_byte(src.size == 64, reg_topbit(src), false, reg_topbit(dst));
+        text += {op, modrm};
+    }
+}
+
 static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Section& text) {
     // TODO: Once I write code to assemble all the instructions, start to
     // consolidate and de-duplicate code by looking at "pattern" of
