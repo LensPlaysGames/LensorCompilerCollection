@@ -83,17 +83,8 @@ static constexpr std::vector<u8> as_bytes(MOperandImmediate imm) {
 }
 
 static constexpr std::vector<u8> as_bytes_cap32(MOperandImmediate imm) {
-    if (imm.size <= 8)
-        return {u8(imm.value)};
-    if (imm.size <= 16)
-        return as_bytes(u16(imm.value));
-    if (imm.size <= 32)
-        return as_bytes(u32(imm.value));
-    if (imm.size <= 64) {
-        // TODO: assert that the top half of value isn't used (sign extended anyway).
-        return as_bytes(u32(imm.value));
-    }
-    LCC_UNREACHABLE();
+    if (imm.size > 32) imm.size = 32;
+    return as_bytes(imm);
 }
 
 // NOTE: +rw indicates the lower three bits of the opcode byte are used
@@ -867,7 +858,7 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
         assemble(out, func, text);
     }
 
-    // LCC_TODO("Actually assemble into machine code, populate symbols, etc");
+    // TODO: Resolve local label ".Lxxxx" relocations.
 
     return out;
 }
