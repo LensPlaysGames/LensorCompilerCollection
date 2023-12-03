@@ -461,6 +461,28 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
             );
         } break;
 
+        case Opcode::Pop: {
+            //       0x58+rw  |  PUSH r16  |  O
+            // REX.W 0x58+rd  |  PUSH r64  |  O
+            if (is_reg(inst)) {
+                auto reg = extract_reg(inst);
+
+                LCC_ASSERT(
+                    (is_one_of<16, 64>(reg.size)),
+                    "x86_64 only supports pushing 16 and 64 bit register onto the stack: got {}",
+                    reg.size
+                );
+
+                if (reg.size == 16) text += prefix16;
+                if (reg.size == 64 or reg_topbit(reg))
+                    text += rex_byte(reg.size == 64, false, false, reg_topbit(reg));
+                text += 0x58 + rd_encoding(reg);
+            } else Diag::ICE(
+                "Sorry, unhandled form\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
+        } break;
+
         case Opcode::Move: {
             // GNU syntax (src, dst operands)
             //       0x88 /r  |  MOV r8, r/m8     |  MR
@@ -670,7 +692,6 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
             );
         } break;
 
-        case Opcode::Pop:
         case Opcode::Jump:
         case Opcode::Call:
         case Opcode::MoveSignExtended:
