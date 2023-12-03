@@ -49,7 +49,7 @@ static std::vector<u8> as_bytes(u32 value) {
     const u8 lower_a = u8((value >> 16) & 0xff);
     const u8 upper_b = u8((value >> 8) & 0xff);
     const u8 lower_b = u8((value >> 0) & 0xff);
-    return {lower_b, upper_b, lower_a, upper_b};
+    return {lower_b, upper_b, lower_a, upper_a};
 }
 static std::vector<u8> as_bytes(i32 value) {
     return as_bytes(static_cast<u32>(value));
