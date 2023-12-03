@@ -50,7 +50,7 @@ using load_reg = load_some_op<Register<0, 0>>;
 template <typename store_op>
 using store_some_op_local = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), store_op, Local<>>>,
-    InstList<Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, o<1>>>>;
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), o<0>, o<1>>>>;
 
 using store_reg_local = store_some_op_local<Register<0, 0>>;
 using store_imm_local = store_some_op_local<Immediate<0, 0>>;
