@@ -557,7 +557,10 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                 // modrm 0b10 disp32 offset
                 text += as_bytes(i32(offset));
                 text += as_bytes(imm);
-            }
+            } else Diag::ICE(
+                "Sorry, unhandled form of move (deref rhs)\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
         } break;
 
         case Opcode::MoveDereferenceLHS: {
@@ -585,7 +588,10 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                     text += rex_byte(reg.size == 64, reg_topbit(reg), false, false);
                 text += {op, modrm};
                 text += as_bytes(i32(offset));
-            }
+            } else Diag::ICE(
+                "Sorry, unhandled form of move (deref lhs)\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
         } break;
 
         case Opcode::Pop:
@@ -613,7 +619,8 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
         case Opcode::SetByteIfLessUnsigned:
         case Opcode::SetByteIfLessSigned:
         case Opcode::SetByteIfGreaterUnsigned:
-        case Opcode::SetByteIfGreaterSigned: break;
+        case Opcode::SetByteIfGreaterSigned:
+            LCC_TODO("Assemble {}\n", PrintMInstImpl(inst, opcode_to_string));
 
         case Opcode::Poison: LCC_UNREACHABLE();
     }
