@@ -303,6 +303,7 @@ static constexpr void mcode_sib_if_r12(Section& text, RegisterId address_registe
 
 // Must be MOperand* types
 template <typename Op>
+requires std::is_convertible_v<Op, MOperand>
 bool is_one_operand(MInst& inst) {
     // clang-format off
     return inst.all_operands().size() == 1
