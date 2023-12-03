@@ -64,7 +64,7 @@ static std::vector<u8> as_bytes(u64 value) {
     const u8 lower_c = u8((value >> 16) & 0xff);
     const u8 upper_d = u8((value >> 8) & 0xff);
     const u8 lower_d = u8((value >> 0) & 0xff);
-    return {lower_d, upper_d, lower_c, upper_c, lower_b, upper_b, lower_a, upper_b};
+    return {lower_d, upper_d, lower_c, upper_c, lower_b, upper_b, lower_a, upper_a};
 }
 static std::vector<u8> as_bytes(i64 value) {
     return as_bytes(static_cast<u64>(value));
