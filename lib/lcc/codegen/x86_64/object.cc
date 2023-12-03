@@ -393,6 +393,8 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
             break;
 
         case Opcode::Push: {
+            //       0x50+rw  |  PUSH r16  |  O
+            // REX.W 0x50+rd  |  PUSH r64  |  O
             if (is_reg(inst)) {
                 auto reg = extract_reg(inst);
 
@@ -410,7 +412,11 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                 if (reg.size == 64 or reg_topbit(reg))
                     text += rex_byte(reg.size == 64, false, false, reg_topbit(reg));
                 text += 0x50 + rd_encoding(reg);
-            } else if (is_imm(inst)) {
+            }
+            //       0x6a ib  |  PUSH imm8   |  I
+            //       0x68 iw  |  PUSH imm16  |  I
+            //       0x68 id  |  PUSH imm32  |  I
+            else if (is_imm(inst)) {
                 auto imm = extract_imm(inst);
 
                 if (imm.size <= 8)
