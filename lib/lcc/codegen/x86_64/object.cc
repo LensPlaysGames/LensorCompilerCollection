@@ -362,15 +362,15 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
     out.sections.push_back(bss_);
 
     Section& text = out.section(".text");
-    Section& data = out.section(".data");
-    Section& bss = out.section(".bss");
+    // Section& data = out.section(".data");
+    // Section& bss = out.section(".bss");
 
     for (auto* var : module->vars())
         out.symbol_from_global(var);
 
     for (auto& func : mir) {
-        const bool exported = func.linkage() == Linkage::Exported || func.linkage() == Linkage::Reexported;
         const bool imported = func.linkage() == Linkage::Imported || func.linkage() == Linkage::Reexported;
+        //const bool exported = func.linkage() == Linkage::Exported || func.linkage() == Linkage::Reexported;
 
         if (imported) {
             Symbol sym{};
