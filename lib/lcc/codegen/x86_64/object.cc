@@ -9,6 +9,44 @@
 namespace lcc {
 namespace x86_64 {
 
+static constexpr std::vector<u8> as_bytes(u16 value) {
+    const u8 upper = (value >> 8) & 0xff;
+    const u8 lower = (value >> 0) & 0xff;
+    return {upper, lower};
+}
+
+static constexpr std::vector<u8> as_bytes(u32 value) {
+    const u8 upper_a = (value >> 24) & 0xff;
+    const u8 lower_a = (value >> 16) & 0xff;
+    const u8 upper_b = (value >> 8) & 0xff;
+    const u8 lower_b = (value >> 0) & 0xff;
+    return {upper_a, lower_a, upper_b, lower_b};
+}
+
+static constexpr std::vector<u8> as_bytes(u64 value) {
+    const u8 upper_a = (value >> 56) & 0xff;
+    const u8 lower_a = (value >> 48) & 0xff;
+    const u8 upper_b = (value >> 40) & 0xff;
+    const u8 lower_b = (value >> 32) & 0xff;
+    const u8 upper_c = (value >> 24) & 0xff;
+    const u8 lower_c = (value >> 16) & 0xff;
+    const u8 upper_d = (value >> 8) & 0xff;
+    const u8 lower_d = (value >> 0) & 0xff;
+    return {upper_a, lower_a, upper_b, lower_b, upper_c, lower_c, upper_d, lower_d};
+}
+
+static constexpr std::vector<u8> as_bytes(MOperandImmediate imm) {
+    if (imm.size <= 8)
+        return {u8(imm.value)};
+    if (imm.size <= 16)
+        return as_bytes(u16(imm.value));
+    if (imm.size <= 32)
+        return as_bytes(u32(imm.value));
+    if (imm.size <= 64)
+        return as_bytes(u64(imm.value));
+    LCC_UNREACHABLE();
+}
+
 // NOTE: +rw indicates the lower three bits of the opcode byte are used
 // to indicate the 16-bit register operand.
 // For registers R8 through R15, the REX.b bit also needs set.
@@ -56,6 +94,14 @@ static constexpr u8 rw_encoding(RegisterId id) {
     }
     LCC_UNREACHABLE();
 }
+static constexpr u8 rw_encoding(Register reg) {
+    return rw_encoding(RegisterId(reg.value));
+}
+[[nodiscard]]
+static constexpr u8 rw_encoding(MOperand op) {
+    // LCC_ASSERT(std::holds_alternative<MOperandRegister>(op));
+    return rw_encoding(RegisterId(std::get<MOperandRegister>(op).value));
+}
 
 // NOTE: +rd indicates the lower three bits of the opcode byte are used
 // to indicate the 32 or 64-bit register operand.
@@ -82,12 +128,11 @@ static constexpr u8 rd_encoding(RegisterId id) {
 }
 [[nodiscard]]
 static constexpr u8 rd_encoding(Register reg) {
-    return rd_encoding(RegisterId(reg.value));
+    return rw_encoding(reg);
 }
 [[nodiscard]]
 static constexpr u8 rd_encoding(MOperand op) {
-    // LCC_ASSERT(std::holds_alternative<MOperandRegister>(op));
-    return rd_encoding(RegisterId(std::get<MOperandRegister>(op).value));
+    return rw_encoding(op);
 }
 
 // NOTE: +rb indicates the lower three bits of the opcode byte are used
@@ -112,6 +157,14 @@ static constexpr u8 rd_encoding(MOperand op) {
 [[nodiscard]]
 static constexpr u8 rb_encoding(RegisterId id) {
     return rw_encoding(id);
+}
+[[nodiscard]]
+static constexpr u8 rb_encoding(Register reg) {
+    return rw_encoding(reg);
+}
+[[nodiscard]]
+static constexpr u8 rb_encoding(MOperand op) {
+    return rw_encoding(op);
 }
 
 /// REX.W == extend to 64 bit operation
@@ -349,6 +402,37 @@ static void assemble_inst(MInst& inst, Section& text) {
                 if (src.size == 64 or reg_topbit(src) or reg_topbit(dst))
                     text += rex_byte(src.size == 64, reg_topbit(src), false, reg_topbit(dst));
                 text += {op, modrm};
+            }
+            // GNU syntax (src, dst operands)
+            //        0xb0+rb ib | MOV imm8, r8   | OI
+            //   0x66 0xb8+rw iw | MOV imm16, r16 | OI
+            //        0xb8+rd id | MOV imm32, r32 | OI
+            //  REX.W 0xb8+rd io | MOV imm64, r64 | OI
+            // "OI" means source operand is an immediate and destination operand is
+            // part of the opcode byte itself (bottom 3 bits).
+            else if (is_imm_reg(inst)) {
+                auto imm = std::get<MOperandImmediate>(inst.get_operand(0));
+                auto dst = std::get<MOperandRegister>(inst.get_operand(1));
+
+                // 1 isn't a valid register, but we treat it as 1 byte. Makes lowering of
+                // booleans much easier.
+                LCC_ASSERT(
+                    (is_one_of<1, 8, 16, 32, 64>(dst.size)),
+                    "x86_64: invalid register size"
+                );
+
+                u8 op = u8(-1);
+                if (dst.size == 1 or dst.size == 8)
+                    op = 0xb0 + rb_encoding(dst);
+                else op = 0xb8;
+                const std::vector<u8> imm_bytes = as_bytes(imm);
+
+                if (dst.size == 16) text += prefix16;
+                if (dst.size == 64 or reg_topbit(dst))
+                    text += rex_byte(dst.size == 64, false, false, reg_topbit(dst));
+                text += op;
+                text += imm_bytes;
+
             } else Diag::ICE(
                 "Sorry, unhandled form of move\n    {}\n",
                 PrintMInstImpl(inst, opcode_to_string)

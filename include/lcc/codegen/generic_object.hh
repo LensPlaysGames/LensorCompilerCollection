@@ -23,6 +23,11 @@ struct Section {
         return *this;
     }
 
+    Section& operator+=(const std::span<const u8> rhs) {
+        contents.insert(contents.end(), rhs.begin(), rhs.end());
+        return *this;
+    }
+
     u32 length{0};
     u8 value{0};
 
