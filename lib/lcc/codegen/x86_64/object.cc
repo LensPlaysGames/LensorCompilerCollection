@@ -10,10 +10,24 @@
 namespace lcc {
 namespace x86_64 {
 
-// FIXME: Endianness of target architecture, probably, not of compiled
-// architecture. This is effectively acting as if target format is always
-// native.
-static constexpr bool little_endian = std::endian::native == std::endian::little;
+// /digit - A digit between 0 and 7 indicates that the ModR/M byte of the
+//     instruction uses only the r/m (register or memory) operand. The reg
+//     field contains the digit that provides an extension to the
+//     instruction's opcode.
+// /r - Indicates that the ModR/M byte of the instruction contains a
+//     register operand and an r/m operand.
+// ib, iw, id, io - A 1-byte (ib), 2-byte (iw), 4-byte (id) or 8-byte (io)
+//     immediate operand to the instruction that follows the opcode, ModR/M
+//     bytes or scale-indexing bytes. The opcode determines if the operand is
+//     a signed value. All words, doublewords, and quadwords are given with
+//     the low-order byte first.
+// +rb, +rw, +rd, +ro - Indicated the lower 3 bits of the opcode byte is
+//     used to encode the register operand without a modR/M byte. The
+//     instruction lists the corresponding hexadecimal value of the opcode
+//     byte with low 3 bits as 000b. In non-64-bit mode, a register code, from
+//     0 through 7, is added to the hexadecimal value of the opcode byte. In
+//     64-bit mode, indicates the four bit field of REX.b and opcode[2:0]
+//     field encodes the register operand of the instruction.
 
 static std::vector<u8> as_bytes(u16 value) {
     // 0xffff
@@ -21,9 +35,7 @@ static std::vector<u8> as_bytes(u16 value) {
     //     __  lower
     const u8 upper = u8((value >> 8) & 0xff);
     const u8 lower = u8((value >> 0) & 0xff);
-    if constexpr (little_endian)
-        return {lower, upper};
-    else return {upper, lower};
+    return {lower, upper};
 }
 static std::vector<u8> as_bytes(i16 value) {
     return as_bytes(static_cast<u16>(value));
@@ -37,9 +49,7 @@ static std::vector<u8> as_bytes(u32 value) {
     const u8 lower_a = u8((value >> 16) & 0xff);
     const u8 upper_b = u8((value >> 8) & 0xff);
     const u8 lower_b = u8((value >> 0) & 0xff);
-    if constexpr (little_endian)
-        return {lower_b, upper_b, lower_a, upper_b};
-    else return {upper_a, lower_a, upper_b, lower_b};
+    return {lower_b, upper_b, lower_a, upper_b};
 }
 static std::vector<u8> as_bytes(i32 value) {
     return as_bytes(static_cast<u32>(value));
@@ -54,9 +64,7 @@ static std::vector<u8> as_bytes(u64 value) {
     const u8 lower_c = u8((value >> 16) & 0xff);
     const u8 upper_d = u8((value >> 8) & 0xff);
     const u8 lower_d = u8((value >> 0) & 0xff);
-    if constexpr (little_endian)
-        return {lower_d, upper_d, lower_c, upper_c, lower_b, upper_b, lower_a, upper_b};
-    else return {upper_a, lower_a, upper_b, lower_b, upper_c, lower_c, upper_d, lower_d};
+    return {lower_d, upper_d, lower_c, upper_c, lower_b, upper_b, lower_a, upper_b};
 }
 static std::vector<u8> as_bytes(i64 value) {
     return as_bytes(static_cast<u64>(value));
