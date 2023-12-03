@@ -140,6 +140,8 @@ int main(int argc, char** argv) {
         const char* replacement = ".s";
         if (context.format()->format() == lcc::Format::LLVM_TEXTUAL_IR)
             replacement = ".ll";
+        if (context.format()->format() == lcc::Format::ELF_OBJECT or context.format()->format() == lcc::Format::COFF_OBJECT)
+            replacement = ".o";
 
         return std::filesystem::path{path_string}.replace_extension(replacement).string();
     };
