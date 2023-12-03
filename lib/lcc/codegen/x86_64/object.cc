@@ -500,10 +500,9 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                 // 32-bit register, as moving into 32-bit register clears the top half as
                 // well.
 
-                u8 op = u8(-1);
+                u8 op = 0xb8 + rd_encoding(dst);
                 if (dst.size == 1 or dst.size == 8)
-                    op = 0xb0 + rb_encoding(dst);
-                else op = 0xb8 + rd_encoding(dst);
+                    op -= 8; // op = 0xb0 + rb_encoding(dst);
 
                 if (dst.size == 16) text += prefix16;
                 if (dst.size == 64 or reg_topbit(dst))
@@ -538,7 +537,7 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                 u8 modrm = modrm_byte(0b10, regbits(reg), regbits(RegisterId::RBP));
 
                 if (reg.size == 16) text += prefix16;
-                if (reg.size == 64 || reg_topbit(reg))
+                if (reg.size == 64 or reg_topbit(reg))
                     text += rex_byte(reg.size == 64, reg_topbit(reg), false, false);
                 text += {op, modrm};
                 text += as_bytes(i32(offset));
@@ -591,9 +590,9 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
 
                 LCC_ASSERT((is_one_of<1, 8, 16, 32, 64>(reg.size)));
 
-                u8 op = 0x8a;
+                u8 op = 0x8b;
                 if (reg.size == 1 or reg.size == 8)
-                    op = 0x8b;
+                    op = 0x8a;
 
                 u8 modrm = modrm_byte(0b10, regbits(reg), regbits(RegisterId::RBP));
 
