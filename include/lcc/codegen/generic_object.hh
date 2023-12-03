@@ -12,6 +12,33 @@ struct Section {
 
     std::vector<u8> contents{};
 
+    u64 attributes{};
+
+    // Enum integer value is bit index into attributes field.
+    enum struct Attribute {
+        // By default, a section is not loaded when the object file is loaded into
+        // memory and executed.
+        // Common Sections: `.text`, `.data`, `.rodata`, `.bss`
+        LOAD,
+        // Mark this section as having "writable" permissions when it is loaded.
+        // Common Sections: `.data`
+        WRITABLE,
+        // Mark this section as having "executable" permissions when it is loaded.
+        // Common Sections: `.text`
+        EXECUTABLE,
+
+        MAX = sizeof(decltype(attributes)) // NONE ALLOWED PAST THIS
+    };
+
+    bool attribute(Attribute n) {
+        return attributes & (u64(1) << int(n));
+    }
+
+    bool attribute(Attribute n, bool new_value) {
+        attributes |= u64(1) << int(n);
+        return new_value;
+    }
+
     Section& operator+=(u8 rhs) {
         contents.push_back(rhs);
         return *this;
@@ -277,6 +304,9 @@ struct GenericObject {
             out += section.print();
         return out;
     }
+
+    // Write this generic object file in ELF format into the given file.
+    void as_elf(FILE* f);
 };
 
 } // namespace lcc

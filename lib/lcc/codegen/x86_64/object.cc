@@ -804,9 +804,15 @@ static void assemble(MFunction& func, Section& text) {
 GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, std::vector<MFunction>& mir) {
     GenericObject out{};
 
-    Section text_{".text", {}, 0, 0, false};
-    Section data_{".data", {}, 0, 0, false};
-    Section bss_{".bss", {}, 0, 0, true};
+    Section text_{".text"};
+    Section data_{".data"};
+    Section bss_{".bss"};
+    text_.attribute(Section::Attribute::LOAD, true);
+    text_.attribute(Section::Attribute::EXECUTABLE, true);
+    data_.attribute(Section::Attribute::LOAD, true);
+    data_.attribute(Section::Attribute::WRITABLE, true);
+    bss_.attribute(Section::Attribute::LOAD, true);
+    bss_.attribute(Section::Attribute::WRITABLE, true);
     out.sections.push_back(text_);
     out.sections.push_back(data_);
     out.sections.push_back(bss_);

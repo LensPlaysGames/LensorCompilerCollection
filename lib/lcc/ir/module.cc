@@ -184,7 +184,11 @@ void Module::emit(std::filesystem::path output_file_path) {
 
                 fmt::print("{}\n", gobj.print());
 
-                LCC_TODO("Emit ELF object from generic object format");
+                FILE* f = fopen(output_file_path.string().data(), "wb");
+                if (not f) Diag::ICE("Could not open output file at {} for writing", output_file_path.string());
+                gobj.as_elf(f);
+                fclose(f);
+
             } else if (_ctx->format()->format() == Format::COFF_OBJECT) {
                 LCC_TODO("Emit COFF object from generic object format");
             }
