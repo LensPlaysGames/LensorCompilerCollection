@@ -147,8 +147,9 @@ void GenericObject::as_elf(FILE* f) {
                 break;
 
             case Symbol::Kind::FUNCTION:
-                elf_sym.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
+                elf_sym.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_FUNC);
                 elf_sym.st_value = sym.byte_offset;
+                // TODO: set elf_sym.st_size to size of assembled function.
                 break;
 
             case Symbol::Kind::EXTERNAL:
@@ -158,7 +159,10 @@ void GenericObject::as_elf(FILE* f) {
             case Symbol::Kind::NONE: LCC_UNREACHABLE();
         }
 
-        syms.push_back(elf_sym);
+        // All STB_LOCAL symbols go here
+        if (elf_sym.st_info == ELF64_ST_INFO(STB_LOCAL, STT_OBJECT))
+            syms.insert(syms.begin() + 1, elf_sym);
+        else syms.push_back(elf_sym);
     }
 
     // Index needed by relocation section header(s)
@@ -167,6 +171,7 @@ void GenericObject::as_elf(FILE* f) {
     usz string_table_sh_index = sections.size() + 3;
 
     // Symbol Table Section Header
+    // shoutout https://stackoverflow.com/q/62497285
     {
         elf64_shdr shdr{};
         shdr.sh_type = SHT_SYMTAB;
