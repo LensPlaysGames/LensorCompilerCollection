@@ -34,6 +34,11 @@ enum struct OperandKind {
     // For use in the output of patterns when a temporary register is needed.
     // Use like Operand<OK::NewVirtual, v<0>> and so-on.
     NewVirtual,
+    // References an input register operand but changes the size.
+    // Takes an index of a register operand from the input to copy the value
+    // of and an explicit size to use instead of the copied one.
+
+    ResizedRegister,
 
     // A reference to a stack frame object.
     Local,
@@ -132,7 +137,19 @@ struct v {
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
     static constexpr usz value = 0;
-    static constexpr usz size = 0;
+    static constexpr usz size = op_idx;
+    static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
+};
+
+template <usz op_idx, usz new_size>
+struct ResizedRegister {
+    static constexpr OperandKind kind = OperandKind::ResizedRegister;
+    static constexpr i64 immediate = 0;
+    static constexpr usz index = op_idx;
+    static constexpr usz value = 0;
+    static constexpr usz size = new_size;
     static constexpr GlobalVariable* global = nullptr;
     static constexpr lcc::Function* function = nullptr;
     static constexpr lcc::Block* block = nullptr;
@@ -212,6 +229,42 @@ struct Inst {
 
             case OperandKind::Register:
                 return MOperandRegister(operand::value, operand::size);
+
+            case OperandKind::ResizedRegister: {
+                MOperand op{};
+
+                // Current operand index.
+                usz i = 0;
+                // Operand index we need to find.
+                usz needle = operand::index;
+                // Whether or not we've found the operand we are looking for.
+                bool found = false;
+                for (auto instruction : input) {
+                    for (auto op_candidate : instruction->all_operands()) {
+                        // This is the instruction we are looking for!
+                        if (i == needle) {
+                            found = true;
+                            op = op_candidate;
+                        }
+
+                        // We can stop looking at operands if we found the one we needed.
+                        if (found) break;
+
+                        // Increment operand index for the next operand.
+                        ++i;
+                    }
+                    // We can stop looking at instructions if we found the operand we needed.
+                    if (found) break;
+                }
+
+                // FIXME: Which pattern? Possible to include it in error message somehow?
+                LCC_ASSERT(found, "Pattern has ill-formed ResizedRegister<{}, {}> operand: index greater than amount of operands in input.", needle, operand::size);
+
+                LCC_ASSERT(std::holds_alternative<MOperandRegister>(op),
+                           "Pattern has ill-formed ResizedRegister<{}, {}> operand: index within bounds, but does not reference a register operand", needle, operand::size);
+
+                return MOperandRegister(std::get<MOperandRegister>(op).value, operand::size);
+            }
 
             case OperandKind::NewVirtual: {
                 if (not new_virtuals.contains(operand::index)) {
