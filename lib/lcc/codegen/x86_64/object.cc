@@ -564,9 +564,14 @@ static void assemble_inst(MFunction& func, MInst& inst, Section& text) {
                     "x86_64: invalid register size"
                 );
 
-                // TODO: Optimisations; can reduce code size if 64-bit immediate fits into
-                // 32-bit register, as moving into 32-bit register clears the top half as
-                // well.
+                // Code size reduction: If immediate is sized larger than 32 bits but it's
+                // value can actually fit into 32 bits, reduce size of immediate and
+                // destination register to 32 bits. Prevents encoding 8 bytes of zeros for
+                // zeroing a register out, for example.
+                if (imm.size > 32 and imm.value <= 0xffffffff) {
+                    imm.size = 32;
+                    dst.size = 32;
+                }
 
                 u8 op = 0xb8 + rd_encoding(dst);
                 if (dst.size == 1 or dst.size == 8)
