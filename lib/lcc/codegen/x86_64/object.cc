@@ -114,6 +114,10 @@ static constexpr u8 rb_encoding(RegisterId id) {
     return rw_encoding(id);
 }
 
+/// REX.W == extend to 64 bit operation
+/// REX.R == top bit of reg modrm field
+/// REX.X == top bit of index sib field
+/// REX.B == top bit of r/m modrm field
 [[nodiscard]]
 static constexpr u8 rex_byte(bool w, bool r, bool x, bool b) {
     return u8(0b01000000 | ((w ? 1 : 0) << 3) | ((r ? 1 : 0) << 2) | ((x ? 1 : 0) << 1) | (b ? 1 : 0));
@@ -145,6 +149,9 @@ static constexpr u8 regbits(RegisterId id) {
         default: break;
     }
     Diag::ICE("Unhandled register in regbits: %s\n", ToString(id));
+}
+static constexpr u8 regbits(Register reg) {
+    return regbits(RegisterId(reg.value));
 }
 
 static constexpr bool regbits_top(u8 bits) {
@@ -307,7 +314,45 @@ static void assemble_inst(MInst& inst, Section& text) {
         } break;
 
         case Opcode::Move: {
-            
+            // GNU syntax (src, dst operands)
+            //       0x88 /r  |  MOV r8, r/m8     |  MR
+            //  0x66 0x89 /r  |  MOV r16, r/m16   |  MR
+            //       0x89 /r  |  MOV r32, r/m32   |  MR
+            // REX.W 0x89 /r  |  MOV r64, r/m64   |  MR
+            // "/r" means that register/memory operands are encoded in modrm byte.
+            // "MR" means that the source operand goes in reg field of modrm and the destination operand goes in the r/m field.
+            if (is_reg_reg(inst)) {
+                auto src = std::get<MOperandRegister>(inst.get_operand(0));
+                auto dst = std::get<MOperandRegister>(inst.get_operand(1));
+
+                LCC_ASSERT(
+                    src.size == dst.size,
+                    "x86_64 only supports register to register moves when the registers are of the same size: got {} and {}",
+                    src.size,
+                    dst.size
+                );
+
+                // 1 isn't a valid register, but we treat it as 1 byte. Makes lowering of
+                // booleans much easier.
+                LCC_ASSERT(
+                    (is_one_of<1, 8, 16, 32, 64>(src.size)),
+                    "x86_64: invalid register size"
+                );
+
+                u8 op = u8(-1);
+                u8 modrm = modrm_byte(0b11, regbits(src), regbits(dst));
+                if (src.size == 1 or src.size == 8)
+                    op = 0x88;
+                else op = 0x89;
+
+                if (src.size == 16) text += prefix16;
+                if (src.size == 64 or reg_topbit(src) or reg_topbit(dst))
+                    text += rex_byte(src.size == 64, reg_topbit(src), false, reg_topbit(dst));
+                text += {op, modrm};
+            } else Diag::ICE(
+                "Sorry, unhandled form of move\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
         } break;
 
         case Opcode::Pop:
@@ -370,7 +415,7 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
 
     for (auto& func : mir) {
         const bool imported = func.linkage() == Linkage::Imported || func.linkage() == Linkage::Reexported;
-        //const bool exported = func.linkage() == Linkage::Exported || func.linkage() == Linkage::Reexported;
+        // const bool exported = func.linkage() == Linkage::Exported || func.linkage() == Linkage::Reexported;
 
         if (imported) {
             Symbol sym{};
