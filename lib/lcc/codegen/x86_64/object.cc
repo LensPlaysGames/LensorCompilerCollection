@@ -895,12 +895,26 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
             );
         } break;
 
+        case Opcode::Add: {
+            if (is_reg_reg(inst)) opcode_slash_r(gobj, func, inst, 0x00, text);
+            else Diag::ICE(
+                "Sorry, unhandled form\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
+        } break;
+
+        case Opcode::And: {
+            if (is_reg_reg(inst)) opcode_slash_r(gobj, func, inst, 0x20, text);
+            else Diag::ICE(
+                "Sorry, unhandled form\n    {}\n",
+                PrintMInstImpl(inst, opcode_to_string)
+            );
+        } break;
+
+    case Opcode::Multiply:
         case Opcode::MoveSignExtended:
         case Opcode::MoveZeroExtended:
-        case Opcode::And:
         case Opcode::ShiftRightLogical:
-        case Opcode::Add:
-        case Opcode::Multiply:
             LCC_TODO("Assemble {}\n", PrintMInstImpl(inst, opcode_to_string));
 
         case Opcode::Poison: LCC_UNREACHABLE();
