@@ -374,6 +374,27 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
     // same code can handle both. So, we could make like a `emit_opcode_modrm`
     // function or something that can handle both of these just by switching
     // out the opcode it writes.
+
+    // i.e. called with 0x94, would encode:
+    // 0x0f 0x94 | SETE r/m8 | M
+    // "M" means that the operand is encoded in r/m field of modrm byte.
+    auto setcc = [&](u8 opcode) {
+        if (is_reg(inst)) {
+            auto reg = extract_reg(inst);
+            LCC_ASSERT(
+                reg.size == 1 or reg.size == 8,
+                "x86_64 SETcc requires 1-byte operand"
+            );
+            u8 modrm = modrm_byte(0b11, 0, regbits(reg));
+            if (reg_topbit(reg))
+                text += rex_byte(false, false, false, reg_topbit(reg));
+            text += {0x0f, opcode, modrm};
+        } else Diag::ICE(
+            "Sorry, unhandled form\n    {}\n",
+            PrintMInstImpl(inst, opcode_to_string)
+        );
+    };
+
     switch (Opcode(inst.opcode())) {
         case Opcode::Return: {
             // TODO: Stack frame kinds
@@ -737,191 +758,61 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
         case Opcode::SetByteIfEqual: {
             // 0x0f 0x94 | SETE r/m8 | M
             // "M" means that the operand is encoded in r/m field of modrm byte.
-            if (is_reg(inst)) {
-                auto reg = extract_reg(inst);
-                LCC_ASSERT(
-                    reg.size == 1 or reg.size == 8,
-                    "x86_64 SETcc requires 1-byte operand"
-                );
-                u8 modrm = modrm_byte(0b11, 0, regbits(reg));
-                if (reg_topbit(reg))
-                    text += rex_byte(false, false, false, reg_topbit(reg));
-                text += {0x0f, 0x94, modrm};
-            } else Diag::ICE(
-                "Sorry, unhandled form\n    {}\n",
-                PrintMInstImpl(inst, opcode_to_string)
-            );
+            setcc(0x94);
         } break;
 
         case Opcode::SetByteIfNotEqual: {
             // 0x0f 0x95 | SETNE r/m8 | M
             // "M" means that the operand is encoded in r/m field of modrm byte.
-            if (is_reg(inst)) {
-                auto reg = extract_reg(inst);
-                LCC_ASSERT(
-                    reg.size == 1 or reg.size == 8,
-                    "x86_64 SETcc requires 1-byte operand"
-                );
-                u8 modrm = modrm_byte(0b11, 0, regbits(reg));
-                if (reg_topbit(reg))
-                    text += rex_byte(false, false, false, reg_topbit(reg));
-                text += {0x0f, 0x95, modrm};
-            } else Diag::ICE(
-                "Sorry, unhandled form\n    {}\n",
-                PrintMInstImpl(inst, opcode_to_string)
-            );
+            setcc(0x95);
         } break;
 
         case Opcode::SetByteIfEqualOrLessUnsigned: {
             // 0x0f 0x96 | SETBE r/m8 | M
             // "M" means that the operand is encoded in r/m field of modrm byte.
-            if (is_reg(inst)) {
-                auto reg = extract_reg(inst);
-                LCC_ASSERT(
-                    reg.size == 1 or reg.size == 8,
-                    "x86_64 SETcc requires 1-byte operand"
-                );
-                u8 modrm = modrm_byte(0b11, 0, regbits(reg));
-                if (reg_topbit(reg))
-                    text += rex_byte(false, false, false, reg_topbit(reg));
-                text += {0x0f, 0x96, modrm};
-            } else Diag::ICE(
-                "Sorry, unhandled form\n    {}\n",
-                PrintMInstImpl(inst, opcode_to_string)
-            );
+            setcc(0x96);
         } break;
 
         case Opcode::SetByteIfEqualOrLessSigned: {
             // 0x0f 0x9e | SETLE r/m8 | M
             // "M" means that the operand is encoded in r/m field of modrm byte.
-            if (is_reg(inst)) {
-                auto reg = extract_reg(inst);
-                LCC_ASSERT(
-                    reg.size == 1 or reg.size == 8,
-                    "x86_64 SETcc requires 1-byte operand"
-                );
-                u8 modrm = modrm_byte(0b11, 0, regbits(reg));
-                if (reg_topbit(reg))
-                    text += rex_byte(false, false, false, reg_topbit(reg));
-                text += {0x0f, 0x9e, modrm};
-            } else Diag::ICE(
-                "Sorry, unhandled form\n    {}\n",
-                PrintMInstImpl(inst, opcode_to_string)
-            );
+            setcc(0x9e);
         } break;
 
         case Opcode::SetByteIfEqualOrGreaterUnsigned: {
             // 0x0f 0x93 | SETAE r/m8 | M
             // "M" means that the operand is encoded in r/m field of modrm byte.
-            if (is_reg(inst)) {
-                auto reg = extract_reg(inst);
-                LCC_ASSERT(
-                    reg.size == 1 or reg.size == 8,
-                    "x86_64 SETcc requires 1-byte operand"
-                );
-                u8 modrm = modrm_byte(0b11, 0, regbits(reg));
-                if (reg_topbit(reg))
-                    text += rex_byte(false, false, false, reg_topbit(reg));
-                text += {0x0f, 0x93, modrm};
-            } else Diag::ICE(
-                "Sorry, unhandled form\n    {}\n",
-                PrintMInstImpl(inst, opcode_to_string)
-            );
+            setcc(0x93);
         } break;
 
         case Opcode::SetByteIfEqualOrGreaterSigned: {
             // 0x0f 0x9d | SETGE r/m8 | M
             // "M" means that the operand is encoded in r/m field of modrm byte.
-            if (is_reg(inst)) {
-                auto reg = extract_reg(inst);
-                LCC_ASSERT(
-                    reg.size == 1 or reg.size == 8,
-                    "x86_64 SETcc requires 1-byte operand"
-                );
-                u8 modrm = modrm_byte(0b11, 0, regbits(reg));
-                if (reg_topbit(reg))
-                    text += rex_byte(false, false, false, reg_topbit(reg));
-                text += {0x0f, 0x9d, modrm};
-            } else Diag::ICE(
-                "Sorry, unhandled form\n    {}\n",
-                PrintMInstImpl(inst, opcode_to_string)
-            );
+            setcc(0x9d);
         } break;
 
         case Opcode::SetByteIfLessUnsigned: {
             // 0x0f 0x92 | SETB r/m8 | M
             // "M" means that the operand is encoded in r/m field of modrm byte.
-            if (is_reg(inst)) {
-                auto reg = extract_reg(inst);
-                LCC_ASSERT(
-                    reg.size == 1 or reg.size == 8,
-                    "x86_64 SETcc requires 1-byte operand"
-                );
-                u8 modrm = modrm_byte(0b11, 0, regbits(reg));
-                if (reg_topbit(reg))
-                    text += rex_byte(false, false, false, reg_topbit(reg));
-                text += {0x0f, 0x92, modrm};
-            } else Diag::ICE(
-                "Sorry, unhandled form\n    {}\n",
-                PrintMInstImpl(inst, opcode_to_string)
-            );
+            setcc(0x92);
         } break;
 
         case Opcode::SetByteIfLessSigned: {
             // 0x0f 0x9c | SETL r/m8 | M
             // "M" means that the operand is encoded in r/m field of modrm byte.
-            if (is_reg(inst)) {
-                auto reg = extract_reg(inst);
-                LCC_ASSERT(
-                    reg.size == 1 or reg.size == 8,
-                    "x86_64 SETcc requires 1-byte operand"
-                );
-                u8 modrm = modrm_byte(0b11, 0, regbits(reg));
-                if (reg_topbit(reg))
-                    text += rex_byte(false, false, false, reg_topbit(reg));
-                text += {0x0f, 0x9c, modrm};
-            } else Diag::ICE(
-                "Sorry, unhandled form\n    {}\n",
-                PrintMInstImpl(inst, opcode_to_string)
-            );
+            setcc(0x9c);
         } break;
 
         case Opcode::SetByteIfGreaterUnsigned: {
             // 0x0f 0x97 | SETA r/m8 | M
             // "M" means that the operand is encoded in r/m field of modrm byte.
-            if (is_reg(inst)) {
-                auto reg = extract_reg(inst);
-                LCC_ASSERT(
-                    reg.size == 1 or reg.size == 8,
-                    "x86_64 SETcc requires 1-byte operand"
-                );
-                u8 modrm = modrm_byte(0b11, 0, regbits(reg));
-                if (reg_topbit(reg))
-                    text += rex_byte(false, false, false, reg_topbit(reg));
-                text += {0x0f, 0x97, modrm};
-            } else Diag::ICE(
-                "Sorry, unhandled form\n    {}\n",
-                PrintMInstImpl(inst, opcode_to_string)
-            );
+            setcc(0x97);
         } break;
 
         case Opcode::SetByteIfGreaterSigned: {
             // 0x0f 0x9f | SETG r/m8 | M
             // "M" means that the operand is encoded in r/m field of modrm byte.
-            if (is_reg(inst)) {
-                auto reg = extract_reg(inst);
-                LCC_ASSERT(
-                    reg.size == 1 or reg.size == 8,
-                    "x86_64 SETcc requires 1-byte operand"
-                );
-                u8 modrm = modrm_byte(0b11, 0, regbits(reg));
-                if (reg_topbit(reg))
-                    text += rex_byte(false, false, false, reg_topbit(reg));
-                text += {0x0f, 0x9f, modrm};
-            } else Diag::ICE(
-                "Sorry, unhandled form\n    {}\n",
-                PrintMInstImpl(inst, opcode_to_string)
-            );
+            setcc(0x9f);
         } break;
 
         case Opcode::Jump: {
@@ -1048,7 +939,6 @@ static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
 
         for (auto& inst : block.instructions())
             assemble_inst(gobj, func, inst, text);
-
     }
 }
 
