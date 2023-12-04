@@ -137,6 +137,8 @@ void GenericObject::as_elf(FILE* f) {
             elf_sym.st_shndx = u16(elf_section_index);
         }
 
+        elf_sym.st_value = sym.byte_offset;
+
         switch (sym.kind) {
             case Symbol::Kind::STATIC:
                 elf_sym.st_info = ELF64_ST_INFO(STB_LOCAL, STT_OBJECT);
@@ -148,7 +150,6 @@ void GenericObject::as_elf(FILE* f) {
 
             case Symbol::Kind::FUNCTION:
                 elf_sym.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_FUNC);
-                elf_sym.st_value = sym.byte_offset;
                 // TODO: set elf_sym.st_size to size of assembled function.
                 break;
 
