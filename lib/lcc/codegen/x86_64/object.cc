@@ -896,6 +896,11 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
         } break;
 
         case Opcode::Add: {
+            // GNU syntax (src, dst operands)
+            //       0x00 /r | ADD r8, r/m8   | MR
+            //  0x66 0x01 /r | ADD r16, r/m16 | MR
+            //       0x01 /r | ADD r32, r/m32 | MR
+            // REX.W 0x01 /r | ADD r64, r/m64 | MR
             if (is_reg_reg(inst)) opcode_slash_r(gobj, func, inst, 0x00, text);
             else Diag::ICE(
                 "Sorry, unhandled form\n    {}\n",
@@ -904,6 +909,11 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
         } break;
 
         case Opcode::And: {
+            // GNU syntax (src, dst operands)
+            //       0x20 /r | AND r8, r/m8   | MR
+            //  0x66 0x21 /r | AND r16, r/m16 | MR
+            //       0x21 /r | AND r32, r/m32 | MR
+            // REX.W 0x21 /r | AND r64, r/m64 | MR
             if (is_reg_reg(inst)) opcode_slash_r(gobj, func, inst, 0x20, text);
             else Diag::ICE(
                 "Sorry, unhandled form\n    {}\n",
