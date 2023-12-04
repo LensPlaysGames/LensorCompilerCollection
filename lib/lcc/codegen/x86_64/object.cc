@@ -755,56 +755,65 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
             );
         } break;
 
-        case Opcode::SetByteIfLessUnsigned: {
-            // 0x0f 0x92 | SETB r/m8 | M
-            // "M" means that the operand is encoded in r/m field of modrm byte.
+        // 0x0f 0x92 | SETB r/m8 | M
+        // "M" means that the operand is encoded in r/m field of modrm byte.
+        case Opcode::SetByteIfLessUnsigned:
             setcc(0x92);
-        } break;
-        case Opcode::SetByteIfEqualOrGreaterUnsigned: {
-            // 0x0f 0x93 | SETAE r/m8 | M
-            // "M" means that the operand is encoded in r/m field of modrm byte.
+            break;
+
+        // 0x0f 0x93 | SETAE r/m8 | M
+        // "M" means that the operand is encoded in r/m field of modrm byte.
+        case Opcode::SetByteIfEqualOrGreaterUnsigned:
             setcc(0x93);
-        } break;
-        case Opcode::SetByteIfEqual: {
-            // 0x0f 0x94 | SETE r/m8 | M
-            // "M" means that the operand is encoded in r/m field of modrm byte.
+            break;
+
+        // 0x0f 0x94 | SETE r/m8 | M
+        // "M" means that the operand is encoded in r/m field of modrm byte.
+        case Opcode::SetByteIfEqual:
             setcc(0x94);
-        } break;
-        case Opcode::SetByteIfNotEqual: {
-            // 0x0f 0x95 | SETNE r/m8 | M
-            // "M" means that the operand is encoded in r/m field of modrm byte.
+            break;
+
+        // 0x0f 0x95 | SETNE r/m8 | M
+        // "M" means that the operand is encoded in r/m field of modrm byte.
+        case Opcode::SetByteIfNotEqual:
             setcc(0x95);
-        } break;
-        case Opcode::SetByteIfEqualOrLessUnsigned: {
-            // 0x0f 0x96 | SETBE r/m8 | M
-            // "M" means that the operand is encoded in r/m field of modrm byte.
+            break;
+
+        // 0x0f 0x96 | SETBE r/m8 | M
+        // "M" means that the operand is encoded in r/m field of modrm byte.
+        case Opcode::SetByteIfEqualOrLessUnsigned:
             setcc(0x96);
-        } break;
-        case Opcode::SetByteIfGreaterUnsigned: {
-            // 0x0f 0x97 | SETA r/m8 | M
-            // "M" means that the operand is encoded in r/m field of modrm byte.
+            break;
+
+        // 0x0f 0x97 | SETA r/m8 | M
+        // "M" means that the operand is encoded in r/m field of modrm byte.
+        case Opcode::SetByteIfGreaterUnsigned:
             setcc(0x97);
-        } break;
-        case Opcode::SetByteIfLessSigned: {
-            // 0x0f 0x9c | SETL r/m8 | M
-            // "M" means that the operand is encoded in r/m field of modrm byte.
+            break;
+
+        // 0x0f 0x9c | SETL r/m8 | M
+        // "M" means that the operand is encoded in r/m field of modrm byte.
+        case Opcode::SetByteIfLessSigned:
             setcc(0x9c);
-        } break;
-        case Opcode::SetByteIfEqualOrGreaterSigned: {
-            // 0x0f 0x9d | SETGE r/m8 | M
-            // "M" means that the operand is encoded in r/m field of modrm byte.
+            break;
+
+        // 0x0f 0x9d | SETGE r/m8 | M
+        // "M" means that the operand is encoded in r/m field of modrm byte.
+        case Opcode::SetByteIfEqualOrGreaterSigned:
             setcc(0x9d);
-        } break;
-        case Opcode::SetByteIfEqualOrLessSigned: {
-            // 0x0f 0x9e | SETLE r/m8 | M
-            // "M" means that the operand is encoded in r/m field of modrm byte.
+            break;
+
+        // 0x0f 0x9e | SETLE r/m8 | M
+        // "M" means that the operand is encoded in r/m field of modrm byte.
+        case Opcode::SetByteIfEqualOrLessSigned:
             setcc(0x9e);
-        } break;
-        case Opcode::SetByteIfGreaterSigned: {
-            // 0x0f 0x9f | SETG r/m8 | M
-            // "M" means that the operand is encoded in r/m field of modrm byte.
+            break;
+
+        // 0x0f 0x9f | SETG r/m8 | M
+        // "M" means that the operand is encoded in r/m field of modrm byte.
+        case Opcode::SetByteIfGreaterSigned:
             setcc(0x9f);
-        } break;
+            break;
 
         case Opcode::Jump: {
             // Just do 32-bit for now. Could technically do smaller jumps if we know we
@@ -921,7 +930,7 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
             );
         } break;
 
-    case Opcode::Multiply:
+        case Opcode::Multiply:
         case Opcode::MoveSignExtended:
         case Opcode::MoveZeroExtended:
         case Opcode::ShiftRightLogical:
