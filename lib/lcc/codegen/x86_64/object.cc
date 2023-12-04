@@ -1026,6 +1026,18 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
 }
 
 static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
+    // TODO: Stack frame kinds.
+    // GNU syntax (src, dst operands)
+    // push %rbp
+    // mov %rsp, %rbp
+    auto push_rbp = MInst(usz(Opcode::Push), {0, 0});
+    push_rbp.add_operand(MOperandRegister(usz(RegisterId::RBP), 64));
+    auto mov_rsp_into_rbp = MInst(usz(Opcode::Move), {0, 0});
+    mov_rsp_into_rbp.add_operand(MOperandRegister(usz(RegisterId::RSP), 64));
+    mov_rsp_into_rbp.add_operand(MOperandRegister(usz(RegisterId::RBP), 64));
+    assemble_inst(gobj, func, push_rbp, text);
+    assemble_inst(gobj, func, mov_rsp_into_rbp, text);
+
     for (auto& block : func.blocks()) {
         gobj.symbols.push_back(
             {Symbol::Kind::STATIC,
@@ -1033,16 +1045,6 @@ static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
              text.name,
              text.contents.size()}
         );
-
-        // TODO: Stack frame kinds.
-        // GNU syntax (src, dst operands)
-        // push %rbp
-        // mov %rsp, %rbp
-        auto push_rbp = MInst(usz(Opcode::Push), {0, 0});
-        push_rbp.add_operand(MOperandRegister(usz(RegisterId::RBP), 64));
-        auto mov_rsp_into_rbp = MInst(usz(Opcode::Move), {0, 0});
-        mov_rsp_into_rbp.add_operand(MOperandRegister(usz(RegisterId::RSP), 64));
-        mov_rsp_into_rbp.add_operand(MOperandRegister(usz(RegisterId::RBP), 64));
 
         for (auto& inst : block.instructions())
             assemble_inst(gobj, func, inst, text);
