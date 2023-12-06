@@ -720,7 +720,7 @@ lcc::intercept::Lexer::MacroExpansion::MacroExpansion(
     Location loc
 ) : m(&m), it(m.expansion.begin()), bound_arguments(std::move(args)), location(loc) {
     for (usz i = 0; i < m.definitions.size(); i++)
-        gensyms.push_back(fmt::format(".{}", l.gensym_counter++));
+        gensyms.push_back(fmt::format("__L{}", l.gensym_counter++));
 }
 
 auto lcc::intercept::Lexer::MacroExpansion::operator++() -> Token {
