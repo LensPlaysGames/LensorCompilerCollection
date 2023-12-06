@@ -744,8 +744,8 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
     /// While we’re at the start of an expression, if we’re not parsing
     /// a single-expression, parse call arguments.
     // Exception: parsed expression (would-be callee) must be an identifier or
-    // a lambda.
-    else if (not single_expression and (lhs->kind() == Expr::Kind::NameRef or lhs->kind() == Expr::Kind::FuncDecl)) {
+    // a lambda or a number.
+    else if (not single_expression and (lhs->kind() == Expr::Kind::NameRef or lhs->kind() == Expr::Kind::FuncDecl or lhs->kind() == Expr::Kind::IntegerLiteral)) {
         std::vector<Expr*> args;
 
         /// Ignore unary operators that could also be binary operators.
@@ -763,6 +763,53 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
                 {lhs->location(), tok.location}
             );
         }
+    }
+
+    /// Binary operator parse loop.
+    while (ShouldKeepParsingOperators()) {
+        /// Handle ‘operators’ that require special parsing.
+        switch (tok.kind) {
+            default: break;
+
+            /// Subscript expression.
+            case Tk::LBrack: {
+                NextToken();
+                auto index = ParseExpr();
+                if (not index) return index.diag();
+                lhs = new (*mod) BinaryExpr(Tk::LBrack, *lhs, *index, {lhs->location(), tok.location});
+                if (not Consume(Tk::RBrack)) return Error("Expected ]");
+                continue;
+            }
+
+            /// Cast operator. The RHS is a type.
+            case Tk::As:
+            case Tk::AsBang: {
+                const auto cast_kind = tok.kind == Tk::As ? CastKind::SoftCast : CastKind::HardCast;
+                NextToken();
+                auto ty = ParseType();
+                if (not ty) return ty.diag();
+                lhs = new (*mod) CastExpr(*lhs, *ty, cast_kind, {lhs->location(), tok.location});
+                continue;
+            }
+
+            /// The member access operator must be followed by an identifier.
+            case Tk::Dot: {
+                NextToken();
+                if (not At(Tk::Ident)) return Error("Expected identifier after .");
+                auto member = tok.text;
+                auto loc = tok.location;
+                NextToken();
+                lhs = new (*mod) MemberAccessExpr(*lhs, std::move(member), {lhs->location(), loc});
+                continue;
+            }
+        }
+
+        /// Regular binary expression.
+        auto op = tok.kind;
+        NextToken();
+        auto rhs = ParseExpr(BinaryOrPostfixPrecedence(op));
+        if (not rhs) return rhs.diag();
+        lhs = new (*mod) BinaryExpr(op, *lhs, *rhs, {lhs->location(), rhs->location()});
     }
 
     return lhs;

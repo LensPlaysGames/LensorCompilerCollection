@@ -1,3 +1,4 @@
+#include <intercept/ast.hh>
 #include <intercept/sema.hh>
 #include <lcc/context.hh>
 #include <lcc/utils.hh>
@@ -1243,6 +1244,71 @@ void intc::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     /// If the callee is a function pointer, dereference it.
     if (auto ty = expr->callee()->type(); ty->is_pointer() and ty->elem()->is_function())
         InsertImplicitCast(&expr->callee(), ty->elem());
+
+    // if the callee is an integer, multiply all the arguments.
+    // `100 x;` -> 100 * x
+    //   CallExpr(
+    //       ConstantExpr 100
+    //       NameRefExpr x
+    //   )
+    // becomes
+    //   BinaryExpr(
+    //       '*'
+    //       ConstantExpr 100
+    //       NameRefExpr x
+    // )
+    //
+    // `100 x y` -> 100 * x * y
+    //   CallExpr(
+    //       ConstantExpr 100
+    //       NameRefExpr x
+    //       NameRefExpr y
+    //   )
+    // becomes
+    //   BinaryExpr(
+    //       '*'
+    //       ConstantExpr 100
+    //       BinaryExpr(
+    //           NameRefExpr x
+    //           NameRefExpr y
+    //       )
+    // )
+
+    else if (auto ty = expr->callee()->type(); ty->is_integer()) {
+        // NOTE: Call of integer with zero arguments by deproceduring should not
+        // be possible, but this handles `100();`
+        if (expr->args().empty() and not HasSideEffects(expr)) {
+            Diag::Warning(
+                context,
+                expr->location(),
+                "Expression result unused"
+            );
+            return;
+        }
+
+        auto* rhs = expr->args().back();
+        // NOTE: Relies on unsigned underflow
+        for (usz i = expr->args().size() - 2; i < expr->args().size(); --i) {
+            auto* lhs = expr->args().at(i);
+            rhs = new (mod) BinaryExpr(
+                TokenKind::Star,
+                lhs,
+                rhs,
+                {lhs->location(), rhs->location()}
+            );
+        }
+
+        *expr_ptr = new (mod) BinaryExpr(
+            TokenKind::Star,
+            expr->callee(),
+            rhs,
+            expr->location()
+        );
+
+        Analyse(expr_ptr);
+
+        return;
+    }
 
     /// Otherwise, if the type is not already a function type, we can’t call this.
     else if (not ty->is_function()) {
