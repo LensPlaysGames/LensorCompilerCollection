@@ -8,6 +8,8 @@
 namespace lcc {
 namespace isel {
 
+// TODO: namespace x86_64
+
 using OK = OperandKind;
 using Opcode = x86_64::Opcode;
 
@@ -102,6 +104,12 @@ using s_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::SExt), Register<0, 0>>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveSignExtended), o<0>, i<0>>>>;
 
+using not_reg = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Compl), Register<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Not), o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+
 using sar_imm_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Sar), Immediate<0, 0>, Immediate<0, 0>>>,
     InstList<
@@ -143,7 +151,7 @@ using shl_imm_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Shl), Immediate<0, 0>, Register<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-             Inst<Clobbers<>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(x86_64::RegisterId::RCX), 32>>,
+        Inst<Clobbers<>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(x86_64::RegisterId::RCX), 32>>,
         Inst<Clobbers<>, usz(Opcode::ShiftLeft), Register<usz(x86_64::RegisterId::RCX), 8>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
@@ -187,16 +195,25 @@ using shl_reg_reg = Pattern<
         Inst<Clobbers<>, usz(Opcode::ShiftLeft), Register<usz(x86_64::RegisterId::RCX), 8>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
-using and_reg_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::And), Register<0, 0>, Register<0, 0>>>,
+template<usz inst_kind, usz out_opcode>
+using binary_commutative_reg_reg = Pattern<
+    InstList<Inst<Clobbers<>, inst_kind, Register<0, 0>, Register<0, 0>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::And), o<0>, o<1>>,
+        Inst<Clobbers<>, out_opcode, o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
+using and_reg_reg = binary_commutative_reg_reg<usz(MInst::Kind::And), usz(Opcode::And)>;
 using and_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::And), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::And), o<1>, o<0>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
+
+using or_reg_reg = binary_commutative_reg_reg<usz(MInst::Kind::Or), usz(Opcode::Or)>;
+using or_reg_imm = Pattern<
+    InstList<Inst<Clobbers<>, usz(MInst::Kind::Or), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<
+        Inst<Clobbers<>, usz(Opcode::Or), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using add_local_imm = Pattern<
@@ -205,12 +222,7 @@ using add_local_imm = Pattern<
         Inst<Clobbers<>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
 
-using add_reg_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Register<0, 0>, Register<0, 0>>>,
-    InstList<
-        Inst<Clobbers<>, usz(Opcode::Add), o<0>, o<1>>,
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
-
+using add_reg_reg = binary_commutative_reg_reg<usz(MInst::Kind::Add), usz(Opcode::Add)>;
 using add_imm_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Immediate<0, 0>, Register<0, 0>>>,
     InstList<
@@ -329,94 +341,99 @@ using z_ext_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(MInst::Kind::ZExt), Register<0, 0>>>,
     InstList<Inst<Clobbers<>, usz(Opcode::MoveZeroExtended), o<0>, i<0>>>>;
 
-using x86_64PatternList = PatternList <
-                          ret,
-      ret_imm,
-      ret_reg,
-      load_global,
-      load_local,
-      load_reg,
-      store_reg_local,
-      store_imm_local,
-      store_imm_reg,
-      store_reg_reg,
-      copy_reg,
-      copy_global,
-      copy_local,
-      copy_imm,
+using x86_64PatternList = PatternList<
+    ret,
+    ret_imm,
+    ret_reg,
+    load_global,
+    load_local,
+    load_reg,
+    store_reg_local,
+    store_imm_local,
+    store_imm_reg,
+    store_reg_reg,
+    copy_reg,
+    copy_global,
+    copy_local,
+    copy_imm,
 
-      s_ext_reg,
-      z_ext_reg,
+    s_ext_reg,
+    z_ext_reg,
 
-      shl_imm_imm,
-      shr_imm_imm,
-      sar_imm_imm,
+    not_reg,
 
-      shl_imm_reg,
-      shr_imm_reg,
-      sar_imm_reg,
+    shl_imm_imm,
+    shr_imm_imm,
+    sar_imm_imm,
 
-      shl_reg_imm,
-      shr_reg_imm,
-      sar_reg_imm,
+    shl_imm_reg,
+    shr_imm_reg,
+    sar_imm_reg,
 
-      shl_reg_reg,
-      shr_reg_reg,
-      sar_reg_reg,
+    shl_reg_imm,
+    shr_reg_imm,
+    sar_reg_imm,
 
-      and_reg_reg,
-      and_reg_imm,
+    shl_reg_reg,
+    shr_reg_reg,
+    sar_reg_reg,
 
-      add_local_imm,
-      add_reg_reg,
-      add_imm_reg,
-      add_reg_imm,
+    and_reg_reg,
+    and_reg_imm,
 
-      mul_imm_reg,
-      mul_reg_imm,
+    or_reg_reg,
+    or_reg_imm,
 
-      sub_reg_reg,
-      sub_reg_imm,
+    add_local_imm,
+    add_reg_reg,
+    add_imm_reg,
+    add_reg_imm,
 
-      bitcast_imm,
+    mul_imm_reg,
+    mul_reg_imm,
 
-      simple_function_call,
-      simple_block_branch,
-      cond_branch_reg,
-      cond_branch_imm,
+    sub_reg_reg,
+    sub_reg_imm,
 
-      u_lt_reg_reg,
-      s_lt_reg_reg,
-      u_lt_eq_reg_reg,
-      s_lt_eq_reg_reg,
-      u_gt_reg_reg,
-      s_gt_reg_reg,
-      u_gt_eq_reg_reg,
-      s_gt_eq_reg_reg,
-      eq_reg_reg,
-      ne_reg_reg,
+    bitcast_imm,
 
-      u_lt_reg_imm,
-      s_lt_reg_imm,
-      u_lt_eq_reg_imm,
-      s_lt_eq_reg_imm,
-      u_gt_reg_imm,
-      s_gt_reg_imm,
-      u_gt_eq_reg_imm,
-      s_gt_eq_reg_imm,
-      eq_reg_imm,
-      ne_reg_imm,
+    simple_function_call,
+    simple_block_branch,
+    cond_branch_reg,
+    cond_branch_imm,
 
-      u_lt_imm_imm,
-      s_lt_imm_imm,
-      u_lt_eq_imm_imm,
-      s_lt_eq_imm_imm,
-      u_gt_imm_imm,
-      s_gt_imm_imm,
-      u_gt_eq_imm_imm,
-      s_gt_eq_imm_imm,
-      eq_imm_imm,
-      ne_imm_imm>;
+    u_lt_reg_reg,
+    s_lt_reg_reg,
+    u_lt_eq_reg_reg,
+    s_lt_eq_reg_reg,
+    u_gt_reg_reg,
+    s_gt_reg_reg,
+    u_gt_eq_reg_reg,
+    s_gt_eq_reg_reg,
+    eq_reg_reg,
+    ne_reg_reg,
+
+    u_lt_reg_imm,
+    s_lt_reg_imm,
+    u_lt_eq_reg_imm,
+    s_lt_eq_reg_imm,
+    u_gt_reg_imm,
+    s_gt_reg_imm,
+    u_gt_eq_reg_imm,
+    s_gt_eq_reg_imm,
+    eq_reg_imm,
+    ne_reg_imm,
+
+    u_lt_imm_imm,
+    s_lt_imm_imm,
+    u_lt_eq_imm_imm,
+    s_lt_eq_imm_imm,
+    u_gt_imm_imm,
+    s_gt_imm_imm,
+    u_gt_eq_imm_imm,
+    s_gt_eq_imm_imm,
+    eq_imm_imm,
+    ne_imm_imm>;
 
 } // namespace isel
 } // namespace lcc

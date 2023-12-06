@@ -25,7 +25,9 @@ enum struct Opcode : u32 {
     LoadEffectiveAddress, // lea
 
     // Bitwise
+    Not, // One's Complement Negation
     And,
+    Or,
     ShiftRightArithmetic,
     ShiftRightLogical,
     ShiftLeft,
@@ -114,7 +116,7 @@ constexpr auto Special(usz size) -> std::string_view {
 
 constexpr auto ToString(Opcode op) -> std::string_view {
     switch (op) {
-        case Opcode::Poison: return "x86_64.poison";
+        case Opcode::Poison: return "x86_64.poison"; // FIXME: Crash here?
         case Opcode::Return: return "ret";
         case Opcode::Jump: return "jmp";
         case Opcode::Call: return "call";
@@ -124,7 +126,9 @@ constexpr auto ToString(Opcode op) -> std::string_view {
         case Opcode::MoveSignExtended: return "movsx";
         case Opcode::MoveZeroExtended: return "movzx";
         case Opcode::LoadEffectiveAddress: return "lea";
+        case Opcode::Not: return "not";
         case Opcode::And: return "and";
+        case Opcode::Or: return "or";
         case Opcode::ShiftLeft: return "shl";
         case Opcode::ShiftRightLogical: return "shr";
         case Opcode::ShiftRightArithmetic: return "sar";

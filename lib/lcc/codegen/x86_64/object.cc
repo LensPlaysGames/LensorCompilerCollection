@@ -930,6 +930,8 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
             );
         } break;
 
+        case Opcode::Not:
+        case Opcode::Or:
         case Opcode::Multiply:
         case Opcode::MoveSignExtended:
         case Opcode::MoveZeroExtended:
