@@ -1113,10 +1113,8 @@ std::vector<lcc::u8> intc::Module::serialise() {
     }
 
     // Make name easily serialisable
-    // Make name up if there isn't one. Should possibly just assert.
-    if (name.empty()) name = "YouForgotToNameThisModule";
-    // Possible TODO: Should we error if there is a NULL in the module name?
-    // That would surely bugger things.
+    LCC_ASSERT(name.size(), "Cannot serialise unnamed module");
+    // TODO: Error if there is a NULL in the module name. That would surely bugger things.
     serialised_name.insert(serialised_name.end(), name.begin(), name.end());
     serialised_name.push_back('\0');
 
@@ -1143,6 +1141,20 @@ bool intc::Module::deserialise(std::vector<u8> module_metadata_blob) {
     // (if that is even allowed past sema).
     if (module_metadata_blob.size() < sizeof(ModuleDescription::Header))
         return false;
+
+    ModuleDescription::Header hdr{};
+    std::memcpy(&hdr, module_metadata_blob.data(), sizeof(ModuleDescription::Header));
+
+    if (hdr.version != 1) {
+        fmt::print("ERROR: Could not deserialise: Invalid version {} in header\n", hdr.version);
+        return false;
+    }
+    if (hdr.magic[0] != ModuleDescription::magic_byte0 or hdr.magic[1] != ModuleDescription::magic_byte1 or hdr.magic[2] != ModuleDescription::magic_byte2) {
+        fmt::print("ERROR: Could not deserialise: Invalid magic bytes in header: {} {} {}\n", hdr.magic[0], hdr.magic[1], hdr.magic[2]);
+        return false;
+    }
+
+    LCC_TODO("Deserialise module from binary metadata blob");
 
     return true;
 }
