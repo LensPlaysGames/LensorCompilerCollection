@@ -972,8 +972,47 @@ struct ModuleDescription {
         lcc::u16 type_count;
     };
 
-    // FIXME: Maybe better as a using? But then we don't have field name.
     struct DeclarationHeader {
+        enum struct Kind : lcc::u16 {
+            INVALID,
+            TYPE,
+            TYPE_ALIAS,
+            ENUMERATOR,
+            VARIABLE,
+            FUNCTION,
+        };
+        static constexpr Kind get_kind(intc::Decl* decl) {
+            switch (decl->kind()) {
+                // All kinds of decl must go here
+                case lcc::intercept::Expr::Kind::TypeDecl: return Kind::TYPE;
+                case lcc::intercept::Expr::Kind::TypeAliasDecl: return Kind::TYPE_ALIAS;
+                case lcc::intercept::Expr::Kind::EnumeratorDecl: return Kind::ENUMERATOR;
+                case lcc::intercept::Expr::Kind::VarDecl: return Kind::VARIABLE;
+                case lcc::intercept::Expr::Kind::FuncDecl: return Kind::FUNCTION;
+
+                // Non-decl kinds
+                case lcc::intercept::Expr::Kind::While:
+                case lcc::intercept::Expr::Kind::For:
+                case lcc::intercept::Expr::Kind::Return:
+                case lcc::intercept::Expr::Kind::IntegerLiteral:
+                case lcc::intercept::Expr::Kind::StringLiteral:
+                case lcc::intercept::Expr::Kind::CompoundLiteral:
+                case lcc::intercept::Expr::Kind::OverloadSet:
+                case lcc::intercept::Expr::Kind::EvaluatedConstant:
+                case lcc::intercept::Expr::Kind::If:
+                case lcc::intercept::Expr::Kind::Block:
+                case lcc::intercept::Expr::Kind::Call:
+                case lcc::intercept::Expr::Kind::IntrinsicCall:
+                case lcc::intercept::Expr::Kind::Cast:
+                case lcc::intercept::Expr::Kind::Unary:
+                case lcc::intercept::Expr::Kind::Binary:
+                case lcc::intercept::Expr::Kind::NameRef:
+                case lcc::intercept::Expr::Kind::MemberAccess:
+                    break;
+            }
+            LCC_UNREACHABLE();
+        }
+        lcc::u16 kind; // one of DeclarationHeader::Kind
         lcc::u16 type_index;
     };
 };
@@ -1097,7 +1136,9 @@ std::vector<lcc::u8> intc::Module::serialise() {
 
         // Prepare declaration header
         u16 type_index = serialise(types, type_cache, decl->type());
-        ModuleDescription::DeclarationHeader decl_hdr{type_index};
+        ModuleDescription::DeclarationHeader decl_hdr{
+            u16(ModuleDescription::DeclarationHeader::get_kind(decl)),
+            type_index};
         auto decl_hdr_bytes = to_bytes(decl_hdr);
 
         // Prepare length
@@ -1142,9 +1183,11 @@ bool intc::Module::deserialise(std::vector<u8> module_metadata_blob) {
     if (module_metadata_blob.size() < sizeof(ModuleDescription::Header))
         return false;
 
+    // Copy the header from the binary metadata blob.
     ModuleDescription::Header hdr{};
     std::memcpy(&hdr, module_metadata_blob.data(), sizeof(ModuleDescription::Header));
 
+    // Verify header has expected values.
     if (hdr.version != 1) {
         fmt::print("ERROR: Could not deserialise: Invalid version {} in header\n", hdr.version);
         return false;
@@ -1152,6 +1195,42 @@ bool intc::Module::deserialise(std::vector<u8> module_metadata_blob) {
     if (hdr.magic[0] != ModuleDescription::magic_byte0 or hdr.magic[1] != ModuleDescription::magic_byte1 or hdr.magic[2] != ModuleDescription::magic_byte2) {
         fmt::print("ERROR: Could not deserialise: Invalid magic bytes in header: {} {} {}\n", hdr.magic[0], hdr.magic[1], hdr.magic[2]);
         return false;
+    }
+
+    // Starting at the type table offset, parse all types. Stop after parsing
+    // the amount of types specified in the header.
+    auto type_count = hdr.type_count;
+    while (type_count--) {
+        LCC_TODO("Parse type from binary module metadata");
+    }
+
+    // Starting after the header, begin parsing declarations. Stop after
+    // parsing the amount of declarations specified in the header.
+    auto offset = sizeof(ModuleDescription::Header);
+    auto decl_count = hdr.declaration_count;
+    while (decl_count--) {
+        ModuleDescription::DeclarationHeader decl_hdr{};
+        std::memcpy(
+            &decl_hdr,
+            module_metadata_blob.data() + offset,
+            sizeof(decl_hdr)
+        );
+        offset += sizeof(decl_hdr);
+
+        u16 name_length{};
+        std::memcpy(
+            &name_length,
+            module_metadata_blob.data() + offset,
+            sizeof(name_length)
+        );
+        offset += sizeof(name_length);
+
+        std::string name{};
+        for (decltype(offset) i = 0; i < offset + name_length; ++i)
+            name += char(*(module_metadata_blob.data() + offset + i));
+        offset += name_length;
+
+        LCC_TODO("Create Decl from deserialised info: {}", name);
     }
 
     LCC_TODO("Deserialise module from binary metadata blob");
