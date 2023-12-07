@@ -935,6 +935,8 @@ void intc::Module::print(bool use_colour) {
 /// A declaration is encoded as a DeclarationHeader + N amount of bytes
 /// determined by the values in the declaration header.
 struct ModuleDescription {
+    using TypeIndex = lcc::u16;
+
     // Default/expected values.
     static constexpr lcc::u8 default_version = 1;
     static constexpr lcc::u8 magic_byte0 = 'I';
@@ -1013,7 +1015,7 @@ struct ModuleDescription {
             LCC_UNREACHABLE();
         }
         lcc::u16 kind; // one of DeclarationHeader::Kind
-        lcc::u16 type_index;
+        TypeIndex type_index;
     };
 };
 
@@ -1035,7 +1037,7 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
         cache.size() < 0xffff,
         "Too many types, cannot serialise"
     );
-    u16 type_index = u16(cache.size());
+    auto type_index = ModuleDescription::TypeIndex(cache.size());
     cache.push_back(ty);
 
     u8 tag = u8(ty->kind());
@@ -1053,10 +1055,10 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             out.insert(out.end(), type->name().begin(), type->name().end());
         } break;
 
-        // PointerType, ReferenceType: type_index :u16
+        // PointerType, ReferenceType: type_index :TypeIndex
         case Type::Kind::Pointer:
         case Type::Kind::Reference: {
-            u16 referenced_type_index = u16(-1);
+            auto referenced_type_index = ModuleDescription::TypeIndex(-1);
             auto type_index_bytes = to_bytes(referenced_type_index);
 
             // Write `type_index: u16`, keeping track of byte index into binary
@@ -1072,7 +1074,7 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             // FIXME: Is it possible to /not/ do this reinterpret cast? I guess we
             // could manually fuddle with bytes given the index since we know
             // endianness and size. Yeah, that's probably what we should do.
-            u16* referenced_type_index_ptr = reinterpret_cast<u16*>(out.data() + referenced_type_index_offset);
+            auto* referenced_type_index_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + referenced_type_index_offset);
             *referenced_type_index_ptr = referenced_type_index;
         } break;
 
@@ -1113,8 +1115,73 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             out.insert(out.end(), ffi_kind_bytes.begin(), ffi_kind_bytes.end());
         } break;
 
+        // FunctionType:
+        //     attributes :u32
+        //     param_count :u16
+        //     param_types :u16[param_count]
+        //     return_type :u16
+        //     param_names :(param_name_length :u16, param_name :u8[param_name_length])[param_count]
+        case Type::Kind::Function: {
+            FuncType* type = as<FuncType>(ty);
+            u32 attributes{};
+            const auto set_attr_bit = [&](FuncAttr f) {
+                if (type->has_attr(f)) {
+                    static constexpr auto one = decltype(attributes)(1);
+                    attributes |= one << u32(f);
+                }
+            };
+            // Probably don't need all of these. If we run out of bits, we could
+            // remove some that aren't needed.
+            set_attr_bit(FuncAttr::Const);
+            set_attr_bit(FuncAttr::Discardable);
+            set_attr_bit(FuncAttr::Flatten);
+            set_attr_bit(FuncAttr::Inline);
+            set_attr_bit(FuncAttr::NoInline);
+            set_attr_bit(FuncAttr::NoMangle);
+            set_attr_bit(FuncAttr::NoOpt);
+            set_attr_bit(FuncAttr::NoReturn);
+            set_attr_bit(FuncAttr::Pure);
+            set_attr_bit(FuncAttr::ReturnsTwice);
+            set_attr_bit(FuncAttr::Used);
+
+            u16 param_count = u16(type->params().size());
+
+            auto attributes_bytes = to_bytes(attributes);
+            out.insert(out.end(), attributes_bytes.begin(), attributes_bytes.end());
+
+            auto param_count_bytes = to_bytes(param_count);
+            out.insert(out.end(), param_count_bytes.begin(), param_count_bytes.end());
+
+            // Allocate enough room to represent parameter types, once we are able to
+            // serialise them, keeping track of where they are so we can fix them up
+            // later.
+            auto param_types_offset = out.size();
+            out.insert(out.end(), param_count * sizeof(ModuleDescription::TypeIndex), 0);
+
+            auto return_type_offset = out.size();
+            out.insert(out.end(), sizeof(ModuleDescription::TypeIndex), 0);
+
+            // Write parameter names
+            for (auto& param : type->params()) {
+                auto name_length = u16(param.name.length());
+                auto name_length_bytes = to_bytes(name_length);
+                out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
+                out.insert(out.end(), param.name.begin(), param.name.end());
+            }
+
+            // Serialise parameter types and fixup parameter type indices previously
+            // allocated.
+            auto* param_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + param_types_offset);
+            for (auto [index, param] : vws::enumerate(type->params())) {
+                *param_types_ptr++ = serialise(out, cache, param.type);
+            }
+
+            // Serialise return type and fixup return type index previously allocated.
+            auto* return_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + return_type_offset);
+            *return_type_ptr = serialise(out, cache, type->return_type());
+        } break;
+
         case Type::Kind::Enum:
-        case Type::Kind::Function:
         case Type::Kind::Array:
         case Type::Kind::Struct:
             LCC_TODO("Handle serialisation of type {}", *ty);
@@ -1135,7 +1202,7 @@ std::vector<lcc::u8> intc::Module::serialise() {
         // Decl: DeclHeader, length :u8, name :u8[length]
 
         // Prepare declaration header
-        u16 type_index = serialise(types, type_cache, decl->type());
+        ModuleDescription::TypeIndex type_index = serialise(types, type_cache, decl->type());
         ModuleDescription::DeclarationHeader decl_hdr{
             u16(ModuleDescription::DeclarationHeader::get_kind(decl)),
             type_index};
