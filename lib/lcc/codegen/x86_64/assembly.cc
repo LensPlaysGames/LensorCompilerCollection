@@ -3,8 +3,8 @@
 #include <lcc/codegen/x86_64.hh>
 #include <lcc/codegen/x86_64/assembly.hh>
 #include <lcc/context.hh>
-#include <lcc/utils.hh>
 #include <lcc/ir/ir.hh>
+#include <lcc/utils.hh>
 #include <string>
 #include <variant>
 
@@ -126,7 +126,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
             out += fmt::format("    sub ${}, %rsp\n", stack_frame_size);
         }
 
-        for (auto& block : function.blocks()) {
+        for (auto [block_index, block] : vws::enumerate(function.blocks())) {
             out += fmt::format("{}:\n", block_name(block.name()));
 
             for (auto& instruction : block.instructions()) {
@@ -135,6 +135,19 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                     auto lhs = instruction.get_operand(0);
                     auto rhs = instruction.get_operand(1);
                     if (std::holds_alternative<MOperandRegister>(lhs) and std::holds_alternative<MOperandRegister>(rhs) and std::get<MOperandRegister>(lhs).value == std::get<MOperandRegister>(rhs).value)
+                        continue;
+                }
+
+                // Simple jump threading
+                // clang-format off
+                if (&block != &function.blocks().back()
+                    and instruction.opcode() == +x86_64::Opcode::Jump
+                    and instruction.all_operands().size() == 1
+                    and std::holds_alternative<MOperandBlock>(instruction.get_operand(0))) {
+                    // clang-format on
+                    auto target_block = std::get<MOperandBlock>(instruction.get_operand(0));
+                    auto next_block = function.blocks().at(usz(block_index + 1));
+                    if (target_block->name() == next_block.name())
                         continue;
                 }
 
@@ -158,6 +171,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                 if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS and std::holds_alternative<MOperandRegister>(instruction.get_operand(1))) {
                     auto lhs = instruction.get_operand(0);
                     auto rhs = instruction.get_operand(1);
+
                     usz offset = 0;
                     if (instruction.all_operands().size() == 3) {
                         auto given_offset = instruction.get_operand(2);
@@ -167,6 +181,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                         );
                         offset = std::get<MOperandImmediate>(given_offset).value;
                     }
+
                     if (offset)
                         out += fmt::format(" {}, {}({})\n", ToString(function, lhs), offset, ToString(function, rhs));
                     else out += fmt::format(" {}, ({})\n", ToString(function, lhs), ToString(function, rhs));
