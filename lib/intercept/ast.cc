@@ -1055,7 +1055,16 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             out.push_back(is_signed);
         } break;
 
-        case Type::Kind::Builtin:
+        case Type::Kind::Builtin: {
+            BuiltinType* type = as<BuiltinType>(ty);
+            LCC_ASSERT(
+                type->builtin_kind() != BuiltinType::BuiltinKind::OverloadSet,
+                "Cannot serialise overload sets; sorry"
+            );
+            u8 builtin_kind = u8(type->builtin_kind());
+            out.push_back(builtin_kind);
+        } break;
+
         case Type::Kind::FFIType:
         case Type::Kind::Array:
         case Type::Kind::Function:
