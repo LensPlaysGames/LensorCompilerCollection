@@ -1226,7 +1226,7 @@ bool intc::Module::deserialise(std::vector<u8> module_metadata_blob) {
         offset += sizeof(name_length);
 
         std::string name{};
-        for (decltype(offset) i = 0; i < offset + name_length; ++i)
+        for (decltype(offset) i = 0; i < name_length; ++i)
             name += char(*(module_metadata_blob.data() + offset + i));
         offset += name_length;
 
