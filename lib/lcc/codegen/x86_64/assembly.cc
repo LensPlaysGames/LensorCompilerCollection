@@ -204,7 +204,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                     else out += fmt::format(" ({}), {}\n", ToString(function, lhs), ToString(function, rhs));
                     continue;
                 }
-                if (instruction.opcode() == +x86_64::Opcode::Move) {
+                if (instruction.opcode() == +x86_64::Opcode::MoveDereferenceRHS) {
                     auto lhs = instruction.get_operand(0);
                     auto rhs = instruction.get_operand(1);
                     if (std::holds_alternative<MOperandImmediate>(lhs)) {
