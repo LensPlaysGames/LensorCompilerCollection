@@ -1037,8 +1037,8 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             *referenced_type_index_ptr = referenced_type_index;
         } break;
 
+        // IntegerType: bitwidth :u16, is_signed :u8
         case Type::Kind::Integer: {
-            // bitwidth :u16, is_signed :u8
             IntegerType* type = as<IntegerType>(ty);
             LCC_ASSERT(
                 type->bit_width() <= 0xffff,
@@ -1055,6 +1055,7 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             out.push_back(is_signed);
         } break;
 
+        // BuiltinType: builtin_kind :u8
         case Type::Kind::Builtin: {
             BuiltinType* type = as<BuiltinType>(ty);
             LCC_ASSERT(
@@ -1065,10 +1066,17 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             out.push_back(builtin_kind);
         } break;
 
-        case Type::Kind::FFIType:
-        case Type::Kind::Array:
-        case Type::Kind::Function:
+        // FFIType: ffi_kind :u16
+        case Type::Kind::FFIType: {
+            FFIType* type = as<FFIType>(ty);
+            u16 ffi_kind = u8(type->ffi_kind());
+            auto ffi_kind_bytes = to_bytes(ffi_kind);
+            out.insert(out.end(), ffi_kind_bytes.begin(), ffi_kind_bytes.end());
+        } break;
+
         case Type::Kind::Enum:
+        case Type::Kind::Function:
+        case Type::Kind::Array:
         case Type::Kind::Struct:
             LCC_TODO("Handle serialisation of type {}", *ty);
     }
