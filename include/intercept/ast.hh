@@ -137,7 +137,7 @@ private:
     std::string name{};
 
     FuncDecl* top_level_function{};
-    bool is_module;
+    bool _is_module;
     File* file;
 
     std::vector<Ref> _imports;
@@ -188,6 +188,10 @@ public:
 
     /// Get a function name that is unique within this module.
     auto unique_function_name() -> std::string { return fmt::format("_XInt__lambda_{}", lambda_counter++); }
+
+    bool is_module() const {
+        return _is_module;
+    }
 
     /// Obtain a module metadata blob describing this Intercept module.
     std::vector<u8> serialise();

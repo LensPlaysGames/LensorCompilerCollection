@@ -16,7 +16,7 @@ intc::Module::Module(
     File* file,
     std::string module_name,
     bool is_logical_module
-) : name{std::move(module_name)}, is_module{is_logical_module}, file{file} {
+) : name{std::move(module_name)}, _is_module{is_logical_module}, file{file} {
     FuncType* ty{};
 
     /// Create the type of the top-level function.
