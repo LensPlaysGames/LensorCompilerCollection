@@ -1037,13 +1037,30 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             *referenced_type_index_ptr = referenced_type_index;
         } break;
 
+        case Type::Kind::Integer: {
+            // bitwidth :u16, is_signed :u8
+            IntegerType* type = as<IntegerType>(ty);
+            LCC_ASSERT(
+                type->bit_width() <= 0xffff,
+                "Cannot encode over-large bitwidth of integer type {}",
+                *ty
+            );
+
+            u16 bitwidth = u16(type->bit_width());
+            auto bitwidth_bytes = to_bytes(bitwidth);
+
+            u8 is_signed = type->is_signed() ? 1 : 0;
+
+            out.insert(out.end(), bitwidth_bytes.begin(), bitwidth_bytes.end());
+            out.push_back(is_signed);
+        } break;
+
         case Type::Kind::Builtin:
         case Type::Kind::FFIType:
         case Type::Kind::Array:
         case Type::Kind::Function:
         case Type::Kind::Enum:
         case Type::Kind::Struct:
-        case Type::Kind::Integer:
             LCC_TODO("Handle serialisation of type {}", *ty);
     }
 
