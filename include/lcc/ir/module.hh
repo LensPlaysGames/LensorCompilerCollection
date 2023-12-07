@@ -4,6 +4,7 @@
 #include <lcc/forward.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/utils.hh>
+#include <lcc/codegen/generic_object.hh>
 
 namespace lcc {
 /// An LCC IR module.
@@ -13,6 +14,7 @@ class Module {
 
     std::vector<Function*> _code;
     std::vector<GlobalVariable*> _vars;
+    std::vector<Section> _extra_sections;
 
     usz _virtual_register{0x420};
 
@@ -47,9 +49,15 @@ public:
     auto code() const -> std::vector<Function*> { return _code; }
     auto vars() -> std::vector<GlobalVariable*>& { return _vars; }
     auto vars() const -> std::vector<GlobalVariable*> { return _vars; }
+    auto extra_sections() -> std::vector<Section>& { return _extra_sections; }
+    auto extra_sections() const -> std::vector<Section> { return _extra_sections; }
 
     void add_function(Function* func) { _code.push_back(func); }
     void add_var(GlobalVariable* var) { _vars.push_back(var); }
+
+    void add_extra_section(const Section& section) {
+        _extra_sections.push_back(section);
+    }
 
     void lower();
     void emit(std::filesystem::path output_file_path);
