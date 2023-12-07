@@ -186,8 +186,20 @@ public:
     /// Get the top-level scope.
     auto top_level_scope() const -> Scope* { return scopes[1]; }
 
-    /// Get a unique function name.
+    /// Get a function name that is unique within this module.
     auto unique_function_name() -> std::string { return fmt::format("_XInt__lambda_{}", lambda_counter++); }
+
+    /// Obtain a module metadata blob describing this Intercept module.
+    std::vector<u8> serialise();
+    // Serialise type into given out parameter and append type to cache iff it
+    // is not already in the cache. Return the index within the cache of the
+    // given type.
+    lcc::u16 serialise(std::vector<u8>& out, std::vector<Type*>& cache, Type*);
+    /// Deserialise a module metadata blob into `this`.
+    /// \return a boolean value denoting `true` iff deserialisation succeeded.
+    /// NOTE: Only call this on new modules, as it does not clear out old
+    /// module before deserialising into `this`.
+    bool deserialise(std::vector<u8> module_metadata_blob);
 
     std::vector<Expr*> nodes;
     std::vector<Type*> types;

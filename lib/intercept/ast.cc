@@ -2,6 +2,7 @@
 #include <intercept/ast.hh>
 #include <intercept/parser.hh>
 #include <lcc/target.hh>
+#include <lcc/utils.hh>
 #include <lcc/utils/ast_printer.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
@@ -919,4 +920,195 @@ auto intc::Type::string(bool use_colours) const -> std::string {
 
 void intc::Module::print(bool use_colour) {
     ASTPrinter{use_colour}.print(this);
+}
+
+/// For serialisation purposes.
+/// If you know how ELF works, you'll find this familiar and pretty
+/// easy-going. If not, hopefully the comments help you out along the way.
+///
+/// OVERALL STRUCTURE of BINARY METADATA BLOB version 1:
+///
+/// Beginning of file       type_table_offset  name_offset
+/// V                       V                  V
+/// Header { Declarations } { Types }          [ Module Name ]
+///
+/// A declaration is encoded as a DeclarationHeader + N amount of bytes
+/// determined by the values in the declaration header.
+struct ModuleDescription {
+    // Default/expected values.
+    static constexpr lcc::u8 default_version = 1;
+    static constexpr lcc::u8 magic_byte0 = 'I';
+    static constexpr lcc::u8 magic_byte1 = 'N';
+    static constexpr lcc::u8 magic_byte2 = 'T';
+    struct Header {
+        lcc::u8 version{default_version};
+        lcc::u8 magic[3]{
+            magic_byte0,
+            magic_byte1,
+            magic_byte2,
+        };
+
+        /// Size, in 8-bit bytes, of this binary metadata blob, including this header.
+        lcc::u32 size;
+
+        /// The offset within this binary metadata blob at which you will find the
+        /// beginning of the type table. Value undefined iff type_count is zero.
+        lcc::u32 type_table_offset;
+
+        /// The offset within this binary metadata blob at which you will find the
+        /// beginning of a NULL-terminated string: the name of the serialised
+        /// module.
+        lcc::u32 name_offset;
+
+        /// The amount of declarations encoded in this binary metadata blob. Once
+        /// this many declarations have been deserialised, the reader should stop
+        /// reading.
+        lcc::u16 declaration_count;
+
+        /// The amount of types encoded in this binary metadata blob. Determines
+        /// maximum exclusive allowed value of declaration type_index field.
+        /// Once the reader deserialised this many types, the reader should stop
+        /// reading types.
+        lcc::u16 type_count;
+    };
+
+    // FIXME: Maybe better as a using? But then we don't have field name.
+    struct DeclarationHeader {
+        lcc::u16 type_index;
+    };
+};
+
+// FIXME: This should probably be backwards for big endian machines, afaik.
+template <typename T> std::array<lcc::u8, sizeof(T) / sizeof(lcc::u8)> to_bytes(const T object) {
+    std::array<lcc::u8, sizeof(T)> out{};
+    const lcc::u8* begin = reinterpret_cast<const lcc::u8*>(&object);
+    const lcc::u8* end = begin + (sizeof(T));
+    std::copy(begin, end, out.begin());
+    return out;
+}
+
+lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache, Type* ty) {
+    auto found = rgs::find(cache, ty);
+    if (found != cache.end())
+        return u16(found - cache.begin());
+
+    LCC_ASSERT(
+        cache.size() < 0xffff,
+        "Too many types, cannot serialise"
+    );
+    u16 type_index = u16(cache.size());
+    cache.push_back(ty);
+
+    u8 tag = u8(ty->kind());
+    out.push_back(tag);
+
+    switch (ty->kind()) {
+        // NamedType: length :u32, name :u8[length]
+        case Type::Kind::Named: {
+            NamedType* type = as<NamedType>(ty);
+            u16 name_length = u16(type->name().length());
+            auto name_length_bytes = to_bytes(name_length);
+            // Write `length: u32`
+            out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
+            // Write `name : u8[length]`
+            out.insert(out.end(), type->name().begin(), type->name().end());
+        } break;
+
+        // PointerType, ReferenceType: type_index :u16
+        case Type::Kind::Pointer:
+        case Type::Kind::Reference: {
+            u16 referenced_type_index = u16(-1);
+            auto type_index_bytes = to_bytes(referenced_type_index);
+
+            // Write `type_index: u16`, keeping track of byte index into binary
+            // metadata blob where it can be found again.
+            u32 referenced_type_index_offset = u32(out.size());
+            out.insert(out.end(), type_index_bytes.begin(), type_index_bytes.end());
+
+            // Serialise the referenced type.
+            referenced_type_index = serialise(out, cache, ty->elem());
+
+            // Go back and fixup the referenced type index from -1 to the actual
+            // proper value.
+            // FIXME: Is it possible to /not/ do this reinterpret cast? I guess we
+            // could manually fuddle with bytes given the index since we know
+            // endianness and size. Yeah, that's probably what we should do.
+            u16* referenced_type_index_ptr = reinterpret_cast<u16*>(out.data() + referenced_type_index_offset);
+            *referenced_type_index_ptr = referenced_type_index;
+        } break;
+
+        case Type::Kind::Builtin:
+        case Type::Kind::FFIType:
+        case Type::Kind::Array:
+        case Type::Kind::Function:
+        case Type::Kind::Enum:
+        case Type::Kind::Struct:
+        case Type::Kind::Integer:
+            LCC_TODO("Handle serialisation of type {}", *ty);
+    }
+
+    return type_index;
+}
+
+std::vector<lcc::u8> intc::Module::serialise() {
+    ModuleDescription::Header hdr{};
+    std::vector<u8> declarations{};
+    std::vector<u8> types{};
+    std::vector<u8> serialised_name{};
+
+    // Decls and types collected from exports.
+    std::vector<Type*> type_cache{};
+    for (auto* decl : exports) {
+        // Decl: DeclHeader, length :u8, name :u8[length]
+
+        // Prepare declaration header
+        u16 type_index = serialise(types, type_cache, decl->type());
+        ModuleDescription::DeclarationHeader decl_hdr{type_index};
+        auto decl_hdr_bytes = to_bytes(decl_hdr);
+
+        // Prepare length
+        LCC_ASSERT(
+            decl->name().length() <= 0xff,
+            "Exported declaration has over-long name and cannot be encoded in binary format"
+        );
+        u8 length = u8(decl->name().length());
+
+        declarations.insert(declarations.end(), decl_hdr_bytes.begin(), decl_hdr_bytes.end());
+        declarations.push_back(length);
+        declarations.insert(declarations.end(), decl->name().begin(), decl->name().end());
+    }
+
+    // Make name easily serialisable
+    // Make name up if there isn't one. Should possibly just assert.
+    if (name.empty()) name = "YouForgotToNameThisModule";
+    // Possible TODO: Should we error if there is a NULL in the module name?
+    // That would surely bugger things.
+    serialised_name.insert(serialised_name.end(), name.begin(), name.end());
+    serialised_name.push_back('\0');
+
+    // Final header fixups now that nothing will change.
+    hdr.size = u32(sizeof(ModuleDescription::Header) + declarations.size() + types.size() + serialised_name.size());
+    hdr.type_table_offset = u32(sizeof(ModuleDescription::Header) + declarations.size());
+    hdr.name_offset = u32(sizeof(ModuleDescription::Header) + declarations.size() + types.size());
+    hdr.declaration_count = u16(exports.size());
+    hdr.type_count = u16(type_cache.size());
+
+    // Convert header to byte representation that is easy to serialise.
+    auto hdr_bytes = to_bytes(hdr);
+
+    std::vector<u8> out{};
+    out.insert(out.end(), hdr_bytes.begin(), hdr_bytes.end());
+    out.insert(out.end(), declarations.begin(), declarations.end());
+    out.insert(out.end(), types.begin(), types.end());
+    out.insert(out.end(), serialised_name.begin(), serialised_name.end());
+    return out;
+}
+
+bool intc::Module::deserialise(std::vector<u8> module_metadata_blob) {
+    // We need at least enough bytes for a header, for a zero-exports module
+    // (if that is even allowed past sema).
+    if (module_metadata_blob.size() < sizeof(ModuleDescription::Header))
+        return false;
+
+    return true;
 }
