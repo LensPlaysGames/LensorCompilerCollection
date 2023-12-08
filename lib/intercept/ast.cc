@@ -1321,10 +1321,14 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
 
     // Starting at the type table offset, parse all types. Stop after parsing
     // the amount of types specified in the header.
+    // NOTE: Big issue here is forward references. i.e. a pointer type at
+    // index 3 that stores a pointee type index of 4. So, we need to know the
+    // Type* of any given index /before/ we start parsing any of the types.
+    // This is sort of difficult in C++ with stupid fucking inheritance.
     auto type_count = hdr.type_count;
     auto type_offset = hdr.type_table_offset;
     auto types_zero_index = types.size();
-    types.reserve(type_count);
+    types.reserve(types.size() + type_count);
     for (auto type_index = 0; type_index < type_count; ++type_index) {
         auto tag = module_metadata_blob.at(type_offset++);
         auto kind = Type::Kind(tag);
@@ -1347,7 +1351,7 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
 
                 // FIXME: This may need to be top level scope, not entirely sure the
                 // semantics of this yet.
-                auto* ty = new (*this) NamedType(name, global_scope(), {});
+                new (*this) NamedType(name, global_scope(), {});
             } break;
 
             // BuiltinType: builtin_kind :u8
@@ -1369,12 +1373,27 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
                     "Cannot deserialise overload sets; sorry"
                 );
                 auto builtin_kind = BuiltinType::BuiltinKind(builtin_kind_value);
-                auto* type = BuiltinType::Make(*this, builtin_kind, {});
+                BuiltinType::Make(*this, builtin_kind, {});
+            } break;
+
+            // PointerType, ReferenceType: type_index :TypeIndex
+            case Type::Kind::Pointer:
+            case Type::Kind::Reference: {
+                static constexpr auto type_index_size = sizeof(ModuleDescription::TypeIndex);
+                std::array<u8, type_index_size> type_index_array{};
+                for (unsigned i = 0; i < type_index_size; ++i)
+                    type_index_array[i] = module_metadata_blob.at(type_offset++);
+                auto type_index = from_bytes<ModuleDescription::TypeIndex>(type_index_array);
+
+                if (kind == Type::Kind::Pointer) {
+                    new (*this) PointerType();
+                } else if (kind == Type::Kind::Reference) {
+                    
+                }
+
             } break;
 
             case Type::Kind::FFIType:
-            case Type::Kind::Pointer:
-            case Type::Kind::Reference:
             case Type::Kind::Array:
             case Type::Kind::Function:
             case Type::Kind::Enum:
@@ -1418,27 +1437,43 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
         switch (ModuleDescription::DeclarationHeader::Kind(decl_hdr.kind)) {
             // Created from Expr::Kind::TypeDecl
             case ModuleDescription::DeclarationHeader::Kind::TYPE: {
-                LCC_TODO("Make a TypeDecl in the global scope");
+                LCC_ASSERT(
+                    is<DeclaredType>(ty),
+                    "Can't make TypeDecl from a Type that is not derived from DeclaredType"
+                );
+                auto type_decl = new (*this) TypeDecl(this, name, as<DeclaredType>(ty), {});
+                auto decl = global_scope()->declare(ctx, std::string(name), type_decl);
             } break;
+
             // Created from Expr::Kind::TypeAliasDecl
             case ModuleDescription::DeclarationHeader::Kind::TYPE_ALIAS: {
                 auto* type_alias_decl = new (*this) TypeAliasDecl(name, ty, {});
                 auto decl = global_scope()->declare(ctx, std::string(name), type_alias_decl);
             } break;
-            // Created from Expr::Kind::EnumeratorDecl
-            case ModuleDescription::DeclarationHeader::Kind::ENUMERATOR: {
-                LCC_TODO("Make an EnumeratorDecl in the global scope");
-            }
+
             // Created from Expr::Kind::VarDecl
             case ModuleDescription::DeclarationHeader::Kind::VARIABLE: {
                 // FIXME: Should possibly be reexported.
                 auto* var_decl = new (*this) VarDecl(name, ty, nullptr, this, Linkage::Imported, {});
                 auto decl = global_scope()->declare(ctx, std::string(name), var_decl);
             } break;
+
             // Created from Expr::Kind::FuncDecl
             case ModuleDescription::DeclarationHeader::Kind::FUNCTION: {
-                LCC_TODO("Make a FuncDecl in the global scope");
+                LCC_ASSERT(
+                    is<FuncType>(ty),
+                    "Cannot create FuncDecl when deserialised type is not a function"
+                );
+                auto* func_decl = new (*this) FuncDecl(name, as<FuncType>(ty), nullptr, global_scope(), this, Linkage::Imported, {});
+                auto decl = global_scope()->declare(ctx, std::string(name), func_decl);
             } break;
+
+            // Created from Expr::Kind::EnumeratorDecl
+            // FIXME: Is it possible to export a single enum decl? I'm pretty sure the
+            // only place an enum decl can happen is within an enum type.
+            case ModuleDescription::DeclarationHeader::Kind::ENUMERATOR: {
+                LCC_TODO("Make an EnumeratorDecl in the global scope");
+            }
 
             case ModuleDescription::DeclarationHeader::Kind::INVALID:
             default:
