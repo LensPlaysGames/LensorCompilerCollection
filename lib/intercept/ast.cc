@@ -1121,7 +1121,7 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
         // FFIType: ffi_kind :u16
         case Type::Kind::FFIType: {
             FFIType* type = as<FFIType>(ty);
-            u16 ffi_kind = u8(type->ffi_kind());
+            u16 ffi_kind = u16(type->ffi_kind());
             auto ffi_kind_bytes = to_bytes(ffi_kind);
             out.insert(out.end(), ffi_kind_bytes.begin(), ffi_kind_bytes.end());
         } break;
@@ -1330,7 +1330,31 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
     auto types_zero_index = types.size();
     types.reserve(types.size() + type_count);
 
-    for (auto type_index = 0; type_index < type_count; ++type_index) {
+    struct BasicFixup {
+        // Type index of the type that needs fixing up.
+        ModuleDescription::TypeIndex fixup_type_index;
+    };
+    struct PointerFixup : BasicFixup {
+        ModuleDescription::TypeIndex pointee_type_index;
+
+        PointerFixup(
+            ModuleDescription::TypeIndex fixup_type,
+            ModuleDescription::TypeIndex pointee_type
+        ) : BasicFixup(fixup_type),
+            pointee_type_index(pointee_type) {}
+    };
+    struct ReferenceFixup : BasicFixup {
+        ModuleDescription::TypeIndex referent_type_index;
+
+        ReferenceFixup(
+            ModuleDescription::TypeIndex fixup_type,
+            ModuleDescription::TypeIndex referent_type
+        ) : BasicFixup(fixup_type),
+            referent_type_index(referent_type) {}
+    };
+    std::vector<PointerFixup> ptr_fixups{};
+    std::vector<ReferenceFixup> ref_fixups{};
+    for (decltype(type_count) type_index = 0; type_index < type_count; ++type_index) {
         auto tag = module_metadata_blob.at(type_offset++);
         auto kind = Type::Kind(tag);
         switch (kind) {
@@ -1377,6 +1401,17 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
                 BuiltinType::Make(*this, builtin_kind, {});
             } break;
 
+            // FFIType: ffi_kind :u16
+            case Type::Kind::FFIType: {
+                static constexpr auto ffi_kind_size = sizeof(u16);
+                std::array<u8, ffi_kind_size> length_array{};
+                for (unsigned i = 0; i < ffi_kind_size; ++i)
+                    length_array[i] = module_metadata_blob.at(type_offset++);
+                u16 ffi_kind_value = from_bytes<u16>(length_array);
+                auto ffi_kind = FFIType::FFIKind(ffi_kind_value);
+                FFIType::Make(*this, ffi_kind, {});
+            } break;
+
             // PointerType, ReferenceType: type_index :TypeIndex
             case Type::Kind::Pointer:
             case Type::Kind::Reference: {
@@ -1386,19 +1421,13 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
                     ref_type_index_array[i] = module_metadata_blob.at(type_offset++);
                 auto ref_type_index = from_bytes<ModuleDescription::TypeIndex>(ref_type_index_array);
 
-                Type* ref_type{};
-                if (ref_type_index > type_index) {
-                    // Forward reference
-                    LCC_TODO("Forward type index references are fuckin stupid with dumb fucking inheritance complexity machines");
-                } else ref_type = types.at(ref_type_index);
-
+                types.push_back(nullptr);
                 if (kind == Type::Kind::Pointer)
-                    new (*this) PointerType(ref_type, {});
+                    ptr_fixups.push_back({type_index, ref_type_index});
                 else if (kind == Type::Kind::Reference)
-                    new (*this) ReferenceType(ref_type, {});
+                    ref_fixups.push_back({type_index, ref_type_index});
             } break;
 
-            case Type::Kind::FFIType:
             case Type::Kind::Array:
             case Type::Kind::Function:
             case Type::Kind::Enum:
@@ -1407,7 +1436,17 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
                 LCC_TODO("Parse type kind {} from binary module metadata", ToString(kind));
                 break;
         }
-        LCC_TODO("Parse type from binary module metadata");
+    }
+
+    for (auto ptr_fixup : ptr_fixups) {
+        LCC_ASSERT(ptr_fixup.fixup_type_index < types.size());
+        LCC_ASSERT(ptr_fixup.pointee_type_index < types.size());
+        types[ptr_fixup.fixup_type_index] = types[ptr_fixup.pointee_type_index];
+    }
+    for (auto ref_fixup : ref_fixups) {
+        LCC_ASSERT(ref_fixup.fixup_type_index < types.size());
+        LCC_ASSERT(ref_fixup.referent_type_index < types.size());
+        types[ref_fixup.fixup_type_index] = types[ref_fixup.referent_type_index];
     }
 
     // Starting after the header, begin parsing declarations. Stop after
