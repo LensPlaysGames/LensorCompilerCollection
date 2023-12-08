@@ -1329,6 +1329,7 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
     auto type_offset = hdr.type_table_offset;
     auto types_zero_index = types.size();
     types.reserve(types.size() + type_count);
+
     for (auto type_index = 0; type_index < type_count; ++type_index) {
         auto tag = module_metadata_blob.at(type_offset++);
         auto kind = Type::Kind(tag);
@@ -1379,18 +1380,22 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
             // PointerType, ReferenceType: type_index :TypeIndex
             case Type::Kind::Pointer:
             case Type::Kind::Reference: {
-                static constexpr auto type_index_size = sizeof(ModuleDescription::TypeIndex);
-                std::array<u8, type_index_size> type_index_array{};
-                for (unsigned i = 0; i < type_index_size; ++i)
-                    type_index_array[i] = module_metadata_blob.at(type_offset++);
-                auto type_index = from_bytes<ModuleDescription::TypeIndex>(type_index_array);
+                static constexpr auto ref_type_index_size = sizeof(ModuleDescription::TypeIndex);
+                std::array<u8, ref_type_index_size> ref_type_index_array{};
+                for (unsigned i = 0; i < ref_type_index_size; ++i)
+                    ref_type_index_array[i] = module_metadata_blob.at(type_offset++);
+                auto ref_type_index = from_bytes<ModuleDescription::TypeIndex>(ref_type_index_array);
 
-                if (kind == Type::Kind::Pointer) {
-                    new (*this) PointerType();
-                } else if (kind == Type::Kind::Reference) {
-                    
-                }
+                Type* ref_type{};
+                if (ref_type_index > type_index) {
+                    // Forward reference
+                    LCC_TODO("Forward type index references are fuckin stupid with dumb fucking inheritance complexity machines");
+                } else ref_type = types.at(ref_type_index);
 
+                if (kind == Type::Kind::Pointer)
+                    new (*this) PointerType(ref_type, {});
+                else if (kind == Type::Kind::Reference)
+                    new (*this) ReferenceType(ref_type, {});
             } break;
 
             case Type::Kind::FFIType:
