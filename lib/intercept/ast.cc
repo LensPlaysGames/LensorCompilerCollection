@@ -1321,15 +1321,15 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
 
     // Starting at the type table offset, parse all types. Stop after parsing
     // the amount of types specified in the header.
-    // NOTE: Big issue here is forward references. i.e. a pointer type at
-    // index 3 that stores a pointee type index of 4. So, we need to know the
-    // Type* of any given index /before/ we start parsing any of the types.
-    // This is sort of difficult in C++ with stupid fucking inheritance.
     auto type_count = hdr.type_count;
     auto type_offset = hdr.type_table_offset;
     auto types_zero_index = types.size();
     types.reserve(types.size() + type_count);
 
+    // NOTE: Big issue here is forward references. i.e. a pointer type at
+    // index 3 that stores a pointee type index of 4. So, we need to know the
+    // Type* of any given index /before/ we start parsing any of the types.
+    // This is sort of difficult in C++ with stupid fucking inheritance.
     struct BasicFixup {
         // Type index of the type that needs fixing up.
         ModuleDescription::TypeIndex fixup_type_index;

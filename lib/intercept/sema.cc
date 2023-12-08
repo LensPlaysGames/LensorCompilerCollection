@@ -477,8 +477,13 @@ void intc::Sema::Analyse(Context* ctx, Module& m, bool use_colours) {
 }
 
 void intc::Sema::AnalyseModule() {
-    /// TODO(Sirraide): Load imported modules.
-    LCC_ASSERT(mod.imports().empty(), "Importing modules is not yet supported.");
+    /// Load imported modules.
+    for (auto import : mod.imports()) {
+        // TODO: Using module name, look in all include directories for
+        // "<module name>.o". Parse the object file and get the `.intc_metadata`
+        // section out of it, then deserialise that into the module.
+        LCC_TODO("Import module {}", import.name);
+    }
 
     /// Analyse the signatures of all functions. This must be done
     /// before analysing bodies since, in order to perform overload
