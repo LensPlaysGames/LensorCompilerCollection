@@ -203,7 +203,7 @@ public:
     /// \return a boolean value denoting `true` iff deserialisation succeeded.
     /// NOTE: Only call this on new modules, as it does not clear out old
     /// module before deserialising into `this`.
-    bool deserialise(std::vector<u8> module_metadata_blob);
+    bool deserialise(lcc::Context*, std::vector<u8> module_metadata_blob);
 
     std::vector<Expr*> nodes;
     std::vector<Type*> types;
@@ -498,6 +498,22 @@ public:
     static Type* OverloadSet;
 };
 
+static constexpr auto ToString(Type::Kind k) {
+    switch (k) {
+        case Type::Kind::Builtin: return "builtin";
+        case Type::Kind::FFIType: return "ffi";
+        case Type::Kind::Named: return "named";
+        case Type::Kind::Pointer: return "ptr";
+        case Type::Kind::Reference: return "ref";
+        case Type::Kind::Array: return "array";
+        case Type::Kind::Function: return "function";
+        case Type::Kind::Enum: return "enum";
+        case Type::Kind::Struct: return "struct";
+        case Type::Kind::Integer: return "integer";
+    }
+    LCC_UNREACHABLE();
+}
+
 /// This only holds a kind.
 ///
 /// Builtin types are not singletons because they need to carry
@@ -524,10 +540,6 @@ private:
 
     const BuiltinKind _kind;
 
-    static auto Make(Module& mod, K k, Location l) -> BuiltinType* {
-        return new (mod) BuiltinType(k, l);
-    }
-
     constexpr BuiltinType(K k, Location location)
         : Type(Kind::Builtin, location), _kind(k) {
         set_sema_done();
@@ -538,6 +550,10 @@ public:
     auto builtin_kind() const -> BuiltinKind { return _kind; }
 
     bool operator==(BuiltinKind k) const { return _kind == k; }
+
+    static auto Make(Module& mod, K k, Location l) -> BuiltinType* {
+        return new (mod) BuiltinType(k, l);
+    }
 
     /// Get instances of primitive types.
     static auto Bool(Module& mod, Location l = {}) -> BuiltinType* { return Make(mod, K::Bool, l); }
@@ -573,15 +589,15 @@ private:
     const K kind;
     FFIType(K k, Location loc) : Type(Kind::FFIType, loc), kind(k) {}
 
-    static auto Make(Module& mod, K k, Location l) -> FFIType* {
-        return new (mod) FFIType(k, l);
-    }
-
 public:
     /// Get the kind of this C FFI type.
     auto ffi_kind() const -> FFIKind { return kind; }
 
     bool operator==(FFIKind k) const { return kind == k; }
+
+    static auto Make(Module& mod, K k, Location l) -> FFIType* {
+        return new (mod) FFIType(k, l);
+    }
 
     /// Get instances of C FFI types.
     static auto CChar(Module& mod, Location l = {}) -> FFIType* { return Make(mod, K::CChar, l); }

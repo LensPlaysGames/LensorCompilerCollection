@@ -6,6 +6,7 @@
 #include <lcc/utils/ast_printer.hh>
 #include <lcc/utils/macros.hh>
 #include <lcc/utils/rtti.hh>
+#include <type_traits>
 
 namespace intc = lcc::intercept;
 
@@ -1020,11 +1021,21 @@ struct ModuleDescription {
 };
 
 // FIXME: This should probably be backwards for big endian machines, afaik.
-template <typename T> std::array<lcc::u8, sizeof(T) / sizeof(lcc::u8)> to_bytes(const T object) {
+template <typename T>
+std::array<lcc::u8, sizeof(T) / sizeof(lcc::u8)> to_bytes(const T object) {
     std::array<lcc::u8, sizeof(T)> out{};
     const lcc::u8* begin = reinterpret_cast<const lcc::u8*>(&object);
     const lcc::u8* end = begin + (sizeof(T));
     std::copy(begin, end, out.begin());
+    return out;
+}
+
+// FIXME: This should probably be backwards for big endian machines, afaik.
+// requires std::is_trivially_constructible?
+template <typename T>
+T from_bytes(std::array<lcc::u8, sizeof(T)> bytes) {
+    T out{};
+    std::copy(bytes.begin(), bytes.end(), &out);
     return out;
 }
 
@@ -1035,7 +1046,7 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
 
     LCC_ASSERT(
         cache.size() < 0xffff,
-        "Too many types, cannot serialise"
+        "Too many types, cannot serialise in binary metadata format version 1"
     );
     auto type_index = ModuleDescription::TypeIndex(cache.size());
     cache.push_back(ty);
@@ -1288,7 +1299,7 @@ std::vector<lcc::u8> intc::Module::serialise() {
     return out;
 }
 
-bool intc::Module::deserialise(std::vector<u8> module_metadata_blob) {
+bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadata_blob) {
     // We need at least enough bytes for a header, for a zero-exports module
     // (if that is even allowed past sema).
     if (module_metadata_blob.size() < sizeof(ModuleDescription::Header))
@@ -1311,7 +1322,67 @@ bool intc::Module::deserialise(std::vector<u8> module_metadata_blob) {
     // Starting at the type table offset, parse all types. Stop after parsing
     // the amount of types specified in the header.
     auto type_count = hdr.type_count;
-    while (type_count--) {
+    auto type_offset = hdr.type_table_offset;
+    auto types_zero_index = types.size();
+    types.reserve(type_count);
+    for (auto type_index = 0; type_index < type_count; ++type_index) {
+        auto tag = module_metadata_blob.at(type_offset++);
+        auto kind = Type::Kind(tag);
+        switch (kind) {
+            // NamedType: length :u32, name :u8[length]
+            case Type::Kind::Named: {
+                static constexpr auto length_size = sizeof(u32);
+                std::array<u8, length_size> length_array{};
+                for (unsigned i = 0; i < length_size; ++i)
+                    length_array[i] = module_metadata_blob.at(type_offset++);
+                u32 length = from_bytes<u32>(length_array);
+
+                LCC_ASSERT(name.size(), "Deserialised named type has zero-length name");
+
+                std::string name{};
+                for (u32 i = 0; i < length; ++i)
+                    name += char(module_metadata_blob.at(type_offset++));
+
+                LCC_ASSERT(name.size(), "Deserialised named type has empty name");
+
+                // FIXME: This may need to be top level scope, not entirely sure the
+                // semantics of this yet.
+                auto* ty = new (*this) NamedType(name, global_scope(), {});
+            } break;
+
+            // BuiltinType: builtin_kind :u8
+            case Type::Kind::Builtin: {
+                auto builtin_kind_value = module_metadata_blob.at(type_offset++);
+                // clang-format off
+                LCC_ASSERT(
+                    builtin_kind_value == +BuiltinType::BuiltinKind::Bool
+                    or builtin_kind_value == +BuiltinType::BuiltinKind::Byte
+                    or builtin_kind_value == +BuiltinType::BuiltinKind::Int
+                    or builtin_kind_value == +BuiltinType::BuiltinKind::Unknown
+                    or builtin_kind_value == +BuiltinType::BuiltinKind::Void
+                    or builtin_kind_value == +BuiltinType::BuiltinKind::OverloadSet,
+                    "Invalid builtin kind value {}", builtin_kind_value
+                );
+                // clang-format on
+                LCC_ASSERT(
+                    builtin_kind_value != +BuiltinType::BuiltinKind::OverloadSet,
+                    "Cannot deserialise overload sets; sorry"
+                );
+                auto builtin_kind = BuiltinType::BuiltinKind(builtin_kind_value);
+                auto* type = BuiltinType::Make(*this, builtin_kind, {});
+            } break;
+
+            case Type::Kind::FFIType:
+            case Type::Kind::Pointer:
+            case Type::Kind::Reference:
+            case Type::Kind::Array:
+            case Type::Kind::Function:
+            case Type::Kind::Enum:
+            case Type::Kind::Struct:
+            case Type::Kind::Integer:
+                LCC_TODO("Parse type kind {} from binary module metadata", ToString(kind));
+                break;
+        }
         LCC_TODO("Parse type from binary module metadata");
     }
 
@@ -1340,6 +1411,39 @@ bool intc::Module::deserialise(std::vector<u8> module_metadata_blob) {
         for (decltype(offset) i = 0; i < name_length; ++i)
             name += char(*(module_metadata_blob.data() + offset + i));
         offset += name_length;
+
+        auto* ty = types.at(types_zero_index + decl_hdr.type_index);
+
+        // FIXME: Should it be top level scope instead of global?
+        switch (ModuleDescription::DeclarationHeader::Kind(decl_hdr.kind)) {
+            // Created from Expr::Kind::TypeDecl
+            case ModuleDescription::DeclarationHeader::Kind::TYPE: {
+                LCC_TODO("Make a TypeDecl in the global scope");
+            } break;
+            // Created from Expr::Kind::TypeAliasDecl
+            case ModuleDescription::DeclarationHeader::Kind::TYPE_ALIAS: {
+                auto* type_alias_decl = new (*this) TypeAliasDecl(name, ty, {});
+                auto decl = global_scope()->declare(ctx, std::string(name), type_alias_decl);
+            } break;
+            // Created from Expr::Kind::EnumeratorDecl
+            case ModuleDescription::DeclarationHeader::Kind::ENUMERATOR: {
+                LCC_TODO("Make an EnumeratorDecl in the global scope");
+            }
+            // Created from Expr::Kind::VarDecl
+            case ModuleDescription::DeclarationHeader::Kind::VARIABLE: {
+                // FIXME: Should possibly be reexported.
+                auto* var_decl = new (*this) VarDecl(name, ty, nullptr, this, Linkage::Imported, {});
+                auto decl = global_scope()->declare(ctx, std::string(name), var_decl);
+            } break;
+            // Created from Expr::Kind::FuncDecl
+            case ModuleDescription::DeclarationHeader::Kind::FUNCTION: {
+                LCC_TODO("Make a FuncDecl in the global scope");
+            } break;
+
+            case ModuleDescription::DeclarationHeader::Kind::INVALID:
+            default:
+                LCC_ASSERT(false, "Invalid declaration kind in declaration header: {}", decl_hdr.kind);
+        }
 
         LCC_TODO("Create Decl from deserialised info: {}", name);
     }
