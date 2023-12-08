@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <intercept/ast.hh>
 #include <intercept/sema.hh>
 #include <lcc/context.hh>
@@ -482,6 +483,18 @@ void intc::Sema::AnalyseModule() {
         // TODO: Using module name, look in all include directories for
         // "<module name>.o". Parse the object file and get the `.intc_metadata`
         // section out of it, then deserialise that into the module.
+        for (auto include_dir : context->include_directories()) {
+            // TODO: Also look for .obj?
+            auto path = include_dir + std::filesystem::path::preferred_separator + import.name + ".o";
+            fmt::print("Looking for module {} at {}\n", import.name, path);
+            if (std::filesystem::exists(path)) {
+                LCC_TODO(
+                    "When importing module {}, found built object file at {}: parse metadata section",
+                    import.name,
+                    path
+                );
+            }
+        }
         LCC_TODO("Import module {}", import.name);
     }
 
