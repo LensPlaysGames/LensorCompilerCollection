@@ -1212,8 +1212,22 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
 
         } break;
 
-        case Type::Kind::Array:
-        case Type::Kind::Struct:
+        // ArrayType: element_type_index :u16, element_count :u64
+        case Type::Kind::Array: {
+            auto type = as<ArrayType>(ty);
+
+            auto element_type_offset = out.size();
+            out.insert(out.end(), sizeof(ModuleDescription::TypeIndex), 0);
+
+            u64 element_count = u64(type->dimension());
+            auto element_count_bytes = to_bytes(element_count);
+            out.insert(out.end(), element_count_bytes.begin(), element_count_bytes.end());
+
+            auto* element_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + element_type_offset);
+            *element_type_ptr = serialise(out, cache, type->element_type());
+        } break;
+
+        case Type::Kind::Struct: // will be a lot like function
             LCC_TODO("Handle serialisation of type {}", *ty);
     }
 
