@@ -1181,7 +1181,37 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             *return_type_ptr = serialise(out, cache, type->return_type());
         } break;
 
-        case Type::Kind::Enum:
+        // EnumType:
+        //     underlying_type_index :u16
+        //     enum_decl_count :u32
+        //     enum_decls :u64[enum_decl_count]
+        // FIXME: Ideally we should get the size of the value (enum_decls element
+        // type) from the underlying type, instead of just assuming it fits in 64
+        // bits.
+        case Type::Kind::Enum: {
+            auto type = as<EnumType>(ty);
+
+            auto underlying_type_offset = out.size();
+            out.insert(out.end(), sizeof(ModuleDescription::TypeIndex), 0);
+
+            // TODO: Assert that underlying type can fit in 64 bits. But we don't have
+            // context here (yet).
+
+            u32 enum_decl_count = u32(type->enumerators().size());
+            auto enum_decl_count_bytes = to_bytes(enum_decl_count);
+            out.insert(out.end(), enum_decl_count_bytes.begin(), enum_decl_count_bytes.end());
+
+            for (auto* enum_decl : type->enumerators()) {
+                u64 value = enum_decl->value().value();
+                auto value_bytes = to_bytes(value);
+                out.insert(out.end(), value_bytes.begin(), value_bytes.end());
+            }
+
+            auto* underlying_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + underlying_type_offset);
+            *underlying_type_ptr = serialise(out, cache, type->underlying_type());
+
+        } break;
+
         case Type::Kind::Array:
         case Type::Kind::Struct:
             LCC_TODO("Handle serialisation of type {}", *ty);
