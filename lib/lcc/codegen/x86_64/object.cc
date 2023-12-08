@@ -984,6 +984,13 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
     out.sections.push_back(data_);
     out.sections.push_back(bss_);
 
+    // Extra sections (frontend metadata and the like).
+    out.sections.insert(
+        out.sections.end(),
+        module->extra_sections().begin(),
+        module->extra_sections().end()
+    );
+
     Section& text = out.section(".text");
     // Section& data = out.section(".data");
     // Section& bss = out.section(".bss");
