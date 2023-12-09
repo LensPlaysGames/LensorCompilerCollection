@@ -299,7 +299,7 @@ static constexpr u8 sib_byte(u8 scale_factor, u8 index, u8 base) {
 /// is written that may contain r12 in the r/m field.
 static constexpr void mcode_sib_if_r12(Section& text, RegisterId address_register, u8 modrm) {
     if (address_register == RegisterId::R12 && (modrm & 0b11000000) != 0b11000000)
-        text.contents.push_back(sib_byte(0b00, 0b100, 0b100));
+        text += sib_byte(0b00, 0b100, 0b100);
 }
 
 template <usz... ints>
@@ -689,7 +689,7 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 text += {0x8d, modrm};
                 // Make RIP-relative disp32 relocation
                 Relocation reloc{};
-                reloc.symbol.byte_offset = text.contents.size();
+                reloc.symbol.byte_offset = text.contents().size();
                 reloc.symbol.name = global->name();
                 reloc.symbol.section_name = text.name;
                 reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
@@ -713,7 +713,7 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 // Make RIP-relative disp32 relocation
                 Relocation reloc{};
                 reloc.symbol.kind = Symbol::Kind::FUNCTION;
-                reloc.symbol.byte_offset = text.contents.size();
+                reloc.symbol.byte_offset = text.contents().size();
                 reloc.symbol.name = func->name();
                 reloc.symbol.section_name = text.name;
                 reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
@@ -826,7 +826,7 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 text += 0xe9;
                 // RELOCATION
                 Relocation reloc{};
-                reloc.symbol.byte_offset = text.contents.size();
+                reloc.symbol.byte_offset = text.contents().size();
                 reloc.symbol.name = block->name();
                 reloc.symbol.section_name = text.name;
                 reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
@@ -840,7 +840,7 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 // RELOCATION
                 Relocation reloc{};
                 reloc.symbol.kind = Symbol::Kind::FUNCTION;
-                reloc.symbol.byte_offset = text.contents.size();
+                reloc.symbol.byte_offset = text.contents().size();
                 reloc.symbol.name = function->name();
                 reloc.symbol.section_name = text.name;
                 reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
@@ -864,7 +864,7 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 // RELOCATION
                 Relocation reloc{};
                 reloc.symbol.kind = Symbol::Kind::FUNCTION;
-                reloc.symbol.byte_offset = text.contents.size();
+                reloc.symbol.byte_offset = text.contents().size();
                 reloc.symbol.name = block->name();
                 reloc.symbol.section_name = text.name;
                 reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
@@ -878,7 +878,7 @@ static void assemble_inst(GenericObject& gobj, MFunction& func, MInst& inst, Sec
                 // RELOCATION
                 Relocation reloc{};
                 reloc.symbol.kind = Symbol::Kind::FUNCTION;
-                reloc.symbol.byte_offset = text.contents.size();
+                reloc.symbol.byte_offset = text.contents().size();
                 reloc.symbol.name = function->name();
                 reloc.symbol.section_name = text.name;
                 reloc.kind = Relocation::Kind::DISPLACEMENT32_PCREL;
@@ -960,7 +960,7 @@ static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
             {Symbol::Kind::STATIC,
              block.name(),
              text.name,
-             text.contents.size()}
+             text.contents().size()}
         );
 
         for (auto& inst : block.instructions())
@@ -1012,7 +1012,7 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
             sym.kind = Symbol::Kind::FUNCTION;
             sym.name = func.name();
             sym.section_name = text.name;
-            sym.byte_offset = text.contents.size();
+            sym.byte_offset = text.contents().size();
             out.symbols.push_back(sym);
         }
 

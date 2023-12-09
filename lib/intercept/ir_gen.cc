@@ -799,7 +799,7 @@ auto IRGen::Generate(Context* context, intercept::Module& int_mod) -> lcc::Modul
     if (int_mod.is_module()) {
         Section metadata_blob{};
         metadata_blob.name = ".intc_metadata";
-        metadata_blob.contents = int_mod.serialise();
+        metadata_blob.contents() = int_mod.serialise();
         ir_gen.mod()->add_extra_section(metadata_blob);
     }
 

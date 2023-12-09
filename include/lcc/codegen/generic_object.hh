@@ -7,12 +7,28 @@
 
 namespace lcc {
 
+// I am dearly sorry for the public/private layout, but the struct layout
+// is more important that not writing public/private a million times.
 struct Section {
     std::string name{};
 
-    std::vector<u8> contents{};
+private:
+    std::vector<u8> _contents{};
 
+public:
     u64 attributes{};
+
+private:
+    u32 _length{0};
+    u8 _value{0};
+
+public:
+    // Iff is_fill is true, contents isn't valid; use length + value to
+    // construct contents of section.
+    bool is_fill{false};
+
+    Section() = default;
+    Section(std::string name_) : name(name_) {}
 
     // Enum integer value is bit index into attributes field.
     enum struct Attribute {
@@ -39,28 +55,38 @@ struct Section {
         return new_value;
     }
 
+    auto& length() {
+        LCC_ASSERT(is_fill, "Cannot access length unless section is_fill");
+        return _length;
+    }
+    auto& value() {
+        LCC_ASSERT(is_fill, "Cannot access length unless section is_fill");
+        return _value;
+    }
+
+    auto& contents() {
+        LCC_ASSERT(not is_fill, "Cannot append to contents unless section !is_fill");
+        return _contents;
+    }
+
     Section& operator+=(u8 rhs) {
-        contents.push_back(rhs);
+        LCC_ASSERT(not is_fill, "Cannot append to contents unless section !is_fill");
+        _contents.push_back(rhs);
         return *this;
     }
 
     // use like <section> += {0x32, 0x4}, etc.
     Section& operator+=(const std::initializer_list<const u8> rhs) {
-        contents.insert(contents.end(), rhs.begin(), rhs.end());
+        LCC_ASSERT(not is_fill, "Cannot append to contents unless section !is_fill");
+        _contents.insert(_contents.end(), rhs.begin(), rhs.end());
         return *this;
     }
 
     Section& operator+=(const std::span<const u8> rhs) {
-        contents.insert(contents.end(), rhs.begin(), rhs.end());
+        LCC_ASSERT(not is_fill, "Cannot append to contents unless section !is_fill");
+        _contents.insert(_contents.end(), rhs.begin(), rhs.end());
         return *this;
     }
-
-    u32 length{0};
-    u8 value{0};
-
-    // Iff is_fill is true, contents isn't valid; use length + value to
-    // construct contents of section.
-    bool is_fill{false};
 
     std::string print() {
         auto out = fmt::format(
@@ -70,9 +96,9 @@ struct Section {
         );
 
         if (is_fill) {
-            out += fmt::format(" {} {:x}\n", length, value);
+            out += fmt::format(" {} {:x}\n", _length, _value);
         } else {
-            const auto size = contents.size();
+            const auto size = _contents.size();
             out += fmt::format("\n================ {} bytes\n", size);
 
             // Print bytes like hexdump, kinda
@@ -81,28 +107,28 @@ struct Section {
                 for (; i < size - 16; i += 16) {
                     out += fmt::format(
                         "      {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}  {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}",
-                        contents[i],
-                        contents[i + 1],
-                        contents[i + 2],
-                        contents[i + 3],
-                        contents[i + 4],
-                        contents[i + 5],
-                        contents[i + 6],
-                        contents[i + 7],
-                        contents[i + 8],
-                        contents[i + 9],
-                        contents[i + 10],
-                        contents[i + 11],
-                        contents[i + 12],
-                        contents[i + 13],
-                        contents[i + 14],
-                        contents[i + 15]
+                        _contents[i],
+                        _contents[i + 1],
+                        _contents[i + 2],
+                        _contents[i + 3],
+                        _contents[i + 4],
+                        _contents[i + 5],
+                        _contents[i + 6],
+                        _contents[i + 7],
+                        _contents[i + 8],
+                        _contents[i + 9],
+                        _contents[i + 10],
+                        _contents[i + 11],
+                        _contents[i + 12],
+                        _contents[i + 13],
+                        _contents[i + 14],
+                        _contents[i + 15]
                     );
 
                     out += "      |";
                     // Loop over 16 bytes starting at `i`.
                     for (usz index = i; index < i + 16; ++index) {
-                        char c = char(contents[index]);
+                        char c = char(_contents[index]);
                         if (c < ' ' || c > '~') c = '.';
                         out += fmt::format("{}", c);
                     }
@@ -115,7 +141,7 @@ struct Section {
                 out += "      ";
                 for (usz index = i; index < i + 16; ++index) {
                     // If inbounds, print byte, otherwise print blank space to keep alignment.
-                    if (index < size) out += fmt::format("{:02x}", contents[index]);
+                    if (index < size) out += fmt::format("{:02x}", _contents[index]);
                     else out += "  ";
                     // Space after every one except for the last.
                     if (index - i != 15) out += ' ';
@@ -125,7 +151,7 @@ struct Section {
                 out += "      |";
                 for (usz index = i; index < i + 16; ++index) {
                     if (index < size) {
-                        char c = char(contents[index]);
+                        char c = char(_contents[index]);
                         if (c < ' ' || c > '~') c = '.';
                         out += fmt::format("{}", c);
                     } else out += '.';
@@ -243,7 +269,7 @@ struct GenericObject {
                                   : Symbol::Kind::STATIC;
 
             Section& initialized_data = section(".data");
-            symbols.push_back({kind, var->name(), ".data", initialized_data.contents.size()});
+            symbols.push_back({kind, var->name(), ".data", initialized_data.contents().size()});
 
             switch (var->init()->kind()) {
                 case Value::Kind::IntegerConstant: {
@@ -253,13 +279,13 @@ struct GenericObject {
                     u64 value = integer_constant->value().value();
                     for (usz i = 0; i < integer_constant->type()->bytes(); ++i) {
                         u8 byte = (value >> (i * 8)) & 0xff;
-                        initialized_data.contents.push_back(byte);
+                        initialized_data.contents().push_back(byte);
                     }
                 } break;
 
                 case Value::Kind::ArrayConstant: {
                     auto array_constant = as<ArrayConstant>(var->init());
-                    for (char c : *array_constant) initialized_data.contents.push_back(u8(c));
+                    for (char c : *array_constant) initialized_data.contents().push_back(u8(c));
                 } break;
 
                 default:
@@ -275,18 +301,18 @@ struct GenericObject {
                 Section& uninitialized_data = section(".bss");
 
                 // Align uninitialized data to variable type's alignment requirements.
-                uninitialized_data.length = u32(align_to(
-                    uninitialized_data.length,
+                uninitialized_data.length() = u32(align_to(
+                    uninitialized_data.length(),
                     isz(var->type()->align_bytes())
                 ));
 
                 // The symbol will now begin at an aligned address.
-                s.byte_offset = uninitialized_data.length;
+                s.byte_offset = uninitialized_data.length();
 
                 symbols.push_back(s);
 
                 // Write uninitialized bytes for this variable.
-                uninitialized_data.length += u32(var->type()->bytes());
+                uninitialized_data.length() += u32(var->type()->bytes());
             }
         }
     }

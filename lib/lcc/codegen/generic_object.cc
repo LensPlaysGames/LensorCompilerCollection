@@ -85,10 +85,10 @@ void GenericObject::as_elf(FILE* f) {
 
         if (section.is_fill) {
             shdr.sh_type = SHT_NOBITS;
-            shdr.sh_size = section.length;
+            shdr.sh_size = section.length();
         } else {
             shdr.sh_type = SHT_PROGBITS;
-            shdr.sh_size = section.contents.size();
+            shdr.sh_size = section.contents().size();
             shdr.sh_offset = data_offset;
             data_offset += shdr.sh_size;
         }
@@ -288,10 +288,10 @@ void GenericObject::as_elf(FILE* f) {
         if (section.is_fill) {
             // Skips .bss
             if (section.attribute(Attr::LOAD)) {
-                for (usz n = section.length; n; --n)
-                    fwrite(&section.value, 1, 1, f);
+                for (usz n = section.length(); n; --n)
+                    fwrite(&section.value(), 1, 1, f);
             }
-        } else fwrite(section.contents.data(), 1, section.contents.size(), f);
+        } else fwrite(section.contents().data(), 1, section.contents().size(), f);
     }
     // Write symbol table ".symtab"
     fwrite(syms.data(), sizeof(*syms.data()), syms.size(), f);

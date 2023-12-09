@@ -259,11 +259,11 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
     for (auto& section : module->extra_sections()) {
         out += fmt::format(".section {}\n", section.name);
         LCC_ASSERT(not section.is_fill, "Sorry, haven't handled fill extra sections");
-        if (section.contents.empty()) continue;
+        if (section.contents().empty()) continue;
         const auto write_byte = [&](u8 byte) {
             return fmt::format("0x{:x}", byte);
         };
-        out += fmt::format(".byte {}\n", fmt::join(vws::transform(section.contents, write_byte), ","));
+        out += fmt::format(".byte {}\n", fmt::join(vws::transform(section.contents(), write_byte), ","));
     }
 
     out += ".section .note.GNU-stack\n";
