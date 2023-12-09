@@ -30,6 +30,9 @@ public:
     /// Write to a file on disk and terminate on error.
     static void WriteOrTerminate(const void* data, usz size, const fs::path& file);
 
+    /// Get a file's contents from disk.
+    static auto Read(const fs::path& path) -> std::vector<char>;
+
     /// We cannot move or copy files.
     File(const File&) = delete;
     File(File&&) = delete;

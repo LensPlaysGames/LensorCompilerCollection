@@ -76,6 +76,10 @@ void lcc::File::WriteOrTerminate(const void* data, usz size, const fs::path& fil
 lcc::File::File(Context& ctx, fs::path name, std::vector<char>&& contents)
     : ctx(ctx), file_path(std::move(name)), contents(std::move(contents)) {}
 
+auto lcc::File::Read(const fs::path& path) -> std::vector<char> {
+    return LoadFileData(path);
+}
+
 auto lcc::File::LoadFileData(const fs::path& path) -> std::vector<char> {
 #ifdef __linux__
     /// Open the file.
