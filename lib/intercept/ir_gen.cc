@@ -134,11 +134,13 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                     generated_ir[expr] = alloca;
                 } break;
 
-                case Linkage::Imported:
+                case Linkage::Imported: {
+                    auto* global = new (*module) GlobalVariable(module, Convert(ctx, decl->type()), decl->name(), decl->linkage(), nullptr);
+                    generated_ir[expr] = global;
+                } break;
+
                 case Linkage::Reexported: {
-                    auto* alloca = new (*module) AllocaInst(Convert(ctx, decl->type()), expr->location());
-                    insert(alloca);
-                    generated_ir[expr] = alloca;
+                    LCC_TODO();
                 } break;
 
                 case Linkage::Internal:
@@ -469,13 +471,12 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                     generated_ir[expr] = truncate;
                     insert(truncate);
                 }
-
             }
 
         } break;
 
         case intercept::Expr::Kind::EvaluatedConstant: {
-            const auto& constant = as<ConstantExpr>(expr);
+            auto* constant = as<ConstantExpr>(expr);
             EvalResult result = constant->value();
             if (result.is_null()) {
                 // Zero constant... I dunno
@@ -488,15 +489,17 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         } break;
 
         case intercept::Expr::Kind::NameRef: {
-            const auto& name_ref = as<NameRefExpr>(expr);
-            LCC_ASSERT(generated_ir[name_ref->target()], "NameRef references non-IRGenned expression...");
+            auto* name_ref = as<NameRefExpr>(expr);
+            if (is<VarDecl>(name_ref->target()) and as<VarDecl>(name_ref->target())->linkage() == Linkage::Imported)
+                generate_expression(name_ref->target());
+            LCC_ASSERT(generated_ir[name_ref->target()], "NameRef {} references non-IRGenned expression...", fmt::ptr(name_ref));
             generated_ir[expr] = generated_ir[name_ref->target()];
         } break;
 
         case Expr::Kind::Return: {
-            const auto& ret_expr = as<ReturnExpr>(expr);
+            auto* ret_expr = as<ReturnExpr>(expr);
             if (ret_expr->value()) generate_expression(ret_expr->value());
-            const auto& ret = new (*module) ReturnInst(generated_ir[ret_expr->value()], expr->location());
+            auto* ret = new (*module) ReturnInst(generated_ir[ret_expr->value()], expr->location());
             generated_ir[expr] = ret;
             insert(ret);
         } break;
