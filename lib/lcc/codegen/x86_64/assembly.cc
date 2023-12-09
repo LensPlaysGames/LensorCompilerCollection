@@ -17,9 +17,7 @@ static std::string safe_name(std::string in) {
     LCC_ASSERT(not in.empty(), "safe_name does not handle empty string input");
     // . in the middle of an identifier is not allowed
     std::replace(in.begin(), in.end(), '.', '_');
-    // . at the beginning tells the assembler it's a local label and not a
-    // function.
-    return fmt::format(".{}", in);
+    return fmt::format("{}", in);
 }
 
 static std::string block_name(std::string in) {
@@ -27,11 +25,9 @@ static std::string block_name(std::string in) {
         static usz block_count = 0;
         return fmt::format(".__block_{}", block_count++);
     }
-    // . in the middle of an identifier is not allowed
-    std::replace(in.begin(), in.end(), '.', '_');
     // . at the beginning tells the assembler it's a local label and not a
     // function.
-    return fmt::format(".{}", in);
+    return fmt::format(".{}", safe_name(in));
 }
 
 std::string ToString(MFunction& function, MOperand op) {
@@ -94,7 +90,12 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                     LCC_ASSERT(false, "Sorry, but global variable initialisation with value kind {} is not supported.", Value::ToString(var->init()->kind()));
             }
             out += '\n';
-        } else out += fmt::format("{}\n", var->name());
+        }
+        // From GNU as manual: `.extern` is accepted in the source program--for
+        // compatibility with other assemblers--but it is ignored. `as` treats all
+        // undefined symbols as external.
+        if (var->linkage() != Linkage::Imported)
+            out += fmt::format(".globl {}\n", var->name());
     }
 
     for (auto& function : mir) {
