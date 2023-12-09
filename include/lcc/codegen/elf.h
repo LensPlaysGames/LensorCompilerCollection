@@ -160,6 +160,7 @@ typedef struct elf64_header {
 /// Processor mask (these bits are reserved per ISA)
 #define PF_MASKPROC 0xf0000000
 
+/// ELF 64-bit Program Header
 typedef struct elf64_phdr {
   /// Type of segment. See PT_* macros for more info.
   uint32_t p_type;
@@ -184,6 +185,7 @@ typedef struct elf64_phdr {
   uint64_t p_align;
 } elf64_phdr;
 
+/// ELF 64-bit Section Header
 typedef struct elf64_shdr {
   /// Offset into the `.shstrtab` section that represents the name of this section.
   uint32_t sh_name;
@@ -247,10 +249,12 @@ typedef struct elf64_shdr {
 #define ELF64_ST_TYPE(st_info) ((st_info) & 0b1111)
 #define ELF64_ST_INFO(binding, type) (((binding) << 4) | ((type) & 0b1111))
 
-// An object file’s symbol table holds information needed to locate and
-// relocate a program’s symbolic definitions and references. A symbol
-// table index is a subscript into this array. Index 0 both designates the
-// first entry in the table and serves as the undefined symbol index.
+/// ELF 64-bit Symbol Table Entry (a symbol)
+///
+/// An object file’s symbol table holds information needed to locate and
+/// relocate a program’s symbolic definitions and references. A symbol
+/// table index is a subscript into this array. Index 0 both designates the
+/// first entry in the table and serves as the undefined symbol index.
 typedef struct elf64_sym {
   /// Index into symbol string table ".strtab", or zero for unnamed.
   uint32_t st_name;
@@ -265,8 +269,6 @@ typedef struct elf64_sym {
   uint64_t st_value;
   uint64_t st_size;
 } elf64_sym;
-
-
 
 #define ELF64_R_SYM(r_info) ((r_info) >> 32)
 #define ELF64_R_TYPE(r_info) ((uint32_t)(r_info))
