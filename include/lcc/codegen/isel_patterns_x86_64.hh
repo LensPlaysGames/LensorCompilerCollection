@@ -195,7 +195,7 @@ using shl_reg_reg = Pattern<
         Inst<Clobbers<>, usz(Opcode::ShiftLeft), Register<usz(x86_64::RegisterId::RCX), 8>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
-template<usz inst_kind, usz out_opcode>
+template <usz inst_kind, usz out_opcode>
 using binary_commutative_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, inst_kind, Register<0, 0>, Register<0, 0>>>,
     InstList<
