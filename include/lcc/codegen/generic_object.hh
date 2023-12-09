@@ -98,6 +98,11 @@ public:
         if (is_fill) {
             out += fmt::format(" {} {:x}\n", _length, _value);
         } else {
+            if (_contents.empty()) {
+                out += " empty\n";
+                return out;
+            }
+
             const auto size = _contents.size();
             out += fmt::format("\n================ {} bytes\n", size);
 
