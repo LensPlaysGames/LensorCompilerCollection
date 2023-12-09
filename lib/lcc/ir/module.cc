@@ -45,7 +45,10 @@ void Module::lower() {
                                 LCC_ASSERT(load->type()->bytes() == store->val()->type()->bytes());
                                 auto byte_count = load->type()->bytes();
 
-                                std::vector<Value*> memcpy_operands{dest_ptr, source_ptr, new (*this) IntegerConstant(IntegerType::Get(context(), 64), byte_count)};
+                                std::vector<Value*> memcpy_operands{
+                                    dest_ptr,
+                                    source_ptr,
+                                    new (*this) IntegerConstant(IntegerType::Get(context(), 64), byte_count)};
                                 auto memcpy_inst = new (*this) IntrinsicInst(IntrinsicKind::MemCopy, memcpy_operands, load->location());
                                 load->replace_with(memcpy_inst);
 
