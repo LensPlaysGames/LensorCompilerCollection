@@ -1,6 +1,8 @@
 #include <filesystem>
 #include <intercept/ast.hh>
+#include <intercept/module_description.hh>
 #include <intercept/sema.hh>
+#include <lcc/codegen/elf.h>
 #include <lcc/context.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
@@ -484,15 +486,85 @@ void intc::Sema::AnalyseModule() {
         // "<module name>.o". Parse the object file and get the `.intc_metadata`
         // section out of it, then deserialise that into the module.
         for (auto include_dir : context->include_directories()) {
-            // TODO: Also look for .obj?
-            auto path = include_dir + std::filesystem::path::preferred_separator + import.name + ".o";
-            fmt::print("Looking for module {} at {}\n", import.name, path);
-            if (std::filesystem::exists(path)) {
-                LCC_TODO(
-                    "When importing module {}, found built object file at {}: parse metadata section",
-                    import.name,
-                    path
-                );
+            auto path_base = include_dir + std::filesystem::path::preferred_separator + import.name;
+            const auto look_for_module_at_path = [&](std::string path) {
+                fmt::print("Looking for module {} at {}\n", import.name, path);
+                return std::filesystem::exists(path);
+            };
+
+            auto paths = {
+                path_base + ".o",
+                path_base + ".obj",
+            };
+            for (auto p : paths) {
+                if (look_for_module_at_path(p)) {
+                    // Open file, get contents
+                    auto object_file = File::Read(p);
+                    LCC_ASSERT(
+                        not object_file.empty(),
+                        "Found object file for module {} at {}, but the file is empty",
+                        import.name,
+                        p
+                    );
+                    // Determine file-type via magic bytes or extension
+                    // TODO: Could possibly cheat and look for magic bytes/header in the file
+                    // anywhere.
+                    std::vector<u8> metadata_blob{};
+                    // TODO: More validation that it's a proper ELF file/what we expect, I
+                    // guess.
+                    if (object_file.size() >= sizeof(elf64_header) and
+                        object_file.at(0) == 0x7f and object_file.at(1) == 'E' and
+                        object_file.at(2) == 'L' and object_file.at(3) == 'F') {
+                        fmt::print("    Found ELF file...\n");
+                        elf64_header hdr{};
+                        std::memcpy(&hdr, object_file.data(), sizeof(hdr));
+                        // TODO: Extract ".intc_metadata" section contents
+                        LCC_ASSERT(hdr.e_shentsize == sizeof(elf64_shdr));
+                        auto section_headers_offset = hdr.e_shoff;
+                        auto* section_headers_base = reinterpret_cast<elf64_shdr*>(object_file.data() + section_headers_offset);
+                        auto section_header_count = hdr.e_shnum;
+                        // First grab reference to section header name section. Usually `.strtab`
+                        // or `.shstrtab`.
+                        auto* shstrtab_hdr = section_headers_base + hdr.e_shstrndx;
+                        auto* shstrtab = object_file.data() + shstrtab_hdr->sh_offset;
+                        // Now try to find section named `.intc_metadata`.
+                        for (decltype(section_header_count) i = 0; i < section_header_count; ++i) {
+                            auto* section_header = section_headers_base + i;
+                            std::string name{shstrtab + section_header->sh_name};
+                            if (name == ".intc_metadata") {
+                                auto begin = object_file.begin() + isz(section_header->sh_offset);
+                                auto end = begin + isz(section_header->sh_size);
+                                metadata_blob.insert(metadata_blob.end(), begin, end);
+                                break;
+                            }
+                        }
+                    } else LCC_ASSERT(
+                        false,
+                        "Unrecognized file format of module {} at {}",
+                        import.name,
+                        p
+                    );
+                    // Very basic validation pass
+                    LCC_ASSERT(
+                        not metadata_blob.empty(),
+                        "Didn't properly get metadata (it's empty) for module {} at {}",
+                        import.name,
+                        p
+                    );
+                    LCC_ASSERT(
+                        metadata_blob.at(0) == ModuleDescription::default_version and
+                            metadata_blob.at(1) == ModuleDescription::magic_byte0 and
+                            metadata_blob.at(2) == ModuleDescription::magic_byte1 and
+                            metadata_blob.at(3) == ModuleDescription::magic_byte2,
+                        "Metadata for module {} at {} has invalid magic bytes",
+                        import.name,
+                        p
+                    );
+                    // Deserialise metadata blob into a module
+                    // FIXME: (this module? or a new module?)
+                    mod.deserialise(context, metadata_blob);
+                    break;
+                }
             }
         }
         LCC_TODO("Import module {}", import.name);
