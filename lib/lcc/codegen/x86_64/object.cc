@@ -991,6 +991,10 @@ GenericObject emit_mcode_gobj(Module* module, const MachineDescription& desc, st
         module->extra_sections().end()
     );
 
+    Section gnu_stack{};
+    gnu_stack.name = ".note.GNU-stack";
+    out.sections.push_back(gnu_stack);
+
     Section& text = out.section(".text");
     // Section& data = out.section(".data");
     // Section& bss = out.section(".bss");
