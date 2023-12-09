@@ -611,6 +611,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
             case K::Call: PrintBasicInterceptNode("CallExpr", e, e->type()); return;
             case K::IntrinsicCall: PrintBasicInterceptNode("IntrinsicCallExpr", e, e->type()); return;
             case K::MemberAccess: PrintBasicInterceptNode("MemberAccessExpr", e, e->type()); return;
+            case K::Module: PrintBasicInterceptNode("ModuleExpr", e, nullptr); return;
         }
 
         PrintBasicInterceptNode(R"(<???>)", e, e->type());
@@ -711,6 +712,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
             case K::StringLiteral:
             case K::IntrinsicCall:
             case K::MemberAccess:
+            case K::Module:
                 break;
         }
     }

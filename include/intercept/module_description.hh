@@ -99,6 +99,7 @@ struct ModuleDescription {
                 case intercept::Expr::Kind::Binary:
                 case intercept::Expr::Kind::NameRef:
                 case intercept::Expr::Kind::MemberAccess:
+                case intercept::Expr::Kind::Module:
                     break;
             }
             LCC_UNREACHABLE();

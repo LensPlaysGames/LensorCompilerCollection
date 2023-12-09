@@ -311,6 +311,7 @@ bool intc::Sema::HasSideEffects(Expr* expr) {
         case Expr::Kind::StringLiteral:
         case Expr::Kind::OverloadSet:
         case Expr::Kind::NameRef:
+        case Expr::Kind::Module:
             return false;
 
         /// For these, it depends.
@@ -1051,7 +1052,9 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             break;
 
         /// These should only be created by sema and are thus no-ops.
-        case Expr::Kind::EvaluatedConstant: break;
+        case Expr::Kind::Module:
+        case Expr::Kind::EvaluatedConstant:
+            break;
 
         /// Validate overload sets.
         case Expr::Kind::OverloadSet: {

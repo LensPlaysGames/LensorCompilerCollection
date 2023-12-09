@@ -3,9 +3,9 @@
 #include <lcc/context.hh>
 #include <lcc/core.hh>
 #include <lcc/ir/ir.hh>
-#include <lcc/target.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
+#include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/rtti.hh>
 #include <memory>
@@ -744,6 +744,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         } break;
 
         // no-op/handled elsewhere
+        case Expr::Kind::Module: break;
         case Expr::Kind::TypeDecl: break;
         case Expr::Kind::TypeAliasDecl: break;
         case Expr::Kind::FuncDecl: break;

@@ -262,6 +262,8 @@ public:
     ) -> Result<Decl*>;
 
     /// Look up a symbol in this scope.
+    /// FIXME: This is the stupidest fuckin API ever and has no documentation
+    /// on how to fucking use it. Way to go, champ.
     auto find(std::string_view name) { return symbols.equal_range(name); }
 
     /// Get the parent scope.
@@ -860,6 +862,7 @@ public:
 
         NameRef,
         MemberAccess,
+        Module,
     };
 
 private:
@@ -1436,6 +1439,21 @@ public:
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::MemberAccess; }
 };
+
+class ModuleExpr : public Expr {
+    Module* _mod;
+
+public:
+    ModuleExpr(Module* _module, Location location)
+        : Expr(Kind::Module, location), _mod(_module) {}
+
+    auto mod() const -> Module* {
+        return _mod;
+    }
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Module; }
+};
+
 } // namespace lcc::intercept
 
 /// Formatter for types.
