@@ -1,6 +1,7 @@
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/isel_patterns_x86_64.hh>
 #include <lcc/codegen/mir.hh>
+#include <lcc/codegen/mir_utils.hh>
 #include <lcc/codegen/x86_64.hh>
 #include <lcc/context.hh>
 #include <lcc/ir/module.hh>
@@ -95,12 +96,40 @@ void select_instructions(Module* mod, MFunction& function) {
             for (usz index = 0; index < block.instructions().size(); ++index) {
                 MInst& inst = block.instructions().at(index);
                 switch (inst.kind()) {
+                    // Rewrite return of global into move + return
+                    //
+                    // M.Return global(nice)
+                    // becomes the following machine code, GNU syntax
+                    //     mov nice(%rip), %rRETURN
+                    //     ret
+                    case MInst::Kind::Return: {
+                        if (is_global(inst)) {
+                            auto global = extract_global(inst);
+                            LCC_ASSERT(
+                                global->allocated_type()->bytes() <= 8,
+                                "Cannot return over-large global on x86_64 (yet), sorry"
+                            );
+
+                            auto mov_inst = MInst(+x86_64::Opcode::MoveDereferenceLHS, {0, 0});
+                            mov_inst.add_operand(global);
+                            mov_inst.add_operand(MOperandRegister{usz(x86_64::RegisterId::RETURN), uint(global->allocated_type()->bits())});
+
+                            auto ret_inst = MInst(+x86_64::Opcode::Return, {0, 0});
+
+                            // replace return with move
+                            block.instructions()[index] = mov_inst;
+                            // insert return instruction after move, previously return
+                            // ++index to skip newly inserted instruction.
+                            block.instructions().insert(block.instructions().begin() + isz(++index), ret_inst);
+                        } else LCC_ASSERT(false, "Unhandled instruction selection of return");
+                    } break;
+
                     // Rewrite truncates into bitwise ands.
                     //
                     // r3.1 | M.Trunc r1.64
                     // becomes the following machine code, GNU syntax
                     //     mov %r1.64, %r3.64
-                    //     and %r3.64, $1
+                    //     and $1, %r3.64
                     case MInst::Kind::Trunc: {
                         if (std::holds_alternative<MOperandImmediate>(inst.get_operand(0))) {
                             auto imm = std::get<MOperandImmediate>(inst.get_operand(0));
@@ -120,8 +149,10 @@ void select_instructions(Module* mod, MFunction& function) {
                             break;
                         }
 
-                        LCC_ASSERT(std::holds_alternative<MOperandRegister>(inst.get_operand(0)),
-                                   "Sorry, but you can only truncate registers and immediates for right now");
+                        LCC_ASSERT(
+                            std::holds_alternative<MOperandRegister>(inst.get_operand(0)),
+                            "Sorry, but you can only truncate registers and immediates for right now"
+                        );
 
                         auto mov_inst = MInst(usz(x86_64::Opcode::Move), {0, 0});
                         auto operand_reg = std::get<MOperandRegister>(inst.get_operand(0));
