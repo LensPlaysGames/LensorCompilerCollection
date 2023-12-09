@@ -489,7 +489,7 @@ void intc::Sema::AnalyseModule() {
         for (auto include_dir : context->include_directories()) {
             auto path_base = include_dir + std::filesystem::path::preferred_separator + import.name;
             const auto look_for_module_at_path = [&](std::string path) {
-                fmt::print("Looking for module {} at {}\n", import.name, path);
+                // fmt::print("Looking for module {} at {}\n", import.name, path);
                 return std::filesystem::exists(path);
             };
 
@@ -516,7 +516,7 @@ void intc::Sema::AnalyseModule() {
                     if (object_file.size() >= sizeof(elf64_header) and
                         object_file.at(0) == 0x7f and object_file.at(1) == 'E' and
                         object_file.at(2) == 'L' and object_file.at(3) == 'F') {
-                        fmt::print("    Found ELF file...\n");
+                        // fmt::print("    Found ELF file...\n");
                         elf64_header hdr{};
                         std::memcpy(&hdr, object_file.data(), sizeof(hdr));
                         // TODO: Extract ".intc_metadata" section contents
@@ -568,7 +568,6 @@ void intc::Sema::AnalyseModule() {
                 }
             }
         }
-        LCC_TODO("Import module {}", import.name);
     }
 
     /// Analyse the signatures of all functions. This must be done
@@ -945,7 +944,6 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
         /// exist in the struct.
         case Expr::Kind::MemberAccess: {
             auto m = as<MemberAccessExpr>(expr);
-
             /// If there is an error analysing the object, we don’t know
             /// its type and can thus not continue checking this.
             if (not Analyse(&m->object())) {
@@ -953,7 +951,19 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 break;
             }
 
-            /// TODO(Sirraide): Accessing ‘members’ of modules.
+            /// Accessing ‘members’ of modules.
+            if (is<NameRefExpr>(m->object()) and is<ModuleExpr>(as<NameRefExpr>(m->object())->target())) {
+                // m->name() == name of member we are accessing
+                // m->object() == NameRef to module we are accessing
+                auto name_ref = as<NameRefExpr>(m->object());
+                auto module_expr = as<ModuleExpr>(name_ref->target());
+                auto* referenced_module = module_expr->mod();
+                auto* scope = referenced_module->global_scope();
+                // Replace member access with a name ref
+                *expr_ptr = new (mod) NameRefExpr(m->name(), scope, m->location());
+                AnalyseNameRef(as<NameRefExpr>(*expr_ptr));
+                break;
+            }
 
             /// ‘object’ is actually a type name.
             if (is<NameRefExpr>(m->object()) and is<TypeDecl>(as<NameRefExpr>(m->object())->target())) {
@@ -1627,8 +1637,18 @@ void intc::Sema::AnalyseNameRef(NameRefExpr* expr) {
 
     /// If we’re at the global scope and there still is no symbol, then
     /// this symbol is apparently not declared.
-    /// TODO(Sirraide): Search imported modules here.
     if (syms.first == syms.second) {
+        /// Search imported modules here.
+        for (auto ref : mod.imports()) {
+            if (expr->name() == ref.name) {
+                // Set expr->target() and expr->type() to something reasonable.
+                auto module_expr = new (mod) ModuleExpr(&mod, expr->location());
+                expr->target(module_expr);
+                expr->type(Type::Void);
+                return;
+            }
+        }
+
         Error(expr->location(), "Unknown symbol '{}'", expr->name());
 
         /// If there is a declaration of this variable in the top-level
