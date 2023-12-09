@@ -1,5 +1,6 @@
 #include <bit>
 #include <intercept/ast.hh>
+#include <intercept/module_description.hh>
 #include <intercept/parser.hh>
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
@@ -923,102 +924,6 @@ void intc::Module::print(bool use_colour) {
     ASTPrinter{use_colour}.print(this);
 }
 
-/// For serialisation purposes.
-/// If you know how ELF works, you'll find this familiar and pretty
-/// easy-going. If not, hopefully the comments help you out along the way.
-///
-/// OVERALL STRUCTURE of BINARY METADATA BLOB version 1:
-///
-/// Beginning of file       type_table_offset  name_offset
-/// V                       V                  V
-/// Header { Declarations } { Types }          [ Module Name ]
-///
-/// A declaration is encoded as a DeclarationHeader + N amount of bytes
-/// determined by the values in the declaration header.
-struct ModuleDescription {
-    using TypeIndex = lcc::u16;
-
-    // Default/expected values.
-    static constexpr lcc::u8 default_version = 1;
-    static constexpr lcc::u8 magic_byte0 = 'I';
-    static constexpr lcc::u8 magic_byte1 = 'N';
-    static constexpr lcc::u8 magic_byte2 = 'T';
-    struct Header {
-        lcc::u8 version{default_version};
-        lcc::u8 magic[3]{
-            magic_byte0,
-            magic_byte1,
-            magic_byte2,
-        };
-
-        /// Size, in 8-bit bytes, of this binary metadata blob, including this header.
-        lcc::u32 size;
-
-        /// The offset within this binary metadata blob at which you will find the
-        /// beginning of the type table. Value undefined iff type_count is zero.
-        lcc::u32 type_table_offset;
-
-        /// The offset within this binary metadata blob at which you will find the
-        /// beginning of a NULL-terminated string: the name of the serialised
-        /// module.
-        lcc::u32 name_offset;
-
-        /// The amount of declarations encoded in this binary metadata blob. Once
-        /// this many declarations have been deserialised, the reader should stop
-        /// reading.
-        lcc::u16 declaration_count;
-
-        /// The amount of types encoded in this binary metadata blob. Determines
-        /// maximum exclusive allowed value of declaration type_index field.
-        /// Once the reader deserialised this many types, the reader should stop
-        /// reading types.
-        lcc::u16 type_count;
-    };
-
-    struct DeclarationHeader {
-        enum struct Kind : lcc::u16 {
-            INVALID,
-            TYPE,
-            TYPE_ALIAS,
-            ENUMERATOR,
-            VARIABLE,
-            FUNCTION,
-        };
-        static constexpr Kind get_kind(intc::Decl* decl) {
-            switch (decl->kind()) {
-                // All kinds of decl must go here
-                case lcc::intercept::Expr::Kind::TypeDecl: return Kind::TYPE;
-                case lcc::intercept::Expr::Kind::TypeAliasDecl: return Kind::TYPE_ALIAS;
-                case lcc::intercept::Expr::Kind::EnumeratorDecl: return Kind::ENUMERATOR;
-                case lcc::intercept::Expr::Kind::VarDecl: return Kind::VARIABLE;
-                case lcc::intercept::Expr::Kind::FuncDecl: return Kind::FUNCTION;
-
-                // Non-decl kinds
-                case lcc::intercept::Expr::Kind::While:
-                case lcc::intercept::Expr::Kind::For:
-                case lcc::intercept::Expr::Kind::Return:
-                case lcc::intercept::Expr::Kind::IntegerLiteral:
-                case lcc::intercept::Expr::Kind::StringLiteral:
-                case lcc::intercept::Expr::Kind::CompoundLiteral:
-                case lcc::intercept::Expr::Kind::OverloadSet:
-                case lcc::intercept::Expr::Kind::EvaluatedConstant:
-                case lcc::intercept::Expr::Kind::If:
-                case lcc::intercept::Expr::Kind::Block:
-                case lcc::intercept::Expr::Kind::Call:
-                case lcc::intercept::Expr::Kind::IntrinsicCall:
-                case lcc::intercept::Expr::Kind::Cast:
-                case lcc::intercept::Expr::Kind::Unary:
-                case lcc::intercept::Expr::Kind::Binary:
-                case lcc::intercept::Expr::Kind::NameRef:
-                case lcc::intercept::Expr::Kind::MemberAccess:
-                    break;
-            }
-            LCC_UNREACHABLE();
-        }
-        lcc::u16 kind; // one of DeclarationHeader::Kind
-        TypeIndex type_index;
-    };
-};
 
 // FIXME: This should probably be backwards for big endian machines, afaik.
 template <typename T>
@@ -1060,7 +965,7 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             NamedType* type = as<NamedType>(ty);
             u16 name_length = u16(type->name().length());
             auto name_length_bytes = to_bytes(name_length);
-            // Write `length: u32`
+            // Write `length: u16`
             out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
             // Write `name : u8[length]`
             out.insert(out.end(), type->name().begin(), type->name().end());
@@ -1462,13 +1367,7 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
         );
         offset += sizeof(decl_hdr);
 
-        u16 name_length{};
-        std::memcpy(
-            &name_length,
-            module_metadata_blob.data() + offset,
-            sizeof(name_length)
-        );
-        offset += sizeof(name_length);
+        u8 name_length = module_metadata_blob.at(offset++);
 
         std::string name{};
         for (decltype(offset) i = 0; i < name_length; ++i)
