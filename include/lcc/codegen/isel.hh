@@ -31,7 +31,7 @@ constexpr void Foreach(auto&& lambda) {
 enum struct OperandKind {
     Immediate,
     // Eventually an immediate operand; takes an input operand index and gets
-    // the size from it.
+    // the size from it IN BITS. BITS. I'll say it a third time, IN BITS.
     Sizeof,
 
     Register,
@@ -246,7 +246,8 @@ struct Inst {
     template <typename operand>
     static constexpr MOperand get_operand(
         Module* mod,
-        std::vector<MInst*> input,
+        MFunction& function,       // for locals lookup
+        std::vector<MInst*> input, // for Input*Reference,
         std::unordered_map<usz, usz>& new_virtuals
     ) {
         const auto input_operand_by_index = [&](usz index) -> Result<MOperand> {
@@ -280,10 +281,11 @@ struct Inst {
                 else if (std::holds_alternative<MOperandImmediate>(op))
                     size = std::get<MOperandImmediate>(op).size;
                 else if (std::holds_alternative<MOperandGlobal>(op))
-                    size = std::get<MOperandGlobal>(op)->allocated_type()->bytes();
-                else if (std::holds_alternative<MOperandLocal>(op))
-                    LCC_TODO("Resolving size of local would require passing function down further in API, and sorry but I'm lazy rn");
-                else LCC_ASSERT(
+                    size = std::get<MOperandGlobal>(op)->allocated_type()->bits();
+                else if (std::holds_alternative<MOperandLocal>(op)) {
+                    auto* local = function.locals().at(+std::get<MOperandLocal>(op));
+                    size = local->allocated_type()->bits();
+                } else LCC_ASSERT(
                     false,
                     "Unhandled operand kind in Sizeof handling, sorry"
                 );
@@ -299,8 +301,8 @@ struct Inst {
                     } break;
 
                     case OperandKind::Sizeof: {
-                        auto op = get_operand<typename operand::sz>(mod, input, new_virtuals);
-                        size = std::get<MOperandImmediate>(op).size;
+                        auto op = get_operand<typename operand::sz>(mod, function, input, new_virtuals);
+                        size = uint(std::get<MOperandImmediate>(op).value);
                     } break;
 
                     default:
@@ -557,7 +559,7 @@ struct PatternList {
                         });
 
                         inst::foreach_operand([&]<typename op> {
-                            output->add_operand(inst::template get_operand<op>(mod, input, new_virtuals));
+                            output->add_operand(inst::template get_operand<op>(mod, function, input, new_virtuals));
                         });
 
                         // Stupidly match use count (not sure if even necessary).
