@@ -490,8 +490,11 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         case intercept::Expr::Kind::NameRef: {
             auto* name_ref = as<NameRefExpr>(expr);
-            if (is<VarDecl>(name_ref->target()) and as<VarDecl>(name_ref->target())->linkage() == Linkage::Imported)
+
+            if (is<ObjectDecl>(name_ref->target()) and
+                as<ObjectDecl>(name_ref->target())->linkage() == Linkage::Imported)
                 generate_expression(name_ref->target());
+
             LCC_ASSERT(generated_ir[name_ref->target()], "NameRef {} references non-IRGenned expression...", fmt::ptr(name_ref));
             generated_ir[expr] = generated_ir[name_ref->target()];
         } break;
