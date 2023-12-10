@@ -516,10 +516,9 @@ void intc::Sema::AnalyseModule() {
                     if (object_file.size() >= sizeof(elf64_header) and
                         object_file.at(0) == 0x7f and object_file.at(1) == 'E' and
                         object_file.at(2) == 'L' and object_file.at(3) == 'F') {
-                        // fmt::print("    Found ELF file...\n");
                         elf64_header hdr{};
                         std::memcpy(&hdr, object_file.data(), sizeof(hdr));
-                        // TODO: Extract ".intc_metadata" section contents
+                        // Extract ".intc_metadata" section contents
                         LCC_ASSERT(hdr.e_shentsize == sizeof(elf64_shdr));
                         auto section_headers_offset = hdr.e_shoff;
                         auto* section_headers_base = reinterpret_cast<elf64_shdr*>(object_file.data() + section_headers_offset);
