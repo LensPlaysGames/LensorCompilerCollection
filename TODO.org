@@ -1,0 +1,32 @@
+#+title: LCC TODO
+#+author: Lens_r
+
+* Intercept
+
+** TODO Packed Structs called "Cereals"
+[2023-12-09 Sat 17:39]
+
+Basically, a packed struct is going to be an entirely separate type
+kind, like struct, enum, etc.
+
+#+begin_src int
+  foo : cereal {
+    x :u8;
+    y :u16;
+  }
+#+end_src
+
+The size of ~foo~ above would be 24 bits, and the layout is guaranteed.
+
+The use of cereals would be for serialisation and deserialisation,
+where you sometimes need exact bit or byte types that don't necessarily
+follow all padding rules and such.
+
+** TODO Invalid "Expression Result Unused" Warning
+[2023-12-09 Sat 17:46]
+
+In ~examples/intercept/minimal_module~, when compiling ~program.int~, I
+get the "Expression Result Unused" warning from the bottom of
+~Discard~. This is because I have to insert a top level declaration
+expression in order to properly IRGen the declaration before it's used
+in a name ref.
