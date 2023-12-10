@@ -4,6 +4,7 @@
 #include <lcc/codegen/mir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/utils.hh>
+#include <lcc/utils/result.hh>
 #include <unordered_map>
 #include <variant>
 
@@ -29,6 +30,9 @@ constexpr void Foreach(auto&& lambda) {
 
 enum struct OperandKind {
     Immediate,
+    // Eventually an immediate operand; takes an input operand index and gets
+    // the size from it.
+    Sizeof,
 
     Register,
     // For use in the output of patterns when a temporary register is needed.
@@ -57,25 +61,40 @@ enum struct OperandKind {
 // NOTE: The operand values are a bit scuffed, in that each one needs all
 // of the accessors in order for everything to compile...
 
-template <i64 imm = 0, u64 sz = 0>
+template <i64 imm = 0, u64 _size = 0>
 struct Immediate {
+    using sz = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Immediate;
     static constexpr i64 immediate = imm;
     static constexpr usz index = 0;
     static constexpr usz value = 0;
-    static constexpr usz size = sz;
+    static constexpr usz size = _size;
     static constexpr GlobalVariable* global = nullptr;
     static constexpr lcc::Function* function = nullptr;
     static constexpr lcc::Block* block = nullptr;
 };
 
-template <usz val, usz sz>
+template <usz idx>
+struct Sizeof {
+    using sz = Immediate<>;
+    static constexpr OperandKind kind = OperandKind::Sizeof;
+    static constexpr i64 immediate = 0;
+    static constexpr usz index = idx;
+    static constexpr usz value = 0;
+    static constexpr usz size = 0;
+    static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
+};
+
+template <usz val = 0, typename _size = Immediate<>>
 struct Register {
+    using sz = _size;
     static constexpr OperandKind kind = OperandKind::Register;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
     static constexpr usz value = val;
-    static constexpr usz size = sz;
+    static constexpr usz size = 0;
     static constexpr GlobalVariable* global = nullptr;
     static constexpr lcc::Function* function = nullptr;
     static constexpr lcc::Block* block = nullptr;
@@ -83,6 +102,7 @@ struct Register {
 
 template <typename... _>
 struct Local {
+    using sz = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Local;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
@@ -95,6 +115,7 @@ struct Local {
 
 template <typename... _>
 struct Global {
+    using sz = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Global;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
@@ -107,6 +128,7 @@ struct Global {
 
 template <typename... _>
 struct Function {
+    using sz = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Function;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
@@ -119,6 +141,7 @@ struct Function {
 
 template <typename... _>
 struct Block {
+    using sz = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Block;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
@@ -132,6 +155,7 @@ struct Block {
 // New virtual register, by unique index within each pattern.
 template <usz idx, usz op_idx>
 struct v {
+    using sz = Immediate<>;
     static constexpr OperandKind kind = OperandKind::NewVirtual;
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
@@ -144,6 +168,7 @@ struct v {
 
 template <usz op_idx, usz new_size>
 struct ResizedRegister {
+    using sz = Immediate<>;
     static constexpr OperandKind kind = OperandKind::ResizedRegister;
     static constexpr i64 immediate = 0;
     static constexpr usz index = op_idx;
@@ -157,6 +182,7 @@ struct ResizedRegister {
 // Operand reference, by index.
 template <usz idx>
 struct o {
+    using sz = Immediate<>;
     static constexpr OperandKind kind = OperandKind::InputOperandReference;
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
@@ -170,6 +196,7 @@ struct o {
 // Instruction reference, by index.
 template <usz idx>
 struct i {
+    using sz = Immediate<>;
     static constexpr OperandKind kind = OperandKind::InputInstructionReference;
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
@@ -222,45 +249,79 @@ struct Inst {
         std::vector<MInst*> input,
         std::unordered_map<usz, usz>& new_virtuals
     ) {
+        const auto input_operand_by_index = [&](usz index) -> Result<MOperand> {
+            // Current operand index.
+            usz i = 0;
+            for (auto instruction : input) {
+                for (auto op_candidate : instruction->all_operands()) {
+                    // This is the instruction we are looking for!
+                    if (i == index) return op_candidate;
+
+                    // Increment operand index for the next operand.
+                    ++i;
+                }
+            }
+            return {};
+        };
+
         switch (operand::kind) {
             case OperandKind::Immediate:
                 return MOperandImmediate(operand::immediate);
 
-            case OperandKind::Register:
-                return MOperandRegister(operand::value, operand::size);
+            case OperandKind::Sizeof: {
+                auto op_result = input_operand_by_index(operand::index);
+                // FIXME: Which pattern? Possible to include it in error message somehow?
+                LCC_ASSERT(op_result, "Pattern has ill-formed Sizeof<{}> operand: index greater than amount of operands in input.", operand::index);
+                auto op = *op_result;
+
+                u64 size{};
+                if (std::holds_alternative<MOperandRegister>(op))
+                    size = std::get<MOperandRegister>(op).size;
+                else if (std::holds_alternative<MOperandImmediate>(op))
+                    size = std::get<MOperandImmediate>(op).size;
+                else if (std::holds_alternative<MOperandGlobal>(op))
+                    size = std::get<MOperandGlobal>(op)->allocated_type()->bytes();
+                else if (std::holds_alternative<MOperandLocal>(op))
+                    LCC_TODO("Resolving size of local would require passing function down further in API, and sorry but I'm lazy rn");
+                else LCC_ASSERT(
+                    false,
+                    "Unhandled operand kind in Sizeof handling, sorry"
+                );
+
+                return MOperandImmediate(size);
+            }
+
+            case OperandKind::Register: {
+                uint size{};
+                switch (operand::sz::kind) {
+                    case OperandKind::Immediate: {
+                        size = operand::sz::immediate;
+                    } break;
+
+                    case OperandKind::Sizeof: {
+                        auto op = get_operand<typename operand::sz>(mod, input, new_virtuals);
+                        size = std::get<MOperandImmediate>(op).size;
+                    } break;
+
+                    default:
+                        LCC_ASSERT(
+                            false,
+                            "Unhandled operand kind in sz field (size) of Register, sorry"
+                        );
+                }
+                LCC_ASSERT(
+                    size != 0,
+                    "Zero-sized register is not allowed!"
+                );
+                return MOperandRegister(operand::value, size);
+            }
 
             case OperandKind::ResizedRegister: {
-                MOperand op{};
-
-                // Current operand index.
-                usz i = 0;
-                // Operand index we need to find.
-                usz needle = operand::index;
-                // Whether or not we've found the operand we are looking for.
-                bool found = false;
-                for (auto instruction : input) {
-                    for (auto op_candidate : instruction->all_operands()) {
-                        // This is the instruction we are looking for!
-                        if (i == needle) {
-                            found = true;
-                            op = op_candidate;
-                        }
-
-                        // We can stop looking at operands if we found the one we needed.
-                        if (found) break;
-
-                        // Increment operand index for the next operand.
-                        ++i;
-                    }
-                    // We can stop looking at instructions if we found the operand we needed.
-                    if (found) break;
-                }
-
+                auto op_result = input_operand_by_index(operand::index);
                 // FIXME: Which pattern? Possible to include it in error message somehow?
-                LCC_ASSERT(found, "Pattern has ill-formed ResizedRegister<{}, {}> operand: index greater than amount of operands in input.", needle, operand::size);
-
-                LCC_ASSERT(std::holds_alternative<MOperandRegister>(op),
-                           "Pattern has ill-formed ResizedRegister<{}, {}> operand: index within bounds, but does not reference a register operand", needle, operand::size);
+                LCC_ASSERT(op_result, "Pattern has ill-formed ResizedRegister<{}, {}> operand: index greater than amount of operands in input.", operand::index, operand::size);
+                auto op = *op_result;
+                LCC_ASSERT(std::holds_alternative<MOperandRegister>(op), "Pattern has ill-formed ResizedRegister<{}, {}> operand: index within bounds, but does not reference a register operand", operand::index, operand::size);
 
                 return MOperandRegister(std::get<MOperandRegister>(op).value, operand::size);
             }
@@ -321,35 +382,10 @@ struct Inst {
                 return MOperandGlobal(operand::block);
 
             case OperandKind::InputOperandReference: {
-                MOperand op{};
-                // Current operand index.
-                usz i = 0;
-                // Operand index we need to find.
-                usz needle = operand::index;
-                // Whether or not we've found the operand we are looking for.
-                bool found = false;
-                for (auto instruction : input) {
-                    for (auto op_candidate : instruction->all_operands()) {
-                        // This is the instruction we are looking for!
-                        if (i == needle) {
-                            found = true;
-                            op = op_candidate;
-                        }
-
-                        // We can stop looking at operands if we found the one we needed.
-                        if (found) break;
-
-                        // Increment operand index for the next operand.
-                        ++i;
-                    }
-                    // We can stop looking at instructions if we found the operand we needed.
-                    if (found) break;
-                }
-
+                auto op_result = input_operand_by_index(operand::index);
                 // FIXME: Which pattern? Possible to include it in error message somehow?
-                LCC_ASSERT(found, "Pattern has ill-formed o<{}> operand: index greater than amount of operands in input.", needle);
-
-                return op;
+                LCC_ASSERT(op_result, "Pattern has ill-formed o<{}> operand: index greater than amount of operands in input.", operand::index);
+                return *op_result;
             }
 
             case OperandKind::InputInstructionReference: {
@@ -513,7 +549,7 @@ struct PatternList {
                         pool.push_back(output);
                         instructions.insert(instructions.begin() + output_i, output);
 
-                        inst::clobbers::foreach([&]<typename clobber> {
+                        inst::clobbers::foreach ([&]<typename clobber> {
                             if constexpr (clobber::kind == ClobberKind::Operand)
                                 output->add_operand_clobber(clobber::index);
                             else if constexpr (clobber::kind == ClobberKind::RegisterValue)
