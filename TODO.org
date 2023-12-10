@@ -48,3 +48,10 @@ declarations.
   foo : something;
   #foo ;; 2
 #+end_src
+
+** TODO Error on non-hygienic declarations when defining a macro
+[2023-12-09 Sat 18:22]
+
+Whoever wrote the lexer and parser absolutely butchered macros. I
+already fixed ~defines~, I'm pretty sure, but it wasn't even erroring
+when it should, so we aren't checking for hygienic expansions :(.
