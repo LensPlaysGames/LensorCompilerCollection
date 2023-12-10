@@ -37,7 +37,6 @@ enum struct OperandKind {
     // References an input register operand but changes the size.
     // Takes an index of a register operand from the input to copy the value
     // of and an explicit size to use instead of the copied one.
-
     ResizedRegister,
 
     // A reference to a stack frame object.

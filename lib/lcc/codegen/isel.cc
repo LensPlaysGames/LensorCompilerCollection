@@ -88,7 +88,7 @@ void select_instructions(Module* mod, MFunction& function) {
     if (function.blocks().empty()) return;
 
     if (mod->context()->target()->is_x64()) {
-        function = lcc::isel::x86_64PatternList::rewrite(mod, function);
+        function = lcc::isel::x86_64::AllPatterns::rewrite(mod, function);
 
         // In-code instruction selection. Ideally, we wouldn't have to do this at
         // all. But, not all hardware is ideal.

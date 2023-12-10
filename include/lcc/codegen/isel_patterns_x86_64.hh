@@ -7,18 +7,22 @@
 
 namespace lcc {
 namespace isel {
+namespace x86_64 {
+// Just a NOTE: I don't like having lcc::x86_64 /and/ lcc::isel::x86_64,
+// but I don't like having isel split up across all the arch namespaces
+// either.
 
-// TODO: namespace x86_64
-
+using MKind = MInst::Kind;
 using OK = OperandKind;
-using Opcode = x86_64::Opcode;
+using Opcode = lcc::x86_64::Opcode;
+using RegId = lcc::x86_64::RegisterId;
 
 using bitcast_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Bitcast), Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Bitcast), Immediate<0, 0>>>,
     InstList<Inst<Clobbers<>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using ret = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Return)>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Return)>>,
     InstList<Inst<Clobbers<>, usz(Opcode::Return)>>>;
 
 // InputOperandReference operand with a value of o<0> means replace the
@@ -28,9 +32,9 @@ using ret = Pattern<
 // size from another operand, or something?
 template <typename ret_op>
 using ret_some_op = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Return), ret_op>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Return), ret_op>>,
     InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(lcc::x86_64::RegisterId::RETURN), 64>>,
+        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RETURN), 64>>,
         Inst<Clobbers<>, usz(Opcode::Return)>>>;
 
 using ret_imm = ret_some_op<Immediate<>>;
@@ -42,7 +46,7 @@ using ret_reg = ret_some_op<Register<0, 0>>;
 // register of the load.
 template <typename load_op>
 using load_some_op = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Load), load_op>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Load), load_op>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceLHS), o<0>, i<0>>>>;
 
 using load_global = load_some_op<Global<>>;
@@ -51,7 +55,7 @@ using load_reg = load_some_op<Register<0, 0>>;
 
 template <typename store_op>
 using store_some_op_local = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), store_op, Local<>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Store), store_op, Local<>>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), o<0>, o<1>>>>;
 
 using store_reg_local = store_some_op_local<Register<0, 0>>;
@@ -61,18 +65,18 @@ using store_imm_local = store_some_op_local<Immediate<0, 0>>;
 //   mov $imm, %tmp
 //   mov %tmp, (%r)
 using store_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), Immediate<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Store), Immediate<0, 0>, Register<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), v<0, 0>, o<1>>>>;
 
 using store_reg_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Store), Register<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Store), Register<0, 0>, Register<0, 0>>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveDereferenceRHS), o<0>, o<1>>>>;
 
 template <typename copy_op>
 using copy_some_op = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Copy), copy_op>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Copy), copy_op>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using copy_reg = copy_some_op<Register<0, 0>>;
@@ -80,7 +84,7 @@ using copy_imm = copy_some_op<Immediate<0, 0>>;
 
 template <typename copy_op>
 using copy_mem_op = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Copy), copy_op>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Copy), copy_op>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>>>;
 
 using copy_global = copy_mem_op<Global<>>;
@@ -88,111 +92,111 @@ using copy_local = copy_mem_op<Local<>>;
 
 template <typename callee>
 using simple_call = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Call), callee>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Call), callee>>,
     InstList<Inst<Clobbers<>, usz(Opcode::Call), o<0>>>>;
 
 using simple_function_call = simple_call<Function<>>;
 
 template <typename callee>
 using simple_branch = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Branch), callee>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Branch), callee>>,
     InstList<Inst<Clobbers<>, usz(Opcode::Jump), o<0>>>>;
 
 using simple_block_branch = simple_branch<Block<>>;
 
 using s_ext_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::SExt), Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::SExt), Register<0, 0>>>,
     InstList<Inst<Clobbers<c<1>>, usz(Opcode::MoveSignExtended), o<0>, i<0>>>>;
 
 using not_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Compl), Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Compl), Register<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Not), o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using sar_imm_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sar), Immediate<0, 0>, Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Sar), Immediate<0, 0>, Immediate<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
         Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), o<1>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using shr_imm_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shr), Immediate<0, 0>, Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Shr), Immediate<0, 0>, Immediate<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
         Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), o<1>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using shl_imm_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shl), Immediate<0, 0>, Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Shl), Immediate<0, 0>, Immediate<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
         Inst<Clobbers<>, usz(Opcode::ShiftLeft), o<1>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using sar_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sar), Immediate<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Sar), Immediate<0, 0>, Register<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(x86_64::RegisterId::RCX), 32>>,
-        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), Register<usz(x86_64::RegisterId::RCX), 8>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(RegId::RCX), 32>>,
+        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), Register<usz(RegId::RCX), 8>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using shr_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shr), Immediate<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Shr), Immediate<0, 0>, Register<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(x86_64::RegisterId::RCX), 32>>,
-        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), Register<usz(x86_64::RegisterId::RCX), 8>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(RegId::RCX), 32>>,
+        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), Register<usz(RegId::RCX), 8>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 using shl_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shl), Immediate<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Shl), Immediate<0, 0>, Register<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
-        Inst<Clobbers<>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(x86_64::RegisterId::RCX), 32>>,
-        Inst<Clobbers<>, usz(Opcode::ShiftLeft), Register<usz(x86_64::RegisterId::RCX), 8>, v<0, 0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), ResizedRegister<1, 32>, Register<usz(RegId::RCX), 32>>,
+        Inst<Clobbers<>, usz(Opcode::ShiftLeft), Register<usz(RegId::RCX), 8>, v<0, 0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), v<0, 0>, i<0>>>>;
 
 // FIXME: If immediate's value doesn't fit into 8 bits, we can't encode it like this.
 using sar_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sar), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Sar), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using shr_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shr), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Shr), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using shl_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shl), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Shl), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::ShiftLeft), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using sar_reg_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sar), Register<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Sar), Register<0, 0>, Register<0, 0>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(x86_64::RegisterId::RCX), 32>>, // 32 bits to clear dependencies
-        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), Register<usz(x86_64::RegisterId::RCX), 8>, o<0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), 32>>, // 32 bits to clear dependencies
+        Inst<Clobbers<>, usz(Opcode::ShiftRightArithmetic), Register<usz(RegId::RCX), 8>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using shr_reg_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shr), Register<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Shr), Register<0, 0>, Register<0, 0>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(x86_64::RegisterId::RCX), 32>>, // 32 bits to clear dependencies
-        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), Register<usz(x86_64::RegisterId::RCX), 8>, o<0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), 32>>, // 32 bits to clear dependencies
+        Inst<Clobbers<>, usz(Opcode::ShiftRightLogical), Register<usz(RegId::RCX), 8>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using shl_reg_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Shl), Register<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Shl), Register<0, 0>, Register<0, 0>>>,
     InstList<
-        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(x86_64::RegisterId::RCX), 32>>, // 32 bits to clear dependencies
-        Inst<Clobbers<>, usz(Opcode::ShiftLeft), Register<usz(x86_64::RegisterId::RCX), 8>, o<0>>,
+        Inst<Clobbers<>, usz(Opcode::Move), o<1>, Register<usz(RegId::RCX), 32>>, // 32 bits to clear dependencies
+        Inst<Clobbers<>, usz(Opcode::ShiftLeft), Register<usz(RegId::RCX), 8>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 template <usz inst_kind, usz out_opcode>
@@ -202,81 +206,81 @@ using binary_commutative_reg_reg = Pattern<
         Inst<Clobbers<>, out_opcode, o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
-using and_reg_reg = binary_commutative_reg_reg<usz(MInst::Kind::And), usz(Opcode::And)>;
+using and_reg_reg = binary_commutative_reg_reg<usz(MKind::And), usz(Opcode::And)>;
 using and_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::And), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::And), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::And), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
-using or_reg_reg = binary_commutative_reg_reg<usz(MInst::Kind::Or), usz(Opcode::Or)>;
+using or_reg_reg = binary_commutative_reg_reg<usz(MKind::Or), usz(Opcode::Or)>;
 using or_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Or), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Or), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Or), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using add_local_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Local<>, Immediate<>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Add), o<1>, i<0>>>>;
 
-using add_reg_reg = binary_commutative_reg_reg<usz(MInst::Kind::Add), usz(Opcode::Add)>;
+using add_reg_reg = binary_commutative_reg_reg<usz(MKind::Add), usz(Opcode::Add)>;
 using add_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Immediate<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Add), Immediate<0, 0>, Register<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Add), o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using add_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Add), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Add), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Add), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using mul_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Mul), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Mul), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Multiply), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using mul_imm_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Mul), Immediate<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Mul), Immediate<0, 0>, Register<0, 0>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Multiply), o<0>, o<1>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<1>, i<0>>>>;
 
 using sub_reg_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sub), Register<0, 0>, Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Sub), Register<0, 0>, Register<0, 0>>>,
     InstList<
         // NOTE: GNU ordering of operands
         Inst<Clobbers<>, usz(Opcode::Sub), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using sub_reg_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::Sub), Register<0, 0>, Immediate<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::Sub), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
         // NOTE: GNU ordering of operands
         Inst<Clobbers<>, usz(Opcode::Sub), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
 using cond_branch_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::CondBranch), Register<0, 0>, Block<>, Block<>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::CondBranch), Register<0, 0>, Block<>, Block<>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Test), o<0>, o<0>>,
         Inst<Clobbers<>, usz(Opcode::JumpIfZeroFlag), o<2>>,
         Inst<Clobbers<>, usz(Opcode::Jump), o<1>>>>;
 
 using cond_branch_imm = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::CondBranch), Immediate<0, 0>, Block<>, Block<>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::CondBranch), Immediate<0, 0>, Block<>, Block<>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::Move), o<0>, v<0, 0>>,
         Inst<Clobbers<>, usz(Opcode::Test), v<0, 0>, v<0, 0>>,
         Inst<Clobbers<>, usz(Opcode::JumpIfZeroFlag), o<2>>,
         Inst<Clobbers<>, usz(Opcode::Jump), o<1>>>>;
 
-template <MInst::Kind kind, Opcode set_opcode>
+template <MKind kind, Opcode set_opcode>
 using cmp_reg_reg = Pattern<
     InstList<Inst<Clobbers<>, usz(kind), Register<0, 0>, Register<0, 0>>>,
     InstList<
@@ -285,18 +289,18 @@ using cmp_reg_reg = Pattern<
         Inst<Clobbers<>, usz(Opcode::Move), Immediate<0, 0>, i<0>>,
         Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
-using u_lt_reg_reg = cmp_reg_reg<MInst::Kind::ULt, Opcode::SetByteIfLessUnsigned>;
-using s_lt_reg_reg = cmp_reg_reg<MInst::Kind::SLt, Opcode::SetByteIfLessSigned>;
-using u_lt_eq_reg_reg = cmp_reg_reg<MInst::Kind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
-using s_lt_eq_reg_reg = cmp_reg_reg<MInst::Kind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
-using u_gt_reg_reg = cmp_reg_reg<MInst::Kind::UGt, Opcode::SetByteIfGreaterUnsigned>;
-using s_gt_reg_reg = cmp_reg_reg<MInst::Kind::SGt, Opcode::SetByteIfGreaterSigned>;
-using u_gt_eq_reg_reg = cmp_reg_reg<MInst::Kind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
-using s_gt_eq_reg_reg = cmp_reg_reg<MInst::Kind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
-using eq_reg_reg = cmp_reg_reg<MInst::Kind::Eq, Opcode::SetByteIfEqual>;
-using ne_reg_reg = cmp_reg_reg<MInst::Kind::Ne, Opcode::SetByteIfNotEqual>;
+using u_lt_reg_reg = cmp_reg_reg<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
+using s_lt_reg_reg = cmp_reg_reg<MKind::SLt, Opcode::SetByteIfLessSigned>;
+using u_lt_eq_reg_reg = cmp_reg_reg<MKind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
+using s_lt_eq_reg_reg = cmp_reg_reg<MKind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
+using u_gt_reg_reg = cmp_reg_reg<MKind::UGt, Opcode::SetByteIfGreaterUnsigned>;
+using s_gt_reg_reg = cmp_reg_reg<MKind::SGt, Opcode::SetByteIfGreaterSigned>;
+using u_gt_eq_reg_reg = cmp_reg_reg<MKind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
+using s_gt_eq_reg_reg = cmp_reg_reg<MKind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
+using eq_reg_reg = cmp_reg_reg<MKind::Eq, Opcode::SetByteIfEqual>;
+using ne_reg_reg = cmp_reg_reg<MKind::Ne, Opcode::SetByteIfNotEqual>;
 
-template <MInst::Kind kind, Opcode set_opcode>
+template <MKind kind, Opcode set_opcode>
 using cmp_reg_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(kind), Register<0, 0>, Immediate<0, 0>>>,
     InstList<
@@ -305,18 +309,18 @@ using cmp_reg_imm = Pattern<
         Inst<Clobbers<>, usz(Opcode::Move), Immediate<0, 0>, i<0>>,
         Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
-using u_lt_reg_imm = cmp_reg_imm<MInst::Kind::ULt, Opcode::SetByteIfLessUnsigned>;
-using s_lt_reg_imm = cmp_reg_imm<MInst::Kind::SLt, Opcode::SetByteIfLessSigned>;
-using u_lt_eq_reg_imm = cmp_reg_imm<MInst::Kind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
-using s_lt_eq_reg_imm = cmp_reg_imm<MInst::Kind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
-using u_gt_reg_imm = cmp_reg_imm<MInst::Kind::UGt, Opcode::SetByteIfGreaterUnsigned>;
-using s_gt_reg_imm = cmp_reg_imm<MInst::Kind::SGt, Opcode::SetByteIfGreaterSigned>;
-using u_gt_eq_reg_imm = cmp_reg_imm<MInst::Kind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
-using s_gt_eq_reg_imm = cmp_reg_imm<MInst::Kind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
-using eq_reg_imm = cmp_reg_imm<MInst::Kind::Eq, Opcode::SetByteIfEqual>;
-using ne_reg_imm = cmp_reg_imm<MInst::Kind::Ne, Opcode::SetByteIfNotEqual>;
+using u_lt_reg_imm = cmp_reg_imm<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
+using s_lt_reg_imm = cmp_reg_imm<MKind::SLt, Opcode::SetByteIfLessSigned>;
+using u_lt_eq_reg_imm = cmp_reg_imm<MKind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
+using s_lt_eq_reg_imm = cmp_reg_imm<MKind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
+using u_gt_reg_imm = cmp_reg_imm<MKind::UGt, Opcode::SetByteIfGreaterUnsigned>;
+using s_gt_reg_imm = cmp_reg_imm<MKind::SGt, Opcode::SetByteIfGreaterSigned>;
+using u_gt_eq_reg_imm = cmp_reg_imm<MKind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
+using s_gt_eq_reg_imm = cmp_reg_imm<MKind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
+using eq_reg_imm = cmp_reg_imm<MKind::Eq, Opcode::SetByteIfEqual>;
+using ne_reg_imm = cmp_reg_imm<MKind::Ne, Opcode::SetByteIfNotEqual>;
 
-template <MInst::Kind kind, Opcode set_opcode>
+template <MKind kind, Opcode set_opcode>
 using cmp_imm_imm = Pattern<
     InstList<Inst<Clobbers<>, usz(kind), Immediate<0, 0>, Immediate<0, 0>>>,
     InstList<
@@ -326,22 +330,22 @@ using cmp_imm_imm = Pattern<
         Inst<Clobbers<>, usz(Opcode::Move), Immediate<0, 0>, i<0>>,
         Inst<Clobbers<c<0>>, usz(set_opcode), i<0>>>>;
 
-using u_lt_imm_imm = cmp_imm_imm<MInst::Kind::ULt, Opcode::SetByteIfLessUnsigned>;
-using s_lt_imm_imm = cmp_imm_imm<MInst::Kind::SLt, Opcode::SetByteIfLessSigned>;
-using u_lt_eq_imm_imm = cmp_imm_imm<MInst::Kind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
-using s_lt_eq_imm_imm = cmp_imm_imm<MInst::Kind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
-using u_gt_imm_imm = cmp_imm_imm<MInst::Kind::UGt, Opcode::SetByteIfGreaterUnsigned>;
-using s_gt_imm_imm = cmp_imm_imm<MInst::Kind::SGt, Opcode::SetByteIfGreaterSigned>;
-using u_gt_eq_imm_imm = cmp_imm_imm<MInst::Kind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
-using s_gt_eq_imm_imm = cmp_imm_imm<MInst::Kind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
-using eq_imm_imm = cmp_imm_imm<MInst::Kind::Eq, Opcode::SetByteIfEqual>;
-using ne_imm_imm = cmp_imm_imm<MInst::Kind::Ne, Opcode::SetByteIfNotEqual>;
+using u_lt_imm_imm = cmp_imm_imm<MKind::ULt, Opcode::SetByteIfLessUnsigned>;
+using s_lt_imm_imm = cmp_imm_imm<MKind::SLt, Opcode::SetByteIfLessSigned>;
+using u_lt_eq_imm_imm = cmp_imm_imm<MKind::ULe, Opcode::SetByteIfEqualOrLessUnsigned>;
+using s_lt_eq_imm_imm = cmp_imm_imm<MKind::SLe, Opcode::SetByteIfEqualOrLessSigned>;
+using u_gt_imm_imm = cmp_imm_imm<MKind::UGt, Opcode::SetByteIfGreaterUnsigned>;
+using s_gt_imm_imm = cmp_imm_imm<MKind::SGt, Opcode::SetByteIfGreaterSigned>;
+using u_gt_eq_imm_imm = cmp_imm_imm<MKind::UGe, Opcode::SetByteIfEqualOrGreaterUnsigned>;
+using s_gt_eq_imm_imm = cmp_imm_imm<MKind::SGe, Opcode::SetByteIfEqualOrGreaterSigned>;
+using eq_imm_imm = cmp_imm_imm<MKind::Eq, Opcode::SetByteIfEqual>;
+using ne_imm_imm = cmp_imm_imm<MKind::Ne, Opcode::SetByteIfNotEqual>;
 
 using z_ext_reg = Pattern<
-    InstList<Inst<Clobbers<>, usz(MInst::Kind::ZExt), Register<0, 0>>>,
+    InstList<Inst<Clobbers<>, usz(MKind::ZExt), Register<0, 0>>>,
     InstList<Inst<Clobbers<>, usz(Opcode::MoveZeroExtended), o<0>, i<0>>>>;
 
-using x86_64PatternList = PatternList<
+using AllPatterns = PatternList<
     ret,
     ret_imm,
     ret_reg,
@@ -435,6 +439,7 @@ using x86_64PatternList = PatternList<
     eq_imm_imm,
     ne_imm_imm>;
 
+} // namespace x86_64
 } // namespace isel
 } // namespace lcc
 
