@@ -52,7 +52,6 @@ Oop, just thought of a good use case, I think.
 
 #+begin_src int
   from_bytes : template(bytes :u8[sizeof(T)]) {
-    ;; TODO: How do I access the templated type? maybe just "template"?
     out : template;
     memcpy &out &bytes sizeof(T);
     out;
@@ -60,6 +59,25 @@ Oop, just thought of a good use case, I think.
 #+end_src
 
 Still not happy with the inability to access the templated type easily.
+
+I think I should probably have a way, for proper introspection, to
+"access" the return type of a function type. So, maybe there is some
+builtin keyword ~rettype~ that does exactly that. Interesting thing
+here is that ~rettype~ will take in either an expression or a type, so
+we will have to take advantage of that ~:~ unary operator to pass in
+a type directly. But, we won't often be passing in a type directly.
+
+#+begin_src int
+  from_bytes : template(bytes :u8[sizeof (rettype from_bytes)]) {
+    out : rettype from_bytes;
+    memcpy &out &bytes sizeof (rettype from_bytes);
+    out;
+  }
+#+end_src
+
+While it's a bit verbose, it would work. The only other options I can see are:
+- having a sigil for template types, and the identifier is unique and declares that type, or
+- template.id or something of that nature. template[id]. Something like that.
 
 ** Other Type Template
 
