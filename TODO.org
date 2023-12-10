@@ -21,3 +21,30 @@ The size of ~foo~ above would be 24 bits, and the layout is guaranteed.
 The use of cereals would be for serialisation and deserialisation,
 where you sometimes need exact bit or byte types that don't necessarily
 follow all padding rules and such.
+
+** TODO ~:~ unary prefix operator takes in a type and returns a type expression
+[2023-12-09 Sat 18:14]
+
+This is basically just to make parsing easier, as expressions can't
+start with a type by itself without making things ambiguous.
+
+I don't necessarily know /how/ I'll be using this yet, but I know this
+is good syntax, as it is consistent with how types are written in
+declarations.
+
+** TODO ~#~ unary prefix operator: "sizeof"
+[2023-12-09 Sat 18:17]
+
+#+begin_src int
+  #:u8 ;; 1
+  #:u8[42] ;; 42
+
+  something : struct {
+    x :u8;
+    y :u8;
+  }
+  #:something ;; 2
+
+  foo : something;
+  #foo ;; 2
+#+end_src
