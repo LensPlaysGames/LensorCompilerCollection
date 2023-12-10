@@ -816,21 +816,23 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
         /// The type of a block is the type of its last expression. Type
         /// inference is only used for the last expression in the block.
         case Expr::Kind::Block: {
-            auto b = as<BlockExpr>(expr);
-            if (b->children().empty()) {
-                b->type(Type::Void);
+            auto block = as<BlockExpr>(expr);
+            if (block->children().empty()) {
+                block->type(Type::Void);
                 break;
             }
 
-            for (auto*& child : b->children()) {
-                const bool last = &child == b->last_expr();
-                if (not Analyse(&child, last ? expected_type : nullptr)) b->set_sema_errored();
-                if (not last and child->ok()) Discard(&child);
+            for (auto*& child : block->children()) {
+                const bool last = &child == block->last_expr();
+                if (not Analyse(&child, last ? expected_type : nullptr))
+                    block->set_sema_errored();
+                if (not last and child->ok())
+                    Discard(&child);
             }
 
-            if (not b->sema_errored()) {
-                b->set_lvalue(b->children().back()->is_lvalue());
-                b->type(b->children().back()->type());
+            if (not block->sema_errored()) {
+                block->set_lvalue(block->children().back()->is_lvalue());
+                block->type(block->children().back()->type());
             }
         } break;
 
