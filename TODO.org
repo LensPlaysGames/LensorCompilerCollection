@@ -21,20 +21,3 @@ The size of ~foo~ above would be 24 bits, and the layout is guaranteed.
 The use of cereals would be for serialisation and deserialisation,
 where you sometimes need exact bit or byte types that don't necessarily
 follow all padding rules and such.
-
-** DONE Invalid "Expression Result Unused" Warning
-[2023-12-09 Sat 17:46]
-
-In ~examples/intercept/minimal_module~, when compiling ~program.int~, I
-get the "Expression Result Unused" warning from the bottom of
-~Discard~. This is because I have to insert a top level declaration
-expression in order to properly IRGen the declaration before it's used
-in a name ref.
-
-DONE [2023-12-09 Sat 17:55]
-
-Lol. So, writing it down, I realised that it was actually easy to
-solve. Just /don't/ insert the top level declaration to make IRGen
-work. I shouldn't be fudding with the AST to make IRGen do anything.
-IRGen /needs/ to adapt to whatever the proper AST that represents the
-program is.
