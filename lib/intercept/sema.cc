@@ -157,11 +157,10 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
 
             /// Unsigned to Unsigned Conversion
             auto bits = to->size(context);
-            if (
-                from->is_unsigned_int(context) and
-                bits < 64 and
-                val > u64(utils::MaxBitValue(bits))
-            ) return ConversionImpossible;
+            if (from->is_unsigned_int(context)
+                and bits < 64
+                and val > u64(utils::MaxBitValue(bits)))
+                return ConversionImpossible;
 
             if constexpr (PerformConversion) {
                 InsertImplicitCast(expr_ptr, to);
@@ -173,10 +172,8 @@ int intc::Sema::ConvertImpl(intc::Expr** expr_ptr, intc::Type* to) {
         /// Furthermore, smaller sized integer types are convertible to larger sized
         /// integer types, so long as we’re not converting from a signed to an unsigned
         /// type.
-        if (
-            from->size(context) <= to->size(context) and
-            (from->is_unsigned_int(context) or to->is_signed_int(context))
-        ) {
+        if (from->size(context) <= to->size(context)
+            and (from->is_unsigned_int(context) or to->is_signed_int(context))) {
             if constexpr (PerformConversion) InsertImplicitCast(expr_ptr, to);
             return Score(1);
         }
@@ -210,10 +207,9 @@ bool intc::Sema::Deproceduring(Expr** expr_ptr) {
     /// This conversion only applies to functions and function pointers.
     auto expr = *expr_ptr;
     auto ty = expr->type();
-    if (
-        not ty->is_function() and
-        (not ty->is_pointer() or not ty->elem()->is_function())
-    ) return false;
+    if (not ty->is_function()
+        and (not ty->is_pointer() or not ty->elem()->is_function()))
+        return false;
 
     /// Function declarations are never deprocedured automatically.
     if (is<FuncDecl>(expr)) return false;
@@ -513,9 +509,9 @@ void intc::Sema::AnalyseModule() {
                     std::vector<u8> metadata_blob{};
                     // TODO: More validation that it's a proper ELF file/what we expect, I
                     // guess.
-                    if (object_file.size() >= sizeof(elf64_header) and
-                        object_file.at(0) == 0x7f and object_file.at(1) == 'E' and
-                        object_file.at(2) == 'L' and object_file.at(3) == 'F') {
+                    if (object_file.size() >= sizeof(elf64_header)
+                        and object_file.at(0) == 0x7f and object_file.at(1) == 'E'
+                        and object_file.at(2) == 'L' and object_file.at(3) == 'F') {
                         elf64_header hdr{};
                         std::memcpy(&hdr, object_file.data(), sizeof(hdr));
                         // Extract ".intc_metadata" section contents
@@ -552,10 +548,10 @@ void intc::Sema::AnalyseModule() {
                         p
                     );
                     LCC_ASSERT(
-                        metadata_blob.at(0) == ModuleDescription::default_version and
-                            metadata_blob.at(1) == ModuleDescription::magic_byte0 and
-                            metadata_blob.at(2) == ModuleDescription::magic_byte1 and
-                            metadata_blob.at(3) == ModuleDescription::magic_byte2,
+                        metadata_blob.at(0) == ModuleDescription::default_version
+                        and metadata_blob.at(1) == ModuleDescription::magic_byte0
+                        and metadata_blob.at(2) == ModuleDescription::magic_byte1
+                        and metadata_blob.at(3) == ModuleDescription::magic_byte2,
                         "Metadata for module {} at {} has invalid magic bytes",
                         import.name,
                         p
@@ -762,7 +758,10 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 if (r->value() and r->value()->ok() and not r->value()->type()->is_void())
                     Error(r->location(), "Function returning void must not return a value");
             } else {
-                if (not r->value()) Error(r->location(), "Non-void function must return a value");
+                if (not r->value()) Error(
+                    r->location(),
+                    "Non-void function must return a value"
+                );
                 else if (not Convert(&r->value(), ret_type)) Error(
                     r->location(),
                     "Type of return expression is not convertible to return type {}",
@@ -791,7 +790,9 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             /// If the branches are both void, then the type of the if statement
             /// is void. Otherwise, it is the common type of the two branches.
             if (i->then()->ok() and (not i->else_() or i->else_()->ok())) {
-                if (not i->else_() or not ConvertToCommonType(&i->then(), &i->else_())) i->type(Type::Void);
+                if (not i->else_()
+                    or not ConvertToCommonType(&i->then(), &i->else_()))
+                    i->type(Type::Void);
                 else {
                     i->type(i->then()->type());
 
@@ -802,9 +803,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                         LValueToRValue(&i->else_());
                     }
                 }
-            } else {
-                i->set_sema_errored();
-            }
+            } else i->set_sema_errored();
 
             if (i->type()->is_void()) {
                 Discard(&i->then());
@@ -868,7 +867,10 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                 /// the type is known, make sure that we use a type that is
                 /// legal in a declaration for inference.
                 const bool infer_type = v->type()->is_unknown();
-                Analyse(&v->init(), infer_type ? nullptr : DeclTypeDecay(v->type()));
+                Analyse(
+                    &v->init(),
+                    infer_type ? nullptr : DeclTypeDecay(v->type())
+                );
 
                 /// If we’re using type inference, break if there was an
                 /// error since we can’t validate the type of this if we
@@ -953,7 +955,8 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             }
 
             /// Accessing ‘members’ of modules.
-            if (is<NameRefExpr>(m->object()) and is<ModuleExpr>(as<NameRefExpr>(m->object())->target())) {
+            if (is<NameRefExpr>(m->object())
+                and is<ModuleExpr>(as<NameRefExpr>(m->object())->target())) {
                 // m->name() == name of member we are accessing
                 // m->object() == NameRef to module we are accessing
                 auto name_ref = as<NameRefExpr>(m->object());
@@ -967,13 +970,17 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             }
 
             /// ‘object’ is actually a type name.
-            if (is<NameRefExpr>(m->object()) and is<TypeDecl>(as<NameRefExpr>(m->object())->target())) {
+            if (is<NameRefExpr>(m->object())
+                and is<TypeDecl>(as<NameRefExpr>(m->object())->target())) {
                 auto t = as<TypeDecl>(as<NameRefExpr>(m->object())->target());
                 if (is<StructType>(t->type())) LCC_TODO();
 
                 /// Handle accessing enumerators.
                 if (auto e = cast<EnumType>(t->type())) {
-                    auto it = rgs::find_if(e->enumerators(), [&](auto&& en) { return en->name() == m->name(); });
+                    auto it = rgs::find_if(
+                        e->enumerators(),
+                        [&](auto&& en) { return en->name() == m->name(); }
+                    );
                     if (it == e->enumerators().end()) {
                         Error(m->location(), "Type {} has no enumerator named '{}'", e, m->name());
                         m->set_sema_errored();
@@ -987,7 +994,11 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
                     }
 
                     if (not enumerator->ok()) {
-                        Error(m->location(), "Enumerator {} cannot be used before it is defined", enumerator->name());
+                        Error(
+                            m->location(),
+                            "Enumerator {} cannot be used before it is defined",
+                            enumerator->name()
+                        );
                         m->set_sema_errored();
                         break;
                     }
@@ -1092,7 +1103,10 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
 
                     /// If all of them are equal, then we have a problem.
                     if (k != oi_params.size()) {
-                        Error(oi->location(), "Overload set contains two overloads with the same parameter types");
+                        Error(
+                            oi->location(),
+                            "Overload set contains two overloads with the same parameter types"
+                        );
                         Diag::Note(context, oj->location(), "Conflicting overload is here");
                         expr->set_sema_errored();
                     }
@@ -1132,12 +1146,28 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
 
             /// Convert both operands to booleans.
             if (not Convert(&b->lhs(), Type::Bool)) {
-                Error(b->location(), "Binary logical operator {} on {} and {}: cannot convert lhs, of type {}, to {}", ToString(b->op()), lhs, rhs, lhs, Type::Bool);
+                Error(
+                    b->location(),
+                    "Binary logical operator {} on {} and {}: cannot convert lhs, of type {}, to {}",
+                    ToString(b->op()),
+                    lhs,
+                    rhs,
+                    lhs,
+                    Type::Bool
+                );
                 b->set_sema_errored();
                 return;
             }
             if (not Convert(&b->rhs(), Type::Bool)) {
-                Error(b->location(), "Binary logical operator {} on {} and {}: cannot convert rhs, of type {}, to {}", ToString(b->op()), lhs, rhs, lhs, Type::Bool);
+                Error(
+                    b->location(),
+                    "Binary logical operator {} on {} and {}: cannot convert rhs, of type {}, to {}",
+                    ToString(b->op()),
+                    lhs,
+                    rhs,
+                    lhs,
+                    Type::Bool
+                );
                 b->set_sema_errored();
                 return;
             }
@@ -1151,7 +1181,11 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             ImplicitDe_Reference(&b->lhs());
             auto ty = b->lhs()->type();
             if (not is<PointerType, ArrayType>(ty)) {
-                Error(b->location(), "LHS of subscript must be a pointer or array, but was {}", b->lhs()->type());
+                Error(
+                    b->location(),
+                    "LHS of subscript must be a pointer or array, but was {}",
+                    b->lhs()->type()
+                );
                 b->set_sema_errored();
                 return;
             }
@@ -1170,7 +1204,8 @@ void intc::Sema::AnalyseBinary(BinaryExpr* b) {
             if (auto arr = cast<ArrayType>(ty); arr and arr->size()->ok()) {
                 EvalResult res;
                 if (b->rhs()->evaluate(context, res, false)) {
-                    if (res.as_int().is_negative() or res.as_int() >= as<ConstantExpr>(arr->size())->value().as_int().value())
+                    if (res.as_int().is_negative()
+                        or res.as_int() >= as<ConstantExpr>(arr->size())->value().as_int().value())
                         Error(b->location(), "Array subscript out of bounds");
 
                     /// Since we already have the result, store it for later.
@@ -1452,12 +1487,8 @@ void intc::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
 void intc::Sema::AnalyseCast(CastExpr* c) {
     /// Implicit casts and lvalue-to-rvalue conversions are
     /// only ever created by sema, so we know they’re fine.
-    if (
-        c->is_implicit_cast() or
-        c->is_lvalue_to_rvalue() or
-        c->is_lvalue_to_ref() or
-        c->is_ref_to_lvalue()
-    ) {
+    if (c->is_implicit_cast() or c->is_lvalue_to_rvalue()
+        or c->is_lvalue_to_ref() or c->is_ref_to_lvalue()) {
         c->set_lvalue(c->is_ref_to_lvalue());
         return;
     }
@@ -1560,7 +1591,10 @@ void intc::Sema::AnalyseIntrinsicCall(Expr** expr_ptr, IntrinsicCallExpr* expr) 
         } break;
 
         case IntrinsicKind::BuiltinLine: {
-            if (not expr->args().empty()) Error(expr->location(), "__builtin_line() takes no arguments");
+            if (not expr->args().empty()) Error(
+                expr->location(),
+                "__builtin_line() takes no arguments"
+            );
             expr->type(Type::Int);
             expr->set_sema_done();
 
@@ -1895,7 +1929,11 @@ bool intc::Sema::Analyse(Type** type_ptr) {
 
             auto elem = p->element_type();
             if (is<ReferenceType>(elem)) {
-                if (elem->ok()) Error(p->location(), "Cannot create pointer to reference type {}", elem);
+                if (elem->ok()) Error(
+                    p->location(),
+                    "Cannot create pointer to reference type {}",
+                    elem
+                );
                 p->set_sema_errored();
             }
         } break;
@@ -1919,7 +1957,11 @@ bool intc::Sema::Analyse(Type** type_ptr) {
 
             auto elem = a->element_type();
             if (is<ReferenceType>(elem)) {
-                if (elem->ok()) Error(a->location(), "Cannot create array of reference type {}", elem);
+                if (elem->ok()) Error(
+                    a->location(),
+                    "Cannot create array of reference type {}",
+                    elem
+                );
                 a->set_sema_errored();
             }
 
@@ -1988,9 +2030,9 @@ bool intc::Sema::Analyse(Type** type_ptr) {
 
         /// Calculate size, alignment, and member offsets.
         case Type::Kind::Struct: {
-            /// TODO(Sirraide): Packed structs should probably be a separate
-            ///     type altogether and for those, we’ll have to perform all
-            ///     these calculations below in bits instead.
+            /// TODO: Packed structs should probably be a separate type altogether and
+            /// for those, we’ll have to perform all these calculations below in bits
+            /// instead. Cereals!
             auto s = as<StructType>(type);
             usz byte_size = 0;
             usz alignment = 1;
@@ -2056,11 +2098,9 @@ bool intc::Sema::Analyse(Type** type_ptr) {
                 else {
                     aint res;
                     bool converted;
-                    if (
-                        not Analyse(&val->init()) or
-                        not(converted = Convert(&val->init(), e->underlying_type())) or
-                        not EvaluateAsInt(val->init(), e->underlying_type(), res)
-                    ) {
+                    if (not Analyse(&val->init())
+                        or not(converted = Convert(&val->init(), e->underlying_type()))
+                        or not EvaluateAsInt(val->init(), e->underlying_type(), res)) {
                         if (val->init()->ok() and not converted) Error(
                             val->init()->location(),
                             "Type {} of initialiser is not convertible to {}",
