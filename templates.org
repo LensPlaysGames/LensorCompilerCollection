@@ -88,6 +88,66 @@ a hard time immediately coming up with something here.
 
 ** Struct
 
+I'm somewhat confident in this approach to templating types.
+
 *** Member Type Template
 
+#+begin_src int
+  foo : struct {
+    x :template;
+    y :u8;
+  };
+
+  ;; error because no type given for x
+  y : foo;
+
+  ;; error because foo.x has no type.
+  y : foo template;
+
+  ;; foo.x is deduced to be int
+  ;; Possible TODO: Allow _ instead of template for shorter declarations
+  y : foo template = [22, 16];
+
+  ;; foo.x is a u8
+  y : foo u8;
+
+  ;; Templated Math Vector Type Example
+  vec2 : struct {
+    x :template;
+    y :template;
+  }
+
+  int_vector : vec2 int int = [34, 35];
+  int_vector.x := 34;
+  int_vector.y := 35;
+#+end_src
+
 *** Value Template
+
+#+begin_src int
+  foo : struct {
+    x :u8 = template;
+    y :u8;
+  };
+
+  ;; error because no template value given for x
+  y : foo;
+
+  ;; foo.x goes uninitialised
+  y : foo template;
+
+  y : foo u8;
+#+end_src
+
+Basically, a struct type will gain "template parameters" for each
+time "template" is encountered in one of the few spots it is actually
+allowed and expected (within the type of a member (member type
+template), or the initialiser of a member (value template)). The
+expected "kind" of each template parameter is stored, so that the parser
+knows whether or not to parse a type or an expression (I hope this works).
+
+For this to work, it /does/ mean that templated types won't be order
+independant, but I don't think that that's a big sacrifice or that
+surprising. It'd be weird to write all the instantiations of a template
+and then the template itself, imo. Maybe we can figure that out in the
+future sometime, tho.
