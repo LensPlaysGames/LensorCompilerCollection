@@ -30,21 +30,17 @@ using ret = Pattern<
 // instructions; in this case, the immediate operand of the gMIR return.
 // FIXME: Return register size is hardcoded at 64. We need some way to get
 // size from another operand, or something?
-template <typename ret_op>
+template <typename ret_op, Opcode opcode>
 using ret_some_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Return), ret_op>>,
     InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RETURN), Immediate<64>>>,
+        Inst<Clobbers<c<1>>, usz(opcode), o<0>, Register<usz(RegId::RETURN), Sizeof<0>>>,
         Inst<Clobbers<>, usz(Opcode::Return)>>>;
 
-using ret_imm = ret_some_op<Immediate<>>;
-using ret_reg = ret_some_op<Register<>>;
-
-using ret_global = Pattern<
-    InstList<Inst<Clobbers<>, usz(MKind::Return), Global<>>>,
-    InstList<
-        Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, Register<usz(RegId::RETURN), Immediate<64>>>,
-        Inst<Clobbers<>, usz(Opcode::Return)>>>;
+using ret_imm = ret_some_op<Immediate<>, Opcode::Move>;
+using ret_reg = ret_some_op<Register<>, Opcode::Move>;
+using ret_global = ret_some_op<Global<>, Opcode::MoveDereferenceLHS>;
+using ret_local = ret_some_op<Local<>, Opcode::MoveDereferenceLHS>;
 
 // InputInstructionReference operand with a value of i<0> means replace
 // the operand with a register with a value equal to the zero-eth
@@ -355,6 +351,8 @@ using AllPatterns = PatternList<
     ret,
     ret_imm,
     ret_reg,
+    ret_global,
+    ret_local,
     load_global,
     load_local,
     load_reg,
