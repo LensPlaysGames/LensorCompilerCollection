@@ -1387,6 +1387,7 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
                     "Can't make TypeDecl from a Type that is not derived from DeclaredType"
                 );
                 auto type_decl = new (*this) TypeDecl(this, name, as<DeclaredType>(ty), {});
+                type_decl->set_sema_done();
                 add_top_level_expr(type_decl);
                 auto decl = global_scope()->declare(ctx, std::string(name), type_decl);
             } break;
@@ -1394,6 +1395,7 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
             // Created from Expr::Kind::TypeAliasDecl
             case ModuleDescription::DeclarationHeader::Kind::TYPE_ALIAS: {
                 auto* type_alias_decl = new (*this) TypeAliasDecl(name, ty, {});
+                type_alias_decl->set_sema_done();
                 add_top_level_expr(type_alias_decl);
                 auto decl = global_scope()->declare(ctx, std::string(name), type_alias_decl);
             } break;
@@ -1414,6 +1416,7 @@ bool intc::Module::deserialise(lcc::Context* ctx, std::vector<u8> module_metadat
                     "Cannot create FuncDecl when deserialised type is not a function"
                 );
                 auto* func_decl = new (*this) FuncDecl(name, as<FuncType>(ty), nullptr, global_scope(), this, Linkage::Imported, {});
+                func_decl->set_sema_done();
                 add_top_level_expr(func_decl);
                 auto decl = global_scope()->declare(ctx, std::string(name), func_decl);
             } break;
