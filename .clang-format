@@ -131,8 +131,8 @@ BitFieldColonSpacing: Both
 ## Leave line breaks around attributes alone.
 BreakAfterAttributes: Leave
 
-## Break *after*, and not before operators.
-BreakBeforeBinaryOperators: None
+## Break before operators.
+BreakBeforeBinaryOperators: All
 
 ## NEVER put opening braces on a new line.
 BreakBeforeBraces: Attach
@@ -388,7 +388,6 @@ SpacesInAngles: Never
 
 ## We definitely don’t want this.
 SpacesInCStyleCastParentheses: false
-
 ## Or this.
 SpacesInConditionalStatement: false
 
