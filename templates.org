@@ -1,0 +1,75 @@
+#+author: Lens_r
+#+date: [2023-12-09 Sat 18:27]
+
+* Templated Function
+
+** Parameter Type Template
+
+Idea here: less boilerplate regarding parameter template types, since
+they are always able to be deduced at call-time from the argument.
+
+Idea 1: maybe ~template~ is a special type within a parameter that will
+just be the type of whatever you pass into it... But also should be
+able to define if it's a pointer or reference or what. Or maybe ~auto~.
+We could access the templated type within the instantiation via
+something like ~decltype~ or ~typeof~ that can get the type of an
+expression.
+
+#+begin_src int
+  write69 : void(x :&template) {
+    x := 69;
+  };
+
+  foo : int;
+  bar : u16;
+  write69 foo;
+  write69 bar;
+#+end_src
+
+** Return Type Template
+
+I'm having a hard time thinking of any time this would be useful.
+
+Maybe an array of template type T with template value N elements as a
+return type?
+
+Also, deducing the return type automatically will require top-down type
+inference. Which, is doable, just not in every scenario. So, functions
+templated on return type could only deduce the template type if there
+is an expected type it should be. Like if it is on the right hand side
+of a declaration or assignment, for example.
+
+Oop, just thought of a good use case, I think.
+
+#+begin_src c++
+  template <typename T>
+  T from_bytes(std::array<lcc::u8, sizeof(T)> bytes) {
+      T out{};
+      std::copy(bytes.begin(), bytes.end(), &out);
+      return out;
+  }
+#+end_src
+
+#+begin_src int
+  from_bytes : template(bytes :u8[sizeof(T)]) {
+    ;; TODO: How do I access the templated type? maybe just "template"?
+    out : template;
+    memcpy &out &bytes sizeof(T);
+    out;
+  }
+#+end_src
+
+Still not happy with the inability to access the templated type easily.
+
+** Other Type Template
+
+Used in the body, but nowhere in the function signature. Again, having
+a hard time immediately coming up with something here.
+
+* Templated Type Declaration
+
+** Struct
+
+*** Member Type Template
+
+*** Value Template
