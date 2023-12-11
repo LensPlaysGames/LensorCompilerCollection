@@ -1,0 +1,10 @@
+;; 42
+
+a : int = 69;
+
+foo : void(x : &int) {
+  x := 42;
+};
+
+foo a;
+a; ;; should return 42

@@ -1,59 +1,78 @@
 /// Top-level rule.
-<file> ::= <preamble> { <expression> | ";" }
+<file> ::= <preamble> { [ <expr> ] ";" }
 
 <preamble> ::= [ <module-declaration> ] { <import-declaration> | ";" }
 
-<module-declaration> ::= MODULE IDENTIFIER
-<import-declaration> ::= IMPORT IDENTIFIER
+<module-declaration> ::= "module" IDENTIFIER
+<import-declaration> ::= "import" IDENTIFIER
 
 /// Expression.
-<expression>     ::= <expr-decl>
-                   | <expr-if>
-                   | <expr-for>
-                   | <expr-while>
-                   | <expr-block>
-                   | <expr-lambda>
-                   | <expr-call>
-                   | <expr-cast>
-                   | <expr-subs>
-                   | <expr-paren>
-                   | <expr-prefix>
-                   | <expr-binary>
-                   | <expr-primary>
+<expr>        ::= <expr-call> | <expr-single>
+
+/// Expression that is not a call.
+<expr-single> ::= <expr-decl>
+                | <expr-if>
+                | <expr-for>
+                | <expr-while>
+                | <expr-block>
+                | <expr-lambda>
+                | <expr-cast>
+                | <expr-subs>
+                | <expr-paren>
+                | <expr-return>
+                | <expr-literal>
+                | <expr-binary>
+                | <expr-prefix>
+                | <expr-primary>
+                | EXPR
 
 /// Declarations.
-<expr-decl>      ::= <decl-start> <decl-rest>
-<decl-start>     ::= [ EXPORT ] IDENTIFIER ":"
-<decl-rest>      ::= <type-function> <function-body>
-                   | <type> [ "=" <expression> ]
-                   | EXT <type-function>
+<expr-decl>      ::= <storage-specs> IDENTIFIER <decl-rest>
+<decl-rest>      ::= <decl-var> | <decl-function> | <decl-type>
+<decl-var>       ::= ":" <type> [ "=" <expr> ] | "::" <expr>
+<decl-function>  ::= ":" <type-function> [ <function-body> ]
+<decl-type>      ::= ":" <type-struct> | ":" TYPE "=" <type>
 
 /// Other expressions.
-<expr-if>        ::= IF <expression> <expression> [ ELSE <expression> ]
-<expr-while>     ::= WHILE <expression> <expression>
-<expr-for>       ::= FOR <expression> [ "," ] <expression> [ "," ] <expression> <expression>
-<expr-block>     ::= "{" { <expression> } "}"
-<expr-lambda>    ::= <type-function> <function-body>
-<expr-call>      ::= <expression> "(" { <expression> [ "," ] } ")"
-<expr-cast>      ::= <expression> AS <type>
-<expr-subs>      ::= <expression> "[" <expression> "]"
-<expr-paren>     ::= "(" <expression> ")"
-<expr-prefix>    ::= <prefix> <expression>
-<expr-binary>    ::= <expression> <binary> <expression>
+<expr-if>        ::= IF <expr> THEN <expr> [ ELSE <expr> ]
+<expr-while>     ::= WHILE <expr> DO <expr>
+<expr-for>       ::= FOR <expr> "," <expr> "," <expr> DO <expr>
+<expr-block>     ::= "{" { <expr> ";" } "}"
+<expr-lambda>    ::= LAMBDA <type-function> <function-body>
+<expr-call>      ::= <expr> { <expr-single> } | <expr> "(" ")"
+<expr-cast>      ::= <expr> ( AS | "as!" ) <type>
+<expr-subs>      ::= <expr> "[" <expr> "]"
+<expr-paren>     ::= "(" <expr> ")"
+<expr-return>    ::= RETURN [ <expr> ]
+<expr-literal>   ::= "[" { <expr-single> [ "," ] } "]"
+<expr-prefix>    ::= <prefix> <expr>
+<expr-binary>    ::= <expr> <binary> <expr>
 <expr-primary>   ::= NUMBER | IDENTIFIER
 
 /// Types.
-<type>           ::= <type-base> | <type-pointer> | <type-derived> | <type-struct>
-<type-pointer>   ::= "@" { "@" } ( IDENTIFIER | "(" <type> ")" )
-<type-base>      ::= IDENTIFIER | INTEGER | BYTE | VOID | ARBITRARY_INT
-<type-struct>    ::= TYPE <struct-body>
-<type-derived>   ::= <type-array> | <type-function>
-<type-array>     ::= <type> "[" <expression> "]"
-<type-function>  ::= <type> "(" { <param-decl> [ "," ]  } ")"
-<param-decl>     ::= <decl-start> <type>
-<struct-body>    ::= "{" { <param-decl> } "}"
+///
+/// Note that this grammar is technically incorrect as it doesn’t
+/// take precedence into account at all. For more information on
+/// type precedence, see the comment in ParseType().
+<type>           ::= <type-quals> <type-base> <type-rest> | "(" <type> ")"
+<type-quals>     ::= { "@" | "&" }
+<type-base>      ::= <type-struct> | <type-enum> | <type-builtin> | IDENTIFIER | INT_TYPE
+<type-struct>    ::= STRUCT <struct-body>
+<type-enum>      ::= ENUM [ "(" <type> ")" ] [ <enum-body> ]
+<type-builtin>   ::= INT | BYTE | BOOL | VOID
+<type-rest>      ::= { <type-arr-sz> | <type-signature>  }
+<type-arr-sz>    ::= "[" <expr> "]"
+<type-signature> ::= "(" <param-decls> ")" <func-attrs>
+<param-decls>    ::= { <param-decl> [ "," ]  }
+<param-decl>     ::= [ IDENTIFIER { [ "," ] IDENTIFIER } ] ":" <type>
+<func-attrs>     ::= /// All function attributes
 
 /// Miscellaneous.
-<function-body>  ::= [ "=" ] <expression>
+<storage-specs>  ::= [ EXPORT ] [ EXTERN ] [ STATIC ]
+<type-function>  ::= <type-base> <type-signature>
+<function-body>  ::= "=" <expr> | <expr-block>
+<struct-body>    ::= "{" { <member-decl> } "}"
+<enum-body>      ::= "{" { IDENTIFIER [ ":=" <expr> ] [ "," ] } "}"
+<member-decl>    ::= IDENTIFIER ":" <type> [ ";" ]
 <binary>         ::= /// All binary operators
 <prefix>         ::= /// All unary prefix operators

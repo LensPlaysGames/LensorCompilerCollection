@@ -1,0 +1,7 @@
+// R %lcc --ir %s
+
+// * struct node { ptr }
+struct node
+{
+    node* parent;
+}

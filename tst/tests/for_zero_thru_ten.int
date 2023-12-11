@@ -1,9 +1,0 @@
-;; 0
-;; 0123456789
-
-putchar : ext integer(c : integer)
-
-count : integer = 10
-for i : integer = 0, i < count, i := i + 1
-  putchar(48 + i)
-

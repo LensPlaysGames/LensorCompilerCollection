@@ -1,0 +1,7 @@
+// R %lcc --ir %s
+// d b [a-zA-Z0-9\.]+
+
+// * main : i64():
+// +   $b:
+// +     return i64 69
+int main() => 69;

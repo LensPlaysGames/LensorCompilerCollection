@@ -1,0 +1,13 @@
+;; 69
+
+variable :: 0
+foo : int() {
+  variable := variable + 1
+  33 + variable
+}
+
+macro doubled $a:expr emits
+  $a + $a
+endmacro
+
+doubled foo()

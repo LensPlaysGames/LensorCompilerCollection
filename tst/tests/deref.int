@@ -1,6 +1,0 @@
-;; 69
-
-a     : integer  = 69
-a_ptr : @integer = &a
-
-@a_ptr

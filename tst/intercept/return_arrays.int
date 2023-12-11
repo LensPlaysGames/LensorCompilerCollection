@@ -1,0 +1,11 @@
+;; 69
+
+foo : int[2]() {
+  out : int[2]
+  @out[0] := 42
+  @out[1] := 69
+  out
+}
+
+gnu :: foo()
+@gnu[1]

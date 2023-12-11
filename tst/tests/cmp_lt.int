@@ -1,4 +1,0 @@
-;; 69
-
-cond :: 0
-if cond < 0 42 else 69

@@ -1,0 +1,22 @@
+// R %lcc --ir %s
+// d b [a-zA-Z0-9\.]+
+// d t %[0-9]+
+
+struct vec2i
+{
+    int x;
+    int y;
+}
+
+void init(vec2i& v)
+{
+    v.x = 34;
+    v.y = 35;
+}
+
+int main()
+{
+    vec2i v;
+    init(&v);
+    return v.x + v.y;
+}

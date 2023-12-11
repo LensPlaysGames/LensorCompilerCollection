@@ -1,0 +1,8 @@
+MyObject : cereal {
+  x :u8
+  y :u64
+  z :u8
+};
+
+;; Returns 10, *not* 24.
+#:MyObject;

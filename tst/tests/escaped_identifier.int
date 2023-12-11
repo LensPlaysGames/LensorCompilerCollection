@@ -1,6 +1,0 @@
-;; 69
-
-\macro : integer = 34
-\if : integer = 35
-
-\macro + \if

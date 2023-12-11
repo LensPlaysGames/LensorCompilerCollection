@@ -1,20 +1,5 @@
-cmake_minimum_required(VERSION 3.19)
-project(Intercept C CXX)
-
-# Use `ccache` if it is installed in system's PATH.
-find_program(CCACHE_PROGRAM ccache)
-if (CCACHE_PROGRAM)
-  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
-endif()
-
-# Export compilation database in JSON format.
-set(CMAKE_EXPORT_COMPILE_COMMANDS on)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# Allow arbitrary characters in test names.
-cmake_policy(SET CMP0110 NEW)
+cmake_minimum_required(VERSION 3.20)
+project(LCC VERSION 2.0.0 LANGUAGES C CXX)
 
 # User Option(s)
 set(
@@ -23,334 +8,373 @@ set(
   "Whether or not to optimise for the system being compiled on. This should be true *unless* you are making distributed binaries."
 )
 
-set(
-  BUILD_NATIVE_TESTING TRUE
-  CACHE BOOL
-  "Whether or not to include native tests in ctest"
-)
+## ============================================================================
+##  Global CMake Variables
+## ============================================================================
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # Export compilation database in JSON format.
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(
-  BUILD_OPT_TESTING FALSE
-  CACHE BOOL
-  "Whether or not to include optimisation tests in ctest"
-)
-
-set(
-  BUILD_OBJ_TESTING FALSE
-  CACHE BOOL
-  "Whether or not to include object file target tests in ctest (default just includes assembly)"
-)
-
-set(
-  BUILD_LLVM_TESTING FALSE
-  CACHE BOOL
-  "Whether or not to include LLVM target tests in ctest (default just includes assembly)"
-)
-
-add_executable(
-  intc
-  src/ast.c
-  src/codegen.c
-  src/error.c
-  src/main.c
-  #src/ir_parser.c
-  src/parser.c
-  src/typechecker.c
-  src/utils.c
-  src/platform.c
-  src/module.c
-  src/ir/dom.c
-  src/codegen/generic_object.c
-  src/codegen/instruction_selection.c
-  src/ir/ir.c
-  src/codegen/register_allocation.c
-  src/codegen/opt/opt.c
-  src/ir/inline.c
-  src/codegen/machine_ir.c
-  #src/codegen/ir/ir.c
-  src/codegen/llvm/llvm_target.c
-  src/codegen/x86_64/arch_x86_64.c
-  src/codegen/x86_64/arch_x86_64_common.c
-  src/codegen/x86_64/arch_x86_64_isel.c
-  src/codegen/x86_64/arch_x86_64_tgt_assembly.c
-  src/codegen/x86_64/arch_x86_64_tgt_generic_object.c
-)
-target_include_directories(
-  intc
-  PUBLIC src/
-)
-
-## Hard-code ISel table locations for now so it works on Windows in VS.
-target_compile_definitions(intc PRIVATE
-    ISEL_TABLE_LOCATION_X86_64="${PROJECT_SOURCE_DIR}/src/codegen/x86_64/arch_x86_64.isel"
-)
-
-## Build the format check plugin *now*, as CMake will complain otherwise when we
-## try to add it to the command-line for the Intercept compiler below.
-if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
-  find_package(LLVM CONFIG)
-  if (DEFINED LLVM_PACKAGE_VERSION AND LLVM_VERSION_MAJOR GREATER_EQUAL 15)
-    execute_process(
-      COMMAND "${CMAKE_COMMAND}"
-        -S .
-        -B out
-        "-DLLVM_DIR=${LLVM_DIR}"
-        "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
-        "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
-        "-DCMAKE_GENERATOR=${CMAKE_GENERATOR}"
-      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/fmt-check-plugin"
-      ECHO_OUTPUT_VARIABLE
-      ECHO_ERROR_VARIABLE
-      COMMAND_ERROR_IS_FATAL ANY
-    )
-
-    execute_process(
-      COMMAND "${CMAKE_COMMAND}" --build out --target fmt-check-plugin
-      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/fmt-check-plugin"
-      ECHO_OUTPUT_VARIABLE
-      ECHO_ERROR_VARIABLE
-      COMMAND_ERROR_IS_FATAL ANY
-    )
-
-    # Run the format checking plugin.
-    message(STATUS "Done compiling format check plugin.")
-    target_compile_options(intc PRIVATE "-fplugin=${PROJECT_SOURCE_DIR}/fmt-check-plugin/out/fmt-check-plugin")
-  endif()
+## ============================================================================
+##  Other Global Settings
+## ============================================================================
+# Use `ccache` if it is installed in system's PATH.
+find_program(CCACHE_PROGRAM ccache)
+if (CCACHE_PROGRAM)
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
 endif()
 
-# Do not link with libm (math) when target is windows executable.
-if (NOT WIN32)
-  target_link_libraries(intc PRIVATE m)
+## Turn on diagnostics colours.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-fdiagnostics-color=always)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(-fcolor-diagnostics)
+endif()
+
+## Use mold as the default linker, if it exists.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    find_program(MOLD_LINKER "mold")
+    if (MOLD_LINKER)
+        add_link_options(-fuse-ld=mold)
+    endif()
+endif()
+
+## ============================================================================
+##  Compiler options.
+## ============================================================================
+add_library(options INTERFACE)
+
+## Flags for Clang and GCC.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(options INTERFACE
+        ## Warnings.
+        -Wall -Wextra     # Enable ‘all’ warnings.
+        -Wundef           # Invalid #undef or undefined macro in #if.
+        -Wcast-align      # Casting that changes alignment.
+        -Wconversion      # Implicit conversions.
+        -Wsign-conversion # Implicit sign conversions.
+        -Wformat=2        # Stricter format checking.
+
+        ## Disabled warnings.
+        -Wno-unused-function
+        -Wno-unused-local-typedefs
+        -Wno-unused-parameter
+
+        ## NULL Errors.
+        -Werror=nonnull # Passing NULL to nonnull parameter.
+
+        ## Memory Errors.
+        -Werror=address              # Suspicious use of addresses.
+        -Werror=init-self            # Initialization of a variable with itself.
+        -Werror=uninitialized
+
+        ## Return type.
+        -Werror=return-type
+
+        ## C/C++.
+        -Werror=implicit-fallthrough
+        -Werror=missing-include-dirs # User-specified include dir does not exist.
+        -Werror=pointer-arith        # Disallow void* and function pointer arithmetic.
+        -Werror=string-compare       # Nonsensical string comparisons.
+        -Werror=switch               # Missing switch cases.
+        # -Werror=switch-enum          # Switch on enum (even if there is a default case).
+        -Werror=write-strings        # Strings in C should be const char*.
+
+        ## C++.
+        -Werror=missing-field-initializers
+        -Werror=non-virtual-dtor
+        -Werror=pessimizing-move
+    )
+
+    # -march=native only makes sense when compiling for the compiled system.
+    if (NATIVE_OPT)
+        target_compile_options(options INTERFACE
+            $<$<CONFIG:RELEASE>:-march=native>
+        )
+    endif()
+endif()
+
+## Additional flags for GCC.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(options INTERFACE
+        -Wlogical-op      # Duplicate or unintended logical operators.
+        -Werror=invalid-memory-model # For atomics.
+        -Werror=maybe-uninitialized
+        -Werror=missing-requires
+        -Werror=return-local-addr
+    )
+endif()
+
+## Additional flags for Clang.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(options INTERFACE
+        -Werror=dangling
+        -Werror=return-stack-address
+    )
+endif()
+
+## Flags for MSVC/clang-cl.
+if (MSVC)
+    target_compile_options(options INTERFACE
+        # Enable ‘all’ warnings.
+        /W4
+
+        # Source character set is UTF-8
+        /utf-8
+
+        # Allow unnamed structs/unions.
+        /wd4201
+
+        # Don't warn about unused functions.
+        /wd4505
+    )
+endif()
+
+## On Windows, don’t suggest the _s nonsense functions.
+if (WIN32)
+    target_compile_definitions(options INTERFACE
+        _CRT_SECURE_NO_WARNINGS
+        _CRT_SECURE_NO_WARNINGS_GLOBALS
+        _CRT_NONSTDC_NO_WARNINGS
+    )
 endif()
 
 ## Debug/Release flags.
 if (NOT MSVC)
-  target_compile_options(intc PRIVATE
-    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
-    $<$<CONFIG:RELEASE>:-O3>
-  )
-  target_link_options(intc PRIVATE
-    $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
-    $<$<CONFIG:RELEASE>:-O3>
-  )
+    if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        target_compile_options(options INTERFACE $<$<CONFIG:DEBUG>:-rdynamic>)
+    else()
+        target_compile_options(options INTERFACE -Wno-unused-private-field)
+    endif()
 
-  # Keep internal symbol names in debug mode if possible. See below for clang.
-  if (CMAKE_C_COMPILER_ID STREQUAL "GCC")
-    target_compile_options(intc PRIVATE $<$<CONFIG:DEBUG>:-rdynamic>)
-  endif()
-
-  # -march=native only makes sense when compiling for the compiled system.
-  if (NATIVE_OPT)
-    target_compile_options(intc PRIVATE
-      $<$<CONFIG:RELEASE>:-march=native>
+    target_compile_options(options INTERFACE
+        $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3>
+        $<$<CONFIG:RELEASE>:-O3 -march=native>
     )
-  endif()
 
+    target_link_options(options INTERFACE
+        $<$<CONFIG:DEBUG>:-O0 -g3 -ggdb3 -rdynamic>
+        $<$<CONFIG:RELEASE>:-O3 -march=native>
+    )
 else()
-  target_compile_options(intc PRIVATE
-    $<$<CONFIG:DEBUG>:/Od>
-    $<$<CONFIG:RELEASE>:/O2>
-  )
-endif()
-
-# When compiling with clang-cl, MSVC is also defined, so we put this here instead.
-if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
-  target_link_options(intc PRIVATE $<$<CONFIG:DEBUG>:-Wl,-export-dynamic>)
+    target_compile_options(options INTERFACE
+        $<$<CONFIG:DEBUG>:/Od>
+        $<$<CONFIG:RELEASE>:/O2>
+    )
 endif()
 
 # Enable asan if requested and possible.
 if (NOT WIN32)
-  if (ENABLE_ASAN)
-    target_compile_options(intc PRIVATE -fsanitize=address)
-    target_compile_definitions(intc PRIVATE ENABLE_ASAN=1)
-    target_link_options(intc PRIVATE -fsanitize=address)
+    if (ENABLE_ASAN)
+        target_compile_options(options INTERFACE -fsanitize=address)
+        target_compile_definitions(options INTERFACE ENABLE_ASAN=1)
+        target_link_options(options INTERFACE -fsanitize=address)
 
-    # Make address sanitiser ignore memory leaks. This is useful if there are
-    # more severe problems (e.g. use-after-free bugs) that need to be fixed.
-    if (ASAN_IGNORE_LEAKS)
-      target_compile_definitions(intc PRIVATE ASAN_IGNORE_LEAKS=1)
-    endif ()
-  endif()
+        # Make address sanitiser ignore memory leaks. This is useful if there are
+        # more severe problems (e.g. use-after-free bugs) that need to be fixed.
+        if (ASAN_IGNORE_LEAKS)
+            target_compile_definitions(options INTERFACE ASAN_IGNORE_LEAKS=1)
+        endif ()
+    endif()
 endif ()
 
-# Compile options.
-if (NOT MSVC)
-  target_compile_options(
-    intc
-    PRIVATE
-    -Wall -Wextra
-    -Wshadow -Wconversion
-
-    -Werror=return-type -Werror=implicit-function-declaration
-    -Werror=implicit-int -Werror=pointer-arith
-    -Werror=incompatible-pointer-types
-
-    -Wno-unused-parameter -Wno-unused-function
-    -Wno-format-zero-length -Wno-comment
-    -Wno-cast-function-type
-  )
-  # Use color codes in the output of the compiler for readability.
-  # FIXME: Make this a generator expression
-  if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(intc PRIVATE -fcolor-diagnostics)
-  else()
-    target_compile_options(intc PRIVATE -fdiagnostics-color=always)
-  endif()
-else()
-  target_compile_options(
-    intc
-    PRIVATE
-    # Enable "all" warnings.
-    /W4
-
-    # Source character set is UTF-8
-    /utf-8
-
-    # Allow unnamed structs/unions.
-    /wd4201
-
-    # Don't warn about unused functions.
-    /wd4505
-  )
-
-  # clang-cl
-  if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(
-      intc
-      PRIVATE
-      -Wno-unused-function -Wno-unused-parameter
-      -Wno-format-zero-length
-    )
-  endif()
-endif()
-
-# On Windows, don't suggest the _s nonsense functions.
-if (WIN32)
-  target_compile_definitions(intc PRIVATE
-    _CRT_SECURE_NO_WARNINGS
-    _CRT_SECURE_NO_WARNINGS_GLOBALS
-    _CRT_NONSTDC_NO_WARNINGS
-  )
-endif()
-
-find_program(A68G_PROGRAM a68g NO_CACHE)
-
-if (A68G_PROGRAM STREQUAL "A68G_PROGRAM-NOTFOUND")
-  message(NOTICE "
-
-[41m
-[m
-[31;5mERROR: MISSING PROGRAM!  Could not find `a68g` Algol 68 Genie Interpreter, test target has not been generated. See README in `tst` subdirectory.
-[41m
-[m
-
-")
-else()
-  add_custom_target(
-    algol-suite
-    COMMAND a68g main.a68
-    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/tst
-    COMMENT "Running tests"
-    VERBATIM
-    USES_TERMINAL
-  )
-endif()
-
-include(CTest)
+## ============================================================================
+##  Submodules and include dirs.
+## ============================================================================
+## Find libfmt.
 include(FetchContent)
-if (BUILD_TESTING)
-  message(STATUS "Downloading dependencies for test runner. This may take a while.")
-  FetchContent_Declare(fmtlib
+set(FETCHCONTENT_QUIET OFF)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+message(STATUS "Checking dependencies ...")
+FetchContent_Declare(fmtlib
     GIT_REPOSITORY https://github.com/fmtlib/fmt.git
     GIT_TAG 10.0.0
     SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
-  )
+)
+FetchContent_MakeAvailable(fmtlib)
+target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
 
-  FetchContent_MakeAvailable(fmtlib)
+## Add libclopts.
+FetchContent_Declare(clopts
+    GIT_REPOSITORY https://github.com/Sirraide/clopts.git
+    GIT_TAG v2.0.3
+    SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/clopts"
+)
+FetchContent_MakeAvailable(clopts)
+target_include_directories(options INTERFACE ${clopts_SOURCE_DIR}/include)
 
-  add_executable(test_instantiator tst/main.cpp)
-  target_link_libraries(test_instantiator PRIVATE fmt)
-  target_include_directories(test_instantiator SYSTEM PRIVATE
-    "${clopts_SOURCE_DIR}/include"
-    "${fmtlib_SOURCE_DIR}/include"
-  )
-  target_compile_options(test_instantiator PUBLIC -fconcepts)
+## Link against libfmt.
+target_link_libraries(options INTERFACE fmt)
 
-  ## User needs to specify a linker.
-  if (NOT DEFINED INTERCEPT_TEST_LINKER)
-    message (FATAL_ERROR "Please specify a linker for tests using -DINTERCEPT_TEST_LINKER=/path/to/linker. The path must be an absolute path and point to a version of gcc or clang (not clang-cl!)")
-  endif ()
-  message(STATUS "Using linker ${INTERCEPT_TEST_LINKER} for tests.")
+## Add ‘include’ as an include dir.
+target_include_directories(options INTERFACE include)
 
-  file(GLOB tests ${CMAKE_CURRENT_LIST_DIR}/tst/tests/*.int)
-  foreach (test ${tests})
-    if (BUILD_NATIVE_TESTING)
-      add_test(
-        NAME ASM_${test}
-        COMMAND $<TARGET_FILE:test_instantiator>
-        asm
-        "${test}"
-        $<TARGET_FILE:intc>
-        "${INTERCEPT_TEST_LINKER}"
-        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-        COMMAND_EXPAND_LISTS
+## As well as everything in ‘libs’.
+if (EXISTS ${PROJECT_SOURCE_DIR}/libs)
+    file(GLOB libs ${PROJECT_SOURCE_DIR}/libs/*)
+
+    ## Add the include directory to the include path, or the root
+    ## directory if there is no include directory.
+    foreach(lib ${libs})
+        if (IS_DIRECTORY ${lib}/include)
+            target_include_directories(options INTERFACE ${lib}/include)
+        else()
+            target_include_directories(options INTERFACE ${lib})
+        endif()
+    endforeach()
+
+    ## Also add all of them as subdirectories if they have a CMakeLists.txt.
+    foreach (lib ${libs})
+        if (EXISTS ${lib}/CMakeLists.txt)
+            add_subdirectory(${lib})
+        endif()
+    endforeach()
+endif()
+
+# Do not link with libm (math) when target is windows executable.
+if (NOT WIN32)
+  target_link_libraries(options INTERFACE m)
+endif()
+
+# Precompile utils.hh.
+target_precompile_headers(options INTERFACE "${PROJECT_SOURCE_DIR}/include/lcc/utils.hh")
+
+## ============================================================================
+##  Executables and libraries.
+## ============================================================================
+## ‘include’ and ‘lib’ are library sources.
+file(GLOB_RECURSE library-sources
+    "${PROJECT_SOURCE_DIR}/lib/*.cc"
+    "${PROJECT_SOURCE_DIR}/include/*.hh"
+)
+
+## Add the main lcc library
+add_library(liblcc STATIC ${library-sources})
+set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
+
+## Add the driver.
+add_executable(lcc "${PROJECT_SOURCE_DIR}/src/lcc.cc")
+
+## Set public include dir for lcc.
+target_include_directories(liblcc PUBLIC "${PROJECT_SOURCE_DIR}/include")
+
+## Apply our options.
+target_link_libraries(liblcc PRIVATE options)
+target_link_libraries(lcc PRIVATE options liblcc)
+
+## ============================================================================
+##  Tests
+## ============================================================================
+# Allow arbitrary characters in test names.
+cmake_policy(SET CMP0110 NEW)
+
+if (BUILD_TESTING)
+    include(ExternalProject)
+    include(CTest)
+
+    ## Set fchk properties here.
+    if (DEFINED FCHK_GIT_TAG)
+      message(
+        FATAL_ERROR
+        "You've defined FCHK_GIT_TAG as a user-specified option, but you must alter the CMakeLists.txt to change this variable"
       )
-      set_tests_properties(ASM_${test} PROPERTIES TIMEOUT 10)
     endif()
-    if (BUILD_OBJ_TESTING)
-      if (WIN32)
-        add_test(
-          NAME OBJ_${test}
-          COMMAND $<TARGET_FILE:test_instantiator>
-          coff_object
-          "${test}"
-          $<TARGET_FILE:intc>
-          "${INTERCEPT_TEST_LINKER}"
-          WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-          COMMAND_EXPAND_LISTS
+    set(FCHK_GIT_TAG v3.0.1)
+
+    ## First, check if fchk has already been downloaded.
+    if (NOT EXISTS "${PROJECT_SOURCE_DIR}/fchk/CMakeLists.txt")
+        message(STATUS "Downloading fchk")
+
+        ## Delete old fchk directory.
+        if (EXISTS "${PROJECT_SOURCE_DIR}/fchk")
+            file(REMOVE_RECURSE "${PROJECT_SOURCE_DIR}/fchk")
+        endif()
+
+        ## Clone the repo.
+        execute_process(
+            COMMAND git clone https://github.com/Sirraide/fchk
+                --branch "${FCHK_GIT_TAG}"
+                --depth 1
+                --recursive
+            WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+            COMMAND_ERROR_IS_FATAL ANY
+            ECHO_OUTPUT_VARIABLE
+            ECHO_ERROR_VARIABLE
         )
-        set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 10)
-      else()
-        add_test(
-          NAME OBJ_${test}
-          COMMAND $<TARGET_FILE:test_instantiator>
-          elf_object
-          "${test}"
-          $<TARGET_FILE:intc>
-          "${INTERCEPT_TEST_LINKER}"
-          WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-          COMMAND_EXPAND_LISTS
-        )
-        set_tests_properties(OBJ_${test} PROPERTIES TIMEOUT 10)
-      endif()
     endif()
-    if (BUILD_OPT_TESTING)
-      add_test(
-        NAME OPT_${test}
-        COMMAND $<TARGET_FILE:test_instantiator>
-        asm
-        "${test}"
-        $<TARGET_FILE:intc>
-        "${INTERCEPT_TEST_LINKER}"
-        -O
-        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-        COMMAND_EXPAND_LISTS
-      )
-      set_tests_properties(OPT_${test} PROPERTIES TIMEOUT 10)
-    endif()
-    if (BUILD_LLVM_TESTING)
-      add_test(
-        NAME LLVM_${test}
-        COMMAND $<TARGET_FILE:test_instantiator>
-        llvm
-        "${test}"
-        $<TARGET_FILE:intc>
-        "${INTERCEPT_TEST_LINKER}"
-        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-        COMMAND_EXPAND_LISTS
-      )
 
-      set_tests_properties(LLVM_${test} PROPERTIES TIMEOUT 10)
-    endif()
-  endforeach()
+    ## Next, update it to the right tag.
+    message(STATUS "Updating fchk")
+        execute_process(
+        COMMAND git fetch --tags
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/fchk"
+        COMMAND_ERROR_IS_FATAL ANY
+        ECHO_OUTPUT_VARIABLE
+        ECHO_ERROR_VARIABLE
+    )
+
+    execute_process(
+        COMMAND git fetch --depth 1 origin "${FCHK_GIT_TAG}"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/fchk"
+        COMMAND_ERROR_IS_FATAL ANY
+        ECHO_OUTPUT_VARIABLE
+        ECHO_ERROR_VARIABLE
+    )
+
+    execute_process(
+        COMMAND git reset --hard "${FCHK_GIT_TAG}"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/fchk"
+        COMMAND_ERROR_IS_FATAL ANY
+        ECHO_OUTPUT_VARIABLE
+        ECHO_ERROR_VARIABLE
+    )
+
+    ## We only need to download fchk to be able to configure this,
+    ## so add a target for the tests to build it when we run the tests.
+    add_custom_target(fchk ALL
+        COMMAND ${CMAKE_COMMAND}
+            -S "${PROJECT_SOURCE_DIR}/fchk"
+            -B "${PROJECT_SOURCE_DIR}/fchk/out"
+            -G "${CMAKE_GENERATOR}"
+        COMMAND ${CMAKE_COMMAND} --build "${PROJECT_SOURCE_DIR}/fchk/out"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/fchk"
+        BYPRODUCTS "${PROJECT_SOURCE_DIR}/fchk/out"
+        VERBATIM
+        USES_TERMINAL
+    )
+
+    ## Now that that’s done, we can set up the tests.
+    set(FCHK_EXE_PATH "${PROJECT_SOURCE_DIR}/fchk/out/fchk")
+    include("${PROJECT_SOURCE_DIR}/fchk/cmake/FCHKDiscoverTests.cmake")
+
+
+    ## Add more tests below if need be.
+    FCHKAddAllTestsInDir(
+        IN "tst/laye"
+        PATTERN "*.laye"
+        PREFIX "//"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
+        RECURSIVE
+        DEPENDS lcc fchk
+    )
+
+    FCHKAddAllTestsInDir(
+        IN "tst/intercept/ir"
+        PATTERN "*.int"
+        PREFIX "$<SEMICOLON>$<SEMICOLON>"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
+        DEPENDS lcc fchk
+    )
+
+    FCHKAddAllTestsInDir(
+        IN "tst/ir" "tst/opt"
+        PATTERN "*.lcc"
+        PREFIX "$<SEMICOLON>"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        ARGS -l . -D "lcc=$<TARGET_FILE:lcc>" -P re -P nocap
+        DEPENDS lcc fchk
+    )
 endif()

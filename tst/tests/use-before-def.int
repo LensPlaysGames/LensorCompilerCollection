@@ -1,5 +1,0 @@
-;; ERROR
-
-a : integer
-b := a
-b : integer

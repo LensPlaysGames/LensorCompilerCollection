@@ -1,0 +1,5 @@
+;; ERROR
+
+sixty_nine: int() = 69
+sixty_nine() ;; this is an error, it's return value goes unused!
+sixty_nine() ;; this is fine; it's the return value of the program

@@ -1,0 +1,11 @@
+;; LABELS overloading
+;; 42
+
+bar : int () {
+    foo : int (x : byte) x + 69
+    foo(20)
+}
+
+foo : int (x : int) x + 22
+
+bar()

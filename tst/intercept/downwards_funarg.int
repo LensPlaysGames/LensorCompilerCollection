@@ -1,0 +1,7 @@
+;; 69
+
+sixty_nine : int() = 69;
+
+foo : int(getter : int()) = getter;
+
+foo sixty_nine;

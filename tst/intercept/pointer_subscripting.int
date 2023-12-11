@@ -1,0 +1,13 @@
+;; 0
+;; 1
+
+;; This test simply ensures that a subscript of a pointer is what it is
+;; meant to be.
+
+number : int = 69
+a : @int = &number
+b : @int = a[0]
+
+putchar(if (a = b) & (@a = @b) 49 else 48)
+
+putchar : ext void(c : int)

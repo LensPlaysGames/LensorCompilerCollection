@@ -1,0 +1,5 @@
+;; ERROR
+
+a : int
+b := a
+b : int

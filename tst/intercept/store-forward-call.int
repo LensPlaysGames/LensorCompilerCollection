@@ -1,0 +1,19 @@
+;; 69
+;; A
+
+puts : ext s32(str : @byte) nomangle discardable
+memset : ext @byte(str: @byte, c : byte, size : int) nomangle discardable
+
+;; This specifically tests the store forwarding pass in the optimiser
+;; and makes sure that we don’t eliminate neither the initial store of
+;; "A" and "\0", nor the load to get an "E" back.
+escape : int() {
+    a : byte[2]
+    @a[0] := 65
+    @a[1] := 0
+    puts(a[0])
+    memset(a[0], 69, 1)
+    @a[0]
+}
+
+escape()

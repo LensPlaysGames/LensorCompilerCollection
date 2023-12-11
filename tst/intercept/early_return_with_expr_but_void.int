@@ -1,0 +1,6 @@
+;; ERROR
+
+foo: void() {
+  return 69;
+};
+foo;

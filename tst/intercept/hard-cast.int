@@ -1,0 +1,8 @@
+;; 42
+
+a :: 42;
+ptr :: &a;
+i :: ptr as int;
+ptr2 :: i as! @int;
+
+@ptr2;

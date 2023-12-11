@@ -1,0 +1,9 @@
+;; 69
+
+foo: int() {
+  a: int = 69
+  b: @int = &a
+  @b
+}
+
+foo()

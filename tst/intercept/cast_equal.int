@@ -1,0 +1,5 @@
+;; 69
+
+a : int = 69;
+b : int = a as int;
+b;

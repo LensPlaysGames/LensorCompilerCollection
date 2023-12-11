@@ -1,7 +1,0 @@
-;; 69
-
-foo: integer() {
-  return 69;
-  42
-}
-foo()

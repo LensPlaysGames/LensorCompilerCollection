@@ -1,8 +1,0 @@
-;; 42
-
-foo : integer(x : integer) {
-    if x = 42 return x;
-    foo(x + 1)
-}
-
-foo(0)

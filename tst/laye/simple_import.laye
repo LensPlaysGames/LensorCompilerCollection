@@ -1,0 +1,20 @@
+// R %lcc --ir %s
+// d b [a-zA-Z0-9\.]+
+// d t %[0-9]+
+
+// * (?<global>[^:\s]+) : i8\[22\] = "Hello, simple import!\\00"
+
+// Note that this is temporarily wrong, and should be:
+// puts : imported i32(ptr $t)
+// * puts : reexported i32(ptr $t)
+import "lib/stdio.laye";
+
+// * main : i64():
+// +   $b:
+// +     $t = call @puts (ptr @$global) -> i32
+// +     return i64 0
+int main()
+{
+    stdio::puts("Hello, simple import!");
+    return 0;
+}

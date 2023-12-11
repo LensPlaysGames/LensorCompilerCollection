@@ -1,0 +1,6 @@
+struct vec<T, i32 N>
+{
+    T[N] data;
+}
+
+vec<f32, 2> my_vec2 = 10;

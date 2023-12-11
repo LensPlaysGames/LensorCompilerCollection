@@ -1,0 +1,65 @@
+; R %lcc --ir -O3 %s
+
+; p lit []
+
+; * main : i32():
+; +   bb0:
+; +     return i32 42
+main : i32():
+  bb0:
+    ; Note: We purposefully allocate an absurd amount of
+    ; integers here so as to ensure that the SROA pass does
+    ; not insert allocas for each one, since that would most
+    ; definitely cause any reasonable system to run out of
+    ; memory.
+    %0 = alloca i32[1000000000000000000]
+    %1 = gep i32[1000000000000000000] from %0 at i43 5
+    %2 = gep i32[1000000000000000000] from %0 at i43 47
+    store i32 20 into %1
+    store i32 22 into %2
+    %3 = load i32 from %1
+    %4 = load i32 from %2
+    %5 = add i32 %3, %4
+    return i32 %5
+
+; * first_elem : i32():
+; +   bb0:
+; +     return i32 42
+first_elem : i32():
+  bb0:
+    %0 = alloca i32[4]
+    store i32 42 into %0
+    %1 = load i32 from %0
+    return i32 %1
+
+
+; * sroa_memcpy : i64():
+; +   bb0:
+; +     return i64 44
+sroa_memcpy : i64():
+  bb0:
+    %0 = alloca i64[4]
+    %1 = alloca i64[4]
+    %2 = gep i64 from %0 at i64 0
+    store i64 11 into %2
+    %3 = gep i64 from %0 at i64 1
+    store i64 11 into %3
+    %4 = gep i64 from %0 at i64 2
+    store i64 11 into %4
+    %5 = gep i64 from %0 at i64 3
+    store i64 11 into %5
+    %6 = load i64[4] from %0
+    store i64[4] %6 into %1
+    %7 = gep i64 from %1 at i64 0
+    %8 = load i64 from %7
+    %9 = gep i64 from %1 at i64 1
+    %10 = load i64 from %9
+    %11 = add i64 %8, %10
+    %12 = gep i64 from %1 at i64 2
+    %13 = load i64 from %12
+    %14 = add i64 %11, %13
+    %15 = gep i64 from %1 at i64 3
+    %16 = load i64 from %15
+    %17 = add i64 %14, %16
+    return i64 %17
+

@@ -1,0 +1,26 @@
+// R 
+
+struct location
+{
+    int offset;
+    int length;
+
+    int line;
+    int column;
+}
+
+struct jvalue
+{
+    location location;
+    variant integer { int value; }
+    variant string { i8[*] value; }
+}
+
+int main()
+{
+    jvalue anyval;
+    jvalue::integer ival;
+    ival.value = 69;
+    anyval = ival;
+    return ival.value;
+}

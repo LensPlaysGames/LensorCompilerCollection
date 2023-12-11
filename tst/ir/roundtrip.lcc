@@ -1,0 +1,122 @@
+; R %lcc %s --ir --color=never
+
+; p lit []
+
+; * cc1 : imported layecc i32(i32 %0)
+; * cc2 : imported i32()
+; * cc3 : imported intcc i32()
+cc1 : imported layecc i32(i32)
+cc2 : imported ccc i32()
+cc3 : imported intcc i32()
+
+; * varargs1 : void() variadic
+; * varargs2 : i32(ptr %0) variadic
+varargs1 : void() variadic
+varargs2 : i32(ptr %0) variadic
+
+; * ops : void(i32 %0, i32 %1):
+; +   bb0:
+; +     %2 = add i32 %0, %1
+; +     %3 = sub i32 %0, %1
+; +     %4 = mul i32 %0, %1
+; +     %5 = sdiv i32 %0, %1
+; +     %6 = udiv i32 %0, %1
+; +     %7 = srem i32 %0, %1
+; +     %8 = urem i32 %0, %1
+; +     %9 = shl i32 %0, %1
+; +     %10 = shr i32 %0, %1
+; +     %11 = sar i32 %0, %1
+; +     branch to %bb1
+; +   bb1:
+; +     %12 = and i32 %0, %1
+; +     %13 = or i32 %0, %1
+; +     %14 = xor i32 %0, %1
+; +     branch to %bb2
+; +   bb2:
+; +     %15 = eq i32 %0, %1
+; +     %16 = ne i32 %0, %1
+; +     %17 = ugt i32 %0, %1
+; +     %18 = uge i32 %0, %1
+; +     %19 = ult i32 %0, %1
+; +     %20 = ule i32 %0, %1
+; +     %21 = sgt i32 %0, %1
+; +     %22 = sge i32 %0, %1
+; +     %23 = slt i32 %0, %1
+; +     %24 = sle i32 %0, %1
+; +     branch on 1 to %bb3 else %bb5
+; +   bb3:
+; +     %25 = zext i32 %0 to i64
+; +     %26 = sext i32 %0 to i64
+; +     %27 = trunc i32 %0 to i1
+; +     branch to %bb5
+; +   bb4:
+; +     unreachable
+; +   bb5:
+; +     %28 = phi i32, [%bb3 : 4], [%bb4 : poison]
+; +     %29 = alloca i32
+; +     store i32 %28 into %29
+; +     %30 = load i32 from %29
+; +     %31 = call layecc @cc1 (i32 %30) -> i32
+; +     %32 = call @cc2 () -> i32
+; +     %33 = call @cc2 () -> i32
+; +     %34 = call intcc @cc3 () -> i32
+; +     %35 = alloca i32[100]
+; +     %36 = gep i32[100] from %35 at i32 0
+; +     call @varargs1 () variadic
+; +     %37 = call @varargs2 (ptr %36, i32 %28) variadic -> i32
+; +     intrinsic @memcpy(ptr %29, ptr %36, i64 4)
+; +     return
+ops : exported void(i32 %0, i32 %1):
+  bb0:
+    %2 = add i32 %0, %1
+    %3 = sub i32 %0, %1
+    %4 = mul i32 %0, %1
+    %5 = sdiv i32 %0, %1
+    %6 = udiv i32 %0, %1
+    %8 = srem i32 %0, %1
+    %7 = urem i32 %0, %1
+    %9 = shl i32 %0, %1
+    %10 = shr i32 %0, %1
+    %11 = sar i32 %0, %1
+    branch to %bb1
+  bb1:
+    %12 = and i32 %0, %1
+    %13 = or i32 %0, %1
+    %14 = xor i32 %0, %1
+    branch to %bb2
+  bb2:
+    %15 = eq i32 %0, %1
+    %16 = ne i32 %0, %1
+    %17 = ugt i32 %0, %1
+    %18 = uge i32 %0, %1
+    %19 = ult i32 %0, %1
+    %20 = ule i32 %0, %1
+    %21 = sgt i32 %0, %1
+    %22 = sge i32 %0, %1
+    %23 = slt i32 %0, %1
+    %24 = sle i32 %0, %1
+    branch on 1 to %bb3 else %bb5
+  bb3:
+    %25 = zext i32 %0 to i64
+    %26 = sext i32 %0 to i64
+    %27 = trunc i32 %0 to i1
+    branch to %bb5
+  bb4:
+    unreachable
+  bb5:
+    %28 = phi i32, [%bb3 : 4], [%bb4 : poison]
+    %29 = alloca i32
+    store i32 %28 into %29
+    %30 = load i32 from %29
+    %31 = call layecc @cc1 (i32 %30) -> i32
+    %32 = call ccc @cc2 () -> i32
+    %33 = call @cc2 () -> i32
+    %34 = call intcc @cc3 () -> i32
+    %35 = alloca i32[100]
+    %36 = gep i32[100] from %35 at i32 0
+    call @varargs1 () variadic
+    %37 = call @varargs2 (ptr %36, i32 %28) variadic -> i32
+    intrinsic @memcpy(ptr %29, ptr %36, i64 4)
+    return
+
+

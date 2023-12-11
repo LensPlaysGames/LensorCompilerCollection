@@ -1,0 +1,159 @@
+#+author: Ætèrnal
+#+subauthor: Lens_r
+
+* Function Overload Resolution
+
+** Terminology
+
+- A (formal) parameter is a parameter (type) of a function type or signature.
+
+- An (actual) argument is a subexpression of a function call that is not
+  the callee.
+
+- Two types, A and B, are *equivalent* iff
+    - 1. A and B are the same type, or
+    - 2. one is a function type and the other its corresponding function
+         pointer type, or
+    - 3. one is a named type whose underlying type is equivalent to the
+         other.
+
+- A type A is *convertible* to a type B if there is a series of implicit
+  conversions that transforms A to B or if A and B are equivalent.
+
+- An argument A is convertible/equivalent to a parameter P iff the type
+  of A is convertible/equivalent to the type of P.
+
+** Algorithm
+
+To resolve an unresolved function reference, execute the following
+steps in order. The unresolved function reference in question is
+hereinafter referred to as ‘the function being resolved’.
+
+*** 0
+
+Skip anything that is not a function reference, or any function
+references previously resolved.
+
+*** 1
+
+Collect all functions with the same name as the function being
+resolved into an *overload set* O. We cannot filter out any
+functions just yet.
+
+If the overload set size is zero, it is an error (no function may be resolved).
+
+It is advisable to ensure any invariants you require across function
+overloads, given the semantics of the language. For example, in
+Intercept, all overloads of a function must have the same return type.
+
+*** 2
+
+If the parent expression is a call expression, and the function being
+resolved is the callee of the call, then:
+
+**** 2a
+
+Typecheck all arguments of the call that are not unresolved function
+references themselves. Note: This takes care of resolving nested calls.
+
+**** 2b
+
+Remove from O all functions that have a different number of
+parameters than the call expression has arguments.
+
+**** 2c
+
+Let A_1, ... A_n be the arguments of the call expression.
+
+For candidate C in O, let P_1, ... P_n be the parameters of C. For each
+argument A_i of the call, iff it is not an unresolved function, check
+if it is convertible to P_i. Remove C from O if it is not. Note down
+the number of A_i’s that required a (series of) implicit conversions to
+their corresponding P_i’s. Also collect unresolved function references.
+
+**** 2e
+
+If there are unresolved function references:
+
+***** 2eα
+
+Collect their overload sets.
+
+***** 2eβ
+
+Remove from O all candidates C that do no accept any overload of this
+argument as a parameter.
+
+***** 2eγ
+
+Remove from O all functions except those with the least number of
+implicit conversions as per step 2d.
+
+***** 2eδ
+
+Resolve the function being resolved.
+
+***** 2eε
+
+For each argument, remove from its overload set all candidates that are
+not equivalent to the type of the corresponding parameter of the
+resolved function.
+
+***** 2eζ
+
+Resolve the argument.
+
+**** 2f
+
+Remove from O all functions except those with the least number of
+implicit conversions as per step 2d.
+
+*** 3
+
+Otherwise, depending on the type of the parent expression:
+
+**** 3a
+
+If the parent expression is a unary prefix expression with operator
+address-of, then replace the parent expression with the unresolved
+function and go to step 2/3 depending on the type of the new parent.
+
+**** 3b
+
+If the parent expression is a declaration, and the lvalue is not of
+function pointer type, this is a type error. Otherwise, remove from O
+all functions that are not equivalent to the lvalue being assigned to.
+
+**** 3c
+
+If the parent expression is an assignment expression, then if we are
+the LHS, then this is a type error, as we cannot assign to a function
+reference.
+
+If the lvalue is not of function pointer type, this is a type error.
+
+Otherwise, remove from O all functions that are not equivalent to the lvalue being assigned to.
+
+**** 3d
+
+If the parent expression is a return expression, and the return type of
+the function F containing that return expression is not of function
+pointer type, this is a type error. Otherwise, remove from O all
+functions that are not equivalent to the return type of F.
+
+**** 3e
+
+If the parent expression is a cast expression, and the result type of
+the cast is a function or function pointer type, remove from O all
+functions that are not equivalent to that type.
+
+**** 3f
+
+Otherwise, do nothing.
+
+*** 4
+
+Resolve the function reference.
+
+For the most part, entails finding the one function that is still
+marked viable in the overload set.

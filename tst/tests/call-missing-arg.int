@@ -1,5 +1,0 @@
-;; ERROR
-
-bar()
-
-bar : void (x : integer()) x

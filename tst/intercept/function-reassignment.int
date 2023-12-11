@@ -1,0 +1,5 @@
+;; ERROR
+
+bar : int(n : int) { 42 }
+foo : int(b : int) { 69 }
+foo := bar

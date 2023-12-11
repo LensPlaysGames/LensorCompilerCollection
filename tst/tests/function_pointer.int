@@ -1,7 +1,0 @@
-;; 42
-
-ptr : @(integer ())
-
-ptr := integer () 42
-
-ptr()

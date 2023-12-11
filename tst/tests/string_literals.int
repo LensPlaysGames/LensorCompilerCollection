@@ -1,9 +1,0 @@
-;; 0
-;; Lorem ipsum dolor sit amet consectetuer
-
-puts : ext void(s : @byte)
-
-str : @byte = "Lorem ipsum dolor sit amet consectetuer"[0]
-
-puts(str)
-0

@@ -1,0 +1,8 @@
+// R 
+
+int main()
+{
+    int[*] r = cast(int[*]) 0;
+    var p = cast(i8[*]) r;
+    return cast(int) p;
+}

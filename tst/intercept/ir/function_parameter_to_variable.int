@@ -1,0 +1,16 @@
+;; R %lcc %s --ir
+
+;; Declare `i_` as regex to match any bitwidth signed integer
+;; d i_ i[0-9]+
+;; Declare `tmp` as regex to match any IR instruction reference (the % + number things)
+;; d tmp %[0-9]+
+
+;; * main : (?<ret_type>$i_)((?<argc_type>$i_) (?<argc>$tmp), ptr (?<argv>$tmp), ptr (?<envp>$tmp)):
+;; +   bb0:
+;; +     (?<argc_var>$tmp) = alloca $argc_type
+;; +     store $argc_type $argc into $argc_var
+;; +     (?<argv_var>$tmp) = alloca ptr
+;; +     store ptr $argv into $argv_var
+;; +     (?<envp_var>$tmp) = alloca ptr
+;; +     store ptr $envp into $envp_var
+;; +     return $ret_type 0

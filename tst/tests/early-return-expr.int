@@ -1,7 +1,0 @@
-;; 42
-
-f : integer (x: integer) {
-    return x + 10;
-}
-
-f(32)

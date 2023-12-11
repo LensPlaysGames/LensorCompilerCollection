@@ -1,0 +1,21 @@
+// R %lcc --ir %s
+// d b  [a-zA-Z0-9\.]+
+// d t  %[0-9]+
+// d f  _L[a-zA-Z0-9_]+
+// d ty [a-zA-Z0-9_]+
+
+// * main : (?<ret_ty>$ty)():
+// +   $b:
+// +     (?<r>$t) = alloca $ret_ty
+// +     store $ret_ty 69 into $r
+// +     (?<r_ptr>$t) = alloca ptr
+// +     store ptr $r into $r_ptr
+// +     (?<addr>$t) = load ptr from $r_ptr
+// +     (?<val>$t) = load $ret_ty from $addr
+// +     return $ret_ty $val
+int main()
+{
+    int r = 69;
+    int* r_ptr = &r;
+    return *r_ptr;
+}

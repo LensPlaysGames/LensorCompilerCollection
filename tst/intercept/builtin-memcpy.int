@@ -1,0 +1,11 @@
+;; 0
+;; Memcpy go brrr
+
+puts : ext s32(s : @byte) nomangle discardable;
+
+arr : byte[15];
+
+__builtin_memcpy arr[0] "Memcpy go brrr"[0] 15;
+
+puts(arr[0]);
+0;

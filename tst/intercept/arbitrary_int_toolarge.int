@@ -1,0 +1,4 @@
+;; ERROR
+
+foo: s128;
+foo;

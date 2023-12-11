@@ -1,0 +1,17 @@
+Numbers: struct {
+  x: int;
+  y: int;
+};
+
+;; Pass two arch-sized signed integers to a function that returns their sum.
+extern sum_two: int(numbers: Numbers);
+
+;; The function in C actually just calls an Intercept function; this one.
+export sum_two_impl: int(numbers: Numbers) nomangle {
+  numbers.x + numbers.y;
+};
+
+foo: Numbers;
+foo.x := 34;
+foo.y := 35;
+sum_two(foo);

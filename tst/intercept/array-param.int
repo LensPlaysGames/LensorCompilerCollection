@@ -1,0 +1,10 @@
+;; 69
+
+foo : int(xy : int[2]) {
+  @xy[0] + @xy[1];
+};
+
+arr : int[2];
+@arr[0] := 34;
+@arr[1] := 35;
+foo arr;

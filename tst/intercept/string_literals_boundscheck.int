@@ -1,0 +1,8 @@
+;; ERROR
+
+extern puts : void(s : @byte);
+
+str : @byte = "Lorem ipsum dolor sit amet consectetuer"[-1];
+
+puts(str);
+0;

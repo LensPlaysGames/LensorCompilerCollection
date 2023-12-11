@@ -1,6 +1,0 @@
-;; 0
-;; 1
-
-putchar : ext void(c : integer)
-putchar(48 + if ~0 1 else 0)
-0

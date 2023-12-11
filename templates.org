@@ -1,0 +1,153 @@
+#+author: Lens_r
+#+date: [2023-12-09 Sat 18:27]
+
+* Templated Function
+
+** Parameter Type Template
+
+Idea here: less boilerplate regarding parameter template types, since
+they are always able to be deduced at call-time from the argument.
+
+Idea 1: maybe ~template~ is a special type within a parameter that will
+just be the type of whatever you pass into it... But also should be
+able to define if it's a pointer or reference or what. Or maybe ~auto~.
+We could access the templated type within the instantiation via
+something like ~decltype~ or ~typeof~ that can get the type of an
+expression.
+
+#+begin_src int
+  write69 : void(x :&template) {
+    x := 69;
+  };
+
+  foo : int;
+  bar : u16;
+  write69 foo;
+  write69 bar;
+#+end_src
+
+** Return Type Template
+
+I'm having a hard time thinking of any time this would be useful.
+
+Maybe an array of template type T with template value N elements as a
+return type?
+
+Also, deducing the return type automatically will require top-down type
+inference. Which, is doable, just not in every scenario. So, functions
+templated on return type could only deduce the template type if there
+is an expected type it should be. Like if it is on the right hand side
+of a declaration or assignment, for example.
+
+Oop, just thought of a good use case, I think.
+
+#+begin_src c++
+  template <typename T>
+  T from_bytes(std::array<lcc::u8, sizeof(T)> bytes) {
+      T out{};
+      std::copy(bytes.begin(), bytes.end(), &out);
+      return out;
+  }
+#+end_src
+
+#+begin_src int
+  from_bytes : template(bytes :u8[sizeof(T)]) {
+    out : template;
+    memcpy &out &bytes sizeof(T);
+    out;
+  }
+#+end_src
+
+Still not happy with the inability to access the templated type easily.
+
+I think I should probably have a way, for proper introspection, to
+"access" the return type of a function type. So, maybe there is some
+builtin keyword ~rettype~ that does exactly that. Interesting thing
+here is that ~rettype~ will take in either an expression or a type, so
+we will have to take advantage of that ~:~ unary operator to pass in
+a type directly. But, we won't often be passing in a type directly.
+
+#+begin_src int
+  from_bytes : template(bytes :u8[sizeof (rettype from_bytes)]) {
+    out : rettype from_bytes;
+    memcpy &out &bytes sizeof (rettype from_bytes);
+    out;
+  }
+#+end_src
+
+While it's a bit verbose, it would work. The only other options I can see are:
+- having a sigil for template types, and the identifier is unique and declares that type, or
+- template.id or something of that nature. template[id]. Something like that.
+
+** Other Type Template
+
+Used in the body, but nowhere in the function signature. Again, having
+a hard time immediately coming up with something here.
+
+* Templated Type Declaration
+
+** Struct
+
+I'm somewhat confident in this approach to templating types.
+
+*** Member Type Template
+
+#+begin_src int
+  foo : struct {
+    x :template;
+    y :u8;
+  };
+
+  ;; error because no type given for x
+  y : foo;
+
+  ;; error because foo.x has no type.
+  y : foo template;
+
+  ;; foo.x is deduced to be int
+  ;; Possible TODO: Allow _ instead of template for shorter declarations
+  y : foo template = [22, 16];
+
+  ;; foo.x is a u8
+  y : foo u8;
+
+  ;; Templated Math Vector Type Example
+  vec2 : struct {
+    x :template;
+    y :template;
+  }
+
+  int_vector : vec2 int int = [34, 35];
+  int_vector.x := 34;
+  int_vector.y := 35;
+#+end_src
+
+*** Value Template
+
+#+begin_src int
+  foo : struct {
+    x :u8 = template;
+    y :u8;
+  };
+
+  ;; error because no template value given for x
+  y : foo;
+
+  ;; foo.x goes uninitialised
+  y : foo template;
+
+  y : foo u8;
+#+end_src
+
+Basically, a struct type will gain "template parameters" for each
+time "template" is encountered in one of the few spots it is actually
+allowed and expected (within the type of a member (member type
+template), or the initialiser of a member (value template)). The
+expected "kind" of each template parameter is stored, so that the parser
+knows whether or not to parse a type or an expression (I hope this works).
+
+For this to work, it /does/ mean that templated types won't be order
+independant, but I don't think that that's a big sacrifice or that
+surprising. It'd be weird to write all the instantiations of a template
+and then the template itself, imo. Maybe we can figure that out in the
+future sometime, tho.

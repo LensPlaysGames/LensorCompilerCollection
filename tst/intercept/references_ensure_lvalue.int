@@ -1,0 +1,11 @@
+;; ERROR
+
+foo : void (x : &int) { x = 42 };
+;; `4`, an int literal, is an rvalue; meaning there is not an
+;; address in memory where this is stored; it's simply a temporary
+;; value.
+;; An lvalue of type T is implicitly convertible to a reference of type
+;; T, but an rvalue of type T is *not*. This means that the following
+;; expression should error because `4`, an rvalue, can not be
+;; implicitly converted into a reference of `int`.
+foo(4);

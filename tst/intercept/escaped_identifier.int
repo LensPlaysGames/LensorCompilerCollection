@@ -1,0 +1,6 @@
+;; 69
+
+\macro : int = 34;
+\if : int = 35;
+
+\macro + \if;

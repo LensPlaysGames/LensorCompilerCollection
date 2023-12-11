@@ -1,6 +1,0 @@
-;; ERROR
-
-;; This test will currently always fail because the test runner is not
-;; equipped to handle signals. This will raise SIGTRAP on linux.
-__builtin_debugtrap()
-

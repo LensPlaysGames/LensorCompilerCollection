@@ -1,0 +1,7 @@
+;; 144
+
+a : byte = 200;
+a + a;
+
+;; NOTE: Currently fails because `+` returns a t_int, which is 8 bytes.
+;; Return status is (errantly?) 400

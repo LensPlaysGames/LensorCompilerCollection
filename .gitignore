@@ -37,10 +37,13 @@
 # Language Server
 **/compile_commands.json
 .Random.seed
-.clang-format
 
 # Disallow files starting with some symbols
 **/_*
 
 # Testing
 Testing/
+/fchk
+
+# VS Code
+.vscode/

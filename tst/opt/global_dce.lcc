@@ -1,0 +1,25 @@
+; R %lcc %s --passes=gdce --ir
+
+; * foo : void():
+; +   bb0:
+; +     call @used ()
+; +     return
+foo : void():
+  bb0:
+    call @used ()
+    return
+
+; * used : void():
+; +   bb0:
+; +     return
+used : void():
+  bb0:
+    return
+
+; !* bar
+bar : internal void():
+  bb0:
+    return
+
+; !* baz
+baz : imported void()

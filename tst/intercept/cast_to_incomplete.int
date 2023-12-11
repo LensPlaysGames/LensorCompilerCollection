@@ -1,0 +1,5 @@
+;; ERROR
+
+a : byte;
+
+a as void;

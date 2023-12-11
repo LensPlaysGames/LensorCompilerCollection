@@ -1,0 +1,10 @@
+;; ERROR
+
+;; Calculate nth term of fibonacci sequence using recursion.
+fib : int(n : int) inline {
+  if n <= 1
+    n
+  else fib(n - 1) + fib(n - 2)
+}
+
+fib(5)

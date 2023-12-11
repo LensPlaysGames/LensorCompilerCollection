@@ -1,0 +1,44 @@
+; R %lcc --ir --passes=ssa,icmb,dce %s
+
+; p re off
+
+; * main : i32(i1 %0, i1 %1):
+; +   bb0:
+; +     branch on %0 to %bb1 else %bb2
+; +   bb1:
+; +     branch on %1 to %bb2 else %bb3
+; +   bb2:
+; +     %2 = phi i32, [%bb0 : 4], [%bb1 : 9]
+; +     %3 = phi i32, [%bb0 : 5], [%bb1 : 8]
+; +     %4 = add i32 1, %2
+; +     branch to %bb3
+; +   bb3:
+; +     %5 = phi i32, [%bb2 : %4], [%bb1 : 9]
+; +     %6 = phi i32, [%bb2 : %3], [%bb1 : 8]
+; +     %7 = mul i32 %5, %6
+; +     return i32 %7
+main : i32(i1 %c1, i1 %c2):
+  bb0:
+    %1 = alloca i32
+    %2 = alloca i32
+    store i32 4 into %1
+    store i32 5 into %2
+    branch on %c1 to %bb1 else %bb2
+  bb1:
+    %3 = load i32 from %1
+    %4 = load i32 from %2
+    %5 = add i32 %3, %4
+    %6 = sub i32 %5, 1
+    store i32 %5 into %1
+    store i32 %6 into %2
+    branch on %c2 to %bb2 else %bb3
+  bb2:
+    %7 = load i32 from %1
+    %8 = add i32 %7, 1
+    store i32 %8 into %1
+    branch to %bb3
+  bb3:
+    %9 = load i32 from %1
+    %10 = load i32 from %2
+    %11 = mul i32 %9, %10
+    return i32 %11

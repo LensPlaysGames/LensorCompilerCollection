@@ -1,0 +1,10 @@
+;; LABELS overloading
+;; 42
+
+foo : int (x : byte, y : byte) 42
+foo : int (x : byte, y : int) 69
+
+a: byte = 1
+b: byte = 2
+
+foo(a, b)

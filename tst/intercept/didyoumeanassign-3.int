@@ -1,0 +1,11 @@
+;; 0
+
+;; This represents a returned comparison from a block.
+;; It should NOT trigger an error for a comparison that should be an
+;; assignment.
+
+{
+  a: int = 69;
+  b: int = 42;
+  a = b;
+};
