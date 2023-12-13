@@ -1,7 +1,7 @@
+gcd_euclid 88, 32;
+
 gcd_euclid : int (a:int b:int) {
   if a = b      then a
   else if a < b then gcd_euclid a (b - a)
   else          gcd_euclid (a - b) b;
 };
-
-gcd_euclid 88, 32;
