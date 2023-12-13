@@ -4,6 +4,16 @@
 
 Now written in C++, LCC started as a compiler written in C for just one hobby language, ~Intercept~. Over the course of a few years, it has grown into a compiler collection, with a whole host of frontends created and maintained by the growing and thriving community.
 
+** Implemented Languages
+
+- Intercept (WIP)
+- Laye (WIP)
+
+In the future, we hope to support
+
+- some of C
+- YOUR language :)
+
 ** Usage
 
 For convenience purposes, there is a single executable, ~lcc~, that can delegate between all of the different compilers in the collection. This is called the /compiler driver/, often shortened to just /driver/.

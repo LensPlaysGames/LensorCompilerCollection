@@ -1,7 +1,12 @@
 #+title: LCC TODO
 #+author: Lens_r
 
-* Intercept
+* ~lcc~, Driver
+
+** TODO Add option to override input language
+[2023-12-13 Wed 11:02]
+
+* Intercept, Language
 
 ** TODO Packed Structs called "Cereals"
 [2023-12-09 Sat 17:39]
