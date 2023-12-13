@@ -504,7 +504,6 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
 
     /// Parse the LHS.
     switch (tok.kind) {
-        default: return Error("Expected expression");
         case Tk::Gensym: LCC_ASSERT(false, "Gensym token in parser");
 
         /// AST node bound by macro.
@@ -639,6 +638,43 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
             lhs = ParseFuncDecl("", func_ty, false);
             lhs->location({loc, lhs->location()});
         } break;
+
+        case TokenKind::Comma:
+        case TokenKind::RParen:
+        case TokenKind::RBrack:
+        case TokenKind::RBrace:
+        case TokenKind::Dot:
+        case TokenKind::Plus:
+        case TokenKind::Star:
+        case TokenKind::Slash:
+        case TokenKind::Percent:
+        case TokenKind::Pipe:
+        case TokenKind::Caret:
+        case TokenKind::Hash:
+        case TokenKind::Shl:
+        case TokenKind::Shr:
+        case TokenKind::Eq:
+        case TokenKind::Ne:
+        case TokenKind::Lt:
+        case TokenKind::Gt:
+        case TokenKind::Le:
+        case TokenKind::Ge:
+        case TokenKind::Colon:
+        case TokenKind::ColonEq:
+        case TokenKind::ColonColon:
+        case TokenKind::Do:
+        case TokenKind::Then:
+        case TokenKind::As:
+        case TokenKind::AsBang:
+        case TokenKind::AndKw:
+        case TokenKind::OrKw:
+        case TokenKind::Invalid:
+        case TokenKind::Eof:
+            return Error("Expected expression, got {}", ToString(tok.kind));
+
+        case TokenKind::MacroArg:
+        case TokenKind::Semicolon:
+            Diag::ICE("Unexpected token {} during parsing: likely lexer error", ToString(tok.kind));
     }
 
     /// Some places in the grammar are ambiguous and require us to
@@ -662,6 +698,15 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
         "Someone forgot to assign to `lhs` when parsing expr starting with {}",
         ToString(start_token)
     );
+
+    // If encountering a comma at this position, it is a "soft" expression
+    // separator. So, we are done parsing whatever expression we were parsing,
+    // as if it's a semi-colon. But, it won't cause a function call to stop
+    // being parsed. Hope that makes sense.
+    if (tok.kind == Tk::Comma) {
+        NextToken();
+        return lhs;
+    }
 
     /// The rules for operator precedence parsing are as follows:
     ///   - unary prefix operators are unambiguously handled up above;

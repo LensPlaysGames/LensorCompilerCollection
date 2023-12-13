@@ -4,4 +4,4 @@ gcd_euclid : int (a:int b:int) {
   else          gcd_euclid (a - b) b;
 };
 
-gcd_euclid 88 32;
+gcd_euclid 88, 32;
