@@ -60,3 +60,19 @@ declarations.
 Whoever wrote the lexer and parser absolutely butchered macros. I
 already fixed ~defines~, I'm pretty sure, but it wasn't even erroring
 when it should, so we aren't checking for hygienic expansions :(.
+
+** TODO An assignment is an explicit typing of the rhs as much as a declaration is of the left
+[2023-12-13 Wed 16:24]
+
+This means we should treat the right hand side of an assignment, in
+code like the following,
+#+begin_src int
+  x : u32 = 69
+  x := -1
+#+end_src
+as an explicit cast of the expression's result type to the left hand
+side type, should it be convertible.
+
+An /explicit/ cast means the programmer specified they want it to
+happen. I *WANT* an assignment to happen if I write it, and I shouldn't
+be forced to write `as typeof x` or similar just to make it work.
