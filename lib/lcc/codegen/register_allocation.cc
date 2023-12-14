@@ -305,11 +305,11 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
     std::vector<Register> registers{};
     // Helper function that handles not adding duplicates.
     auto add_reg = [&](usz id, usz size) {
-        if (std::find_if(registers.begin(), registers.end(), [&](Register& r) {
+        auto found = std::find_if(registers.begin(), registers.end(), [&](Register& r) {
                 return r.value == id;
-            }) == registers.end()) {
+        });
+        if (found == registers.end())
             registers.push_back(Register{id, uint(size)});
-        }
     };
     for (auto [index, reg] : vws::enumerate(desc.registers))
         add_reg(reg, 0);
