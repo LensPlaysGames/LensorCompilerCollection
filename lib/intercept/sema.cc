@@ -484,17 +484,12 @@ void intc::Sema::AnalyseModule() {
         // section out of it, then deserialise that into the module.
         for (auto include_dir : context->include_directories()) {
             auto path_base = include_dir + std::filesystem::path::preferred_separator + import.name;
-            const auto look_for_module_at_path = [&](std::string path) {
-                // fmt::print("Looking for module {} at {}\n", import.name, path);
-                return std::filesystem::exists(path);
-            };
-
             auto paths = {
                 path_base + ".o",
                 path_base + ".obj",
             };
             for (auto p : paths) {
-                if (look_for_module_at_path(p)) {
+                if (std::filesystem::exists(p)) {
                     // Open file, get contents
                     auto object_file = File::Read(p);
                     LCC_ASSERT(
