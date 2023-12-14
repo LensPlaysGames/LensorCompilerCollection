@@ -958,6 +958,23 @@ static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
     // TODO: OOPS totally forgot to do stackframe handling for locals here.
     // lol. Gotta subtract the stack frame size from the stack pointer.
 
+    // TODO: Different stack frame kinds
+    usz stack_frame_size = rgs::fold_left(
+        vws::transform(func.locals(), [](AllocaInst* l) {
+            return l->allocated_type()->bytes();
+        }),
+        0,
+        std::plus{}
+    );
+    if (stack_frame_size) {
+        constexpr usz alignment = 16;
+        stack_frame_size = utils::AlignTo(stack_frame_size, alignment);
+        auto sub_rsp = MInst(usz(Opcode::Sub), {});
+        sub_rsp.add_operand(MOperandImmediate(stack_frame_size));
+        sub_rsp.add_operand(MOperandRegister(usz(RegisterId::RSP), 64));
+        assemble_inst(gobj, func, sub_rsp, text);
+    }
+
     for (auto& block : func.blocks()) {
         gobj.symbols.push_back(
             {Symbol::Kind::STATIC,
