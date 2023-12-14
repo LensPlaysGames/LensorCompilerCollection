@@ -1,11 +1,11 @@
 #include <bit>
-#include <object/generic.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/mir_utils.hh>
-#include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/codegen/x86_64/object.hh>
+#include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/context.hh>
 #include <lcc/utils.hh>
+#include <object/generic.hh>
 #include <variant>
 
 namespace lcc {
@@ -954,6 +954,9 @@ static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
     mov_rsp_into_rbp.add_operand(MOperandRegister(usz(RegisterId::RBP), 64));
     assemble_inst(gobj, func, push_rbp, text);
     assemble_inst(gobj, func, mov_rsp_into_rbp, text);
+
+    // TODO: OOPS totally forgot to do stackframe handling for locals here.
+    // lol. Gotta subtract the stack frame size from the stack pointer.
 
     for (auto& block : func.blocks()) {
         gobj.symbols.push_back(
