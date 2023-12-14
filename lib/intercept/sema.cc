@@ -6,6 +6,7 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
 #include <object/elf.h>
+#include <object/elf.hh>
 
 namespace intc = lcc::intercept;
 /// ===========================================================================
@@ -502,33 +503,14 @@ void intc::Sema::AnalyseModule() {
                     // TODO: Could possibly cheat and look for magic bytes/header in the file
                     // anywhere.
                     std::vector<u8> metadata_blob{};
-                    // TODO: More validation that it's a proper ELF file/what we expect, I
-                    // guess.
                     if (object_file.size() >= sizeof(elf64_header)
                         and object_file.at(0) == 0x7f and object_file.at(1) == 'E'
                         and object_file.at(2) == 'L' and object_file.at(3) == 'F') {
-                        elf64_header hdr{};
-                        std::memcpy(&hdr, object_file.data(), sizeof(hdr));
-                        // Extract ".intc_metadata" section contents
-                        LCC_ASSERT(hdr.e_shentsize == sizeof(elf64_shdr));
-                        auto section_headers_offset = hdr.e_shoff;
-                        auto* section_headers_base = reinterpret_cast<elf64_shdr*>(object_file.data() + section_headers_offset);
-                        auto section_header_count = hdr.e_shnum;
-                        // First grab reference to section header name section. Usually `.strtab`
-                        // or `.shstrtab`.
-                        auto* shstrtab_hdr = section_headers_base + hdr.e_shstrndx;
-                        auto* shstrtab = object_file.data() + shstrtab_hdr->sh_offset;
-                        // Now try to find section named `.intc_metadata`.
-                        for (decltype(section_header_count) i = 0; i < section_header_count; ++i) {
-                            auto* section_header = section_headers_base + i;
-                            std::string name{shstrtab + section_header->sh_name};
-                            if (name == ".intc_metadata") {
-                                auto begin = object_file.begin() + isz(section_header->sh_offset);
-                                auto end = begin + isz(section_header->sh_size);
-                                metadata_blob.insert(metadata_blob.end(), begin, end);
-                                break;
-                            }
-                        }
+                        auto section = elf::get_section_from_blob(
+                            object_file,
+                            ".intc_metadata"sv
+                                                                  );
+                        metadata_blob = std::move(section.contents());
                     } else LCC_ASSERT(
                         false,
                         "Unrecognized file format of module {} at {}",
