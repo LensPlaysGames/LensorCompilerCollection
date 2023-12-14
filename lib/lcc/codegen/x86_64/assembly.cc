@@ -122,8 +122,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
         );
         if (stack_frame_size) {
             constexpr usz alignment = 16;
-            // FIXME: ALIGN_TO, once we have that.
-            stack_frame_size = (stack_frame_size + ((alignment - (stack_frame_size % alignment)) % alignment));
+            stack_frame_size = utils::AlignTo(stack_frame_size, alignment);
             out += fmt::format("    sub ${}, %rsp\n", stack_frame_size);
         }
 
