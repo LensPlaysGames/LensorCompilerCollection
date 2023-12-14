@@ -6,6 +6,20 @@
 ** TODO Add option to override input language
 [2023-12-13 Wed 11:02]
 
+* Optimisation
+
+** Local Merging Pass
+[2023-12-13 Wed 17:52]
+
+Basically, if you have two locals in a function but their uses don't
+overlap at all, you could use the same stack memory for both of them.
+
+#+begin_src int
+  a : u32 = 34
+  b : u32 = a + 35
+  b
+#+end_src
+
 * Intercept, Language
 
 ** TODO Packed Structs called "Cereals"
