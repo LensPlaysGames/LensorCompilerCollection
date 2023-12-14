@@ -955,9 +955,6 @@ static void assemble(GenericObject& gobj, MFunction& func, Section& text) {
     assemble_inst(gobj, func, push_rbp, text);
     assemble_inst(gobj, func, mov_rsp_into_rbp, text);
 
-    // TODO: OOPS totally forgot to do stackframe handling for locals here.
-    // lol. Gotta subtract the stack frame size from the stack pointer.
-
     // TODO: Different stack frame kinds
     usz stack_frame_size = rgs::fold_left(
         vws::transform(func.locals(), [](AllocaInst* l) {
