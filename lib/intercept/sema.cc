@@ -197,6 +197,17 @@ void intc::Sema::ConvertOrError(Expr** expr, Type* to) {
 }
 
 bool intc::Sema::ConvertToCommonType(Expr** a, Expr** b) {
+    // An integer literal should always be converted into the type of the
+    // other side, favoring the left hand side when ambiguous.
+    bool a_is_literal = is<IntegerLiteral>(*a);
+    bool b_is_literal = is<IntegerLiteral>(*b);
+    bool both_literals = a_is_literal and b_is_literal;
+    if (not both_literals) {
+        if (a_is_literal)
+            return Convert(a, (*b)->type());
+        if (b_is_literal)
+            return Convert(b, (*a)->type());
+    }
     return Convert(a, (*b)->type()) or Convert(b, (*a)->type());
 }
 
