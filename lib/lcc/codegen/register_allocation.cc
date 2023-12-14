@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
-#include <lcc/codegen/x86_64.hh>
+#include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/utils.hh>
 #include <ranges>
 #include <variant>

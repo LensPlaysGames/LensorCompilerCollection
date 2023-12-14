@@ -3,7 +3,7 @@
 
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
-#include <lcc/codegen/x86_64.hh>
+#include <lcc/codegen/x86_64/x86_64.hh>
 
 namespace lcc {
 namespace isel {

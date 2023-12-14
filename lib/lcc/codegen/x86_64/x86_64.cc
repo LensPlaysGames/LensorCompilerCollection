@@ -1,4 +1,4 @@
-#include <lcc/codegen/x86_64.hh>
+#include <lcc/codegen/x86_64/x86_64.hh>
 
 #include <lcc/codegen/mir.hh>
 

@@ -1,8 +1,8 @@
 #include <lcc/codegen/isel.hh>
-#include <lcc/codegen/isel_patterns_x86_64.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/mir_utils.hh>
-#include <lcc/codegen/x86_64.hh>
+#include <lcc/codegen/x86_64/isel_patterns.hh>
+#include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/context.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/target.hh>

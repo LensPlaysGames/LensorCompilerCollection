@@ -4,7 +4,7 @@
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
-#include <lcc/codegen/x86_64.hh>
+#include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/codegen/x86_64/assembly.hh>
 #include <lcc/codegen/x86_64/object.hh>
 #include <lcc/context.hh>
