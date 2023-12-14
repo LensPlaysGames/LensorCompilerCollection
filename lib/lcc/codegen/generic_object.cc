@@ -1,8 +1,8 @@
 #include <cstdio>
 #include <cstring>
-#include <lcc/codegen/elf.h>
-#include <lcc/codegen/generic_object.hh>
 #include <lcc/utils.hh>
+#include <object/elf.h>
+#include <object/generic.hh>
 
 namespace lcc {
 

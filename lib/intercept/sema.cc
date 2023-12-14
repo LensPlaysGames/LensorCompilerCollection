@@ -2,10 +2,10 @@
 #include <intercept/ast.hh>
 #include <intercept/module_description.hh>
 #include <intercept/sema.hh>
-#include <lcc/codegen/elf.h>
 #include <lcc/context.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/macros.hh>
+#include <object/elf.h>
 
 namespace intc = lcc::intercept;
 /// ===========================================================================
@@ -549,9 +549,9 @@ void intc::Sema::AnalyseModule() {
                     );
                     LCC_ASSERT(
                         metadata_blob.at(0) == ModuleDescription::default_version
-                        and metadata_blob.at(1) == ModuleDescription::magic_byte0
-                        and metadata_blob.at(2) == ModuleDescription::magic_byte1
-                        and metadata_blob.at(3) == ModuleDescription::magic_byte2,
+                            and metadata_blob.at(1) == ModuleDescription::magic_byte0
+                            and metadata_blob.at(2) == ModuleDescription::magic_byte1
+                            and metadata_blob.at(3) == ModuleDescription::magic_byte2,
                         "Metadata for module {} at {} has invalid magic bytes",
                         import.name,
                         p

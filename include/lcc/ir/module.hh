@@ -4,7 +4,7 @@
 #include <lcc/forward.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/utils.hh>
-#include <lcc/codegen/generic_object.hh>
+#include <object/generic.hh>
 
 namespace lcc {
 /// An LCC IR module.

@@ -1,5 +1,5 @@
 #include <bit>
-#include <lcc/codegen/generic_object.hh>
+#include <object/generic.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/mir_utils.hh>
 #include <lcc/codegen/x86_64/x86_64.hh>

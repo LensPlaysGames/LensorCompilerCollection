@@ -1,6 +1,6 @@
 #include <algorithm>
 #include <fmt/format.h>
-#include <lcc/codegen/generic_object.hh>
+#include <object/generic.hh>
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
