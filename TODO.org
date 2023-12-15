@@ -6,6 +6,14 @@
 ** TODO Add option to override input language
 [2023-12-13 Wed 11:02]
 
+* ~lcc~, Codegen
+
+** TODO [ISel] Add ~Where~ type to template of ~Pattern~
+[2023-12-14 Thu 17:06]
+
+We want this to contain a list of types that begin with ~Require*~.
+For example, ~RequireOperandSizeLessThan<operand_index, declared_size>~.
+
 * Intercept, Language
 
 ** TODO Packed Structs called "Cereals"
