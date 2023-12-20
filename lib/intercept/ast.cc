@@ -82,7 +82,7 @@ intc::StringLiteral::StringLiteral(
     Module& mod,
     std::string_view value,
     Location location
-) : TypedExpr{
+) : TypedExpr{ // clang-format off
         Kind::StringLiteral,
         location,
         new(mod) ReferenceType(
@@ -94,8 +94,7 @@ intc::StringLiteral::StringLiteral(
             location
         ),
     },
-    _index{mod.intern(value)} {
-}
+    _index{mod.intern(value)} {} // clang-format on
 
 /// Declare a symbol in this scope.
 auto intc::Scope::declare(
@@ -108,9 +107,9 @@ auto intc::Scope::declare(
     /// function declaration.
     if (
         auto it = symbols.find(name);
-        it != symbols.end() and
-        not is<FuncDecl>(it->second) and
-        not is<FuncDecl>(decl)
+        it != symbols.end()
+        and not is<FuncDecl>(it->second)
+        and not is<FuncDecl>(decl)
     ) return Diag::Error(ctx, decl->location(), "Redeclaration of '{}'", name);
 
     /// TODO: Check that this declaration is hygienic if it’s part of a macro.
@@ -224,10 +223,10 @@ bool intc::Type::is_bool() const { return ::is_builtin(this, BuiltinType::Builti
 bool intc::Type::is_byte() const { return ::is_builtin(this, BuiltinType::BuiltinKind::Byte); }
 
 bool intc::Type::is_integer(bool include_bool) const {
-    return is<IntegerType, FFIType>(this) or
-           ::is_builtin(this, BuiltinType::BuiltinKind::Int) or
-           is_byte() or
-           (include_bool and is_bool());
+    return is<IntegerType, FFIType>(this)
+        or ::is_builtin(this, BuiltinType::BuiltinKind::Int)
+        or is_byte()
+        or (include_bool and is_bool());
 }
 
 bool intc::Type::is_signed_int(const Context* ctx) const {
@@ -613,6 +612,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
             case K::IntrinsicCall: PrintBasicInterceptNode("IntrinsicCallExpr", e, e->type()); return;
             case K::MemberAccess: PrintBasicInterceptNode("MemberAccessExpr", e, e->type()); return;
             case K::Module: PrintBasicInterceptNode("ModuleExpr", e, nullptr); return;
+            case K::Sizeof: PrintBasicInterceptNode("SizeofExpr", e, intc::Type::Int); return;
         }
 
         PrintBasicInterceptNode(R"(<???>)", e, e->type());
@@ -702,6 +702,11 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
             case K::Return: {
                 auto ret = as<intc::ReturnExpr>(e);
                 if (ret->value()) PrintChildren({ret->value()}, leading_text);
+            } break;
+
+            case K::Sizeof: {
+                auto sizeof_expr = as<intc::SizeofExpr>(e);
+                PrintChildren({sizeof_expr->expr()}, leading_text);
             } break;
 
             case K::OverloadSet:
@@ -927,7 +932,6 @@ auto intc::Type::string(bool use_colours) const -> std::string {
 void intc::Module::print(bool use_colour) {
     ASTPrinter{use_colour}.print(this);
 }
-
 
 // FIXME: This should probably be backwards for big endian machines, afaik.
 template <typename T>

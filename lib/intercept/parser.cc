@@ -128,6 +128,7 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::TrueKw:
         case Tk::FalseKw:
         case Tk::Colon:
+        case Tk::SizeofKw:
             return true;
 
         case Tk::Invalid:
@@ -284,7 +285,7 @@ auto intc::Parser::ParseBlock(
                     location.len = 1;
                 }
 
-                //Error(location, "Expected ';'")
+                // Error(location, "Expected ';'")
                 Warning(location, "Expected ';'")
                     .attach(false, Diag::Note(context, tok.location, "Before this"));
             }
@@ -560,6 +561,15 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
         case Tk::FalseKw:
             lhs = new (*mod) IntegerLiteral(aint(0), BuiltinType::Bool(*mod, tok.location), tok.location);
             break;
+
+        case Tk::SizeofKw: {
+            auto loc = tok.location;
+            // Yeet `sizeof`
+            NextToken();
+            lhs = ParseExpr();
+            if (not lhs) return lhs.diag();
+            lhs = new (*mod) SizeofExpr(*lhs, {loc, lhs->location()});
+        } break;
 
         /// Because of parsing problems, expressions must not start with a type.
         case Tk::ArbitraryInt:
@@ -1202,7 +1212,7 @@ void intc::Parser::ParseTopLevel() {
                     location.len = 1;
                 }
 
-                //Error(location, "Expected ';'")
+                // Error(location, "Expected ';'")
                 Warning(location, "Expected ';'")
                     .attach(false, Diag::Note(context, tok.location, "Before this"));
             }

@@ -102,6 +102,7 @@ struct ModuleDescription {
                 case K::MemberAccess:
                 case K::Module:
                 case K::Type:
+                case K::Sizeof:
                     break;
             }
             LCC_UNREACHABLE();

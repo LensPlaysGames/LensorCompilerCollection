@@ -32,6 +32,7 @@ lcc::StringMap<Tk> keywords{
     {"false", Tk::FalseKw},
     {"and", Tk::AndKw},
     {"or", Tk::OrKw},
+    {"sizeof", Tk::SizeofKw},
 };
 } // namespace
 
@@ -828,6 +829,7 @@ bool lcc::intercept::InterceptToken::operator==(const InterceptToken& rhs) const
         case TokenKind::FalseKw:
         case TokenKind::AndKw:
         case TokenKind::OrKw:
+        case TokenKind::SizeofKw:
             return true;
     }
 
@@ -898,6 +900,7 @@ std::string_view lcc::intercept::ToString(Tk kind) {
         case Tk::FalseKw: return "false";
         case Tk::AndKw: return "and";
         case Tk::OrKw: return "or";
+        case Tk::SizeofKw: return "sizeof";
         case Tk::Struct: return "struct";
         case Tk::Enum: return "enum";
         case Tk::Lambda: return "lambda";

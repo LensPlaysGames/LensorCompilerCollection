@@ -321,6 +321,7 @@ bool intc::Sema::HasSideEffects(Expr* expr) {
         case Expr::Kind::NameRef:
         case Expr::Kind::Module:
         case Expr::Kind::Type:
+        case Expr::Kind::Sizeof:
             return false;
 
         /// For these, it depends.
@@ -1030,6 +1031,18 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             /// member access is an lvalue, iff the struct is an lvalue.
             m->set_lvalue(ImplicitDereference(&m->object()));
             m->type(it->type);
+        } break;
+
+        case Expr::Kind::Sizeof: {
+            auto sizeof_expr = as<SizeofExpr>(expr);
+            Analyse(sizeof_expr->expr_ref());
+
+            aint value{};
+            if (auto typed_expr = cast<TypedExpr>(sizeof_expr->expr()))
+                value = typed_expr->type()->size(context);
+            else Error(sizeof_expr->location(), "Unhandled expression in sizeof");
+
+            *expr_ptr = new (mod) IntegerLiteral(value, expr->location());
         } break;
 
         /// Unary prefix and postfix expressions.

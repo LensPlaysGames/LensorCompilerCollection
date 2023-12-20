@@ -389,6 +389,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
                 case TokenKind::RBrace:
                 case TokenKind::LBrack: // handled above
                 case TokenKind::RBrack:
+                case TokenKind::SizeofKw:
                 case TokenKind::LParen:
                 case TokenKind::RParen:
                 case TokenKind::Lambda:
@@ -752,6 +753,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         // no-op/handled elsewhere
         case K::Module: break;
+        case K::Sizeof: break;
         case K::Type: break;
         case K::TypeDecl: break;
         case K::TypeAliasDecl: break;

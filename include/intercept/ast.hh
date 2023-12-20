@@ -100,6 +100,7 @@ enum struct TokenKind {
     OrKw,
     IntKw,
     ArbitraryInt,
+    SizeofKw,
     For,
     Return,
     Export,
@@ -864,6 +865,8 @@ public:
         Type,
         MemberAccess,
         Module,
+
+        Sizeof, // replaced during sema
     };
 
 private:
@@ -1462,6 +1465,24 @@ public:
     }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::Module; }
+};
+
+class SizeofExpr : public Expr {
+    Expr* _expr;
+
+public:
+    SizeofExpr(Expr* _expression, Location location)
+        : Expr(Kind::Sizeof, location), _expr(_expression) {}
+
+    auto expr() const -> Expr* {
+        return _expr;
+    }
+
+    auto expr_ref() -> Expr** {
+        return &_expr;
+    }
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Sizeof; }
 };
 
 } // namespace lcc::intercept
