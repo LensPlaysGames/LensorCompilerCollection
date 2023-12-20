@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
             format = lcc::Format::gnu_as_att_assembly;
         } else if (*format_string == "obj") {
 #if defined(_MSC_VER)
-            format = lcc::Format::coff:object;
+            format = lcc::Format::coff_object;
 #else
             format = lcc::Format::elf_object;
 #endif
