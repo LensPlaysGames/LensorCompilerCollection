@@ -32,7 +32,7 @@ The use of cereals would be for serialisation and deserialisation,
 where you sometimes need exact bit or byte types that don't necessarily
 follow all padding rules and such.
 
-** TODO ~:~ unary prefix operator takes in a type and returns a type expression
+** DONE ~:~ unary prefix operator takes in a type and returns a type expression
 [2023-12-09 Sat 18:14]
 
 This is basically just to make parsing easier, as expressions can't
@@ -42,7 +42,9 @@ I don't necessarily know /how/ I'll be using this yet, but I know this
 is good syntax, as it is consistent with how types are written in
 declarations.
 
-** TODO ~#~ unary prefix operator: "sizeof"
+DONE [2023-12-20 Wed 11:47]
+
+** DONE ~#~ unary prefix operator: "sizeof"
 [2023-12-09 Sat 18:17]
 
 #+begin_src int
@@ -58,6 +60,12 @@ declarations.
   foo : something;
   #foo ;; 2
 #+end_src
+
+[2023-12-20 Wed 10:58]
+I've decided I want to start out with the ~sizeof~ keyword as the unary
+prefix operator, instead of the symbol ~#~.
+
+DONE [2023-12-20 Wed 11:47]
 
 ** TODO Error on non-hygienic declarations when defining a macro
 [2023-12-09 Sat 18:22]
