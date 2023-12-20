@@ -58,6 +58,14 @@ using options = clopts< // clang-format off
             "obj", "elf", "coff"
         >
     >,
+    option<"-x", "What language to parse input code as (default: extension based)",
+        values<
+            "c",
+            "int",
+            "ir",
+            "laye"
+        >
+    >,
     option<"--color", "Whether to include colours in the output (default: auto)",
         values<"always", "auto", "never">
     >,
@@ -175,6 +183,7 @@ int main(int argc, char** argv) {
 
     // NOTE: Moves the input file, so, uhh, don't use that after passing it to
     // this.
+    auto specified_language = opts.get_or<"-x">("default");
     auto GenerateOutputFile = [&](auto& input_file, std::string_view output_file_path) {
         auto path_str = input_file.path.string();
         auto& file = context.create_file(
@@ -183,14 +192,14 @@ int main(int argc, char** argv) {
         );
 
         /// LCC IR.
-        if (path_str.ends_with(".lcc")) {
+        if (specified_language == "ir" or (specified_language == "default" and path_str.ends_with(".lcc"))) {
             auto mod = lcc::Module::Parse(&context, file);
             if (context.has_error()) return; // the error condition is handled by the caller already
             return EmitModule(mod.get(), path_str, output_file_path);
         }
 
         /// Intercept.
-        else if (path_str.ends_with(".int")) {
+        else if (specified_language == "int" or (specified_language == "default" and path_str.ends_with(".int"))) {
             /// Parse the file.
             auto mod = lcc::intercept::Parser::Parse(&context, file);
             if (context.has_error()) return; // the error condition is handled by the caller already
@@ -214,7 +223,7 @@ int main(int argc, char** argv) {
         }
 
         /// Laye.
-        else if (path_str.ends_with(".laye")) {
+        else if (specified_language == "laye" or (specified_language == "default" and path_str.ends_with(".laye"))) {
             auto laye_context = new lcc::laye::LayeContext{&context};
 
             /// Parse the file.
@@ -247,7 +256,7 @@ int main(int argc, char** argv) {
         }
 
         /// C.
-        else if (path_str.ends_with(".c")) {
+        else if (specified_language == "c" or (specified_language == "default" and path_str.ends_with(".c"))) {
             /// Parse the file.
             auto c_context = new lcc::c::CContext{&context};
             auto translation_unit = lcc::c::Parser::Parse(c_context, file);
