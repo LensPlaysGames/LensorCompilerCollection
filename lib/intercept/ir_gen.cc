@@ -108,18 +108,19 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
         update_block(new (*module) lcc::Block(fmt::format("body.{}", total_block)));
     }
 
+    using K = intercept::Expr::Kind;
     switch (expr->kind()) {
-        case intercept::Expr::Kind::Block: {
+        case K::Block: {
             for (auto e : as<BlockExpr>(expr)->children()) generate_expression(e);
         } break;
 
         // Will be inlined anywhere it is used; a no-op for actual generation.
-        case intercept::Expr::Kind::IntegerLiteral: {
+        case K::IntegerLiteral: {
             auto* literal = new (*module) lcc::IntegerConstant(Convert(ctx, expr->type()), as<IntegerLiteral>(expr)->value());
             generated_ir[expr] = literal;
         } break;
 
-        case intercept::Expr::Kind::VarDecl: {
+        case K::VarDecl: {
             const auto& decl = as<VarDecl>(expr);
             switch (decl->linkage()) {
                 case Linkage::LocalVar: {
@@ -162,7 +163,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         } break;
 
-        case Expr::Kind::Unary: {
+        case K::Unary: {
             const auto& unary_expr = as<UnaryExpr>(expr);
 
             generate_expression(unary_expr->operand());
@@ -196,7 +197,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             }
         } break;
 
-        case intercept::Expr::Kind::Binary: {
+        case K::Binary: {
             const auto& binary_expr = as<BinaryExpr>(expr);
             const auto& lhs_expr = binary_expr->lhs();
             const auto& rhs_expr = binary_expr->rhs();
@@ -413,7 +414,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             insert(as<Inst>(generated_ir[expr]));
         } break;
 
-        case intercept::Expr::Kind::Cast: {
+        case K::Cast: {
             auto cast = as<CastExpr>(expr);
             generate_expression(cast->operand());
 
@@ -475,7 +476,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         } break;
 
-        case intercept::Expr::Kind::EvaluatedConstant: {
+        case K::EvaluatedConstant: {
             auto* constant = as<ConstantExpr>(expr);
             EvalResult result = constant->value();
             if (result.is_null()) {
@@ -488,7 +489,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             }
         } break;
 
-        case intercept::Expr::Kind::NameRef: {
+        case K::NameRef: {
             auto* name_ref = as<NameRefExpr>(expr);
 
             if (is<ObjectDecl>(name_ref->target()) and
@@ -499,7 +500,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             generated_ir[expr] = generated_ir[name_ref->target()];
         } break;
 
-        case Expr::Kind::Return: {
+        case K::Return: {
             auto* ret_expr = as<ReturnExpr>(expr);
             if (ret_expr->value()) generate_expression(ret_expr->value());
             auto* ret = new (*module) ReturnInst(generated_ir[ret_expr->value()], expr->location());
@@ -507,7 +508,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             insert(ret);
         } break;
 
-        case Expr::Kind::While: {
+        case K::While: {
             // +---------+
             // | current |
             // +---------+        ,---------+
@@ -550,7 +551,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             update_block(exit);
         } break;
 
-        case Expr::Kind::For: {
+        case K::For: {
             // +------------------+
             // | current          |
             // | emit initialiser |
@@ -594,7 +595,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             update_block(exit);
         } break;
 
-        case Expr::Kind::If: {
+        case K::If: {
             ///         +---------+         |
             ///         | current |         |
             ///         +---------+         |
@@ -658,11 +659,11 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 
         } break;
 
-        case Expr::Kind::StringLiteral:
+        case K::StringLiteral:
             generated_ir[expr] = string_literals[as<StringLiteral>(expr)->string_index()];
             break;
 
-        case Expr::Kind::Call: {
+        case K::Call: {
             const auto& call = as<CallExpr>(expr);
 
             generate_expression(call->callee());
@@ -696,7 +697,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             insert(ir_call);
         } break;
 
-        case Expr::Kind::IntrinsicCall: {
+        case K::IntrinsicCall: {
             auto intrinsic = as<IntrinsicCallExpr>(expr);
             switch (intrinsic->intrinsic_kind()) {
                 /// Handled by sema.
@@ -726,7 +727,7 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             }
         } break;
 
-        case Expr::Kind::MemberAccess: {
+        case K::MemberAccess: {
             auto member_access = as<MemberAccessExpr>(expr);
 
             generate_expression(member_access->object());
@@ -739,22 +740,23 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
             insert(gmp);
         } break;
 
-        case Expr::Kind::EnumeratorDecl: {
+        case K::EnumeratorDecl: {
             auto enumerator = as<EnumeratorDecl>(expr);
             generated_ir[expr] = new (*module) IntegerConstant(Convert(ctx, enumerator->type()), enumerator->value());
         } break;
 
-        case Expr::Kind::CompoundLiteral: {
+        case K::CompoundLiteral: {
             // TODO: I need help with this. What IR does it make?
             LCC_ASSERT(false, "TODO: I'm blanking on how to implement compound literal IRGen, so I'm going to wait until I can talk to somebody smarter than me.");
         } break;
 
         // no-op/handled elsewhere
-        case Expr::Kind::Module: break;
-        case Expr::Kind::TypeDecl: break;
-        case Expr::Kind::TypeAliasDecl: break;
-        case Expr::Kind::FuncDecl: break;
-        case Expr::Kind::OverloadSet: break;
+        case K::Module: break;
+        case K::Type: break;
+        case K::TypeDecl: break;
+        case K::TypeAliasDecl: break;
+        case K::FuncDecl: break;
+        case K::OverloadSet: break;
     }
 }
 

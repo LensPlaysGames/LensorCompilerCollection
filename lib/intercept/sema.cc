@@ -320,6 +320,7 @@ bool intc::Sema::HasSideEffects(Expr* expr) {
         case Expr::Kind::OverloadSet:
         case Expr::Kind::NameRef:
         case Expr::Kind::Module:
+        case Expr::Kind::Type:
             return false;
 
         /// For these, it depends.
@@ -520,7 +521,7 @@ void intc::Sema::AnalyseModule() {
                         auto section = elf::get_section_from_blob(
                             object_file,
                             ".intc_metadata"sv
-                                                                  );
+                        );
                         metadata_blob = std::move(section.contents());
                     } else LCC_ASSERT(
                         false,
@@ -1052,6 +1053,7 @@ bool intc::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             break;
 
         /// The actual work here is analysing the type, so this is a no-op.
+        case Expr::Kind::Type:
         case Expr::Kind::TypeDecl:
         case Expr::Kind::TypeAliasDecl:
             break;

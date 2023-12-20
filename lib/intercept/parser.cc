@@ -127,6 +127,7 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::Expression:
         case Tk::TrueKw:
         case Tk::FalseKw:
+        case Tk::Colon:
             return true;
 
         case Tk::Invalid:
@@ -135,7 +136,6 @@ constexpr bool MayStartAnExpression(intc::TokenKind kind) {
         case Tk::RBrack:
         case Tk::RBrace:
         case Tk::Comma:
-        case Tk::Colon:
         case Tk::Semicolon:
         case Tk::Dot:
         case Tk::Star:
@@ -633,10 +633,19 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
             auto loc = tok.location;
             NextToken();
             auto ty = ParseType();
+            // FIXME: Isn't this supposed to be if (*not* ty)?? or (ty and ...)?
             if (ty or not is<FuncType>(*ty)) return Error("Type of lambda must be a function type");
             auto func_ty = cast<FuncType>(ty.value());
             lhs = ParseFuncDecl("", func_ty, false);
             lhs->location({loc, lhs->location()});
+        } break;
+
+        case TokenKind::Colon: {
+            auto loc = tok.location;
+            NextToken(); // yeet `:`
+            auto ty = ParseType();
+            if (not ty) return ty.diag();
+            lhs = new (*mod) TypeExpr(*ty, {loc, ty->location()});
         } break;
 
         case TokenKind::Comma:
@@ -659,7 +668,6 @@ auto intc::Parser::ParseExpr(isz current_precedence, bool single_expression) -> 
         case TokenKind::Gt:
         case TokenKind::Le:
         case TokenKind::Ge:
-        case TokenKind::Colon:
         case TokenKind::ColonEq:
         case TokenKind::ColonColon:
         case TokenKind::Do:

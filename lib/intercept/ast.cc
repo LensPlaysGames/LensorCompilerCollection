@@ -600,6 +600,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
 
             case K::OverloadSet: PrintBasicInterceptNode("OverloadSet", e, e->type()); return;
             case K::EvaluatedConstant: PrintBasicInterceptNode("ConstantExpr", e, e->type()); return;
+            case K::Type: PrintBasicInterceptNode("TypeExpr", e, e->type()); return;
             case K::TypeDecl: PrintBasicInterceptNode("TypeDecl", e, e->type()); return;
             case K::TypeAliasDecl: PrintBasicInterceptNode("TypeAliasDecl", e, e->type()); return;
             case K::StringLiteral: PrintBasicInterceptNode("StringLiteral", e, e->type()); return;
@@ -713,6 +714,7 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
             case K::IntrinsicCall:
             case K::MemberAccess:
             case K::Module:
+            case K::Type:
                 break;
         }
     }

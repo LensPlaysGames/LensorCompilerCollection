@@ -22,6 +22,7 @@ bool lcc::intercept::Expr::evaluate(const Context* ctx, EvalResult& out, bool re
         case Kind::MemberAccess:
         case Kind::EnumeratorDecl:
         case Kind::Module:
+        case Kind::Type:
         not_constexpr:
             if (required) Diag::Error(ctx, location(), "Not a constant expression");
             return false;

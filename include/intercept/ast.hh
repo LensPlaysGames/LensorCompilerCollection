@@ -861,6 +861,7 @@ public:
         Binary,
 
         NameRef,
+        Type,
         MemberAccess,
         Module,
     };
@@ -1410,6 +1411,15 @@ public:
     void target(Expr* target) { _target = target; }
 
     static bool classof(const Expr* expr) { return expr->kind() == Kind::NameRef; }
+};
+
+class TypeExpr : public TypedExpr {
+
+public:
+    TypeExpr(Type* _ty, Location location)
+        : TypedExpr(Kind::Type, location, _ty) {}
+
+    static bool classof(const Expr* expr) { return expr->kind() == Kind::Type; }
 };
 
 class MemberAccessExpr : public TypedExpr {

@@ -73,33 +73,35 @@ struct ModuleDescription {
         TypeIndex type_index;
 
         static constexpr Kind get_kind(Decl* decl) {
+            using K = intercept::Expr::Kind;
             switch (decl->kind()) {
                 // All kinds of decl must go here
-                case intercept::Expr::Kind::TypeDecl: return Kind::TYPE;
-                case intercept::Expr::Kind::TypeAliasDecl: return Kind::TYPE_ALIAS;
-                case intercept::Expr::Kind::EnumeratorDecl: return Kind::ENUMERATOR;
-                case intercept::Expr::Kind::VarDecl: return Kind::VARIABLE;
-                case intercept::Expr::Kind::FuncDecl: return Kind::FUNCTION;
+                case K::TypeDecl: return Kind::TYPE;
+                case K::TypeAliasDecl: return Kind::TYPE_ALIAS;
+                case K::EnumeratorDecl: return Kind::ENUMERATOR;
+                case K::VarDecl: return Kind::VARIABLE;
+                case K::FuncDecl: return Kind::FUNCTION;
 
                 // Non-decl kinds
-                case intercept::Expr::Kind::While:
-                case intercept::Expr::Kind::For:
-                case intercept::Expr::Kind::Return:
-                case intercept::Expr::Kind::IntegerLiteral:
-                case intercept::Expr::Kind::StringLiteral:
-                case intercept::Expr::Kind::CompoundLiteral:
-                case intercept::Expr::Kind::OverloadSet:
-                case intercept::Expr::Kind::EvaluatedConstant:
-                case intercept::Expr::Kind::If:
-                case intercept::Expr::Kind::Block:
-                case intercept::Expr::Kind::Call:
-                case intercept::Expr::Kind::IntrinsicCall:
-                case intercept::Expr::Kind::Cast:
-                case intercept::Expr::Kind::Unary:
-                case intercept::Expr::Kind::Binary:
-                case intercept::Expr::Kind::NameRef:
-                case intercept::Expr::Kind::MemberAccess:
-                case intercept::Expr::Kind::Module:
+                case K::While:
+                case K::For:
+                case K::Return:
+                case K::IntegerLiteral:
+                case K::StringLiteral:
+                case K::CompoundLiteral:
+                case K::OverloadSet:
+                case K::EvaluatedConstant:
+                case K::If:
+                case K::Block:
+                case K::Call:
+                case K::IntrinsicCall:
+                case K::Cast:
+                case K::Unary:
+                case K::Binary:
+                case K::NameRef:
+                case K::MemberAccess:
+                case K::Module:
+                case K::Type:
                     break;
             }
             LCC_UNREACHABLE();
