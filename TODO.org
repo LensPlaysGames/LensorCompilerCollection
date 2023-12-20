@@ -3,11 +3,6 @@
 
 * ~lcc~, Driver
 
-** DONE Add option to override input language
-[2023-12-13 Wed 11:02]
-
-DONE [2023-12-20 Wed 10:27]
-
 * ~lcc~, Codegen
 
 ** TODO [ISel] Add ~Where~ type to template of ~Pattern~
