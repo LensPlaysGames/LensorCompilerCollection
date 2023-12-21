@@ -38,6 +38,60 @@ So, we basically need a "base, size, capacity" triplet and that will be
 the actual value that is passed around when the variable is accessed
 and such, just like a vector.
 
+
+- Creating a new dynamic array
+
+Sema would have to replace a declaration of a dynamic array with a
+declaration of a vector-style struct.
+
+- Appending to a dynamic array
+
+Using the binary add-then-assign operator ~:+~ with the lhs as a
+dynamic array and the rhs as an expression with a type convertible to
+the dynamic array's element type, the following:
+
+~foo :+ 69~
+
+would be replaced with this.
+
+#+begin_src int
+  ;; If capacity is not large enough to store added item, allocate a larger
+  ;; chunk of memory, copy current data into that, then free the old memory.
+  if foo.capacity <= foo.size then {
+    ;; Grow capacity.
+    if foo.capacity = 0 then
+      foo.capacity := 8;
+    else foo.capacity := foo.capacity << 1;
+    ;; Allocate new (larger) chunk of memory.
+    new_base := allocate foo.capacity;
+    ;; Copy from old memory to new memory
+    memcpy new_base foo.base foo.size;
+    ;; Update dynamic array base to new base, then deallocate the old base.
+    old_base := foo.base;
+    foo.base := new_base;
+    deallocate old_base;
+  };
+  ;; Actually write the new element.
+  @foo.base[foo.size] := 69;
+  ;; Update size of dynamic array to include new element.
+  foo.size :+ 1;
+#+end_src
+
+It's possible that we may want to just make a function for each dynamic
+array element type that takes in a reference to that type of dynamic
+array and a value and returns a new dynamic array. So, we would end up
+just replacing ~:+~ with a function call.
+
+- Accessing memory of a dynamic array
+
+Using the subscript operator ~[]~ with the lhs as a dynamic array and
+the rhs as some expression convertible to an integer will fetch the pointer
+to that position in memory iff it is within bounds. Iff the memory
+attempted to be accessed is NOT within ~[base, base + capacity)~, the
+program may do an implementation-defined crashing behaviour.
+
+~foo[3]  ->  if 3 >= foo.size then CRASH, foo.base[3];~
+
 *** TODO Slices
 [2023-12-20 Wed 17:07]
 
