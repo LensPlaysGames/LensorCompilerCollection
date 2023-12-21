@@ -82,7 +82,8 @@ intc::StringLiteral::StringLiteral(
     Module& mod,
     std::string_view value,
     Location location
-) : TypedExpr{ // clang-format off
+) : TypedExpr{
+    // clang-format off
         Kind::StringLiteral,
         location,
         new(mod) ReferenceType(
@@ -750,8 +751,10 @@ struct ASTPrinter : lcc::utils::ASTPrinter<ASTPrinter, intc::Expr, intc::Type> {
 
     void print(intc::Module* mod) {
         printed_functions.insert(mod->top_level_func());
-        for (auto* node : as<intc::BlockExpr>(mod->top_level_func()->body())->children())
-            PrintTopLevelNode(node);
+        if (auto funcbody = cast<intc::BlockExpr>(mod->top_level_func()->body())) {
+            for (auto* node : funcbody->children())
+                PrintTopLevelNode(node);
+        } else PrintTopLevelNode(mod->top_level_func()->body());
 
         for (auto* f : mod->functions())
             if (not printed_functions.contains(f))
@@ -1096,9 +1099,8 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             // Serialise parameter types and fixup parameter type indices previously
             // allocated.
             auto* param_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + param_types_offset);
-            for (auto [index, param] : vws::enumerate(type->params())) {
+            for (auto param : type->params())
                 *param_types_ptr++ = serialise(out, cache, param.type);
-            }
 
             // Serialise return type and fixup return type index previously allocated.
             auto* return_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + return_type_offset);
@@ -1151,8 +1153,54 @@ lcc::u16 intc::Module::serialise(std::vector<u8>& out, std::vector<Type*>& cache
             *element_type_ptr = serialise(out, cache, type->element_type());
         } break;
 
-        case Type::Kind::Struct: // will be a lot like function
-            LCC_TODO("Handle serialisation of type {}", *ty);
+        // StructType:
+        //     size_in_bytes :u16
+        //     align_in_bytes :u16
+        //     member_count :u16
+        //     member_types :TypeIndex[member_count]
+        //     member_data :(byte_offset :u16, name_length :u16, member_name :u8[name_length])[member_count]
+        case Type::Kind::Struct: {
+            auto type = as<StructType>(ty);
+
+            auto size_in_bytes = u16(type->byte_size());
+            auto size_in_bytes_bytes = to_bytes(size_in_bytes);
+            out.insert(out.end(), size_in_bytes_bytes.begin(), size_in_bytes_bytes.end());
+
+            auto align_in_bytes = u16(type->alignment());
+            auto align_in_bytes_bytes = to_bytes(align_in_bytes);
+            out.insert(out.end(), align_in_bytes_bytes.begin(), align_in_bytes_bytes.end());
+
+            auto& members = type->members();
+
+            auto member_count = u16(members.size());
+            auto member_count_bytes = to_bytes(member_count);
+            out.insert(out.end(), member_count_bytes.begin(), member_count_bytes.end());
+
+            // Allocate enough room to represent member types, once we are able to
+            // serialise them, keeping track of where they are so we can fix them up
+            // later.
+            auto member_types_offset = out.size();
+            out.insert(out.end(), member_count * sizeof(ModuleDescription::TypeIndex), 0);
+
+            // Member Data
+            for (const auto& member : members) {
+                auto byte_offset = u16(member.byte_offset);
+                auto byte_offset_bytes = to_bytes(byte_offset);
+                out.insert(out.end(), byte_offset_bytes.begin(), byte_offset_bytes.end());
+
+                auto name_length = member.name.length();
+                auto name_length_bytes = to_bytes(name_length);
+                out.insert(out.end(), name_length_bytes.begin(), name_length_bytes.end());
+
+                out.insert(out.end(), member.name.begin(), member.name.end());
+            }
+
+            // Serialise member types and fixup member type indices previously
+            // allocated.
+            auto* member_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + member_types_offset);
+            for (auto& member : members)
+                *member_types_ptr++ = serialise(out, cache, member.type);
+        } break;
     }
 
     return type_index;
