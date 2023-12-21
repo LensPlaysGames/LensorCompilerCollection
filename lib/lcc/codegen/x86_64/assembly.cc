@@ -99,12 +99,14 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
     }
 
     for (auto& function : mir) {
-        if (function.linkage() == Linkage::Imported) {
+        if (function.linkage() == Linkage::Exported || function.linkage() == Linkage::Reexported)
+            out += fmt::format("    .globl {}\n", function.name());
+
+        if (function.linkage() == Linkage::Imported || function.linkage() == Linkage::Reexported) {
             out += fmt::format("    .extern {}\n", function.name());
             continue;
         }
-        if (function.linkage() == Linkage::Exported)
-            out += fmt::format("    .globl {}\n", function.name());
+
         out += fmt::format("{}:\n", function.name());
 
         // Function Header
