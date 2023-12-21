@@ -495,17 +495,26 @@ void intc::Sema::Analyse(Context* ctx, Module& m, bool use_colours) {
 void intc::Sema::AnalyseModule() {
     /// Load imported modules.
     for (auto import : mod.imports()) {
-        // TODO: Using module name, look in all include directories for
+        bool loaded{false};
+        std::vector<std::string> paths_tried{};
+        // Using module name, look in all include directories for
         // "<module name>.o". Parse the object file and get the `.intc_metadata`
         // section out of it, then deserialise that into the module.
         for (auto include_dir : context->include_directories()) {
-            auto path_base = include_dir + std::filesystem::path::preferred_separator + import.name;
+            auto path_base0 = include_dir + std::filesystem::path::preferred_separator + import.name;
+            auto path_base1 = include_dir + std::filesystem::path::preferred_separator + "lib" + import.name;
             auto paths = {
-                path_base + ".o",
-                path_base + ".obj",
+                path_base0 + ".o",
+                path_base0 + ".obj",
+                path_base0 + ".a",
+                path_base1 + ".o",
+                path_base1 + ".obj",
+                path_base1 + ".a",
             };
             for (auto p : paths) {
+                paths_tried.push_back(p);
                 if (std::filesystem::exists(p)) {
+                    fmt::print("Found IMPORT {} at {}\n", import.name, p);
                     // Open file, get contents
                     auto object_file = File::Read(p);
                     LCC_ASSERT(
@@ -551,10 +560,20 @@ void intc::Sema::AnalyseModule() {
                     // Deserialise metadata blob into a module
                     // FIXME: (this module? or a new module?)
                     mod.deserialise(context, metadata_blob);
+                    loaded = true;
                     break;
                 }
             }
         }
+
+        LCC_ASSERT(
+            loaded,
+            "Could not find imported module {} in any include directory\n"
+            "Paths tried:\n"
+            "{}",
+            import.name,
+            fmt::join(paths_tried, "\n")
+        );
     }
 
     /// Analyse the signatures of all functions. This must be done
