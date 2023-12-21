@@ -160,3 +160,6 @@ side type, should it be convertible.
 An /explicit/ cast means the programmer specified they want it to
 happen. I *WANT* an assignment to happen if I write it, and I shouldn't
 be forced to write `as typeof x` or similar just to make it work.
+
+** TODO ~usz~ and ~isz~
+[2023-12-21 Thu 11:32]
