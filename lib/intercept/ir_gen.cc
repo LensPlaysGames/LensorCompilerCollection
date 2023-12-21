@@ -765,22 +765,24 @@ void intercept::IRGen::generate_expression(intercept::Expr* expr) {
 void IRGen::generate_function(intercept::FuncDecl* f) {
     function = as<Function>(generated_ir[f]);
 
-    // Hard to generate code for a function without a body.
-    if (auto* expr = f->body()) {
-        block = new (*module) lcc::Block(fmt::format("body.{}", total_block));
-        update_block(block);
+    if (f->linkage() != Linkage::Imported and f->linkage() != Linkage::Reexported) {
+        // Hard to generate code for a function without a body.
+        if (auto* expr = f->body()) {
+            block = new (*module) lcc::Block(fmt::format("body.{}", total_block));
+            update_block(block);
 
-        // Bind param instructions.
-        for (auto [i, param] : vws::enumerate(f->param_decls())) {
-            auto inst = function->param(usz(i));
-            auto alloca = new (*module) AllocaInst(inst->type(), param->location());
-            auto store = new (*module) StoreInst(inst, alloca);
-            insert(alloca);
-            insert(store);
-            generated_ir[param] = alloca;
+            // Bind param instructions.
+            for (auto [i, param] : vws::enumerate(f->param_decls())) {
+                auto inst = function->param(usz(i));
+                auto alloca = new (*module) AllocaInst(inst->type(), param->location());
+                auto store = new (*module) StoreInst(inst, alloca);
+                insert(alloca);
+                insert(store);
+                generated_ir[param] = alloca;
+            }
+
+            generate_expression(expr);
         }
-
-        generate_expression(expr);
     }
 }
 
