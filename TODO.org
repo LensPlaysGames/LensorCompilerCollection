@@ -1,8 +1,6 @@
 #+title: LCC TODO
 #+author: Lens_r
 
-* ~lcc~, Driver
-
 * ~lcc~, Codegen
 
 ** TODO [ISel] Add ~Where~ type to template of ~Pattern~
@@ -12,6 +10,60 @@ We want this to contain a list of types that begin with ~Require*~.
 For example, ~RequireOperandSizeLessThan<operand_index, declared_size>~.
 
 * Intercept, Language
+
+** TODO Dynamic sized array
+[2023-12-20 Wed 16:57]
+
+Basically, I want a way to do the following
+
+#+begin_src int
+  foo_n : u8[](count : int, value : u8) {
+    out : u8[];
+    for i : int, i < count, i := i + 1 do {
+      out :+ value;
+    }
+    out;
+  };
+#+end_src
+
+This ~u8[]~ type is an "unbounded" array type. It can keep on growing
+and growing or shrinking and shrinking. The idea is that we have a sort
+of "C++ vector" built in at the language level.
+
+For now, I am not going to worry about allocators. There can be a whole
+way to do that in the future when it matters. For now, I think having
+this built-in would be huge for the language.
+
+So, we basically need a "base, size, capacity" triplet and that will be
+the actual value that is passed around when the variable is accessed
+and such, just like a vector.
+
+*** TODO Slices
+[2023-12-20 Wed 17:07]
+
+Instead of a "base, size, capacity" triplet, a slice would just be a
+base and a size. A slice would not own the data, but simply allow for a
+"view" of it to be taken. A slice would have to be initialised in order
+to be created at all.
+
+#+begin_src int
+  slice : u8[/]
+#+end_src
+
+
+** TODO ~:+~, ~:-~, etc.
+[2023-12-20 Wed 17:05]
+
+~x :+ 4~ = ~x := x + 4~, and so on.
+
+** TODO ~alignof~
+[2023-12-20 Wed 11:48]
+
+** TODO ~typeof~
+[2023-12-20 Wed 11:48]
+
+Yield a type expression (~TypeExpr~) corresponding to the type of the
+following expression.
 
 ** TODO Packed Structs called "Cereals"
 [2023-12-09 Sat 17:39]
