@@ -223,8 +223,10 @@ bool intc::Sema::Deproceduring(Expr** expr_ptr) {
         and (not ty->is_pointer() or not ty->elem()->is_function()))
         return false;
 
-    /// Function declarations are never deprocedured automatically.
-    if (is<FuncDecl>(expr)) return false;
+    /// Declarations are never deprocedured automatically.
+    if (is<Decl>(expr)) return false;
+    /// Block expressions are never deprocedured automatically.
+    if (is<BlockExpr>(expr)) return false;
 
     /// Functions that take arguments are not affected.
     auto ftype = cast<FuncType>(ty->is_function() ? ty : ty->elem());
