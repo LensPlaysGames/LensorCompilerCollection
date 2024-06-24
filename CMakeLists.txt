@@ -9,31 +9,31 @@ set(
   should be true *unless* you are making distributed binaries."
 )
 
-## ============================================================================
-##  Global CMake Variables
-## ============================================================================
+# ============================================================================
+#  Global CMake Variables
+# ============================================================================
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # Export compilation database in JSON format.
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-## ============================================================================
-##  Other Global Settings
-## ============================================================================
+# ============================================================================
+#  Other Global Settings
+# ============================================================================
 # Use `ccache` if it is installed in system's PATH.
 find_program(CCACHE_PROGRAM ccache)
 if (CCACHE_PROGRAM)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
 endif()
 
-## Turn on diagnostics colours.
+# Turn on diagnostics colours.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-fdiagnostics-color=always)
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     add_compile_options(-fcolor-diagnostics)
 endif()
 
-## Use mold as the default linker, if it exists.
+# Use mold as the default linker, if it exists.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     find_program(MOLD_LINKER "mold")
     if (MOLD_LINKER)
@@ -41,15 +41,15 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
     endif()
 endif()
 
-## ============================================================================
-##  Compiler options.
-## ============================================================================
+# ============================================================================
+#  Compiler options.
+# ============================================================================
 add_library(options INTERFACE)
 
-## Flags for Clang and GCC.
+# Flags for Clang and GCC.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(options INTERFACE
-        ## Warnings.
+        # Warnings.
         -Wall -Wextra     # Enable ‘all’ warnings.
         -Wundef           # Invalid #undef or undefined macro in #if.
         -Wcast-align      # Casting that changes alignment.
@@ -57,23 +57,23 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
         -Wsign-conversion # Implicit sign conversions.
         -Wformat=2        # Stricter format checking.
 
-        ## Disabled warnings.
+        # Disabled warnings.
         -Wno-unused-function
         -Wno-unused-local-typedefs
         -Wno-unused-parameter
 
-        ## NULL Errors.
+        # NULL Errors.
         -Werror=nonnull # Passing NULL to nonnull parameter.
 
-        ## Memory Errors.
+        # Memory Errors.
         -Werror=address              # Suspicious use of addresses.
         -Werror=init-self            # Initialization of a variable with itself.
         -Werror=uninitialized
 
-        ## Return type.
+        # Return type.
         -Werror=return-type
 
-        ## C/C++.
+        # C/C++.
         -Werror=implicit-fallthrough
         -Werror=missing-include-dirs # User-specified include dir does not exist.
         -Werror=pointer-arith        # Disallow void* and function pointer arithmetic.
@@ -82,7 +82,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
         # -Werror=switch-enum          # Switch on enum (even if there is a default case).
         -Werror=write-strings        # Strings in C should be const char*.
 
-        ## C++.
+        # C++.
         -Werror=missing-field-initializers
         -Werror=non-virtual-dtor
         -Werror=pessimizing-move
@@ -96,7 +96,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clan
     endif()
 endif()
 
-## Additional flags for GCC.
+# Additional flags for GCC.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(options INTERFACE
         -Wlogical-op      # Duplicate or unintended logical operators.
@@ -107,7 +107,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     )
 endif()
 
-## Additional flags for Clang.
+# Additional flags for Clang.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(options INTERFACE
         -Werror=dangling
@@ -115,7 +115,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     )
 endif()
 
-## Flags for MSVC/clang-cl.
+# Flags for MSVC/clang-cl.
 if (MSVC)
     target_compile_options(options INTERFACE
         # Enable ‘all’ warnings.
@@ -132,7 +132,7 @@ if (MSVC)
     )
 endif()
 
-## On Windows, don’t suggest the _s nonsense functions.
+# On Windows, don’t suggest the _s nonsense functions.
 if (WIN32)
     target_compile_definitions(options INTERFACE
         _CRT_SECURE_NO_WARNINGS
@@ -141,7 +141,7 @@ if (WIN32)
     )
 endif()
 
-## Debug/Release flags.
+# Debug/Release flags.
 if (NOT MSVC)
     if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         target_compile_options(options INTERFACE $<$<CONFIG:DEBUG>:-rdynamic>)
@@ -180,10 +180,10 @@ if (NOT WIN32)
     endif()
 endif ()
 
-## ============================================================================
-##  libfmt and include dirs.
-## ============================================================================
-## Find libfmt.
+# ============================================================================
+#  libfmt and include dirs.
+# ============================================================================
+# Find libfmt.
 include(FetchContent)
 set(FETCHCONTENT_QUIET OFF)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
@@ -197,18 +197,18 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(fmtlib)
 target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
 
-## Link against libfmt.
+# Link against libfmt.
 target_link_libraries(options INTERFACE fmt)
 
-## Add ‘include’ as an include dir.
+# Add ‘include’ as an include dir.
 target_include_directories(options INTERFACE include)
 
-## As well as everything in ‘libs’.
+# As well as everything in ‘libs’.
 if (EXISTS ${PROJECT_SOURCE_DIR}/libs)
     file(GLOB libs ${PROJECT_SOURCE_DIR}/libs/*)
 
-    ## Add the include directory to the include path, or the root
-    ## directory if there is no include directory.
+    # Add the include directory to the include path, or the root
+    # directory if there is no include directory.
     foreach(lib ${libs})
         if (IS_DIRECTORY ${lib}/include)
             target_include_directories(options INTERFACE ${lib}/include)
@@ -217,7 +217,7 @@ if (EXISTS ${PROJECT_SOURCE_DIR}/libs)
         endif()
     endforeach()
 
-    ## Also add all of them as subdirectories if they have a CMakeLists.txt.
+    # Also add all of them as subdirectories if they have a CMakeLists.txt.
     foreach (lib ${libs})
         if (EXISTS ${lib}/CMakeLists.txt)
             add_subdirectory(${lib})
@@ -233,26 +233,26 @@ endif()
 # Precompile utils.hh.
 target_precompile_headers(options INTERFACE "${PROJECT_SOURCE_DIR}/include/lcc/utils.hh")
 
-## ============================================================================
-##  Executables and libraries.
-## ============================================================================
-## ‘include’ and ‘lib’ are library sources.
+# ============================================================================
+#  Executables and libraries.
+# ============================================================================
+# ‘include’ and ‘lib’ are library sources.
 file(GLOB_RECURSE library-sources
     "${PROJECT_SOURCE_DIR}/lib/*.cc"
     "${PROJECT_SOURCE_DIR}/include/*.hh"
 )
 
-## Add the main lcc library
+# Add the main lcc library
 add_library(liblcc STATIC ${library-sources})
 set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
 
-## Add the driver.
+# Add the driver.
 add_executable(lcc "${PROJECT_SOURCE_DIR}/src/lcc.cc")
 
-## Set public include dir for lcc.
+# Set public include dir for lcc.
 target_include_directories(liblcc PUBLIC "${PROJECT_SOURCE_DIR}/include")
 
-## Apply our options.
+# Apply our options.
 target_link_libraries(liblcc PRIVATE options)
 target_link_libraries(lcc PRIVATE options liblcc)
 
