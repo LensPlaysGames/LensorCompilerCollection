@@ -1,11 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
-project(LCC VERSION 2.0.0 LANGUAGES C CXX)
+project(LCC VERSION 4.20.0 LANGUAGES C CXX)
 
 # User Option(s)
 set(
   NATIVE_OPT TRUE
   CACHE BOOL
-  "Whether or not to optimise for the system being compiled on. This should be true *unless* you are making distributed binaries."
+  "Whether or not to optimise for the system being compiled on. This
+  should be true *unless* you are making distributed binaries."
 )
 
 ## ============================================================================
@@ -180,29 +181,21 @@ if (NOT WIN32)
 endif ()
 
 ## ============================================================================
-##  Submodules and include dirs.
+##  libfmt and include dirs.
 ## ============================================================================
 ## Find libfmt.
 include(FetchContent)
 set(FETCHCONTENT_QUIET OFF)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 message(STATUS "Checking dependencies ...")
-FetchContent_Declare(fmtlib
+FetchContent_Declare(
+    fmtlib
     GIT_REPOSITORY https://github.com/fmtlib/fmt.git
     GIT_TAG 10.0.0
     SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
 )
 FetchContent_MakeAvailable(fmtlib)
 target_include_directories(options INTERFACE ${fmtlib_SOURCE_DIR}/include)
-
-## Add libclopts.
-FetchContent_Declare(clopts
-    GIT_REPOSITORY https://github.com/Sirraide/clopts.git
-    GIT_TAG v2.0.3
-    SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/clopts"
-)
-FetchContent_MakeAvailable(clopts)
-target_include_directories(options INTERFACE ${clopts_SOURCE_DIR}/include)
 
 ## Link against libfmt.
 target_link_libraries(options INTERFACE fmt)

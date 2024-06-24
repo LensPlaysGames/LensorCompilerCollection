@@ -1,6 +1,7 @@
 #include <c/ast.hh>
 #include <c/parser.hh>
-#include <clopts.hh>
+#include <cstdio>
+#include <fmt/format.h>
 #include <intercept/ast.hh>
 #include <intercept/ir_gen.hh>
 #include <intercept/parser.hh>
@@ -18,6 +19,49 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/platform.hh>
 #include <string>
+#include <vector>
+#include <format>
+
+struct TwoColumnLayoutHelper {
+    struct Column {
+        const std::string_view a;
+        const std::string_view b;
+    };
+    std::vector<Column> columns;
+
+    /// Gap inserted between A and B columns.
+    std::string gap{"    "};
+
+    char padding_character{' '};
+
+    std::string get() const {
+        size_t longest_a_side = 0;
+        for (const auto& c : columns) {
+            if (c.a.size() > longest_a_side)
+                longest_a_side = c.a.size();
+        }
+
+        std::string out{};
+        for (const auto& c : columns) {
+            out += c.a;
+
+            if (c.b.size()) {
+                // Do padding if needed to line up b side
+                for (size_t i = c.a.size(); i < longest_a_side; ++i)
+                    out += padding_character;
+
+                out += gap;
+                out += c.b;
+            }
+        }
+
+        return out;
+    }
+
+    operator std::string() const {
+        return get();
+    }
+};
 
 namespace detail {
 void aluminium_handler() {
@@ -45,68 +89,169 @@ const lcc::Target* default_target =
 
 /// Default format
 const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
-
-using namespace command_line_options;
-using options = clopts< // clang-format off
-    help<>,
-    option<"-o", "Path to the output filepath where target code will be stored">,
-    multiple<option<"-I", "Add a directory to the include search paths">>,
-    option<"-f", "What format to emit code in (default: asm)",
-        values<
-            "llvm",
-            "asm", "gnu-as-att",
-            "obj", "elf", "coff"
-        >
-    >,
-    option<"-x", "What language to parse input code as (default: extension based)",
-        values<
-            "c",
-            "int",
-            "ir",
-            "laye"
-        >
-    >,
-    option<"--color", "Whether to include colours in the output (default: auto)",
-        values<"always", "auto", "never">
-    >,
-    option<"--passes", "Comma-separated list of optimisation passes to run">,
-    experimental::short_option<"-O", "Set optimisation level (default: 0)", values<0, 1, 2, 3>>,
-    flag<"-v", "Enable verbose output">,
-    flag<"--ast", "Print the AST and exit without generating code">,
-    flag<"--sema", "Run sema only and exit">,
-    flag<"--syntax-only", "Do not perform semantic analysis">,
-    flag<"--ir", "Emit LCC intermediate representation and exit">,
-    flag<"--mir", "Emit LCC machine instruction representation at various stages and exit">,
-    func<"--aluminium", "That special something to spice up your compilation", aluminium_handler>,
-    multiple<positional<"filepath", "Path to files that should be compiled", file<std::vector<char>>, true>>
->; // clang-format on
-} // namespace detail
-using detail::options;
-
-[[noreturn]] bool HandleOptParseError(std::string&& msg) {
-    lcc::Diag::Fatal("{}", msg);
 }
 
-int main(int argc, char** argv) {
-    auto opts = options::parse(argc, argv, HandleOptParseError);
+struct Options {
+    bool verbose{false};
+    bool ast{false};
+    bool sema{false};
+    bool syntax{false};
+    bool ir{false};
+    bool mir{false};
+    bool aluminium{false};
+
+    std::vector<std::string> input_files{};
+    std::vector<std::string> include_directories{};
+    std::string output_filepath{};
+    int optimisation{0};
+    std::string optimisation_passes{};
+    std::string color{"auto"};
+    std::string language{"default"};
+    std::string format{"default"};
+
+};
+
+int main(int argc, const char** argv) {
+    Options options{};
+    for (int i = 1; i < argc; ++i) {
+        auto next_arg = [&]() {
+            if (i + 1 >= argc) {
+                fmt::print("CLI ERROR: You probably gave an option and didn't supply a value at the very end of the command line\n");
+                exit(1);
+            }
+            return std::string_view{argv[++i]};
+        };
+        const auto arg = std::string_view{argv[i]};
+        if (arg.substr(0, 3) == "--h" or arg.substr(0, 2) == "-h") {
+            fmt::print("USAGE: {} [FLAGS] [OPTIONS] [SOURCE FILES...]\n", argv[0]);
+            fmt::print("FLAGS:\n");
+            fmt::print("{}",
+                       TwoColumnLayoutHelper {
+                           {
+                               {"  -v", "Enable verbose output\n"},
+                               {"  --ast", "Print the AST and exit without generating code\n"},
+                               {"  --sema", "Run sema only and exit\n"},
+                               {"  --syntax-only", "Do not perform semantic analysis\n"},
+                               {"  --ir", "Emit LCC intermediate representation and exit\n"},
+                               {"  --mir", "Emit LCC machine instruction representation at various stages and exit\n"},
+                               {"  --aluminium", "That special something to spice up your compilation\n"}
+                           },
+                       }.get());
+            fmt::print("OPTIONS:\n");
+            fmt::print("{}",
+                       TwoColumnLayoutHelper {
+                           {
+                               {"  -I", "Add a directory to the include search paths\n"},
+                               {"  -o", "Path to the output filepath where target code will be stored\n"},
+                               {"  -O", "Set optimisation level (default 0)\n"},
+                               {"", "    0, 1, 2, 3\n"},
+                               {"  --passes", "Comma-separated list of optimisation passes to run\n"},
+                               {"  --color", "Whether to include colors colours in the output (default: auto)\n"},
+                               {"", "    always, auto, never\n"},
+                               {"  -x", "What language to parse input code as (default: extension based)\n"},
+                               {"", "    c, glint\n"},
+                               {"  -f", "What format to emit code in (default: asm)\n"},
+                               {"", "    asm, gnu-as-att, obj, elf, coff, llvm\n"},
+                           }
+                       }.get());
+            exit(0);
+        }
+        if (arg == "-v") {
+            options.verbose = true;
+        } else if (arg == "--ast") {
+            options.ast = true;
+        } else if (arg == "--sema") {
+            options.sema = true;
+        } else if (arg == "--syntax-only") {
+            options.syntax = true;
+        } else if (arg == "--ir") {
+            options.ir = true;
+        } else if (arg == "--mir") {
+            options.mir = true;
+        } else if (arg == "--aluminium") {
+            options.aluminium = true;
+        }
+
+        else if (arg == "-I") {
+            // Add a directory to the include search paths
+            auto include_dir = next_arg();
+            options.include_directories.push_back(std::string(include_dir));
+        } else if (arg == "-o") {
+            // Path to the output filepath where target code will be stored
+            auto output_path = next_arg();
+            options.output_filepath = std::string(output_path);
+        } else if (arg == "-O") {
+            // Set optimisation level (default: 0)
+            auto o_level_str = next_arg();
+
+            auto o_level = 0;
+            if (o_level_str == "0")
+                ;
+            else if (o_level_str == "1")
+                o_level = 1;
+            else if (o_level_str == "2")
+                o_level = 2;
+            else if (o_level_str == "3")
+                o_level = 3;
+            else {
+                fmt::print("CLI ERROR: Invalid optimisation level {}\n", o_level_str);
+                exit(1);
+            }
+
+            options.optimisation = o_level;
+        } else if (arg == "--passes") {
+            // Comma-separated list of optimisation passes to run
+            auto passes = next_arg();
+            options.optimisation_passes = passes;
+        } else if (arg == "--color") {
+            // Whether to include colours in the output
+            auto color = next_arg();
+            if (color != "always" and color != "auto" and color != "never") {
+                fmt::print("CLI ERROR: Invalid color level {}\n", color);
+                exit(1);
+            }
+            options.color = color;
+        } else if (arg == "-x") {
+            // What language to parse input code as
+            auto lang = next_arg();
+            if (lang != "c" and lang != "glint") {
+                fmt::print("CLI ERROR: Invalid lang {}\n", lang);
+                exit(1);
+            }
+            options.language = lang;
+        } else if (arg == "-f") {
+            // What format to emit code in
+            auto format = next_arg();
+            // asm, gnu-as-att, obj, elf, coff
+            if (format != "asm" and format != "gnu-as-att" and format != "obj" and format != "elf" and format != "coff" and format != "llvm") {
+                fmt::print("CLI ERROR: Invalid format {}\n", format);
+                exit(1);
+            }
+            options.format = format;
+        }
+        else {
+            // Otherwise, it's a filepath
+            options.input_files.push_back(std::string(arg));
+        }
+    }
 
     /// Determine whether to use colours in the output.
     /// TODO: Enable colours in the console on Windows (for `cmd`).
-    auto colour_opt = opts.get_or<"--color">("auto");
+    auto colour_opt = options.color;
     bool use_colour{};
     if (colour_opt == "always") use_colour = true;
     else if (colour_opt == "never") use_colour = false;
     else use_colour = lcc::platform::StdoutIsTerminal() or lcc::platform::StderrIsTerminal();
 
     // Determine whether we should print MIR or not.
-    bool should_print_mir{opts.get<"--mir">()};
+    bool should_print_mir{options.mir};
 
     /// Get input files
-    auto& input_files = *opts.get<"filepath">();
-    if (opts.get<"-v">()) {
+    auto& input_files = options.input_files;
+    if (options.verbose) {
         fmt::print("Input files:\n");
         for (const auto& input_file : input_files)
-            fmt::print("- {}\n", input_file.path.string());
+            fmt::print("- {}\n", input_file);
     }
 
     if (input_files.empty())
@@ -115,32 +260,31 @@ int main(int argc, char** argv) {
     /// Compile the file.
     // TODO: Get target from "-t" or "--target" command line option.
     auto* format = detail::default_format;
-    if (auto format_string = opts.get<"-f">()) {
-        if (*format_string == "llvm") {
-            format = lcc::Format::llvm_textual_ir;
-        } else if (*format_string == "asm" || *format_string == "gnu-as-att") {
-            format = lcc::Format::gnu_as_att_assembly;
-        } else if (*format_string == "obj") {
+    if (options.format == "llvm") {
+        format = lcc::Format::llvm_textual_ir;
+    } else if (options.format == "asm" || options.format == "gnu-as-att") {
+        format = lcc::Format::gnu_as_att_assembly;
+    } else if (options.format == "obj") {
 #if defined(_MSC_VER)
-            format = lcc::Format::coff_object;
+        format = lcc::Format::coff_object;
 #else
-            format = lcc::Format::elf_object;
+        format = lcc::Format::elf_object;
 #endif
-        } else if (*format_string == "elf") {
-            format = lcc::Format::elf_object;
-        } else if (*format_string == "coff") {
-            format = lcc::Format::coff_object;
-        }
+    } else if (options.format == "elf") {
+        format = lcc::Format::elf_object;
+    } else if (options.format == "coff") {
+        format = lcc::Format::coff_object;
     }
 
     lcc::Context context{
         detail::default_target,
         format,
         use_colour,
-        should_print_mir};
+        should_print_mir
+    };
 
-    for (const auto& dir : *opts.get<"-I">()) {
-        if (opts.get<"-v">()) fmt::print("Added input directory: {}\n", dir);
+    for (const auto& dir : options.include_directories) {
+        if (options.verbose) fmt::print("Added input directory: {}\n", dir);
         context.add_include_directory(dir);
     }
 
@@ -159,16 +303,16 @@ int main(int argc, char** argv) {
         /// Do NOT do anything else as this means that we
         /// *only* want to run optimisation passes; specifically,
         /// do *not* run lowering if this option was specified.
-        if (auto p = opts.get<"--passes">()) {
-            lcc::opt::RunPasses(m, *p);
-            if (opts.get<"--ir">()) m->print_ir(use_colour);
+        if (options.optimisation_passes.size()) {
+            lcc::opt::RunPasses(m, options.optimisation_passes);
+            if (options.ir) m->print_ir(use_colour);
             return;
         }
 
-        if (auto opt = opts.get_or<"-O">(0))
-            lcc::opt::Optimise(m, int(opt));
+        if (options.optimisation)
+            lcc::opt::Optimise(m, int(options.optimisation));
 
-        if (opts.get<"--ir">()) {
+        if (options.ir) {
             m->print_ir(use_colour);
             return;
         }
@@ -176,19 +320,33 @@ int main(int argc, char** argv) {
         m->lower();
         m->emit(output_file_path);
 
-        if (opts.get<"-v">()) {
+        if (options.verbose)
             fmt::print("Generated output from {} at {}\n", input_file_path, output_file_path);
-        }
     };
 
     // NOTE: Moves the input file, so, uhh, don't use that after passing it to
     // this.
-    auto specified_language = opts.get_or<"-x">("default");
+    auto specified_language = options.language;
     auto GenerateOutputFile = [&](auto& input_file, std::string_view output_file_path) {
-        auto path_str = input_file.path.string();
+        auto path_str = input_file;
+        auto f = fopen(input_file.data(), "rb");
+        fseek(f, 0, SEEK_END);
+        size_t fsize = size_t(ftell(f));
+        fseek(f, 0, SEEK_SET);
+        std::vector<char> contents{};
+        contents.resize(fsize);
+        auto nread = fread(contents.data(), 1, fsize, f);
+        if (nread != fsize){
+            fmt::print("ERROR reading file {}\n"
+                       "    Got {} bytes, expected {}\n",
+                       path_str, nread, fsize);
+            fclose(f);
+            exit(1);
+        }
+        fclose(f);
         auto& file = context.create_file(
-            std::move(input_file.path),
-            std::move(input_file.contents)
+            std::move(input_file),
+            std::move(contents)
         );
 
         /// LCC IR.
@@ -203,21 +361,21 @@ int main(int argc, char** argv) {
             /// Parse the file.
             auto mod = lcc::intercept::Parser::Parse(&context, file);
             if (context.has_error()) return; // the error condition is handled by the caller already
-            if (opts.get<"--syntax-only">()) {
-                if (opts.get<"--ast">()) mod->print(use_colour);
+            if (options.syntax) {
+                if (options.ast) mod->print(use_colour);
                 return;
             }
 
             /// Perform semantic analysis.
             lcc::intercept::Sema::Analyse(&context, *mod, true);
             if (context.has_error()) return; // the error condition is handled by the caller already
-            if (opts.get<"--ast">()) {
+            if (options.ast) {
                 mod->print(use_colour);
                 return;
             }
 
             /// Stop after sema if requested.
-            if (opts.get<"--sema">()) return;
+            if (options.sema) return;
 
             return EmitModule(lcc::intercept::IRGen::Generate(&context, *mod), path_str, output_file_path);
         }
@@ -229,8 +387,8 @@ int main(int argc, char** argv) {
             /// Parse the file.
             auto mod = laye_context->get_or_load_module(file);
             if (context.has_error()) return; // the error condition is handled by the caller already
-            if (opts.get<"--syntax-only">()) {
-                if (opts.get<"--ast">()) laye_context->print_modules();
+            if (options.syntax) {
+                if (options.ast) laye_context->print_modules();
                 // stop processing this file, but DO continue to process other files passed in
                 return;
             }
@@ -238,13 +396,13 @@ int main(int argc, char** argv) {
             /// Perform semantic analysis.
             lcc::laye::Sema::Analyse(laye_context, mod, true);
             if (context.has_error()) return; // the error condition is handled by the caller already
-            if (opts.get<"--ast">()) {
+            if (options.ast) {
                 laye_context->print_modules();
                 return;
             }
 
             /// Stop after sema if requested.
-            if (opts.get<"--sema">()) return;
+            if (options.sema) return;
 
             for (auto module : laye_context->modules()) {
                 std::string input_file_path = module->file()->path().string();
@@ -261,8 +419,8 @@ int main(int argc, char** argv) {
             auto c_context = new lcc::c::CContext{&context};
             auto translation_unit = lcc::c::Parser::Parse(c_context, file);
 
-            if (opts.get<"--syntax-only">()) {
-                if (opts.get<"--ast">()) translation_unit->print();
+            if (options.syntax) {
+                if (options.ast) translation_unit->print();
                 return;
             }
 
@@ -275,15 +433,15 @@ int main(int argc, char** argv) {
         }
     };
 
-    auto configured_output_file_path = opts.get_or<"-o">("");
+    auto configured_output_file_path = options.output_filepath;
     if (input_files.size() == 1) {
         std::string output_file_path = configured_output_file_path;
         if (output_file_path.empty())
-            output_file_path = ConvertFileExtensionToOutputFormat(input_files[0].path.string());
+            output_file_path = ConvertFileExtensionToOutputFormat(input_files[0]);
 
         GenerateOutputFile(input_files[0], output_file_path);
         if (context.has_error()) return 1;
-        if (opts.get<"-v">()) fmt::print("Generated output at {}\n", output_file_path);
+        if (options.verbose) fmt::print("Generated output at {}\n", output_file_path);
     } else {
         if (not configured_output_file_path.empty()) {
             // TODO(local): you can, but only if we're planning to link these files; handle that later
@@ -291,7 +449,7 @@ int main(int argc, char** argv) {
         }
 
         for (auto& input_file : input_files) {
-            std::string input_file_path = input_file.path.string();
+            std::string input_file_path = input_file;
             std::string output_file_path = ConvertFileExtensionToOutputFormat(input_file_path);
             GenerateOutputFile(input_file, output_file_path);
         }
