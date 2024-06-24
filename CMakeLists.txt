@@ -191,7 +191,7 @@ message(STATUS "Checking dependencies ...")
 FetchContent_Declare(
     fmtlib
     GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-    GIT_TAG 10.0.0
+    GIT_TAG 10.2.1
     SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libs/fmt"
 )
 FetchContent_MakeAvailable(fmtlib)
