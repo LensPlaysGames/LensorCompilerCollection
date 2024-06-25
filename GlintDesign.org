@@ -240,3 +240,63 @@ switch foo.type {
 I guess the idea is that anything iterable will fit an interface called a Sequence, and that a lot of things built-in to the language and standard library will operate on sequences. This will handle linked lists (the most important data structure, /clearly/), dynamic arrays, strings, and more.
 
 Something important is that a user-defined type (i.e. a struct) may meet the standards of a sequence, and therefore integrate tightly with the inner workings of the language.
+
+*** AoC 2023 Day 2 :: Data
+[2024-06-25 Tue 14:38]
+
+#+begin_src lisp
+  struct Game {
+      id :: 0;
+      struct CubeCount {
+          red :: 0;
+          green :: 0;
+          blue :: 0;
+      };
+      records: CubeCount[];
+  };
+
+  games :: (Game[]
+      (Game 1
+       (CubeCount[]
+        (CubeCount 4 0 3)
+        (CubeCount 1 2 6)
+        (CubeCount 0 2 0)))
+      (Game 2
+       (CubeCount[]
+        (CubeCount 0 2 1)
+        (CubeCount 1 3 4)
+        (CubeCount 0 1 1)))
+      (Game 3
+       (CubeCount[]
+        (CubeCount 20 8 6)
+        (CubeCount 4 13 5)
+        (CubeCount 1 5 0)))
+      (Game 4
+       (CubeCount[]
+        (CubeCount 3 1 6)
+        (CubeCount 6 3 0)
+        (CubeCount 14 3 15)))
+      (Game 5
+       (CubeCount[]
+        (CubeCount 6 3 1)
+        (CubeCount 1 2 2)))
+      );
+
+  possible_games_id_sum :: 0;
+  for game :: games {
+      possible :: true;
+      for count :: game.records {
+          if count.red > 12 or count.green > 13 or count.blue > 14 {
+              possible := false;
+              (break);
+          }
+      }
+      if possible possible_games_id_sum += game.id;
+  }
+  possible_games_id_sum;
+#+end_src
+
+Basically, I'm trying to show here a couple things:
+- Invoking a type constructs an instance of that type
+- Built-in Dynamic Arrays
+May we eventually have a very capable standard library that may even have a dynamic array container type that is easier to maintain and also easier to use? Yes. But that's a long ways off, and I want it to be *easy* to have a dynamic list right off the bat (otherwise implementing that standard library will be /rough/).
