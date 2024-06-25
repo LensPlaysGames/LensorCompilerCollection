@@ -330,6 +330,10 @@ int main(int argc, const char** argv) {
     auto GenerateOutputFile = [&](auto& input_file, std::string_view output_file_path) {
         auto path_str = input_file;
         auto f = fopen(input_file.data(), "rb");
+        if (not f) {
+            fmt::print("ERROR opening file {}\n", path_str);
+            return;
+        }
         fseek(f, 0, SEEK_END);
         size_t fsize = size_t(ftell(f));
         fseek(f, 0, SEEK_SET);
