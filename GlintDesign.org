@@ -184,38 +184,47 @@ switch foo {
 [2024-06-25 Tue 14:01]
 
 #+begin_src lisp
-  data :: "1abc2
-  pqr3stu8vwx
-  a1b2c3d4e5f
-  treb7uchet";
+    data :: "1abc2
+    pqr3stu8vwx
+    a1b2c3d4e5f
+    treb7uchet";
 
-  for byte :: data {
-      byte;
-  };
-  ;; The above should expand to the following
-  cfor {
-    (gensym i) :: 0;
-    (gensym i) < (data.size);
-    ++(gensym i);
-  } {
-    byte :: data[(gensym i)];
-    ;; ... body from above `for` inserted here ...
-  };
+    for byte :: data {
+        byte;
+    };
+    ;; The above will expand according to the following macro (or very
+    ;; similarly).
+    macro
+        for $sym :: $container:expr_once $body:expr
+    defines i
+    emits
+        cfor {
+            i :: 0;
+            i < ($container.size);
+            ++i;
+        } {
+            $sym :: $container[i];
+            $body;
+        };
+    endmacro
 
-  for line :: (data.lines) {
+    for line :: (data.lines) {
+        for byte :: line {
+            byte;
+        };
+    };
+    ;; The above should expand to the following
+    cfor {
+      i :: 0;
+      i < (data.lines.size);
+      ++i;
+    } {
+      byte :: data.lines[i];
+      ;; ... body from outer `for` inserted here ...
       for byte :: line {
           byte;
       }
-  };
-  ;; The above should expand to the following
-  cfor {
-    (gensym i) :: 0;
-    (gensym i) < (data.lines.size);
-    ++(gensym i);
-  } {
-    byte :: data.lines[(gensym i)];
-    ;; ... body from above `for` inserted here ...
-  };
+    };
 #+end_src
 
 *** AOC 2023 Day 1
