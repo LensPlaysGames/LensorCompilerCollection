@@ -136,7 +136,7 @@ enum names :string {
 
 If a type is declared, the values will be constrained to be convertible to that type.
 
-If no type is declared, an enum will act like a union of all of the types of all of the values within it. Every enum has a corresponding sort of "variant index" stored inside it that may be queried to see what value the enum holds. Basically, each value's type will be assigned an index within an enum, and then we will convert the type passed to the "enum.has" thing into the corresponding index value within the variant.
+If no type is declared, an enum will act like a union of all of the types of all of the values within it. Every enum has a corresponding sort of "variant index" stored inside it that may be queried to see what value the enum holds. Basically, each named value will be assigned an index within an enum, and then we will convert the name passed to the "enum.has" thing into the corresponding index value within the variant, allowing for the runtime check to be generated properly.
 
 #+begin_example
 enum my-enum {
@@ -155,28 +155,23 @@ enum mix {
 };
 
 ;; Declare variable `foo` of type `mix` initialized to value `mix.STERMA`.
-foo : mix mix.STERMA;
+foo :: mix.STERMA;
 
 ;; Reflection with .has function
-if (foo.has string)
+if (foo.has STERMA)
   (print foo);
-else if (foo.has int)
+else if (foo.has PERMA)
   (print "It's over 9000!");
 
-;; NOTE: You can also access by type as well, mostly for symmetry with
-;; .has. Should probably have a run-time check that the value we are
-;; .get-ing is actually held by the variant. Crash if not.
-(foo.get string) ;; Results in value mix.STERMA
-
 ;; EVENTUALLY
-switch foo.type {
-  case string (print foo);
-  case int (print "It's over 9000");
+switch foo {
+  case STERMA (print foo);
+  case PERMA (print "It's over 9000");
 }
 ;; or even
-(print {switch foo.type {
-  case string foo;
-  case int "It's over 9000";
+(print {switch foo {
+  case STERMA foo;
+  case PERMA "It's over 9000";
 }});
 #+end_example
 
