@@ -1,0 +1,242 @@
+* Glint
+
+Goals:
+- One or many powerful, expressive type systems.
+- A LISP without top level parentheses.
+- Entirely My Own (You Can Fuck Off Please and Thank You, Don't "Help"; MAKE YOUR OWN).
+
+** Shitty No-good Stinking Rotten Filthy Ideas
+
+*** "disallow"
+[2024-06-22 Sat 11:24]
+
+It would be cool to be able to "disallow" specific variables beyond a
+given point in a control flow. i.e. setup a few things and then make
+them access-only after that. I guess this is sort of like const except
+that you can reassign it up until it is disallowed.
+
+#+begin_src
+  foobar :string "";
+  ;; ... do things
+  foobar := "some other thing";
+  (disallow foobar);
+  ;; Fine
+  printf "%s\n", foobar[0];
+  ;; PROGRAM ERROR
+  foobar := "mcgee mcgoo I lost my shoes";
+#+end_src
+
+*** Basic Outline
+[2024-06-23 Sun 16:44]
+
+Comma is an expression separator, semi-colon is a statement separator. Or something like that.
+
+**** Line Comments
+#+begin_example
+;; This is a comment.
+#+end_example
+
+**** Variable Access
+#+begin_example
+foo;
+#+end_example
+
+**** Variable Declaration
+#+begin_example
+foo : string;
+#+end_example
+
+**** Variable Declaration w/ Definition
+#+begin_example
+foo :string "ruh roh";
+#+end_example
+
+**** Variable Declaration w/ Definition (type inferred)
+#+begin_example
+foo :: "ruh roh";
+#+end_example
+
+**** Variable Assignment
+#+begin_example
+foo := "ruh roh";
+#+end_example
+
+**** Function Declaration w/ Immediate Return Expression
+#+begin_example
+func :string() "im the returned value when you call (func)";
+#+end_example
+
+**** Function Declaration w/ Body
+#+begin_example
+func :string() {
+  ;; .. some other stuff ..
+  "im the returned value when you call (func)";
+};
+#+end_example
+
+**** Function Declaration (external)
+#+begin_example
+external puts :void(:byte@);
+#+end_example
+
+**** Function Call
+#+begin_example
+(func)
+#+end_example
+
+If the first expression within parentheses resolves to a function type, it will be called, with the rest of the expressions in the parentheses passed as arguments.
+
+**** Function Call w/ Arguments
+#+begin_example
+(some-function "something" "another argument", "optional comma")
+#+end_example
+
+**** Struct Type Declaration
+#+begin_example
+struct my-struct {
+  my-member: long;
+  some-data: int, ;; You can use commas or semi-colons, doesn't matter.
+};
+#+end_example
+
+**** Enum Type Declaration
+In Glint, an enum is just a way to name values.
+
+#+begin_example
+enum my-enum {
+  one :: 1,
+  two :: 2,
+};
+
+enum names :string {
+  JERRY :: "Jerry Seinfeld",
+  JEREMY :: "Jeremy Elbertson",
+};
+#+end_example
+
+If a type is declared, the values will be constrained to be convertible to that type.
+
+If no type is declared, an enum will act like a union of all of the types of all of the values within it. Every enum has a corresponding sort of "variant index" stored inside it that may be queried to see what value the enum holds. Basically, each value's type will be assigned an index within an enum, and then we will convert the type passed to the "enum.has" thing into the corresponding index value within the variant.
+
+#+begin_example
+enum my-enum {
+  one :: 1,
+  two :: 2,
+};
+
+enum names :string {
+  JERRY :: "Jerry Seinfeld",
+  JEREMY :: "Jeremy Elbertson",
+};
+
+enum mix {
+  STERMA :: "Jeremy CUCK-LORD Elbertson",
+  PERMA :: 9001,
+};
+
+;; Declare variable `foo` of type `mix` initialized to value `mix.STERMA`.
+foo : mix mix.STERMA;
+
+;; Reflection with .has function
+if (foo.has string)
+  (print foo);
+else if (foo.has int)
+  (print "It's over 9000!");
+
+;; NOTE: You can also access by type as well, mostly for symmetry with
+;; .has. Should probably have a run-time check that the value we are
+;; .get-ing is actually held by the variant. Crash if not.
+(foo.get string) ;; Results in value mix.STERMA
+
+;; EVENTUALLY
+switch foo.type {
+  case string (print foo);
+  case int (print "It's over 9000");
+}
+;; or even
+(print {switch foo.type {
+  case string foo;
+  case int "It's over 9000";
+}});
+#+end_example
+
+*** Fuck Exceptions
+[2024-06-23 Sun 17:50]
+
+*** Strings Are Important
+[2024-06-25 Tue 14:01]
+
+#+begin_src lisp
+  data :: "1abc2
+  pqr3stu8vwx
+  a1b2c3d4e5f
+  treb7uchet";
+
+  for byte :: data {
+      byte;
+  };
+  ;; The above should expand to the following
+  cfor {
+    (gensym i) :: 0;
+    (gensym i) < (data.size);
+    ++(gensym i);
+  } {
+    byte :: data[(gensym i)];
+    ;; ... body from above `for` inserted here ...
+  };
+
+  for line :: (data.lines) {
+      for byte :: line {
+          byte;
+      }
+  };
+  ;; The above should expand to the following
+  cfor {
+    (gensym i) :: 0;
+    (gensym i) < (data.lines.size);
+    ++(gensym i);
+  } {
+    byte :: data.lines[(gensym i)];
+    ;; ... body from above `for` inserted here ...
+  };
+#+end_src
+
+*** AOC 2023 Day 1
+[2024-06-25 Tue 14:22]
+
+#+begin_src lisp
+  data :: "1abc2
+    pqr3stu8vwx
+    a1b2c3d4e5f
+    treb7uchet";
+
+  sum :: 0;
+
+  first-digit-present :: false;
+  first-digit-value :: 0;
+  last-digit-value :: 0;
+  for byte :: data {
+      if byte = '\n' {
+          first-digit-present := false;
+          line-value :: 10(first-digit-value) + last-digit-value;
+          sum += line-value;
+      } else if (one-of "0123456789" byte) {
+          last-digit-value := byte;
+          if not first-digit-present {
+              first-digit-present := true;
+              first-digit-value := byte;
+          }
+      };
+  };
+  line-value :: 10(first-digit-value) + last-digit-value;
+  sum += line-value;
+
+  sum;
+#+end_src
+
+*** Sequences
+[2024-06-25 Tue 14:24]
+
+I guess the idea is that anything iterable will fit an interface called a Sequence, and that a lot of things built-in to the language and standard library will operate on sequences. This will handle linked lists (the most important data structure, /clearly/), dynamic arrays, strings, and more.
+
+Something important is that a user-defined type (i.e. a struct) may meet the standards of a sequence, and therefore integrate tightly with the inner workings of the language.
