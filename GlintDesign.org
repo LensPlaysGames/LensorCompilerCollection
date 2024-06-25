@@ -180,6 +180,8 @@ switch foo.type {
 }});
 #+end_example
 
+**** NOTE: Macros Are a Thing, but They Aren't Covered Here
+
 *** Fuck Exceptions
 [2024-06-23 Sun 17:50]
 
@@ -446,3 +448,8 @@ So, what exactly happens when we invoke the macro?
 #+end_src
 
 Well, /at compile time/, the macro body is expanded and then run, resulting, in this case, in =(- 1 70)= being returned. Now, you might be a bit weirded out at this point... the macro returned /more code/. And that's exactly the key to these types of macros: their return value is the code that they will expand into. In the final code, it is as if we erased the macro invocation and inserted the return value of that invocation in it's place.
+
+*** A String Should Be Able to Be Used as a Symbol
+[2024-06-25 Tue 15:50]
+
+A =String= should be able to be used in the same ways a symbol can, or converted between the two. While this isn't possible with a String who's value is not known at compile time (unless we implement some sort of Glint environment with a runtime, but that doesn't sound like my style), it /is/ possible for values known at compile time---for example those often passed to macro invocations. The idea is that we may eventually have a parser macro that takes or makes a String, possibly does things to it, then uses that to return code that accesses a variable bound to a symbol equivalent to the contents of that String...
