@@ -76,15 +76,35 @@ func :string() {
 
 **** Function Declaration (external)
 #+begin_example
-external puts :void(:byte@);
+external puts :void(:byte.ptr);
 #+end_example
+
+Basically, if you are linking with a library written in another language, you can use =external= before declaring the Glint type information for the symbol from that library. Most of the time, =external= should be reserved to library wrappers/bindings written in Glint, and then =import='ed like everything else. NOTE: =external= automatically implies =export=.
+
+**** Function Declaration (exported)
+#+begin_example
+export value :: 69;
+export function :int() 420;
+#+end_example
+
+NOTE: Only affects module compilation.
+
+When compiling a module, the symbols are kept local by default. That is, the symbols defined in the generated object file(s) have a local scope/binding, meaning that when these objects are linked, other libraries and programs would not be able to access those symbols. If you are making a library and want to expose an API, put =export= behind the declaration to make it available for =import= in other Glint files (and usable in other languages via their external linkage procedures, assuming you line up the calling convention).
 
 **** Function Call
 #+begin_example
 (func)
 #+end_example
 
-If the first expression within parentheses resolves to a function type, it will be called, with the rest of the expressions in the parentheses passed as arguments.
+If the first expression within parentheses resolves to a value of function type, it will be called, with the rest of the expressions in the parentheses passed as arguments.
+
+If the first expression in parentheses does not resolve to a value of function type, but instead to a type itself, that type will be instantiated with the arguments passed along to the constructor.
+
+Otherwise, the parentheses are just treated as a grouped expression (i.e. =(x + 2) * 3=).
+
+There is a special form regarding parentheses where a parenthetical expression following a number (or anything that may be multiplied) acts as a multiplication, just like in math (i.e. =3(x + 2)=).
+
+NOTE: We may want to make it possible to call functions like we can multiply numbers, with the more "normal" invocation syntax. If it doesn't break the grammar, I don't see why not. =fact(5)= or =(fact 5)= both make sense to me.
 
 **** Function Call w/ Arguments
 #+begin_example
@@ -300,3 +320,129 @@ Basically, I'm trying to show here a couple things:
 - Invoking a type constructs an instance of that type
 - Built-in Dynamic Arrays
 May we eventually have a very capable standard library that may even have a dynamic array container type that is easier to maintain and also easier to use? Yes. But that's a long ways off, and I want it to be *easy* to have a dynamic list right off the bat (otherwise implementing that standard library will be /rough/).
+
+*** Some Types
+[2024-06-25 Tue 15:07]
+
+Byte
+Bool, bool, Boolean, boolean -> Bool
+String, Symbol -> String
+T[] -> Dynamic Array of T
+T() -> Function w/ Return Type T
+
+*** Lexer Macros
+[2024-06-25 Tue 15:22]
+
+You know LaTeX? Yeah, like that.
+
+**** Simple Macro
+#+begin_example
+macro add34 $arg1 emits
+  $arg1 + 34
+endmacro
+
+add34 35
+#+end_example
+
+This defines a macro called =add34= which takes a single macro argument; *remember, macro arguments are tokens at the lexer level*, unless otherwise specified. When a macro is expanded, any uses of the macro argument in the output, in the macro expansion, will be replaced with the token passed when invoking the macro. This means the =add34 35= macro invocation expands into =35 + 34=. Notice how there is no macro left in the final code; they are purely tools to generate code, not code itself.
+
+**** Hygienic Macros
+#+begin_example
+macro increment $i emits {
+  a :: 0
+  $i := $i + 1
+} endmacro
+
+a :: 4
+b :: 8
+increment a
+increment b
+a
+#+end_example
+
+The above will error, complaining about the macro =increment= not being hygienic in the expansion of =increment a=. That's right, no crazy macro shadowing issues like in C.
+
+The proper way to declare a new variable within a macro is to generate a unique symbol to use by using =gensym=.
+#+begin_example
+macro increment $i
+defines a ;; <---- the important part
+emits {
+  a :: 0
+  $i := $i + 1
+  a := 42
+  $i
+} endmacro
+
+a :: 67
+increment a
+increment a
+#+end_example
+
+By letting the compiler know that a symbol within the macro is meant to be unique to each invocation of the macro, it may generate a unique symbol and replace uses of the original symbol with the unique one.
+
+In case you aren't familiar: [[https://en.wikipedia.org/wiki/Hygienic_macro]]
+
+**** Empty Macro
+#+begin_example
+macro foo emits endmacro
+foo
+#+end_example
+
+**** Macro Selector =expr=
+#+begin_example
+macro capture_binary $binop:expr emits
+  $binop + $binop
+endmacro
+
+1 + capture_binary 17 + 17
+#+end_example
+
+Because these macros work at the level of the lexer, it can be really difficult to work with values at the language level, at the parser level. To fix this, we have the =expr= selector. This may be applied to any macro argument, and it will change how tokens are bound to the argument. Instead of binding the argument to the first token found, it will bind the argument to the first expression parsed. As you can see above, this is useful to be able to capture values at the language level rather than individual tokens.
+
+You may be asking, how does this even work? Well, the lexer has a token type that is a node the parser returns. We parse an expression and store the result in a token, as weird as that is.
+
+**** Macro Selector =expr_once=
+#+begin_example
+variable :: 0
+foo : int() {
+  variable := variable + 1
+  33 + variable
+}
+
+macro doubled $a:expr_once emits
+  $a + $a
+endmacro
+
+doubled foo() ;; returns 68
+#+end_example
+
+Basically, if you expand a single input token multiple times in the output of a macro, /and that input token evaluates to something that has side effects/, those side effects may occur multiple times and that may not be the behavior necessary. For this, we have the =expr_once= selector. It is much like the =expr= selector, except that even if the expression is expanded multiple times, it is only ever evaluated once.
+
+This is accomplished by caching the return value in a variable with a generated, unique symbol and then replacing all expansions of the original expression with that unique symbol.
+
+*** Parser Macros
+[2024-06-25 Tue 15:22]
+
+If you've written macros in LISP, that is what I'm talking about.
+
+Basically, these sort of macros will be "real code", but the catch is that it is run at compile-time and generates code itself that is then evaluated in the final code. Again, if you haven't written LISP macros this might sound confusing, but it's actually really simple (and incredibly powerful in turn) once you get the hang of it.
+
+#+begin_src lisp
+  (defmacro foo (a b c)
+    (if (= a "sum")
+        `(+ ,b ,c)
+        `(- ,b ,c)))
+#+end_src
+
+Hopefully you can read LISP, as I don't yet have a syntax worked out in Glint.
+
+The above defines a macro =foo= with three macro arguments, =a=, =b=, and =c=.
+
+The macro body is an =if= control flow expression.
+
+So, what exactly happens when we invoke the macro?
+#+begin_src lisp
+  (foo "difference" 70 1)
+#+end_src
+
+Well, /at compile time/, the macro body is expanded and then run, resulting, in this case, in =(- 1 70)= being returned. Now, you might be a bit weirded out at this point... the macro returned /more code/. And that's exactly the key to these types of macros: their return value is the code that they will expand into. In the final code, it is as if we erased the macro invocation and inserted the return value of that invocation in it's place.
