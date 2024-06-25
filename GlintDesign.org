@@ -460,3 +460,27 @@ Well, /at compile time/, the macro body is expanded and then run, resulting, in 
 [2024-06-25 Tue 15:50]
 
 A =String= should be able to be used in the same ways a symbol can, or converted between the two. While this isn't possible with a String who's value is not known at compile time (unless we implement some sort of Glint environment with a runtime, but that doesn't sound like my style), it /is/ possible for values known at compile time---for example those often passed to macro invocations. The idea is that we may eventually have a parser macro that takes or makes a String, possibly does things to it, then uses that to return code that accesses a variable bound to a symbol equivalent to the contents of that String...
+
+*** =unless= (no else allowed) and =until=
+[2024-06-25 Tue 16:46]
+
+The opposites of =if= and =while=, they're there if you want them.
+
+=unless=
+#+begin_src lisp
+  success :: do_something_that_might_fail();
+  unless success {
+      (print "something went horribly wrong\n");
+      (exit 1);
+  };
+#+end_src
+
+=until=
+#+begin_src lisp
+  data :: "Some \"string\" returned from some C library\n";
+  c_str :: &data[0];
+  until @c_str = '\0' {
+      (print @c_str);
+      c_str := &c_str[1];
+  };
+#+end_src
