@@ -156,21 +156,21 @@ int main(int argc, const char** argv) {
                        }.get());
             exit(0);
         }
-        if (arg == "-v") {
+
+        if (arg == "-v")
             options.verbose = true;
-        } else if (arg == "--ast") {
+        else if (arg == "--ast")
             options.ast = true;
-        } else if (arg == "--sema") {
+        else if (arg == "--sema")
             options.sema = true;
-        } else if (arg == "--syntax-only") {
+        else if (arg == "--syntax-only")
             options.syntax = true;
-        } else if (arg == "--ir") {
+        else if (arg == "--ir")
             options.ir = true;
-        } else if (arg == "--mir") {
+        else if (arg == "--mir")
             options.mir = true;
-        } else if (arg == "--aluminium") {
+        else if (arg == "--aluminium")
             options.aluminium = true;
-        }
 
         else if (arg == "-I") {
             // Add a directory to the include search paths
