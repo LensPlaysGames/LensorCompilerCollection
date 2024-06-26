@@ -79,7 +79,7 @@ func :string() {
 external puts :void(:byte.ptr);
 #+end_example
 
-Basically, if you are linking with a library written in another language, you can use =external= before declaring the Glint type information for the symbol from that library. Most of the time, =external= should be reserved to library wrappers/bindings written in Glint, and then =import='ed like everything else. NOTE: =external= automatically implies =export=.
+Basically, if you are linking with a library written in another language, you can use =external= before declaring the Glint type information for the symbol from that library. Most of the time, =external= should be reserved to library wrappers/bindings written in Glint, and then =import='ed like everything else. NOTE: =external= automatically implies =export= ($\text{external} \Rightarrow \text{export} \land \text{external}$).
 
 **** Function Declaration (exported)
 #+begin_example
