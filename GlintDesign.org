@@ -250,11 +250,11 @@ Implementation NOTE for myself THAT IM NOT GOING TO DO: the first expression aft
           line-value :: 10(first-digit-value) + last-digit-value;
           sum += line-value;
       } else if (one-of "0123456789" byte) {
-          last-digit-value := byte;
+          last-digit-value := byte - 48;
           if not first-digit-present {
               first-digit-present := true;
-              first-digit-value := byte;
-          }
+              first-digit-value := byte - 48;
+          };
       };
   };
   line-value :: 10(first-digit-value) + last-digit-value;
