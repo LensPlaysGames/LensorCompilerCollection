@@ -1,6 +1,5 @@
 #include <c/ast.hh>
 #include <c/parser.hh>
-#include <cstdio>
 #include <fmt/format.h>
 #include <intercept/ast.hh>
 #include <intercept/ir_gen.hh>
@@ -18,9 +17,11 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/platform.hh>
+
+#include <cstdio>
+#include <format>
 #include <string>
 #include <vector>
-#include <format>
 
 struct TwoColumnLayoutHelper {
     struct Column {
@@ -89,7 +90,7 @@ const lcc::Target* default_target =
 
 /// Default format
 const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
-}
+} // namespace detail
 
 struct Options {
     bool verbose{false};
@@ -108,7 +109,6 @@ struct Options {
     std::string color{"auto"};
     std::string language{"default"};
     std::string format{"default"};
-
 };
 
 int main(int argc, const char** argv) {
@@ -123,37 +123,33 @@ int main(int argc, const char** argv) {
         };
         const auto arg = std::string_view{argv[i]};
         if (arg.substr(0, 3) == "--h" or arg.substr(0, 2) == "-h") {
+            // clang-format off
             fmt::print("USAGE: {} [FLAGS] [OPTIONS] [SOURCE FILES...]\n", argv[0]);
             fmt::print("FLAGS:\n");
-            fmt::print("{}",
-                       TwoColumnLayoutHelper {
-                           {
-                               {"  -v", "Enable verbose output\n"},
-                               {"  --ast", "Print the AST and exit without generating code\n"},
-                               {"  --sema", "Run sema only and exit\n"},
-                               {"  --syntax-only", "Do not perform semantic analysis\n"},
-                               {"  --ir", "Emit LCC intermediate representation and exit\n"},
-                               {"  --mir", "Emit LCC machine instruction representation at various stages and exit\n"},
-                               {"  --aluminium", "That special something to spice up your compilation\n"}
-                           },
-                       }.get());
+            fmt::print("{}", TwoColumnLayoutHelper{{
+                {"  -v", "Enable verbose output\n"},
+                {"  --ast", "Print the AST and exit without generating code\n"},
+                {"  --sema", "Run sema only and exit\n"},
+                {"  --syntax-only", "Do not perform semantic analysis\n"},
+                {"  --ir", "Emit LCC intermediate representation and exit\n"},
+                {"  --mir", "Emit LCC machine instruction representation at various stages and exit\n"},
+                {"  --aluminium", "That special something to spice up your compilation\n"}},
+            }.get());
             fmt::print("OPTIONS:\n");
-            fmt::print("{}",
-                       TwoColumnLayoutHelper {
-                           {
-                               {"  -I", "Add a directory to the include search paths\n"},
-                               {"  -o", "Path to the output filepath where target code will be stored\n"},
-                               {"  -O", "Set optimisation level (default 0)\n"},
-                               {"", "    0, 1, 2, 3\n"},
-                               {"  --passes", "Comma-separated list of optimisation passes to run\n"},
-                               {"  --color", "Whether to include colors colours in the output (default: auto)\n"},
-                               {"", "    always, auto, never\n"},
-                               {"  -x", "What language to parse input code as (default: extension based)\n"},
-                               {"", "    c, glint\n"},
-                               {"  -f", "What format to emit code in (default: asm)\n"},
-                               {"", "    asm, gnu-as-att, obj, elf, coff, llvm\n"},
-                           }
-                       }.get());
+            fmt::print("{}", TwoColumnLayoutHelper{{
+                {"  -I", "Add a directory to the include search paths\n"},
+                {"  -o", "Path to the output filepath where target code will be stored\n"},
+                {"  -O", "Set optimisation level (default 0)\n"},
+                {"", "    0, 1, 2, 3\n"},
+                {"  --passes", "Comma-separated list of optimisation passes to run\n"},
+                {"  --color", "Whether to include colors colours in the output (default: auto)\n"},
+                {"", "    always, auto, never\n"},
+                {"  -x", "What language to parse input code as (default: extension based)\n"},
+                {"", "    c, glint\n"},
+                {"  -f", "What format to emit code in (default: asm)\n"},
+                {"", "    asm, gnu-as-att, obj, elf, coff, llvm\n"},
+                }}.get());
+            // clang-format on
             exit(0);
         }
 
@@ -228,8 +224,7 @@ int main(int argc, const char** argv) {
                 exit(1);
             }
             options.format = format;
-        }
-        else {
+        } else {
             // Otherwise, it's a filepath
             options.input_files.push_back(std::string(arg));
         }
@@ -280,8 +275,7 @@ int main(int argc, const char** argv) {
         detail::default_target,
         format,
         use_colour,
-        should_print_mir
-    };
+        should_print_mir};
 
     for (const auto& dir : options.include_directories) {
         if (options.verbose) fmt::print("Added input directory: {}\n", dir);
@@ -340,10 +334,14 @@ int main(int argc, const char** argv) {
         std::vector<char> contents{};
         contents.resize(fsize);
         auto nread = fread(contents.data(), 1, fsize, f);
-        if (nread != fsize){
-            fmt::print("ERROR reading file {}\n"
-                       "    Got {} bytes, expected {}\n",
-                       path_str, nread, fsize);
+        if (nread != fsize) {
+            fmt::print(
+                "ERROR reading file {}\n"
+                "    Got {} bytes, expected {}\n",
+                path_str,
+                nread,
+                fsize
+            );
             fclose(f);
             exit(1);
         }
