@@ -501,3 +501,8 @@ The opposites of =if= and =while=, they're there if you want them.
       c_str := &c_str[1];
   };
 #+end_src
+
+*** Function Overloading
+[2024-06-26 Wed 01:28]
+
+I am not against it, but I don't often use it. It's a nice-to-have and for the amount of work it takes to implement, I'm not super focused on getting this in particular working.
