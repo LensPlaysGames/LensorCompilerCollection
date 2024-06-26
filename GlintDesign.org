@@ -309,7 +309,7 @@ Something important is that a user-defined type (i.e. a struct) may meet the sta
        (CubeCount[]
         (CubeCount 6 3 1)
         (CubeCount 1 2 2)))
-      );
+  );
 
   possible_games_id_sum :: 0;
   for game :: games {
@@ -336,8 +336,9 @@ May we eventually have a very capable standard library that may even have a dyna
 Byte
 Bool, bool, Boolean, boolean -> Bool
 String, Symbol -> String
-T[] -> Dynamic Array of T
+T[], T -> Dynamic Array of T
 T() -> Function w/ Return Type T
+T.ptr -> Pointer to T
 
 *** Lexer Macros
 [2024-06-25 Tue 15:22]
