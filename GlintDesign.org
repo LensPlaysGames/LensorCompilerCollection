@@ -340,6 +340,8 @@ T[], T -> Dynamic Array of T
 T() -> Function w/ Return Type T
 T.ptr -> Pointer to T
 
+NOTE: String is effectively dynamic array of Byte.
+
 *** Lexer Macros
 [2024-06-25 Tue 15:22]
 
@@ -456,6 +458,20 @@ So, what exactly happens when we invoke the macro?
 #+end_src
 
 Well, /at compile time/, the macro body is expanded and then run, resulting, in this case, in =(- 1 70)= being returned. Now, you might be a bit weirded out at this point... the macro returned /more code/. And that's exactly the key to these types of macros: their return value is the code that they will expand into. In the final code, it is as if we erased the macro invocation and inserted the return value of that invocation in it's place.
+
+Helpful NOTE: While quasiquoting sounds fancy and people choose to make it hard to understand (by refusing to because words are new and/or different to what they are used to, /grrr/), it is actually as simple as string interpolation.
+
+#+begin_src lisp
+(setq foo "69")
+`("abc" ,foo "def")
+#+end_src
+The above quasiquotation with an unquote is equivalent to the following string interpolation.
+#+begin_src js
+const foo = "69";
+`abc${foo}def`;
+#+end_src
+
+If you can't wrap your heads around quasiquoting, it's a /you/ problem :&.
 
 *** A String Should Be Able to Be Used as a Symbol
 [2024-06-25 Tue 15:50]
