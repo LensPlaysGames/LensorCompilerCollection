@@ -209,7 +209,7 @@ ForEachMacros: []
 IfMacros: []
 
 ## Merge include blocks, sort them, and resplit.
-IncludeBlocks: Regroup
+IncludeBlocks: Preserve
 
 ## Enable outdenting `private:`.
 # NOTE: This setting currently causes the content of structs
