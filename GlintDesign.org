@@ -513,3 +513,8 @@ I am not against it, but I don't often use it. It's a nice-to-have and for the a
 I just want to clarify what should be a focus in the design of Glint: strings and dynamic arrays ("vectors"). Specifically, /native/ and /extensible/ strings and dynamic arrays, and operations on them.
 
 In my opinion, having these two things makes implementing just about anything much, much easier and faster. At the same time, making the user implement these things themselves is one of the most common avenues to bugs, memory corruption, and more.
+
+*** Multiple Strings? Nah
+[2024-06-27 Thu 17:36]
+
+I want multiple string literals in a row to become a single string literal.
