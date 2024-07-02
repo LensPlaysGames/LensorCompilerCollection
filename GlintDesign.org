@@ -531,6 +531,9 @@ Call F(x...) <- F x...;
 
 Attempt 001 (=cmacro= return type)
 #+begin_src lisp
+  ;; If you aren't used to parser macros, it is code that runs at compile
+  ;; time to return code that will be compiled into the final program.
+  ;; Think of it like code that operates on code instead of data.
   plus : cmacro(nodes : Node[]) {
     out :: (NodeBinaryAdd 0 0);
     for node :: nodes {
@@ -542,6 +545,7 @@ Attempt 001 (=cmacro= return type)
   };
 
   (plus 34 35);
+  ;; MACRO-INVOCATION plus NODES 34 35
   ;; expansion steps:
   ;; 0 + 0
   ;; 34 + 0
@@ -552,3 +556,8 @@ Attempt 001 (=cmacro= return type)
 #+end_src
 
 While this does make =cmacro= a keyword, I really don't think that's an issue. I'm okay with a thousand keywords, honestly. The above =plus= macro doesn't require any quasiquoting or any of the more complex evaluation requirements that some parser macros have; I've also written it to be simple rather than perfectly efficient. This is just to play with the syntax, mind you.
+
+*** =embed "foo.bin";=
+[2024-07-02 Tue 10:18]
+
+Yes, like the new =C= standards, we will have data embeds that also adhere to include paths. I'm pretty sure we'll just have this create a fixed =Byte= array, and have it able to be used in initialisers.
