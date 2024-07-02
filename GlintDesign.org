@@ -518,3 +518,37 @@ In my opinion, having these two things makes implementing just about anything mu
 [2024-06-27 Thu 17:36]
 
 I want multiple string literals in a row to become a single string literal.
+
+*** Reduction Rules
+[2024-07-02 Tue 10:06]
+
+String <- String, [String];
+
+Call F(x...) <- F x...;
+
+*** Parser Macro Syntax Playground
+[2024-07-02 Tue 10:06]
+
+Attempt 001 (=cmacro= return type)
+#+begin_src lisp
+  plus : cmacro(nodes : Node[]) {
+    out :: (NodeBinaryAdd 0 0);
+    for node :: nodes {
+      out.left := node;
+      out.right := (NodeBinaryAdd 0 0);
+      out := out.right;
+    };
+    out;
+  };
+
+  (plus 34 35);
+  ;; expansion steps:
+  ;; 0 + 0
+  ;; 34 + 0
+  ;; 34 + (0 + 0)
+  ;; 34 + (35 + 0)
+  ;; 34 + (35 + (0 + 0))
+  ;; 34 + 35 + 0 + 0
+#+end_src
+
+While this does make =cmacro= a keyword, I really don't think that's an issue. I'm okay with a thousand keywords, honestly. The above =plus= macro doesn't require any quasiquoting or any of the more complex evaluation requirements that some parser macros have; I've also written it to be simple rather than perfectly efficient. This is just to play with the syntax, mind you.
