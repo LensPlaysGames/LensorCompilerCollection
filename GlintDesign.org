@@ -582,7 +582,7 @@ Function Call :: function [ args... ]
 
 Binary Member Access :: "."
 Binary Subscript :: array "[" index "]"
-Binary Dereferencing Access :: pointer "->" identifier
+Binary Dereferencing Access :: pointer "->" IDENTIFIER
 Binary Add :: "+"
 Binary Sub :: "-"
 Binary Mul :: "*"
@@ -600,6 +600,8 @@ Binary Bitwise Shift Right, Unsigned :: "shr"
 Unary Prefix Logical Not :: "not"
 Unary Prefix Bitwise Not :: "~"
 Unary Prefix Pointer Dereference :: "@"
+Unary Prefix sizeof :: "sizeof"
+Unary Prefix alignof :: "alignof"
 
 Type void
 Type bool, Bool, boolean, Boolean
@@ -619,6 +621,8 @@ Control Flow until :: "until" condition-expr body-expr;
 Control Flow if :: "if" condition-expr body-expr;
 if-else Expression :: "if" condition-expr body-expr "else" body-expr;
 
+Lambda :: "lambda" function-type body-expr;
+
 IDENTIFIER :: The usual
 INTEGER :: The usual
 #+end_example
@@ -627,3 +631,10 @@ Ambiguities that have been resolved:
 - By changing array syntax from =T[size]= to =[T size]=, subscripts of values and arrays of arbitrary types are now parseable into single trees.
 
 I guess type casting will be equivalent to instantiating that type, where we just call the type like it's a function, i.e. =(T v)=.
+
+*** Lambda
+[2024-07-03 Wed 09:37]
+
+#+begin_src lisp
+  (lambda T() ...body)
+#+end_src
