@@ -566,3 +566,64 @@ While this does make =cmacro= a keyword, I really don't think that's an issue. I
 [2024-07-02 Tue 10:18]
 
 Yes, like the new =C= standards, we will have data embeds that also adhere to include paths. I'm pretty sure we'll just have this create a fixed =Byte= array, and have it able to be used in initialisers.
+
+*** New Overview/Outline
+[2024-07-03 Wed 07:47]
+
+#+begin_example
+Variable Access :: IDENTIFIER
+Variable Declaration
+ :: IDENTIFIER "::" init-value
+ :: IDENTIFIER ":" type
+ :: IDENTIFIER ":" type init-value
+Variable Assignment :: IDENTIFIER ":=" new-value
+
+Function Call :: function [ args... ]
+
+Binary Member Access :: "."
+Binary Subscript :: array "[" index "]"
+Binary Dereferencing Access :: pointer "->" identifier
+Binary Add :: "+"
+Binary Sub :: "-"
+Binary Mul :: "*"
+Binary Div :: "/"
+Binary Equals :: "="
+Binary Logical And :: "and"
+Binary Logical Or :: "or"
+Binary Bitwise And :: "&&"
+Binary Bitwise Or :: "||"
+Binary Bitwise Xor :: "xor"
+Binary Bitwise Shift Left :: "shl"
+Binary Bitwise Shift Right, Signed :: "sar"
+Binary Bitwise Shift Right, Unsigned :: "shr"
+
+Unary Prefix Logical Not :: "not"
+Unary Prefix Bitwise Not :: "~"
+Unary Prefix Pointer Dereference :: "@"
+
+Type void
+Type bool, Bool, boolean, Boolean
+Type Byte
+Type String, Symbol
+Type Modifier Array :: "[T]", "[T size]"
+Type Modifier Pointer To :: "T.ptr"
+Type Modifier Reference :: "T.ref"
+Type Modifier Function :: "T()"
+
+Lexer Macro
+Parser Macro
+
+Control Flow CFor :: "cfor" "(" init-expr; condition-expr; iterator-expr; ")" body-expr;
+Control Flow while :: "while" condition-expr body-expr;
+Control Flow until :: "until" condition-expr body-expr;
+Control Flow if :: "if" condition-expr body-expr;
+if-else Expression :: "if" condition-expr body-expr "else" body-expr;
+
+IDENTIFIER :: The usual
+INTEGER :: The usual
+#+end_example
+
+Ambiguities that have been resolved:
+- By changing array syntax from =T[size]= to =[T size]=, subscripts of values and arrays of arbitrary types are now parseable into single trees.
+
+I guess type casting will be equivalent to instantiating that type, where we just call the type like it's a function, i.e. =(T v)=.
