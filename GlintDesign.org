@@ -81,6 +81,8 @@ external puts :void(:byte.ptr);
 
 Basically, if you are linking with a library written in another language, you can use =external= before declaring the Glint type information for the symbol from that library. Most of the time, =external= should be reserved to library wrappers/bindings written in Glint, and then =import='ed like everything else. NOTE: =external= automatically implies =export= ($\text{external} \Rightarrow \text{export} \land \text{external}$).
 
+Defining a body expression for an externally-declared function is ill-formed.
+
 **** Function Declaration (exported)
 #+begin_example
 export value :: 69;
@@ -577,8 +579,14 @@ Variable Declaration
  :: IDENTIFIER ":" type
  :: IDENTIFIER ":" type init-value
 Variable Assignment :: IDENTIFIER ":=" new-value
+Lambda :: "lambda" function-type body-expr;
+Function Call :: function [ args... ];
 
-Function Call :: function [ args... ]
+Control Flow CFor :: "cfor" "(" init-expr; condition-expr; iterator-expr; ")" body-expr;
+Control Flow while :: "while" condition-expr body-expr;
+Control Flow until :: "until" condition-expr body-expr;
+Control Flow if :: "if" condition-expr body-expr;
+if-else Expression :: "if" condition-expr body-expr "else" body-expr;
 
 Binary Member Access :: "."
 Binary Subscript :: array "[" index "]"
@@ -603,6 +611,8 @@ Unary Prefix Pointer Dereference :: "@"
 Unary Prefix sizeof :: "sizeof"
 Unary Prefix alignof :: "alignof"
 
+File Embed :: "embed" file-path;
+
 Type void
 Type bool, Bool, boolean, Boolean
 Type Byte
@@ -618,14 +628,6 @@ Type Modifier Function :: "T()"
 
 Lexer Macro
 Parser Macro
-
-Control Flow CFor :: "cfor" "(" init-expr; condition-expr; iterator-expr; ")" body-expr;
-Control Flow while :: "while" condition-expr body-expr;
-Control Flow until :: "until" condition-expr body-expr;
-Control Flow if :: "if" condition-expr body-expr;
-if-else Expression :: "if" condition-expr body-expr "else" body-expr;
-
-Lambda :: "lambda" function-type body-expr;
 
 IDENTIFIER :: The usual
 INTEGER :: The usual
