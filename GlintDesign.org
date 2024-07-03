@@ -607,6 +607,10 @@ Type void
 Type bool, Bool, boolean, Boolean
 Type Byte
 Type String, Symbol
+Type Arbitrary Signed Int :: "s" INTEGER
+Type Arbitrary Unsigned Int :: "u" INTEGER
+Type Default Signed Int :: "int" -> ssize_t
+Type Default Unsigned Int :: "uint" -> size_t
 Type Modifier Array :: "[T]", "[T size]"
 Type Modifier Pointer To :: "T.ptr"
 Type Modifier Reference :: "T.ref"
