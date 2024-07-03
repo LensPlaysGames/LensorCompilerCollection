@@ -203,28 +203,6 @@ target_link_libraries(options INTERFACE fmt)
 # Add ‘include’ as an include dir.
 target_include_directories(options INTERFACE include)
 
-# As well as everything in ‘libs’.
-if (EXISTS ${PROJECT_SOURCE_DIR}/libs)
-    file(GLOB libs ${PROJECT_SOURCE_DIR}/libs/*)
-
-    # Add the include directory to the include path, or the root
-    # directory if there is no include directory.
-    foreach(lib ${libs})
-        if (IS_DIRECTORY ${lib}/include)
-            target_include_directories(options INTERFACE ${lib}/include)
-        else()
-            target_include_directories(options INTERFACE ${lib})
-        endif()
-    endforeach()
-
-    # Also add all of them as subdirectories if they have a CMakeLists.txt.
-    foreach (lib ${libs})
-        if (EXISTS ${lib}/CMakeLists.txt)
-            add_subdirectory(${lib})
-        endif()
-    endforeach()
-endif()
-
 # Do not link with libm (math) when target is windows executable.
 if (NOT WIN32)
   target_link_libraries(options INTERFACE m)
@@ -258,4 +236,5 @@ target_link_libraries(lcc PRIVATE options liblcc)
 
 if (BUILD_TESTING)
   # TODO
+  message(FATAL_ERROR "Testing has not yet been re-implemented")
 endif()
