@@ -644,3 +644,24 @@ I guess type casting will be equivalent to instantiating that type, where we jus
 #+begin_src lisp
   (lambda T() ...body)
 #+end_src
+
+*** Unary Minus to Free Dynamic Array
+[2024-07-03 Wed 17:26]
+
+#+begin_src lisp
+  foo : [Byte 4];
+  ;; ... use foo
+  -foo;
+  ;; if foo is used "from here on", after the free, the compiler should
+  ;; issue an error. NOTE: what if -foo is in body of while, etc.
+#+end_src
+
+Maybe also unary plus to allocate a type, i.e. =+T= in Glint -> =new T();= in C++.
+#+begin_src lisp
+  ;; NOTE: Type of bar is Byte.ptr (return type of allocation function).
+  bar :: +Byte;
+  ;; ... use bar
+  -bar;
+#+end_src
+
+I dunno, doesn't seem like the worst thing in the world. But it also does. Lol. Allocation will always suck, afaik.
