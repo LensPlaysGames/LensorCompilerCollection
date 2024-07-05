@@ -200,9 +200,9 @@ switch foo {
       for $sym :: $container:expr_once $body:expr
   defines i, s
   emits
-      s :: ($container.size);
+      s :: $container.end;
       cfor {
-          i :: 0;
+          i :: container.begin;
           i < s;
           ++i;
       } {
@@ -211,15 +211,16 @@ switch foo {
       };
   endmacro
 
-  for line :: (data.lines) {
+  for line :: data.lines {
       for byte :: line {
           byte;
       };
   };
-  ;; The above should expand to the following
+  ;; The above should expand to the following (roughly)
+  s :: data.lines.end;
   cfor {
-      i :: 0;
-      i < (data.lines.size);
+      i :: data.lines.begin;
+      i < s;
       ++i;
   } {
       byte :: data.lines[i];
@@ -230,7 +231,7 @@ switch foo {
   };
 #+end_src
 
-Implementation NOTE for myself THAT IM NOT GOING TO DO: the first expression after =cfor= must be a block with at least three child expressions. If there are more than three, the first and last will remain the initialise and increment respectively, but each expression in-between will be treated as another expression in the condition code body.
+Note that due to deproceduring, it is possible for this for to either call functions or access values without special handling required for those cases.
 
 *** AOC 2023 Day 1
 [2024-06-25 Tue 14:22]
@@ -636,7 +637,7 @@ INTEGER :: The usual
 Ambiguities that have been resolved:
 - By changing array syntax from =T[size]= to =[T size]=, subscripts of values and arrays of arbitrary types are now parseable into single trees.
 
-I guess type casting will be equivalent to instantiating that type, where we just call the type like it's a function, i.e. =(T v)=.
+I guess type casting will be equivalent to instantiating that type (compound literal), where we just call the type like it's a function, i.e. =(T v)=.
 
 *** Lambda
 [2024-07-03 Wed 09:37]
@@ -644,6 +645,8 @@ I guess type casting will be equivalent to instantiating that type, where we jus
 #+begin_src lisp
   (lambda T() ...body)
 #+end_src
+
+NOTE: I wonder if, with the (T v) parsing syntax, we could just have =T() body-expr= be a lambda? Not needed, and I'll start with just the lambda keyword, but it's something to think about ... when else would a function type not be followed immediately by a semi-colon? Also would make the lambda syntax the same as normal function syntax, just without the =name:= preceding it.
 
 *** Unary Minus to Free Dynamic Array
 [2024-07-03 Wed 17:26]
@@ -659,9 +662,31 @@ I guess type casting will be equivalent to instantiating that type, where we jus
 Maybe also unary plus to allocate a type, i.e. =+T= in Glint -> =new T();= in C++.
 #+begin_src lisp
   ;; NOTE: Type of bar is Byte.ptr (return type of allocation function).
-  bar :: +Byte;
+  bar : +Byte;
   ;; ... use bar
   -bar;
 #+end_src
 
 I dunno, doesn't seem like the worst thing in the world. But it also does. Lol. Allocation will always suck, afaik.
+
+*** Print
+[2024-07-04 Thu 14:20]
+
+#+begin_src lisp
+  print 42;        ;; -> 42
+  print "42";      ;; -> 42
+  print (cchar 42); ;; -> *
+#+end_src
+
+EVENTUALLY we will want a way to do /something like/ string interpolation (probably generalized to work on any dynamic array, just for fun).
+
+*** "Character"
+[2024-07-04 Thu 20:10]
+
+While we don't have a char type like C does, and our strings take advantage of both single and double quotes anyway, we do have a short-hand syntax for converting a string /literal/ into it's corresponding byte value using the =b= prefix.
+#+begin_src lisp
+  "hello"; ;; type of [Byte], value of "hello"
+  b"hello"; ;; ERROR: too many bytes in bytestring being converted into byte value.
+  b"h"; ;; type of Byte, value of 104
+#+end_src
+
