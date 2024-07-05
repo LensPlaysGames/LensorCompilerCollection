@@ -214,15 +214,147 @@ target_precompile_headers(options INTERFACE "${PROJECT_SOURCE_DIR}/include/lcc/u
 # ============================================================================
 #  Executables and libraries.
 # ============================================================================
-# ‘include’ and ‘lib’ are library sources.
-file(GLOB_RECURSE library-sources
-    "${PROJECT_SOURCE_DIR}/lib/*.cc"
-    "${PROJECT_SOURCE_DIR}/include/*.hh"
-)
 
-# Add the main lcc library
-add_library(liblcc STATIC ${library-sources})
+# NOTE: If you go to use a glob, and are trying to complain that it's too
+# hard to list files individually, or it's too hard to alphabetise the
+# lists, well, the tree command does both of those things for you by
+# default, and I don't take kindly to those not willing to put in the
+# effort ơ_ơ.
+
+# C language library
+add_library(
+  lcc-cc STATIC
+  include/c/ast.hh
+  include/c/lexer.hh
+  include/c/parser.hh
+  include/c/opts.hh
+  lib/c/ast.cc
+  lib/c/lexer.cc
+  lib/c/parser.cc
+)
+target_include_directories(lcc-cc PUBLIC include)
+target_link_libraries(lcc-cc PRIVATE options)
+
+# Intercept language library (will remove soon)
+add_library(
+  intercept STATIC
+  include/intercept/ast.hh
+  include/intercept/eval.hh
+  include/intercept/ir_gen.hh
+  include/intercept/lexer.hh
+  include/intercept/parser.hh
+  include/intercept/sema.hh
+  lib/intercept/ast.cc
+  lib/intercept/eval.cc
+  lib/intercept/ir_gen.cc
+  lib/intercept/lexer.cc
+  lib/intercept/parser.cc
+  lib/intercept/sema.cc
+)
+target_include_directories(intercept PUBLIC include)
+target_link_libraries(intercept PRIVATE options)
+target_link_libraries(intercept PRIVATE object)
+
+# Laye language library (will remove soon)
+add_library(
+  laye STATIC
+  include/laye/ast.hh
+  include/laye/ir_gen.hh
+  include/laye/lexer.hh
+  include/laye/parser.hh
+  include/laye/sema.hh
+  lib/laye/ast.cc
+  lib/laye/context.cc
+  lib/laye/ir_gen.cc
+  lib/laye/lexer.cc
+  lib/laye/parser.cc
+  lib/laye/sema.cc
+)
+target_include_directories(laye PUBLIC include)
+target_link_libraries(laye PRIVATE options)
+
+# Generic object library (convertible to ELF and COFF, currently)
+add_library(
+  object STATIC
+  include/object/elf.h
+  include/object/elf.hh
+  include/object/generic.hh
+  lib/object/elf.cc
+  lib/object/generic.cc
+)
+target_include_directories(object PUBLIC include)
+target_link_libraries(object PRIVATE options)
+
+# Add the main lcc library.
+add_library(
+  liblcc STATIC
+  include/lcc/codegen/isel.hh
+  include/lcc/codegen/gnu_as_att_assembly.hh
+  include/lcc/codegen/mir.hh
+  include/lcc/codegen/mir_utils.hh
+  include/lcc/codegen/register_allocation.hh
+  include/lcc/codegen/x86_64/assembly.hh
+  include/lcc/codegen/x86_64/isel_patterns.hh
+  include/lcc/codegen/x86_64/object.hh
+  include/lcc/codegen/x86_64/x86_64.hh
+  include/lcc/context.hh
+  include/lcc/core.hh
+  include/lcc/diags.hh
+  include/lcc/file.hh
+  include/lcc/format.hh
+  include/lcc/forward.hh
+  include/lcc/ir/domtree.hh
+  include/lcc/ir/ir.hh
+  include/lcc/ir/module.hh
+  include/lcc/ir/type.hh
+  include/lcc/lcc-c.h
+  include/lcc/location.hh
+  include/lcc/opt/opt.hh
+  include/lcc/syntax/lexer.hh
+  include/lcc/syntax/token.hh
+  include/lcc/target.hh
+  include/lcc/utils.hh
+  include/lcc/utils/aint.hh
+  include/lcc/utils/ast_printer.hh
+  include/lcc/utils/dependency_graph.hh
+  include/lcc/utils/generator.hh
+  include/lcc/utils/ir_printer.hh
+  include/lcc/utils/iterator.hh
+  include/lcc/utils/macros.hh
+  include/lcc/utils/platform.hh
+  include/lcc/utils/result.hh
+  include/lcc/utils/rtti.hh
+  lib/lcc/codegen/isel.cc
+  lib/lcc/codegen/mir.cc
+  lib/lcc/codegen/register_allocation.cc
+  lib/lcc/codegen/x86_64/assembly.cc
+  lib/lcc/codegen/x86_64/object.cc
+  lib/lcc/codegen/x86_64/x86_64.cc
+  lib/lcc/context.cc
+  lib/lcc/diags.cc
+  lib/lcc/file.cc
+  lib/lcc/init.cc
+  lib/lcc/ir/domtree.cc
+  lib/lcc/ir/ir.cc
+  lib/lcc/ir/llvm.cc
+  lib/lcc/ir/module.cc
+  lib/lcc/ir/module_mir.cc
+  lib/lcc/ir/parser.cc
+  lib/lcc/lcc-c.cc
+  lib/lcc/location.cc
+  lib/lcc/opt/opt.cc
+  lib/lcc/platform.cc
+  lib/lcc/utils.cc
+)
 set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
+
+# Link main lcc library with generic object library.
+target_link_libraries(liblcc PUBLIC object)
+
+# Link main lcc library with language libraries.
+target_link_libraries(liblcc PUBLIC lcc-cc)
+target_link_libraries(liblcc PUBLIC intercept)
+target_link_libraries(liblcc PUBLIC laye)
 
 # Add the driver.
 add_executable(lcc "${PROJECT_SOURCE_DIR}/src/lcc.cc")
@@ -230,7 +362,7 @@ add_executable(lcc "${PROJECT_SOURCE_DIR}/src/lcc.cc")
 # Set public include dir for lcc.
 target_include_directories(liblcc PUBLIC "${PROJECT_SOURCE_DIR}/include")
 
-# Apply our options.
+# Apply options.
 target_link_libraries(liblcc PRIVATE options)
 target_link_libraries(lcc PRIVATE options liblcc)
 
