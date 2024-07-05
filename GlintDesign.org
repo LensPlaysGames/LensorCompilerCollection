@@ -582,6 +582,7 @@ Variable Declaration
 Variable Assignment :: IDENTIFIER ":=" new-value
 Lambda :: "lambda" function-type body-expr;
 Function Call :: function [ args... ];
+Compound Literal :: type [ args... ];
 
 Control Flow CFor :: "cfor" "(" init-expr; condition-expr; iterator-expr; ")" body-expr;
 Control Flow while :: "while" condition-expr body-expr;
@@ -690,3 +691,29 @@ While we don't have a char type like C does, and our strings take advantage of b
   b"h"; ;; type of Byte, value of 104
 #+end_src
 
+*** Small Note
+[2024-07-04 Thu 20:45]
+
+Equivalent:
+#+begin_src lisp
+  ;; Type-declared variable declaration initialized with integer literal.
+  offset : usz 0;
+  offset : usz = 0;
+  ;; Type-inferenced variable declaration initialized with compound literal.
+  offset :: usz 0;
+#+end_src
+
+NOTE: May end up removing ability to put ~=~ in there.
+
+*** "Pincer" Type Inference
+[2024-07-04 Thu 20:48]
+
+NOTE: This may all be really stupid, or not novel, or something like that. That's okay.
+
+Fuck bottom-up and top-down closed-off stupid mindsets. Like the parsers I write, both will be used in tandem. My idea is that sometimes when we are type-checking we will have an "expected type": this is the top-down approach, I think.
+
+Type-checking the initialising expression of =offset : usz -1;=, for example, we can pretty heavily infer that the type should be a usz: we don't need the initialising expression to explicitly declare it's own type (i.e. bottom up). Not that it couldn't, of course: a value may absolutely have it's type fully defined. This is the approach of the pincer: it aims to find places where it can't pinch, and those are errors. That is, it tries to find places where the /defined type/ of an expression (bottom-up) isn't convertable to the /declared type/ of an expression (top-down); these are type errors.
+
+Why does this matter? Well, if you have ever used C, you will recognized the declaration above and realise that, in C, as soon as you compile it, you will get a big, phat warning (provided =-Wconversion= is on, but, if it isn't, /you are insane/), or maybe even an error. This is because =-1=, as an expression by itself, is signed. I mean, if it wasn't, the sign wouldn't be doing much there, would it :Þ? So, the expression itself defines it's type to be some signed integer type (or at least constrains it so), and the declaration declares it's value to be of an unsigned integer type. As you can see, this mismatch is what causes the type warnings/errors to occur in C. However, looking at this from a philosophical point of view, what did the programmer intend in writing such syntax? THEY OBVIOUSLY INTENDED TO INITIALISE A =usz= WITH A VALUE OF =-1= AND HAVE ASKED THE LANGUAGE AND/OR COMPILER TO DO THE CONVERSION AUTOMATICALLY. Like, really, what kind of programmer is relying on a compiler to tell them they initialised something to a value that has to be converted to what they are initialising it to? I understand they ideally want no operation to happen "silently" in C or whatever but in C++... yeah, I don't know why they keep this system around. So, instead of having a perfectly-precise pincer-point that may only effectively "pinch" when they are exactly the same, I want to put some leeway in there to /trust the programmer/ and therefore bias the pincer towards the top-down declared type if present (converting the value of bottum-up defined type to the declared type if necessary). This means no error on things like =offset : usz -1=. the compiler will insert a cast/conversion to =usz=, and store that value.
+
+C++ people may argue that this is a problem because it does conversions that might be costly very easily and invisibly, or something like that. My response to that is that if a programmer cares about performance, they will write performant code, and know how to do so. If our goal was to allow any old idiot to write perfectly fast code, then, sure, we may want to make it obvious that expensive operations occur when creating a string from a string view or something of that nature, and make it difficult to do in the first place---to try and force programmers who don't care about performance to write performant code when it may not even matter for the program they are writing. In my opinion, this is /futile/. If a programmer's program runs too slow, /they/ will figure out why and fix up that code; if that programmer was converting between string view and string all the time, or making a bunch of dynamic array copies, or whatever other awfulness they have stumbled upon, then they will learn a valuable lesson in how /not/ to write code as well as the consequences if you do.
