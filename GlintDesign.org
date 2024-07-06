@@ -509,10 +509,10 @@ The opposites of =if= and =while=, they're there if you want them.
 =until=
 #+begin_src lisp
   data :: "Some \"string\" returned from some C library\n";
-  c_str :: &data[0];
+  c_str :: data[0];
   until @c_str = '\0' {
       (print @c_str);
-      c_str := &c_str[1];
+      c_str := c_str[1];
   };
 #+end_src
 
