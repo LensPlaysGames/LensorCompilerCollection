@@ -43,12 +43,12 @@ foo;
 
 **** Variable Declaration
 #+begin_example
-foo : string;
+foo: [Byte];
 #+end_example
 
 **** Variable Declaration w/ Definition
 #+begin_example
-foo :string "ruh roh";
+foo: [Byte] "ruh roh";
 #+end_example
 
 **** Variable Declaration w/ Definition (type inferred)
@@ -63,29 +63,37 @@ foo := "ruh roh";
 
 **** Function Declaration w/ Immediate Return Expression
 #+begin_example
-func :string() "im the returned value when you call (func)";
+func: [Byte]() "im the returned value when you call (func)";
 #+end_example
 
 **** Function Declaration w/ Body
 #+begin_example
-func :string() {
+func1: [Byte]() {
   ;; .. some other stuff ..
-  "im the returned value when you call (func)";
+  "im the returned value when you call (func1)";
+};
+
+;; Note that `return` also exists.
+func2: [Byte](cond: Boolean) {
+  if cond return "I might be the returned value, if cond is truthy";
+  "im the returned value when you call (func2)";
 };
 #+end_example
 
 **** Function Declaration (external)
 #+begin_example
-external puts :void(:byte.ptr);
+external puts: void(:byte.ptr);
 #+end_example
 
 Basically, if you are linking with a library written in another language, you can use =external= before declaring the Glint type information for the symbol from that library. Most of the time, =external= should be reserved to library wrappers/bindings written in Glint, and then =import='ed like everything else. NOTE: =external= automatically implies =export= ($\text{external} \Rightarrow \text{export} \land \text{external}$).
 
 Defining a body expression for an externally-declared function is ill-formed.
 
-**** Function Declaration (exported)
+**** Declarations (exported)
 #+begin_example
+;; Type-inferred Variable
 export value :: 69;
+;; Function
 export function :int() 420;
 #+end_example
 
@@ -95,27 +103,23 @@ When compiling a module, the symbols are kept local by default. That is, the sym
 
 **** Function Call
 #+begin_example
-(func)
+;; All of the following are equivalent.
+func;
+func();
+(func);
 #+end_example
-
-If the first expression within parentheses resolves to a value of function type, it will be called, with the rest of the expressions in the parentheses passed as arguments.
-
-If the first expression in parentheses does not resolve to a value of function type, but instead to a type itself, that type will be instantiated with the arguments passed along to the constructor.
-
-Otherwise, the parentheses are just treated as a grouped expression (i.e. =(x + 2) * 3=).
-
-There is a special form regarding parentheses where a parenthetical expression following a number (or anything that may be multiplied) acts as a multiplication, just like in math (i.e. =3(x + 2)=).
-
-NOTE: We may want to make it possible to call functions like we can multiply numbers, with the more "normal" invocation syntax. If it doesn't break the grammar, I don't see why not. =fact(5)= or =(fact 5)= both make sense to me.
 
 **** Function Call w/ Arguments
 #+begin_example
-(some-function "something" "another argument", "optional comma")
+;; All of the following are equivalent.
+func arg1, (arg_func) arg3;
+func(arg1 (arg_func), arg3);
+(func, arg1 (arg_func) arg3);
 #+end_example
 
 **** Struct Type Declaration
 #+begin_example
-struct my-struct {
+my-struct: struct {
   my-member: long;
   some-data: int, ;; You can use commas or semi-colons, doesn't matter.
 };
@@ -125,12 +129,12 @@ struct my-struct {
 In Glint, an enum is just a way to name values.
 
 #+begin_example
-enum my-enum {
+my-enum: enum {
   one :: 1,
   two :: 2,
 };
 
-enum names :string {
+names: enum [Byte] {
   JERRY :: "Jerry Seinfeld",
   JEREMY :: "Jeremy Elbertson",
 };
@@ -139,6 +143,8 @@ enum names :string {
 If a type is declared, the values will be constrained to be convertible to that type.
 
 If no type is declared, an enum will act like a union of all of the types of all of the values within it. Every enum has a corresponding sort of "variant index" stored inside it that may be queried to see what value the enum holds. Basically, each named value will be assigned an index within an enum, and then we will convert the name passed to the "enum.has" thing into the corresponding index value within the variant, allowing for the runtime check to be generated properly.
+
+NOTE: I may choose to separate the "flag style" enum and the "variant style" enum into "enum" and "union", respectively.
 
 #+begin_example
 enum my-enum {
@@ -176,8 +182,6 @@ switch foo {
   case PERMA "It's over 9000";
 }});
 #+end_example
-
-NOTE: I may choose to separate the "flag style" enum and the "variant style" enum into "enum" and "union", respectively.
 
 **** NOTE: Macros Are a Thing, but They Aren't Covered Here
 
