@@ -11,6 +11,9 @@ struct ASTPrinter {
     using NodeType = NodeTy;
     using TypeType = TypeTy;
 
+    static constexpr Colour base_colour{White};
+    static constexpr Colour name_colour{Reset};
+
     std::string out;
     bool use_colour = true;
     Colours C{use_colour};
@@ -36,22 +39,20 @@ struct ASTPrinter {
     }
 
     /// Print the start of the header of an AST node.
-    /// Example: IfExpr 0xdeadbeef <0>
+    /// Example: IfExpr <69>
     void PrintBasicHeader(std::string_view node_name, const NodeType* node) {
         out += fmt::format(
-            "{}{} {}{} {}<{}>",
-            C(Red),
+            "{}{} {}<{}>",
+            C(name_colour),
             node_name,
-            C(Blue),
-            fmt::ptr(node),
-            C(Magenta),
+            C(base_colour),
             node->location().pos
         );
     }
 
     /// Print the linkage of a node.
     void PrintLinkage(lcc::Linkage l) {
-        out += C(Red);
+        out += C(name_colour);
         switch (l) {
             case lcc::Linkage::LocalVar: out += "Local "; return;
             case lcc::Linkage::Internal: out += "Internal "; return;
@@ -70,7 +71,7 @@ struct ASTPrinter {
             const bool last = handle_last and i == exprs.size() - 1;
 
             /// Print the leading text.
-            out += fmt::format("{}{}{}", C(Red), leading_text, last ? "└─" : "├─");
+            out += fmt::format("{}{}{}", C(base_colour), leading_text, last ? "└─" : "├─");
 
             /// Print the child.
             static_cast<Derived*>(this)->operator()(exprs[i], leading_text + (last ? "  " : "│ "));
