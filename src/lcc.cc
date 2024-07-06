@@ -1,6 +1,9 @@
 #include <c/ast.hh>
 #include <c/parser.hh>
 #include <fmt/format.h>
+#include <glint/ast.hh>
+#include <glint/parser.hh>
+#include <glint/sema.hh>
 #include <intercept/ast.hh>
 #include <intercept/ir_gen.hh>
 #include <intercept/parser.hh>
@@ -70,10 +73,10 @@ void aluminium_handler() {
     // Windows
     system("start https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #elif defined(__APPLE__)
-    // Apple (iOS, OS X, watchOS...)
+    // Apple
     system("open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #elif __linux__ || __unix__
-    // Linux or unix-based
+    // Linux-ish
     system("xdg-open https://www.youtube.com/watch?v=dQw4w9WgXcQ");
 #endif
 }
@@ -95,10 +98,10 @@ const lcc::Format* default_format = lcc::Format::gnu_as_att_assembly;
 struct Options {
     bool verbose{false};
     bool ast{false};
-    bool sema{false};
-    bool syntax{false};
     bool ir{false};
     bool mir{false};
+    bool stopat_sema{false};
+    bool stopat_syntax{false};
     bool aluminium{false};
 
     std::vector<std::string> input_files{};
@@ -128,11 +131,11 @@ int main(int argc, const char** argv) {
             fmt::print("FLAGS:\n");
             fmt::print("{}", TwoColumnLayoutHelper{{
                 {"  -v", "Enable verbose output\n"},
-                {"  --ast", "Print the AST and exit without generating code\n"},
-                {"  --sema", "Run sema only and exit\n"},
-                {"  --syntax-only", "Do not perform semantic analysis\n"},
-                {"  --ir", "Emit LCC intermediate representation and exit\n"},
-                {"  --mir", "Emit LCC machine instruction representation at various stages and exit\n"},
+                {"  --ast", "Emit AST in human-readable format\n"},
+                {"  --ir", "Emit LCC intermediate representation\n"},
+                {"  --mir", "Emit LCC machine instruction representation at various stages\n"},
+                {"  --stopat-syntax", "Request language does not process input further than syntactic analysis\n"},
+                {"  --stopat-sema", "Request language does not process input further than semantic analysis\n"},
                 {"  --aluminium", "That special something to spice up your compilation\n"}},
             }.get());
             fmt::print("OPTIONS:\n");
@@ -157,14 +160,14 @@ int main(int argc, const char** argv) {
             options.verbose = true;
         else if (arg == "--ast")
             options.ast = true;
-        else if (arg == "--sema")
-            options.sema = true;
-        else if (arg == "--syntax-only")
-            options.syntax = true;
         else if (arg == "--ir")
             options.ir = true;
         else if (arg == "--mir")
             options.mir = true;
+        else if (arg == "--stopat-syntax")
+            options.stopat_syntax = true;
+        else if (arg == "--stopat-sema")
+            options.stopat_sema = true;
         else if (arg == "--aluminium")
             options.aluminium = true;
 
@@ -218,12 +221,22 @@ int main(int argc, const char** argv) {
         } else if (arg == "-f") {
             // What format to emit code in
             auto format = next_arg();
-            // asm, gnu-as-att, obj, elf, coff
-            if (format != "asm" and format != "gnu-as-att" and format != "obj" and format != "elf" and format != "coff" and format != "llvm") {
+            if (
+                format != "asm" and format != "gnu-as-att"
+                and format != "obj" and format != "elf"
+                and format != "coff" and format != "llvm"
+            ) {
                 fmt::print("CLI ERROR: Invalid format {}\n", format);
                 exit(1);
             }
             options.format = format;
+        } else if (arg.starts_with("-")) {
+            fmt::print(
+                "CLI ERROR: Unrecognized command line option or flag {}\n"
+                "    Prepend ./ or equivalent for file that starts with '-'\n",
+                arg
+            );
+            exit(1);
         } else {
             // Otherwise, it's a filepath
             options.input_files.push_back(std::string(arg));
@@ -358,26 +371,45 @@ int main(int argc, const char** argv) {
             return EmitModule(mod.get(), path_str, output_file_path);
         }
 
+        /// Glint.
+        else if (specified_language == "glint" or (specified_language == "default" and path_str.ends_with(".g"))) {
+            /// Parse the file.
+            auto mod = lcc::glint::Parser::Parse(&context, file);
+            if (context.has_error()) return; // the error condition is handled by the caller already
+            if (options.ast) mod->print(use_colour);
+            if (options.stopat_syntax) return;
+
+            /// Perform semantic analysis.
+            lcc::glint::Sema::Analyse(&context, *mod, true);
+            if (context.has_error()) return; // the error condition is handled by the caller already
+            if (options.ast) {
+                fmt::print("\nAfter Sema:\n");
+                mod->print(use_colour);
+            }
+
+            /// Stop after sema if requested.
+            if (options.stopat_sema) return;
+
+            fmt::print("Sorry, Glint is currently a WIP language\n");
+            exit(0);
+
+            // TODO
+            // return EmitModule(lcc::glint::IRGen::Generate(&context, *mod), path_str, output_file_path);
+        }
+
         /// Intercept.
         else if (specified_language == "int" or (specified_language == "default" and path_str.ends_with(".int"))) {
             /// Parse the file.
             auto mod = lcc::intercept::Parser::Parse(&context, file);
             if (context.has_error()) return; // the error condition is handled by the caller already
-            if (options.syntax) {
-                if (options.ast) mod->print(use_colour);
-                return;
-            }
+            if (options.ast) mod->print(use_colour);
+            if (options.stopat_syntax) return;
 
             /// Perform semantic analysis.
             lcc::intercept::Sema::Analyse(&context, *mod, true);
             if (context.has_error()) return; // the error condition is handled by the caller already
-            if (options.ast) {
-                mod->print(use_colour);
-                return;
-            }
-
-            /// Stop after sema if requested.
-            if (options.sema) return;
+            if (options.ast) mod->print(use_colour);
+            if (options.stopat_sema) return;
 
             return EmitModule(lcc::intercept::IRGen::Generate(&context, *mod), path_str, output_file_path);
         }
@@ -389,11 +421,9 @@ int main(int argc, const char** argv) {
             /// Parse the file.
             auto mod = laye_context->get_or_load_module(file);
             if (context.has_error()) return; // the error condition is handled by the caller already
-            if (options.syntax) {
-                if (options.ast) laye_context->print_modules();
-                // stop processing this file, but DO continue to process other files passed in
-                return;
-            }
+            if (options.ast) laye_context->print_modules();
+            // stop processing this file, but DO continue to process other files passed in
+            if (options.stopat_syntax) return;
 
             /// Perform semantic analysis.
             lcc::laye::Sema::Analyse(laye_context, mod, true);
@@ -404,7 +434,7 @@ int main(int argc, const char** argv) {
             }
 
             /// Stop after sema if requested.
-            if (options.sema) return;
+            if (options.stopat_sema) return;
 
             for (auto module : laye_context->modules()) {
                 std::string input_file_path = module->file()->path().string();
@@ -421,10 +451,11 @@ int main(int argc, const char** argv) {
             auto c_context = new lcc::c::CContext{&context};
             auto translation_unit = lcc::c::Parser::Parse(c_context, file);
 
-            if (options.syntax) {
-                if (options.ast) translation_unit->print();
-                return;
-            }
+            if (options.ast) translation_unit->print();
+            if (options.stopat_syntax) return;
+
+            /// Stop after sema if requested.
+            if (options.stopat_sema) return;
 
             LCC_TODO();
         }

@@ -37,6 +37,16 @@ public:
         usz align_of_bool;
         usz align_of_byte;
         usz align_of_int;
+    } glint;
+
+    struct {
+        usz size_of_bool;
+        usz size_of_byte;
+        usz size_of_int;
+
+        usz align_of_bool;
+        usz align_of_byte;
+        usz align_of_int;
     } intercept;
 
     struct {
@@ -57,8 +67,6 @@ public:
         bool char_is_signed;
     } ffi;
 
-    /// TODO(Sirraide): Function pointers may have a different size than object
-    ///     pointers on some targets.
     usz size_of_pointer;
     usz align_of_pointer;
 
@@ -82,6 +90,16 @@ namespace detail {
 struct Targets {
     static constexpr Target x86_64_linux = [] {
         Target t{};
+        t.glint = {
+            .size_of_bool = 8,
+            .size_of_byte = 8,
+            .size_of_int = 64,
+
+            .align_of_bool = 8,
+            .align_of_byte = 8,
+            .align_of_int = 64,
+        };
+
         t.intercept = {
             .size_of_bool = 8,
             .size_of_byte = 8,

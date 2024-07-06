@@ -1,10 +1,10 @@
-#ifndef INTERCEPT_EVAL_HH
-#define INTERCEPT_EVAL_HH
+#ifndef GLINT_EVAL_HH
+#define GLINT_EVAL_HH
 
 #include <lcc/utils.hh>
 #include <lcc/utils/aint.hh>
 
-namespace lcc::intercept {
+namespace lcc::glint {
 class Scope;
 class Expr;
 class Decl;
@@ -41,6 +41,6 @@ public:
     StringLiteral* as_string() const { return std::get<StringLiteral*>(data); }
 };
 
-} // namespace lcc::intercept
+} // namespace lcc::glint
 
-#endif // INTERCEPT_EVAL_HH
+#endif // GLINT_EVAL_HH

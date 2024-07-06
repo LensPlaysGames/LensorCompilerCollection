@@ -221,6 +221,24 @@ target_precompile_headers(options INTERFACE "${PROJECT_SOURCE_DIR}/include/lcc/u
 # default, and I don't take kindly to those not willing to put in the
 # effort ơ_ơ.
 
+# Glint language library
+add_library(
+  glint STATIC
+  include/glint/ast.hh
+  include/glint/eval.hh
+  include/glint/lexer.hh
+  include/glint/parser.hh
+  include/glint/sema.hh
+  lib/glint/ast.cc
+  lib/glint/eval.cc
+  lib/glint/lexer.cc
+  lib/glint/parser.cc
+  lib/glint/sema.cc
+)
+target_include_directories(glint PUBLIC include)
+target_link_libraries(glint PRIVATE options)
+target_link_libraries(glint PRIVATE object)
+
 # C language library
 add_library(
   lcc-cc STATIC
@@ -352,6 +370,7 @@ set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
 target_link_libraries(liblcc PUBLIC object)
 
 # Link main lcc library with language libraries.
+target_link_libraries(liblcc PUBLIC glint)
 target_link_libraries(liblcc PUBLIC lcc-cc)
 target_link_libraries(liblcc PUBLIC intercept)
 target_link_libraries(liblcc PUBLIC laye)

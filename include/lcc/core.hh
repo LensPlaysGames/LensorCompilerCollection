@@ -61,6 +61,9 @@ enum struct CallConv {
 
     /// Intercept internal calling convention.
     Intercept,
+
+    /// Glint internal calling convention.
+    Glint,
 };
 
 enum struct IntrinsicKind {
@@ -183,6 +186,7 @@ constexpr auto StringifyEnum(CallConv cc) -> std::string_view {
         case CallConv::C: return "ccc";
         case CallConv::Laye: return "layecc";
         case CallConv::Intercept: return "intcc";
+        case CallConv::Glint: return "glintcc";
     }
 
     LCC_UNREACHABLE();
