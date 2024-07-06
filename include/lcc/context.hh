@@ -27,6 +27,7 @@ class Context {
     /// Miscellaneous flags.
     bool _colour_diagnostics = false;
     bool _should_print_mir = false;
+    bool _stopat_mir = false;
 
     const Target* _target{};
     const Format* _format{};
@@ -45,7 +46,8 @@ public:
         const Target* tgt,
         const Format* format,
         bool colour_diagnostics,
-        bool should_print_mir
+        bool should_print_mir,
+        bool stopat_mir
     );
 
     /// Do not allow copying or moving the context.
@@ -108,6 +110,9 @@ public:
 
     [[nodiscard]]
     bool should_print_mir() const { return _should_print_mir; }
+
+    [[nodiscard]]
+    bool stopat_mir() const { return _stopat_mir; }
 
     auto include_directories() const -> const decltype(_include_directories)& {
         return _include_directories;

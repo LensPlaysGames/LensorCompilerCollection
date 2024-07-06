@@ -226,11 +226,13 @@ add_library(
   glint STATIC
   include/glint/ast.hh
   include/glint/eval.hh
+  include/glint/ir_gen.hh
   include/glint/lexer.hh
   include/glint/parser.hh
   include/glint/sema.hh
   lib/glint/ast.cc
   lib/glint/eval.cc
+  lib/glint/ir_gen.cc
   lib/glint/lexer.cc
   lib/glint/parser.cc
   lib/glint/sema.cc

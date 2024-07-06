@@ -1,15 +1,15 @@
 #ifndef LCC_IR_TYPE_HH
 #define LCC_IR_TYPE_HH
 
-#include <lcc/utils.hh>
 #include <lcc/forward.hh>
+#include <lcc/utils.hh>
 #include <vector>
 
 namespace lcc {
 /// Base class of all IR types.
 ///
 /// Note: IR types are immutable and cached and uniqued in the
-/// context. Two IR types are equal, iff their pointers are equ``al.
+/// context. Two IR types are equal, iff their pointers are equal.
 class Type {
     friend class lcc::Context;
 

@@ -136,7 +136,7 @@ auto PrintMIR(std::vector<GlobalVariable*>& vars, std::vector<MFunction>& mcode)
         "{}{}{}{}",
         fmt::join(vws::transform(vars, PrintGlobal), "\n"),
         vars.empty() ? "" : "\n",
-        fmt::join(vws::transform(mcode, PrintMFunction), "\n"),
+        fmt::join(vws::transform(mcode, PrintMFunction), ""),
         mcode.empty() ? "" : "\n"
     );
 };

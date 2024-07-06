@@ -1,10 +1,10 @@
 #include <lcc/context.hh>
+#include <lcc/format.hh>
 #include <lcc/ir/ir.hh>
 #include <lcc/ir/module.hh>
 #include <lcc/ir/type.hh>
 #include <lcc/lcc-c.h>
 #include <lcc/target.hh>
-#include <lcc/format.hh>
 
 extern "C" {
 
@@ -30,17 +30,17 @@ LccFormatRef lcc_format_gnu_as_att_assembly() {
 
 /// Create an LCC context.
 LccContextRef lcc_context_create(LccTargetRef target, LccFormatRef format) {
-    return reinterpret_cast<LccContextRef>(new lcc::Context {
-            reinterpret_cast<const lcc::Target*>(target),
-            reinterpret_cast<const lcc::Format*>(format),
-            true, // use colour in diagnostics
-            false // do not print mir and exit
-        });
+    return reinterpret_cast<LccContextRef>(new lcc::Context{
+        reinterpret_cast<const lcc::Target*>(target),
+        reinterpret_cast<const lcc::Format*>(format),
+        true,  // use colour in diagnostics
+        false, // do not print mir
+        false, // do not stop after MIR, before code emission
+    });
 }
 
 LccModuleRef lcc_module_create(LccContextRef context) {
     auto lcc_context = reinterpret_cast<lcc::Context*>(context);
     return reinterpret_cast<LccModuleRef>(new lcc::Module(lcc_context));
 }
-
 }

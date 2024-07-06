@@ -1,12 +1,11 @@
 #include <algorithm>
 #include <fmt/format.h>
-#include <object/generic.hh>
 #include <lcc/codegen/isel.hh>
 #include <lcc/codegen/mir.hh>
 #include <lcc/codegen/register_allocation.hh>
-#include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/codegen/x86_64/assembly.hh>
 #include <lcc/codegen/x86_64/object.hh>
+#include <lcc/codegen/x86_64/x86_64.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/format.hh>
@@ -15,6 +14,7 @@
 #include <lcc/target.hh>
 #include <lcc/utils.hh>
 #include <lcc/utils/ir_printer.hh>
+#include <object/generic.hh>
 
 // NOTE: See module_mir.cc for Machine Instruction Representation (MIR)
 // generation.
@@ -59,8 +59,6 @@ void Module::lower() {
                                 // - unroll into 8 byte loads, temporary pointer stored into then
                                 //   incremented
 
-                                // NOTE(local): For now, allowing the IR to otherwise handle big loads like any other type,
-                                // relying on the backend to decide what happens.
                                 // LCC_ASSERT(false, "TODO: Handle load > 8 bytes lowering");
                             }
                         } break;
@@ -109,13 +107,13 @@ void Module::emit(std::filesystem::path output_file_path) {
                 select_instructions(this, mfunc);
 
             if (_ctx->should_print_mir()) {
-                fmt::print("After ISel\n");
+                fmt::print("\nAfter ISel\n");
                 if (_ctx->target()->is_x64()) {
                     for (auto& f : machine_ir)
-                        fmt::print("{}\n", PrintMFunctionImpl(f, x86_64::opcode_to_string));
+                        fmt::print("{}", PrintMFunctionImpl(f, x86_64::opcode_to_string));
                 } else {
                     fmt::print(
-                        "{}\n",
+                        "{}",
                         fmt::join(vws::transform(machine_ir, PrintMFunction), "\n")
                     );
                 }
@@ -158,18 +156,19 @@ void Module::emit(std::filesystem::path output_file_path) {
                 allocate_registers(desc, mfunc);
 
             if (_ctx->should_print_mir()) {
-                fmt::print("After RA\n");
+                fmt::print("\nAfter RA\n");
                 if (_ctx->target()->is_x64()) {
                     for (auto& f : machine_ir)
-                        fmt::print("{}\n", PrintMFunctionImpl(f, x86_64::opcode_to_string));
+                        fmt::print("{}", PrintMFunctionImpl(f, x86_64::opcode_to_string));
                 } else {
                     fmt::print(
-                        "{}\n",
+                        "{}",
                         fmt::join(vws::transform(machine_ir, PrintMFunction), "\n")
                     );
                 }
-                std::exit(0);
             }
+
+            if (_ctx->stopat_mir()) std::exit(0);
 
             if (_ctx->format()->format() == Format::GNU_AS_ATT_ASSEMBLY) {
                 if (_ctx->target()->is_x64())

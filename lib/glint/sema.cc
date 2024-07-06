@@ -1033,15 +1033,8 @@ bool lcc::glint::Sema::Analyse(Expr** expr_ptr, Type* expected_type) {
             /// Type must be a struct type (or something that represents one, like a DynamicArrayType)
             auto stripped_object_type = m->object()->type()->strip_pointers_and_references();
             auto struct_type = cast<StructType>(stripped_object_type);
-            if (not struct_type and is<DynamicArrayType>(stripped_object_type)) {
-                struct_type = new (mod) StructType(
-                    mod.global_scope(),
-                    {{"data", new (mod) PointerType(m->object()->type()->elem()), {}},
-                     {"size", Type::UInt, {}},
-                     {"capacity", Type::UInt, {}}},
-                    m->object()->type()->location()
-                );
-            }
+            if (not struct_type and is<DynamicArrayType>(stripped_object_type))
+                struct_type = as<DynamicArrayType>(stripped_object_type)->struct_type(mod);
 
             if (not struct_type) {
                 Error(
@@ -1438,6 +1431,10 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     // TODO: This NameRefExpr check is probably a sign of something more
     // sinister going on, but I can't exactly pinpoint it right now.
     if (is<TypeExpr>(expr->callee()) or (is<NameRefExpr>(expr->callee()) and is<TypeDecl>(as<NameRefExpr>(expr->callee())->target()))) {
+        const usz s = expr->args().size();
+        for (usz i = 0; i < s; ++i)
+            LValueToRValue(expr->args().data() + i);
+
         if (expr->args().size() == 1) {
             *expr_ptr = new (mod) CastExpr(
                 expr->args().at(0),
@@ -1550,6 +1547,7 @@ void lcc::glint::Sema::AnalyseCall(Expr** expr_ptr, CallExpr* expr) {
     /// lvalue-to-rvalue conversion only if the parameter type is not a reference
     /// type. This is all handled transparently by Convert().
     for (usz i = 0, end = std::min(expr->args().size(), func_type->params().size()); i < end; i++) {
+        LValueToRValue(expr->args().data() + i);
         if (not Convert(expr->args().data() + i, func_type->params()[i].type)) Error(
             expr->args()[i]->location(),
             "Type of argument {} is not convertible to parameter type {}",
@@ -2068,6 +2066,7 @@ bool lcc::glint::Sema::Analyse(Type** type_ptr) {
 
         // Apply decltype decay to the element type, prohibit arrays of
         // references, and, if there is an initial size expression, analyse that.
+        // Also set cached struct type for IRGen by calling struct_type().
         case Type::Kind::DynamicArray: {
             auto a = as<DynamicArrayType>(type);
             LCC_ASSERT(a->element_type(), "DynamicArray has NULL element type");
@@ -2083,6 +2082,9 @@ bool lcc::glint::Sema::Analyse(Type** type_ptr) {
                 );
                 a->set_sema_errored();
             }
+
+            // Cache struct type for IRGen.
+            (void) a->struct_type(mod);
 
             if (a->initial_size()) Analyse(&a->initial_size());
         } break;

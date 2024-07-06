@@ -2,6 +2,7 @@
 #include <c/parser.hh>
 #include <fmt/format.h>
 #include <glint/ast.hh>
+#include <glint/ir_gen.hh>
 #include <glint/parser.hh>
 #include <glint/sema.hh>
 #include <intercept/ast.hh>
@@ -100,8 +101,10 @@ struct Options {
     bool ast{false};
     bool ir{false};
     bool mir{false};
-    bool stopat_sema{false};
     bool stopat_syntax{false};
+    bool stopat_sema{false};
+    bool stopat_ir{false};
+    bool stopat_mir{false};
     bool aluminium{false};
 
     std::vector<std::string> input_files{};
@@ -136,6 +139,8 @@ int main(int argc, const char** argv) {
                 {"  --mir", "Emit LCC machine instruction representation at various stages\n"},
                 {"  --stopat-syntax", "Request language does not process input further than syntactic analysis\n"},
                 {"  --stopat-sema", "Request language does not process input further than semantic analysis\n"},
+                {"  --stopat-ir", "Do not process input further than LCC's intermediate representation (IR)\n"},
+                {"  --stopat-mir", "Do not process input further than LCC's machine instruction representation (MIR)\n"},
                 {"  --aluminium", "That special something to spice up your compilation\n"}},
             }.get());
             fmt::print("OPTIONS:\n");
@@ -251,9 +256,6 @@ int main(int argc, const char** argv) {
     else if (colour_opt == "never") use_colour = false;
     else use_colour = lcc::platform::StdoutIsTerminal() or lcc::platform::StderrIsTerminal();
 
-    // Determine whether we should print MIR or not.
-    bool should_print_mir{options.mir};
-
     /// Get input files
     auto& input_files = options.input_files;
     if (options.verbose) {
@@ -288,7 +290,8 @@ int main(int argc, const char** argv) {
         detail::default_target,
         format,
         use_colour,
-        should_print_mir};
+        options.mir,
+        options.stopat_mir};
 
     for (const auto& dir : options.include_directories) {
         if (options.verbose) fmt::print("Added input directory: {}\n", dir);
@@ -319,12 +322,17 @@ int main(int argc, const char** argv) {
         if (options.optimisation)
             lcc::opt::Optimise(m, int(options.optimisation));
 
-        if (options.ir) {
-            m->print_ir(use_colour);
-            return;
-        }
+        if (options.ir) m->print_ir(use_colour);
 
         m->lower();
+
+        if (options.ir) {
+            fmt::print("\nAfter Lowering:\n");
+            m->print_ir(use_colour);
+        }
+
+        if (options.stopat_ir) return;
+
         m->emit(output_file_path);
 
         if (options.verbose)
@@ -390,11 +398,9 @@ int main(int argc, const char** argv) {
             /// Stop after sema if requested.
             if (options.stopat_sema) return;
 
-            fmt::print("Sorry, Glint is currently a WIP language\n");
-            exit(0);
+            auto ir = lcc::glint::IRGen::Generate(&context, *mod);
 
-            // TODO
-            // return EmitModule(lcc::glint::IRGen::Generate(&context, *mod), path_str, output_file_path);
+            return EmitModule(ir, path_str, output_file_path);
         }
 
         /// Intercept.

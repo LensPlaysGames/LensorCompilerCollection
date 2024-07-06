@@ -6,9 +6,11 @@ lcc::Context::Context(
     const Target* tgt,
     const Format* fmt,
     bool colour_diags,
-    bool should_print_mir
+    bool should_print_mir,
+    bool stopat_mir
 ) : _colour_diagnostics(colour_diags),
     _should_print_mir(should_print_mir),
+    _stopat_mir(stopat_mir),
     _target(tgt),
     _format(fmt) {
     static std::once_flag once;

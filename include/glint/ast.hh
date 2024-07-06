@@ -577,6 +577,20 @@ public:
     static bool classof(const Type* type) { return type->kind() == Kind::Builtin; }
 };
 
+class IntegerType : public Type {
+    usz _bit_width;
+    bool _is_signed;
+
+public:
+    IntegerType(usz bitWidth, bool isSigned, Location location)
+        : Type(Kind::Integer, location), _bit_width(bitWidth), _is_signed(isSigned) {}
+
+    bool is_signed() const { return _is_signed; }
+    usz bit_width() const { return _bit_width; }
+
+    static bool classof(const Type* type) { return type->kind() == Kind::Integer; }
+};
+
 /// C FFI integer type.
 class FFIType : public Type {
 public:
@@ -673,35 +687,6 @@ public:
         : TypeWithOneElement(Kind::Reference, location, element_type) {}
 
     static bool classof(const Type* type) { return type->kind() == Kind::Reference; }
-};
-
-class ArrayType : public TypeWithOneElement {
-    Expr* _size;
-
-public:
-    ArrayType(Type* element_type, Expr* size, Location location = {})
-        : TypeWithOneElement(Kind::Array, location, element_type), _size(size) {}
-
-    /// Get the dimension of this array.
-    auto dimension() const -> usz;
-
-    auto size() -> Expr*& { return _size; }
-    Expr* size() const { return _size; }
-
-    static bool classof(const Type* type) { return type->kind() == Kind::Array; }
-};
-
-class DynamicArrayType : public TypeWithOneElement {
-    Expr* _initial_size;
-
-public:
-    DynamicArrayType(Type* element_type, Expr* size, Location location = {})
-        : TypeWithOneElement(Kind::DynamicArray, location, element_type), _initial_size(size) {}
-
-    auto initial_size() -> Expr*& { return _initial_size; }
-    Expr* initial_size() const { return _initial_size; }
-
-    static bool classof(const Type* type) { return type->kind() == Kind::DynamicArray; }
 };
 
 class FuncType : public Type {
@@ -819,6 +804,59 @@ public:
     static bool classof(const Type* type) { return type->kind() == Kind::Struct; }
 };
 
+class ArrayType : public TypeWithOneElement {
+    Expr* _size;
+
+public:
+    ArrayType(Type* element_type, Expr* size, Location location = {})
+        : TypeWithOneElement(Kind::Array, location, element_type), _size(size) {}
+
+    /// Get the dimension of this array.
+    auto dimension() const -> usz;
+
+    auto size() -> Expr*& { return _size; }
+    Expr* size() const { return _size; }
+
+    static bool classof(const Type* type) { return type->kind() == Kind::Array; }
+};
+
+class DynamicArrayType : public TypeWithOneElement {
+    Expr* _initial_size;
+    StructType* _cached_struct{nullptr};
+
+public:
+    DynamicArrayType(Type* element_type, Expr* size, Location location = {})
+        : TypeWithOneElement(Kind::DynamicArray, location, element_type), _initial_size(size) {}
+
+    auto initial_size() -> Expr*& { return _initial_size; }
+    Expr* initial_size() const { return _initial_size; }
+
+    auto struct_type(Module& mod) -> StructType* {
+        if (not _cached_struct) {
+            _cached_struct = new (mod) StructType(
+                mod.global_scope(),
+                {{"data", new (mod) PointerType(element_type()), {}},
+                 {"size", new (mod) IntegerType(32, false, {}), {}},
+                 {"capacity", new (mod) IntegerType(32, false, {}), {}}},
+                location()
+            );
+            _cached_struct->members().at(0).type->set_sema_done();
+            _cached_struct->members().at(1).type->set_sema_done();
+            _cached_struct->members().at(2).type->set_sema_done();
+            _cached_struct->set_sema_done();
+        }
+
+        return _cached_struct;
+    }
+
+    /// Make sure to check the return value is not nullptr.
+    auto struct_type() -> StructType* {
+        return _cached_struct;
+    }
+
+    static bool classof(const Type* type) { return type->kind() == Kind::DynamicArray; }
+};
+
 // TODO
 class EnumeratorDecl;
 class EnumType : public DeclaredType {
@@ -837,20 +875,6 @@ public:
     auto underlying_type() -> Type*& { return _underlying_type; }
 
     static bool classof(const Type* type) { return type->kind() == Kind::Enum; }
-};
-
-class IntegerType : public Type {
-    usz _bit_width;
-    bool _is_signed;
-
-public:
-    IntegerType(usz bitWidth, bool isSigned, Location location)
-        : Type(Kind::Integer, location), _bit_width(bitWidth), _is_signed(isSigned) {}
-
-    bool is_signed() const { return _is_signed; }
-    usz bit_width() const { return _bit_width; }
-
-    static bool classof(const Type* type) { return type->kind() == Kind::Integer; }
 };
 
 /// \brief Base class for expression syntax nodes.
