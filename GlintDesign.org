@@ -177,6 +177,8 @@ switch foo {
 }});
 #+end_example
 
+NOTE: I may choose to separate the "flag style" enum and the "variant style" enum into "enum" and "union", respectively.
+
 **** NOTE: Macros Are a Thing, but They Aren't Covered Here
 
 *** Fuck Exceptions
@@ -582,7 +584,8 @@ Variable Declaration
 Variable Assignment :: IDENTIFIER ":=" new-value
 Lambda :: "lambda" function-type body-expr;
 Function Call :: function [ args... ];
-Compound Literal :: type [ args... ];
+Typed Compound Literal :: type [ args... ];
+Compound Literal :: "!{" [ args... ] "}";
 
 Control Flow CFor :: "cfor" "(" init-expr; condition-expr; iterator-expr; ")" body-expr;
 Control Flow while :: "while" condition-expr body-expr;
