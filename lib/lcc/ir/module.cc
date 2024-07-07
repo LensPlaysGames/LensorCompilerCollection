@@ -30,10 +30,11 @@ void Module::lower() {
 
             // Add parameter for over-large return types (in-memory ones that alter
             // function signature).
-            // FIXME: SysV is able to return objects <= 16 bytes in two registers, so this is wrong.
+            // SysV is able to return objects <= 16 bytes in two registers.
+            bool ret_t_tworeg = _ctx->target()->is_linux() and function_type->ret()->bytes() > 8 and function_type->ret()->bytes() <= 16;
             bool ret_t_large = function_type->ret()->bytes() > 8;
             Value* ret_v_large{nullptr};
-            if (ret_t_large) {
+            if (not ret_t_tworeg and ret_t_large) {
                 // Prepend parameter to both function value and function type.
                 function_type->params().insert(function_type->params().begin(), Type::PtrTy);
                 function->params().insert(function->params().begin(), new (*this) Parameter{Type::PtrTy, 0});
@@ -59,10 +60,13 @@ void Module::lower() {
                     switch (instruction->kind()) {
                         case Value::Kind::Return: {
                             auto ret = as<ReturnInst>(instruction);
-                            // For large return types, we memcpy value into Parameter(0).
-                            if (ret_t_large) {
-                                auto source_ptr = ret->val();
+                            // For large return types, we memcpy the returned value into the pointer
+                            // passed as the hidden first arugument.
+                            if (not ret_t_tworeg and ret_t_large) {
                                 auto dest_ptr = ret_v_large;
+                                auto source_ptr = ret->val();
+                                if (not source_ptr->type()->is_ptr())
+                                    Diag::ICE("IR ReturnInst returns large value but operand is not of pointer type");
 
                                 auto byte_count = function_type->ret()->bytes();
                                 std::vector<Value*> memcpy_operands{
@@ -108,8 +112,6 @@ void Module::lower() {
                                 //   handle the fact that over-sized loads will be pointers instead.
                                 auto copy = new (*this) CopyInst(load->ptr());
                                 load->replace_with(copy);
-
-                                // LCC_ASSERT(false, "TODO: Handle load > 8 bytes lowering");
                             }
                         } break;
 
@@ -119,9 +121,7 @@ void Module::lower() {
                             // Less than or equal to 8 bytes; nothing to change.
                             if (store->type()->bits() <= 64) continue;
 
-                            // NOTE(local): For now, allowing the IR to handle big stores like any other type,
-                            // relying on the backend to decide what happens.
-                            // LCC_ASSERT(false, "TODO: Handle store > 8 bytes lowering");
+                            LCC_ASSERT(false, "TODO: Handle store > 8 bytes lowering");
                         } break;
                         default: break;
                     }

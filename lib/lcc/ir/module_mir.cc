@@ -746,6 +746,31 @@ auto Module::mir() -> std::vector<MFunction> {
 
                     case Value::Kind::Return: {
                         auto ret_ir = as<ReturnInst>(instruction);
+                        auto func_type = as<FunctionType>(function->type());
+                        auto ret_type_bytes = func_type->ret()->bytes();
+
+                        // SysV return in two registers
+                        if (_ctx->target()->is_linux()) {
+                            if (ret_ir->has_value() and ret_type_bytes > 8 and ret_type_bytes <= 16) {
+                                auto load_a = MInst(MInst::Kind::Load, {usz(x86_64::RegisterId::RAX), 64});
+                                load_a.add_operand(MOperandValueReference(function, f, ret_ir->val()));
+
+                                // Add eight bytes to pointer to load from next.
+                                auto add_b = MInst(MInst::Kind::Add, {next_vreg(), 64});
+                                add_b.add_operand(MOperandValueReference(function, f, ret_ir->val()));
+                                add_b.add_operand(MOperandImmediate(8, 32));
+
+                                auto load_b = MInst(MInst::Kind::Load, {usz(x86_64::RegisterId::RDX), uint(func_type->ret()->bits() - 64)});
+                                load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
+
+                                bb.add_instruction(load_a);
+                                bb.add_instruction(add_b);
+                                bb.add_instruction(load_b);
+                                bb.add_instruction(MInst(MInst::Kind::Return, {0, 0}));
+                                break;
+                            }
+                        }
+
                         usz regsize = 0;
                         if (ret_ir->has_value()) regsize = ret_ir->val()->type()->bits();
                         auto ret = MInst(MInst::Kind::Return, {virts[instruction], uint(regsize)});
