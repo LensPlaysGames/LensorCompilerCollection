@@ -153,7 +153,7 @@ int main(int argc, const char** argv) {
                 {"  --color", "Whether to include colors colours in the output (default: auto)\n"},
                 {"", "    always, auto, never\n"},
                 {"  -x", "What language to parse input code as (default: extension based)\n"},
-                {"", "    c, glint\n"},
+                {"", "    c, glint, ir\n"},
                 {"  -f", "What format to emit code in (default: asm)\n"},
                 {"", "    asm, gnu-as-att, obj, elf, coff, llvm\n"},
                 }}.get());
@@ -222,7 +222,7 @@ int main(int argc, const char** argv) {
         } else if (arg == "-x") {
             // What language to parse input code as
             auto lang = next_arg();
-            if (lang != "c" and lang != "glint") {
+            if (lang != "c" and lang != "glint" and lang != "ir") {
                 fmt::print("CLI ERROR: Invalid lang {}\n", lang);
                 exit(1);
             }
