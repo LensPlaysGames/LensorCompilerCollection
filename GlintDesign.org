@@ -766,3 +766,4 @@ C++ people may argue that this is a problem because it does conversions that mig
   foo.size += 1;
 #+end_src
 
+My main question right now is that I'm not entirely sure where these things should be implemented, i.e. during Parsing or during IRGen.

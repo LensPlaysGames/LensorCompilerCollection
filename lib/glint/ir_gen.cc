@@ -140,6 +140,82 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                 case Linkage::LocalVar: {
                     auto* alloca = new (*module) AllocaInst(Convert(ctx, decl->type()), expr->location());
                     insert(alloca);
+
+                    // Initialise dynamic arrays
+                    // code
+                    //     foo: [Byte];
+                    //     ;; roughly equivalent to
+                    //     foo_t : struct {
+                    //         data: Byte.ptr;
+                    //         size: int;
+                    //         capacity: int;
+                    //     };
+                    //     foo: foo_t;
+                    //     foo.capacity := 8;
+                    //     foo.size := 0;
+                    //     foo.data := malloc 8(sizeof Byte);
+                    // endcode
+                    if (auto* dynamic_array_t = cast<DynamicArrayType>(decl->type())) {
+                        constexpr usz default_dynamic_array_capacity = 8;
+
+                        // TODO: Don't use hard-coded struct member index.
+                        auto* capacity_val = new (*module) IntegerConstant(
+                            Convert(ctx, Type::UInt),
+                            default_dynamic_array_capacity
+                        );
+                        auto* capacity_ptr = new (*module) GetMemberPtrInst(
+                            Convert(ctx, dynamic_array_t->struct_type()),
+                            alloca,
+                            new (*module) IntegerConstant(Convert(ctx, Type::UInt), 2)
+                        );
+                        auto capacity_store = new (*module) StoreInst(capacity_val, capacity_ptr);
+                        insert(capacity_ptr);
+                        insert(capacity_store);
+
+                        auto* size_val = new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0);
+                        auto* size_ptr = new (*module) GetMemberPtrInst(
+                            Convert(ctx, dynamic_array_t->struct_type()),
+                            alloca,
+                            new (*module) IntegerConstant(Convert(ctx, Type::UInt), 1)
+                        );
+                        auto size_store = new (*module) StoreInst(size_val, size_ptr);
+                        insert(size_ptr);
+                        insert(size_store);
+
+                        auto* alloc_size_bytes = new (*module) IntegerConstant(
+                            Convert(ctx, Type::UInt),
+                            default_dynamic_array_capacity * dynamic_array_t->element_type()->size_in_bytes(ctx)
+                        );
+                        auto* malloc_ty = FunctionType::Get(
+                            ctx,
+                            lcc::Type::PtrTy,
+                            {lcc::IntegerType::Get(ctx, ctx->target()->ffi.size_of_long_long)}
+                        );
+                        auto* malloc_func = new (*module) Function(
+                            module,
+                            "malloc",
+                            malloc_ty,
+                            Linkage::Imported,
+                            CallConv::C,
+                            {}
+                        );
+                        auto* malloc_call = new (*module) CallInst(
+                            malloc_func,
+                            malloc_ty,
+                            {alloc_size_bytes}
+                        );
+                        insert(malloc_call);
+
+                        auto* data_ptr = new (*module) GetMemberPtrInst(
+                            Convert(ctx, dynamic_array_t->struct_type()),
+                            alloca,
+                            new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0)
+                        );
+                        auto* data_store = new (*module) StoreInst(malloc_call, data_ptr);
+                        insert(data_ptr);
+                        insert(data_store);
+                    }
+
                     if (auto* init_expr = decl->init()) {
                         generate_expression(init_expr);
                         // Store generated init_expr into above inserted declaration

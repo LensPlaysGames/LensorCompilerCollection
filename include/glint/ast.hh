@@ -413,6 +413,9 @@ public:
     /// Check if this is an array type.
     bool is_array() const { return _kind == Kind::Array; }
 
+    /// Check if this is a dynamic array type.
+    bool is_dynamic_array() const { return _kind == Kind::DynamicArray; }
+
     /// Check if this is the builtin \c bool type.
     bool is_bool() const;
 
