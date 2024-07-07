@@ -226,6 +226,7 @@ void GenericObject::as_elf(FILE* f) {
         shdr.sh_type = SHT_STRTAB;
         shdr.sh_name = elf_add_string(".strtab");
         // FIXME: Ensure no more strings are added to table after this.
+        // TODO: Locking vector sort of container needed here as well.
         shdr.sh_size = string_table.size();
         shdr.sh_offset = data_offset;
         hdr.e_shstrndx = u16(shdrs.size());

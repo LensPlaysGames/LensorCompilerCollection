@@ -837,7 +837,7 @@ class GetMemberPtrInst : public GEPBaseInst {
     friend Inst;
     friend parser::Parser;
 
-    /// TODO: Used by the IR parser.
+    // NOTE: Used by the IR parser.
     GetMemberPtrInst(Type* structType, Location loc)
         : GEPBaseInst(Kind::GetMemberPtr, structType, nullptr, nullptr, loc) {}
 
