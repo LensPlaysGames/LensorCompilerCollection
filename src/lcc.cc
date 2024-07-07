@@ -173,6 +173,10 @@ int main(int argc, const char** argv) {
             options.stopat_syntax = true;
         else if (arg == "--stopat-sema")
             options.stopat_sema = true;
+        else if (arg == "--stopat-ir")
+            options.stopat_ir = true;
+        else if (arg == "--stopat-mir")
+            options.stopat_mir = true;
         else if (arg == "--aluminium")
             options.aluminium = true;
 
