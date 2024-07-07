@@ -164,7 +164,8 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::Intrinsic:
-                        LCC_TODO();
+                        // TODO: Assign virtual register to intrinsic operands, if any
+                        break;
 
                     case Value::Kind::Load: {
                         assign_virtual_register(as<LoadInst>(instruction)->ptr());
@@ -447,7 +448,8 @@ auto Module::mir() -> std::vector<MFunction> {
                                 usz arg_regs_used = 0;
                                 for (auto [arg_i, arg] : vws::enumerate(call_ir->args())) {
                                     if (arg_regs_used < arg_reg_total and arg->type()->bytes() <= 8) {
-                                        auto copy = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], 64});
+                                        // TODO: May have to quantize arg->type()->bits() to 8, 16, 32, 64
+                                        auto copy = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], uint(arg->type()->bits())});
                                         copy.add_operand(MOperandValueReference(function, f, arg));
                                         bb.add_instruction(copy);
                                     } else if (arg_regs_used < arg_reg_total - 1 and arg->type()->bytes() <= 16) {
@@ -496,7 +498,57 @@ auto Module::mir() -> std::vector<MFunction> {
                     } break;
 
                     case Value::Kind::Intrinsic: {
-                        LCC_ASSERT(false, "TODO: Generate MIR for Intrinsic");
+                        auto intrinsic = as<IntrinsicInst>(instruction);
+                        switch (intrinsic->intrinsic_kind()) {
+                            case IntrinsicKind::MemCopy: {
+                                LCC_ASSERT(intrinsic->operands().size() == 3, "Invalid number of operands to memcpy intrinsic");
+
+                                std::vector<usz> arg_regs{};
+                                if (_ctx->target()->is_windows()) {
+                                    arg_regs = {
+                                        +x86_64::RegisterId::RCX,
+                                        +x86_64::RegisterId::RDX,
+                                        +x86_64::RegisterId::R8,
+                                        +x86_64::RegisterId::R9,
+                                    };
+                                } else if (_ctx->target()->is_linux()) {
+                                    arg_regs = {
+                                        +x86_64::RegisterId::RDI,
+                                        +x86_64::RegisterId::RSI,
+                                        +x86_64::RegisterId::RDX,
+                                        +x86_64::RegisterId::RCX,
+                                        +x86_64::RegisterId::R8,
+                                        +x86_64::RegisterId::R9,
+                                    };
+                                } else {
+                                    Diag::ICE("Unhandled target in argument lowering for memcpy intrinsic");
+                                }
+
+                                usz arg_regs_used = 0;
+                                for (auto op : intrinsic->operands()) {
+                                    auto copy = MInst(MInst::Kind::Copy, {arg_regs[arg_regs_used++], uint(op->type()->bits())});
+                                    copy.add_operand(MOperandValueReference(function, f, op));
+                                    bb.add_instruction(copy);
+                                }
+
+                                auto call = MInst(MInst::Kind::Call, {0, 0});
+                                auto memcpy_ty = FunctionType::Get(
+                                    _ctx,
+                                    Type::VoidTy,
+                                    {Type::PtrTy,
+                                     Type::PtrTy,
+                                     IntegerType::Get(_ctx, 32)}
+                                );
+                                auto memcpy_function = new (*this) Function(this, "memcpy", memcpy_ty, Linkage::Imported, CallConv::C);
+                                call.add_operand(memcpy_function);
+                                bb.add_instruction(call);
+                            } break;
+
+                            case IntrinsicKind::DebugTrap:
+                            case IntrinsicKind::MemSet:
+                            case IntrinsicKind::SystemCall:
+                                LCC_TODO("Generate MIR for IntrinsicInst");
+                        }
                     } break;
 
                     case Value::Kind::GetElementPtr: {

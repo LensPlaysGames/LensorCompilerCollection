@@ -97,7 +97,6 @@ lcc::Type* Convert(Context* ctx, Type* in) {
 }
 
 void glint::IRGen::create_function(glint::FuncDecl* f) {
-    // FIXME: CallConv::Glint shouldn't be hard-coded.
     generated_ir[f] = new (*module) Function(
         module,
         f->mangled_name(),
@@ -248,8 +247,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                 Type* lhs_type_stripped = lhs_expr->type()->strip_references();
                 if (lhs_type_stripped->is_pointer()) {
-                    /// TODO(Sirraide): What if we have a reference to a pointer here in Glint?
-                    // pointer subscript needs scaled by size of pointer base type
+                    // Pointer subscript needs scaled by size of pointer base type
                     auto* type_to_scale_by = as<PointerType>(lhs_type_stripped)->element_type();
                     auto* gep = new (*module) GEPInst(Convert(ctx, type_to_scale_by), lhs, rhs, expr->location());
                     generated_ir[expr] = gep;

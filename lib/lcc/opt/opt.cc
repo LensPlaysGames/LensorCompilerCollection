@@ -748,10 +748,9 @@ struct SSAConstructionPass : InstructionRewritePass {
         /// Insert PHIs for each alloca.
         for (auto [i, a] : vws::enumerate(optimisable)) {
             /// Collect definitions.
-            auto def_blocks =
-                a->users()                                              //
-                | vws::filter([](Inst* u) { return is<StoreInst>(u); }) //
-                | vws::transform(&Inst::block);
+            auto def_blocks = a->users()
+                            | vws::filter([](Inst* u) { return is<StoreInst>(u); })
+                            | vws::transform(&Inst::block);
 
             /// Insert a PHI at each block of DF+(defs).
             for (auto b : dom_tree.iterated_dom_frontier(def_blocks)) {
@@ -999,8 +998,8 @@ private:
                 if constexpr (requires { &Pass::run_on_instruction; }) {
                     for (usz ii = 0; ii < f->blocks()[bi]->instructions().size(); ii++) {
                         auto Done = [&] {
-                            return bi >= f->blocks().size() or
-                                   ii >= f->blocks()[bi]->instructions().size();
+                            return bi >= f->blocks().size()
+                                or ii >= f->blocks()[bi]->instructions().size();
                         };
 
                         /// Some passes may end up deleting all remaining instructions,

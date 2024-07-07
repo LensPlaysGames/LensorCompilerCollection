@@ -319,10 +319,16 @@ int main(int argc, const char** argv) {
             return;
         }
 
+        if (options.ir)
+            m->print_ir(use_colour);
+
         if (options.optimisation)
             lcc::opt::Optimise(m, int(options.optimisation));
 
-        if (options.ir) m->print_ir(use_colour);
+        if (options.ir) {
+            fmt::print("\nAfter Optimisations:\n");
+            m->print_ir(use_colour);
+        }
 
         m->lower();
 

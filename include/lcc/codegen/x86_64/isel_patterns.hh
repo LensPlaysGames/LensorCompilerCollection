@@ -28,8 +28,6 @@ using ret = Pattern<
 // InputOperandReference operand with a value of o<0> means replace the
 // operand with whatever the zero-eth operand is in the input
 // instructions; in this case, the immediate operand of the gMIR return.
-// FIXME: Return register size is hardcoded at 64. We need some way to get
-// size from another operand, or something?
 template <typename ret_op, Opcode opcode>
 using ret_some_op = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Return), ret_op>>,

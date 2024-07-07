@@ -26,9 +26,55 @@ u64 operator+(MOperandLocal l) { return static_cast<u64>(l); }
 void Module::lower() {
     if (_ctx->target()->is_x64()) {
         for (auto function : code()) {
+            FunctionType* function_type = as<FunctionType>(function->type());
+
+            // Add parameter for over-large return types (in-memory ones that alter
+            // function signature).
+            // FIXME: SysV is able to return objects <= 16 bytes in two registers, so this is wrong.
+            bool ret_t_large = function_type->ret()->bytes() > 8;
+            Value* ret_v_large{nullptr};
+            if (ret_t_large) {
+                // Prepend parameter to both function value and function type.
+                function_type->params().insert(function_type->params().begin(), Type::PtrTy);
+                function->params().insert(function->params().begin(), new (*this) Parameter{Type::PtrTy, 0});
+                // Update the indices of the rest of the displaced parameters, if any.
+                for (usz i = 1; i < function->params().size(); ++i)
+                    function->params()[i]->index() = u32(i);
+
+                if (function->blocks().size() and function->blocks().at(0)->instructions().size()) {
+                    auto start = function->blocks().at(0);
+                    auto alloca = new (*this) AllocaInst(Type::PtrTy, {});
+                    auto store = new (*this) StoreInst(function->params().at(0), alloca);
+                    start->insert_before(alloca, start->instructions().at(0));
+                    start->insert_after(store, alloca);
+                    ret_v_large = alloca;
+                }
+
+                // Now we should go through and lower all the returns in the function to
+                // instead be a memcpy into this pointer.
+            }
+
             for (auto block : function->blocks()) {
                 for (auto [index, instruction] : vws::enumerate(block->instructions())) {
                     switch (instruction->kind()) {
+                        case Value::Kind::Return: {
+                            auto ret = as<ReturnInst>(instruction);
+                            // For large return types, we memcpy value into Parameter(0).
+                            if (ret_t_large) {
+                                auto source_ptr = ret->val();
+                                auto dest_ptr = ret_v_large;
+
+                                auto byte_count = function_type->ret()->bytes();
+                                std::vector<Value*> memcpy_operands{
+                                    dest_ptr,
+                                    source_ptr,
+                                    new (*this) IntegerConstant(IntegerType::Get(context(), 64), byte_count)};
+                                auto memcpy_inst = new (*this) IntrinsicInst(IntrinsicKind::MemCopy, memcpy_operands, ret->location());
+                                ret->replace_with(memcpy_inst);
+                                block->insert_after(new (*this) ReturnInst(nullptr), memcpy_inst);
+                            }
+                        } break;
+
                         case Value::Kind::Load: {
                             auto load = as<LoadInst>(instruction);
 
@@ -58,6 +104,10 @@ void Module::lower() {
                                 // - generate builtin memcpy for backend to handle
                                 // - unroll into 8 byte loads, temporary pointer stored into then
                                 //   incremented
+                                // - just copy the ptr instead, and everywhere that uses a load should
+                                //   handle the fact that over-sized loads will be pointers instead.
+                                auto copy = new (*this) CopyInst(load->ptr());
+                                load->replace_with(copy);
 
                                 // LCC_ASSERT(false, "TODO: Handle load > 8 bytes lowering");
                             }
@@ -78,7 +128,6 @@ void Module::lower() {
                 }
             }
         }
-
     } else {
         LCC_ASSERT(false, "TODO: Lowering of specified arch is not yet supported");
     }

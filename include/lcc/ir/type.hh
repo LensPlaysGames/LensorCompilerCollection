@@ -117,6 +117,9 @@ public:
     /// Get the parameter types of this function.
     auto params() const -> const std::vector<Type*>& { return param_types; }
 
+    /// Get the parameter types of this function.
+    auto params() -> std::vector<Type*>& { return param_types; }
+
     /// True if this function type is (C-style) variadic, false otherwise.
     bool variadic() const { return is_variadic; }
 

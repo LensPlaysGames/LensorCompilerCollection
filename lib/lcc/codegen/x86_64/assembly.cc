@@ -6,6 +6,7 @@
 #include <lcc/ir/ir.hh>
 #include <lcc/utils.hh>
 #include <string>
+#include <type_traits>
 #include <variant>
 
 namespace lcc {
@@ -136,8 +137,19 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                 if (instruction.opcode() == +x86_64::Opcode::Move and instruction.all_operands().size() == 2) {
                     auto lhs = instruction.get_operand(0);
                     auto rhs = instruction.get_operand(1);
-                    if (std::holds_alternative<MOperandRegister>(lhs) and std::holds_alternative<MOperandRegister>(rhs) and std::get<MOperandRegister>(lhs).value == std::get<MOperandRegister>(rhs).value)
+                    if (std::holds_alternative<MOperandRegister>(lhs)
+                        and std::holds_alternative<MOperandRegister>(rhs)
+                        and std::get<MOperandRegister>(lhs).value == std::get<MOperandRegister>(rhs).value)
                         continue;
+                }
+                if (instruction.opcode() == +x86_64::Opcode::Move and instruction.all_operands().size() == 2) {
+                    auto lhs = instruction.get_operand(0);
+                    auto rhs = instruction.get_operand(1);
+                    if (
+                        std::holds_alternative<MOperandRegister>(lhs)
+                        and std::holds_alternative<MOperandRegister>(rhs)
+                        and std::get<MOperandRegister>(lhs).size != std::get<MOperandRegister>(rhs).size
+                    ) Diag::ICE("Move from register to register has mismatched sizes");
                 }
 
                 // Simple jump threading
@@ -244,7 +256,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                 if (instruction.opcode() == +x86_64::Opcode::Call) {
                     // Move return value from return register to result register, if necessary.
                     // Also restore return register, if necessary.
-                    if (instruction.reg() != desc.return_register) {
+                    if (instruction.reg() and instruction.reg() != desc.return_register) {
                         out += fmt::format(
                             "    mov %{}, %{}\n",
                             ToString(x86_64::RegisterId(desc.return_register), instruction.regsize()),

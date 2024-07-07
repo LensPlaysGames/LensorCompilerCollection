@@ -91,7 +91,7 @@ void select_instructions(Module* mod, MFunction& function) {
         function = lcc::isel::x86_64::AllPatterns::rewrite(mod, function);
 
         // In-code instruction selection. Ideally, we wouldn't have to do this at
-        // all. But, not all hardware is ideal.
+        // all.
         for (auto& block : function.blocks()) {
             for (usz index = 0; index < block.instructions().size(); ++index) {
                 MInst& inst = block.instructions().at(index);
@@ -132,6 +132,13 @@ void select_instructions(Module* mod, MFunction& function) {
                         destination_reg.size = operand_reg.size;
                         mov_inst.add_operand(operand_reg);
                         mov_inst.add_operand(destination_reg);
+
+                        // Truncating a register to a smaller register size is a no-op; we will
+                        // just access the smaller portion of the register.
+                        if (inst.regsize() == 8 or inst.regsize() == 16 or inst.regsize() == 32) {
+                            block.instructions()[index] = mov_inst;
+                            return;
+                        }
 
                         auto and_inst = MInst(usz(x86_64::Opcode::And), {0, 0});
                         // Set bottom inst.regsize() bits of immediate.

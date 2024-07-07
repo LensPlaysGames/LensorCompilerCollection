@@ -604,6 +604,9 @@ public:
     /// Get the number of parameters.
     auto param_count() const -> size_t { return param_list.size(); }
 
+    // NOTE: For lowering
+    auto params() -> std::vector<Parameter*>& { return param_list; }
+
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Function; }
 };
@@ -615,10 +618,15 @@ class Parameter : public UseTrackingValue {
 
     /// Only the Function class should be able to create these.
     friend Function;
+    // NOTE: For lowering
+    friend Module;
     Parameter(Type* ty, u32 idx) : UseTrackingValue(Kind::Parameter, ty), i(idx) {}
 public:
     /// Get the parameter index.
     auto index() const -> u32 { return i; }
+
+    /// NOTE: For lowering
+    auto index() -> u32& { return i; }
 
     /// RTTI.
     static bool classof(Value* v) { return v->kind() == Kind::Parameter; }
@@ -790,8 +798,8 @@ public:
 
     /// RTTI.
     static bool classof(Value* v) {
-        return v->kind() == Kind::GetElementPtr or
-               v->kind() == Kind::GetMemberPtr;
+        return v->kind() == Kind::GetElementPtr
+            or v->kind() == Kind::GetMemberPtr;
     }
 };
 
