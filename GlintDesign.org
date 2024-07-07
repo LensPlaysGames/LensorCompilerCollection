@@ -724,3 +724,45 @@ Type-checking the initialising expression of =offset : usz -1;=, for example, we
 Why does this matter? Well, if you have ever used C, you will recognized the declaration above and realise that, in C, as soon as you compile it, you will get a big, phat warning (provided =-Wconversion= is on, but, if it isn't, /you are insane/), or maybe even an error. This is because =-1=, as an expression by itself, is signed. I mean, if it wasn't, the sign wouldn't be doing much there, would it :Þ? So, the expression itself defines it's type to be some signed integer type (or at least constrains it so), and the declaration declares it's value to be of an unsigned integer type. As you can see, this mismatch is what causes the type warnings/errors to occur in C. However, looking at this from a philosophical point of view, what did the programmer intend in writing such syntax? THEY OBVIOUSLY INTENDED TO INITIALISE A =usz= WITH A VALUE OF =-1= AND HAVE ASKED THE LANGUAGE AND/OR COMPILER TO DO THE CONVERSION AUTOMATICALLY. Like, really, what kind of programmer is relying on a compiler to tell them they initialised something to a value that has to be converted to what they are initialising it to? I understand they ideally want no operation to happen "silently" in C or whatever but in C++... yeah, I don't know why they keep this system around. So, instead of having a perfectly-precise pincer-point that may only effectively "pinch" when they are exactly the same, I want to put some leeway in there to /trust the programmer/ and therefore bias the pincer towards the top-down declared type if present (converting the value of bottum-up defined type to the declared type if necessary). This means no error on things like =offset : usz -1=. the compiler will insert a cast/conversion to =usz=, and store that value.
 
 C++ people may argue that this is a problem because it does conversions that might be costly very easily and invisibly, or something like that. My response to that is that if a programmer cares about performance, they will write performant code, and know how to do so. If our goal was to allow any old idiot to write perfectly fast code, then, sure, we may want to make it obvious that expensive operations occur when creating a string from a string view or something of that nature, and make it difficult to do in the first place---to try and force programmers who don't care about performance to write performant code when it may not even matter for the program they are writing. In my opinion, this is /futile/. If a programmer's program runs too slow, /they/ will figure out why and fix up that code; if that programmer was converting between string view and string all the time, or making a bunch of dynamic array copies, or whatever other awfulness they have stumbled upon, then they will learn a valuable lesson in how /not/ to write code as well as the consequences if you do.
+
+*** Dynamic Arrays
+[2024-07-06 Sat 19:59]
+
+**** Initialisation
+
+#+begin_src lisp
+  foo: [Byte];
+  ;; should be equivalent to
+  foo_t : struct {
+      data: Byte.ptr;
+      size: int;
+      capacity: int;
+  };
+  foo: foo_t;
+  foo.size := 0;
+  foo.capacity := 8;
+  foo.data := malloc 8(sizeof Byte);
+#+end_src
+
+**** Appending
+
+1. Grow if new size would exceed or equal current capacity.
+2. Write appended value.
+3. Update size.
+
+#+begin_src lisp
+  foo: [Byte];
+
+  foo += 42;
+  ;; should be equivalent to
+  ;; (grow if needed)
+  if foo.size + 1 >= foo.capacity {
+      foo.capacity *= 2;
+      foo.data := realloc foo.data foo.capacity;
+  }
+  ;; (write new value)
+  @foo.data[foo.size] := 42;
+  ;; (update size)
+  foo.size += 1;
+#+end_src
+
