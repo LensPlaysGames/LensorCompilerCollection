@@ -216,7 +216,7 @@ in Intercept source code will be indented."
 
 ;;;###autoload
 (define-derived-mode int-ts-mode--base-mode prog-mode "int"
-  "Major mode for editing Intercept, powered by tree-sitter. "
+  "Major mode for editing Intercept, powered by tree-sitter."
   :syntax-table int-ts-mode--syntax-table
 
   ;; Electric
