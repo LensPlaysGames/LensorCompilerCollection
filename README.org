@@ -20,7 +20,7 @@ For convenience purposes, there is a single executable, ~lcc~, that can delegate
 
 Running the driver executable with no arguments will display a usage message that contains compiler flags and options as well as command layout.
 
-The driver uses file extension to determine which compiler to pass the source code to. ~lcc ./tst/intercept/byte.int~ will invoke the ~Intercept~ compiler, while ~lcc ./tst/laye/exit_code.laye~ will invoke the ~Laye~ compiler, for example.
+The driver, by default, uses file extension to determine which compiler to pass the source code to. ~lcc ./tst/intercept/byte.int~ will invoke the ~Intercept~ compiler, while ~lcc ./tst/laye/exit_code.laye~ will invoke the ~Laye~ compiler, for example. You can use ~-x LANG~ to treat source files as a particular language, regardless of extension.
 
 ** Building
 
