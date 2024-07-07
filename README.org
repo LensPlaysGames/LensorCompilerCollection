@@ -41,31 +41,3 @@ Finally, build an executable from the build tree.
 #+begin_src shell
   cmake --build bld
 #+end_src
-
-*** To build generated ~.s~ x86_64 ASM
-
-To use external calls, link with appropriate libraries!
-
-GNU Binutils:
-#+begin_src shell
-  as code.S -o code.o
-  ld code.o -o code
-#+end_src
-
-GNU Compiler Collection
-#+begin_src shell
-  gcc code.S -o code
-#+end_src
-
-LLVM/Clang
-#+begin_src shell
-  clang code.S -o code --target=x86_64
-#+end_src
-
-*** To build generated ~.ll~ LLVM
-
-Use LLVM's ~clang~ to compile the generated LLVM output into a library or executable.
-
-#+begin_src shell
-  clang code.ll -o code
-#+end_src
