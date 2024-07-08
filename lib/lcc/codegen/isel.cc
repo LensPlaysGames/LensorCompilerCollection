@@ -137,7 +137,7 @@ void select_instructions(Module* mod, MFunction& function) {
                         // just access the smaller portion of the register.
                         if (inst.regsize() == 8 or inst.regsize() == 16 or inst.regsize() == 32) {
                             block.instructions()[index] = mov_inst;
-                            return;
+                            break;
                         }
 
                         auto and_inst = MInst(usz(x86_64::Opcode::And), {0, 0});
