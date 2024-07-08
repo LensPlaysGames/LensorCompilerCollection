@@ -231,6 +231,7 @@ add_library(
   include/glint/parser.hh
   include/glint/sema.hh
   lib/glint/ast.cc
+  lib/glint/ast_module.cc
   lib/glint/eval.cc
   lib/glint/ir_gen.cc
   lib/glint/lexer.cc
