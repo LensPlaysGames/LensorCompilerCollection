@@ -314,13 +314,9 @@ int main(int argc, const char** argv) {
 
     /// Common path after IR gen.
     auto EmitModule = [&](lcc::Module* m, std::string_view input_file_path, std::string_view output_file_path) {
-        /// Do NOT do anything else as this means that we
-        /// *only* want to run optimisation passes; specifically,
-        /// do *not* run lowering if this option was specified.
         if (options.optimisation_passes.size()) {
             lcc::opt::RunPasses(m, options.optimisation_passes);
             if (options.ir) m->print_ir(use_colour);
-            return;
         }
 
         if (options.ir)
