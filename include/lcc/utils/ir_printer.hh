@@ -109,9 +109,10 @@ protected:
     void SetFunctionIndices(Function* f) {
         for (auto [i, b] : vws::enumerate(f->blocks())) {
             block_indices[b] = i;
-            for (auto inst : b->instructions())
+            for (auto inst : b->instructions()) {
                 if (This()->RequiresTemporary(inst))
                     inst_indices[inst] = tmp++;
+            }
         }
     }
 

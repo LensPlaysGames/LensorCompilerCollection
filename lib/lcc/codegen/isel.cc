@@ -80,6 +80,7 @@ static void calculate_defining_uses_for_block(
 }
 
 static void calculate_defining_uses(MFunction& function) {
+    // Only calculate defining uses for blocks reachable from the entry point (first block).
     calculate_defining_uses_for_block(function, {}, &function.blocks().front(), {}, {});
 }
 

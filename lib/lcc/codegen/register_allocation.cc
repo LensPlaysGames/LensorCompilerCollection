@@ -306,7 +306,7 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
     // Helper function that handles not adding duplicates.
     auto add_reg = [&](usz id, usz size) {
         auto found = std::find_if(registers.begin(), registers.end(), [&](Register& r) {
-                return r.value == id;
+            return r.value == id;
         });
         if (found == registers.end())
             registers.push_back(Register{id, uint(size)});
@@ -327,6 +327,10 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
     }
 
     // Error if zero registers collected.
+    // NOTE: We could technically just return but for the most part this
+    // usually means we have accidentally ended up codegenning a function with
+    // no body. So, because this never happens normally, it is a fatal error,
+    // even though it doesn't have to be.
     LCC_ASSERT(registers.size(), "Cannot allocate registers when there are no registers to allocate");
 
     // STEP TWO
@@ -453,7 +457,11 @@ void allocate_registers(const MachineDescription& desc, MFunction& function) {
             }
         }
 
-        LCC_ASSERT(reg_value, "Can not color graph with {} colors until stack spilling is implemented!", desc.registers.size());
+        if (not reg_value) {
+            Diag::Error("Can not color graph with {} colors until stack spilling is implemented!", desc.registers.size());
+            Diag::Note("Allocating registers for function `{}`", function.name());
+            return;
+        }
 
         list.color = reg_value;
         list.allocated = true;

@@ -6,9 +6,8 @@
 namespace lcc::detail {
 /// Check that an object is a pointer to a class type.
 template <typename Type>
-concept ClassPointer =
-    std::is_pointer_v<std::remove_reference_t<Type>> and
-    std::is_class_v<std::remove_pointer_t<std::remove_reference_t<Type>>>;
+concept ClassPointer = std::is_pointer_v<std::remove_reference_t<Type>>
+                   and std::is_class_v<std::remove_pointer_t<std::remove_reference_t<Type>>>;
 
 /// Return const To if either From or To is const.
 template <typename From, typename To>
