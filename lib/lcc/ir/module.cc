@@ -21,8 +21,6 @@
 
 namespace lcc {
 
-u64 operator+(MOperandLocal l) { return static_cast<u64>(l); }
-
 void Module::lower() {
     if (_ctx->target()->is_x64()) {
         for (auto function : code()) {

@@ -45,6 +45,7 @@ enum struct OperandKind {
 
     // A reference to a stack frame object.
     Local,
+    OffsetLocal,
     // A reference to a symbol.
     Global,
 
@@ -64,6 +65,7 @@ enum struct OperandKind {
 template <i64 imm = 0, u64 _size = 0>
 struct Immediate {
     using sz = Immediate<>;
+    using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Immediate;
     static constexpr i64 immediate = imm;
     static constexpr usz index = 0;
@@ -77,6 +79,7 @@ struct Immediate {
 template <usz idx>
 struct Sizeof {
     using sz = Immediate<>;
+    using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Sizeof;
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
@@ -90,6 +93,7 @@ struct Sizeof {
 template <usz val = 0, typename _size = Immediate<>>
 struct Register {
     using sz = _size;
+    using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Register;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
@@ -103,7 +107,22 @@ struct Register {
 template <typename... _>
 struct Local {
     using sz = Immediate<>;
+    using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Local;
+    static constexpr i64 immediate = 0;
+    static constexpr usz index = 0;
+    static constexpr usz value = 0;
+    static constexpr usz size = 0;
+    static constexpr GlobalVariable* global = nullptr;
+    static constexpr lcc::Function* function = nullptr;
+    static constexpr lcc::Block* block = nullptr;
+};
+
+template <typename local_op, typename immediate_op>
+struct OffsetLocal {
+    using sz = local_op;
+    using offset = immediate_op;
+    static constexpr OperandKind kind = OperandKind::OffsetLocal;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
     static constexpr usz value = 0;
@@ -116,6 +135,7 @@ struct Local {
 template <typename... _>
 struct Global {
     using sz = Immediate<>;
+    using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Global;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
@@ -129,6 +149,7 @@ struct Global {
 template <typename... _>
 struct Function {
     using sz = Immediate<>;
+    using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Function;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
@@ -142,6 +163,7 @@ struct Function {
 template <typename... _>
 struct Block {
     using sz = Immediate<>;
+    using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::Block;
     static constexpr i64 immediate = 0;
     static constexpr usz index = 0;
@@ -156,6 +178,7 @@ struct Block {
 template <usz idx, usz op_idx>
 struct v {
     using sz = Immediate<>;
+    using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::NewVirtual;
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
@@ -169,6 +192,7 @@ struct v {
 template <usz op_idx, usz new_size>
 struct ResizedRegister {
     using sz = Immediate<>;
+    using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::ResizedRegister;
     static constexpr i64 immediate = 0;
     static constexpr usz index = op_idx;
@@ -183,6 +207,7 @@ struct ResizedRegister {
 template <usz idx>
 struct o {
     using sz = Immediate<>;
+    using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::InputOperandReference;
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
@@ -197,6 +222,7 @@ struct o {
 template <usz idx>
 struct i {
     using sz = Immediate<>;
+    using offset = Immediate<>;
     static constexpr OperandKind kind = OperandKind::InputInstructionReference;
     static constexpr i64 immediate = 0;
     static constexpr usz index = idx;
@@ -283,7 +309,7 @@ struct Inst {
                 else if (std::holds_alternative<MOperandGlobal>(op))
                     size = std::get<MOperandGlobal>(op)->allocated_type()->bits();
                 else if (std::holds_alternative<MOperandLocal>(op)) {
-                    auto* local = function.locals().at(+std::get<MOperandLocal>(op));
+                    auto* local = function.locals().at(std::get<MOperandLocal>(op).index);
                     size = local->allocated_type()->bits();
                 } else LCC_ASSERT(
                     false,
@@ -373,6 +399,14 @@ struct Inst {
 
             case OperandKind::Local:
                 return MOperandLocal(operand::index);
+
+            case OperandKind::OffsetLocal: {
+                auto local = get_operand<typename operand::sz>(mod, function, input, new_virtuals);
+                auto offset = get_operand<typename operand::offset>(mod, function, input, new_virtuals);
+                LCC_ASSERT(std::holds_alternative<MOperandLocal>(local), "OffsetLocal operand requires Local as first operand");
+                LCC_ASSERT(std::holds_alternative<MOperandImmediate>(offset), "OffsetLocal operand requires Immediate as second operand");
+                return MOperandLocal(std::get<MOperandLocal>(local).index, i32(std::get<MOperandImmediate>(offset).value));
+            }
 
             case OperandKind::Global:
                 return MOperandGlobal(operand::global);

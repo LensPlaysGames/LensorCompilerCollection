@@ -22,13 +22,10 @@ static std::string safe_name(std::string in) {
 }
 
 static std::string block_name(std::string in) {
-    if (in.empty()) {
-        static usz block_count = 0;
-        return fmt::format(".__block_{}", block_count++);
-    }
-    // . at the beginning tells the assembler it's a local label and not a
-    // function.
-    return fmt::format(".{}", safe_name(in));
+    LCC_ASSERT(in.size(), "Cannot emit empty block name!");
+    // ".L" at the beginning tells the assembler it's a local label and not a
+    // function, which helps objdump and things like that don't get confused.
+    return fmt::format(".L{}", safe_name(in));
 }
 
 std::string ToString(MFunction& function, MOperand op) {
@@ -39,10 +36,7 @@ std::string ToString(MFunction& function, MOperand op) {
     } else if (std::holds_alternative<MOperandImmediate>(op)) {
         return fmt::format("${}", std::get<MOperandImmediate>(op).value);
     } else if (std::holds_alternative<MOperandLocal>(op)) {
-        usz offset = 0;
-        for (usz index = 0; index <= +std::get<MOperandLocal>(op); ++index)
-            offset += function.locals().at(index)->allocated_type()->bytes();
-        return fmt::format("{}(%rbp)", -isz(offset));
+        return fmt::format("{}(%rbp)", function.local_offset(std::get<MOperandLocal>(op)));
     } else if (std::holds_alternative<MOperandGlobal>(op)) {
         return fmt::format("{}(%rip)", safe_name(std::get<MOperandGlobal>(op)->name()));
     } else if (std::holds_alternative<MOperandFunction>(op)) {
@@ -225,7 +219,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                         if (std::holds_alternative<MOperandLocal>(rhs)) {
                             // Moving immediate into local (memory) requires mov suffix in GNU. We use
                             // size of local to determine how big of a move to do.
-                            auto local_index = +std::get<MOperandLocal>(rhs);
+                            auto local_index = std::get<MOperandLocal>(rhs).index;
                             auto* local = function.locals().at(local_index);
                             auto bitwidth = local->allocated_type()->bits();
                             switch (bitwidth) {

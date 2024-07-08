@@ -18,8 +18,10 @@ auto PrintMOperand(const MOperand& op) -> std::string {
             reg.size
         );
     }
-    if (std::holds_alternative<MOperandLocal>(op))
-        return fmt::format("local({})", +std::get<MOperandLocal>(op));
+    if (std::holds_alternative<MOperandLocal>(op)) {
+        auto l = std::get<MOperandLocal>(op);
+        return fmt::format("local({}){:+}", l.index, l.offset);
+    }
     if (std::holds_alternative<MOperandGlobal>(op))
         return fmt::format("global({})", std::get<MOperandGlobal>(op)->name());
     if (std::holds_alternative<MOperandFunction>(op))

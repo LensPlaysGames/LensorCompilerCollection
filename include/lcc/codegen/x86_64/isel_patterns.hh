@@ -220,7 +220,11 @@ using or_reg_imm = Pattern<
         Inst<Clobbers<>, usz(Opcode::Or), o<1>, o<0>>,
         Inst<Clobbers<c<1>>, usz(Opcode::Move), o<0>, i<0>>>>;
 
-using add_local_imm = Pattern<
+using add_local_imm_1 = Pattern<
+    InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
+    InstList<Inst<Clobbers<>, usz(Opcode::LoadEffectiveAddress), OffsetLocal<o<0>, o<1>>, i<0>>>>;
+
+using add_local_imm_2 = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
     InstList<
         Inst<Clobbers<>, usz(Opcode::LoadEffectiveAddress), o<0>, i<0>>,
@@ -390,7 +394,8 @@ using AllPatterns = PatternList<
     or_reg_reg,
     or_reg_imm,
 
-    add_local_imm,
+    add_local_imm_1,
+    add_local_imm_2,
     add_reg_reg,
     add_imm_reg,
     add_reg_imm,

@@ -22,11 +22,15 @@ struct Immediate {
     uint size{};
 };
 
+struct LocalOp {
+    u32 index{u32(-1)}; // if you have more locals than this, /you/ fucked up.
+    i32 offset{0};
+};
+
 // Machine Operand
 using MOperandRegister = Register;
 using MOperandImmediate = Immediate;
-enum struct MOperandLocal : u64;
-u64 operator+(MOperandLocal l);
+using MOperandLocal = LocalOp;
 using MOperandGlobal = GlobalVariable*;
 using MOperandFunction = Function*;
 using MOperandBlock = Block*;
@@ -319,17 +323,18 @@ public:
     }
 
     // Given an index into the locals of this function (aka what local
-    // operands are), return the offset required to get to the beginning of
+    // operands are), return the offset required to get to *the beginning of*
     // this local.
     // <local_offset(index)>(%rbp), basically
-    auto local_offset(usz needle) const -> isz {
+    isz INTERNAL_local_offset(usz needle) const {
         isz offset = 0;
         for (usz index = 0; index <= needle; ++index)
             offset -= isz(_locals.at(index)->allocated_type()->bytes());
         return offset;
     }
-    auto local_offset(MOperandLocal local) const -> isz {
-        return local_offset(+local);
+    // <local_offset(index)+offset>(%rbp), basically
+    isz local_offset(MOperandLocal local) const {
+        return INTERNAL_local_offset(local.index) + local.offset;
     }
 
     void add_local(AllocaInst* local) {
