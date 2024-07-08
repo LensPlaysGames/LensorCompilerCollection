@@ -160,7 +160,7 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
 
                         // TODO: Don't use hard-coded struct member index.
                         auto* capacity_val = new (*module) IntegerConstant(
-                            Convert(ctx, Type::UInt),
+                            Convert(ctx, dynamic_array_t->struct_type()->members()[2].type),
                             default_dynamic_array_capacity
                         );
                         auto* capacity_ptr = new (*module) GetMemberPtrInst(
@@ -172,7 +172,10 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         insert(capacity_ptr);
                         insert(capacity_store);
 
-                        auto* size_val = new (*module) IntegerConstant(Convert(ctx, Type::UInt), 0);
+                        auto* size_val = new (*module) IntegerConstant(
+                            Convert(ctx, dynamic_array_t->struct_type()->members()[1].type),
+                            0
+                        );
                         auto* size_ptr = new (*module) GetMemberPtrInst(
                             Convert(ctx, dynamic_array_t->struct_type()),
                             alloca,
