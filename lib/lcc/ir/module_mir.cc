@@ -321,7 +321,7 @@ auto Module::mir() -> std::vector<MFunction> {
                 if (found == f.locals().end()) {
                     Diag::ICE("MIR Generation: encountered reference to local before it has been declared");
                 }
-                return MOperandLocal{u64(found - f.locals().begin())};
+                return MOperandLocal{u32(found - f.locals().begin())};
             }
 
             case Value::Kind::GlobalVariable:
