@@ -189,6 +189,7 @@ static void collect_interferences_from_block(
 
         for (auto A : vreg_operands) {
             for (auto B : vreg_operands) {
+                // If either A or B is clobbered, do NOT set interference between the two.
                 if (rgs::find(clobbered_regs, A.reg.value) == clobbered_regs.end() and rgs::find(clobbered_regs, B.reg.value) == clobbered_regs.end()) {
                     matrix.set(A.idx, B.idx);
                     // fmt::print("Non-clobbered register operands r{} and r{} interfere\n", A.reg.value, B.reg.value);

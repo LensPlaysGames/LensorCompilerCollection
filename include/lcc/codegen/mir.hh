@@ -109,10 +109,17 @@ private:
 
     usz _use_count{0};
 
-    // TODO: Do SSO basically. For operands, instructions in MBlocks, and blocks in MFunctions.
+    // Possible Performance TODO: Do small string optimisation, basically.
+    // For operands, instructions in MBlocks, and blocks in MFunctions.
     std::vector<MOperand> operands{};
 
     // Indices of operands of this instruction that this instruction clobbers.
+    // An instruction is said to clobber an operand iff that instruction will
+    // overwrite the contents of that operand, i.e. `mov $69, %rax` clobbers RAX.
+    // Basically, a "clobbered register" has the affect during register allocation
+    // that all live values will interfere with the clobber.
+    // If multiple register operands appear in an instruction, they usually
+    // interfere with each other, but clobbering alters that behaviour.
     std::vector<usz> _operand_clobbers{};
 
 public:
