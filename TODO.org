@@ -75,6 +75,7 @@ Probably from this portion of code from the SSA Construction pass running on the
    });
 #+end_src
 
+NOTE: Running icmb pass /after/ ssa pass works, but I don't think that's reliable since multiple runs of all passes are possible. It also has the same affect as just removing the ssa pass.
 
 ** TODO Get rid of clown colors in IR
 [2024-07-03 Wed 10:22]
