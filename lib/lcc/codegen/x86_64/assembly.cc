@@ -56,7 +56,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                 case Value::Kind::ArrayConstant: {
                     auto array_constant = as<ArrayConstant>(var->init());
                     out += fmt::format(
-                        ".byte {}\n",
+                        ".byte {}",
                         fmt::join(
                             vws::transform(*array_constant, [&](char c) {
                                 return fmt::format("0x{:x}", int(c));
@@ -78,7 +78,6 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                         if (i + 1 < integer_constant->type()->bytes())
                             out += ", ";
                     }
-                    out += '\n';
                 } break;
 
                 default:
@@ -90,7 +89,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
         // compatibility with other assemblers--but it is ignored. `as` treats all
         // undefined symbols as external.
         if (var->linkage() != Linkage::Imported)
-            out += fmt::format(".globl {}\n", var->name());
+            out += fmt::format("    .globl {}\n", var->name());
     }
 
     for (auto& function : mir) {
