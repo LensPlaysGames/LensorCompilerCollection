@@ -1034,13 +1034,26 @@ lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>&
     out.push_back(tag);
 
     switch (ty->kind()) {
-        case Type::Kind::DynamicArray:
-            LCC_TODO("Serialise type kind {} into binary module metadata", ToString(ty->kind()));
-            break;
+        // DynamicArrayType: element_type_index :TypeIndex
+        case Type::Kind::DynamicArray: {
+            auto* type = as<DynamicArrayType>(ty);
+
+            // Write `element_type_index: TypeIndex`, keeping track of byte index into
+            // binary metadata blob where it can be found again.
+            auto element_type_index_offset = out.size();
+            auto element_type_index = ModuleDescription::TypeIndex(-1);
+            auto type_index_bytes = to_bytes(element_type_index);
+            out.insert(out.end(), type_index_bytes.begin(), type_index_bytes.end());
+
+            auto element_type = serialise(out, cache, type->element_type());
+
+            auto* element_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + element_type_index_offset);
+            *element_type_ptr = element_type;
+        } break;
 
         // NamedType: length :u32, name :u8[length]
         case Type::Kind::Named: {
-            NamedType* type = as<NamedType>(ty);
+            auto* type = as<NamedType>(ty);
             u16 name_length = u16(type->name().length());
             auto name_length_bytes = to_bytes(name_length);
             // Write `length: u16`
@@ -1165,13 +1178,18 @@ lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>&
 
             // Serialise parameter types and fixup parameter type indices previously
             // allocated.
-            auto* param_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + param_types_offset);
+            std::vector<ModuleDescription::TypeIndex> param_types{};
             for (auto param : type->params())
-                *param_types_ptr++ = serialise(out, cache, param.type);
+                param_types.push_back(serialise(out, cache, param.type));
+
+            auto* param_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + param_types_offset);
+            for (auto param_type : param_types)
+                *param_types_ptr++ = param_type;
 
             // Serialise return type and fixup return type index previously allocated.
+            auto return_type = serialise(out, cache, type->return_type());
             auto* return_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + return_type_offset);
-            *return_type_ptr = serialise(out, cache, type->return_type());
+            *return_type_ptr = return_type;
         } break;
 
         // EnumType:
@@ -1200,9 +1218,10 @@ lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>&
                 out.insert(out.end(), value_bytes.begin(), value_bytes.end());
             }
 
-            auto* underlying_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + underlying_type_offset);
-            *underlying_type_ptr = serialise(out, cache, type->underlying_type());
+            auto underlying_type = serialise(out, cache, type->underlying_type());
 
+            auto* underlying_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + underlying_type_offset);
+            *underlying_type_ptr = underlying_type;
         } break;
 
         // ArrayType: element_type_index :u16, element_count :u64
@@ -1216,8 +1235,10 @@ lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>&
             auto element_count_bytes = to_bytes(element_count);
             out.insert(out.end(), element_count_bytes.begin(), element_count_bytes.end());
 
+            auto element_type = serialise(out, cache, type->element_type());
+
             auto* element_type_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + element_type_offset);
-            *element_type_ptr = serialise(out, cache, type->element_type());
+            *element_type_ptr = element_type;
         } break;
 
         // StructType:
@@ -1264,9 +1285,13 @@ lcc::u16 lcc::glint::Module::serialise(std::vector<u8>& out, std::vector<Type*>&
 
             // Serialise member types and fixup member type indices previously
             // allocated.
-            auto* member_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + member_types_offset);
+            std::vector<ModuleDescription::TypeIndex> member_types{};
             for (auto& member : members)
-                *member_types_ptr++ = serialise(out, cache, member.type);
+                member_types.push_back(serialise(out, cache, member.type));
+
+            auto* member_types_ptr = reinterpret_cast<ModuleDescription::TypeIndex*>(out.data() + member_types_offset);
+            for (auto& member_type : member_types)
+                *member_types_ptr++ = member_type;
         } break;
     }
 
