@@ -944,8 +944,8 @@ struct Optimiser {
             StoreFowardingPass,
             CFGSimplPass,
             SSAConstructionPass,
-            DCEPass//,
-            //GlobalDCEPass
+            DCEPass,
+            GlobalDCEPass
         >();
     } // clang-format on
 
