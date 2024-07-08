@@ -1,7 +1,85 @@
 #+title: LCC TODO
 #+author: Lens_r
 
+* ~lcc~, Driver
+
+** TODO [Feature Request] Build System Integration
+[2024-07-05 Fri 14:43]
+
+While the half-baked support we have with the basic compiler templates defined in ~./cmake/~ is fine and dandy, it'd be cool if the compiler could generate CMake for a given executable file, imports, etc. i.e. invoke the compiler once to figure out how to invoke the compiler to build everything required and in what order. Maybe even generate the CMake and optionally invoke it to generate a build tree, lol. Kind of weirdly mutually recursive but I think it would ease use of the language when creating a new project. i.e. start writing, ask the compiler to generate a basic CMake build system that you can then handle yourself.
+
 * ~lcc~, Codegen
+
+** ~opt~
+
+*** BUG
+[2024-07-08 Mon 13:28]
+
+Instruction combine (icmb) and ssa passes cause the following to change the signature of fopen and pass a struct instead of the ptr that it is supposed to. There is some issue with not updating the type of a replaced/altered instruction, or something.
+
+#+begin_src sh
+lcc examples/glint/SimpleFile.g --passes icmb,ssa
+#+end_src
+
+#+begin_example
+NO OPTIMISATIONS:
+read : glintcc @__struct_0(@__struct_0 %0):
+  bb0:
+    %1 = alloca @__struct_0
+    store @__struct_0 %0 into %1
+    %2 = alloca ptr
+    %3 = gmp @__struct_0 from %1 at i64 0
+    %4 = load ptr from %3
+    %5 = gep i8 from @.str.0 at i64 0
+    %6 = call @fopen (ptr %4, ptr %5) -> ptr
+    ...
+
+SSA CONSTRUCTION:
+read : glintcc @__struct_0(@__struct_0 %0):
+  bb0:
+    %1 = alloca @__struct_0
+    store @__struct_0 %0 into %1
+    %2 = gmp @__struct_0 from %1 at i64 0
+    %3 = load ptr from %2
+    %4 = gep i8 from @.str.0 at i64 0
+    %5 = call @fopen (ptr %3, ptr %4) -> ptr
+    ...
+
+INSTRUCTION COMBINE:
+read : glintcc @__struct_0(@__struct_0 %0):
+  bb0:
+    %1 = alloca @__struct_0
+    store @__struct_0 %0 into %1
+    %2 = alloca ptr
+    %3 = load ptr from %1
+    %4 = call @fopen (ptr %3, ptr @.str.0) -> ptr
+    ...
+
+ICMB, SSA:
+read : glintcc @__struct_0(@__struct_0 %0):
+  bb0:
+    %1 = call @fopen (@__struct_0 %0, ptr @.str.0) -> ptr
+    ...
+#+end_example
+
+Probably from this portion of code from the SSA Construction pass running on the simplified "alloca -> store -> load", in which it is replacing the load instruction with it's reaching definition, past the optimised-out alloca.
+
+#+begin_src c++
+  /// If this instruction uses a load of an optimisable
+  /// alloca, replace the load with the reaching definition
+  /// of that alloca.
+  i->replace_children<LoadInst>([&](LoadInst* l) -> Value* {
+      auto a = rgs::find(optimisable, l->ptr());
+      if (a == optimisable.end()) return nullptr;
+      return ReachingDef(*a, l);
+   });
+#+end_src
+
+
+** TODO Get rid of clown colors in IR
+[2024-07-03 Wed 10:22]
+
+Just ughh.
 
 ** TODO [ISel] Add ~Where~ type to template of ~Pattern~
 [2023-12-14 Thu 17:06]
@@ -9,115 +87,7 @@
 We want this to contain a list of types that begin with ~Require*~.
 For example, ~RequireOperandSizeLessThan<operand_index, declared_size>~.
 
-* Intercept, Language
-
-** TODO Dynamic sized array
-[2023-12-20 Wed 16:57]
-
-Basically, I want a way to do the following
-
-#+begin_src int
-  foo_n : u8[](count : int, value : u8) {
-    out : u8[];
-    for i : int, i < count, i := i + 1 do {
-      out :+ value;
-    }
-    out;
-  };
-#+end_src
-
-This ~u8[]~ type is an "unbounded" array type. It can keep on growing
-and growing or shrinking and shrinking. The idea is that we have a sort
-of "C++ vector" built in at the language level.
-
-For now, I am not going to worry about allocators. There can be a whole
-way to do that in the future when it matters. For now, I think having
-this built-in would be huge for the language.
-
-So, we basically need a "base, size, capacity" triplet and that will be
-the actual value that is passed around when the variable is accessed
-and such, just like a vector.
-
-
-- Creating a new dynamic array
-
-Sema would have to replace a declaration of a dynamic array with a
-declaration of a vector-style struct.
-
-- Appending to a dynamic array
-
-Using the binary add-then-assign operator ~:+~ with the lhs as a
-dynamic array and the rhs as an expression with a type convertible to
-the dynamic array's element type, the following:
-
-~foo :+ 69~
-
-would be replaced with this.
-
-#+begin_src int
-  ;; If capacity is not large enough to store added item, allocate a larger
-  ;; chunk of memory, copy current data into that, then free the old memory.
-  if foo.capacity <= foo.size then {
-    ;; Grow capacity.
-    if foo.capacity = 0 then
-      foo.capacity := 8;
-    else foo.capacity := foo.capacity << 1;
-    ;; Allocate new (larger) chunk of memory.
-    new_base := allocate foo.capacity;
-    ;; Copy from old memory to new memory
-    memcpy new_base foo.base foo.size;
-    ;; Update dynamic array base to new base, then deallocate the old base.
-    old_base := foo.base;
-    foo.base := new_base;
-    deallocate old_base;
-  };
-  ;; Actually write the new element.
-  @foo.base[foo.size] := 69;
-  ;; Update size of dynamic array to include new element.
-  foo.size :+ 1;
-#+end_src
-
-It's possible that we may want to just make a function for each dynamic
-array element type that takes in a reference to that type of dynamic
-array and a value and returns a new dynamic array. So, we would end up
-just replacing ~:+~ with a function call.
-
-- Accessing memory of a dynamic array
-
-Using the subscript operator ~[]~ with the lhs as a dynamic array and
-the rhs as some expression convertible to an integer will fetch the pointer
-to that position in memory iff it is within bounds. Iff the memory
-attempted to be accessed is NOT within ~[base, base + capacity)~, the
-program may do an implementation-defined crashing behaviour.
-
-~foo[3]  ->  if 3 >= foo.size then CRASH, foo.base[3];~
-
-*** TODO Slices
-[2023-12-20 Wed 17:07]
-
-Instead of a "base, size, capacity" triplet, a slice would just be a
-base and a size. A slice would not own the data, but simply allow for a
-"view" of it to be taken. A slice would have to be initialised in order
-to be created at all.
-
-#+begin_src int
-  slice : u8[/]
-#+end_src
-
-
-** TODO ~:+~, ~:-~, etc.
-[2023-12-20 Wed 17:05]
-
-~x :+ 4~ = ~x := x + 4~, and so on.
-
-** TODO ~alignof~
-[2023-12-20 Wed 11:48]
-
-** TODO ~typeof~
-[2023-12-20 Wed 11:48]
-
-Yield a type expression (~TypeExpr~) corresponding to the type of the
-following expression.
+* ~Intercept~, Language
 
 ** TODO Packed Structs called "Cereals"
 [2023-12-09 Sat 17:39]
