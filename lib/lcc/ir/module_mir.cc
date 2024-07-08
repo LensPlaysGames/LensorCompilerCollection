@@ -481,7 +481,10 @@ auto Module::mir() -> std::vector<MFunction> {
 
                                             load_b.add_operand(MOperandRegister(add_b.reg(), uint(add_b.regsize())));
                                             bb.add_instruction(add_b);
-                                        } else LCC_ASSERT(false, "Handle gMIR lowering of SysV multiple register argument");
+                                        } else {
+                                            fmt::print("{}\n", *arg->type());
+                                            LCC_ASSERT(false, "Handle gMIR lowering of SysV multiple register argument");
+                                        }
 
                                         bb.add_instruction(load_a);
                                         bb.add_instruction(load_b);
