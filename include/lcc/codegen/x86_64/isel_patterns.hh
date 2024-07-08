@@ -222,7 +222,7 @@ using or_reg_imm = Pattern<
 
 using add_local_imm_1 = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
-    InstList<Inst<Clobbers<>, usz(Opcode::LoadEffectiveAddress), OffsetLocal<o<0>, o<1>>, i<0>>>>;
+    InstList<Inst<Clobbers<c<1>>, usz(Opcode::LoadEffectiveAddress), OffsetLocal<o<0>, o<1>>, i<0>>>>;
 
 using add_local_imm_2 = Pattern<
     InstList<Inst<Clobbers<>, usz(MKind::Add), Local<>, Immediate<>>>,
