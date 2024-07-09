@@ -767,3 +767,22 @@ C++ people may argue that this is a problem because it does conversions that mig
 #+end_src
 
 My main question right now is that I'm not entirely sure where these things should be implemented, i.e. during Parsing or during IRGen.
+
+*** ptr ptr
+[2024-07-08 Mon 23:03]
+
+cadr cdar, ptr pptr
+
+#+begin_src c
+  argv: Byte.ptr.ptr
+#+end_src
+
+Yeah, that's not gonna fly.
+
+#+begin_src c
+  argv: Byte.pptr
+#+end_src
+
+Yeah, that makes a lot of sense.
+
+For people who need a pointer to a pointer to a pointer... what in the fuck are you doing? Write it out if you need to be that crazy.
