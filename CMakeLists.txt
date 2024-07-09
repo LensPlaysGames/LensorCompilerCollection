@@ -349,21 +349,19 @@ add_library(
   lib/lcc/platform.cc
   lib/lcc/utils.cc
 )
+target_include_directories(liblcc PUBLIC include)
 set_target_properties(liblcc PROPERTIES OUTPUT_NAME lcc)
 
 # Link main lcc library with generic object library.
 target_link_libraries(liblcc PUBLIC object)
 
-# Link main lcc library with language libraries.
-target_link_libraries(liblcc PUBLIC glint)
-target_link_libraries(liblcc PUBLIC lcc-cc)
-target_link_libraries(liblcc PUBLIC intercept)
-
 # Add the driver.
 add_executable(lcc "${PROJECT_SOURCE_DIR}/src/lcc.cc")
 
-# Set public include dir for lcc.
-target_include_directories(liblcc PUBLIC "${PROJECT_SOURCE_DIR}/include")
+# Link lcc driver with language libraries.
+target_link_libraries(lcc PUBLIC glint)
+target_link_libraries(lcc PUBLIC lcc-cc)
+target_link_libraries(lcc PUBLIC intercept)
 
 # Apply options.
 target_link_libraries(liblcc PRIVATE options)
