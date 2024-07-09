@@ -1,11 +1,7 @@
 ; R %lcc %s --ir --color=never
 
-; p lit []
-
-; * cc1 : imported layecc i32(i32 %0)
 ; * cc2 : imported i32()
 ; * cc3 : imported intcc i32()
-cc1 : imported layecc i32(i32)
 cc2 : imported ccc i32()
 cc3 : imported intcc i32()
 
@@ -56,7 +52,6 @@ varargs2 : i32(ptr %0) variadic
 ; +     %29 = alloca i32
 ; +     store i32 %28 into %29
 ; +     %30 = load i32 from %29
-; +     %31 = call layecc @cc1 (i32 %30) -> i32
 ; +     %32 = call @cc2 () -> i32
 ; +     %33 = call @cc2 () -> i32
 ; +     %34 = call intcc @cc3 () -> i32
@@ -108,7 +103,6 @@ ops : exported void(i32 %0, i32 %1):
     %29 = alloca i32
     store i32 %28 into %29
     %30 = load i32 from %29
-    %31 = call layecc @cc1 (i32 %30) -> i32
     %32 = call ccc @cc2 () -> i32
     %33 = call @cc2 () -> i32
     %34 = call intcc @cc3 () -> i32

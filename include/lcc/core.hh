@@ -56,9 +56,6 @@ enum struct CallConv {
     /// C calling convention.
     C,
 
-    /// Laye default calling convention.
-    Laye,
-
     /// Intercept internal calling convention.
     Intercept,
 
@@ -184,7 +181,6 @@ constexpr auto StringifyEnum(Linkage l) -> std::string_view {
 constexpr auto StringifyEnum(CallConv cc) -> std::string_view {
     switch (cc) {
         case CallConv::C: return "ccc";
-        case CallConv::Laye: return "layecc";
         case CallConv::Intercept: return "intcc";
         case CallConv::Glint: return "glintcc";
     }

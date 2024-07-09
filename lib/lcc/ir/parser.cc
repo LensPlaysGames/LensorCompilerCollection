@@ -332,9 +332,9 @@ void lcc::parser::Parser::NextToken() {
 
                 /// Try and parse a number after `i`.
                 if (
-                    tok.text.size() > 1 and
-                    tok.text[0] == 'i' and
-                    IsDigit(tok.text[1])
+                    tok.text.size() > 1
+                    and tok.text[0] == 'i'
+                    and IsDigit(tok.text[1])
                 ) {
                     const char* cstr = tok.text.c_str();
 
@@ -514,7 +514,6 @@ auto lcc::parser::Parser::ParseCallConv() -> CallConv {
         };
 
         if (tok.text == "ccc") SetCC(CallConv::C);
-        else if (tok.text == "layecc") SetCC(CallConv::Laye);
         else if (tok.text == "intcc") SetCC(CallConv::Intercept);
     }
     return cc;

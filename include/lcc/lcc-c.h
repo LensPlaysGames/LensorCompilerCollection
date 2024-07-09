@@ -11,14 +11,12 @@ typedef struct LccContext* LccContextRef;
 typedef struct LccTarget const* LccTargetRef;
 typedef struct LccFormat const* LccFormatRef;
 
-typedef struct LccStringView
-{
+typedef struct LccStringView {
     const char* string;
     int64_t length;
 } LccStringView;
 
-typedef struct LccLocation
-{
+typedef struct LccLocation {
     uint32_t position;
     uint16_t length;
     uint16_t file_id;
@@ -80,8 +78,7 @@ typedef enum LccValueKind {
 } LccValueKind;
 
 // Keep this in the same order as lcc::Linkage for easy conversions
-typedef enum LccLinkage
-{
+typedef enum LccLinkage {
     /// Local variable.
     ///
     /// This is just a dummy value that is used for local variables
@@ -147,13 +144,9 @@ typedef enum LccIntrinsicKind {
 } LccIntrinsicKind;
 
 // Keep this in the same order as lcc::CallingConvention for easy conversions
-typedef enum LccCallingConvention
-{
+typedef enum LccCallingConvention {
     /// C calling convention.
     C,
-
-    /// Laye default calling convention.
-    LAYE,
 
     /// Intercept internal calling convention.
     INTERCEPT,
@@ -438,4 +431,4 @@ size_t lcc_get_constant_array_size(LccValueRef constant_value);
 }
 #endif
 
-#endif //LCC_LCC_H 
+#endif // LCC_LCC_H

@@ -677,7 +677,7 @@ auto Module::mir() -> std::vector<MFunction> {
                         if (auto param = cast<Parameter>(store_ir->val())) {
                             // TODO FOR FUN: Functions marked internal we can do all the fucky wucky
                             // to, to make more efficient-like.
-                            // FIXME: What does f.calling_convention() (C, Intercept, Laye) have to do
+                            // FIXME: What does f.calling_convention() (C, Glint) have to do
                             // with any of this?
                             if (_ctx->target()->is_x64() and _ctx->target()->is_linux()) {
                                 usz sysv_registers_used = 0;
