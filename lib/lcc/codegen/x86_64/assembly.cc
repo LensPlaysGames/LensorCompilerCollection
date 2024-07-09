@@ -223,7 +223,7 @@ void emit_gnu_att_assembly(std::filesystem::path output_path, Module* module, co
                             auto bitwidth = local->allocated_type()->bits();
                             switch (bitwidth) {
                                 case 64: out += 'q'; break;
-                                case 32: out += 'd'; break;
+                                case 32: out += 'l'; break;
                                 case 16: out += 'w'; break;
                                 case 8: out += 'b'; break;
                                 default: LCC_ASSERT(false, "Invalid move");
