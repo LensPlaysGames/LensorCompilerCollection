@@ -151,19 +151,59 @@ void parse_matchtree(std::span<char> contents, const size_t fsize, size_t& i, Ma
     parse_matchtree(contents, fsize, i, match.children.back());
 }
 
-void parse_test(std::span<char> contents, const size_t fsize, size_t& i) {
-    std::string_view test_name{};
-    std::string_view test_source{};
-    std::string_view test_expected{};
-    MatchTree matcher{};
+struct Test {
+    std::string_view name;
+    std::string_view source;
+    MatchTree matcher;
 
+    void run() {
+        LCC_ASSERT(not name.empty(), "Refusing to run test with empty name");
+
+        // Parse source using LCC
+        // TODO: Get from context parameter, don't construct our own
+        lcc::Context context{
+            default_target,
+            default_format,
+            false,
+            false,
+            false};
+
+        bool failed_parse{false};
+        bool failed_check{false};
+        bool matches{true};
+        auto mod = lcc::glint::Parser::Parse(&context, source);
+        if (not context.has_error()) {
+            // Perform type-checking
+            lcc::glint::Sema::Analyse(&context, *mod, true);
+            if (not context.has_error()) {
+                // TODO: Only confirm AST conforms to expected match tree iff test is NOT
+                // decorated as expected to fail.
+
+                auto* root = mod->top_level_func()->body();
+                matches = perform_match(root, matcher);
+            } else failed_check = true;
+        } else failed_parse = true;
+
+        fmt::print("{}: ", name);
+        if (not matches or failed_parse or failed_check) {
+            fmt::print("{}FAIL{}\n", C(Colour::Red), C(Colour::Reset));
+            if (not matches) {
+                fmt::print("EXPECTED: {}\n", matcher.print());
+                fmt::print("GOT: {}\n", print_node(mod->top_level_func()->body()));
+            }
+        } else fmt::print("{}PASS{}\n", C(Colour::Green), C(Colour::Reset));
+    }
+};
+
+/// @param[out] test
+bool parse_test(std::span<char> contents, const size_t fsize, size_t& i, Test& test) {
     { // Parse test name
         // Skip '=' line
         while (i < fsize and contents[i] != '\n')
             ++i;
         if (i >= fsize) {
             fmt::print("ERROR parsing first line of test\n");
-            return;
+            return false;
         }
 
         // Eat '\n'
@@ -175,10 +215,10 @@ void parse_test(std::span<char> contents, const size_t fsize, size_t& i) {
             ++i;
         if (i >= fsize) {
             fmt::print("ERROR parsing name of test\n");
-            return;
+            return false;
         }
 
-        test_name = {
+        test.name = {
             contents.begin() + lcc::isz(begin),
             contents.begin() + lcc::isz(i)};
 
@@ -189,8 +229,8 @@ void parse_test(std::span<char> contents, const size_t fsize, size_t& i) {
         while (i < fsize and contents[i] != '\n')
             ++i;
         if (i >= fsize) {
-            fmt::print("ERROR parsing closing line of name of test {}\n", test_name);
-            return;
+            fmt::print("ERROR parsing closing line of name of test {}\n", test.name);
+            return false;
         }
 
         // Eat '\n'
@@ -210,10 +250,10 @@ void parse_test(std::span<char> contents, const size_t fsize, size_t& i) {
         }
         if (i >= fsize) {
             // Got EOF when expected `---` followed by expected test output (AST matcher)
-            fmt::print("ERROR parsing source of test {}\n", test_name);
-            return;
+            fmt::print("ERROR parsing source of test {}\n", test.name);
+            return false;
         }
-        test_source = {
+        test.source = {
             contents.begin() + lcc::isz(begin_source),
             contents.begin() + lcc::isz(i)};
     }
@@ -225,57 +265,17 @@ void parse_test(std::span<char> contents, const size_t fsize, size_t& i) {
             ++i;
         if (i >= fsize) {
             // Got EOF when expected `(` (beginning of expected test output after `---`)
-            fmt::print("ERROR parsing expected of test {}\n", test_name);
-            return;
+            fmt::print("ERROR parsing expected of test {}\n", test.name);
+            return false;
         }
 
-        size_t begin_expect{i};
-        parse_matchtree(contents, fsize, i, matcher);
-        size_t back_expect{i};
-
-        test_expected = {
-            contents.begin() + lcc::isz(begin_expect),
-            contents.begin() + lcc::isz(back_expect) + 1};
+        parse_matchtree(contents, fsize, i, test.matcher);
 
         // Skip to beginning of next test or end of input.
         while (i < fsize and contents[i] != '=') ++i;
     }
 
-    // Success! Parsed test.
-
-    // Parse source using LCC
-    // TODO: Get from context parameter, don't construct our own
-    lcc::Context context{
-        default_target,
-        default_format,
-        false,
-        false,
-        false};
-
-    bool failed_parse{false};
-    bool failed_check{false};
-    bool matches{true};
-    auto mod = lcc::glint::Parser::Parse(&context, test_source);
-    if (not context.has_error()) {
-        // Perform type-checking
-        lcc::glint::Sema::Analyse(&context, *mod, true);
-        if (not context.has_error()) {
-            // TODO: Only confirm AST conforms to expected match tree iff test is NOT
-            // decorated as expected to fail.
-
-            auto* root = mod->top_level_func()->body();
-            matches = perform_match(root, matcher);
-        } else failed_check = true;
-    } else failed_parse = true;
-
-    fmt::print("{}: ", test_name);
-    if (not matches or failed_parse or failed_check) {
-        fmt::print("{}FAIL{}\n", C(Colour::Red), C(Colour::Reset));
-        if (not matches) {
-            fmt::print("EXPECTED: {}\n", matcher.print());
-            fmt::print("GOT: {}\n", print_node(mod->top_level_func()->body()));
-        }
-    } else fmt::print("{}PASS{}\n", C(Colour::Green), C(Colour::Reset));
+    return true;
 }
 
 void parse_tests(std::span<char> contents) {
@@ -286,11 +286,9 @@ void parse_tests(std::span<char> contents) {
         auto c = contents[i];
         // FIXME: We may want to ensure that the entire line is '=', eventually.
         if (bol and c == '=') {
-            bol = false;
-            // Parse test!
-
-            parse_test(contents, fsize, i);
-
+            Test test{};
+            if (parse_test(contents, fsize, i, test))
+                test.run();
             bol = true;
         } else bol = c == '\n';
     }
