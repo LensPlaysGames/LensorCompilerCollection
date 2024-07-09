@@ -1381,6 +1381,12 @@ auto intc::Parser::ParseType(isz current_precedence) -> Result<Type*> {
                 if (tok.kind != Tk::Ident)
                     return Error("Expected IDENTIFIER after . following type {}, not {}", *ty, ToString(tok.kind));
                 location.len = u16(tok.text.size() + tok.location.pos - location.pos);
+                if (tok.text == "pptr") {
+                    ty = new (*mod) PointerType(new (*mod) PointerType(ty, location));
+                    // Eat "pptr"
+                    NextToken();
+                    break;
+                }
                 if (tok.text == "ptr") {
                     ty = new (*mod) PointerType(ty, location);
                     // Eat "ptr"
