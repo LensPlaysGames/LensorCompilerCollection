@@ -193,7 +193,7 @@ void lcc_module_add_variable(LccModuleRef module, LccValueRef variable);
 
 // ==== Values
 
-// TODO(local): allocate values
+// TODO: allocate values
 
 /// Returns true of the given value is of the given kind, false otherwise.
 bool lcc_is_of_kind(LccValueRef value, LccValueKind kind);
@@ -250,7 +250,7 @@ bool lcc_is_block_closed(LccValueRef block);
 LccValueRef lcc_block_insert(LccValueRef block, LccValueRef instruction, bool force);
 LccValueRef lcc_block_insert_force(LccValueRef block, LccValueRef instruction);
 
-// TODO(local): create instruction builders
+// TODO: create instruction builders
 
 // ==== Functions
 
@@ -264,7 +264,7 @@ int64_t lcc_get_function_parameter_count(LccValueRef function);
 /// Gets the parameter in this function at the given index.
 LccValueRef lcc_get_function_parameter_at_index(LccValueRef function, int64_t index);
 
-// TODO(local): turn this into `LccValueRef lcc_append_block(LccValueRef function);` ?
+// TODO: turn this into `LccValueRef lcc_append_block(LccValueRef function);` ?
 
 /// Append the given block to the given function.
 void lcc_function_append_block(LccValueRef function, LccValueRef block);
@@ -420,9 +420,9 @@ LccValueRef lcc_integer_constant(LccTypeRef type, uint64_t value);
 /// Gets the integer value of a constant.
 uint64_t lcc_get_constant_integer(LccValueRef constant_value);
 
-// TODO(local): constant float
+// TODO: constant float
 
-// TODO(local): constant array value at index
+// TODO: constant array value at index
 
 /// Gets the size of an array constant.
 size_t lcc_get_constant_array_size(LccValueRef constant_value);

@@ -477,7 +477,7 @@ void cc::Lexer::ReadTokenNoPreprocess(CToken& token) {
         lex_identifier:;
             std::string identifier_text{};
 
-            // NOTE(local): we can have a fast path without unicode, and a slower path once we identify them
+            // NOTE: we can have a fast path without unicode, and a slower path once we identify them
             while (IsAlphaNumeric(CurrentChar()) or CurrentChar() == '_') {
                 identifier_text.push_back(CurrentChar());
                 AdvanceChar();
@@ -514,7 +514,7 @@ void cc::Lexer::ReadToken(CToken& token) {
     }
 
     ReadTokenNoPreprocess(token);
-    // TODO(local): handle macro expansions n stuff
+    // TODO: handle macro expansions n stuff
 
     if (token.kind == TokenKind::Ident) {
         /// If an identifier makes it this far, it didn't get eaten by the preprocessor.
@@ -539,7 +539,7 @@ void cc::Lexer::ReadToken(CToken& token) {
         if (token.kind == TokenKind::Ident and +c_context()->opts.std >= +StandardVersion::C23)
             token.kind = LookupKeyword(token.text, c23_keywords);
 
-        // TODO(local): extension keywords
+        // TODO: extension keywords
     }
 }
 

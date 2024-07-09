@@ -270,17 +270,17 @@ void* cc::BaseNode::operator new(size_t sz, TranslationUnit& cu) {
 }
 
 bool cc::Expr::is_lvalue() const {
-    // NOTE(local): MS extensions allow typecasts of l-values to also be l-values. Check compiler settings
+    // NOTE: MS extensions allow typecasts of l-values to also be l-values. Check compiler settings
     switch (_kind) {
         default:
             return false;
 
         case Kind::Name:
-            // TODO(local): if we can get access to the type of this name, then we need to check that its type is a valid l-value (are any invalid?)
+            // TODO: if we can get access to the type of this name, then we need to check that its type is a valid l-value (are any invalid?)
             return true;
 
         case Kind::Subscript:
-            // TODO(local): so long as this does not evaluate to an array, it is an l-value. Get the type if we can
+            // TODO: so long as this does not evaluate to an array, it is an l-value. Get the type if we can
             return true;
 
         case Kind::MemberSelect:
@@ -290,7 +290,7 @@ bool cc::Expr::is_lvalue() const {
             auto unary = as<UnaryExpr>(this);
             if (unary->operator_kind() != OperatorKind::Dereference)
                 return false;
-            // TODO(local): so long as this does not evaluate to an array, it is an l-value. Get the type if we can
+            // TODO: so long as this does not evaluate to an array, it is an l-value. Get the type if we can
             return true;
         }
 
@@ -299,8 +299,8 @@ bool cc::Expr::is_lvalue() const {
             return expr->is_lvalue();
         }
 
-            // TODO(local): const object (nonmodifiable l-value)
-            // TODO(local): check C standards for any more valid l-values
+            // TODO: const object (nonmodifiable l-value)
+            // TODO: check C standards for any more valid l-values
     }
 }
 

@@ -455,8 +455,10 @@ int main(int argc, const char** argv) {
         if (options.verbose) fmt::print("Generated output at {}\n", output_file_path);
     } else {
         if (not configured_output_file_path.empty()) {
-            // TODO(local): you can, but only if we're planning to link these files; handle that later
-            lcc::Diag::Fatal("cannot specify -o when generating multiple output files");
+            lcc::Diag::Fatal(
+                "Cannot specify -o when generating multiple output files (would overwrite the same file with every output)."
+                "If you have a suggestion of how you think this should behave, let a developer know."
+            );
         }
 
         for (auto& input_file : input_files) {
@@ -464,9 +466,6 @@ int main(int argc, const char** argv) {
             std::string output_file_path = ConvertFileExtensionToOutputFormat(input_file_path);
             GenerateOutputFile(input_file, output_file_path);
         }
-
-        // TODO(local): if we do linking, now's the time to link to the output file path, else a.out
-        // std::string linked_output_file_path = configured_output_file_path;
     }
 
     return 0;
