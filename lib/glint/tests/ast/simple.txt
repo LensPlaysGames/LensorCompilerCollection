@@ -18,8 +18,8 @@ Empty, Whitespace
 ================
 Empty, Expression Separators
 ================
-;,,,;,,;,,,,,,,;,;,,,,,
-;;;,,;
+; ; ; ; ; ; ;
+; ; ; ;
 ---
 
 (block (return (integer_literal)))
