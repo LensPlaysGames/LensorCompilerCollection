@@ -158,11 +158,31 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                     if (auto* dynamic_array_t = cast<DynamicArrayType>(decl->type())) {
                         constexpr usz default_dynamic_array_capacity = 8;
 
+                        Value* capacity_val;
+                        lcc::Type* capacity_val_type = Convert(ctx, dynamic_array_t->struct_type()->members()[2].type);
+                        if (dynamic_array_t->initial_size()) {
+                            LCC_ASSERT(
+                                is<NameRefExpr>(dynamic_array_t->initial_size()),
+                                "Dynamic array initial size must be a variable reference"
+                            );
+
+                            generate_expression(dynamic_array_t->initial_size());
+
+                            auto* initial_size = new (*module) LoadInst(
+                                capacity_val_type,
+                                generated_ir[dynamic_array_t->initial_size()]
+                            );
+                            insert(initial_size);
+
+                            capacity_val = initial_size;
+                        } else {
+                            capacity_val = new (*module) IntegerConstant(
+                                capacity_val_type,
+                                default_dynamic_array_capacity
+                            );
+                        }
+
                         // TODO: Don't use hard-coded struct member index.
-                        auto* capacity_val = new (*module) IntegerConstant(
-                            Convert(ctx, dynamic_array_t->struct_type()->members()[2].type),
-                            default_dynamic_array_capacity
-                        );
                         auto* capacity_ptr = new (*module) GetMemberPtrInst(
                             Convert(ctx, dynamic_array_t->struct_type()),
                             alloca,
@@ -185,10 +205,21 @@ void glint::IRGen::generate_expression(glint::Expr* expr) {
                         insert(size_ptr);
                         insert(size_store);
 
-                        auto* alloc_size_bytes = new (*module) IntegerConstant(
-                            Convert(ctx, Type::UInt),
-                            default_dynamic_array_capacity * dynamic_array_t->element_type()->size_in_bytes(ctx)
-                        );
+                        Value* alloc_size_bytes;
+                        if (dynamic_array_t->initial_size()) {
+                            auto* initial_size = new (*module) LoadInst(
+                                Convert(ctx, dynamic_array_t->initial_size()->type()),
+                                generated_ir[dynamic_array_t->initial_size()]
+                            );
+                            insert(initial_size);
+
+                            alloc_size_bytes = initial_size;
+                        } else {
+                            alloc_size_bytes = new (*module) IntegerConstant(
+                                Convert(ctx, Type::UInt),
+                                default_dynamic_array_capacity * dynamic_array_t->element_type()->size_in_bytes(ctx)
+                            );
+                        }
                         auto* malloc_ty = FunctionType::Get(
                             ctx,
                             lcc::Type::PtrTy,
