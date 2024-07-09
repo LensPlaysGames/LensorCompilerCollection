@@ -5,6 +5,8 @@
 #include <lcc/file.hh>
 #include <lcc/utils.hh>
 
+#include <string_view>
+
 namespace lcc::syntax {
 namespace detail {
 /// API for the lexer to make sure the lexer code doesn’t

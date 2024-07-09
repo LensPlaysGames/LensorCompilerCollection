@@ -1,14 +1,3 @@
-#include <c/ast.hh>
-#include <c/parser.hh>
-#include <fmt/format.h>
-#include <glint/ast.hh>
-#include <glint/ir_gen.hh>
-#include <glint/parser.hh>
-#include <glint/sema.hh>
-#include <intercept/ast.hh>
-#include <intercept/ir_gen.hh>
-#include <intercept/parser.hh>
-#include <intercept/sema.hh>
 #include <lcc/context.hh>
 #include <lcc/diags.hh>
 #include <lcc/format.hh>
@@ -19,7 +8,20 @@
 #include <lcc/utils.hh>
 #include <lcc/utils/platform.hh>
 
+// FIXME: We should probably have a more unified API for each language
+#include <c/ast.hh>
+#include <c/parser.hh>
+#include <glint/ast.hh>
+#include <glint/ir_gen.hh>
+#include <glint/parser.hh>
+#include <glint/sema.hh>
+#include <intercept/ast.hh>
+#include <intercept/ir_gen.hh>
+#include <intercept/parser.hh>
+#include <intercept/sema.hh>
+
 #include <cstdio>
+#include <fmt/format.h>
 #include <format>
 #include <string>
 #include <vector>
