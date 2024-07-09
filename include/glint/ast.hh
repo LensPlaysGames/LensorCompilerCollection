@@ -966,6 +966,8 @@ public:
     static Expr* Clone(Module& mod, Expr* expr);
 };
 
+std::string ToString(Expr::Kind k);
+
 class TypedExpr : public Expr {
     Type* _type;
 

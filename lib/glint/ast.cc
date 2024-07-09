@@ -503,6 +503,38 @@ auto lcc::glint::EnumeratorDecl::value() const -> aint {
              : as<IntegerLiteral>(init())->value();
 }
 
+std::string lcc::glint::ToString(lcc::glint::Expr::Kind k) {
+    switch (k) {
+        case lcc::glint::Expr::Kind::While: return "while";
+        case lcc::glint::Expr::Kind::For: return "for";
+        case lcc::glint::Expr::Kind::Return: return "return";
+        case lcc::glint::Expr::Kind::TypeDecl: return "type_declaration";
+        case lcc::glint::Expr::Kind::TypeAliasDecl: return "type_alias_declaration";
+        case lcc::glint::Expr::Kind::EnumeratorDecl: return "enum_declaration";
+        case lcc::glint::Expr::Kind::VarDecl: return "variable_declaration";
+        case lcc::glint::Expr::Kind::FuncDecl: return "function_declaration";
+        case lcc::glint::Expr::Kind::IntegerLiteral: return "integer_literal";
+        case lcc::glint::Expr::Kind::StringLiteral: return "string_literal";
+        case lcc::glint::Expr::Kind::CompoundLiteral: return "compound_literal";
+        case lcc::glint::Expr::Kind::OverloadSet: return "overload_set";
+        case lcc::glint::Expr::Kind::EvaluatedConstant: return "evaluated_constant";
+        case lcc::glint::Expr::Kind::If: return "if";
+        case lcc::glint::Expr::Kind::Block: return "block";
+        case lcc::glint::Expr::Kind::Call: return "call";
+        case lcc::glint::Expr::Kind::IntrinsicCall: return "intrinsic";
+        case lcc::glint::Expr::Kind::Cast: return "cast";
+        case lcc::glint::Expr::Kind::Unary: return "unary";
+        case lcc::glint::Expr::Kind::Binary: return "binary";
+        case lcc::glint::Expr::Kind::NameRef: return "name";
+        case lcc::glint::Expr::Kind::Type: return "type";
+        case lcc::glint::Expr::Kind::MemberAccess: return "member_access";
+        case lcc::glint::Expr::Kind::Module: return "module";
+        case lcc::glint::Expr::Kind::Sizeof: return "sizeof";
+        case lcc::glint::Expr::Kind::Alignof: return "alignof";
+    }
+    LCC_UNREACHABLE();
+}
+
 /// ===========================================================================
 ///  AST Printing
 /// ===========================================================================
